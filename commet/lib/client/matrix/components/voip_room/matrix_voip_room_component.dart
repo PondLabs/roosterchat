@@ -39,16 +39,18 @@ class MatrixVoipRoomComponent
 
   StreamController _onParticipantsChanged = StreamController.broadcast();
 
+  /// Recomputes the list when the next membership in it lapses (see
+  /// [getCurrentParticipants]).
+  late final MembershipLapseTimer _lapseTimer =
+      MembershipLapseTimer(() => _onParticipantsChanged.add(()));
+
   @override
   onSync(JoinedRoomUpdate update) {
-    if (update.timeline?.events == null) {
-      return;
-    }
-
-    for (var event in update.timeline!.events!) {
-      if (event.type == callMemberStateEvent) {
-        _onParticipantsChanged.add(());
-      }
+    // A limited sync delivers state changes in `state`, not the timeline: a
+    // leave that came in one was missed, and the member stayed listed.
+    final events = [...?update.state, ...?update.timeline?.events];
+    if (events.any((event) => event.type == callMemberStateEvent)) {
+      _onParticipantsChanged.add(());
     }
   }
 
@@ -62,27 +64,25 @@ class MatrixVoipRoomComponent
     return deviceId == client.matrixClient.deviceID;
   }
 
-  /// A membership whose `expires` window, counted from its join time, has
-  /// already elapsed. Only full [Event]s carry a timestamp; stripped state is
-  /// assumed live.
-  static bool isMembershipExpired(StrippedStateEvent entry) =>
-      MatrixCallMembership.isExpired(entry.content,
-          entry is Event ? entry.originServerTs : null, DateTime.now());
-
   @override
   List<String> getCurrentParticipants() {
     final state = room.matrixRoom.states[callMemberStateEvent];
     if (state == null) {
+      _lapseTimer.cancel();
       return [];
     }
 
+    final now = DateTime.now();
+    final expiries = <DateTime?>[];
     List<String> participants = List.empty(growable: true);
     for (var pair in state.entries) {
       if (pair.value.content.isEmpty) {
         continue;
       }
 
-      if (isMembershipExpired(pair.value)) {
+      final entry = pair.value;
+      final sentAt = entry is Event ? entry.originServerTs : null;
+      if (MatrixCallMembership.isExpired(entry.content, sentAt, now)) {
         continue;
       }
 
@@ -93,6 +93,8 @@ class MatrixVoipRoomComponent
         continue;
       }
 
+      expiries.add(MatrixCallMembership.expiresAt(entry.content, sentAt));
+
       final sender = pair.value.senderId;
       if (participants.contains(sender)) {
         continue;
@@ -100,6 +102,9 @@ class MatrixVoipRoomComponent
 
       participants.add(sender);
     }
+
+    // Nothing arrives over sync when a membership lapses, so look again then.
+    _lapseTimer.schedule(MatrixCallMembership.nextExpiry(expiries, now));
 
     return participants;
   }

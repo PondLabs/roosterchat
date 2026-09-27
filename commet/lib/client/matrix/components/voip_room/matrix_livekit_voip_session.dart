@@ -1164,9 +1164,8 @@ class MatrixLivekitVoipSession implements VoipSession, ScreenShareWatching {
       // still has to end and release LiveKit. The delayed leave, or
       // clearStaleOwnMembership, takes care of a membership left behind.
       await Future.wait([
-        clearRoomCallState(),
+        _leaveMembership(),
         disconnectCall(),
-        stopHeartbeat(),
       ]).timeout(const Duration(seconds: 8));
     } catch (e, s) {
       // Not rethrown: the session ends either way, and not every caller
@@ -1609,6 +1608,50 @@ class MatrixLivekitVoipSession implements VoipSession, ScreenShareWatching {
 
     Log.i("Stopped heartbeat");
   }
+
+  /// Takes our membership down on hang up. Sending the delayed leave now
+  /// clears it and disarms the dead man's switch in one request. Clearing by
+  /// hand is the fallback, and the delayed leave is only cancelled once that
+  /// worked: it used to be cancelled alongside the clear, so a clear that
+  /// failed (rate limited, offline, timed out) left nothing to ever clear the
+  /// membership, and everyone kept listing us in the call for hours.
+  Future<void> _leaveMembership() async {
+    heartbeatTimer?.cancel();
+    heartbeatTimer = null;
+
+    final delayId = _delayedLeaveId ?? heartbeatDelayId;
+    _delayedLeaveId = null;
+    heartbeatDelayId = null;
+
+    if (delayId != null) {
+      try {
+        // Registered like a clear: it is one, and a rejoin must wait for it.
+        await CallMembershipWrites.clearing(
+            _ownMembershipKey, _delayedLeaveAction(delayId, "send"));
+        Log.i("Sent our delayed leave");
+        return;
+      } catch (e) {
+        Log.w("Could not send our delayed leave, clearing by hand: $e");
+      }
+    }
+
+    await clearRoomCallState();
+
+    if (delayId != null) {
+      try {
+        await _delayedLeaveAction(delayId, "cancel");
+      } catch (e) {
+        // Already gone, or it fires into the membership we just cleared.
+        Log.w("Could not cancel our delayed leave: $e");
+      }
+    }
+  }
+
+  Future<void> _delayedLeaveAction(String delayId, String action) =>
+      room.matrixRoom.client.request(RequestType.POST,
+          "/client/unstable/org.matrix.msc4140/delayed_events/${Uri.encodeComponent(delayId)}",
+          contentType: "application/json",
+          data: jsonEncode({"action": action}));
 
   Future<void> startHeartbeat() async {
     final capabilities = await room.matrixRoom.client.getVersions();

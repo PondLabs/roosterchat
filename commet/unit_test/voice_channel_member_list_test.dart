@@ -343,6 +343,24 @@ void main() {
       expect(callParticipants(component), isEmpty);
     });
 
+    test("a membership drops off the list when it lapses, with no event",
+        () async {
+      // Their client died without leaving: nothing ever arrives over sync.
+      setMemberships([
+        callMemberEvent(room, otherUserId, "DEVICEB", extra: {"expires": 50}),
+        callMemberEvent(room, thirdUserId, "DEVICEC"),
+      ]);
+      final changes = <void>[];
+      final sub = component.onSessionsChanged.listen(changes.add);
+      addTearDown(sub.cancel);
+
+      expect(callParticipants(component), {otherUserId, thirdUserId});
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+
+      expect(changes, hasLength(1));
+      expect(callParticipants(component), {thirdUserId});
+    });
+
     test("in our call, LiveKit decides who is live", () {
       setMemberships([
         callMemberEvent(room, selfUserId, selfDeviceId, streams: []),

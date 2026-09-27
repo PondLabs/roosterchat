@@ -6,12 +6,12 @@ import 'package:commet/client/components/voip/voip_stream.dart';
 import 'package:commet/client/room.dart';
 import 'package:commet/config/layout_config.dart';
 import 'package:commet/ui/layout/bento.dart';
+import 'package:commet/ui/organisms/call_view/call_control_buttons.dart';
 import 'package:commet/ui/organisms/call_view/call_grid_tiles.dart';
 import 'package:commet/ui/organisms/call_view/voip_fullscreen_stream_view.dart';
 import 'package:commet/ui/organisms/call_view/voip_stream_view.dart';
 import 'package:commet/ui/organisms/dj/dj_booth_panel.dart';
 import 'package:commet/ui/organisms/soundboard/soundboard_call_controller.dart';
-import 'package:commet/ui/organisms/soundboard/soundboard_button.dart';
 import 'package:commet/utils/animation/ring_shaker.dart';
 import 'package:commet/utils/animation/ripple.dart';
 import 'package:flutter/material.dart';
@@ -121,7 +121,6 @@ class _CallViewState extends State<CallView> {
 
   Widget callOutgoingView() {
     return callButtons(
-      canHangUp: true,
       child: Center(
         child: RippleAnimation(
           ripplesCount: 3,
@@ -137,13 +136,25 @@ class _CallViewState extends State<CallView> {
     );
   }
 
-  Widget callButtons(
-      {bool canMute = false,
-      bool canDeafen = false,
-      bool canScreenshare = false,
-      bool canHangUp = false,
-      bool canToggleCamera = false,
-      required Widget child}) {
+  CallControlActions get controlActions => CallControlActions(
+        setMicrophoneMute: widget.setMicrophoneMute,
+        setDeafened: widget.setDeafened,
+        pickScreenshareSource: widget.pickScreenshareSource,
+        stopScreenshare: widget.stopScreenshare,
+        pickCamera: widget.pickCamera,
+        disableCamera: widget.disableCamera,
+        hangUp: widget.hangUp,
+        soundboard: _soundboard,
+      );
+
+  void showFullscreen(VoipStream stream) {
+    VoipFullscreenStreamView.show(context,
+        session: widget.currentSession,
+        stream: stream,
+        actions: controlActions);
+  }
+
+  Widget callButtons({bool connected = false, required Widget child}) {
     // Mobile keeps touch-sized buttons; the desktop row only shows on hover.
     final buttonRadius = MediaQuery.of(context).mobile ? 24.0 : 18.0;
     final buttonIconSize = buttonRadius * 1.2;
@@ -172,98 +183,23 @@ class _CallViewState extends State<CallView> {
             duration: const Duration(milliseconds: 200),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(8, 8, 8, 24),
-              child: Wrap(
-                spacing: 12,
-                children: [
-                  if (canScreenshare)
-                    tiamat.CircleButton(
-                        radius: buttonRadius,
-                        iconSize: buttonIconSize,
-                        icon: Icons.screen_share_outlined,
-                        onPressed: widget.pickScreenshareSource),
-                  if (widget.currentSession.isSharingScreen && canScreenshare)
-                    tiamat.CircleButton(
+              child: connected
+                  ? CallControlButtons(
+                      session: widget.currentSession,
+                      actions: controlActions,
                       radius: buttonRadius,
-                      iconSize: buttonIconSize,
-                      icon: Icons.stop_screen_share,
-                      onPressed: widget.stopScreenshare,
-                    ),
-                  if (canMute)
-                    tiamat.CircleButton(
-                      radius: buttonRadius,
-                      iconSize: buttonIconSize,
-                      icon: widget.currentSession.isMicrophoneMuted
-                          ? Icons.mic_off
-                          : Icons.mic,
-                      color: widget.currentSession.isMicrophoneMuted
-                          ? Theme.of(context).colorScheme.errorContainer
-                          : null,
-                      onPressed: () async {
-                        await widget.setMicrophoneMute
-                            ?.call(!widget.currentSession.isMicrophoneMuted);
-                        setState(() {});
+                      boothOpen: _boothOpen,
+                      onToggleBooth: _dj == null
+                          ? null
+                          : () => setState(() => _boothOpen = !_boothOpen),
+                      onHungUp: () {
+                        if (mounted) setState(() {});
                       },
-                    ),
-                  if (canDeafen)
-                    tiamat.CircleButton(
-                      radius: buttonRadius,
-                      iconSize: buttonIconSize,
-                      icon: widget.currentSession.isDeafened
-                          ? Icons.headset_off
-                          : Icons.headset,
-                      color: widget.currentSession.isDeafened
-                          ? Theme.of(context).colorScheme.errorContainer
-                          : null,
-                      onPressed: () async {
-                        await widget.setDeafened
-                            ?.call(!widget.currentSession.isDeafened);
-                        setState(() {});
-                      },
-                    ),
-                  if (canToggleCamera)
-                    tiamat.CircleButton(
-                      radius: buttonRadius,
-                      iconSize: buttonIconSize,
-                      icon: widget.currentSession.isCameraEnabled
-                          ? Icons.no_photography
-                          : Icons.camera_alt_outlined,
-                      onPressed: widget.currentSession.isCameraEnabled
-                          ? widget.disableCamera
-                          : widget.pickCamera,
-                    ),
-                  if (canHangUp && _soundboard != null)
-                    SoundboardButton(
-                      controller: _soundboard!,
-                      deafened: widget.currentSession.isDeafened,
-                      onOpenChanged: (open) {
+                      onSoundboardOpenChanged: (open) {
                         if (mounted) setState(() => _soundboardOpen = open);
                       },
-                      builder: (context, onPressed) => tiamat.CircleButton(
-                        radius: buttonRadius,
-                        iconSize: buttonIconSize,
-                        icon: Icons.surround_sound,
-                        iconColor: onPressed == null
-                            ? Theme.of(context).disabledColor
-                            : null,
-                        onPressed: onPressed,
-                      ),
-                    ),
-                  if (canHangUp && _dj != null)
-                    Tooltip(
-                      message: _boothOpen ? 'Close the DJ booth' : 'DJ booth',
-                      child: tiamat.CircleButton(
-                        radius: buttonRadius,
-                        iconSize: buttonIconSize,
-                        icon: Icons.album_rounded,
-                        color: _boothOpen
-                            ? Theme.of(context).colorScheme.primaryContainer
-                            : null,
-                        onPressed: () =>
-                            setState(() => _boothOpen = !_boothOpen),
-                      ),
-                    ),
-                  if (canHangUp)
-                    tiamat.CircleButton(
+                    )
+                  : tiamat.CircleButton(
                       color: Theme.of(context).colorScheme.errorContainer,
                       radius: buttonRadius,
                       iconSize: buttonIconSize,
@@ -272,9 +208,7 @@ class _CallViewState extends State<CallView> {
                         await widget.hangUp?.call();
                         setState(() {});
                       },
-                    )
-                ],
-              ),
+                    ),
             ),
           )
         ],
@@ -285,11 +219,7 @@ class _CallViewState extends State<CallView> {
   Widget callConnectedView() {
     final dj = _dj;
     final call = callButtons(
-        canMute: true,
-        canDeafen: true,
-        canHangUp: true,
-        canScreenshare: true,
-        canToggleCamera: true,
+        connected: true,
         // The now playing pill has a strip of its own above the tiles: over
         // them it hid the corner buttons (fullscreen) of a focused stream.
         child: Column(
@@ -389,10 +319,7 @@ class _CallViewState extends State<CallView> {
                       .firstOrNull
                       ?.audioStream,
                   borderColor: Colors.white,
-                  onFullscreen: () {
-                    VoipFullscreenStreamView.show(context,
-                        session: widget.currentSession, stream: mainStream!);
-                  },
+                  onFullscreen: () => showFullscreen(mainStream!),
                   fit: BoxFit.contain,
                   key: ValueKey(
                       "callView_mainStreamView_${mainStream!.streamId}"),
@@ -422,10 +349,7 @@ class _CallViewState extends State<CallView> {
                       ? BoxFit.contain
                       : BoxFit.cover,
                   widget.currentSession,
-                  onFullscreen: () {
-                    VoipFullscreenStreamView.show(context,
-                        session: widget.currentSession, stream: e);
-                  },
+                  onFullscreen: () => showFullscreen(e),
                 ));
           }).toList()),
         ),

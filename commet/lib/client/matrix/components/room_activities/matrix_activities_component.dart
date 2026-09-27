@@ -36,6 +36,11 @@ class MatrixActivitiesComponent
 
   final StreamController _onParticipantsChanged = StreamController.broadcast();
 
+  /// Recomputes the list when the next membership in it lapses (see
+  /// [getSessions]).
+  late final MembershipLapseTimer _lapseTimer =
+      MembershipLapseTimer(() => _onParticipantsChanged.add(()));
+
   CallManager? get _callManager =>
       _injectedCallManager ?? clientManager?.callManager;
 
@@ -88,6 +93,7 @@ class MatrixActivitiesComponent
 
     List<RoomActivitySession> activities = List.empty(growable: true);
     final now = DateTime.now();
+    final expiries = <DateTime?>[];
 
     for (var entry in state.entries) {
       if (entry.value.content.isEmpty) continue;
@@ -143,6 +149,7 @@ class MatrixActivitiesComponent
       }
 
       activity.participants.add(entry.value.senderId);
+      expiries.add(MatrixCallMembership.expiresAt(event.content, sentAt));
 
       // Only full events: stripped state has no timestamp, so it never
       // expires and a stale LIVE badge would stay forever.
@@ -177,6 +184,10 @@ class MatrixActivitiesComponent
       _applyCallStreams(call, session);
       if (call.participants.isEmpty) activities.remove(call);
     }
+
+    // Nothing arrives over sync when a membership lapses, so look again then:
+    // it is how the membership of a client that died without leaving goes.
+    _lapseTimer.schedule(MatrixCallMembership.nextExpiry(expiries, now));
 
     return activities;
   }

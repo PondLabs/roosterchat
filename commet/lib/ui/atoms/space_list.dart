@@ -139,6 +139,7 @@ class _SpaceListState extends State<SpaceList> {
       itemBuilder: (context, data) {
         return RoomTextButton(
           data,
+          key: ValueKey(data.identifier),
           onTap: widget.onRoomSelected,
           highlight: selectedRoom == data,
         );
@@ -205,6 +206,10 @@ class _SpaceListState extends State<SpaceList> {
     if (child case SpaceChildRoom _)
       return RoomTextButton(
         child.child,
+        // Keyed: the button keeps per-room state (who is in its voice
+        // channel), which must not be handed to another room when a room is
+        // added, removed or moved above it.
+        key: ValueKey(child.child.identifier),
         onTap: widget.onRoomSelected,
         highlight: selectedRoom == child.child,
       );

@@ -4,7 +4,9 @@ import 'package:commet/client/components/rtc_screen_share_annotation/rtc_screen_
 import 'package:commet/client/components/voip/voip_session.dart';
 import 'package:commet/client/components/voip/voip_stream.dart';
 import 'package:commet/config/platform_utils.dart';
+import 'package:commet/client/matrix/components/dj/dj_booths.dart';
 import 'package:commet/debug/log.dart';
+import 'package:commet/ui/organisms/call_view/call_control_buttons.dart';
 import 'package:commet/ui/organisms/call_view/call_grid_tiles.dart';
 import 'package:commet/ui/organisms/call_view/voip_stream_view.dart';
 import 'package:flutter/material.dart';
@@ -20,12 +22,18 @@ import 'package:tiamat/tiamat.dart' as tiamat;
 /// (the browser tab on web) and the stream fills it edge to edge.
 class VoipFullscreenStreamView extends StatefulWidget {
   const VoipFullscreenStreamView(
-      {required this.stream, required this.session, super.key});
+      {required this.stream, required this.session, this.actions, super.key});
   final VoipStream stream;
   final VoipSession session;
 
+  /// The call's own buttons (mute, deafen, share, hang up...), shown next to
+  /// exit fullscreen so the call can be run without leaving it.
+  final CallControlActions? actions;
+
   static Future<void> show(BuildContext context,
-      {required VoipStream stream, required VoipSession session}) {
+      {required VoipStream stream,
+      required VoipSession session,
+      CallControlActions? actions}) {
     // Before the route is pushed: browsers only grant fullscreen while the
     // click that asked for it is still being handled.
     final fullscreen = _NativeFullscreen.enter();
@@ -35,8 +43,8 @@ class VoipFullscreenStreamView extends StatefulWidget {
           barrierColor: Colors.black,
           transitionDuration: const Duration(milliseconds: 150),
           reverseTransitionDuration: const Duration(milliseconds: 150),
-          pageBuilder: (_, __, ___) =>
-              VoipFullscreenStreamView(stream: stream, session: session),
+          pageBuilder: (_, __, ___) => VoipFullscreenStreamView(
+              stream: stream, session: session, actions: actions),
           transitionsBuilder: (_, animation, __, child) =>
               FadeTransition(opacity: animation, child: child),
         ))
@@ -78,6 +86,9 @@ class _VoipFullscreenStreamViewState extends State<VoipFullscreenStreamView> {
   bool showControls = true;
   Timer? hideControlsTimer;
 
+  /// The soundboard popover is open: the controls stay up under it.
+  bool soundboardOpen = false;
+
   @override
   void initState() {
     component =
@@ -105,7 +116,7 @@ class _VoipFullscreenStreamViewState extends State<VoipFullscreenStreamView> {
   void wakeControls() {
     hideControlsTimer?.cancel();
     hideControlsTimer = Timer(_controlsTimeout, () {
-      if (mounted) setState(() => showControls = false);
+      if (mounted && !soundboardOpen) setState(() => showControls = false);
     });
     if (!showControls) setState(() => showControls = true);
   }
@@ -237,6 +248,26 @@ class _VoipFullscreenStreamViewState extends State<VoipFullscreenStreamView> {
                               onPressed: close,
                             ),
                           ),
+                          if (widget.actions != null)
+                            CallControlButtons(
+                              session: widget.session,
+                              actions: widget.actions!,
+                              radius: _buttonRadius,
+                              spacing: 8,
+                              // The booth panel lives in the call view: leave
+                              // fullscreen and open it there.
+                              onToggleBooth: DjBooths.of(widget.session) == null
+                                  ? null
+                                  : () {
+                                      DjBooths.showPanel(widget.session);
+                                      close();
+                                    },
+                              onHungUp: close,
+                              onSoundboardOpenChanged: (open) {
+                                soundboardOpen = open;
+                                if (!open) wakeControls();
+                              },
+                            ),
                         ]),
                   ),
                 ),

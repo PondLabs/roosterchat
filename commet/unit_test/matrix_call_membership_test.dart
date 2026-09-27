@@ -98,6 +98,60 @@ void main() {
               const {'expires': 1}, null, joined.add(const Duration(days: 1))),
           isFalse);
     });
+
+    test('a membership is still live at the moment it expires', () {
+      const content = {'expires': 1000};
+      final expiry = MatrixCallMembership.expiresAt(content, joined)!;
+
+      expect(expiry, joined.add(const Duration(seconds: 1)));
+      expect(MatrixCallMembership.isExpired(content, joined, expiry), isFalse);
+      expect(MatrixCallMembership.nextExpiry([expiry], expiry), expiry);
+    });
+  });
+
+  group('nextExpiry', () {
+    test('is the earliest expiry not yet passed', () {
+      final now = joined.add(const Duration(hours: 1));
+      expect(
+          MatrixCallMembership.nextExpiry([
+            null,
+            joined, // already lapsed
+            now.add(const Duration(hours: 2)),
+            now.add(const Duration(minutes: 5)),
+          ], now),
+          now.add(const Duration(minutes: 5)));
+    });
+
+    test('is null when nothing listed expires', () {
+      expect(MatrixCallMembership.nextExpiry([null], joined), isNull);
+      expect(MatrixCallMembership.nextExpiry([], joined), isNull);
+    });
+  });
+
+  group('MembershipLapseTimer', () {
+    test('fires once, just after the time it was given', () async {
+      var fired = 0;
+      final timer = MembershipLapseTimer(() => fired++);
+      final at = DateTime.now().add(const Duration(milliseconds: 30));
+      timer.schedule(at);
+      // Every recompute of the list schedules again: that is not a second one.
+      timer.schedule(at);
+
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(fired, 0);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(fired, 1);
+    });
+
+    test('cancelling it stops it firing', () async {
+      var fired = 0;
+      final timer = MembershipLapseTimer(() => fired++);
+      timer.schedule(DateTime.now().add(const Duration(milliseconds: 20)));
+      timer.cancel();
+
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(fired, 0);
+    });
   });
 
   group('withPublishedState', () {

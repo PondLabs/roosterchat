@@ -3,6 +3,8 @@
 // they have silenced themselves, so the voice channel list can show who is
 // live, muted or deafened to people outside the call (issue #9).
 // Pure Dart. See docs/research/issue-9-live-badge-voice-list.md.
+import 'dart:async';
+
 import 'package:commet/client/components/activities/activities_component.dart';
 
 class MatrixCallMembership {
@@ -62,15 +64,34 @@ class MatrixCallMembership {
     return sentAt;
   }
 
-  /// Whether the membership's `expires` window, counted from its join time
-  /// like MatrixRTC clients do, has passed at [now]. Stripped state carries
-  /// no [sentAt] and is assumed live.
+  /// When the membership's `expires` window, counted from its join time like
+  /// MatrixRTC clients do, closes. Null when it never does: no `expires`, or
+  /// stripped state, which carries no [sentAt].
+  static DateTime? expiresAt(Map<String, Object?> content, DateTime? sentAt) {
+    final expires = content['expires'];
+    if (expires is! int || sentAt == null) return null;
+    return joinedAt(content, sentAt)!.add(Duration(milliseconds: expires));
+  }
+
+  /// Whether the membership's `expires` window has passed at [now]. Stripped
+  /// state carries no [sentAt] and is assumed live.
   static bool isExpired(
       Map<String, Object?> content, DateTime? sentAt, DateTime now) {
-    final expires = content['expires'];
-    if (expires is! int || sentAt == null) return false;
-    final joined = joinedAt(content, sentAt)!;
-    return now.isAfter(joined.add(Duration(milliseconds: expires)));
+    final expiry = expiresAt(content, sentAt);
+    return expiry != null && now.isAfter(expiry);
+  }
+
+  /// The earliest of [expiries] still ahead of [now], when the list of who is
+  /// in the call next changes without any event arriving: nothing is sent
+  /// when a membership lapses, so whoever lists them has to look again then.
+  static DateTime? nextExpiry(Iterable<DateTime?> expiries, DateTime now) {
+    DateTime? next;
+    for (final expiry in expiries) {
+      // Already lapsed means not listed; one lapsing right now still is.
+      if (expiry == null || expiry.isBefore(now)) continue;
+      if (next == null || expiry.isBefore(next)) next = expiry;
+    }
+    return next;
   }
 
   /// [current] rewritten to list [media], [voiceState] and [away]. Every
@@ -100,4 +121,39 @@ class MatrixCallMembership {
       ],
     };
   }
+}
+
+/// Tells a list of who is in a call to look again when the next membership
+/// in it lapses. Without it a member whose client died without leaving (no
+/// delayed leave on their homeserver, or a leave that never got through)
+/// stayed listed long past their `expires`, until some other membership
+/// change happened to come by.
+class MembershipLapseTimer {
+  MembershipLapseTimer(this.onLapse);
+
+  final void Function() onLapse;
+
+  Timer? _timer;
+  DateTime? _at;
+
+  /// Fires [onLapse] just after [at], replacing what was scheduled before;
+  /// null cancels it.
+  void schedule(DateTime? at) {
+    if (at == _at) return;
+    _timer?.cancel();
+    _timer = null;
+    _at = at;
+    if (at == null) return;
+
+    // Just after: a membership is still live at the very moment it expires.
+    final delay =
+        at.difference(DateTime.now()) + const Duration(milliseconds: 1);
+    _timer = Timer(delay.isNegative ? Duration.zero : delay, () {
+      _timer = null;
+      _at = null;
+      onLapse();
+    });
+  }
+
+  void cancel() => schedule(null);
 }
