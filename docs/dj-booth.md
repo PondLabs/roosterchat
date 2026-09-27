@@ -130,7 +130,10 @@ Scaffold for snack bars.
   which gives a console app its own console window, or detached, which gives
   it none and so hands a fresh console to whatever *it* starts.
   `CREATE_NO_WINDOW` gives a console with no window, which the whole tree
-  inherits.
+  inherits. Each extension also runs in a job object of its own, so a
+  request killed for running too long ends everything it started
+  (yt-dlp.exe, for one, is a launcher whose Python child would go on
+  downloading otherwise).
 
 ## Known gaps
 

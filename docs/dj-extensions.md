@@ -88,9 +88,12 @@ Every request carries `"protocol": 1` and `"data"`: a folder the extension
 may keep things in (`<dir>/data`, created before the first request).
 `<dir>/deps` is writable too, so a download can update itself.
 
-The process is killed when it runs over its time (below). On Windows that
-ends only the process itself, so an extension that starts other programs
-should give up on them when it is gone.
+The process is killed when it runs over its time (below). On Windows it runs
+in a job object of its own, and the kill ends the whole job: whatever it
+started goes too. A program it leaves running after it has ended normally
+(an updater, say) is left alone. On Linux only the process gets the
+signal, so an extension that starts other programs should end them when it
+goes.
 
 ### `resolve`
 
