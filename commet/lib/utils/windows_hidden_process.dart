@@ -1,14 +1,13 @@
 // Runs a program on Windows without a console window flashing up, for the
-// DJ booth's yt-dlp.
+// DJ booth's source extensions (docs/dj-extensions.md).
 //
 // Dart has no say over how a child process is given a console. Started
 // normally from a GUI app, a console program gets its own console window;
 // started detached (`ProcessStartMode.detachedWithStdio`) it gets none, but
-// then whatever *it* starts gets a fresh one instead. yt-dlp runs a
-// JavaScript runtime for YouTube's player challenges, so adding a song from
-// YouTube pops a console up for as long as the challenge takes. On Windows
-// 11 that console is a Terminal window, which ignores the hidden-window hint
-// yt-dlp asks for.
+// then whatever *it* starts gets a fresh one instead. An extension is often
+// a script runtime that starts other console programs in turn, and on
+// Windows 11 each fresh console is a Terminal window, which ignores any
+// hidden-window hint a program asks for.
 //
 // `CREATE_NO_WINDOW` is the flag that gives a child a console with no window
 // of its own, which its own children then inherit, so nothing in the tree
@@ -16,7 +15,7 @@
 //
 // Output goes to files in a temporary directory rather than pipes: reading a
 // pipe means a blocking read on a thread of its own, and nothing here needs
-// what yt-dlp says sooner than the next poll.
+// what a program says sooner than the next poll.
 import 'dart:async';
 import 'dart:ffi';
 import 'dart:io';
@@ -248,7 +247,7 @@ Pointer<Void> _attributeListFor(List<int> handles, Arena arena) {
 }
 
 /// Quotes [argument] the way the C runtime parses a command line back into
-/// arguments, which is what yt-dlp and Deno use.
+/// arguments, which is what most programs (Deno included) use.
 String quoteWindowsArgument(String argument) {
   if (argument.isNotEmpty && !argument.contains(RegExp(r'[ \t"]'))) {
     return argument;
