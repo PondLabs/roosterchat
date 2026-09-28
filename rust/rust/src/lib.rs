@@ -21,9 +21,7 @@ pub mod linux_browser_runtime;
 // symbols are linked into this library; Dart loads them from here.
 pub use audio_dsp;
 
-// Soundboard clip decoder (MP3/Ogg/FLAC/WAV to PCM), same C ABI arrangement.
-pub use audio_decode;
-
-// DJ music player (local file to 48 kHz stereo for the WebRTC music track),
-// same C ABI arrangement.
+// DJ music player (local file to 48 kHz stereo for the WebRTC music track)
+// and soundboard clips (decode a window, encode Ogg Opus), same C ABI
+// arrangement.
 pub use dj_audio;

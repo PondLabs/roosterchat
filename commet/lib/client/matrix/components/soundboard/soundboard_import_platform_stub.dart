@@ -1,0 +1,38 @@
+import 'dart:typed_data';
+
+import 'package:commet/client/components/soundboard/soundboard_import_service.dart';
+import 'package:commet/client/components/soundboard/soundboard_normalizer.dart';
+import 'package:commet/client/matrix/components/soundboard/soundboard_import_platform.dart';
+
+SoundboardImportPlatform create() => _CantImport();
+
+/// The browser: plays sounds, can't add them.
+class _CantImport implements SoundboardImportPlatform {
+  @override
+  bool get canImport => false;
+
+  @override
+  List<String> get fileExtensions => const [];
+
+  Never _unsupported() =>
+      throw const SoundboardImportError('Adding sounds needs the desktop app');
+
+  @override
+  Future<SoundboardSourceFile> fromFile(String path) async => _unsupported();
+
+  @override
+  Future<SoundboardSourceFile> fromLink(String link,
+          {void Function(String status)? onStatus}) async =>
+      _unsupported();
+
+  @override
+  Future<PcmAudio> decode(SoundboardSourceFile file,
+          {required int startMs, required int maxMs}) async =>
+      _unsupported();
+
+  @override
+  Future<Uint8List> encode(PcmAudio pcm) async => _unsupported();
+
+  @override
+  Future<void> discard(SoundboardSourceFile file) async {}
+}

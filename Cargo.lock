@@ -97,13 +97,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c59bdb34bc650a32731b31bd8f0829cc15d24a708ee31559e0bb34f2bc320cba"
 
 [[package]]
-name = "audio_decode"
-version = "0.1.0"
-dependencies = [
- "symphonia",
-]
-
-[[package]]
 name = "audio_dsp"
 version = "0.1.0"
 dependencies = [
@@ -1294,7 +1287,6 @@ dependencies = [
 name = "rust_lib_commet"
 version = "0.1.0"
 dependencies = [
- "audio_decode",
  "audio_dsp",
  "base64",
  "dj_audio",

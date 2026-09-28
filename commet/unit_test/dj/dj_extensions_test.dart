@@ -1,4 +1,4 @@
-// Source extensions as the booth runs them (docs/dj-extensions.md): a fake
+// Source extensions as the booth runs them (docs/source-extensions.md): a fake
 // extension, a shell script, answers the way the protocol says, and the
 // booth takes from it only what the protocol allows.
 import 'dart:convert';
@@ -25,6 +25,7 @@ case "$verb" in
     case "$(field url)" in
       */bad) echo '{"error":"Nothing playable in that link"}'; exit 1 ;;
       */silent) echo 'it broke' >&2; exit 1 ;;
+      */for) echo "{\"tracks\":[{\"source\":\"x\",\"title\":\"$(field for)\"}]}"; exit 0 ;;
     esac
     echo '{"tracks":[{"source":"https://music.example/1","title":"One","label":"Example","durationMs":1000,"thumbnail":"http://insecure.example/x.jpg","link":"javascript:alert(1)"},{"title":"no source"},{"source":"search:two","title":"Two","artist":"Band","link":"https://songs.example/2","thumbnail":"https://art.example/2.jpg"}]}'
     ;;
@@ -79,6 +80,44 @@ void main() {
     await temp.delete(recursive: true);
   });
 
+  test('a link goes to an extension serving what it is for', () {
+    InstalledDjExtension installed(String id, List<String> hosts,
+            [List<String>? uses]) =>
+        InstalledDjExtension(
+            DjExtensionManifest.parse(jsonEncode({
+              'protocol': 1,
+              'id': id,
+              'name': id,
+              'version': '1',
+              'hosts': hosts,
+              if (uses != null) 'uses': uses,
+              'run': {'command': 'x'},
+            })),
+            temp);
+    final extensions = DjExtensions.instance;
+    final before = extensions.extensions.value;
+    addTearDown(() => extensions.extensions.value = before);
+    extensions.extensions.value = [
+      installed('all.sites', ['*'], ['dj', 'soundboard']),
+      installed('music.only', ['music.example']),
+      installed('sounds.only', ['sounds.example'], ['soundboard']),
+    ];
+    String? dj(String host) => extensions.forHost(host)?.id;
+    String? soundboard(String host) =>
+        extensions.forHost(host, use: DjExtensionManifest.useSoundboard)?.id;
+
+    expect(dj('music.example'), 'music.only');
+    expect(dj('sounds.example'), 'all.sites');
+    expect(soundboard('sounds.example'), 'sounds.only');
+    expect(soundboard('music.example'), 'all.sites');
+    expect(
+        extensions.namesHost('music.example',
+            use: DjExtensionManifest.useSoundboard),
+        isFalse);
+    expect(extensions.serving(DjExtensionManifest.useDj).map((e) => e.id),
+        ['all.sites', 'music.only']);
+  });
+
   group('running an extension', () {
     test('resolve gives its tracks, keeping only what is safe', () async {
       final extension = await _fakeExtension(temp);
@@ -105,6 +144,19 @@ void main() {
       expect(two.thumbnail, 'https://art.example/2.jpg');
       expect(two.artist, 'Band');
       expect(two.addedBy, '@a:x');
+    });
+
+    test('a request says what it is for', () async {
+      final extension = await _fakeExtension(temp);
+      Future<Object?> titleFor(String? use) async => (use == null
+              ? await DjExtensions.resolve(
+                  extension, 'https://music.example/for')
+              : await DjExtensions.resolve(
+                  extension, 'https://music.example/for',
+                  use: use))
+          .single['title'];
+      expect(await titleFor(null), 'dj');
+      expect(await titleFor('soundboard'), 'soundboard');
     });
 
     test("an extension's error is the user's message", () async {

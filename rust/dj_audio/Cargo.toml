@@ -2,7 +2,7 @@
 name = "dj_audio"
 version = "0.1.0"
 edition = "2021"
-description = "Commet DJ: decode a local music file to 48 kHz stereo and serve it to the WebRTC music track. C ABI."
+description = "Commet DJ: decode a local music file to 48 kHz stereo and serve it to the WebRTC music track; decode and Ogg Opus encode soundboard clips. C ABI."
 license = "AGPL-3.0"
 publish = false
 

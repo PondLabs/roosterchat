@@ -1,5 +1,5 @@
 // Runs a program on Windows without a console window flashing up, for the
-// DJ booth's source extensions (docs/dj-extensions.md).
+// DJ booth's source extensions (docs/source-extensions.md).
 //
 // Dart has no say over how a child process is given a console. Started
 // normally from a GUI app, a console program gets its own console window;

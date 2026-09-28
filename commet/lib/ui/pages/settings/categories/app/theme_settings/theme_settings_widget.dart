@@ -1,3 +1,5 @@
+import 'package:commet/config/build_config.dart';
+import 'package:commet/ui/molecules/desktop_app_notice.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -166,31 +168,41 @@ class _ThemeListWidgetState extends State<ThemeListWidget> {
               context,
               tiamat.TextButton(entry.name,
                   onTap: () => entry.setter(context))),
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              tiamat.CircleButton(
-                icon: Icons.add,
-                onPressed: () async {
-                  var result = await FilePicker.platform.pickFiles(
-                      type: FileType.custom,
-                      allowedExtensions: ["zip"],
-                      dialogTitle: "Pick theme archive file");
+        // Themes are installed into the app's folder, which a browser has
+        // none of.
+        if (BuildConfig.WEB)
+          const Padding(
+            padding: EdgeInsets.all(8.0),
+            child: DesktopAppNotice(
+                '🎨 Make Roscord yours with custom themes, installed in one '
+                'click in the desktop app.'),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                tiamat.CircleButton(
+                  icon: Icons.add,
+                  onPressed: () async {
+                    var result = await FilePicker.platform.pickFiles(
+                        type: FileType.custom,
+                        allowedExtensions: ["zip"],
+                        dialogTitle: "Pick theme archive file");
 
-                  var file = result?.files.firstOrNull;
-                  if (file?.path == null) {
-                    return;
-                  }
+                    var file = result?.files.firstOrNull;
+                    if (file?.path == null) {
+                      return;
+                    }
 
-                  File f = File(file!.path!);
-                  await ThemeConfig.installThemeFromZip(f);
-                },
-              ),
-            ],
-          ),
-        )
+                    File f = File(file!.path!);
+                    await ThemeConfig.installThemeFromZip(f);
+                  },
+                ),
+              ],
+            ),
+          )
       ],
     );
   }

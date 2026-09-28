@@ -273,4 +273,18 @@ void main() {
     expect(find.text(SoundboardEmoji.fallback), findsOneWidget);
     expect(find.byType(Image), findsNothing);
   });
+
+  testWidgets('a name that does not fit gets a tooltip with all of it',
+      (tester) async {
+    const long = 'The longest airhorn anyone has ever put on a soundboard';
+    await pumpPopover(tester, [
+      _source('!a', 'Roscas do CCO', [
+        _sound('s1', 'Bruh'),
+        _sound('s2', long),
+      ]),
+    ]);
+
+    expect(find.byTooltip(long), findsOneWidget);
+    expect(find.byTooltip('Bruh'), findsNothing);
+  });
 }

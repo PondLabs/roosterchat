@@ -1,7 +1,7 @@
 // Soundboard domain model.
 //
 // Deep module interface: callers learn SoundboardSound + SoundboardCatalog,
-// implementation (Matrix state events, MXC upload, MyInstants import) stays
+// implementation (Matrix state events, MXC upload, import) stays
 // behind the seam. See docs/adr decisions inline.
 import 'package:commet/client/components/soundboard/soundboard_normalizer.dart';
 
@@ -23,11 +23,12 @@ class SoundboardSound {
   /// Unicode emoji (may be ZWJ sequence / flag) or custom Space emoticon.
   final SoundboardEmoji emoji;
 
-  /// Original MyInstants page URL used at import time (for provenance).
+  /// The link the sound was imported from (for provenance); null for one
+  /// made from a file.
   final String? sourceUrl;
 
   /// Matrix Content Repository URI (mxc://...) after import/normalization.
-  /// After import, clients play from this URI — never hotlink MyInstants.
+  /// After import, clients play from this URI, never from where it came.
   final String mediaUri;
 
   /// MIME type of the stored audio (audio/mpeg, audio/ogg, audio/wav, ...).
