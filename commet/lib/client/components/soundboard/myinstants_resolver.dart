@@ -161,7 +161,8 @@ class MyInstantsResolver {
     return lower.contains('/media/sounds/');
   }
 
-  /// Validates downloaded bytes before they are stored: size + MIME.
+  /// Validates downloaded bytes before they are trimmed: size + MIME. The
+  /// trimmed clip is checked against [SoundboardConstraints.maxFileBytes].
   static void validateDownload({
     required int byteLength,
     required String? contentType,
@@ -170,8 +171,8 @@ class MyInstantsResolver {
     if (byteLength <= 0) {
       throw const MyInstantsValidationError('Downloaded file is empty');
     }
-    if (byteLength > SoundboardConstraints.maxFileBytes) {
-      throw const MyInstantsValidationError('Audio file too large (max 1 MB)');
+    if (byteLength > SoundboardConstraints.maxSourceFileBytes) {
+      throw const MyInstantsValidationError('Audio file too large (max 3 MB)');
     }
     if (contentType != null) {
       final mime = contentType.split(';').first.trim().toLowerCase();

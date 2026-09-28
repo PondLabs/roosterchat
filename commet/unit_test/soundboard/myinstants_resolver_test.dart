@@ -152,7 +152,7 @@ void main() {
     test('rejects oversized files', () {
       expect(
           () => MyInstantsResolver.validateDownload(
-                byteLength: 2 * 1024 * 1024,
+                byteLength: 4 * 1024 * 1024,
                 contentType: 'audio/mpeg',
                 downloadUrl: 'https://www.myinstants.com/media/sounds/x.mp3',
               ),

@@ -1,5 +1,6 @@
-// MyInstants import pipeline: resolve -> download -> validate -> normalize
-// metadata -> caller uploads bytes to MXC.
+// MyInstants import pipeline: resolve -> download the source (up to 1 min)
+// -> admin picks a selection -> trim (MP3 frames, no re-encode) -> validate
+// the clip (15 s, 1 MiB) -> measure loudness -> caller uploads bytes to MXC.
 //
 // Split from UI/Matrix so it is unit-testable with injected [fetcher].
 // The actual MXC upload stays in the Matrix component (needs authenticated
@@ -16,18 +17,42 @@ import 'package:commet/client/components/soundboard/soundboard_normalizer.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:http/http.dart' as http;
 
+/// A downloaded MyInstants file, before trimming.
 class FetchedAudio {
   final Uint8List bytes;
   final String mimeType;
   final String audioUrl;
   final int? durationMs;
-  final double normalizedGain;
-  final bool loudnessMeasured;
+
+  /// Decoded audio, for the waveform and for measuring the loudness of a
+  /// selection. Null where nothing can decode it (Android).
+  final PcmAudio? pcm;
+
+  /// True for MP3, the only format [SoundboardImportService.trim] can cut.
+  /// Other formats are imported whole.
+  final bool canTrim;
 
   const FetchedAudio({
     required this.bytes,
     required this.mimeType,
     required this.audioUrl,
+    required this.durationMs,
+    required this.pcm,
+    required this.canTrim,
+  });
+}
+
+/// The part of a [FetchedAudio] that gets uploaded.
+class SoundboardClip {
+  final Uint8List bytes;
+  final String mimeType;
+  final int? durationMs;
+  final double normalizedGain;
+  final bool loudnessMeasured;
+
+  const SoundboardClip({
+    required this.bytes,
+    required this.mimeType,
     required this.durationMs,
     required this.normalizedGain,
     required this.loudnessMeasured,
@@ -228,27 +253,92 @@ class SoundboardImportService {
     final mime = _inferMime(contentType, audioUrl);
     final pcm = await _decode(bytes, mime);
     final durationMs = _measureDurationMs(bytes, mime, pcm);
+    final canTrim = _isMp3(mime) && Mp3Duration.inMilliseconds(bytes) != null;
     log('duration: ${durationMs == null ? 'unknown' : '$durationMs ms'} '
-        '($mime)');
+        '($mime, ${canTrim ? 'trimmable' : 'not trimmable'})');
     if (durationMs != null &&
-        durationMs > SoundboardConstraints.maxDurationMs) {
+        durationMs > SoundboardConstraints.maxSourceDurationMs) {
       throw MyInstantsValidationError(
           'Audio too long (${_seconds(durationMs)} s, '
-          'max ${_seconds(SoundboardConstraints.maxDurationMs)} s)');
+          'max ${_seconds(SoundboardConstraints.maxSourceDurationMs)} s)');
     }
-    final estimate = pcm == null
-        ? SoundboardNormalizer.fallback()
-        : await compute(SoundboardNormalizer.analyze, pcm);
-    log('loudness: $estimate');
+    if (!canTrim) {
+      // Imported whole, so it has to fit the stored-sound limits already.
+      if (durationMs != null &&
+          durationMs > SoundboardConstraints.maxDurationMs) {
+        throw MyInstantsValidationError(
+            'Audio too long (${_seconds(durationMs)} s, '
+            'max ${_seconds(SoundboardConstraints.maxDurationMs)} s). '
+            'Only MP3 sounds can be trimmed.');
+      }
+      _checkClipSize(bytes.length);
+    }
     return FetchedAudio(
       bytes: bytes,
       mimeType: mime,
       audioUrl: audioUrl,
       durationMs: durationMs,
+      pcm: pcm,
+      canTrim: canTrim,
+    );
+  }
+
+  /// Cuts [startMs]..[endMs] out of [source] and measures its loudness.
+  /// Sources that cannot be trimmed come back whole; pass their full length.
+  Future<SoundboardClip> trim(FetchedAudio source,
+      {required int startMs, required int endMs}) async {
+    final Uint8List bytes;
+    final int? durationMs;
+    PcmAudio? pcm = source.pcm;
+    if (source.canTrim) {
+      final selected = endMs - startMs;
+      if (selected > SoundboardConstraints.maxDurationMs) {
+        throw MyInstantsValidationError(
+            'Selection too long (${_seconds(selected)} s, '
+            'max ${_seconds(SoundboardConstraints.maxDurationMs)} s)');
+      }
+      final clip = selected < SoundboardConstraints.minDurationMs
+          ? null
+          : Mp3Trim.cut(source.bytes, startMs, endMs);
+      if (clip == null) {
+        throw const MyInstantsValidationError('Selection too short');
+      }
+      bytes = clip.bytes;
+      durationMs = clip.durationMs;
+      pcm = pcm?.slice(clip.startMs, clip.startMs + clip.durationMs);
+      log('trim: ${clip.startMs} ms + ${clip.durationMs} ms, '
+          '${bytes.length} bytes');
+    } else {
+      final whole = source.durationMs;
+      if (startMs > 0 || (whole != null && endMs < whole)) {
+        throw const MyInstantsValidationError('Only MP3 sounds can be trimmed');
+      }
+      bytes = source.bytes;
+      durationMs = whole;
+    }
+    _checkClipSize(bytes.length);
+
+    final estimate = pcm == null
+        ? SoundboardNormalizer.fallback()
+        : await compute(SoundboardNormalizer.analyze, pcm);
+    log('loudness: $estimate');
+    return SoundboardClip(
+      bytes: bytes,
+      mimeType: source.mimeType,
+      durationMs: durationMs,
       normalizedGain: estimate.gain,
       loudnessMeasured: estimate.measured,
     );
   }
+
+  static void _checkClipSize(int length) {
+    if (length > SoundboardConstraints.maxFileBytes) {
+      throw const MyInstantsValidationError('Sound file too large (max 1 MB)');
+    }
+  }
+
+  static bool _isMp3(String mime) =>
+      mime == 'audio/mpeg' || mime == 'audio/mp3';
 
   Future<PcmAudio?> _decode(Uint8List bytes, String mime) async {
     final wav = SoundboardNormalizer.decodeWav(bytes);
@@ -286,7 +376,7 @@ class SoundboardImportService {
   /// neither is available (accepted, bounded at playback by natural end +
   /// overlay clamp).
   static int? _measureDurationMs(Uint8List bytes, String mime, PcmAudio? pcm) {
-    if (mime == 'audio/mpeg' || mime == 'audio/mp3') {
+    if (_isMp3(mime)) {
       final ms = Mp3Duration.inMilliseconds(bytes);
       if (ms != null) return ms;
     }

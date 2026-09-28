@@ -1,22 +1,100 @@
-// MP3 duration from MPEG audio frame headers. Pure Dart.
+// MP3 duration and trimming from MPEG audio frame headers. Pure Dart.
 //
 // Import used to assume 128 kbps CBR over the whole file, ID3 tags and cover
 // art included. Real MyInstants uploads broke that both ways: a 14.5 s VBR
 // clip measured 18.9 s (rejected) and a 21.6 s 64 kbps clip measured 10.8 s
 // (accepted). Summing the samples of every frame is exact for CBR and VBR
-// and cheap under the 1 MiB import cap.
+// and cheap under the import cap.
+//
+// Trimming keeps whole frames and never re-encodes, so it runs the same on
+// every platform, including the browser.
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 class Mp3Duration {
   /// Playback duration of [bytes] in milliseconds, or null when they do not
   /// hold a run of valid MPEG audio frames (not MP3, or free-format bitrate).
   static int? inMilliseconds(Uint8List bytes) {
+    final frames = _AudioFrames.scan(bytes);
+    if (frames == null) return null;
+    return frames.durationMs(frames.length);
+  }
+}
+
+/// Audio cut out of an MP3 file by [Mp3Trim.cut].
+class Mp3Clip {
+  final Uint8List bytes;
+
+  /// Where the kept audio starts in the source, on a frame boundary.
+  final int startMs;
+
+  /// Length of the kept audio, not counting priming frames.
+  final int durationMs;
+
+  const Mp3Clip(
+      {required this.bytes, required this.startMs, required this.durationMs});
+}
+
+class Mp3Trim {
+  /// The frames of [bytes] between [startMs] and [endMs], snapped inward to
+  /// frame boundaries (~26 ms at 44.1 kHz) so the clip is never longer than
+  /// the selection. Null when [bytes] hold no MP3 frames or the selection
+  /// holds no whole frame.
+  ///
+  /// ID3 tags and the Xing/Info frame are dropped: the tags may carry cover
+  /// art, and the Xing frame counts the frames of the whole source.
+  ///
+  /// A Layer III frame may keep part of its audio data in the frames before
+  /// it (the bit reservoir). Those frames are kept too, so the first
+  /// selected frame decodes cleanly; they add at most a few frames of
+  /// lead-in, which usually decodes as silence.
+  static Mp3Clip? cut(Uint8List bytes, int startMs, int endMs) {
+    final frames = _AudioFrames.scan(bytes);
+    if (frames == null) return null;
+    final msPerFrame = frames.samplesPerFrame * 1000 / frames.sampleRate;
+    final first = math.max(0, (startMs / msPerFrame - 1e-9).ceil());
+    final end = math.min(frames.length, (endMs / msPerFrame + 1e-9).floor());
+    if (end <= first) return null;
+
+    final from = first - frames.primingFrames(first);
+    final out = BytesBuilder(copy: false);
+    for (var i = from; i < end; i++) {
+      final offset = frames.offsets[i];
+      out.add(Uint8List.sublistView(
+          bytes, offset, offset + frames.headers[i].length));
+    }
+    return Mp3Clip(
+      bytes: out.takeBytes(),
+      startMs: (first * msPerFrame).round(),
+      durationMs: frames.durationMs(end - first),
+    );
+  }
+}
+
+/// The audio frames of one MPEG stream, without tags or the Xing frame.
+class _AudioFrames {
+  final Uint8List bytes;
+  final List<int> offsets;
+  final List<_FrameHeader> headers;
+  final int sampleRate;
+  final int samplesPerFrame;
+
+  _AudioFrames(this.bytes, this.offsets, this.headers, this.sampleRate,
+      this.samplesPerFrame);
+
+  int get length => offsets.length;
+
+  int durationMs(int frameCount) =>
+      (frameCount * samplesPerFrame * 1000 / sampleRate).round();
+
+  static _AudioFrames? scan(Uint8List bytes) {
     var offset = _skipId3v2(bytes);
     final first = _findFrame(bytes, offset, null);
     if (first == null) return null;
     final ref = _FrameHeader.parse(bytes, first)!;
 
-    var samples = 0;
+    final offsets = <int>[];
+    final headers = <_FrameHeader>[];
     offset = first;
     while (offset + 4 <= bytes.length) {
       final header = _FrameHeader.parse(bytes, offset);
@@ -29,12 +107,26 @@ class Mp3Duration {
       if (offset + header.length > bytes.length) break;
       // A Xing/Info/VBRI frame carries encoder metadata, not audio.
       if (!(offset == first && header.isVbrInfoFrame(bytes, offset))) {
-        samples += header.samplesPerFrame;
+        offsets.add(offset);
+        headers.add(header);
       }
       offset += header.length;
     }
-    if (samples == 0) return null;
-    return (samples * 1000 / ref.sampleRate).round();
+    if (offsets.isEmpty) return null;
+    return _AudioFrames(
+        bytes, offsets, headers, ref.sampleRate, ref.samplesPerFrame);
+  }
+
+  /// How many frames before [index] hold audio data of frame [index].
+  int primingFrames(int index) {
+    final needed = headers[index].mainDataBegin(bytes, offsets[index]);
+    var count = 0;
+    var available = 0;
+    while (available < needed && count < index) {
+      count++;
+      available += headers[index - count].mainDataCapacity;
+    }
+    return count;
   }
 
   static int _skipId3v2(Uint8List b) {
@@ -142,9 +234,24 @@ class _FrameHeader {
       layer == other.layer &&
       sampleRate == other.sampleRate;
 
+  int get _sideInfoLength => version == 3 ? (mono ? 17 : 32) : (mono ? 9 : 17);
+
+  /// Bytes of this frame that hold audio data (Layer III), which later
+  /// frames may borrow through the bit reservoir.
+  int get mainDataCapacity =>
+      layer == 3 ? length - 4 - (hasCrc ? 2 : 0) - _sideInfoLength : 0;
+
+  /// How many bytes of this frame's audio data sit in earlier frames (the
+  /// `main_data_begin` field of the Layer III side info).
+  int mainDataBegin(Uint8List b, int i) {
+    if (layer != 3) return 0;
+    final side = i + 4 + (hasCrc ? 2 : 0);
+    if (side + 2 > b.length) return 0;
+    return version == 3 ? b[side] << 1 | b[side + 1] >> 7 : b[side];
+  }
+
   bool isVbrInfoFrame(Uint8List b, int i) {
-    final sideInfo = version == 3 ? (mono ? 17 : 32) : (mono ? 9 : 17);
-    final xing = i + 4 + (hasCrc ? 2 : 0) + sideInfo;
+    final xing = i + 4 + (hasCrc ? 2 : 0) + _sideInfoLength;
     return _tagAt(b, xing, 'Xing') ||
         _tagAt(b, xing, 'Info') ||
         _tagAt(b, i + 36, 'VBRI');

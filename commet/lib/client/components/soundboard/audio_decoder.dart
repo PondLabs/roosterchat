@@ -7,6 +7,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:commet/client/components/soundboard/soundboard_constraints.dart';
 import 'package:commet/client/components/soundboard/soundboard_normalizer.dart';
 
 import 'audio_decoder/audio_decoder_stub.dart'
@@ -18,9 +19,10 @@ import 'audio_decoder/audio_decoder_stub.dart'
 typedef AudioDecoder = FutureOr<PcmAudio?> Function(
     Uint8List bytes, String mimeType);
 
-/// Decodes at most this much audio: enough to tell a clip is over
-/// [SoundboardConstraints.maxDurationMs] without decoding a whole song.
-const double maxDecodeSeconds = 20;
+/// Decodes at most this much audio: enough to tell a source is over
+/// [SoundboardConstraints.maxSourceDurationMs] without decoding a whole song.
+const double maxDecodeSeconds =
+    SoundboardConstraints.maxSourceDurationMs / 1000 + 5;
 
 Future<PcmAudio?> decodeWithPlatform(Uint8List bytes, String mimeType) =>
     platform.decode(bytes, mimeType);

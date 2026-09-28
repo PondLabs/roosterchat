@@ -2,12 +2,14 @@
 //
 // Only visible to users with canManage (power levels). Enforced again in
 // MatrixSpaceSoundboardComponent — hiding UI is not the security boundary.
-// Import flow: paste MyInstants URL -> resolve -> validate -> upload to MXC
-// -> store per-sound state event. Audio is then served from the homeserver,
+// Import flow: paste MyInstants URL -> resolve -> download (up to 1 min) ->
+// trim to at most 15 s in the editor -> upload the clip to MXC -> store
+// per-sound state event. Audio is then served from the homeserver,
 // never hotlinked per-click.
 // Each sound has an admin volume slider (fallback for sounds normalization
 // gets wrong) with a preview at the volume a call would use.
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:commet/client/components/emoticon/dynamic_emoticon_pack.dart';
 import 'package:commet/client/components/emoticon/emoji_pack.dart';
@@ -28,6 +30,7 @@ import 'package:commet/client/matrix/components/soundboard/soundboard_preview_pl
 import 'package:commet/config/build_config.dart';
 import 'package:commet/debug/log.dart';
 import 'package:commet/ui/molecules/soundboard_emoji_picker.dart';
+import 'package:commet/ui/molecules/soundboard_trim_editor.dart';
 import 'package:commet/ui/organisms/soundboard/soundboard_call_controller.dart';
 import 'package:commet/utils/emoji/unicode_emoji.dart';
 import 'package:flutter/material.dart';
@@ -54,18 +57,42 @@ class _SpaceSoundboardSettingsPageState
       userVolume: () => SoundboardCallController.userVolume);
   double _volume = 1.0;
   bool _busy = false;
+  bool _loading = false;
   bool _previewBusy = false;
   String? _error;
+  late final _service =
+      SoundboardImportService(log: (line) => Log.i('Soundboard import: $line'));
 
-  // Audio fetched for preview, reused by "Add sound" while the link is the
-  // same so it is downloaded once.
+  // Audio fetched for trimming, reused by "Preview" and "Add sound" while the
+  // link is the same so it is downloaded once.
   FetchedAudio? _fetched;
   String? _fetchedUrl;
+  List<double>? _peaks;
+  int _startMs = 0;
+  int _endMs = 0;
+
+  // The current selection of [_fetched], cut and measured; null after the
+  // selection changes.
+  SoundboardClip? _clip;
+
+  static const _waveformBins = 240;
+
+  bool get _idle => !_busy && !_loading && !_previewBusy;
+
+  @override
+  void initState() {
+    super.initState();
+    // Shows or hides the trim editor as the link changes.
+    _urlCtrl.addListener(_onUrlChanged);
+  }
+
+  void _onUrlChanged() => setState(() {});
 
   @override
   void dispose() {
     _preview.dispose();
     _changes.dispose();
+    _urlCtrl.removeListener(_onUrlChanged);
     _urlCtrl.dispose();
     _nameCtrl.dispose();
     super.dispose();
@@ -90,12 +117,29 @@ class _SpaceSoundboardSettingsPageState
             children: [
               const tiamat.Text.labelEmphasised('Add sound from MyInstants'),
               const SizedBox(height: 8),
-              tiamat.TextInput(
-                label: 'MyInstants link',
-                placeholder:
-                    'https://www.myinstants.com/en/instant/... (page or .mp3)',
-                controller: _urlCtrl,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: tiamat.TextInput(
+                      label: 'MyInstants link',
+                      placeholder: 'https://www.myinstants.com/en/instant/... '
+                          '(page or .mp3)',
+                      controller: _urlCtrl,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 110,
+                    child: tiamat.Button.secondary(
+                      text: 'Load',
+                      isLoading: _loading,
+                      onTap: _idle ? _load : null,
+                    ),
+                  ),
+                ],
               ),
+              ..._trimSection(),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -121,12 +165,12 @@ class _SpaceSoundboardSettingsPageState
                 previewing: _previewBusy,
                 onChanged: (v) {
                   setState(() => _volume = v);
-                  final fetched = _fetched;
-                  if (fetched != null) {
-                    _preview.setSoundGain(fetched.normalizedGain * v);
+                  final clip = _clip;
+                  if (clip != null) {
+                    _preview.setSoundGain(clip.normalizedGain * v);
                   }
                 },
-                onPreview: _busy || _previewBusy ? null : _previewNewSound,
+                onPreview: _idle ? _previewNewSound : null,
               ),
               if (_error != null)
                 Padding(
@@ -137,7 +181,7 @@ class _SpaceSoundboardSettingsPageState
               tiamat.Button(
                 text: 'Add sound',
                 isLoading: _busy,
-                onTap: _busy || _previewBusy ? null : _addSound,
+                onTap: _idle ? _addSound : null,
               ),
               const SizedBox(height: 16),
               tiamat.Text.labelEmphasised('Sounds (${sounds.length})'),
@@ -183,21 +227,90 @@ class _SpaceSoundboardSettingsPageState
     );
   }
 
+  /// The trim editor for the loaded link, or a note when it can't be
+  /// trimmed. Empty until the link is loaded.
+  List<Widget> _trimSection() {
+    final fetched = _fetched;
+    if (fetched == null || _fetchedUrl != _urlCtrl.text) return const [];
+    final durationMs = fetched.durationMs;
+    return [
+      const SizedBox(height: 8),
+      if (fetched.canTrim && durationMs != null)
+        SoundboardTrimEditor(
+          durationMs: durationMs,
+          peaks: _peaks,
+          startMs: _startMs,
+          endMs: _endMs,
+          onChanged: (start, end) => setState(() {
+            _startMs = start;
+            _endMs = end;
+            _clip = null;
+          }),
+        )
+      else
+        tiamat.Text.labelLow(durationMs == null
+            ? 'Only MP3 sounds can be trimmed.'
+            : '${(durationMs / 1000).toStringAsFixed(2)} s. '
+                'Only MP3 sounds can be trimmed.'),
+    ];
+  }
+
   Future<FetchedAudio> _fetch(String url) async {
     if (_fetched != null && _fetchedUrl == url) return _fetched!;
-    final service = SoundboardImportService(
-        log: (line) => Log.i('Soundboard import: $line'));
     final FetchedAudio fetched;
     try {
       // Each request inside is bounded by SoundboardConstraints.httpTimeout.
-      fetched = await service.importFromPageUrl(url);
+      fetched = await _service.importFromPageUrl(url);
     } on MyInstantsRequestError {
       if (!BuildConfig.WEB) unawaited(_probeNetwork(url));
       rethrow;
     }
-    _fetched = fetched;
-    _fetchedUrl = url;
+    final durationMs = fetched.durationMs ?? 0;
+    final peaks = fetched.pcm?.peaks(_waveformBins);
+    void apply() {
+      _fetched = fetched;
+      _fetchedUrl = url;
+      _peaks = peaks;
+      _clip = null;
+      _startMs = 0;
+      _endMs = fetched.canTrim
+          ? math.min(durationMs, SoundboardConstraints.maxDurationMs)
+          : durationMs;
+    }
+
+    mounted ? setState(apply) : apply();
     return fetched;
+  }
+
+  /// The selected part of [fetched], cut and measured once per selection.
+  Future<SoundboardClip> _trimmed(FetchedAudio fetched) async {
+    final cached = _clip;
+    if (cached != null) return cached;
+    final start = _startMs;
+    final end = _endMs;
+    final clip = await _service.trim(fetched, startMs: start, endMs: end);
+    // Keep it only if the selection didn't move meanwhile.
+    if (identical(fetched, _fetched) && start == _startMs && end == _endMs) {
+      _clip = clip;
+    }
+    return clip;
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await _fetch(_urlCtrl.text);
+    } on MyInstantsValidationError catch (e) {
+      if (mounted) setState(() => _error = _friendlyError(e));
+    } catch (e, s) {
+      Log.onError(e, s, content: 'Soundboard import failed: $e');
+      if (mounted) setState(() => _error = _friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   Future<void> _previewNewSound() async {
@@ -207,8 +320,9 @@ class _SpaceSoundboardSettingsPageState
     });
     try {
       final fetched = await _fetch(_urlCtrl.text);
+      final clip = await _trimmed(fetched);
       await _preview.playBytes(
-          fetched.bytes, fetched.mimeType, fetched.normalizedGain * _volume);
+          clip.bytes, clip.mimeType, clip.normalizedGain * _volume);
     } on MyInstantsValidationError catch (e) {
       if (mounted) setState(() => _error = _friendlyError(e));
     } catch (e, s) {
@@ -230,22 +344,23 @@ class _SpaceSoundboardSettingsPageState
       final name = SoundboardValidator.sanitizeName(_nameCtrl.text);
       final emoji = SoundboardValidator.sanitizeSoundEmoji(_emoji);
       final fetched = await _fetch(url);
-      // Upload normalized bytes to the homeserver (MXC) — clients stream
+      final clip = await _trimmed(fetched);
+      // Upload the trimmed clip to the homeserver (MXC) — clients stream
       // from here, never from MyInstants per-click.
       final mx = (widget.soundboard as MatrixSpaceSoundboardComponent)
           .client
           .getMatrixClient();
       final mxc =
-          await mx.uploadContent(fetched.bytes, contentType: fetched.mimeType);
-      Log.i('Soundboard import: uploaded ${fetched.bytes.length} bytes '
+          await mx.uploadContent(clip.bytes, contentType: clip.mimeType);
+      Log.i('Soundboard import: uploaded ${clip.bytes.length} bytes '
           'as $mxc');
       await widget.soundboard.addSound(
         name: name,
         emoji: emoji,
         mediaUri: mxc.toString(),
-        mimeType: fetched.mimeType,
-        durationMs: fetched.durationMs ?? 3000,
-        normalizedGain: fetched.normalizedGain,
+        mimeType: clip.mimeType,
+        durationMs: clip.durationMs ?? 3000,
+        normalizedGain: clip.normalizedGain,
         volume: _volume,
         sourceUrl: MyInstantsResolver.normalizeUrl(url),
       );
@@ -255,6 +370,8 @@ class _SpaceSoundboardSettingsPageState
       _nameCtrl.clear();
       _fetched = null;
       _fetchedUrl = null;
+      _peaks = null;
+      _clip = null;
       if (mounted) {
         setState(() {
           _emoji = _defaultEmoji;

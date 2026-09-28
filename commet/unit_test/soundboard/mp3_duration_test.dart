@@ -8,7 +8,59 @@ import 'mp3_fixtures.dart';
 int? durationOf(List<int> bytes) =>
     Mp3Duration.inMilliseconds(Uint8List.fromList(bytes));
 
+Mp3Clip? cut(List<int> bytes, int startMs, int endMs) =>
+    Mp3Trim.cut(Uint8List.fromList(bytes), startMs, endMs);
+
+/// Length of one [mpeg1Frames] frame at 128 kbps.
+const frameBytes = 417;
+
 void main() {
+  group('Mp3Trim', () {
+    final frameMs = 1152 * 1000 / 44100;
+
+    test('keeps the frames inside the selection', () {
+      final clip = cut(
+          mpeg1Frames(100), (10 * frameMs).round(), (30 * frameMs).round())!;
+      expect(clip.bytes.length, 20 * frameBytes);
+      expect(clip.durationMs, framesToMs(20));
+      expect(clip.startMs, framesToMs(10));
+      expect(durationOf(clip.bytes), framesToMs(20));
+    });
+
+    test('snaps inward so the clip is never longer than the selection', () {
+      final clip = cut(mpeg1Frames(100), (10 * frameMs).round() + 5,
+          (30 * frameMs).round() - 5)!;
+      expect(clip.durationMs, framesToMs(18));
+      expect(clip.startMs, framesToMs(11));
+    });
+
+    test('drops ID3 tags and the Xing frame', () {
+      final xing = mpeg1Frames(1)..setAll(36, 'Xing'.codeUnits);
+      final clip =
+          cut([...id3v2(5000), ...xing, ...mpeg1Frames(50)], 0, 100000)!;
+      expect(clip.bytes.length, 50 * frameBytes);
+      expect(clip.bytes.take(2), [0xFF, 0xFB]);
+    });
+
+    test('keeps the frames the first one borrows audio data from', () {
+      final frames = mpeg1Frames(40);
+      // Frame 20's audio data starts 500 bytes back. Each frame holds
+      // 417 - 4 (header) - 32 (side info) = 381, so it reaches two back.
+      final side = 20 * frameBytes + 4;
+      frames[side] = 500 >> 1;
+      frames[side + 1] = (500 & 1) << 7;
+      final clip = cut(frames, (20 * frameMs).round(), (30 * frameMs).round())!;
+      expect(clip.bytes.length, 12 * frameBytes);
+      expect(clip.durationMs, framesToMs(10));
+      expect(clip.startMs, framesToMs(20));
+    });
+
+    test('returns null without a whole frame or MP3 data', () {
+      expect(cut(mpeg1Frames(100), 10, 20), isNull);
+      expect(cut(List.filled(5000, 1), 0, 1000), isNull);
+    });
+  });
+
   test('CBR duration comes from the frame count', () {
     expect(durationOf(mpeg1Frames(383)), framesToMs(383));
   });

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:commet/client/components/soundboard/audio_decoder.dart';
 import 'package:commet/client/components/soundboard/myinstants_resolver.dart';
 import 'package:commet/client/components/soundboard/soundboard_catalog.dart';
 import 'package:commet/client/components/soundboard/soundboard_constraints.dart';
@@ -108,7 +109,7 @@ void main() {
         if (uri.path.contains('instant')) {
           return _html('<a onclick="play(\'/media/sounds/big.mp3\')">x</a>');
         }
-        return _audio(List.filled(2 * 1024 * 1024, 1), 'audio/mpeg');
+        return _audio(List.filled(4 * 1024 * 1024, 1), 'audio/mpeg');
       });
       await expectLater(
           svc.importFromPageUrl('https://www.myinstants.com/en/instant/big-1/'),
@@ -156,15 +157,15 @@ void main() {
     });
 
     test('duration comes from MP3 frames, not file size', () async {
-      // 20 s at 32 kbps is ~80 KB, which the old 128 kbps guess let through.
+      // 62.7 s at 32 kbps is ~250 KB, which a 128 kbps guess reads as 16 s.
       final svc = SoundboardImportService(
           fetcher: (_) async =>
-              _audio(mpeg1Frames(766, kbps: 32), 'audio/mpeg'));
+              _audio(mpeg1Frames(2400, kbps: 32), 'audio/mpeg'));
       await expectLater(
           svc.importFromPageUrl(
               'https://www.myinstants.com/media/sounds/long.mp3'),
           throwsA(isA<MyInstantsValidationError>().having((e) => e.message,
-              'message', 'Audio too long (20.0 s, max 15 s)')));
+              'message', 'Audio too long (62.7 s, max 60 s)')));
     });
 
     test('cover art does not push a short clip over the limit', () async {
@@ -200,7 +201,7 @@ void main() {
           containsAllInOrder([
             'GET https://www.myinstants.com/en/instant/ok-1/',
             'GET https://www.myinstants.com/media/sounds/ok.mp3',
-            'duration: ${framesToMs(40)} ms (audio/mpeg)',
+            'duration: ${framesToMs(40)} ms (audio/mpeg, trimmable)',
           ]));
     });
 
@@ -222,8 +223,10 @@ void main() {
             return quiet;
           },
         );
-        final out = await svc
+        final source = await svc
             .importFromPageUrl('https://www.myinstants.com/media/sounds/q.mp3');
+        final out =
+            await svc.trim(source, startMs: 0, endMs: source.durationMs!);
         expect(decodedMime, 'audio/mpeg');
         expect(out.loudnessMeasured, isTrue);
         // -30 LUFS needs +14 dB to reach -16.
@@ -238,8 +241,10 @@ void main() {
           fetcher: (_) async => _audio(mpeg1Frames(40), 'audio/mpeg'),
           decoder: (bytes, mime) async => null,
         );
-        final out = await svc
+        final source = await svc
             .importFromPageUrl('https://www.myinstants.com/media/sounds/q.mp3');
+        final out =
+            await svc.trim(source, startMs: 0, endMs: source.durationMs!);
         expect(out.loudnessMeasured, isFalse);
         expect(out.normalizedGain, 1.0);
         expect(lines, contains(startsWith('loudness: measured=false')));
@@ -252,8 +257,9 @@ void main() {
           fetcher: (_) async => _audio(wav, 'audio/wav'),
           decoder: (bytes, mime) => fail('WAV must not need a decoder'),
         );
-        final out = await svc
+        final source = await svc
             .importFromPageUrl('https://www.myinstants.com/media/sounds/l.wav');
+        final out = await svc.trim(source, startMs: 0, endMs: 1500);
         expect(out.loudnessMeasured, isTrue);
         expect(out.durationMs, 1500);
         expect(20 * math.log(out.normalizedGain) / math.ln10, closeTo(-10, 1));
@@ -270,8 +276,94 @@ void main() {
         await expectLater(
             svc.importFromPageUrl(
                 'https://www.myinstants.com/media/sounds/long.ogg'),
+            throwsA(isA<MyInstantsValidationError>().having(
+                (e) => e.message,
+                'message',
+                'Audio too long (16 s, max 15 s). '
+                    'Only MP3 sounds can be trimmed.')));
+      });
+    });
+
+    group('trim', () {
+      // 30 s of 128 kbps frames, 417 bytes each.
+      final source = mpeg1Frames(1150);
+
+      Future<FetchedAudio> fetch(List<int> bytes, String mime,
+              {AudioDecoder? decoder}) =>
+          SoundboardImportService(
+            fetcher: (_) async => _audio(bytes, mime),
+            decoder: decoder ?? (bytes, mime) async => null,
+          ).importFromPageUrl('https://www.myinstants.com/media/sounds/x.mp3');
+
+      test('accepts an MP3 longer than a sound may be', () async {
+        final fetched = await fetch(source, 'audio/mpeg');
+        expect(fetched.canTrim, isTrue);
+        expect(fetched.durationMs, framesToMs(1150));
+      });
+
+      test('cuts whole frames inside the selection', () async {
+        final fetched = await fetch(source, 'audio/mpeg');
+        final clip = await SoundboardImportService()
+            .trim(fetched, startMs: 5000, endMs: 8000);
+        // Frames 192 (from 5016 ms) to 305 (to 7993 ms).
+        expect(clip.durationMs, framesToMs(114));
+        expect(clip.bytes.length, 114 * 417);
+      });
+
+      test('measures loudness of the selection only', () async {
+        // 10 s: 5 s of silence, then 5 s of noise.
+        final pcm = Float32List(480000);
+        final random = math.Random(1);
+        for (var i = 240000; i < pcm.length; i++) {
+          pcm[i] = (random.nextDouble() * 2 - 1) * 0.1;
+        }
+        final fetched = await fetch(mpeg1Frames(383), 'audio/mpeg',
+            decoder: (_, __) async =>
+                PcmAudio(sampleRate: 48000, channels: [pcm]));
+        final svc = SoundboardImportService();
+        final silent = await svc.trim(fetched, startMs: 0, endMs: 4000);
+        final loud = await svc.trim(fetched, startMs: 6000, endMs: 9000);
+        expect(silent.normalizedGain, 1.0);
+        expect(loud.loudnessMeasured, isTrue);
+        expect(loud.normalizedGain, isNot(1.0));
+      });
+
+      test('rejects a selection over 15 s', () async {
+        final fetched = await fetch(source, 'audio/mpeg');
+        await expectLater(
+            SoundboardImportService()
+                .trim(fetched, startMs: 1000, endMs: 16100),
             throwsA(isA<MyInstantsValidationError>().having((e) => e.message,
-                'message', 'Audio too long (16 s, max 15 s)')));
+                'message', 'Selection too long (15.1 s, max 15 s)')));
+      });
+
+      test('rejects a selection under 100 ms', () async {
+        final fetched = await fetch(source, 'audio/mpeg');
+        await expectLater(
+            SoundboardImportService().trim(fetched, startMs: 1000, endMs: 1090),
+            throwsA(isA<MyInstantsValidationError>()
+                .having((e) => e.message, 'message', 'Selection too short')));
+      });
+
+      test('other formats are imported whole', () async {
+        final ogg = await fetch([1, 2, 3, 4], 'audio/ogg',
+            decoder: (_, __) async =>
+                PcmAudio(sampleRate: 1000, channels: [Float32List(5000)]));
+        expect(ogg.canTrim, isFalse);
+        final svc = SoundboardImportService();
+        await expectLater(
+            svc.trim(ogg, startMs: 0, endMs: 3000),
+            throwsA(isA<MyInstantsValidationError>().having((e) => e.message,
+                'message', 'Only MP3 sounds can be trimmed')));
+        final whole = await svc.trim(ogg, startMs: 0, endMs: 5000);
+        expect(whole.bytes, [1, 2, 3, 4]);
+      });
+
+      test('other formats over 1 MB are rejected at download', () async {
+        await expectLater(
+            fetch(List.filled(2 * 1024 * 1024, 1), 'audio/ogg'),
+            throwsA(isA<MyInstantsValidationError>().having((e) => e.message,
+                'message', 'Sound file too large (max 1 MB)')));
       });
     });
 

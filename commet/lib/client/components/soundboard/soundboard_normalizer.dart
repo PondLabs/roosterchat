@@ -35,6 +35,31 @@ class PcmAudio {
   int get durationMs =>
       sampleRate <= 0 ? 0 : (frames * 1000 / sampleRate).round();
 
+  /// The audio between [startMs] and [endMs], without copying.
+  PcmAudio slice(int startMs, int endMs) {
+    int at(int ms) => (ms * sampleRate / 1000).round().clamp(0, frames);
+    final start = at(startMs);
+    final end = math.max(start, at(endMs));
+    return PcmAudio(sampleRate: sampleRate, channels: [
+      for (final c in channels) Float32List.sublistView(c, start, end),
+    ]);
+  }
+
+  /// Loudest absolute sample of each of [bins] equal slices, for drawing a
+  /// waveform.
+  List<double> peaks(int bins) {
+    final result = List<double>.filled(bins, 0);
+    if (frames == 0) return result;
+    for (final c in channels) {
+      for (var f = 0; f < frames; f++) {
+        final bin = f * bins ~/ frames;
+        final v = c[f].abs();
+        if (v > result[bin]) result[bin] = v;
+      }
+    }
+    return result;
+  }
+
   /// Splits interleaved samples into channels.
   factory PcmAudio.interleaved(
       Float32List samples, int channelCount, int sampleRate) {

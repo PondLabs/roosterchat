@@ -496,12 +496,7 @@ class _SoundTileState extends State<_SoundTile> {
                   SoundboardEmojiView(sound.emoji,
                       image: widget.imageFor?.call(sound.emoji), size: 18),
                   const SizedBox(width: 6),
-                  Expanded(
-                    child: tiamat.Text.label(
-                      sound.name,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
+                  Expanded(child: _SoundName(sound.name)),
                   // Kept in the tree (and tappable) while hidden so touch
                   // users can still reach it; long-press works too.
                   Opacity(
@@ -527,5 +522,41 @@ class _SoundTileState extends State<_SoundTile> {
         ),
       ),
     );
+  }
+}
+
+/// A sound's name on one line, with the full name in a tooltip when it is
+/// cut off.
+class _SoundName extends StatelessWidget {
+  final String name;
+
+  const _SoundName(this.name);
+
+  @override
+  Widget build(BuildContext context) {
+    final text = tiamat.Text.label(name, overflow: TextOverflow.ellipsis);
+    return LayoutBuilder(builder: (context, constraints) {
+      // Same style tiamat.Text.label uses.
+      final style = Theme.of(context)
+          .textTheme
+          .labelLarge!
+          .copyWith(fontWeight: FontWeight.w300);
+      final painter = TextPainter(
+        text: TextSpan(text: name, style: style),
+        maxLines: 1,
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout(maxWidth: constraints.maxWidth);
+      final cutOff = painter.didExceedMaxLines;
+      painter.dispose();
+      if (!cutOff) return text;
+      return Tooltip(
+        message: name,
+        preferBelow: false,
+        // Hover only: a long press on the tile toggles the favorite.
+        triggerMode: TooltipTriggerMode.manual,
+        child: text,
+      );
+    });
   }
 }
