@@ -1019,12 +1019,15 @@ class _AddBarState extends State<_AddBar> {
             padding: const EdgeInsets.only(left: 4),
             child: tiamat.Text.tiny(_describe(_links)),
           ),
-        if (!_hasSources && _sources != null)
+        // Stays after the first install, for adding sources for other sites.
+        if (_sources != null)
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
               icon: const Icon(Icons.extension_outlined, size: 16),
-              label: const Text('Add a music source…'),
+              label: Text(_hasSources
+                  ? 'Add another music source…'
+                  : 'Add a music source…'),
               onPressed: () => installDjSource(context),
             ),
           ),

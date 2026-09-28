@@ -52,7 +52,7 @@ import 'package:intl/intl.dart';
 import 'package:logging/logging.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:provider/provider.dart';
-import 'package:receive_intent/receive_intent.dart';
+import 'package:receive_intent/receive_intent.dart' hide Intent;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:tiamat/config/style/theme_changer.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -355,6 +355,20 @@ void enableEdgeToEdge() async {
           : Brightness.dark));
 }
 
+// Flutter only binds Ctrl+V to paste on Windows and Linux. Ctrl+Shift+V is
+// what people press for "paste as plain text", and Shift+Insert is what some
+// clipboard managers send. A browser already pastes on these itself.
+final Map<ShortcutActivator, Intent>? _appShortcuts = BuildConfig.WEB
+    ? null
+    : {
+        ...WidgetsApp.defaultShortcuts,
+        const SingleActivator(LogicalKeyboardKey.keyV,
+            control: true,
+            shift: true): const PasteTextIntent(SelectionChangedCause.keyboard),
+        const SingleActivator(LogicalKeyboardKey.insert, shift: true):
+            const PasteTextIntent(SelectionChangedCause.keyboard),
+      };
+
 class App extends StatelessWidget {
   const App(
       {super.key,
@@ -393,6 +407,7 @@ class App extends StatelessWidget {
                     showPerformanceOverlay:
                         preferences.showPerformanceOverlay.value,
                     debugShowCheckedModeBanner: false,
+                    shortcuts: _appShortcuts,
                     navigatorKey: navigator,
                     builder: (context, child) => Provider<ClientManager>(
                       create: (context) => clientManager,
