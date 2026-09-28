@@ -3,6 +3,7 @@
 // raised hand next to whoever asked for the decks, and the right-click
 // actions to ask for, pass or leave the decks.
 import 'package:commet/client/components/dj/dj_session.dart';
+import 'package:commet/ui/molecules/desktop_app_notice.dart';
 import 'package:commet/ui/organisms/dj/vinyl_disc.dart';
 import 'package:flutter/material.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
@@ -224,8 +225,7 @@ List<tiamat.ContextMenuItem> _actions(
   }
 
   if (dj.isDjUser(userId) && !isSelf) {
-    if (!canDj)
-      return [_note('DJing needs the desktop app (Windows or Linux)')];
+    if (!canDj) return [_desktopOnly()];
     if (dj.isJoining) return const [];
     return [
       dj.hasRequested
@@ -241,8 +241,7 @@ List<tiamat.ContextMenuItem> _actions(
   }
 
   if (isSelf && dj.isVacant && dj.role == DjRole.listener) {
-    if (!canDj)
-      return [_note('DJing needs the desktop app (Windows or Linux)')];
+    if (!canDj) return [_desktopOnly()];
     return [
       tiamat.ContextMenuItem(
           text: 'Become the DJ',
@@ -261,6 +260,43 @@ String _platformName(String platform) => switch (platform) {
       'macos' => 'macOS',
       _ => platform,
     };
+
+/// A menu line saying DJing needs the desktop app, with a link to download
+/// it.
+tiamat.ContextMenuItem _desktopOnly() => tiamat.ContextMenuItem(
+      text: '🎧 The decks live in the desktop app',
+      customBuilder: (context, onClicked, {closeMenu}) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 10, 16, 6),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 260),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                spacing: 10,
+                children: [
+                  Icon(Icons.desktop_windows_outlined,
+                      size: 18, color: Theme.of(context).colorScheme.outline),
+                  const Flexible(
+                      child: tiamat.Text.labelLow(
+                          '🎧 The decks live in the desktop app')),
+                ],
+              ),
+              TextButton.icon(
+                onPressed: () {
+                  DesktopAppNotice.openDownloads(context);
+                  closeMenu?.call();
+                },
+                icon: const Icon(Icons.download_rounded, size: 18),
+                label: Text(DesktopAppNotice.labelDownloadDesktopApp),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
 
 /// A menu line that explains instead of acting.
 tiamat.ContextMenuItem _note(String text) => tiamat.ContextMenuItem(

@@ -1,5 +1,5 @@
 // The booth's questions to the user: installing a source extension (from a
-// file or a link, nothing fetched without a yes; docs/dj-extensions.md), and
+// file or a link, nothing fetched without a yes; docs/source-extensions.md), and
 // whether to take the decks someone is handing them.
 import 'dart:async';
 

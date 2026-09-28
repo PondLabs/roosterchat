@@ -107,14 +107,15 @@ class SettingsCategoryApp implements SettingsCategory {
               pageBuilder: (context) {
                 return const SoundboardSettingsPage();
               }),
-        if (hasVoip && DjPlatform.instance.sources != null)
+        // On the web these say what the desktop app would give.
+        if (hasVoip && (DjPlatform.instance.sources != null || BuildConfig.WEB))
           SettingsTab(
               label: labelSettingsAppDj,
               icon: m.Icons.album_outlined,
               pageBuilder: (context) {
                 return const DjSettingsPage();
               }),
-        if (PlatformUtils.isLinux || PlatformUtils.isWindows)
+        if (PlatformUtils.isLinux || PlatformUtils.isWindows || BuildConfig.WEB)
           SettingsTab(
               label: labelSettingsShortcuts,
               icon: m.Icons.keyboard_alt_outlined,

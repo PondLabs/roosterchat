@@ -8,7 +8,12 @@
 //! WebRTC plugin pulls 10 ms blocks from it. Decoding runs on a background
 //! thread that keeps a ~3 s ring filled, so `pull` only copies, fades,
 //! applies gain and soft-clips.
+//!
+//! The same decoding serves soundboard clips ([`clip`]): a window of a
+//! downloaded file is decoded for the trim editor, and the part kept is
+//! encoded to Ogg Opus for upload.
 
+pub mod clip;
 pub mod ffi;
 pub mod growing;
 mod mp4;

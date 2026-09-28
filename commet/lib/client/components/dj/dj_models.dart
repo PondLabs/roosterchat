@@ -9,7 +9,7 @@ class DjTrack {
   /// entries.
   final String id;
 
-  /// How the DJ's client gets the song (see docs/dj-extensions.md): a local
+  /// How the DJ's client gets the song (see docs/source-extensions.md): a local
   /// file (`file:<id>`, known only to the DJ who added it), or what a source
   /// extension gave for it (`ext:<extension id>:<its source>`). Clients from
   /// before extensions queued plain links.

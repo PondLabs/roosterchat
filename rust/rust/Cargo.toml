@@ -13,7 +13,6 @@ path = "src/bin/cef_host.rs"
 
 
 [dependencies]
-audio_decode = { path = "../audio_decode" }
 audio_dsp = { path = "../audio_dsp" }
 dj_audio = { path = "../dj_audio" }
 base64 = "0.22.1"

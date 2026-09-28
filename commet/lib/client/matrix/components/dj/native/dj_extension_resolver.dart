@@ -1,8 +1,9 @@
 // Turns a pasted link into queue entries on the DJ's desktop client, by
-// asking the source extension that takes the link (docs/dj-extensions.md).
+// asking the source extension that takes the link (docs/source-extensions.md).
 import 'dart:math';
 
 import 'package:commet/client/components/dj/dj_engine.dart';
+import 'package:commet/client/components/dj/dj_extension_manifest.dart';
 import 'package:commet/client/components/dj/dj_links.dart';
 import 'package:commet/client/components/dj/dj_models.dart';
 import 'package:commet/client/matrix/components/dj/native/dj_extensions.dart';
@@ -29,7 +30,7 @@ class DjExtensionResolver implements DjResolver {
 
   @override
   String? get hint {
-    final installed = extensions.extensions.value;
+    final installed = extensions.serving(DjExtensionManifest.useDj).toList();
     if (installed.length != 1) return null;
     return installed.single.manifest.hint;
   }

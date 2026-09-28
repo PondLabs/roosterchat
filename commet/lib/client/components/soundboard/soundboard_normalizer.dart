@@ -16,10 +16,10 @@
 // - Runs ONCE at import; playback multiplies pcm * normalizedGain *
 //   userVolume (two separate stages, per spec).
 //
-// Input is planar float PCM in [-1, 1] ([PcmAudio]). WAV is decoded here
-// ([decodeWav]); MP3/Ogg go through `audio_decoder.dart`. When nothing can
-// decode the bytes, callers use [SoundboardNormalizer.fallback] so we never
-// fake a measurement.
+// Input is planar float PCM in [-1, 1] ([PcmAudio]): the selection the
+// admin trimmed, decoded by the platform (SoundboardImportPlatform). WAV
+// can also be decoded here ([decodeWav]). Without a measurement, callers
+// use [SoundboardNormalizer.fallback] so we never fake one.
 import 'dart:math' as math;
 import 'dart:typed_data';
 

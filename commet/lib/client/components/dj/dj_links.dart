@@ -1,7 +1,7 @@
 // Finds the links in what the DJ pasted. Pure string work, shared by the add
 // bar (to say which source takes a link before resolving it) and the
 // session. What a link holds is up to the source extension that takes it
-// (docs/dj-extensions.md).
+// (docs/source-extensions.md).
 
 class DjLink {
   /// The link, normalised: `https://`, no tracking parameters.

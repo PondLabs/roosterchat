@@ -1,5 +1,5 @@
 // `roscord-extension.json`, the manifest of a DJ source extension (see
-// docs/dj-extensions.md). Plain parsing and checking, so it has no platform
+// docs/source-extensions.md). Plain parsing and checking, so it has no platform
 // dependency and is unit tested.
 import 'dart:convert';
 
@@ -48,6 +48,10 @@ class DjExtensionManifest {
   static const fileName = 'roscord-extension.json';
   static const protocol = 1;
 
+  /// What an extension can serve ([uses]), and what a request is for.
+  static const useDj = 'dj';
+  static const useSoundboard = 'soundboard';
+
   final String id;
   final String name;
   final String version;
@@ -59,6 +63,10 @@ class DjExtensionManifest {
 
   /// The add bar's placeholder while it is installed.
   final String? hint;
+
+  /// What it serves: [useDj] and/or [useSoundboard]. Manifests from before
+  /// the soundboard used extensions don't say, and serve the DJ booth.
+  final Set<String> uses;
   final List<DjExtensionDownload> downloads;
   final String command;
   final List<String> args;
@@ -71,6 +79,7 @@ class DjExtensionManifest {
     this.homepage,
     required this.hosts,
     this.hint,
+    this.uses = const {useDj},
     required this.downloads,
     required this.command,
     required this.args,
@@ -85,6 +94,8 @@ class DjExtensionManifest {
       hosts.any((h) => h != '*' && DjLinks.hostMatches(host, h));
 
   bool get takesAnyLink => hosts.contains('*');
+
+  bool serves(String use) => uses.contains(use);
 
   /// The files to download on [platform], in order; null when one of the
   /// downloads has nothing for it.
@@ -164,6 +175,15 @@ class DjExtensionManifest {
         if (h.trim().isNotEmpty) h.trim().toLowerCase()
     ];
 
+    // Uses this app doesn't know are for a later one.
+    final uses = json.containsKey('uses')
+        ? {
+            for (final use in strings(json['uses'], 'uses'))
+              if (use == useDj || use == useSoundboard) use
+          }
+        : const {useDj};
+    if (uses.isEmpty) bad('serves nothing this app knows ("uses")');
+
     final downloads = <DjExtensionDownload>[];
     final seen = <String>{};
     final rawDownloads = json['downloads'] ?? const [];
@@ -229,6 +249,7 @@ class DjExtensionManifest {
       homepage: homepage,
       hosts: hosts,
       hint: optional(json, 'hint', max: 80),
+      uses: uses,
       downloads: downloads,
       command: command,
       args: args,

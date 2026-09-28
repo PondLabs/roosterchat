@@ -1,4 +1,4 @@
-// The manifest of a DJ source extension (docs/dj-extensions.md): what is
+// The manifest of a DJ source extension (docs/source-extensions.md): what is
 // taken, and what is turned down before anything is downloaded or run.
 import 'dart:convert';
 
@@ -72,6 +72,21 @@ void main() {
     expect(any.takesHost('example.org'), isFalse);
   });
 
+  test('what it serves: the DJ booth unless it says', () {
+    expect(parse(manifest()).uses, {'dj'});
+    final both = parse({
+      ...manifest(),
+      'uses': ['soundboard', 'dj', 'jukebox'],
+    });
+    expect(both.uses, {'dj', 'soundboard'});
+    expect(both.serves(DjExtensionManifest.useSoundboard), isTrue);
+    final soundboard = parse({
+      ...manifest(),
+      'uses': ['soundboard'],
+    });
+    expect(soundboard.serves(DjExtensionManifest.useDj), isFalse);
+  });
+
   test('the command line fills in its folder and downloads', () {
     final m = parse(manifest());
     expect(m.commandLine(dir: '/ext', dep: (id) => '/ext/deps/$id'),
@@ -92,6 +107,16 @@ void main() {
   });
 
   group('turned down', () {
+    test('serving nothing this app knows', () {
+      expect(
+          () => parse({
+                ...manifest(),
+                'uses': ['jukebox'],
+              }),
+          refused('serves nothing'));
+      expect(() => parse({...manifest(), 'uses': 'dj'}), refused('"uses"'));
+    });
+
     test('not JSON, or not an object', () {
       expect(() => DjExtensionManifest.parse('{'), refused('valid JSON'));
       expect(() => DjExtensionManifest.parse('[]'), refused('JSON object'));

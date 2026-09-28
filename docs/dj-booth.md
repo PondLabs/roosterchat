@@ -2,7 +2,7 @@
 
 Music everyone in a voice room hears at the same moment, played by one
 member (the DJ) from files on their computer, or from links a source
-extension they installed can play (`docs/dj-extensions.md`), with a queue
+extension they installed can play (`docs/source-extensions.md`), with a queue
 everyone can see and a volume each listener sets for themselves.
 
 ## Shape
@@ -109,7 +109,7 @@ Scaffold for snack bars.
   the decks can't be handed over while one is playing.
 - Links go to the source extension whose `hosts` take them, which lists the
   songs (`resolve`) and downloads each one when its turn comes (`fetch`). See
-  `docs/dj-extensions.md` for the protocol and the package.
+  `docs/source-extensions.md` for the protocol and the package.
 - Songs play while they download, as a video does. The extension writes the
   file in place and names it, with its size when it knows it exactly,
   before the first byte; Dart hands both to the player

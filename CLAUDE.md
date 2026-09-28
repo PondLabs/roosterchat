@@ -4,11 +4,11 @@ Hard fork of Commet (a Flutter Matrix client) by PondLabs. Layout:
 
 - `commet/` the app (Flutter). `tiamat/` the widget library. `widgets/` Matrix widget helpers.
 - `rust/rust` the Rust library shipped as `librust_lib_commet` (flutter_rust_bridge, built by cargokit for Linux and Windows only; Android and web do not build it).
-- `rust/audio_decode` soundboard clip decoder (symphonia, C ABI linked into `librust_lib_commet`); loudness is measured in Dart (`soundboard_normalizer.dart`).
+- Soundboard sounds are added on desktop from a file, a link to an audio file, or a page link through a source extension (the same extensions as the DJ booth). The trim editor's audio is decoded and the clip encoded to Ogg Opus by `rust/dj_audio` (`src/clip.rs`); loudness is measured in Dart (`soundboard_normalizer.dart`). See `docs/source-extensions.md`.
 - `rust/audio_dsp` voice DSP crate (noise suppression with DeepFilterNet3, vendored in `third_party/deep_filter`; input gate, ducking). See `docs/voice-audio-processing.md`.
 - `browser_surface/` Flutter plugin (Linux, Windows) that draws the CEF hosts' shared-memory frames into a texture. The hosts are `commet/windows/cef_host` (C++) and `cef_host` in `rust/rust` plus `commet/linux/cef_engine` (C++) on Linux. See `docs/cef-browser-runtime-hosts.md`.
 - `rust/dj_audio` DJ booth music player (symphonia decode, 48 kHz stereo, C ABI linked into `librust_lib_commet`). See `docs/dj-booth.md`.
-- DJ songs come from the DJ's own files or from source extensions the user installs; the app itself knows no music site. See `docs/dj-extensions.md`.
+- DJ songs come from the DJ's own files or from source extensions the user installs; the app itself knows no music site. See `docs/source-extensions.md`.
 - Voice call health: every second a voice room checks that our microphone still gets through and that we still receive everyone, and repairs either without a rejoin. See `docs/voice-call-health.md`.
 - Away status: the amber dot, and where idle time comes from on each platform. See `docs/away-status.md`.
 - Call controls outside the window: taskbar thumbnail buttons (Windows), Dock menu (macOS), launcher actions and quicklist (Linux), floating panel (browser). See `docs/voice-controls.md`.

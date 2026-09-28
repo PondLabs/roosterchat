@@ -4,21 +4,26 @@
 // - Soundboard = short SFX, not music. 15s cap keeps preload/memory sane
 //   (15s stereo 48kHz f32 ~= 5.7MB decoded; 1MB encoded is generous for SFX).
 // - 1MB encoded cap protects bandwidth/storage/preload on mobile.
-// - Import downloads a longer source (up to 1 min, 3 MiB) so an admin can
-//   trim it; only the trimmed clip has to fit the 15 s / 1 MiB caps.
-// - 3 redirects + 15s timeout + strict allowlist mitigate SSRF/open-redirect.
+// - Import takes a file of any length (a whole video's audio, say) and
+//   decodes a window of at most 1 min of it for the trim editor; only the
+//   trimmed clip, re-encoded, has to fit the 15 s / 1 MiB caps.
 class SoundboardConstraints {
   /// Longest stored sound, i.e. the longest selection the trim editor allows.
   static const int maxDurationMs = 15000;
 
-  /// Longest MyInstants file the import downloads for trimming.
-  static const int maxSourceDurationMs = 60000;
+  /// Most audio the trim editor shows at once. Longer sources are opened at
+  /// a start point the admin picks.
+  static const int maxWindowMs = 60000;
 
-  /// Largest MyInstants file the import downloads for trimming.
-  static const int maxSourceFileBytes = 3 * 1024 * 1024; // 3 MiB
+  /// Largest file import reads or downloads, before trimming: room for the
+  /// audio of a long video.
+  static const int maxSourceFileBytes = 200 * 1024 * 1024;
 
   /// Shortest selection the trim editor allows.
   static const int minDurationMs = 100;
+
+  /// Fade in and out at the cut points, so a cut mid-waveform doesn't click.
+  static const int fadeMs = 5;
 
   /// Longest a sound may play. Sounds are checked against [maxDurationMs]
   /// when imported, but any Space moderator can point a sound at any file.
@@ -26,8 +31,9 @@ class SoundboardConstraints {
 
   /// Largest stored sound file, enforced again at playback.
   static const int maxFileBytes = 1024 * 1024; // 1 MiB
-  static const int maxRedirects = 3;
-  static const Duration httpTimeout = Duration(seconds: 15);
+
+  /// Stored sounds are Opus in Ogg.
+  static const String clipMimeType = 'audio/ogg';
 
   /// Upper bound of the per-sound admin volume (200 %).
   static const double maxSoundVolume = 2.0;
@@ -52,25 +58,6 @@ class SoundboardConstraints {
     'audio/aac',
     'audio/flac',
     'audio/x-m4a',
-  ];
-
-  static const List<String> allowedExtensions = [
-    '.mp3',
-    '.ogg',
-    '.oga',
-    '.opus',
-    '.wav',
-    '.webm',
-    '.m4a',
-    '.aac',
-    '.flac',
-  ];
-
-  /// Hosts explicitly supported for import. No sub-domain wildcards beyond
-  /// what is listed; `myinstants.com.attacker.com` must NOT match.
-  static const List<String> allowedHosts = [
-    'myinstants.com',
-    'www.myinstants.com',
   ];
 
   /// Event TTL: triggers older than this are dropped (reconnect safety).

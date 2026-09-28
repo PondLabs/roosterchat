@@ -1,5 +1,5 @@
 // The DJ's player on desktop: the DJ's own files, and songs a source
-// extension downloads (docs/dj-extensions.md), played as they arrive,
+// extension downloads (docs/source-extensions.md), played as they arrive,
 // decoded by the Rust player, and published as a stereo LiveKit track named
 // MatrixLivekitVoipStream.musicTrackName, apart from the DJ's microphone.
 //
@@ -13,6 +13,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:commet/client/components/dj/dj_engine.dart';
+import 'package:commet/client/components/dj/dj_extension_manifest.dart';
 import 'package:commet/client/components/dj/dj_models.dart';
 import 'package:collection/collection.dart';
 import 'package:commet/client/matrix/components/dj/native/dj_extensions.dart';
@@ -182,7 +183,7 @@ class DjSongCache {
     // Queued by a client from before extensions: a plain link.
     final host = Uri.tryParse(source)?.host ?? '';
     final extension = (host.isEmpty ? null : extensions.forHost(host)) ??
-        extensions.extensions.value.firstOrNull;
+        extensions.serving(DjExtensionManifest.useDj).firstOrNull;
     if (extension == null) {
       throw const DjTrackUnavailable('no source extension is installed');
     }

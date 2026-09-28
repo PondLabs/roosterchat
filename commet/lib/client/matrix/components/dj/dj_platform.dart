@@ -57,6 +57,9 @@ class DjSourceInfo {
   /// again updates it.
   final String? installedFrom;
 
+  /// What it serves: `dj` and/or `soundboard`.
+  final Set<String> uses;
+
   const DjSourceInfo({
     required this.id,
     required this.name,
@@ -64,6 +67,7 @@ class DjSourceInfo {
     this.description,
     this.homepage,
     this.installedFrom,
+    this.uses = const {'dj'},
   });
 }
 
@@ -102,7 +106,7 @@ class DjSourceCancelled implements Exception {
   String toString() => 'Cancelled';
 }
 
-/// Installs, lists and removes source extensions (docs/dj-extensions.md).
+/// Installs, lists and removes source extensions (docs/source-extensions.md).
 abstract class DjSources {
   ValueListenable<List<DjSourceInfo>> get installed;
 

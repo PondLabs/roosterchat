@@ -1,4 +1,4 @@
-// Source extensions on desktop (docs/dj-extensions.md): installed from a
+// Source extensions on desktop (docs/source-extensions.md): installed from a
 // package into <app support>/dj-extensions/<id>/, with the programs their
 // manifest names downloaded next to them, and run one process per request.
 import 'dart:async';
@@ -58,6 +58,7 @@ class InstalledDjExtension {
         description: manifest.description,
         homepage: manifest.homepage,
         installedFrom: installedFrom,
+        uses: manifest.uses,
       );
 }
 
@@ -76,6 +77,7 @@ class DjExtensionPackage implements DjSourcePackage {
         description: manifest.description,
         homepage: manifest.homepage,
         installedFrom: from,
+        uses: manifest.uses,
       );
 
   @override
@@ -179,11 +181,23 @@ class DjExtensions implements DjSources {
   InstalledDjExtension? byId(String id) =>
       extensions.value.firstWhereOrNull((e) => e.id == id);
 
-  /// The extension that takes links from [host]: one naming it, else one
-  /// taking any link.
-  InstalledDjExtension? forHost(String host) =>
-      extensions.value.firstWhereOrNull((e) => e.manifest.takesHost(host)) ??
-      extensions.value.firstWhereOrNull((e) => e.manifest.takesAnyLink);
+  /// The installed extensions that serve [use].
+  Iterable<InstalledDjExtension> serving(String use) =>
+      extensions.value.where((e) => e.manifest.serves(use));
+
+  /// The extension serving [use] that takes links from [host]: one naming
+  /// it, else one taking any link.
+  InstalledDjExtension? forHost(String host,
+      {String use = DjExtensionManifest.useDj}) {
+    final candidates = serving(use);
+    return candidates.firstWhereOrNull((e) => e.manifest.takesHost(host)) ??
+        candidates.firstWhereOrNull((e) => e.manifest.takesAnyLink);
+  }
+
+  /// Whether an extension serving [use] names [host] itself, rather than
+  /// taking it as any link.
+  bool namesHost(String host, {String use = DjExtensionManifest.useDj}) =>
+      serving(use).any((e) => e.manifest.takesHost(host));
 
   // -------------------------------------------------------------------
   // Installing
@@ -531,11 +545,14 @@ class DjExtensions implements DjSources {
   }
 
   /// The tracks [extension] finds for [url], as its answer's `tracks`.
+  /// [use] says what they are for.
   static Future<List<Map<String, Object?>>> resolve(
-      InstalledDjExtension extension, String url) async {
+      InstalledDjExtension extension, String url,
+      {String use = DjExtensionManifest.useDj}) async {
     Map<String, Object?>? answer;
     final stderr = await _run(
-        extension, 'resolve', {'url': url}, resolveTimeout, (message) {
+        extension, 'resolve', {'url': url, 'for': use}, resolveTimeout,
+        (message) {
       if (answer == null &&
           (message.containsKey('tracks') || message.containsKey('error'))) {
         answer = message;
@@ -552,7 +569,8 @@ class DjExtensions implements DjSources {
   static DjExtensionFetch fetch(InstalledDjExtension extension, String source,
       {required String directory,
       required String name,
-      required bool trusted}) {
+      required bool trusted,
+      String use = DjExtensionManifest.useDj}) {
     final started = Completer<(String, Map<String, Object?>)>();
     final finished = Completer<String>();
     // Whoever only waits for one of them must not see the other fail
@@ -588,6 +606,7 @@ class DjExtensions implements DjSources {
               'directory': directory,
               'name': name,
               'trusted': trusted,
+              'for': use,
             },
             fetchTimeout, (message) {
           if (message['error'] != null) {

@@ -17,6 +17,7 @@ import 'package:commet/main.dart';
 import 'package:commet/ui/atoms/adaptive_context_menu.dart';
 import 'package:commet/ui/navigation/adaptive_dialog.dart';
 import 'package:commet/ui/organisms/dj/dj_member_ui.dart';
+import 'package:commet/ui/molecules/desktop_app_notice.dart';
 import 'package:commet/ui/organisms/dj/dj_prompts.dart';
 import 'package:commet/ui/organisms/dj/vinyl_disc.dart';
 import 'package:commet/utils/links/link_utils.dart';
@@ -174,27 +175,10 @@ class DjDesktopOnlyNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: const Padding(
-        padding: EdgeInsets.all(12),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          spacing: 10,
-          children: [
-            Icon(Icons.desktop_windows_outlined, size: 20),
-            Flexible(
-              child: tiamat.Text.labelLow(
-                  'DJing needs the desktop app (Windows or Linux). '
-                  'You can listen from here.'),
-            ),
-          ],
-        ),
-      ),
-    );
+    return const DesktopAppNotice(
+        '🎧 Want the aux? Play YouTube, SoundCloud or your own tracks for the '
+        'whole call from the desktop app. Until then, enjoy the set from '
+        'here.');
   }
 }
 
