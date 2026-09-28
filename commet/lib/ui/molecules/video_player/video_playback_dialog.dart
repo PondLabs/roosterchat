@@ -8,6 +8,7 @@ import 'package:commet/client/components/video_embed/video_embed_info.dart';
 import 'package:commet/client/components/video_embed/video_playback_source.dart';
 import 'package:commet/debug/log.dart';
 import 'package:commet/main.dart' show browserRuntime;
+import 'package:commet/ui/atoms/filled_icon_button_style.dart';
 import 'package:commet/utils/links/link_utils.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -245,6 +246,7 @@ class _VideoPlaybackDialogState extends State<VideoPlaybackDialog> {
                 top: 12,
                 right: 12,
                 child: IconButton.filledTonal(
+                  style: filledTonalIconButtonStyle(context),
                   tooltip: 'Close',
                   onPressed: close,
                   icon: const Icon(Icons.close_rounded),

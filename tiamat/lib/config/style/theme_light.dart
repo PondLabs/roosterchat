@@ -36,7 +36,10 @@ class ThemeLight {
         outline: Colors.white,
         tertiary: Color.fromARGB(255, 252, 191, 73),
         tertiaryContainer: Color.fromARGB(20, 252, 191, 73),
-        primary: ThemeLightColors.primary);
+        primary: ThemeLightColors.primary,
+        // As in the dark theme. The monochrome seed's own is a light grey,
+        // hard to read on the primary fill (a filled button's label, icon).
+        onPrimary: Colors.white);
 
     return ThemeBase.theme(scheme).copyWith(extensions: [
       const ThemeSettings(),

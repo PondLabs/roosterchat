@@ -15,6 +15,7 @@ import 'package:commet/client/member.dart';
 import 'package:commet/config/layout_config.dart';
 import 'package:commet/main.dart';
 import 'package:commet/ui/atoms/adaptive_context_menu.dart';
+import 'package:commet/ui/atoms/filled_icon_button_style.dart';
 import 'package:commet/ui/navigation/adaptive_dialog.dart';
 import 'package:commet/ui/organisms/dj/dj_member_ui.dart';
 import 'package:commet/ui/organisms/dj/dj_prompts.dart';
@@ -611,6 +612,7 @@ class _NowPlayingState extends State<_NowPlaying> {
                     controls && !dj.isBuffering ? () => dj.seek(0) : null,
               ),
               IconButton.filled(
+                style: filledIconButtonStyle(context),
                 tooltip: dj.isPlaying ? 'Pause for everyone' : 'Play',
                 iconSize: 28,
                 icon: Icon(dj.isPlaying
