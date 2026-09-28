@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:collection/collection.dart';
 import 'package:commet/client/room.dart';
 import 'package:commet/client/space.dart';
@@ -51,6 +53,17 @@ class WindowManagement {
       Log.onError(error, stacktrace, content: "Failed to hide the window");
     }
 
+    // Out of the calls first, with the leave sound heard: closing the
+    // clients stops every player. The window is already gone, so the wait
+    // is not a frozen window. Bounded: the app closes regardless.
+    try {
+      await clientManager?.callManager.leaveAllCalls().timeout(
+          const Duration(seconds: 12),
+          onTimeout: () => Log.w("Leaving the calls timed out"));
+    } catch (error, stacktrace) {
+      Log.onError(error, stacktrace, content: "Failed to leave the calls");
+    }
+
     await closeClients();
     // Windows keeps a dead tray icon around until the pointer crosses it.
     await VoiceTray.instance.dispose();
@@ -87,6 +100,15 @@ class WindowManagement {
 
     windowManager.setPreventClose(true);
     windowManager.addListener(listener);
+
+    // `kill` and Ctrl+C close like the window's close button: out of the
+    // call, with the leave sound, rather than gone mid call. (A kill -9, or
+    // Windows ending the process, gives no chance to.)
+    if (PlatformUtils.isLinux) {
+      for (final signal in [ProcessSignal.sigterm, ProcessSignal.sigint]) {
+        signal.watch().listen((_) => close());
+      }
+    }
 
     HardwareKeyboard.instance.addHandler(_onKeyEvent);
 

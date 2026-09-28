@@ -52,6 +52,16 @@ class CallManager {
   /// cut off someone's join sound.
   Player? cueSoundPlayer;
 
+  /// Our own leave sound: a player of its own, so the join sound of the
+  /// call we move to does not cut it off.
+  Player? leaveSoundPlayer;
+
+  /// About how long the leave sound is heard for (left_call.ogg).
+  static const leaveSoundLength = Duration(milliseconds: 1300);
+
+  /// Done once the last leave sound has been heard.
+  Future<void> _leaveSoundDone = Future.value();
+
   void _onClientAdded(int index) {
     var client = clientManager.clients[index];
 
@@ -136,7 +146,7 @@ class CallManager {
       stopRingtone();
     }
 
-    endCallSound();
+    leftCallSound();
   }
 
   /// Which of [sessions] joining [roomId] on [client] has to end, so a
@@ -355,6 +365,42 @@ class CallManager {
     }
   }
 
+  /// We left a call: hung up, moved to another channel, or the app is
+  /// closing or restarting. Always heard, deafened or not: it is the one
+  /// sign that we are out.
+  void leftCallSound() {
+    try {
+      leaveSoundPlayer ??= Player(configuration: PlayerConfiguration());
+      leaveSoundPlayer!.setVolume(preferences.notificationsVolume.value);
+      leaveSoundPlayer!.open(Media("asset:///assets/sound/left_call.ogg"));
+      _leaveSoundDone = Future.delayed(leaveSoundLength);
+    } catch (e) {
+      Log.w("Could not play a call sound: $e");
+    }
+  }
+
+  /// Leaves every call, and returns once the leave sound has been heard:
+  /// the app is about to close or restart, which stops every player. Each
+  /// hang up is bounded, and a call that fails to leave does not keep the
+  /// others, or the app, waiting.
+  Future<void> leaveAllCalls() async {
+    await Future.wait(currentSessions.toList().map((session) async {
+      try {
+        final leave = session.state == VoipState.incoming
+            ? session.declineCall()
+            : session.hangUpCall();
+        // hangUpCall bounds its own network requests, this is a backstop
+        await leave.timeout(const Duration(seconds: 10));
+      } catch (error, stacktrace) {
+        Log.onError(error, stacktrace, content: "Failed to leave a call");
+      }
+    }));
+    stopRingtone();
+    await _leaveSoundDone;
+  }
+
+  /// Someone else left the call we are in. Their noise: not for a deafened
+  /// user.
   void endCallSound() {
     if (isDeafened) return;
     player = getSoundPlayer();
@@ -390,6 +436,8 @@ class CallManager {
     unmuteSoundPlayer = null;
     cueSoundPlayer?.dispose();
     cueSoundPlayer = null;
+    leaveSoundPlayer?.dispose();
+    leaveSoundPlayer = null;
   }
 
   void stopRingtone() {

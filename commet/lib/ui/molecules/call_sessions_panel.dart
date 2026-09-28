@@ -99,12 +99,13 @@ class _CallSessionPanelState extends State<CallSessionPanel>
 
   String get tooltipSelectingScreen => Intl.message("Selecting screen",
       name: "tooltipSelectingScreen",
-      desc: "Tooltip on the voice panel button while the screen picker is open");
+      desc:
+          "Tooltip on the voice panel button while the screen picker is open");
 
-  String get messageCouldNotShareScreen => Intl.message(
-      "Could not share your screen.",
-      name: "messageCouldNotShareScreen",
-      desc: "Shown when starting a screen share fails");
+  String get messageCouldNotShareScreen =>
+      Intl.message("Could not share your screen.",
+          name: "messageCouldNotShareScreen",
+          desc: "Shown when starting a screen share fails");
 
   @override
   void initState() {
@@ -173,8 +174,8 @@ class _CallSessionPanelState extends State<CallSessionPanel>
     } catch (e, s) {
       Log.onError(e, s, content: "Could not start screen sharing");
       if (mounted && messenger != null && messenger.mounted) {
-        messenger.showSnackBar(
-            SnackBar(content: Text(messageCouldNotShareScreen)));
+        messenger
+            .showSnackBar(SnackBar(content: Text(messageCouldNotShareScreen)));
       }
     } finally {
       if (mounted) setState(() => _screenShareBusy = false);

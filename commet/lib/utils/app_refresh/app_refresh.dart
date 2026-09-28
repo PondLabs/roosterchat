@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:commet/client/client_manager.dart';
 import 'package:commet/client/components/component.dart';
-import 'package:commet/client/components/voip/voip_session.dart';
 import 'package:commet/client/room.dart';
 import 'package:commet/client/tasks/client_connection_status_task.dart';
 import 'package:commet/config/build_config.dart';
@@ -140,25 +139,10 @@ class AppRefresh {
     }
   }
 
-  /// Leaves every call first so no membership is left behind in the room.
-  static Future<void> _leaveCalls(ClientManager manager) async {
-    final callManager = manager.callManager;
-
-    await Future.wait(callManager.currentSessions.toList().map((session) async {
-      try {
-        final leave = session.state == VoipState.incoming
-            ? session.declineCall()
-            : session.hangUpCall();
-        // hangUpCall bounds its own network requests, this is a backstop
-        await leave.timeout(const Duration(seconds: 10));
-      } catch (error, stacktrace) {
-        Log.onError(error, stacktrace,
-            content: "Failed to leave call before refreshing");
-      }
-    }));
-
-    callManager.stopRingtone();
-  }
+  /// Leaves every call first so no membership is left behind in the room,
+  /// and lets the leave sound finish before the old players go.
+  static Future<void> _leaveCalls(ClientManager manager) =>
+      manager.callManager.leaveAllCalls();
 
   /// Connection tasks watch the old clients, which will never report again.
   static void _removeConnectionTasks() {
