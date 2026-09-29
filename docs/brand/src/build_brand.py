@@ -9,6 +9,7 @@ and headless Chrome (to rasterise).
     python3 docs/brand/src/build_brand.py --install  # also the app's icons
 """
 
+import math
 import os
 import subprocess
 import sys
@@ -44,45 +45,80 @@ PINE = "#2F5B4B"
 # sweeps back under the roof, the head fills the lower half, and the door
 # opens at the bottom of the rooster's neck. Drawn on a 618 x 696 grid.
 
-MARK_BOX = (30, 62, 560, 542)
-ROOSTER_BOX = (124, 156, 354, 446)
+MARK_BOX = (0, 36, 618, 562)
+ROOSTER_BOX = (84, 150, 416, 434)
 
-HOUSE = ("M296 84 Q310 72 324 84 L566 280 Q580 292 562 298 L544 302 V566 "
-         "Q544 592 518 592 H104 Q80 592 80 566 V302 L58 298 Q40 292 54 280 Z")
-CHIMNEY = '<rect x="356" y="80" width="42" height="110" rx="14"/>'
-# The comb: four broad lobes leaning back, a small one at the front, and a
-# rounded tongue trailing left.
+HOUSE = ("M284 58 Q298 44 312 58 L598 272 Q614 286 598 300 L556 322 V566 "
+         "Q556 590 532 590 H80 Q56 590 56 566 V322 L20 300 Q4 286 20 272 Z")
+CHIMNEY = '<rect x="350" y="48" width="34" height="120" rx="12"/>'
+def _lobe(base, tip, r_base, r_tip):
+    """A comb lobe: narrow where it grows out of the head, round at the tip.
+
+    The hull of a small circle at base and a big one set back from tip.
+    """
+    bx, by = base
+    dx, dy = tip[0] - bx, tip[1] - by
+    length = math.hypot(dx, dy)
+    ux, uy = dx / length, dy / length
+    cx, cy = tip[0] - ux * r_tip, tip[1] - uy * r_tip
+    d = math.hypot(cx - bx, cy - by)
+    theta = math.atan2(cy - by, cx - bx)
+    alpha = math.acos((r_base - r_tip) / d)
+    pts = []
+    for sign in (1, -1):
+        a = theta + sign * alpha
+        pts.append(((bx + r_base * math.cos(a), by + r_base * math.sin(a)),
+                    (cx + r_tip * math.cos(a), cy + r_tip * math.sin(a))))
+    (b1, t1), (b2, t2) = pts
+    return ('<path d="M%.1f %.1f L%.1f %.1f A%g %g 0 1 0 %.1f %.1f '
+            'L%.1f %.1f A%g %g 0 0 0 %.1f %.1f Z"/>'
+            % (b1 + t1 + (r_tip, r_tip) + t2 + b2 + (r_base, r_base) + b1))
+
+
+# The comb: four big rounded lobes fanning back from the crown, as in the
+# concept. Every lobe grows out of a point inside the head, which is drawn
+# over it, so the comb sits on the head instead of floating above it.
+CROWN = (326, 350)
 COMB_SHAPES = (
-    '<ellipse cx="218" cy="238" rx="34" ry="46" transform="rotate(-42 218 238)"/>'
-    '<ellipse cx="272" cy="214" rx="36" ry="46" transform="rotate(-25 272 214)"/>'
-    '<ellipse cx="330" cy="210" rx="32" ry="42" transform="rotate(-6 330 210)"/>'
-    '<ellipse cx="380" cy="238" rx="26" ry="38" transform="rotate(18 380 238)"/>'
-    '<ellipse cx="406" cy="290" rx="18" ry="30" transform="rotate(8 406 290)"/>'
-    '<ellipse cx="186" cy="306" rx="50" ry="32" transform="rotate(-18 186 306)"/>'
-    '<path d="M150 320 L214 252 L300 230 L390 254 L422 342 L300 332 Z"/>')
-HEAD = ("M176 592 C 184 530 188 474 200 430 C 214 362 258 318 318 318 "
-        "C 368 318 402 342 414 372 L 410 426 C 404 470 402 530 400 592 Z")
+    _lobe(CROWN, (392, 170), 36, 50)     # front, standing up
+    + _lobe(CROWN, (236, 158), 36, 52)   # top, leaning back
+    + _lobe(CROWN, (124, 240), 34, 48)   # back
+    + _lobe(CROWN, (104, 350), 32, 42))  # lowest, trailing over the ear
+HEAD = ("M160 590 C 164 530 174 468 190 420 C 206 350 262 306 330 306 "
+        "C 372 306 402 330 414 372 L 408 430 C 404 480 404 540 406 590 Z")
 # The head without a house under it ends in a rounded neck, not the ground.
-HEAD_ALONE = ("M232 560 C 214 520 196 470 200 430 C 205 365 255 318 318 318 "
-              "C 368 318 402 342 414 372 L 410 426 C 404 470 404 520 398 556 "
-              "C 380 590 250 596 232 560 Z")
-DOOR = "M276 592 V540 A34 34 0 0 1 344 540 V592 Z"
-# Headphones: the band hugs the top of the head under the comb, the cup sits
-# on the side of the head with a light ring round it.
-BAND = "M224 396 C 236 358 278 338 346 338"
-CUP = (206, 436)
-EYE = '<circle cx="352" cy="385" r="17"/>'
-BEAK_D = "M406 370 L466 398 Q474 404 464 408 L408 426 Z"
-WATTLE_D = "M410 424 C 444 430 456 474 444 508 C 436 528 410 524 406 502 Z"
+HEAD_ALONE = ("M188 548 C 172 500 172 460 190 420 C 196 350 262 306 330 306 "
+              "C 372 306 402 330 414 372 L 408 430 C 404 480 406 520 402 548 "
+              "C 380 584 210 584 188 548 Z")
+DOOR = "M279 590 V549 A34 34 0 0 1 347 549 V590 Z"
+EYE = '<circle cx="355" cy="381" r="15"/>'
+BEAK_D = "M410 370 L480 392 Q490 396 480 402 L412 422 Z"
+WATTLE_D = "M408 440 C 446 440 466 480 458 516 C 452 540 420 540 410 516 Z"
+# Headphones, seen from the side: the cup sits on the cheek behind the eye,
+# and the band curves up out of it and forward over the crown
+# and passes behind the head. It is clipped to the head outline, so it ends
+# exactly where the head does.
+CUP = (264, 414)
+CUP_R = 56
+BAND = "M262 380 C 260 344 280 314 330 288"
+_ids = [0]
 
 
-def headphones(dark=HEARTH, ring=FEATHER):
+def _uid(prefix):
+    _ids[0] += 1
+    return "%s%d" % (prefix, _ids[0])
+
+
+def headphones(head, dark=HEARTH, ring=FEATHER):
+    """head: the outline the band is clipped to."""
     cx, cy = CUP
-    return ('<path d="%s" fill="none" stroke="%s" stroke-width="24" '
-            'stroke-linecap="round"/>' % (BAND, dark)
-            + '<circle cx="%d" cy="%d" r="72" fill="%s"/>' % (cx, cy, dark)
-            + '<circle cx="%d" cy="%d" r="55" fill="none" stroke="%s" '
-              'stroke-width="10"/>' % (cx, cy, ring))
+    clip = _uid("band")
+    return ('<clipPath id="%s"><path d="%s"/></clipPath>' % (clip, head)
+            + '<path d="%s" fill="none" stroke="%s" stroke-width="26" '
+              'clip-path="url(#%s)"/>' % (BAND, dark, clip)
+            + '<circle cx="%d" cy="%d" r="%d" fill="%s"/>' % (cx, cy, CUP_R, dark)
+            + '<circle cx="%d" cy="%d" r="%d" fill="none" stroke="%s" '
+              'stroke-width="11"/>' % (cx, cy, CUP_R - 15, ring))
 
 
 def mark_elements(house=HEARTH, feather=FEATHER):
@@ -92,7 +128,7 @@ def mark_elements(house=HEARTH, feather=FEATHER):
         + '<path d="%s" fill="%s"/>' % (HOUSE, house)
         + '<g fill="%s">%s</g>' % (COMB, COMB_SHAPES)
         + '<path d="%s" fill="%s"/>' % (HEAD, feather)
-        + headphones(house, feather)
+        + headphones(HEAD, house, feather)
         + '<path d="%s" fill="%s"/>' % (DOOR, house)
         + '<g fill="%s">%s</g>' % (house, EYE)
         + '<path d="%s" fill="%s"/>' % (BEAK_D, BEAK)
@@ -104,7 +140,7 @@ def rooster_elements(feather=FEATHER, eye=HEARTH):
     return (
         '<g fill="%s">%s</g>' % (COMB, COMB_SHAPES)
         + '<path d="%s" fill="%s"/>' % (HEAD_ALONE, feather)
-        + headphones(eye, feather)
+        + headphones(HEAD_ALONE, eye, feather)
         + '<g fill="%s">%s</g>' % (eye, EYE)
         + '<path d="%s" fill="%s"/>' % (BEAK_D, BEAK)
         + '<path d="%s" fill="%s"/>' % (WATTLE_D, WATTLE))
@@ -118,7 +154,7 @@ def mono_elements(color="currentColor", uid="m"):
     """
     return (
         '<defs><mask id="%(u)s" maskUnits="userSpaceOnUse" x="0" y="0" '
-        'width="618" height="696">'
+        'width="618" height="618">'
         '<path d="%(house)s" fill="#fff"/><g fill="#fff">%(chimney)s</g>'
         '<g fill="#000">%(comb)s</g>'
         '<path d="%(head)s" fill="#000" stroke="#fff" stroke-width="12"/>'
@@ -127,10 +163,10 @@ def mono_elements(color="currentColor", uid="m"):
         '%(phones)s'
         '<path d="%(door)s" fill="#fff"/><g fill="#fff">%(eye)s</g>'
         '</mask></defs>'
-        '<rect width="618" height="696" fill="%(c)s" mask="url(#%(u)s)"/>'
+        '<rect width="618" height="618" fill="%(c)s" mask="url(#%(u)s)"/>'
         % {"u": uid, "house": HOUSE, "chimney": CHIMNEY, "comb": COMB_SHAPES,
            "head": HEAD, "beak": BEAK_D, "wattle": WATTLE_D,
-           "phones": headphones("#fff", "#000"), "door": DOOR, "eye": EYE,
+           "phones": headphones(HEAD, "#fff", "#000"), "door": DOOR, "eye": EYE,
            "c": color})
 
 
@@ -497,8 +533,9 @@ def build_brand(tmp):
     fam = []
     for i, text in enumerate([rooster_icon_svg(), app_icon_svg(),
                               app_icon_svg(background=COMB),
-                              app_icon_svg(background=PLASTER).replace(
-                                  mark_elements(), mono_elements(HEARTH, "f")),
+                              svg((0, 0, 1024, 1024), tile("rounded", PLASTER)
+                                  + '<g %s>%s</g>' % (fit(MARK_BOX, (112, 112, 800, 800)),
+                                                      mono_elements(HEARTH, "f"))),
                               svg((0, 0, 1024, 1024), tile("rounded", HEARTH)
                                   + '<g %s>%s</g>' % (fit(MARK_BOX, (112, 112, 800, 800)),
                                                       mono_elements(EGGSHELL, "g")))]):
