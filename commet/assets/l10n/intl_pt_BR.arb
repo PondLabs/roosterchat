@@ -1817,5 +1817,10 @@
         "description": "Tooltip on the call panel button (browser only) that opens the mute, deafen and disconnect buttons in a small window that stays on top of other windows",
         "type": "text",
         "placeholders": {}
-    }
+    },
+    "roomSearchNoResults": "Nenhum resultado encontrado",
+    "roomSearchFailed": "Não foi possível buscar mensagens",
+    "roomSearchRetry": "Tentar novamente",
+    "roomSearchClear": "Limpar busca",
+    "roomSearchNext": "Próxima"
 }
