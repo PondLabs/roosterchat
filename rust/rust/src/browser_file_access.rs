@@ -6,7 +6,7 @@
 //! OS/portal chooser with a read-only staged handoff.  This module owns the
 //! pure policy; the CEF hosts enforce it at their download, clipboard, and
 //! file-dialog callbacks and the Dart adapter mirrors it in
-//! `commet/lib/browser_runtime/file_access.dart`.
+//! `cockhouse/lib/browser_runtime/file_access.dart`.
 
 use std::collections::{BTreeMap, BTreeSet};
 

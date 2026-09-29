@@ -6,7 +6,7 @@ presentations), and #126 (Windows official video through MediaEmbedAdapter).
 
 ## Host restart
 
-`SurfaceRecoveryCoordinator` (`commet/lib/browser_runtime/surface_recovery.dart`)
+`SurfaceRecoveryCoordinator` (`cockhouse/lib/browser_runtime/surface_recovery.dart`)
 wraps `RuntimeLifecycle` and owns the declarative registry shared by every
 presenter. A host restart recreates contexts and surfaces in stable
 `SurfaceId` order from the immutable `SurfaceSpec` plus the latest idempotent

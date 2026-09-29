@@ -502,7 +502,7 @@ void ApplicationLoopbackCapturer::CaptureThread() {
             conv[f] = static_cast<int16_t>((static_cast<int32_t>(left) + right) / 2);
           }
         }
-        // COMMET: hand the packet to the raw tap as it arrives, ahead of
+        // COCKHOUSE: hand the packet to the raw tap as it arrives, ahead of
         // the feeder's 160 ms pre-buffer.
         if (raw_tap_) {
           raw_tap_(silent ? nullptr : conv.data(), num_frames, out_channels,

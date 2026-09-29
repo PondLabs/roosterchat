@@ -1,0 +1,265 @@
+import 'dart:async';
+
+import 'package:collection/collection.dart';
+import 'package:cockhouse/client/call_manager.dart';
+import 'package:cockhouse/client/components/activities/activities_component.dart';
+import 'package:cockhouse/client/components/voip/voip_session.dart';
+import 'package:cockhouse/client/components/voip/voip_stream.dart';
+import 'package:cockhouse/client/components/widgets/widget_component.dart';
+import 'package:cockhouse/client/matrix/components/matrix_sync_listener.dart';
+import 'package:cockhouse/client/matrix/components/voip_room/matrix_call_membership.dart';
+import 'package:cockhouse/client/matrix/matrix_client.dart';
+import 'package:cockhouse/client/matrix/matrix_room.dart';
+import 'package:cockhouse/debug/log.dart';
+import 'package:cockhouse/main.dart';
+import 'package:cockhouse/utils/image_or_icon.dart';
+import 'package:flutter/material.dart';
+import 'package:matrix/matrix.dart';
+import 'package:matrix/matrix_api_lite/model/sync_update.dart';
+
+class MatrixActivitiesComponent
+    implements
+        ActivitiesComponent<MatrixClient, MatrixRoom>,
+        MatrixRoomSyncListener {
+  @override
+  MatrixClient client;
+
+  @override
+  MatrixRoom room;
+
+  /// Injected for tests; otherwise resolved lazily from the global
+  /// [clientManager], which is still null while rooms are first loaded.
+  final CallManager? _injectedCallManager;
+
+  MatrixActivitiesComponent(this.client, this.room, {CallManager? callManager})
+      : _injectedCallManager = callManager;
+
+  final StreamController _onParticipantsChanged = StreamController.broadcast();
+
+  /// Recomputes the list when the next membership in it lapses (see
+  /// [getSessions]).
+  late final MembershipLapseTimer _lapseTimer =
+      MembershipLapseTimer(() => _onParticipantsChanged.add(()));
+
+  CallManager? get _callManager =>
+      _injectedCallManager ?? clientManager?.callManager;
+
+  final List<StreamSubscription> _callManagerSubs = [];
+  final Map<VoipSession, StreamSubscription> _sessionSubs = {};
+  bool _watchingCallManager = false;
+
+  bool _isOurCall(VoipSession session) =>
+      session.client == client && session.roomId == room.identifier;
+
+  /// Our own call membership is only listed while a session for this room is
+  /// registered with [CallManager] (see the filter in [getSessions]). The
+  /// membership sync usually lands before the LiveKit session is registered,
+  /// so the list must be recomputed when the session starts or ends too, and
+  /// whenever its streams change (live badges, see [_applyCallStreams]).
+  void _watchCallManager() {
+    if (_watchingCallManager) return;
+    final callManager = _callManager;
+    if (callManager == null) return;
+    _watchingCallManager = true;
+
+    void watch(VoipSession session) {
+      _sessionSubs[session] ??=
+          session.onStateChanged.listen((_) => _onParticipantsChanged.add(()));
+    }
+
+    for (final session in callManager.currentSessions.where(_isOurCall)) {
+      watch(session);
+    }
+
+    _callManagerSubs.add(callManager.currentSessions.onAdd.listen((session) {
+      if (!_isOurCall(session)) return;
+      watch(session);
+      _onParticipantsChanged.add(());
+    }));
+    _callManagerSubs.add(callManager.currentSessions.onRemove.listen((session) {
+      if (!_isOurCall(session)) return;
+      _sessionSubs.remove(session)?.cancel();
+      _onParticipantsChanged.add(());
+    }));
+  }
+
+  static const callMemberStateEvent = "org.matrix.msc3401.call.member";
+
+  @override
+  List<RoomActivitySession> getSessions() {
+    // No membership state is not the end of it: people can be in our LiveKit
+    // room with their membership gone (see below).
+    final state = room.matrixRoom.states[callMemberStateEvent] ?? const {};
+
+    List<RoomActivitySession> activities = List.empty(growable: true);
+    final now = DateTime.now();
+    final expiries = <DateTime?>[];
+
+    for (var entry in state.entries) {
+      if (entry.value.content.isEmpty) continue;
+
+      var application = entry.value.content.tryGet<String>("application");
+      if (application == null) continue;
+      var activity =
+          activities.firstWhereOrNull((i) => i.application == application);
+
+      final event = entry.value;
+      final sentAt = event is Event ? event.originServerTs : null;
+      if (MatrixCallMembership.isExpired(event.content, sentAt, now)) {
+        Log.i("Membership state is expired, skipping");
+        continue;
+      }
+
+      // A call membership written by this device is only real while this
+      // device is actually in the call; otherwise it is a leftover from a
+      // previous run that was closed without hanging up.
+      if (application == "m.call" &&
+          entry.value.senderId == client.self?.identifier &&
+          entry.value.content.tryGet<String>("device_id") ==
+              client.matrixClient.deviceID &&
+          _callManager?.getCallInRoom(client, room.identifier) == null) {
+        continue;
+      }
+
+      if (activity == null) {
+        var widgetComp = client.getComponent<WidgetComponent>();
+        var widgets = widgetComp?.getWidgets(room);
+
+        var widget = widgets?.firstWhereOrNull((i) => i.type == application);
+        String? name = widget?.name;
+
+        Log.i("Found widget for ${application} : ${name} ${widget}");
+
+        bool thirdparty = true;
+
+        var icon = widget?.icon ?? ImageOrIcon(icon: Icons.question_mark);
+
+        if (application == "m.call") {
+          thirdparty = false;
+        }
+
+        activity = RoomActivitySession(
+            participants: Set(),
+            application: application,
+            appName: name,
+            icon: icon,
+            associatedWidget: widget,
+            thirdparty: thirdparty);
+        activities.add(activity);
+      }
+
+      activity.participants.add(entry.value.senderId);
+      expiries.add(MatrixCallMembership.expiresAt(event.content, sentAt));
+
+      // Only full events: stripped state has no timestamp, so it never
+      // expires and a stale LIVE badge would stay forever.
+      if (application == "m.call" && event is Event) {
+        final media = MatrixCallMembership.liveMediaOf(event.content);
+        if (media.isNotEmpty) {
+          activity.liveMedia
+              .putIfAbsent(event.senderId, () => {})
+              .addAll(media);
+        }
+
+        // Only for a membership that says anything about it: a client that
+        // does not report its voice state must not read as unmuted.
+        if (event.content.containsKey(MatrixCallMembership.voiceStateKey)) {
+          activity.voiceState[event.senderId] =
+              MatrixCallMembership.voiceStateOf(event.content);
+        }
+      }
+    }
+
+    final session = _callManager?.getCallInRoom(client, room.identifier);
+    if (session != null) {
+      var call = activities.firstWhereOrNull((a) => a.application == "m.call");
+      if (call == null) {
+        call = RoomActivitySession(
+            participants: {},
+            application: "m.call",
+            icon: ImageOrIcon(icon: Icons.call),
+            thirdparty: false);
+        activities.add(call);
+      }
+      _applyCallStreams(call, session);
+      if (call.participants.isEmpty) activities.remove(call);
+    }
+
+    // Nothing arrives over sync when a membership lapses, so look again then:
+    // it is how the membership of a client that died without leaving goes.
+    _lapseTimer.schedule(MatrixCallMembership.nextExpiry(expiries, now));
+
+    return activities;
+  }
+
+  /// For people in our own call, LiveKit is right away what their
+  /// memberships only say after a debounced write and a sync. It also lists
+  /// who is in the call: a membership can lapse while its owner is still
+  /// connected (a missed heartbeat fires the delayed leave), and they must
+  /// not vanish from the list of someone who can hear them.
+  static void _applyCallStreams(RoomActivitySession call, VoipSession session) {
+    final inCall = <String, Set<LiveMedia>>{};
+    final voice = <String, Set<VoiceState>>{};
+    for (final stream in session.streams) {
+      final media = inCall.putIfAbsent(stream.streamUserId, () => {});
+      switch (stream.type) {
+        case VoipStreamType.screenshare:
+          media.add(LiveMedia.screen);
+        case VoipStreamType.video:
+          media.add(LiveMedia.camera);
+        case VoipStreamType.audio:
+          // Only the microphone says anything about muting: a muted camera
+          // or screen share is not a muted member.
+          voice[stream.streamUserId] = {
+            if (stream.isMuted || stream.isDeafened) VoiceState.muted,
+            if (stream.isDeafened) VoiceState.deafened,
+          };
+        case VoipStreamType.screenshareAudio:
+        case VoipStreamType.music:
+          break;
+      }
+    }
+    call.participants.addAll(inCall.keys);
+    call.liveMedia.addAll(inCall);
+    call.voiceState.addAll(voice);
+  }
+
+  @override
+  Stream<void> get onSessionsChanged {
+    _watchCallManager();
+    return _onParticipantsChanged.stream;
+  }
+
+  @override
+  onSync(JoinedRoomUpdate update) {
+    // A limited sync delivers state changes in `state`, not the timeline.
+    final events = [...?update.state, ...?update.timeline?.events];
+    if (events.any((event) => event.type == callMemberStateEvent)) {
+      _onParticipantsChanged.add(());
+    }
+  }
+
+  @override
+  Future<void> clearMemberships(RoomActivitySession session) async {
+    final state = room.matrixRoom.states[callMemberStateEvent];
+    if (state == null) {
+      return;
+    }
+
+    for (var entry in state.entries) {
+      if (entry.value.content.isEmpty) continue;
+
+      var application = entry.value.content.tryGet<String>("application");
+      if (application == null) continue;
+
+      if (application != session.application) continue;
+
+      if (entry.value.senderId != client.self!.identifier) continue;
+
+      if (entry.value.content.isEmpty) continue;
+
+      await room.matrixRoom.client.setRoomStateWithKey(
+          room.identifier, callMemberStateEvent, entry.value.stateKey!, {});
+    }
+  }
+}

@@ -26,7 +26,7 @@ namespace flutter_webrtc_plugin {
 // Linux PulseAudio / PipeWire (pulse compat) implementation of
 // LoopbackCapturer: "system audio" for screen share, minus our own process.
 //
-// COMMET: this used to record the default sink's monitor, which carries
+// COCKHOUSE: this used to record the default sink's monitor, which carries
 // everything the speakers play, including Commet playing the call. Everyone
 // in the call then heard themselves in the screen share. The Windows
 // capturer excludes our process tree (PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_

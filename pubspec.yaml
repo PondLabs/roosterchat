@@ -3,7 +3,7 @@ publish_to: none
 environment: 
   sdk: '>=3.6.0 <4.0.0'
 workspace:
-  - commet
+  - cockhouse
   - tiamat
   - widgets/matrix_widget_api
   - widgets/calendar

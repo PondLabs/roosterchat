@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.pondlabs.cockhouse</id>
+  <name>Cockhouse</name>
+  <summary>Your crew's place on the internet.</summary>
+  <developer_name>Airyz</developer_name>
+  <url type="homepage">https://github.com/PondLabs/roscord</url>
+  <metadata_license>CC-BY-SA-4.0</metadata_license>
+  <project_license>AGPL-3.0-only</project_license>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+  <description>
+    <p>Cockhouse is the weird, warm little house on the internet where your people hang out. Drop into always-on voice rooms, share your screen, play the soundboard, put a song on in the DJ booth, or just talk in the text channels.</p>
+    <p>It runs on Matrix, so your crew can host its own server, federate with others and keep its conversations end-to-end encrypted. Your house, your rules.</p>
+  </description>
+  <launchable type="desktop-id">com.pondlabs.cockhouse.desktop</launchable>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="{{VERSION_TAG}}" />
+  </releases>
+</component>

@@ -68,7 +68,7 @@ class LocalVideoTrack extends LocalTrack with VideoTrack {
   Map<String, SimulcastTrackInfo> simulcastCodecs = {};
   Map<(String, int), rtc.RTCRtpEncoding> encodingBackups = {};
 
-  // COMMET: remembered so every sender publishing this track (the primary and
+  // COCKHOUSE: remembered so every sender publishing this track (the primary and
   // each backup codec) gets the same preference; see
   // [applyDegradationPreference].
   DegradationPreference? _degradationPreference;
@@ -507,7 +507,7 @@ extension LocalVideoTrackExt on LocalVideoTrack {
     return simulcastCodecInfo;
   }
 
-  // COMMET: drops the simulcast codec state tied to the senders of the
+  // COCKHOUSE: drops the simulcast codec state tied to the senders of the
   // current publish. Must run when those senders are gone (unpublish, full
   // reconnect): otherwise a later publish finds stale senders and rejects the
   // backup codec as a duplicate, or removes senders from a peer connection
@@ -518,7 +518,7 @@ extension LocalVideoTrackExt on LocalVideoTrack {
     encodingBackups.clear();
   }
 
-  // COMMET: degradation is a property of the sender, not of the track, so
+  // COCKHOUSE: degradation is a property of the sender, not of the track, so
   // every sender publishing this track needs it applied on its own. A backup
   // codec publishes over its own sender; without this it keeps WebRTC's
   // implicit preference and its frame rate diverges from the primary encoder
@@ -531,7 +531,7 @@ extension LocalVideoTrackExt on LocalVideoTrack {
     }
   }
 
-  // COMMET: applies the preference remembered for this track to one of its
+  // COCKHOUSE: applies the preference remembered for this track to one of its
   // senders. Tolerates a missing sender: a backup codec's sender only exists
   // once the server asked for it.
   @internal

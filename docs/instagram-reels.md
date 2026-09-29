@@ -1,6 +1,6 @@
 # Instagram reels and posts in the chat
 
-A reel link (`instagram.com/reel/<code>`, `/reels/<code>`, `/<user>/reel/<code>`, `/p/<code>`, or the ddinstagram, kkinstagram and instagramez mirrors) previews as a video card. The card plays in the video dialog. A photo or carousel post previews as its photos. `InstagramProvider` (`commet/lib/client/components/video_embed/providers/instagram_provider.dart`) resolves it.
+A reel link (`instagram.com/reel/<code>`, `/reels/<code>`, `/<user>/reel/<code>`, `/p/<code>`, or the ddinstagram, kkinstagram and instagramez mirrors) previews as a video card. The card plays in the video dialog. A photo or carousel post previews as its photos. `InstagramProvider` (`cockhouse/lib/client/components/video_embed/providers/instagram_provider.dart`) resolves it.
 
 ## Native: play the MP4 ourselves
 
@@ -41,7 +41,7 @@ On web, where the page cannot be read, a `/p/` link stays an official embed card
 
 ## Web and fallback: Instagram's own embed
 
-A browser cannot read the embed page. instagram.com sends no CORS headers, and `Sec-Fetch-Mode` is set by the browser anyway. The web build therefore skips the fetch. It plays `https://www.instagram.com/reel/<code>/embed/` in an iframe instead (`OfficialEmbedFrame`, `commet/lib/ui/molecules/video_player/official_embed_frame_web.dart`).
+A browser cannot read the embed page. instagram.com sends no CORS headers, and `Sec-Fetch-Mode` is set by the browser anyway. The web build therefore skips the fetch. It plays `https://www.instagram.com/reel/<code>/embed/` in an iframe instead (`OfficialEmbedFrame`, `cockhouse/lib/ui/molecules/video_player/official_embed_frame_web.dart`).
 
 The page sends no `X-Frame-Options` and no `frame-ancestors`, and the reel plays inside the iframe after a click. YouTube embeds use the same iframe on web.
 
@@ -51,7 +51,7 @@ On web the card's thumbnail and title come from the homeserver's URL preview, wh
 
 ## When it breaks
 
-The embed page's JSON and markup are not an API, and Instagram can change them. When it does, posts fall back to the official embed rather than failing. The fixtures in `commet/unit_test/fixtures/` (`instagram_reel_embed.html`, `instagram_photo_embed.html`) are trimmed from real pages, so compare them against fresh ones:
+The embed page's JSON and markup are not an API, and Instagram can change them. When it does, posts fall back to the official embed rather than failing. The fixtures in `cockhouse/unit_test/fixtures/` (`instagram_reel_embed.html`, `instagram_photo_embed.html`) are trimmed from real pages, so compare them against fresh ones:
 
 ```sh
 curl -s -H 'Sec-Fetch-Mode: navigate' \

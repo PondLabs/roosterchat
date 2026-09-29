@@ -1,0 +1,32 @@
+[Desktop Entry]
+Version={{VERSION_TAG}}
+Type=Application
+Name=Cockhouse
+Comment=Your crew's place on the internet.
+Categories=Utility;Amusement;
+Icon=com.pondlabs.cockhouse
+Exec=cockhouse
+Terminal=false
+StartupWMClass=com.pondlabs.cockhouse
+Actions=ToggleMute;ToggleDeafen;Disconnect
+X-KDE-StartupNotify=false
+StartupNotify=false
+
+[Desktop Action ToggleMute]
+Name=Mute or Unmute
+Name[pt_BR]=Silenciar ou dessilenciar
+Icon=audio-input-microphone-symbolic
+Exec=cockhouse --shortcut toggle_mute
+X-KDE-Shortcuts=Alt+M
+
+[Desktop Action ToggleDeafen]
+Name=Deafen or Undeafen
+Name[pt_BR]=Desativar ou reativar áudio
+Icon=audio-headphones-symbolic
+Exec=cockhouse --shortcut toggle_deafen
+
+[Desktop Action Disconnect]
+Name=Disconnect
+Name[pt_BR]=Desconectar
+Icon=call-stop-symbolic
+Exec=cockhouse --shortcut disconnect

@@ -416,7 +416,7 @@ void PulseLoopbackCapturer::MixThread() {
           std::clamp<int32_t>(acc[i], INT16_MIN, INT16_MAX));
     }
 
-    // COMMET: see LoopbackCapturer::RawTap.
+    // COCKHOUSE: see LoopbackCapturer::RawTap.
     if (raw_tap_) {
       raw_tap_(out.data(), kFramesPer10ms, kChannels, kSampleRate);
     }

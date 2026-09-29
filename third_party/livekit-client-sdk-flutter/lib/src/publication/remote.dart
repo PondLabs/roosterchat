@@ -299,7 +299,7 @@ class RemoteTrackPublication<T extends RemoteTrack> extends TrackPublication<T> 
     _sendUpdateSubscription(subscribed: true);
   }
 
-  // COMMET: ask the server for the track again. [unsubscribe] does nothing
+  // COCKHOUSE: ask the server for the track again. [unsubscribe] does nothing
   // when no track is attached, which is exactly the case after a failed
   // subscription or a track that never delivered a frame, and [subscribe]
   // alone is a no-op for the server, which still counts us as subscribed.

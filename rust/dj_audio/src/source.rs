@@ -41,6 +41,10 @@ pub(crate) struct Source {
     track_id: u32,
     time_base: Option<TimeBase>,
     gapless: bool,
+    /// Drop the padding the container marks at the end of a packet.
+    /// symphonia's decoders do that themselves; ours ([`OpusDecoder`])
+    /// does not, and Ogg Opus ends its last packet with some.
+    trim_end: bool,
     /// First packet, already read by a manual seek.
     pending: Option<Packet>,
     /// Drop audio before this time; `None` once reached.
@@ -62,6 +66,7 @@ struct Selected {
     time_base: Option<TimeBase>,
     rate: Option<u32>,
     is_mp3: bool,
+    is_opus: bool,
     reported_ms: Option<u64>,
     /// Leading frames the container says the encoder added, with the rate
     /// they are counted at, for tracks whose packets start at zero anyway.
@@ -160,6 +165,7 @@ fn make_decoder(track: &Track) -> Option<Selected> {
         time_base: track.time_base,
         rate,
         is_mp3,
+        is_opus: params.codec == CODEC_ID_OPUS,
         reported_ms,
         delay,
         decoder,
@@ -348,6 +354,7 @@ pub(crate) fn open(
             track_id: sel.track_id,
             time_base: sel.time_base,
             gapless: !sel.is_mp3,
+            trim_end: sel.is_opus,
             pending,
             target_ms: Some(start_ms),
             priming,
@@ -365,6 +372,7 @@ impl Source {
                 self.track_id = sel.track_id;
                 self.time_base = sel.time_base;
                 self.gapless = !sel.is_mp3;
+                self.trim_end = sel.is_opus;
                 true
             }
             Err(_) => false,
@@ -419,7 +427,11 @@ impl Source {
         };
         let rate = buf.spec().rate();
         let channels = buf.spec().channels().count();
-        let frames = buf.frames();
+        let mut frames = buf.frames();
+        let decoded = frames;
+        if self.trim_end {
+            frames = frames.saturating_sub(packet.trim_end.get().min(usize::MAX as u64) as usize);
+        }
         if rate == 0 || channels == 0 || frames == 0 {
             return Ok(Some(0));
         }
@@ -445,10 +457,10 @@ impl Source {
             skip = s as usize;
             self.target_ms = None;
         }
-        self.interleaved.resize(frames * channels, 0.0);
+        self.interleaved.resize(decoded * channels, 0.0);
         buf.copy_to_slice_interleaved(&mut self.interleaved);
         stereo.reserve(frames - skip);
-        for f in self.interleaved.chunks_exact(channels).skip(skip) {
+        for f in self.interleaved.chunks_exact(channels).take(frames).skip(skip) {
             stereo.push(match channels {
                 1 => [f[0], f[0]],
                 2 => [f[0], f[1]],

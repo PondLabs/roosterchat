@@ -7,10 +7,10 @@ navigation, close, host loss, timeout, denial, or unavailable UI.
 
 The pure policy lives in two mirrored implementations:
 
-- Dart: `commet/lib/browser_runtime/file_access.dart`
+- Dart: `cockhouse/lib/browser_runtime/file_access.dart`
 - Rust: `rust/rust/src/browser_file_access.rs`
 
-The Windows `cef_host` (`commet/windows/cef_host/cef_host.cpp`) and the Linux
+The Windows `cef_host` (`cockhouse/windows/cef_host/cef_host.cpp`) and the Linux
 `cef_host` (`rust/rust/src/cef_host.rs` via `HostCore`) enforce the same
 policy at their CEF callbacks. Wire vocabulary is shared: `download_request`,
 `clipboard_request`, and `upload_request` events with matching `download`,

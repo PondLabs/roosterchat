@@ -1,4 +1,4 @@
-import 'package:commet_calendar_widget/calendar.dart';
+import 'package:cockhouse_calendar_widget/calendar.dart';
 import 'package:flutter/material.dart';
 
 import 'package:tiamat/tiamat.dart' as tiamat;

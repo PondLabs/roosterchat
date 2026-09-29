@@ -290,20 +290,20 @@ fn stop_and_free_while_waiting_do_not_hang() {
 #[test]
 fn ffi_growing_calls() {
     unsafe {
-        commet_music_file_growing(std::ptr::null(), 0, 0);
-        commet_music_file_done(std::ptr::null(), 1);
+        cockhouse_music_file_growing(std::ptr::null(), 0, 0);
+        cockhouse_music_file_done(std::ptr::null(), 1);
     }
-    assert_eq!(commet_music_abi_version(), 2);
+    assert_eq!(cockhouse_music_abi_version(), 2);
 
     let data = std::fs::read(fixture("tone_gap.mp3")).unwrap();
     let path = temp_path("ffi.mp3");
     let c_path = std::ffi::CString::new(path.to_str().unwrap()).unwrap();
     unsafe {
-        commet_music_file_growing(c_path.as_ptr(), data.len() as u64, 4000);
-        let h = commet_music_new();
-        assert_eq!(commet_music_open(h, c_path.as_ptr(), 0, 1), 0);
+        cockhouse_music_file_growing(c_path.as_ptr(), data.len() as u64, 4000);
+        let h = cockhouse_music_new();
+        assert_eq!(cockhouse_music_open(h, c_path.as_ptr(), 0, 1), 0);
         append(&path, &data);
-        commet_music_file_done(c_path.as_ptr(), 1);
+        cockhouse_music_file_done(c_path.as_ptr(), 1);
         let (tx, rx) = mpsc::channel();
         let hh = h as usize;
         thread::spawn(move || {
@@ -312,13 +312,13 @@ fn ffi_growing_calls() {
             let mut audio = 0;
             let deadline = Instant::now() + Duration::from_secs(10);
             while audio < RATE && Instant::now() < deadline {
-                audio += commet_music_pull(h, buf.as_mut_ptr(), BLOCK, 2, RATE as i32);
+                audio += cockhouse_music_pull(h, buf.as_mut_ptr(), BLOCK, 2, RATE as i32);
                 thread::sleep(Duration::from_millis(1));
             }
             tx.send(audio).unwrap();
         });
         assert!(rx.recv().unwrap() >= RATE);
-        commet_music_free(h);
+        cockhouse_music_free(h);
     }
     let _ = std::fs::remove_file(&path);
 }

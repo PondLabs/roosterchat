@@ -4,7 +4,7 @@
 #include <gtk/gtk.h>
 #include <sys/utsname.h>
 
-// COMMET: the appindicator is optional (see CMakeLists.txt). Without it
+// COCKHOUSE: the appindicator is optional (see CMakeLists.txt). Without it
 // nothing below HAVE_APPINDICATOR is built and every call answers "not
 // implemented".
 #ifdef HAVE_APPINDICATOR

@@ -9,11 +9,11 @@ unowned native window.
 ## In-CEF destinations
 
 The `allowed_origins` list may contain exact `https://` origins and controlled
-`commet://` origins. The `allowed_loopback_origins` list is separate and only
+`cockhouse://` origins. The `allowed_loopback_origins` list is separate and only
 accepts exact `http://localhost`, `http://127.0.0.1`, or `http://[::1]` origins
 with an explicit port. Paths, credentials, fragments, arbitrary custom
 schemes, `file:`, `javascript:`, `data:`, `chrome:`, `devtools:`, and
-`view-source:` are rejected. The host-owned `commet://fixture/` bootstrap is
+`view-source:` are rejected. The host-owned `cockhouse://fixture/` bootstrap is
 the one built-in controlled destination used by validation fixtures.
 
 Redirects and top-level navigations pass through the same origin check. A

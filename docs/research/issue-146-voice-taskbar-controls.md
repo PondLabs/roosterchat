@@ -225,8 +225,8 @@ Because Plank and XFCE ignore `DBusActivatable`, `Exec` has to work on its own.
 
 ### What the repo already has
 
-- `commet --shortcut <name>` (`commet/linux/main.cc`, `shortcuts.h`) sends
-  `chat.commet.commetapp.Shortcuts.<name>` to the running app over D-Bus and
+- `commet --shortcut <name>` (`cockhouse/linux/main.cc`, `shortcuts.h`) sends
+  `com.pondlabs.cockhouse.Shortcuts.<name>` to the running app over D-Bus and
   exits before GTK starts. `system_wide_shortcuts_linux.dart` owns the name
   and maps it to `SystemWideShortcuts.shortcuts`.
 - The forwarder never calls `dbus_connection_flush` before exiting.
@@ -292,7 +292,7 @@ The SNI tray (tray_manager, appindicator) already has Mute and Deafen.
 
 ### Window matching
 
-- `g_set_prgname("chat.commet.commetapp")` gives both the Wayland app_id and
+- `g_set_prgname("com.pondlabs.cockhouse")` gives both the Wayland app_id and
   the X11 `WM_CLASS`, matching `StartupWMClass`
   ([gdkwindow-wayland.c](https://gitlab.gnome.org/GNOME/gtk/-/raw/gtk-3-24/gdk/wayland/gdkwindow-wayland.c)).
 - Actions and LauncherEntry key on the desktop file id, not on the display

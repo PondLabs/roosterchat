@@ -1,4 +1,4 @@
-// Drives window.commetAudioDsp (commet/web/audio_dsp.js) the way the app
+// Drives window.cockhouseAudioDsp (cockhouse/web/audio_dsp.js) the way the app
 // does, with Chrome's fake microphone playing the fixture, and records what
 // the published track carries. The result lands in window.__result for
 // tools/voice_dsp/web_noise_loop.mjs.
@@ -38,11 +38,11 @@
     const track = stream.getAudioTracks()[0];
 
     // What the app asks before a call decides who suppresses noise.
-    result.probe = await window.commetAudioDsp.probe();
+    result.probe = await window.cockhouseAudioDsp.probe();
 
     let graph;
     try {
-      graph = await window.commetAudioDsp.create(track, scenario === "dsp" ? appDefaults : off);
+      graph = await window.cockhouseAudioDsp.create(track, scenario === "dsp" ? appDefaults : off);
     } catch (e) {
       result.createError = String(e);
       window.__result = result;

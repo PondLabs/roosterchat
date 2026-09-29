@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-/// A Flutter texture showing frames that roscord's CEF host writes to a
+/// A Flutter texture showing frames that Cockhouse's CEF host writes to a
 /// shared-memory frame ring.
 ///
 /// The host reports each frame as (ring name, slot, sequence, size) in a

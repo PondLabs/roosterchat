@@ -1,6 +1,6 @@
 # browser_surface
 
-Presents frames from roscord's out-of-process CEF host (`cef_host`) as Flutter
+Presents frames from Cockhouse's out-of-process CEF host (`cef_host`) as Flutter
 textures, on Linux and Windows.
 
 The host copies every off-screen paint into a shared-memory frame ring (POSIX

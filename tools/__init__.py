@@ -1,1 +1,1 @@
-"""Release and supply-chain tooling for roscord."""
+"""Release and supply-chain tooling for Cockhouse."""

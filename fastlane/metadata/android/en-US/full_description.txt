@@ -1,9 +1,9 @@
-<p>Commet is a client for Matrix focused on providing a feature rich experience while maintaining a simple interface.
+<p>Cockhouse is a client for Matrix focused on providing a feature rich experience while maintaining a simple interface.
     The goal is to build a secure, privacy respecting app without compromising on the features you have come to expect
     from a modern chat client.</p>
 
 <h3>Feature Rich</h3>
-<p>Commet aims to provide all the functionality you have come to expect from a modern chat app, without compromising
+<p>Cockhouse aims to provide all the functionality you have come to expect from a modern chat app, without compromising
     security.</p>
 <ul>
     <li>🖼️ GIF Search</li>
@@ -20,13 +20,13 @@
 
 <h3>Your space to connect</h3>
 
-<p>In addition to text and calls, Commet provides additional tools to help you hang out and connect with your friends.
+<p>In addition to text and calls, Cockhouse provides additional tools to help you hang out and connect with your friends.
     Easily plan events with a shared calendar, and upload all the photos to a shared album!</p>
 
 
 <h3> Seamless multi-account support</h3>
 
-<p> Commet was built from the ground up with multi-account support in mind, with a unique approach which doesn't require
+<p> Cockhouse was built from the ground up with multi-account support in mind, with a unique approach which doesn't require
     manually switching account.</p>
 
 <p>All your accounts are logged in simultaneously, seamlessly blending together so you can focus on the conversation.
@@ -34,5 +34,5 @@
 
 
 <h3>We are Open Source</h3>
-<p> Commet is built and maintained by a passionate group of volunteers. We are always grateful for any help we can get!
+<p> Cockhouse is built and maintained by a passionate group of volunteers. We are always grateful for any help we can get!
 </p>

@@ -10,7 +10,7 @@ that frame to disk.
 Linux: `<bundle>/cef_host`, a Unix socket, and POSIX shared memory.
 Windows: `<bundle>/cef_host/cef_host.exe`, a named pipe, and a file mapping.
 
-    python3 tools/cef_host_smoke.py --bundle commet/build/linux/x64/release/bundle
+    python3 tools/cef_host_smoke.py --bundle cockhouse/build/linux/x64/release/bundle
     python3 tools/cef_host_smoke.py --bundle <dir> --youtube aqz-KE-bpKQ --seconds 20 --png /tmp/frame.png
 
 The frame ring layout is browser_surface/native/browser_frame_ring.h.
@@ -47,7 +47,7 @@ WINDOWS = sys.platform == "win32"
 # having named its physical key (KeyboardEvent.code).
 FIXTURE_HTML = """<!DOCTYPE html>
 <html><body style="margin:0;background:#1e6fd9;color:#fff;font:48px sans-serif">
-<div style="padding:40px">roscord cef_host smoke test</div>
+<div style="padding:40px">Cockhouse cef_host smoke test</div>
 <input id="field" style="margin:0 40px;font:48px monospace;width:80%">
 <div id="log" style="padding:16px 40px;font:20px monospace;white-space:pre"></div>
 <script>
@@ -278,7 +278,7 @@ def _launch(bundle: Path, nonce: str, work: Path, software: bool):
 
     if WINDOWS:
         host = bundle / "cef_host" / "cef_host.exe"
-        endpoint = rf"\\.\pipe\roscord-browser-{os.getpid()}-{nonce}"
+        endpoint = rf"\\.\pipe\cockhouse-browser-{os.getpid()}-{nonce}"
         command = [
             str(host),
             f"--pipe={endpoint}",
@@ -289,7 +289,7 @@ def _launch(bundle: Path, nonce: str, work: Path, software: bool):
     else:
         host = bundle / "cef_host"
         runtime_parent = Path(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir())
-        socket_dir = Path(tempfile.mkdtemp(prefix="roscord-browser-smoke-", dir=runtime_parent))
+        socket_dir = Path(tempfile.mkdtemp(prefix="cockhouse-browser-smoke-", dir=runtime_parent))
         endpoint = str(socket_dir / "host.sock")
         command = [
             str(host),
@@ -360,7 +360,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     bundle = args.bundle.resolve()
-    work = Path(tempfile.mkdtemp(prefix="roscord-cef-smoke-"))
+    work = Path(tempfile.mkdtemp(prefix="cockhouse-cef-smoke-"))
     nonce = secrets.token_hex(16)
 
     loopback_origins: list[str] = []

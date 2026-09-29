@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["rust/rust", "rust/audio_dsp", "rust/audio_decode"]
+members = ["rust/rust", "rust/audio_dsp"]
 
 # DeepFilterNet's inference (tract, in rust/audio_dsp) runs about thirty times
 # slower unoptimised: too slow for real time in a debug build of the app,

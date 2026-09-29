@@ -2,7 +2,7 @@
 
 Music everyone in a voice room hears at the same moment, played by one
 member (the DJ) from files on their computer, or from links a source
-extension they installed can play (`docs/dj-extensions.md`), with a queue
+extension they installed can play (`docs/source-extensions.md`), with a queue
 everyone can see and a volume each listener sets for themselves.
 
 ## Shape
@@ -10,7 +10,7 @@ everyone can see and a volume each listener sets for themselves.
 The DJ's desktop client plays each song from its file (a local one, or one
 a source extension downloads, played while it downloads), decodes it in
 Rust and publishes it as its own stereo LiveKit track
-(`commet-dj-music`, 128 kbps Opus, DTX and RED off). Listeners just receive
+(`cockhouse-dj-music`, 128 kbps Opus, DTX and RED off). Listeners just receive
 that track, so:
 
 - everyone is in sync by construction, and late joiners hear the song live;
@@ -23,7 +23,7 @@ that track, so:
   listener's own business.
 
 Only desktop (Linux, Windows) can DJ: it needs the Rust player
-(`librust_lib_commet` is not built for Android or web), and reads files and
+(`librust_lib_cockhouse` is not built for Android or web), and reads files and
 runs extensions.
 
 The DJ hears their own music through a second, in-process WebRTC connection
@@ -35,13 +35,13 @@ send the music back into the room through their microphone.
 
 | Where | What |
 |-------|------|
-| `commet/lib/client/components/dj/` | Platform-free booth: models, wire protocol, link parsing, the `DjSession` state machine. Unit tested in `commet/unit_test/dj/`. |
-| `commet/lib/client/matrix/components/dj/` | LiveKit transport, `DjBooths` (one booth per call, opened and closed by `MatrixLivekitVoipSession`), platform switch (`dj_platform*.dart`). |
+| `cockhouse/lib/client/components/dj/` | Platform-free booth: models, wire protocol, link parsing, the `DjSession` state machine. Unit tested in `cockhouse/unit_test/dj/`. |
+| `cockhouse/lib/client/matrix/components/dj/` | LiveKit transport, `DjBooths` (one booth per call, opened and closed by `MatrixLivekitVoipSession`), platform switch (`dj_platform*.dart`). |
 | `.../dj/native/` | Desktop only: `DjExtensions` (installs and runs source extensions), `DjExtensionResolver`, `DjLocalFiles` (what `file:<id>` points at), `DjSongCache`, `NativeDjEngine`, FFI bindings. |
-| `rust/dj_audio` | The player: symphonia decode (Opus in WebM/Ogg, AAC/MP4 incl. fragmented, MP3, Vorbis, FLAC, WAV) of whole files or files still downloading (`growing.rs`), resampling to 48 kHz stereo, a ring buffer filled by a decoder thread, fades, gain. C ABI `commet_music_*`, linked into `librust_lib_commet`. Opus is `opus.rs`, on the pure-Rust `opus-rs`. |
-| `third_party/flutter-webrtc` | `commetCreateMusicTrack` / `commetStopMusicTrack` and `commet_music_source.h`: a kCustom audio source fed by a 10 ms pacing thread calling `commet_music_pull`. |
+| `rust/dj_audio` | The player: symphonia decode (Opus in WebM/Ogg, AAC/MP4 incl. fragmented, MP3, Vorbis, FLAC, WAV) of whole files or files still downloading (`growing.rs`), resampling to 48 kHz stereo, a ring buffer filled by a decoder thread, fades, gain. C ABI `cockhouse_music_*`, linked into `librust_lib_cockhouse`. Opus is `opus.rs`, on the pure-Rust `opus-rs`. |
+| `third_party/flutter-webrtc` | `cockhouseCreateMusicTrack` / `cockhouseStopMusicTrack` and `cockhouse_music_source.h`: a kCustom audio source fed by a 10 ms pacing thread calling `cockhouse_music_pull`. |
 | `third_party/livekit-client-sdk-flutter` | `AudioPublishOptions.stereo`: `TF_STEREO` on the track, `stereo=1;sprop-stereo=1` in our offer, and the subscriber answer mirrors stereo where the server offers it. |
-| `commet/lib/ui/organisms/dj/` | Booth panel, now-playing pill, spinning record, member badges and right-click actions, the extension install prompt, the listener's music volume. Installed extensions are listed in Settings, App, DJ. |
+| `cockhouse/lib/ui/organisms/dj/` | Booth panel, now-playing pill, spinning record, member badges and right-click actions, the extension install prompt, the listener's music volume. Installed extensions are listed in Settings, App, DJ. |
 
 ## Who is the DJ
 
@@ -109,13 +109,13 @@ Scaffold for snack bars.
   the decks can't be handed over while one is playing.
 - Links go to the source extension whose `hosts` take them, which lists the
   songs (`resolve`) and downloads each one when its turn comes (`fetch`). See
-  `docs/dj-extensions.md` for the protocol and the package.
+  `docs/source-extensions.md` for the protocol and the package.
 - Songs play while they download, as a video does. The extension writes the
   file in place and names it, with its size when it knows it exactly,
   before the first byte; Dart hands both to the player
-  (`commet_music_file_growing`), which reads the file as it grows and waits
+  (`cockhouse_music_file_growing`), which reads the file as it grows and waits
   for bytes that haven't arrived, then says when the download is done
-  (`commet_music_file_done`). Fragmented MP4 with its index up front starts
+  (`cockhouse_music_file_done`). Fragmented MP4 with its index up front starts
   after the first few KB. Opening and seeking such a file happen on the
   decoder thread, so nothing waits on the network in the UI.
 - A download that breaks off plays what arrived, then the song fails with

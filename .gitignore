@@ -1,11 +1,11 @@
 *.DS_Store
-commet/coverage/lcov.info
-commet/assets/js/package/olm.js
-commet/assets/js/package/olm.wasm
-commet/assets/js/package/olm_legacy.js
-commet/.vodozemac/
-commet/assets/vodozemac/vodozemac_bindings_dart_bg.wasm
-commet/assets/vodozemac/vodozemac_bindings_dart.js
+cockhouse/coverage/lcov.info
+cockhouse/assets/js/package/olm.js
+cockhouse/assets/js/package/olm.wasm
+cockhouse/assets/js/package/olm_legacy.js
+cockhouse/.vodozemac/
+cockhouse/assets/vodozemac/vodozemac_bindings_dart_bg.wasm
+cockhouse/assets/vodozemac/vodozemac_bindings_dart.js
 /.dart_tool
 build/.last_build_id
 widgets/matrix_widget_api/build/.last_build_id
@@ -16,12 +16,12 @@ widgets/calendar/android/local.properties
 /target
 .cache/cef/
 tools/__pycache__/
-commet/.livekit/
-commet/web/e2ee.worker.dart.js.map
-commet/web/e2ee.worker.dart.js.deps
-commet/web/e2ee.worker.dart.js
-# built by commet/scripts/prepare-web.sh from rust/audio_dsp
-commet/web/audio_dsp.wasm
+cockhouse/.livekit/
+cockhouse/web/e2ee.worker.dart.js.map
+cockhouse/web/e2ee.worker.dart.js.deps
+cockhouse/web/e2ee.worker.dart.js
+# built by cockhouse/scripts/prepare-web.sh from rust/audio_dsp
+cockhouse/web/audio_dsp.wasm
 third_party/**/.dart_tool/
 third_party/**/pubspec.lock
 

@@ -442,7 +442,7 @@ void FlutterWebRTC::HandleMethodCall(
     RTCMediaTrack* track = MediaTrackForId(track_id);
     if (track != nullptr) {
       const bool enabled = GetValue<bool>(enable);
-      // COMMET: an unmute makes WebRTC start recording again; make sure it
+      // COCKHOUSE: an unmute makes WebRTC start recording again; make sure it
       // is from the selected microphone (ReselectRecordingDevice).
       if (enabled && track->kind().std_string() == "audio" &&
           local_tracks_.find(track_id) != local_tracks_.end()) {
@@ -566,7 +566,7 @@ void FlutterWebRTC::HandleMethodCall(
       return;
     }
 
-    // COMMET: a track received on a peer connection keeps the id of the
+    // COCKHOUSE: a track received on a peer connection keeps the id of the
     // local track it was sent from, and MediaTrackForId answers with local
     // tracks first. The DJ booth's monitor receives its own music track in
     // this same process, so without looking in the peer connection the
@@ -1328,10 +1328,10 @@ void FlutterWebRTC::HandleMethodCall(
       initLoggerCallback(severity);
     }
   } else if (method_call.method_name().compare(
-                 "commetStartSystemAudioReference") == 0) {
-    // COMMET: feed the system mix to Commet's voice DSP, see
-    // commet_system_audio_reference.h. `ctx` and `feed` are the Rust handle
-    // and the address of commet_dsp_feed_reference, as pointer-sized ints.
+                 "cockhouseStartSystemAudioReference") == 0) {
+    // COCKHOUSE: feed the system mix to Commet's voice DSP, see
+    // cockhouse_system_audio_reference.h. `ctx` and `feed` are the Rust handle
+    // and the address of cockhouse_dsp_feed_reference, as pointer-sized ints.
     if (!method_call.arguments()) {
       result->Error("Bad Arguments", "Null arguments received");
       return;
@@ -1344,21 +1344,21 @@ void FlutterWebRTC::HandleMethodCall(
       result->Error("Bad Arguments", "ctx and feed are required");
       return;
     }
-    const bool ok = commet_reference_.Start(
+    const bool ok = cockhouse_reference_.Start(
         reinterpret_cast<void*>(static_cast<uintptr_t>(ctx)),
-        reinterpret_cast<CommetSystemAudioReference::FeedFn>(
+        reinterpret_cast<CockhouseSystemAudioReference::FeedFn>(
             static_cast<uintptr_t>(feed)));
     result->Success(EncodableValue(ok));
   } else if (method_call.method_name().compare(
-                 "commetStopSystemAudioReference") == 0) {
-    // COMMET: once this returns the Rust handle is no longer referenced.
-    commet_reference_.Stop();
+                 "cockhouseStopSystemAudioReference") == 0) {
+    // COCKHOUSE: once this returns the Rust handle is no longer referenced.
+    cockhouse_reference_.Stop();
     result->Success(EncodableValue(true));
-  } else if (method_call.method_name().compare("commetCreateMusicTrack") ==
+  } else if (method_call.method_name().compare("cockhouseCreateMusicTrack") ==
              0) {
-    // COMMET: a local audio track playing Commet's music player, see
-    // commet_music_source.h. `ctx` and `pull` are the Rust player handle and
-    // the address of commet_music_pull, as pointer-sized ints. Answers like
+    // COCKHOUSE: a local audio track playing Commet's music player, see
+    // cockhouse_music_source.h. `ctx` and `pull` are the Rust player handle and
+    // the address of cockhouse_music_pull, as pointer-sized ints. Answers like
     // getDisplayMedia, so Dart builds the stream the same way.
     if (!method_call.arguments()) {
       result->Error("Bad Arguments", "Null arguments received");
@@ -1374,7 +1374,7 @@ void FlutterWebRTC::HandleMethodCall(
     }
     EnsureWebRTCInitialized();
     if (!factory_) {
-      result->Error("commetCreateMusicTrack", "WebRTC is not initialized");
+      result->Error("cockhouseCreateMusicTrack", "WebRTC is not initialized");
       return;
     }
 
@@ -1382,7 +1382,7 @@ void FlutterWebRTC::HandleMethodCall(
     options.echo_cancellation = false;
     options.auto_gain_control = false;
     options.noise_suppression = false;
-    const std::string source_label = "commet_music_" + GenerateUUID();
+    const std::string source_label = "cockhouse_music_" + GenerateUUID();
     scoped_refptr<RTCAudioSource> source = factory_->CreateAudioSource(
         source_label.c_str(), RTCAudioSource::SourceType::kCustom, options);
     const std::string track_id = GenerateUUID();
@@ -1395,11 +1395,11 @@ void FlutterWebRTC::HandleMethodCall(
     local_streams_[stream_id] = stream;
     local_tracks_[track_id] = track;
 
-    commet_music_tracks_.Add(
+    cockhouse_music_tracks_.Add(
         track_id,
-        std::make_unique<CommetMusicFeeder>(
+        std::make_unique<CockhouseMusicFeeder>(
             source, reinterpret_cast<void*>(static_cast<uintptr_t>(ctx)),
-            reinterpret_cast<CommetMusicFeeder::PullFn>(
+            reinterpret_cast<CockhouseMusicFeeder::PullFn>(
                 static_cast<uintptr_t>(pull))));
 
     EncodableMap audio_info;
@@ -1416,9 +1416,9 @@ void FlutterWebRTC::HandleMethodCall(
     response[EncodableValue("audioTracks")] = EncodableValue(audio_tracks);
     response[EncodableValue("videoTracks")] = EncodableValue(EncodableList());
     result->Success(EncodableValue(response));
-  } else if (method_call.method_name().compare("commetStopMusicTrack") ==
+  } else if (method_call.method_name().compare("cockhouseStopMusicTrack") ==
              0) {
-    // COMMET: once this returns the Rust player handle is no longer
+    // COCKHOUSE: once this returns the Rust player handle is no longer
     // referenced. The track itself is released by the usual trackDispose.
     if (!method_call.arguments()) {
       result->Error("Bad Arguments", "Null arguments received");
@@ -1427,7 +1427,7 @@ void FlutterWebRTC::HandleMethodCall(
     const EncodableMap params =
         GetValue<EncodableMap>(*method_call.arguments());
     const std::string track_id = findString(params, "trackId");
-    result->Success(EncodableValue(commet_music_tracks_.Stop(track_id)));
+    result->Success(EncodableValue(cockhouse_music_tracks_.Stop(track_id)));
   } else {
     if (HandleFrameCryptorMethodCall(method_call, std::move(result), &result)) {
       return;

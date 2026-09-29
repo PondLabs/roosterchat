@@ -32,7 +32,7 @@ command in the page and completes it with a host-sourced terminal script event.
 The script is the BrowserRuntime equivalent of `widgets_ipc.js` and
 the Rust `call_ipc.js` fallback: it installs the `window.parent.postMessage`
 shim, recursive binary conversion, `sessionStorage` rendezvous, and the
-`__roscordBrowserRuntimeReceive`/`__roscordBrowserRuntimeSend` callbacks.
+`__cockhouseBrowserRuntimeReceive`/`__cockhouseBrowserRuntimeSend` callbacks.
 Matrix vocabulary remains in the adapter and existing Matrix
 message/capability handlers; `cef_host` sees only an opaque script channel and
 generic script values.
@@ -49,7 +49,7 @@ The bridge intentionally retains the old wire details:
   `MatrixWidgetTransport`, including nested lists and maps.
 
 App-to-page messages use a generic `dispatch_script_message` command. The
-host invokes `window.__roscordBrowserRuntimeReceive` in the ready page, while
+host invokes `window.__cockhouseBrowserRuntimeReceive` in the ready page, while
 the renderer callback sends page-to-app JSON back as a `ScriptMessageEvent`
 with `source: page`. The host never parses Matrix actions, capabilities, or
 storage-key prefixes; the adapter performs those protocol and origin checks.
@@ -76,7 +76,7 @@ fallback browser backend.
 
 ## Windows embedded presentation (#121)
 
-`EmbeddedBrowserSurface` (`commet/lib/browser_runtime/embedded_browser_surface.dart`)
+`EmbeddedBrowserSurface` (`cockhouse/lib/browser_runtime/embedded_browser_surface.dart`)
 owns one `PresentationMode.embedded` surface through the four-operation seam.
 The host renders windowless OSR. It copies each CPU `OnPaint` into the next
 slot of the surface's shared-memory frame ring and publishes a `frame_ready`
@@ -102,14 +102,14 @@ browser backend is reachable from the embedded path.
 
 ## Windows standalone presentation (#122)
 
-`StandaloneBrowserSurface` (`commet/lib/browser_runtime/standalone_browser_surface.dart`)
+`StandaloneBrowserSurface` (`cockhouse/lib/browser_runtime/standalone_browser_surface.dart`)
 owns one `PresentationMode.standalone` surface through the same four-operation
 seam. Standalone and embedded surfaces share one lazily started host, one
 account request context, one policy, and one permission mediation without
 starting another host; two surfaces for one account observe the same browser
 state while different accounts stay isolated.
 
-The Windows host creates a roscord-owned top-level `HWND` per standalone
+The Windows host creates a cockhouse-owned top-level `HWND` per standalone
 surface (`CreateStandaloneWindow`/`RegisterStandaloneWindowClass`) and parents
 the windowed CEF browser as its child (`SetAsChild`). Geometry travels through
 ordered `resize` commands applied with `SetWindowPos`/`MoveWindow` plus
@@ -136,7 +136,7 @@ release as embedded.
 ## Official video (MediaEmbedAdapter, #126)
 
 `MediaEmbedAdapter`
-(`commet/lib/client/components/video_embed/media_embed_adapter.dart`)
+(`cockhouse/lib/client/components/video_embed/media_embed_adapter.dart`)
 migrates Windows official-video playback through the same four-operation seam.
 Only `OfficialVideoEmbedSource` enters CEF; native direct-stream sources keep
 using the media-kit player and are never adapted.
@@ -197,7 +197,7 @@ and native dispatch (`--widget_runner`), the host-Chromium launcher inside
 the remote-HTTP runner, the developer launcher, and the Windows web-view
 branches. `WidgetHostType` is now `embedded`, `standalone`,
 `remoteHttpClient`, and `androidActivity`: desktop offers embedded plus
-standalone (a roscord-owned CEF window), remote HTTP stays as the
+standalone (a cockhouse-owned CEF window), remote HTTP stays as the
 remote-device QR flow, and Android/web keep their existing runners.
 
 `_CefMatrixWidget` opens one adapter session per overlay, attaches an

@@ -4,8 +4,8 @@ import 'dart:math';
 import 'dart:ui';
 
 import 'package:calendar_view/calendar_view.dart';
-import 'package:commet_calendar_widget/rfc8984.dart';
-import 'package:commet_calendar_widget/utils.dart';
+import 'package:cockhouse_calendar_widget/rfc8984.dart';
+import 'package:cockhouse_calendar_widget/utils.dart';
 import 'package:flutter/material.dart';
 import 'package:matrix_widget_api/capabilities.dart';
 import 'package:matrix_widget_api/matrix_widget_api.dart';

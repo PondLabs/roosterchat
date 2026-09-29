@@ -1,10 +1,10 @@
 #[cfg(target_os = "linux")]
 fn main() {
-    if let Err(error) = rust_lib_commet::cef_host::run(std::env::args_os()) {
+    if let Err(error) = rust_lib_cockhouse::cef_host::run(std::env::args_os()) {
         eprintln!("cef_host: {error}");
         // Chromium starts its child processes without our stderr, so a child
         // that fails would otherwise leave no trace.
-        if let Some(path) = std::env::var_os("ROSCORD_CEF_HOST_LOG") {
+        if let Some(path) = std::env::var_os("COCKHOUSE_CEF_HOST_LOG") {
             use std::io::Write;
             if let Ok(mut log) = std::fs::OpenOptions::new()
                 .create(true)
