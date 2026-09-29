@@ -1624,5 +1624,10 @@
         "description": "Placeholder text to put in a notification when the user has privacy enhanced notifications enabled.",
         "type": "text",
         "placeholders": {}
-    }
+    },
+    "roomSearchNoResults": "Nenhum resultado encontrado",
+    "roomSearchFailed": "Não foi possível buscar mensagens",
+    "roomSearchRetry": "Tentar novamente",
+    "roomSearchClear": "Limpar busca",
+    "roomSearchNext": "Próxima"
 }
