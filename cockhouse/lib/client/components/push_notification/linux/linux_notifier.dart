@@ -49,8 +49,24 @@ class LinuxNotifier implements Notifier {
 
   LinuxServerCapabilities? capabilities;
 
+  static const _launcherAppUri = 'application://com.pondlabs.cockhouse.desktop';
+
+  // The package's default object path uses a signed hash, and for this app
+  // URI it comes out negative: a `-` makes the path invalid and every badge
+  // update threw. libunity names it after GLib's string hash, unsigned.
   final service = LauncherEntryService(
-      appUri: 'application://com.pondlabs.cockhouse.desktop');
+      appUri: _launcherAppUri,
+      objectPath: launcherEntryObjectPath(_launcherAppUri));
+
+  /// `/com/canonical/unity/launcherentry/<g_str_hash(appUri)>`, as libunity
+  /// makes it (djb2 over the bytes, 32 bits unsigned).
+  static String launcherEntryObjectPath(String appUri) {
+    var hash = 5381;
+    for (final byte in utf8.encode(appUri)) {
+      hash = ((hash << 5) + hash + byte) & 0xFFFFFFFF;
+    }
+    return '/com/canonical/unity/launcherentry/$hash';
+  }
 
   static void notificationResponse(NotificationResponse details) {
     final payload = jsonDecode(details.payload!) as Map<String, dynamic>;
@@ -160,7 +176,11 @@ class LinuxNotifier implements Notifier {
     if (preferences.showNotificationBadgesInTaskbar.value == true) {
       var counts = NotificationUtils.getNotificationCounts();
       var count = counts.$2;
-      service.update(countVisible: count > 0, count: count);
+      // No session bus (CI, containers) or no dock listening: the badge is a
+      // nicety, never a reason for startup to fail.
+      service.update(countVisible: count > 0, count: count).catchError(
+          (Object e, StackTrace s) =>
+              Log.onError(e, s, content: "Launcher badge not updated"));
     }
   }
 

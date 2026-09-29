@@ -13,8 +13,9 @@ bool _attempted = false;
 DynamicLibrary? openRustLibrary() {
   if (_attempted) return _library;
   _attempted = true;
-  final name =
-      Platform.isWindows ? 'rust_lib_cockhouse.dll' : 'librust_lib_cockhouse.so';
+  final name = Platform.isWindows
+      ? 'rust_lib_cockhouse.dll'
+      : 'librust_lib_cockhouse.so';
   final exeDir = p.dirname(Platform.resolvedExecutable);
   final candidates = [
     // packaged builds and `flutter run` bundles

@@ -93,8 +93,8 @@ class MatrixRemoteHttpWidgetTransceiver implements WidgetTransceiver {
         .asUint8List();
     var scriptText = Utf8Decoder().convert(scriptBytes);
 
-    text =
-        text.replaceAll("\$RUNNER_PAGE_TITLE", "Cockhouse Widget | ${info.name}");
+    text = text.replaceAll(
+        "\$RUNNER_PAGE_TITLE", "Cockhouse Widget | ${info.name}");
 
     text = text.replaceAll("\$IFRAME_URL", editedUrl.toString());
 

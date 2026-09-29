@@ -76,7 +76,8 @@ final _legacyIdentityAllowlist = <_Allowance>[
     reason: _thirdPartyProject,
   ),
   _Allowance(
-    path: r'(?:macos/Runner/Configs/AppInfo\.xcconfig|windows/runner/Runner\.rc)',
+    path:
+        r'(?:macos/Runner/Configs/AppInfo\.xcconfig|windows/runner/Runner\.rc)',
     token: r'commet\.chat\.',
     count: 2,
     reason: _upstreamCopyright,
@@ -149,7 +150,8 @@ void main() {
     final infoPlist = File('macos/Runner/Info.plist').readAsStringSync();
 
     expect(
-      RegExp(r'^PRODUCT_NAME = Cockhouse$', multiLine: true).allMatches(appInfo),
+      RegExp(r'^PRODUCT_NAME = Cockhouse$', multiLine: true)
+          .allMatches(appInfo),
       hasLength(1),
     );
     expect(project, contains('path = Cockhouse.app;'));

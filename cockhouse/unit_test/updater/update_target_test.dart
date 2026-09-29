@@ -72,8 +72,8 @@ void main() {
   });
 
   test('run from staging with nothing left behind, it moves out beside it', () {
-    final staged =
-        build(p.join('here', '.cockhouse-update', 'v2', 'unpacked', 'Cockhouse'));
+    final staged = build(
+        p.join('here', '.cockhouse-update', 'v2', 'unpacked', 'Cockhouse'));
     final target = targetOf(staged);
     expect(target.install, p.join(root.path, 'here', 'Cockhouse'));
     expect(target.workRoot, p.join(root.path, 'here', '.cockhouse-update'));
@@ -83,7 +83,8 @@ void main() {
       'run out of a zip Explorer unpacked into temp, it moves somewhere lasting',
       () {
     final temp = p.join(root.path, 'Temp');
-    final inZip = build(p.join('Temp', 'Temp1_cockhouse-v1.zip', 'cockhouse-v1'));
+    final inZip =
+        build(p.join('Temp', 'Temp1_cockhouse-v1.zip', 'cockhouse-v1'));
     final target = targetOf(inZip, tempDir: temp);
     if (!Platform.isWindows) {
       // Only Windows opens zips that way.

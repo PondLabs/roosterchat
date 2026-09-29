@@ -161,18 +161,18 @@ class _Bindings {
         captureProcess = find<NativeFunction<_ProcessNative>>(
                 lib, 'cockhouse_dsp_capture_process')
             .address,
-        captureReset =
-            find<NativeFunction<_ResetNative>>(lib, 'cockhouse_dsp_capture_reset')
-                .address,
+        captureReset = find<NativeFunction<_ResetNative>>(
+                lib, 'cockhouse_dsp_capture_reset')
+            .address,
         renderInit =
             find<NativeFunction<_InitNative>>(lib, 'cockhouse_dsp_render_init')
                 .address,
         renderProcess = find<NativeFunction<_ProcessNative>>(
                 lib, 'cockhouse_dsp_render_process')
             .address,
-        renderReset =
-            find<NativeFunction<_ResetNative>>(lib, 'cockhouse_dsp_render_reset')
-                .address,
+        renderReset = find<NativeFunction<_ResetNative>>(
+                lib, 'cockhouse_dsp_render_reset')
+            .address,
         feedReference = find<NativeFunction<_FeedReferenceNative>>(
                 lib, 'cockhouse_dsp_feed_reference')
             .address;
@@ -242,7 +242,8 @@ class NativeAudioProcessingManager extends AudioProcessingManager {
     _loadAttempted = true;
     final lib = _openLibrary();
     if (lib == null) {
-      _unavailableReason = "the voice library (librust_lib_cockhouse) is missing";
+      _unavailableReason =
+          "the voice library (librust_lib_cockhouse) is missing";
       return null;
     }
     try {

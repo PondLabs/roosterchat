@@ -33,7 +33,8 @@ class WindowsNotifier implements Notifier {
   @override
   Future<void> init() async {
     final dir = await getTemporaryDirectory();
-    var file = p.join(dir.path, "com.pondlabs.cockhouse", "cockhouse_app_icon.png");
+    var file =
+        p.join(dir.path, "com.pondlabs.cockhouse", "cockhouse_app_icon.png");
 
     ByteData data = await rootBundle
         .load("assets/images/app_icon/app_icon_transparent_cropped.png");

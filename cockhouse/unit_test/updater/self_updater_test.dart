@@ -58,8 +58,11 @@ void main() {
 
   group('what may be replaced', () {
     test('a build unpacked into a home directory is ours', () {
-      expect(isSelfInstallable('linux', '/home/lion/cockhouse/cockhouse'), isTrue);
-      expect(isSelfInstallable('windows', r'C:\Users\lion\Cockhouse\cockhouse.exe'),
+      expect(
+          isSelfInstallable('linux', '/home/lion/cockhouse/cockhouse'), isTrue);
+      expect(
+          isSelfInstallable(
+              'windows', r'C:\Users\lion\Cockhouse\cockhouse.exe'),
           isTrue);
     });
 
@@ -78,7 +81,8 @@ void main() {
     test('only the desktop platforms install over themselves', () {
       expect(isSelfInstallable('android', '/data/app/cockhouse'), isFalse);
       expect(isSelfInstallable('web', '/cockhouse'), isFalse);
-      expect(isSelfInstallable('macos', '/Applications/Cockhouse.app'), isFalse);
+      expect(
+          isSelfInstallable('macos', '/Applications/Cockhouse.app'), isFalse);
     });
   });
 
@@ -242,7 +246,8 @@ void main() {
       final odd = Directory(p.join(root.path, "it's here"))
         ..createSync(recursive: true);
       final install = buildDir(odd, 'Cockhouse', 'old');
-      final work = Directory(p.join(odd.path, '.cockhouse-update'))..createSync();
+      final work = Directory(p.join(odd.path, '.cockhouse-update'))
+        ..createSync();
       final staged = buildDir(work, 'unpacked/cockhouse-v2-linux', 'new');
 
       final result =

@@ -103,8 +103,10 @@ class DjMusicBindings {
               Pointer<Void>, Pointer<MusicStatus>)>('cockhouse_music_status');
 
   late final void Function(Pointer<Utf8>, int, int) fileGrowing =
-      lib.lookupFunction<Void Function(Pointer<Utf8>, Uint64, Uint64),
-          void Function(Pointer<Utf8>, int, int)>('cockhouse_music_file_growing');
+      lib.lookupFunction<
+          Void Function(Pointer<Utf8>, Uint64, Uint64),
+          void Function(
+              Pointer<Utf8>, int, int)>('cockhouse_music_file_growing');
   late final void Function(Pointer<Utf8>, int) fileDone = lib.lookupFunction<
       Void Function(Pointer<Utf8>, Uint8),
       void Function(Pointer<Utf8>, int)>('cockhouse_music_file_done');
