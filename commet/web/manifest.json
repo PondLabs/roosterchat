@@ -1,11 +1,11 @@
 {
-    "name": "roscord",
-    "short_name": "roscord",
+    "name": "Cockhouse",
+    "short_name": "Cockhouse",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "Your space to connect!",
+    "background_color": "#2B1A14",
+    "theme_color": "#2B1A14",
+    "description": "Your crew's place on the internet.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

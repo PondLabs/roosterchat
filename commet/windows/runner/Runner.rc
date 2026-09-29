@@ -90,7 +90,7 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "PondLabs" "\0"
-            VALUE "FileDescription", "roscord" "\0"
+            VALUE "FileDescription", "Cockhouse" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "roscord" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2023 commet.chat. Copyright (C) 2026 PondLabs. All rights reserved." "\0"
@@ -98,7 +98,7 @@ BEGIN
             // BINARY_NAME builds in windows/CMakeLists.txt. Renaming the
             // executable is a distribution-identity change, tracked separately.
             VALUE "OriginalFilename", "commet.exe" "\0"
-            VALUE "ProductName", "roscord" "\0"
+            VALUE "ProductName", "Cockhouse" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

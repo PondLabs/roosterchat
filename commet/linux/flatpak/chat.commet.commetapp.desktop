@@ -1,8 +1,8 @@
 [Desktop Entry]
 Version={{VERSION_TAG}}
 Type=Application
-Name=roscord
-Comment=Your space to connect!
+Name=Cockhouse
+Comment=Your crew's place on the internet.
 Categories=Utility;Amusement;
 Icon=chat.commet.commetapp
 Exec=commet

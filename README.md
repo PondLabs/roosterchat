@@ -1,15 +1,20 @@
 <p align="center" style="padding-top:20px">
-<img src="commet/assets/images/app_icon/app_icon_filled.png" width="128" alt="roscord">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/logo/lockup-on-dark.svg">
+  <img src="docs/brand/logo/lockup-on-light.svg" width="420" alt="Cockhouse">
+</picture>
 
 <p align="center">
-    <a href="https://github.com/PondLabs/roscord/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/PondLabs/roscord?style=for-the-badge&color=534cdd"></a>
-    <a href="https://github.com/PondLabs/roscord/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/PondLabs/roscord?style=for-the-badge&color=534cdd"></a>
-    <a href="https://github.com/PondLabs/roscord/issues"><img alt="Issues" src="https://img.shields.io/github/issues/PondLabs/roscord?style=for-the-badge&color=534cdd"></a>
+    <a href="https://github.com/PondLabs/roscord/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/PondLabs/roscord?style=for-the-badge&color=d4643c"></a>
+    <a href="https://github.com/PondLabs/roscord/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/PondLabs/roscord?style=for-the-badge&color=d4643c"></a>
+    <a href="https://github.com/PondLabs/roscord/issues"><img alt="Issues" src="https://img.shields.io/github/issues/PondLabs/roscord?style=for-the-badge&color=d4643c"></a>
 </p>
 
-### Your space to connect
+### Your crew's place on the internet
 
-roscord is a client for [Matrix](https://matrix.org) focused on providing a feature rich experience while maintaining a simple interface. The goal is to build a secure, privacy respecting app without compromising on the features you have come to expect from a modern chat client.
+Cockhouse is the weird, warm little house on the internet where your people hang out. Drop into always-on voice rooms, share your screen, fire off the soundboard, put a song on in the DJ booth, or just talk in the text channels. It runs on [Matrix](https://matrix.org), so your crew can host its own server, federate with others and keep its conversations end-to-end encrypted. Your house, your rules.
+
+Cockhouse started as a fork of [Commet](https://github.com/commetchat/commet). Its brand guide is in [`docs/brand`](docs/brand/README.md).
 
 # Download
 

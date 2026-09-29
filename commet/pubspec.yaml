@@ -247,6 +247,10 @@ flutter:
     - family: Jellee
       fonts: 
         - asset: assets/font/jellee/Jellee-Bold.ttf
+
+    - family: Sora
+      fonts:
+        - asset: assets/font/sora/Sora-VariableFont_wght.ttf
         
     - family: EmojiFont
       fonts: 

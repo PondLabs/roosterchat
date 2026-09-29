@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
   <id>chat.commet.commetapp</id>
-  <name>roscord</name>
-  <summary>Your space to connect!</summary>
+  <name>Cockhouse</name>
+  <summary>Your crew's place on the internet.</summary>
   <developer_name>Airyz</developer_name>
   <url type="homepage">https://github.com/PondLabs/roscord</url>
   <metadata_license>CC-BY-SA-4.0</metadata_license>
@@ -13,7 +13,8 @@
     <control>touch</control>
   </supports>
   <description>
-    <p>roscord is a client for Matrix focused on providing a feature rich experience while maintaining a simple interface. The goal is to build a secure, privacy respecting app without compromising on the features you have come to expect from a modern chat client. </p>
+    <p>Cockhouse is the weird, warm little house on the internet where your people hang out. Drop into always-on voice rooms, share your screen, play the soundboard, put a song on in the DJ booth, or just talk in the text channels.</p>
+    <p>It runs on Matrix, so your crew can host its own server, federate with others and keep its conversations end-to-end encrypted. Your house, your rules.</p>
   </description>
   <launchable type="desktop-id">chat.commet.commetapp.desktop</launchable>
   <content_rating type="oars-1.1" />

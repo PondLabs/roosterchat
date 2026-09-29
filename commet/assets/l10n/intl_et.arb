@@ -612,7 +612,7 @@
         "type": "text",
         "placeholders": {}
     },
-    "unifiedPushExplainer": "# Unified Push\nSee roscord versioon on kompileeritud ilma Google Play Services toeta. Tõuketeavituste jaoks pead sa kasutama [Unified Push](https://unifiedpush.org/) teenuseid. \n\nKui sul juba on Unified Push teenustega ühilduv haldusrakendus paigaldatud, siis saad teda alljärgnevalt seadistada\n",
+    "unifiedPushExplainer": "# Unified Push\nSee Cockhouse versioon on kompileeritud ilma Google Play Services toeta. Tõuketeavituste jaoks pead sa kasutama [Unified Push](https://unifiedpush.org/) teenuseid. \n\nKui sul juba on Unified Push teenustega ühilduv haldusrakendus paigaldatud, siis saad teda alljärgnevalt seadistada\n",
     "@unifiedPushExplainer": {
         "description": "Explains the need for unified push. Supports markdown",
         "type": "text",

@@ -1205,7 +1205,7 @@
         "type": "text",
         "placeholders": {}
     },
-    "unifiedPushExplainer": "# Unified Push\nЭта версия roscord собрана без поддержки служб Google Play. Получение пуш-уведомлений возможно посредством [Unified Push](https://unifiedpush.org/).\n\nЕсли у вас уже установлено приложение распределения уведомлений, совместимое с Unified Push, выполнить настройку можно ниже\n",
+    "unifiedPushExplainer": "# Unified Push\nЭта версия Cockhouse собрана без поддержки служб Google Play. Получение пуш-уведомлений возможно посредством [Unified Push](https://unifiedpush.org/).\n\nЕсли у вас уже установлено приложение распределения уведомлений, совместимое с Unified Push, выполнить настройку можно ниже\n",
     "@unifiedPushExplainer": {
         "description": "Explains the need for unified push. Supports markdown",
         "type": "text",
@@ -2317,7 +2317,7 @@
         "type": "text",
         "placeholders": {}
     },
-    "descriptionUpdateAvailable": "Доступна новая версия roscord: {version}",
+    "descriptionUpdateAvailable": "Доступна новая версия Cockhouse: {version}",
     "@descriptionUpdateAvailable": {
         "description": "describes the update, showing the version code for the available update",
         "type": "text",

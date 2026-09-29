@@ -31,7 +31,7 @@ class RoomCreated extends StatelessWidget {
                     "Welcome to ${room.displayName}!",
                   ),
                   const tiamat.Text.labelEmphasised(
-                    "This is the beginning of the end...",
+                    "Make yourself at home.",
                   ),
                 ],
               ),

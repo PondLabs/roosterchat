@@ -38,7 +38,7 @@ class UpdateChecker {
       desc: "Label for the the info popup when an update is available");
 
   static String descriptionUpdateAvailable(String version) => Intl.message(
-      "There is a newer version of roscord available: ${version}. Tap to open the release page.",
+      "There is a newer version of Cockhouse available: ${version}. Tap to open the release page.",
       name: "descriptionUpdateAvailable",
       args: [version],
       desc:

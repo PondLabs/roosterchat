@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:commet/client/room.dart';
 import 'package:commet/client/space.dart';
+import 'package:commet/config/build_config.dart';
 import 'package:commet/config/platform_utils.dart';
 import 'package:commet/debug/log.dart';
 import 'package:commet/main.dart';
@@ -159,7 +160,7 @@ class WindowManagement {
     final result = [
       _currentRoomName,
       _currentSpaceName,
-      "roscord",
+      BuildConfig.app,
     ].whereNot((a) => a == null).join(" | ");
     await windowManager.setTitle(result);
   }

@@ -5,6 +5,7 @@ import 'package:commet/client/components/push_notification/notification_content.
 import 'package:commet/client/components/push_notification/notification_manager.dart';
 import 'package:commet/client/components/push_notification/notifier.dart';
 import 'package:commet/client/room.dart';
+import 'package:commet/config/build_config.dart';
 import 'package:commet/main.dart';
 import 'package:commet/utils/common_strings.dart';
 import 'package:commet/utils/event_bus.dart';
@@ -44,7 +45,7 @@ class WindowsNotifier implements Notifier {
 
     await WinToast.instance().initialize(
       aumId: 'chat.commet.app.windows-a33bc9ba',
-      displayName: 'roscord',
+      displayName: BuildConfig.app,
       iconPath: uri.toString(),
       clsid: '7685C041-9D17-4112-8FC4-386743A3D53E',
     );

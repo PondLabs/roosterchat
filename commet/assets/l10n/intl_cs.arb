@@ -425,7 +425,7 @@
         "type": "text",
         "placeholders": {}
     },
-    "unifiedPushExplainer": "# Unified Push\nTato verze aplikace roscord byla vytvořena bez služeb Google Play. Abyste mohli přijímat push oznámení, budete muset použít [Unified Push](https://unifiedpush.org/). \n\nPokud již máte nainstalovanou kompatibilní aplikaci s Unified Push, můžete ji nakonfigurovat níže\n",
+    "unifiedPushExplainer": "# Unified Push\nTato verze aplikace Cockhouse byla vytvořena bez služeb Google Play. Abyste mohli přijímat push oznámení, budete muset použít [Unified Push](https://unifiedpush.org/). \n\nPokud již máte nainstalovanou kompatibilní aplikaci s Unified Push, můžete ji nakonfigurovat níže\n",
     "@unifiedPushExplainer": {
         "description": "Explains the need for unified push. Supports markdown",
         "type": "text",
@@ -2251,7 +2251,7 @@
         "type": "text",
         "placeholders": {}
     },
-    "descriptionUpdateAvailable": "K dispozici je novější verze aplikace roscord: {version}",
+    "descriptionUpdateAvailable": "K dispozici je novější verze aplikace Cockhouse: {version}",
     "@descriptionUpdateAvailable": {
         "description": "describes the update, showing the version code for the available update",
         "type": "text",

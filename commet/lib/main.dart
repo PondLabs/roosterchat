@@ -113,7 +113,7 @@ void bubble() async {
   var initialTheme = await preferences.resolveTheme();
 
   runApp(MaterialApp(
-      title: 'roscord',
+      title: BuildConfig.app,
       theme: initialTheme,
       navigatorKey: navigator,
       debugShowCheckedModeBanner: false,
@@ -402,7 +402,7 @@ class App extends StatelessWidget {
                 initialTheme: initialTheme ?? ThemeDark.theme,
                 materialAppBuilder: (context, theme) {
                   return MaterialApp(
-                    title: 'roscord',
+                    title: BuildConfig.app,
                     theme: theme,
                     showPerformanceOverlay:
                         preferences.showPerformanceOverlay.value,

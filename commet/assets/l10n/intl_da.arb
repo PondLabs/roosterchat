@@ -495,7 +495,7 @@
         "type": "text",
         "placeholders": {}
     },
-    "unifiedPushExplainer": "#Unified Push\nDenne version af roscord var bygget uden Google Play Services. Hvis du vil modtage notifikationer skal du bruge Unified Push](https://unifiedpush.org/).\n\nhvis du allerede har Unified Push kompatibel distributør app installeret kan du konfigurere den herunder\n",
+    "unifiedPushExplainer": "#Unified Push\nDenne version af Cockhouse var bygget uden Google Play Services. Hvis du vil modtage notifikationer skal du bruge Unified Push](https://unifiedpush.org/).\n\nhvis du allerede har Unified Push kompatibel distributør app installeret kan du konfigurere den herunder\n",
     "@unifiedPushExplainer": {
         "description": "Explains the need for unified push. Supports markdown",
         "type": "text",

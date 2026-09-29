@@ -455,7 +455,7 @@
         "type": "text",
         "placeholders": {}
     },
-    "unifiedPushExplainer": "# Unified Push\nAceastă versiune de roscord a fost creată fără serviciile Google Play. Pentru a primi notificări, va trebui să folosești [Unified Push](https://unifiedpush.org/). \n\nDacă ai deja instalată o aplicație de distribuție compatibilă cu UnifiedPush, o poți configura mai jos.\n",
+    "unifiedPushExplainer": "# Unified Push\nAceastă versiune de Cockhouse a fost creată fără serviciile Google Play. Pentru a primi notificări, va trebui să folosești [Unified Push](https://unifiedpush.org/). \n\nDacă ai deja instalată o aplicație de distribuție compatibilă cu UnifiedPush, o poți configura mai jos.\n",
     "@unifiedPushExplainer": {
         "description": "Explains the need for unified push. Supports markdown",
         "type": "text",
@@ -2019,7 +2019,7 @@
         "type": "text",
         "placeholders": {}
     },
-    "descriptionUpdateAvailable": "Există o versiune roscord mai nouă: {version}",
+    "descriptionUpdateAvailable": "Există o versiune Cockhouse mai nouă: {version}",
     "@descriptionUpdateAvailable": {
         "description": "describes the update, showing the version code for the available update",
         "type": "text",

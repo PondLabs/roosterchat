@@ -186,7 +186,7 @@ class _VoipRoomViewState extends State<VoipRoomView> {
                       BoxDecoration(borderRadius: BorderRadius.circular(8)),
                   child: tiamat.Tile.surfaceContainer(
                       child: Center(
-                          child: tiamat.Text.labelLow("No one's here...")))),
+                          child: tiamat.Text.labelLow("It's quiet in here. Pull up a chair.")))),
             ),
           ),
         if (widget.voip.canJoinCall)

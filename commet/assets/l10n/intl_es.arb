@@ -763,7 +763,7 @@
         "type": "text",
         "placeholders": {}
     },
-    "unifiedPushExplainer": "# Unified Push\nEsta versión de roscord se ha creado sin los Servicios de Google Play. Para recibir notificaciones push, tendrás que utilizar [Unified Push](https://unifiedpush.org/). \n\nSi ya tienes instalada una aplicación distribuidora compatible con Unified Push, puedes configurarla a continuación\n",
+    "unifiedPushExplainer": "# Unified Push\nEsta versión de Cockhouse se ha creado sin los Servicios de Google Play. Para recibir notificaciones push, tendrás que utilizar [Unified Push](https://unifiedpush.org/). \n\nSi ya tienes instalada una aplicación distribuidora compatible con Unified Push, puedes configurarla a continuación\n",
     "@unifiedPushExplainer": {
         "description": "Explains the need for unified push. Supports markdown",
         "type": "text",
@@ -2335,7 +2335,7 @@
         "type": "text",
         "placeholders": {}
     },
-    "descriptionUpdateAvailable": "Hay una versión nueva de roscord disponible: {version}",
+    "descriptionUpdateAvailable": "Hay una versión nueva de Cockhouse disponible: {version}",
     "@descriptionUpdateAvailable": {
         "description": "describes the update, showing the version code for the available update",
         "type": "text",

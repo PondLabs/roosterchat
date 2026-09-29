@@ -1,11 +1,11 @@
 [Desktop Entry]
-Name=roscord
+Name=Cockhouse
 Exec=/usr/lib/chat.commet.commetapp/commet %U
 Terminal=false
 Type=Application
 Icon=commet-desktop
 StartupWMClass=chat.commet.commetapp
-Comment=Your space to connect!
+Comment=Your crew's place on the internet.
 Categories=Network;InstantMessaging;Chat;
 Actions=ToggleMute;ToggleDeafen;Disconnect
 

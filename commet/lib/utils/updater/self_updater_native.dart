@@ -228,7 +228,7 @@ class NativeSelfUpdater implements SelfUpdater {
       if (!UpdateChecker.isNewer(release.tag, BuildConfig.VERSION_TAG)) {
         _set(UpdateStage.upToDate,
             release: release,
-            message: 'roscord ${BuildConfig.VERSION_TAG} is the latest.');
+            message: '${BuildConfig.app} ${BuildConfig.VERSION_TAG} is the latest.');
         return;
       }
       if (!canInstall) {
@@ -297,7 +297,7 @@ class NativeSelfUpdater implements SelfUpdater {
       _set(UpdateStage.ready,
           release: release,
           message: _target.moves
-              ? '${release.tag} is ready. Restarting moves roscord to '
+              ? '${release.tag} is ready. Restarting moves ${BuildConfig.app} to '
                   '${_target.install}, with a Start menu shortcut, so it no '
                   'longer runs from the zip.'
               : null);

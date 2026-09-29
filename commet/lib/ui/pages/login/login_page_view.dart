@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:commet/client/auth.dart';
+import 'package:commet/config/build_config.dart';
 import 'package:commet/config/global_config.dart';
 import 'package:commet/ui/atoms/shader/star_trails.dart';
 import 'package:commet/ui/navigation/navigation_utils.dart';
@@ -204,9 +205,12 @@ class _LoginPageViewState extends State<LoginPageView> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             appIcon(context),
+            const SizedBox(width: 12),
+            appName(),
           ],
         ),
       ),
+      const tiamat.Text.labelLow("Come on in."),
       const SizedBox(height: 16),
       homeserverEntry(),
       const SizedBox(height: 16),
@@ -298,8 +302,12 @@ class _LoginPageViewState extends State<LoginPageView> {
 
   Text appName() {
     return const Text(
-      "roscord",
-      style: TextStyle(fontFamily: 'Jellee', fontSize: 30),
+      BuildConfig.app,
+      style: TextStyle(
+          fontFamily: 'Sora',
+          fontSize: 30,
+          fontVariations: [FontVariation.weight(800)],
+          letterSpacing: -0.8),
     );
   }
 
@@ -380,8 +388,8 @@ class _LoginPageViewState extends State<LoginPageView> {
 
   SizedBox appIcon(BuildContext context) {
     return SizedBox(
-      width: 50,
-      height: 50,
+      width: 56,
+      height: 56,
       child: SvgPicture.asset(
         "assets/images/app_icon/icon.svg",
         theme: SvgTheme(currentColor: Theme.of(context).colorScheme.onSurface),

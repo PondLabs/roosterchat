@@ -1061,7 +1061,7 @@
             "spaceName": {}
         }
     },
-    "unifiedPushExplainer": "# UnifiedPush\n此版本的 roscord 是在沒有 Google Play 服務的情況下建立的。為了接收推播通知，您需要使用 [UnifiedPush](https://unifiedpush.org/)。\n\n如果您已經安裝了相容於 Unified Push 的應用程式，可以在下面進行設置\n",
+    "unifiedPushExplainer": "# UnifiedPush\n此版本的 Cockhouse 是在沒有 Google Play 服務的情況下建立的。為了接收推播通知，您需要使用 [UnifiedPush](https://unifiedpush.org/)。\n\n如果您已經安裝了相容於 Unified Push 的應用程式，可以在下面進行設置\n",
     "@unifiedPushExplainer": {
         "description": "Explains the need for unified push. Supports markdown",
         "type": "text",
@@ -2251,7 +2251,7 @@
         "type": "text",
         "placeholders": {}
     },
-    "descriptionUpdateAvailable": "有新的 roscord 更新可供使用：{version}",
+    "descriptionUpdateAvailable": "有新的 Cockhouse 更新可供使用：{version}",
     "@descriptionUpdateAvailable": {
         "description": "describes the update, showing the version code for the available update",
         "type": "text",
