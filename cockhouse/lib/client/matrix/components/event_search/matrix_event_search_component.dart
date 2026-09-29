@@ -8,7 +8,6 @@ import 'package:cockhouse/client/timeline_events/timeline_event.dart';
 import 'package:cockhouse/debug/log.dart';
 import 'package:cockhouse/ui/molecules/timeline_events/timeline_view_entry.dart';
 import 'package:cockhouse/utils/mime.dart';
-import 'package:cockhouse/utils/notifying_list.dart';
 import 'package:matrix/matrix.dart' as matrix;
 
 class MatrixEncryptedRoomEventSearchSession extends EventSearchSession {
@@ -24,12 +23,15 @@ class MatrixEncryptedRoomEventSearchSession extends EventSearchSession {
   List<TimelineEvent<Client>> results = List.empty(growable: true);
 
   @override
-  Stream<List<TimelineEvent<Client>>> startSearch(String searchTerm,
-      {String? nextBatch}) async* {
+  Stream<List<TimelineEvent<Client>>> startSearch(
+    String searchTerm, {
+    String? nextBatch,
+  }) async* {
     currentSearchTerm = searchTerm.toLowerCase();
 
     if (nextBatch == null) {
       results = List.empty(growable: true);
+      lastPrevBatch = null;
     }
 
     currentlySearching = true;
@@ -37,38 +39,40 @@ class MatrixEncryptedRoomEventSearchSession extends EventSearchSession {
     var params = MatrixSearchParameters.parse(searchTerm);
 
     var search = timeline.matrixTimeline!.startSearch(
-        searchTerm: searchTerm,
-        searchFunc: (ev) => searchFunc(params, ev),
-        prevBatch: nextBatch);
+      searchTerm: searchTerm,
+      searchFunc: (ev) => searchFunc(params, ev),
+      prevBatch: nextBatch,
+    );
 
-    await for (final chunk in search) {
-      var result = chunk.$1
-          .map((e) => (timeline.room as MatrixRoom).convertEvent(e))
-          .toList();
+    try {
+      await for (final chunk in search) {
+        var result = chunk.$1
+            .map((e) => (timeline.room as MatrixRoom).convertEvent(e))
+            .toList();
 
-      Map<String, TimelineEvent> m = {};
+        Map<String, TimelineEvent> m = {};
 
-      for (var event in result) {
-        var type = TimelineViewEntryState.eventToDisplayType(event);
-        if (type != TimelineEventWidgetDisplayType.hidden) {
-          m[event.eventId] = event;
+        for (var event in result) {
+          var type = TimelineViewEntryState.eventToDisplayType(event);
+          if (type != TimelineEventWidgetDisplayType.hidden) {
+            m[event.eventId] = event;
+          }
         }
-      }
 
-      if (chunk.$2 != null) {
         lastPrevBatch = chunk.$2;
+
+        result = m.values.toList();
+        result.sort((a, b) => b.originServerTs.compareTo(a.originServerTs));
+
+        results.addAll(
+          result.where((i) => !results.any((e) => i.eventId == e.eventId)),
+        );
+
+        yield results;
       }
-
-      result = m.values.toList();
-      result.sort((a, b) => b.originServerTs.compareTo(a.originServerTs));
-
-      results.addAll(
-          result.where((i) => !results.any((e) => i.eventId == e.eventId)));
-
-      yield results;
+    } finally {
+      currentlySearching = false;
     }
-
-    currentlySearching = false;
     yield results;
   }
 
@@ -130,7 +134,7 @@ class MatrixEncryptedRoomEventSearchSession extends EventSearchSession {
   }
 
   @override
-  bool get canContinueSearch => true;
+  bool get canContinueSearch => lastPrevBatch != null;
 }
 
 class MatrixSearchParameters {
@@ -208,8 +212,7 @@ class MatrixServerEventSearchSession extends EventSearchSession {
 
   MatrixServerEventSearchSession(this.timeline);
 
-  NotifyingList<TimelineEvent<Client>> events =
-      NotifyingList.empty(growable: true);
+  List<TimelineEvent<Client>> events = [];
 
   @override
   bool currentlySearching = false;
@@ -227,8 +230,10 @@ class MatrixServerEventSearchSession extends EventSearchSession {
   }
 
   @override
-  Stream<List<TimelineEvent<Client>>> startSearch(String searchTerm,
-      {String? nextBatch}) {
+  Stream<List<TimelineEvent<Client>>> startSearch(
+    String searchTerm, {
+    String? nextBatch,
+  }) async* {
     currentSearchTerm = searchTerm;
     var client = (timeline.client as MatrixClient).matrixClient;
 
@@ -237,53 +242,66 @@ class MatrixServerEventSearchSession extends EventSearchSession {
     currentlySearching = true;
 
     if (nextBatch == null) {
-      events = NotifyingList.empty(growable: true);
+      events = [];
+      nextBatchToken = null;
     }
 
     var criteria = matrix.RoomEventsCriteria(
       searchTerm: parameters.words.join(" "),
       orderBy: matrix.SearchOrder.recent,
       filter: matrix.SearchFilter(
-          rooms: [timeline.room.identifier],
-          limit: 20,
-          senders: parameters.requiredSender != null
-              ? [parameters.requiredSender!]
-              : null,
-          containsUrl: parameters.requireUrl == true ? true : null),
+        rooms: [timeline.room.identifier],
+        limit: 20,
+        senders: parameters.requiredSender != null
+            ? [parameters.requiredSender!]
+            : null,
+        containsUrl: parameters.requireUrl == true ? true : null,
+      ),
       includeState: false,
     );
 
     Log.i("Criteria: ${criteria.toJson()}");
 
-    client
-        .search(matrix.Categories(roomEvents: criteria), nextBatch: nextBatch)
-        .then((result) {
-      currentlySearching = false;
+    try {
+      final result = await client.search(
+        matrix.Categories(roomEvents: criteria),
+        nextBatch: nextBatch,
+      );
 
       var resultEvents = result.searchCategories.roomEvents?.results;
       nextBatchToken = result.searchCategories.roomEvents?.nextBatch;
 
-      events.clear();
-
       if (resultEvents != null) {
-        events.addAll(resultEvents
-            .where((i) => i.result != null)
-            .sorted((a, b) =>
-                b.result!.originServerTs.compareTo(a.result!.originServerTs))
-            .map((i) => (timeline.room as MatrixRoom).convertEvent(matrix.Event(
-                content: i.result!.content,
-                type: i.result!.type,
-                eventId: i.result!.eventId,
-                senderId: i.result!.senderId,
-                originServerTs: i.result!.originServerTs,
-                room: timeline.matrixTimeline!.room))));
+        events.addAll(
+          resultEvents
+              .where((i) => i.result != null)
+              .sorted(
+                (a, b) => b.result!.originServerTs.compareTo(
+                  a.result!.originServerTs,
+                ),
+              )
+              .map(
+                (i) => (timeline.room as MatrixRoom).convertEvent(
+                  matrix.Event(
+                    content: i.result!.content,
+                    type: i.result!.type,
+                    eventId: i.result!.eventId,
+                    senderId: i.result!.senderId,
+                    originServerTs: i.result!.originServerTs,
+                    room: timeline.matrixTimeline!.room,
+                  ),
+                ),
+              )
+              .where(
+                (event) => !events.any((old) => old.eventId == event.eventId),
+              ),
+        );
       }
-
-      events.update();
-      Log.i("Got events: ${resultEvents}");
-    });
-
-    return events.onListUpdated.map((i) => events);
+    } finally {
+      currentlySearching = false;
+    }
+    // Keep previous pages visible and do not mutate lists already rendered.
+    yield List.of(events);
   }
 }
 
@@ -312,7 +330,7 @@ class MatrixEventSearchComponent implements EventSearchComponent<MatrixClient> {
         MatrixSearchParameters.hasFileString,
         MatrixSearchParameters.hasImageString,
         MatrixSearchParameters.hasVideoString,
-        "from:@user:example.com"
+        "from:@user:example.com",
       ];
     } else {
       return ["from:@user:example.com"];
