@@ -1,5 +1,5 @@
 //! Flatpak Matrix presentations: bundled CEF OSR/CPU frames on X11 and
-//! Wayland through the Flutter texture path (embedded) and roscord-owned
+//! Wayland through the Flutter texture path (embedded) and cockhouse-owned
 //! windows (standalone).
 //!
 //! Both Flatpak compositor cells share one release-authoritative presenter:
@@ -32,7 +32,7 @@ pub const FLATPAK_CEF_LIBRARY_PATH: &str = "/app/cef/libcef.so";
 /// Embedded presentation path (Flutter texture).
 pub const FLATPAK_EMBEDDED_PRESENTATION_PATH: &str = "osr-cpu-flutter-texture";
 
-/// Standalone presentation path (roscord-owned window).
+/// Standalone presentation path (cockhouse-owned window).
 pub const FLATPAK_STANDALONE_PRESENTATION_PATH: &str = "osr-cpu-owned-window";
 
 /// Required Flatpak compositor cells. Unknown compositors fail closed.

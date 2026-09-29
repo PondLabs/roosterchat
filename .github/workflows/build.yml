@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECT_PATH: commet
+  PROJECT_PATH: cockhouse
 
 jobs:
   build-windows:
@@ -43,18 +43,18 @@ jobs:
           if ($null -eq $archive) { throw "locked CEF archive was not fetched" }
           python tools/cef_runtime.py stage-sdk --platform windows-x64 $archive.FullName $sdk
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          "ROSCORD_BUILD_CEF_HOST=ON" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "COCKHOUSE_BUILD_CEF_HOST=ON" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "CEF_ROOT=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Code Generation
         run: |
-          cd .\commet
+          cd .\cockhouse
           git config --global core.longpaths true
           dart run scripts/codegen.dart
 
       - name: Build Windows App
         run: |
-          cd .\commet
+          cd .\cockhouse
           flutter build windows --release --dart-define PLATFORM=windows
 
   build-android:
@@ -213,7 +213,7 @@ jobs:
 
       - name: Run App
         run: |
-          ldd $PROJECT_PATH/build/linux/x64/release/bundle/commet
+          ldd $PROJECT_PATH/build/linux/x64/release/bundle/cockhouse
 
   build-web:
     runs-on: ubuntu-24.04

@@ -634,7 +634,7 @@ mod tests {
             .unwrap()
             .as_nanos();
         let root = env::temp_dir().join(format!(
-            "roscord-profile-{name}-{}-{stamp}",
+            "cockhouse-profile-{name}-{}-{stamp}",
             std::process::id()
         ));
         fs::create_dir_all(&root).unwrap();

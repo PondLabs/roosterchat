@@ -172,7 +172,7 @@ class Native {
     }
   }
 
-  // COMMET: install Commet's voice DSP callbacks on the shared WebRTC audio
+  // COCKHOUSE: install Commet's voice DSP callbacks on the shared WebRTC audio
   // processing module (Linux and Windows plugins). Addresses come from
   // dart:ffi lookups in the Rust library. Passing zeros clears the slots.
   static Future<bool> setExternalAudioProcessing({
@@ -186,7 +186,7 @@ class Native {
   }) async {
     try {
       final result = await channel.invokeMethod<bool>(
-        'commetSetExternalAudioProcessing',
+        'cockhouseSetExternalAudioProcessing',
         <String, dynamic>{
           'ctx': ctx,
           'captureInit': captureInit,
@@ -199,21 +199,21 @@ class Native {
       );
       return result == true;
     } catch (error) {
-      logger.warning('commetSetExternalAudioProcessing did throw $error');
+      logger.warning('cockhouseSetExternalAudioProcessing did throw $error');
       return false;
     }
   }
 
-  // COMMET
+  // COCKHOUSE
   static Future<bool> clearExternalAudioProcessing() async {
     try {
       final result = await channel.invokeMethod<bool>(
-        'commetClearExternalAudioProcessing',
+        'cockhouseClearExternalAudioProcessing',
         <String, dynamic>{},
       );
       return result == true;
     } catch (error) {
-      logger.warning('commetClearExternalAudioProcessing did throw $error');
+      logger.warning('cockhouseClearExternalAudioProcessing did throw $error');
       return false;
     }
   }

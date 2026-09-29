@@ -1,8 +1,8 @@
 import 'dart:io';
 
-import 'package:commet_calendar_widget/calendar.dart';
-import 'package:commet_calendar_widget/recurrence_editor.dart';
-import 'package:commet_calendar_widget/rfc8984.dart';
+import 'package:cockhouse_calendar_widget/calendar.dart';
+import 'package:cockhouse_calendar_widget/recurrence_editor.dart';
+import 'package:cockhouse_calendar_widget/rfc8984.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';

@@ -3,7 +3,7 @@
 
 This module is release tooling only: the application never imports it and it
 never downloads CEF at runtime.  It checks a built Windows artifact directory
-(the ``Release`` folder next to ``commet.exe``, as shipped in the Windows ZIP
+(the ``Release`` folder next to ``cockhouse.exe``, as shipped in the Windows ZIP
 and portable artifacts) plus the metadata directory produced by
 ``tools/cef_runtime.py metadata`` against ``third_party/cef/cef.lock.json``.
 
@@ -11,7 +11,7 @@ Bundle layout
 -------------
 
 The CEF payload lives in ``<bundle>/cef_host/`` when installed through
-``commet/windows/cef_host/CMakeLists.txt``, or directly in ``<bundle>/`` for
+``cockhouse/windows/cef_host/CMakeLists.txt``, or directly in ``<bundle>/`` for
 bare payload directories (for example the output of ``cef_runtime stage``
 smoke-tested without the Flutter shell).  Production ZIP and portable
 artifacts always use the nested layout, which is also what the Dart

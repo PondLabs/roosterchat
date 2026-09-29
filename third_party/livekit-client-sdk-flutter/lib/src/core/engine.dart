@@ -215,7 +215,7 @@ class Engine extends Disposable with EventsEmittable<EngineEvent> {
       await cleanUp();
       await events.dispose();
       await _signalListener.dispose();
-      // COMMET: nothing else disposes the signal client, and only its dispose
+      // COCKHOUSE: nothing else disposes the signal client, and only its dispose
       // cancels the connectivity_plus subscription. Every call left one
       // behind, which is what made connectivity_plus report `none` on the
       // next join (issue #48).
@@ -1075,7 +1075,7 @@ class Engine extends Disposable with EventsEmittable<EngineEvent> {
 
       if (await signalClient.networkIsAvailable() == false) {
         logger.fine('no internet connection, waiting...');
-        // COMMET: connectivity_plus can report `none` wrongly on desktop and
+        // COCKHOUSE: connectivity_plus can report `none` wrongly on desktop and
         // then never sends a change event. Wait a while for the network to
         // come back, then try anyway: a failed attempt goes through the
         // normal retry policy.
@@ -1387,7 +1387,7 @@ class Engine extends Disposable with EventsEmittable<EngineEvent> {
         final answer = await subscriber!.pc.createAnswer();
         logger.fine('Created answer');
         logger.finer('sdp: ${answer.sdp}');
-        // COMMET: decode in stereo what the server offers in stereo (a DJ's
+        // COCKHOUSE: decode in stereo what the server offers in stereo (a DJ's
         // music track); without it in our answer the decoder stays mono.
         final munged = _answerStereoLikeOffer(event.sd.sdp, answer.sdp);
         if (munged != null) {
@@ -1488,7 +1488,7 @@ class Engine extends Disposable with EventsEmittable<EngineEvent> {
   }
 }
 
-/// COMMET: [answer] with stereo Opus asked for on every audio section the
+/// COCKHOUSE: [answer] with stereo Opus asked for on every audio section the
 /// [offer] has in stereo, matched by mid. Null when nothing had to change or
 /// either SDP can't be read.
 String? _answerStereoLikeOffer(String? offer, String? answer) {

@@ -1,4 +1,4 @@
-//! The typed seam between roscord callers and the out-of-process browser host.
+//! The typed seam between Cockhouse callers and the out-of-process browser host.
 //!
 //! This module deliberately contains no CEF or platform types.  The production
 //! host will sit behind this interface; the fake implementation is used by
@@ -236,9 +236,9 @@ impl SurfacePolicy {
             return false;
         };
         if is_controlled_fixture(url) {
-            // The host-owned validation fixture is a controlled roscord
+            // The host-owned validation fixture is a controlled Cockhouse
             // destination even when a smoke-test policy is intentionally
-            // empty.  All other roscord destinations must be declared.
+            // empty.  All other Cockhouse destinations must be declared.
             return true;
         }
         self.allowed_origins
@@ -267,8 +267,8 @@ impl SurfacePolicy {
 }
 
 fn is_controlled_fixture(url: &str) -> bool {
-    const FIXTURE_ORIGIN: &str = "commet://fixture";
-    url == FIXTURE_ORIGIN || url.starts_with("commet://fixture/")
+    const FIXTURE_ORIGIN: &str = "cockhouse://fixture";
+    url == FIXTURE_ORIGIN || url.starts_with("cockhouse://fixture/")
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1529,7 +1529,7 @@ fn validate_url(url: &str) -> Result<(), RuntimeError> {
     let scheme = url
         .split_once("://")
         .map(|(scheme, _)| scheme.to_ascii_lowercase());
-    if !matches!(scheme.as_deref(), Some("http" | "https" | "commet")) {
+    if !matches!(scheme.as_deref(), Some("http" | "https" | "cockhouse")) {
         return Err(RuntimeError::InvalidSpec(
             "navigation scheme is not declared by the runtime".into(),
         ));
@@ -1545,7 +1545,7 @@ fn validate_url(url: &str) -> Result<(), RuntimeError> {
 pub(crate) fn url_origin(url: &str) -> Option<String> {
     let (raw_scheme, rest) = url.split_once("://")?;
     let scheme = raw_scheme.to_ascii_lowercase();
-    if !matches!(scheme.as_str(), "http" | "https" | "commet") {
+    if !matches!(scheme.as_str(), "http" | "https" | "cockhouse") {
         return None;
     }
     let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
@@ -1613,7 +1613,7 @@ fn validate_declared_origin(origin: &str, loopback: bool) -> Result<(), RuntimeE
     }
     let expected = if loopback { "http" } else { "https" };
     if !normalized.starts_with(&format!("{expected}://"))
-        && !(expected == "https" && normalized.starts_with("commet://"))
+        && !(expected == "https" && normalized.starts_with("cockhouse://"))
     {
         return Err(RuntimeError::InvalidSpec(
             "policy origin uses an undeclared scheme".into(),
@@ -1851,11 +1851,11 @@ mod tests {
     }
 
     #[test]
-    fn policy_allows_declared_https_roscord_and_controlled_loopback_only() {
+    fn policy_allows_declared_https_cockhouse_and_controlled_loopback_only() {
         let policy = SurfacePolicy::with_navigation(
             [
                 "https://widget.test".to_owned(),
-                "commet://widget".to_owned(),
+                "cockhouse://widget".to_owned(),
             ],
             ["http://127.0.0.1:43123".to_owned()],
             true,
@@ -1863,11 +1863,11 @@ mod tests {
         )
         .unwrap();
         assert!(policy.allows_url("https://widget.test/path"));
-        assert!(policy.allows_url("commet://widget/bridge"));
+        assert!(policy.allows_url("cockhouse://widget/bridge"));
         assert!(policy.allows_url("http://127.0.0.1:43123/bootstrap"));
-        assert!(policy.allows_url("commet://fixture"));
-        assert!(policy.allows_url("commet://fixture/health"));
-        assert!(!policy.allows_url("commet://fixture?redirect=https://evil"));
+        assert!(policy.allows_url("cockhouse://fixture"));
+        assert!(policy.allows_url("cockhouse://fixture/health"));
+        assert!(!policy.allows_url("cockhouse://fixture?redirect=https://evil"));
         assert!(SurfacePolicy::with_navigation(
             std::iter::empty(),
             ["http://[::1]:43123".to_owned()],
@@ -1876,7 +1876,7 @@ mod tests {
         )
         .unwrap()
         .allows_url("http://[::1]:43123/bootstrap"));
-        assert!(policy.allows_url("commet://fixture/"));
+        assert!(policy.allows_url("cockhouse://fixture/"));
         assert!(!policy.allows_url("http://widget.test/path"));
         assert!(!policy.allows_url("http://127.0.0.1:43124/bootstrap"));
         assert!(!policy.allows_url("file:///C:/secret"));

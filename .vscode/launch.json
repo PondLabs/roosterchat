@@ -5,9 +5,9 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "commet (debug desktop)",
+            "name": "cockhouse (debug desktop)",
             "request": "launch",
-            "program": "commet/lib/main.dart",
+            "program": "cockhouse/lib/main.dart",
             "type": "dart",
             "toolArgs": [
                 "--dart-define",
@@ -17,10 +17,10 @@
             ],
         },
         {
-            "name": "commet (debug windows)",
+            "name": "cockhouse (debug windows)",
             "request": "launch",
             "type": "dart",
-            "program": "commet/lib/main.dart",
+            "program": "cockhouse/lib/main.dart",
             "toolArgs": [
                 "--dart-define",
                 "PLATFORM=windows",
@@ -29,10 +29,10 @@
             ],
         },
         {
-            "name": "commet (debug mobile)",
+            "name": "cockhouse (debug mobile)",
             "request": "launch",
             "type": "dart",
-            "program": "commet/lib/main.dart",
+            "program": "cockhouse/lib/main.dart",
             "toolArgs": [
                 "--dart-define",
                 "PLATFORM=mobile",
@@ -41,10 +41,10 @@
             ],
         },
         {
-            "name": "commet (debug web)",
+            "name": "cockhouse (debug web)",
             "request": "launch",
             "type": "dart",
-            "program": "commet/lib/main.dart",
+            "program": "cockhouse/lib/main.dart",
             "toolArgs": [
                 "--dart-define",
                 "PLATFORM=web",
@@ -57,10 +57,10 @@
             ],
         },
         {
-            "name": "commet (release web)",
+            "name": "cockhouse (release web)",
             "request": "launch",
             "type": "dart",
-            "program": "commet/lib/main.dart",
+            "program": "cockhouse/lib/main.dart",
             "toolArgs": [
                 "--dart-define",
                 "PLATFORM=web",
@@ -74,10 +74,10 @@
             "flutterMode": "release"
         },
         {
-            "name": "commet (debug android)",
+            "name": "cockhouse (debug android)",
             "request": "launch",
             "type": "dart",
-            "program": "commet/lib/main.dart",
+            "program": "cockhouse/lib/main.dart",
             "toolArgs": [
                 "--dart-define",
                 "PLATFORM=android",
@@ -86,10 +86,10 @@
             ],
         },
         {
-            "name": "commet (release desktop)",
+            "name": "cockhouse (release desktop)",
             "request": "launch",
             "type": "dart",
-            "program": "commet/lib/main.dart",
+            "program": "cockhouse/lib/main.dart",
             "toolArgs": [
                 "--dart-define",
                 "PLATFORM=desktop",
@@ -99,9 +99,9 @@
             "flutterMode": "release"
         },
         {
-            "name": "commet (release android)",
+            "name": "cockhouse (release android)",
             "request": "launch",
-            "program": "commet/lib/main.dart",
+            "program": "cockhouse/lib/main.dart",
             "type": "dart",
             "toolArgs": [
                 "--dart-define",
@@ -112,9 +112,9 @@
             "flutterMode": "release"
         },
         {
-            "name": "commet (release windows)",
+            "name": "cockhouse (release windows)",
             "request": "launch",
-            "program": "commet/lib/main.dart",
+            "program": "cockhouse/lib/main.dart",
             "type": "dart",
             "toolArgs": [
                 "--dart-define",
@@ -125,7 +125,7 @@
             "flutterMode": "release"
         },
         {
-            "name": "commet (release mobile)",
+            "name": "cockhouse (release mobile)",
             "request": "launch",
             "type": "dart",
             "toolArgs": [
@@ -137,7 +137,7 @@
             "flutterMode": "release"
         },
         {
-            "name": "commet widgetbook",
+            "name": "cockhouse widgetbook",
             "request": "launch",
             "type": "dart",
             "program": "lib/widgetbook.dart"

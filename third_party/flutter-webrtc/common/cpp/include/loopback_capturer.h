@@ -21,11 +21,11 @@ using namespace libwebrtc;
 //   linux/pulse_loopback_capturer.h          — PulseAudio / PipeWire
 class LoopbackCapturer {
  public:
-  // COMMET: PCM as it comes off the OS capture API, before any pacing or
+  // COCKHOUSE: PCM as it comes off the OS capture API, before any pacing or
   // pre-buffering (the Windows feeder holds 160 ms back before it starts
   // calling CaptureFrame). Interleaved int16, `frames` frames of `channels`
   // channels; a null `samples` is a block the OS reported as silent. Called
-  // on the capturer's own thread. Used by CommetSystemAudioReference, which
+  // on the capturer's own thread. Used by CockhouseSystemAudioReference, which
   // needs the system mix *before* it reaches the microphone through the air.
   using RawTap = std::function<void(const int16_t* samples, size_t frames,
                                     size_t channels, int sample_rate)>;
@@ -40,7 +40,7 @@ class LoopbackCapturer {
   // Stop capturing and clean up platform resources.
   virtual void Stop() = 0;
 
-  // COMMET: set before Start(); not changed while capturing.
+  // COCKHOUSE: set before Start(); not changed while capturing.
   void SetRawTap(RawTap tap) { raw_tap_ = std::move(tap); }
 
  protected:

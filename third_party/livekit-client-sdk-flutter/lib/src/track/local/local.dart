@@ -165,7 +165,7 @@ abstract class LocalTrack extends Track {
 
   TrackProcessor? _processor;
 
-  // COMMET: the processor of a web restart whose new capture could not be
+  // COCKHOUSE: the processor of a web restart whose new capture could not be
   // opened, for the next restart to put back.
   TrackProcessor? _processorOfFailedRestart;
 
@@ -262,7 +262,7 @@ abstract class LocalTrack extends Track {
         if (options.selfBrowserSurface != null) {
           constraints['selfBrowserSurface'] = options.selfBrowserSurface!;
         }
-        // COMMET: leave our own tab out of the shared system audio. It plays
+        // COCKHOUSE: leave our own tab out of the shared system audio. It plays
         // everyone else in the call, who would otherwise hear themselves in
         // the screen share. Browsers that don't know the constraint ignore it.
         if (options.captureScreenAudio) {
@@ -299,14 +299,14 @@ abstract class LocalTrack extends Track {
       throw Exception('options must be a ${currentOptions.runtimeType}');
     }
 
-    // COMMET: the options only change once the new capture exists. Upstream
+    // COCKHOUSE: the options only change once the new capture exists. Upstream
     // set them first: a capture that could not be opened (the device gone
     // for a moment, another application holding it) left options saying the
     // restart had happened, so nothing ever tried it again, and the sender
     // on a stopped track, silent until the user rejoined the call.
     final nextOptions = options ?? currentOptions;
 
-    // COMMET: taken before stop(), which already stops the processor and
+    // COCKHOUSE: taken before stop(), which already stops the processor and
     // forgets it. Taken after, as upstream does, it was always null: every
     // restart (a microphone switch, the noise suppression preference
     // flipping mid-call) went on without the web voice DSP, sending the raw
@@ -329,7 +329,7 @@ abstract class LocalTrack extends Track {
         rethrow;
       }
     } else {
-      // COMMET: make before break on desktop and mobile, where every
+      // COCKHOUSE: make before break on desktop and mobile, where every
       // capture shares WebRTC's one audio device module: a capture that
       // cannot be opened leaves the old one sending.
       newStream = await LocalTrack.createStream(nextOptions);
@@ -337,7 +337,7 @@ abstract class LocalTrack extends Track {
     }
     final newTrack = newStream.getTracks().first;
     currentOptions = nextOptions;
-    // COMMET: a new capture comes enabled. Muted meanwhile (the mute
+    // COCKHOUSE: a new capture comes enabled. Muted meanwhile (the mute
     // disabled the old one, or did nothing at all while this track was
     // stopped), it must not go out: without a processor it is what the
     // sender carries, off before it gets there.
@@ -347,7 +347,7 @@ abstract class LocalTrack extends Track {
 
     // set new stream & track to this object
     updateMediaStreamAndTrack(newStream, newTrack);
-    // COMMET: the constructor only watched the first capture. A capture
+    // COCKHOUSE: the constructor only watched the first capture. A capture
     // that a restart made and that then ended (the device unplugged, the
     // permission revoked) went unnoticed, and the call sent its silence.
     newTrack.onEnded = () {
@@ -355,7 +355,7 @@ abstract class LocalTrack extends Track {
       events.emit(TrackEndedEvent(track: this));
     };
 
-    // COMMET: the processor before the sender. setProcessor puts its
+    // COCKHOUSE: the processor before the sender. setProcessor puts its
     // processed track on the sender, so the sender goes from the old
     // processed track to the new one and the raw capture never goes out.
     // The capture itself only goes on the sender when there is nothing
@@ -379,7 +379,7 @@ abstract class LocalTrack extends Track {
     // mark as started
     await start();
 
-    // COMMET: and with one, what the sender carries is the processed track,
+    // COCKHOUSE: and with one, what the sender carries is the processed track,
     // turned off here, once it is there.
     if (muted) await disable();
 
@@ -409,7 +409,7 @@ abstract class LocalTrack extends Track {
 
     if (_processor?.processedTrack != null) {
       setProcessedTrack(processor.processedTrack!);
-      // COMMET: if this track is already on a sender (processor set after
+      // COCKHOUSE: if this track is already on a sender (processor set after
       // publish, or restartTrack re-applying it after a device switch), the
       // sender still holds the raw track. Swap it, otherwise unprocessed
       // audio keeps going out.
@@ -432,7 +432,7 @@ abstract class LocalTrack extends Track {
     if (_processor == null) return;
 
     logger.fine('stopping processor');
-    // COMMET: put the original capture track back on the sender before the
+    // COCKHOUSE: put the original capture track back on the sender before the
     // processor tears its graph down, so audio keeps flowing unprocessed.
     if (originalTrack != null) {
       final original = originalTrack!;

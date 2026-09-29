@@ -17,7 +17,7 @@ import tempfile
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 BRAND = os.path.join(ROOT, "docs", "brand")
-APP = os.path.join(ROOT, "commet")
+APP = os.path.join(ROOT, "cockhouse")
 FONTS = os.path.join(APP, "assets", "font")
 SORA = os.path.join(FONTS, "sora", "Sora-VariableFont_wght.ttf")
 
@@ -621,7 +621,7 @@ def build_app(tmp):
     # Linux.
     hicolor = os.path.join(APP, "linux", "debian", "usr", "share", "icons", "hicolor")
     for s in (16, 32, 64, 128, 256, 512):
-        icon_at(s, os.path.join(hicolor, "%dx%d" % (s, s), "apps", "commet-desktop.png"))
+        icon_at(s, os.path.join(hicolor, "%dx%d" % (s, s), "apps", "cockhouse.png"))
     icon_at(512, os.path.join(APP, "linux", "flatpak", "icon.png"))
 
     # Android.

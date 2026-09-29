@@ -187,7 +187,7 @@ class LocalParticipant extends Participant<LocalTrackPublication> {
       muted: track.muted,
       stream: buildStreamId(publishOptions, track.source),
       disableDtx: !publishOptions.dtx,
-      // COMMET: `red: true` means RED on; this sent it as `disableRed`.
+      // COCKHOUSE: `red: true` means RED on; this sent it as `disableRed`.
       disableRed: room.e2eeManager != null ? true : !(publishOptions.red ?? true),
       encryption: room.roomOptions.lkEncryptionType,
     );
@@ -196,10 +196,10 @@ class LocalParticipant extends Participant<LocalTrackPublication> {
     req.audioFeatures.addAll([
       if (!publishOptions.dtx) lk_models.AudioTrackFeature.TF_NO_DTX,
       if (publishOptions.preConnect) lk_models.AudioTrackFeature.TF_PRECONNECT_BUFFER,
-      // COMMET: the server then offers subscribers stereo for this track.
+      // COCKHOUSE: the server then offers subscribers stereo for this track.
       if (publishOptions.stereo) lk_models.AudioTrackFeature.TF_STEREO,
     ]);
-    // COMMET: and our offer asks the encoder for it.
+    // COCKHOUSE: and our offer asks the encoder for it.
     if (publishOptions.stereo) {
       room.engine.publisher?.setTrackStereo(track.getCid());
     }
@@ -251,7 +251,7 @@ class LocalParticipant extends Participant<LocalTrackPublication> {
     final listener = track.createListener();
     listener.on((TrackEndedEvent event) async {
       logger.fine('TrackEndedEvent: ${event.track}');
-      // COMMET: a microphone whose capture ended stays published. Removing
+      // COCKHOUSE: a microphone whose capture ended stays published. Removing
       // it made the user look muted and nothing brought it back; the app's
       // microphone watch (MicrophoneHealthMonitor) opens a new capture for
       // it instead, as LiveKit's JS SDK does.
@@ -540,7 +540,7 @@ class LocalParticipant extends Participant<LocalTrackPublication> {
     final listener = track.createListener();
     listener.on((TrackEndedEvent event) async {
       logger.fine('TrackEndedEvent: ${event.track}');
-      // COMMET: a microphone whose capture ended stays published. Removing
+      // COCKHOUSE: a microphone whose capture ended stays published. Removing
       // it made the user look muted and nothing brought it back; the app's
       // microphone watch (MicrophoneHealthMonitor) opens a new capture for
       // it instead, as LiveKit's JS SDK does.
@@ -563,7 +563,7 @@ class LocalParticipant extends Participant<LocalTrackPublication> {
       logger.warning('Publication not found $trackSid');
       return;
     }
-    // COMMET: the publication (and, through it, the track) is disposed last,
+    // COCKHOUSE: the publication (and, through it, the track) is disposed last,
     // once every sender is off the pc and the renegotiation that tells the
     // server is done. Disposing first tore the track down before its senders
     // could be removed, so the server kept the publication live for viewers
@@ -585,7 +585,7 @@ class LocalParticipant extends Participant<LocalTrackPublication> {
         didRemoveSender = true;
       }
 
-      // COMMET: not gated on the primary sender, stale backup codec state must
+      // COCKHOUSE: not gated on the primary sender, stale backup codec state must
       // not survive unpublish even when the track never got a live sender.
       // A backup codec publishes over its own sender: the removal has to be
       // awaited before the renegotiation below, and a sender that never
@@ -663,7 +663,7 @@ class LocalParticipant extends Participant<LocalTrackPublication> {
         await publishAudioTrack(track.track as LocalAudioTrack);
       } else if (track.track is LocalVideoTrack) {
         final videoTrack = track.track as LocalVideoTrack;
-        // COMMET: a full reconnect replaced the peer connection, so any
+        // COCKHOUSE: a full reconnect replaced the peer connection, so any
         // simulcast codec senders the track still holds belong to the old
         // one. Republishing through them would act on a torn down connection
         // (issue #79).
@@ -790,7 +790,7 @@ class LocalParticipant extends Participant<LocalTrackPublication> {
     return null;
   }
 
-  // COMMET: our own publications always carry their source. The fallback to
+  // COCKHOUSE: our own publications always carry their source. The fallback to
   // a publication without one is for other SDKs' remote tracks; locally it
   // found the DJ booth's music (published without a source) as the
   // microphone whenever the microphone was not published, so publishing one
@@ -868,7 +868,7 @@ class LocalParticipant extends Participant<LocalTrackPublication> {
         } else if (source == TrackSource.microphone) {
           final AudioCaptureOptions captureOptions = audioCaptureOptions ?? room.roomOptions.defaultAudioCaptureOptions;
           final track = await LocalAudioTrack.create(captureOptions);
-          // COMMET: a publish that fails (the room went away meanwhile) must
+          // COCKHOUSE: a publish that fails (the room went away meanwhile) must
           // not leave the microphone it just opened capturing, with nothing
           // left that could stop it.
           try {
@@ -1018,7 +1018,7 @@ class LocalParticipant extends Participant<LocalTrackPublication> {
       backupCodec,
     );
 
-    // COMMET: the backup codec publishes over its own sender, so it needs the
+    // COCKHOUSE: the backup codec publishes over its own sender, so it needs the
     // same degradation preference the primary sender resolved to. Without
     // this, a share that regressed to this codec (viewers without H.265) is
     // the only stream with WebRTC's implicit preference: a frame rate that

@@ -3,8 +3,8 @@
 
 #include "flutter_common.h"
 
-#include "commet_music_source.h"             // COMMET
-#include "commet_system_audio_reference.h"  // COMMET
+#include "cockhouse_music_source.h"             // COCKHOUSE
+#include "cockhouse_system_audio_reference.h"  // COCKHOUSE
 
 #include "flutter_data_channel.h"
 #include "flutter_data_packet_cryptor.h"
@@ -49,11 +49,11 @@ class FlutterWebRTC : public FlutterWebRTCBase,
   void initLoggerCallback(RTCLoggingSeverity severity);
   RTCLoggingSeverity str2LogSeverity(std::string str);
 
-  // COMMET: commetStartSystemAudioReference / commetStopSystemAudioReference.
-  CommetSystemAudioReference commet_reference_;
+  // COCKHOUSE: cockhouseStartSystemAudioReference / cockhouseStopSystemAudioReference.
+  CockhouseSystemAudioReference cockhouse_reference_;
 
-  // COMMET: commetCreateMusicTrack / commetStopMusicTrack (DJ booth).
-  CommetMusicTracks commet_music_tracks_;
+  // COCKHOUSE: cockhouseCreateMusicTrack / cockhouseStopMusicTrack (DJ booth).
+  CockhouseMusicTracks cockhouse_music_tracks_;
 };
 
 }  // namespace flutter_webrtc_plugin

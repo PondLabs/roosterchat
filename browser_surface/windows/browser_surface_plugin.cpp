@@ -22,8 +22,8 @@
 
 namespace {
 
-// Rings are created by cef_host as Local\roscord-cef-<namespace>-<surface>-<gen>.
-constexpr wchar_t kRingPrefix[] = L"Local\\roscord-cef-";
+// Rings are created by cef_host as Local\cockhouse-cef-<namespace>-<surface>-<gen>.
+constexpr wchar_t kRingPrefix[] = L"Local\\cockhouse-cef-";
 
 std::wstring Widen(const std::string& text) {
   if (text.empty()) return std::wstring();

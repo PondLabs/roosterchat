@@ -4,7 +4,7 @@ Research note for https://github.com/PondLabs/roscord/issues/8 (voice panel
 should show a red LIVE pill, a 16:9 preview of the outgoing screen share /
 camera, and stop buttons while the user is live). Read-only survey of this
 repo at commit `906de7c1`, the vendored packages in `third_party/`, and the
-matrix-dart-sdk checkout pub resolves for `commet/pubspec.yaml`
+matrix-dart-sdk checkout pub resolves for `cockhouse/pubspec.yaml`
 (`commetchat/matrix-dart-sdk` ref `upstream-v6.1.1`, pub-cache commit
 `58e0bd24`). Line numbers are from those files as of 2026-09-16.
 
@@ -12,7 +12,7 @@ matrix-dart-sdk checkout pub resolves for `commet/pubspec.yaml`
 
 ## 1. `VoipSession` interface
 
-File: `commet/lib/client/components/voip/voip_session.dart`.
+File: `cockhouse/lib/client/components/voip/voip_session.dart`.
 
 - `enum VoipState { incoming, connecting, connected, unknown, outgoing, ended }` (8-15).
 - `abstract class VoipSession` (28-87). Members relevant here:
@@ -35,13 +35,13 @@ the stop methods are `stopScreenshare()` and `stopCamera()`. (The legacy
 `matrix_voip_session.dart:207-209`, unused by the UI.)
 
 Sessions are tracked by `CallManager.currentSessions`, a
-`NotifyingList<VoipSession>` (`commet/lib/client/call_manager.dart:38-39`),
+`NotifyingList<VoipSession>` (`cockhouse/lib/client/call_manager.dart:38-39`),
 added in `onClientSessionStarted` (64-66) and removed in `onSessionEnded`
 (106-108).
 
 ## 2. `VoipStream` and the two implementations
 
-File: `commet/lib/client/components/voip/voip_stream.dart`.
+File: `cockhouse/lib/client/components/voip/voip_stream.dart`.
 
 - `enum VoipStreamType { audio, video, screenshare }` (3)
 - `enum VoipStreamDirection { incoming, outgoing }` (5)
@@ -50,7 +50,7 @@ File: `commet/lib/client/components/voip/voip_stream.dart`.
 - `Stream<void> get onStreamChanged;` (14)
 - `double? get aspectRatio;` (32)
 
-`VoipStreamView` (`commet/lib/ui/organisms/call_view/voip_stream_view.dart`)
+`VoipStreamView` (`cockhouse/lib/ui/organisms/call_view/voip_stream_view.dart`)
 calls `widget.stream.buildVideoRenderer(widget.fit, rendererKey) ?? const
 CircularProgressIndicator()` inside a `Center` for `video` and `screenshare`
 types (243-248), where `rendererKey` is a `GlobalKey` owned by the view state
@@ -62,7 +62,7 @@ type == video || type == screenshare`.
 
 ### `MatrixLivekitVoipSession` / `MatrixLivekitVoipStream`
 
-Files: `commet/lib/client/matrix/components/voip_room/matrix_livekit_voip_session.dart`
+Files: `cockhouse/lib/client/matrix/components/voip_room/matrix_livekit_voip_session.dart`
 (session) and `.../matrix_livekit_voip_stream.dart` (stream).
 
 - `streams` is a plain growable `List<VoipStream>` field (session 514).
@@ -117,7 +117,7 @@ OS or the browser picker ends capture:
 
 ### `MatrixVoipSession` / `MatrixVoipStream` (legacy 1:1)
 
-Files: `commet/lib/client/matrix/components/voip/matrix_voip_session.dart`
+Files: `cockhouse/lib/client/matrix/components/voip/matrix_voip_session.dart`
 and `.../matrix_voip_stream.dart`.
 
 - `isSharingScreen => session.localScreenSharingStream != null` (90);
@@ -152,7 +152,7 @@ and `.../matrix_voip_stream.dart`.
   emits `WrappedMediaStream.onMuteStateChanged`
   (`utils/wrapped_media_stream.dart:96-99`), and `updateMuteStatus` sends SDP
   metadata without touching `onCallStateChanged` (`1254-1276`). Nothing in
-  `commet/lib` listens to `onMuteStateChanged` (grep: no hits). So
+  `cockhouse/lib` listens to `onMuteStateChanged` (grep: no hits). So
   `MatrixVoipSession.onStateChanged` does **not** fire when the camera is
   toggled. `MatrixVoipStream` does listen to `stream.onStreamChanged`
   (stream 25), which only fires on `setNewStream` (`wrapped_media_stream.dart:86-89`),
@@ -172,7 +172,7 @@ and `.../matrix_voip_stream.dart`.
 
 ### `CallSessionsPanel` / `CallSessionPanel`
 
-File: `commet/lib/ui/molecules/call_sessions_panel.dart`.
+File: `cockhouse/lib/ui/molecules/call_sessions_panel.dart`.
 
 - `CallSessionsPanel({this.height = 50})` (14-15) subscribes to
   `clientManager!.callManager.currentSessions.onListUpdated` and calls
@@ -203,7 +203,7 @@ File: `commet/lib/ui/molecules/call_sessions_panel.dart`.
 
 ### `CurrentSessionPanel`
 
-File: `commet/lib/ui/molecules/current_session_panel.dart`.
+File: `cockhouse/lib/ui/molecules/current_session_panel.dart`.
 
 - Subscribes to `WidgetComponent.currentSessions.onListUpdated` and
   `callManager.currentSessions.onListUpdated` (35-42).
@@ -223,7 +223,7 @@ The desktop host column is `mainAxisSize: min` with the room picker in an
 
 ### `CallView` overlay (the existing screenshare / camera controls)
 
-File: `commet/lib/ui/organisms/call_view/call_view.dart`.
+File: `cockhouse/lib/ui/organisms/call_view/call_view.dart`.
 
 - `CallView` takes callbacks `pickScreenshareSource`, `stopScreenshare`,
   `pickCamera`, `disableCamera` (18-44), all wired by `CallWidget`
@@ -239,14 +239,14 @@ File: `commet/lib/ui/organisms/call_view/call_view.dart`.
 - `CallView` rebuilds on `session.onStateChanged` (61-63) and lays out
   `session.streams` in a `BentoLayout` of `VoipStreamView`s, with an optional
   `mainStream` rendered larger (267-334). `CallWidget` is only mounted while
-  the voice room is the current room (`commet/lib/ui/pages/main/room_primary_view.dart:55-64`
-  and `commet/lib/ui/organisms/voip_room_view/voip_room_view.dart:80`), so
+  the voice room is the current room (`cockhouse/lib/ui/pages/main/room_primary_view.dart:55-64`
+  and `cockhouse/lib/ui/organisms/voip_room_view/voip_room_view.dart:80`), so
   when the user is on a text channel the panel preview would be the only
   renderer of the local track.
 
 ## 4. Where `CurrentSessionPanel` is hosted
 
-- Desktop: `commet/lib/ui/pages/main/main_page_view_desktop.dart`. The
+- Desktop: `cockhouse/lib/ui/pages/main/main_page_view_desktop.dart`. The
   left column is `SizedBox(width: 320)` > `Column(mainAxisSize: min,
   crossAxisAlignment: stretch)` (45-49) with an `Expanded(Row[SideNavigationBar
   tile, Flexible(room picker)])` and then `tiamat.Tile.low(... child:
@@ -255,11 +255,11 @@ File: `commet/lib/ui/organisms/call_view/call_view.dart`.
   tile and the panel's own 2 + 4/4 px paddings), so a full-width 16:9 preview
   is roughly 310 x 175 px. The spaces column is not separate from the panel
   row: the panel sits under both the space bar and the room list.
-- Mobile: `commet/lib/ui/pages/main/main_page_view_mobile.dart`. The
+- Mobile: `cockhouse/lib/ui/pages/main/main_page_view_mobile.dart`. The
   navigation drawer `navigation()` (182+) ends with the same
   `tiamat.Tile.low(... ScaledSafeArea(bottom: true, top: false, child:
   CurrentSessionPanel(...)))` (245-256). The drawer is the `left` panel of
-  `OverlappingPanels` (128-143, `commet/lib/ui/molecules/overlapping_panels.dart`),
+  `OverlappingPanels` (128-143, `cockhouse/lib/ui/molecules/overlapping_panels.dart`),
   which pads the left panel by `restWidth + 3` on the right with
   `restWidth = 40` by default (32, 45, 209), i.e. the panel is screen width
   minus 43 logical px (after `preferences.appScale`, 71-72). The left panel is
@@ -267,21 +267,21 @@ File: `commet/lib/ui/organisms/call_view/call_view.dart`.
   view is showing the sidebar (and any preview in it) is built but not
   painted.
 - `MediaQuery.of(context).mobile` / `.desktop` come from the
-  `LayoutQueryData` extension (`commet/lib/config/layout_config.dart:56-87`).
+  `LayoutQueryData` extension (`cockhouse/lib/config/layout_config.dart:56-87`).
 
 ## 5. Test conventions
 
-- There is no `commet/test/`. Dart tests live in `commet/unit_test/`
+- There is no `cockhouse/test/`. Dart tests live in `cockhouse/unit_test/`
   (`deafen_test.dart`, `screen_share_audio_test.dart`,
   `url_preview_widget_test.dart`, `video_player_controls_test.dart`, a
   `soundboard/` folder, etc.). CI runs `dart run scripts/codegen.dart` then
-  `flutter test unit_test` from `commet/` (`.github/workflows/ci.yml:41, 64-69`).
-- `commet/integration_test/` holds Synapse-backed flows (login, spaces, key
+  `flutter test unit_test` from `cockhouse/` (`.github/workflows/ci.yml:41, 64-69`).
+- `cockhouse/integration_test/` holds Synapse-backed flows (login, spaces, key
   verification, multi-account) plus a `benchmark/` folder; nothing touches
   voice.
-- No `commet/lib/client/simulated/` directory exists in this checkout.
+- No `cockhouse/lib/client/simulated/` directory exists in this checkout.
 - Fake `VoipSession` already exists in tests: `FakeVoipSession implements
-  VoipSession` (`commet/unit_test/deafen_test.dart:11-88`) with mutable
+  VoipSession` (`cockhouse/unit_test/deafen_test.dart:11-88`) with mutable
   `isMicrophoneMuted` / `isDeafened`, a `_streams` list exposed as `streams`,
   broadcast controllers for `onStateChanged`, `onConnectionStateChanged` and
   `onUpdateVolumeVisualizers`, and `noSuchMethod` for everything else (87).
@@ -303,11 +303,11 @@ File: `commet/lib/ui/organisms/call_view/call_view.dart`.
 - Strings are `Intl.message` getters on the widget state, named after the
   getter, e.g. `String get labelEmojiPickerEmojiTab => Intl.message("Emoji",
   desc: "...", name: "labelEmojiPickerEmojiTab");`
-  (`commet/lib/ui/molecules/emoticon_picker.dart:57-59`). Parameterised
-  messages pass `args:` (`commet/lib/client/call_manager.dart:23-33`). ARB
-  files are in `commet/assets/l10n` and generation goes to
-  `lib/generated/l10n` (`commet/l10n.yaml:1-6`; `flutter_intl` in
-  `commet/pubspec.yaml:184-187`). `CallSessionPanel` currently has no
+  (`cockhouse/lib/ui/molecules/emoticon_picker.dart:57-59`). Parameterised
+  messages pass `args:` (`cockhouse/lib/client/call_manager.dart:23-33`). ARB
+  files are in `cockhouse/assets/l10n` and generation goes to
+  `lib/generated/l10n` (`cockhouse/l10n.yaml:1-6`; `flutter_intl` in
+  `cockhouse/pubspec.yaml:184-187`). `CallSessionPanel` currently has no
   localized strings; `CallView` has a hard-coded `"Call ended"` (337).
 - Theme: `tiamat` builds its dark scheme with `ColorScheme.fromSeed(...
   dynamicSchemeVariant: DynamicSchemeVariant.monochrome, primary: ...)` and
@@ -319,7 +319,7 @@ File: `commet/lib/ui/organisms/call_view/call_view.dart`.
   (`error` background, `onError` icon, radius 8) and the `errorContainer`
   circle buttons in `call_view.dart:168-170, 210`. The speaking green is
   `SpeakingIndicator.color = Color(0xFF23A55A)`
-  (`commet/lib/ui/atoms/speaking_indicator.dart:16`).
+  (`cockhouse/lib/ui/atoms/speaking_indicator.dart:16`).
 - Tiamat has no pill/badge/chip atom (`tiamat/lib/atoms/`: avatar, button,
   circle_button, icon_button, text, tile, tooltip, ...). The deafened badge
   above is the closest in-tree example of a rounded coloured tag.
@@ -367,7 +367,7 @@ case but the two views cannot have different keys/fits reliably: `contain`
 returns an unkeyed `AspectRatio` and `cover` returns a keyed view (131-143).
 
 Already rendered twice in the codebase: `Lightbox.show` uses
-`showGeneralDialog` (`commet/lib/ui/atoms/lightbox.dart:37-50`), which keeps
+`showGeneralDialog` (`cockhouse/lib/ui/atoms/lightbox.dart:37-50`), which keeps
 the underlying route mounted, and `CallView` opens
 `VoipFullscreenStreamView(stream: e)` from a tile that stays in the bento
 grid (`call_view.dart:286-292, 321-328`;
@@ -381,7 +381,7 @@ already rendered locally while sharing.
 
 - No LIVE pill exists yet. Issue 9 (voice channel list) is still open and
   targets `RoomTextButton.buildCallMember`
-  (`commet/lib/ui/atoms/room_text_button.dart:357-...`), which today renders a
+  (`cockhouse/lib/ui/atoms/room_text_button.dart:357-...`), which today renders a
   `tiamat.TextButton` with avatar and name and an optional `footer` row of
   activity icons (372-395). Nothing to reuse there yet; a shared pill widget
   could serve both issues.
@@ -390,7 +390,7 @@ already rendered locally while sharing.
   `error`/`primary` background and an icon).
 - 16:9 thumbnails exist for unrelated content (`space_appearance_settings_page.dart:102`,
   `generic_video_provider.dart:53`) but no reusable thumbnail widget.
-- `WidgetSessionsPanel` (`commet/lib/ui/molecules/widget_sessions_panel.dart`)
+- `WidgetSessionsPanel` (`cockhouse/lib/ui/molecules/widget_sessions_panel.dart`)
   is the sibling 40 px row for Matrix widgets; it has no preview.
 
 ## Implications for implementation

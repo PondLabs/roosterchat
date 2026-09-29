@@ -9,7 +9,7 @@ env:
   USER1_PW: AliceInWonderLand
   USER2_NAME: bob
   USER2_PW: CanWeFixIt
-  PROJECT_PATH: commet
+  PROJECT_PATH: cockhouse
 
 jobs:
   integration-test:
@@ -30,7 +30,7 @@ jobs:
           flutter-version: '3.41.9'
           channel: 'stable'
 
-      # cargokit builds librust_lib_commet with cargo during the Flutter build
+      # cargokit builds librust_lib_cockhouse with cargo during the Flutter build
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -99,4 +99,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: result.mkv
-          path: commet/video.mkv
+          path: cockhouse/video.mkv

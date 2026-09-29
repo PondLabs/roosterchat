@@ -11,11 +11,11 @@ runtime downloader, standard library only).
 The record covers one Windows x64 artifact plus every released Linux x64
 artifact together:
 
-- `windows-x64` (`roscord-windows.zip`);
+- `windows-x64` (`cockhouse-windows.zip`);
 - `debian-12` (Debian 12 baseline `.deb`);
 - `ubuntu-22.04` and `ubuntu-24.04` (released Ubuntu `.deb`s);
-- `portable` (`roscord-linux-portable-x64.tar.gz`);
-- `flatpak` (`chat.commet.commetapp.flatpak`, GNOME Platform 48 `x86_64`).
+- `portable` (`cockhouse-linux-portable-x64.tar.gz`);
+- `flatpak` (`com.pondlabs.cockhouse.flatpak`, GNOME Platform 48 `x86_64`).
 
 `tools/release_record.py --list-packages` prints this set. Any missing or
 failing section blocks publication of the entire Windows/Linux set: Windows

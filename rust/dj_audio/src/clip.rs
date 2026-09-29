@@ -162,7 +162,7 @@ fn opus_head(channels: u8) -> Vec<u8> {
 
 /// The comment header (RFC 7845 §5.2): a vendor string, no comments.
 fn opus_tags() -> Vec<u8> {
-    const VENDOR: &[u8] = b"roscord dj_audio (opus-rs)";
+    const VENDOR: &[u8] = b"Cockhouse dj_audio (opus-rs)";
     let mut tags = b"OpusTags".to_vec();
     tags.extend_from_slice(&(VENDOR.len() as u32).to_le_bytes());
     tags.extend_from_slice(VENDOR);
@@ -500,7 +500,7 @@ mod tests {
 
     #[test]
     fn ffi_reports_bad_arguments_and_missing_files() {
-        assert_eq!(commet_clip_abi_version(), 1);
+        assert_eq!(cockhouse_clip_abi_version(), 1);
         let mut audio = ClipAudio {
             samples: std::ptr::null_mut(),
             len: 7,
@@ -509,13 +509,13 @@ mod tests {
         };
         unsafe {
             assert_eq!(
-                commet_clip_decode(std::ptr::null(), 0, 1_000, &mut audio),
+                cockhouse_clip_decode(std::ptr::null(), 0, 1_000, &mut audio),
                 ERR_ARGS
             );
             assert_eq!(audio.len, 0);
             let missing = CString::new(temp_path("missing.opus").to_str().unwrap()).unwrap();
             assert_eq!(
-                commet_clip_decode(missing.as_ptr(), 0, 1_000, &mut audio),
+                cockhouse_clip_decode(missing.as_ptr(), 0, 1_000, &mut audio),
                 ERR_OPEN
             );
         }
@@ -527,14 +527,14 @@ mod tests {
         };
         unsafe {
             let enc = |rate, ch, len, out| {
-                commet_clip_encode_ogg_opus(pcm.as_ptr(), len, ch, rate, 96_000, out)
+                cockhouse_clip_encode_ogg_opus(pcm.as_ptr(), len, ch, rate, 96_000, out)
             };
             assert_eq!(enc(44_100, 2, pcm.len(), &mut bytes), ERR_ARGS);
             assert_eq!(enc(48_000, 3, pcm.len(), &mut bytes), ERR_ARGS);
             assert_eq!(enc(48_000, 2, pcm.len() - 1, &mut bytes), ERR_ARGS);
             assert_eq!(enc(48_000, 2, 0, &mut bytes), ERR_ARGS);
             assert_eq!(
-                commet_clip_encode_ogg_opus(std::ptr::null(), 4, 2, 48_000, 96_000, &mut bytes),
+                cockhouse_clip_encode_ogg_opus(std::ptr::null(), 4, 2, 48_000, 96_000, &mut bytes),
                 ERR_ARGS
             );
             assert!(bytes.data.is_null());
@@ -551,13 +551,13 @@ mod tests {
         let path = temp_path("ffi.opus");
         unsafe {
             assert_eq!(
-                commet_clip_encode_ogg_opus(pcm.as_ptr(), pcm.len(), 2, 48_000, 96_000, &mut bytes),
+                cockhouse_clip_encode_ogg_opus(pcm.as_ptr(), pcm.len(), 2, 48_000, 96_000, &mut bytes),
                 0
             );
             let data = std::slice::from_raw_parts(bytes.data, bytes.len);
             assert_eq!(&data[..4], b"OggS");
             std::fs::write(&path, data).unwrap();
-            commet_clip_bytes_free(bytes.data, bytes.len);
+            cockhouse_clip_bytes_free(bytes.data, bytes.len);
 
             let c_path = CString::new(path.to_str().unwrap()).unwrap();
             let mut audio = ClipAudio {
@@ -567,12 +567,12 @@ mod tests {
                 channels: 0,
             };
             assert_eq!(
-                commet_clip_decode(c_path.as_ptr(), 0, 60_000, &mut audio),
+                cockhouse_clip_decode(c_path.as_ptr(), 0, 60_000, &mut audio),
                 0
             );
             assert_eq!((audio.sample_rate, audio.channels), (48_000, 2));
             assert_eq!(audio.len, 48_000);
-            commet_clip_decode_free(audio.samples, audio.len);
+            cockhouse_clip_decode_free(audio.samples, audio.len);
         }
         let _ = std::fs::remove_file(&path);
     }

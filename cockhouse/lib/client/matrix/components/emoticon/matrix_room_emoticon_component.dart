@@ -1,0 +1,204 @@
+import 'package:cockhouse/client/components/emoticon/emoji_pack.dart';
+import 'package:cockhouse/client/components/emoticon/emoticon.dart';
+import 'package:cockhouse/client/components/emoticon/emoticon_component.dart';
+import 'package:cockhouse/client/matrix/components/emoticon/matrix_emoticon.dart';
+import 'package:cockhouse/client/matrix/components/emoticon/matrix_emoticon_component.dart';
+import 'package:cockhouse/client/matrix/components/emoticon/matrix_emoticon_state_manager.dart';
+import 'package:cockhouse/client/client.dart';
+import 'package:cockhouse/client/matrix/extensions/matrix_client_extensions.dart';
+import 'package:cockhouse/client/matrix/matrix_client.dart';
+import 'package:cockhouse/client/matrix/matrix_mxc_file_provider.dart';
+import 'package:cockhouse/client/matrix/matrix_mxc_image_provider.dart';
+import 'package:cockhouse/client/matrix/matrix_room.dart';
+import 'package:cockhouse/client/matrix/matrix_timeline.dart';
+import 'package:cockhouse/client/timeline_events/timeline_event.dart';
+import 'package:cockhouse/main.dart';
+import 'package:cockhouse/utils/emoji/unicode_emoji.dart';
+import 'package:cockhouse/utils/image_utils.dart';
+import 'package:cockhouse/utils/mime.dart';
+import 'package:matrix/matrix.dart' as matrix;
+
+class MatrixRoomEmoticonComponent extends MatrixEmoticonComponent
+    implements RoomEmoticonComponent<MatrixClient, MatrixRoom> {
+  @override
+  MatrixRoom room;
+
+  MatrixRoomEmoticonComponent(MatrixClient client, this.room)
+      : super(client, MatrixEmoticonRoomStateManager(room.matrixRoom));
+
+  @override
+  List<EmoticonPack> get availableEmoji =>
+      _getAvailablePacks(includeUnicode: true)
+          .where((element) => element.emoji.isNotEmpty)
+          .toList();
+
+  @override
+  List<EmoticonPack> get availableStickers =>
+      _getAvailablePacks(includeUnicode: false)
+          .where((element) => element.stickers.isNotEmpty)
+          .toList();
+
+  @override
+  bool get canCreatePack => room.permissions.canEditRoomEmoticons;
+
+  @override
+  String get ownerId => room.identifier;
+
+  @override
+  String get ownerDisplayName => room.displayName;
+
+  @override
+  List<EmoticonPack> get availablePacks {
+    List<EmoticonPack> packs = _spacePacks();
+    packs.addAll(ownedPacks.where((e) => !packs.contains(e)));
+
+    var component = room.client.getComponent<EmoticonComponent>();
+
+    if (component == null) return packs;
+
+    packs.addAll(
+        component.globalPacks().where((element) => !packs.contains(element)));
+
+    packs.addAll(
+        component.ownedPacks.where((element) => !packs.contains(element)));
+
+    return packs;
+  }
+
+  @override
+  Future<TimelineEvent?> sendSticker(
+      Emoticon sticker, TimelineEvent? inReplyTo) async {
+    if (sticker is! MatrixEmoticon) return null;
+
+    var image = await ImageUtils.imageProviderToImage(sticker.image);
+
+    matrix.Event? replyingTo;
+
+    if (inReplyTo != null) {
+      replyingTo = await room.matrixRoom.getEventById(inReplyTo.eventId);
+    }
+    String? mimeType;
+    if (sticker.image is MatrixMxcImage) {
+      mimeType = (sticker.image as MatrixMxcImage).mimeType;
+    }
+
+    // Sometimes MatrixMxcImage doesnt have mimetype loaded, so we need to look it up manually
+    if (mimeType == null) {
+      var provider =
+          MxcFileProvider(client.getMatrixClient(), sticker.emojiUrl);
+      var data = await provider.getFileData();
+      mimeType = Mime.lookupType("", data: data);
+    }
+
+    var extension = "";
+
+    // element web wont render images if the body doesnt have an extension
+    if (mimeType != null) {
+      extension = ".${mimeType.split("/").last}";
+    }
+
+    var content = {
+      "body": sticker.shortcode! + extension,
+      "url": sticker.emojiUrl.toString(),
+      if (preferences.stickerCompatibilityMode.value) "msgtype": "m.image",
+      if (preferences.stickerCompatibilityMode.value)
+        "chat.commet.type": "chat.commet.sticker",
+      "info": {
+        "w": image.width,
+        "h": image.height,
+        if (mimeType != null) "mimetype": mimeType
+      }
+    };
+
+    var id = await room.matrixRoom.sendEvent(content,
+        type: preferences.stickerCompatibilityMode.value
+            ? matrix.EventTypes.Message
+            : matrix.EventTypes.Sticker,
+        inReplyTo: replyingTo);
+
+    if (id != null) {
+      var event = await room.matrixRoom.getEventById(id);
+      return room.convertEvent(event!,
+          timeline: (room.timeline as MatrixTimeline?)?.matrixTimeline);
+    }
+
+    return null;
+  }
+
+  List<EmoticonPack> _getAvailablePacks({bool includeUnicode = false}) {
+    var result = _spacePacks();
+    result.addAll(ownedPacks.where((e) => !result.contains(e)));
+
+    var globalComponent = room.client.getComponent<EmoticonComponent>();
+    if (globalComponent != null) {
+      for (var pack in globalComponent.globalPacks()) {
+        if (!result.contains(pack)) {
+          result.add(pack);
+        }
+      }
+    }
+
+    if (globalComponent != null) {
+      result
+          .addAll(globalComponent.ownedPacks.where((e) => !result.contains(e)));
+    }
+
+    // main() starts the unicode packs loading and does not wait for
+    // them, so anything drawn in the first moments has none yet.
+    if (includeUnicode) result.addAll(UnicodeEmojis.packs ?? const []);
+
+    return result;
+  }
+
+  /// Packs of every space the room is in, including through subspaces, so
+  /// server emoji come first in the picker.
+  List<EmoticonPack> _spacePacks() {
+    final result = List<EmoticonPack>.empty(growable: true);
+    for (final space
+        in room.client.spaces.where((space) => _spaceContainsRoom(space, {}))) {
+      final component = space.getComponent<SpaceEmoticonComponent>();
+      if (component == null) continue;
+      result.addAll(component.ownedPacks.where((e) => !result.contains(e)));
+    }
+    return result;
+  }
+
+  bool _spaceContainsRoom(Space space, Set<String> visited) {
+    if (!visited.add(space.identifier)) return false;
+    if (space.containsRoom(room.identifier)) return true;
+    return space.subspaces.any((sub) => _spaceContainsRoom(sub, visited));
+  }
+
+  @override
+  bool isGloballyAvailable(String packId) {
+    return room.matrixRoom.client
+        .isEmoticonPackGloballyAvailable(room.matrixRoom.id, packId);
+  }
+
+  Future<void> markAsGlobal(bool isGlobal, String packKey) async {
+    if (isGlobal)
+      return room.matrixRoom.client
+          .addEmoticonRoomPack(room.matrixRoom.id, packKey);
+
+    return room.matrixRoom.client
+        .removeEmoticonRoomPack(room.matrixRoom.id, packKey);
+  }
+
+  Map<String, Map<String, String>> getEmotePacksFlat(
+      matrix.ImagePackUsage emoticon) {
+    var packs = availablePacks;
+
+    var result = <String, Map<String, String>>{};
+
+    for (var pack in packs) {
+      var key = "${pack.displayName}-${pack.hashCode}";
+      result[key] = <String, String>{};
+      for (var emote in pack.emotes) {
+        result[key]![emote.shortcode!] =
+            (emote as MatrixEmoticon).emojiUrl.toString();
+      }
+    }
+
+    return result;
+  }
+}

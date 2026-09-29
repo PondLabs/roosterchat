@@ -1,0 +1,52 @@
+import 'package:cockhouse/client/components/voip/android_screencapture_source.dart';
+import 'package:cockhouse/client/components/voip/voip_session.dart';
+import 'package:cockhouse/config/platform_utils.dart';
+import 'package:cockhouse/ui/organisms/call_view/screen_capture_source_dialog.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:tiamat/atoms/popup_dialog.dart';
+
+class WebrtcScreencaptureSource implements ScreenCaptureSource {
+  DesktopCapturerSource source;
+  @override
+  final bool captureAudio;
+
+  WebrtcScreencaptureSource(this.source, {this.captureAudio = true});
+
+  static Future<ScreenCaptureSource?> showSelectSourcePrompt(
+      BuildContext context) async {
+    if (PlatformUtils.isAndroid) {
+      return WebrtcAndroidScreencaptureSource.getCaptureSource(context);
+    }
+
+    bool isWayland = PlatformUtils.displayServer == "wayland";
+    final types = [if (!isWayland) SourceType.Window, SourceType.Screen];
+
+    var sources = await desktopCapturer.getSources(
+      types: types,
+      // Big enough for the picker's cards to stay sharp.
+      thumbnailSize: ThumbnailSize(480, 270),
+    );
+
+    // Wayland's portal asks the user itself.
+    if (isWayland && sources.isNotEmpty) {
+      return WebrtcScreencaptureSource(sources.first);
+    }
+
+    if (context.mounted) {
+      var result = await PopupDialog.show<ScreenCaptureDialogResult>(context,
+          content:
+              ScreenCaptureSourceDialog(sources, DesktopCapturerFeed(types)),
+          title: "Share your screen");
+
+      if (result != null) {
+        return WebrtcScreencaptureSource(
+          result.source,
+          captureAudio: result.captureAudio,
+        );
+      }
+    }
+
+    return null;
+  }
+}

@@ -43,11 +43,11 @@ const SOCKET_PATH_MAX_BYTES: usize = 107;
 const CEF_RELEASE: &str = "Release";
 /// CEF child processes are started by Chromium, which does not pass the
 /// host's own arguments on; they find the validated runtime through this.
-const CEF_ROOT_ENV: &str = "ROSCORD_CEF_ROOT";
-const FRAME_RATE_ENV: &str = "ROSCORD_CEF_FRAME_RATE";
+const CEF_ROOT_ENV: &str = "COCKHOUSE_CEF_ROOT";
+const FRAME_RATE_ENV: &str = "COCKHOUSE_CEF_FRAME_RATE";
 const DEFAULT_FRAME_RATE: i32 = 30;
-/// Shared-memory frame rings are named `/roscord-cef-<host pid>-<random>-...`.
-const FRAME_RING_PREFIX: &str = "roscord-cef-";
+/// Shared-memory frame rings are named `/cockhouse-cef-<host pid>-<random>-...`.
+const FRAME_RING_PREFIX: &str = "cockhouse-cef-";
 /// The staged Linux runtime keeps every file CEF loads in `Release/`, next to
 /// libcef.so: on Linux CEF resolves ICU data, the .pak resources and
 /// `locales/` from the directory holding libcef.so (DIR_ASSETS), whatever
@@ -614,9 +614,9 @@ where
     result
 }
 
-/// Appends a diagnostic line to `$ROSCORD_CEF_HOST_LOG` when it is set.
+/// Appends a diagnostic line to `$COCKHOUSE_CEF_HOST_LOG` when it is set.
 fn trace(message: &str) {
-    let Some(path) = std::env::var_os("ROSCORD_CEF_HOST_LOG") else {
+    let Some(path) = std::env::var_os("COCKHOUSE_CEF_HOST_LOG") else {
         return;
     };
     if let Ok(mut log) = fs::OpenOptions::new().create(true).append(true).open(path) {
@@ -638,7 +638,7 @@ fn new_frame_namespace() -> String {
     format!("{}-{}", std::process::id(), &random[..16])
 }
 
-/// Removes `/dev/shm/roscord-cef-<pid>-*` rings whose host is gone.  Rings
+/// Removes `/dev/shm/cockhouse-cef-<pid>-*` rings whose host is gone.  Rings
 /// are unlinked when their surface closes, so only a crashed host leaves any.
 fn remove_stale_frame_rings() {
     let Ok(entries) = fs::read_dir("/dev/shm") else {
@@ -1631,7 +1631,7 @@ fn page_script(envelope: &ScriptEnvelope) -> Option<String> {
     match value.get("operation")?.as_str()? {
         "evaluate_javascript" => value.get("script")?.as_str().map(str::to_owned),
         "dispatch_script_message" => Some(format!(
-            "window.__roscordBrowserRuntimeReceive && window.__roscordBrowserRuntimeReceive({value});"
+            "window.__cockhouseBrowserRuntimeReceive && window.__cockhouseBrowserRuntimeReceive({value});"
         )),
         _ => None,
     }
@@ -2077,7 +2077,7 @@ mod tests {
             .unwrap()
             .as_nanos();
         let path = env::temp_dir().join(format!(
-            "roscord-cef-host-{name}-{}-{timestamp}",
+            "cockhouse-cef-host-{name}-{}-{timestamp}",
             std::process::id()
         ));
         fs::create_dir_all(&path).unwrap();
@@ -2109,7 +2109,7 @@ mod tests {
         let mut args = vec![
             OsString::from("cef_host"),
             OsString::from("--socket"),
-            OsString::from("/tmp/roscord-cef.sock"),
+            OsString::from("/tmp/cockhouse-cef.sock"),
             OsString::from("--parent-pid"),
             OsString::from("42"),
             OsString::from("--parent-nonce"),
@@ -2117,7 +2117,7 @@ mod tests {
             OsString::from("--cef-root"),
             OsString::from("/opt/roscord/cef"),
             OsString::from("--profile-root"),
-            OsString::from("/tmp/roscord-profile"),
+            OsString::from("/tmp/cockhouse-profile"),
         ];
         args.extend(extra.iter().map(OsString::from));
         args
@@ -2128,32 +2128,32 @@ mod tests {
         let config = HostConfig::parse(
             [
                 "cef_host",
-                "--socket=/tmp/roscord-cef.sock",
+                "--socket=/tmp/cockhouse-cef.sock",
                 "--parent-pid=42",
                 "--parent-nonce=0123456789abcdef0123456789abcdef",
                 "--cef-root=/opt/roscord/cef",
-                "--profile-root=/tmp/roscord-profile",
+                "--profile-root=/tmp/cockhouse-profile",
                 "--max-frame-bytes=4096",
                 "--cef-software-rendering",
             ]
             .map(OsString::from),
         )
         .unwrap();
-        assert_eq!(config.socket_path, PathBuf::from("/tmp/roscord-cef.sock"));
+        assert_eq!(config.socket_path, PathBuf::from("/tmp/cockhouse-cef.sock"));
         assert_eq!(config.parent_pid, 42);
         assert_eq!(config.cef_root, PathBuf::from("/opt/roscord/cef"));
         assert_eq!(config.max_frame_bytes, 4096);
         assert!(config.software_rendering);
         assert_eq!(
             HostConfig::parse(host_args(&[])).unwrap().socket_path,
-            PathBuf::from("/tmp/roscord-cef.sock")
+            PathBuf::from("/tmp/cockhouse-cef.sock")
         );
     }
 
     #[test]
     fn a_missing_profile_root_is_created_privately_with_its_parents() {
         let root = temp_root("profile-parents");
-        let profile_root = root.join("share").join("roscord").join("cef").join("profiles");
+        let profile_root = root.join("share").join("cockhouse").join("cef").join("profiles");
         validate_profile_root(&profile_root).unwrap();
         for directory in [
             root.join("share"),

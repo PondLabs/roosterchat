@@ -80,7 +80,7 @@ class SignalClient extends Disposable with EventsEmittable<SignalEvent> {
     return _connectivityResult.isNotEmpty && !_connectivityResult.contains(ConnectivityResult.none);
   }
 
-  // COMMET: connectivity_plus reports `none` wrongly on desktop (after its
+  // COCKHOUSE: connectivity_plus reports `none` wrongly on desktop (after its
   // change subscription is re-created on every connect, and with VPNs or
   // virtual adapters), which made rejoining a voice room fail until the app
   // restarted. `none` is only a hint now, the socket decides.
@@ -113,11 +113,11 @@ class SignalClient extends Disposable with EventsEmittable<SignalEvent> {
     bool reconnect = false,
     lk_models.ReconnectReason? reconnectReason,
   }) async {
-    // COMMET: see _connectivityReportedNone.
+    // COCKHOUSE: see _connectivityReportedNone.
     var reportedOffline = false;
     if (!kIsWeb && !lkPlatformIsTest()) {
       _connectivityResult = await Connectivity().checkConnectivity();
-      // COMMET: a connect that was in flight while the room was disposed
+      // COCKHOUSE: a connect that was in flight while the room was disposed
       // would install a subscription nobody cancels, which is the leak that
       // made rejoining fail (issue #48).
       if (isDisposed) {
@@ -126,7 +126,7 @@ class SignalClient extends Disposable with EventsEmittable<SignalEvent> {
       }
       await _connectivitySubscription?.cancel();
       _connectivitySubscription = Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> result) {
-        // COMMET: compare contents, lists never compare equal with !=.
+        // COCKHOUSE: compare contents, lists never compare equal with !=.
         if (!listEquals(_connectivityResult, result)) {
           if (result.contains(ConnectivityResult.none)) {
             logger.warning('lost connectivity');
@@ -141,7 +141,7 @@ class SignalClient extends Disposable with EventsEmittable<SignalEvent> {
         }
       });
 
-      // COMMET: don't hard-fail, try the socket anyway.
+      // COCKHOUSE: don't hard-fail, try the socket anyway.
       if (_connectivityReportedNone()) {
         reportedOffline = true;
         logger.warning('connectivity reported ${_connectivityResult}, connecting anyway');
@@ -193,7 +193,7 @@ class SignalClient extends Disposable with EventsEmittable<SignalEvent> {
 
       // Attempt Validation
       var finalError = socketError;
-      // COMMET: whether the server answered the validation request.
+      // COCKHOUSE: whether the server answered the validation request.
       var reachedServer = false;
       try {
         // Re-build same uri for validate mode
@@ -226,7 +226,7 @@ class SignalClient extends Disposable with EventsEmittable<SignalEvent> {
         }
       } finally {
         events.emit(SignalDisconnectedEvent(reason: DisconnectReason.signalingConnectionFailure));
-        // COMMET: only blame the network once the connection really failed.
+        // COCKHOUSE: only blame the network once the connection really failed.
         if (reportedOffline && !reachedServer) {
           logger.warning('no internet connection');
           throw ConnectException('no internet connection', reason: ConnectionErrorReason.InternalError, statusCode: 503);

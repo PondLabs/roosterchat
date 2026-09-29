@@ -50,7 +50,7 @@ class TrackBitrateInfo {
   });
 }
 
-/// COMMET: asks for stereo Opus on one parsed `m=audio` section: `stereo=1`
+/// COCKHOUSE: asks for stereo Opus on one parsed `m=audio` section: `stereo=1`
 /// tells the other side we want to receive two channels, `sprop-stereo=1`
 /// that we send them. Returns whether the section has Opus.
 bool ensureOpusStereo(Map<String, dynamic> media) {
@@ -81,7 +81,7 @@ bool ensureOpusStereo(Map<String, dynamic> media) {
   return true;
 }
 
-/// COMMET: whether a parsed `m=audio` section's Opus asks for stereo.
+/// COCKHOUSE: whether a parsed `m=audio` section's Opus asks for stereo.
 bool opusIsStereo(Map<String, dynamic> media) {
   int? opusPayload;
   for (final rtp in (media['rtp'] as List? ?? const [])) {
@@ -229,7 +229,7 @@ class Transport extends Disposable {
 
     final sdpParsed = sdp_transform.parse(offer.sdp ?? '');
     sdpParsed['media']?.forEach((media) {
-      // COMMET: stereo audio tracks (see AudioPublishOptions.stereo).
+      // COCKHOUSE: stereo audio tracks (see AudioPublishOptions.stereo).
       if (media['type'] == 'audio' &&
           media['msid'] != null &&
           _stereoTrackCids.any((cid) => (media['msid'] as String).contains(cid))) {
@@ -312,7 +312,7 @@ class Transport extends Disposable {
     return null;
   }
 
-  // COMMET: cids of published tracks whose Opus has to be stereo.
+  // COCKHOUSE: cids of published tracks whose Opus has to be stereo.
   final Set<String> _stereoTrackCids = {};
 
   void setTrackStereo(String cid) => _stereoTrackCids.add(cid);

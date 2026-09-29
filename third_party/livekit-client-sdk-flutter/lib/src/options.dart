@@ -324,7 +324,7 @@ class AudioPublishOptions extends PublishOptions {
   /// Used to populate protobuf audioFeatures (TF_PRECONNECT_BUFFER).
   final bool preConnect;
 
-  // COMMET: send two channels (music). Opus only encodes stereo when the SDP
+  // COCKHOUSE: send two channels (music). Opus only encodes stereo when the SDP
   // asks for it, which the SDK does not do on its own.
   final bool stereo;
 

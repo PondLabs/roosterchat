@@ -223,7 +223,7 @@ void FlutterMediaStream::GetUserAudio(const EncodableMap& constraints,
           sourceId ==
               SanitizeDeviceIdFromAudioBuffers(strRecordingName,
                                                strRecordingGuid)) {
-        SelectRecordingDevice(i, sourceId);  // COMMET
+        SelectRecordingDevice(i, sourceId);  // COCKHOUSE
       }
     }
 
@@ -232,7 +232,7 @@ void FlutterMediaStream::GetUserAudio(const EncodableMap& constraints,
                                                 strRecordingGuid);
       sourceId = SanitizeDeviceIdFromAudioBuffers(strRecordingName,
                                                   strRecordingGuid);
-      SelectRecordingDevice(0, sourceId);  // COMMET
+      SelectRecordingDevice(0, sourceId);  // COCKHOUSE
     }
 
     char strPlayoutName[256];
@@ -513,7 +513,7 @@ void FlutterMediaStream::SelectAudioInput(
     std::string cur_device_id =
         SanitizeDeviceIdFromAudioBuffers(deviceName, deviceGuid);
     if (device_id != "" && device_id == cur_device_id) {
-      SelectRecordingDevice(i, cur_device_id);  // COMMET
+      SelectRecordingDevice(i, cur_device_id);  // COCKHOUSE
       found = true;
       break;
     }
@@ -526,7 +526,7 @@ void FlutterMediaStream::SelectAudioInput(
   result->Success();
 }
 
-// COMMET: desktop WebRTC stops recording while every sender is muted and
+// COCKHOUSE: desktop WebRTC stops recording while every sender is muted and
 // starts again on the unmute (MuteStream, stop-on-mute mode). Its audio
 // device module keeps the microphone as a position in the device list and
 // looks that position up again whenever it starts recording, so a device

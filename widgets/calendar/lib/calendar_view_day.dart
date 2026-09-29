@@ -1,9 +1,9 @@
 import 'package:calendar_view/calendar_view.dart';
-import 'package:commet_calendar_widget/calendar.dart';
-import 'package:commet_calendar_widget/calendar_view_header.dart';
-import 'package:commet_calendar_widget/event_view.dart';
-import 'package:commet_calendar_widget/main.dart';
-import 'package:commet_calendar_widget/unavailability_painter.dart';
+import 'package:cockhouse_calendar_widget/calendar.dart';
+import 'package:cockhouse_calendar_widget/calendar_view_header.dart';
+import 'package:cockhouse_calendar_widget/event_view.dart';
+import 'package:cockhouse_calendar_widget/main.dart';
+import 'package:cockhouse_calendar_widget/unavailability_painter.dart';
 import 'package:flutter/material.dart';
 
 class CalendarViewDay extends StatefulWidget {

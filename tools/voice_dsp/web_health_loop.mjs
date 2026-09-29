@@ -7,10 +7,10 @@
 // microphone going out (unprocessed if need be) and stop its frame counter,
 // which the app's microphone watch reads to build a new graph.
 //
-//   node tools/voice_dsp/web_health_loop.mjs [--web-root commet/web] [--chrome <path>]
+//   node tools/voice_dsp/web_health_loop.mjs [--web-root cockhouse/web] [--chrome <path>]
 //
 // Serves the glue (audio_dsp.js, the worklet, the worker) and audio_dsp.wasm
-// from --web-root (commet/scripts/build-audio-dsp-wasm.sh puts the wasm
+// from --web-root (cockhouse/scripts/build-audio-dsp-wasm.sh puts the wasm
 // there), builds a graph on Chrome's fake microphone, sends its processed
 // track over a loopback peer connection and reads WebRTC's statistics while
 // each fault is injected. Needs Node 22 or later (global WebSocket).
@@ -26,7 +26,7 @@ const opt = (name, fallback) => {
   return i >= 0 ? args[i + 1] : fallback;
 };
 const repo = resolve(new URL("../..", import.meta.url).pathname);
-const webRoot = resolve(opt("--web-root", join(repo, "commet/web")));
+const webRoot = resolve(opt("--web-root", join(repo, "cockhouse/web")));
 const chrome = opt("--chrome", process.env.CHROME || "google-chrome-stable");
 const work = mkdtempSync(join(tmpdir(), "voice-health-"));
 
@@ -55,12 +55,12 @@ const FAULT_BLOCK = 300; // three seconds in
 // The worker with a fault, injected where the DSP runs.
 function workerSource(fault) {
   const src = readFileSync(join(webRoot, "audio_dsp.worker.js"), "utf8");
-  const call = "ex.commet_dsp_process_block(handle, micPtr, BLOCK);";
+  const call = "ex.cockhouse_dsp_process_block(handle, micPtr, BLOCK);";
   if (!src.includes(call)) throw new Error("audio_dsp.worker.js no longer calls " + call);
   if (fault === "trap") {
     // A real wasm trap (out of bounds) from the block on.
     return src.replace(call, `self.__n = (self.__n || 0) + 1;
-    if (self.__n >= ${FAULT_BLOCK}) ex.commet_dsp_process_block(handle, 0xFFFFFE00, BLOCK);
+    if (self.__n >= ${FAULT_BLOCK}) ex.cockhouse_dsp_process_block(handle, 0xFFFFFE00, BLOCK);
     ${call}`);
   }
   if (fault === "stall") {
@@ -86,14 +86,14 @@ const page = `<!doctype html><script src="audio_dsp.js"></script><script>
     if (fault === "ended") {
       raw.stop();
       try {
-        await window.commetAudioDsp.create(raw, {});
+        await window.cockhouseAudioDsp.create(raw, {});
         window.__out = { rejected: false };
       } catch (e) {
         window.__out = { rejected: true, message: String(e && e.message || e) };
       }
       return;
     }
-    const graph = await window.commetAudioDsp.create(raw, { noiseSuppression: false, gateMode: 0 });
+    const graph = await window.cockhouseAudioDsp.create(raw, { noiseSuppression: false, gateMode: 0 });
     let last = null;
     graph.onReport = (r) => { last = r; };
     graph.onError = (m) => errors.push({ t: now(), m: String(m) });

@@ -14,17 +14,17 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-HOST = ROOT / "commet" / "windows" / "cef_host"
+HOST = ROOT / "cockhouse" / "windows" / "cef_host"
 SOURCE = (HOST / "cef_host.cpp").read_text(encoding="utf-8")
 RUST_HOST_SOURCE = (
     ROOT / "rust" / "rust" / "src" / "cef_host.rs"
 ).read_text(encoding="utf-8")
 CMAKE = (HOST / "CMakeLists.txt").read_text(encoding="utf-8")
-WINDOWS_CMAKE = (ROOT / "commet" / "windows" / "CMakeLists.txt").read_text(
+WINDOWS_CMAKE = (ROOT / "cockhouse" / "windows" / "CMakeLists.txt").read_text(
     encoding="utf-8"
 )
 DART_RUNTIME = (
-    ROOT / "commet" / "lib" / "browser_runtime" / "windows_browser_runtime.dart"
+    ROOT / "cockhouse" / "lib" / "browser_runtime" / "windows_browser_runtime.dart"
 ).read_text(encoding="utf-8")
 PROFILE_RUNTIME = (ROOT / "rust" / "rust" / "src" / "browser_profile.rs").read_text(
     encoding="utf-8"
@@ -36,7 +36,7 @@ LIFECYCLE_RUST = (
     ROOT / "rust" / "rust" / "src" / "browser_runtime_lifecycle.rs"
 ).read_text(encoding="utf-8")
 LIFECYCLE_DART = (
-    ROOT / "commet" / "lib" / "browser_runtime" / "runtime_lifecycle.dart"
+    ROOT / "cockhouse" / "lib" / "browser_runtime" / "runtime_lifecycle.dart"
 ).read_text(encoding="utf-8")
 LINUX_RUNTIME = (
     ROOT / "rust" / "rust" / "src" / "linux_browser_runtime.rs"
@@ -45,7 +45,7 @@ FILE_ACCESS_RUST = (ROOT / "rust" / "rust" / "src" / "browser_file_access.rs").r
     encoding="utf-8"
 )
 FILE_ACCESS_DART = (
-    ROOT / "commet" / "lib" / "browser_runtime" / "file_access.dart"
+    ROOT / "cockhouse" / "lib" / "browser_runtime" / "file_access.dart"
 ).read_text(encoding="utf-8")
 FILE_ACCESS_DOC = (ROOT / "docs" / "cef-browser-runtime-file-access.md").read_text(
     encoding="utf-8"
@@ -54,17 +54,17 @@ BROWSER_RUNTIME_RUST = (ROOT / "rust" / "rust" / "src" / "browser_runtime.rs").r
     encoding="utf-8"
 )
 BROWSER_RUNTIME_DART = (
-    ROOT / "commet" / "lib" / "browser_runtime" / "browser_runtime.dart"
+    ROOT / "cockhouse" / "lib" / "browser_runtime" / "browser_runtime.dart"
 ).read_text(encoding="utf-8")
 RUNTIME_TOOL = (ROOT / "tools" / "cef_runtime.py").read_text(encoding="utf-8")
 MEDIA_RUST = (ROOT / "rust" / "rust" / "src" / "browser_media.rs").read_text(
     encoding="utf-8"
 )
 MEDIA_DART = (
-    ROOT / "commet" / "lib" / "browser_runtime" / "media_permission.dart"
+    ROOT / "cockhouse" / "lib" / "browser_runtime" / "media_permission.dart"
 ).read_text(encoding="utf-8")
 BROWSER_RUNTIME_DART = (
-    ROOT / "commet" / "lib" / "browser_runtime" / "browser_runtime.dart"
+    ROOT / "cockhouse" / "lib" / "browser_runtime" / "browser_runtime.dart"
 ).read_text(encoding="utf-8")
 BROWSER_RUNTIME_RUST = (
     ROOT / "rust" / "rust" / "src" / "browser_runtime.rs"
@@ -72,7 +72,7 @@ BROWSER_RUNTIME_RUST = (
 MEDIA_DOC = (ROOT / "docs" / "cef-browser-runtime-media.md").read_text(
     encoding="utf-8"
 )
-MAIN_DART = (ROOT / "commet" / "lib" / "main.dart").read_text(encoding="utf-8")
+MAIN_DART = (ROOT / "cockhouse" / "lib" / "main.dart").read_text(encoding="utf-8")
 CEF_LOCK = (ROOT / "third_party" / "cef" / "cef.lock.json").read_text(
     encoding="utf-8"
 )
@@ -86,7 +86,7 @@ BUILD_WORKFLOW = (ROOT / ".github" / "workflows" / "build.yml").read_text(
     encoding="utf-8"
 )
 LINUX_EMBEDDED_DART = (
-    ROOT / "commet" / "lib" / "browser_runtime" / "linux_embedded_presenter.dart"
+    ROOT / "cockhouse" / "lib" / "browser_runtime" / "linux_embedded_presenter.dart"
 ).read_text(encoding="utf-8")
 LINUX_EMBEDDED_RUST = (
     ROOT / "rust" / "rust" / "src" / "browser_linux_embedded.rs"
@@ -95,17 +95,17 @@ LINUX_EMBEDDED_DOC = (
     ROOT / "docs" / "cef-browser-runtime-linux-embedded.md"
 ).read_text(encoding="utf-8")
 RUST_LIB = (ROOT / "rust" / "rust" / "src" / "lib.rs").read_text(encoding="utf-8")
-DART_BARREL = (ROOT / "commet" / "lib" / "browser_runtime.dart").read_text(
+DART_BARREL = (ROOT / "cockhouse" / "lib" / "browser_runtime.dart").read_text(
     encoding="utf-8"
 )
 LINUX_EMBEDDED_TEST = (
-    ROOT / "commet" / "unit_test" / "linux_embedded_presenter_test.dart"
+    ROOT / "cockhouse" / "unit_test" / "linux_embedded_presenter_test.dart"
 ).read_text(encoding="utf-8")
 EMBEDDED_DART = (
-    ROOT / "commet" / "lib" / "browser_runtime" / "embedded_browser_surface.dart"
+    ROOT / "cockhouse" / "lib" / "browser_runtime" / "embedded_browser_surface.dart"
 ).read_text(encoding="utf-8")
 LINUX_STANDALONE_DART = (
-    ROOT / "commet" / "lib" / "browser_runtime" / "linux_standalone_presenter.dart"
+    ROOT / "cockhouse" / "lib" / "browser_runtime" / "linux_standalone_presenter.dart"
 ).read_text(encoding="utf-8")
 LINUX_STANDALONE_RUST = (
     ROOT / "rust" / "rust" / "src" / "browser_linux_standalone.rs"
@@ -114,10 +114,10 @@ LINUX_STANDALONE_DOC = (
     ROOT / "docs" / "cef-browser-runtime-linux-standalone.md"
 ).read_text(encoding="utf-8")
 LINUX_STANDALONE_TEST = (
-    ROOT / "commet" / "unit_test" / "linux_standalone_presenter_test.dart"
+    ROOT / "cockhouse" / "unit_test" / "linux_standalone_presenter_test.dart"
 ).read_text(encoding="utf-8")
 FLATPAK_DART = (
-    ROOT / "commet" / "lib" / "browser_runtime" / "flatpak_presenter.dart"
+    ROOT / "cockhouse" / "lib" / "browser_runtime" / "flatpak_presenter.dart"
 ).read_text(encoding="utf-8")
 FLATPAK_RUST = (ROOT / "rust" / "rust" / "src" / "browser_flatpak.rs").read_text(
     encoding="utf-8"
@@ -126,35 +126,35 @@ FLATPAK_DOC = (ROOT / "docs" / "cef-browser-runtime-flatpak.md").read_text(
     encoding="utf-8"
 )
 FLATPAK_TEST = (
-    ROOT / "commet" / "unit_test" / "flatpak_presenter_test.dart"
+    ROOT / "cockhouse" / "unit_test" / "flatpak_presenter_test.dart"
 ).read_text(encoding="utf-8")
 FLATPAK_MANIFEST = (
-    ROOT / "commet" / "linux" / "flatpak" / "chat.commet.commetapp.yaml"
+    ROOT / "cockhouse" / "linux" / "flatpak" / "com.pondlabs.cockhouse.yaml"
 ).read_text(encoding="utf-8")
 STANDALONE_DART = (
-    ROOT / "commet" / "lib" / "browser_runtime" / "standalone_browser_surface.dart"
+    ROOT / "cockhouse" / "lib" / "browser_runtime" / "standalone_browser_surface.dart"
 ).read_text(encoding="utf-8")
 RECOVERY_DART = (
-    ROOT / "commet" / "lib" / "browser_runtime" / "surface_recovery.dart"
+    ROOT / "cockhouse" / "lib" / "browser_runtime" / "surface_recovery.dart"
 ).read_text(encoding="utf-8")
 DIAGNOSTICS_DART = (
-    ROOT / "commet" / "lib" / "browser_runtime" / "surface_diagnostics.dart"
+    ROOT / "cockhouse" / "lib" / "browser_runtime" / "surface_diagnostics.dart"
 ).read_text(encoding="utf-8")
 RECOVERY_UI_DART = (
-    ROOT / "commet" / "lib" / "browser_runtime" / "recovery_surface_ui.dart"
+    ROOT / "cockhouse" / "lib" / "browser_runtime" / "recovery_surface_ui.dart"
 ).read_text(encoding="utf-8")
 RECOVERY_TEST = (
-    ROOT / "commet" / "unit_test" / "surface_recovery_test.dart"
+    ROOT / "cockhouse" / "unit_test" / "surface_recovery_test.dart"
 ).read_text(encoding="utf-8")
 DIAGNOSTICS_TEST = (
-    ROOT / "commet" / "unit_test" / "surface_diagnostics_test.dart"
+    ROOT / "cockhouse" / "unit_test" / "surface_diagnostics_test.dart"
 ).read_text(encoding="utf-8")
 RECOVERY_UI_TEST = (
-    ROOT / "commet" / "unit_test" / "recovery_surface_ui_test.dart"
+    ROOT / "cockhouse" / "unit_test" / "recovery_surface_ui_test.dart"
 ).read_text(encoding="utf-8")
 MEDIA_ADAPTER = (
     ROOT
-    / "commet"
+    / "cockhouse"
     / "lib"
     / "client"
     / "components"
@@ -171,7 +171,7 @@ WINDOWS_ARTIFACT_DOC = (
     ROOT / "docs" / "cef-browser-runtime-windows-artifacts.md"
 ).read_text(encoding="utf-8")
 LINUX_ARTIFACT_DART = (
-    ROOT / "commet" / "lib" / "browser_runtime" / "linux_artifact_qualification.dart"
+    ROOT / "cockhouse" / "lib" / "browser_runtime" / "linux_artifact_qualification.dart"
 ).read_text(encoding="utf-8")
 LINUX_ARTIFACT_RUST = (
     ROOT / "rust" / "rust" / "src" / "browser_linux_artifacts.rs"
@@ -180,16 +180,16 @@ LINUX_ARTIFACT_DOC = (
     ROOT / "docs" / "cef-browser-runtime-linux-artifacts.md"
 ).read_text(encoding="utf-8")
 LINUX_ARTIFACT_TEST = (
-    ROOT / "commet" / "unit_test" / "linux_artifact_qualification_test.dart"
+    ROOT / "cockhouse" / "unit_test" / "linux_artifact_qualification_test.dart"
 ).read_text(encoding="utf-8")
-LINUX_CMAKE = (ROOT / "commet" / "linux" / "CMakeLists.txt").read_text(
+LINUX_CMAKE = (ROOT / "cockhouse" / "linux" / "CMakeLists.txt").read_text(
     encoding="utf-8"
 )
 DEBIAN_CONTROL_2204 = (
-    ROOT / "commet" / "linux" / "debian" / "DEBIAN" / "control-ubuntu-22.04"
+    ROOT / "cockhouse" / "linux" / "debian" / "DEBIAN" / "control-ubuntu-22.04"
 ).read_text(encoding="utf-8")
 DEBIAN_CONTROL_2404 = (
-    ROOT / "commet" / "linux" / "debian" / "DEBIAN" / "control-ubuntu-24.04"
+    ROOT / "cockhouse" / "linux" / "debian" / "DEBIAN" / "control-ubuntu-24.04"
 ).read_text(encoding="utf-8")
 QUALIFY_FLATPAK_TOOL = (ROOT / "tools" / "qualify_flatpak_artifact.py").read_text(
     encoding="utf-8"
@@ -208,7 +208,7 @@ RELEASE_TEST = (ROOT / "tools" / "test_qualify_release_candidate.py").read_text(
 )
 MATRIX_COMPONENT = (
     ROOT
-    / "commet"
+    / "cockhouse"
     / "lib"
     / "client"
     / "matrix"
@@ -218,7 +218,7 @@ MATRIX_COMPONENT = (
 ).read_text(encoding="utf-8")
 VIDEO_DIALOG = (
     ROOT
-    / "commet"
+    / "cockhouse"
     / "lib"
     / "ui"
     / "molecules"
@@ -226,12 +226,12 @@ VIDEO_DIALOG = (
     / "video_playback_dialog.dart"
 ).read_text(encoding="utf-8")
 WIDGET_VOCAB = (
-    ROOT / "commet" / "lib" / "client" / "components" / "widgets" / "widget_component.dart"
+    ROOT / "cockhouse" / "lib" / "client" / "components" / "widgets" / "widget_component.dart"
 ).read_text(encoding="utf-8")
-PUBSPEC = (ROOT / "commet" / "pubspec.yaml").read_text(encoding="utf-8")
+PUBSPEC = (ROOT / "cockhouse" / "pubspec.yaml").read_text(encoding="utf-8")
 RUST_CARGO = (ROOT / "rust" / "rust" / "Cargo.toml").read_text(encoding="utf-8")
 LINUX_DART_RUNTIME = (
-    ROOT / "commet" / "lib" / "browser_runtime" / "linux_browser_runtime.dart"
+    ROOT / "cockhouse" / "lib" / "browser_runtime" / "linux_browser_runtime.dart"
 ).read_text(encoding="utf-8")
 STUB_PUBSPEC = (
     ROOT / "third_party" / "flutter_inappwebview_windows_stub" / "pubspec.yaml"
@@ -261,19 +261,19 @@ VENDORED_AUTH_PUBSPEC = (
 class CefHostContractTests(unittest.TestCase):
     def test_host_is_opt_in_until_locked_runtime_is_staged(self) -> None:
         self.assertIn(
-            'option(ROSCORD_BUILD_CEF_HOST "Build the bundled Windows CEF host" OFF)',
+            'option(COCKHOUSE_BUILD_CEF_HOST "Build the bundled Windows CEF host" OFF)',
             WINDOWS_CMAKE,
         )
         self.assertIn("find_package(CEF REQUIRED)", CMAKE)
         self.assertIn("bootstrap.exe", CMAKE)
         self.assertIn('OUTPUT_NAME "cef_host"', CMAKE)
-        self.assertIn("ENV{ROSCORD_BUILD_CEF_HOST}", WINDOWS_CMAKE)
+        self.assertIn("ENV{COCKHOUSE_BUILD_CEF_HOST}", WINDOWS_CMAKE)
         self.assertIn("ENV{CEF_ROOT}", WINDOWS_CMAKE)
         self.assertIn("stage-sdk", RUNTIME_TOOL)
         self.assertIn('"build_sdk"', CEF_LOCK)
-        self.assertIn("ROSCORD_BUILD_CEF_HOST=ON", DESKTOP_WORKFLOW)
-        self.assertIn("ROSCORD_BUILD_CEF_HOST=ON", RELEASE_WORKFLOW)
-        self.assertIn("ROSCORD_BUILD_CEF_HOST=ON", BUILD_WORKFLOW)
+        self.assertIn("COCKHOUSE_BUILD_CEF_HOST=ON", DESKTOP_WORKFLOW)
+        self.assertIn("COCKHOUSE_BUILD_CEF_HOST=ON", RELEASE_WORKFLOW)
+        self.assertIn("COCKHOUSE_BUILD_CEF_HOST=ON", BUILD_WORKFLOW)
         for workflow in (BUILD_WORKFLOW, DESKTOP_WORKFLOW, RELEASE_WORKFLOW):
             self.assertIn(
                 'Get-ChildItem -LiteralPath $cache -Filter "*.tar.bz2" -File -Recurse',
@@ -318,7 +318,7 @@ class CefHostContractTests(unittest.TestCase):
         self.assertIn("size > kMaxFrameBytes", SOURCE)
 
     def test_fixture_has_public_lifecycle_events(self) -> None:
-        self.assertIn('kFixtureUrl[] = "commet://fixture/"', SOURCE)
+        self.assertIn('kFixtureUrl[] = "cockhouse://fixture/"', SOURCE)
         self.assertIn("SendOpened", SOURCE)
         self.assertIn("SendReady", SOURCE)
         self.assertIn("SendClosed", SOURCE)
@@ -328,10 +328,10 @@ class CefHostContractTests(unittest.TestCase):
     def test_script_commands_execute_in_cef_and_page_messages_return_as_events(self) -> None:
         for token in (
             "BrowserRuntimeSendHandler",
-            "__roscordBrowserRuntimeSend",
-            "roscord_browser_runtime_send",
+            "__cockhouseBrowserRuntimeSend",
+            "cockhouse_browser_runtime_send",
             "ExecuteJavaScript",
-            "__roscordBrowserRuntimeReceive",
+            "__cockhouseBrowserRuntimeReceive",
             "SendScriptComplete",
             "OnProcessMessageReceived",
             "script_message",
@@ -501,7 +501,7 @@ class CefHostContractTests(unittest.TestCase):
         self.assertIn("registers no method channels", stub_text)
         # SSO keeps working through the external browser plus loopback
         # server; the vendored auth package carries no webview dependency,
-        # import, or implementation. (Historical COMMET comments may name the
+        # import, or implementation. (Historical COCKHOUSE comments may name the
         # removed package; the assertions below target dependency lines and
         # imports, not prose.)
         self.assertNotIn("desktop_webview_window:", VENDORED_AUTH_PUBSPEC)
@@ -535,12 +535,12 @@ class CefHostContractTests(unittest.TestCase):
         )
         self.assertFalse((ROOT / "rust" / "rust" / "src" / "main.rs").exists())
         self.assertFalse(
-            (ROOT / "commet" / "linux" / "widget_runner.h").exists()
+            (ROOT / "cockhouse" / "linux" / "widget_runner.h").exists()
         )
         self.assertFalse(
             (
                 ROOT
-                / "commet"
+                / "cockhouse"
                 / "lib"
                 / "client"
                 / "matrix"
@@ -707,7 +707,7 @@ class CefHostContractTests(unittest.TestCase):
             ROOT / "rust" / "rust" / "src" / "browser_runtime.rs"
         ).read_text(encoding="utf-8")
         dart_runtime = (
-            ROOT / "commet" / "lib" / "browser_runtime" / "browser_runtime.dart"
+            ROOT / "cockhouse" / "lib" / "browser_runtime" / "browser_runtime.dart"
         ).read_text(encoding="utf-8")
         for source in (browser_runtime, dart_runtime):
             for token in (
@@ -1015,7 +1015,7 @@ class CefHostContractTests(unittest.TestCase):
 
     def test_windows_embedded_matrix_fixture_contract(self) -> None:
         adapter = (
-            ROOT / "commet" / "lib" / "client" / "matrix" / "components"
+            ROOT / "cockhouse" / "lib" / "client" / "matrix" / "components"
             / "widgets" / "matrix_widget_adapter.dart"
         ).read_text(encoding="utf-8")
         for token in (
@@ -1032,7 +1032,7 @@ class CefHostContractTests(unittest.TestCase):
                 BROWSER_RUNTIME_DART + EMBEDDED_DART,
                 f"missing matrix fixture token: {token}",
             )
-        self.assertIn("commet://fixture/", SOURCE)
+        self.assertIn("cockhouse://fixture/", SOURCE)
         self.assertIn("MatrixWidgetAdapter", adapter)
         self.assertIn("matrixWidgetBridgeInstallOperation", adapter)
 
@@ -1806,8 +1806,8 @@ class CefHostContractTests(unittest.TestCase):
         ):
             self.assertIn(token, RUST_HOST_SOURCE)
         # CMake consumes the staged runtime and SDK through the environment.
-        self.assertIn("ROSCORD_CEF_RUNTIME_DIR", LINUX_CMAKE)
-        self.assertIn("ROSCORD_CEF_SDK_ROOT", LINUX_CMAKE)
+        self.assertIn("COCKHOUSE_CEF_RUNTIME_DIR", LINUX_CMAKE)
+        self.assertIn("COCKHOUSE_CEF_SDK_ROOT", LINUX_CMAKE)
         self.assertIn("/cef", LINUX_CMAKE)
         # Qualification modules are registered in both barrels.
         self.assertIn("linux_artifact_qualification", DART_BARREL)

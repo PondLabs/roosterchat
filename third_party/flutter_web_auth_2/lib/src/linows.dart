@@ -19,7 +19,7 @@ class FlutterWebAuth2LinowsPlugin extends FlutterWebAuth2Platform {
     required String callbackUrlScheme,
     required Map<String, dynamic> options,
   }) async {
-    // COMMET: the CEF cutover (#132) deleted the in-app webview module and
+    // COCKHOUSE: the CEF cutover (#132) deleted the in-app webview module and
     // its desktop webview dependency. Desktop SSO always authenticates
     // through the external system browser plus the loopback server, which is
     // also what roscord requests with useWebview: false.

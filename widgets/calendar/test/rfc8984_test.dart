@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:commet_calendar_widget/rfc8984.dart';
+import 'package:cockhouse_calendar_widget/rfc8984.dart';
 import 'package:test/test.dart';
 
 void main() {

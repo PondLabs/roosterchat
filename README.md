@@ -22,11 +22,11 @@ Builds are published on the [releases page](https://github.com/PondLabs/roscord/
 
 | Platform | Asset |
 |---|---|
-| Windows | `roscord-v<version>-windows-x64-release.zip` |
-| Linux | `roscord-v<version>-linux-x64-release.tar.gz` |
-| macOS | `roscord-v<version>-macos-universal-release.zip` |
+| Windows | `cockhouse-v<version>-windows-x64-release.zip` |
+| Linux | `cockhouse-v<version>-linux-x64-release.tar.gz` |
+| macOS | `cockhouse-v<version>-macos-universal-release.zip` |
 
-Unpack the archive and run `roscord` from inside it. The macOS archive holds `roscord.app`: drag it to Applications. It is not signed by Apple, so the first launch needs right click → Open, and it does not update itself the way the Windows and Linux builds do. iOS and Android are not currently built.
+Unpack the archive and run `Cockhouse` from inside it. The macOS archive holds `Cockhouse.app`: drag it to Applications. It is not signed by Apple, so the first launch needs right click → Open, and it does not update itself the way the Windows and Linux builds do. iOS and Android are not currently built.
 
 # Features
 
@@ -49,13 +49,13 @@ Open an [issue](https://github.com/PondLabs/roscord/issues/new). The "Report iss
 
 # Translation
 
-Strings live in `commet/assets/l10n/intl_*.arb`. `intl_en.arb` is the source of truth; the other locales are edited to match it. See [Development](#development) for how translations are regenerated.
+Strings live in `cockhouse/assets/l10n/intl_*.arb`. `intl_en.arb` is the source of truth; the other locales are edited to match it. See [Development](#development) for how translations are regenerated.
 
 # Development
 
 To build, you require [Flutter](https://flutter.dev), currently v3.41.9
 
-This repo has a monorepo structure, containing two flutter projects: roscord and Tiamat. roscord is the main client, and Tiamat is a sort of wrapper around Material with some extra goodies, which is used to maintain a consistent style across the app. Tiamat may eventually be moved to its own repo, but for now it is maintained here for ease of development.
+This repo has a monorepo structure, containing two flutter projects: Cockhouse and Tiamat. Cockhouse is the main client, and Tiamat is a sort of wrapper around Material with some extra goodies, which is used to maintain a consistent style across the app. Tiamat may eventually be moved to its own repo, but for now it is maintained here for ease of development.
 
 ## Building
 
@@ -73,7 +73,7 @@ documented in
 
 ### 2. Install Libraries
 
-roscord requires some additional libraries to be built
+Cockhouse requires some additional libraries to be built
 
 ```bash
 sudo apt-get install -y cmake clang ninja-build rustup libgtk-3-dev libmpv-dev mpv ffmpeg libmimalloc-dev libwebkit2gtk-4.1-dev keybinder-3.0
@@ -84,7 +84,7 @@ sudo apt-get install -y cmake clang ninja-build rustup libgtk-3-dev libmpv-dev m
 You will need to change directory in to the project, then fetch dependencies
 
 ```bash
-cd commet
+cd cockhouse
 flutter pub get
 ```
 
@@ -92,7 +92,7 @@ flutter pub get
 
 We make use of procedural code generation in some parts of the project. As a rule, generated code will not be checked in to git, and will need to be generated before building.
 
-To run code generation, run the script within the `commet` directory:
+To run code generation, run the script within the `cockhouse` directory:
 `dart run scripts/codegen.dart`
 
 ### 5. Building
@@ -117,14 +117,14 @@ When building, there are some additional command line arguments that must be use
 **Example:**
 
 ```bash
-cd commet
+cd cockhouse
 flutter run --dart-define BUILD_MODE=debug --dart-define PLATFORM=linux
 ```
 
 # License and provenance
 
-roscord is a hard fork of [Commet](https://github.com/commetchat/commet) by the Commet developers, and is licensed under the GNU Affero General Public License v3, the same license as the original. See [LICENSE](LICENSE) for the full text.
+Cockhouse is a hard fork of [Commet](https://github.com/commetchat/commet) by the Commet developers, and is licensed under the GNU Affero General Public License v3, the same license as the original. See [LICENSE](LICENSE) for the full text.
 
 Original work is copyright © the Commet developers and contributors. Copyright for changes made in this fork is held by PondLabs.
 
-The fork keeps Commet's values for anything that would break compatibility with existing installs or with other clients: bundle identifiers, the `chat.commet` URL scheme and the `chat.commet.*` Matrix event types are unchanged on purpose, so a roscord install interoperates with rooms created by Commet. See `third_party/README.md` for the vendored packages this fork modifies in place.
+Cockhouse keeps Commet's values where changing them would break compatibility with other clients or with links already out there: the `chat.commet` URL scheme and the `chat.commet.*` Matrix event types are unchanged on purpose, so Cockhouse interoperates with rooms created by Commet. Installs from before the rename update in place and keep their data; see `docs/adr/0002-rename-to-cockhouse.md`. See `third_party/README.md` for the vendored packages this fork modifies in place.

@@ -29,12 +29,12 @@ which gates on `currentSession != null`, a field assigned only after
 
 | # | Claim from the issue | Verdict | Evidence |
 |---|---|---|---|
-| 1 | Sidebar shows others but not us after joining | Confirmed (by code path) | `commet/lib/ui/atoms/room_text_button.dart:126-131` rebuilds from `getSessions()`; filter at `matrix_activities_component.dart:66-73` drops our entry when no session is registered. |
-| 2 | Race with the stale filter from `37ab8327` | Confirmed | `git show 37ab8327 -- commet/lib/client/matrix/components/room_activities/matrix_activities_component.dart` adds exactly lines 63-73 (the `getCallInRoom(...) == null` test). |
-| 3 | `MatrixLivekitBackend.join()` writes `call.member` first | Confirmed | `commet/lib/client/matrix/components/voip_room/matrix_livekit_backend.dart:172-190` (`setRoomStateWithKey`), then `:192` (`lkRoom.connect`), then `:213` (`MatrixLivekitVoipSession(...)`). |
-| 4 | Session is registered with CallManager only in the session constructor | Confirmed | `commet/lib/client/matrix/components/voip_room/matrix_livekit_voip_session.dart:35-36`: `clientManager?.callManager.onClientSessionStarted(this)` is the first line of the constructor. `CallManager.onClientSessionStarted` adds to `currentSessions` at `commet/lib/client/call_manager.dart:64-66`. |
+| 1 | Sidebar shows others but not us after joining | Confirmed (by code path) | `cockhouse/lib/ui/atoms/room_text_button.dart:126-131` rebuilds from `getSessions()`; filter at `matrix_activities_component.dart:66-73` drops our entry when no session is registered. |
+| 2 | Race with the stale filter from `37ab8327` | Confirmed | `git show 37ab8327 -- cockhouse/lib/client/matrix/components/room_activities/matrix_activities_component.dart` adds exactly lines 63-73 (the `getCallInRoom(...) == null` test). |
+| 3 | `MatrixLivekitBackend.join()` writes `call.member` first | Confirmed | `cockhouse/lib/client/matrix/components/voip_room/matrix_livekit_backend.dart:172-190` (`setRoomStateWithKey`), then `:192` (`lkRoom.connect`), then `:213` (`MatrixLivekitVoipSession(...)`). |
+| 4 | Session is registered with CallManager only in the session constructor | Confirmed | `cockhouse/lib/client/matrix/components/voip_room/matrix_livekit_voip_session.dart:35-36`: `clientManager?.callManager.onClientSessionStarted(this)` is the first line of the constructor. `CallManager.onClientSessionStarted` adds to `currentSessions` at `cockhouse/lib/client/call_manager.dart:64-66`. |
 | 5 | If sync arrives in between, `getSessions()` skips our membership | Confirmed | `matrix_activities_component.dart:66-73`. `getCallInRoom` (`call_manager.dart:121-126`) searches `currentSessions`, empty until step 4. |
-| 6 | `onSessionsChanged` fires only for `call.member` timeline events in sync | Confirmed | `matrix_activities_component.dart:111-122` (`onSync`), driven from `commet/lib/client/matrix/matrix_client.dart:287-288, 314-327`. There is no other `_onParticipantsChanged.add` call site. |
+| 6 | `onSessionsChanged` fires only for `call.member` timeline events in sync | Confirmed | `matrix_activities_component.dart:111-122` (`onSync`), driven from `cockhouse/lib/client/matrix/matrix_client.dart:287-288, 314-327`. There is no other `_onParticipantsChanged.add` call site. |
 | 7 | `RoomTextButton` does not listen to `CallManager` | Confirmed | `room_text_button.dart:94-100` subscribes only to `room.onUpdate`, `CalendarRoom.onEventsChanged` and `ActivitiesComponent.onSessionsChanged`. No import of `call_manager.dart`. |
 | 8 | Nothing re-checks the list after the session is registered | Confirmed | `room.onUpdate` triggers `setState` only (`:155-157`) without recomputing `activitySessions`. Heartbeat (`matrix_livekit_voip_session.dart:586-591`) only restarts an MSC4140 delayed event and never writes a timeline state event. |
 
@@ -49,10 +49,10 @@ to `connect()`.
 
 ## Code walkthrough
 
-### `MatrixActivitiesComponent` (`commet/lib/client/matrix/components/room_activities/matrix_activities_component.dart`)
+### `MatrixActivitiesComponent` (`cockhouse/lib/client/matrix/components/room_activities/matrix_activities_component.dart`)
 
 - Constructed per room by the registry at
-  `commet/lib/client/components/component_registry.dart:93` with
+  `cockhouse/lib/client/components/component_registry.dart:93` with
   `(MatrixClient, MatrixRoom)`. It implements `ActivitiesComponent` and
   `MatrixRoomSyncListener` (`:16-19`).
 - `getSessions()` (`:33-106`) iterates `room.matrixRoom.states["org.matrix.msc3401.call.member"]`,
@@ -61,7 +61,7 @@ to `connect()`.
   device's `m.call` membership when
   `clientManager?.callManager.getCallInRoom(client, room.identifier) == null`
   (`:66-73`). It reads the global `clientManager` from
-  `commet/lib/main.dart:65`.
+  `cockhouse/lib/main.dart:65`.
 - `onSessionsChanged` (`:109`) is `_onParticipantsChanged.stream`, fed only by
   `onSync` (`:112-122`), which fires once per `call.member` event found in
   `update.timeline.events`.
@@ -92,11 +92,11 @@ membership that is in the middle of being established.
 7. Back in `MatrixVoipRoomComponent.joinCall` (`matrix_voip_room_component.dart:149-153`)
    `currentSession` is assigned only after `await backend.join()`.
 
-### `CallManager` (`commet/lib/client/call_manager.dart`)
+### `CallManager` (`cockhouse/lib/client/call_manager.dart`)
 
 - `currentSessions` is a `NotifyingList<VoipSession>` (`:38-39`) with
   synchronous broadcast streams `onAdd`, `onRemove`, `onListUpdated`
-  (`commet/lib/utils/notifying_list.dart:28-36, 90-93`).
+  (`cockhouse/lib/utils/notifying_list.dart:28-36, 90-93`).
 - `onClientSessionStarted` (`:64-104`) does `currentSessions.add(event)`.
   It is called directly by the LiveKit session constructor; the
   `VoipComponent.onSessionStarted` stream subscribed at `:58` only carries
@@ -110,9 +110,9 @@ membership that is in the middle of being established.
   `.add`ed anywhere in this file. `currentSessions.onAdd/onRemove` are the
   usable signals.
 
-### `RoomTextButton` (`commet/lib/ui/atoms/room_text_button.dart`)
+### `RoomTextButton` (`cockhouse/lib/ui/atoms/room_text_button.dart`)
 
-- Rendered per room by the sidebar (`commet/lib/ui/atoms/space_list.dart:140, 206`).
+- Rendered per room by the sidebar (`cockhouse/lib/ui/atoms/space_list.dart:140, 206`).
 - `initState` (`:90-124`): subscribes to `room.onUpdate`,
   `calendarRoom.onEventsChanged`, `activities.onSessionsChanged`; computes
   `activitySessions = activities.getSessions()` once.
@@ -123,15 +123,15 @@ membership that is in the middle of being established.
 
 ### Interfaces
 
-- `ActivitiesComponent` (`commet/lib/client/components/activities/activities_component.dart:31-38`):
+- `ActivitiesComponent` (`cockhouse/lib/client/components/activities/activities_component.dart:31-38`):
   `List<RoomActivitySession> getSessions()`, `Stream<void> get onSessionsChanged`,
   `Future<void> clearMemberships(RoomActivitySession)`.
 - `RoomActivitySession` (`:6-29`): `Set<String> participants`, `application`,
   `thirdparty`, `icon`, `associatedWidget`, `knownName`.
-- `VoipRoomComponent` (`commet/lib/client/components/voip_room/voip_room_component.dart:5-25`):
+- `VoipRoomComponent` (`cockhouse/lib/client/components/voip_room/voip_room_component.dart:5-25`):
   `getCurrentParticipants()`, `onParticipantsChanged`, `currentSession`,
   `joinCall()`, `clearStaleOwnMembership()`.
-- `VoipSession` (`commet/lib/client/components/voip/voip_session.dart:32-80`):
+- `VoipSession` (`cockhouse/lib/client/components/voip/voip_session.dart:32-80`):
   `client`, `roomId`, `state`, `onStateChanged`, `onConnectionStateChanged`, ...
 
 ## Sequence of the race (text diagram)
@@ -182,9 +182,9 @@ via its existing `onSessionsChanged` subscription.
   not just a lookup; need care that `clientManager` may be null at construction
   time in background-service mode (`main.dart:65`, `ClientManager.init(isBackgroundService:)`),
   and the per-room subscription must be cancelled (no `dispose` exists on
-  `RoomComponent` today; check `commet/lib/client/components/room_component.dart`).
+  `RoomComponent` today; check `cockhouse/lib/client/components/room_component.dart`).
 - Test: unit test with a `ClientManager()` + real `CallManager` (as
-  `commet/unit_test/deafen_test.dart:213-216` does) and a `FakeVoipSession`
+  `cockhouse/unit_test/deafen_test.dart:213-216` does) and a `FakeVoipSession`
   whose `client`/`roomId` match; assert `onSessionsChanged` emits when
   `callManager.onClientSessionStarted(fake)` is called. This needs the
   component to accept the `CallManager` via constructor/injection (see D)
@@ -220,7 +220,7 @@ constructing the session, or construct the session object before writing state.
   `keyProvider.init(livekitRoom.localParticipant!...)` (`:64`, non-null
   assertion on `localParticipant`). Also does not fix the hang-up mirror case.
   Riskiest option.
-- Test: only integration (synapse + LiveKit), see `commet/integration_test/`.
+- Test: only integration (synapse + LiveKit), see `cockhouse/integration_test/`.
 
 ### D. Make the component testable: inject the `CallManager` lookup
 
@@ -241,7 +241,7 @@ to the global. `component_registry.dart:93` keeps constructing it as today.
 
 ## Existing test infrastructure
 
-- Unit tests live in `commet/unit_test/`; the ones touching this area are
+- Unit tests live in `cockhouse/unit_test/`; the ones touching this area are
   `deafen_test.dart` (builds `ClientManager()` and `CallManager(clientManager)`
   directly, uses a `FakeVoipSession implements VoipSession` with
   `noSuchMethod`, `:11-88, 211-216`) and `screen_share_audio_test.dart`
@@ -249,7 +249,7 @@ to the global. `component_registry.dart:93` keeps constructing it as today.
   `MatrixActivitiesComponent`, `RoomTextButton`, `getSessions` or
   `onSessionsChanged`.
 - `ClientManager()` has a no-arg constructor that creates its `CallManager`
-  (`commet/lib/client/client_manager.dart:26-28`), so a `CallManager` is cheap
+  (`cockhouse/lib/client/client_manager.dart:26-28`), so a `CallManager` is cheap
   to build in a test. `CallManager.onClientSessionStarted` calls
   `event.client.getRoom(...)`, `AudioProcessingManager.instance`, and
   `event.onConnectionStateChanged.listen`, so a fake session must implement
@@ -257,7 +257,7 @@ to the global. `component_registry.dart:93` keeps constructing it as today.
   (the deafen test avoids this by adding to `currentSessions` directly, which
   is also what a test for A can do since `NotifyingList.add` fires `onAdd`
   synchronously, `notifying_list.dart:118-121`).
-- Integration tests (`commet/integration_test/matrix/*`) drive a real synapse;
+- Integration tests (`cockhouse/integration_test/matrix/*`) drive a real synapse;
   none cover voice rooms.
 - `MatrixActivitiesComponent` cannot currently be unit-tested end to end
   because `getSessions()` needs an SDK-backed `MatrixRoom` and the global

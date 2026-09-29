@@ -15,7 +15,7 @@ and downloads its audio. Two parts of the app use them:
   stored sound.
 
 Extensions are desktop only (Linux, Windows). They are not made or shipped
-with Roscord, and one extension may serve both parts: it says which in its
+with Cockhouse, and one extension may serve both parts: it says which in its
 manifest (`uses`), and each request says which it is for (`for`).
 
 ## Writing one
@@ -28,8 +28,9 @@ example in Deno, but anything the manifest can start works.
 
 ## Package
 
-A `.zip` with `roscord-extension.json` at its root, next to whatever the
-extension runs (scripts, data). Installed from a file the user picks or an
+A `.zip` with `cockhouse-extension.json` at its root, next to whatever the
+extension runs (scripts, data). The name from before the rename,
+`roscord-extension.json`, is still read, so older extensions keep working. Installed from a file the user picks or an
 `https://` link they paste, into `<app support>/dj-extensions/<id>/`. The
 app records where it came from, so it can be installed again from there to
 update it.
