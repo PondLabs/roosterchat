@@ -1,5 +1,5 @@
-// When the screen share and camera sounds play: on a start only, once,
-// whatever event reported it, and never for what was already live.
+// When the screen share and camera sounds play: on a start or a stop, once, whatever event reported it, and never for what was
+// already live.
 import 'package:cockhouse/client/components/voip/share_cues.dart';
 import 'package:test/test.dart';
 
@@ -31,7 +31,7 @@ void main() {
         tracker.update({
           '@a:x:D1': {ShareCue.screenShare}
         }),
-        [ShareCue.screenShare]);
+        [ShareSound.screenShareStarted]);
     // The same share reported again (a publish, then an unmute).
     later();
     expect(
@@ -48,21 +48,21 @@ void main() {
         tracker.update({
           '@b:x:D2': {ShareCue.camera}
         }),
-        [ShareCue.camera]);
+        [ShareSound.cameraOn]);
   });
 
-  test('stopping plays nothing, starting again plays again', () {
+  test('a camera turning off plays its sound, on again plays again', () {
     tracker.update({
       '@a:x:D1': {ShareCue.camera}
     });
     later();
-    expect(tracker.update({'@a:x:D1': {}}), isEmpty);
+    expect(tracker.update({'@a:x:D1': {}}), [ShareSound.cameraOff]);
     later();
     expect(
         tracker.update({
           '@a:x:D1': {ShareCue.camera}
         }),
-        [ShareCue.camera]);
+        [ShareSound.cameraOn]);
   });
 
   test('both starting at once play both sounds', () {
@@ -72,7 +72,7 @@ void main() {
         tracker.update({
           '@a:x:D1': {ShareCue.screenShare, ShareCue.camera}
         }),
-        [ShareCue.screenShare, ShareCue.camera]);
+        [ShareSound.screenShareStarted, ShareSound.cameraOn]);
   });
 
   test('several people starting within a second make one sound', () {
@@ -82,7 +82,7 @@ void main() {
         tracker.update({
           '@a:x:D1': {ShareCue.camera}
         }),
-        [ShareCue.camera]);
+        [ShareSound.cameraOn]);
     later(const Duration(milliseconds: 300));
     expect(
         tracker.update({
@@ -98,7 +98,7 @@ void main() {
           '@b:x:D2': {ShareCue.camera},
           '@c:x:D3': {ShareCue.camera},
         }),
-        [ShareCue.camera]);
+        [ShareSound.cameraOn]);
   });
 
   test('what a reconnect brings back plays nothing', () {
@@ -122,7 +122,7 @@ void main() {
           '@a:x:D1': {ShareCue.screenShare},
           '@b:x:D2': {ShareCue.camera},
         }),
-        [ShareCue.camera]);
+        [ShareSound.cameraOn]);
   });
 
   test('a quiet update learns what is live without playing', () {
@@ -139,5 +139,53 @@ void main() {
           '@a:x:D1': {ShareCue.screenShare}
         }),
         isEmpty);
+  });
+
+  test('a screen share stopping plays its sound, once', () {
+    tracker.update({
+      '@a:x:D1': {ShareCue.screenShare, ShareCue.camera}
+    });
+    later();
+    expect(
+        tracker.update({
+          '@a:x:D1': {ShareCue.camera}
+        }),
+        [ShareSound.screenShareStopped]);
+    later();
+    expect(
+        tracker.update({
+          '@a:x:D1': {ShareCue.camera}
+        }),
+        isEmpty);
+  });
+
+  test('a sharer leaving the call plays no stop sound', () {
+    tracker.update({
+      '@a:x:D1': {ShareCue.screenShare, ShareCue.camera},
+      '@b:x:D2': {},
+    });
+    later();
+    expect(tracker.update({'@b:x:D2': {}}), isEmpty);
+  });
+
+  test('a stop right after a start is still heard', () {
+    tracker.update({'@a:x:D1': {}});
+    later();
+    expect(
+        tracker.update({
+          '@a:x:D1': {ShareCue.screenShare}
+        }),
+        [ShareSound.screenShareStarted]);
+    later(const Duration(milliseconds: 300));
+    expect(tracker.update({'@a:x:D1': {}}), [ShareSound.screenShareStopped]);
+  });
+
+  test('what a reconnect drops plays no stop sound', () {
+    tracker.update({
+      '@a:x:D1': {ShareCue.screenShare}
+    });
+    later();
+    tracker.reconnected();
+    expect(tracker.update({'@a:x:D1': {}}), isEmpty);
   });
 }

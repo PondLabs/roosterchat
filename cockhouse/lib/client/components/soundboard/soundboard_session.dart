@@ -27,9 +27,6 @@ class SoundboardSession {
   final SoundboardTransport transport;
   final String selfUserId;
 
-  /// Resolves a soundId to its known duration (for overlay timing).
-  final int? Function(String soundId)? durationOf;
-
   /// Preloads a sound's audio (cache/file/open). Failures are logged only.
   final Future<void> Function(String soundId)? preloader;
 
@@ -52,7 +49,6 @@ class SoundboardSession {
     required this.engine,
     required this.transport,
     required this.selfUserId,
-    this.durationOf,
     this.preloader,
     SoundboardErrorSink? onError,
   }) : onError = onError ?? ((_, __, ___) {});
@@ -124,7 +120,6 @@ class SoundboardSession {
       soundId: soundId,
       senderId: selfUserId,
       eventId: const Uuid().v4(),
-      soundDurationMs: durationOf?.call(soundId),
     );
     localPlayLatenciesMs.add(DateTime.now().millisecondsSinceEpoch - t0);
     _lastSendMs = DateTime.now().millisecondsSinceEpoch;
@@ -150,7 +145,6 @@ class SoundboardSession {
     await engine.onRemoteEvent(
       msg.event,
       authenticatedSenderId: msg.authenticatedSenderId,
-      soundDurationMs: durationOf?.call(msg.event.soundId),
     );
   }
 

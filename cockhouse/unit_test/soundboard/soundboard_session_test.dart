@@ -54,14 +54,12 @@ void main() {
         engine: ea,
         transport: ta,
         selfUserId: '@a:x',
-        durationOf: (_) => 1500,
       );
       final sb = SoundboardSession(
         catalog: catalogB,
         engine: eb,
         transport: tb,
         selfUserId: '@b:x',
-        durationOf: (_) => 1500,
       );
       await sa.init();
       await sb.init();

@@ -809,10 +809,12 @@ class MatrixLivekitVoipSession implements VoipSession, ScreenShareWatching {
   /// The screen share and camera sounds (share_cues.dart).
   late final ShareCueTracker _shareCues = ShareCueTracker(now: _now);
 
-  /// Who shows their screen or camera right now, us included.
+  /// Who shows their screen or camera right now, for everyone in the call,
+  /// us included.
   Map<String, Set<ShareCue>> _liveShareMedia() {
     final live = <String, Set<ShareCue>>{};
     void add(lk.Participant participant) {
+      live[participant.identity] ??= {};
       for (final publication in participant.trackPublications.values) {
         if (publication.kind != lk.TrackType.VIDEO || publication.muted) {
           continue;
@@ -822,7 +824,7 @@ class MatrixLivekitVoipSession implements VoipSession, ScreenShareWatching {
           lk.TrackSource.camera => ShareCue.camera,
           _ => null,
         };
-        if (cue != null) (live[participant.identity] ??= {}).add(cue);
+        if (cue != null) live[participant.identity]!.add(cue);
       }
     }
 
@@ -832,19 +834,24 @@ class MatrixLivekitVoipSession implements VoipSession, ScreenShareWatching {
     return live;
   }
 
-  /// Plays the sound for a screen share or camera that just started. Quiet
+  /// Plays the sound for a screen share or camera that just started or
+  /// stopped. Quiet
   /// while reconnecting: what LiveKit brings back was already live.
   void _updateShareCues({bool quiet = false}) {
     if (state == VoipState.ended) return;
     try {
-      final cues =
+      final sounds =
           _shareCues.update(_liveShareMedia(), quiet: quiet || !_connected());
-      for (final cue in cues) {
-        switch (cue) {
-          case ShareCue.screenShare:
+      for (final sound in sounds) {
+        switch (sound) {
+          case ShareSound.screenShareStarted:
             _callManager?.screenShareStartedSound();
-          case ShareCue.camera:
+          case ShareSound.cameraOn:
             _callManager?.cameraOnSound();
+          case ShareSound.screenShareStopped:
+            _callManager?.screenShareStoppedSound();
+          case ShareSound.cameraOff:
+            _callManager?.cameraOffSound();
         }
       }
     } catch (e, s) {
