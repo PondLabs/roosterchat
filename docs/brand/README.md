@@ -22,7 +22,7 @@ The central image is **a house for your flock**. The app is a place: spaces are 
 
 ![lockup with tagline](preview/lockup-tagline.png)
 
-The mark is a dark house with a rooster looking out of it, wearing headphones: it is in a call. The comb sweeps back under the roof, the white head fills the lower half, a chimney sits beside the ridge, and the door opens at the bottom of the rooster's neck. It reads as "a house" at a glance and as "a rooster's house" a second later. The joke stays in the name.
+The mark is a dark house with a rooster looking out of it, wearing headphones: it is in a call. The comb is four big rounded lobes fanning back from the crown, the front one tallest, and it grows out of the head rather than floating above it. The white head fills the lower half. The ear cup sits on the cheek behind the eye, and the band curves up out of it and forward over the crown. A chimney sits beside the ridge, and the door opens at the bottom of the rooster's neck. It reads as "a house" at a glance and as "a rooster's house" a second later. The joke stays in the name.
 
 ![icon family](preview/icon-family.png)
 

@@ -5,9 +5,9 @@
 </picture>
 
 <p align="center">
-    <a href="https://github.com/PondLabs/roscord/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/PondLabs/roscord?style=for-the-badge&color=d4643c"></a>
-    <a href="https://github.com/PondLabs/roscord/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/PondLabs/roscord?style=for-the-badge&color=d4643c"></a>
-    <a href="https://github.com/PondLabs/roscord/issues"><img alt="Issues" src="https://img.shields.io/github/issues/PondLabs/roscord?style=for-the-badge&color=d4643c"></a>
+    <a href="https://github.com/PondLabs/roscord/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/PondLabs/roscord?style=for-the-badge&color=e4573a"></a>
+    <a href="https://github.com/PondLabs/roscord/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/PondLabs/roscord?style=for-the-badge&color=e4573a"></a>
+    <a href="https://github.com/PondLabs/roscord/issues"><img alt="Issues" src="https://img.shields.io/github/issues/PondLabs/roscord?style=for-the-badge&color=e4573a"></a>
 </p>
 
 ### Your crew's place on the internet
