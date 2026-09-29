@@ -250,7 +250,8 @@ class NativeSelfUpdater implements SelfUpdater {
       if (!UpdateChecker.isNewer(release.tag, BuildConfig.VERSION_TAG)) {
         _set(UpdateStage.upToDate,
             release: release,
-            message: '${BuildConfig.app} ${BuildConfig.VERSION_TAG} is the latest.');
+            message:
+                '${BuildConfig.app} ${BuildConfig.VERSION_TAG} is the latest.');
         return;
       }
       if (!canInstall) {

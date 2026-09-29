@@ -82,8 +82,7 @@ void main() {
     test('nothing to do elsewhere', () {
       for (final platform in ['macos', 'android', 'web']) {
         expect(
-            legacyMovesFor(
-                platform: platform, env: const {}, supportDir: '/x'),
+            legacyMovesFor(platform: platform, env: const {}, supportDir: '/x'),
             isEmpty,
             reason: platform);
       }
@@ -94,7 +93,9 @@ void main() {
     test('the old directory takes the place of the new, empty one', () async {
       dataAt('old');
       Directory(at('new')).createSync(); // path_provider made it
-      await migrateLegacyData([LegacyMove(at('new'), [at('old')])]);
+      await migrateLegacyData([
+        LegacyMove(at('new'), [at('old')])
+      ]);
 
       expect(File(at('new/shared_preferences.json')).readAsStringSync(),
           '{"from":"old"}');
@@ -118,7 +119,9 @@ void main() {
     test('data already in the new place is never replaced', () async {
       dataAt('new');
       dataAt('old');
-      await migrateLegacyData([LegacyMove(at('new'), [at('old')])]);
+      await migrateLegacyData([
+        LegacyMove(at('new'), [at('old')])
+      ]);
 
       expect(File(at('new/shared_preferences.json')).readAsStringSync(),
           '{"from":"new"}');
@@ -126,7 +129,9 @@ void main() {
     });
 
     test('with nothing to move, nothing happens', () async {
-      await migrateLegacyData([LegacyMove(at('new'), [at('old')])]);
+      await migrateLegacyData([
+        LegacyMove(at('new'), [at('old')])
+      ]);
       expect(Directory(at('new')).existsSync(), isFalse);
     });
 

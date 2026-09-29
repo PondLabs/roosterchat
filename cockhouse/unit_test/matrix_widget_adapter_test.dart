@@ -54,7 +54,8 @@ void main() {
     final value = Map<String, dynamic>.from(install.envelope.value as Map);
     expect(value['operation'], matrixWidgetBridgeInstallOperation);
     expect(value['protocol_version'], matrixWidgetBridgeProtocolVersion);
-    expect(value['script'], contains('window.__cockhouseBrowserRuntimeReceive'));
+    expect(
+        value['script'], contains('window.__cockhouseBrowserRuntimeReceive'));
     expect(value['script'], contains(matrixWidgetFromWidgetStoragePrefix));
     expect(value['script'], contains(matrixWidgetToWidgetStoragePrefix));
     expect(value['script'], contains('sessionStorage.removeItem'));

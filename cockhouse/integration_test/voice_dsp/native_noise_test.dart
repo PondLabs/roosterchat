@@ -232,8 +232,8 @@ void main() {
       await sampler;
       noise.kill();
       await noise.exitCode;
-      await rtc.WebRTC.invokeMethod(
-          'cockhouseStopMusicTrack', <String, dynamic>{'trackId': musicTrack.id});
+      await rtc.WebRTC.invokeMethod('cockhouseStopMusicTrack',
+          <String, dynamic>{'trackId': musicTrack.id});
       player.free();
       await dsp.stopMicTest();
 

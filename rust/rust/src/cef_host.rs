@@ -2115,7 +2115,7 @@ mod tests {
             OsString::from("--parent-nonce"),
             OsString::from("0123456789abcdef0123456789abcdef"),
             OsString::from("--cef-root"),
-            OsString::from("/opt/roscord/cef"),
+            OsString::from("/opt/cockhouse/cef"),
             OsString::from("--profile-root"),
             OsString::from("/tmp/cockhouse-profile"),
         ];
@@ -2131,7 +2131,7 @@ mod tests {
                 "--socket=/tmp/cockhouse-cef.sock",
                 "--parent-pid=42",
                 "--parent-nonce=0123456789abcdef0123456789abcdef",
-                "--cef-root=/opt/roscord/cef",
+                "--cef-root=/opt/cockhouse/cef",
                 "--profile-root=/tmp/cockhouse-profile",
                 "--max-frame-bytes=4096",
                 "--cef-software-rendering",
@@ -2141,7 +2141,7 @@ mod tests {
         .unwrap();
         assert_eq!(config.socket_path, PathBuf::from("/tmp/cockhouse-cef.sock"));
         assert_eq!(config.parent_pid, 42);
-        assert_eq!(config.cef_root, PathBuf::from("/opt/roscord/cef"));
+        assert_eq!(config.cef_root, PathBuf::from("/opt/cockhouse/cef"));
         assert_eq!(config.max_frame_bytes, 4096);
         assert!(config.software_rendering);
         assert_eq!(
@@ -2157,8 +2157,8 @@ mod tests {
         validate_profile_root(&profile_root).unwrap();
         for directory in [
             root.join("share"),
-            root.join("share/roscord"),
-            root.join("share/roscord/cef"),
+            root.join("share/cockhouse"),
+            root.join("share/cockhouse/cef"),
             profile_root.clone(),
         ] {
             let mode = fs::metadata(&directory).unwrap().permissions().mode() & 0o777;
@@ -2177,10 +2177,10 @@ mod tests {
         let root = child_cef_root(&[
             OsString::from("cef_host"),
             OsString::from("--type=renderer"),
-            OsString::from("--cef-root=/opt/roscord/cef"),
+            OsString::from("--cef-root=/opt/cockhouse/cef"),
         ])
         .unwrap();
-        assert_eq!(root, PathBuf::from("/opt/roscord/cef"));
+        assert_eq!(root, PathBuf::from("/opt/cockhouse/cef"));
     }
 
     #[test]

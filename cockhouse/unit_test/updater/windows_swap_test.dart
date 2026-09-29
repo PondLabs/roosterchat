@@ -82,9 +82,10 @@ void main() {
     final ran = p.join(root.path, 'ran');
     final install =
         buildDir(p.join(root.path, 'cockhouse-v1', 'cockhouse-v1'), 'old', ran);
-    final work = Directory(p.join(root.path, 'cockhouse-v1', '.cockhouse-update'));
-    final staged =
-        buildDir(p.join(work.path, 'v2', 'unpacked', 'cockhouse-v2'), 'new', ran);
+    final work =
+        Directory(p.join(root.path, 'cockhouse-v1', '.cockhouse-update'));
+    final staged = buildDir(
+        p.join(work.path, 'v2', 'unpacked', 'cockhouse-v2'), 'new', ran);
     final script =
         await writeScript(work, install: install.path, staged: staged.path);
 
@@ -128,7 +129,8 @@ void main() {
     final ran = p.join(root.path, 'ran');
     final restarted = p.join(root.path, 'restarted');
     final install = buildDir(p.join(root.path, 'Cockhouse'), 'old', restarted);
-    final work = Directory(p.join(root.path, '.cockhouse-update'))..createSync();
+    final work = Directory(p.join(root.path, '.cockhouse-update'))
+      ..createSync();
     final script = await writeScript(work,
         install: install.path,
         // Never unpacked: the move cannot succeed.
@@ -151,8 +153,8 @@ void main() {
     final programs = p.join(root.path, 'Local', 'Programs');
     final install = p.join(programs, 'Cockhouse');
     final work = Directory(p.join(programs, '.cockhouse-update'));
-    final staged =
-        buildDir(p.join(work.path, 'v2', 'unpacked', 'cockhouse-v2'), 'new', ran);
+    final staged = buildDir(
+        p.join(work.path, 'v2', 'unpacked', 'cockhouse-v2'), 'new', ran);
     final shortcut = p.join(root.path, 'Start', 'Cockhouse.lnk');
     Directory(p.dirname(shortcut)).createSync(recursive: true);
     final script = await writeScript(work,
