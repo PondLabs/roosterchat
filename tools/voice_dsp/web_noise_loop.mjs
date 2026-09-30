@@ -338,7 +338,14 @@ for (const f of ["audio_dsp.js", "audio_dsp.worklet.js", "audio_dsp.worker.js", 
 }
 
 const fixture = loadFixture(repo, fixtureDir);
-const results = await Promise.all(scenarios.map((s) => (appRoot ? appScenario(s, fixture) : scenario(s, fixture))));
+// One Chrome at a time. The scenarios measure real-time audio, and browsers
+// side by side on a CI runner starve each other's DSP workers: DeepFilterNet
+// then misses its budget and gives way to RNNoise, blocks come back late,
+// and the recording no longer lines up with the fixture.
+const results = [];
+for (const s of scenarios) {
+  results.push(await (appRoot ? appScenario(s, fixture) : scenario(s, fixture)));
+}
 let failed = false;
 for (const r of results) {
   console.log(`${r.ok ? "PASS" : "FAIL"} ${r.name} ${JSON.stringify(r.summary)}`);
