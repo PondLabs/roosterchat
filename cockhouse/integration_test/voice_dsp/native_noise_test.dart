@@ -177,6 +177,14 @@ void main() {
       final dsp =
           AudioProcessingManager.instance as NativeAudioProcessingManager;
       await WebrtcDefaultDevices.selectOutputDevice();
+      // What changes the room noise here is WebRTC's own suppressor, which
+      // our preference turned off no longer turns on: asked for directly.
+      // ignore: invalid_use_of_visible_for_testing_member
+      NativeAudioProcessingManager.debugMicTestConstraints['noiseSuppression'] =
+          true;
+      // ignore: invalid_use_of_visible_for_testing_member
+      addTearDown(() => NativeAudioProcessingManager.debugMicTestConstraints
+          .remove('noiseSuppression'));
       expect(await dsp.startMicTest(), isTrue);
       await dsp.setMicTestMonitor(false);
       // ignore: invalid_use_of_visible_for_testing_member
@@ -298,6 +306,14 @@ void main() {
       final dsp =
           AudioProcessingManager.instance as NativeAudioProcessingManager;
       await WebrtcDefaultDevices.selectOutputDevice();
+      // What changes the room noise here is WebRTC's own suppressor, which
+      // our preference turned off no longer turns on: asked for directly.
+      // ignore: invalid_use_of_visible_for_testing_member
+      NativeAudioProcessingManager.debugMicTestConstraints['noiseSuppression'] =
+          true;
+      // ignore: invalid_use_of_visible_for_testing_member
+      addTearDown(() => NativeAudioProcessingManager.debugMicTestConstraints
+          .remove('noiseSuppression'));
       expect(await dsp.startMicTest(), isTrue);
       await dsp.setMicTestMonitor(false);
       // ignore: invalid_use_of_visible_for_testing_member
@@ -383,6 +399,92 @@ void main() {
       expect(b, closeTo(a, 3),
           reason: "the DJ's monitor switched the microphone's echo "
               'cancellation off: $summary');
+    });
+  });
+
+  // Turned off is off. Turning our noise suppression off used to hand the
+  // job to WebRTC's own suppressor, so with it "off" and the sensitivity all
+  // the way up the room's noise still never went out. The room noise is
+  // sent twice: A the way the app captures with noise suppression off, B
+  // with WebRTC's suppressor asked for, as the app used to. A must be the
+  // louder by far.
+  testWidgets('with noise suppression turned off the room noise goes out',
+      (tester) async {
+    expect(_roomNoise, isNotEmpty,
+        reason: 'run tools/voice_dsp/native_noise_loop.sh');
+
+    await tester.runAsync(() async {
+      await preferences.init();
+      await preferences.voipNoiseSuppression.set(false);
+      // The sensitivity all the way up: the gate lets everything through.
+      await preferences.voipInputSensitivityAuto.set(false);
+      await preferences.voipInputSensitivityDb.set(-90);
+      await preferences.voipFarEndDucking.set(false);
+      await preferences.voipSpeakerBleed.set(false);
+      await preferences.voipDefaultAudioInput.set(_mic);
+      await preferences.voipDefaultAudioOutput.set(_out);
+      await WebrtcDefaultDevices.selectOutputDevice();
+      final dsp =
+          AudioProcessingManager.instance as NativeAudioProcessingManager;
+
+      // The room noise as the microphone test sends it, averaged from 1.5 s
+      // (a real PulseAudio hands it over up to a second late) to 5 s.
+      Future<double> sentLevel() async {
+        expect(await dsp.startMicTest(), isTrue);
+        await dsp.setMicTestMonitor(false);
+        // ignore: invalid_use_of_visible_for_testing_member
+        final mic = dsp.debugMicTestMicrophone!;
+        Future<(double, double)> sent() async {
+          // ignore: invalid_use_of_visible_for_testing_member
+          for (final r in await dsp.debugMicTestStats()) {
+            if (r.type == 'media-source' &&
+                r.values['trackIdentifier'] == mic.id) {
+              return (
+                (r.values['totalAudioEnergy'] as num?)?.toDouble() ?? 0,
+                (r.values['totalSamplesDuration'] as num?)?.toDouble() ?? 0,
+              );
+            }
+          }
+          return (0.0, 0.0);
+        }
+
+        final noise =
+            await Process.start('paplay', ['--device=$_micSink', _roomNoise]);
+        await Future<void>.delayed(const Duration(milliseconds: 1500));
+        final (e0, d0) = await sent();
+        await Future<void>.delayed(const Duration(milliseconds: 3500));
+        final (e1, d1) = await sent();
+        noise.kill();
+        await noise.exitCode;
+        await dsp.stopMicTest();
+        final e = e1 - e0, d = d1 - d0;
+        return d > 0 && e > 0
+            ? 10 * math.log(e / d) / math.ln10
+            : double.negativeInfinity;
+      }
+
+      final off = await sentLevel();
+      // ignore: invalid_use_of_visible_for_testing_member
+      NativeAudioProcessingManager.debugMicTestConstraints['noiseSuppression'] =
+          true;
+      final double suppressed;
+      try {
+        suppressed = await sentLevel();
+      } finally {
+        // ignore: invalid_use_of_visible_for_testing_member
+        NativeAudioProcessingManager.debugMicTestConstraints
+            .remove('noiseSuppression');
+      }
+
+      final summary = 'room noise sent with noise suppression off '
+          '${off.toStringAsFixed(1)} dB, with WebRTC\'s suppressor '
+          '${suppressed.toStringAsFixed(1)} dB';
+      await File('$_results/suppression_off.txt').writeAsString('$summary\n');
+      // ignore: avoid_print
+      print('noise suppression off: $summary');
+      expect(off, greaterThan(suppressed + 6),
+          reason: 'noise suppression turned off still takes the room noise '
+              'out: $summary');
     });
   });
 

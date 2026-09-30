@@ -127,17 +127,32 @@ void main() {
     expect(stream, same(devices.streams.single));
   });
 
-  test('without our DSP, or with the preference off, WebRTC\'s stays on',
-      () async {
+  test('without our DSP, WebRTC\'s stays on', () async {
     dsp.supported = false;
     await wrapped.getUserMedia(_sdkMic);
-    dsp.supported = true;
+
+    expect(_optional(devices.calls.single),
+        contains(equals({'noiseSuppression': true})));
+  });
+
+  // Turned off is off: WebRTC's used to take over, so the room's noise never
+  // went out whatever the user set.
+  test('with the preference off, nothing suppresses', () async {
     preference = false;
     await wrapped.getUserMedia(_sdkMic);
 
-    for (final call in devices.calls) {
-      expect(_optional(call), contains(equals({'noiseSuppression': true})));
-    }
+    expect(_optional(devices.calls.single),
+        contains(equals({'noiseSuppression': false})));
+  });
+
+  test('with the preference off and ours not starting, no suppressor is added',
+      () async {
+    preference = false;
+    dsp.process = (_) => null;
+
+    await wrapped.getUserMedia(_sdkMic);
+
+    expect(devices.calls, hasLength(1));
   });
 
   test('the web sends what the DSP makes of the microphone', () async {

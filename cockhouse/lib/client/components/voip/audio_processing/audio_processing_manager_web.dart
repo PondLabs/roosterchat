@@ -269,12 +269,13 @@ class WebAudioProcessingManager extends AudioProcessingManager {
     final api = _cockhouseAudioDsp;
     if (api == null) return false;
     try {
-      // Same constraints as a call: the browser suppressor only when ours
-      // is off.
+      // Same constraints as a call: ours runs here, so never the browser's
+      // suppressor, whether ours is on or turned off (then nothing
+      // suppresses, as asked).
       final constraints = web.MediaStreamConstraints(
         audio: {
           'echoCancellation': true,
-          'noiseSuppression': !settings.noiseSuppression,
+          'noiseSuppression': false,
           'autoGainControl': true,
         }.jsify()!,
       );
