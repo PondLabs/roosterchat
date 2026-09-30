@@ -39,6 +39,7 @@ import 'package:cockhouse/ui/organisms/dj/dj_prompts.dart';
 import 'package:cockhouse/ui/organisms/soundboard/soundboard_call_controller.dart';
 import 'package:cockhouse/utils/emoji/unicode_emoji.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:tiamat/tiamat.dart' as tiamat;
@@ -111,6 +112,13 @@ class _SpaceSoundboardSettingsPageState
 
   static const _waveformBins = 240;
 
+  /// Loads a pasted link once the field stops changing.
+  Timer? _autoLoad;
+  static const _autoLoadDelay = Duration(milliseconds: 700);
+
+  /// The selection start when the playing preview began, for the playhead.
+  int _previewFromMs = 0;
+
   bool get _idle => !_busy && !_loading && !_previewBusy;
 
   @override
@@ -123,13 +131,35 @@ class _SpaceSoundboardSettingsPageState
   /// sound" never uploads something other than what the field says.
   void _onLinkChanged() {
     if (_loadError != null) setState(() => _loadError = null);
+    _scheduleAutoLoad();
     final source = _source;
     if (source == null || !source.temporary) return;
     if (source.origin != _linkCtrl.text.trim()) setState(_dropSource);
   }
 
+  /// A pasted link loads by itself: nobody has to find the Load button to
+  /// see the trim editor.
+  void _scheduleAutoLoad() {
+    _autoLoad?.cancel();
+    final link = _linkCtrl.text.trim();
+    if (!_looksLikeLink(link) || _source?.origin == link) return;
+    _autoLoad = Timer(_autoLoadDelay, () {
+      if (!mounted || !_idle || _linkCtrl.text.trim() != link) return;
+      if (_source?.origin == link) return;
+      _loadLink();
+    });
+  }
+
+  static bool _looksLikeLink(String text) {
+    final uri = Uri.tryParse(text);
+    return uri != null &&
+        (uri.scheme == 'https' || uri.scheme == 'http') &&
+        uri.host.contains('.');
+  }
+
   @override
   void dispose() {
+    _autoLoad?.cancel();
     _dropSource();
     _preview.dispose();
     _changes.dispose();
@@ -230,6 +260,10 @@ class _SpaceSoundboardSettingsPageState
               placeholder: 'A link to an audio file, or to a page a source '
                   'takes',
               controller: _linkCtrl,
+              onSubmitted: (_) {
+                _autoLoad?.cancel();
+                if (_idle) _loadLink();
+              },
             ),
           ),
           const SizedBox(width: 8),
@@ -252,7 +286,7 @@ class _SpaceSoundboardSettingsPageState
         ),
       const SizedBox(height: 4),
       _SourcesNote(onAdd: () => installDjSource(context)),
-      if (_loading && _status != null)
+      if (_loading && _status != null && _source != null)
         Padding(
           padding: const EdgeInsets.only(top: 8),
           child: tiamat.Text.labelLow(_status!),
@@ -281,6 +315,8 @@ class _SpaceSoundboardSettingsPageState
       _SoundVolumeField(
         volume: _volume,
         previewing: _previewBusy,
+        playing: _preview.position,
+        onStop: _preview.stop,
         onChanged: (v) {
           setState(() => _volume = v);
           final clip = _clip;
@@ -319,7 +355,12 @@ class _SpaceSoundboardSettingsPageState
   List<Widget> _trimSection() {
     final source = _source;
     final window = _window;
-    if (source == null || window == null) return const [];
+    if (source == null || window == null) {
+      return [
+        const SizedBox(height: 12),
+        _TrimPlaceholder(status: _loading ? _status ?? 'Loading…' : null),
+      ];
+    }
     final clock = SoundboardImportService.clock;
     final whole = source.durationMs;
     return [
@@ -357,16 +398,26 @@ class _SpaceSoundboardSettingsPageState
         ),
       ],
       const SizedBox(height: 8),
-      SoundboardTrimEditor(
-        durationMs: window.durationMs,
-        peaks: _peaks,
-        startMs: _startMs,
-        endMs: _endMs,
-        onChanged: (start, end) => setState(() {
-          _startMs = start;
-          _endMs = end;
-          _clip = null;
-        }),
+      ValueListenableBuilder(
+        valueListenable: _preview.position,
+        builder: (context, position, _) => SoundboardTrimEditor(
+          durationMs: window.durationMs,
+          peaks: _peaks,
+          startMs: _startMs,
+          endMs: _endMs,
+          playheadMs: position == null
+              ? null
+              : _previewFromMs + position.inMilliseconds,
+          onChanged: (start, end) {
+            // The preview plays the old selection: stop it.
+            if (_preview.position.value != null) _preview.stop();
+            setState(() {
+              _startMs = start;
+              _endMs = end;
+              _clip = null;
+            });
+          },
+        ),
       ),
     ];
   }
@@ -497,6 +548,7 @@ class _SpaceSoundboardSettingsPageState
     });
     try {
       final clip = await _trimmed();
+      _previewFromMs = _startMs;
       await _preview.playBytes(
           clip.bytes, clip.mimeType, clip.normalizedGain * _volume);
     } on SoundboardImportError catch (e) {
@@ -733,11 +785,17 @@ class _SoundVolumeField extends StatelessWidget {
   final ValueChanged<double> onChanged;
   final VoidCallback? onPreview;
 
+  /// While it holds a position, the preview plays and the button stops it.
+  final ValueListenable<Duration?>? playing;
+  final VoidCallback? onStop;
+
   const _SoundVolumeField({
     required this.volume,
     required this.previewing,
     required this.onChanged,
     required this.onPreview,
+    this.playing,
+    this.onStop,
   });
 
   static String percent(double volume) => '${(volume * 100).round()}%';
@@ -765,14 +823,63 @@ class _SoundVolumeField extends StatelessWidget {
               width: 48,
               child: tiamat.Text.labelLow(percent(volume)),
             ),
-            tiamat.Button.secondary(
-              text: 'Preview',
-              isLoading: previewing,
-              onTap: onPreview,
+            ValueListenableBuilder(
+              valueListenable: playing ?? ValueNotifier<Duration?>(null),
+              builder: (context, position, _) =>
+                  position != null && onStop != null
+                      ? tiamat.Button.secondary(text: 'Stop', onTap: onStop)
+                      : tiamat.Button.secondary(
+                          text: 'Preview',
+                          isLoading: previewing,
+                          onTap: onPreview,
+                        ),
             ),
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Where the trim editor goes before anything is loaded: says what to do,
+/// or what is loading.
+class _TrimPlaceholder extends StatelessWidget {
+  /// What is loading, or null while waiting for a link or a file.
+  final String? status;
+
+  const _TrimPlaceholder({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final status = this.status;
+    return Container(
+      height: SoundboardTrimEditor.height,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (status != null) ...[
+            const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2)),
+            const SizedBox(width: 10),
+          ] else ...[
+            Icon(Icons.graphic_eq, color: colors.onSurfaceVariant),
+            const SizedBox(width: 10),
+          ],
+          Flexible(
+            child: tiamat.Text.labelLow(status ??
+                'Paste a link or choose a file: its audio shows up here, to '
+                    'cut the part you want and hear it before adding it.'),
+          ),
+        ],
+      ),
     );
   }
 }
