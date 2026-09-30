@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:cockhouse/client/matrix/components/voip_room/call_key_distributor.dart';
 import 'package:cockhouse/client/matrix/components/voip_room/call_key_messages.dart';
 import 'package:cockhouse/client/matrix/components/voip_room/matrix_voip_room_component.dart';
+import 'package:cockhouse/client/matrix/homeserver_clock.dart';
 import 'package:cockhouse/debug/log.dart';
 import 'package:livekit_client/livekit_client.dart' hide KeyProvider;
 import 'package:webrtc_interface/src/frame_cryptor.dart';
@@ -40,6 +41,8 @@ class MatrixLivekitEncryptionKeyProvider
     subs = [
       room.client.onToDeviceEvent.stream.listen(onToDeviceEvent),
       room.client.onSync.stream.listen(onSync),
+      // Who is in the call was worked out by the time as it was.
+      HomeserverClock.instance.onCorrected.listen((_) => _membersChanged()),
     ];
   }
 
@@ -159,7 +162,10 @@ class MatrixLivekitEncryptionKeyProvider
       ],
       ownUserId: room.client.userID!,
       ownDeviceId: room.client.deviceID!,
-      now: DateTime.now(),
+      // Memberships lapse by the homeserver's clock. By a clock hours ahead,
+      // someone in the call for a while counted as gone: their keys were
+      // held back, and our new ones did not go to them.
+      now: HomeserverClock.instance.now(),
     );
   }
 
@@ -311,6 +317,11 @@ class MatrixLivekitEncryptionKeyProvider
       return;
     }
 
+    _membersChanged();
+  }
+
+  void _membersChanged() {
+    if (_disposed) return;
     final members = currentMembers();
     distributor.updateMembers(members);
     _incoming

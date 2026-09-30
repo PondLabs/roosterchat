@@ -75,6 +75,9 @@ class CallMembershipPublisher {
   int _failures = 0;
   bool _stopped = false;
 
+  /// A write was asked for even with nothing changed (see [rewrite]).
+  bool _rewrite = false;
+
   /// What we advertise now. Written once it has stayed the same for
   /// [debounce], one write at a time and at most one per [minInterval];
   /// a value equal to the last one written isn't written again.
@@ -88,6 +91,16 @@ class CallMembershipPublisher {
     });
   }
 
+  /// Writes what we advertise again although it has not changed: every
+  /// write pushes the membership's expiry out, and it lapses for everyone if
+  /// nothing does. Waits its turn like any other write, and one going out
+  /// anyway does for it.
+  void rewrite() {
+    if (_stopped) return;
+    _rewrite = true;
+    _flush();
+  }
+
   void _flush() {
     if (_stopped ||
         _debounceTimer != null ||
@@ -95,7 +108,7 @@ class CallMembershipPublisher {
         _cooldownTimer != null) {
       return;
     }
-    if (_desired == _written) return;
+    if (_desired == _written && !_rewrite) return;
 
     final sending = _send(_desired);
     _inFlight = sending;
@@ -109,6 +122,7 @@ class CallMembershipPublisher {
     try {
       await _write(state);
       _written = state;
+      _rewrite = false;
       _failures = 0;
     } catch (e) {
       _failures++;

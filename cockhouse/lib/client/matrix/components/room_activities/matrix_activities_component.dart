@@ -8,6 +8,7 @@ import 'package:cockhouse/client/components/voip/voip_stream.dart';
 import 'package:cockhouse/client/components/widgets/widget_component.dart';
 import 'package:cockhouse/client/matrix/components/matrix_sync_listener.dart';
 import 'package:cockhouse/client/matrix/components/voip_room/matrix_call_membership.dart';
+import 'package:cockhouse/client/matrix/homeserver_clock.dart';
 import 'package:cockhouse/client/matrix/matrix_client.dart';
 import 'package:cockhouse/client/matrix/matrix_room.dart';
 import 'package:cockhouse/debug/log.dart';
@@ -31,15 +32,34 @@ class MatrixActivitiesComponent
   /// [clientManager], which is still null while rooms are first loaded.
   final CallManager? _injectedCallManager;
 
-  MatrixActivitiesComponent(this.client, this.room, {CallManager? callManager})
-      : _injectedCallManager = callManager;
+  /// The homeserver's time, which memberships lapse by. Not this machine's:
+  /// a clock hours ahead dropped everyone who had been in the channel for a
+  /// while from the list.
+  final HomeserverClock _clock;
+
+  MatrixActivitiesComponent(this.client, this.room,
+      {CallManager? callManager, HomeserverClock? clock})
+      : _injectedCallManager = callManager,
+        _clock = clock ?? HomeserverClock.instance;
 
   final StreamController _onParticipantsChanged = StreamController.broadcast();
 
   /// Recomputes the list when the next membership in it lapses (see
   /// [getSessions]).
-  late final MembershipLapseTimer _lapseTimer =
-      MembershipLapseTimer(() => _onParticipantsChanged.add(()));
+  late final MembershipLapseTimer _lapseTimer = MembershipLapseTimer(
+      () => _onParticipantsChanged.add(()),
+      now: _clock.now);
+
+  StreamSubscription? _clockSub;
+
+  /// The list was worked out by the time as it was: when a sync puts that
+  /// right, it is looked at again, and its timer set again.
+  void _watchClock() {
+    _clockSub ??= _clock.onCorrected.listen((_) {
+      _lapseTimer.cancel();
+      _onParticipantsChanged.add(());
+    });
+  }
 
   CallManager? get _callManager =>
       _injectedCallManager ?? clientManager?.callManager;
@@ -92,7 +112,7 @@ class MatrixActivitiesComponent
     final state = room.matrixRoom.states[callMemberStateEvent] ?? const {};
 
     List<RoomActivitySession> activities = List.empty(growable: true);
-    final now = DateTime.now();
+    final now = _clock.now();
     final expiries = <DateTime?>[];
 
     for (var entry in state.entries) {
@@ -196,7 +216,8 @@ class MatrixActivitiesComponent
   /// memberships only say after a debounced write and a sync. It also lists
   /// who is in the call: a membership can lapse while its owner is still
   /// connected (a missed heartbeat fires the delayed leave), and they must
-  /// not vanish from the list of someone who can hear them.
+  /// not vanish from the list of someone who can hear them. Neither must
+  /// someone who publishes nothing, a microphone that would not open.
   static void _applyCallStreams(RoomActivitySession call, VoipSession session) {
     final inCall = <String, Set<LiveMedia>>{};
     final voice = <String, Set<VoiceState>>{};
@@ -220,6 +241,9 @@ class MatrixActivitiesComponent
       }
     }
     call.participants.addAll(inCall.keys);
+    if (session case CallRoster roster) {
+      call.participants.addAll(roster.connectedUserIds);
+    }
     call.liveMedia.addAll(inCall);
     call.voiceState.addAll(voice);
   }
@@ -227,6 +251,7 @@ class MatrixActivitiesComponent
   @override
   Stream<void> get onSessionsChanged {
     _watchCallManager();
+    _watchClock();
     return _onParticipantsChanged.stream;
   }
 

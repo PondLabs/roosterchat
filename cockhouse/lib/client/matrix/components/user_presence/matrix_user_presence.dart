@@ -6,6 +6,7 @@ import 'package:cockhouse/client/matrix/components/read_receipts/matrix_read_rec
 import 'package:cockhouse/client/matrix/components/typing_indicators/matrix_typing_indicators_component.dart';
 import 'package:cockhouse/client/matrix/components/voip_room/matrix_call_membership.dart';
 import 'package:cockhouse/client/matrix/components/voip_room/matrix_voip_room_component.dart';
+import 'package:cockhouse/client/matrix/homeserver_clock.dart';
 import 'package:cockhouse/client/matrix/matrix_client.dart';
 import 'package:cockhouse/main.dart';
 import 'package:cockhouse/utils/in_memory_cache.dart';
@@ -117,7 +118,8 @@ class MatrixUserPresenceComponent
   /// as offline, and someone in a call is plainly online — or away, where
   /// their membership says they have left their machine.
   UserPresenceStatus? callPresence(String userId) {
-    final now = DateTime.now();
+    // Memberships lapse by the homeserver's clock.
+    final now = HomeserverClock.instance.now();
     UserPresenceStatus? status;
     for (final room in client.matrixClient.rooms) {
       final memberships =

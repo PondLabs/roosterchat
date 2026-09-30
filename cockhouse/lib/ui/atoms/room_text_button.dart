@@ -132,6 +132,9 @@ class _RoomTextButtonState extends State<RoomTextButton> {
   StreamSubscription? voiceLevelSub;
   Set<String> speakingMembers = const {};
 
+  /// Who in the list has had their member asked for, once each.
+  final Set<String> fetchedMembers = {};
+
   @override
   void initState() {
     calendarRoom = widget.room.getComponent<CalendarRoom>();
@@ -164,17 +167,7 @@ class _RoomTextButtonState extends State<RoomTextButton> {
       onCalendarEventsChanged(());
     }
 
-    if (activitySessions?.isNotEmpty == true) {
-      for (var activity in activitySessions!) {
-        for (var participant in activity.participants) {
-          widget.room.fetchMember(participant).then((_) {
-            if (mounted) {
-              setState(() {});
-            }
-          });
-        }
-      }
-    }
+    fetchNewMembers();
 
     super.initState();
   }
@@ -184,6 +177,25 @@ class _RoomTextButtonState extends State<RoomTextButton> {
       activitySessions = activities?.getSessions();
       sortActivities();
     });
+    fetchNewMembers();
+  }
+
+  /// Asks for the member of everyone listed for the first time, for their
+  /// name and avatar. Not only of who was there when the row was built:
+  /// people also turn up later, some of them in the call for hours (a sync
+  /// putting the time right after the app starts), and were shown as their
+  /// user id.
+  void fetchNewMembers() {
+    for (final activity in activitySessions ?? const <RoomActivitySession>[]) {
+      for (final participant in activity.participants) {
+        if (!fetchedMembers.add(participant)) continue;
+        widget.room.fetchMember(participant).then((_) {
+          if (mounted) setState(() {});
+        }, onError: (Object e, StackTrace s) {
+          Log.onError(e, s, content: "Could not fetch $participant");
+        });
+      }
+    }
   }
 
   void sortActivities() {

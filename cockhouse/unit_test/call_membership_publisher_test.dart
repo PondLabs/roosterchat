@@ -161,4 +161,68 @@ void main() {
 
     await finish();
   });
+
+  group('rewriting, which pushes the expiry out', () {
+    testWidgets('writes the current value again, unchanged', (tester) async {
+      publisher.update(muted);
+      await tester.pump(const Duration(seconds: 5));
+      expect(writes, [muted]);
+
+      publisher.rewrite();
+      await tester.pump();
+      expect(writes, [muted, muted]);
+
+      await finish();
+    });
+
+    testWidgets('before anything was published, the join state',
+        (tester) async {
+      publisher.rewrite();
+      await tester.pump();
+      expect(writes, [nothing]);
+
+      await finish();
+    });
+
+    testWidgets('waits its turn, and a pending change covers it',
+        (tester) async {
+      pendingWrite = Completer();
+      publisher.update(screen);
+      await tester.pump(const Duration(milliseconds: 800));
+      publisher.rewrite();
+      publisher.update(camera);
+      await tester.pump(const Duration(seconds: 1));
+      expect(writes, [screen]);
+
+      pendingWrite!.complete();
+      pendingWrite = null;
+      await tester.pump(const Duration(seconds: 5));
+      expect(writes, [screen, camera],
+          reason: 'any write pushes the expiry out, so one is enough');
+
+      await finish();
+    });
+
+    testWidgets('a failed rewrite is tried again', (tester) async {
+      failuresLeft = 1;
+      publisher.rewrite();
+      await tester.pump();
+      expect(writes, [nothing]);
+
+      await tester.pump(const Duration(seconds: 3));
+      expect(writes, [nothing, nothing]);
+
+      await tester.pump(const Duration(seconds: 30));
+      expect(writes, [nothing, nothing]);
+
+      await finish();
+    });
+
+    testWidgets('not once stopped', (tester) async {
+      await publisher.stop();
+      publisher.rewrite();
+      await tester.pump(const Duration(seconds: 5));
+      expect(writes, isEmpty);
+    });
+  });
 }
