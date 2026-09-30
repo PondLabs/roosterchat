@@ -38,6 +38,24 @@ class RoomTextButton extends StatefulWidget {
     this.onTap,
     super.key,
   });
+
+  /// Our live call in [room], from the call manager's own list. Not from
+  /// VoipRoomComponent.currentSession: a session registers itself with the
+  /// call manager while it is being made, before the component gets it back
+  /// from the join, so on that list update the component still said none,
+  /// and nothing came after it to look again. The row then never lit up.
+  @visibleForTesting
+  static VoipSession? callSessionIn(Room room, Iterable<VoipSession> sessions) {
+    for (final session in sessions) {
+      if (session.roomId == room.identifier &&
+          session.client == room.client &&
+          session.state != VoipState.ended) {
+        return session;
+      }
+    }
+    return null;
+  }
+
   final bool highlight;
   final Room room;
   final Function(Room room, {bool bypassSpecialRoomType})? onTap;
@@ -183,8 +201,8 @@ class _RoomTextButtonState extends State<RoomTextButton> {
   }
 
   void attachVoiceSession() {
-    final session =
-        widget.room.getComponent<VoipRoomComponent>()?.currentSession;
+    final session = RoomTextButton.callSessionIn(
+        widget.room, clientManager?.callManager.currentSessions ?? const []);
     if (identical(session, voiceSession)) return;
 
     voiceLevelSub?.cancel();
