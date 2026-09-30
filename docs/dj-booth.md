@@ -10,7 +10,7 @@ everyone can see and a volume each listener sets for themselves.
 The DJ's desktop client plays each song from its file (a local one, or one
 a source extension downloads, played while it downloads), decodes it in
 Rust and publishes it as its own stereo LiveKit track
-(`cockhouse-dj-music`, 128 kbps Opus, DTX and RED off). Listeners just receive
+(`commet-dj-music`, a wire name that keeps Commet's like `chat.commet.*`; builds of 29-30 September 2026 sent `cockhouse-dj-music`, which is still read; 128 kbps Opus, DTX and RED off). Listeners just receive
 that track, so:
 
 - everyone is in sync by construction, and late joiners hear the song live;

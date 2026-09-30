@@ -783,6 +783,9 @@ class DjMusicVolume extends StatefulWidget {
 class _DjMusicVolumeState extends State<DjMusicVolume> {
   StreamSubscription? _sub;
 
+  /// Being dragged: the level is only saved when let go.
+  bool _dragging = false;
+
   @override
   void initState() {
     super.initState();
@@ -800,6 +803,11 @@ class _DjMusicVolumeState extends State<DjMusicVolume> {
   void dispose() {
     _sub?.cancel();
     _liveMusicVolume.removeListener(_onLive);
+    // Gone mid-drag (the booth swaps its idle and playing layouts when a DJ
+    // starts or a song changes): the slider is never let go, so save the
+    // level here, or the next music stream plays at the old one.
+    final live = _liveMusicVolume.value;
+    if (_dragging && live != null) setDjMusicVolume(widget.session, live);
     super.dispose();
   }
 
@@ -846,9 +854,13 @@ class _DjMusicVolumeState extends State<DjMusicVolume> {
               child: Slider(
                 value: volume,
                 max: maxDjMusicVolume,
+                onChangeStart: (_) => _dragging = true,
                 onChanged: (v) =>
                     setDjMusicVolume(widget.session, v, save: false),
-                onChangeEnd: (v) => setDjMusicVolume(widget.session, v),
+                onChangeEnd: (v) {
+                  _dragging = false;
+                  setDjMusicVolume(widget.session, v);
+                },
               ),
             ),
           ),
