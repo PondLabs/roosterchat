@@ -152,6 +152,75 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 60));
       expect(fired, 0);
     });
+
+    test("counts down by the homeserver's clock, not this machine's", () async {
+      // This machine is three hours ahead of the homeserver. By its own
+      // clock the membership lapsed long ago, and a timer set by it fired at
+      // once, over and over, while the list kept the member.
+      final server = DateTime.now().subtract(const Duration(hours: 3));
+      var fired = 0;
+      final timer = MembershipLapseTimer(() => fired++, now: () => server);
+      timer.schedule(server.add(const Duration(milliseconds: 40)));
+
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(fired, 0);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(fired, 1);
+    });
+  });
+
+  group('needsRefresh', () {
+    // Written with a 4 h window, as the join does.
+    const content = {'expires': 4 * 60 * 60 * 1000};
+
+    test('not while more than three hours of it are left', () {
+      expect(
+          MatrixCallMembership.needsRefresh(
+              content, joined, joined.add(const Duration(minutes: 59))),
+          isFalse);
+    });
+
+    test('an hour after it was written, well before it lapses', () {
+      expect(MatrixCallMembership.refreshWhenLeft, const Duration(hours: 3));
+      expect(
+          MatrixCallMembership.needsRefresh(
+              content, joined, joined.add(const Duration(hours: 1))),
+          isTrue);
+      expect(
+          MatrixCallMembership.needsRefresh(
+              content, joined, joined.add(const Duration(hours: 5))),
+          isTrue,
+          reason: 'one that lapsed while we are still in the call too');
+    });
+
+    test('counts from the join time of a rewritten membership', () {
+      // Rewritten two hours in, pushing the expiry to four hours past then.
+      final rewritten = {
+        'expires': const Duration(hours: 6).inMilliseconds,
+        'created_ts': joined.millisecondsSinceEpoch,
+      };
+      final rewrittenAt = joined.add(const Duration(hours: 2));
+
+      expect(
+          MatrixCallMembership.needsRefresh(rewritten, rewrittenAt,
+              joined.add(const Duration(hours: 2, minutes: 59))),
+          isFalse);
+      expect(
+          MatrixCallMembership.needsRefresh(
+              rewritten, rewrittenAt, joined.add(const Duration(hours: 3))),
+          isTrue);
+    });
+
+    test('never for a membership that does not expire', () {
+      expect(
+          MatrixCallMembership.needsRefresh(
+              const {'application': 'm.call'}, joined, joined),
+          isFalse);
+      expect(
+          MatrixCallMembership.needsRefresh(
+              content, null, joined.add(const Duration(days: 1))),
+          isFalse);
+    });
   });
 
   group('withPublishedState', () {

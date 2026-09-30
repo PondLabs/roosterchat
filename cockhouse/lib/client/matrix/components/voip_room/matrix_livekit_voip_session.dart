@@ -27,6 +27,7 @@ import 'package:cockhouse/client/matrix/components/voip_room/matrix_livekit_encr
 import 'package:cockhouse/client/matrix/components/voip_room/matrix_livekit_voip_stream.dart';
 import 'package:cockhouse/client/matrix/components/voip_room/matrix_voip_room_component.dart';
 import 'package:cockhouse/client/matrix/components/voip_room/screen_share_watch_list.dart';
+import 'package:cockhouse/client/matrix/homeserver_clock.dart';
 import 'package:cockhouse/client/matrix/matrix_room.dart';
 import 'package:cockhouse/config/platform_utils.dart';
 import 'package:cockhouse/debug/log.dart';
@@ -73,7 +74,8 @@ lk.VideoPublishOptions buildScreenSharePublishOptions({
   );
 }
 
-class MatrixLivekitVoipSession implements VoipSession, ScreenShareWatching {
+class MatrixLivekitVoipSession
+    implements VoipSession, ScreenShareWatching, CallRoster {
   MatrixRoom room;
   lk.Room livekitRoom;
   Timer? heartbeatTimer;
@@ -117,9 +119,27 @@ class MatrixLivekitVoipSession implements VoipSession, ScreenShareWatching {
   /// The clock of the once-a-second checks; tests stand one in.
   final DateTime Function() _now;
 
+  /// The homeserver's time, which our membership lapses by (see
+  /// [HomeserverClock]).
+  final DateTime Function() _serverNow;
+
+  /// The time our membership's window is written and watched by: the later
+  /// of the homeserver's and ours. A window cut short hides us from
+  /// everyone, as this machine's clock running behind used to; one a little
+  /// long only keeps a client that died listed a little longer, where there
+  /// are no delayed leaves.
+  DateTime _membershipTime() {
+    final server = _serverNow();
+    final local = _now();
+    return local.isAfter(server) ? local : server;
+  }
+
   MatrixLivekitVoipSession(this.room, this.livekitRoom,
-      {this.keyProvider, @visibleForTesting DateTime Function()? now})
-      : _now = now ?? DateTime.now {
+      {this.keyProvider,
+      @visibleForTesting DateTime Function()? now,
+      @visibleForTesting DateTime Function()? serverNow})
+      : _now = now ?? DateTime.now,
+        _serverNow = serverNow ?? HomeserverClock.instance.now {
     // First: if this throws, nothing was registered or started yet, so no
     // half built session is left behind in the call manager.
     keyProvider?.init(livekitRoom.localParticipant!.identity, livekitRoom);
@@ -866,12 +886,35 @@ class MatrixLivekitVoipSession implements VoipSession, ScreenShareWatching {
     if (_isDeafened) {
       _broadcastVoiceState();
     }
+    // Who is in the call changed, streams or not (see [connectedUserIds]).
+    _stateChanged.add(());
   }
 
   void onParticipantDisconnected(lk.ParticipantDisconnectedEvent event) {
     _updateShareCues();
     _deafenedIdentities.remove(event.participant.identity);
     _callManager?.endCallSound();
+    _stateChanged.add(());
+  }
+
+  /// Everyone in the LiveKit room, whether they publish anything or not,
+  /// and whatever their membership says: the voice channel list shows who
+  /// is here from this while we are in the call.
+  @override
+  Set<String> get connectedUserIds => {
+        if (state != VoipState.ended) ...[
+          room.client.self!.identifier,
+          for (final identity in livekitRoom.remoteParticipants.keys)
+            if (_userIdOf(identity) case final String userId) userId,
+        ],
+      };
+
+  /// The Matrix user of a LiveKit identity, `@user:server:DEVICE`. Null for
+  /// one that is nobody's, a bot's say.
+  static String? _userIdOf(String identity) {
+    final parts = identity.split(":");
+    if (!identity.startsWith("@") || parts.length < 2) return null;
+    return parts.getRange(0, 2).join(":");
   }
 
   /// Data topic used to tell the room about state LiveKit itself does not
@@ -1072,7 +1115,7 @@ class MatrixLivekitVoipSession implements VoipSession, ScreenShareWatching {
           voiceState: published.voice,
           away: published.away,
           joinedAt: joinedAt,
-          now: DateTime.now()),
+          now: _membershipTime()),
     );
   }
 
@@ -1597,6 +1640,15 @@ class MatrixLivekitVoipSession implements VoipSession, ScreenShareWatching {
 
   bool get _leaving => state == VoipState.ended || _hangUp != null;
 
+  /// Whether [interval] has gone by since [since] on [_now]. A clock that
+  /// was set back counts as it having gone by: waiting for it to catch up
+  /// could take hours.
+  bool _waited(DateTime? since, Duration interval) {
+    if (since == null) return true;
+    final waited = _now().difference(since);
+    return waited.isNegative || waited >= interval;
+  }
+
   Future<void> stopHeartbeat() async {
     heartbeatTimer?.cancel();
     heartbeatTimer = null;
@@ -1660,29 +1712,65 @@ class MatrixLivekitVoipSession implements VoipSession, ScreenShareWatching {
           contentType: "application/json",
           data: jsonEncode({"action": action}));
 
-  Future<void> startHeartbeat() async {
-    final capabilities = await room.matrixRoom.client.getVersions();
-    Log.d("${capabilities}");
-    if (capabilities.unstableFeatures?["org.matrix.msc4140"] != true) {
-      Log.e("Homeserver does not support delayed events");
-      return;
-    }
+  /// Whether the homeserver has delayed events (MSC4140), once it has said.
+  /// Synapse ships without them.
+  bool? _hasDelayedEvents;
 
-    await _armDelayedLeave();
-    if (_leaving) {
-      // Hung up while it was being armed, after the hang up cancelled
-      // nothing: left alone it would fire into a rejoin and clear the new
-      // membership.
-      await stopHeartbeat();
-      return;
-    }
+  /// When arming the delayed leave was last tried, and how many times in a
+  /// row that failed: it is tried again 30 s later, then a minute, two,
+  /// and so on up to ten.
+  DateTime? _lastArmAttempt;
+  int _armFailures = 0;
 
-    heartbeatTimer = Timer.periodic(_heartbeatInterval, (_) {
-      if (_heartbeatInFlight != null || _leaving) return;
-      final beat = _heartbeat();
-      _heartbeatInFlight = beat;
-      beat.whenComplete(() => _heartbeatInFlight = null);
+  Duration get _armRetryInterval {
+    final doublings = min(max(_armFailures - 1, 0), 5);
+    final wait = const Duration(seconds: 30) * (1 << doublings);
+    return wait > const Duration(minutes: 10)
+        ? const Duration(minutes: 10)
+        : wait;
+  }
+
+  /// Starts the heartbeat, which runs every [_heartbeatInterval] for the
+  /// whole call. Where the homeserver has delayed events it keeps ours from
+  /// firing, and everywhere it keeps our membership from lapsing: it used to
+  /// run only once a delayed leave was armed, so on a homeserver without
+  /// them, or when arming failed, nothing pushed the membership out and four
+  /// hours into a call everyone stopped listing us.
+  Future<void> startHeartbeat() {
+    // Before anything is awaited, so a hang up always finds it to cancel.
+    heartbeatTimer ??= Timer.periodic(_heartbeatInterval, (_) => _beat());
+    return _beat();
+  }
+
+  /// One heartbeat, never two at once: asking for one while one is running
+  /// gets that one.
+  Future<void> _beat() {
+    if (_leaving) return Future.value();
+    final inFlight = _heartbeatInFlight;
+    if (inFlight != null) return inFlight;
+
+    final beat = _heartbeat();
+    _heartbeatInFlight = beat;
+    beat.whenComplete(() {
+      if (identical(_heartbeatInFlight, beat)) _heartbeatInFlight = null;
     });
+    return beat;
+  }
+
+  /// One heartbeat, for tests.
+  @visibleForTesting
+  Future<void> debugHeartbeat() => _beat();
+
+  /// Never fails: neither the timer nor a hang up waiting for it has an
+  /// error to deal with.
+  Future<void> _heartbeat() async {
+    await _keepDelayedLeave();
+    if (_leaving) return;
+    try {
+      _keepMembershipFromLapsing();
+    } catch (e, s) {
+      Log.onError(e, s, content: "Could not extend our call membership");
+    }
   }
 
   /// Schedules a delayed leave: the server clears our membership once
@@ -1703,9 +1791,56 @@ class MatrixLivekitVoipSession implements VoipSession, ScreenShareWatching {
     _publishMembershipState();
   }
 
-  Future<void> _heartbeat() async {
+  /// Arms the delayed leave where the homeserver has delayed events, and
+  /// again after [_armRetryInterval] while that fails: the first attempt
+  /// used to be the only one, and one that failed (offline for a moment,
+  /// rate limited) left the whole call without a delayed leave, without our
+  /// LIVE and muted badges, and without its membership ever being restored.
+  Future<void> _armDelayedLeaveWhenDue() async {
+    if (_hasDelayedEvents == false) return;
+    if (_armFailures > 0 && !_waited(_lastArmAttempt, _armRetryInterval)) {
+      return;
+    }
+    _lastArmAttempt = _now();
+
+    try {
+      if (_hasDelayedEvents == null) {
+        final capabilities = await room.matrixRoom.client.getVersions();
+        Log.d("${capabilities}");
+        _hasDelayedEvents =
+            capabilities.unstableFeatures?["org.matrix.msc4140"] == true;
+        if (_hasDelayedEvents == false) {
+          Log.e("Homeserver does not support delayed events");
+          return;
+        }
+      }
+      if (_leaving) return;
+
+      await _armDelayedLeave();
+      _armFailures = 0;
+    } catch (e, s) {
+      _armFailures++;
+      Log.onError(e, s,
+          content: "Could not arm our delayed leave "
+              "(attempt $_armFailures, again in ${_armRetryInterval.inSeconds} s)");
+      return;
+    }
+
+    if (_leaving) {
+      // Hung up while it was being armed, after the hang up cancelled
+      // nothing: left alone it would fire into a rejoin and clear the new
+      // membership.
+      await stopHeartbeat().catchError((Object e, StackTrace s) {
+        Log.onError(e, s, content: "Could not cancel our delayed leave");
+      });
+    }
+  }
+
+  /// Keeps our delayed leave from firing while we are here: restarts it,
+  /// or arms it where there is none yet.
+  Future<void> _keepDelayedLeave() async {
     final delayId = _delayedLeaveId;
-    if (delayId == null) return;
+    if (delayId == null) return _armDelayedLeaveWhenDue();
 
     try {
       try {
@@ -1727,7 +1862,6 @@ class MatrixLivekitVoipSession implements VoipSession, ScreenShareWatching {
       }
 
       await _restoreMembershipIfCleared();
-      await _refreshMembershipExpiry();
     } catch (e, s) {
       // Stop advertising streams until a heartbeat works again: without the
       // delayed leave, nothing would clear them if this client died.
@@ -1759,15 +1893,12 @@ class MatrixLivekitVoipSession implements VoipSession, ScreenShareWatching {
 
     // Our write only shows up in the room state once it comes back over
     // sync: don't write it again in the meantime.
-    final now = DateTime.now();
-    final last = _lastMembershipRestore;
-    if (last != null && now.difference(last) < const Duration(seconds: 30)) {
-      return;
-    }
-    _lastMembershipRestore = now;
+    if (!_waited(_lastMembershipRestore, const Duration(seconds: 30))) return;
+    _lastMembershipRestore = _now();
 
     Log.w("Our call membership was cleared while we are in the call, "
         "restoring it");
+    final now = _membershipTime();
     await room.matrixRoom.client.setRoomStateWithKey(
       room.matrixRoom.id,
       MatrixVoipRoomComponent.callMemberStateEvent,
@@ -1782,32 +1913,29 @@ class MatrixLivekitVoipSession implements VoipSession, ScreenShareWatching {
   }
 
   /// A membership's `expires` counts from the join, and only a change to
-  /// what we publish or our mute state rewrites it. Push it out well before
-  /// it passes, or after four hours in a call every client stops listing us.
-  Future<void> _refreshMembershipExpiry() async {
+  /// what we advertise rewrites it otherwise. It is written again an hour
+  /// after each write ([MatrixCallMembership.refreshWhenLeft]), by
+  /// [_membershipTime]: pushed out only in its last hour by this machine's
+  /// clock, it lapsed for everyone whose clock ran an hour ahead of ours.
+  void _keepMembershipFromLapsing() {
     final current =
         room.matrixRoom.states[MatrixVoipRoomComponent.callMemberStateEvent]
             ?[_ownMembershipKey];
+    // Cleared: putting it back is the delayed leave's heartbeat's to do.
     if (current is! Event || current.content["application"] == null) return;
-    final expires = current.content["expires"];
-    if (expires is! int) return;
-
-    final now = DateTime.now();
-    final joinedAt =
-        MatrixCallMembership.joinedAt(current.content, current.originServerTs)!;
-    final expiresAt = joinedAt.add(Duration(milliseconds: expires));
-    if (expiresAt.difference(now) > const Duration(hours: 1)) return;
-
-    final last = _lastExpiryRefresh;
-    if (last != null && now.difference(last) < const Duration(minutes: 5)) {
+    if (!MatrixCallMembership.needsRefresh(
+        current.content, current.originServerTs, _membershipTime())) {
       return;
     }
-    _lastExpiryRefresh = now;
+
+    // The write only shows in the room state once it comes back over sync.
+    if (!_waited(_lastExpiryRefresh, const Duration(minutes: 5))) return;
+    _lastExpiryRefresh = _now();
 
     Log.i("Extending our call membership before it expires");
-    await _writeMembershipState(heartbeatDelayId != null
-        ? CallMembershipState(media: _localLiveMedia, voice: _localVoiceState)
-        : const CallMembershipState());
+    // Through the publisher, like every other write of it: one at a time,
+    // and saying what we advertise now, away included.
+    _membershipPublisher.rewrite();
   }
 
   @override

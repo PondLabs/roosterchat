@@ -124,12 +124,20 @@ class VoiceTray with TrayListener {
     });
   }
 
+  /// The icon for [status]: Windows loads tray icons from .ico, the
+  /// appindicator from an image. Named for the app, not for the status:
+  /// KDE Plasma's tray looks the file's name up in the icon theme before it
+  /// reads the file, and themes (MacTahoe, WhiteSur, Papirus) have an "idle"
+  /// (Python's IDLE) and a "live" (Outlook), which it showed instead. No
+  /// dashes either: theme lookups fall back from "a-b" to "a".
+  static String iconAsset(VoiceTrayStatus status, {required bool windows}) =>
+      "assets/images/tray/cockhouse_tray_${status.name}.${windows ? "ico" : "png"}";
+
   Future<void> _show(VoiceCallState state) async {
     final status = _statusFor(state);
 
-    // Windows loads tray icons from .ico, the appindicator from an image.
-    final extension = PlatformUtils.isWindows ? "ico" : "png";
-    await trayManager.setIcon("assets/images/tray/${status.name}.$extension");
+    await trayManager
+        .setIcon(iconAsset(status, windows: PlatformUtils.isWindows));
     await trayManager.setContextMenu(menuOf(state));
 
     try {

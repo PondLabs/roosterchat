@@ -73,7 +73,7 @@ It needs `google-chrome` (for rasterising) and ImageMagick's `convert` on the PA
 
 - the Flutter assets;
 - web favicons, PWA and maskable icons, and the web splash (the rooster alone for dark, the house for light);
-- the Windows `.ico` and the tray's idle icon;
+- the Windows `.ico` and the tray's idle icon (`cockhouse_tray_idle`);
 - the Linux hicolor and Flatpak icons;
 - the Android launcher icons, adaptive foreground, themed monochrome and notification icons, and the adaptive background colour.
 
