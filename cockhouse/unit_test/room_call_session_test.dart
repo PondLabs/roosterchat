@@ -49,6 +49,7 @@ void main() {
   test("our call in the room is found as soon as the call manager has it", () {
     final session = _Session('!voice:x', client);
     expect(
+        // ignore: invalid_use_of_visible_for_testing_member
         RoomTextButton.callSessionIn(
             room, [_Session('!other:x', client), session]),
         same(session));
@@ -56,6 +57,7 @@ void main() {
 
   test('a call in another room, or on another account, is not this one', () {
     expect(
+        // ignore: invalid_use_of_visible_for_testing_member
         RoomTextButton.callSessionIn(room, [
           _Session('!other:x', client),
           _Session('!voice:x', _Client()),
@@ -65,6 +67,7 @@ void main() {
 
   test('a call that ended is not ours any more', () {
     expect(
+        // ignore: invalid_use_of_visible_for_testing_member
         RoomTextButton.callSessionIn(
             room, [_Session('!voice:x', client, VoipState.ended)]),
         isNull);
