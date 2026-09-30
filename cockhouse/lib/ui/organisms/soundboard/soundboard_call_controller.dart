@@ -14,6 +14,7 @@ import 'package:cockhouse/client/client.dart';
 import 'package:cockhouse/client/components/soundboard/entrance_sound.dart';
 import 'package:cockhouse/client/components/soundboard/soundboard_catalog.dart';
 import 'package:cockhouse/client/components/soundboard/soundboard_component.dart';
+import 'package:cockhouse/client/components/soundboard/soundboard_constraints.dart';
 import 'package:cockhouse/client/components/soundboard/soundboard_engine.dart';
 import 'package:cockhouse/client/components/soundboard/soundboard_session.dart';
 import 'package:cockhouse/client/components/soundboard/soundboard_sound.dart';
@@ -72,8 +73,8 @@ class SoundboardCallController extends ChangeNotifier {
   StreamSubscription? _engineSub;
   StreamSubscription? _sessionSub;
 
-  /// Activations whose overlay has already been shown.
-  final Set<String> _shownEventIds = {};
+  /// Activations whose emoji is on their sender's avatar, by eventId.
+  final Map<String, ActiveSound> _shown = {};
 
   SoundboardCallController(this.session) {
     // In the constructor, not init(): the engine is silenced through
@@ -96,7 +97,8 @@ class SoundboardCallController extends ChangeNotifier {
       onInstanceFinished: (id) => engine.onAudioCompleted(id),
     );
     engine = SoundboardEngine(player: player);
-    // Bridge engine activations -> avatar overlays (sender-specific).
+    // Bridge engine activations -> avatar overlays (sender-specific), for as
+    // long as each one's audio plays.
     engine.addListener(_syncOverlays);
     _engineSub = null; // engine uses sync listeners, not streams.
 
@@ -106,7 +108,6 @@ class SoundboardCallController extends ChangeNotifier {
       engine: engine,
       transport: transport,
       selfUserId: session.client.self?.identifier ?? '',
-      durationOf: (id) => catalog.getById(id)?.durationMs,
       preloader: _preload,
       onError: (e, s, ctx) => Log.onError(e, s, content: 'Soundboard: $ctx'),
     );
@@ -137,6 +138,13 @@ class SoundboardCallController extends ChangeNotifier {
     );
   }
 
+  /// The soundboard of the Space behind [source], to add sounds to it.
+  SpaceSoundboardComponent? soundboardOf(SoundboardSource source) =>
+      session.client.spaces
+          .where((space) => space.identifier == source.id)
+          .firstOrNull
+          ?.getComponent<SpaceSoundboardComponent>();
+
   void _resolveCatalog() {
     try {
       final roomId = session.roomId;
@@ -150,6 +158,7 @@ class SoundboardCallController extends ChangeNotifier {
                 avatar: space.avatar,
                 color: space.color,
                 catalog: _CatalogAdapter(comp),
+                canAddSounds: () => comp.canManage,
               ),
       ];
       catalog = _CompositeCatalog([for (final s in sources) s.catalog]);
@@ -240,23 +249,38 @@ class SoundboardCallController extends ChangeNotifier {
     if (_disposed) return;
     final engine = soundboard?.engine;
     if (engine == null) return;
-    _shownEventIds.retainAll(engine.active.keys);
+    final registry = SoundboardOverlayRegistry.instance;
+    // Sounds whose audio ended (or was cut): their emoji goes, after a
+    // moment for a very short sound. A newer sound by the same sender keeps
+    // its own.
+    final ended =
+        _shown.keys.where((id) => !engine.active.containsKey(id)).toList();
+    for (final eventId in ended) {
+      final shown = _shown.remove(eventId)!;
+      void clear() => registry.clearEvent(shown.senderId, eventId);
+      final left = shown.startedAtMs +
+          SoundboardConstraints.minOverlayMs -
+          engine.nowMs();
+      if (left > 0) {
+        Future.delayed(Duration(milliseconds: left), clear);
+      } else {
+        clear();
+      }
+    }
     for (final entry in engine.active.values) {
-      if (!_shownEventIds.add(entry.eventId)) continue;
+      if (_shown.containsKey(entry.eventId)) continue;
       final sound = catalog.getById(entry.soundId);
       if (sound == null) continue;
-      final shown = SoundboardOverlayRegistry.instance.show(
-        userId: entry.senderId,
-        soundId: entry.soundId,
-        emoji: sound.emoji,
-        image: soundboardEmojiImage(sound.emoji, session.client),
-        overlayMs: entry.overlayMs,
+      _shown[entry.eventId] = entry;
+      registry.show(
+        entry.senderId,
+        SoundboardOverlayEntry(
+          eventId: entry.eventId,
+          soundId: entry.soundId,
+          emoji: sound.emoji,
+          image: soundboardEmojiImage(sound.emoji, session.client),
+        ),
       );
-      // Auto-clear after overlay window so tiles don't stick. A newer
-      // trigger by the same sender keeps its own overlay.
-      Future.delayed(Duration(milliseconds: entry.overlayMs + 250), () {
-        SoundboardOverlayRegistry.instance.clearEntry(entry.senderId, shown);
-      });
     }
     notifyListeners();
   }

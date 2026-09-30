@@ -412,8 +412,14 @@ class CallManager {
   /// the room's noise: not for a deafened user.
   void screenShareStartedSound() => _playCue("screenshare_started.ogg");
 
+  /// Someone still in the call stopped sharing their screen.
+  void screenShareStoppedSound() => _playCue("screenshare_stopped.ogg");
+
   /// Someone in the call turned their camera on.
   void cameraOnSound() => _playCue("camera_on.ogg");
+
+  /// Someone still in the call turned their camera off.
+  void cameraOffSound() => _playCue("camera_off.ogg");
 
   void _playCue(String sound) {
     if (isDeafened) return;

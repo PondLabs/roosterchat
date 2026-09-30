@@ -1,7 +1,8 @@
 // Trim editor for a soundboard import: the source's waveform with a
 // selection the admin drags. Dragging a handle past
 // SoundboardConstraints.maxDurationMs pulls the other handle along, so the
-// selection can never be longer than a stored sound may be.
+// selection can never be longer than a stored sound may be. While the
+// selection is previewed, a playhead shows where it is.
 //
 // Pure Flutter so it behaves the same on web.
 import 'dart:math' as math;
@@ -21,6 +22,9 @@ class SoundboardTrimEditor extends StatefulWidget {
   final int endMs;
   final void Function(int startMs, int endMs) onChanged;
 
+  /// Where the preview is playing, in the same time as [startMs], or null.
+  final int? playheadMs;
+
   const SoundboardTrimEditor({
     super.key,
     required this.durationMs,
@@ -28,6 +32,7 @@ class SoundboardTrimEditor extends StatefulWidget {
     required this.startMs,
     required this.endMs,
     required this.onChanged,
+    this.playheadMs,
   });
 
   static const double height = 64;
@@ -96,6 +101,9 @@ class _SoundboardTrimEditorState extends State<SoundboardTrimEditor> {
                     peaks: widget.peaks,
                     start: widget.startMs / widget.durationMs,
                     end: widget.endMs / widget.durationMs,
+                    playhead: widget.playheadMs == null
+                        ? null
+                        : widget.playheadMs! / widget.durationMs,
                     selected: colors.primary,
                     unselected: colors.outlineVariant,
                     background: colors.surfaceContainerHighest,
@@ -107,10 +115,19 @@ class _SoundboardTrimEditorState extends State<SoundboardTrimEditor> {
           );
         }),
         const SizedBox(height: 4),
-        tiamat.Text.labelLow('${_seconds(widget.startMs)} – '
-            '${_seconds(widget.endMs)} of ${_seconds(widget.durationMs)}, '
-            'length ${_seconds(length)} '
-            '(max ${_seconds(SoundboardConstraints.maxDurationMs)})'),
+        Row(
+          children: [
+            tiamat.Text.label('Length ${_seconds(length)}'),
+            const SizedBox(width: 8),
+            Flexible(
+              child: tiamat.Text.labelLow('${_seconds(widget.startMs)} – '
+                  '${_seconds(widget.endMs)} of '
+                  '${_seconds(widget.durationMs)} · drag the edges to cut the '
+                  'start or the end, the middle to move it (max '
+                  '${_seconds(SoundboardConstraints.maxDurationMs)})'),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -161,6 +178,7 @@ class _WaveformPainter extends CustomPainter {
   final List<double>? peaks;
   final double start;
   final double end;
+  final double? playhead;
   final Color selected;
   final Color unselected;
   final Color background;
@@ -170,6 +188,7 @@ class _WaveformPainter extends CustomPainter {
     required this.peaks,
     required this.start,
     required this.end,
+    this.playhead,
     required this.selected,
     required this.unselected,
     required this.background,
@@ -217,6 +236,17 @@ class _WaveformPainter extends CustomPainter {
       final cx = x.clamp(1.5, size.width - 1.5);
       canvas.drawLine(Offset(cx, 2), Offset(cx, size.height - 2), handlePaint);
     }
+
+    final playhead = this.playhead;
+    if (playhead != null) {
+      final x = (playhead * size.width).clamp(1.0, size.width - 1.0);
+      canvas.drawLine(
+          Offset(x, 0),
+          Offset(x, size.height),
+          Paint()
+            ..color = selected
+            ..strokeWidth = 2);
+    }
   }
 
   @override
@@ -224,6 +254,7 @@ class _WaveformPainter extends CustomPainter {
       old.peaks != peaks ||
       old.start != start ||
       old.end != end ||
+      old.playhead != playhead ||
       old.selected != selected ||
       old.unselected != unselected ||
       old.background != background ||

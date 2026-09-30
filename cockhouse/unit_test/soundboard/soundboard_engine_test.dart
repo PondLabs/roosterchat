@@ -269,10 +269,7 @@ void main() {
           authenticatedSenderId: msg.authenticatedSenderId));
 
       final event = ea.localTrigger(
-          soundId: 'airhorn',
-          senderId: '@alice:x',
-          eventId: 'e1',
-          soundDurationMs: 2000);
+          soundId: 'airhorn', senderId: '@alice:x', eventId: 'e1');
       await ta.send(event);
       await Future.delayed(const Duration(milliseconds: 20));
 

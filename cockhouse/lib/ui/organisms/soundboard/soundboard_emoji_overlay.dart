@@ -1,108 +1,60 @@
-// Emoji burst overlay for soundboard triggers.
+// Emoji overlay for soundboard triggers.
 //
-// Placed over the sender's avatar (Stack). Entrance: scale 0.4->1.15 with
-// easeOutBack + fade in; hold; exit: fade+scale down. Duration comes from
-// the engine's ActiveSound.overlayMs (real sound duration clamped to
-// 1200..3500ms). Never replaces the avatar — pure overlay, IgnorePointer.
-import 'package:cockhouse/client/components/soundboard/soundboard_emoji.dart';
+// Placed over the sender's avatar (Stack). It stays for as long as the sound
+// plays: [entry] is the registry's, which the call controller clears when
+// the audio ends. Entrance: scale 0.4->1 with easeOutBack + fade in; exit:
+// fade + scale down. A new sound from the same sender swaps it. Never
+// replaces the avatar — pure overlay, IgnorePointer.
 import 'package:cockhouse/ui/molecules/soundboard_emoji_picker.dart';
+import 'package:cockhouse/ui/organisms/soundboard/soundboard_overlay_registry.dart';
 import 'package:flutter/material.dart';
 
-class SoundboardEmojiOverlay extends StatefulWidget {
-  final SoundboardEmoji emoji;
-  final ImageProvider? image;
-  final int durationMs;
-  final VoidCallback? onDone;
+class SoundboardEmojiOverlay extends StatelessWidget {
+  /// What to show, or null for nothing.
+  final SoundboardOverlayEntry? entry;
 
-  const SoundboardEmojiOverlay({
-    super.key,
-    required this.emoji,
-    this.image,
-    required this.durationMs,
-    this.onDone,
-  });
-
-  @override
-  State<SoundboardEmojiOverlay> createState() => _SoundboardEmojiOverlayState();
-}
-
-class _SoundboardEmojiOverlayState extends State<SoundboardEmojiOverlay>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _scale;
-  late final Animation<double> _opacity;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: Duration(milliseconds: widget.durationMs),
-    );
-    // Entrance ~25%, hold ~50%, exit ~25%.
-    _scale = TweenSequence<double>([
-      TweenSequenceItem(
-        tween: Tween(begin: 0.4, end: 1.15)
-            .chain(CurveTween(curve: Curves.easeOutBack)),
-        weight: 25,
-      ),
-      TweenSequenceItem(tween: ConstantTween(1.0), weight: 50),
-      TweenSequenceItem(
-        tween:
-            Tween(begin: 1.0, end: 0.6).chain(CurveTween(curve: Curves.easeIn)),
-        weight: 25,
-      ),
-    ]).animate(_controller);
-    _opacity = TweenSequence<double>([
-      TweenSequenceItem(
-        tween: Tween(begin: 0.0, end: 1.0)
-            .chain(CurveTween(curve: Curves.easeOut)),
-        weight: 20,
-      ),
-      TweenSequenceItem(tween: ConstantTween(1.0), weight: 55),
-      TweenSequenceItem(
-        tween:
-            Tween(begin: 1.0, end: 0.0).chain(CurveTween(curve: Curves.easeIn)),
-        weight: 25,
-      ),
-    ]).animate(_controller);
-    _controller.forward().whenComplete(() => widget.onDone?.call());
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+  const SoundboardEmojiOverlay({super.key, required this.entry});
 
   @override
   Widget build(BuildContext context) {
+    final entry = this.entry;
     return IgnorePointer(
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) => Opacity(
-          opacity: _opacity.value,
-          child: Transform.scale(
-            scale: _scale.value,
-            child: Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.45),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: SoundboardEmojiView(
-                widget.emoji,
-                image: widget.image,
-                size: 34,
-              ),
-            ),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 350),
+        reverseDuration: const Duration(milliseconds: 250),
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOut,
+              reverseCurve: Curves.easeIn),
+          child: ScaleTransition(
+            scale: Tween(begin: 0.4, end: 1.0).animate(CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeOutBack,
+                reverseCurve: Curves.easeIn)),
+            child: child,
           ),
         ),
+        child: entry == null
+            ? const SizedBox.shrink()
+            : Container(
+                key: ValueKey(entry.eventId),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: SoundboardEmojiView(
+                  entry.emoji,
+                  image: entry.image,
+                  size: 34,
+                ),
+              ),
       ),
     );
   }

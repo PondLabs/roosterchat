@@ -28,20 +28,19 @@ abstract class SoundboardPlayer {
   bool isPlaying(String instanceId);
 }
 
-/// One visible/audible activation (drives emoji overlay).
+/// One visible/audible activation. It lasts until its audio ends, and the
+/// sender's avatar shows the sound's emoji for as long.
 class ActiveSound {
   final String soundId;
   final String senderId;
   final String eventId;
   final int startedAtMs;
-  final int overlayMs;
 
   const ActiveSound({
     required this.soundId,
     required this.senderId,
     required this.eventId,
     required this.startedAtMs,
-    required this.overlayMs,
   });
 }
 
@@ -98,7 +97,6 @@ class SoundboardEngine {
     required String soundId,
     required String senderId,
     required String eventId,
-    int? soundDurationMs,
   }) {
     final now = nowMs();
     _ownEventIds.add(eventId);
@@ -111,7 +109,6 @@ class SoundboardEngine {
       senderId: senderId,
       eventId: eventId,
       now: now,
-      soundDurationMs: soundDurationMs,
     );
     return SoundboardEvent(
       soundId: soundId,
@@ -127,7 +124,6 @@ class SoundboardEngine {
   Future<bool> onRemoteEvent(
     SoundboardEvent event, {
     String? authenticatedSenderId,
-    int? soundDurationMs,
   }) async {
     final now = nowMs();
     if (_ownEventIds.remove(event.eventId)) return false; // own echo
@@ -142,7 +138,6 @@ class SoundboardEngine {
       senderId: sender,
       eventId: event.eventId,
       now: now,
-      soundDurationMs: soundDurationMs,
     );
     return true;
   }
@@ -152,7 +147,6 @@ class SoundboardEngine {
     required String senderId,
     required String eventId,
     required int now,
-    int? soundDurationMs,
   }) {
     // One copy per sender and sound: re-triggering restarts it from the
     // start, so nobody can stack a sound; other senders' copies play on.
@@ -171,28 +165,20 @@ class SoundboardEngine {
       senderId: senderId,
       eventId: eventId,
       startedAtMs: now,
-      overlayMs: clampOverlayMs(soundDurationMs),
     );
     _notify();
     player.setVolumeFor(eventId, _userVolume);
     player.start(eventId, soundId);
   }
 
-  /// Called by audio completion / overlay timer.
+  /// Called by audio completion, or with [stopAudio] to cut a sound.
   void markFinished(String eventId, {bool stopAudio = false}) {
     if (stopAudio) player.stop(eventId);
     if (active.remove(eventId) != null) _notify();
   }
 
-  /// Sound finished naturally (audio ended). Overlay may linger briefly;
-  /// UI decides via [ActiveSound.startedAtMs]/[overlayMs].
+  /// Sound finished naturally (audio ended, or failed to play).
   void onAudioCompleted(String eventId) => markFinished(eventId);
-
-  static int clampOverlayMs(int? soundDurationMs) {
-    final d = soundDurationMs ?? SoundboardConstraints.minOverlayMs;
-    return d.clamp(
-        SoundboardConstraints.minOverlayMs, SoundboardConstraints.maxOverlayMs);
-  }
 
   Future<void> dispose() async {
     await player.stopAll();

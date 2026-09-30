@@ -135,13 +135,12 @@ class Button extends StatelessWidget {
         break;
     }
 
+    // Without onTap the button is disabled, and looks it: a button that
+    // looks live but ignores clicks reads as broken.
+    final onTap = this.onTap;
     return ElevatedButton(
       style: style,
-      onPressed: isLoading == true
-          ? null
-          : () {
-              onTap?.call();
-            },
+      onPressed: isLoading == true || onTap == null ? null : () => onTap(),
       child: Padding(
         padding: const EdgeInsets.all(8.0),
         child: isLoading == true

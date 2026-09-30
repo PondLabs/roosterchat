@@ -76,7 +76,7 @@ class SoundboardConstraints {
   /// Max decoded sounds held in session LRU.
   static const int maxCachedSounds = 20;
 
-  /// Visual overlay duration bounds (ms). Real duration is clamped into this.
+  /// Shortest time the emoji stays on the sender's avatar (ms), so a very
+  /// short sound still shows it. Otherwise it lasts as long as the audio.
   static const int minOverlayMs = 1200;
-  static const int maxOverlayMs = 3500;
 }
