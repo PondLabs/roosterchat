@@ -10,7 +10,7 @@ everyone can see and a volume each listener sets for themselves.
 The DJ's desktop client plays each song from its file (a local one, or one
 a source extension downloads, played while it downloads), decodes it in
 Rust and publishes it as its own stereo LiveKit track
-(`cockhouse-dj-music`, 128 kbps Opus, DTX and RED off). Listeners just receive
+(`commet-dj-music`, a wire name that keeps Commet's like `chat.commet.*`; builds of 29-30 September 2026 sent `cockhouse-dj-music`, which is still read; 128 kbps Opus, DTX and RED off). Listeners just receive
 that track, so:
 
 - everyone is in sync by construction, and late joiners hear the song live;
@@ -27,7 +27,7 @@ Only desktop (Linux, Windows) can DJ: it needs the Rust player
 runs extensions.
 
 The DJ hears their own music through a second, in-process WebRTC connection
-receiving the same track (`_LocalMonitor` in `native_dj_engine.dart`). A
+receiving the same track (`DjLocalMonitor` in `native_dj_engine.dart`). A
 media player would bypass WebRTC's playout, and a DJ on loudspeakers would
 send the music back into the room through their microphone.
 

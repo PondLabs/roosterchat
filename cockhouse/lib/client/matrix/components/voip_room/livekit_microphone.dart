@@ -342,7 +342,23 @@ Future<bool> restoreMicrophoneProcessingAfter(
       custom.source == lk.TrackSource.microphone) {
     return false;
   }
-  final sender = custom.track?.sender;
+  return restoreMicrophoneProcessingOnceSending(custom.track?.sender,
+      () => microphonePublication(participant)?.track?.mediaStreamTrack,
+      overridden: overridden, timeout: timeout, poll: poll);
+}
+
+/// Desktop: once [sender], a custom source's, is sending (and so has written
+/// its options onto the shared audio processing module), writes the
+/// [microphone]'s back. Any sender of a custom source does, not only the
+/// call's: the DJ's own monitor is one too.
+Future<bool> restoreMicrophoneProcessingOnceSending(
+  rtc.RTCRtpSender? sender,
+  rtc.MediaStreamTrack? Function() microphone, {
+  bool? overridden,
+  Duration timeout = const Duration(seconds: 10),
+  Duration poll = const Duration(milliseconds: 100),
+}) async {
+  if (!(overridden ?? customAudioSourcesOverrideMicrophone)) return false;
   if (sender != null) {
     final deadline = DateTime.now().add(timeout);
     while (!await _negotiated(sender)) {
@@ -355,10 +371,9 @@ Future<bool> restoreMicrophoneProcessingAfter(
       await Future<void>.delayed(poll);
     }
   }
-  final track = microphonePublication(participant)?.track;
+  final track = microphone();
   if (track == null) return false;
-  return restoreMicrophoneProcessing(track.mediaStreamTrack,
-      overridden: overridden);
+  return restoreMicrophoneProcessing(track, overridden: overridden);
 }
 
 Future<bool> _negotiated(rtc.RTCRtpSender sender) async {

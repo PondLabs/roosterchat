@@ -130,7 +130,12 @@ class MatrixLivekitVoipStream implements VoipStream {
       if (track is RemoteAudioTrack) track.setVolume(volume);
       return;
     }
-    await Helper.setVolume(volume, track.mediaStreamTrack);
+    try {
+      await Helper.setVolume(volume, track.mediaStreamTrack);
+    } catch (e, s) {
+      // Otherwise lost (nobody awaits this), and the track plays at 100 %.
+      Log.onError(e, s, content: 'Could not set a track\'s playback volume');
+    }
   }
 
   static AudioVisualizer _speakingVisualizer(AudioTrack track) =>
@@ -296,8 +301,17 @@ class MatrixLivekitVoipStream implements VoipStream {
       typeOf(publication.kind, publication.source, name: publication.name);
 
   /// Name the DJ booth publishes its music under (the track source says
-  /// nothing: LiveKit has no source for it).
-  static const musicTrackName = 'cockhouse-dj-music';
+  /// nothing: LiveKit has no source for it). A wire name, so it keeps
+  /// Commet's like `chat.commet.*` does (docs/adr/0002): a client that does
+  /// not know the name takes the music for the DJ's voice, plays it at the
+  /// DJ's voice volume and ignores the music slider.
+  static const musicTrackName = 'commet-dj-music';
+
+  /// What the builds of 29-30 September 2026 published instead.
+  static const _renamedMusicTrackName = 'cockhouse-dj-music';
+
+  static bool isMusicTrackName(String? name) =>
+      name == musicTrackName || name == _renamedMusicTrackName;
 
   /// Maps a LiveKit publication's kind and source onto the app's stream
   /// types. System audio captured with a screen share is its own type so the
@@ -306,7 +320,7 @@ class MatrixLivekitVoipStream implements VoipStream {
   static VoipStreamType typeOf(TrackType kind, TrackSource source,
       {String? name}) {
     if (kind == TrackType.AUDIO) {
-      if (name == musicTrackName) return VoipStreamType.music;
+      if (isMusicTrackName(name)) return VoipStreamType.music;
       return source == TrackSource.screenShareAudio
           ? VoipStreamType.screenshareAudio
           : VoipStreamType.audio;

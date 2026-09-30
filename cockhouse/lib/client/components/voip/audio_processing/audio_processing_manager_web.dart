@@ -364,7 +364,7 @@ class WebAudioProcessingManager extends AudioProcessingManager {
         // The DJ booth's music plays without a break: as far-end it would
         // keep the ducker on for as long as the music lasts, whatever the
         // listener set its volume to. The browser's echo canceller has it.
-        if (pub.name == MatrixLivekitVoipStream.musicTrackName) continue;
+        if (MatrixLivekitVoipStream.isMusicTrackName(pub.name)) continue;
         final track = pub.track?.mediaStreamTrack;
         if (track is MediaStreamTrackWeb) {
           wanted[track.jsTrack.id] = track.jsTrack;

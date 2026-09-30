@@ -24,6 +24,7 @@ import 'package:cockhouse/client/components/voip/microphone_health.dart';
 import 'package:cockhouse/client/components/voip/webrtc_default_devices.dart';
 import 'package:cockhouse/client/components/voip/webrtc_microphone.dart';
 import 'package:cockhouse/client/matrix/components/dj/native/dj_music_player.dart';
+import 'package:cockhouse/client/matrix/components/dj/native/native_dj_engine.dart';
 import 'package:cockhouse/main.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
@@ -265,6 +266,123 @@ void main() {
               'restoreMicrophoneProcessing: $summary. libwebrtc no longer '
               'reapplies a sender\'s options when its track is re-enabled; '
               'see shared_audio_processing.dart');
+    });
+  });
+
+  // The DJ hears their own music through a second connection in this
+  // process (DjLocalMonitor), whose sender is a custom source's too: it
+  // writes echo cancellation, gain control and noise suppression off onto
+  // the processing the microphone shares, after the call's own restore has
+  // run. Left like that for the DJ's whole turn, everyone the DJ heard on
+  // loudspeakers came back to the room through the DJ's microphone, an echo
+  // of themselves. The monitor puts the microphone's processing back.
+  //
+  // Measured as in the test above, with our DSP transparent: A with the
+  // music sent and the microphone's processing restored, as a call has it
+  // once the booth publishes; B once the monitor runs too.
+  testWidgets("the DJ's own monitor leaves the microphone's processing on",
+      (tester) async {
+    expect(_roomNoise, isNotEmpty,
+        reason: 'run tools/voice_dsp/native_noise_loop.sh');
+
+    await tester.runAsync(() async {
+      await preferences.init();
+      await preferences.voipNoiseSuppression.set(false);
+      await preferences.voipInputSensitivityAuto.set(false);
+      await preferences.voipInputSensitivityDb.set(-90);
+      await preferences.voipFarEndDucking.set(false);
+      await preferences.voipSpeakerBleed.set(false);
+      await preferences.voipDefaultAudioInput.set(_mic);
+      await preferences.voipDefaultAudioOutput.set(_out);
+
+      final dsp =
+          AudioProcessingManager.instance as NativeAudioProcessingManager;
+      await WebrtcDefaultDevices.selectOutputDevice();
+      expect(await dsp.startMicTest(), isTrue);
+      await dsp.setMicTestMonitor(false);
+      // ignore: invalid_use_of_visible_for_testing_member
+      final mic = dsp.debugMicTestMicrophone!;
+
+      final started = DateTime.now();
+      double now() => DateTime.now().difference(started).inMilliseconds / 1000;
+      final samples = <({double t, double energy, double duration})>[];
+      var sampling = true;
+      final sampler = () async {
+        double? lastE, lastD;
+        while (sampling) {
+          // ignore: invalid_use_of_visible_for_testing_member
+          for (final r in await dsp.debugMicTestStats()) {
+            final v = r.values;
+            if (r.type != 'media-source' || v['trackIdentifier'] != mic.id) {
+              continue;
+            }
+            final e = (v['totalAudioEnergy'] as num?)?.toDouble();
+            final d = (v['totalSamplesDuration'] as num?)?.toDouble();
+            if (e != null && d != null && lastE != null && d > lastD!) {
+              samples.add((t: now(), energy: e - lastE, duration: d - lastD));
+            }
+            lastE = e;
+            lastD = d;
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        }
+      }();
+
+      final noise =
+          await Process.start('paplay', ['--device=$_micSink', _roomNoise]);
+      Future<void> until(double t) => Future<void>.delayed(
+          Duration(milliseconds: ((t - now()) * 1000).round()));
+
+      // The booth publishes its music, and the call restores the
+      // microphone's processing once that sender is sending.
+      final player = DjMusicPlayer(DjMusicBindings.load()!);
+      final response = await rtc.WebRTC.invokeMethod(
+          'cockhouseCreateMusicTrack', <String, dynamic>{
+        'ctx': player.handleAddress,
+        'pull': player.pullAddress,
+      });
+      final music = MediaStreamNative(response['streamId'], 'local')
+        ..setMediaTracks(response['audioTracks'], response['videoTracks']);
+      final musicTrack = music.getAudioTracks().first;
+      // ignore: invalid_use_of_visible_for_testing_member
+      await dsp.debugMicTestAddTrack(musicTrack, music);
+      await until(2.0);
+      expect(restoreMicrophoneProcessing(mic), isTrue);
+
+      await until(6.5);
+      // ignore: invalid_use_of_visible_for_testing_member
+      final monitor = DjLocalMonitor();
+      await monitor.start(music, musicTrack, 0, microphone: () => mic);
+
+      await until(11.0);
+      sampling = false;
+      await sampler;
+      noise.kill();
+      await noise.exitCode;
+      await monitor.stop();
+      await rtc.WebRTC.invokeMethod('cockhouseStopMusicTrack',
+          <String, dynamic>{'trackId': musicTrack.id});
+      player.free();
+      await dsp.stopMicTest();
+
+      double level(double from, double to) {
+        var e = 0.0, d = 0.0;
+        for (final s in samples.where((s) => s.t >= from && s.t < to)) {
+          e += s.energy;
+          d += s.duration;
+        }
+        return d > 0 ? 10 * math.log(e / d) / math.ln10 : double.nan;
+      }
+
+      final a = level(4.0, 6.5), b = level(8.5, 11.0);
+      final summary = 'with the music sent ${a.toStringAsFixed(1)} dB, with '
+          "the DJ's monitor too ${b.toStringAsFixed(1)} dB";
+      await File('$_results/dj_monitor.txt').writeAsString('$summary\n');
+      // ignore: avoid_print
+      print("DJ monitor: $summary");
+      expect(b, closeTo(a, 3),
+          reason: "the DJ's monitor switched the microphone's echo "
+              'cancellation off: $summary');
     });
   });
 
