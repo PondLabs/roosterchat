@@ -499,16 +499,22 @@ class _NowPlayingState extends State<_NowPlaying> {
   }
 
   Widget _idle(BuildContext context) {
-    return Row(
-      spacing: 12,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const VinylDisc(size: 56, spinning: false),
-        Expanded(
-          child: tiamat.Text.labelLow(dj.isDj
-              ? 'Nothing on the decks. Paste a link below to start the music.'
-              : 'Nothing playing yet.'),
+        Row(
+          spacing: 12,
+          children: [
+            const VinylDisc(size: 56, spinning: false),
+            Expanded(
+              child: tiamat.Text.labelLow(dj.isDj
+                  ? 'Nothing on the decks. Paste a link below to start the '
+                      'music.'
+                  : 'Nothing playing yet.'),
+            ),
+          ],
         ),
-        DjMusicVolume(session: widget.session),
+        DjMusicVolume(session: widget.session, width: null),
       ],
     );
   }
@@ -618,9 +624,11 @@ class _NowPlayingState extends State<_NowPlaying> {
                 onPressed: () =>
                     LinkUtils.open(Uri.parse(page), context: context),
               ),
-            DjMusicVolume(session: widget.session),
           ],
         ),
+        // A line of its own, the booth's whole width: a long slider sets a
+        // level precisely.
+        DjMusicVolume(session: widget.session, width: null),
       ],
     );
   }
@@ -771,10 +779,17 @@ class DjSourceChip extends StatelessWidget {
 
 /// Mute button and slider for the booth's music, for this listener only.
 class DjMusicVolume extends StatefulWidget {
-  const DjMusicVolume({required this.session, this.width = 88, super.key});
+  const DjMusicVolume(
+      {required this.session, this.width = defaultWidth, super.key});
+
+  /// Long enough to set a level precisely: at 88 px a pixel was over 1 %.
+  static const double defaultWidth = 180;
+
+  /// Null: the slider takes all the width it is given (the booth's own
+  /// line), and the level is written next to it.
 
   final VoipSession session;
-  final double width;
+  final double? width;
 
   @override
   State<DjMusicVolume> createState() => _DjMusicVolumeState();
@@ -826,8 +841,29 @@ class _DjMusicVolumeState extends State<DjMusicVolume> {
   Widget build(BuildContext context) {
     final volume = (_liveMusicVolume.value ?? preferences.djMusicVolume.value)
         .clamp(0.0, maxDjMusicVolume);
+    final fill = widget.width == null;
+    final slider = Tooltip(
+      message: 'Music volume, only for you (${(volume * 100).round()}%)',
+      child: SliderTheme(
+        data: SliderTheme.of(context).copyWith(
+          trackHeight: 5,
+          overlayShape: SliderComponentShape.noOverlay,
+          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+        ),
+        child: Slider(
+          value: volume,
+          max: maxDjMusicVolume,
+          onChangeStart: (_) => _dragging = true,
+          onChanged: (v) => setDjMusicVolume(widget.session, v, save: false),
+          onChangeEnd: (v) {
+            _dragging = false;
+            setDjMusicVolume(widget.session, v);
+          },
+        ),
+      ),
+    );
     return Row(
-      mainAxisSize: MainAxisSize.min,
+      mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
       children: [
         IconButton(
           tooltip: volume == 0 ? 'Unmute the music' : 'Mute the music for you',
@@ -841,30 +877,17 @@ class _DjMusicVolumeState extends State<DjMusicVolume> {
           ),
           onPressed: _toggleMute,
         ),
-        SizedBox(
-          width: widget.width,
-          child: Tooltip(
-            message: 'Music volume, only for you (${(volume * 100).round()}%)',
-            child: SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: 3,
-                overlayShape: SliderComponentShape.noOverlay,
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-              ),
-              child: Slider(
-                value: volume,
-                max: maxDjMusicVolume,
-                onChangeStart: (_) => _dragging = true,
-                onChanged: (v) =>
-                    setDjMusicVolume(widget.session, v, save: false),
-                onChangeEnd: (v) {
-                  _dragging = false;
-                  setDjMusicVolume(widget.session, v);
-                },
-              ),
+        if (fill) ...[
+          Expanded(child: slider),
+          SizedBox(
+            width: 44,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: tiamat.Text.labelLow('${(volume * 100).round()}%'),
             ),
           ),
-        ),
+        ] else
+          SizedBox(width: widget.width, child: slider),
       ],
     );
   }

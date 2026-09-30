@@ -55,4 +55,28 @@ void main() {
     expect(preferences.djMusicVolume.value, lessThan(0.3));
     expect(liveDjMusicVolume.value, isNull);
   });
+
+  testWidgets('the slider is long enough to set a level precisely',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      theme: ThemeData.light().copyWith(extensions: const [ThemeSettings()]),
+      home: Scaffold(body: Center(child: DjMusicVolume(session: _Session()))),
+    ));
+
+    expect(
+        tester.getSize(find.byType(Slider)).width, greaterThanOrEqualTo(160));
+  });
+
+  testWidgets("in the booth it takes the booth's whole width", (tester) async {
+    await tester.binding.setSurfaceSize(const Size(380, 200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(
+      theme: ThemeData.light().copyWith(extensions: const [ThemeSettings()]),
+      home: Scaffold(
+          body: Center(child: DjMusicVolume(session: _Session(), width: null))),
+    ));
+
+    expect(tester.getSize(find.byType(Slider)).width, greaterThan(250));
+    expect(find.text('100%'), findsOneWidget);
+  });
 }
