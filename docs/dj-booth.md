@@ -27,7 +27,7 @@ Only desktop (Linux, Windows) can DJ: it needs the Rust player
 runs extensions.
 
 The DJ hears their own music through a second, in-process WebRTC connection
-receiving the same track (`_LocalMonitor` in `native_dj_engine.dart`). A
+receiving the same track (`DjLocalMonitor` in `native_dj_engine.dart`). A
 media player would bypass WebRTC's playout, and a DJ on loudspeakers would
 send the music back into the room through their microphone.
 
