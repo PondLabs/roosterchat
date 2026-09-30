@@ -1,0 +1,1 @@
+{"nodes": [{"id": "$graphify-root$_third_party_flutter_webrtc_android_build_gradle", "label": "build.gradle", "file_type": "code", "source_file": "third_party/flutter-webrtc/android/build.gradle", "source_location": "L1"}], "edges": [], "raw_calls": [], "parse_errors": {"first_error_line": 31, "multiline_error": true}}

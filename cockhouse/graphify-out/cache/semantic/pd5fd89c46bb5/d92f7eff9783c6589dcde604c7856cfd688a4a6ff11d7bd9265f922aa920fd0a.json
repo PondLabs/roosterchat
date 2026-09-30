@@ -1,0 +1,1 @@
+{"nodes": [{"id": "windows_cef_host_fixture", "label": "Cockhouse CEF fixture page", "file_type": "code", "source_file": "windows/cef_host/fixture.html", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null, "rationale": "Intentionally inert; proves host can create and close a local CEF surface"}], "edges": [], "hyperedges": []}
