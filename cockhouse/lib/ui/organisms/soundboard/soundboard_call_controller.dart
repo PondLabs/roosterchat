@@ -138,6 +138,13 @@ class SoundboardCallController extends ChangeNotifier {
     );
   }
 
+  /// The soundboard of the Space behind [source], to add sounds to it.
+  SpaceSoundboardComponent? soundboardOf(SoundboardSource source) =>
+      session.client.spaces
+          .where((space) => space.identifier == source.id)
+          .firstOrNull
+          ?.getComponent<SpaceSoundboardComponent>();
+
   void _resolveCatalog() {
     try {
       final roomId = session.roomId;
@@ -151,6 +158,7 @@ class SoundboardCallController extends ChangeNotifier {
                 avatar: space.avatar,
                 color: space.color,
                 catalog: _CatalogAdapter(comp),
+                canAddSounds: () => comp.canManage,
               ),
       ];
       catalog = _CompositeCatalog([for (final s in sources) s.catalog]);

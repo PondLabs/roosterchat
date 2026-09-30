@@ -8,6 +8,7 @@ import 'package:cockhouse/client/space.dart';
 import 'package:cockhouse/main.dart';
 import 'package:cockhouse/ui/organisms/soundboard/soundboard_call_controller.dart';
 import 'package:cockhouse/ui/pages/settings/categories/app/double_preference_slider.dart';
+import 'package:cockhouse/ui/pages/settings/categories/space/space_soundboard_settings_page.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
@@ -66,6 +67,19 @@ class _SoundboardSettingsPageState extends State<SoundboardSettingsPage> {
       "None of your spaces have soundboard sounds yet.",
       name: "labelSoundboardEntranceNoSounds",
       desc: "Shown when no space has a soundboard to pick an entrance sound");
+
+  String labelSoundboardAddSound(String space) => Intl.message(
+      "Add a sound to $space",
+      args: [space],
+      name: "labelSoundboardAddSound",
+      desc:
+          "Button that opens the screen to add a sound to a space's soundboard");
+
+  String get labelSoundboardChooseSpaceToAdd => Intl.message(
+      "Choose a space to add sounds to it.",
+      name: "labelSoundboardChooseSpaceToAdd",
+      desc:
+          "Hint shown when all spaces are selected: sounds are added to one space");
 
   @override
   void initState() {
@@ -198,9 +212,32 @@ class _SoundboardSettingsPageState extends State<SoundboardSettingsPage> {
               ),
             ],
           ),
+          ..._addSound(context, spaces, spaceId),
         ],
       ],
     );
+  }
+
+  /// Adding sounds happens in one space: the chosen one, if the user may
+  /// manage its soundboard; with every space chosen, a hint to pick one.
+  List<Widget> _addSound(BuildContext context,
+      List<(Space, SpaceSoundboardComponent)> spaces, String? spaceId) {
+    if (spaceId == null) {
+      if (!spaces.any((e) => e.$2.canManage)) return const [];
+      return [tiamat.Text.labelLow(labelSoundboardChooseSpaceToAdd)];
+    }
+    final (space, comp) = spaces.firstWhere((e) => e.$1.identifier == spaceId);
+    if (!comp.canManage) return const [];
+    return [
+      Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: TextButton.icon(
+          icon: const Icon(Icons.add),
+          label: Text(labelSoundboardAddSound(space.displayName)),
+          onPressed: () => showSpaceSoundboardDialog(context, comp),
+        ),
+      ),
+    ];
   }
 
   Future<void> _selectSpace(

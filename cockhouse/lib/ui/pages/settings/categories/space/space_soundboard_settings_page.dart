@@ -29,8 +29,10 @@ import 'package:cockhouse/client/matrix/components/soundboard/matrix_soundboard_
 import 'package:cockhouse/client/matrix/components/soundboard/matrix_space_soundboard_component.dart';
 import 'package:cockhouse/client/matrix/components/soundboard/soundboard_import_platform.dart';
 import 'package:cockhouse/client/matrix/components/soundboard/soundboard_preview_player.dart';
+import 'package:cockhouse/config/layout_config.dart';
 import 'package:cockhouse/debug/log.dart';
 import 'package:cockhouse/ui/molecules/desktop_app_notice.dart';
+import 'package:cockhouse/ui/navigation/adaptive_dialog.dart';
 import 'package:cockhouse/ui/molecules/soundboard_emoji_picker.dart';
 import 'package:cockhouse/ui/molecules/soundboard_trim_editor.dart';
 import 'package:cockhouse/ui/organisms/dj/dj_prompts.dart';
@@ -40,6 +42,27 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:tiamat/tiamat.dart' as tiamat;
+
+/// Opens a Space's soundboard page (add a sound, edit the ones there) in a
+/// popup, for the places a user reaches it from outside Space settings: the
+/// call's soundboard and the entrance sound setting.
+Future<void> showSpaceSoundboardDialog(
+    BuildContext context, SpaceSoundboardComponent soundboard) {
+  return AdaptiveDialog.show(
+    context,
+    title: 'Soundboard · ${soundboard.space.displayName}',
+    scrollable: false,
+    builder: (context) {
+      final size = MediaQuery.sizeOf(context);
+      final desktop = MediaQuery.of(context).desktop;
+      return SizedBox(
+        width: desktop ? math.min(680, size.width - 80) : size.width,
+        height: math.min(640, size.height * (desktop ? 0.8 : 0.7)),
+        child: SpaceSoundboardSettingsPage(soundboard: soundboard),
+      );
+    },
+  );
+}
 
 class SpaceSoundboardSettingsPage extends StatefulWidget {
   final SpaceSoundboardComponent soundboard;
@@ -70,6 +93,10 @@ class _SpaceSoundboardSettingsPageState
   String? _status;
   String? _error;
 
+  /// Why the last link or file did not load, shown under the link field
+  /// where the Load and Choose file buttons are.
+  String? _loadError;
+
   // The audio being made into a sound, the part of it the trim editor
   // shows, and the selection in that part.
   SoundboardSourceFile? _source;
@@ -95,6 +122,7 @@ class _SpaceSoundboardSettingsPageState
   /// A different link than the loaded one drops what was loaded, so "Add
   /// sound" never uploads something other than what the field says.
   void _onLinkChanged() {
+    if (_loadError != null) setState(() => _loadError = null);
     final source = _source;
     if (source == null || !source.temporary) return;
     if (source.origin != _linkCtrl.text.trim()) setState(_dropSource);
@@ -205,24 +233,23 @@ class _SpaceSoundboardSettingsPageState
             ),
           ),
           const SizedBox(width: 8),
-          SizedBox(
-            width: 90,
-            child: tiamat.Button.secondary(
-              text: 'Load',
-              isLoading: _loading,
-              onTap: _idle ? _loadLink : null,
-            ),
+          tiamat.Button.secondary(
+            text: 'Load',
+            isLoading: _loading,
+            onTap: _idle ? _loadLink : null,
           ),
           const SizedBox(width: 8),
-          SizedBox(
-            width: 130,
-            child: tiamat.Button.secondary(
-              text: 'Choose file…',
-              onTap: _idle ? _chooseFile : null,
-            ),
+          tiamat.Button.secondary(
+            text: 'Choose file…',
+            onTap: _idle ? _chooseFile : null,
           ),
         ],
       ),
+      if (_loadError != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: tiamat.Text.error(_loadError!),
+        ),
       const SizedBox(height: 4),
       _SourcesNote(onAdd: () => installDjSource(context)),
       if (_loading && _status != null)
@@ -315,12 +342,9 @@ class _SpaceSoundboardSettingsPageState
               ),
             ),
             const SizedBox(width: 8),
-            SizedBox(
-              width: 90,
-              child: tiamat.Button.secondary(
-                text: 'Go',
-                onTap: _idle ? _moveWindow : null,
-              ),
+            tiamat.Button.secondary(
+              text: 'Go',
+              onTap: _idle ? _moveWindow : null,
             ),
             const SizedBox(width: 12),
             Flexible(
@@ -347,21 +371,23 @@ class _SpaceSoundboardSettingsPageState
     ];
   }
 
-  /// Runs [load] with the add section busy, showing what goes wrong.
+  /// Runs [load] with the add section busy, showing what goes wrong under
+  /// the link field.
   Future<void> _loadWith(Future<void> Function() load) async {
     setState(() {
       _loading = true;
       _error = null;
+      _loadError = null;
       _status = null;
     });
     try {
       await load();
     } on SoundboardImportError catch (e) {
       Log.w('Soundboard import failed: $e');
-      if (mounted) setState(() => _error = e.message);
+      if (mounted) setState(() => _loadError = e.message);
     } catch (e, s) {
       Log.onError(e, s, content: 'Soundboard import failed: $e');
-      if (mounted) setState(() => _error = _friendlyError(e));
+      if (mounted) setState(() => _loadError = _friendlyError(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -739,13 +765,10 @@ class _SoundVolumeField extends StatelessWidget {
               width: 48,
               child: tiamat.Text.labelLow(percent(volume)),
             ),
-            SizedBox(
-              width: 110,
-              child: tiamat.Button.secondary(
-                text: 'Preview',
-                isLoading: previewing,
-                onTap: onPreview,
-              ),
+            tiamat.Button.secondary(
+              text: 'Preview',
+              isLoading: previewing,
+              onTap: onPreview,
             ),
           ],
         ),
