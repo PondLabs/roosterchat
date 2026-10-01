@@ -9,8 +9,14 @@ import 'package:cockhouse/ui/atoms/message_attachment.dart';
 import 'package:cockhouse/ui/atoms/shimmer_loading.dart';
 import 'package:cockhouse/ui/molecules/video_player/video_playback_dialog.dart';
 import 'package:cockhouse/utils/links/link_utils.dart';
+import 'package:cockhouse/client/components/video_embed/x_post.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:intl/intl.dart' as intl;
+import 'package:tiamat/atoms/avatar.dart';
 import 'package:tiamat/atoms/tile.dart';
+import 'package:tiamat/config/style/theme_extensions.dart';
 
 typedef VideoPreviewOpener = Future<void> Function(
   BuildContext context,
@@ -178,6 +184,8 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final xPost = widget.data?.xPost;
+    if (xPost != null) return _buildXCard(xPost);
     if (isBareImage) return _buildBareImage();
 
     final double maxWidth;
@@ -736,4 +744,270 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
       ],
     );
   }
+
+  // The X logo (simple-icons), so the card needs no asset.
+  static const _xLogoSvg =
+      '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path '
+      'd="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 '
+      '7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 '
+      '3.24H4.298Z"/></svg>';
+
+  /// iframely's X card: author, text, media, quoted post, date and counts.
+  /// The whole card opens the post. See docs/x-posts.md.
+  Widget _buildXCard(XPost post) {
+    final theme = Theme.of(context);
+    final secondary = theme.colorScheme.secondary;
+    final images = widget.data!.images;
+    final Widget? media = images.length > 1
+        ? _buildPhotoGrid()
+        : images.length == 1
+            ? image()
+            : isVideo
+                ? _buildVideoThumbnail()
+                : null;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Tile.surfaceContainer(
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            key: const ValueKey('url-preview-card'),
+            onTap: _openLink,
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: _xAuthor(post, radius: 20)),
+                        const SizedBox(width: 8),
+                        SvgPicture.string(
+                          _xLogoSvg,
+                          key: const ValueKey('x-logo'),
+                          width: 18,
+                          height: 18,
+                          colorFilter: ColorFilter.mode(
+                              theme.colorScheme.onSurface, BlendMode.srcIn),
+                        ),
+                      ],
+                    ),
+                    if (post.text.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text.rich(
+                        TextSpan(children: _xText(post.text)),
+                        style: theme.textTheme.bodyMedium,
+                        maxLines: 12,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    if (media != null) ...[
+                      const SizedBox(height: 8),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 420),
+                        child: media,
+                      ),
+                    ],
+                    if (post.quote != null) ...[
+                      const SizedBox(height: 8),
+                      _xQuote(post.quote!),
+                    ],
+                    const SizedBox(height: 8),
+                    DefaultTextStyle.merge(
+                      style:
+                          theme.textTheme.bodySmall!.copyWith(color: secondary),
+                      child: IconTheme.merge(
+                        data: IconThemeData(size: 15, color: secondary),
+                        child: Row(
+                          children: [
+                            _xCount(Icons.chat_bubble_outline, post.replies),
+                            _xCount(Icons.repeat, post.retweets),
+                            _xCount(Icons.favorite_border, post.likes),
+                            const Spacer(),
+                            if (post.createdAt != null)
+                              Flexible(
+                                flex: 3,
+                                child: Text(
+                                  intl.DateFormat.yMMMd()
+                                      .add_jm()
+                                      .format(post.createdAt!.toLocal()),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Avatar, display name, verified mark and @handle.
+  Widget _xAuthor(XPost post, {required double radius}) {
+    final theme = Theme.of(context);
+    final avatar = post.avatarUrl;
+    return Row(
+      children: [
+        Avatar(
+          radius: radius,
+          image: avatar == null ? null : NetworkImage(avatar.toString()),
+          placeholderText: post.authorName,
+          placeholderColor: theme.colorScheme.surfaceContainerHighest,
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      post.authorName,
+                      style: theme.textTheme.titleSmall!
+                          .copyWith(fontWeight: FontWeight.w700),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (post.isVerified)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 3),
+                      child: Icon(
+                        Icons.verified,
+                        key: const ValueKey('x-verified'),
+                        size: 16,
+                        // X's colours: gold for businesses, grey for
+                        // governments, blue otherwise.
+                        color: switch (post.verification) {
+                          'business' => const Color(0xFFE2B719),
+                          'government' => const Color(0xFF829AAB),
+                          _ => const Color(0xFF1D9BF0),
+                        },
+                      ),
+                    ),
+                ],
+              ),
+              Text(
+                '@${post.handle}',
+                style: theme.textTheme.bodySmall!
+                    .copyWith(color: theme.colorScheme.secondary),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  static final _xEntity = RegExp(r'https?://\S+|@\w{1,15}|#\w+');
+
+  /// The post's text with links, @mentions and #hashtags tappable.
+  // ponytail: recognizers are not disposed, like LinkSpan's.
+  List<InlineSpan> _xText(String text) {
+    final theme = Theme.of(context);
+    final linkColor =
+        theme.extension<ExtraColors>()?.linkColor ?? theme.colorScheme.primary;
+    final spans = <InlineSpan>[];
+    var last = 0;
+    for (final match in _xEntity.allMatches(text)) {
+      spans.add(TextSpan(text: text.substring(last, match.start)));
+      final entity = match[0]!;
+      final target = switch (entity[0]) {
+        '@' => Uri.https('x.com', '/${entity.substring(1)}'),
+        '#' => Uri.https('x.com', '/hashtag/${entity.substring(1)}'),
+        _ => Uri.tryParse(entity),
+      };
+      spans.add(TextSpan(
+        text: entity,
+        style: TextStyle(color: linkColor),
+        recognizer: target == null
+            ? null
+            : (TapGestureRecognizer()
+              ..onTap = () => LinkUtils.open(target, context: context)),
+      ));
+      last = match.end;
+    }
+    spans.add(TextSpan(text: text.substring(last)));
+    return spans;
+  }
+
+  /// The quoted post, nested and smaller; tapping it opens the quote.
+  Widget _xQuote(XPost quote) {
+    final theme = Theme.of(context);
+    final thumbnail = quote.media.firstOrNull?.thumbnailUrl;
+    return Material(
+      color: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        key: const ValueKey('x-quote'),
+        onTap: () => LinkUtils.open(quote.url, context: context),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _xAuthor(quote, radius: 11),
+              if (quote.text.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  quote.text,
+                  style: theme.textTheme.bodySmall,
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+              if (thumbnail != null) ...[
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 160),
+                    child: Image.network(
+                      thumbnail.toString(),
+                      fit: BoxFit.cover,
+                      filterQuality: FilterQuality.medium,
+                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _xCount(IconData icon, int count) => Padding(
+        padding: const EdgeInsets.only(right: 14),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon),
+            const SizedBox(width: 4),
+            Text(intl.NumberFormat.compact().format(count)),
+          ],
+        ),
+      );
 }
