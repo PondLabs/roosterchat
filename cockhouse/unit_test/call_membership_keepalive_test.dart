@@ -396,6 +396,19 @@ void main() {
       expect(expiryOf(write), serverTime.add(MatrixCallMembership.lifetime));
     });
 
+    // Away was only published with the delayed leave armed: here someone
+    // away read as present (green) to everyone else in the channel.
+    test('going away is published all the same', () async {
+      joined(serverTime);
+      await join();
+      UserIdleWatcher.instance.isAway.value = true;
+      await stay(const Duration(seconds: 5));
+      await Future<void>.delayed(const Duration(seconds: 1));
+
+      expect(homeserver.membershipWrites.map(MatrixCallMembership.isAway),
+          contains(true));
+    });
+
     test('and an hour after that again, still from the same join', () async {
       final joinedAt = serverTime;
       joined(joinedAt);

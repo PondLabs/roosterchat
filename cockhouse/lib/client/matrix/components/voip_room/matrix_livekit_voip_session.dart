@@ -1084,14 +1084,17 @@ class MatrixLivekitVoipSession
 
   void _publishMembershipState() {
     if (state == VoipState.ended) return;
-    // Only with the delayed leave armed: it is what clears the membership,
-    // and the badge with it, if this client crashes while streaming.
-    _membershipPublisher.update(heartbeatDelayId != null
-        ? CallMembershipState(
-            media: _localLiveMedia,
-            voice: _localVoiceState,
-            away: _idleWatcher.isAway.value)
-        : const CallMembershipState());
+    // Streams and voice state only with the delayed leave armed: it is what
+    // clears the membership, and a LIVE badge with it, if this client
+    // crashes while streaming. Away goes out either way: left behind it
+    // marks nothing that is not already stale, and without it someone away
+    // on a homeserver without delayed events (Synapse by default) read as
+    // present to everyone.
+    final armed = heartbeatDelayId != null;
+    _membershipPublisher.update(CallMembershipState(
+        media: armed ? _localLiveMedia : const {},
+        voice: armed ? _localVoiceState : const {},
+        away: _idleWatcher.isAway.value));
   }
 
   // Named `published`, not `state`: `state` is this session's VoipState.
