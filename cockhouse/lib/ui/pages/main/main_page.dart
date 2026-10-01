@@ -435,6 +435,14 @@ class MainPageState extends State<MainPage> {
       return;
     }
 
+    // COCKHOUSE: a room both accounts are in opens in the one on screen, not
+    // behind a "switch account?" prompt (a notification may name the other).
+    if (filterClient != null &&
+        client != filterClient &&
+        filterClient!.hasRoom(roomId)) {
+      client = filterClient!;
+    }
+
     if (filterClient != null && client != filterClient) {
       askSwitchAccount(client, (args.roomId, args.clientId));
       return;
