@@ -8,14 +8,12 @@ import 'package:cockhouse/client/room.dart';
 import 'package:cockhouse/config/build_config.dart';
 import 'package:cockhouse/main.dart';
 import 'package:cockhouse/utils/common_strings.dart';
-import 'package:cockhouse/utils/event_bus.dart';
 import 'package:cockhouse/utils/shortcuts_manager.dart';
 import 'package:desktop_notifications/desktop_notifications.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:win_toast/win_toast.dart';
-import 'package:window_manager/window_manager.dart';
 import 'package:path/path.dart' as p;
 
 class WindowsNotifier implements Notifier {
@@ -86,10 +84,8 @@ class WindowsNotifier implements Notifier {
         var roomId = args['room_id'];
         if (roomId == null) return;
 
-        final clientId = args['client_id'];
-
-        EventBus.doOpenRoom(roomId, clientId: clientId);
-        windowManager.show();
+        // COCKHOUSE: show() alone left a minimized window minimized.
+        NotificationManager.openRoom(roomId, clientId: args['client_id']);
         break;
       case 'accept_call':
       case 'reject_call':

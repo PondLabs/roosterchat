@@ -14,12 +14,26 @@ import 'package:cockhouse/config/build_config.dart';
 import 'package:cockhouse/config/platform_utils.dart';
 import 'package:cockhouse/debug/log.dart';
 import 'package:cockhouse/main.dart';
+import 'package:cockhouse/utils/event_bus.dart';
+import 'package:cockhouse/utils/window_management.dart';
+import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
 
 class NotificationManager {
   static Notifier? _notifier;
 
   static Notifier? get notifier => _notifier;
+
+  @visibleForTesting
+  static set notifier(Notifier? value) => _notifier = value;
+
+  // COCKHOUSE: every room wrapper of every signed-in account listens for its
+  // room's notifications, so one message can arrive here more than once.
+  // ponytail: last 200 event ids, plenty for messages arriving together.
+  static final Set<String> _shownMessageIds = <String>{};
+
+  @visibleForTesting
+  static void forgetShownMessages() => _shownMessageIds.clear();
 
   static final List<NotificationModifier> _modifiers =
       List.empty(growable: true);
@@ -106,6 +120,17 @@ class NotificationManager {
       return;
     }
 
+    // Before any await: the copies arrive together.
+    if (notification is MessageNotificationContent && !forceShow) {
+      if (!_shownMessageIds.add(notification.eventId)) {
+        onNotificationRejected?.call("This message was already shown");
+        return;
+      }
+      if (_shownMessageIds.length > 200) {
+        _shownMessageIds.remove(_shownMessageIds.first);
+      }
+    }
+
     for (var modifier in _modifiers) {
       Log.d("Processing modifier: $modifier");
       if (forceShow) {
@@ -126,5 +151,12 @@ class NotificationManager {
 
     Log.i("Displaying notification content: $content");
     await _notifier!.notify(content!);
+  }
+
+  /// What clicking a notification does: open its room, in its space, and
+  /// bring the window up (restored, if it was minimized).
+  static Future<void> openRoom(String roomId, {String? clientId}) {
+    EventBus.doOpenRoom(roomId, clientId: clientId);
+    return WindowManagement.bringToFront();
   }
 }

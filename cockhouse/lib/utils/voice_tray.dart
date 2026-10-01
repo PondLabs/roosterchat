@@ -9,7 +9,6 @@ import 'package:cockhouse/utils/voice_controls/voice_controls.dart';
 import 'package:cockhouse/utils/window_management.dart';
 import 'package:intl/intl.dart';
 import 'package:tray_manager/tray_manager.dart';
-import 'package:window_manager/window_manager.dart';
 
 enum VoiceTrayStatus {
   /// Not in a call: the app logo.
@@ -151,15 +150,7 @@ class VoiceTray with TrayListener {
     }
   }
 
-  Future<void> _openWindow() async {
-    try {
-      if (await windowManager.isMinimized()) await windowManager.restore();
-      await windowManager.show();
-      await windowManager.focus();
-    } catch (e, s) {
-      Log.onError(e, s, content: "Could not bring the window back");
-    }
-  }
+  Future<void> _openWindow() => WindowManagement.bringToFront();
 
   // Windows only: on Linux a click opens the menu.
   @override

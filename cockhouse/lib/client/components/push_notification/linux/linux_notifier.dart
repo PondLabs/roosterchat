@@ -9,7 +9,6 @@ import 'package:cockhouse/debug/log.dart';
 import 'package:cockhouse/main.dart';
 import 'package:cockhouse/utils/app_refresh/app_refresh.dart';
 import 'package:cockhouse/utils/common_strings.dart';
-import 'package:cockhouse/utils/event_bus.dart';
 import 'package:cockhouse/utils/image/lod_image.dart';
 import 'package:cockhouse/utils/image_utils.dart';
 import 'package:cockhouse/utils/notification_utils.dart';
@@ -20,7 +19,6 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_local_notifications_linux/src/model/hint.dart' as notif;
 import 'package:launcher_entry/launcher_entry.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:window_manager/window_manager.dart';
 import 'dart:ui' as ui;
 
 class LinuxNotifier implements Notifier {
@@ -97,10 +95,8 @@ class LinuxNotifier implements Notifier {
     if ([callAccept, openRoom].contains(action)) {
       final roomId = payload['room_id']!;
 
-      var clientId = payload['client_id'] as String?;
-      EventBus.doOpenRoom(roomId, clientId: clientId);
-      windowManager.show();
-      windowManager.focus();
+      NotificationManager.openRoom(roomId,
+          clientId: payload['client_id'] as String?);
     }
 
     if ([callAccept, callDecline].contains(action)) {
