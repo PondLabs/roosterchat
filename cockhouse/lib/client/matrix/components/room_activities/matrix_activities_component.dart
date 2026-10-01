@@ -126,7 +126,13 @@ class MatrixActivitiesComponent
       final event = entry.value;
       final sentAt = event is Event ? event.originServerTs : null;
       if (MatrixCallMembership.isExpired(event.content, sentAt, now)) {
-        Log.i("Membership state is expired, skipping");
+        // Named, with both times: the first thing to read when someone in
+        // the call is missing from the list (docs/voice-channel-members.md).
+        Log.i("Not listing ${event.senderId} in ${room.identifier}: their "
+            "call membership expired at "
+            "${MatrixCallMembership.expiresAt(event.content, sentAt)?.toUtc()}, "
+            "homeserver time now ${now.toUtc()} (this machine: "
+            "${DateTime.now().toUtc()})");
         continue;
       }
 
