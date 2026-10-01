@@ -531,6 +531,11 @@ class Preferences {
   DoublePreference sidebarWidth =
       DoublePreference("desktop_sidebar_width", defaultValue: 320);
 
+  /// Which corner of a call tile the developer-mode stream info sits in
+  /// ([StreamDebugInfo]): topLeft, topRight, bottomRight or bottomLeft.
+  StringPreference streamDebugInfoCorner =
+      StringPreference("stream_debug_info_corner", defaultValue: "topLeft");
+
   DoublePreference emojiPickerHeight =
       DoublePreference("emoji_picker_height", defaultValue: 300);
 

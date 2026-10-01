@@ -19,6 +19,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import 'package:cockhouse/ui/molecules/stream_debug_info.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class VoipStreamView extends StatefulWidget {
@@ -162,19 +163,7 @@ class _VoipStreamViewState extends State<VoipStreamView> {
                   child: buildDefault()),
             ),
             if (preferences.developerMode.value)
-              Align(
-                alignment: AlignmentGeometry.topLeft,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: ColorScheme.of(context).surfaceContainer,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: tiamat.Text.labelLow(widget.stream.stats),
-                  ),
-                ),
-              ),
+              StreamDebugInfo(widget.stream.stats),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
