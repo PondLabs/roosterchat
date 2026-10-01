@@ -30,6 +30,7 @@ Client connect(FakeCall call, String identity,
     Duration passTimeout = const Duration(seconds: 90),
     ValueListenable<bool>? away,
     DateTime Function()? now,
+    Duration tickInterval = const Duration(milliseconds: 40),
     void Function(FakeEngine)? onEngine}) {
   final transport = call.join(identity);
   final engines = <FakeEngine>[];
@@ -49,7 +50,7 @@ Client connect(FakeCall call, String identity,
     away: away,
     now: now,
     passTimeout: passTimeout,
-    tickInterval: const Duration(milliseconds: 40),
+    tickInterval: tickInterval,
     pollInterval: const Duration(milliseconds: 10),
   )..start();
   return Client(session, transport, engines);
@@ -67,12 +68,14 @@ void main() {
       FakeResolver? resolver,
       Duration passTimeout = const Duration(seconds: 90),
       ValueListenable<bool>? away,
+      Duration tickInterval = const Duration(milliseconds: 40),
       void Function(FakeEngine)? onEngine}) {
     final client = connect(call, identity,
         caps: caps,
         resolver: resolver,
         passTimeout: passTimeout,
         away: away,
+        tickInterval: tickInterval,
         now: () => DateTime.now().add(skew),
         onEngine: onEngine);
     clients.add(client);
@@ -92,8 +95,9 @@ void main() {
   });
 
   /// A DJ'ing, with [tracks] queued and the first one playing.
-  Future<Client> djWith(String identity, List<String> links) async {
-    final dj = join(identity);
+  Future<Client> djWith(String identity, List<String> links,
+      {Duration tickInterval = const Duration(milliseconds: 40)}) async {
+    final dj = join(identity, tickInterval: tickInterval);
     await settle();
     await dj.session.becomeDj();
     await settle();
@@ -224,8 +228,11 @@ void main() {
     });
 
     test('a listener that reconnects asks for the booth again', () async {
-      final a =
-          await djWith('@a:x:DEV1', ['https://music.example/aaaaaaaaaaa']);
+      // Ticks, every 40 ms elsewhere, would tell b about the DJ by
+      // themselves: on a slow machine one landed between the leave and the
+      // check. Here only the reconnect may.
+      final a = await djWith('@a:x:DEV1', ['https://music.example/aaaaaaaaaaa'],
+          tickInterval: const Duration(minutes: 1));
       final b = join('@b:x:DEV2');
       await settle();
       // LiveKit made the DJ "leave" during b's reconnect.
