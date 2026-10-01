@@ -21,12 +21,12 @@ import 'package:cockhouse/main.dart';
 import 'package:cockhouse/ui/organisms/attachment_processor/attachment_processor.dart';
 import 'package:cockhouse/ui/navigation/adaptive_dialog.dart';
 import 'package:cockhouse/ui/organisms/chat/chat_view.dart';
+import 'package:cockhouse/ui/organisms/chat/dropped_files.dart';
 import 'package:cockhouse/utils/debounce.dart';
 import 'package:cockhouse/utils/error_utils.dart';
 import 'package:cockhouse/utils/event_bus.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:exif/exif.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -99,6 +99,7 @@ class ChatState extends State<Chat> {
 
     onFileDroppedSubscription =
         EventBus.onFileDropped.stream.listen(onFileDropped);
+    _open.add(this);
 
     gifs = room.client.getComponent<GifComponent>();
     emoticons = room.getComponent<RoomEmoticonComponent>();
@@ -150,6 +151,7 @@ class ChatState extends State<Chat> {
         "Disposing room timeline for: ${widget.room.displayName} ${widget.threadId ?? ""}");
 
     onFileDroppedSubscription?.cancel();
+    _open.remove(this);
     super.dispose();
   }
 
@@ -400,18 +402,45 @@ class ChatState extends State<Chat> {
     typingIndicators?.setTypingStatus(false);
   }
 
+  /// Every chat on screen (a thread can be open beside the room's), so a
+  /// drop goes to one of them only.
+  static final Set<ChatState> _open = {};
+
+  Rect? get _bounds {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached || !box.hasSize) return null;
+    return box.localToGlobal(Offset.zero) & box.size;
+  }
+
   void onFileDropped(DropDoneDetails event) async {
-    for (var file in event.files) {
-      var size = await file.length();
-      Uint8List? data;
-      if (size < 50000000) {
-        data = await file.readAsBytes();
-      }
+    if (!mounted ||
+        !chatTakesDrop(
+            mine: _bounds,
+            isThread: widget.threadId != null,
+            others: _open
+                .where((chat) => chat != this && chat.mounted)
+                .map((chat) => chat._bounds)
+                .nonNulls,
+            at: event.globalPosition)) {
+      return;
+    }
+    final skipped = <String>[];
+    final dropped = await attachmentsFromDroppedFiles(event.files,
+        onSkipped: (name, error) {
+      Log.w("Could not attach dropped file $name: $error");
+      skipped.add(name);
+    });
+    if (skipped.isNotEmpty && mounted) {
+      AdaptiveDialog.showError(
+          context,
+          "Could not attach ${skipped.join(", ")}: folders and unreadable "
+          "files can't be uploaded.",
+          StackTrace.current,
+          title: "Not attached");
+    }
 
+    for (final attachment in dropped) {
       if (mounted) {
-        var attachment = PendingFileAttachment(
-            name: file.name, path: file.path, size: size, data: data);
-
         var processedAttachment =
             await AdaptiveDialog.show<PendingFileAttachment>(context,
                 scrollable: false,
