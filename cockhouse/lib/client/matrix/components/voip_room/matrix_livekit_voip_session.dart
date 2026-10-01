@@ -1622,6 +1622,16 @@ class MatrixLivekitVoipSession
   static const _delayedLeaveTimeout = Duration(seconds: 30);
   static const _heartbeatInterval = Duration(seconds: 10);
 
+  /// How long a heartbeat waits for the homeserver to restart the delayed
+  /// leave. One that was lost (sent down a connection that died with the
+  /// network) used to wait out the HTTP client's 35 s, longer than the
+  /// delayed leave's 30 s, and held up every heartbeat behind it: the
+  /// delayed leave fired, and everyone outside the call stopped listing us
+  /// while we were still in it. Given up on before the next heartbeat is
+  /// due, that heartbeat tries again in time.
+  @visibleForTesting
+  static Duration restartTimeout = const Duration(seconds: 8);
+
   /// The delayed leave the heartbeat restarts. Unlike [heartbeatDelayId],
   /// kept while restarts fail, so the next heartbeat retries it.
   String? _delayedLeaveId;
@@ -1844,10 +1854,12 @@ class MatrixLivekitVoipSession
 
     try {
       try {
-        await room.matrixRoom.client.request(RequestType.POST,
-            "/client/unstable/org.matrix.msc4140/delayed_events/${Uri.encodeComponent(delayId)}",
-            contentType: "application/json",
-            data: jsonEncode({"action": "restart"}));
+        await room.matrixRoom.client
+            .request(RequestType.POST,
+                "/client/unstable/org.matrix.msc4140/delayed_events/${Uri.encodeComponent(delayId)}",
+                contentType: "application/json",
+                data: jsonEncode({"action": "restart"}))
+            .timeout(restartTimeout);
         if (heartbeatDelayId == null) {
           heartbeatDelayId = delayId;
           _publishMembershipState();

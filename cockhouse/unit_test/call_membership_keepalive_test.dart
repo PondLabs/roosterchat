@@ -177,6 +177,11 @@ class _SdkClient implements matrix.Client {
   int armFailures = 0;
   int armAttempts = 0;
 
+  /// How many of the next restarts of the delayed leave are lost, and how
+  /// many were asked for.
+  int restartsLost = 0;
+  int restarts = 0;
+
   /// Our membership as written, write by write.
   final List<Map<String, Object?>> membershipWrites = [];
 
@@ -218,6 +223,14 @@ class _SdkClient implements matrix.Client {
       return {'delay_id': 'delay-$armAttempts'};
     }
     // Restarting, sending or cancelling a delayed leave.
+    if (data is String && data.contains('restart')) {
+      restarts++;
+      if (restartsLost > 0) {
+        restartsLost--;
+        // Sent down a connection that died: no answer ever comes.
+        return Completer<Map<String, Object?>>().future;
+      }
+    }
     return {};
   }
 
@@ -533,6 +546,36 @@ void main() {
       expect(homeserver.armAttempts, 3, reason: 'two minutes after the third');
       await stay(const Duration(seconds: 10));
       expect(homeserver.armAttempts, 4);
+      expect(session!.heartbeatDelayId, isNotNull);
+    });
+
+    test('a restart that was lost does not hold up the next heartbeat',
+        () async {
+      // ignore: invalid_use_of_visible_for_testing_member
+      final timeout = MatrixLivekitVoipSession.restartTimeout;
+      // ignore: invalid_use_of_visible_for_testing_member
+      MatrixLivekitVoipSession.restartTimeout =
+          const Duration(milliseconds: 100);
+      // ignore: invalid_use_of_visible_for_testing_member
+      addTearDown(() => MatrixLivekitVoipSession.restartTimeout = timeout);
+
+      joined(serverTime);
+      await join();
+      expect(session!.heartbeatDelayId, isNotNull);
+
+      // The next heartbeat's restart goes down a connection that died with
+      // the network. It used to be waited for until the HTTP client gave up
+      // (35 s), every heartbeat behind it skipped, and the delayed leave
+      // (30 s) took our membership down while we were still in the call.
+      homeserver.restartsLost = 1;
+      // ignore: invalid_use_of_visible_for_testing_member
+      unawaited(session!.debugHeartbeat());
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+
+      // Ten seconds on, the next one restarts it, well inside the 30 s.
+      await stay(const Duration(seconds: 10))
+          .timeout(const Duration(seconds: 2));
+      expect(homeserver.restarts, 2);
       expect(session!.heartbeatDelayId, isNotNull);
     });
 

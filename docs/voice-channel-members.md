@@ -40,6 +40,7 @@ window only covers homeservers without delayed events.
 | 7 | Its rate limits compared times on this machine's clock: a clock set back (someone fixing it) held the next push back by as much. | A clock that went back counts as the wait being over (`_waited`). |
 | 8 | A list is only worked out again when a membership changes. Worked out right after the app starts, before any sync has said what time it is, it stayed as the wrong clock had it for up to an hour. | `HomeserverClock.onCorrected` fires when a reading moves its time by more than 30 s; the sidebar, the channel's page and the key provider work their lists out again, and the lapse timer is set again. |
 | 9 | The sidebar asked for the member (name, avatar) of the people listed when the row was built only. Anyone who turned up later showed as their user id. | Everyone listed is asked for once, whenever they turn up (`RoomTextButton.fetchNewMembers`). |
+| 10 | A heartbeat waited for its restart of the delayed leave for as long as the HTTP client did, 35 s, and the heartbeats after it waited for that one. A restart lost to a dropped connection (a network blip, a Wi-Fi roam) therefore outlived the delayed leave's 30 s: it fired, and the member dropped out of the list of everyone outside the call while still talking, until a later heartbeat put the membership back, a minute or more on. | A restart is given up on after 8 s (`MatrixLivekitVoipSession.restartTimeout`), before the next heartbeat is due, and that one restarts it in time. |
 
 ## What the tests guard
 
@@ -47,7 +48,7 @@ window only covers homeservers without delayed events.
 |-----------|------------|
 | The homeserver's time comes from its own events' age, not another homeserver's or a local echo's; setting this machine's clock does not move it; a late or back-dated reading does not set it back, unless the one kept is five minutes old; the first reading after a sleep puts it right | `unit_test/homeserver_clock_test.dart` |
 | Someone in for hours, with a clock three hours ahead, is listed in the sidebar and on the channel's page; a window closed by the homeserver's clock is not; the list is looked at again when one closes, not before, and as soon as a sync puts the time right; in our call, someone connected with no stream and no membership is listed, and connecting updates the list | `unit_test/voice_channel_member_list_test.dart` ("Members in the call for hours", "Voice channel page") |
-| Written again an hour after each write, from the same join, with or without delayed events, away included; a clock three hours behind, a lagging homeserver time and a clock set back all still write a full window; a delayed leave, or the question, that failed is tried again 30 s later and not before, and less often while it keeps failing; LiveKit's participants are who is connected | `unit_test/call_membership_keepalive_test.dart` |
+| Written again an hour after each write, from the same join, with or without delayed events, away included; a clock three hours behind, a lagging homeserver time and a clock set back all still write a full window; a delayed leave, or the question, that failed is tried again 30 s later and not before, and less often while it keeps failing; a restart that is lost does not hold up the next heartbeat; LiveKit's participants are who is connected | `unit_test/call_membership_keepalive_test.dart` |
 | When a membership is due, and the lapse timer counting by the homeserver's clock | `unit_test/matrix_call_membership_test.dart` |
 | The sidebar row itself shows everyone under the channel by name, someone in for five hours included; on a clock three hours ahead, the ones in for hours turn up, by name, as soon as a sync says what time it is | `unit_test/voice_channel_sidebar_row_test.dart` |
 | A rewrite waits its turn, is covered by a write going out anyway, is retried when it fails, and does nothing once stopped | `unit_test/call_membership_publisher_test.dart` |
@@ -65,6 +66,10 @@ Reverting any one of these fixes turns at least one of these tests red
   fix.
 - `Homeserver does not support delayed events`: no delayed leave, so a
   client that dies stays listed until its window closes, up to four hours.
+- `Our delayed leave is gone, arming a new one` followed by `Our call
+  membership was cleared while we are in the call, restoring it`: the
+  member's delayed leave fired while they were in the call, and they were
+  missing from the list of everyone outside it until then.
 - `Could not arm our delayed leave (attempt N, again in S s)`: tried again
   30 s later, then a minute, two, and so on up to ten.
 - `Membership state is expired, skipping` (sidebar): a membership whose
