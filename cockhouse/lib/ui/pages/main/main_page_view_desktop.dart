@@ -5,6 +5,7 @@ import 'package:cockhouse/ui/atoms/scaled_safe_area.dart';
 import 'package:cockhouse/ui/atoms/space_header.dart';
 import 'package:cockhouse/ui/molecules/current_session_panel.dart';
 import 'package:cockhouse/ui/molecules/space_viewer.dart';
+import 'package:cockhouse/ui/organisms/dj/dj_booth_panel.dart';
 import 'package:cockhouse/ui/organisms/background_task_view/background_task_view_container.dart';
 import 'package:cockhouse/ui/organisms/home_screen/home_screen.dart';
 import 'package:cockhouse/ui/organisms/home_screen/single_rooms_list.dart';
@@ -119,6 +120,8 @@ class MainPageViewDesktop extends StatelessWidget {
           ),
           if (state.currentRoom != null)
             DragDropFileTarget(
+              // The DJ booth queues files dropped on it.
+              ignoreAt: djBoothTakesDrop,
               onDropComplete: (details) {
                 EventBus.onFileDropped.add(details);
               },
