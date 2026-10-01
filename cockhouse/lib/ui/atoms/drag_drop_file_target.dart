@@ -4,8 +4,11 @@ import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class DragDropFileTarget extends StatefulWidget {
-  const DragDropFileTarget({super.key, this.onDropComplete});
+  const DragDropFileTarget({super.key, this.onDropComplete, this.ignoreAt});
   final Function(DropDoneDetails details)? onDropComplete;
+
+  /// Spots (global positions) where another drop target takes the files.
+  final bool Function(Offset globalPosition)? ignoreAt;
   @override
   State<DragDropFileTarget> createState() => _DragDropFileTargetState();
 }
@@ -26,12 +29,22 @@ class _DragDropFileTargetState extends State<DragDropFileTarget> {
               isFileHovered = true;
             });
           },
+          onDragUpdated: (details) {
+            final hovered =
+                widget.ignoreAt?.call(details.globalPosition) != true;
+            if (hovered != isFileHovered) {
+              setState(() => isFileHovered = hovered);
+            }
+          },
           onDragExited: (_) {
             setState(() {
               isFileHovered = false;
             });
           },
-          onDragDone: (detail) => widget.onDropComplete?.call(detail),
+          onDragDone: (detail) {
+            if (widget.ignoreAt?.call(detail.globalPosition) == true) return;
+            widget.onDropComplete?.call(detail);
+          },
           child: Stack(
             children: [
               AnimatedOpacity(

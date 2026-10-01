@@ -101,7 +101,10 @@ Scaffold for snack bars.
 
 ## Songs
 
-- Files: the add bar's file button picks audio files. Each is queued as
+- Files: the add bar's "Choose files…" button (or "Add music" with nothing
+  pasted) picks audio files, and audio files dropped on the DJ's booth are
+  queued too (the window-wide chat upload target skips drops on the booth,
+  `djBoothTakesDrop`). Each is queued as
   `file:<id>`, the id a hash of its path, and the path is remembered in
   `<app support>/dj-local-files.json`. The file is played where it is, never
   copied. Another client can't play it: a DJ who takes over skips such songs
