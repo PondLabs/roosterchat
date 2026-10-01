@@ -195,6 +195,11 @@ class DjSnapshot {
   /// right one.
   final String? passId;
 
+  /// The DJ this epoch's DJ took the decks from because they were away
+  /// ([DjSession.takeOverAfterAway]), without a pass. That DJ's client
+  /// yields, or takes them back with the next epoch if they are not away.
+  final String? takenFrom;
+
   const DjSnapshot({
     this.epoch = 0,
     this.seq = 0,
@@ -207,6 +212,7 @@ class DjSnapshot {
     this.requests = const [],
     this.passTo,
     this.passId,
+    this.takenFrom,
   });
 
   static const empty = DjSnapshot();
@@ -226,6 +232,7 @@ class DjSnapshot {
     String? passTo,
     String? passId,
     bool clearPassTo = false,
+    String? takenFrom,
   }) =>
       DjSnapshot(
         epoch: epoch ?? this.epoch,
@@ -239,6 +246,9 @@ class DjSnapshot {
         requests: requests ?? this.requests,
         passTo: clearPassTo ? null : (passTo ?? this.passTo),
         passId: clearPassTo ? null : (passId ?? this.passId),
+        // Says how this epoch began, so a new epoch drops it.
+        takenFrom: takenFrom ??
+            (epoch == null || epoch == this.epoch ? this.takenFrom : null),
       );
 
   Map<String, Object?> toJson() => {
@@ -253,6 +263,7 @@ class DjSnapshot {
         if (requests.isNotEmpty) 'r': requests,
         if (passTo != null) 'to': passTo,
         if (passId != null) 'pid': passId,
+        if (takenFrom != null) 'tk': takenFrom,
       };
 
   static DjSnapshot? fromJson(Object? json) {
@@ -284,6 +295,7 @@ class DjSnapshot {
           : const [],
       passTo: djString(json['to'], 256),
       passId: djString(json['pid'], 64),
+      takenFrom: djString(json['tk'], 256),
     );
   }
 

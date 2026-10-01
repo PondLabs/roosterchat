@@ -346,7 +346,14 @@ class _DjStrip extends StatelessWidget {
                 child: const Text('No thanks')),
         ],
       );
+    } else if (dj.caps.canDj && dj.canTakeOver) {
+      action = TextButton.icon(
+        onPressed: () => dj.takeOver(),
+        icon: const Icon(Icons.album_rounded, size: 16),
+        label: Text(takeOverLabel),
+      );
     } else if (dj.caps.canDj) {
+      final away = dj.djAwayFor;
       action = dj.hasRequested
           ? TextButton(
               onPressed: () => dj.requestDj(false),
@@ -357,6 +364,10 @@ class _DjStrip extends StatelessWidget {
               icon: const Icon(Icons.back_hand_outlined, size: 16),
               label: const Text('Ask for the decks'),
             );
+      if (away != null) {
+        action = Tooltip(
+            message: takeOverWait(member.displayName, away), child: action);
+      }
     }
 
     return Padding(
