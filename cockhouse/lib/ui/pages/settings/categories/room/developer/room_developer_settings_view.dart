@@ -31,6 +31,9 @@ class RoomDeveloperSettingsView extends StatelessWidget {
           child: Codeblock(
             language: "json",
             text: room.developerInfo,
+            // The copy button: the state is what gets pasted into a bug
+            // report.
+            clipboardText: room.developerInfo,
           ),
         )
       ],
