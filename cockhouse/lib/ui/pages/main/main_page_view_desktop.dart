@@ -1,5 +1,7 @@
 import 'package:cockhouse/config/layout_config.dart';
+import 'package:cockhouse/main.dart';
 import 'package:cockhouse/ui/atoms/drag_drop_file_target.dart';
+import 'package:cockhouse/ui/atoms/resizable_width.dart';
 import 'package:cockhouse/ui/atoms/room_header.dart';
 import 'package:cockhouse/ui/atoms/scaled_safe_area.dart';
 import 'package:cockhouse/ui/atoms/space_header.dart';
@@ -42,8 +44,12 @@ class MainPageViewDesktop extends StatelessWidget {
             mainAxisSize: MainAxisSize.max,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                width: 320,
+              // The channel list gets the width less the space bar's 70: 200
+              // to 480.
+              ResizableWidth(
+                preference: preferences.sidebarWidth,
+                min: 270,
+                max: 550,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -87,7 +93,7 @@ class MainPageViewDesktop extends StatelessWidget {
                               ),
                             ),
                           ),
-                          Flexible(
+                          Expanded(
                             child: tiamat.Tile.surfaceContainer(
                                 caulkClipBottomLeft: true,
                                 caulkClipTopRight: true,
@@ -130,34 +136,31 @@ class MainPageViewDesktop extends StatelessWidget {
     );
   }
 
-  SizedBox spaceRoomSelector(BuildContext context) {
-    return SizedBox(
-      width: 250,
-      child: Column(
-        children: [
-          SpaceHeader(
-            state.currentSpace!,
-            onTap: state.clearRoomSelection,
-            backgroundColor: Theme.of(
-              context,
-            ).colorScheme.surfaceContainerLow,
-          ),
-          Expanded(
-            child: SingleChildScrollView(
-              child: SpaceViewer(
-                state.currentSpace!,
-                key: ValueKey(
-                  "space-view-key-${state.currentSpace!.localId}",
-                ),
-                onRoomSelected: (room, {bool bypassSpecialRoomType = false}) {
-                  state.selectRoom(room,
-                      bypassSpecialRoomType: bypassSpecialRoomType);
-                },
+  Widget spaceRoomSelector(BuildContext context) {
+    return Column(
+      children: [
+        SpaceHeader(
+          state.currentSpace!,
+          onTap: state.clearRoomSelection,
+          backgroundColor: Theme.of(
+            context,
+          ).colorScheme.surfaceContainerLow,
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            child: SpaceViewer(
+              state.currentSpace!,
+              key: ValueKey(
+                "space-view-key-${state.currentSpace!.localId}",
               ),
+              onRoomSelected: (room, {bool bypassSpecialRoomType = false}) {
+                state.selectRoom(room,
+                    bypassSpecialRoomType: bypassSpecialRoomType);
+              },
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
