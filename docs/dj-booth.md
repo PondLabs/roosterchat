@@ -86,6 +86,23 @@ How the epoch moves:
 - **Request.** A desktop listener asks; the DJ's state lists them, which puts
   a ✋ next to their name for everyone. Web and Android get an explanation
   instead of the request action. Hands go down when the booth empties.
+- **Take over from an away DJ.** A DJ's ticks carry `aw`, how long
+  (ms) their user has been away (`UserIdleWatcher.isAway`, the amber dot of
+  `docs/away-status.md`, so idle 15 min before it starts counting). Once a
+  listener has heard a DJ say they have been away for 15 minutes
+  (`DjSession.takeOverAfterAway`), a desktop listener gets "Take the decks
+  (DJ away 15 min)" in the booth panel and on the DJ's right-click menu
+  (before then, how long they have been away and when it opens up). It
+  works like a pass the DJ didn't make: the taker fetches the playing song
+  while it plays on, then announces itself with the next epoch and
+  `tk` (taken from) naming the old DJ. Everyone follows the epoch as usual;
+  the old DJ's own client is the judge. Still away for 15 minutes by its
+  own count, it yields and fades out. Back (or never away that long), it
+  takes the decks back with the epoch after the taker's, which beats it
+  everywhere, and the taker stops. The taker gives up if the DJ's ticks stop
+  saying away before it announces. A takeover during the DJ's own file
+  can't fetch it, so the booth is taken paused on it (play skips it).
+  Builds without this send no `aw`, so their DJs can't be taken from.
 - **Release or leave.** The booth empties but everyone keeps the queue and
   position, paused, so the next DJ picks up where it stopped.
 

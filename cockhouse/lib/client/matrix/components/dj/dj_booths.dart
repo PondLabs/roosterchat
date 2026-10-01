@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:cockhouse/client/components/dj/dj_engine.dart';
 import 'package:cockhouse/client/components/dj/dj_models.dart';
 import 'package:cockhouse/client/components/dj/dj_session.dart';
+import 'package:cockhouse/client/components/user_presence/user_idle_watcher.dart';
 import 'package:cockhouse/client/components/voip/voip_session.dart';
 import 'package:cockhouse/client/matrix/components/dj/dj_platform.dart';
 import 'package:cockhouse/client/components/voip/voip_stream.dart';
@@ -60,6 +61,7 @@ class DjBooths {
       selfUserId: session.client.self?.identifier ?? '',
       engineFactory: platform.engineFactory(room),
       resolver: platform.resolver,
+      away: UserIdleWatcher.instance.isAway,
       acceptPass: platform.canDj
           ? (from) => askToTakeDecks(session.client
                   .getRoom(session.roomId)
