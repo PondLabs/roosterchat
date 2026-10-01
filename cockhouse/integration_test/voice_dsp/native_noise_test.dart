@@ -396,7 +396,9 @@ void main() {
       await File('$_results/dj_monitor.txt').writeAsString('$summary\n');
       // ignore: avoid_print
       print("DJ monitor: $summary");
-      expect(b, closeTo(a, 3),
+      // One way: switched off, the room noise comes back up (about -29 dB
+      // against -40). Lower is WebRTC's suppressor still settling in A.
+      expect(b, lessThan(a + 3),
           reason: "the DJ's monitor switched the microphone's echo "
               'cancellation off: $summary');
     });
