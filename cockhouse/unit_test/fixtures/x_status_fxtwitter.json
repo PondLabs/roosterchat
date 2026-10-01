@@ -1,0 +1,84 @@
+{
+  "code": 200,
+  "message": "OK",
+  "tweet": {
+    "url": "https://x.com/SpaceX/status/1732824684683784516",
+    "id": "1732824684683784516",
+    "text": "At dawn from the gateway to Mars, the launch of Starship’s second flight test",
+    "author": {
+      "screen_name": "SpaceX",
+      "name": "SpaceX",
+      "avatar_url": "https://pbs.twimg.com/profile_images/1697749409851985920/HbrI04tM_200x200.jpg",
+      "verification": {
+        "verified": true,
+        "verified_at": null,
+        "type": "organization"
+      }
+    },
+    "replies": 2433,
+    "retweets": 6573,
+    "likes": 33877,
+    "created_timestamp": 1701972573,
+    "media": {
+      "all": [
+        {
+          "type": "video",
+          "url": "https://video.twimg.com/ext_tw_video/1732820284301058052/pu/vid/avc1/1920x1080/K2NITCly19drRgED.mp4?tag=14",
+          "thumbnail_url": "https://pbs.twimg.com/ext_tw_video_thumb/1732820284301058052/pu/img/A-6jgWgxmMJ43_YO.jpg",
+          "width": 1920,
+          "height": 1080,
+          "duration": 114.322
+        }
+      ],
+      "videos": [
+        {
+          "type": "video",
+          "url": "https://video.twimg.com/ext_tw_video/1732820284301058052/pu/vid/avc1/1920x1080/K2NITCly19drRgED.mp4?tag=14",
+          "thumbnail_url": "https://pbs.twimg.com/ext_tw_video_thumb/1732820284301058052/pu/img/A-6jgWgxmMJ43_YO.jpg",
+          "width": 1920,
+          "height": 1080,
+          "duration": 114.322
+        }
+      ]
+    },
+    "quote": {
+      "url": "https://x.com/TheEllenShow/status/440322224407314432",
+      "id": "440322224407314432",
+      "text": "If only Bradley's arm was longer. Best photo ever. #oscars",
+      "author": {
+        "screen_name": "TheEllenShow",
+        "name": "The Ellen Show",
+        "avatar_url": "https://pbs.twimg.com/profile_images/1909090851592273920/UutmZxGI_200x200.jpg",
+        "verification": {
+          "verified": false,
+          "verified_at": null,
+          "type": null
+        }
+      },
+      "replies": 158793,
+      "retweets": 2515153,
+      "likes": 1862056,
+      "created_timestamp": 1393815973,
+      "media": {
+        "all": [
+          {
+            "type": "photo",
+            "id": "440322224092745728",
+            "url": "https://pbs.twimg.com/media/BhxWutnCEAAtEQ6.jpg?name=orig",
+            "width": 1920,
+            "height": 1080
+          }
+        ],
+        "photos": [
+          {
+            "type": "photo",
+            "id": "440322224092745728",
+            "url": "https://pbs.twimg.com/media/BhxWutnCEAAtEQ6.jpg?name=orig",
+            "width": 1920,
+            "height": 1080
+          }
+        ]
+      }
+    }
+  }
+}

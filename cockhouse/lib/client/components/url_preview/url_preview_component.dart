@@ -2,6 +2,7 @@ import 'package:cockhouse/client/attachment.dart';
 import 'package:cockhouse/client/client.dart';
 import 'package:cockhouse/client/components/component.dart';
 import 'package:cockhouse/client/components/video_embed/video_embed_info.dart';
+import 'package:cockhouse/client/components/video_embed/x_post.dart';
 import 'package:cockhouse/client/timeline_events/timeline_event.dart';
 import 'package:flutter/widgets.dart';
 
@@ -54,6 +55,10 @@ class UrlPreviewData {
   /// with a single image; [image] stays the primary/first one either way.
   final List<UrlPreviewImage> images;
 
+  /// Set for an X status, which shows as an X card instead (author, text,
+  /// [images] or the [videoEmbedInfo] video, quote, counts).
+  final XPost? xPost;
+
   const UrlPreviewData(
     this.uri, {
     this.siteName,
@@ -64,5 +69,6 @@ class UrlPreviewData {
     this.video,
     this.videoEmbedInfo,
     this.images = const [],
+    this.xPost,
   });
 }
