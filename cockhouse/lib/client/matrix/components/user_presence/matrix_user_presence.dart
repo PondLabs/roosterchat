@@ -85,8 +85,15 @@ class MatrixUserPresenceComponent
       );
 
   @override
-  Future<UserPresence> getUserPresence(String userId) async {
-    final presence = await client.matrixClient.fetchCurrentPresence(userId);
+  Future<UserPresence> getUserPresence(String userId) async => resolvePresence(
+      userId, await client.matrixClient.fetchCurrentPresence(userId));
+
+  /// [presence], what the homeserver holds for [userId], with what we know
+  /// first hand folded in. Every status we report goes through here: a dot
+  /// reads [getUserPresence] once and then follows [onPresenceChanged], so a
+  /// raw homeserver update there undid a membership saying they are away,
+  /// and an away friend went grey.
+  UserPresence resolvePresence(String userId, CachedPresence presence) {
     final call = callPresence(userId);
 
     // A membership that says its owner is away is first hand and recent,
@@ -171,7 +178,7 @@ class MatrixUserPresenceComponent
   }
 
   void changed(CachedPresence event) {
-    _controller.add((event.userid, convertPresence(event)));
+    _controller.add((event.userid, resolvePresence(event.userid, event)));
   }
 
   @override
@@ -300,7 +307,14 @@ class MatrixUserPresenceComponent
         }
       }
 
-      _controller.add((id, UserPresence(UserPresenceStatus.online)));
+      // Online, unless their call membership says they are away: the event
+      // may be their client rewriting that membership on its own.
+      _controller.add((
+        id,
+        UserPresence(callPresence(id) == UserPresenceStatus.unavailable
+            ? UserPresenceStatus.unavailable
+            : UserPresenceStatus.online)
+      ));
     }
   }
 
