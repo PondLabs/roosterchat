@@ -4,7 +4,7 @@ Research note, 2026-09-16. All paths are relative to the repo root; line
 numbers are from the working tree at commit `906de7c1`
 (branch `t3code/solve-github-issue-eleven`). Nothing here changes code.
 
-Issue: https://github.com/PondLabs/roscord/issues/11. Sharing a screen with
+Issue: https://github.com/PondLabs/roosterchat/issues/11. Sharing a screen with
 "do not share audio" unchecked adds a second avatar tile for the sharer
 (both on the sharer's side and on every viewer's), and that tile's speaking
 indicator lights up whenever the shared audio plays.

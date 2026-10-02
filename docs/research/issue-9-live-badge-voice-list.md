@@ -1,6 +1,6 @@
 # Issue #9: LIVE badge for screen sharers in the sidebar voice list
 
-Research note for https://github.com/PondLabs/roscord/issues/9, 2026-09-16.
+Research note for https://github.com/PondLabs/roosterchat/issues/9, 2026-09-16.
 roscord paths are relative to the repo root at `a484ef19`. This note changes no
 code. External sources are pinned as follows (line numbers refer to these
 revisions):

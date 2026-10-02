@@ -65,7 +65,7 @@ class SettingsCategoryAbout implements SettingsCategory {
                 text: "Source Code",
                 recognizer: TapGestureRecognizer()
                   ..onTap = () => LinkUtils.open(
-                      Uri.parse("https://github.com/PondLabs/roscord"),
+                      Uri.parse("https://github.com/PondLabs/roosterchat"),
                       context: context)),
           ),
           const tiamat.Text.label(" · "),
@@ -76,7 +76,7 @@ class SettingsCategoryAbout implements SettingsCategory {
                 recognizer: TapGestureRecognizer()
                   ..onTap = () => LinkUtils.open(
                       Uri.parse(
-                          "https://github.com/PondLabs/roscord/blob/main/LICENSE"),
+                          "https://github.com/PondLabs/roosterchat/blob/main/LICENSE"),
                       context: context)),
           ),
           const tiamat.Text.label(" · "),

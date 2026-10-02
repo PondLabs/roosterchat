@@ -1,8 +1,8 @@
 # Issue tracker: GitHub
 
-Issues and specs for this repo live as GitHub issues in **`PondLabs/roscord`**. Use the `gh` CLI for all operations.
+Issues and specs for this repo live as GitHub issues in **`PondLabs/roosterchat`**. Use the `gh` CLI for all operations.
 
-The clone's `origin` is `PondLabs/roscord`, so bare `gh` commands resolve correctly when run inside the clone; from elsewhere, pass `--repo PondLabs/roscord`.
+The clone's `origin` is `PondLabs/roosterchat`, so bare `gh` commands resolve correctly when run inside the clone; from elsewhere, pass `--repo PondLabs/roosterchat`.
 
 ## Conventions
 

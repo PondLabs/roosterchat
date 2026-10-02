@@ -32,7 +32,7 @@ releases, turns the whole thing off (`UpdateChecker.shouldCheckForUpdates`).
 | `lib/ui/organisms/update_button.dart` | The button in general settings. |
 
 The request is one unauthenticated GET to
-`api.github.com/repos/PondLabs/roscord/releases/latest`, which is rate
+`api.github.com/repos/PondLabs/roosterchat/releases/latest`, which is rate
 limited to 60 an hour per IP. `releases/latest` leaves out prereleases by
 design.
 

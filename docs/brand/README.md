@@ -179,6 +179,6 @@ It also works for caps (the mark embroidered), hoodies, die-cut stickers (the ap
 
 Everything that is the app's own is **Rooster**. That covers the display name everywhere a person sees it, the app ID `com.pondlabs.rooster`, the `rooster` executable, the data directories, the `rooster/` folder and Dart package, and the release asset names. Installs from before the renames (Rooster, and Commet before it) update in place and bring their data with them.
 
-What keeps Commet's name is the Matrix protocol (`chat.commet.*` event types), the `chat.commet` URL scheme, the web build's database name, and Commet's own services and attribution. Renaming those would break other clients, links and existing users. The GitHub repo is still `PondLabs/roscord` until it is renamed there.
+What keeps Commet's name is the Matrix protocol (`chat.commet.*` event types), the `chat.commet` URL scheme, the web build's database name, and Commet's own services and attribution. Renaming those would break other clients, links and existing users. The GitHub repo is `PondLabs/roosterchat`; the old `PondLabs/roscord` URLs redirect to it.
 
 The full list, and how earlier installs are brought across, is in [`docs/adr/0003-rename-to-rooster.md`](../adr/0003-rename-to-rooster.md), which builds on [`0002-rename-to-rooster.md`](../adr/0002-rename-to-rooster.md).

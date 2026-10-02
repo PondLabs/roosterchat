@@ -16,7 +16,7 @@ on 2026-09-14. Paths assume the Windows user `apbia`; adjust as needed.
 | Visual Studio 2022 Community, "Desktop development with C++" workload | default VS location | The workload was missing (only bare MSVC tools were installed, no CMake tools, no Windows SDK). Added with the VS installer, elevated. |
 | Rust stable (MSVC target) | `C:\Users\apbia\.cargo\bin` | Was 1.86; several crates in the lockfile refuse anything older than ~1.88. `rustup update stable` fixed it (now 1.98). |
 | CEF SDK (pinned lock in `third_party/cef/`) | staged by `tools/cef_runtime.py` during the build | The cutover removed the old `nuget.exe`/WebView2 step: the Windows target links no WebView2 and downloads nothing at configure time. The bundled CEF runtime is staged, hash-verified, sandboxed, and signed per `docs/cef-browser-runtime-windows-artifacts.md`; run `python tools/qualify_windows_artifact.py` after the build. |
-| Native checkout | `C:\Users\apbia\workspace\roscord` | Cloned from the WSL repo (`git clone /home/lion/workspace/pondlabs/roscord /mnt/c/Users/apbia/workspace/roscord`), then `git remote set-url origin git@github.com:PondLabs/roscord.git`. Build from a native Windows path, not from `\\wsl.localhost\...`: the build is far slower there and plugin symlinks misbehave. |
+| Native checkout | `C:\Users\apbia\workspace\roscord` | Cloned from the WSL repo (`git clone /home/lion/workspace/pondlabs/roscord /mnt/c/Users/apbia/workspace/roscord`), then `git remote set-url origin git@github.com:PondLabs/roosterchat.git`. Build from a native Windows path, not from `\\wsl.localhost\...`: the build is far slower there and plugin symlinks misbehave. |
 | Git long paths | global git config | `git config --global core.longpaths true` (CI does the same). |
 
 ### Redoing the setup from scratch
@@ -41,7 +41,7 @@ cmd.exe /c "rustup update stable"
 
 # Checkout
 git clone --branch main /home/lion/workspace/pondlabs/roscord /mnt/c/Users/apbia/workspace/roscord
-cd /mnt/c/Users/apbia/workspace/roscord && git remote set-url origin git@github.com:PondLabs/roscord.git
+cd /mnt/c/Users/apbia/workspace/roscord && git remote set-url origin git@github.com:PondLabs/roosterchat.git
 ```
 
 Check the toolchain once:

@@ -27,11 +27,11 @@ class UpdateChecker {
 
   /// The project whose releases we check.
   static const String releasesApiUrl =
-      "https://api.github.com/repos/PondLabs/roscord/releases/latest";
+      "https://api.github.com/repos/PondLabs/roosterchat/releases/latest";
 
   /// Where the "View release" action sends the user.
   static const String releasesPageUrl =
-      "https://github.com/PondLabs/roscord/releases/latest";
+      "https://github.com/PondLabs/roosterchat/releases/latest";
 
   static String get labelUpdateAvailable => Intl.message("Update Available",
       name: "labelUpdateAvailable",

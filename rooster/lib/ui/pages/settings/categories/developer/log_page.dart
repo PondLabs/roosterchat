@@ -205,7 +205,7 @@ class _LogPageState extends State<LogPage> {
 
   Future<void> reportIssue(LogEntryException entry) async {
     var data = await getErrorData(entry);
-    var uri = Uri.https("github.com", "/PondLabs/roscord/issues/new", {
+    var uri = Uri.https("github.com", "/PondLabs/roosterchat/issues/new", {
       "title": entry.content.split("\n").first,
       "body": data,
       "labels": "bug",

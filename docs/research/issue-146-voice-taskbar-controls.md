@@ -1,6 +1,6 @@
 # Issue 146: voice controls outside the window
 
-Research note for https://github.com/PondLabs/roscord/issues/146:
+Research note for https://github.com/PondLabs/roosterchat/issues/146:
 Discord-style call controls (mute, deafen, disconnect) under the taskbar
 thumbnail on Windows, and the nearest native equivalent on macOS, Linux
 and the browser. Written 2026-09-25 against
