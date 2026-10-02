@@ -1,0 +1,132 @@
+/* Rooster's landing page. Palette and type from docs/brand/README.md. */
+@font-face {
+  font-family: "Sora";
+  src: url("Sora-VariableFont_wght.ttf") format("truetype");
+  font-weight: 100 800;
+  font-display: swap;
+}
+
+:root {
+  --ink: #211614;
+  --comb: #E8382A;
+  --yolk: #F89B17;
+  --cream: #F7EDE1;
+  --stone: #8D8178;
+  --surface: #2A221E;
+  --text: #F5EBDD;
+  --link: #8FB4DA;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--text);
+  font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+a { color: var(--link); }
+a:hover { color: var(--text); }
+
+h1, h2, .tagline, .button, .downloads strong {
+  font-family: "Sora", system-ui, sans-serif;
+}
+
+.hero {
+  text-align: center;
+  padding: 72px 24px 48px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.mark { display: block; margin: 0 auto 8px; }
+
+h1 {
+  font-size: 64px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin: 0;
+  line-height: 1;
+}
+
+.tagline {
+  font-weight: 500;
+  font-size: 22px;
+  color: var(--stone);
+  margin: 10px 0 24px;
+}
+
+.lede { font-size: 19px; margin: 0 auto 32px; }
+
+.cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin: 0; }
+
+.button {
+  display: inline-block;
+  padding: 14px 26px;
+  border-radius: 12px;
+  background: var(--comb);
+  color: #FFF7EE;
+  font-weight: 700;
+  text-decoration: none;
+}
+.button:hover { background: #F04A3C; color: #FFF7EE; }
+.button.secondary { background: var(--surface); color: var(--text); }
+.button.secondary:hover { background: #362C27; }
+
+.note { color: var(--stone); font-size: 15px; margin-top: 16px; }
+
+main { max-width: 1040px; margin: 0 auto; padding: 0 24px 48px; }
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  gap: 20px;
+  margin: 24px 0 72px;
+}
+.features div {
+  background: var(--surface);
+  border-radius: 16px;
+  padding: 24px 24px 8px;
+}
+.features h2 { font-size: 20px; margin: 0 0 8px; }
+
+.downloads { text-align: center; }
+.downloads h2 { font-size: 34px; margin: 0 0 20px; }
+.downloads ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 auto;
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.downloads li a {
+  display: block;
+  width: 200px;
+  padding: 20px;
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  border: 2px solid transparent;
+}
+.downloads li a:hover { border-color: var(--comb); }
+.downloads li strong { display: block; font-size: 20px; }
+.downloads li span { color: var(--stone); font-size: 14px; }
+
+footer {
+  border-top: 1px solid var(--surface);
+  color: var(--stone);
+  font-size: 14px;
+  text-align: center;
+  padding: 24px;
+}
+
+@media (max-width: 600px) {
+  .hero { padding-top: 48px; }
+  .mark { width: 160px; height: 160px; }
+  h1 { font-size: 48px; }
+}

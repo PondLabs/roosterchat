@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rooster · Talk. Play. Hang out.</title>
+  <meta name="description" content="Rooster is where your crew talks, plays and hangs out: always-on voice rooms, screen share, a soundboard and a DJ booth, on Matrix. Free and open source.">
+  <meta property="og:title" content="Rooster">
+  <meta property="og:description" content="Talk. Play. Hang out. Voice rooms, screen share, soundboard and DJ booth, on your own Matrix server.">
+  <meta property="og:image" content="https://pondlabs.github.io/roosterchat/app-icon-1024.png">
+  <meta name="theme-color" content="#211614">
+  <link rel="icon" href="app-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="hero">
+    <img class="mark" src="mark.svg" alt="" width="220" height="220">
+    <h1>Rooster</h1>
+    <p class="tagline">Talk. Play. Hang out.</p>
+    <p class="lede">Always-on voice rooms for your crew, with screen share, a soundboard and a DJ booth. Runs on <a href="https://matrix.org">Matrix</a>, so you can host your own server, federate with friends and keep it end-to-end encrypted.</p>
+    <p class="cta">
+      <a class="button" id="primary-download" href="https://github.com/PondLabs/roosterchat/releases/latest">Download</a>
+      <a class="button secondary" href="https://github.com/PondLabs/roosterchat">Source on GitHub</a>
+    </p>
+    <p class="note" id="version"></p>
+  </header>
+
+  <main>
+    <section class="features">
+      <div>
+        <h2>Voice rooms that stay open</h2>
+        <p>Drop in, drop out. Rooms don't ring, they just are. Per-person volume, noise suppression and push to talk, on desktop and in the browser.</p>
+      </div>
+      <div>
+        <h2>Share your screen</h2>
+        <p>Share a window or the whole screen, with its audio, and watch what everyone else is sharing in a grid.</p>
+      </div>
+      <div>
+        <h2>Soundboard</h2>
+        <p>Add a clip from a file or a link, trim it, and fire it into the call. Every space gets its own board.</p>
+      </div>
+      <div>
+        <h2>DJ booth</h2>
+        <p>Queue songs from your own files and play them into the room, in sync, for everyone.</p>
+      </div>
+      <div>
+        <h2>Your house, your rules</h2>
+        <p>It's Matrix underneath: run your own server or use any public one, bring your existing account, and talk to people on other clients.</p>
+      </div>
+      <div>
+        <h2>Free and open source</h2>
+        <p>AGPL-3.0. No accounts to sell, no ads, no telemetry. Read the code, build it yourself, or <a href="https://github.com/PondLabs/roosterchat/issues">tell us what's broken</a>.</p>
+      </div>
+    </section>
+
+    <section class="downloads" id="download">
+      <h2>Download</h2>
+      <ul>
+        <li><a data-os="windows" href="https://github.com/PondLabs/roosterchat/releases/latest"><strong>Windows</strong><span>x64 · .zip</span></a></li>
+        <li><a data-os="linux" href="https://github.com/PondLabs/roosterchat/releases/latest"><strong>Linux</strong><span>x64 · .tar.gz</span></a></li>
+        <li><a data-os="macos" href="https://github.com/PondLabs/roosterchat/releases/latest"><strong>macOS</strong><span>universal · .zip</span></a></li>
+      </ul>
+      <p class="note">Unpack it and run Rooster. Windows and Linux builds update themselves. The macOS build isn't signed by Apple: right click → Open the first time. Phones aren't built yet.</p>
+    </section>
+  </main>
+
+  <footer>
+    <p>Made by <a href="https://github.com/PondLabs">PondLabs</a>. Rooster is a fork of <a href="https://github.com/commetchat/commet">Commet</a>, and like it is licensed under the <a href="https://github.com/PondLabs/roosterchat/blob/main/LICENSE">AGPL-3.0</a>.</p>
+  </footer>
+
+  <script>
+    // Point the download links at the latest release's assets. Without this
+    // (offline, rate limited) they go to the releases page, which works too.
+    const suffix = {windows: '-windows-x64-release.zip', linux: '-linux-x64-release.tar.gz', macos: '-macos-universal-release.zip'};
+    const ua = navigator.userAgent;
+    const mine = /Windows/.test(ua) ? 'windows' : /Mac/.test(ua) ? 'macos' : /Linux/.test(ua) ? 'linux' : null;
+    const primary = document.getElementById('primary-download');
+    if (mine) primary.textContent = 'Download for ' + document.querySelector(`[data-os=${mine}] strong`).textContent;
+    fetch('https://api.github.com/repos/PondLabs/roosterchat/releases/latest')
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(release => {
+        for (const [os, end] of Object.entries(suffix)) {
+          const asset = release.assets.find(a => a.name.endsWith(end));
+          if (!asset) continue;
+          document.querySelector(`[data-os=${os}]`).href = asset.browser_download_url;
+          if (os === mine) primary.href = asset.browser_download_url;
+        }
+        document.getElementById('version').textContent = release.tag_name;
+      })
+      .catch(() => {});
+  </script>
+</body>
+</html>
