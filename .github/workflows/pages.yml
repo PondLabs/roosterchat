@@ -1,13 +1,10 @@
-# The landing page, at https://pondlabs.github.io/roosterchat/.
+# The landing page and the web app, at https://pondlabs.github.io/roosterchat/
+# and .../roosterchat/app/. Every push to main redeploys both.
 name: pages
 
 on:
   push:
     branches: [main]
-    paths:
-      - website/**
-      - docs/brand/logo/**
-      - .github/workflows/pages.yml
   workflow_dispatch:
 
 permissions:
@@ -19,20 +16,74 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+env:
+  PROJECT_PATH: rooster
+
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2.8.0
+        with:
+          flutter-version: '3.41.9'
+          channel: 'stable'
+
+      - name: Setup Tools
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ninja-build libgtk-3-dev libmpv-dev mpv ffmpeg
+
+      - name: Code Generation
+        run: |
+          cd $PROJECT_PATH
+          dart run scripts/codegen.dart
+
+      - uses: moonrepo/setup-rust@v1
+      - run: rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
+      - run: rustup target add wasm32-unknown-unknown
+
+      # Same as the release workflow: vodozemac, the LiveKit E2EE worker and
+      # the voice DSP are built, not committed.
+      - name: Prepare web
+        run: |
+          cd $PROJECT_PATH
+          ./scripts/prepare-web.sh
+
+      # The same defines as scripts/build_release.dart, plus the base href
+      # for the sub-path the app is served from.
+      - name: Build Web
+        run: |
+          cd $PROJECT_PATH
+          tag=$(git describe --tags --abbrev=0 --match 'v*' || echo v0.0.0)
+          flutter build web --release --base-href /roosterchat/app/ \
+            --build-name="${tag#v}" \
+            --dart-define BUILD_MODE=release \
+            --dart-define PLATFORM=web \
+            --dart-define GIT_HASH=${{ github.sha }} \
+            --dart-define VERSION_TAG=$tag \
+            --dart-define ENABLE_GOOGLE_SERVICES=false \
+            --dart-define BUILD_DATE=$(date +%s%3N) \
+            --dart-define FLUTTER_WEB_CANVASKIT_URL=canvaskit/
+
+      - name: The web build carries the voice DSP
+        run: python3 tools/voice_dsp/check_contracts.py --web-build $PROJECT_PATH/build/web
+
       - name: Assemble the site
         run: |
           mkdir _site
           cp website/* _site/
           cp docs/brand/logo/mark.svg docs/brand/logo/app-icon.svg docs/brand/logo/app-icon-1024.png _site/
           cp rooster/assets/font/sora/Sora-VariableFont_wght.ttf _site/
+          cp -r $PROJECT_PATH/build/web _site/app
+
       - uses: actions/upload-pages-artifact@v3
       - id: deployment
         uses: actions/deploy-pages@v4
