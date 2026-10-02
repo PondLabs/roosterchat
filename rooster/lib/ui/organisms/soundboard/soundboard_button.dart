@@ -4,6 +4,7 @@ import 'package:rooster/client/matrix/components/soundboard/matrix_soundboard_em
 import 'package:rooster/ui/atoms/anchored_popover.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_call_controller.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_popover.dart';
+import 'package:rooster/ui/pages/settings/categories/space/space_soundboard_settings_page.dart';
 import 'package:flutter/material.dart';
 
 class SoundboardButton extends StatefulWidget {
@@ -62,6 +63,14 @@ class _SoundboardButtonState extends State<SoundboardButton> {
           volume01: ctrl.volume01,
           onVolumeChanged: ctrl.setVolume01,
           imageFor: (emoji) => soundboardEmojiImage(emoji, ctrl.session.client),
+          onAddSound: (source) {
+            final soundboard = ctrl.soundboardOf(source);
+            if (soundboard == null) return;
+            // The popover sits above every route; close it so the dialog
+            // is not under it.
+            close();
+            showSpaceSoundboardDialog(this.context, soundboard);
+          },
         ),
       ),
     );

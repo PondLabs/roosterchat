@@ -34,9 +34,12 @@ abstract class MicrophoneCapture {
 }
 
 /// Who takes the background noise out of a call's microphone, kept true for
-/// the whole call: our DSP when the preference asks for it and the DSP can
-/// run, WebRTC's (the browser's) own suppressor otherwise. Never both (voices
-/// sound hollow) and never neither (the noise goes out).
+/// the whole call: with the preference on, our DSP when it can run and
+/// WebRTC's (the browser's) own suppressor otherwise, never both (voices
+/// sound hollow). With the preference off, neither: the user turned noise
+/// suppression off and the room's noise goes out, as they asked. WebRTC's
+/// used to take over then, so turning it off changed nothing anyone could
+/// hear.
 ///
 /// WebRTC's suppressor is a capture option, so a change of who suppresses is
 /// a restart of the capture, and that only happens while the microphone is
@@ -78,10 +81,11 @@ class MicrophoneNoiseSuppression {
   /// once a second.
   static const retryAfter = Duration(seconds: 10);
 
-  /// Whether a capture created now should have WebRTC's own suppressor on.
+  /// Whether a capture created now should have WebRTC's own suppressor on:
+  /// only in place of ours, when suppression is wanted and ours cannot run.
   static bool webrtcSuppressorFor(AudioProcessingManager dsp,
           {required bool preference}) =>
-      !(dsp.isSupported && preference);
+      preference && !dsp.isSupported;
 
   bool _dspFailed = false;
   DateTime? _stalledSince;
@@ -94,7 +98,7 @@ class MicrophoneNoiseSuppression {
 
   /// Whether the capture should have WebRTC's own suppressor on right now.
   bool get wantWebrtcSuppressor =>
-      webrtcSuppressorFor(dsp, preference: preference()) || _dspFailed;
+      preference() && (!dsp.isSupported || _dspFailed);
 
   /// Checks on our DSP, then brings the capture in line.
   Future<void> update() {

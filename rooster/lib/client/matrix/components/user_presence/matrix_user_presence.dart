@@ -6,6 +6,7 @@ import 'package:rooster/client/matrix/components/read_receipts/matrix_read_recei
 import 'package:rooster/client/matrix/components/typing_indicators/matrix_typing_indicators_component.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_call_membership.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_voip_room_component.dart';
+import 'package:rooster/client/matrix/homeserver_clock.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/utils/in_memory_cache.dart';
@@ -84,8 +85,15 @@ class MatrixUserPresenceComponent
       );
 
   @override
-  Future<UserPresence> getUserPresence(String userId) async {
-    final presence = await client.matrixClient.fetchCurrentPresence(userId);
+  Future<UserPresence> getUserPresence(String userId) async => resolvePresence(
+      userId, await client.matrixClient.fetchCurrentPresence(userId));
+
+  /// [presence], what the homeserver holds for [userId], with what we know
+  /// first hand folded in. Every status we report goes through here: a dot
+  /// reads [getUserPresence] once and then follows [onPresenceChanged], so a
+  /// raw homeserver update there undid a membership saying they are away,
+  /// and an away friend went grey.
+  UserPresence resolvePresence(String userId, CachedPresence presence) {
     final call = callPresence(userId);
 
     // A membership that says its owner is away is first hand and recent,
@@ -117,7 +125,8 @@ class MatrixUserPresenceComponent
   /// as offline, and someone in a call is plainly online — or away, where
   /// their membership says they have left their machine.
   UserPresenceStatus? callPresence(String userId) {
-    final now = DateTime.now();
+    // Memberships lapse by the homeserver's clock.
+    final now = HomeserverClock.instance.now();
     UserPresenceStatus? status;
     for (final room in client.matrixClient.rooms) {
       final memberships =
@@ -169,7 +178,7 @@ class MatrixUserPresenceComponent
   }
 
   void changed(CachedPresence event) {
-    _controller.add((event.userid, convertPresence(event)));
+    _controller.add((event.userid, resolvePresence(event.userid, event)));
   }
 
   @override
@@ -298,7 +307,14 @@ class MatrixUserPresenceComponent
         }
       }
 
-      _controller.add((id, UserPresence(UserPresenceStatus.online)));
+      // Online, unless their call membership says they are away: the event
+      // may be their client rewriting that membership on its own.
+      _controller.add((
+        id,
+        UserPresence(callPresence(id) == UserPresenceStatus.unavailable
+            ? UserPresenceStatus.unavailable
+            : UserPresenceStatus.online)
+      ));
     }
   }
 

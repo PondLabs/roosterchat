@@ -271,14 +271,4 @@ void main() {
       }
     });
   });
-
-  group('overlay duration clamp', () {
-    test('uses spec bounds', () {
-      // Replicates SoundboardEngine.clampOverlayMs without flutter import.
-      int clamp(int? d) => (d ?? 1200).clamp(1200, 3500);
-      expect(clamp(2000), 2000);
-      expect(clamp(100), 1200);
-      expect(clamp(60000), 3500);
-    });
-  });
 }

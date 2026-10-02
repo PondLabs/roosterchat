@@ -8,6 +8,8 @@ import 'package:rooster/client/components/component.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/client/matrix/components/room_activities/matrix_activities_component.dart';
+import 'package:rooster/client/matrix/components/voip_room/matrix_voip_room_component.dart';
+import 'package:rooster/client/matrix/homeserver_clock.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:matrix/matrix.dart' as matrix;
@@ -35,7 +37,9 @@ class FakeProfile implements Profile {
 class FakeSdkClient implements matrix.Client {
   @override
   final String? deviceID;
-  FakeSdkClient(this.deviceID);
+  @override
+  final String? userID;
+  FakeSdkClient(this.deviceID, this.userID);
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -45,7 +49,7 @@ class FakeMatrixClient implements MatrixClient {
   @override
   Profile? self = FakeProfile(selfUserId);
 
-  final FakeSdkClient _sdk = FakeSdkClient(selfDeviceId);
+  final FakeSdkClient _sdk = FakeSdkClient(selfDeviceId, selfUserId);
 
   @override
   matrix.Client get matrixClient => _sdk;
@@ -82,7 +86,7 @@ class FakeMatrixRoom implements MatrixRoom {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-class FakeVoipSession implements VoipSession {
+class FakeVoipSession implements VoipSession, CallRoster {
   @override
   final Client client;
   @override
@@ -95,11 +99,22 @@ class FakeVoipSession implements VoipSession {
   @override
   final List<VoipStream> streams = [];
 
+  /// Who is connected to the call, streams or not.
+  final Set<String> connected = {};
+
+  @override
+  Set<String> get connectedUserIds => connected;
+
   final StreamController<void> _stateChanged =
       StreamController.broadcast(sync: true);
 
   @override
   Stream<void> get onStateChanged => _stateChanged.stream;
+
+  void connect(String userId) {
+    connected.add(userId);
+    _stateChanged.add(null);
+  }
 
   void publish(String userId, VoipStreamType type,
       {bool muted = false, bool deafened = false}) {
@@ -170,6 +185,32 @@ matrix.Event callMemberEvent(
       if (voiceState != null) "chat.commet.voice_state": voiceState,
       ...extra,
     },
+  );
+}
+
+const homeserver = "example.org";
+
+/// The homeserver's time: three hours behind this machine's clock.
+DateTime serverNow() => DateTime.now().subtract(const Duration(hours: 3));
+
+/// A sync the homeserver answered at [at], by its clock.
+matrix.SyncUpdate syncFromHomeserver(DateTime at) {
+  return matrix.SyncUpdate(
+    nextBatch: "next",
+    rooms: matrix.RoomsUpdate(join: {
+      roomId: matrix.JoinedRoomUpdate(
+        timeline: matrix.TimelineUpdate(events: [
+          matrix.MatrixEvent(
+            type: "m.room.message",
+            content: const {"body": "hi"},
+            senderId: otherUserId,
+            eventId: r"$message",
+            originServerTs: at,
+            unsigned: const {"age": 0},
+          ),
+        ]),
+      ),
+    }),
   );
 }
 
@@ -496,6 +537,223 @@ void main() {
       clientManager.callManager.currentSessions.add(session);
 
       expect(callSession(component).voiceState[otherUserId], isEmpty);
+    });
+  });
+
+  // People who had been in a voice channel for a while vanished from it,
+  // leaving it looking empty while they were still talking in it. Their
+  // memberships lapse by the homeserver's clock, and were read against this
+  // machine's, which can be hours ahead: a Windows clock reading a dual
+  // boot's UTC hardware clock as local time runs three hours ahead, in
+  // Brazil. Here this machine's clock is the real one, and the homeserver's
+  // three hours behind it.
+  group("Members in the call for hours", () {
+    const thirdUserId = "@third:example.org";
+
+    late HomeserverClock clock;
+    late MatrixActivitiesComponent sidebar;
+
+    setUp(() {
+      clock = HomeserverClock();
+      clock.readSync(syncFromHomeserver(serverNow()), homeserver: homeserver);
+      sidebar = MatrixActivitiesComponent(client, room,
+          callManager: clientManager.callManager, clock: clock);
+    });
+
+    void setMemberships(List<matrix.StrippedStateEvent> memberships) {
+      room.matrixRoom.states[MatrixActivitiesComponent.callMemberStateEvent] = {
+        for (final m in memberships) m.stateKey!: m,
+      };
+    }
+
+    test("someone who joined two hours ago is listed on a clock that is ahead",
+        () {
+      setMemberships([
+        callMemberEvent(room, otherUserId, "DEVICEB",
+            sentAt: serverNow().subtract(const Duration(hours: 2))),
+      ]);
+
+      expect(callParticipants(sidebar), {otherUserId});
+    });
+
+    test("someone who joined five hours ago and keeps it up is listed", () {
+      // Written again an hour ago, the window pushed four hours past then.
+      final joined = serverNow().subtract(const Duration(hours: 5));
+      setMemberships([
+        callMemberEvent(room, otherUserId, "DEVICEB",
+            sentAt: serverNow().subtract(const Duration(hours: 1)),
+            extra: {
+              "created_ts": joined.millisecondsSinceEpoch,
+              "expires": const Duration(hours: 8).inMilliseconds,
+            }),
+        callMemberEvent(room, thirdUserId, "DEVICEC",
+            sentAt: serverNow().subtract(const Duration(minutes: 5))),
+      ]);
+
+      expect(callParticipants(sidebar), {otherUserId, thirdUserId});
+    });
+
+    test("a membership that lapsed by the homeserver's clock is dropped", () {
+      setMemberships([
+        callMemberEvent(room, otherUserId, "DEVICEB",
+            sentAt: serverNow().subtract(const Duration(hours: 5))),
+      ]);
+
+      expect(callParticipants(sidebar), isEmpty);
+    });
+
+    test("the list is looked at again when one lapses, not before", () async {
+      setMemberships([
+        callMemberEvent(room, otherUserId, "DEVICEB",
+            sentAt: serverNow(), extra: {"expires": 60}),
+        callMemberEvent(room, thirdUserId, "DEVICEC", sentAt: serverNow()),
+      ]);
+      final changes = <void>[];
+      final sub = sidebar.onSessionsChanged.listen(changes.add);
+      addTearDown(sub.cancel);
+
+      expect(callParticipants(sidebar), {otherUserId, thirdUserId});
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(changes, isEmpty);
+
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      expect(changes, hasLength(1));
+      expect(callParticipants(sidebar), {thirdUserId});
+    });
+
+    test("the list is put right as soon as a sync says what time it is",
+        () async {
+      // Just started: nothing has said what time it is yet.
+      final unread = HomeserverClock();
+      final justStarted = MatrixActivitiesComponent(client, room,
+          callManager: clientManager.callManager, clock: unread);
+      setMemberships([
+        callMemberEvent(room, otherUserId, "DEVICEB",
+            sentAt: serverNow().subtract(const Duration(hours: 2))),
+      ]);
+      final changes = <void>[];
+      final sub = justStarted.onSessionsChanged.listen(changes.add);
+      addTearDown(sub.cancel);
+      // By this machine's clock their window closed an hour ago.
+      expect(callParticipants(justStarted), isEmpty);
+
+      unread.readSync(syncFromHomeserver(serverNow()), homeserver: homeserver);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(changes, hasLength(1),
+          reason: "nothing else might come by for an hour");
+      expect(callParticipants(justStarted), {otherUserId});
+    });
+
+    test(
+        "in our call, someone connected who publishes nothing and has no "
+        "membership is listed", () {
+      // Their microphone would not open, and their membership lapsed.
+      final selfMembership = callMembership(selfUserId, selfDeviceId);
+      setMemberships([selfMembership]);
+      final session = FakeVoipSession(client, roomId, "session-1")
+        ..connected.addAll({selfUserId, otherUserId})
+        ..publish(selfUserId, VoipStreamType.audio);
+      clientManager.callManager.currentSessions.add(session);
+
+      expect(callParticipants(sidebar), {selfUserId, otherUserId});
+    });
+
+    test("in our call, the list is looked at again when someone connects",
+        () async {
+      final session = FakeVoipSession(client, roomId, "session-1");
+      clientManager.callManager.currentSessions.add(session);
+      final changes = <void>[];
+      final sub = sidebar.onSessionsChanged.listen(changes.add);
+      addTearDown(sub.cancel);
+
+      session.connect(thirdUserId);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(changes, isNotEmpty);
+      expect(callParticipants(sidebar), contains(thirdUserId));
+    });
+  });
+
+  // The voice channel's own page, before joining, shows everyone in it.
+  group("Voice channel page", () {
+    const thirdUserId = "@third:example.org";
+
+    late HomeserverClock clock;
+    late MatrixVoipRoomComponent voip;
+
+    setUp(() {
+      clock = HomeserverClock();
+      clock.readSync(syncFromHomeserver(serverNow()), homeserver: homeserver);
+      voip = MatrixVoipRoomComponent(client, room, clock: clock);
+    });
+
+    void setMemberships(List<matrix.StrippedStateEvent> memberships) {
+      room.matrixRoom.states[MatrixVoipRoomComponent.callMemberStateEvent] = {
+        for (final m in memberships) m.stateKey!: m,
+      };
+    }
+
+    test("lists someone in the call for hours on a clock that is ahead", () {
+      final joined = serverNow().subtract(const Duration(hours: 6));
+      setMemberships([
+        callMemberEvent(room, otherUserId, "DEVICEB",
+            sentAt: serverNow().subtract(const Duration(hours: 2))),
+        callMemberEvent(room, thirdUserId, "DEVICEC",
+            sentAt: serverNow().subtract(const Duration(minutes: 50)),
+            extra: {
+              "created_ts": joined.millisecondsSinceEpoch,
+              "expires": const Duration(hours: 9).inMilliseconds,
+            }),
+      ]);
+
+      expect(voip.getCurrentParticipants(), [otherUserId, thirdUserId]);
+    });
+
+    test("does not list a membership that lapsed", () {
+      setMemberships([
+        callMemberEvent(room, otherUserId, "DEVICEB",
+            sentAt: serverNow().subtract(const Duration(hours: 4, minutes: 1))),
+      ]);
+
+      expect(voip.getCurrentParticipants(), isEmpty);
+    });
+
+    test("is looked at again when a membership lapses, not before", () async {
+      setMemberships([
+        callMemberEvent(room, otherUserId, "DEVICEB",
+            sentAt: serverNow(), extra: {"expires": 60}),
+      ]);
+      final changes = <void>[];
+      final sub = voip.onParticipantsChanged.listen(changes.add);
+      addTearDown(sub.cancel);
+
+      expect(voip.getCurrentParticipants(), [otherUserId]);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(changes, isEmpty);
+
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      expect(changes, hasLength(1));
+      expect(voip.getCurrentParticipants(), isEmpty);
+    });
+
+    test("is put right as soon as a sync says what time it is", () async {
+      final unread = HomeserverClock();
+      final justStarted = MatrixVoipRoomComponent(client, room, clock: unread);
+      setMemberships([
+        callMemberEvent(room, otherUserId, "DEVICEB",
+            sentAt: serverNow().subtract(const Duration(hours: 2))),
+      ]);
+      final changes = <void>[];
+      final sub = justStarted.onParticipantsChanged.listen(changes.add);
+      addTearDown(sub.cancel);
+      expect(justStarted.getCurrentParticipants(), isEmpty);
+
+      unread.readSync(syncFromHomeserver(serverNow()), homeserver: homeserver);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(changes, hasLength(1));
+      expect(justStarted.getCurrentParticipants(), [otherUserId]);
     });
   });
 }

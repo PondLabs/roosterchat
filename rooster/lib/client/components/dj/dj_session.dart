@@ -25,6 +25,11 @@
 //   position and pause carry over.
 // - Release or leave: the booth empties, keeping queue and position,
 //   paused. Anyone who knows an empty booth tells newcomers about it.
+// - Take over: a DJ who says (in their ticks) they have been away for
+//   [DjSession.takeOverAfterAway] can have the decks taken, fetched like a
+//   pass, announced with the next epoch and `takenFrom`. Everyone follows
+//   the epoch; the old DJ's client is the judge: it yields if it is still
+//   away, and otherwise takes the decks back with the epoch after.
 //
 // None of this is a security boundary: anyone in the call can send anything
 // on the data channel. It keeps honest clients consistent.
@@ -66,6 +71,11 @@ class DjSession extends ChangeNotifier {
   /// when they didn't ask for them. No function: taken without asking.
   final Future<bool> Function(String fromIdentity)? acceptPass;
 
+  /// Whether the user at this machine is away (`UserIdleWatcher.isAway`).
+  /// A DJ tells the room how long they have been, so the decks can be taken
+  /// from them after [takeOverAfterAway]. No listenable: never away.
+  final ValueListenable<bool>? away;
+
   /// Matrix user id of this client's user, recorded on what they queue.
   final String selfUserId;
 
@@ -97,6 +107,9 @@ class DjSession extends ChangeNotifier {
   /// How often a pass target tells the DJ it is still getting ready.
   static const passKeepAlive = Duration(seconds: 20);
 
+  /// How long a DJ has to have been away before anyone can take the decks.
+  static const takeOverAfterAway = Duration(minutes: 15);
+
   DjSession({
     required this.transport,
     required this.caps,
@@ -105,6 +118,7 @@ class DjSession extends ChangeNotifier {
     this.resolver,
     this.prepareToDj,
     this.acceptPass,
+    this.away,
     DateTime Function()? now,
     String Function()? newId,
     this.tickInterval = const Duration(seconds: 2),
@@ -148,6 +162,9 @@ class DjSession extends ChangeNotifier {
 
   /// The pass we are taking over, and passes we already tried.
   String? _takingPass;
+
+  /// The away DJ we are taking the decks from ([takeOver]).
+  String? _takingFrom;
   final Set<String> _triedPasses = {};
 
   final List<DjPendingAdd> _pendingAdds = [];
@@ -200,9 +217,35 @@ class DjSession extends ChangeNotifier {
   /// few seconds, so no disagreement can turn into a message storm.
   final Map<String, DateTime> _answered = {};
 
-  /// Redraws listeners when the DJ falls silent (the booth becomes free).
+  /// Redraws listeners when the DJ falls silent (the booth becomes free),
+  /// or has been away long enough to have the decks taken.
   Timer? _silenceTimer;
-  bool _wasVacant = true;
+  (bool, bool) _wasFree = (true, false);
+
+  /// Since when this client's user is away; null while they are not.
+  DateTime? _awaySince;
+
+  /// Since when the DJ says they are away; null while they don't.
+  DateTime? _djAwaySince;
+
+  /// How long the DJ has said they are away for; null while they are not.
+  Duration? get djAwayFor {
+    final since = _djAwaySince;
+    return since == null || _snap.dj == null ? null : _now().difference(since);
+  }
+
+  bool get _djAwayLongEnough =>
+      (djAwayFor ?? Duration.zero) >= takeOverAfterAway;
+
+  /// Whether this client may take the decks from a DJ who has been away for
+  /// [takeOverAfterAway], without asking.
+  bool get canTakeOver =>
+      _canBecomeDj &&
+      _role == DjRole.listener &&
+      _snap.dj != null &&
+      _snap.passTo == null &&
+      !isVacant &&
+      _djAwayLongEnough;
 
   bool get hasRequested => _snap.requests.contains(selfIdentity);
 
@@ -292,12 +335,22 @@ class DjSession extends ChangeNotifier {
       _hello();
     });
     _silenceTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      final vacant = isVacant;
-      if (vacant != _wasVacant) {
-        _wasVacant = vacant;
+      final free = (isVacant, canTakeOver);
+      if (free != _wasFree) {
+        _wasFree = free;
         _notify();
       }
     });
+    away?.addListener(_awayChanged);
+    _awayChanged();
+  }
+
+  void _awayChanged() {
+    final isAway = away?.value ?? false;
+    if (isAway == (_awaySince != null)) return;
+    _awaySince = isAway ? _now() : null;
+    // Coming back is told at once, so nobody takes the decks after it.
+    _sendTick();
   }
 
   void _hello() {
@@ -316,6 +369,7 @@ class DjSession extends ChangeNotifier {
     _stopTimers();
     _syncRetry?.cancel();
     _silenceTimer?.cancel();
+    away?.removeListener(_awayChanged);
     _playGen++;
     final engine = _engine;
     final wasDj = _snap.dj == selfIdentity;
@@ -455,10 +509,29 @@ class DjSession extends ChangeNotifier {
   }
 
   void _onState(String sender, DjSnapshot snap) {
+    if (isDj &&
+        snap.takenFrom == selfIdentity &&
+        snap.dj == sender &&
+        snap.epoch > _snap.epoch) {
+      if (_awaySince == null ||
+          _now().difference(_awaySince!) < takeOverAfterAway) {
+        // We are back (or never were away that long): the decks stay ours,
+        // at an epoch that beats theirs everywhere.
+        _snap = _snap.copyWith(epoch: snap.epoch + 1, seq: 0);
+        _sendState();
+        _notify();
+        return;
+      }
+      _notice('${_nameOf(sender)} took the decks while you were away');
+    }
     if (!_accepts(sender, snap)) {
       _answerLoser(sender, snap);
       return;
     }
+    if (isDj && _snap.takenFrom == sender && snap.dj == sender) {
+      _notice('${_nameOf(sender)} is back and took the decks back');
+    }
+    if (snap.dj != _snap.dj || snap.epoch != _snap.epoch) _djAwaySince = null;
     _gotState = true;
     _snap = snap;
     _basePos = snap.positionMs;
@@ -466,12 +539,13 @@ class DjSession extends ChangeNotifier {
     if (snap.dj != null) _lastHeardFromDj = _now();
 
     // Someone else is the DJ now (a pass landed, we lost a claim), unless
-    // this is the DJ still naming us as the pass we are taking.
+    // this is the DJ still naming us as the pass we are taking, or the DJ we
+    // are taking the decks from carrying on meanwhile.
     if (_role != DjRole.listener && snap.dj != selfIdentity) {
       final stillOurPass = _role == DjRole.joining &&
-          _takingPass != null &&
-          snap.passTo == selfIdentity &&
-          snap.passId == _takingPass;
+          (_takingPass != null
+              ? snap.passTo == selfIdentity && snap.passId == _takingPass
+              : _takingFrom != null && snap.dj == _takingFrom);
       if (!stillOurPass) _stepDown();
     }
 
@@ -554,6 +628,10 @@ class DjSession extends ChangeNotifier {
     }
     if (sender != _snap.dj || epoch != _snap.epoch) return;
     _lastHeardFromDj = _now();
+    final away = djInt(message['aw']);
+    _djAwaySince = away == null || away == 0
+        ? null
+        : _now().subtract(Duration(milliseconds: away));
     if (message['c'] != _snap.current?.id) return;
     final pos = djInt(message['pos']);
     if (pos == null) return;
@@ -708,30 +786,43 @@ class DjSession extends ChangeNotifier {
     if (_snap.current != null) _startCurrent(positionMs: position);
   }
 
-  /// The DJ handed us the booth: fetch the playing track while they keep
-  /// playing, load it at the live position, then announce ourselves.
-  Future<void> _takeOver(String passId) async {
+  /// Takes the decks from a DJ who has been away for [takeOverAfterAway]
+  /// ([canTakeOver]), like a pass they didn't make: the playing song is
+  /// fetched while it plays on, then we announce ourselves with `takenFrom`.
+  Future<void> takeOver() async {
+    if (canTakeOver) await _takeOver(null);
+  }
+
+  /// The DJ handed us the booth ([passId]), or we take it from an away DJ
+  /// (no [passId]): fetch the playing track while they keep playing, load
+  /// it at the live position, then announce ourselves.
+  Future<void> _takeOver(String? passId) async {
     final engine = engineFactory?.call();
     if (engine == null) return;
     final from = _snap.dj;
     final epoch = _snap.epoch;
+    final taking = passId == null;
     _engine = engine;
     _role = DjRole.joining;
     _takingPass = passId;
+    _takingFrom = taking ? from : null;
     _notify();
 
     // Still ours: nothing replaced the pass (a cancel, another target, a
-    // release, another DJ). The DJ leaving mid-pass doesn't end it.
+    // release, another DJ). The DJ leaving mid-pass doesn't end it. Taking
+    // over: the DJ is still the one we take from, and still away.
     bool stillOurs() =>
         !_disposed &&
         _engine == engine &&
         _snap.epoch == epoch &&
-        (_snap.dj == null ||
-            (_snap.passTo == selfIdentity && _snap.passId == passId));
+        (taking
+            ? _snap.dj == from && _snap.passTo == null && _djAwayLongEnough
+            : _snap.dj == null ||
+                (_snap.passTo == selfIdentity && _snap.passId == passId));
 
     // Tell the DJ we are still at it: the consent prompt and the downloads
     // can take longer than the pass timeout.
-    final keepAlive = from == null
+    final keepAlive = from == null || taking
         ? null
         : Timer.periodic(passKeepAlive, (_) {
             if (_engine == engine && isJoining) {
@@ -740,7 +831,7 @@ class DjSession extends ChangeNotifier {
           });
 
     void decline(String why) {
-      if (from != null) {
+      if (from != null && !taking) {
         _send({'t': 'pfail', 'e': epoch, 'pid': passId, 'why': why},
             to: [from]);
       }
@@ -749,7 +840,10 @@ class DjSession extends ChangeNotifier {
     var agreed = false;
     Future<void> calledOff() async {
       if (agreed && !_disposed) {
-        _notice('The handoff was called off; ${_nameOf(from)} keeps the decks');
+        _notice(taking
+            ? '${_nameOf(from)} is back, or the booth changed: '
+                'they keep the decks'
+            : 'The handoff was called off; ${_nameOf(from)} keeps the decks');
       }
       await _abandon(engine);
     }
@@ -757,7 +851,7 @@ class DjSession extends ChangeNotifier {
     String? failure;
     try {
       // Someone who asked for the decks takes them; anyone else is asked.
-      final asked = _snap.requests.contains(selfIdentity);
+      final asked = taking || _snap.requests.contains(selfIdentity);
       final accept = acceptPass;
       if (!asked && accept != null && !await accept(from ?? '')) {
         decline('they said no');
@@ -776,12 +870,22 @@ class DjSession extends ChangeNotifier {
       // while we download.
       DjTrack? fetched;
       DjTrackInfo? info;
+      // Taking over during the away DJ's own file: it can't be had, so the
+      // booth is taken paused on it (play skips it).
+      var unavailable = false;
       for (var attempt = 0; attempt < 3; attempt++) {
         final track = _snap.current;
         if (track == null || !stillOurs()) break;
         // All of it: we start mid-song, where a download still under way
         // may not have got to yet.
-        info = await engine.prepare(track, whole: true);
+        try {
+          info = await engine.prepare(track, whole: true);
+          unavailable = false;
+        } on DjTrackUnavailable {
+          if (!taking) rethrow;
+          info = null;
+          unavailable = true;
+        }
         fetched = track;
         if (_snap.current?.id == track.id) break;
       }
@@ -790,7 +894,7 @@ class DjSession extends ChangeNotifier {
       // From here to the announcement nothing awaits, so nothing can change
       // the booth under us.
       final track = _snap.current;
-      final playing = _snap.playing && _snap.dj != null;
+      final playing = _snap.playing && _snap.dj != null && !unavailable;
       // Loaded paused a moment ahead, and started once the old DJ has
       // heard us and faded out: the room never hears both copies.
       final lead = playing ? handoffLead.inMilliseconds : 0;
@@ -799,7 +903,9 @@ class DjSession extends ChangeNotifier {
         if (fetched?.id != track.id) {
           throw StateError('the song kept changing while it downloaded');
         }
-        engine.load(track, positionMs: position, paused: true);
+        if (!unavailable) {
+          engine.load(track, positionMs: position, paused: true);
+        }
       }
       _paused = !playing;
       _failuresInARow = 0;
@@ -812,13 +918,17 @@ class DjSession extends ChangeNotifier {
         playing: playing,
         buffering: false,
         positionMs: position,
+        takenFrom: taking ? from : null,
       );
       if (track != null && info != null) _mergeInfo(track.id, info);
       _basePos = position;
       _baseAt = _now();
       _takingPass = null;
+      _takingFrom = null;
       _becameDj();
-      _notice("You're on the decks");
+      _notice(taking
+          ? 'You took the decks from ${_nameOf(from)}'
+          : "You're on the decks");
       // Counted from when the announcement is out, however many parts a
       // long queue takes: the old DJ stops when it has it.
       final announced = _sendState();
@@ -850,6 +960,7 @@ class DjSession extends ChangeNotifier {
       _engine = null;
       _role = DjRole.listener;
       _takingPass = null;
+      _takingFrom = null;
       _notify();
     }
     await engine.shutdown().catchError((_) {});
@@ -857,6 +968,7 @@ class DjSession extends ChangeNotifier {
 
   void _becameDj() {
     _role = DjRole.dj;
+    _djAwaySince = null;
     _lastEngineState = null;
     _tickTimer?.cancel();
     _tickTimer = Timer.periodic(tickInterval, (_) => _sendTick());
@@ -871,6 +983,7 @@ class DjSession extends ChangeNotifier {
     _engine = null;
     _role = DjRole.listener;
     _takingPass = null;
+    _takingFrom = null;
     _loading = false;
     _playGen++;
     _stopTimers();
@@ -1415,6 +1528,8 @@ class DjSession extends ChangeNotifier {
       'pos': positionMs,
       'p': _snap.playing,
       if (_snap.buffering) 'b': true,
+      if (_awaySince != null)
+        'aw': max(1, _now().difference(_awaySince!).inMilliseconds),
     });
   }
 

@@ -11,6 +11,7 @@ import 'package:rooster/client/matrix/auth/matrix_username_password_login_flow.d
 import 'package:rooster/client/matrix/components/matrix_sync_listener.dart';
 import 'package:rooster/client/matrix/components/profile/matrix_profile_component.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_voip_room_component.dart';
+import 'package:rooster/client/matrix/homeserver_clock.dart';
 import 'package:rooster/client/matrix/database/matrix_database.dart';
 import 'package:rooster/client/matrix/extensions/matrix_client_extensions.dart';
 import 'package:rooster/client/matrix/matrix_native_implementations.dart';
@@ -295,6 +296,13 @@ class MatrixClient extends Client {
   }
 
   void onMatrixClientSync(matrix.SyncUpdate update) {
+    // First: the components below list who is in each voice channel, by
+    // the homeserver's clock.
+    final homeserver = _matrixClient.userID?.domain;
+    if (homeserver != null) {
+      HomeserverClock.instance.readSync(update, homeserver: homeserver);
+    }
+
     _handleComponentSync(update);
 
     _onSync.add(null);

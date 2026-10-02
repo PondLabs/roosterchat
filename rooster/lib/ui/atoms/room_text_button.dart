@@ -38,6 +38,24 @@ class RoomTextButton extends StatefulWidget {
     this.onTap,
     super.key,
   });
+
+  /// Our live call in [room], from the call manager's own list. Not from
+  /// VoipRoomComponent.currentSession: a session registers itself with the
+  /// call manager while it is being made, before the component gets it back
+  /// from the join, so on that list update the component still said none,
+  /// and nothing came after it to look again. The row then never lit up.
+  @visibleForTesting
+  static VoipSession? callSessionIn(Room room, Iterable<VoipSession> sessions) {
+    for (final session in sessions) {
+      if (session.roomId == room.identifier &&
+          session.client == room.client &&
+          session.state != VoipState.ended) {
+        return session;
+      }
+    }
+    return null;
+  }
+
   final bool highlight;
   final Room room;
   final Function(Room room, {bool bypassSpecialRoomType})? onTap;
@@ -114,6 +132,9 @@ class _RoomTextButtonState extends State<RoomTextButton> {
   StreamSubscription? voiceLevelSub;
   Set<String> speakingMembers = const {};
 
+  /// Who in the list has had their member asked for, once each.
+  final Set<String> fetchedMembers = {};
+
   @override
   void initState() {
     calendarRoom = widget.room.getComponent<CalendarRoom>();
@@ -146,17 +167,7 @@ class _RoomTextButtonState extends State<RoomTextButton> {
       onCalendarEventsChanged(());
     }
 
-    if (activitySessions?.isNotEmpty == true) {
-      for (var activity in activitySessions!) {
-        for (var participant in activity.participants) {
-          widget.room.fetchMember(participant).then((_) {
-            if (mounted) {
-              setState(() {});
-            }
-          });
-        }
-      }
-    }
+    fetchNewMembers();
 
     super.initState();
   }
@@ -166,6 +177,25 @@ class _RoomTextButtonState extends State<RoomTextButton> {
       activitySessions = activities?.getSessions();
       sortActivities();
     });
+    fetchNewMembers();
+  }
+
+  /// Asks for the member of everyone listed for the first time, for their
+  /// name and avatar. Not only of who was there when the row was built:
+  /// people also turn up later, some of them in the call for hours (a sync
+  /// putting the time right after the app starts), and were shown as their
+  /// user id.
+  void fetchNewMembers() {
+    for (final activity in activitySessions ?? const <RoomActivitySession>[]) {
+      for (final participant in activity.participants) {
+        if (!fetchedMembers.add(participant)) continue;
+        widget.room.fetchMember(participant).then((_) {
+          if (mounted) setState(() {});
+        }, onError: (Object e, StackTrace s) {
+          Log.onError(e, s, content: "Could not fetch $participant");
+        });
+      }
+    }
   }
 
   void sortActivities() {
@@ -183,8 +213,8 @@ class _RoomTextButtonState extends State<RoomTextButton> {
   }
 
   void attachVoiceSession() {
-    final session =
-        widget.room.getComponent<VoipRoomComponent>()?.currentSession;
+    final session = RoomTextButton.callSessionIn(
+        widget.room, clientManager?.callManager.currentSessions ?? const []);
     if (identical(session, voiceSession)) return;
 
     voiceLevelSub?.cancel();

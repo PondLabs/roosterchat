@@ -50,3 +50,13 @@ live membership that reports its owner away wins over whatever presence the
 homeserver holds, since it is first hand and recent; a membership that
 reports them present makes them online where the homeserver says offline.
 Someone in a call from two devices is away only if both say so.
+
+Every status a dot gets goes through that fold (`resolvePresence`): the first
+read and every update after it alike. A dot reads once and then follows
+`onPresenceChanged`, so when updates passed on the homeserver's presence as is,
+the first `offline` it sent turned someone away in a call grey, and their
+client rewriting its membership (hourly) turned them green.
+
+Outside a call, on a homeserver that shares no presence, nothing tells anyone
+we are away: the dot is grey whatever we do, and green for two minutes after
+we are seen to do something.

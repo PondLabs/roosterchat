@@ -4,7 +4,7 @@
 // MatrixLivekitVoipStream.musicTrackName, apart from the DJ's microphone.
 //
 // The DJ hears their own music through a second, in-process WebRTC
-// connection that receives the same track (_LocalMonitor). Playing it
+// connection that receives the same track (DjLocalMonitor). Playing it
 // through WebRTC's playout, and not a media player, puts it in the echo
 // canceller's reference, so a DJ on loudspeakers doesn't send the music
 // back into the room through their microphone.
@@ -19,9 +19,11 @@ import 'package:collection/collection.dart';
 import 'package:rooster/client/matrix/components/dj/native/dj_extensions.dart';
 import 'package:rooster/client/matrix/components/dj/native/dj_local_files.dart';
 import 'package:rooster/client/matrix/components/dj/native/dj_music_player.dart';
+import 'package:rooster/client/matrix/components/voip_room/livekit_microphone.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_livekit_voip_stream.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
 // The stream flutter-webrtc returns for native tracks; getDisplayMedia builds
 // its own the same way.
@@ -311,7 +313,7 @@ class NativeDjEngine implements DjPlaybackEngine {
   DjMusicPlayer? _player;
   rtc.MediaStream? _stream;
   lk.LocalAudioTrack? _lkTrack;
-  final _LocalMonitor _monitor = _LocalMonitor();
+  final DjLocalMonitor _monitor = DjLocalMonitor();
   double _monitorVolume;
 
   /// Tracks ids for the Rust player, which counts them in integers.
@@ -373,7 +375,9 @@ class NativeDjEngine implements DjPlaybackEngine {
     if (_shutDown) return;
 
     try {
-      await _monitor.start(stream, track, _monitorVolume);
+      await _monitor.start(stream, track, _monitorVolume,
+          microphone: () =>
+              microphonePublication(participant)?.track?.mediaStreamTrack);
     } catch (e, s) {
       // The room still hears the music; only the DJ doesn't.
       Log.onError(e, s, content: 'DJ booth: could not start the monitor');
@@ -531,7 +535,13 @@ class NativeDjEngine implements DjPlaybackEngine {
 
 /// Plays a local track to this machine's speakers through WebRTC: a sending
 /// and a receiving peer connection in the same process, linked directly.
-class _LocalMonitor {
+/// The DJ hearing their own music: a sender and a receiver connected in
+/// this process. The sender is a custom source's, so on desktop it switches
+/// the microphone's echo cancellation off (shared_audio_processing.dart) and
+/// [start] puts it back, or everyone the DJ hears on loudspeakers comes back
+/// to the room through the DJ's microphone.
+@visibleForTesting
+class DjLocalMonitor {
   rtc.RTCPeerConnection? _sender;
   rtc.RTCPeerConnection? _receiver;
   rtc.MediaStreamTrack? _remote;
@@ -539,7 +549,8 @@ class _LocalMonitor {
   bool _stopped = false;
 
   Future<void> start(
-      rtc.MediaStream stream, rtc.MediaStreamTrack track, double volume) async {
+      rtc.MediaStream stream, rtc.MediaStreamTrack track, double volume,
+      {rtc.MediaStreamTrack? Function()? microphone}) async {
     _volume = volume;
     final config = <String, dynamic>{
       'iceServers': <Map<String, dynamic>>[],
@@ -567,7 +578,7 @@ class _LocalMonitor {
       rtc.Helper.setVolume(_volume, event.track);
     };
 
-    await sender.addTrack(track, stream);
+    final rtpSender = await sender.addTrack(track, stream);
     final offer = await sender.createOffer();
     offer.sdp = _stereo(offer.sdp);
     await sender.setLocalDescription(offer);
@@ -583,6 +594,9 @@ class _LocalMonitor {
     }
     for (final c in toSender) {
       await sender.addCandidate(c);
+    }
+    if (microphone != null && !_stopped) {
+      await restoreMicrophoneProcessingOnceSending(rtpSender, microphone);
     }
   }
 

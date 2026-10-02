@@ -212,9 +212,9 @@ class NativeSoundboardImport implements SoundboardImportPlatform {
       if (!type.startsWith('audio/') &&
           !type.startsWith('video/') &&
           !_audioTypes.contains(type)) {
-        throw const SoundboardImportError(
-            "That link isn't an audio file. Links to pages need a source: "
-            'add one in Settings, DJ, Sources.');
+        throw SoundboardImportError(
+            "That link is a page, not an audio file. To take sounds from "
+            '${uri.host}, add a source extension that takes it.');
       }
       final declared = response.contentLength;
       if (declared != null &&

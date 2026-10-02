@@ -25,6 +25,15 @@ class WebrtcBrowserScreenCaptureSource implements ScreenCaptureSource {
   WebrtcBrowserScreenCaptureSource({this.captureAudio = true});
 }
 
+/// A call that knows everyone connected to it, not just who publishes a
+/// stream: someone whose microphone would not open is in it too, and so is
+/// someone whose call membership lapsed while they stayed.
+abstract class CallRoster {
+  /// The user ids of everyone in the call right now, ourselves included.
+  /// Empty once it has ended.
+  Set<String> get connectedUserIds;
+}
+
 abstract class VoipSession {
   Client get client;
 

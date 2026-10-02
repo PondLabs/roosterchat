@@ -22,6 +22,7 @@ import 'package:rooster/ui/molecules/desktop_app_notice.dart';
 import 'package:rooster/ui/organisms/dj/dj_prompts.dart';
 import 'package:rooster/ui/organisms/dj/vinyl_disc.dart';
 import 'package:rooster/utils/links/link_utils.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -161,7 +162,9 @@ class _Vacant extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             if (dj.caps.canDj)
-              tiamat.Button(text: 'Become the DJ', onTap: () => dj.becomeDj())
+              tiamat.Button(
+                  text: 'Take the decks to play music',
+                  onTap: () => dj.becomeDj())
             else
               const DjDesktopOnlyNote(),
           ],
@@ -199,7 +202,7 @@ class _Booth extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final queue = dj.queue;
-    return CustomScrollView(
+    final booth = CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
           child: _DjStrip(
@@ -220,6 +223,18 @@ class _Booth extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
               child: _AddBar(dj: dj, enabled: editable),
+            ),
+          ),
+        if (!dj.isDj && !dj.isJoining && dj.caps.canDj)
+          SliverToBoxAdapter(
+            key: const ValueKey('how-to-start'),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: tiamat.Text.labelLow(dj.hasRequested
+                  ? 'You asked for the decks. Once the DJ passes them to '
+                      'you, you can add music.'
+                  : 'Want to play music? Ask for the decks above; the DJ '
+                      'can pass them to you.'),
             ),
           ),
         if (dj.isDj && dj.requests.isNotEmpty)
@@ -268,6 +283,7 @@ class _Booth extends StatelessWidget {
         const SliverToBoxAdapter(child: SizedBox(height: 12)),
       ],
     );
+    return editable ? _BoothDrop(dj: dj, child: booth) : booth;
   }
 
   Widget? _handover(BuildContext context) {
@@ -346,7 +362,14 @@ class _DjStrip extends StatelessWidget {
                 child: const Text('No thanks')),
         ],
       );
+    } else if (dj.caps.canDj && dj.canTakeOver) {
+      action = TextButton.icon(
+        onPressed: () => dj.takeOver(),
+        icon: const Icon(Icons.album_rounded, size: 16),
+        label: Text(takeOverLabel),
+      );
     } else if (dj.caps.canDj) {
+      final away = dj.djAwayFor;
       action = dj.hasRequested
           ? TextButton(
               onPressed: () => dj.requestDj(false),
@@ -357,6 +380,10 @@ class _DjStrip extends StatelessWidget {
               icon: const Icon(Icons.back_hand_outlined, size: 16),
               label: const Text('Ask for the decks'),
             );
+      if (away != null) {
+        action = Tooltip(
+            message: takeOverWait(member.displayName, away), child: action);
+      }
     }
 
     return Padding(
@@ -499,16 +526,22 @@ class _NowPlayingState extends State<_NowPlaying> {
   }
 
   Widget _idle(BuildContext context) {
-    return Row(
-      spacing: 12,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const VinylDisc(size: 56, spinning: false),
-        Expanded(
-          child: tiamat.Text.labelLow(dj.isDj
-              ? 'Nothing on the decks. Paste a link below to start the music.'
-              : 'Nothing playing yet.'),
+        Row(
+          spacing: 12,
+          children: [
+            const VinylDisc(size: 56, spinning: false),
+            Expanded(
+              child: tiamat.Text.labelLow(dj.isDj
+                  ? 'Nothing on the decks. Paste a link below to start the '
+                      'music.'
+                  : 'Nothing playing yet.'),
+            ),
+          ],
         ),
-        DjMusicVolume(session: widget.session),
+        DjMusicVolume(session: widget.session, width: null),
       ],
     );
   }
@@ -618,9 +651,11 @@ class _NowPlayingState extends State<_NowPlaying> {
                 onPressed: () =>
                     LinkUtils.open(Uri.parse(page), context: context),
               ),
-            DjMusicVolume(session: widget.session),
           ],
         ),
+        // A line of its own, the booth's whole width: a long slider sets a
+        // level precisely.
+        DjMusicVolume(session: widget.session, width: null),
       ],
     );
   }
@@ -771,10 +806,17 @@ class DjSourceChip extends StatelessWidget {
 
 /// Mute button and slider for the booth's music, for this listener only.
 class DjMusicVolume extends StatefulWidget {
-  const DjMusicVolume({required this.session, this.width = 88, super.key});
+  const DjMusicVolume(
+      {required this.session, this.width = defaultWidth, super.key});
+
+  /// Long enough to set a level precisely: at 88 px a pixel was over 1 %.
+  static const double defaultWidth = 180;
+
+  /// Null: the slider takes all the width it is given (the booth's own
+  /// line), and the level is written next to it.
 
   final VoipSession session;
-  final double width;
+  final double? width;
 
   @override
   State<DjMusicVolume> createState() => _DjMusicVolumeState();
@@ -782,6 +824,9 @@ class DjMusicVolume extends StatefulWidget {
 
 class _DjMusicVolumeState extends State<DjMusicVolume> {
   StreamSubscription? _sub;
+
+  /// Being dragged: the level is only saved when let go.
+  bool _dragging = false;
 
   @override
   void initState() {
@@ -800,6 +845,11 @@ class _DjMusicVolumeState extends State<DjMusicVolume> {
   void dispose() {
     _sub?.cancel();
     _liveMusicVolume.removeListener(_onLive);
+    // Gone mid-drag (the booth swaps its idle and playing layouts when a DJ
+    // starts or a song changes): the slider is never let go, so save the
+    // level here, or the next music stream plays at the old one.
+    final live = _liveMusicVolume.value;
+    if (_dragging && live != null) setDjMusicVolume(widget.session, live);
     super.dispose();
   }
 
@@ -818,8 +868,29 @@ class _DjMusicVolumeState extends State<DjMusicVolume> {
   Widget build(BuildContext context) {
     final volume = (_liveMusicVolume.value ?? preferences.djMusicVolume.value)
         .clamp(0.0, maxDjMusicVolume);
+    final fill = widget.width == null;
+    final slider = Tooltip(
+      message: 'Music volume, only for you (${(volume * 100).round()}%)',
+      child: SliderTheme(
+        data: SliderTheme.of(context).copyWith(
+          trackHeight: 5,
+          overlayShape: SliderComponentShape.noOverlay,
+          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+        ),
+        child: Slider(
+          value: volume,
+          max: maxDjMusicVolume,
+          onChangeStart: (_) => _dragging = true,
+          onChanged: (v) => setDjMusicVolume(widget.session, v, save: false),
+          onChangeEnd: (v) {
+            _dragging = false;
+            setDjMusicVolume(widget.session, v);
+          },
+        ),
+      ),
+    );
     return Row(
-      mainAxisSize: MainAxisSize.min,
+      mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
       children: [
         IconButton(
           tooltip: volume == 0 ? 'Unmute the music' : 'Mute the music for you',
@@ -833,27 +904,105 @@ class _DjMusicVolumeState extends State<DjMusicVolume> {
           ),
           onPressed: _toggleMute,
         ),
-        SizedBox(
-          width: widget.width,
-          child: Tooltip(
-            message: 'Music volume, only for you (${(volume * 100).round()}%)',
-            child: SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: 3,
-                overlayShape: SliderComponentShape.noOverlay,
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-              ),
-              child: Slider(
-                value: volume,
-                max: maxDjMusicVolume,
-                onChanged: (v) =>
-                    setDjMusicVolume(widget.session, v, save: false),
-                onChangeEnd: (v) => setDjMusicVolume(widget.session, v),
-              ),
+        if (fill) ...[
+          Expanded(child: slider),
+          SizedBox(
+            width: 44,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: tiamat.Text.labelLow('${(volume * 100).round()}%'),
             ),
           ),
-        ),
+        ] else
+          SizedBox(width: widget.width, child: slider),
       ],
+    );
+  }
+}
+
+/// Queues the audio files among [paths] (others are skipped).
+Future<void> addDjFiles(DjSession dj, List<String> paths) async {
+  final audio = [
+    for (final path in paths)
+      if (DjPlatform.audioFileExtensions
+          .contains(path.split('.').last.toLowerCase()))
+        path
+  ];
+  if (audio.isEmpty) return;
+  dj.addTracks(await DjPlatform.instance
+      .localTracks(audio, addedBy: dj.selfUserId, newId: dj.newTrackId));
+}
+
+final Set<_BoothDropState> _boothDrops = {};
+
+/// Whether a file dropped at [globalPosition] lands on a DJ's booth, which
+/// takes it, so the chat behind should not upload it too.
+bool djBoothTakesDrop(Offset globalPosition) => _boothDrops.any((drop) {
+      final box = drop.context.findRenderObject() as RenderBox?;
+      return box != null &&
+          box.attached &&
+          (box.localToGlobal(Offset.zero) & box.size).contains(globalPosition);
+    });
+
+/// Audio files dropped on the booth go into the DJ's queue.
+class _BoothDrop extends StatefulWidget {
+  const _BoothDrop({required this.dj, required this.child});
+
+  final DjSession dj;
+  final Widget child;
+
+  @override
+  State<_BoothDrop> createState() => _BoothDropState();
+}
+
+class _BoothDropState extends State<_BoothDrop> {
+  bool _hovered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _boothDrops.add(this);
+  }
+
+  @override
+  void dispose() {
+    _boothDrops.remove(this);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DropTarget(
+      onDragEntered: (_) => setState(() => _hovered = true),
+      onDragExited: (_) => setState(() => _hovered = false),
+      onDragDone: (details) {
+        setState(() => _hovered = false);
+        addDjFiles(widget.dj, [
+          for (final file in details.files)
+            if (file.path.isNotEmpty) file.path
+        ]);
+      },
+      child: Stack(
+        children: [
+          widget.child,
+          if (_hovered)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: scheme.primaryContainer.withValues(alpha: 0.85),
+                    border: Border.all(color: scheme.primary, width: 2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Center(
+                      child:
+                          tiamat.Text.largeTitle('Drop songs to queue them')),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -918,16 +1067,16 @@ class _AddBarState extends State<_AddBar> {
       type: FileType.custom,
       allowedExtensions: DjPlatform.audioFileExtensions,
     );
-    final paths = [
+    if (!widget.enabled) return;
+    await addDjFiles(widget.dj, [
       for (final file in result?.files ?? const <PlatformFile>[])
         if (file.path != null) file.path!
-    ];
-    if (paths.isEmpty || !widget.enabled) return;
-    final dj = widget.dj;
-    final tracks = await DjPlatform.instance
-        .localTracks(paths, addedBy: dj.selfUserId, newId: dj.newTrackId);
-    dj.addTracks(tracks);
+    ]);
   }
+
+  /// The big button: adds what is pasted, or with nothing pasted opens the
+  /// file chooser, so it always does something.
+  void _primary() => _links.isEmpty ? _addFiles() : _add();
 
   String _describe(List<DjLink> links) {
     if (links.length > 1) return '${links.length} links';
@@ -947,8 +1096,8 @@ class _AddBarState extends State<_AddBar> {
         ? 'Locked while the decks change hands'
         : widget.dj.resolver?.hint ??
             (_hasSources
-                ? 'Paste a link'
-                : 'Add songs from this computer, or a music source for links');
+                ? 'Paste a link or drop files'
+                : 'Drop songs here, or choose files');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 6,
@@ -977,28 +1126,38 @@ class _AddBarState extends State<_AddBar> {
               border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                   borderSide: BorderSide.none),
-              suffixIcon: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    tooltip: 'Add songs from this computer',
-                    icon: const Icon(Icons.audio_file_outlined, size: 20),
-                    onPressed: widget.enabled ? _addFiles : null,
-                  ),
-                  IconButton(
-                    tooltip: 'Play next (Shift+Enter)',
-                    icon: const Icon(Icons.low_priority_rounded, size: 20),
-                    onPressed: canAdd ? () => _add(next: true) : null,
-                  ),
-                  IconButton(
-                    tooltip: 'Add to the queue (Enter)',
-                    icon: const Icon(Icons.playlist_add_rounded, size: 22),
-                    onPressed: canAdd ? _add : null,
-                  ),
-                ],
-              ),
             ),
           ),
+        ),
+        // Wraps rather than cutting a label off when the booth is narrow.
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          runSpacing: 4,
+          children: [
+            OutlinedButton.icon(
+              onPressed: widget.enabled ? _addFiles : null,
+              icon: const Icon(Icons.audio_file_outlined, size: 18),
+              label: const Text('Choose files…'),
+            ),
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              IconButton(
+                tooltip: 'Play next (Shift+Enter)',
+                icon: const Icon(Icons.low_priority_rounded, size: 20),
+                onPressed: canAdd ? () => _add(next: true) : null,
+              ),
+              Tooltip(
+                message: _links.isEmpty
+                    ? 'Paste a link above, or pick songs from this computer'
+                    : 'Add to the queue (Enter)',
+                child: FilledButton.icon(
+                  onPressed: widget.enabled ? _primary : null,
+                  icon: const Icon(Icons.playlist_add_rounded, size: 20),
+                  label: const Text('Add music'),
+                ),
+              ),
+            ]),
+          ],
         ),
         if (_links.isNotEmpty)
           Padding(

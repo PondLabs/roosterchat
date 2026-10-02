@@ -1,26 +1,27 @@
-// Shared overlay state: which sender currently has a visible emoji burst.
+// Shared overlay state: which sender currently has a visible emoji.
 //
-// Written by the call's SoundboardSession (via engine listeners), read by
-// every VoipStreamView. Keyed by Matrix userId so the emoji appears ONLY on
-// the sender's avatar — never broadcast to all tiles.
+// Written by the call's SoundboardCallController (from the engine's
+// activations), read by every VoipStreamView. Keyed by Matrix userId so the
+// emoji appears ONLY on the sender's avatar — never broadcast to all tiles.
+// An entry stays until the controller clears it, when the sound's audio ends.
 import 'package:rooster/client/components/soundboard/soundboard_emoji.dart';
 import 'package:flutter/widgets.dart';
 
 class SoundboardOverlayEntry {
+  /// The activation shown: a new trigger is a new entry, even of the same
+  /// sound.
+  final String eventId;
   final String soundId;
   final SoundboardEmoji emoji;
 
   /// Image of a custom [emoji], resolved by the caller that has a client.
   final ImageProvider? image;
-  final int expiresAtMs;
-  final int overlayMs;
 
   const SoundboardOverlayEntry({
+    required this.eventId,
     required this.soundId,
     required this.emoji,
     this.image,
-    required this.expiresAtMs,
-    required this.overlayMs,
   });
 }
 
@@ -31,37 +32,18 @@ class SoundboardOverlayRegistry extends ChangeNotifier {
 
   final Map<String, SoundboardOverlayEntry> _byUser = {};
 
-  SoundboardOverlayEntry? entryFor(String userId) {
-    final e = _byUser[userId];
-    if (e == null) return null;
-    if (DateTime.now().millisecondsSinceEpoch > e.expiresAtMs) {
-      _byUser.remove(userId);
-      return null;
-    }
-    return e;
-  }
+  SoundboardOverlayEntry? entryFor(String userId) => _byUser[userId];
 
-  SoundboardOverlayEntry show({
-    required String userId,
-    required String soundId,
-    required SoundboardEmoji emoji,
-    ImageProvider? image,
-    required int overlayMs,
-  }) {
-    final entry = _byUser[userId] = SoundboardOverlayEntry(
-      soundId: soundId,
-      emoji: emoji,
-      image: image,
-      overlayMs: overlayMs,
-      expiresAtMs: DateTime.now().millisecondsSinceEpoch + overlayMs + 200,
-    );
+  /// Shows [entry] on [userId]'s avatar, in place of what was there.
+  void show(String userId, SoundboardOverlayEntry entry) {
+    _byUser[userId] = entry;
     notifyListeners();
-    return entry;
   }
 
-  /// Clears [userId]'s overlay only if it is still [entry].
-  void clearEntry(String userId, SoundboardOverlayEntry entry) {
-    if (identical(_byUser[userId], entry)) clearUser(userId);
+  /// Clears [userId]'s overlay only if it still shows [eventId]: a newer
+  /// sound of theirs keeps its own.
+  void clearEvent(String userId, String eventId) {
+    if (_byUser[userId]?.eventId == eventId) clearUser(userId);
   }
 
   void clearUser(String userId) {

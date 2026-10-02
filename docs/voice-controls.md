@@ -91,6 +91,11 @@ has the same three controls.
   ignore quicklists and show the actions instead. The Flatpak needs
   `--talk-name=com.canonical.Unity` to see a dock come up after Rooster;
   sending the signal needs no permission.
+- The tray icon files are named for the app (`rooster_tray_idle.png`,
+  `_live`, `_muted`). KDE Plasma's tray looks the file's name up in the icon
+  theme before it reads the file, so `idle.png` and `live.png` showed the
+  theme's Python IDLE and Outlook icons (MacTahoe, WhiteSur, Papirus). No
+  dashes either: theme lookups fall back from `a-b` to `a`.
 
 ### Browser
 

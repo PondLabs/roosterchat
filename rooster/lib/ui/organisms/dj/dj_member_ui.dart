@@ -227,7 +227,15 @@ List<tiamat.ContextMenuItem> _actions(
   if (dj.isDjUser(userId) && !isSelf) {
     if (!canDj) return [_desktopOnly()];
     if (dj.isJoining) return const [];
+    final away = dj.djAwayFor;
     return [
+      if (dj.canTakeOver)
+        tiamat.ContextMenuItem(
+            text: takeOverLabel,
+            icon: Icons.album_rounded,
+            onPressed: () => dj.takeOver())
+      else if (away != null)
+        _note(takeOverWait(displayName, away)),
       dj.hasRequested
           ? tiamat.ContextMenuItem(
               text: 'Stop asking to be the DJ',
@@ -252,6 +260,15 @@ List<tiamat.ContextMenuItem> _actions(
 
   return const [];
 }
+
+/// The action that takes the decks from a DJ who has been away long enough.
+final takeOverLabel = 'Take the decks (DJ away '
+    '${DjSession.takeOverAfterAway.inMinutes} min)';
+
+/// Why the decks can't be taken yet from [name], away for [away].
+String takeOverWait(String name, Duration away) =>
+    '$name has been away ${away.inMinutes} min: the decks can be taken '
+    'once they have been away ${DjSession.takeOverAfterAway.inMinutes}';
 
 String _platformName(String platform) => switch (platform) {
       'web' => 'the web',

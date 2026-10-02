@@ -269,12 +269,13 @@ class WebAudioProcessingManager extends AudioProcessingManager {
     final api = _roosterAudioDsp;
     if (api == null) return false;
     try {
-      // Same constraints as a call: the browser suppressor only when ours
-      // is off.
+      // Same constraints as a call: ours runs here, so never the browser's
+      // suppressor, whether ours is on or turned off (then nothing
+      // suppresses, as asked).
       final constraints = web.MediaStreamConstraints(
         audio: {
           'echoCancellation': true,
-          'noiseSuppression': !settings.noiseSuppression,
+          'noiseSuppression': false,
           'autoGainControl': true,
         }.jsify()!,
       );
@@ -364,7 +365,7 @@ class WebAudioProcessingManager extends AudioProcessingManager {
         // The DJ booth's music plays without a break: as far-end it would
         // keep the ducker on for as long as the music lasts, whatever the
         // listener set its volume to. The browser's echo canceller has it.
-        if (pub.name == MatrixLivekitVoipStream.musicTrackName) continue;
+        if (MatrixLivekitVoipStream.isMusicTrackName(pub.name)) continue;
         final track = pub.track?.mediaStreamTrack;
         if (track is MediaStreamTrackWeb) {
           wanted[track.jsTrack.id] = track.jsTrack;

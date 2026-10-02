@@ -4,6 +4,7 @@ import 'package:rooster/client/components/url_preview/direct_image_link.dart';
 import 'package:rooster/client/components/url_preview/url_preview_component.dart';
 import 'package:rooster/client/components/video_embed/composite_video_provider.dart';
 import 'package:rooster/client/components/video_embed/photo_post.dart';
+import 'package:rooster/client/components/video_embed/providers/twitter_provider.dart';
 import 'package:rooster/client/components/video_embed/video_embed_info.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
@@ -44,10 +45,12 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
       return cache[uri.toString()];
     }
 
-    UrlPreviewData? data;
+    UrlPreviewData? data = DirectImageLink.matches(uri)
+        ? DirectImageLink.preview(uri)
+        : await _xPostPreview(uri);
 
-    if (DirectImageLink.matches(uri)) {
-      data = DirectImageLink.preview(uri);
+    if (data != null) {
+      // A direct image link or an X card: no homeserver needed.
     } else if (shouldGetPreviewsInRoom(room)) {
       try {
         data =
@@ -143,9 +146,10 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
       return cache[uri.toString()];
     }
 
-    UrlPreviewData? data;
+    UrlPreviewData? data = await _xPostPreview(uri);
 
-    if (shouldGetPreviewsInRoom(room) != false &&
+    if (data == null &&
+        shouldGetPreviewsInRoom(room) != false &&
         serverSupportsUrlPreview != false) {
       try {
         data =
@@ -353,6 +357,41 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
       }
     } catch (_) {}
     return null;
+  }
+
+  /// An X status previews as an X card from fxtwitter rather than from the
+  /// homeserver, whose og: card for X has no avatar, quote or counts. Null
+  /// (so the plain preview is used) when the status cannot be fetched.
+  Future<UrlPreviewData?> _xPostPreview(Uri uri) async {
+    final provider = CompositeVideoProvider.instance.findProvider(uri);
+    if (provider is! TwitterProvider) return null;
+    try {
+      final post = await provider.resolveXPost(uri);
+      if (post == null) return null;
+      final images = _toPreviewImages([
+        for (final photo in post.photos)
+          PostPhoto(photo.url, aspectRatio: photo.aspectRatio),
+      ]);
+      // Same fetch, cached: the video as the player wants it.
+      final video = images.isEmpty ? await provider.resolve(uri) : null;
+      return UrlPreviewData(
+        uri,
+        siteName: 'X',
+        title: '${post.authorName} (@${post.handle})',
+        description: post.text.isEmpty ? null : post.text,
+        image: images.firstOrNull?.image ?? video?.thumbnail,
+        images: images,
+        videoEmbedInfo: video,
+        type: video != null
+            ? UrlDestinationType.video
+            : images.isNotEmpty
+                ? UrlDestinationType.image
+                : UrlDestinationType.page,
+        xPost: post,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<PhotoPost?> _resolvePost(Uri uri) async {

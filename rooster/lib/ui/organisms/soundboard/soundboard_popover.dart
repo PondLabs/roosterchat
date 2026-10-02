@@ -1,5 +1,7 @@
 // Soundboard popover (Discord-style): search, favorites, a rail with one
-// entry per Space, and collapsible sections holding a 3-column grid.
+// entry per Space, and collapsible sections holding a 3-column grid. A Space
+// the user may manage ends its grid with an "Add sound" tile, and shows even
+// while it has no sounds.
 //
 // Pure Flutter (no platform plugins) so it behaves the same on web.
 import 'dart:async';
@@ -20,13 +22,20 @@ class SoundboardSource {
   final Color color;
   final SoundboardCatalog catalog;
 
+  /// Whether the user may add sounds to this Space now (power levels can
+  /// change while the popover is open, so it is asked, not stored).
+  final bool Function()? canAddSounds;
+
   const SoundboardSource({
     required this.id,
     required this.name,
     required this.color,
     required this.catalog,
     this.avatar,
+    this.canAddSounds,
   });
+
+  bool get canAdd => canAddSounds?.call() ?? false;
 }
 
 class SoundboardPopover extends StatefulWidget {
@@ -39,6 +48,10 @@ class SoundboardPopover extends StatefulWidget {
   /// Resolves custom Space emoji images; without it their fallback shows.
   final SoundboardEmojiImageResolver? imageFor;
 
+  /// Opens the screen that adds a sound to [SoundboardSource]; without it no
+  /// "Add sound" tile shows.
+  final ValueChanged<SoundboardSource>? onAddSound;
+
   const SoundboardPopover({
     super.key,
     required this.sources,
@@ -47,6 +60,7 @@ class SoundboardPopover extends StatefulWidget {
     required this.volume01,
     required this.onVolumeChanged,
     this.imageFor,
+    this.onAddSound,
   });
 
   static const double width = 540;
@@ -64,6 +78,9 @@ class _Section {
   const _Section(this.key, this.title, this.source, this.sounds);
 
   bool get isFavorites => source == null;
+
+  /// Ends with an "Add sound" tile.
+  bool get addable => source?.canAdd ?? false;
 }
 
 class _SoundboardPopoverState extends State<SoundboardPopover> {
@@ -135,13 +152,15 @@ class _SoundboardPopoverState extends State<SoundboardPopover> {
 
     final favorites =
         widget.favorites.ids.map(_findSound).nonNulls.where(matches).toList();
+    // A Space the user can add to stays, empty or not, unless searching.
+    final showAddable = widget.onAddSound != null && query.isEmpty;
 
     return [
       _Section(favoritesKey, 'Favorites', null, favorites),
       for (final source in widget.sources)
         _Section(source.id, source.name, source,
             source.catalog.sounds.where(matches).toList()),
-    ].where((s) => s.sounds.isNotEmpty).toList();
+    ].where((s) => s.sounds.isNotEmpty || (showAddable && s.addable)).toList();
   }
 
   GlobalKey _keyFor(String section) =>
@@ -322,16 +341,23 @@ class _SoundboardPopoverState extends State<SoundboardPopover> {
             ),
           ),
         ),
-        if (!collapsed) _grid(section.sounds),
+        if (!collapsed)
+          _grid([
+            for (final sound in section.sounds) _tile(sound),
+            if (widget.onAddSound != null &&
+                _query.trim().isEmpty &&
+                section.addable)
+              _AddSoundTile(onTap: () => widget.onAddSound!(section.source!)),
+          ]),
       ],
     );
   }
 
-  Widget _grid(List<SoundboardSound> sounds) {
+  Widget _grid(List<Widget> tiles) {
     const spacing = 6.0;
     return Column(
       children: [
-        for (var row = 0; row < sounds.length; row += columns)
+        for (var row = 0; row < tiles.length; row += columns)
           Padding(
             padding: const EdgeInsets.only(bottom: spacing),
             child: Row(
@@ -339,8 +365,8 @@ class _SoundboardPopoverState extends State<SoundboardPopover> {
                 for (var col = 0; col < columns; col++) ...[
                   if (col > 0) const SizedBox(width: spacing),
                   Expanded(
-                    child: row + col < sounds.length
-                        ? _tile(sounds[row + col])
+                    child: row + col < tiles.length
+                        ? tiles[row + col]
                         : const SizedBox.shrink(),
                   ),
                 ],
@@ -358,6 +384,50 @@ class _SoundboardPopoverState extends State<SoundboardPopover> {
       onPlay: () => widget.onPlay(sound.soundId),
       onToggleFavorite: () => widget.favorites.toggle(sound.soundId),
       imageFor: widget.imageFor,
+    );
+  }
+}
+
+/// The last tile of a Space the user manages: opens the screen that adds a
+/// sound to it.
+class _AddSoundTile extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _AddSoundTile({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      color: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: colors.outlineVariant),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: SizedBox(
+          height: 40,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.add, size: 18, color: colors.primary),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  'Add sound',
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelLarge
+                      ?.copyWith(color: colors.primary),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/utils/voice_controls/voice_controls.dart';
 import 'package:rooster/utils/voice_tray.dart';
@@ -82,6 +84,40 @@ void main() {
             "-",
             "Quit",
           ]);
+    });
+  });
+
+  // KDE Plasma's tray takes the icon file's name and looks it up in the
+  // icon theme before it reads the file: with idle.png and live.png, themes
+  // like MacTahoe, WhiteSur and Papirus showed Python's IDLE and Outlook in
+  // place of our logo and mic.
+  group("Tray icon files", () {
+    for (final windows in [false, true]) {
+      final platform = windows ? "Windows" : "Linux";
+
+      for (final status in VoiceTrayStatus.values) {
+        final asset = VoiceTray.iconAsset(status, windows: windows);
+
+        test("$platform, ${status.name}: the file is there", () {
+          expect(File(asset).existsSync(), isTrue, reason: asset);
+          expect(asset, endsWith(windows ? ".ico" : ".png"));
+        });
+
+        test("$platform, ${status.name}: a name no icon theme has", () {
+          final name = asset.split("/").last.split(".").first;
+          expect(name, startsWith("rooster_tray_"));
+          // Theme lookups fall back from "a-b-c" to "a-b" and "a", which
+          // could land on another icon.
+          expect(name, isNot(contains("-")));
+        });
+      }
+    }
+
+    test("a different icon for each status", () {
+      expect({
+        for (final status in VoiceTrayStatus.values)
+          VoiceTray.iconAsset(status, windows: false)
+      }, hasLength(VoiceTrayStatus.values.length));
     });
   });
 }

@@ -8,6 +8,7 @@ import '../video_capabilities.dart';
 import '../video_embed_info.dart';
 import '../video_playback_source.dart';
 import '../video_provider.dart';
+import '../x_post.dart';
 
 class TwitterStatusInfo {
   final String username;
@@ -20,6 +21,11 @@ class TwitterProvider implements VideoProvider, PhotoPostProvider {
   TwitterProvider({http.Client? httpClient}) : _defaultHttpClient = httpClient;
 
   final http.Client? _defaultHttpClient;
+
+  /// Status JSON by status id, so the card, the video and the photos share
+  /// one request. Failed fetches are dropped so they are retried.
+  // ponytail: never evicts, cleared at 500 entries; an LRU if that matters.
+  final Map<String, Future<Map<String, dynamic>?>> _tweets = {};
 
   @override
   String get id => 'twitter';
@@ -164,7 +170,25 @@ class TwitterProvider implements VideoProvider, PhotoPostProvider {
     return width / height;
   }
 
+  /// The status as the X card shows it. Null when it cannot be fetched.
+  Future<XPost?> resolveXPost(Uri uri, {http.Client? client}) async {
+    final info = extractStatusInfo(uri);
+    if (info == null) return null;
+    final tweet = await _fetchTweet(info, client);
+    return tweet == null ? null : XPost.fromFxJson(tweet);
+  }
+
   Future<Map<String, dynamic>?> _fetchTweet(
+      TwitterStatusInfo info, http.Client? client) {
+    if (_tweets.length > 500) _tweets.clear();
+    final id = info.statusId;
+    return _tweets[id] ??= _requestTweet(info, client).then((tweet) {
+      if (tweet == null) _tweets.remove(id);
+      return tweet;
+    });
+  }
+
+  Future<Map<String, dynamic>?> _requestTweet(
       TwitterStatusInfo info, http.Client? client) async {
     final httpClient = client ?? _defaultHttpClient ?? http.Client();
     final shouldCloseClient = client == null && _defaultHttpClient == null;
@@ -175,7 +199,8 @@ class TwitterProvider implements VideoProvider, PhotoPostProvider {
       final res =
           await httpClient.get(apiUrl).timeout(const Duration(seconds: 4));
       if (res.statusCode == 200) {
-        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        final data =
+            jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
         return data['tweet'] as Map<String, dynamic>?;
       }
     } catch (_) {

@@ -6,6 +6,7 @@
 import 'dart:async';
 
 import 'package:rooster/client/components/activities/activities_component.dart';
+import 'package:rooster/client/matrix/homeserver_clock.dart';
 
 class MatrixCallMembership {
   /// Lists what the member publishes, e.g. `["screen", "camera"]`. Other
@@ -26,6 +27,12 @@ class MatrixCallMembership {
 
   /// How long a membership lasts from its join time, the MatrixRTC default.
   static const lifetime = Duration(hours: 4);
+
+  /// Its owner writes it again, pushing the expiry [lifetime] past then, once
+  /// this much of it is left: an hour after each write. Pushed out only in
+  /// its last hour, a membership lapsed for everyone whose clock ran an hour
+  /// ahead of its owner's, or whenever one write failed.
+  static const refreshWhenLeft = Duration(hours: 3);
 
   /// What [content] reports the member publishing. Unknown values and
   /// malformed content are ignored.
@@ -81,6 +88,15 @@ class MatrixCallMembership {
     return expiry != null && now.isAfter(expiry);
   }
 
+  /// Whether our own membership, [content] sent at [sentAt], is due to be
+  /// written again at [now] to keep it from lapsing (see [refreshWhenLeft]).
+  /// Also once it has lapsed: we are still in the call.
+  static bool needsRefresh(
+      Map<String, Object?> content, DateTime? sentAt, DateTime now) {
+    final expiry = expiresAt(content, sentAt);
+    return expiry != null && expiry.difference(now) <= refreshWhenLeft;
+  }
+
   /// The earliest of [expiries] still ahead of [now], when the list of who is
   /// in the call next changes without any event arriving: nothing is sent
   /// when a membership lapses, so whoever lists them has to look again then.
@@ -129,9 +145,12 @@ class MatrixCallMembership {
 /// stayed listed long past their `expires`, until some other membership
 /// change happened to come by.
 class MembershipLapseTimer {
-  MembershipLapseTimer(this.onLapse);
+  /// [now] is the homeserver's time, which memberships lapse by.
+  MembershipLapseTimer(this.onLapse, {DateTime Function()? now})
+      : _now = now ?? HomeserverClock.instance.now;
 
   final void Function() onLapse;
+  final DateTime Function() _now;
 
   Timer? _timer;
   DateTime? _at;
@@ -146,8 +165,7 @@ class MembershipLapseTimer {
     if (at == null) return;
 
     // Just after: a membership is still live at the very moment it expires.
-    final delay =
-        at.difference(DateTime.now()) + const Duration(milliseconds: 1);
+    final delay = at.difference(_now()) + const Duration(milliseconds: 1);
     _timer = Timer(delay.isNegative ? Duration.zero : delay, () {
       _timer = null;
       _at = null;

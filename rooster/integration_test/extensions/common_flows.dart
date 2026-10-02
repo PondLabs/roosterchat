@@ -70,7 +70,13 @@ extension CommonFlows on WidgetTester {
   /// The username and password fields only exist once the homeserver has
   /// been checked (debounced, then a network round trip).
   Future<void> waitForLoginFields() async {
-    await waitFor(() => find.byType(TextField).evaluate().length >= 3);
+    await waitFor(() =>
+        find
+            .descendant(
+                of: find.byType(LoginPage), matching: find.byType(TextField))
+            .evaluate()
+            .length >=
+        3);
     await pumpAndSettle();
   }
 
@@ -79,7 +85,11 @@ extension CommonFlows on WidgetTester {
 
     var button = find.widgetWithText(ElevatedButton, "Login");
 
-    var inputs = find.byType(TextField);
+    // The login page's own fields: anything else on screen while it slides
+    // in (the page it was opened from) would shift them, and the password
+    // went into the homeserver field.
+    var inputs = find.descendant(
+        of: find.byType(LoginPage), matching: find.byType(TextField));
     expect(inputs, findsWidgets);
 
     // Build our app and trigger a frame.
@@ -105,7 +115,11 @@ extension CommonFlows on WidgetTester {
     await waitFor(() => find.byType(LoginPage).evaluate().isNotEmpty);
     var button = find.widgetWithText(ElevatedButton, "Login");
 
-    var inputs = find.byType(TextField);
+    // The login page's own fields: anything else on screen while it slides
+    // in (the page it was opened from) would shift them, and the password
+    // went into the homeserver field.
+    var inputs = find.descendant(
+        of: find.byType(LoginPage), matching: find.byType(TextField));
     expect(inputs, findsWidgets);
 
     await enterText(inputs.at(0), homeserver);

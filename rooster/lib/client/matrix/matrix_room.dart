@@ -386,9 +386,10 @@ class MatrixRoom extends Room {
   @override
   Future<List<ProcessedAttachment>> processAttachments(
       List<PendingFileAttachment> attachments) async {
-    return await Future.wait(attachments.map((e) async {
-      return (await processAttachment(e))!;
-    }));
+    // An attachment whose file could not be read is left out, not a crash
+    // of the whole send.
+    final processed = await Future.wait(attachments.map(processAttachment));
+    return processed.nonNulls.toList();
   }
 
   Future<MatrixProcessedAttachment?> processAttachment(

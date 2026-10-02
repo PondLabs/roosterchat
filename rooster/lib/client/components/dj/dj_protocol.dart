@@ -5,7 +5,8 @@
 //   sync   {}                           someone asks for the booth
 //   state  {DjSnapshot}                 the booth, from the DJ on every change
 //                                       (or, while empty, from anyone asked)
-//   tick   {e, s, c, pos, p, b}         the DJ's position, every few seconds
+//   tick   {e, s, c, pos, p, b, aw}     the DJ's position, every few seconds,
+//                                       and how long (ms) they have been away
 //   req    {on: bool}                   ask (or stop asking) to be the DJ
 //   pfail  {e, pid, why}                the handoff target could not take over
 //   part   {id, i, n, d}                one piece of a large message

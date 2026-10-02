@@ -531,17 +531,19 @@ def build_app(tmp):
         pngs.append(p)
     ico(pngs, os.path.join(APP, "windows", "runner", "resources", "app_icon.ico"))
 
-    # Tray (idle state; live and muted are the mic glyphs).
+    # Tray (idle state; live and muted are the mic glyphs). Named for the
+    # app: KDE looks a tray icon's file name up in the icon theme first, and
+    # themes have an "idle" (Python's IDLE). See lib/utils/voice_tray.dart.
     tray = os.path.join(APP, "assets", "images", "tray")
     circ = os.path.join(tmp, "tray-circle.png")
     render(app_icon_svg("circle", inset=150), circ, 256)
-    downscale(circ, os.path.join(tray, "idle.png"), 64)
+    downscale(circ, os.path.join(tray, "rooster_tray_idle.png"), 64)
     tray_pngs = []
     for s in sizes:
         p = os.path.join(tmp, "tray-%d.png" % s)
         downscale(circ, p, s)
         tray_pngs.append(p)
-    ico(tray_pngs, os.path.join(tray, "idle.ico"))
+    ico(tray_pngs, os.path.join(tray, "rooster_tray_idle.ico"))
 
     # Linux.
     hicolor = os.path.join(APP, "linux", "debian", "usr", "share", "icons", "hicolor")

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:rooster/client/components/dj/dj_engine.dart';
 import 'package:rooster/client/components/dj/dj_models.dart';
 import 'package:rooster/client/components/dj/dj_session.dart';
+import 'package:flutter/foundation.dart';
 import 'package:test/test.dart';
 
 import 'dj_fakes.dart';
@@ -27,6 +28,9 @@ Client connect(FakeCall call, String identity,
     {DjCaps caps = desktop,
     FakeResolver? resolver,
     Duration passTimeout = const Duration(seconds: 90),
+    ValueListenable<bool>? away,
+    DateTime Function()? now,
+    Duration tickInterval = const Duration(milliseconds: 40),
     void Function(FakeEngine)? onEngine}) {
   final transport = call.join(identity);
   final engines = <FakeEngine>[];
@@ -43,8 +47,10 @@ Client connect(FakeCall call, String identity,
           }
         : null,
     resolver: resolver ?? FakeResolver(),
+    away: away,
+    now: now,
     passTimeout: passTimeout,
-    tickInterval: const Duration(milliseconds: 40),
+    tickInterval: tickInterval,
     pollInterval: const Duration(milliseconds: 10),
   )..start();
   return Client(session, transport, engines);
@@ -54,21 +60,30 @@ void main() {
   late FakeCall call;
   final clients = <Client>[];
 
+  /// How far the clients' shared clock runs ahead of the real one.
+  var skew = Duration.zero;
+
   Client join(String identity,
       {DjCaps caps = desktop,
       FakeResolver? resolver,
       Duration passTimeout = const Duration(seconds: 90),
+      ValueListenable<bool>? away,
+      Duration tickInterval = const Duration(milliseconds: 40),
       void Function(FakeEngine)? onEngine}) {
     final client = connect(call, identity,
         caps: caps,
         resolver: resolver,
         passTimeout: passTimeout,
+        away: away,
+        tickInterval: tickInterval,
+        now: () => DateTime.now().add(skew),
         onEngine: onEngine);
     clients.add(client);
     return client;
   }
 
   setUp(() {
+    skew = Duration.zero;
     call = FakeCall();
     clients.clear();
   });
@@ -80,8 +95,9 @@ void main() {
   });
 
   /// A DJ'ing, with [tracks] queued and the first one playing.
-  Future<Client> djWith(String identity, List<String> links) async {
-    final dj = join(identity);
+  Future<Client> djWith(String identity, List<String> links,
+      {Duration tickInterval = const Duration(milliseconds: 40)}) async {
+    final dj = join(identity, tickInterval: tickInterval);
     await settle();
     await dj.session.becomeDj();
     await settle();
@@ -212,8 +228,11 @@ void main() {
     });
 
     test('a listener that reconnects asks for the booth again', () async {
-      final a =
-          await djWith('@a:x:DEV1', ['https://music.example/aaaaaaaaaaa']);
+      // Ticks, every 40 ms elsewhere, would tell b about the DJ by
+      // themselves: on a slow machine one landed between the leave and the
+      // check. Here only the reconnect may.
+      final a = await djWith('@a:x:DEV1', ['https://music.example/aaaaaaaaaaa'],
+          tickInterval: const Duration(minutes: 1));
       final b = join('@b:x:DEV2');
       await settle();
       // LiveKit made the DJ "leave" during b's reconnect.
@@ -654,6 +673,120 @@ void main() {
       expect(a.session.snapshot.passTo, isNull);
       expect(b.session.isDj, isFalse);
       expect(a.notices.last.message, contains('only on your computer'));
+    });
+  });
+
+  group('taking the decks from an away DJ', () {
+    late ValueNotifier<bool> aAway;
+    late Client a, b, c;
+
+    /// A DJs, away since now; b and c listen.
+    Future<void> setUpBooth() async {
+      aAway = ValueNotifier(false);
+      final dj = join('@a:x:DEV1', away: aAway);
+      await settle();
+      await dj.session.becomeDj();
+      await settle();
+      dj.session.addLinks('https://music.example/aaaaaaaaaaa\n'
+          'https://music.example/bbbbbbbbbbb');
+      a = dj;
+      b = join('@b:x:DEV2');
+      c = join('@c:x:DEV3');
+      await settle();
+      aAway.value = true;
+    }
+
+    /// Moves everyone's clock on by [by], and lets the DJ tick at it.
+    Future<void> pass(Duration by) async {
+      skew += by;
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      await settle();
+    }
+
+    test('not before the DJ has been away 15 minutes', () async {
+      await setUpBooth();
+      await pass(const Duration(minutes: 14));
+      expect(b.session.djAwayFor!.inMinutes, 14);
+      expect(b.session.canTakeOver, isFalse);
+
+      await b.session.takeOver();
+      await settle();
+      expect(a.session.isDj, isTrue);
+      expect(b.session.role, DjRole.listener);
+    });
+
+    test('not from a web client', () async {
+      await setUpBooth();
+      final w = join('@w:x:WEB', caps: web);
+      await pass(const Duration(minutes: 16));
+      expect(w.session.djAwayFor, isNotNull);
+      expect(w.session.canTakeOver, isFalse);
+    });
+
+    test('after 15 minutes: everyone follows the new DJ, the old one stops',
+        () async {
+      await setUpBooth();
+      await pass(const Duration(minutes: 16));
+      expect(b.session.canTakeOver, isTrue);
+      expect(c.session.canTakeOver, isTrue);
+      final song = a.session.current!.id;
+      final epoch = a.session.snapshot.epoch;
+
+      await b.session.takeOver();
+      await settle();
+
+      expect(b.session.isDj, isTrue);
+      expect(b.engine!.preparedWhole, [song]);
+      expect(b.session.current!.id, song);
+      expect(b.session.isPlaying, isTrue);
+      expect(b.session.queue.map((t) => t.id), [
+        for (final t in a.session.queue) t.id,
+      ]);
+      for (final client in [a, b, c]) {
+        expect(client.session.djIdentity, '@b:x:DEV2');
+        expect(client.session.snapshot.epoch, epoch + 1);
+      }
+      expect(a.session.isDj, isFalse);
+      expect(a.engine!.shutDown, isTrue);
+      expect(a.notices.last.message, contains('while you were away'));
+      expect(c.session.canTakeOver, isFalse);
+    });
+
+    test('not once the DJ is back', () async {
+      await setUpBooth();
+      await pass(const Duration(minutes: 16));
+      expect(b.session.canTakeOver, isTrue);
+
+      aAway.value = false;
+      await settle();
+      expect(b.session.djAwayFor, isNull);
+      expect(b.session.canTakeOver, isFalse);
+      await b.session.takeOver();
+      await settle();
+      expect(a.session.isDj, isTrue);
+      expect(b.session.role, DjRole.listener);
+    });
+
+    test('a DJ back before hearing of it keeps the decks everywhere', () async {
+      await setUpBooth();
+      await pass(const Duration(minutes: 16));
+      // A is back, but nobody has heard yet.
+      a.transport.drop.add('tick');
+      aAway.value = false;
+
+      await b.session.takeOver();
+      await settle();
+
+      expect(a.session.isDj, isTrue);
+      expect(a.engine!.shutDown, isFalse);
+      expect(b.session.isDj, isFalse);
+      expect(b.engine!.shutDown, isTrue);
+      final epoch = a.session.snapshot.epoch;
+      for (final client in [a, b, c]) {
+        expect(client.session.djIdentity, '@a:x:DEV1');
+        expect(client.session.snapshot.epoch, epoch);
+      }
+      expect(b.notices.last.message, contains('took the decks back'));
     });
   });
 }

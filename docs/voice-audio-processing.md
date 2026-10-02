@@ -125,8 +125,11 @@ suppressor off when ours is on.
 
 ### Every microphone through one door
 
-Who takes the noise out of a capture (our DSP, or WebRTC's / the browser's
-own suppressor, never both and never neither) is decided in one place,
+Who takes the noise out of a capture is decided in one place. With noise
+suppression on: our DSP, or WebRTC's / the browser's own suppressor when ours
+cannot run, never both. With it off: neither, and the room's noise goes out
+as the user asked (until 2026-09-30 WebRTC's took over, so turning it off
+changed nothing anyone could hear). The place is
 `MicrophoneNoiseSuppression` (`audio_processing/microphone_noise_suppression.dart`),
 and every capture is made through it:
 
@@ -496,7 +499,7 @@ tools/voice_dsp/native_noise_loop.sh
 | A library missing any entry point is unsupported from the start | `native_dsp_test.dart` | ci `test` |
 | A leave and a join fired together leave the DSP on the hook; one call ending leaves another's DSP | `native_dsp_test.dart` | ci `test` |
 | `isProcessing` only with audio | `native_dsp_test.dart` | ci `test` |
-| Ours or WebRTC's, never both or neither: at creation, on a flip while live, muted, or before publishing; the watchdog; the microphone found by source; a first unmute creates a room microphone | `microphone_noise_suppression_test.dart` | ci `test` |
+| Ours or WebRTC's, never both; neither when turned off: at creation, on a flip while live, muted, or before publishing; the watchdog; the microphone found by source; a first unmute creates a room microphone | `microphone_noise_suppression_test.dart` | ci `test` |
 | A call waits for `ensureReady` before choosing | `microphone_noise_suppression_test.dart` | ci `test` |
 | Legacy calls: the preference and the device reach the capture; a failed web DSP recaptures with the browser's suppressor | `legacy_call_microphone_test.dart` | ci `test` |
 | The web processor survives restart, device switch and mute; `copyWith` keeps it | `livekit_processor_restart_test.dart` | ci `test` |
@@ -508,6 +511,8 @@ tools/voice_dsp/native_noise_loop.sh
 | Inside the real WebRTC (Linux): the microphone test on the picked device, "Hear myself" off, noise ≥ 20 dB down in what is encoded, DeepFilterNet suppressing by the end (measured 2026-09-25: 61 dB) | `native_noise_loop.sh` | integration-test |
 | Screen audio and DJ music do not leave the microphone without WebRTC's processing: restored after negotiation, not for the mic itself, not while muted, desktop only | `shared_audio_processing_test.dart` | ci `test` |
 | ... and inside the real WebRTC, with the DJ's music track: restored to within 3 dB of before (the libwebrtc internal it relies on still holds) | `native_noise_loop.sh` | integration-test |
+| ... and with the DJ's own monitor running too (`DjLocalMonitor`) | `native_noise_loop.sh` | integration-test |
+| Noise suppression turned off lets the room noise out, more than 6 dB louder than with WebRTC's suppressor | `native_noise_loop.sh` | integration-test |
 | After a mute during which a device listed before the microphone went away, the microphone is heard again, within 3 dB of before (`ReselectRecordingDevice`) | `native_noise_loop.sh` | integration-test |
 | One NaN, infinity or huge input sample leaves the voice as it was a second later (it used to silence the DSP for good); state that went bad is rebuilt | `tests/non_finite.rs` | ci `test` |
 | A capture WebRTC stopped recording from, a web DSP whose worker traps or hangs, a suspended audio context: the call repairs them or keeps the microphone going (docs/voice-call-health.md) | `native_noise_loop.sh`, `web_health_loop.mjs`, `unit_test/voice_health/` | integration-test, ci |
@@ -688,8 +693,8 @@ your speakers." within two seconds of the video starting.
   DJ's music published it is back at -29 until the microphone's options are
   written again. What the user loses is echo cancellation (echo for everyone
   listening to someone on loudspeakers) and gain control, and noise
-  suppression where WebRTC's is the one meant to run (preference off, DSP
-  unavailable, the watchdog's fallback).
+  suppression where WebRTC's is the one meant to run (DSP unavailable, the
+  watchdog's fallback).
 
   **Mitigation in place (option B, 2026-09-25):** after any local audio
   publication that is not the microphone, once its sender is negotiated

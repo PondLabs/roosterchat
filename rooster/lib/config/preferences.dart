@@ -526,6 +526,16 @@ class Preferences {
 
   DoublePreference appScale = DoublePreference("app_scale", defaultValue: 1.0);
 
+  /// Width of the desktop sidebar (space icons and the channel list), set by
+  /// dragging its right edge.
+  DoublePreference sidebarWidth =
+      DoublePreference("desktop_sidebar_width", defaultValue: 320);
+
+  /// Which corner of a call tile the developer-mode stream info sits in
+  /// ([StreamDebugInfo]): topLeft, topRight, bottomRight or bottomLeft.
+  StringPreference streamDebugInfoCorner =
+      StringPreference("stream_debug_info_corner", defaultValue: "topLeft");
+
   DoublePreference emojiPickerHeight =
       DoublePreference("emoji_picker_height", defaultValue: 300);
 

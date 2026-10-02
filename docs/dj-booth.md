@@ -10,7 +10,7 @@ everyone can see and a volume each listener sets for themselves.
 The DJ's desktop client plays each song from its file (a local one, or one
 a source extension downloads, played while it downloads), decodes it in
 Rust and publishes it as its own stereo LiveKit track
-(`rooster-dj-music`, 128 kbps Opus, DTX and RED off). Listeners just receive
+(`commet-dj-music`, a wire name that keeps Commet's like `chat.commet.*`; builds of 29-30 September 2026 sent `rooster-dj-music`, which is still read; 128 kbps Opus, DTX and RED off). Listeners just receive
 that track, so:
 
 - everyone is in sync by construction, and late joiners hear the song live;
@@ -27,7 +27,7 @@ Only desktop (Linux, Windows) can DJ: it needs the Rust player
 runs extensions.
 
 The DJ hears their own music through a second, in-process WebRTC connection
-receiving the same track (`_LocalMonitor` in `native_dj_engine.dart`). A
+receiving the same track (`DjLocalMonitor` in `native_dj_engine.dart`). A
 media player would bypass WebRTC's playout, and a DJ on loudspeakers would
 send the music back into the room through their microphone.
 
@@ -86,6 +86,23 @@ How the epoch moves:
 - **Request.** A desktop listener asks; the DJ's state lists them, which puts
   a ✋ next to their name for everyone. Web and Android get an explanation
   instead of the request action. Hands go down when the booth empties.
+- **Take over from an away DJ.** A DJ's ticks carry `aw`, how long
+  (ms) their user has been away (`UserIdleWatcher.isAway`, the amber dot of
+  `docs/away-status.md`, so idle 15 min before it starts counting). Once a
+  listener has heard a DJ say they have been away for 15 minutes
+  (`DjSession.takeOverAfterAway`), a desktop listener gets "Take the decks
+  (DJ away 15 min)" in the booth panel and on the DJ's right-click menu
+  (before then, how long they have been away and when it opens up). It
+  works like a pass the DJ didn't make: the taker fetches the playing song
+  while it plays on, then announces itself with the next epoch and
+  `tk` (taken from) naming the old DJ. Everyone follows the epoch as usual;
+  the old DJ's own client is the judge. Still away for 15 minutes by its
+  own count, it yields and fades out. Back (or never away that long), it
+  takes the decks back with the epoch after the taker's, which beats it
+  everywhere, and the taker stops. The taker gives up if the DJ's ticks stop
+  saying away before it announces. A takeover during the DJ's own file
+  can't fetch it, so the booth is taken paused on it (play skips it).
+  Builds without this send no `aw`, so their DJs can't be taken from.
 - **Release or leave.** The booth empties but everyone keeps the queue and
   position, paused, so the next DJ picks up where it stopped.
 
@@ -101,7 +118,10 @@ Scaffold for snack bars.
 
 ## Songs
 
-- Files: the add bar's file button picks audio files. Each is queued as
+- Files: the add bar's "Choose files…" button (or "Add music" with nothing
+  pasted) picks audio files, and audio files dropped on the DJ's booth are
+  queued too (the window-wide chat upload target skips drops on the booth,
+  `djBoothTakesDrop`). Each is queued as
   `file:<id>`, the id a hash of its path, and the path is remembered in
   `<app support>/dj-local-files.json`. The file is played where it is, never
   copied. Another client can't play it: a DJ who takes over skips such songs

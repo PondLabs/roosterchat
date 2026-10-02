@@ -121,19 +121,28 @@ void main() {
   tearDown(() => dsp.dispose());
 
   group('who suppresses', () {
-    test('a new capture has WebRTC\'s suppressor only when ours will not run',
-        () {
+    test('a new capture has WebRTC\'s suppressor only in place of ours', () {
       expect(
           MicrophoneNoiseSuppression.webrtcSuppressorFor(dsp, preference: true),
           isFalse);
-      expect(
-          MicrophoneNoiseSuppression.webrtcSuppressorFor(dsp,
-              preference: false),
-          isTrue);
       dsp.supported = false;
       expect(
           MicrophoneNoiseSuppression.webrtcSuppressorFor(dsp, preference: true),
           isTrue);
+    });
+
+    // Turning noise suppression off used to hand it to WebRTC's own
+    // suppressor, so the room's noise never went out whatever the user set.
+    test('with noise suppression turned off nothing suppresses', () {
+      expect(
+          MicrophoneNoiseSuppression.webrtcSuppressorFor(dsp,
+              preference: false),
+          isFalse);
+      dsp.supported = false;
+      expect(
+          MicrophoneNoiseSuppression.webrtcSuppressorFor(dsp,
+              preference: false),
+          isFalse);
     });
 
     test('the room microphone is created that way', () {
@@ -170,10 +179,11 @@ void main() {
   });
 
   group('the preference flipping mid-call', () {
-    test('turning ours off gives the capture WebRTC\'s suppressor', () async {
+    test('turning ours off leaves the capture with no suppressor', () async {
       preference = false;
       await ns.update();
-      expect(mic!.restarts, [true]);
+      expect(mic!.restarts, isEmpty);
+      expect(mic!.webrtcNoiseSuppression, isFalse);
     });
 
     test('turning ours on takes WebRTC\'s off', () async {
@@ -183,41 +193,41 @@ void main() {
     });
 
     // Since 24f5669f unmuting only re-enables the capture, so nothing used
-    // to apply a flip that happened while muted: ours off and WebRTC's off.
+    // to apply a flip that happened while muted.
     test('a flip while muted is applied on unmute', () async {
+      mic = _Mic(webrtcNoiseSuppression: true);
       mic!.muted = true;
-      preference = false;
       await ns.update();
       expect(mic!.restarts, isEmpty,
           reason: 'a restart would bring the muted capture back enabled');
 
       mic!.muted = false;
       await ns.update();
-      expect(mic!.restarts, [true]);
+      expect(mic!.restarts, [false]);
     });
 
     test('a flip before the microphone is published is applied once it is',
         () async {
+      mic = _Mic(webrtcNoiseSuppression: true);
       mic!.published = false;
-      preference = false;
       await ns.update();
       mic!.published = true;
       await ns.update();
-      expect(mic!.restarts, [true]);
+      expect(mic!.restarts, [false]);
     });
 
     test('a failed restart is retried, not every second', () async {
+      mic = _Mic(webrtcNoiseSuppression: true);
       mic!.failRestarts = true;
-      preference = false;
       await ns.update();
       now = now.add(const Duration(seconds: 1));
       await ns.update();
-      expect(mic!.restarts, [true]);
+      expect(mic!.restarts, [false]);
       mic!.failRestarts = false;
       now = now.add(MicrophoneNoiseSuppression.retryAfter);
       await ns.update();
-      expect(mic!.restarts, [true, true]);
-      expect(mic!.webrtcNoiseSuppression, isTrue);
+      expect(mic!.restarts, [false, false]);
+      expect(mic!.webrtcNoiseSuppression, isFalse);
     });
   });
 

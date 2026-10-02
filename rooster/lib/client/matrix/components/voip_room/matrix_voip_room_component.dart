@@ -5,6 +5,7 @@ import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip_room/voip_room_component.dart';
 import 'package:rooster/client/matrix/components/matrix_sync_listener.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_livekit_backend.dart';
+import 'package:rooster/client/matrix/homeserver_clock.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/matrix/matrix_room_permissions.dart';
@@ -28,7 +29,12 @@ class MatrixVoipRoomComponent
 
   VoipSession? currentSession;
 
-  MatrixVoipRoomComponent(this.client, this.room) {
+  /// The homeserver's time, which memberships lapse by (see
+  /// [HomeserverClock]).
+  final HomeserverClock _clock;
+
+  MatrixVoipRoomComponent(this.client, this.room, {HomeserverClock? clock})
+      : _clock = clock ?? HomeserverClock.instance {
     backend = MatrixLivekitBackend(room);
   }
 
@@ -41,8 +47,11 @@ class MatrixVoipRoomComponent
 
   /// Recomputes the list when the next membership in it lapses (see
   /// [getCurrentParticipants]).
-  late final MembershipLapseTimer _lapseTimer =
-      MembershipLapseTimer(() => _onParticipantsChanged.add(()));
+  late final MembershipLapseTimer _lapseTimer = MembershipLapseTimer(
+      () => _onParticipantsChanged.add(()),
+      now: _clock.now);
+
+  StreamSubscription? _clockSub;
 
   @override
   onSync(JoinedRoomUpdate update) {
@@ -72,7 +81,7 @@ class MatrixVoipRoomComponent
       return [];
     }
 
-    final now = DateTime.now();
+    final now = _clock.now();
     final expiries = <DateTime?>[];
     List<String> participants = List.empty(growable: true);
     for (var pair in state.entries) {
@@ -146,7 +155,15 @@ class MatrixVoipRoomComponent
   }
 
   @override
-  Stream<void> get onParticipantsChanged => _onParticipantsChanged.stream;
+  Stream<void> get onParticipantsChanged {
+    // Worked out by the time as it was: looked at again when a sync puts
+    // that right.
+    _clockSub ??= _clock.onCorrected.listen((_) {
+      _lapseTimer.cancel();
+      _onParticipantsChanged.add(());
+    });
+    return _onParticipantsChanged.stream;
+  }
 
   @override
   Future<VoipSession?> joinCall() async {

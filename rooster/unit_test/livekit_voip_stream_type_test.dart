@@ -26,6 +26,24 @@ void main() {
           VoipStreamType.screenshare);
     });
 
+    // The DJ's music keeps Commet's wire name: a listener whose build does
+    // not know the name plays the music at the DJ's voice volume, and the
+    // music slider does nothing (the rename changed it for two days).
+    test("the DJ booth publishes its music under Commet's name", () {
+      expect(MatrixLivekitVoipStream.musicTrackName, 'commet-dj-music');
+    });
+
+    test("the DJ's music is music under either name", () {
+      for (final name in ['commet-dj-music', 'rooster-dj-music']) {
+        expect(
+            MatrixLivekitVoipStream.typeOf(
+                lk.TrackType.AUDIO, lk.TrackSource.unknown,
+                name: name),
+            VoipStreamType.music,
+            reason: name);
+      }
+    });
+
     test("camera video is a video stream", () {
       expect(
           MatrixLivekitVoipStream.typeOf(

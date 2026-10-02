@@ -10,10 +10,12 @@ Hard fork of Commet (a Flutter Matrix client) by PondLabs, shipped as **Rooster*
 - `rust/dj_audio` DJ booth music player (symphonia decode, 48 kHz stereo, C ABI linked into `librust_lib_rooster`). See `docs/dj-booth.md`.
 - DJ songs come from the DJ's own files or from source extensions the user installs; the app itself knows no music site. See `docs/source-extensions.md`.
 - Voice call health: every second a voice room checks that our microphone still gets through and that we still receive everyone, and repairs either without a rejoin. See `docs/voice-call-health.md`.
+- Who is in a voice channel: call memberships read by the homeserver's clock (`HomeserverClock`), written again hourly by their owners for the whole call, plus everyone in LiveKit while we are in it. See `docs/voice-channel-members.md`.
 - Away status: the amber dot, and where idle time comes from on each platform. See `docs/away-status.md`.
 - Call controls outside the window: taskbar thumbnail buttons (Windows), Dock menu (macOS), launcher actions and quicklist (Linux), floating panel (browser). See `docs/voice-controls.md`.
 - Updating: check GitHub Releases, and on desktop install one over the running build. See `docs/updating.md`.
 - Instagram reels and posts in the chat: native builds play the MP4 from the embed page and show photo posts as their photos, web frames Instagram's embed. See `docs/instagram-reels.md`.
+- X posts in the chat: an iframely-style X card (author, text, media, quote, counts) from fxtwitter's CORS-open JSON API on every platform, with the plain preview as the fallback. See `docs/x-posts.md`.
 - `third_party/` vendored packages we modify in place. See `third_party/README.md`.
 
 ## Rules

@@ -79,6 +79,18 @@ class WindowManagement {
     }
   }
 
+  /// Restores, shows and focuses the window. `show()` alone leaves a
+  /// minimized window minimized on Windows. Never throws.
+  static Future<void> bringToFront() async {
+    try {
+      if (await windowManager.isMinimized()) await windowManager.restore();
+      await windowManager.show();
+      await windowManager.focus();
+    } catch (e, s) {
+      Log.onError(e, s, content: "Could not bring the window back");
+    }
+  }
+
   /// Brings the window back when a quit attempt failed, so the user can retry.
   /// Never throws: recovery failing must not mask the original error.
   static Future<void> _restoreWindow() async {

@@ -19,6 +19,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import 'package:rooster/ui/molecules/stream_debug_info.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class VoipStreamView extends StatefulWidget {
@@ -162,19 +163,7 @@ class _VoipStreamViewState extends State<VoipStreamView> {
                   child: buildDefault()),
             ),
             if (preferences.developerMode.value)
-              Align(
-                alignment: AlignmentGeometry.topLeft,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: ColorScheme.of(context).surfaceContainer,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: tiamat.Text.labelLow(widget.stream.stats),
-                  ),
-                ),
-              ),
+              StreamDebugInfo(widget.stream.stats),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -314,30 +303,18 @@ class _VoipStreamViewState extends State<VoipStreamView> {
                             placeholderColor: user.defaultColor,
                             placeholderText: user.displayName),
                       ),
-                      // Soundboard emoji burst: overlay only on the sender's
-                      // avatar, timed by the real sound duration.
-                      ListenableBuilder(
-                        listenable: SoundboardOverlayRegistry.instance,
-                        builder: (context, _) {
-                          final entry = SoundboardOverlayRegistry.instance
-                              .entryFor(user.identifier);
-                          if (entry == null) {
-                            return const SizedBox.shrink();
-                          }
-                          return Positioned(
-                            top: 0,
-                            right: 0,
-                            child: SoundboardEmojiOverlay(
-                              key: ValueKey(
-                                  'sb_${entry.soundId}_${entry.expiresAtMs}'),
-                              emoji: entry.emoji,
-                              image: entry.image,
-                              durationMs: entry.overlayMs,
-                              onDone: () => SoundboardOverlayRegistry.instance
-                                  .clearUser(user.identifier),
-                            ),
-                          );
-                        },
+                      // Soundboard emoji: only on the sender's avatar, for as
+                      // long as their sound plays.
+                      Positioned(
+                        top: 0,
+                        right: 0,
+                        child: ListenableBuilder(
+                          listenable: SoundboardOverlayRegistry.instance,
+                          builder: (context, _) => SoundboardEmojiOverlay(
+                            entry: SoundboardOverlayRegistry.instance
+                                .entryFor(user.identifier),
+                          ),
+                        ),
                       ),
                     ],
                   ),

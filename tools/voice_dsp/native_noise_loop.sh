@@ -89,4 +89,6 @@ fi
 echo "DSP report (rate frames flags): $(cat "$work/results/report.txt")"
 echo "A recording that died mid-call: $(cat "$work/results/recording_died.txt")"
 echo "WebRTC processing of the microphone around a custom audio source: $(cat "$work/results/custom_source.txt")"
+echo "The microphone's processing with the DJ's own monitor: $(cat "$work/results/dj_monitor.txt")"
+echo "Noise suppression turned off: $(cat "$work/results/suppression_off.txt")"
 node "$repo/tools/voice_dsp/measure_stats.mjs" "$work/results"

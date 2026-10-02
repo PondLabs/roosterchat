@@ -20,12 +20,14 @@ SoundboardSound _sound(String id, String name, [String emoji = '📢']) =>
       normalizedGain: 1.0,
     );
 
-SoundboardSource _source(String id, String name, List<SoundboardSound> s) =>
+SoundboardSource _source(String id, String name, List<SoundboardSound> s,
+        {bool canAdd = false}) =>
     SoundboardSource(
       id: id,
       name: name,
       color: Colors.blue,
       catalog: InMemorySoundboardCatalog(s),
+      canAddSounds: () => canAdd,
     );
 
 Widget _testApp(Widget child) {
@@ -56,14 +58,16 @@ void main() {
 
   Future<void> pumpPopover(
     WidgetTester tester,
-    List<SoundboardSource> sources,
-  ) async {
+    List<SoundboardSource> sources, {
+    ValueChanged<SoundboardSource>? onAddSound,
+  }) async {
     await tester.pumpWidget(_testApp(SoundboardPopover(
       sources: sources,
       favorites: favorites,
       onPlay: played.add,
       volume01: volume,
       onVolumeChanged: (v) => volume = v,
+      onAddSound: onAddSound,
     )));
     await tester.pumpAndSettle();
   }
@@ -286,5 +290,56 @@ void main() {
 
     expect(find.byTooltip(long), findsOneWidget);
     expect(find.byTooltip('Bruh'), findsNothing);
+  });
+
+  testWidgets('a space the user manages ends with an Add sound tile',
+      (tester) async {
+    final added = <String>[];
+    await pumpPopover(
+        tester,
+        [
+          _source('!a', 'Managed', [_sound('s1', 'Airhorn')], canAdd: true),
+          _source('!b', 'Not managed', [_sound('s2', 'Bruh')]),
+        ],
+        onAddSound: (source) => added.add(source.id));
+
+    expect(find.text('Add sound'), findsOneWidget);
+    await tester.tap(find.text('Add sound'));
+    expect(added, ['!a']);
+  });
+
+  testWidgets('a managed space with no sounds still shows, to add one',
+      (tester) async {
+    await pumpPopover(
+        tester,
+        [
+          _source('!a', 'Empty space', const [], canAdd: true),
+        ],
+        onAddSound: (_) {});
+
+    expect(find.text('Empty space'), findsOneWidget);
+    expect(find.text('Add sound'), findsOneWidget);
+  });
+
+  testWidgets('searching hides the Add sound tile', (tester) async {
+    await pumpPopover(
+        tester,
+        [
+          _source('!a', 'Managed', [_sound('s1', 'Airhorn')], canAdd: true),
+        ],
+        onAddSound: (_) {});
+
+    await tester.enterText(find.byType(TextField), 'air');
+    await tester.pumpAndSettle();
+    expect(find.text('Airhorn'), findsOneWidget);
+    expect(find.text('Add sound'), findsNothing);
+  });
+
+  testWidgets('without onAddSound there is no Add sound tile', (tester) async {
+    await pumpPopover(tester, [
+      _source('!a', 'Managed', [_sound('s1', 'Airhorn')], canAdd: true),
+    ]);
+
+    expect(find.text('Add sound'), findsNothing);
   });
 }

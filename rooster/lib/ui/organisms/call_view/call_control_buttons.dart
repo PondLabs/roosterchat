@@ -161,7 +161,9 @@ class _CallControlButtonsState extends State<CallControlButtons> {
           ),
         if (widget.onToggleBooth != null)
           Tooltip(
-            message: widget.boothOpen ? 'Close the DJ booth' : 'DJ booth',
+            message: widget.boothOpen
+                ? 'Close the DJ booth'
+                : 'DJ booth – play music',
             child: tiamat.CircleButton(
               radius: radius,
               iconSize: iconSize,

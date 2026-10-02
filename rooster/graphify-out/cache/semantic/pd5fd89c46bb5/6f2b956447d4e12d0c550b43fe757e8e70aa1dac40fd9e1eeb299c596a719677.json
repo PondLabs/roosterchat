@@ -1,0 +1,1 @@
+{"nodes": [{"id": "l10n", "label": "l10n.yaml localization config", "file_type": "code", "source_file": "l10n.yaml", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null, "rationale": "Generates class T into lib/generated/l10n from assets/l10n/intl_en.arb"}], "edges": [], "hyperedges": []}

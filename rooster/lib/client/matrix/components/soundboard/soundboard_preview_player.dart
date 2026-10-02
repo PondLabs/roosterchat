@@ -3,11 +3,13 @@
 // Plays one sound at the volume a call would use (normalizedGain *
 // adminVolume * userVolume, via MediaKitSoundboardPlayer.mpvVolume), so the
 // admin hears what the volume slider does before saving. Moving the slider
-// during playback updates the live volume.
-import 'dart:typed_data';
+// during playback updates the live volume. [position] follows playback, for
+// the trim editor's playhead.
+import 'dart:async';
 
 import 'package:rooster/client/matrix/components/soundboard/mediakit_soundboard_player.dart';
 import 'package:rooster/debug/log.dart';
+import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
 
 class SoundboardPreviewPlayer {
@@ -16,6 +18,10 @@ class SoundboardPreviewPlayer {
 
   Player? _player;
   double _soundGain = 1.0;
+  final List<StreamSubscription> _subs = [];
+
+  /// Where the playing preview is, or null when none plays.
+  final ValueNotifier<Duration?> position = ValueNotifier(null);
 
   SoundboardPreviewPlayer({required this.userVolume});
 
@@ -48,12 +54,24 @@ class SoundboardPreviewPlayer {
 
   Player _createPlayer() {
     final player = Player();
-    player.stream.error
-        .listen((error) => Log.w('Soundboard preview error: $error'));
+    _subs.addAll([
+      player.stream.error
+          .listen((error) => Log.w('Soundboard preview error: $error')),
+      player.stream.position.listen((p) {
+        if (player.state.playing) position.value = p;
+      }),
+      player.stream.playing.listen((playing) {
+        if (!playing) position.value = null;
+      }),
+      player.stream.completed.listen((done) {
+        if (done) position.value = null;
+      }),
+    ]);
     return player;
   }
 
   Future<void> stop() async {
+    position.value = null;
     try {
       await _player?.stop();
     } catch (_) {}
@@ -62,6 +80,11 @@ class SoundboardPreviewPlayer {
   Future<void> dispose() async {
     final player = _player;
     _player = null;
+    for (final sub in _subs) {
+      await sub.cancel();
+    }
+    _subs.clear();
+    position.dispose();
     try {
       await player?.dispose();
     } catch (_) {}

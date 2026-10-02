@@ -56,6 +56,9 @@ class NoiseSuppressedMediaDevices extends MediaDevices {
 
     final processed = await dsp.processMicrophoneStream(stream);
     if (processed != null) return processed;
+    // Noise suppression turned off: nothing to fall back to, the capture
+    // goes out as it is.
+    if (!_preference()) return stream;
     // Ours could not start on this capture, which asked for WebRTC's to be
     // off: capture again with it on rather than send the noise.
     Log.w("Voice DSP: not running on this call, using WebRTC's noise "
