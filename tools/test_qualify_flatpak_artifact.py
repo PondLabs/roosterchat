@@ -19,7 +19,7 @@ def _payload_name(archive_name: str) -> str:
 
 def _write_manifest(directory: Path) -> Path:
     source = qualify_flatpak_artifact.DEFAULT_MANIFEST
-    target = directory / "com.pondlabs.cockhouse.yaml"
+    target = directory / "com.pondlabs.rooster.yaml"
     shutil.copyfile(source, target)
     return target
 
@@ -54,9 +54,9 @@ def _build_qualified_fixture(directory: Path):
     (payload / "fixtures").mkdir(exist_ok=True)
     (payload / "fixtures" / "fixture.html").write_bytes(b"<html>fixture</html>")
     (payload / "fixtures" / "README.md").write_bytes(b"fixture readme")
-    app_bundle = bundle / "cockhouse" / "bundle"
+    app_bundle = bundle / "rooster" / "bundle"
     app_bundle.mkdir(parents=True)
-    (app_bundle / "cockhouse").write_bytes(b"app")
+    (app_bundle / "rooster").write_bytes(b"app")
     manifest = _write_manifest(directory)
     (directory / "cef.lock.json").write_text(json.dumps(lock), encoding="utf-8")
     return lock, bundle, metadata, manifest

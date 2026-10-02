@@ -26,4 +26,4 @@ If applicable, add screenshots to help explain your problem.
 **Additional context**
 Add any other context about the problem here.
 
-<!---  Please paste "Device Info" below this line. You can grab device info from Cockhouse > Settings > About > Click the 'Copy' Icon  --->
+<!---  Please paste "Device Info" below this line. You can grab device info from Rooster > Settings > About > Click the 'Copy' Icon  --->

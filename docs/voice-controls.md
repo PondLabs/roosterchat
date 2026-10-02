@@ -1,7 +1,7 @@
 # Call controls outside the window
 
 In a call, someone working in another window can mute, deafen or leave the
-call without bringing Cockhouse to the front. On Windows the controls are the
+call without bringing Rooster to the front. On Windows the controls are the
 buttons under the taskbar thumbnail, as Discord has them; elsewhere they are
 the nearest thing each platform has (issue #146). The research behind this,
 with sources, is `docs/research/issue-146-voice-taskbar-controls.md`.
@@ -41,9 +41,9 @@ has the same three controls.
 
 | Platform | Surface | Where |
 | --- | --- | --- |
-| Windows 10/11 | Buttons under the taskbar thumbnail | `taskbar_thumbnail.dart`, `cockhouse/windows/runner/voice_thumb_bar.cpp` |
-| macOS | The Dock menu | `dock_menu.dart`, `cockhouse/macos/Runner/AppDelegate.swift` |
-| Linux, every launcher | The desktop file's actions: ToggleMute, ToggleDeafen, Disconnect | `cockhouse/linux/flatpak/*.desktop`, `cockhouse/linux/debian/.../*.desktop` |
+| Windows 10/11 | Buttons under the taskbar thumbnail | `taskbar_thumbnail.dart`, `rooster/windows/runner/voice_thumb_bar.cpp` |
+| macOS | The Dock menu | `dock_menu.dart`, `rooster/macos/Runner/AppDelegate.swift` |
+| Linux, every launcher | The desktop file's actions: ToggleMute, ToggleDeafen, Disconnect | `rooster/linux/flatpak/*.desktop`, `rooster/linux/debian/.../*.desktop` |
 | Linux, Ubuntu Dock / Dash to Dock / Plank | A LauncherEntry quicklist with labels that follow the call | `launcher_quicklist.dart` |
 | Linux, any SNI tray | The tray menu | `voice_tray.dart` |
 | Chrome, Edge 116+, Firefox 151+ | A floating controls panel (Document Picture-in-Picture), from the call panel's pop-out button; Chrome 120+ also opens it when the tab is left mid-call | `browser_call_controls.dart`, `web/` |
@@ -61,7 +61,7 @@ has the same three controls.
 - Dart draws the icons: the call panel's Material glyphs, at the size the
   taskbar asks for (`SM_CXICON` at the window's DPI). The colours:
   - The taskbar follows "Windows mode" (`SystemUsesLightTheme`), not the app
-    mode or Cockhouse's own theme, so the icons do too. They use WinUI's
+    mode or Rooster's own theme, so the icons do too. They use WinUI's
     `TextFillColorPrimary`, and `SystemFillColorCritical` while muted or
     deafened.
   - A contrast theme gets `COLOR_BTNTEXT` for every glyph, and no red. The
@@ -81,15 +81,15 @@ has the same three controls.
 ### Linux
 
 - No Linux shell has buttons on window thumbnails.
-- The desktop file's actions run `cockhouse --shortcut <name>`. `linux/shortcuts.h`
+- The desktop file's actions run `rooster --shortcut <name>`. `linux/shortcuts.h`
   sends that to the running app over D-Bus
-  (`com.pondlabs.cockhouse.Shortcuts`) and exits before GTK starts. Actions are
+  (`com.pondlabs.rooster.Shortcuts`) and exits before GTK starts. Actions are
   static, so their labels cannot follow the call. They carry symbolic icon
   names, which the shell draws in its own theme.
 - The quicklist is a `com.canonical.dbusmenu` menu announced with
   `com.canonical.Unity.LauncherEntry.Update`. KDE Plasma and plain GNOME Shell
   ignore quicklists and show the actions instead. The Flatpak needs
-  `--talk-name=com.canonical.Unity` to see a dock come up after Cockhouse;
+  `--talk-name=com.canonical.Unity` to see a dock come up after Rooster;
   sending the signal needs no permission.
 
 ### Browser
@@ -105,7 +105,7 @@ has the same three controls.
 
 - Linux quicklist: `dbus-monitor --session "interface='com.canonical.Unity.LauncherEntry'"`
   shows the announcement. Then
-  `gdbus call --session --dest <sender> --object-path /com/pondlabs/cockhouse/Quicklist --method com.canonical.dbusmenu.GetLayout -- 0 -1 '@as []'`
+  `gdbus call --session --dest <sender> --object-path /com/pondlabs/rooster/Quicklist --method com.canonical.dbusmenu.GetLayout -- 0 -1 '@as []'`
   shows the menu.
-- Linux actions: `cockhouse --shortcut toggle_mute` (or `toggle_deafen`,
+- Linux actions: `rooster --shortcut toggle_mute` (or `toggle_deafen`,
   `disconnect`) against a running instance.

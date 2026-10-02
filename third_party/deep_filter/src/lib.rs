@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-// COCKHOUSE: libDF as it is upstream, with the newer tract; its warnings are not ours to fix.
+// ROOSTER: libDF as it is upstream, with the newer tract; its warnings are not ours to fix.
 #![allow(deprecated, unknown_lints, mismatched_lifetime_syntaxes)]
 
 use std::ops::MulAssign;
@@ -14,12 +14,12 @@ pub type Complex32 = num_complex::Complex32;
 pub const MEAN_NORM_INIT: [f32; 2] = [-60., -90.];
 pub const UNIT_NORM_INIT: [f32; 2] = [0.001, 0.0001];
 
-// COCKHOUSE: only the real-time inference (`tract`) is vendored. The dataset,
+// ROOSTER: only the real-time inference (`tract`) is vendored. The dataset,
 // transforms, capi, wasm, logging and wav-utils modules of libDF were dropped.
 #[cfg(feature = "tract")]
 pub mod tract;
 
-// COCKHOUSE: wasm32-unknown-unknown has no randomness source without
+// ROOSTER: wasm32-unknown-unknown has no randomness source without
 // wasm-bindgen, and the AudioWorklet instantiates this with no imports. Only
 // tract-onnx's random operators ask for it, and the model has none, so it
 // is refused rather than faked.
@@ -609,4 +609,4 @@ where
     x[mid]
 }
 
-// COCKHOUSE: libDF's ERB round-trip test was dropped with its `rand` dev-dependency.
+// ROOSTER: libDF's ERB round-trip test was dropped with its `rand` dev-dependency.

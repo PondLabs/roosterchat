@@ -1,4 +1,4 @@
-//! Cockhouse voice DSP core.
+//! Rooster voice DSP core.
 //!
 //! One `Dsp` instance processes the local microphone in 10 ms blocks:
 //!
@@ -407,7 +407,7 @@ fn load_model(load: ModelLoad) -> (Option<Box<DeepFilter>>, Option<ModelSlot>) {
             let slot = Arc::new(Mutex::new(None));
             let loaded = Arc::clone(&slot);
             let spawned = std::thread::Builder::new()
-                .name("cockhouse-dsp-model".into())
+                .name("rooster-dsp-model".into())
                 .spawn(move || {
                     let model = LoadedModel(DeepFilter::new().map(Box::new));
                     if let Ok(mut s) = loaded.lock() {

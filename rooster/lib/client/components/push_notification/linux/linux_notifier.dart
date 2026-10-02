@@ -1,0 +1,357 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:rooster/client/client.dart';
+import 'package:rooster/client/components/push_notification/notification_content.dart';
+import 'package:rooster/client/components/push_notification/notification_manager.dart';
+import 'package:rooster/client/components/push_notification/notifier.dart';
+import 'package:rooster/client/room.dart';
+import 'package:rooster/debug/log.dart';
+import 'package:rooster/main.dart';
+import 'package:rooster/utils/app_refresh/app_refresh.dart';
+import 'package:rooster/utils/common_strings.dart';
+import 'package:rooster/utils/event_bus.dart';
+import 'package:rooster/utils/image/lod_image.dart';
+import 'package:rooster/utils/image_utils.dart';
+import 'package:rooster/utils/notification_utils.dart';
+import 'package:rooster/utils/shortcuts_manager.dart';
+import 'package:desktop_notifications/desktop_notifications.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_local_notifications_linux/src/model/hint.dart' as notif;
+import 'package:launcher_entry/launcher_entry.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:window_manager/window_manager.dart';
+import 'dart:ui' as ui;
+
+class LinuxNotifier implements Notifier {
+  @override
+  bool get hasPermission => true;
+
+  static NotificationsClient client = NotificationsClient();
+
+  @override
+  bool get enabled => true;
+
+  @override
+  Future<bool> requestPermission() async {
+    return true;
+  }
+
+  static LinuxFlutterLocalNotificationsPlugin? flutterLocalNotificationsPlugin;
+
+  static void backgroundNotificationResponse(NotificationResponse details) {}
+
+  static const callAccept = "call.accept";
+  static const callDecline = "call.decline";
+  static const openRoom = "room.open";
+
+  static int notificationId = 0;
+
+  LinuxServerCapabilities? capabilities;
+
+  static const _launcherAppUri = 'application://com.pondlabs.rooster.desktop';
+
+  // The package's default object path uses a signed hash, and for this app
+  // URI it comes out negative: a `-` makes the path invalid and every badge
+  // update threw. libunity names it after GLib's string hash, unsigned.
+  final service = LauncherEntryService(
+      appUri: _launcherAppUri,
+      objectPath: launcherEntryObjectPath(_launcherAppUri));
+
+  /// `/com/canonical/unity/launcherentry/<g_str_hash(appUri)>`, as libunity
+  /// makes it (djb2 over the bytes, 32 bits unsigned).
+  static String launcherEntryObjectPath(String appUri) {
+    var hash = 5381;
+    for (final byte in utf8.encode(appUri)) {
+      hash = ((hash << 5) + hash + byte) & 0xFFFFFFFF;
+    }
+    return '/com/canonical/unity/launcherentry/$hash';
+  }
+
+  static void notificationResponse(NotificationResponse details) {
+    final payload = jsonDecode(details.payload!) as Map<String, dynamic>;
+
+    var action = details.actionId ?? payload["default_action_id"];
+
+    if (action == "inline-reply") {
+      var clientId = payload['client_id'];
+      var roomId = payload['room_id'];
+      var eventId = payload['event_id'];
+      var message = details.input;
+
+      if (clientId == null) return;
+      if (roomId == null) return;
+      if (eventId == null) return;
+      if (message == null) return;
+
+      var client = clientManager!.getClient(clientId);
+
+      if (client == null) return;
+
+      if (message.trim().isNotEmpty) {
+        client.getRoom(roomId)?.sendMessage(message: message.trim());
+      }
+      return;
+    }
+
+    if ([callAccept, openRoom].contains(action)) {
+      final roomId = payload['room_id']!;
+
+      var clientId = payload['client_id'] as String?;
+      EventBus.doOpenRoom(roomId, clientId: clientId);
+      windowManager.show();
+      windowManager.focus();
+    }
+
+    if ([callAccept, callDecline].contains(action)) {
+      final callId = payload['call_id'];
+      final clientId = payload['client_id'];
+      final session = clientManager?.callManager.currentSessions
+          .where(
+              (e) => e.sessionId == callId && e.client.identifier == clientId)
+          .firstOrNull;
+
+      if (action == callDecline) {
+        clientManager?.callManager.stopRingtone();
+      }
+
+      if (session != null) {
+        if (action == callAccept) {
+          session.acceptCall(withMicrophone: true);
+        }
+
+        if (action == callDecline) {
+          session.declineCall();
+          clientManager?.callManager.stopRingtone();
+        }
+      } else {
+        Log.d("Could not find call session");
+      }
+    }
+  }
+
+  @override
+  Future<void> init() async {
+    flutterLocalNotificationsPlugin = LinuxFlutterLocalNotificationsPlugin();
+
+    const LinuxInitializationSettings initializationSettingsLinux =
+        LinuxInitializationSettings(defaultActionName: 'Open notification');
+
+    // Talks to the desktop over the D-Bus session bus. Headless sessions
+    // (CI, containers) have none; the app must still start, just without
+    // desktop notifications.
+    try {
+      await flutterLocalNotificationsPlugin?.initialize(
+          initializationSettingsLinux,
+          onDidReceiveNotificationResponse: notificationResponse);
+
+      capabilities = await flutterLocalNotificationsPlugin!.getCapabilities();
+    } catch (e, s) {
+      Log.onError(e, s,
+          content: "Desktop notifications unavailable (no session bus?)");
+      flutterLocalNotificationsPlugin = null;
+    }
+
+    _watchBadgeCount();
+    AppRefresh.onRefreshed.stream.listen((_) => _watchBadgeCount());
+  }
+
+  List<StreamSubscription> _badgeSubscriptions = [];
+
+  void _watchBadgeCount() {
+    for (final sub in _badgeSubscriptions) {
+      sub.cancel();
+    }
+
+    _badgeSubscriptions = [
+      clientManager!.directMessages.highlightedRoomsList.onListUpdated
+          .listen((_) => updateBadgeCount()),
+      clientManager!.onSpaceUpdated.stream.listen((_) => updateBadgeCount()),
+    ];
+
+    updateBadgeCount();
+  }
+
+  void updateBadgeCount() {
+    if (preferences.showNotificationBadgesInTaskbar.value == true) {
+      var counts = NotificationUtils.getNotificationCounts();
+      var count = counts.$2;
+      // No session bus (CI, containers) or no dock listening: the badge is a
+      // nicety, never a reason for startup to fail.
+      service.update(countVisible: count > 0, count: count).catchError(
+          (Object e, StackTrace s) =>
+              Log.onError(e, s, content: "Launcher badge not updated"));
+    }
+  }
+
+  @override
+  Future<void> notify(NotificationContent notification) async {
+    switch (notification) {
+      case MessageNotificationContent _:
+        return displayMessageNotification(notification);
+      case CallNotificationContent _:
+        return displayCallNotification(notification);
+      default:
+    }
+  }
+
+  Future<void> displayMessageNotification(
+      MessageNotificationContent content) async {
+    var client = clientManager?.getClient(content.clientId);
+    var room = client?.getRoom(content.roomId);
+
+    if (room == null) {
+      return;
+    }
+
+    var image = await ShortcutsManager.createAvatarImage(
+        placeholderColor: room.getColorOfUser(content.senderId),
+        placeholderText: content.senderName,
+        imageProvider: content.senderImage,
+        doCircleMask: true,
+        shouldZoomOut: false);
+
+    if (content.isDirectMessage == false) {
+      var roomImage = await ShortcutsManager.createAvatarImage(
+          placeholderColor: room.defaultColor,
+          placeholderText: room.displayName,
+          imageProvider: content.roomImage,
+          doCircleMask: true,
+          shouldZoomOut: false);
+
+      image = await ShortcutsManager.combineRoomAndUserImages(roomImage, image);
+    }
+
+    var bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    final data = bytes!.buffer.asUint8List();
+
+    String notificationBody = content.content;
+
+    var details = LinuxNotificationDetails(
+      icon: ByteDataLinuxIcon(LinuxRawIconData(
+          data: data,
+          width: image.width,
+          height: image.height,
+          hasAlpha: true,
+          channels: 4)),
+      defaultActionName: openRoom,
+      actions: [
+        if (capabilities?.otherCapabilities.contains("inline-reply") == true)
+          LinuxNotificationAction(key: "inline-reply", label: "Reply")
+      ],
+      customHints: [
+        notif.LinuxNotificationCustomHint('desktop-entry',
+            notif.LinuxHintStringValue("com.pondlabs.rooster")),
+      ],
+      category: LinuxNotificationCategory.imReceived,
+    );
+
+    var title = "${content.senderName} (${content.roomName})";
+    if (content.isDirectMessage) {
+      title = content.senderName;
+    }
+
+    var payload = {
+      // include default action here as well
+      // in some cases it seems `defaultActionName` comes back as null
+      // so we can use this as a fallback
+      "default_action_id": openRoom,
+      "room_id": content.roomId,
+      "client_id": content.clientId,
+      "event_id": content.eventId,
+    };
+
+    var player = NotificationManager.getSoundPlayer();
+    player.open(Media("asset:///assets/sound/message.ogg"));
+
+    flutterLocalNotificationsPlugin?.show(
+        notificationId++, title, notificationBody,
+        notificationDetails: details, payload: jsonEncode(payload));
+  }
+
+  Future<void> displayCallNotification(CallNotificationContent content) async {
+    var client = clientManager?.getClient(content.clientId);
+    var room = client?.getRoom(content.roomId);
+
+    if (room == null) {
+      return;
+    }
+
+    var image = await ShortcutsManager.createAvatarImage(
+        placeholderColor: room.getColorOfUser(content.senderId),
+        placeholderText: content.roomName,
+        imageProvider: content.senderImage,
+        doCircleMask: true,
+        shouldZoomOut: false);
+
+    var bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    final data = bytes!.buffer.asUint8List();
+
+    var details = LinuxNotificationDetails(
+        icon: ByteDataLinuxIcon(LinuxRawIconData(
+            data: data,
+            width: image.width,
+            height: image.height,
+            hasAlpha: true,
+            channels: 4)),
+        defaultActionName: openRoom,
+        category: LinuxNotificationCategory.imReceived,
+        timeout: const LinuxNotificationTimeout.expiresNever(),
+        urgency: LinuxNotificationUrgency.critical,
+        actions: [
+          LinuxNotificationAction(
+              key: callAccept, label: CommonStrings.promptAccept),
+          LinuxNotificationAction(
+              key: callDecline, label: CommonStrings.promptDecline),
+        ]);
+
+    var payload = {
+      // include default action here as well
+      // in some cases it seems `defaultActionName` comes back as null
+      // so we can use this as a fallback
+      "default_action_id": openRoom,
+      "room_id": content.roomId,
+      "client_id": content.clientId,
+      "call_id": content.callId
+    };
+
+    flutterLocalNotificationsPlugin?.show(0, content.title, content.content,
+        notificationDetails: details, payload: jsonEncode(payload));
+  }
+
+  Future<ui.Image> determineImage(ImageProvider provider) async {
+    if (provider is LODImageProvider) {
+      var data = await provider.loadThumbnail?.call();
+      var mem = MemoryImage(data!);
+      return await ImageUtils.imageProviderToImage(mem);
+    }
+
+    return await ImageUtils.imageProviderToImage(provider);
+  }
+
+  @override
+  Map<String, dynamic>? extraRegistrationData() {
+    return null;
+  }
+
+  @override
+  Future<String?> getToken() async {
+    return null;
+  }
+
+  @override
+  bool get needsToken => false;
+
+  @override
+  Future<void> clearNotifications(Room room) async {}
+
+  @override
+  Future<void> disableBadges() async {
+    service.update(countVisible: false, count: 0);
+  }
+
+  @override
+  Future<void> enableBadges() async {
+    updateBadgeCount();
+  }
+}

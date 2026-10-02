@@ -1,0 +1,218 @@
+// media_kit-backed SoundboardPlayer: one media_kit Player per trigger.
+//
+// Every instance (keyed by the trigger's eventId) gets its own Player, so the
+// same sound triggered by two users overlaps (SoundboardEngine stops a
+// user's earlier copy when they re-trigger it). On web each Player owns its
+// own media element, so this holds there too. An instance is disposed when
+// it completes or errors, and
+// [MediaKitSoundboardPlayer.onInstanceFinished] reports it so the engine can
+// drop it. An instance that never reports an end (stalled stream) is
+// released after [MediaKitSoundboardPlayer.maxInstanceLifetime]. Volume per
+// instance = SoundboardSound.gain (normalization * admin volume) * userVolume,
+// resolved on every start so admin changes apply to the next trigger. All
+// errors are swallowed after logging: a soundboard failure must never take
+// down the call.
+import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:rooster/client/components/soundboard/soundboard_constraints.dart';
+import 'package:rooster/client/components/soundboard/soundboard_engine.dart';
+import 'package:rooster/utils/mpv/mpv_property.dart';
+import 'package:rooster/client/matrix/components/soundboard/soundboard_player_factory.dart';
+import 'package:rooster/debug/log.dart';
+import 'package:media_kit/media_kit.dart';
+
+/// One playing sound. Production wraps a media_kit [Player]; tests fake it.
+abstract class SoundboardAudioInstance {
+  /// Fires once playback ends, naturally or through a fatal error.
+  Stream<void> get finished;
+  Future<void> setVolume(double mpvVolume);
+  Future<void> open(String uri);
+
+  /// Stops playback and releases the instance.
+  Future<void> dispose();
+}
+
+class _LiveInstance {
+  final SoundboardAudioInstance audio;
+
+  /// [SoundboardSound.gain] (normalization * admin volume) when started.
+  final double soundGain;
+  late final StreamSubscription<void> finishedSub;
+  late final Timer lifetime;
+
+  _LiveInstance(this.audio, this.soundGain);
+}
+
+class MediaKitSoundboardPlayer implements SoundboardPlayer {
+  final SoundResolver resolveSound;
+  final UriResolver resolvePlayableUri;
+  final SoundboardAudioInstance Function() createInstance;
+  final Duration maxInstanceLifetime;
+
+  /// Called when an instance ends on its own (completion, error, unknown
+  /// sound). Not called for [stop]/[stopAll], which the caller initiated.
+  void Function(String instanceId)? onInstanceFinished;
+
+  final Map<String, _LiveInstance> _instances = {};
+  double _userVolume = 0.8;
+
+  MediaKitSoundboardPlayer({
+    required this.resolveSound,
+    required this.resolvePlayableUri,
+    SoundboardAudioInstance Function()? createInstance,
+    this.onInstanceFinished,
+    Duration? maxInstanceLifetime,
+  })  : createInstance = createInstance ?? _MediaKitAudioInstance.new,
+        maxInstanceLifetime = maxInstanceLifetime ??
+            const Duration(milliseconds: SoundboardConstraints.maxPlaybackMs);
+
+  /// mpv's `volume-max` (default 130) must cover the loudest setting:
+  /// user 1.5 * gain +18 dB is about 229.
+  static const double mpvVolumeMax = 400;
+
+  /// media_kit takes mpv's `volume`, where 100 plays the file unchanged and
+  /// mpv scales samples by (volume / 100)^3. The cube root makes the result
+  /// the linear product userVolume * soundGain, boosts included.
+  /// [soundGain] is [SoundboardSound.gain].
+  static double mpvVolume(double userVolume, double soundGain) {
+    final amplitude = math.max(0.0, userVolume * soundGain);
+    return (100 * math.pow(amplitude, 1 / 3).toDouble())
+        .clamp(0.0, mpvVolumeMax);
+  }
+
+  @override
+  Future<void> start(String instanceId, String soundId) async {
+    final sound = resolveSound(soundId);
+    if (sound == null) {
+      // Unknown sound (e.g. removed after event sent): nothing to play.
+      onInstanceFinished?.call(instanceId);
+      return;
+    }
+    final live = _LiveInstance(createInstance(), sound.gain);
+    live.finishedSub =
+        live.audio.finished.listen((_) => _finish(instanceId, live));
+    live.lifetime = Timer(maxInstanceLifetime, () => _finish(instanceId, live));
+    _instances[instanceId] = live;
+    try {
+      await _applyVolume(live);
+      final uri = await resolvePlayableUri(sound);
+      // Stopped while the file was being resolved.
+      if (_instances[instanceId] != live) return;
+      Log.d('Soundboard: playing $soundId ($instanceId) from $uri');
+      await live.audio.open(uri);
+    } catch (e, s) {
+      Log.onError(e, s, content: 'Soundboard play failed: $soundId');
+      await _finish(instanceId, live);
+    }
+  }
+
+  Future<void> _finish(String instanceId, _LiveInstance live) async {
+    if (_instances[instanceId] != live) return;
+    await _release(instanceId);
+    onInstanceFinished?.call(instanceId);
+  }
+
+  Future<void> _release(String instanceId) async {
+    final live = _instances.remove(instanceId);
+    if (live == null) return;
+    live.lifetime.cancel();
+    try {
+      await live.finishedSub.cancel();
+      await live.audio.dispose();
+    } catch (e, s) {
+      Log.onError(e, s, content: 'Soundboard stop failed: $instanceId');
+    }
+  }
+
+  @override
+  Future<void> stop(String instanceId) => _release(instanceId);
+
+  @override
+  Future<void> stopAll() async {
+    for (final id in _instances.keys.toList()) {
+      await _release(id);
+    }
+  }
+
+  /// Sets the user volume (0..1.5, 0 = mute), which also applies to future
+  /// instances, and updates [instanceId] if it is live.
+  @override
+  Future<void> setVolumeFor(String instanceId, double volume) async {
+    _userVolume = volume.clamp(0.0, 1.5);
+    final live = _instances[instanceId];
+    if (live == null) return;
+    try {
+      await _applyVolume(live);
+    } catch (_) {}
+  }
+
+  Future<void> _applyVolume(_LiveInstance live) =>
+      live.audio.setVolume(mpvVolume(_userVolume, live.soundGain));
+
+  @override
+  bool isPlaying(String instanceId) => _instances.containsKey(instanceId);
+}
+
+class _MediaKitAudioInstance implements SoundboardAudioInstance {
+  final Player _player = Player();
+  late final Future<void> _configured = _configure();
+
+  /// mpv clamps `volume` to `volume-max` (default 130), so raise it before
+  /// the first setVolume: normalization boosts go past 100 — user 1.5 * gain
+  /// +18 dB is about 229 on mpv's cubic scale.
+  ///
+  /// With mpv's default `gapless-audio=weak`, `eof-reached` (media_kit's
+  /// `completed`) fires once the last samples are queued for the audio
+  /// output, 0.2 to 0.3 s before they are heard, and disposing then cut off
+  /// the end of every sound. `no` makes it wait until the output has played
+  /// them.
+  Future<void> _configure() async {
+    await setMpvProperty(_player, 'volume-max',
+        MediaKitSoundboardPlayer.mpvVolumeMax.toString());
+    await setMpvProperty(_player, 'gapless-audio', 'no');
+  }
+
+  @override
+  late final Stream<void> finished = _finishedStream();
+
+  Stream<void> _finishedStream() {
+    // open() does not throw for unplayable media; mpv reports it here.
+    final controller = StreamController<void>();
+    final subs = [
+      _player.stream.completed.listen((done) {
+        if (done) controller.add(null);
+      }),
+      _player.stream.error.listen((error) {
+        Log.w('Soundboard player error: $error');
+        // mpv also reports errors it recovers from; only a stopped player
+        // has ended.
+        if (!_player.state.playing) controller.add(null);
+      }),
+    ];
+    controller.onCancel = () async {
+      for (final sub in subs) {
+        await sub.cancel();
+      }
+    };
+    return controller.stream;
+  }
+
+  @override
+  Future<void> setVolume(double mpvVolume) async {
+    await _configured;
+    await _player.setVolume(mpvVolume);
+  }
+
+  @override
+  Future<void> open(String uri) async {
+    await _configured;
+    await _player.open(Media(uri), play: true);
+  }
+
+  @override
+  Future<void> dispose() async {
+    await _player.stop();
+    await _player.dispose();
+  }
+}

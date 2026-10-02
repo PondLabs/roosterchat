@@ -327,7 +327,7 @@ impl Player {
             Some(work) => {
                 let s = session.clone();
                 let spawned = thread::Builder::new()
-                    .name("cockhouse-dj-decode".into())
+                    .name("rooster-dj-decode".into())
                     .spawn(move || {
                         let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                             run_session(&s, work)

@@ -3,8 +3,8 @@
 
 #include "flutter_common.h"
 
-#include "cockhouse_music_source.h"             // COCKHOUSE
-#include "cockhouse_system_audio_reference.h"  // COCKHOUSE
+#include "rooster_music_source.h"             // ROOSTER
+#include "rooster_system_audio_reference.h"  // ROOSTER
 
 #include "flutter_data_channel.h"
 #include "flutter_data_packet_cryptor.h"
@@ -49,11 +49,11 @@ class FlutterWebRTC : public FlutterWebRTCBase,
   void initLoggerCallback(RTCLoggingSeverity severity);
   RTCLoggingSeverity str2LogSeverity(std::string str);
 
-  // COCKHOUSE: cockhouseStartSystemAudioReference / cockhouseStopSystemAudioReference.
-  CockhouseSystemAudioReference cockhouse_reference_;
+  // ROOSTER: roosterStartSystemAudioReference / roosterStopSystemAudioReference.
+  RoosterSystemAudioReference rooster_reference_;
 
-  // COCKHOUSE: cockhouseCreateMusicTrack / cockhouseStopMusicTrack (DJ booth).
-  CockhouseMusicTracks cockhouse_music_tracks_;
+  // ROOSTER: roosterCreateMusicTrack / roosterStopMusicTrack (DJ booth).
+  RoosterMusicTracks rooster_music_tracks_;
 };
 
 }  // namespace flutter_webrtc_plugin

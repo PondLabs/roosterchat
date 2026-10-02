@@ -69,7 +69,7 @@ endif()
 
 # ---------------------------------------------------------------------------
 # System-audio (loopback) capture: PulseAudio async API (threaded mainloop,
-# one monitor stream per application; COCKHOUSE: so our own playback is left out).
+# one monitor stream per application; ROOSTER: so our own playback is left out).
 # Guarded so a host without libpulse dev headers still builds the plugin; in
 # that case pulse_loopback_capturer.cc compiles to nothing and the factory
 # returns nullptr (getDisplayMedia audio degrades to no track), matching the

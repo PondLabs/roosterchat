@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Builds the Cockhouse logo, wordmark and every platform icon from code.
+"""Builds the Rooster logo, wordmark and every platform icon from code.
 
 The shapes live here, not in hand-edited SVGs, so each size and colourway
 comes from the same geometry. Needs fontTools (for the wordmark), ImageMagick
@@ -17,40 +17,32 @@ import tempfile
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 BRAND = os.path.join(ROOT, "docs", "brand")
-APP = os.path.join(ROOT, "cockhouse")
+APP = os.path.join(ROOT, "rooster")
 FONTS = os.path.join(APP, "assets", "font")
 SORA = os.path.join(FONTS, "sora", "Sora-VariableFont_wght.ttf")
 
 # The palette. Keep in sync with docs/brand/README.md and the tiamat themes.
-HEARTH = "#2B1A14"    # the house
-TIMBER = "#3D2A22"
-WALNUT = "#6B3A22"
-ASH = "#5F5557"
-PLASTER = "#EADFCF"
-EGGSHELL = "#F6EDE0"  # the tile
-FEATHER = "#FFFAF3"   # the rooster
-COMB = "#E4573A"
-WATTLE = "#D9472F"
-EMBER = "#E8813A"
-YOLK = "#F6B65A"
-BEAK = "#F4A23A"
-MOSS = "#5E8F4E"
-DUSK = "#3F4F6E"
-PINE = "#2F5B4B"
+INK = "#1F1510"       # the hood, headphones and eye; the dark tile
+COMB = "#E34830"      # comb and wattle; the primary accent
+YOLK = "#F4A320"      # the beak; highlights, away
+CREAM = "#F7EDE1"     # the light tile and background, text on dark
+STONE = "#8D8178"     # secondary text, the tagline
+SPRUCE = "#2E3B33"    # quiet dark accent
+FEATHER = "#FFFDF8"   # the rooster's face
+COMB_ON_RED = "#FF8466"  # the comb, on a comb-red tile, so it still reads
 
 
 # ------------------------------------------------------------------ the mark
 #
-# A dark house with a rooster looking out of it, headphones on. The comb
-# sweeps back under the roof, the head fills the lower half, and the door
-# opens at the bottom of the rooster's neck. Drawn on a 618 x 696 grid.
+# A rooster's head in profile, facing right, headphones on: it is in a call.
+# A big five-lobed comb fans back from the crown. The back of the head is
+# dark, like a hood, and the headphone band sweeps out of it, over the head,
+# from the ear cup to the forehead. A small arched door sits at the bottom of
+# the neck, a nod to the house the brand started as. Drawn on a 1000 grid.
 
-MARK_BOX = (0, 36, 618, 562)
-ROOSTER_BOX = (84, 150, 416, 434)
+MARK_BOX = (90, 0, 820, 940)
 
-HOUSE = ("M284 58 Q298 44 312 58 L598 272 Q614 286 598 300 L556 322 V566 "
-         "Q556 590 532 590 H80 Q56 590 56 566 V322 L20 300 Q4 286 20 272 Z")
-CHIMNEY = '<rect x="350" y="48" width="34" height="120" rx="12"/>'
+
 def _lobe(base, tip, r_base, r_tip):
     """A comb lobe: narrow where it grows out of the head, round at the tip.
 
@@ -75,32 +67,32 @@ def _lobe(base, tip, r_base, r_tip):
             % (b1 + t1 + (r_tip, r_tip) + t2 + b2 + (r_base, r_base) + b1))
 
 
-# The comb: four big rounded lobes fanning back from the crown, as in the
-# concept. Every lobe grows out of a point inside the head, which is drawn
-# over it, so the comb sits on the head instead of floating above it.
-CROWN = (326, 350)
+# The comb: five big rounded lobes fanning back from the crown, the top ones
+# tallest. Each grows out of a point inside the head, which is drawn over it.
+CROWN = (540, 500)
 COMB_SHAPES = (
-    _lobe(CROWN, (392, 170), 36, 50)     # front, standing up
-    + _lobe(CROWN, (236, 158), 36, 52)   # top, leaning back
-    + _lobe(CROWN, (124, 240), 34, 48)   # back
-    + _lobe(CROWN, (104, 350), 32, 42))  # lowest, trailing over the ear
-HEAD = ("M160 590 C 164 530 174 468 190 420 C 206 350 262 306 330 306 "
-        "C 372 306 402 330 414 372 L 408 430 C 404 480 404 540 406 590 Z")
-# The head without a house under it ends in a rounded neck, not the ground.
-HEAD_ALONE = ("M188 548 C 172 500 172 460 190 420 C 196 350 262 306 330 306 "
-              "C 372 306 402 330 414 372 L 408 430 C 404 480 406 520 402 548 "
-              "C 380 584 210 584 188 548 Z")
-DOOR = "M279 590 V549 A34 34 0 0 1 347 549 V590 Z"
-EYE = '<circle cx="355" cy="381" r="15"/>'
-BEAK_D = "M410 370 L480 392 Q490 396 480 402 L412 422 Z"
-WATTLE_D = "M408 440 C 446 440 466 480 458 516 C 452 540 420 540 410 516 Z"
-# Headphones, seen from the side: the cup sits on the cheek behind the eye,
-# and the band curves up out of it and forward over the crown
-# and passes behind the head. It is clipped to the head outline, so it ends
-# exactly where the head does.
-CUP = (264, 414)
-CUP_R = 56
-BAND = "M262 380 C 260 344 280 314 330 288"
+    _lobe(CROWN, (729, 230), 36, 70)     # front, over the forehead
+    + _lobe(CROWN, (577, 70), 36, 78)    # top
+    + _lobe(CROWN, (375, 92), 36, 78)    # top, leaning back
+    + _lobe(CROWN, (218, 230), 36, 76)   # back
+    + _lobe(CROWN, (172, 400), 36, 70))  # lowest, trailing over the ear
+# The whole head, which the hood fills; the face is laid over its front.
+HEAD = ("M300 940 C 290 820 270 720 300 630 C 340 500 450 420 575 418 "
+        "C 680 418 748 480 760 560 L 772 640 C 784 720 764 790 744 850 "
+        "L 736 940 Z")
+FACE = ("M500 940 C 488 860 470 790 430 730 C 410 650 430 560 470 515 "
+        "C 520 465 600 452 660 462 C 712 474 750 512 760 560 L 772 640 "
+        "C 784 720 764 790 744 850 L 736 940 Z")
+DOOR = "M566 940 V888 A40 40 0 0 1 646 888 V940 Z"
+EYE = '<circle cx="648" cy="590" r="26"/>'
+BEAK_D = "M752 540 L892 598 Q906 606 892 614 L758 662 Z"
+WATTLE_D = "M752 668 C 806 668 826 732 806 784 C 790 820 742 812 738 770 Z"
+# Headphones, seen from the side: the cup on the cheek, and the band
+# sweeping up out of it and forward over the head to the forehead, clipped
+# to the head so it ends where the head does.
+CUP = (380, 650)
+CUP_R = 96
+BAND = "M360 560 C 380 470 480 405 640 400"
 _ids = [0]
 
 
@@ -109,65 +101,55 @@ def _uid(prefix):
     return "%s%d" % (prefix, _ids[0])
 
 
-def headphones(head, dark=HEARTH, ring=FEATHER):
-    """head: the outline the band is clipped to."""
+def headphones(dark=INK, ring=FEATHER):
     cx, cy = CUP
     clip = _uid("band")
-    return ('<clipPath id="%s"><path d="%s"/></clipPath>' % (clip, head)
-            + '<path d="%s" fill="none" stroke="%s" stroke-width="26" '
+    return ('<clipPath id="%s"><path d="%s"/></clipPath>' % (clip, HEAD)
+            + '<path d="%s" fill="none" stroke="%s" stroke-width="64" '
               'clip-path="url(#%s)"/>' % (BAND, dark, clip)
             + '<circle cx="%d" cy="%d" r="%d" fill="%s"/>' % (cx, cy, CUP_R, dark)
             + '<circle cx="%d" cy="%d" r="%d" fill="none" stroke="%s" '
-              'stroke-width="11"/>' % (cx, cy, CUP_R - 15, ring))
+              'stroke-width="20"/>' % (cx, cy, CUP_R - 34, ring))
 
 
-def mark_elements(house=HEARTH, feather=FEATHER):
-    """The full-colour mark: house, comb, head, headphones, door, face."""
+def mark_elements(ink=INK, feather=FEATHER, comb=COMB):
+    """The full-colour mark: comb, hood, face, headphones, door, features."""
     return (
-        '<g fill="%s">%s</g>' % (house, CHIMNEY)
-        + '<path d="%s" fill="%s"/>' % (HOUSE, house)
-        + '<g fill="%s">%s</g>' % (COMB, COMB_SHAPES)
-        + '<path d="%s" fill="%s"/>' % (HEAD, feather)
-        + headphones(HEAD, house, feather)
-        + '<path d="%s" fill="%s"/>' % (DOOR, house)
-        + '<g fill="%s">%s</g>' % (house, EYE)
-        + '<path d="%s" fill="%s"/>' % (BEAK_D, BEAK)
-        + '<path d="%s" fill="%s"/>' % (WATTLE_D, WATTLE))
-
-
-def rooster_elements(feather=FEATHER, eye=HEARTH):
-    """Just the rooster, for dark backgrounds where the house would vanish."""
-    return (
-        '<g fill="%s">%s</g>' % (COMB, COMB_SHAPES)
-        + '<path d="%s" fill="%s"/>' % (HEAD_ALONE, feather)
-        + headphones(HEAD_ALONE, eye, feather)
-        + '<g fill="%s">%s</g>' % (eye, EYE)
-        + '<path d="%s" fill="%s"/>' % (BEAK_D, BEAK)
-        + '<path d="%s" fill="%s"/>' % (WATTLE_D, WATTLE))
+        '<g fill="%s">%s</g>' % (comb, COMB_SHAPES)
+        + '<path d="%s" fill="%s"/>' % (HEAD, ink)
+        + '<path d="%s" fill="%s"/>' % (FACE, feather)
+        + headphones(ink, feather)
+        + '<path d="%s" fill="%s"/>' % (DOOR, ink)
+        + '<g fill="%s">%s</g>' % (ink, EYE)
+        + '<path d="%s" fill="%s"/>' % (BEAK_D, YOLK)
+        + '<path d="%s" fill="%s"/>' % (WATTLE_D, COMB))
 
 
 def mono_elements(color="currentColor", uid="m"):
-    """One colour: the house with the rooster cut out of it.
+    """One colour: the silhouette, with the features cut out of it.
 
-    A thin gap keeps the comb and the head apart; the headphones, the eye
-    and the door are filled back in so they still read.
+    Thin gaps keep comb, head, beak and wattle apart; the band, the cup's
+    ring, the eye and the door are cut out so they still read.
     """
+    cx, cy = CUP
     return (
         '<defs><mask id="%(u)s" maskUnits="userSpaceOnUse" x="0" y="0" '
-        'width="618" height="618">'
-        '<path d="%(house)s" fill="#fff"/><g fill="#fff">%(chimney)s</g>'
-        '<g fill="#000">%(comb)s</g>'
-        '<path d="%(head)s" fill="#000" stroke="#fff" stroke-width="12"/>'
-        '<path d="%(beak)s" fill="#000" stroke="#fff" stroke-width="10"/>'
-        '<path d="%(wattle)s" fill="#000" stroke="#fff" stroke-width="10"/>'
-        '%(phones)s'
-        '<path d="%(door)s" fill="#fff"/><g fill="#fff">%(eye)s</g>'
+        'width="1000" height="1000">'
+        '<g fill="#fff">%(comb)s</g>'
+        '<path d="%(head)s" fill="#fff" stroke="#000" stroke-width="22"/>'
+        '<path d="%(beak)s" fill="#fff" stroke="#000" stroke-width="16"/>'
+        '<path d="%(wattle)s" fill="#fff" stroke="#000" stroke-width="16"/>'
+        '<path d="%(band)s" fill="none" stroke="#000" stroke-width="22"/>'
+        '<circle cx="%(cx)d" cy="%(cy)d" r="%(r)d" fill="#fff" stroke="#000" '
+        'stroke-width="22"/>'
+        '<circle cx="%(cx)d" cy="%(cy)d" r="%(ri)d" fill="none" stroke="#000" '
+        'stroke-width="20"/>'
+        '<path d="%(door)s" fill="#000"/><g fill="#000">%(eye)s</g>'
         '</mask></defs>'
-        '<rect width="618" height="618" fill="%(c)s" mask="url(#%(u)s)"/>'
-        % {"u": uid, "house": HOUSE, "chimney": CHIMNEY, "comb": COMB_SHAPES,
-           "head": HEAD, "beak": BEAK_D, "wattle": WATTLE_D,
-           "phones": headphones(HEAD, "#fff", "#000"), "door": DOOR, "eye": EYE,
-           "c": color})
+        '<rect width="1000" height="1000" fill="%(c)s" mask="url(#%(u)s)"/>'
+        % {"u": uid, "comb": COMB_SHAPES, "head": HEAD, "beak": BEAK_D,
+           "wattle": WATTLE_D, "band": BAND, "cx": cx, "cy": cy, "r": CUP_R,
+           "ri": CUP_R - 34, "door": DOOR, "eye": EYE, "c": color})
 
 
 def svg(view, body):
@@ -194,24 +176,19 @@ def tile(shape, fill):
     }[shape].replace("%s", fill)
 
 
-def app_icon_svg(shape="rounded", inset=112, background=EGGSHELL):
-    """The mark on a cream tile. shape: rounded | square | circle | none."""
+def app_icon_svg(shape="rounded", inset=110, background=INK):
+    """The mark on a tile. shape: rounded | square | circle | none."""
+    area = (inset, inset, 1024 - 2 * inset, 1024 - 2 * inset)
+    comb = COMB_ON_RED if background == COMB else COMB
+    return svg((0, 0, 1024, 1024), tile(shape, background)
+               + '<g %s>%s</g>' % (fit(MARK_BOX, area), mark_elements(comb=comb)))
+
+
+def mono_icon_svg(color, inset=110, uid="m", shape="none", background=""):
+    """The one-colour mark, on a tile of background if shape is given."""
     area = (inset, inset, 1024 - 2 * inset, 1024 - 2 * inset)
     return svg((0, 0, 1024, 1024), tile(shape, background)
-               + '<g %s>%s</g>' % (fit(MARK_BOX, area), mark_elements()))
-
-
-def rooster_icon_svg(shape="rounded", inset=150):
-    """The rooster alone on a hearth-brown tile."""
-    area = (inset, inset, 1024 - 2 * inset, 1024 - 2 * inset)
-    return svg((0, 0, 1024, 1024), tile(shape, HEARTH)
-               + '<g %s>%s</g>' % (fit(ROOSTER_BOX, area), rooster_elements()))
-
-
-def mono_icon_svg(color, inset=112, uid="m"):
-    area = (inset, inset, 1024 - 2 * inset, 1024 - 2 * inset)
-    return svg((0, 0, 1024, 1024),
-               '<g %s>%s</g>' % (fit(MARK_BOX, area), mono_elements(color, uid)))
+               + '<g %s>%s</g>' % (fit(MARK_BOX, area), mono_elements(color, uid)))
 
 
 # ---------------------------------------------------------------- wordmark
@@ -291,8 +268,8 @@ def _kerning(font):
 
 
 CAP = 730   # Sora cap height, font units
-NAME = "Cockhouse"
-TAGLINE = "Your crew’s place on the internet."
+NAME = "Rooster"
+TAGLINE = "Talk. Play. Hang out."
 
 
 def wordmark_svg(color):
@@ -302,13 +279,10 @@ def wordmark_svg(color):
                '<path d="%s" fill="%s"/>' % (d, color))
 
 
-def lockup_svg(ink, tagline_ink=None, rooster=False):
-    """Mark left, name right, optional tagline under the name.
-
-    rooster=True uses the house-less rooster, for dark backgrounds.
-    """
-    box = ROOSTER_BOX if rooster else MARK_BOX
-    mark = rooster_elements() if rooster else mark_elements()
+def lockup_svg(ink, tagline_ink=None):
+    """Mark left, name right, optional tagline under the name."""
+    box = MARK_BOX
+    mark = mark_elements()
     mark_h = 360.0
     ms = mark_h / box[3]
     d, width = text_path(NAME)
@@ -348,58 +322,16 @@ def stacked_svg(ink):
     return svg((-pad, -pad, w + 2 * pad, baseline + 60 * word_s + 2 * pad), body)
 
 
-def little_rooster(color, accent=None):
-    """A small sitting rooster in profile, facing right, feet at (0, 0).
-
-    One colour for screen printing; accent (if given) fills comb and wattle.
-    """
-    accent = accent or color
-    return (
-        '<g fill="none" stroke="%(c)s" stroke-linecap="round">'
-        '<path d="M-30 -28 C -52 -32 -60 -52 -54 -72" stroke-width="10"/>'
-        '<path d="M-30 -20 C -60 -18 -74 -38 -74 -58" stroke-width="9"/>'
-        '<path d="M-30 -12 C -60 -6 -80 -22 -84 -40" stroke-width="8"/>'
-        '</g>'
-        '<ellipse cx="-4" cy="-26" rx="30" ry="22" fill="%(c)s"/>'
-        '<path d="M6 -38 C 6 -56 14 -64 26 -64 C 40 -64 44 -52 40 -38 C 36 -26 20 -20 10 -24 Z" fill="%(c)s"/>'
-        '<circle cx="28" cy="-66" r="17" fill="%(c)s"/>'
-        '<g fill="%(a)s"><circle cx="19" cy="-83" r="7"/><circle cx="28" cy="-87" r="8"/>'
-        '<circle cx="38" cy="-83" r="7"/></g>'
-        '<path d="M43 -70 L60 -64 L43 -59 Z" fill="%(c)s"/>'
-        '<ellipse cx="44" cy="-51" rx="4.5" ry="7" fill="%(a)s"/>'
-        '<path d="M-10 -5 V4 M8 -5 V4" stroke="%(c)s" stroke-width="4" stroke-linecap="round"/>'
-        % {"c": color, "a": accent})
-
-
-def merch_tee_svg(color, accent=None):
-    """COCKHOUSE in caps, with a little rooster sitting on a roofline above."""
-    tracking = 30
-    d, width = text_path("COCKHOUSE", tracking=tracking)
-    s = 0.2
-    w = width * s
-    cap = CAP * s
-    roof_y = -cap - 46
-    body = '<path transform="scale(%g)" d="%s" fill="%s"/>' % (s, d, color)
-    # A roofline over HOUSE, where the house is.
-    house_x = (text_path("COCK", tracking=tracking)[1] + tracking) * s
-    mid = (house_x + w) / 2
-    half = (w - house_x) / 2 + 10
-    body += ('<path d="M%g %g L%g %g L%g %g" fill="none" stroke="%s" '
-             'stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>'
-             % (mid - half, roof_y + 44, mid, roof_y - 50, mid + half, roof_y + 44, color))
-    body += ('<g transform="translate(%g %g) scale(1.3)">%s</g>'
-             % (mid + 8, roof_y - 52, little_rooster(color, accent)))
-    pad = 40
-    return svg((-pad, roof_y - 140, w + 2 * pad, cap + 140 + 46 + 40 + pad), body)
+def merch_tee_svg(mono=None):
+    """The mark, big, for the front of a shirt. mono: one ink colour, for
+    single-ink screen printing."""
+    return svg(MARK_BOX, mono_elements(mono, _uid("tee")) if mono
+               else mark_elements())
 
 
 PALETTE = [
-    ("Hearth", HEARTH, EGGSHELL), ("Walnut", WALNUT, EGGSHELL),
-    ("Comb", COMB, FEATHER), ("Ember", EMBER, HEARTH),
-    ("Yolk", YOLK, HEARTH), ("Eggshell", EGGSHELL, HEARTH),
-    ("Moss", MOSS, FEATHER), ("Pine", PINE, FEATHER),
-    ("Dusk", DUSK, FEATHER), ("Timber", TIMBER, EGGSHELL),
-    ("Ash", ASH, EGGSHELL), ("Plaster", PLASTER, HEARTH),
+    ("Ink", INK, CREAM), ("Comb", COMB, FEATHER), ("Yolk", YOLK, INK),
+    ("Cream", CREAM, INK), ("Stone", STONE, FEATHER), ("Spruce", SPRUCE, CREAM),
 ]
 
 
@@ -408,18 +340,18 @@ def palette_svg():
     w, h, gap = 150, 170, 12
     body = ""
     for i, (name, fill, ink) in enumerate(PALETTE):
-        x = (i % 6) * (w + gap)
-        y = (i // 6) * (h + gap)
+        x = i * (w + gap)
+        y = 0
         body += ('<rect x="%d" y="%d" width="%d" height="%d" rx="18" fill="%s"%s/>'
                  % (x, y, w, h, fill,
-                    ' stroke="%s" stroke-width="2"' % PLASTER if fill == EGGSHELL else ""))
+                    ' stroke="%s" stroke-width="2"' % STONE if fill == CREAM else ""))
         body += ('<text x="%d" y="%d" font-family="Sora, sans-serif" '
                  'font-weight="700" font-size="20" fill="%s">%s</text>'
                  % (x + 16, y + h - 44, ink, name))
         body += ('<text x="%d" y="%d" font-family="JetBrains Mono, monospace" '
                  'font-size="15" fill="%s" opacity=".8">%s</text>'
                  % (x + 16, y + h - 20, ink, fill))
-    return svg((-20, -20, 6 * w + 5 * gap + 40, 2 * h + gap + 40),
+    return svg((-20, -20, 6 * w + 5 * gap + 40, h + 40),
                '<rect x="-20" y="-20" width="100%%" height="100%%" fill="%s"/>%s'
                % ("#FBF6EF", body))
 
@@ -479,51 +411,48 @@ def write(path, text):
 
 def build_brand(tmp):
     logo = os.path.join(BRAND, "logo")
+    # Forms of the old house mark that the rooster's head replaced.
     for stale in ("mark-small-on-dark.svg", "mark-small-on-light.svg",
-                  "app-icon-small.svg"):
+                  "app-icon-small.svg", "mark-on-dark.svg", "mark-on-light.svg",
+                  "rooster.svg", "app-icon-dark.svg"):
         if os.path.exists(os.path.join(logo, stale)):
             os.remove(os.path.join(logo, stale))
     files = {
         "mark.svg": svg(MARK_BOX, mark_elements()),
-        "rooster.svg": svg(ROOSTER_BOX, rooster_elements()),
         "mark-mono.svg": svg(MARK_BOX, mono_elements()),
         "app-icon.svg": app_icon_svg(),
-        "app-icon-dark.svg": rooster_icon_svg(),
+        "app-icon-light.svg": app_icon_svg(background=CREAM),
         "app-icon-comb.svg": app_icon_svg(background=COMB),
-        "wordmark-on-dark.svg": wordmark_svg(EGGSHELL),
-        "wordmark-on-light.svg": wordmark_svg(HEARTH),
-        "lockup-on-light.svg": lockup_svg(HEARTH),
-        "lockup-on-dark.svg": lockup_svg(EGGSHELL, rooster=True),
-        "lockup-tagline-on-light.svg": lockup_svg(HEARTH, tagline_ink=ASH),
-        "lockup-stacked-on-light.svg": stacked_svg(HEARTH),
+        "wordmark-on-dark.svg": wordmark_svg(CREAM),
+        "wordmark-on-light.svg": wordmark_svg(INK),
+        "lockup-on-light.svg": lockup_svg(INK),
+        "lockup-on-dark.svg": lockup_svg(CREAM),
+        "lockup-tagline-on-light.svg": lockup_svg(INK, tagline_ink=STONE),
+        "lockup-stacked-on-light.svg": stacked_svg(INK),
     }
-    for old in ("mark-on-dark.svg", "mark-on-light.svg"):
-        if os.path.exists(os.path.join(logo, old)):
-            os.remove(os.path.join(logo, old))
     for name, text in files.items():
         write(os.path.join(logo, name), text)
     merch = os.path.join(BRAND, "merch")
-    write(os.path.join(merch, "tee-on-dark.svg"), merch_tee_svg(EGGSHELL, COMB))
-    write(os.path.join(merch, "tee-on-light.svg"), merch_tee_svg(HEARTH, COMB))
-    write(os.path.join(merch, "tee-one-colour.svg"), merch_tee_svg(EGGSHELL))
+    write(os.path.join(merch, "tee-on-dark.svg"), merch_tee_svg())
+    write(os.path.join(merch, "tee-on-light.svg"), merch_tee_svg())
+    write(os.path.join(merch, "tee-one-colour.svg"), merch_tee_svg(CREAM))
     render(files["app-icon.svg"], os.path.join(logo, "app-icon-1024.png"), 1024)
     write(os.path.join(BRAND, "palette.svg"), palette_svg())
 
     # PNG previews for the guide.
     preview = os.path.join(BRAND, "preview")
-    for old in ("mark-on-dark.png", "mark-on-light.png"):
+    for old in ("mark-on-dark.png", "mark-on-light.png", "motifs.png",
+                "roof-rooster.png"):
         if os.path.exists(os.path.join(preview, old)):
             os.remove(os.path.join(preview, old))
     shots = [
         ("logo/lockup-tagline-on-light.svg", "lockup-tagline.png", (900, 260), "#FBF6EF"),
         ("logo/lockup-on-light.svg", "lockup-on-light.png", (900, 260), "#FBF6EF"),
-        ("logo/lockup-on-dark.svg", "lockup-on-dark.png", (900, 260), "#221A17"),
+        ("logo/lockup-on-dark.svg", "lockup-on-dark.png", (900, 260), INK),
         ("logo/lockup-stacked-on-light.svg", "lockup-stacked.png", (400, 400), "#FBF6EF"),
-        ("logo/mark-mono.svg", "mark-mono.png", (400, 386), "#FBF6EF"),
-        ("merch/tee-on-dark.svg", "tee-on-dark.png", (900, 380), HEARTH),
-        ("palette.svg", "palette.png", (1012, 390), None),
-        ("illustrations/roof-rooster.svg", "roof-rooster.png", (800, 600), None),
-        ("illustrations/motifs.svg", "motifs.png", (960, 300), None),
+        ("logo/mark-mono.svg", "mark-mono.png", (334, 400), "#FBF6EF"),
+        ("merch/tee-on-dark.svg", "tee-on-dark.png", (334, 400), INK),
+        ("palette.svg", "palette.png", (1012, 210), None),
     ]
     for src, out, size, bg in shots:
         with open(os.path.join(BRAND, src)) as f:
@@ -531,14 +460,12 @@ def build_brand(tmp):
 
     # The icon family, as in the concept board.
     fam = []
-    for i, text in enumerate([rooster_icon_svg(), app_icon_svg(),
-                              app_icon_svg(background=COMB),
-                              svg((0, 0, 1024, 1024), tile("rounded", PLASTER)
-                                  + '<g %s>%s</g>' % (fit(MARK_BOX, (112, 112, 800, 800)),
-                                                      mono_elements(HEARTH, "f"))),
-                              svg((0, 0, 1024, 1024), tile("rounded", HEARTH)
-                                  + '<g %s>%s</g>' % (fit(MARK_BOX, (112, 112, 800, 800)),
-                                                      mono_elements(EGGSHELL, "g")))]):
+    for i, text in enumerate([
+            app_icon_svg(), app_icon_svg(background=CREAM),
+            app_icon_svg(background=COMB),
+            mono_icon_svg(CREAM, uid="f", shape="rounded", background=INK),
+            mono_icon_svg(CREAM, uid="g", shape="circle", background=INK),
+            mono_icon_svg("#FFFFFF", uid="h", shape="circle", background=COMB)]):
         p = os.path.join(tmp, "fam%d.png" % i)
         render(text, p, 200)
         fam.append(p)
@@ -564,7 +491,7 @@ def build_app(tmp):
     render(app_icon_svg(), big, 1024)
     # Below 48 px the tile's margin costs too much: fill more of it.
     small = os.path.join(tmp, "rounded-small.png")
-    render(app_icon_svg(inset=56), small, 256)
+    render(app_icon_svg(inset=80), small, 256)
 
     def icon_at(size, out):
         downscale(big if size >= 48 else small, out, size)
@@ -588,10 +515,8 @@ def build_app(tmp):
         render(app_icon_svg("square", inset=240),
                os.path.join(web, "icons", "Icon-maskable-%d.png" % s), s)
     splashes = {
-        "dark": svg((0, 0, 1024, 1024), '<g %s>%s</g>' % (
-            fit(ROOSTER_BOX, (150, 150, 724, 724)), rooster_elements())),
-        "light": svg((0, 0, 1024, 1024), '<g %s>%s</g>' % (
-            fit(MARK_BOX, (112, 112, 800, 800)), mark_elements())),
+        "dark": app_icon_svg("none"),
+        "light": app_icon_svg("none"),
     }
     for theme, splash in splashes.items():
         for i, s in enumerate((661, 1323, 1984, 2646), start=1):
@@ -621,7 +546,7 @@ def build_app(tmp):
     # Linux.
     hicolor = os.path.join(APP, "linux", "debian", "usr", "share", "icons", "hicolor")
     for s in (16, 32, 64, 128, 256, 512):
-        icon_at(s, os.path.join(hicolor, "%dx%d" % (s, s), "apps", "cockhouse.png"))
+        icon_at(s, os.path.join(hicolor, "%dx%d" % (s, s), "apps", "rooster.png"))
     icon_at(512, os.path.join(APP, "linux", "flatpak", "icon.png"))
 
     # Android.
@@ -649,7 +574,7 @@ def build_app(tmp):
     colors = os.path.join(res, "values", "colors.xml")
     write(colors, '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n'
                   '    <color name="ic_launcher_background">%s</color>\n'
-                  '</resources>\n' % EGGSHELL)
+                  '</resources>\n' % INK)
 
 
 def main():

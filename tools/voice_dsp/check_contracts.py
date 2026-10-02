@@ -2,14 +2,14 @@
 """The seams noise suppression depends on, checked without building anything.
 
 Noise suppression runs through several languages that name each other by
-string: Dart looks C symbols up in librust_lib_cockhouse by name, calls method
+string: Dart looks C symbols up in librust_lib_rooster by name, calls method
 channels the vendored LiveKit and flutter-webrtc plugins answer by name, the
 browser loads files by URL and calls wasm exports by name, and three
 languages mirror the same ABI version and struct sizes by hand. Nothing
 fails to compile when one side is renamed or a merge drops the other, and
 the app then runs without the DSP. This script is what fails instead.
 
-    python3 tools/voice_dsp/check_contracts.py [--web-build cockhouse/build/web]
+    python3 tools/voice_dsp/check_contracts.py [--web-build rooster/build/web]
 
 --web-build also checks that a finished web build carries the DSP's files.
 Exits non-zero and lists every broken contract. See
@@ -25,25 +25,25 @@ LK = "third_party/livekit-client-sdk-flutter"
 FW = "third_party/flutter-webrtc"
 DF = "third_party/deep_filter"
 
-# `// COCKHOUSE` markers must never go down: a merge that loses one loses a
+# `// ROOSTER` markers must never go down: a merge that loses one loses a
 # change. Raise these when you add markers.
 MARKER_FLOOR = {LK: 70, FW: 31, DF: 13}
 
 # Local changes noise suppression depends on, each as (file, pattern, why).
 MUST_CONTAIN = [
-    (f"{LK}/shared_cpp/cockhouse_external_audio_processing.h",
+    (f"{LK}/shared_cpp/rooster_external_audio_processing.h",
      r"SetCapturePostProcessing\(capture_\.get\(\)\)",
      "the DSP is installed on the APM's capture post-processing slot"),
-    (f"{LK}/shared_cpp/cockhouse_external_audio_processing.h",
+    (f"{LK}/shared_cpp/rooster_external_audio_processing.h",
      r"void Release\(\) override \{\}",
      "libwebrtc must never free the long-lived proxy (null Initialize crash, e316d80a)"),
-    (f"{LK}/linux/livekit_plugin.cpp", r'#include "cockhouse_external_audio_processing\.h"',
+    (f"{LK}/linux/livekit_plugin.cpp", r'#include "rooster_external_audio_processing\.h"',
      "the Linux plugin hosts the DSP"),
-    (f"{LK}/windows/livekit_plugin.cpp", r'#include "cockhouse_external_audio_processing\.h"',
+    (f"{LK}/windows/livekit_plugin.cpp", r'#include "rooster_external_audio_processing\.h"',
      "the Windows plugin hosts the DSP"),
-    (f"{LK}/linux/livekit_plugin.cpp", r"make_unique<CockhouseExternalAudioProcessingHost>",
+    (f"{LK}/linux/livekit_plugin.cpp", r"make_unique<RoosterExternalAudioProcessingHost>",
      "the Linux plugin creates the host on WebRTC's APM"),
-    (f"{LK}/windows/livekit_plugin.cpp", r"make_unique<CockhouseExternalAudioProcessingHost>",
+    (f"{LK}/windows/livekit_plugin.cpp", r"make_unique<RoosterExternalAudioProcessingHost>",
      "the Windows plugin creates the host on WebRTC's APM"),
     (f"{LK}/linux/livekit_plugin.cpp", r'ptr\("captureProcess"\)',
      "the Linux plugin reads the capture callback"),
@@ -63,7 +63,7 @@ MUST_CONTAIN = [
      "AudioCaptureOptions.copyWith keeps the microphone open through mute (24f5669f)"),
     (f"{FW}/common/cpp/include/loopback_capturer.h", r"void SetRawTap\(RawTap tap\)",
      "the system mix reaches the speaker bleed filter"),
-    (f"{FW}/common/cpp/include/flutter_webrtc.h", r"CockhouseSystemAudioReference cockhouse_reference_;",
+    (f"{FW}/common/cpp/include/flutter_webrtc.h", r"RoosterSystemAudioReference rooster_reference_;",
      "flutter-webrtc owns the system audio reference"),
     (f"{FW}/common/cpp/src/flutter_webrtc.cc", r"ReselectRecordingDevice\(\);",
      "an unmute records from the selected microphone, not from whatever took its place in the device list"),
@@ -79,31 +79,31 @@ MUST_CONTAIN = [
      "source (docs/voice-call-health.md)"),
     (f"{LK}/lib/src/track/local/local.dart", r"if \(muted\) await disable\(\);",
      "a mute that lands during a restart holds on the new capture"),
-    ("cockhouse/lib/client/matrix/components/voip_room/matrix_livekit_voip_session.dart",
+    ("rooster/lib/client/matrix/components/voip_room/matrix_livekit_voip_session.dart",
      r"await _microphoneHealth\.check\(\);",
      "the call checks every second that its microphone gets through "
      "(docs/voice-call-health.md)"),
-    ("cockhouse/lib/client/matrix/components/voip_room/matrix_livekit_voip_session.dart",
+    ("rooster/lib/client/matrix/components/voip_room/matrix_livekit_voip_session.dart",
      r"await _watchRemoteAudio\(\);",
      "the call checks every second that it still receives everyone "
      "(docs/voice-call-health.md)"),
     ("rust/audio_dsp/src/lib.rs", r"\*x = sane\(\*x, limit\);",
      "a sample that is not a number never reaches the DSP's state, which it "
      "would silence for good (tests/non_finite.rs)"),
-    ("cockhouse/web/audio_dsp.worklet.js", r"this\.starved > STARVED_LIMIT && mic",
+    ("rooster/web/audio_dsp.worklet.js", r"this\.starved > STARVED_LIMIT && mic",
      "the web DSP passes the microphone through when its worker stops, "
      "instead of silence"),
-    ("cockhouse/web/audio_dsp.js", r"ctx\.onstatechange = ",
+    ("rooster/web/audio_dsp.js", r"ctx\.onstatechange = ",
      "the web DSP resumes an audio context the browser suspended"),
     ("rust/rust/src/lib.rs", r"^pub use audio_dsp;",
-     "the cockhouse_dsp_* symbols ship inside librust_lib_cockhouse"),
+     "the rooster_dsp_* symbols ship inside librust_lib_rooster"),
     ("rust/rust/Cargo.toml", r'^audio_dsp = \{ path = "\.\./audio_dsp" \}',
-     "librust_lib_cockhouse links the DSP crate"),
-    ("cockhouse/lib/client/matrix/components/voip_room/matrix_livekit_voip_session.dart",
+     "librust_lib_rooster links the DSP crate"),
+    ("rooster/lib/client/matrix/components/voip_room/matrix_livekit_voip_session.dart",
      r"restoreMicrophoneProcessingAfter\(event\.publication",
      "screen audio and DJ music leave the microphone's echo cancellation and "
      "WebRTC noise suppression on (shared_audio_processing.dart)"),
-    ("cockhouse/lib/client/components/voip/audio_processing/shared_audio_processing.dart",
+    ("rooster/lib/client/components/voip/audio_processing/shared_audio_processing.dart",
      r"microphone\.enabled = false;\s*microphone\.enabled = true;",
      "restoreMicrophoneProcessing re-enables the microphone so its sender "
      "writes its options back"),
@@ -115,15 +115,15 @@ MUST_CONTAIN = [
      "audio_dsp.wasm builds without wasm-bindgen imports, which the worker cannot give it"),
     ("Cargo.toml", r'^\[profile\.dev\.package\."\*"\]\nopt-level = 3',
      "DeepFilterNet keeps up in real time in debug builds of the app"),
-    ("cockhouse/web/index.html", r'<script src="audio_dsp\.js"></script>',
+    ("rooster/web/index.html", r'<script src="audio_dsp\.js"></script>',
      "the web app loads the DSP glue"),
-    ("cockhouse/web/audio_dsp.js", r"new Worker\(WORKER_URL\)",
+    ("rooster/web/audio_dsp.js", r"new Worker\(WORKER_URL\)",
      "the web DSP runs in audio_dsp.worker.js, off the audio thread"),
-    ("cockhouse/scripts/prepare-web.sh", r"^\./scripts/build-audio-dsp-wasm\.sh$",
+    ("rooster/scripts/prepare-web.sh", r"^\./scripts/build-audio-dsp-wasm\.sh$",
      "prepare-web.sh builds audio_dsp.wasm"),
-    ("cockhouse/scripts/build-audio-dsp-wasm.sh", r"cargo build -p audio_dsp --release --target wasm32-unknown-unknown",
+    ("rooster/scripts/build-audio-dsp-wasm.sh", r"cargo build -p audio_dsp --release --target wasm32-unknown-unknown",
      "build-audio-dsp-wasm.sh builds audio_dsp.wasm"),
-    ("cockhouse/scripts/build-audio-dsp-wasm.sh", r"audio_dsp\.wasm \./web/audio_dsp\.wasm",
+    ("rooster/scripts/build-audio-dsp-wasm.sh", r"audio_dsp\.wasm \./web/audio_dsp\.wasm",
      "build-audio-dsp-wasm.sh puts audio_dsp.wasm where the web build picks it up"),
 ]
 
@@ -140,10 +140,10 @@ def check_markers(problems):
         count = 0
         for path in (REPO / package).rglob("*"):
             if path.is_file() and path.suffix in {".dart", ".cc", ".cpp", ".h", ".txt", ".podspec", ".kt", ".java", ".m", ".mm", ".yaml", ".rs", ".toml"}:
-                count += path.read_text(encoding="utf-8", errors="replace").count("COCKHOUSE")
+                count += path.read_text(encoding="utf-8", errors="replace").count("ROOSTER")
         if count < floor:
             problems.append(
-                f"{package}: {count} COCKHOUSE markers, at least {floor} expected. A merge "
+                f"{package}: {count} ROOSTER markers, at least {floor} expected. A merge "
                 "dropped a local change; see third_party/README.md")
 
 
@@ -189,46 +189,46 @@ def check_restart_keeps_processor(problems):
 
 def rust_exports():
     text = read("rust/audio_dsp/src/ffi.rs") or ""
-    return set(re.findall(r'#\[no_mangle\]\s*pub extern "C" fn (cockhouse_dsp_\w+)', text))
+    return set(re.findall(r'#\[no_mangle\]\s*pub extern "C" fn (rooster_dsp_\w+)', text))
 
 
 def check_symbols(problems):
     exports = rust_exports()
-    worker = "cockhouse/web/audio_dsp.worker.js"
+    worker = "rooster/web/audio_dsp.worker.js"
     users = [
-        ("cockhouse/lib/client/components/voip/audio_processing/audio_processing_manager_native.dart", r"'(cockhouse_dsp_\w+)'"),
-        (worker, r"\.(cockhouse_dsp_\w+)\("),
-        (worker, r'"(cockhouse_dsp_\w+)"'),
+        ("rooster/lib/client/components/voip/audio_processing/audio_processing_manager_native.dart", r"'(rooster_dsp_\w+)'"),
+        (worker, r"\.(rooster_dsp_\w+)\("),
+        (worker, r'"(rooster_dsp_\w+)"'),
     ]
     for rel, pattern in users:
         names = set(re.findall(pattern, read(rel) or ""))
         if not names:
-            problems.append(f"{rel}: found no cockhouse_dsp_* symbols to check")
+            problems.append(f"{rel}: found no rooster_dsp_* symbols to check")
         for name in sorted(names - exports):
             problems.append(f"{rel} uses {name}, which rust/audio_dsp/src/ffi.rs does not export")
     # The probe has to vouch for every export the worker calls.
-    called = set(re.findall(r"\.(cockhouse_dsp_\w+)\(", read(worker) or ""))
-    probed = set(re.findall(r'"(cockhouse_dsp_\w+)"', read(worker) or ""))
+    called = set(re.findall(r"\.(rooster_dsp_\w+)\(", read(worker) or ""))
+    probed = set(re.findall(r'"(rooster_dsp_\w+)"', read(worker) or ""))
     for name in sorted(called - probed):
         problems.append(f"{worker}: EXPORTS, which probe() checks, does not list {name}, which it calls")
-    for rel in ["cockhouse/web/audio_dsp.worklet.js", "cockhouse/web/audio_dsp.js"]:
-        for name in sorted(set(re.findall(r"(cockhouse_dsp_\w+)", read(rel) or ""))):
+    for rel in ["rooster/web/audio_dsp.worklet.js", "rooster/web/audio_dsp.js"]:
+        for name in sorted(set(re.findall(r"(rooster_dsp_\w+)", read(rel) or ""))):
             problems.append(f"{rel} calls {name}: the wasm runs in {worker}, nowhere else")
 
 
 def check_abi(problems):
     rust_abi = re.search(r"pub const ABI_VERSION: u32 = (\d+);", read("rust/audio_dsp/src/ffi.rs") or "")
-    rust_sizes = re.search(r"cockhouse_dsp_params_size\(\), (\d+)\);\s*assert_eq!\(cockhouse_dsp_report_size\(\), (\d+)\);",
+    rust_sizes = re.search(r"rooster_dsp_params_size\(\), (\d+)\);\s*assert_eq!\(rooster_dsp_report_size\(\), (\d+)\);",
                            read("rust/audio_dsp/src/ffi.rs") or "")
     if not rust_abi or not rust_sizes:
         problems.append("rust/audio_dsp/src/ffi.rs: cannot find ABI_VERSION or the struct size test")
         return
     abi, params, report = rust_abi.group(1), rust_sizes.group(1), rust_sizes.group(2)
     expected = {
-        "cockhouse/lib/client/components/voip/audio_processing/audio_processing_manager_native.dart": [
+        "rooster/lib/client/components/voip/audio_processing/audio_processing_manager_native.dart": [
             (r"static const expectedAbi = (\d+);", abi, "ABI"),
         ],
-        "cockhouse/web/audio_dsp.worker.js": [
+        "rooster/web/audio_dsp.worker.js": [
             (r"const ABI_VERSION = (\d+);", abi, "ABI"),
             (r"const PARAMS_SIZE = (\d+);", params, "Params size"),
             (r"const REPORT_SIZE = (\d+);", report, "Report size"),
@@ -245,38 +245,38 @@ def check_abi(problems):
 
 
 def check_channels(problems):
-    """Every cockhouse* method channel call has a native handler."""
+    """Every rooster* method channel call has a native handler."""
     native = "".join(read(rel) or "" for rel in [
         f"{LK}/linux/livekit_plugin.cpp",
         f"{LK}/windows/livekit_plugin.cpp",
         f"{FW}/common/cpp/src/flutter_webrtc.cc",
     ])
-    handled = set(re.findall(r'"(cockhouse[A-Z]\w+)"', native))
-    for root in ["cockhouse/lib", f"{LK}/lib"]:
+    handled = set(re.findall(r'"(rooster[A-Z]\w+)"', native))
+    for root in ["rooster/lib", f"{LK}/lib"]:
         for path in (REPO / root).rglob("*.dart"):
             if "generated" in path.parts:
                 continue
-            for name in re.findall(r"'(cockhouse[A-Z]\w+)'", path.read_text(encoding="utf-8", errors="replace")):
-                if name == "cockhouseAudioDsp":
+            for name in re.findall(r"'(rooster[A-Z]\w+)'", path.read_text(encoding="utf-8", errors="replace")):
+                if name == "roosterAudioDsp":
                     continue
                 if name not in handled:
                     problems.append(f"{path.relative_to(REPO)} calls {name}, which no plugin handles "
                                     "(livekit_plugin.cpp on Linux and Windows, flutter_webrtc.cc)")
-    for name in ["cockhouseSetExternalAudioProcessing", "cockhouseClearExternalAudioProcessing"]:
+    for name in ["roosterSetExternalAudioProcessing", "roosterClearExternalAudioProcessing"]:
         for rel in [f"{LK}/linux/livekit_plugin.cpp", f"{LK}/windows/livekit_plugin.cpp"]:
             if f'"{name}"' not in (read(rel) or ""):
                 problems.append(f"{rel} does not handle {name}")
-    if "window.cockhouseAudioDsp = " not in (read("cockhouse/web/audio_dsp.js") or ""):
-        problems.append("cockhouse/web/audio_dsp.js no longer defines window.cockhouseAudioDsp, which the web app binds to")
+    if "window.roosterAudioDsp = " not in (read("rooster/web/audio_dsp.js") or ""):
+        problems.append("rooster/web/audio_dsp.js no longer defines window.roosterAudioDsp, which the web app binds to")
 
 
 def check_overrides(problems):
-    pubspec = read("cockhouse/pubspec.yaml") or ""
+    pubspec = read("rooster/pubspec.yaml") or ""
     overrides = pubspec[pubspec.find("dependency_overrides:"):]
     for package, path in [("livekit_client", "../third_party/livekit-client-sdk-flutter"),
                           ("flutter_webrtc", "../third_party/flutter-webrtc")]:
         if not re.search(rf"^  {package}:\s*\n\s+path: {re.escape(path)}\s*$", overrides, re.MULTILINE):
-            problems.append(f"cockhouse/pubspec.yaml: dependency_overrides no longer points {package} at "
+            problems.append(f"rooster/pubspec.yaml: dependency_overrides no longer points {package} at "
                             f"{path}, so the vendored changes are not in the app")
 
 
@@ -306,7 +306,7 @@ def check_web_build(problems, build):
         path = build / name
         if not path.is_file() or path.stat().st_size == 0:
             problems.append(f"{path}: missing from the web build (audio_dsp.wasm comes from "
-                            "cockhouse/scripts/prepare-web.sh)")
+                            "rooster/scripts/prepare-web.sh)")
     wasm = build / "audio_dsp.wasm"
     if wasm.is_file():
         data = wasm.read_bytes()

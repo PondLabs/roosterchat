@@ -56,7 +56,7 @@ runs, in this order:
 
    | Fault | Repair ladder |
    |-------|---------------|
-   | capture stalled (< 0.25 s of audio a second over 2 s), capture ended, DSP stalled, nothing sent while speaking | desktop: **reopen** (the track off and on: WebRTC stops recording and starts it again, which brings back a dead capture thread; the COCKHOUSE `ReselectRecordingDevice` picks the microphone again by id), then **restart** (`restartTrack`, a new capture), then **republish** (a new publication on a new sender). Web: restart, then republish. |
+   | capture stalled (< 0.25 s of audio a second over 2 s), capture ended, DSP stalled, nothing sent while speaking | desktop: **reopen** (the track off and on: WebRTC stops recording and starts it again, which brings back a dead capture thread; the ROOSTER `ReselectRecordingDevice` picks the microphone again by id), then **restart** (`restartTrack`, a new capture), then **republish** (a new publication on a new sender). Web: restart, then republish. |
    | microphone no longer published | republish |
 
    The last step repeats every 10, 20, 40 and then 60 s for as long as the
@@ -80,7 +80,7 @@ runs, in this order:
 
 4. **Keys we cannot decrypt** (encrypted rooms) — a remote track in
    `kMissingKey` or `kDecryptionFailed` makes us ask its owner for its key
-   (`io.Cockhouse.call.encryption_keys_request`, at most every 10 s per
+   (`io.Rooster.call.encryption_keys_request`, at most every 10 s per
    participant, until it decrypts).
 
 Nothing is judged or repaired while the room is not connected (LiveKit
@@ -120,7 +120,7 @@ not "muted".
   the bleed detectors, the model built again the way it first was); the
   report's `REPORT_FLAG_RECOVERED` says so and the app logs it once. RNNoise
   is never handed NaN.
-- **Web DSP glue** (`cockhouse/web/`): the worker returns a block untouched when
+- **Web DSP glue** (`rooster/web/`): the worker returns a block untouched when
   the DSP throws and reports it at most every 5 s; the worklet passes the
   microphone through once no block came back for 200 ms (the user is heard
   unprocessed rather than not at all, until the watch builds a new graph);
@@ -173,7 +173,7 @@ not "muted".
 | The session wires it: a dead capture is reopened without a rejoin, a mute or deafen is respected, nothing is repaired while reconnecting or leaving, a remote microphone that never arrives is asked for again, the mute button follows the microphone (and shows not muted while it is being published again) | `livekit_session_voice_health_test.dart` | ci `test` |
 | A remote track that never arrives, or a microphone silent while its owner speaks, is resubscribed; quiet, muted or unwanted ones are not | `remote_audio_watch_test.dart` | ci `test` |
 | Keys: no new key on rewrites, one on a leave; a failed send is retried and its key not used; a key nobody could get is used after the cap and still sent; unknown device keys, lost messages (the announcement) and requests are healed; indices go round the ring from a random start; nothing after dispose | `call_key_distributor_test.dart` | ci `test` |
-| Incoming keys: only this room's call, only encrypted, only from the device that claims them, in order; held until the membership arrives; an older Cockhouse's keys are still taken | `call_key_messages_test.dart` | ci `test` |
+| Incoming keys: only this room's call, only encrypted, only from the device that claims them, in order; held until the membership arrives; an older Rooster's keys are still taken | `call_key_messages_test.dart` | ci `test` |
 | One NaN, infinity or huge sample (and a whole NaN block) leaves the voice as it was a second later; state that went bad is rebuilt; state that keeps going bad gives suppression up, not the voice; NaN parameters do not stick; RNNoise taking over keeps the voice | `rust/audio_dsp/tests/non_finite.rs` | ci `test` |
 | Inside the real WebRTC (Linux): the app's recording stream killed mid-capture stays dead on its own (WebRTC does not notice), and the reopen repair brings the voice back within 3 dB | `native_noise_loop.sh` ("a microphone whose recording died is heard again"; pacmd on PulseAudio, pw-cli on PipeWire) | integration-test |
 | In Chrome: a worker that traps on every block or hangs keeps the microphone going out (it was -120 dB) and stops the frame counter; a suspended context is resumed; an ended capture is refused | `web_health_loop.mjs` | ci `voice-dsp` |

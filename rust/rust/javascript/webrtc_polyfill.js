@@ -12,18 +12,18 @@
         alert("Unimplemented: " + message);
     }
 
-    const COCKHOUSE_WIDGET_RUNNER_DEBUG = true;
-    const COCKHOUSE_WIDGET_RUNNER_ALERT_UNIMPLEMENTED = true;
+    const ROOSTER_WIDGET_RUNNER_DEBUG = true;
+    const ROOSTER_WIDGET_RUNNER_ALERT_UNIMPLEMENTED = true;
 
     function dbg(args) {
-        if (COCKHOUSE_WIDGET_RUNNER_DEBUG) {
+        if (ROOSTER_WIDGET_RUNNER_DEBUG) {
             console.log(args)
         }
     }
 
     function createUnimplementedPropertyHandlers(object, propertyNames) {
 
-        if (!COCKHOUSE_WIDGET_RUNNER_ALERT_UNIMPLEMENTED) return;
+        if (!ROOSTER_WIDGET_RUNNER_ALERT_UNIMPLEMENTED) return;
 
         propertyNames.forEach((property) => {
             var name = object.constructor.name + "." + property
@@ -42,7 +42,7 @@
     }
 
     function createUnimplementedFunctionHandlers(object, functionNames) {
-        if (!COCKHOUSE_WIDGET_RUNNER_ALERT_UNIMPLEMENTED) return;
+        if (!ROOSTER_WIDGET_RUNNER_ALERT_UNIMPLEMENTED) return;
 
         functionNames.forEach((fn) => {
             var name = object.constructor.name + "." + fn + "();";

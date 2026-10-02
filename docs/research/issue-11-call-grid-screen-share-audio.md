@@ -11,7 +11,7 @@ indicator lights up whenever the shared audio plays.
 
 ## 1. How the grid is built: one tile per `VoipStream`
 
-`CallView` (`cockhouse/lib/ui/organisms/call_view/call_view.dart`) subscribes to
+`CallView` (`rooster/lib/ui/organisms/call_view/call_view.dart`) subscribes to
 `currentSession.onStateChanged` and calls `setState` on every event
 (`call_view.dart:61-63`). While the call is connected it renders
 `generateLayout()` inside a `Row` or `Column` depending on aspect ratio
@@ -26,7 +26,7 @@ indicator lights up whenever the shared audio plays.
   `widget.currentSession.streams.where((e) => e != mainStream).map(...)`,
   one `VoipStreamView` per stream, keyed `callView__${e.streamId}`
   (`call_view.dart:302-332`). `BentoLayout` is a plain list-of-children
-  layout (`cockhouse/lib/ui/layout/bento.dart:6-8`).
+  layout (`rooster/lib/ui/layout/bento.dart:6-8`).
 - The only type-aware logic here is the `fit`: `BoxFit.contain` for
   `VoipStreamType.screenshare`, `BoxFit.cover` otherwise
   (`call_view.dart:317-319`).
@@ -36,7 +36,7 @@ in `streams` becomes a tile.
 
 ## 2. How a tile is drawn: `VoipStreamView`
 
-`cockhouse/lib/ui/organisms/call_view/voip_stream_view.dart`:
+`rooster/lib/ui/organisms/call_view/voip_stream_view.dart`:
 
 - `initState` resolves the member from `stream.streamUserId` and listens to
   `stream.onStreamChanged` and `session.onUpdateVolumeVisualizers`
@@ -66,7 +66,7 @@ slider. That is the second tile from the issue.
 
 ## 3. Where streams come from: `MatrixLivekitVoipSession`
 
-`cockhouse/lib/client/matrix/components/voip_room/matrix_livekit_voip_session.dart`.
+`rooster/lib/client/matrix/components/voip_room/matrix_livekit_voip_session.dart`.
 
 `streams` is a plain growable `List<VoipStream>`
 (`matrix_livekit_voip_session.dart:513-514`). It is filled from LiveKit
@@ -132,14 +132,14 @@ and removes it (`:496-500`). This is the only place in the app that names
   silences it today; any fix must keep that.
 - `generalAudioLevel` is `streams.fold(0.0, max(..., stream.audiolevel))`
   (`:596-601`). It feeds the pulsing avatar in the sessions panel
-  (`cockhouse/lib/ui/molecules/call_sessions_panel.dart:82-83`), so shared
+  (`rooster/lib/ui/molecules/call_sessions_panel.dart:82-83`), so shared
   audio also makes that indicator pulse.
 - `isSharingScreen` is `localParticipant.isScreenShareEnabled()` (`:349-350`),
   which only checks the screen-share *video* source (see section 6).
 
 ## 4. `MatrixLivekitVoipStream`: why screen audio looks like a mic
 
-`cockhouse/lib/client/matrix/components/voip_room/matrix_livekit_voip_stream.dart`.
+`rooster/lib/client/matrix/components/voip_room/matrix_livekit_voip_stream.dart`.
 
 - Wraps a `TrackPublication` and a `userId` (`:12-13`, `:22`).
 - Constructor: for any `AudioTrack` (no source check) it creates a 7-band
@@ -163,7 +163,7 @@ and removes it (`:496-500`). This is the only place in the app that names
 - `setVolume` writes `preferences.setVoipUserVolume(userId, volume)` and sets
   the track volume (`:163-168`); `volume` reads the same preference (`:171`).
   The preference key is `call_user_volume:<userId>`
-  (`cockhouse/lib/config/preferences.dart:237-243`), so a mic stream and a
+  (`rooster/lib/config/preferences.dart:237-243`), so a mic stream and a
   screen-share-audio stream from the same member share one volume setting.
   Sliding the volume on either tile changes the preference; the *other*
   stream's live `Helper.setVolume` is not updated until the next
@@ -171,7 +171,7 @@ and removes it (`:496-500`). This is the only place in the app that names
 
 ## 5. The `VoipStream` interface and the legacy implementation
 
-`cockhouse/lib/client/components/voip/voip_stream.dart`:
+`rooster/lib/client/components/voip/voip_stream.dart`:
 
 - `enum VoipStreamType { audio, video, screenshare }` (`:3`).
 - `enum VoipStreamDirection { incoming, outgoing }` (`:5`).
@@ -180,11 +180,11 @@ and removes it (`:496-500`). This is the only place in the app that names
   `streamId`, `stats`, `audiolevel`, `isMuted`, `isDeafened`, `aspectRatio`,
   `volume`, `setVolume`.
 
-`VoipSession` (`cockhouse/lib/client/components/voip/voip_session.dart:28-86`)
+`VoipSession` (`rooster/lib/client/components/voip/voip_session.dart:28-86`)
 exposes `List<VoipStream> get streams` (`:57`) and `generalAudioLevel` (`:53`).
 
 The legacy 1:1 path, `MatrixVoipStream`
-(`cockhouse/lib/client/matrix/components/voip/matrix_voip_stream.dart`), wraps a
+(`rooster/lib/client/matrix/components/voip/matrix_voip_stream.dart`), wraps a
 matrix-dart-sdk `WrappedMediaStream`:
 
 - `type` (`:49-59`): `SDPStreamMetadataPurpose.Screenshare` ->
@@ -194,7 +194,7 @@ matrix-dart-sdk `WrappedMediaStream`:
   per-user preference (`:163-176`).
 
 `MatrixVoipSession.initStreams`/`shouldAddStream`
-(`cockhouse/lib/client/matrix/components/voip/matrix_voip_session.dart:285-320`)
+(`rooster/lib/client/matrix/components/voip/matrix_voip_session.dart:285-320`)
 only accept `Screenshare` and `Usermedia` purposes and skip video-muted
 screenshares. In this path a screenshare is one `MediaStream` that can carry
 both video and audio tracks, so it never produces a separate audio-only
@@ -202,14 +202,14 @@ stream. The legacy implementation is not affected by the bug; any interface
 change must still compile for it (it is a plain `implements VoipStream`).
 
 Test fakes also implement the interface with `noSuchMethod`
-(`cockhouse/unit_test/deafen_test.dart:90-121`,
-`cockhouse/unit_test/screen_share_audio_test.dart:238-262`), so adding a new
+(`rooster/unit_test/deafen_test.dart:90-121`,
+`rooster/unit_test/screen_share_audio_test.dart:238-262`), so adding a new
 abstract member does not break them, but adding an enum value does affect
 exhaustive `switch`es (`voip_stream_view.dart:161`).
 
 ## 6. LiveKit primary sources (vendored under `third_party/`)
 
-`cockhouse/pubspec.yaml:169-170` overrides `livekit_client` to
+`rooster/pubspec.yaml:169-170` overrides `livekit_client` to
 `../third_party/livekit-client-sdk-flutter`
 (origin and ref in `third_party/README.md:6-9`).
 
@@ -249,10 +249,10 @@ exhaustive `switch`es (`voip_stream_view.dart:161`).
 
 ## 7. Other consumers of `session.streams`
 
-`grep -rn "\.streams\b" cockhouse/lib` finds only:
+`grep -rn "\.streams\b" rooster/lib` finds only:
 
 - `call_view.dart:306` (the grid, above).
-- `cockhouse/lib/client/matrix/components/rtc_screen_share_annotation/matrix_rtc_screen_share_annotation_component.dart:131-133`:
+- `rooster/lib/client/matrix/components/rtc_screen_share_annotation/matrix_rtc_screen_share_annotation_component.dart:131-133`:
   looks a stream up by `streamId` to check `direction == outgoing` when a
   remote cursor event arrives. It matches by id, so it does not care about
   audio streams.
@@ -260,32 +260,32 @@ exhaustive `switch`es (`voip_stream_view.dart:161`).
 Indirect consumers:
 
 - `VoipFullscreenStreamView`
-  (`cockhouse/lib/ui/organisms/call_view/voip_fullscreen_stream_view.dart:33-58`)
+  (`rooster/lib/ui/organisms/call_view/voip_fullscreen_stream_view.dart:33-58`)
   wraps a single `VoipStreamView(canFullscreen: false)` and forwards hover
   positions with `stream.streamId`. It is only reachable from the fullscreen
   button, which exists for video/screenshare tiles, so it is never opened on
   a screen-audio stream.
 - `call_sessions_panel.dart:82-83` uses `generalAudioLevel`, which folds
   over `streams` (section 3).
-- The soundboard (`cockhouse/lib/ui/organisms/soundboard/soundboard_call_controller.dart`)
+- The soundboard (`rooster/lib/ui/organisms/soundboard/soundboard_call_controller.dart`)
   uses `session.client`/`session.roomId` only; it does not publish a LiveKit
   audio track (no `publishAudioTrack`/`LocalAudioTrack` outside the session
   file), so it does not add a third tile.
 
 ## 8. Tests
 
-- Dart unit tests live in `cockhouse/unit_test/` (not `test/`). CI runs
-  `dart run scripts/codegen.dart && flutter test unit_test` from `cockhouse/`
+- Dart unit tests live in `rooster/unit_test/` (not `test/`). CI runs
+  `dart run scripts/codegen.dart && flutter test unit_test` from `rooster/`
   (`.github/workflows/ci.yml:64-69`), gated on any `*_test.dart` existing
   there (`ci.yml:41-43`). Rust crates with tests run via `cargo test`
   (`ci.yml:71-77`).
-- `cockhouse/integration_test/` holds Synapse-backed integration tests
-  (`cockhouse/integration_test/README.md`, `runner.dart:1-25`) and benchmarks
+- `rooster/integration_test/` holds Synapse-backed integration tests
+  (`rooster/integration_test/README.md`, `runner.dart:1-25`) and benchmarks
   (`.github/workflows/benchmark.yml:56`). They need a running homeserver and
   are not the right place for this.
 - `dev_dependencies` are `flutter_test`, `integration_test`, `drift_dev`,
   `build_runner`, `file`, plus icon/msix tooling
-  (`cockhouse/pubspec.yaml`, `dev_dependencies:` block). There is no mockito or
+  (`rooster/pubspec.yaml`, `dev_dependencies:` block). There is no mockito or
   mocktail; existing fakes are hand-written `implements X` classes with
   `noSuchMethod` (`deafen_test.dart:11-121`,
   `screen_share_audio_test.dart:23-41`, `:238-262`).
@@ -293,7 +293,7 @@ Indirect consumers:
   list and `addStream`) and `FakeVoipStream` (with `direction`, `type`,
   `streamUserId`, volume fields). They are file-local; a new test for the
   grid would either duplicate them or move them to a shared helper under
-  `cockhouse/unit_test/`.
+  `rooster/unit_test/`.
 - `screen_share_audio_test.dart:95-191` shows the widget-test pattern for
   this area: `createTestApp` wraps the widget in a `MaterialApp` with the
   tiamat `ThemeSettings` extension (`:12-21`). `CallView` itself is harder to
@@ -428,7 +428,7 @@ from the member's microphone stream only.
 
 ### Suggested test (any of A-C)
 
-A pure-Dart test in `cockhouse/unit_test/` using the existing `FakeVoipStream`
+A pure-Dart test in `rooster/unit_test/` using the existing `FakeVoipStream`
 shape (`deafen_test.dart:90-121`): a member with a mic stream, a
 screenshare stream and a screen-share-audio stream yields one avatar tile
 and one screenshare tile. That requires the tile-selection predicate to be

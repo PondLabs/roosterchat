@@ -13,7 +13,7 @@ carries the CEF payload in `cef/` (installed from the locked `linux-x64`
 runtime). The payload is the staged runtime's `Release/` directory, which
 also holds the archive's `Resources/` (CEF on Linux loads ICU data, `.pak`
 resources and locales from the directory holding `libcef.so`). The Flutter
-bundle stays at `cockhouse/bundle`:
+bundle stays at `rooster/bundle`:
 
 ```text
 <files>/cef/libcef.so
@@ -30,7 +30,7 @@ bundle stays at `cockhouse/bundle`:
 <files>/cef/resources.pak
 <files>/cef/locales/en-US.pak        (+ further staged locales)
 <files>/cef/fixtures/fixture.html
-<files>/cockhouse/bundle/cockhouse        # Flutter shell
+<files>/rooster/bundle/rooster        # Flutter shell
 ```
 
 `LICENSE.txt` and `CREDITS.html` are archive-root inputs and are not
@@ -78,12 +78,12 @@ SUID is not assumed.
 longer grants `device=all`: Flatpak camera and capture go through portals,
 GPU import stays an optional optimization behind CPU `OnPaint`, and denial
 never broadens the sandbox. The qualification gate re-checks the real
-`com.pondlabs.cockhouse.yaml` for the same allow/deny sets, the GNOME
+`com.pondlabs.rooster.yaml` for the same allow/deny sets, the GNOME
 Platform 48 / `x86_64` / app-id / `/app` tokens, and the absence of
 broadening fragments.
 
 File selection uses the FileChooser portal with read-only staged copies.
-Camera and microphone are deny-by-default and mediated by Cockhouse plus the
+Camera and microphone are deny-by-default and mediated by Rooster plus the
 Camera portal; grants stay scoped to account, requesting origin, top-level
 origin, and capability. Screen capture uses the XDG ScreenCast/PipeWire
 portal with fresh consent per request; no persistent display grant exists.
@@ -106,7 +106,7 @@ its generated metadata and manifest against
 ```text
 python tools/qualify_flatpak_artifact.py \
   --bundle build-dir/files --metadata .cef-metadata \
-  --manifest cockhouse/linux/flatpak/com.pondlabs.cockhouse.yaml
+  --manifest rooster/linux/flatpak/com.pondlabs.rooster.yaml
 python tools/qualify_flatpak_artifact.py \
   --bundle <dir> --metadata <dir> --manifest <yaml> \
   --require-signatures --output report.json
@@ -132,7 +132,7 @@ build; a failure blocks the artifact.
 Both Flatpak cells report the same bundled paths: Flatpak X11 and Wayland
 embedded use OSR/CPU frames from `/app` (`osr-cpu-flutter-texture`);
 Flatpak X11 and Wayland standalone use OSR/CPU frames from `/app` inside a
-cockhouse-owned window (`osr-cpu-owned-window`), with no native Wayland child
+rooster-owned window (`osr-cpu-owned-window`), with no native Wayland child
 embedding. `resolveFlatpakBackend` accepts only `cef-osr-cpu` (alias `cef`);
 GPU-only names fail so CPU rendering stays release-authoritative. Both
 presenters only construct with `FlatpakRendering.cpuOsr`; frames carry size,

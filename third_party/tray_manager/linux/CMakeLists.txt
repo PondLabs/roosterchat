@@ -26,7 +26,7 @@ if(APPINDICATOR_FOUND)
 else()
   pkg_check_modules(APPINDICATOR IMPORTED_TARGET appindicator3-0.1)
 endif()
-# COCKHOUSE: optional. Without an appindicator the plugin still builds and every
+# ROOSTER: optional. Without an appindicator the plugin still builds and every
 # call answers "not implemented", so the app runs without a tray icon instead
 # of failing to build (the Flatpak runtime has none).
 if(APPINDICATOR_FOUND)

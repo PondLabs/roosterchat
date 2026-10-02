@@ -10,7 +10,7 @@ one release-authoritative engine: CEF windowless/off-screen rendering, with
 CPU `OnPaint` frames published through a shared-memory frame ring (see
 `docs/cef-browser-runtime-hosts.md`). Embedded presents as a Flutter texture
 (`osr-cpu-flutter-texture`); standalone presents the same OSR/CPU frames
-inside a cockhouse-owned window (`osr-cpu-owned-window`).
+inside a rooster-owned window (`osr-cpu-owned-window`).
 
 ## Staged resources, locales, helpers, graphics, and sandbox route
 
@@ -19,10 +19,10 @@ its size, sidecar SHA-1, project SHA-256, and raw manifest, then stages the
 allow-listed runtime (`tools/cef_runtime.py stage --strip`, which also
 strips the libraries) and records notices, a CycloneDX SBOM, provenance, and
 the staged manifest (`metadata`). The staged directory is installed into the
-bundle as `cef/` by `cockhouse/linux/CMakeLists.txt` (`COCKHOUSE_CEF_RUNTIME_DIR`).
+bundle as `cef/` by `rooster/linux/CMakeLists.txt` (`ROOSTER_CEF_RUNTIME_DIR`).
 The build SDK staged by `tools/cef_runtime.py stage-sdk`
-(`COCKHOUSE_CEF_SDK_ROOT`) compiles the CEF engine library that `cef_host`
-loads (`lib/libcockhouse_cef_engine.so`). Both flow through the environment,
+(`ROOSTER_CEF_SDK_ROOT`) compiles the CEF engine library that `cef_host`
+loads (`lib/librooster_cef_engine.so`). Both flow through the environment,
 so release and CI builds stage the same locked inputs. `desktop-build.yml`
 (the build behind `ci`'s releases) stages both for its Linux leg. The Debian
 job in `release.yml` does not yet.

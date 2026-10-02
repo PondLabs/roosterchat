@@ -55,7 +55,7 @@ def _build_qualified_fixture(directory: Path):
     (payload / "fixtures").mkdir(exist_ok=True)
     (payload / "fixtures" / "fixture.html").write_bytes(b"<html>fixture</html>")
     (payload / "fixtures" / "README.md").write_bytes(b"fixture readme")
-    (bundle / "cockhouse.exe").write_bytes(b"app")
+    (bundle / "rooster.exe").write_bytes(b"app")
     (directory / "cef.lock.json").write_text(json.dumps(lock), encoding="utf-8")
     return lock, bundle, metadata
 
@@ -228,7 +228,7 @@ class QualifyWindowsArtifactTests(unittest.TestCase):
         with TemporaryDirectory() as temporary:
             directory = Path(temporary)
             lock, bundle, metadata = _build_qualified_fixture(directory)
-            target = bundle / "cockhouse.exe"
+            target = bundle / "rooster.exe"
             target.write_bytes(target.read_bytes() + b"EdgeWebView2")
             with self.assertRaises(QualificationError):
                 qualify_windows_artifact.qualify(bundle, metadata, lock)

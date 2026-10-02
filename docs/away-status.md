@@ -2,13 +2,13 @@
 
 The status dot next to someone's name says one of three things: online
 (green), away (amber), offline (grey). Away means nobody has touched that
-person's machine for fifteen minutes — not that Cockhouse is in the background.
+person's machine for fifteen minutes — not that Rooster is in the background.
 Someone sitting in a voice channel with a game in front of them is online;
-someone who walked off leaving Cockhouse focused is away.
+someone who walked off leaving Rooster focused is away.
 
 ## Where idle time comes from
 
-`cockhouse/lib/utils/idle/` asks the platform how long since the last keyboard,
+`rooster/lib/utils/idle/` asks the platform how long since the last keyboard,
 mouse or touch input anywhere on the machine:
 
 | Platform | Source | Sees input outside the app |
@@ -27,7 +27,7 @@ nowhere would be worse than the fallback. Where there is no source at all,
 `UserIdleWatcher` falls back to how long the app has been in the background,
 which is the nearest those platforms have.
 
-`UserIdleWatcher` (`cockhouse/lib/client/components/user_presence/`) polls every
+`UserIdleWatcher` (`rooster/lib/client/components/user_presence/`) polls every
 30 s and holds the answer in `isAway`.
 
 ## How other people find out

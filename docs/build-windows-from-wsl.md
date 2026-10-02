@@ -60,14 +60,14 @@ Mirrors the `build-windows` job in `.github/workflows/build.yml`.
 From WSL, one shot:
 
 ```sh
-cmd.exe /c "set PATH=C:\Users\apbia\workspace\flutter-sdk\flutter\bin;C:\Users\apbia\workspace\tools;C:\Users\apbia\.cargo\bin;%PATH% && cd /d C:\Users\apbia\workspace\roscord\cockhouse && dart run scripts/codegen.dart && flutter build windows --release --dart-define PLATFORM=windows"
+cmd.exe /c "set PATH=C:\Users\apbia\workspace\flutter-sdk\flutter\bin;C:\Users\apbia\workspace\tools;C:\Users\apbia\.cargo\bin;%PATH% && cd /d C:\Users\apbia\workspace\roscord\rooster && dart run scripts/codegen.dart && flutter build windows --release --dart-define PLATFORM=windows"
 ```
 
 Or in a Windows terminal:
 
 ```bat
 set PATH=C:\Users\apbia\workspace\flutter-sdk\flutter\bin;C:\Users\apbia\workspace\tools;%PATH%
-cd /d C:\Users\apbia\workspace\roscord\cockhouse
+cd /d C:\Users\apbia\workspace\roscord\rooster
 dart run scripts/codegen.dart
 flutter build windows --release --dart-define PLATFORM=windows
 ```
@@ -76,8 +76,8 @@ flutter build windows --release --dart-define PLATFORM=windows
 only needs re-running after pulling changes. The first full build takes
 roughly 10 minutes, most of it the Rust library through cargokit.
 
-Output: `C:\Users\apbia\workspace\roscord\cockhouse\build\windows\x64\runner\Release\`.
-`cockhouse.exe` plus all DLLs (about 157 MB) is the whole app; the folder can be
+Output: `C:\Users\apbia\workspace\roscord\rooster\build\windows\x64\runner\Release\`.
+`rooster.exe` plus all DLLs (about 157 MB) is the whole app; the folder can be
 zipped and run elsewhere.
 
 To build a branch other than main:
@@ -96,7 +96,7 @@ cd /mnt/c/Users/apbia/workspace/roscord && git fetch /home/lion/workspace/pondla
 - **`flutter_inappwebview_windows` CMake step fails with missing native
   sources.** The cutover replaced the upstream WebView2 plugin with the
   no-op stub in `third_party/flutter_inappwebview_windows_stub/` (see its
-  README). After pulling, delete `cockhouse\build\windows` so CMake re-runs
+  README). After pulling, delete `rooster\build\windows` so CMake re-runs
   against the stub; the cached upstream paths otherwise persist.
 - **`rustc 1.86.0 is not supported by the following packages`** from
   cargokit. `rustup update stable`.

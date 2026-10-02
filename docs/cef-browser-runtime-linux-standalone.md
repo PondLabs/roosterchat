@@ -1,16 +1,16 @@
 # Native Linux standalone Matrix surfaces
 
-Matrix widgets open in cockhouse-owned X11 and Wayland windows using the common
+Matrix widgets open in rooster-owned X11 and Wayland windows using the common
 OSR/CPU presenter. Both compositor cells share one release-authoritative
 path: CEF windowless/off-screen rendering with CPU `OnPaint` copied into
-client-owned memory and presented inside a cockhouse-owned top-level window.
+client-owned memory and presented inside a rooster-owned top-level window.
 
 ## Compositor cells
 
 Both cells report the same presentation path, `osr-cpu-owned-window`:
 
-- native X11 uses OSR/CPU frames in a cockhouse-owned window;
-- native Wayland uses OSR/CPU frames in a cockhouse-owned window, with no
+- native X11 uses OSR/CPU frames in a rooster-owned window;
+- native Wayland uses OSR/CPU frames in a rooster-owned window, with no
   native Wayland child embedding.
 
 Both cells use forced cpu rendering with no fallback engine: the bundled CEF
@@ -35,7 +35,7 @@ and close behavior on both compositors:
   the locally tracked focus so X11 and Wayland stay aligned;
 - pointer, keyboard, wheel, and IME input ride ordered `InputCommand` values;
 - resize and device-scale changes ride ordered `ResizeCommand` values;
-- popups inherit the opener's account and privacy context as cockhouse-owned
+- popups inherit the opener's account and privacy context as rooster-owned
   standalone child surfaces and close with the opener; they never escape
   into an unowned native window;
 - close sends the typed close operation and observes the same stale-surface
@@ -71,7 +71,7 @@ the fallback engine or embedding names.
 
 ## Host loss
 
-Host loss leaves the rest of Cockhouse usable. The presenter records a
+Host loss leaves the rest of Rooster usable. The presenter records a
 runtime-lost observation that drops the pending frame and exposes an
 accessible reconnecting state instead of crashing the Flutter application.
 The surface can still be closed, and other surfaces on the same runtime

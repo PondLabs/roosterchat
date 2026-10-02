@@ -1746,7 +1746,7 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.5"
-  rust_lib_cockhouse:
+  rust_lib_rooster:
     dependency: transitive
     description:
       path: "rust/rust_builder"

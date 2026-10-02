@@ -5,21 +5,21 @@
 // Chrome plays a fixture (speech over room noise, from
 // `cargo run -p audio_dsp --example noisy_speech`) as its fake microphone.
 // A test page runs the web root's own audio_dsp.js, audio_dsp.worklet.js,
-// audio_dsp.worker.js and audio_dsp.wasm through `cockhouseAudioDsp.create()`,
+// audio_dsp.worker.js and audio_dsp.wasm through `roosterAudioDsp.create()`,
 // the way the app's
-// CockhouseWebTrackProcessor does, and records the level of the raw microphone
+// RoosterWebTrackProcessor does, and records the level of the raw microphone
 // and of the processed track (what LiveKit publishes) every 10 ms. The
 // levels are lined up against the fixture's labels and compared.
 //
-//   node tools/voice_dsp/web_noise_loop.mjs [--web-root cockhouse/web]
+//   node tools/voice_dsp/web_noise_loop.mjs [--web-root rooster/web]
 //        [--fixture-dir target/voice-fixtures] [--chrome google-chrome-stable]
 //        [--scenario dsp,off,toggle,nowasm,badwasm,noworklet,noworker]
-//   node tools/voice_dsp/web_noise_loop.mjs --app cockhouse/build/web_noise_loop
+//   node tools/voice_dsp/web_noise_loop.mjs --app rooster/build/web_noise_loop
 //        [--scenario app,app-nowasm]
 //
 // --web-root is where audio_dsp.js, audio_dsp.worklet.js, audio_dsp.worker.js
-// and audio_dsp.wasm are served from: cockhouse/web after scripts/prepare-web.sh, or
-// cockhouse/build/web to check what a web build ships. Exits non-zero when a
+// and audio_dsp.wasm are served from: rooster/web after scripts/prepare-web.sh, or
+// rooster/build/web to check what a web build ships. Exits non-zero when a
 // scenario does not come out as expected, and says why.
 //
 // Scenarios against the glue alone (a test page, harness/):
@@ -36,7 +36,7 @@
 //   noworklet audio_dsp.worklet.js answers 404: the same
 //   noworker audio_dsp.worker.js answers 404: the same
 //
-// --app serves a web build of cockhouse/integration_test/voice_dsp/
+// --app serves a web build of rooster/integration_test/voice_dsp/
 // web_noise_main.dart instead: the app's own Dart makes the microphone the
 // way a voice room does and puts it on an RTCRtpSender. Scenarios:
 //   app         what the sender carries is suppressed, and still is after
@@ -71,7 +71,7 @@ function arg(name, fallback) {
 }
 
 const appRoot = arg("app", null) && resolve(repo, arg("app", null));
-const webRoot = appRoot ?? resolve(repo, arg("web-root", "cockhouse/web"));
+const webRoot = appRoot ?? resolve(repo, arg("web-root", "rooster/web"));
 const fixtureDir = resolve(repo, arg("fixture-dir", "target/voice-fixtures"));
 const chrome = arg("chrome", process.env.CHROME || "google-chrome-stable");
 const scenarios = arg("scenario", appRoot ? "app,app-nowasm" : "dsp,off,toggle,nowasm,badwasm,noworklet,noworker").split(",");
@@ -332,7 +332,7 @@ async function appScenario(name, fixture) {
 
 for (const f of ["audio_dsp.js", "audio_dsp.worklet.js", "audio_dsp.worker.js", "audio_dsp.wasm", ...(appRoot ? ["index.html", "main.dart.js"] : [])]) {
   if (!existsSync(join(webRoot, f))) {
-    console.error(`${join(webRoot, f)} is missing${f.endsWith(".wasm") ? " (cockhouse/scripts/prepare-web.sh builds it)" : ""}`);
+    console.error(`${join(webRoot, f)} is missing${f.endsWith(".wasm") ? " (rooster/scripts/prepare-web.sh builds it)" : ""}`);
     process.exit(1);
   }
 }

@@ -4,7 +4,7 @@
 This module is release tooling only: the application never imports it and it
 never downloads CEF at runtime.  It checks a Flatpak files root (the
 ``/app`` content produced by ``flatpak-builder`` from
-``cockhouse/linux/flatpak/com.pondlabs.cockhouse.yaml``) plus the metadata
+``rooster/linux/flatpak/com.pondlabs.rooster.yaml``) plus the metadata
 directory produced by ``tools/cef_runtime.py metadata`` against
 ``third_party/cef/cef.lock.json``.
 
@@ -35,13 +35,13 @@ directory that holds ``libcef.so``, so staging already moved the archive's
 ``LICENSE.txt`` and ``CREDITS.html`` are archive-root files and are not
 installed into the payload; they are covered through the generated
 ``THIRD_PARTY_NOTICES.txt`` in the metadata directory.  The Flutter bundle
-stays at ``<bundle>/cockhouse/bundle``; the CEF payload is never loaded from a
+stays at ``<bundle>/rooster/bundle``; the CEF payload is never loaded from a
 host path such as ``/usr/lib``, ``/opt``, ``/run/host``, or ``/host``.
 
 Manifest and portals
 --------------------
 
-``cockhouse/linux/flatpak/com.pondlabs.cockhouse.yaml`` must declare GNOME
+``rooster/linux/flatpak/com.pondlabs.rooster.yaml`` must declare GNOME
 Platform 48, ``x86_64``, and the least-privilege finish-args set (``ipc``,
 ``fallback-x11``, ``wayland``, ``pulseaudio``, ``network``, ``dri`` plus the
 scoped ``xdg-download`` destination).  ``--device=all``, host/home
@@ -92,10 +92,10 @@ PLATFORM = "linux-x64"
 #: Default manifest path relative to the repository root.
 DEFAULT_MANIFEST = (
     Path(__file__).resolve().parents[1]
-    / "cockhouse"
+    / "rooster"
     / "linux"
     / "flatpak"
-    / "com.pondlabs.cockhouse.yaml"
+    / "com.pondlabs.rooster.yaml"
 )
 
 #: Archive-root notice inputs are covered through generated notices, not by
@@ -239,7 +239,7 @@ def find_cef_payload(bundle: Path) -> Path:
     candidates = [
         bundle / "cef",
         bundle / "files" / "cef",
-        bundle / "cockhouse" / "bundle" / "cef",
+        bundle / "rooster" / "bundle" / "cef",
         bundle,
     ]
     for candidate in candidates:
@@ -515,7 +515,7 @@ def check_manifest(manifest_path: Path) -> dict[str, Any]:
         "org.gnome.Platform",
         "48",
         "x86_64",
-        "com.pondlabs.cockhouse",
+        "com.pondlabs.rooster",
         "/app",
     ):
         if token not in text:
@@ -671,7 +671,7 @@ def _parser() -> argparse.ArgumentParser:
         "--manifest",
         type=Path,
         default=DEFAULT_MANIFEST,
-        help="path to com.pondlabs.cockhouse.yaml",
+        help="path to com.pondlabs.rooster.yaml",
     )
     parser.add_argument(
         "--require-signatures",

@@ -1284,7 +1284,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust_lib_cockhouse"
+name = "rust_lib_rooster"
 version = "0.1.0"
 dependencies = [
  "audio_dsp",

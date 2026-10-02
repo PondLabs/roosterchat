@@ -12,13 +12,13 @@ Status legend: `[ ]` open, `[x]` done.
 
 ## Paths mapped (user setting to the network)
 
-- [x] Native voice room (Linux, Windows): preference → `prepareMicrophoneCaptureOptions` (WebRTC NS off when ours runs) → `CallManager` → `NativeAudioProcessingManager` → `cockhouseSetExternalAudioProcessing` → `CockhouseExternalAudioProcessingHost` → APM capture post-processing (only while a sender is unmuted: `capture_output_used`) → `cockhouse_dsp_capture_process` → Opus.
+- [x] Native voice room (Linux, Windows): preference → `prepareMicrophoneCaptureOptions` (WebRTC NS off when ours runs) → `CallManager` → `NativeAudioProcessingManager` → `roosterSetExternalAudioProcessing` → `RoosterExternalAudioProcessingHost` → APM capture post-processing (only while a sender is unmuted: `capture_output_used`) → `rooster_dsp_capture_process` → Opus.
 - [x] Native legacy 1:1: SDK constraints → `NoiseSuppressedMediaDevices` → same process-global hook.
-- [x] Web voice room: preference → `ensureReady` (probe) → `CockhouseWebTrackProcessor` → `cockhouseAudioDsp.create` → worklet + wasm → `processedTrack` on the sender.
+- [x] Web voice room: preference → `ensureReady` (probe) → `RoosterWebTrackProcessor` → `roosterAudioDsp.create` → worklet + wasm → `processedTrack` on the sender.
 - [x] Web legacy 1:1: SDK constraints → `NoiseSuppressedMediaDevices` → `processMicrophoneStream` → worklet.
 - [x] Android: no Rust library, manager unsupported, preference off by default and hidden, WebRTC/hardware NS (`webrtcSuppressorFor` keeps it on; unit tested).
 - [x] Settings microphone test (native loopback pair, web graph).
-- [x] Vendored packages: 60 + 23 `COCKHOUSE` markers, none ever lost (every merge checked); unmarked local changes listed by the vendored-package audit.
+- [x] Vendored packages: 60 + 23 `ROOSTER` markers, none ever lost (every merge checked); unmarked local changes listed by the vendored-package audit.
 - [x] History: 8 past regressions catalogued (below).
 
 ## Feedback loops
@@ -85,7 +85,7 @@ buffer, then bug 18).
 ## Hardening
 
 - [x] CI: ci `test` (Dart + Rust), ci `voice-dsp` (contracts, web build, both web loops; `publish` waits for it), integration-test (native loop)
-- [x] `// COCKHOUSE` marker floor and the vendored changes the DSP needs (`check_contracts.py`)
+- [x] `// ROOSTER` marker floor and the vendored changes the DSP needs (`check_contracts.py`)
 - [x] `audio_dsp.wasm` in the web build (`check_contracts.py --web-build`, in ci, build and release)
 - [x] visible failure: toast when the DSP gives up or cannot run, the reason in Settings
 - [x] docs/voice-audio-processing.md: "What the tests guard", "What still needs a person"

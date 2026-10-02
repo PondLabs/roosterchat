@@ -1,9 +1,9 @@
 //! Native Linux standalone Matrix presentation: OSR/CPU frames in
-//! cockhouse-owned X11 and Wayland windows.
+//! rooster-owned X11 and Wayland windows.
 //!
 //! Both compositor cells share one release-authoritative presenter: CEF
 //! windowless rendering with CPU `OnPaint` copied into client-owned memory
-//! and presented inside a cockhouse-owned top-level window. There is no native
+//! and presented inside a rooster-owned top-level window. There is no native
 //! child embedding on either compositor, no unowned browser window, and
 //! forced CPU/software rendering satisfies the full functional contract.
 //!
@@ -114,7 +114,7 @@ pub fn is_forbidden_backend(name: &str) -> bool {
 
 /// Rejects fallback engines, native child embedding, and unowned windows
 /// without guessing an alternative. The caller must route through the bundled
-/// CEF OSR/CPU host inside a cockhouse-owned window instead.
+/// CEF OSR/CPU host inside a rooster-owned window instead.
 pub fn assert_no_fallback_engine(name: &str) -> Result<(), RuntimeError> {
     if is_forbidden_backend(name) {
         return Err(RuntimeError::InvalidCommand(

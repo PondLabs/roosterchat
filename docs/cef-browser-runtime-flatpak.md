@@ -8,7 +8,7 @@ Both presentations share one release-authoritative engine: CEF
 windowless/off-screen rendering with CPU `OnPaint` copied into client-owned
 memory. Embedded presents as a Flutter texture
 (`osr-cpu-flutter-texture`); standalone presents the same OSR/CPU frames
-inside a cockhouse-owned top-level window (`osr-cpu-owned-window`).
+inside a rooster-owned top-level window (`osr-cpu-owned-window`).
 
 ## Both presentations load without host CEF, host WebKitGTK, or GPU
 
@@ -44,12 +44,12 @@ SUID is not assumed.
 `flatpak-spawn` escapes fail closed with `policyViolation`. The manifest no
 longer grants `device=all`: Flatpak camera and capture go through portals,
 GPU import stays an optional optimization behind CPU `OnPaint`, and denial never broadens the sandbox. Static contract checks read the real
-`com.pondlabs.cockhouse.yaml` and assert the same allow/deny sets.
+`com.pondlabs.rooster.yaml` and assert the same allow/deny sets.
 
 ## File, camera, microphone, and screen capture use portals
 
 File selection uses the FileChooser portal with read-only staged copies.
-Camera and microphone are deny-by-default and mediated by Cockhouse plus the
+Camera and microphone are deny-by-default and mediated by Rooster plus the
 Camera portal; grants stay scoped to account, requesting origin, top-level
 origin, and capability. Screen capture uses the XDG ScreenCast/PipeWire
 portal with fresh consent per request; no persistent display grant exists.
@@ -92,5 +92,5 @@ uploads use a portal chooser plus staging while downloads use the declared
 safe destination with atomic commit. `isFlatpakDynamicBroadening`/
 `assertNoFlatpakDynamicBroadening` deny `flatpak-spawn`, `flatpak override`,
 and any post-denial device/filesystem/D-Bus addition. Popups inherit the
-opener's account and privacy context as cockhouse-owned child surfaces and
+opener's account and privacy context as rooster-owned child surfaces and
 close with the opener.

@@ -125,7 +125,7 @@ It also asks whether a standard way already exists.
 ### 3. matrix-dart-sdk 6.1.1 (MatrixRTC code roscord does not use)
 
 - **Separate event type.** The SDK's `GroupCallSession` writes `com.famedly.call.member` with a `memberships` array (SDK `lib/matrix_api_lite/model/event_types.dart:103`, `lib/src/voip/models/call_membership.dart:3-31`). `VoIP` only reacts to that type (`lib/src/voip/voip.dart:121-126`).
-  - roscord creates `VoIP` only for 1:1 calls (`cockhouse/lib/client/matrix/components/voip/matrix_voip_component.dart:52`) and writes the MSC3401 event type itself (section 4).
+  - roscord creates `VoIP` only for 1:1 calls (`rooster/lib/client/matrix/components/voip/matrix_voip_component.dart:52`) and writes the MSC3401 event type itself (section 4).
   - The SDK therefore never touches roscord's LiveKit membership.
 - **A parse→serialize round trip drops unknown keys.**
   - `CallMembership.fromJson` reads fixed fields, and `toJson` emits a fixed map: `call_id`, `application`, `scope`, `foci_active`, `device_id`, `expires_ts`, `membershipID`, `feeds` (`call_membership.dart:87-129`).
@@ -141,7 +141,7 @@ It also asks whether a standard way already exists.
 
 ### 4. roscord today
 
-- **Join.** `MatrixLivekitBackend.join()` PUTs the membership at `_{mxid}_{device}_m.call` (`cockhouse/lib/client/matrix/components/voip_room/matrix_livekit_backend.dart:169-190`) before `lkRoom.connect` (192).
+- **Join.** `MatrixLivekitBackend.join()` PUTs the membership at `_{mxid}_{device}_m.call` (`rooster/lib/client/matrix/components/voip_room/matrix_livekit_backend.dart:169-190`) before `lkRoom.connect` (192).
   - The content has `application`, `call_id: ""`, `device_id`, `expires: 14400000`, `foci_preferred`, `focus_active` (`oldest_membership`) and `scope`.
   - It has no `created_ts`, `membershipID` or `m.call.intent`.
   - The focus lookup sorts memberships by `originServerTs` and accepts only `oldest_membership` (57-102).
@@ -153,7 +153,7 @@ It also asks whether a standard way already exists.
   - Synapse advertises the flag only when `max_event_delay_duration` and `max_delayed_events_per_user` are both set, and the first defaults to `null` (SYN `synapse/config/server.py:997-999`, `rust/src/handlers/versions.rs:233-235, 319`, `docs/usage/configuration/config_documentation.md:843-850`).
 - **Leave.** `hangUpCall()` runs `clearRoomCallState()` (a PUT of `{}`), `disconnectCall()` and `stopHeartbeat()` (the cancel) concurrently (306-324, 531-557).
 - **Local media.** The session already listens for track published, unpublished, muted and unmuted events (39-49, 151-201, 268-292). `isSharingScreen` and `isCameraEnabled` read LiveKit directly (337-346).
-- **Reading.** `MatrixActivitiesComponent.getSessions()` walks the call.member state (`cockhouse/lib/client/matrix/components/room_activities/matrix_activities_component.dart:67-140`).
+- **Reading.** `MatrixActivitiesComponent.getSessions()` walks the call.member state (`rooster/lib/client/matrix/components/room_activities/matrix_activities_component.dart:67-140`).
   - It skips entries with empty content, without `application`, or where `originServerTs + expires` has passed.
   - It skips our own device's entry unless `CallManager` has a session for the room.
   - Every other entry adds its `senderId` to `participants`.
@@ -162,12 +162,12 @@ It also asks whether a standard way already exists.
 - **Refresh.**
   - `onSessionsChanged` fires only for call.member events in `update.timeline` (`matrix_activities_component.dart:148-159`) and for `CallManager.currentSessions` add/remove (47-63).
   - It does not fire on `session.onStateChanged` or on state-section updates.
-  - The event type is in `importantStateEvents` (`cockhouse/lib/client/matrix/matrix_client.dart:341-347`).
+  - The event type is in `importantStateEvents` (`rooster/lib/client/matrix/matrix_client.dart:341-347`).
 - **Rendering.**
-  - `RoomActivitySession.participants` is a `Set<String>` (`cockhouse/lib/client/components/activities/activities_component.dart:6-29`).
-  - `RoomTextButton` recomputes on `onSessionsChanged` (`cockhouse/lib/ui/atoms/room_text_button.dart:107-113, 139-144`) and draws each member with `buildCallMember`. Today its footer only shows third-party widget icons (330-332, 370-417).
-  - Reusable pieces already exist: `TinyPill` (`cockhouse/lib/ui/atoms/tiny_pill.dart:5-30`) and the "LIVE" string `labelLive` (`cockhouse/lib/ui/molecules/call_session_live_panel.dart:30-31`).
-- **Other readers** of the membership content only use `device_id`: the E2EE key provider (`…/voip_room/matrix_livekit_encryption_key_provider.dart:153-201`) and the soundboard transport (`cockhouse/lib/client/matrix/components/soundboard/matrix_todevice_soundboard_transport.dart:63-80`). An extra key does not affect them.
+  - `RoomActivitySession.participants` is a `Set<String>` (`rooster/lib/client/components/activities/activities_component.dart:6-29`).
+  - `RoomTextButton` recomputes on `onSessionsChanged` (`rooster/lib/ui/atoms/room_text_button.dart:107-113, 139-144`) and draws each member with `buildCallMember`. Today its footer only shows third-party widget icons (330-332, 370-417).
+  - Reusable pieces already exist: `TinyPill` (`rooster/lib/ui/atoms/tiny_pill.dart:5-30`) and the "LIVE" string `labelLive` (`rooster/lib/ui/molecules/call_session_live_panel.dart:30-31`).
+- **Other readers** of the membership content only use `device_id`: the E2EE key provider (`…/voip_room/matrix_livekit_encryption_key_provider.dart:153-201`) and the soundboard transport (`rooster/lib/client/matrix/components/soundboard/matrix_todevice_soundboard_transport.dart:63-80`). An extra key does not affect them.
 
 ### 5. LiveKit side
 
@@ -228,7 +228,7 @@ Implement Option 1, with Option 2 as an overlay on top:
 
 ### Write path
 
-1. **One pure module**, e.g. `cockhouse/lib/client/matrix/components/voip_room/matrix_call_membership.dart`, with `buildJoinedContent(...)`, `liveStreamsOf(content)`, `joinTimeOf(event)` (`created_ts ?? origin_server_ts`) and `isExpired(event, now)`. `join()` (backend 172-190) and the updater both use it. Its tests can sit next to `cockhouse/unit_test/voice_channel_member_list_test.dart`.
+1. **One pure module**, e.g. `rooster/lib/client/matrix/components/voip_room/matrix_call_membership.dart`, with `buildJoinedContent(...)`, `liveStreamsOf(content)`, `joinTimeOf(event)` (`created_ts ?? origin_server_ts`) and `isExpired(event, now)`. `join()` (backend 172-190) and the updater both use it. Its tests can sit next to `rooster/unit_test/voice_channel_member_list_test.dart`.
 2. **Desired state.** In `MatrixLivekitVoipSession`, compute the desired streams from `localParticipant.isScreenShareEnabled()` and `isCameraEnabled()`. Recompute on `LocalTrackPublished`/`LocalTrackUnpublished` and on `TrackMuted`/`TrackUnmuted` for the local participant, all of which are already wired (39-49). Never use calls to `setScreenShare`/`stopScreenshare` as the trigger, because they miss stops that come from the OS.
 3. **Write discipline.**
    - Debounce for about 750 ms (trailing).

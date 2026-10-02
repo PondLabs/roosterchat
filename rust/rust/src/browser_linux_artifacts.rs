@@ -5,7 +5,7 @@
 //! `.deb`, and the portable x64 archive. Every package carries the same
 //! staged payload (resources, locales, helpers, graphics dependencies, and
 //! the qualified sandbox route) and serves both Matrix presentations —
-//! embedded as a Flutter texture and standalone in a cockhouse-owned window —
+//! embedded as a Flutter texture and standalone in a rooster-owned window —
 //! through CEF windowless/off-screen rendering with CPU `OnPaint` copied
 //! into client-owned memory. Clean environments without WebKitGTK or host
 //! CEF still pass, and Linux official video plays the provider's own embed
@@ -28,7 +28,7 @@ pub const LINUX_NATIVE_BACKEND: &str = "cef-osr-cpu";
 /// Embedded presentation path (Flutter texture) shared by every native cell.
 pub const LINUX_EMBEDDED_PRESENTATION_PATH: &str = "osr-cpu-flutter-texture";
 
-/// Standalone presentation path (cockhouse-owned window) shared by every cell.
+/// Standalone presentation path (rooster-owned window) shared by every cell.
 pub const LINUX_STANDALONE_PRESENTATION_PATH: &str = "osr-cpu-owned-window";
 
 /// Staged payload every native Linux artifact must carry. Mirrors the host's

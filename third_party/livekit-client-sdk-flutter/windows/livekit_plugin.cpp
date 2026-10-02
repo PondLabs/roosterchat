@@ -32,7 +32,7 @@
 #include <sstream>
 
 #include "audio_visualizer.h"
-#include "cockhouse_external_audio_processing.h"  // COCKHOUSE
+#include "rooster_external_audio_processing.h"  // ROOSTER
 #include "task_runner_windows.h"
 
 namespace livekit_client_plugin {
@@ -152,8 +152,8 @@ private:
 
 private:
   flutter_webrtc_plugin::FlutterWebRTC *webrtc_instance_ = nullptr;
-  // COCKHOUSE: owns the processors installed on the shared APM.
-  std::unique_ptr<CockhouseExternalAudioProcessingHost> audio_processing_host_;
+  // ROOSTER: owns the processors installed on the shared APM.
+  std::unique_ptr<RoosterExternalAudioProcessingHost> audio_processing_host_;
   std::unordered_map<std::string, std::unique_ptr<VisualizerSink>> visualizers_;
   BinaryMessenger *messenger_ = nullptr;
   mutable std::mutex mutex_;
@@ -180,9 +180,9 @@ void LiveKitPlugin::RegisterWithRegistrar(
 LiveKitPlugin::LiveKitPlugin(BinaryMessenger *messenger)
     : messenger_(messenger) {
   webrtc_instance_ = FlutterWebRTCPluginSharedInstance();
-  // COCKHOUSE
+  // ROOSTER
   if (webrtc_instance_) {
-    audio_processing_host_ = std::make_unique<CockhouseExternalAudioProcessingHost>(
+    audio_processing_host_ = std::make_unique<RoosterExternalAudioProcessingHost>(
         webrtc_instance_->audio_processing());
   }
 }
@@ -256,8 +256,8 @@ void LiveKitPlugin::HandleMethodCall(
 
     result->Success();
   } else if (method_call.method_name().compare(
-                 "cockhouseSetExternalAudioProcessing") == 0) {
-    // COCKHOUSE: install Commet's DSP callbacks on the capture post-processing
+                 "roosterSetExternalAudioProcessing") == 0) {
+    // ROOSTER: install Commet's DSP callbacks on the capture post-processing
     // and render pre-processing slots of the APM. All values are pointer
     // sized integers; a zero process pointer clears that slot.
     if (!method_call.arguments()) {
@@ -277,16 +277,16 @@ void LiveKitPlugin::HandleMethodCall(
     };
     void *ctx = reinterpret_cast<void *>(ptr("ctx"));
     audio_processing_host_->SetCapture(
-        ctx, reinterpret_cast<CockhouseDspInitFn>(ptr("captureInit")),
-        reinterpret_cast<CockhouseDspProcessFn>(ptr("captureProcess")),
-        reinterpret_cast<CockhouseDspResetFn>(ptr("captureReset")));
+        ctx, reinterpret_cast<RoosterDspInitFn>(ptr("captureInit")),
+        reinterpret_cast<RoosterDspProcessFn>(ptr("captureProcess")),
+        reinterpret_cast<RoosterDspResetFn>(ptr("captureReset")));
     audio_processing_host_->SetRender(
-        ctx, reinterpret_cast<CockhouseDspInitFn>(ptr("renderInit")),
-        reinterpret_cast<CockhouseDspProcessFn>(ptr("renderProcess")),
-        reinterpret_cast<CockhouseDspResetFn>(ptr("renderReset")));
+        ctx, reinterpret_cast<RoosterDspInitFn>(ptr("renderInit")),
+        reinterpret_cast<RoosterDspProcessFn>(ptr("renderProcess")),
+        reinterpret_cast<RoosterDspResetFn>(ptr("renderReset")));
     result->Success(flutter::EncodableValue(true));
   } else if (method_call.method_name().compare(
-                 "cockhouseClearExternalAudioProcessing") == 0) {
+                 "roosterClearExternalAudioProcessing") == 0) {
     if (audio_processing_host_) {
       audio_processing_host_->Clear();
     }

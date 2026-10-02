@@ -2,7 +2,7 @@
 name = "audio_dsp"
 version = "0.1.0"
 edition = "2021"
-description = "Cockhouse voice DSP: RNNoise-based noise suppression, input gate and far-end ducking. C ABI, also built to wasm."
+description = "Rooster voice DSP: RNNoise-based noise suppression, input gate and far-end ducking. C ABI, also built to wasm."
 license = "AGPL-3.0"
 publish = false
 

@@ -1,5 +1,5 @@
 name: browser_surface
-description: Presents frames from Cockhouse's out-of-process CEF host as Flutter textures.
+description: Presents frames from Rooster's out-of-process CEF host as Flutter textures.
 version: 0.1.0
 publish_to: none
 

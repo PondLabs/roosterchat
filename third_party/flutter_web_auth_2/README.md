@@ -1,6 +1,6 @@
 # Web Auth 2 for Flutter
 
-> COCKHOUSE: vendored for the CEF BrowserRuntime cutover (#132). The only local
+> ROOSTER: vendored for the CEF BrowserRuntime cutover (#132). The only local
 > changes are the deleted `desktop_webview_window` dependency,
 > `lib/src/webview.dart`, and the `useWebview` branch in
 > `lib/src/linows.dart` (desktop SSO always uses the external system browser

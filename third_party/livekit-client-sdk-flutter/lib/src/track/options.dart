@@ -352,7 +352,7 @@ class AudioCaptureOptions extends LocalTrackOptions {
     return constraints;
   }
 
-  // COCKHOUSE: carries every field. It used to rebuild the options from six of
+  // ROOSTER: carries every field. It used to rebuild the options from six of
   // them, so a copy silently went back to stopping the capture on mute and,
   // worse, dropped the processor: restarting the microphone to change one
   // option took the web AudioWorklet (our DSP) off the track.

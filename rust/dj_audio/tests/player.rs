@@ -704,31 +704,31 @@ fn switching_tracks_is_click_free() {
 
 #[test]
 fn ffi_round_trip() {
-    assert_eq!(cockhouse_music_abi_version(), 2);
+    assert_eq!(rooster_music_abi_version(), 2);
     let path = gap_wav(44_100);
     let c_path = CString::new(path.to_str().unwrap()).unwrap();
     unsafe {
-        let h = cockhouse_music_new();
+        let h = rooster_music_new();
         assert!(!h.is_null());
-        assert_eq!(cockhouse_music_open(h, std::ptr::null(), 0, 1), -1);
+        assert_eq!(rooster_music_open(h, std::ptr::null(), 0, 1), -1);
         assert_eq!(
-            cockhouse_music_open(std::ptr::null_mut(), c_path.as_ptr(), 0, 1),
+            rooster_music_open(std::ptr::null_mut(), c_path.as_ptr(), 0, 1),
             -1
         );
         let missing = CString::new("/no/such/file.mp3").unwrap();
-        assert_eq!(cockhouse_music_open(h, missing.as_ptr(), 0, 1), -2);
-        assert_eq!(cockhouse_music_open(h, c_path.as_ptr(), 100, 42), 0);
-        cockhouse_music_set_gain(h, 0.8);
-        cockhouse_music_set_paused(h, 0);
+        assert_eq!(rooster_music_open(h, missing.as_ptr(), 0, 1), -2);
+        assert_eq!(rooster_music_open(h, c_path.as_ptr(), 100, 42), 0);
+        rooster_music_set_gain(h, 0.8);
+        rooster_music_set_paused(h, 0);
         let player = &*(h as *const Player);
         wait_buffered(player, RATE);
         let mut buf = [0i16; BLOCK * 2];
         assert_eq!(
-            cockhouse_music_pull(h, buf.as_mut_ptr(), BLOCK, 2, 48_000),
+            rooster_music_pull(h, buf.as_mut_ptr(), BLOCK, 2, 48_000),
             BLOCK
         );
         let mut st = MusicStatus::default();
-        cockhouse_music_status(h, &mut st);
+        rooster_music_status(h, &mut st);
         assert_eq!(
             (
                 st.state,
@@ -739,16 +739,16 @@ fn ffi_round_trip() {
             ),
             (1, 42, 110, 4000, 0)
         );
-        assert_eq!(cockhouse_music_seek(h, 3000), 0);
-        cockhouse_music_set_paused(h, 1);
-        cockhouse_music_status(h, &mut st);
+        assert_eq!(rooster_music_seek(h, 3000), 0);
+        rooster_music_set_paused(h, 1);
+        rooster_music_status(h, &mut st);
         assert_eq!((st.state, st.position_ms), (2, 3000));
-        cockhouse_music_stop(h);
-        cockhouse_music_status(h, &mut st);
+        rooster_music_stop(h);
+        rooster_music_status(h, &mut st);
         assert_eq!((st.state, st.track_id), (0, 0));
-        cockhouse_music_status(h, std::ptr::null_mut());
-        cockhouse_music_free(h);
-        cockhouse_music_free(std::ptr::null_mut());
+        rooster_music_status(h, std::ptr::null_mut());
+        rooster_music_free(h);
+        rooster_music_free(std::ptr::null_mut());
     }
     assert_eq!(std::mem::size_of::<MusicStatus>(), 40);
     std::fs::remove_file(path).ok();
@@ -759,32 +759,32 @@ fn ffi_null_handles_are_safe() {
     unsafe {
         let mut buf = [5i16; 64];
         assert_eq!(
-            cockhouse_music_pull(std::ptr::null_mut(), buf.as_mut_ptr(), 32, 2, 48_000),
+            rooster_music_pull(std::ptr::null_mut(), buf.as_mut_ptr(), 32, 2, 48_000),
             0
         );
         assert!(buf.iter().all(|&v| v == 0));
         assert_eq!(
-            cockhouse_music_pull(std::ptr::null_mut(), std::ptr::null_mut(), 32, 2, 48_000),
+            rooster_music_pull(std::ptr::null_mut(), std::ptr::null_mut(), 32, 2, 48_000),
             0
         );
-        let h = cockhouse_music_new();
-        assert_eq!(cockhouse_music_pull(h, std::ptr::null_mut(), 32, 2, 48_000), 0);
+        let h = rooster_music_new();
+        assert_eq!(rooster_music_pull(h, std::ptr::null_mut(), 32, 2, 48_000), 0);
         assert_eq!(
-            cockhouse_music_pull(h, buf.as_mut_ptr(), usize::MAX, 2, 48_000),
+            rooster_music_pull(h, buf.as_mut_ptr(), usize::MAX, 2, 48_000),
             0
         );
         let mut st = MusicStatus {
             state: 9,
             ..Default::default()
         };
-        cockhouse_music_status(std::ptr::null_mut(), &mut st);
+        rooster_music_status(std::ptr::null_mut(), &mut st);
         assert_eq!(st.state, 0);
-        cockhouse_music_stop(std::ptr::null_mut());
-        cockhouse_music_set_paused(std::ptr::null_mut(), 1);
-        cockhouse_music_set_gain(std::ptr::null_mut(), 1.0);
-        assert_eq!(cockhouse_music_seek(std::ptr::null_mut(), 0), -1);
-        assert_eq!(cockhouse_music_seek(h, 0), -1);
-        cockhouse_music_free(h);
+        rooster_music_stop(std::ptr::null_mut());
+        rooster_music_set_paused(std::ptr::null_mut(), 1);
+        rooster_music_set_gain(std::ptr::null_mut(), 1.0);
+        assert_eq!(rooster_music_seek(std::ptr::null_mut(), 0), -1);
+        assert_eq!(rooster_music_seek(h, 0), -1);
+        rooster_music_free(h);
     }
 }
 
@@ -795,50 +795,50 @@ fn free_with_decoder_running_does_not_hang() {
     let c_path = CString::new(path.to_str().unwrap()).unwrap();
     unsafe {
         // Freed while still decoding.
-        let h = cockhouse_music_new();
-        assert_eq!(cockhouse_music_open(h, c_path.as_ptr(), 0, 1), 0);
+        let h = rooster_music_new();
+        assert_eq!(rooster_music_open(h, c_path.as_ptr(), 0, 1), 0);
         let t = Instant::now();
-        cockhouse_music_free(h);
+        rooster_music_free(h);
         assert!(t.elapsed() < Duration::from_secs(1));
 
         // Freed while parked on a full ring.
-        let h = cockhouse_music_new();
-        assert_eq!(cockhouse_music_open(h, c_path.as_ptr(), 0, 1), 0);
+        let h = rooster_music_new();
+        assert_eq!(rooster_music_open(h, c_path.as_ptr(), 0, 1), 0);
         wait_buffered(&*(h as *const Player), RATE * 5 / 2);
         std::thread::sleep(Duration::from_millis(50));
         let t = Instant::now();
-        cockhouse_music_free(h);
+        rooster_music_free(h);
         assert!(t.elapsed() < Duration::from_secs(1));
 
         // Pull on another thread while Dart-side calls churn.
-        let h = cockhouse_music_new();
-        assert_eq!(cockhouse_music_open(h, c_path.as_ptr(), 0, 1), 0);
+        let h = rooster_music_new();
+        assert_eq!(rooster_music_open(h, c_path.as_ptr(), 0, 1), 0);
         let addr = h as usize;
         let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let stop2 = stop.clone();
         let puller = std::thread::spawn(move || {
             let mut buf = [0i16; BLOCK * 2];
             while !stop2.load(Ordering::Relaxed) {
-                cockhouse_music_pull(addr as *mut _, buf.as_mut_ptr(), BLOCK, 2, 48_000);
+                rooster_music_pull(addr as *mut _, buf.as_mut_ptr(), BLOCK, 2, 48_000);
                 std::thread::sleep(Duration::from_micros(300));
             }
         });
         for i in 0..30u64 {
             match i % 5 {
                 // -1 when the previous round stopped the player.
-                0 => assert!(matches!(cockhouse_music_seek(h, i * 500), 0 | -1)),
-                1 => cockhouse_music_set_paused(h, (i % 2) as u8),
-                2 => assert_eq!(cockhouse_music_open(h, c_path.as_ptr(), i * 100, i), 0),
-                3 => cockhouse_music_stop(h),
-                _ => cockhouse_music_set_gain(h, 0.5),
+                0 => assert!(matches!(rooster_music_seek(h, i * 500), 0 | -1)),
+                1 => rooster_music_set_paused(h, (i % 2) as u8),
+                2 => assert_eq!(rooster_music_open(h, c_path.as_ptr(), i * 100, i), 0),
+                3 => rooster_music_stop(h),
+                _ => rooster_music_set_gain(h, 0.5),
             }
             let mut st = MusicStatus::default();
-            cockhouse_music_status(h, &mut st);
+            rooster_music_status(h, &mut st);
             std::thread::sleep(Duration::from_millis(3));
         }
         stop.store(true, Ordering::Relaxed);
         puller.join().unwrap();
-        cockhouse_music_free(h);
+        rooster_music_free(h);
     }
     std::fs::remove_file(path).ok();
 }

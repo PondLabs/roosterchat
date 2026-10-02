@@ -16,8 +16,8 @@
 
 namespace {
 
-// Rings are created by cef_host as /cockhouse-cef-<namespace>-<surface>-<gen>.
-constexpr char kRingPrefix[] = "/cockhouse-cef-";
+// Rings are created by cef_host as /rooster-cef-<namespace>-<surface>-<gen>.
+constexpr char kRingPrefix[] = "/rooster-cef-";
 
 bool IsRingName(const std::string& name) {
   return name.size() > sizeof(kRingPrefix) - 1 && name.size() < 255 &&
