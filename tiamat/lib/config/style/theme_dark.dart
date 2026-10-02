@@ -12,7 +12,7 @@ import 'dart:io' show Platform;
 class ThemeDarkColors {
   static const Color surfaceContainerHigh = Color(0xFF362C27);
   static const Color secondary = Color(0xFF9C8F85);
-  static const Color primary = Color(0xFFE34830);
+  static const Color primary = Color(0xFFE8382A);
   static const Color surface = Color(0xFF2A221E);
   static const Color surfaceContainer = Color(0xFF241D1A);
   static const Color surfaceContainerLow = Color(0xFF1F1916);

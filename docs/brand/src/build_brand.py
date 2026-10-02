@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Builds the Rooster logo, wordmark and every platform icon from code.
 
-The shapes live here, not in hand-edited SVGs, so each size and colourway
-comes from the same geometry. Needs fontTools (for the wordmark), ImageMagick
-and headless Chrome (to rasterise).
+The mark is traced from src/mark.png; everything else is drawn here, so each
+size and colourway comes from the same shapes. Needs fontTools (for the
+wordmark), Pillow, NumPy and potracer (to trace the mark), ImageMagick and
+headless Chrome (to rasterise).
 
     python3 docs/brand/src/build_brand.py            # docs/brand/ only
     python3 docs/brand/src/build_brand.py --install  # also the app's icons
 """
 
-import math
 import os
 import subprocess
 import sys
@@ -22,134 +22,132 @@ FONTS = os.path.join(APP, "assets", "font")
 SORA = os.path.join(FONTS, "sora", "Sora-VariableFont_wght.ttf")
 
 # The palette. Keep in sync with docs/brand/README.md and the tiamat themes.
-INK = "#1F1510"       # the hood, headphones and eye; the dark tile
-COMB = "#E34830"      # comb and wattle; the primary accent
-YOLK = "#F4A320"      # the beak; highlights, away
+# Ink, comb, yolk and feather are the colours of the source art.
+INK = "#211614"       # headphones, eye and door; the dark tile
+COMB = "#E8382A"      # comb and wattle; the primary accent
+YOLK = "#F89B17"      # the beak; highlights, away
 CREAM = "#F7EDE1"     # the light tile and background, text on dark
 STONE = "#8D8178"     # secondary text, the tagline
 SPRUCE = "#2E3B33"    # quiet dark accent
-FEATHER = "#FFFDF8"   # the rooster's face
+FEATHER = "#FCF8F1"   # the rooster's head
 COMB_ON_RED = "#FF8466"  # the comb, on a comb-red tile, so it still reads
 
 
 # ------------------------------------------------------------------ the mark
 #
 # A rooster's head in profile, facing right, headphones on: it is in a call.
-# A big five-lobed comb fans back from the crown. The back of the head is
-# dark, like a hood, and the headphone band sweeps out of it, over the head,
-# from the ear cup to the forehead. A small arched door sits at the bottom of
-# the neck, a nod to the house the brand started as. Drawn on a 1000 grid.
+# The mark is drawn in src/mark.png (transparent, four flat colours) and
+# traced here into one vector layer per colour, on a 1000-unit grid. To
+# change the mark, change the PNG. Needs Pillow, NumPy and potracer.
 
-MARK_BOX = (90, 0, 820, 940)
-
-
-def _lobe(base, tip, r_base, r_tip):
-    """A comb lobe: narrow where it grows out of the head, round at the tip.
-
-    The hull of a small circle at base and a big one set back from tip.
-    """
-    bx, by = base
-    dx, dy = tip[0] - bx, tip[1] - by
-    length = math.hypot(dx, dy)
-    ux, uy = dx / length, dy / length
-    cx, cy = tip[0] - ux * r_tip, tip[1] - uy * r_tip
-    d = math.hypot(cx - bx, cy - by)
-    theta = math.atan2(cy - by, cx - bx)
-    alpha = math.acos((r_base - r_tip) / d)
-    pts = []
-    for sign in (1, -1):
-        a = theta + sign * alpha
-        pts.append(((bx + r_base * math.cos(a), by + r_base * math.sin(a)),
-                    (cx + r_tip * math.cos(a), cy + r_tip * math.sin(a))))
-    (b1, t1), (b2, t2) = pts
-    return ('<path d="M%.1f %.1f L%.1f %.1f A%g %g 0 1 0 %.1f %.1f '
-            'L%.1f %.1f A%g %g 0 0 0 %.1f %.1f Z"/>'
-            % (b1 + t1 + (r_tip, r_tip) + t2 + b2 + (r_base, r_base) + b1))
+SOURCE = os.path.join(BRAND, "src", "mark.png")
+# Each pixel of the art is whichever of these it is nearest to.
+_ART = {"comb": (232, 56, 42), "feather": (252, 248, 241),
+        "ink": (33, 22, 20), "yolk": (248, 155, 23)}
+_LAYERS = {}
 
 
-# The comb: five big rounded lobes fanning back from the crown, the top ones
-# tallest. Each grows out of a point inside the head, which is drawn over it.
-CROWN = (540, 500)
-COMB_SHAPES = (
-    _lobe(CROWN, (729, 230), 36, 70)     # front, over the forehead
-    + _lobe(CROWN, (577, 70), 36, 78)    # top
-    + _lobe(CROWN, (375, 92), 36, 78)    # top, leaning back
-    + _lobe(CROWN, (218, 230), 36, 76)   # back
-    + _lobe(CROWN, (172, 400), 36, 70))  # lowest, trailing over the ear
-# The whole head, which the hood fills; the face is laid over its front.
-HEAD = ("M300 940 C 290 820 270 720 300 630 C 340 500 450 420 575 418 "
-        "C 680 418 748 480 760 560 L 772 640 C 784 720 764 790 744 850 "
-        "L 736 940 Z")
-FACE = ("M500 940 C 488 860 470 790 430 730 C 410 650 430 560 470 515 "
-        "C 520 465 600 452 660 462 C 712 474 750 512 760 560 L 772 640 "
-        "C 784 720 764 790 744 850 L 736 940 Z")
-DOOR = "M566 940 V888 A40 40 0 0 1 646 888 V940 Z"
-EYE = '<circle cx="648" cy="590" r="26"/>'
-BEAK_D = "M752 540 L892 598 Q906 606 892 614 L758 662 Z"
-WATTLE_D = "M752 668 C 806 668 826 732 806 784 C 790 820 742 812 738 770 Z"
-# Headphones, seen from the side: the cup on the cheek, and the band
-# sweeping up out of it and forward over the head to the forehead, clipped
-# to the head so it ends where the head does.
-CUP = (380, 650)
-CUP_R = 96
-BAND = "M360 560 C 380 470 480 405 640 400"
-_ids = [0]
+def _grow(mask, r):
+    """mask, grown by r pixels (square), so the layer under an edge has no
+    hairline gap at it."""
+    import numpy as np
+    out = mask.copy()
+    for dy in range(-r, r + 1):
+        for dx in range(-r, r + 1):
+            out |= np.roll(np.roll(mask, dy, 0), dx, 1)
+    return out
 
 
-def _uid(prefix):
+def _open(mask, r):
+    """mask without the parts narrower than 2r + 1 pixels."""
+    return _grow(~_grow(~mask, r), r)
+
+
+def _path(mask, scale):
+    """SVG path data for mask, traced with potrace."""
+    import potrace
+    # potracer's Bitmap treats True as background.
+    curves = potrace.Bitmap(~mask).trace(turdsize=40, alphamax=1.0,
+                                         opticurve=True, opttolerance=0.2)
+    d = []
+    for curve in curves:
+        p = curve.start_point
+        d.append("M%.1f %.1f" % (p.x * scale, p.y * scale))
+        for seg in curve.segments:
+            e = seg.end_point
+            if seg.is_corner:
+                d.append("L%.1f %.1f L%.1f %.1f" % (seg.c.x * scale, seg.c.y * scale,
+                                                   e.x * scale, e.y * scale))
+            else:
+                d.append("C%.1f %.1f %.1f %.1f %.1f %.1f" % (
+                    seg.c1.x * scale, seg.c1.y * scale, seg.c2.x * scale,
+                    seg.c2.y * scale, e.x * scale, e.y * scale))
+        d.append("Z")
+    return " ".join(d)
+
+
+def layers():
+    """The traced mark: {name: path data}, plus "mono" and "box"."""
+    if _LAYERS:
+        return _LAYERS
+    import numpy as np
+    from PIL import Image
+    art = np.array(Image.open(SOURCE).convert("RGBA")).astype(int)
+    # A margin, so nothing touches the edge of the bitmap.
+    art = np.pad(art, ((20, 20), (20, 20), (0, 0)))
+    solid = art[..., 3] > 128
+    names = list(_ART)
+    refs = np.array([_ART[n] for n in names])
+    nearest = ((art[..., None, :3] - refs) ** 2).sum(-1).argmin(-1)
+    masks = {n: solid & (nearest == i) for i, n in enumerate(names)}
+    # Anti-aliased edge pixels land on the wrong colour (a dark-to-white
+    # edge is nearest to yolk): drop slivers narrower than a few pixels.
+    masks = {n: _open(m, 1 if n == "ink" else 3) for n, m in masks.items()}
+    scale = 1000.0 / art.shape[1]
+    # Drawn bottom to top: comb, head, beak, ink. Each layer under another
+    # reaches a little way under it, inside the silhouette.
+    _LAYERS["comb"] = _path(_grow(masks["comb"], 3) & solid, scale)
+    _LAYERS["feather"] = _path(_grow(masks["feather"], 3) & solid & ~masks["comb"], scale)
+    _LAYERS["yolk"] = _path(_grow(masks["yolk"], 2) & solid & ~masks["comb"], scale)
+    _LAYERS["ink"] = _path(masks["ink"], scale)
+    # A thin ink rim round the outside of the white head, under everything,
+    # so the head still has an edge on a light background. On ink it vanishes.
+    rim = _grow(masks["feather"], 9) & ~solid
+    _LAYERS["rim"] = _path(rim | (_grow(rim, 2) & solid), scale)
+    # One colour: the silhouette, without the ink parts, and with a gap where
+    # the comb meets the head and the beak, so they still read apart.
+    rest = masks["feather"] | masks["yolk"]
+    seam = _grow(masks["comb"], 5) & _grow(rest, 5)
+    seam |= _grow(masks["yolk"], 4) & _grow(masks["feather"], 4)
+    _LAYERS["mono"] = _path(solid & ~_grow(masks["ink"], 1) & ~seam, scale)
+    ys, xs = np.nonzero(solid | rim)
+    pad = 10
+    _LAYERS["box"] = (xs.min() * scale - pad, ys.min() * scale - pad,
+                      (xs.max() - xs.min()) * scale + 2 * pad,
+                      (ys.max() - ys.min()) * scale + 2 * pad)
+    return _LAYERS
+
+
+def mark_box():
+    return layers()["box"]
+
+
+def _uid(prefix, _ids=[0]):
     _ids[0] += 1
     return "%s%d" % (prefix, _ids[0])
 
 
-def headphones(dark=INK, ring=FEATHER):
-    cx, cy = CUP
-    clip = _uid("band")
-    return ('<clipPath id="%s"><path d="%s"/></clipPath>' % (clip, HEAD)
-            + '<path d="%s" fill="none" stroke="%s" stroke-width="64" '
-              'clip-path="url(#%s)"/>' % (BAND, dark, clip)
-            + '<circle cx="%d" cy="%d" r="%d" fill="%s"/>' % (cx, cy, CUP_R, dark)
-            + '<circle cx="%d" cy="%d" r="%d" fill="none" stroke="%s" '
-              'stroke-width="20"/>' % (cx, cy, CUP_R - 34, ring))
+def mark_elements(comb=COMB):
+    """The full-colour mark."""
+    lay = layers()
+    return "".join('<path d="%s" fill="%s"/>' % (lay[name], fill) for name, fill in (
+        ("rim", INK), ("comb", comb), ("feather", FEATHER), ("yolk", YOLK),
+        ("ink", INK)))
 
 
-def mark_elements(ink=INK, feather=FEATHER, comb=COMB):
-    """The full-colour mark: comb, hood, face, headphones, door, features."""
-    return (
-        '<g fill="%s">%s</g>' % (comb, COMB_SHAPES)
-        + '<path d="%s" fill="%s"/>' % (HEAD, ink)
-        + '<path d="%s" fill="%s"/>' % (FACE, feather)
-        + headphones(ink, feather)
-        + '<path d="%s" fill="%s"/>' % (DOOR, ink)
-        + '<g fill="%s">%s</g>' % (ink, EYE)
-        + '<path d="%s" fill="%s"/>' % (BEAK_D, YOLK)
-        + '<path d="%s" fill="%s"/>' % (WATTLE_D, COMB))
-
-
-def mono_elements(color="currentColor", uid="m"):
-    """One colour: the silhouette, with the features cut out of it.
-
-    Thin gaps keep comb, head, beak and wattle apart; the band, the cup's
-    ring, the eye and the door are cut out so they still read.
-    """
-    cx, cy = CUP
-    return (
-        '<defs><mask id="%(u)s" maskUnits="userSpaceOnUse" x="0" y="0" '
-        'width="1000" height="1000">'
-        '<g fill="#fff">%(comb)s</g>'
-        '<path d="%(head)s" fill="#fff" stroke="#000" stroke-width="22"/>'
-        '<path d="%(beak)s" fill="#fff" stroke="#000" stroke-width="16"/>'
-        '<path d="%(wattle)s" fill="#fff" stroke="#000" stroke-width="16"/>'
-        '<path d="%(band)s" fill="none" stroke="#000" stroke-width="22"/>'
-        '<circle cx="%(cx)d" cy="%(cy)d" r="%(r)d" fill="#fff" stroke="#000" '
-        'stroke-width="22"/>'
-        '<circle cx="%(cx)d" cy="%(cy)d" r="%(ri)d" fill="none" stroke="#000" '
-        'stroke-width="20"/>'
-        '<path d="%(door)s" fill="#000"/><g fill="#000">%(eye)s</g>'
-        '</mask></defs>'
-        '<rect width="1000" height="1000" fill="%(c)s" mask="url(#%(u)s)"/>'
-        % {"u": uid, "comb": COMB_SHAPES, "head": HEAD, "beak": BEAK_D,
-           "wattle": WATTLE_D, "band": BAND, "cx": cx, "cy": cy, "r": CUP_R,
-           "ri": CUP_R - 34, "door": DOOR, "eye": EYE, "c": color})
+def mono_elements(color="currentColor", uid=None):
+    """One colour: the silhouette with the headphones, eye and door cut out."""
+    return '<path d="%s" fill="%s" fill-rule="evenodd"/>' % (layers()["mono"], color)
 
 
 def svg(view, body):
@@ -181,14 +179,14 @@ def app_icon_svg(shape="rounded", inset=110, background=INK):
     area = (inset, inset, 1024 - 2 * inset, 1024 - 2 * inset)
     comb = COMB_ON_RED if background == COMB else COMB
     return svg((0, 0, 1024, 1024), tile(shape, background)
-               + '<g %s>%s</g>' % (fit(MARK_BOX, area), mark_elements(comb=comb)))
+               + '<g %s>%s</g>' % (fit(mark_box(), area), mark_elements(comb=comb)))
 
 
 def mono_icon_svg(color, inset=110, uid="m", shape="none", background=""):
     """The one-colour mark, on a tile of background if shape is given."""
     area = (inset, inset, 1024 - 2 * inset, 1024 - 2 * inset)
     return svg((0, 0, 1024, 1024), tile(shape, background)
-               + '<g %s>%s</g>' % (fit(MARK_BOX, area), mono_elements(color, uid)))
+               + '<g %s>%s</g>' % (fit(mark_box(), area), mono_elements(color, uid)))
 
 
 # ---------------------------------------------------------------- wordmark
@@ -281,7 +279,7 @@ def wordmark_svg(color):
 
 def lockup_svg(ink, tagline_ink=None):
     """Mark left, name right, optional tagline under the name."""
-    box = MARK_BOX
+    box = mark_box()
     mark = mark_elements()
     mark_h = 360.0
     ms = mark_h / box[3]
@@ -307,14 +305,14 @@ def lockup_svg(ink, tagline_ink=None):
 def stacked_svg(ink):
     """Mark over the name, centred."""
     mark_h = 360.0
-    ms = mark_h / MARK_BOX[3]
-    mw = MARK_BOX[2] * ms
+    ms = mark_h / mark_box()[3]
+    mw = mark_box()[2] * ms
     d, width = text_path(NAME)
     word_s = (mark_h * 0.30) / CAP
     ww = width * word_s
     w = max(mw, ww)
     body = ('<g transform="translate(%.2f 0) scale(%.5f) translate(%g %g)">%s</g>'
-            % ((w - mw) / 2, ms, -MARK_BOX[0], -MARK_BOX[1], mark_elements()))
+            % ((w - mw) / 2, ms, -mark_box()[0], -mark_box()[1], mark_elements()))
     baseline = mark_h + 36 + CAP * word_s
     body += ('<path transform="translate(%.2f %.2f) scale(%.5f)" d="%s" fill="%s"/>'
              % ((w - ww) / 2, baseline, word_s, d, ink))
@@ -325,7 +323,7 @@ def stacked_svg(ink):
 def merch_tee_svg(mono=None):
     """The mark, big, for the front of a shirt. mono: one ink colour, for
     single-ink screen printing."""
-    return svg(MARK_BOX, mono_elements(mono, _uid("tee")) if mono
+    return svg(mark_box(), mono_elements(mono, _uid("tee")) if mono
                else mark_elements())
 
 
@@ -418,8 +416,8 @@ def build_brand(tmp):
         if os.path.exists(os.path.join(logo, stale)):
             os.remove(os.path.join(logo, stale))
     files = {
-        "mark.svg": svg(MARK_BOX, mark_elements()),
-        "mark-mono.svg": svg(MARK_BOX, mono_elements()),
+        "mark.svg": svg(mark_box(), mark_elements()),
+        "mark-mono.svg": svg(mark_box(), mono_elements()),
         "app-icon.svg": app_icon_svg(),
         "app-icon-light.svg": app_icon_svg(background=CREAM),
         "app-icon-comb.svg": app_icon_svg(background=COMB),
