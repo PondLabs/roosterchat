@@ -2,7 +2,9 @@
 
 Cockhouse is now Rooster. Every identity ADR 0002 gave the app's own name is renamed again, the same way: `cockhouse` became `rooster`, `Cockhouse` became `Rooster`, and `COCKHOUSE` became `ROOSTER`. That covers the `rooster/` folder and `package:rooster/`, the application ID `com.pondlabs.rooster`, the `rooster` executable (`rooster.exe`, `Rooster.app`), the Debian package, the Windows data directory `%APPDATA%\PondLabs\Rooster`, the updater's `Programs\Rooster` and `.rooster-update`, the release assets `rooster-<tag>-<platform>-...`, the Rust library `rust_lib_rooster` and its `rooster_*` C symbols, the CEF `rooster://` scheme and `rooster_cef_engine`, the extension manifest `rooster-extension.json`, and the `// ROOSTER` markers in vendored code.
 
-What ADR 0002 kept under Commet's name stays as it is, for the same reasons: the `chat.commet.*` Matrix identifiers, the `chat.commet` URL scheme, the web build's `commet` database, Commet's services and attribution, and the `PondLabs/roscord` repository.
+What ADR 0002 kept under Commet's name stays as it is, for the same reasons: the `chat.commet.*` Matrix identifiers, the `chat.commet` URL scheme, the web build's `commet` database, Commet's services and attribution.
+
+The GitHub repository was renamed too, from `PondLabs/roscord` to `PondLabs/roosterchat`. GitHub redirects the old URLs, including the releases API that builds from before call to check for updates, so those keep updating. Don't create a new repository named `PondLabs/roscord`: it would take over the old URLs and break the redirect.
 
 ADR 0002 stays as the record of the first rename, so it still says Cockhouse.
 

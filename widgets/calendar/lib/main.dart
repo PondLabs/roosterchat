@@ -304,7 +304,7 @@ class _CalendarWidgetViewState extends State<CalendarWidgetView> {
                       color: Colors.transparent,
                       child: InkWell(
                         onTap: () =>
-                            launchUrl(Uri.parse("https://github.com/PondLabs/roscord")),
+                            launchUrl(Uri.parse("https://github.com/PondLabs/roosterchat")),
                         child: Padding(
                           padding: const EdgeInsets.all(4.0),
                           child: appIcon(context),

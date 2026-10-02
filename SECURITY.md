@@ -2,7 +2,7 @@
 
 ## Reporting a Vulnerability
 
-If you believe you have found a security vulnerability in Rooster, or one of its dependencies, please report it privately through GitHub's [private vulnerability reporting](https://github.com/PondLabs/roscord/security/advisories/new) rather than opening a public issue.
+If you believe you have found a security vulnerability in Rooster, or one of its dependencies, please report it privately through GitHub's [private vulnerability reporting](https://github.com/PondLabs/roosterchat/security/advisories/new) rather than opening a public issue.
 
 Please include enough detail to reproduce: the version you are running (shown on the About page), your platform, and the steps you took.
 

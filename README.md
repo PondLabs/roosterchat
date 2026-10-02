@@ -5,9 +5,9 @@
 </picture>
 
 <p align="center">
-    <a href="https://github.com/PondLabs/roscord/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/PondLabs/roscord?style=for-the-badge&color=e8382a"></a>
-    <a href="https://github.com/PondLabs/roscord/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/PondLabs/roscord?style=for-the-badge&color=e8382a"></a>
-    <a href="https://github.com/PondLabs/roscord/issues"><img alt="Issues" src="https://img.shields.io/github/issues/PondLabs/roscord?style=for-the-badge&color=e8382a"></a>
+    <a href="https://github.com/PondLabs/roosterchat/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/PondLabs/roosterchat?style=for-the-badge&color=e8382a"></a>
+    <a href="https://github.com/PondLabs/roosterchat/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/PondLabs/roosterchat?style=for-the-badge&color=e8382a"></a>
+    <a href="https://github.com/PondLabs/roosterchat/issues"><img alt="Issues" src="https://img.shields.io/github/issues/PondLabs/roosterchat?style=for-the-badge&color=e8382a"></a>
 </p>
 
 ### Talk. Play. Hang out.
@@ -18,7 +18,7 @@ Rooster started as a fork of [Commet](https://github.com/commetchat/commet). Its
 
 # Download
 
-Builds are published on the [releases page](https://github.com/PondLabs/roscord/releases/latest):
+Builds are published on the [releases page](https://github.com/PondLabs/roosterchat/releases/latest):
 
 | Platform | Asset |
 |---|---|
@@ -45,7 +45,7 @@ Unpack the archive and run `Rooster` from inside it. The macOS archive holds `Ro
 
 # Reporting a problem
 
-Open an [issue](https://github.com/PondLabs/roscord/issues/new). The "Report issue" button on the Logs page (Settings → About → Logs, with developer mode on) and on the fatal-error screen both prefill an issue with your build and device details.
+Open an [issue](https://github.com/PondLabs/roosterchat/issues/new). The "Report issue" button on the Logs page (Settings → About → Logs, with developer mode on) and on the fatal-error screen both prefill an issue with your build and device details.
 
 # Translation
 

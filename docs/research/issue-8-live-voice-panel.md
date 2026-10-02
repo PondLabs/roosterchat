@@ -1,6 +1,6 @@
 # Issue 8: LIVE state and preview in the voice panel
 
-Research note for https://github.com/PondLabs/roscord/issues/8 (voice panel
+Research note for https://github.com/PondLabs/roosterchat/issues/8 (voice panel
 should show a red LIVE pill, a 16:9 preview of the outgoing screen share /
 camera, and stop buttons while the user is live). Read-only survey of this
 repo at commit `906de7c1`, the vendored packages in `third_party/`, and the
