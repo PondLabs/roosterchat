@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Builds the screen share and camera sounds of a voice room from code.
 
-They follow the mute and unmute sounds (cockhouse/assets/sound/muted.ogg,
+They follow the mute and unmute sounds (rooster/assets/sound/muted.ogg,
 unmuted.ogg): soft, low, filtered plucks with a small click on the attack,
 struck about 85 ms apart, with a tail of most of a second. Rising turns
 something on, falling turns it off, as unmute and mute do. The screen share
@@ -23,7 +23,7 @@ import tempfile
 import wave
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-SOUNDS = os.path.join(ROOT, "cockhouse", "assets", "sound")
+SOUNDS = os.path.join(ROOT, "rooster", "assets", "sound")
 
 RATE = 44100
 LENGTH = 1.1

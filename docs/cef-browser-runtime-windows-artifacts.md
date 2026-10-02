@@ -7,9 +7,9 @@ download, no foreign engine, and no partially staged bundle may ship.
 
 ## Bundle layout
 
-The Windows `Release` directory next to `cockhouse.exe` carries the CEF payload
-in `cef_host/` (installed by `cockhouse/windows/cef_host/CMakeLists.txt` when
-`COCKHOUSE_BUILD_CEF_HOST=ON`); this nested layout is also what
+The Windows `Release` directory next to `rooster.exe` carries the CEF payload
+in `cef_host/` (installed by `rooster/windows/cef_host/CMakeLists.txt` when
+`ROOSTER_BUILD_CEF_HOST=ON`); this nested layout is also what
 `WindowsBrowserRuntime._resolveHostExecutable` prefers.  The CMake install
 flattens the archive's `Release/` and `Resources/` contents into the payload
 root, renames the locked `Release/bootstrap.exe` to `cef_host.exe`, and adds
@@ -95,7 +95,7 @@ generated metadata against `third_party/cef/cef.lock.json`:
 
 ```text
 python tools/qualify_windows_artifact.py \
-  --bundle cockhouse/build/windows/x64/runner/Release \
+  --bundle rooster/build/windows/x64/runner/Release \
   --metadata .cef-metadata
 python tools/qualify_windows_artifact.py \
   --bundle <dir> --metadata <dir> --require-signatures --output report.json

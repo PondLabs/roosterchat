@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Acquire, verify, and stage Cockhouse's locked CEF runtime.
+"""Acquire, verify, and stage Rooster's locked CEF runtime.
 
 This module is deliberately independent from the application.  It is release
 tooling only: the application never imports it and never downloads CEF at
@@ -678,7 +678,7 @@ class _RejectRedirect(urllib.request.HTTPRedirectHandler):
 def _open_locked_url(url: str) -> Any:
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": "cockhouse-cef-lock/1", "Accept": "application/octet-stream"},
+        headers={"User-Agent": "rooster-cef-lock/1", "Accept": "application/octet-stream"},
         method="GET",
     )
     opener = urllib.request.build_opener(_RejectRedirect())
@@ -880,7 +880,7 @@ def stage_runtime(
     verify_archive(platform, archive, lock)
     destination = Path(destination)
     project_bootstrap = _verify_project_bootstrap(platform, project_root, record)
-    with tempfile.TemporaryDirectory(prefix="cockhouse-cef-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="rooster-cef-") as temporary:
         extracted = safe_extract(archive, Path(temporary) / "archive")
         root = _find_archive_root(extracted)
         selected = _stage_files(platform, root, destination, record)
@@ -915,7 +915,7 @@ def stage_sdk(
     build_sdk = record["build_sdk"]
     verify_archive(platform, archive, lock)
     destination = Path(destination)
-    with tempfile.TemporaryDirectory(prefix="cockhouse-cef-sdk-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="rooster-cef-sdk-") as temporary:
         extracted = safe_extract(archive, Path(temporary) / "archive")
         root = _find_archive_root(extracted)
         runtime = record["runtime"]
@@ -1057,7 +1057,7 @@ def generate_metadata(
     license_file = _required_file(staged, "LICENSE.txt")
     credits_file = _required_file(staged, "CREDITS.html")
     notices = (
-        "Cockhouse bundled CEF runtime\n"
+        "Rooster bundled CEF runtime\n"
         f"CEF version: {lock['cef_version']}\n"
         f"Chromium version: {lock['chromium_version']}\n"
         f"Source: {record['archive']['url']}\n\n"
@@ -1087,8 +1087,8 @@ def generate_metadata(
             "licenses": [{"license": {"id": "BSD-3-Clause"}}],
             "externalReferences": [{"type": "distribution", "url": record["archive"]["url"]}],
             "properties": [
-                {"name": "Cockhouse:chromium-version", "value": lock["chromium_version"]},
-                {"name": "Cockhouse:archive-sha256", "value": record["archive"]["sha256"]},
+                {"name": "Rooster:chromium-version", "value": lock["chromium_version"]},
+                {"name": "Rooster:archive-sha256", "value": record["archive"]["sha256"]},
             ],
         },
         {
@@ -1103,7 +1103,7 @@ def generate_metadata(
         components.append(
             {
                 "type": "file",
-                "bom-ref": "Cockhouse:cef-file:" + path,
+                "bom-ref": "Rooster:cef-file:" + path,
                 "name": path,
                 "version": lock["cef_version"],
                 "hashes": [
@@ -1117,8 +1117,8 @@ def generate_metadata(
                     {"type": "distribution", "url": record["archive"]["url"]}
                 ],
                 "properties": [
-                    {"name": "Cockhouse:locked-version", "value": lock["cef_version"]},
-                    {"name": "cockhouse:platform", "value": platform},
+                    {"name": "Rooster:locked-version", "value": lock["cef_version"]},
+                    {"name": "rooster:platform", "value": platform},
                 ],
             }
         )
@@ -1130,12 +1130,12 @@ def generate_metadata(
         "metadata": {
             "component": {
                 "type": "application",
-                "name": "Cockhouse CEF runtime",
+                "name": "Rooster CEF runtime",
                 "version": lock["cef_version"],
             },
             "properties": [
-                {"name": "cockhouse:platform", "value": platform},
-                {"name": "Cockhouse:manifest-sha256", "value": manifest_sha256},
+                {"name": "rooster:platform", "value": platform},
+                {"name": "Rooster:manifest-sha256", "value": manifest_sha256},
             ],
         },
         "components": components,

@@ -474,12 +474,12 @@ def example_report(*, signed: bool = True) -> dict[str, Any]:
         "policy": {"runtime_download": False, "sbom_format": "CycloneDX-1.5"},
     }
     artifact_names = {
-        "windows-x64": "cockhouse-windows.zip",
-        "debian-12": "cockhouse-debian-12-x64.deb",
-        "ubuntu-22.04": "cockhouse-ubuntu-22.04-x64.deb",
-        "ubuntu-24.04": "cockhouse-ubuntu-24.04-x64.deb",
-        "portable": "cockhouse-linux-portable-x64.tar.gz",
-        "flatpak": "com.pondlabs.cockhouse.flatpak",
+        "windows-x64": "rooster-windows.zip",
+        "debian-12": "rooster-debian-12-x64.deb",
+        "ubuntu-22.04": "rooster-ubuntu-22.04-x64.deb",
+        "ubuntu-24.04": "rooster-ubuntu-24.04-x64.deb",
+        "portable": "rooster-linux-portable-x64.tar.gz",
+        "flatpak": "com.pondlabs.rooster.flatpak",
     }
     report: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,

@@ -44,7 +44,7 @@ class RemoteAudioTrack extends RemoteTrack with AudioTrack, RemoteAudioManagemen
     if (didStart) {
       try {
         // web support
-        // COCKHOUSE: with the chosen volume from the first sample on.
+        // ROOSTER: with the chosen volume from the first sample on.
         await audio.startAudio(getCid(), mediaStreamTrack, volume: _volume);
         if (_deviceId != null) {
           audio.setSinkId(getCid(), _deviceId!);
@@ -54,7 +54,7 @@ class RemoteAudioTrack extends RemoteTrack with AudioTrack, RemoteAudioManagemen
           events.emit(AudioPlaybackFailed(track: this));
         }
       }
-      // COCKHOUSE: the audio element is created above, keep the chosen volume.
+      // ROOSTER: the audio element is created above, keep the chosen volume.
       if (_volume != null) {
         audio.setVolume(getCid(), _volume!);
       }
@@ -77,7 +77,7 @@ class RemoteAudioTrack extends RemoteTrack with AudioTrack, RemoteAudioManagemen
     _deviceId = deviceId;
   }
 
-  // COCKHOUSE: playback volume of the web audio element (0..1). Native playback
+  // ROOSTER: playback volume of the web audio element (0..1). Native playback
   // volume goes through Helper.setVolume instead.
   double? _volume;
 

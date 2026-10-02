@@ -179,7 +179,7 @@
 - Launcher Quicklist
 - Stats
 - Livekitplugin
-- Cockhouse Cef Engine (2)
+- Rooster Cef Engine (2)
 - Browser Runtime
 - Setup Android Release
 - Gif Picker
@@ -204,7 +204,7 @@
 - General Settings Page
 - Bulk Import View
 - Dj Fakes
-- Cockhouse Cef Engine (3)
+- Rooster Cef Engine (3)
 - Standalone Browser Surface
 - Video Player Controller
 - Cef Host (6)
@@ -365,7 +365,7 @@
 - Linux Notifier
 - Soundboard Overlay Registry
 - Instagram Provider
-- Cockhouse System Audio Reference
+- Rooster System Audio Reference
 - Flutterrtcdatachannel
 - Flutter Frame Cryptor (2)
 - Video Dimensions
@@ -506,7 +506,7 @@
 - Notification Debugger
 - Taskbar Thumbnail Test
 - E2ee Data Packet Cryptor
-- Cockhouse Music Source
+- Rooster Music Source
 - Browser Linux Embedded
 - Browser Runtime Lifecycle (5)
 - Agent Attributes
@@ -525,7 +525,7 @@
 - Matrix Room Permissions View
 - App Refresh
 - Matrix Widget Api Web
-- Cockhouse External Audio Processing
+- Rooster External Audio Processing
 - Flutterrtcframecryptor (2)
 - Tract (2)
 - Ttl Map
@@ -606,7 +606,7 @@
 - Method Codec (2)
 - Windows Browser Runtime Stub
 - Fftaudioanalyzer
-- Cockhouse Cef Engine (4)
+- Rooster Cef Engine (4)
 - Browser Input Keys
 - Photo Post
 - Twitter Provider
@@ -696,7 +696,7 @@
 - Basic Message Channel
 - Basic Message Channel (2)
 - Method Channel
-- Cockhouse External Audio Processing (2)
+- Rooster External Audio Processing (2)
 - Cmakelists (2)
 - File Cache
 - Gif Search Result
@@ -708,7 +708,7 @@
 - Particle Player
 - Profile Edit Tab
 - Update Release
-- Cockhouse Cef Engine (5)
+- Rooster Cef Engine (5)
 - Data Packet Cryptor Impl
 - Dj Booth
 - Voice Call Health
@@ -756,7 +756,7 @@
 - Boolean Toggle
 - Notifier Component View
 - Mpv Property Native
-- Cockhouse Cef Engine (6)
+- Rooster Cef Engine (6)
 - Test Image Provider
 - Flutterrtcframecryptor (8)
 - Flutterrtcmediastream (2)
@@ -800,7 +800,7 @@
 - Client (2)
 - Dj Engine (2)
 - Timeline Event View Attachments
-- Cockhouse Cef Engine (7)
+- Rooster Cef Engine (7)
 - Audio Dsp
 - Voice Thumb Bar (2)
 - Issue 8 Live Voice Panel
@@ -814,7 +814,7 @@
 - Texture Registrar (2)
 - Readme (5)
 - Widgets Common
-- Cockhouse Cef Engine (8)
+- Rooster Cef Engine (8)
 - Cef Host (15)
 - Process Wav
 - Texture Registrar (3)
@@ -907,39 +907,39 @@
 - `CEF browser runtime hosts` --semantically_similar_to--> `cef_host (CEF host process)`  [INFERRED] [semantically similar]
   CLAUDE.md → browser_surface/README.md
 - `Legacy commet executable alias (symlink / commet.exe copy)` --semantically_similar_to--> `Compatibility identities kept (commet executable, app IDs, chat.commet.* namespaces)`  [INFERRED] [semantically similar]
-  cockhouse/linux/CMakeLists.txt → docs/adr/0001-remove-donation-awards-preserve-compatible-identities.md
+  rooster/linux/CMakeLists.txt → docs/adr/0001-remove-donation-awards-preserve-compatible-identities.md
 - `tiamat web index.html` --semantically_similar_to--> `calendar widget web index.html`  [INFERRED] [semantically similar]
   tiamat/web/index.html → widgets/calendar/web/index.html
 - `fl_register_plugins()` --calls--> `tray_manager_plugin_register_with_registrar()`  [INFERRED]
-  cockhouse/linux/flutter/generated_plugin_registrant.cc → third_party/tray_manager/linux/tray_manager_plugin.cc
+  rooster/linux/flutter/generated_plugin_registrant.cc → third_party/tray_manager/linux/tray_manager_plugin.cc
 - `_Publication` --implements--> `RemoteTrackPublication`  [EXTRACTED]
-  cockhouse/unit_test/livekit_voip_stream_audio_test.dart → third_party/livekit-client-sdk-flutter/lib/src/publication/remote.dart
+  rooster/unit_test/livekit_voip_stream_audio_test.dart → third_party/livekit-client-sdk-flutter/lib/src/publication/remote.dart
 
 ## Import Cycles
 - 2-file cycle: `rust/rust/src/cef_engine.rs -> rust/rust/src/cef_host.rs -> rust/rust/src/cef_engine.rs`
 
 ## Hyperedges (group relationships)
-- **Matrix widget iframe bridge variants** — cockhouse_assets_data_widget_runner_android, cockhouse_assets_data_widget_runner_embedded, cockhouse_assets_data_widget_runner_remote, cockhouse_assets_data_widget_runner_widgets_common [INFERRED 0.95]
+- **Matrix widget iframe bridge variants** — rooster_assets_data_widget_runner_android, rooster_assets_data_widget_runner_embedded, rooster_assets_data_widget_runner_remote, rooster_assets_data_widget_runner_widgets_common [INFERRED 0.95]
 - **CEF frame presentation pipeline** — browser_surface_readme_cef_host, browser_surface_readme_shared_memory_frame_ring, browser_surface_readme_frame_ready_event, browser_surface_readme_browsersurfacetexture_present [EXTRACTED 1.00]
-- **Third-party asset attributions** — cockhouse_assets_font_code_ofl, cockhouse_assets_font_jellee_jellee_ofl, cockhouse_assets_font_sora_ofl, cockhouse_assets_font_roboto_license, cockhouse_assets_font_emoji_font_readme, cockhouse_assets_images_effects_particles_fluent_emoji_source, cockhouse_assets_emoji_data_readme, cockhouse_assets_data_sources [INFERRED 0.85]
-- **CEF host build and bundling across Linux and Windows** — cockhouse_linux_cmakelists_cockhouse_build_cef_host, cockhouse_linux_cmakelists_cef_host_build, cockhouse_linux_cef_engine_cmakelists_cockhouse_cef_engine, cockhouse_windows_cef_host_cmakelists_cef_host_client, tools_cef_runtime, libcef_dll_wrapper, browser_surface_native [EXTRACTED 1.00]
-- **Pre-rename commet identities kept for upgrade compatibility** — legacy_commet_executable_alias, cockhouse_linux_flatpak_com_pondlabs_cockhouse_legacy_data_filesystem, docs_adr_0001_remove_donation_awards_preserve_compatible_identities_compatibility_identities, docs_adr_0002_rename_to_cockhouse [INFERRED 0.85]
-- **Windows cef_host security and isolation model** — cockhouse_windows_cef_host_readme_authenticated_pipe, cockhouse_windows_cef_host_readme_shared_memory_frame_ring, cockhouse_windows_cef_host_readme_profilemanager, third_party_cef_cef_lock [EXTRACTED 1.00]
+- **Third-party asset attributions** — rooster_assets_font_code_ofl, rooster_assets_font_jellee_jellee_ofl, rooster_assets_font_sora_ofl, rooster_assets_font_roboto_license, rooster_assets_font_emoji_font_readme, rooster_assets_images_effects_particles_fluent_emoji_source, rooster_assets_emoji_data_readme, rooster_assets_data_sources [INFERRED 0.85]
+- **CEF host build and bundling across Linux and Windows** — rooster_linux_cmakelists_rooster_build_cef_host, rooster_linux_cmakelists_cef_host_build, rooster_linux_cef_engine_cmakelists_rooster_cef_engine, rooster_windows_cef_host_cmakelists_cef_host_client, tools_cef_runtime, libcef_dll_wrapper, browser_surface_native [EXTRACTED 1.00]
+- **Pre-rename commet identities kept for upgrade compatibility** — legacy_commet_executable_alias, rooster_linux_flatpak_com_pondlabs_rooster_legacy_data_filesystem, docs_adr_0001_remove_donation_awards_preserve_compatible_identities_compatibility_identities, docs_adr_0002_rename_to_rooster [INFERRED 0.85]
+- **Windows cef_host security and isolation model** — rooster_windows_cef_host_readme_authenticated_pipe, rooster_windows_cef_host_readme_shared_memory_frame_ring, rooster_windows_cef_host_readme_profilemanager, third_party_cef_cef_lock [EXTRACTED 1.00]
 - **Presenters on the four-operation BrowserRuntime seam** — docs_cef_browser_runtime_lifecycle_four_operation_seam, docs_cef_browser_runtime_linux_embedded_linuxembeddedpresenter, docs_cef_browser_runtime_linux_standalone_linuxstandalonepresenter, docs_cef_browser_runtime_flatpak_presenters, docs_cef_browser_runtime_lifecycle_surfacespec [EXTRACTED 1.00]
 - **Atomic CEF desktop release gate** — tools_release_record, tools_qualify_release_candidate, tools_qualify_flatpak_artifact, docs_cef_browser_runtime_hosts_cef_runtime_py, docs_cef_browser_runtime_hosts_cef_lock, docs_cef_browser_runtime_flatpak_artifacts_signatures_json [EXTRACTED 1.00]
 - **CEF runtime failure recovery flow** — docs_cef_browser_runtime_lifecycle_heartbeat_recovery, docs_cef_browser_runtime_lifecycle_command_outcomes, docs_cef_browser_runtime_recovery_surfacerecoverycoordinator, docs_cef_browser_runtime_recovery_recovery_ui, docs_cef_browser_runtime_recovery_diagnostics_sink [INFERRED 0.85]
 - **BrowserRuntime release gate tooling** — tools_cef_runtime, tools_release_record, tools_rollback_release, tools_qualify_windows_artifact [EXTRACTED 1.00]
 - **audio_dsp capture chain** — docs_voice_audio_processing_loudspeaker_bleed_detector, docs_voice_audio_processing_deepfilternet3, docs_voice_audio_processing_highpass_70hz, docs_voice_audio_processing_rnnoise_vad, docs_voice_audio_processing_input_gate, docs_voice_audio_processing_far_end_ducker [EXTRACTED 1.00]
 - **Call control surfaces outside the window** — docs_voice_controls_taskbar_thumbnail, docs_voice_controls_dock_menu, docs_voice_controls_launcher_quicklist, docs_voice_controls_browser_call_controls, docs_voice_controls_voice_tray [EXTRACTED 1.00]
-- **Release build pipeline** — _github_workflows_ci, _github_workflows_desktop_build, _github_workflows_release, cockhouse_scripts_build_release, cockhouse_scripts_codegen [INFERRED 0.85]
+- **Release build pipeline** — _github_workflows_ci, _github_workflows_desktop_build, _github_workflows_release, rooster_scripts_build_release, rooster_scripts_codegen [INFERRED 0.85]
 - **Voice DSP verification in CI** — _github_workflows_ci_voice_dsp_job, tools_voice_dsp_web_loops, tools_voice_dsp_native_noise_loop, _github_workflows_integration_test [INFERRED 0.85]
 - **audio_dsp fixture-based tests** — rust_audio_dsp_tests_speaker_bleed, rust_audio_dsp_tests_background_noise, rust_audio_dsp_tests_impulsive_noise, rust_audio_dsp_testdata_readme_make_fixtures [EXTRACTED 1.00]
 - **CEF BrowserRuntime cutover removes WebView2 from the Windows/desktop graph** — third_party_flutter_inappwebview_windows_stub_readme_cef_browserruntime_cutover, third_party_flutter_inappwebview_windows_stub_readme_cutover_stub, third_party_flutter_web_auth_2_readme_vendored_copy, third_party_flutter_inappwebview_windows_stub_readme_artifact_scans [EXTRACTED 1.00]
-- **Cargokit build of rust_lib_cockhouse** — rust_rust_builder_pubspec_rust_lib_cockhouse, rust_rust_builder_linux_cmakelists_apply_cargokit, rust_rust_builder_windows_cmakelists_apply_cargokit, rust_rust_builder_cargokit_build_tool_pubspec_build_tool [INFERRED 0.85]
+- **Cargokit build of rust_lib_rooster** — rust_rust_builder_pubspec_rust_lib_rooster, rust_rust_builder_linux_cmakelists_apply_cargokit, rust_rust_builder_windows_cmakelists_apply_cargokit, rust_rust_builder_cargokit_build_tool_pubspec_build_tool [INFERRED 0.85]
 - **Locked, verified CEF release supply chain** — third_party_cef_readme_cef_lock_json, third_party_cef_readme_cef_runtime_py, third_party_cef_readme_content_addressed_fetch, third_party_cef_readme_runtime_metadata [EXTRACTED 1.00]
 - **Optional Linux dev deps that degrade instead of failing the build** — third_party_flutter_webrtc_linux_cmakelists_libpulse_loopback, third_party_tray_manager_linux_cmakelists_optional_appindicator, third_party_readme_tray_manager_vendor [INFERRED 0.75]
 - **Vendored changes keeping the microphone and its processing alive** — third_party_readme_restarttrack_processor_fix, third_party_readme_ended_mic_stays_published, third_party_readme_reselectrecordingdevice [INFERRED 0.85]
-- **DJ booth music publish path through vendored WebRTC/LiveKit** — third_party_readme_cockhouse_music_source, third_party_readme_stereo_publish, third_party_readme_flutter_webrtc_vendor, third_party_readme_livekit_vendor [INFERRED 0.85]
+- **DJ booth music publish path through vendored WebRTC/LiveKit** — third_party_readme_rooster_music_source, third_party_readme_stereo_publish, third_party_readme_flutter_webrtc_vendor, third_party_readme_livekit_vendor [INFERRED 0.85]
 - **tiamat Windows CMake build chain** — tiamat_windows_cmakelists, tiamat_windows_flutter_cmakelists, tiamat_windows_runner_cmakelists, tiamat_windows_cmakelists_apply_standard_settings [EXTRACTED 1.00]
 - **Calendar Matrix widget stack** — widgets_calendar_pubspec, widgets_matrix_widget_api_pubspec, tiamat_pubspec, widgets_calendar_web_index_matrix_widget_api_js [INFERRED 0.85]
 
@@ -1351,7 +1351,7 @@ Nodes (35): RTCAudioSource, FlutterRTCFrameCapturer, +convertToCVPixelBuffer, -i
 
 ### Community 102 - "Cef Runtime"
 Cohesion: 0.10
-Nodes (43): COCKHOUSE_CEF_RUNTIME_DIR staged Linux CEF runtime, _archive_hash(), _archive_hashes(), archive_manifest(), _canonical_json(), _ensure_no_symlink_ancestors(), fetch_archive(), fetch_pair() (+35 more)
+Nodes (43): ROOSTER_CEF_RUNTIME_DIR staged Linux CEF runtime, _archive_hash(), _archive_hashes(), archive_manifest(), _canonical_json(), _ensure_no_symlink_ancestors(), fetch_archive(), fetch_pair() (+35 more)
 
 ### Community 103 - "Theme Extensions"
 Cohesion: 0.03
@@ -1391,7 +1391,7 @@ Nodes (60): EventSearchSession, canContinueSearch, client, continueSearch, creat
 
 ### Community 113 - "Audio Processing Manager Web"
 Cohesion: 0.03
-Nodes (63): _, addFarEnd, applySettings, _attachRoom, _CockhouseAudioDsp, create, createAudioProcessingManager, _createTest (+55 more)
+Nodes (63): _, addFarEnd, applySettings, _attachRoom, _RoosterAudioDsp, create, createAudioProcessingManager, _createTest (+55 more)
 
 ### Community 114 - "Star Trails"
 Cohesion: 0.03
@@ -1617,7 +1617,7 @@ Nodes (54): AudioReceiverStats, AudioSenderStats, audioSourceStats, bytesNow, by
 Cohesion: 0.12
 Nodes (6): AudioProcessors, LiveKitPlugin, AudioProcessors, LiveKitPlugin, AudioProcessors, LiveKitPlugin
 
-### Community 172 - "Cockhouse Cef Engine (2)"
+### Community 172 - "Rooster Cef Engine (2)"
 Cohesion: 0.05
 Nodes (23): SurfaceClient, close_requested_, composite_, context_key_, device_scale_factor_, last_click_button_, last_click_count_, last_click_time_ (+15 more)
 
@@ -1717,9 +1717,9 @@ Nodes (47): build, createState, images, labelPhotoAlbumDescription, PhotoAlbumCr
 Cohesion: 0.04
 Nodes (52): advance, call, count, deafTo, dispose, drop, _error, fail (+44 more)
 
-### Community 197 - "Cockhouse Cef Engine (3)"
+### Community 197 - "Rooster Cef Engine (3)"
 Cohesion: 0.07
-Nodes (27): CssCursorName(), AcquireContext(), BrowserGone(), ClientFor(), cockhouse_cef_engine_close_browser(), cockhouse_cef_engine_create_browser(), cockhouse_cef_engine_execute_process(), cockhouse_cef_engine_execute_script() (+19 more)
+Nodes (27): CssCursorName(), AcquireContext(), BrowserGone(), ClientFor(), rooster_cef_engine_close_browser(), rooster_cef_engine_create_browser(), rooster_cef_engine_execute_process(), rooster_cef_engine_execute_script() (+19 more)
 
 ### Community 198 - "Standalone Browser Surface"
 Cohesion: 0.04
@@ -1935,7 +1935,7 @@ Nodes (42): artist, dispose, DjEngineState, DjEngineStatus, DjIncoming, DjNotice
 
 ### Community 251 - "Fakes"
 Cohesion: 0.05
-Nodes (40): CockhouseWebTrackProcessor, channel, destroy, destroyed, dispose, enableCalls, enabled, failGetUserMedia (+32 more)
+Nodes (40): RoosterWebTrackProcessor, channel, destroy, destroyed, dispose, enableCalls, enabled, failGetUserMedia (+32 more)
 
 ### Community 252 - "Matrix Html Parser"
 Cohesion: 0.05
@@ -2147,7 +2147,7 @@ Nodes (34): attributes, canPublish, canPublishData, canPublishSources, canSubscr
 
 ### Community 304 - "Ffi"
 Cohesion: 0.12
-Nodes (30): ffi_reports_bad_arguments_and_missing_files(), ffi_round_trip(), ABI_VERSION, CLIP_ABI_VERSION, ClipAudio, ClipBytes, cockhouse_clip_bytes_free(), cockhouse_clip_decode() (+22 more)
+Nodes (30): ffi_reports_bad_arguments_and_missing_files(), ffi_round_trip(), ABI_VERSION, CLIP_ABI_VERSION, ClipAudio, ClipBytes, rooster_clip_bytes_free(), rooster_clip_decode() (+22 more)
 
 ### Community 305 - "Types"
 Cohesion: 0.05
@@ -2263,7 +2263,7 @@ Nodes (13): (), bool, FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH, FLUTTER_RUST_BRI
 
 ### Community 333 - "Ffi (2)"
 Cohesion: 0.11
-Nodes (26): ABI_VERSION, callbacks_round_trip_through_ctx(), cockhouse_dsp_capture_init(), cockhouse_dsp_capture_process(), cockhouse_dsp_capture_reset(), cockhouse_dsp_create(), cockhouse_dsp_default_params(), cockhouse_dsp_destroy() (+18 more)
+Nodes (26): ABI_VERSION, callbacks_round_trip_through_ctx(), rooster_dsp_capture_init(), rooster_dsp_capture_process(), rooster_dsp_capture_reset(), rooster_dsp_create(), rooster_dsp_default_params(), rooster_dsp_destroy() (+18 more)
 
 ### Community 334 - "Livekit Rtc Pbenum"
 Cohesion: 0.05
@@ -2287,7 +2287,7 @@ Nodes (33): attachVideoOnly, build, buildVideoRenderer, createState, direction, 
 
 ### Community 339 - "Readme (2)"
 Cohesion: 0.07
-Nodes (28): Linux runner executable (cockhouse), Flatpak manifest com.pondlabs.cockhouse, libmpv module (mpv v0.40.0 + libplacebo, libass, x264), Flutter Linux build rules (flutter_assemble), ADR 0001: Remove donation awards, Remaining upstream services (push/proxy/calendar-widget.commet.chat), ADR 0002: Rename to Cockhouse, ADR 0001 (compatibility identities) (+20 more)
+Nodes (28): Linux runner executable (rooster), Flatpak manifest com.pondlabs.rooster, libmpv module (mpv v0.40.0 + libplacebo, libass, x264), Flutter Linux build rules (flutter_assemble), ADR 0001: Remove donation awards, Remaining upstream services (push/proxy/calendar-widget.commet.chat), ADR 0002: Rename to Rooster, ADR 0001 (compatibility identities) (+20 more)
 
 ### Community 340 - "Byte Streams"
 Cohesion: 0.07
@@ -2361,9 +2361,9 @@ Nodes (28): custom, fallback, fromJson, hashCode, isCustom, mxc, operator, short
 Cohesion: 0.06
 Nodes (33): _canFetchEmbedData, canHandle, capabilities, caption, _captionOf, _contextJson, _defaultHttpClient, _displayCopy (+25 more)
 
-### Community 358 - "Cockhouse System Audio Reference"
+### Community 358 - "Rooster System Audio Reference"
 Cohesion: 0.08
-Nodes (13): CockhouseSystemAudioReference, capturer_, sink_, Sink, ctx_, feed_, mutex_, CreateLoopbackCapturer() (+5 more)
+Nodes (13): RoosterSystemAudioReference, capturer_, sink_, Sink, ctx_, feed_, mutex_, CreateLoopbackCapturer() (+5 more)
 
 ### Community 359 - "Flutterrtcdatachannel"
 Cohesion: 0.08
@@ -2779,7 +2779,7 @@ Nodes (11): GetRegistrar(), Plugin, PluginRegistrar, AddPlugin, ClearPlugins, pl
 
 ### Community 463 - "Cmakelists"
 Cohesion: 0.10
-Nodes (20): browser_surface/native (frame ring, input, cursor helpers), browser_surface Flutter plugin, BrowserRuntime contract, l10n Config (arb-dir assets/l10n, class T), libcockhouse_cef_engine.so (Linux CEF engine), cef_host_build (cargo build --bin cef_host), COCKHOUSE_BUILD_CEF_HOST opt-in option, cockhouse pubspec (v0.4.2+920) (+12 more)
+Nodes (20): browser_surface/native (frame ring, input, cursor helpers), browser_surface Flutter plugin, BrowserRuntime contract, l10n Config (arb-dir assets/l10n, class T), librooster_cef_engine.so (Linux CEF engine), cef_host_build (cargo build --bin cef_host), ROOSTER_BUILD_CEF_HOST opt-in option, rooster pubspec (v0.4.2+920) (+12 more)
 
 ### Community 464 - "String List Preference Editor"
 Cohesion: 0.08
@@ -2921,9 +2921,9 @@ Nodes (22): TaskbarThumbnail, appearance, calls, _changed, channel, _channelTest
 Cohesion: 0.09
 Nodes (20): currentKeyIndex, data, dataCryptorId, decrypt, E2EEDataPacketCryptor, encrypt, EncryptedPacket, iv (+12 more)
 
-### Community 499 - "Cockhouse Music Source"
+### Community 499 - "Rooster Music Source"
 Cohesion: 0.12
-Nodes (11): CockhouseMusicFeeder, ctx_, kChannels, kFrames, kSampleRate, pull_, source_, thread_ (+3 more)
+Nodes (11): RoosterMusicFeeder, ctx_, kChannels, kFrames, kSampleRate, pull_, source_, thread_ (+3 more)
 
 ### Community 500 - "Browser Linux Embedded"
 Cohesion: 0.11
@@ -2997,9 +2997,9 @@ Nodes (17): AppRefresh, build, init, _initialized, labelRefreshingApp, _leaveCal
 Cohesion: 0.10
 Nodes (19): _IdleDetector, JS, _, MXTransport, on, onAction, _onReady, reply (+11 more)
 
-### Community 518 - "Cockhouse External Audio Processing"
+### Community 518 - "Rooster External Audio Processing"
 Cohesion: 0.13
-Nodes (7): CockhouseExternalAudioProcessor, ctx_, init_, initialized_, mutex_, num_channels_, sample_rate_hz_
+Nodes (7): RoosterExternalAudioProcessor, ctx_, init_, initialized_, mutex_, num_channels_, sample_rate_hz_
 
 ### Community 519 - "Flutterrtcframecryptor (2)"
 Cohesion: 0.20
@@ -3309,9 +3309,9 @@ Nodes (6): MethodCodec, DecodeAndProcessResponseEnvelopeInternal, DecodeMethodCa
 Cohesion: 0.12
 Nodes (14): CefHostFlavor, close, command, dispose, events, forceSoftwareRendering, hostFlavor, isBundledBrowserRuntimeAvailable (+6 more)
 
-### Community 599 - "Cockhouse Cef Engine (4)"
+### Community 599 - "Rooster Cef Engine (4)"
 Cohesion: 0.12
-Nodes (13): cockhouse_cef_engine_initialize(), EngineState, callbacks, cef_root, condition, context_ready, filter_requests, frame_namespace (+5 more)
+Nodes (13): rooster_cef_engine_initialize(), EngineState, callbacks, cef_root, condition, context_ready, filter_requests, frame_namespace (+5 more)
 
 ### Community 600 - "Browser Input Keys"
 Cohesion: 0.12
@@ -3407,7 +3407,7 @@ Nodes (12): close, command, dispose, events, forceSoftwareRendering, hostFlavor,
 
 ### Community 624 - "Claude"
 Cohesion: 0.15
-Nodes (16): Cockhouse, Commet (upstream Matrix client), dj_audio crate, librust_lib_cockhouse, Soundboard, Source extensions, tiamat widget library, Widget runner (Android) (+8 more)
+Nodes (16): Rooster, Commet (upstream Matrix client), dj_audio crate, librust_lib_rooster, Soundboard, Source extensions, tiamat widget library, Widget runner (Android) (+8 more)
 
 ### Community 625 - "Suppress Active Room"
 Cohesion: 0.15
@@ -3587,7 +3587,7 @@ Nodes (10): build, child, controller, createState, low1, preferredDirection, tex
 
 ### Community 673 - "Claude (2)"
 Cohesion: 0.17
-Nodes (11): CLAUDE.md (Cockhouse project guide), audio_dsp crate, Away status, DeepFilterNet3, Instagram reels in chat, Legacy 1:1 calls (matrix-dart-sdk), MatrixRTC/LiveKit voice rooms, third_party vendored packages (+3 more)
+Nodes (11): CLAUDE.md (Rooster project guide), audio_dsp crate, Away status, DeepFilterNet3, Instagram reels in chat, Legacy 1:1 calls (matrix-dart-sdk), MatrixRTC/LiveKit voice rooms, third_party vendored packages (+3 more)
 
 ### Community 674 - "Mxc File Provider Test"
 Cohesion: 0.17
@@ -3653,9 +3653,9 @@ Nodes (4): BasicMessageChannel, codec_, messenger_, name_
 Cohesion: 0.24
 Nodes (4): MethodChannel, codec_, messenger_, name_
 
-### Community 690 - "Cockhouse External Audio Processing (2)"
+### Community 690 - "Rooster External Audio Processing (2)"
 Cohesion: 0.19
-Nodes (6): CockhouseExternalAudioProcessingHost, apm_, capture_, install_mutex_, installed_, render_
+Nodes (6): RoosterExternalAudioProcessingHost, apm_, capture_, install_mutex_, installed_, render_
 
 ### Community 691 - "Cmakelists (2)"
 Cohesion: 0.19
@@ -3701,7 +3701,7 @@ Nodes (10): build, clientManager, createState, initState, pickAvatar, ProfileEdi
 Cohesion: 0.17
 Nodes (11): assetFor, assets, fetchLatest, fromJson, name, sha256, size, tag (+3 more)
 
-### Community 702 - "Cockhouse Cef Engine (5)"
+### Community 702 - "Rooster Cef Engine (5)"
 Cohesion: 0.21
 Nodes (8): SharedFrameRing, generation_, name_, next_sequence_, next_slot_, region_, region_bytes_, slot_bytes_
 
@@ -3711,7 +3711,7 @@ Nodes (9): algorithm, createDataPacketCryptor, dataCryptorId, DataPacketCryptorF
 
 ### Community 704 - "Dj Booth"
 Cohesion: 0.24
-Nodes (8): DJ booth, cockhouse_music_source.h custom WebRTC audio source, Deck pass / handoff, chat.commet.dj.v1 data channel protocol, commet-dj-music stereo LiveKit track, DjSongCache (1.5 GB song cache), Play songs while they download, rust/dj_audio music player (cockhouse_music_* C ABI)
+Nodes (8): DJ booth, rooster_music_source.h custom WebRTC audio source, Deck pass / handoff, chat.commet.dj.v1 data channel protocol, commet-dj-music stereo LiveKit track, DjSongCache (1.5 GB song cache), Play songs while they download, rust/dj_audio music player (rooster_music_* C ABI)
 
 ### Community 705 - "Voice Call Health"
 Cohesion: 0.23
@@ -3735,7 +3735,7 @@ Nodes (11): consecutiveSifCount, isSifAllowed, lastSifReceivedAt, MAX_SIF_COUNT,
 
 ### Community 711 - "Readme (4)"
 Cohesion: 0.20
-Nodes (9): Bug report issue template, Play Store Full Description (en-US), Seamless multi-account support, Play Store Full Description (jp-JP), Play Store Full Description (zh-CN), Cockhouse README, Cockhouse, PLATFORM/BUILD_MODE dart-define build arguments (+1 more)
+Nodes (9): Bug report issue template, Play Store Full Description (en-US), Seamless multi-account support, Play Store Full Description (jp-JP), Play Store Full Description (zh-CN), Rooster README, Rooster, PLATFORM/BUILD_MODE dart-define build arguments (+1 more)
 
 ### Community 712 - "Video Playback Source"
 Cohesion: 0.22
@@ -3759,7 +3759,7 @@ Nodes (10): background_color, description, display, icons, name, orientation, pr
 
 ### Community 717 - "Voice Audio Processing"
 Cohesion: 0.36
-Nodes (8): Voice audio processing, rust/audio_dsp DSP core (cockhouse_dsp_* C ABI), DeepFilterNet3 noise suppression, Far-end ducker, Input gate (gate.rs), Loudspeaker bleed detector (bleed.rs), Microphone test (Hear myself), RNNoise speech detector / fallback suppressor
+Nodes (8): Voice audio processing, rust/audio_dsp DSP core (rooster_dsp_* C ABI), DeepFilterNet3 noise suppression, Far-end ducker, Input gate (gate.rs), Loudspeaker bleed detector (bleed.rs), Microphone test (Hear myself), RNNoise speech detector / fallback suppressor
 
 ### Community 719 - "Opus (3)"
 Cohesion: 0.29
@@ -3927,7 +3927,7 @@ Nodes (6): build, createState, DragDropFileTarget, _DragDropFileTargetState, fil
 
 ### Community 762 - "Source Extensions"
 Cohesion: 0.39
-Nodes (7): CREATE_NO_WINDOW + job object extension launch, Source extensions, cockhouse-extension.json manifest, fetch request, resolve request, Soundboard add-sound flow (trim to 15 s, Ogg Opus), RamAddict/dj-ytdlp-source extension
+Nodes (7): CREATE_NO_WINDOW + job object extension launch, Source extensions, rooster-extension.json manifest, fetch request, resolve request, Soundboard add-sound flow (trim to 15 s, Ogg Opus), RamAddict/dj-ytdlp-source extension
 
 ### Community 763 - "Issue 10 Own User Missing In Voice List"
 Cohesion: 0.46
@@ -3995,7 +3995,7 @@ Nodes (6): Issue #11: call grid shows you twice when sharing screen audio, Dupli
 
 ### Community 784 - "Pubspec (2)"
 Cohesion: 0.38
-Nodes (7): build_tool lint config (recommended + prefer_relative_imports), Cargokit build_tool package, Cargokit (copied from flutter_rust_bridge integration), rust_lib_cockhouse Linux CMake (apply_cargokit), rust_lib_cockhouse FFI plugin package, rust_builder: glue to build Rust with Flutter, rust_lib_cockhouse Windows CMake (apply_cargokit)
+Nodes (7): build_tool lint config (recommended + prefer_relative_imports), Cargokit build_tool package, Cargokit (copied from flutter_rust_bridge integration), rust_lib_rooster Linux CMake (apply_cargokit), rust_lib_rooster FFI plugin package, rust_builder: glue to build Rust with Flutter, rust_lib_rooster Windows CMake (apply_cargokit)
 
 ### Community 790 - "E2ee Logger"
 Cohesion: 0.29
@@ -4099,7 +4099,7 @@ Nodes (4): Issue tracker: GitHub (PondLabs/roscord), Wayfinder map and child tic
 
 ### Community 825 - "Cargo"
 Cohesion: 0.50
-Nodes (4): audio_dsp, deep_filter, dj_audio, rust_lib_cockhouse
+Nodes (4): audio_dsp, deep_filter, dj_audio, rust_lib_rooster
 
 ### Community 829 - "Binary Messenger"
 Cohesion: 0.50
@@ -4153,7 +4153,7 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
 - **Why does `_Alloc` connect `Diag` to `Native Dsp Test`, `Lib`?**
   _High betweenness centrality (0.027) - this node is a cross-community bridge._
-- **Why does `SurfaceClient` connect `Cockhouse Cef Engine (2)` to `Cockhouse Cef Engine (3)`, `Browser Input`, `Cockhouse Cef Engine (9)`, `Cockhouse Cef Engine`, `Cockhouse Cef Engine (5)`?**
+- **Why does `SurfaceClient` connect `Rooster Cef Engine (2)` to `Rooster Cef Engine (3)`, `Browser Input`, `Rooster Cef Engine (9)`, `Rooster Cef Engine`, `Rooster Cef Engine (5)`?**
   _High betweenness centrality (0.023) - this node is a cross-community bridge._
 - **Why does `_set` connect `Plugin Registrar` to `Cef Host (6)`, `Plugin Registrar (2)`, `Flutter Embedder Headers`, `Cef Host (4)`, `Self Updater Native`?**
   _High betweenness centrality (0.022) - this node is a cross-community bridge._

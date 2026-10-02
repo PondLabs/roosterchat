@@ -1,11 +1,11 @@
-//! Loader and FFI for `libcockhouse_cef_engine.so`, the CEF half of the Linux
+//! Loader and FFI for `librooster_cef_engine.so`, the CEF half of the Linux
 //! `cef_host`.
 //!
 //! The host validates the bundled runtime first, then opens the locked
 //! `Release/libcef.so` by absolute path with `RTLD_GLOBAL`, and only then the
 //! engine.  The engine has no `DT_NEEDED` entry for libcef: its CEF symbols
 //! bind to the copy already loaded, so the dynamic loader never searches for
-//! CEF on its own.  The C ABI is `cockhouse/linux/cef_engine/cockhouse_cef_engine.h`;
+//! CEF on its own.  The C ABI is `rooster/linux/cef_engine/rooster_cef_engine.h`;
 //! keep the two in step (the ABI version is checked at load time).
 
 use std::ffi::{c_char, c_int, c_void, CStr, CString, OsString};
@@ -20,7 +20,7 @@ use crate::browser_runtime::{ImePhase, InputEvent, PointerKind, SurfaceId};
 use crate::cef_host::HostError;
 
 pub const ENGINE_ABI_VERSION: u32 = 2;
-pub const ENGINE_LIBRARY: &str = "libcockhouse_cef_engine.so";
+pub const ENGINE_LIBRARY: &str = "librooster_cef_engine.so";
 
 const POINTER_DOWN: i32 = 0;
 const POINTER_UP: i32 = 1;
@@ -183,19 +183,19 @@ impl EngineLibrary {
             .map_err(|_| HostError::Cef("cannot load the CEF engine".to_owned()))?;
         let functions = unsafe {
             EngineFunctions {
-                abi_version: resolve(engine, b"cockhouse_cef_engine_abi_version\0")?,
-                execute_process: resolve(engine, b"cockhouse_cef_engine_execute_process\0")?,
-                initialize: resolve(engine, b"cockhouse_cef_engine_initialize\0")?,
-                create_browser: resolve(engine, b"cockhouse_cef_engine_create_browser\0")?,
-                close_browser: resolve(engine, b"cockhouse_cef_engine_close_browser\0")?,
-                navigate: resolve(engine, b"cockhouse_cef_engine_navigate\0")?,
-                resize: resolve(engine, b"cockhouse_cef_engine_resize\0")?,
-                focus: resolve(engine, b"cockhouse_cef_engine_focus\0")?,
-                pointer: resolve(engine, b"cockhouse_cef_engine_pointer\0")?,
-                key: resolve(engine, b"cockhouse_cef_engine_key\0")?,
-                ime: resolve(engine, b"cockhouse_cef_engine_ime\0")?,
-                execute_script: resolve(engine, b"cockhouse_cef_engine_execute_script\0")?,
-                shutdown: resolve(engine, b"cockhouse_cef_engine_shutdown\0")?,
+                abi_version: resolve(engine, b"rooster_cef_engine_abi_version\0")?,
+                execute_process: resolve(engine, b"rooster_cef_engine_execute_process\0")?,
+                initialize: resolve(engine, b"rooster_cef_engine_initialize\0")?,
+                create_browser: resolve(engine, b"rooster_cef_engine_create_browser\0")?,
+                close_browser: resolve(engine, b"rooster_cef_engine_close_browser\0")?,
+                navigate: resolve(engine, b"rooster_cef_engine_navigate\0")?,
+                resize: resolve(engine, b"rooster_cef_engine_resize\0")?,
+                focus: resolve(engine, b"rooster_cef_engine_focus\0")?,
+                pointer: resolve(engine, b"rooster_cef_engine_pointer\0")?,
+                key: resolve(engine, b"rooster_cef_engine_key\0")?,
+                ime: resolve(engine, b"rooster_cef_engine_ime\0")?,
+                execute_script: resolve(engine, b"rooster_cef_engine_execute_script\0")?,
+                shutdown: resolve(engine, b"rooster_cef_engine_shutdown\0")?,
             }
         };
         let version = unsafe { (functions.abi_version)() };

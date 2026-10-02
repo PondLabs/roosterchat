@@ -1,0 +1,32 @@
+[Desktop Entry]
+Version={{VERSION_TAG}}
+Type=Application
+Name=Rooster
+Comment=Talk. Play. Hang out.
+Categories=Utility;Amusement;
+Icon=com.pondlabs.rooster
+Exec=rooster
+Terminal=false
+StartupWMClass=com.pondlabs.rooster
+Actions=ToggleMute;ToggleDeafen;Disconnect
+X-KDE-StartupNotify=false
+StartupNotify=false
+
+[Desktop Action ToggleMute]
+Name=Mute or Unmute
+Name[pt_BR]=Silenciar ou dessilenciar
+Icon=audio-input-microphone-symbolic
+Exec=rooster --shortcut toggle_mute
+X-KDE-Shortcuts=Alt+M
+
+[Desktop Action ToggleDeafen]
+Name=Deafen or Undeafen
+Name[pt_BR]=Desativar ou reativar áudio
+Icon=audio-headphones-symbolic
+Exec=rooster --shortcut toggle_deafen
+
+[Desktop Action Disconnect]
+Name=Disconnect
+Name[pt_BR]=Desconectar
+Icon=call-stop-symbolic
+Exec=rooster --shortcut disconnect

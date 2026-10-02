@@ -1,0 +1,62 @@
+import 'package:rooster/ui/organisms/side_navigation_bar/side_navigation_bar.dart';
+import 'dart:async';
+
+import 'package:rooster/client/components/widgets/widget_component.dart';
+import 'package:rooster/ui/navigation/navigation_utils.dart';
+import 'package:rooster/ui/pages/settings/app_settings_page.dart';
+import 'package:flutter/material.dart';
+
+import 'package:tiamat/tiamat.dart' as tiamat;
+
+class UserPanelSettings extends StatefulWidget {
+  const UserPanelSettings({this.height = 30, super.key});
+  final double height;
+
+  @override
+  State<UserPanelSettings> createState() => _UserPanelSettingsState();
+}
+
+class _UserPanelSettingsState extends State<UserPanelSettings> {
+  StreamSubscription? sub;
+
+  @override
+  void initState() {
+    sub = WidgetComponent.currentSessions.onListUpdated.listen((_) {
+      setState(() {});
+    });
+
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    sub?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    double height = widget.height * 0.7;
+    double iconHeight = height / 2.5;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
+      child: Row(
+        children: [
+          SizedBox(
+              width: height,
+              height: height,
+              child: tiamat.IconButton(
+                // Integration tests find the settings entry by this key.
+                key: SideNavigationBar.settingsKey,
+                icon: Icons.settings,
+                size: iconHeight,
+                onPressed: () {
+                  NavigationUtils.navigateTo(context, const AppSettingsPage());
+                },
+              ))
+        ],
+      ),
+    );
+  }
+}

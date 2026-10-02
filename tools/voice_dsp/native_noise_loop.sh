@@ -4,12 +4,12 @@
 # Makes a PulseAudio microphone for this run only, which plays the noisy
 # speech fixture (a null sink fed by paplay, remapped into a source), and
 # runs the app's microphone test on it
-# (cockhouse/integration_test/voice_dsp/native_noise_test.dart), which also
+# (rooster/integration_test/voice_dsp/native_noise_test.dart), which also
 # kills the app's recording stream mid-capture and checks that the call's
 # microphone watch brings it back (pacmd on PulseAudio, pw-cli on
 # PipeWire; docs/voice-call-health.md): the fixture
 # goes through WebRTC's audio device and processing modules and our hook in
-# librust_lib_cockhouse, and is encoded and sent over a local peer connection.
+# librust_lib_rooster, and is encoded and sent over a local peer connection.
 # The test samples WebRTC's own measure of what is encoded and of what is
 # decoded; tools/voice_dsp/measure_stats.mjs compares it with the fixture.
 #
@@ -63,7 +63,7 @@ volume() { pactl get-source-volume "${tag}_mic" | head -n1 | sed 's/^Volume: //'
 echo "microphone volume before: $(volume)"
 status=0
 (
-  cd "$repo/cockhouse"
+  cd "$repo/rooster"
   XDG_DATA_HOME="$work/data" XDG_CONFIG_HOME="$work/config" XDG_CACHE_HOME="$work/cache" \
     "$flutter" test integration_test/voice_dsp/native_noise_test.dart -d linux \
     --dart-define=NS_LOOP_MIC="${tag}Mic" \

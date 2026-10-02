@@ -1173,7 +1173,7 @@ fn create_socket_root(base: Option<&Path>, nonce: &str) -> Result<PathBuf, Runti
     if base_metadata.file_type().is_symlink() || !base_metadata.is_dir() {
         return Err(runtime_error("socket root is not a real directory"));
     }
-    let root = base.join(format!("cockhouse-cef-{}-{nonce}", std::process::id()));
+    let root = base.join(format!("rooster-cef-{}-{nonce}", std::process::id()));
     fs::DirBuilder::new()
         .mode(0o700)
         .create(&root)

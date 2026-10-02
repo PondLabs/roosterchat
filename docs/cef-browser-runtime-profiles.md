@@ -46,7 +46,7 @@ operation.
 
 ## Migration and quarantine
 
-Only a profile with an exact Cockhouse manifest can be opened.  A missing,
+Only a profile with an exact Rooster manifest can be opened.  A missing,
 mismatched, unsupported, corrupt, linked, or non-owner manifest is moved to a
 generated `quarantine-*` directory and produces a migration-failed/profile
 failure.  Its bytes are retained for diagnosis; the host never guesses,

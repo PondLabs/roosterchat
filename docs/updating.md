@@ -1,6 +1,6 @@
 # Updating
 
-Cockhouse checks GitHub for a newer release and, on the desktop builds, can
+Rooster checks GitHub for a newer release and, on the desktop builds, can
 install one over itself. The check is opt-in and the button is always there;
 nothing is downloaded or replaced without being asked for.
 
@@ -9,11 +9,11 @@ nothing is downloaded or replaced without being asked for.
 `ci.yml` cuts a release on every push to `main`: it runs the tests, builds
 Windows and Linux through `desktop-build.yml`, works out the next tag, and
 `gh release create`s it with both archives attached. They are named
-`cockhouse-<tag>-<platform>-x64-<mode>.<zip|tar.gz>` and each holds a single
+`rooster-<tag>-<platform>-x64-<mode>.<zip|tar.gz>` and each holds a single
 top level directory of the same name, which is the bundle.
 
 `release.yml` is the older Commet pipeline and uploads different names
-(`cockhouse-windows.zip`). Nothing runs it today.
+(`rooster-windows.zip`). Nothing runs it today.
 
 The running version is `BuildConfig.VERSION_TAG`, baked in at build time by
 `scripts/build_release.dart`. A local build has `development`, which parses
@@ -47,7 +47,7 @@ a .deb or a distro package (`/usr`), a snap and a nix store path all belong to
 something else and are refused (`isSelfInstallable`); so are Android and the
 web. There, the button opens the release page, which is all the app ever did.
 
-1. **Download** the archive for this platform to `.cockhouse-update/<tag>/`
+1. **Download** the archive for this platform to `.rooster-update/<tag>/`
    beside the install, or the temp directory when that is not writable.
    Beside it means putting it in place is a rename rather than a copy
    between filesystems. Where the install is comes from `updateTargetFor`
@@ -63,17 +63,17 @@ web. There, the button opens the release page, which is all the app ever did.
 4. **Swap**, when the user says to. A running program cannot replace its own
    directory on Windows, so a script is written next to the staged build and
    started detached: it waits for the process to go, moves the install aside,
-   moves the new one in, starts it, and clears up all of `.cockhouse-update/`.
+   moves the new one in, starts it, and clears up all of `.rooster-update/`.
    If the new one will not go in, the old one is moved back — a failure
    leaves the build that was already working, and on Windows starts it
-   again and keeps `install-<stamp>.log` in `.cockhouse-update/`.
+   again and keeps `install-<stamp>.log` in `.rooster-update/`.
 
 On Windows:
 
 - The script is started in the temp directory. It used to inherit the app's
   working directory, which is the install when Explorer starts it, and
   Windows will not rename a directory a process is working in: no swap ever
-  happened, and people ran the staged build from `.cockhouse-update/` instead.
+  happened, and people ran the staged build from `.rooster-update/` instead.
 - Moves are `[System.IO.Directory]::Move`, retried for 30 seconds while the
   install is busy (the CEF helpers closing, a virus scanner). `Move-Item`
   moves a directory with a busy file in it one file at a time and leaves
@@ -84,26 +84,28 @@ On Windows:
 `updateTargetFor` works it out from the running executable:
 
 - **Its own directory**, normally.
-- **Run from inside `.cockhouse-update/`** (a swap that never happened, the
+- **Run from inside `.rooster-update/`** (a swap that never happened, the
   staged build started by hand, maybe more than once, each staging the next
-  inside itself): the build left beside the outermost `.cockhouse-update/` is
+  inside itself): the build left beside the outermost `.rooster-update/` is
   replaced, and the whole nest is cleared with the swap.
 - **Run from a zip opened in Explorer**, which unpacks it under the temp
-  directory: the update goes to `%LOCALAPPDATA%\Programs\Cockhouse`, with a
+  directory: the update goes to `%LOCALAPPDATA%\Programs\Rooster`, with a
   Start menu shortcut, since the next click on the zip would start the old
   build again. The button says so before the restart.
 
-### Across the rename to Cockhouse
+### Across the renames to Cockhouse and Rooster
 
-Builds from before the rename were `commet`/`commet.exe`. They only accept
-an archive that holds their own executable name, and they start that name
-after the swap. So each release also carries a `commet.exe` copy (Windows) or
-a `commet` link (Linux), made by the CMake install step. An old build updates
-into the new one and starts it through that name, and its shortcuts keep
-working. The new updater always asks for and starts `cockhouse`. It also
-still recognises a `.roscord-update/` nest left by an old build. The first
-start of the new build moves the old data directory in (see
-`docs/adr/0002-rename-to-cockhouse.md`, which also says when this bridge can
+Builds from before the renames were `cockhouse`/`cockhouse.exe` and, before
+that, `commet`/`commet.exe`. They only accept an archive that holds their own
+executable name, and they start that name after the swap. So each release
+also carries `cockhouse.exe` and `commet.exe` copies (Windows) or `cockhouse`
+and `commet` links (Linux), made by the CMake install step. An old build
+updates into the new one and starts it through its own name, and its
+shortcuts keep working. The new updater always asks for and starts
+`rooster`. It also still recognises a `.cockhouse-update/` or
+`.roscord-update/` nest left by an old build. The first start of the new
+build moves the old data directory in (see
+`docs/adr/0003-rename-to-rooster.md`, which also says when this bridge can
 go).
 
 The swap scripts are `windowsSwapScript` and `linuxSwapScript`, kept as

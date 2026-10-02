@@ -1,13 +1,13 @@
 import 'dart:async';
 
 import 'package:calendar_view/calendar_view.dart';
-import 'package:cockhouse_calendar_widget/calendar.dart';
-import 'package:cockhouse_calendar_widget/calendar_convert_dialog.dart';
-import 'package:cockhouse_calendar_widget/calendar_view_day.dart';
-import 'package:cockhouse_calendar_widget/calendar_view_month.dart';
-import 'package:cockhouse_calendar_widget/calendar_view_week.dart';
-import 'package:cockhouse_calendar_widget/event_editor.dart';
-import 'package:cockhouse_calendar_widget/rfc8984.dart';
+import 'package:rooster_calendar_widget/calendar.dart';
+import 'package:rooster_calendar_widget/calendar_convert_dialog.dart';
+import 'package:rooster_calendar_widget/calendar_view_day.dart';
+import 'package:rooster_calendar_widget/calendar_view_month.dart';
+import 'package:rooster_calendar_widget/calendar_view_week.dart';
+import 'package:rooster_calendar_widget/event_editor.dart';
+import 'package:rooster_calendar_widget/rfc8984.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:matrix_widget_api/matrix_widget_api.dart';

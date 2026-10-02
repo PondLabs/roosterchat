@@ -3,7 +3,7 @@ import 'package:tiamat/config/style/theme_common.dart';
 import 'package:tiamat/config/style/theme_extensions.dart';
 import 'package:flutter/material.dart';
 
-// The Cockhouse palette by day: eggshell and plaster surfaces, a deeper
+// The Rooster palette by day: eggshell and plaster surfaces, a deeper
 // comb-red primary, hearth-brown text. See docs/brand/README.md.
 class ThemeLightColors {
   static const Color surfaceHigh1 = Color(0xFFF6EFE5);

@@ -1,0 +1,552 @@
+import 'dart:async';
+import 'package:collection/collection.dart';
+import 'package:rooster/client/client.dart';
+import 'package:rooster/client/client_manager.dart';
+import 'package:rooster/client/components/direct_messages/direct_message_component.dart';
+import 'package:rooster/client/components/invitation/invitation_component.dart';
+import 'package:rooster/client/components/profile/profile_component.dart';
+import 'package:rooster/client/components/voip/voip_component.dart';
+import 'package:rooster/client/components/voip/voip_session.dart';
+import 'package:rooster/client/matrix/matrix_client.dart';
+import 'package:rooster/config/build_config.dart';
+import 'package:rooster/config/layout_config.dart';
+import 'package:rooster/debug/log.dart';
+import 'package:rooster/main.dart';
+import 'package:rooster/ui/navigation/adaptive_dialog.dart';
+import 'package:rooster/ui/navigation/quick_switcher.dart';
+import 'package:rooster/ui/organisms/invitation_view/send_invitation.dart';
+import 'package:rooster/ui/organisms/update_installed_dialog/update_installed_dialog.dart';
+import 'package:rooster/ui/organisms/user_profile/user_profile.dart';
+import 'package:rooster/ui/pages/get_or_create_room/get_or_create_room.dart';
+import 'package:rooster/ui/pages/setup/setup_page.dart';
+import 'package:rooster/utils/app_refresh/app_refresh.dart';
+import 'package:rooster/utils/event_bus.dart';
+import 'package:rooster/ui/navigation/navigation_utils.dart';
+import 'package:rooster/ui/pages/main/main_page_view_desktop.dart';
+import 'package:rooster/ui/pages/main/main_page_view_mobile.dart';
+import 'package:rooster/ui/pages/settings/room_settings_page.dart';
+import 'package:rooster/utils/first_time_setup.dart';
+import 'package:rooster/utils/image/lod_image.dart';
+import 'package:rooster/utils/notifying_list.dart';
+import 'package:rooster/utils/notifying_list_combiner.dart';
+import 'package:rooster/utils/notifying_list_filter.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
+
+class MainPage extends StatefulWidget {
+  const MainPage(this.clientManager,
+      {super.key,
+      this.initialClientId,
+      this.initialRoom,
+      this.wasLoggedInAtStartup = false});
+  final ClientManager clientManager;
+  final String? initialRoom;
+  final String? initialClientId;
+  final bool wasLoggedInAtStartup;
+
+  @override
+  State<MainPage> createState() => MainPageState();
+}
+
+enum MainPageSubView {
+  space,
+  home,
+  rooms,
+}
+
+class MainPageState extends State<MainPage> {
+  Space? _currentSpace;
+  Room? _currentRoom;
+  bool showAsTextRoom = false;
+  Client? filterClient;
+
+  MainPageSubView _currentView = MainPageSubView.home;
+
+  late INotifyingList<Room> favoriteRooms;
+
+  late INotifyingList<Room> singleRooms;
+
+  late INotifyingList<Room> directMessages;
+
+  StreamSubscription? onSpaceUpdateSubscription;
+  StreamSubscription? onRoomUpdateSubscription;
+  StreamSubscription? onCallStartedSubscription;
+  StreamSubscription? onClientRemovedSubscription;
+  StreamSubscription? onClientAddedSubscription;
+
+  // Cancelled on dispose: an app refresh replaces this page, and the old one
+  // must not keep reacting to the event bus with its dead clients
+  final List<StreamSubscription> _eventBusSubscriptions = [];
+
+  StreamController onFilterClientChanged = StreamController.broadcast();
+
+  MainPageSubView get currentView => _currentView;
+
+  ClientManager get clientManager => widget.clientManager;
+
+  Profile? get currentUser => getCurrentUser();
+  Space? get currentSpace => _currentSpace;
+  Room? get currentRoom => _currentRoom;
+
+  VoipSession? get currentCall => currentRoom == null
+      ? null
+      : widget.clientManager.callManager
+          .getCallInRoom(currentRoom!.client, currentRoom!.identifier);
+
+  String get updateInstalledTitle => Intl.message("Update Installed",
+      desc:
+          "Title for the dialog which is shown when an update has been installed",
+      name: "updateInstalledTitle");
+
+  @override
+  void initState() {
+    super.initState();
+
+    Client? client;
+    if (preferences.filterClient.value != null) {
+      filterClient = clientManager.clients.firstWhereOrNull(
+          (i) => i.identifier == preferences.filterClient.value);
+    }
+
+    if (widget.initialClientId != null) {
+      client = clientManager.getClient(widget.initialClientId!);
+    }
+
+    if (client == null && widget.initialRoom != null) {
+      client = clientManager.clients
+          .where((element) => element.getRoom(widget.initialRoom!) != null)
+          .firstOrNull;
+    }
+
+    // Before the room, and whether or not one was open: selecting a space
+    // clears the room selection, and the user may have been on a space with
+    // no room open at all.
+    var restoredSpaceId = AppRefresh.takeRestoredSpace();
+    if (restoredSpaceId != null) {
+      var space = clientManager.clients
+          .where((c) => filterClient == null || c == filterClient)
+          .map((c) => c.getSpace(restoredSpaceId))
+          .whereType<Space>()
+          .firstOrNull;
+      if (space != null) selectSpace(space);
+    }
+
+    if (client != null && widget.initialRoom != null) {
+      var room = client.getRoom(widget.initialRoom!);
+
+      if (filterClient == null || room?.client == filterClient) {
+        if (room != null) {
+          selectRoom(room);
+        }
+      }
+    }
+
+    var allFavoriteRooms = NotifyingListCombiner(
+        clientManager.clients.map((i) => i.favoriteRooms).toList());
+
+    favoriteRooms = NotifyingListFilter(allFavoriteRooms, where: (item) {
+      if (filterClient == null) return true;
+      return item.client == filterClient;
+    }, onFilterParamsChanged: [onFilterClientChanged.stream]);
+
+    directMessages = NotifyingListFilter(
+        clientManager.directMessages.directMessageRooms, where: (item) {
+      if (item.isFavorite) return false;
+
+      if (filterClient == null) return true;
+      return item.client == filterClient;
+    }, onFilterParamsChanged: [
+      onFilterClientChanged.stream,
+      allFavoriteRooms.onListUpdated
+    ]);
+
+    singleRooms = NotifyingListFilter(clientManager.rooms, where: (item) {
+      if (filterClient != null) {
+        if (item.client != filterClient) return false;
+      }
+      var dms = item.client.getComponent<DirectMessagesComponent>();
+
+      if (dms?.isRoomDirectMessage(item) != false) {
+        return false;
+      }
+
+      if (item.client.spaces
+          .any((space) => space.containsRoom(item.identifier))) {
+        return false;
+      }
+
+      return true;
+    }, onFilterParamsChanged: [
+      onFilterClientChanged.stream,
+      clientManager.onSpaceUpdated.stream,
+      clientManager.rooms.onListUpdated
+    ]);
+
+    ServicesBinding.instance.keyboard.addHandler(_onKeyPressed);
+
+    // backgroundTaskManager.onListUpdate.listen((event) {
+    //   setState(() {});
+    // });
+
+    onCallStartedSubscription =
+        clientManager.callManager.currentSessions.onListUpdated.listen((event) {
+      setState(() {});
+    });
+
+    _eventBusSubscriptions.addAll([
+      EventBus.openRoom.stream.listen(onOpenRoomSignal),
+      EventBus.openHomeScreen.stream.listen((_) {
+        clearRoomSelection();
+        clearSpaceSelection();
+      }),
+      EventBus.setFilterClient.stream.listen(setFilterClient),
+      EventBus.openUserProfile.stream.listen(onOpenUserProfileSignal),
+    ]);
+
+    onClientRemovedSubscription =
+        clientManager.onClientRemoved.stream.listen(onClientRemoved);
+
+    onClientAddedSubscription = clientManager.onClientAdded.stream.listen((_) {
+      if (mounted) setState(() {});
+    });
+
+    SchedulerBinding.instance.scheduleFrameCallback(onFirstFrame);
+  }
+
+  void onFirstFrame(Duration timeStamp) async {
+    if (widget.clientManager.isLoggedIn()) {
+      // Taken out of the list: an app refresh builds a new main page, which
+      // must not show the same setup again
+      var menus = FirstTimeSetup.postLogin.toList();
+      FirstTimeSetup.postLogin.clear();
+      if (menus.isNotEmpty) {
+        await NavigationUtils.navigateTo(context, SetupPage(menus));
+      }
+
+      bool isNewVersion =
+          preferences.lastOpenedVersion.value != BuildConfig.VERSION_TAG;
+
+      preferences.lastOpenedVersion.set(BuildConfig.VERSION_TAG);
+
+      if (!kIsWeb && isNewVersion && widget.wasLoggedInAtStartup) {
+        await Future.delayed(Duration(seconds: 2));
+
+        await AdaptiveDialog.show(
+          context,
+          title: updateInstalledTitle,
+          builder: (buildContext) {
+            return const UpdateInstalledDialog();
+          },
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    onSpaceUpdateSubscription?.cancel();
+    onRoomUpdateSubscription?.cancel();
+    onCallStartedSubscription?.cancel();
+    onClientRemovedSubscription?.cancel();
+    onClientAddedSubscription?.cancel();
+    for (final sub in _eventBusSubscriptions) {
+      sub.cancel();
+    }
+    ServicesBinding.instance.keyboard.removeHandler(_onKeyPressed);
+    super.dispose();
+  }
+
+  void onClientRemoved(dynamic event) {
+    if (!mounted) return;
+
+    setState(() {
+      if (_currentRoom != null && !clientManager.rooms.contains(_currentRoom)) {
+        _currentRoom = null;
+      }
+
+      if (_currentSpace != null &&
+          !clientManager.spaces.contains(_currentSpace)) {
+        _currentSpace = null;
+        _currentView = MainPageSubView.home;
+      }
+
+      if (filterClient != null &&
+          !clientManager.clients.contains(filterClient)) {
+        filterClient = null;
+        EventBus.setFilterClient.add(null);
+        onFilterClientChanged.add(null);
+      }
+    });
+  }
+
+  Profile? getCurrentUser() {
+    if (currentRoom != null) return currentRoom!.client.self!;
+
+    if (currentSpace != null) return currentSpace!.client.self!;
+
+    if (filterClient != null) return filterClient!.self!;
+
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.of(context).mobile) {
+      return MainPageViewMobile(this);
+    } else {
+      return MainPageViewDesktop(this);
+    }
+  }
+
+  void selectSpace(Space? space) {
+    if (space == currentSpace) return;
+
+    if (space != null && !space.fullyLoaded) {
+      space.loadExtra().catchError((Object e, StackTrace s) {
+        Log.onError(e, s, content: "Could not load the space");
+      });
+    }
+    clearRoomSelection();
+
+    if (space?.avatar is LODImageProvider) {
+      (space!.avatar as LODImageProvider).fetchFullRes();
+    }
+
+    onSpaceUpdateSubscription?.cancel();
+    setState(() {
+      _currentSpace = space;
+      _currentView = MainPageSubView.space;
+    });
+
+    EventBus.onSelectedSpaceChanged.add(space);
+  }
+
+  void selectRoom(Room room, {bool bypassSpecialRoomType = false}) {
+    if (room == currentRoom && bypassSpecialRoomType == showAsTextRoom) return;
+
+    onRoomUpdateSubscription?.cancel();
+
+    setState(() {
+      _currentRoom = room;
+      showAsTextRoom = bypassSpecialRoomType;
+    });
+
+    EventBus.onSelectedRoomChanged.add(room);
+    EventBus.onSelectedSpaceChanged.add(currentSpace);
+  }
+
+  void clearRoomSelection() {
+    onRoomUpdateSubscription?.cancel();
+    setState(() {
+      _currentRoom = null;
+    });
+
+    EventBus.onSelectedRoomChanged.add(null);
+  }
+
+  void clearSpaceSelection() {
+    setState(() {
+      clearRoomSelection();
+
+      _currentSpace = null;
+      _currentView = MainPageSubView.home;
+    });
+
+    EventBus.onSelectedSpaceChanged.add(null);
+  }
+
+  void setFilterClient(Client? event) {
+    setState(() {
+      filterClient = event;
+
+      if (event != null) {
+        if (_currentRoom?.client != event) {
+          clearRoomSelection();
+        }
+
+        if (_currentSpace != null && _currentSpace?.client != event) {
+          clearSpaceSelection();
+        }
+      }
+    });
+
+    onFilterClientChanged.add(null);
+  }
+
+  void callRoom(Room room) {
+    var component = room.client.getComponent<VoipComponent>();
+    if (component == null) {
+      return;
+    }
+
+    var direct = room.client.getComponent<DirectMessagesComponent>();
+    if (direct == null) {
+      Log.w("VOIP Only supports direct messages!!");
+      return;
+    }
+
+    var partner = direct.getDirectMessagePartnerId(room);
+
+    component.startCall(room.identifier, CallType.voice, userId: partner);
+  }
+
+  void selectHome() {
+    setState(() {
+      _currentView = MainPageSubView.home;
+      clearSpaceSelection();
+    });
+  }
+
+  void selectRoomsView() {
+    setState(() {
+      clearSpaceSelection();
+      _currentView = MainPageSubView.rooms;
+    });
+  }
+
+  void onOpenRoomSignal(RoomOpenArgs args) async {
+    var roomId = args.roomId;
+    var clientId = args.clientId;
+    var bypassSpecialRoomType = args.bypassSpecialRoomTypes;
+
+    var originalId = roomId;
+
+    Client? client;
+
+    if (clientId != null) {
+      client = clientManager.getClient(clientId);
+
+      if (client is MatrixClient) {
+        var info = client.parseAddressToIdAndVia(roomId);
+        if (info != null) {
+          roomId = info.$1;
+        }
+      }
+    } else {
+      client = clientManager.clients
+          .where((element) => element.hasRoom(roomId))
+          .firstOrNull;
+    }
+
+    if (client == null) {
+      return;
+    }
+
+    // ROOSTER: a room both accounts are in opens in the one on screen, not
+    // behind a "switch account?" prompt (a notification may name the other).
+    if (filterClient != null &&
+        client != filterClient &&
+        filterClient!.hasRoom(roomId)) {
+      client = filterClient!;
+    }
+
+    if (filterClient != null && client != filterClient) {
+      askSwitchAccount(client, (args.roomId, args.clientId));
+      return;
+    }
+
+    var room = client.getRoom(roomId);
+
+    if (room == null) {
+      room = client.getRoomByAlias(roomId);
+    }
+
+    if (room != null) {
+      if (preferences.automaticallyOpenSpace.value && args.openInSpace) {
+        var spacesWithRoom =
+            client.spaces.where((element) => element.containsRoom(roomId));
+
+        if (spacesWithRoom.isNotEmpty) {
+          selectSpace(spacesWithRoom.first);
+        }
+      }
+
+      selectRoom(room, bypassSpecialRoomType: bypassSpecialRoomType);
+    } else {
+      GetOrCreateRoom.show(client, context,
+          pickExisting: false,
+          showAllRoomTypes: false,
+          initialRoomAddress: originalId);
+    }
+  }
+
+  Future<void> askSwitchAccount(
+      Client newClient, (String, String?) strings) async {
+    var confirm = await AdaptiveDialog.confirmation(context,
+        prompt:
+            "You tried to open a room for another account (${newClient.self?.identifier}), would you like to switch?",
+        title: "Switch Account");
+    if (confirm != true) return;
+
+    EventBus.setFilterClient.add(newClient);
+    preferences.filterClient.set(newClient.identifier);
+    EventBus.doOpenRoom(strings.$1, clientId: strings.$2);
+  }
+
+  void navigateRoomSettings() {
+    if (currentRoom != null) {
+      NavigationUtils.navigateTo(
+          context,
+          RoomSettingsPage(
+            room: currentRoom!,
+            contextSpace: currentSpace,
+            onLeaveRoom: clearRoomSelection,
+          ));
+    }
+  }
+
+  void onOpenUserProfileSignal((String, String, String?) event) {
+    var userId = event.$1;
+    var clientId = event.$2;
+
+    var client = clientManager.getClient(clientId);
+    if (client != null) {
+      UserProfile.show(context, client: client, userId: userId);
+    }
+  }
+
+  void searchUserToDm() async {
+    var client = filterClient;
+    if (client == null) client = await AdaptiveDialog.pickClient(context);
+
+    if (client == null) {
+      return;
+    }
+
+    final invitation = client.getComponent<InvitationComponent>();
+    if (invitation == null) return;
+
+    AdaptiveDialog.show(context,
+        builder: (context) => SendInvitationWidget(
+              client!,
+              invitation,
+              showSuggestions: false,
+              onUserPicked: (userId) async {
+                final confirm = await AdaptiveDialog.confirmation(context,
+                    prompt: "Are you sure you want to invite $userId to chat?",
+                    title: "Invitation");
+                if (confirm != true) {
+                  return;
+                }
+
+                var comp = client!.getComponent<DirectMessagesComponent>();
+                await comp?.createDirectMessage(userId);
+              },
+            ),
+        title: "Start Direct Message");
+  }
+
+  bool _onKeyPressed(KeyEvent event) {
+    if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.keyK &&
+          ServicesBinding.instance.keyboard.isControlPressed) {
+        QuickSwitcher.show(context);
+      }
+    }
+
+    return false;
+  }
+}

@@ -1,1 +1,1 @@
-{"nodes": [{"id": "$graphify-root$_cockhouse_lib_firebase_options_dart", "label": "firebase_options.dart", "file_type": "code", "source_file": "cockhouse/lib/firebase_options.dart", "source_location": null}], "edges": []}
+{"nodes": [{"id": "$graphify-root$_rooster_lib_firebase_options_dart", "label": "firebase_options.dart", "file_type": "code", "source_file": "rooster/lib/firebase_options.dart", "source_location": null}], "edges": []}

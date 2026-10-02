@@ -7,7 +7,7 @@ use std::time::Instant;
 use anyhow::{bail, Context, Result};
 use flate2::read::GzDecoder;
 use ini::Ini;
-// COCKHOUSE: tract's own ndarray (0.16 from tract 0.21.13 on), re-exported so
+// ROOSTER: tract's own ndarray (0.16 from tract 0.21.13 on), re-exported so
 // that callers build their buffers with the same version.
 pub use tract_core::ndarray;
 use tract_core::ndarray::{prelude::*, Axis};
@@ -72,7 +72,7 @@ impl DfParams {
         })
     }
 }
-// COCKHOUSE: the model's bytes, so that a caller can load it with
+// ROOSTER: the model's bytes, so that a caller can load it with
 // `DfParams::from_bytes` and handle an error instead of the panic in
 // `DfParams::default`. It sits next to the crate, not in the repository root.
 #[cfg(feature = "default-model")]
@@ -81,7 +81,7 @@ pub const DEFAULT_MODEL: &[u8] = include_bytes!("../models/DeepFilterNet3_onnx.t
 impl Default for DfParams {
     #[allow(unreachable_code)]
     fn default() -> Self {
-        // COCKHOUSE: the low-latency model (DeepFilterNet3_ll) is not vendored.
+        // ROOSTER: the low-latency model (DeepFilterNet3_ll) is not vendored.
         #[cfg(feature = "default-model")]
         {
             log::debug!("Loading model DeepFilterNet3_onnx.tar.gz");
@@ -773,7 +773,7 @@ fn init_encoder_impl(
     n_ch: usize,
 ) -> Result<TypedModel> {
     log::debug!("Start init encoder.");
-    let s = m.symbols.sym("S"); // COCKHOUSE: `symbol_table` in tract 0.21.4
+    let s = m.symbols.sym("S"); // ROOSTER: `symbol_table` in tract 0.21.4
 
     let nb_erb = df_cfg.get("nb_erb").unwrap().parse::<usize>()?;
     let nb_df = df_cfg.get("nb_df").unwrap().parse::<usize>()?;
@@ -822,7 +822,7 @@ fn init_erb_decoder_impl(
     mask_reduction: Option<ReduceMask>,
 ) -> Result<TypedModel> {
     log::debug!("Start init ERB decoder.");
-    let s = m.symbols.sym("S"); // COCKHOUSE: `symbol_table` in tract 0.21.4
+    let s = m.symbols.sym("S"); // ROOSTER: `symbol_table` in tract 0.21.4
 
     let nb_erb = df_cfg.get("nb_erb").unwrap().parse::<usize>()?;
     let layer_width = net_cfg.get("conv_ch").unwrap().parse::<usize>()?;
@@ -935,7 +935,7 @@ fn init_df_decoder_impl(
     n_ch: usize,
 ) -> Result<TypedModel> {
     log::debug!("Start init DF decoder.");
-    let s = m.symbols.sym("S"); // COCKHOUSE: `symbol_table` in tract 0.21.4
+    let s = m.symbols.sym("S"); // ROOSTER: `symbol_table` in tract 0.21.4
 
     let nb_erb = df_cfg.get("nb_erb").unwrap().parse::<usize>()?;
     let nb_df = df_cfg.get("nb_df").unwrap().parse::<usize>()?;

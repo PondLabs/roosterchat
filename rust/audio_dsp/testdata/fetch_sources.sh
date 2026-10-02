@@ -28,7 +28,7 @@ done
 # Knuckles on a table: the knocking from the noise suppression report.
 f="$dir/knuckles_on_table_16k.wav"
 if [ ! -f "$f" ]; then
-  curl -sSfL -A "cockhouse-test-fixtures" -o "$dir/bulerias_con_nudillos.ogg" \
+  curl -sSfL -A "rooster-test-fixtures" -o "$dir/bulerias_con_nudillos.ogg" \
     "https://upload.wikimedia.org/wikipedia/commons/d/d9/Buler%C3%ADas_con_nudillos.ogg"
   ffmpeg -v error -y -i "$dir/bulerias_con_nudillos.ogg" -ac 1 -ar 16000 -c:a pcm_s16le "$f"
 fi
@@ -38,7 +38,7 @@ commons() {
   out="$dir/$1_16k.wav"
   [ -f "$out" ] && return
   file=$(printf '%s' "$2" | sed 's/ /_/g')
-  curl -sSfL -A "cockhouse-test-fixtures" -o "$dir/$1.src" \
+  curl -sSfL -A "rooster-test-fixtures" -o "$dir/$1.src" \
     "https://commons.wikimedia.org/wiki/Special:FilePath/$file"
   ffmpeg -v error -y -i "$dir/$1.src" -ac 1 -ar 16000 -c:a pcm_s16le "$out"
   sleep 2 # Commons throttles quick successions of downloads

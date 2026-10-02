@@ -41,11 +41,11 @@ mirroring CI:
 
 - `cargo test -p audio_dsp`: 25 unit tests and 15 recording driven ones pass
   (2026-09-17, see "Loudspeaker bleed"); wasm build is 483 KB.
-- `dart analyze` in `cockhouse/`: no new issues. The vendored LiveKit files
+- `dart analyze` in `rooster/`: no new issues. The vendored LiveKit files
   analyze clean.
 - `flutter build linux --debug`: passes, including the vendored C++ plugin
-  and the cargokit Rust build. The bundled `librust_lib_cockhouse.so` exports
-  all 24 `cockhouse_dsp_*` symbols; a dart:ffi smoke test through the app's
+  and the cargokit Rust build. The bundled `librust_lib_rooster.so` exports
+  all 24 `rooster_dsp_*` symbols; a dart:ffi smoke test through the app's
   struct layouts and callback signatures processes 100 frames correctly.
 - The prebuilt libwebrtc 1.4.0 contains `RTCAudioProcessingImpl` and
   `CustomProcessingAdapter`, so the hook is implemented, not just declared.
@@ -62,7 +62,7 @@ APM is initialized. The host used to pass nullptr to detach before
 installing and again on clear; since the mic track already exists at that
 point this was a null virtual call. The host now installs one long-lived
 no-op proxy per slot exactly once and swaps the Rust callbacks inside it
-(`shared_cpp/cockhouse_external_audio_processing.h`).
+(`shared_cpp/rooster_external_audio_processing.h`).
 
 Investigation (2026-09-15, Windows, "no audible difference" report): the
 wiring is complete end to end (LiveKit session → `CallManager` →
@@ -90,7 +90,7 @@ microphone outside one; see "Microphone test" below.
 |----------|----------|
 | Default state of noise suppression | On for desktop and web, off on Android until the hardware DSP interplay is tested |
 | Upstream | Never. Third-party code we change is vendored under `third_party/` (see `third_party/README.md`) |
-| Where the web wasm lives | `cockhouse/web/audio_dsp.wasm`, gitignored, built by `cockhouse/scripts/prepare-web.sh` like the e2ee worker |
+| Where the web wasm lives | `rooster/web/audio_dsp.wasm`, gitignored, built by `rooster/scripts/prepare-web.sh` like the e2ee worker |
 | Sensitivity UI | Level meter in dBFS with a threshold marker, plus an "Automatic" switch that uses the VAD |
 | Model | DeepFilterNet3 (libDF and its model, MIT/Apache-2.0, vendored and trimmed in `third_party/deep_filter`) since 2026-09-25: RNNoise (`nnnoiseless`, BSD-3) let knocks through. RNNoise stays as the speech detector and the fallback |
 | Where the web DSP runs | A Web Worker (`audio_dsp.worker.js`); the AudioWorklet only moves 10 ms blocks. The model takes about 4 ms of each 10 ms block in wasm, a worklet quantum has 2.67 ms |
@@ -100,23 +100,23 @@ microphone outside one; see "Microphone test" below.
 One DSP core, three transports.
 
 ```
-rust/audio_dsp            C ABI: cockhouse_dsp_*          (tested, cargo test -p audio_dsp)
+rust/audio_dsp            C ABI: rooster_dsp_*          (tested, cargo test -p audio_dsp)
    |  + third_party/deep_filter (DeepFilterNet3, tract)
    |                       |
    | re-exported by        | compiled to wasm32-unknown-unknown, no imports
    v                       v
-librust_lib_cockhouse     cockhouse/web/audio_dsp.wasm
+librust_lib_rooster     rooster/web/audio_dsp.wasm
    |                       |
    | dart:ffi addresses    | instantiated inside a Web Worker
    v                       v
-vendored livekit plugin (Linux/Windows C++)          cockhouse/web/audio_dsp.worker.js (runs the DSP)
-   cockhouseSetExternalAudioProcessing                   cockhouse/web/audio_dsp.worklet.js (10 ms blocks to and fro)
-   -> RTCAudioProcessing::SetCapturePostProcessing    cockhouse/web/audio_dsp.js (graph glue)
+vendored livekit plugin (Linux/Windows C++)          rooster/web/audio_dsp.worker.js (runs the DSP)
+   roosterSetExternalAudioProcessing                   rooster/web/audio_dsp.worklet.js (10 ms blocks to and fro)
+   -> RTCAudioProcessing::SetCapturePostProcessing    rooster/web/audio_dsp.js (graph glue)
    -> RTCAudioProcessing::SetRenderPreProcessing      -> LiveKit TrackProcessor (processedTrack)
                                                       -> second worklet input = remote mix
 ```
 
-Dart entry point: `cockhouse/lib/client/components/voip/audio_processing/`.
+Dart entry point: `rooster/lib/client/components/voip/audio_processing/`.
 `AudioProcessingManager.instance` is created lazily with a conditional
 import (stub / native / web). `CallManager` calls `onSessionStarted` and
 `onSessionEnded`; `MatrixLivekitBackend.join` passes
@@ -163,8 +163,8 @@ While the DSP is installed and "Filter out sound from your speakers" is on,
 the vendored flutter-webrtc also runs its system-audio loopback (WASAPI
 process loopback excluding ourselves on Windows, one monitor stream per
 application except ours on Linux) and hands every packet to
-`cockhouse_dsp_feed_reference` from its capture thread, ahead of the Windows
-feeder's 160 ms pre-buffer (`cockhouse_system_audio_reference.h`,
+`rooster_dsp_feed_reference` from its capture thread, ahead of the Windows
+feeder's 160 ms pre-buffer (`rooster_system_audio_reference.h`,
 `LoopbackCapturer::SetRawTap`).
 
 Three properties of that WebRTC matter here, all found by the native loop:
@@ -191,17 +191,17 @@ Three properties of that WebRTC matter here, all found by the native loop:
   removed, and the handler only acts on a picked device. The vendored
   flutter-webrtc now remembers the selected microphone by id and selects it
   again, by id, before a local audio track is enabled
-  (`ReselectRecordingDevice`, a `// COCKHOUSE` change).
+  (`ReselectRecordingDevice`, a `// ROOSTER` change).
 
 Web: `getUserMedia` (browser AEC on, NS off, AGC on) →
-`MediaStreamAudioSourceNode` → **`cockhouse-dsp` AudioWorklet ⇄
+`MediaStreamAudioSourceNode` → **`rooster-dsp` AudioWorklet ⇄
 `audio_dsp.worker.js` (wasm)** → `MediaStreamAudioDestinationNode` →
 published track. The worklet gathers 10 ms blocks (the microphone and the
 far end), transfers each to the worker the moment its last sample is in,
 and plays the processed blocks 20 ms behind the input; a block that comes
 back late is played late (silence in the gap, the delay grows by it, at
 most four blocks). Every remote audio track is also connected to the
-worklet's second input for far-end level. `cockhouseAudioDsp.probe()`
+worklet's second input for far-end level. `roosterAudioDsp.probe()`
 (worklet module, worker script, wasm, exports, ABI, checked in a worker)
 decides whether the DSP can run before a call turns the browser's
 suppressor off, and `create()` only hands out a graph whose worker has
@@ -228,7 +228,7 @@ crate resamples). The worker hands unit-scale 480-sample blocks.
    speech above the noise (its local SNR over 0 dB) in one of its last four
    blocks (`Dsp::gate_vad`); keeping it open takes only the first. Without the model RNNoise does both, as it used to: in
    the app's first half second while the model is built on a thread of its
-   own (`ModelLoad::Background`, `cockhouse_dsp_create`), and for good when
+   own (`ModelLoad::Background`, `rooster_dsp_create`), and for good when
    the model takes over 6 ms a block on average (`dfn::CostMeter`, native)
    or 8 ms (the web worker's timer), or cannot be built. The model's lookahead holds the last audio it heard,
    so a model that arrives mid-stream, one switched back on and one after
@@ -412,31 +412,31 @@ receiving no frames. That is the first thing to read when the meter is dead.
 | `rust/audio_dsp/tests/background_noise.rs` | eighteen noises alone and under speech, with what each has to keep doing |
 | `rust/audio_dsp/src/highpass.rs` | the 70 Hz high-pass after noise suppression |
 | `rust/audio_dsp/examples/process_wav.rs` | a recording through the DSP, for listening and measuring |
-| `third_party/flutter-webrtc/common/cpp/include/cockhouse_system_audio_reference.h` | system mix to `cockhouse_dsp_feed_reference`; `cockhouseStartSystemAudioReference` / `cockhouseStopSystemAudioReference` in `flutter_webrtc.cc` |
+| `third_party/flutter-webrtc/common/cpp/include/rooster_system_audio_reference.h` | system mix to `rooster_dsp_feed_reference`; `roosterStartSystemAudioReference` / `roosterStopSystemAudioReference` in `flutter_webrtc.cc` |
 | `third_party/flutter-webrtc/common/cpp/include/loopback_capturer.h`, `{windows/application,linux/pulse}_loopback_capturer.cc` | `SetRawTap`: packets as they come off the OS, before the Windows feeder's pre-buffer |
-| `rust/rust/src/lib.rs` | `pub use audio_dsp;` so the symbols ship in `librust_lib_cockhouse` |
-| `third_party/livekit-client-sdk-flutter/shared_cpp/cockhouse_external_audio_processing.h` | CustomProcessing adapters |
-| `third_party/livekit-client-sdk-flutter/{linux,windows}/livekit_plugin.cpp` | `cockhouseSetExternalAudioProcessing` / `cockhouseClearExternalAudioProcessing` |
+| `rust/rust/src/lib.rs` | `pub use audio_dsp;` so the symbols ship in `librust_lib_rooster` |
+| `third_party/livekit-client-sdk-flutter/shared_cpp/rooster_external_audio_processing.h` | CustomProcessing adapters |
+| `third_party/livekit-client-sdk-flutter/{linux,windows}/livekit_plugin.cpp` | `roosterSetExternalAudioProcessing` / `roosterClearExternalAudioProcessing` |
 | `third_party/livekit-client-sdk-flutter/lib/src/support/native.dart` | Dart side of those methods (`Native.setExternalAudioProcessing`) |
 | `third_party/livekit-client-sdk-flutter/lib/src/track/local/local.dart` | `replaceTrack` after a processor is set, restore on stop |
 | `third_party/livekit-client-sdk-flutter/lib/src/track/remote/audio.dart`, `track/web/_audio_{html,api}.dart` | `RemoteAudioTrack.setVolume`: per-track playback volume on web (audio element, 0..1) |
-| `cockhouse/lib/client/components/voip/audio_processing/` | manager (stub, native, web), settings and report models |
-| `cockhouse/lib/ui/pages/settings/categories/app/voip_settings/voip_audio_processing_settings.dart` | toggles and level meter |
-| `cockhouse/lib/client/components/voip/audio_processing/microphone_noise_suppression.dart` | who suppresses, the watchdog, `microphoneConstraints` |
-| `cockhouse/lib/client/components/voip/audio_processing/noise_suppressed_media_devices.dart` | legacy 1:1 calls' MediaDevices |
-| `cockhouse/lib/client/components/voip/audio_processing/noise_suppression_notice.dart` | what the user is told when suppression falls back |
-| `cockhouse/lib/client/matrix/components/voip_room/livekit_microphone.dart` | a voice room's microphone: created, found, toggled |
-| `cockhouse/web/audio_dsp.js`, `cockhouse/web/audio_dsp.worklet.js`, `cockhouse/web/audio_dsp.worker.js` | browser glue: the graph, the worklet moving blocks, the worker running the wasm |
-| `cockhouse/scripts/build-audio-dsp-wasm.sh` | builds `audio_dsp.wasm` (called by `prepare-web.sh` and CI) |
-| `cockhouse/unit_test/noise_suppression/` | the Dart tests below |
-| `cockhouse/integration_test/voice_dsp/` | entry points of the native and web app loops |
+| `rooster/lib/client/components/voip/audio_processing/` | manager (stub, native, web), settings and report models |
+| `rooster/lib/ui/pages/settings/categories/app/voip_settings/voip_audio_processing_settings.dart` | toggles and level meter |
+| `rooster/lib/client/components/voip/audio_processing/microphone_noise_suppression.dart` | who suppresses, the watchdog, `microphoneConstraints` |
+| `rooster/lib/client/components/voip/audio_processing/noise_suppressed_media_devices.dart` | legacy 1:1 calls' MediaDevices |
+| `rooster/lib/client/components/voip/audio_processing/noise_suppression_notice.dart` | what the user is told when suppression falls back |
+| `rooster/lib/client/matrix/components/voip_room/livekit_microphone.dart` | a voice room's microphone: created, found, toggled |
+| `rooster/web/audio_dsp.js`, `rooster/web/audio_dsp.worklet.js`, `rooster/web/audio_dsp.worker.js` | browser glue: the graph, the worklet moving blocks, the worker running the wasm |
+| `rooster/scripts/build-audio-dsp-wasm.sh` | builds `audio_dsp.wasm` (called by `prepare-web.sh` and CI) |
+| `rooster/unit_test/noise_suppression/` | the Dart tests below |
+| `rooster/integration_test/voice_dsp/` | entry points of the native and web app loops |
 | `rust/audio_dsp/examples/noisy_speech.rs` | the fixture every loop plays |
 | `tools/voice_dsp/` | the loops and the contracts check |
 
 Preferences: `voipNoiseSuppression`, `voipInputSensitivityAuto`,
 `voipInputSensitivityDb`, `voipFarEndDucking`, `voipSpeakerBleed`.
 
-Vendored LiveKit and flutter-webrtc changes are marked `// COCKHOUSE`.
+Vendored LiveKit and flutter-webrtc changes are marked `// ROOSTER`.
 
 ## Building and testing
 
@@ -452,7 +452,7 @@ cargo test -p audio_dsp --test background_noise -- --nocapture
 # or without a local toolchain
 docker run --rm -v "$PWD":/w -w /w rust:1 cargo test -p audio_dsp
 
-# WebAssembly (also done by cockhouse/scripts/prepare-web.sh), about 24 MB, 8 of
+# WebAssembly (also done by rooster/scripts/prepare-web.sh), about 24 MB, 8 of
 # them the model
 cargo build -p audio_dsp --release --target wasm32-unknown-unknown
 
@@ -461,7 +461,7 @@ cargo run -p audio_dsp --release --example diag
 ```
 
 After changing `pubspec.yaml` (LiveKit is now a path dependency) run
-`flutter pub get` in `cockhouse/`.
+`flutter pub get` in `rooster/`.
 
 Debug builds optimise every dependency and leave their debug info out (the
 workspace `Cargo.toml`): unoptimised, DeepFilterNet cannot keep up with
@@ -475,8 +475,8 @@ when it is missing):
 # seconds: names, ABI and vendored changes the chain depends on
 python3 tools/voice_dsp/check_contracts.py
 # Dart: the FFI loop, the decisions, the vendored LiveKit track
-(cd cockhouse && flutter test unit_test/noise_suppression)
-# browser: the glue alone (cockhouse/web needs audio_dsp.wasm)
+(cd rooster && flutter test unit_test/noise_suppression)
+# browser: the glue alone (rooster/web needs audio_dsp.wasm)
 node tools/voice_dsp/web_noise_loop.mjs
 # browser: everything CI's voice-dsp job does (about 4 min)
 tools/voice_dsp/web_loops.sh
@@ -504,7 +504,7 @@ tools/voice_dsp/native_noise_loop.sh
 | Legacy calls: the preference and the device reach the capture; a failed web DSP recaptures with the browser's suppressor | `legacy_call_microphone_test.dart` | ci `test` |
 | The web processor survives restart, device switch and mute; `copyWith` keeps it | `livekit_processor_restart_test.dart` | ci `test` |
 | Legacy sessions leave CallManager; #48 stays fixed | `call_manager_dsp_test.dart` | ci `test` |
-| Names, ABI, method channels, vendored changes, overrides, `// COCKHOUSE` count | `check_contracts.py` | ci `voice-dsp` |
+| Names, ABI, method channels, vendored changes, overrides, `// ROOSTER` count | `check_contracts.py` | ci `voice-dsp` |
 | The web build carries `audio_dsp.js`, the worklet and a real wasm | `check_contracts.py --web-build` | ci `voice-dsp`, build, release |
 | The browser DSP suppresses; a missing or broken wasm or worklet is caught by `probe()` and `create()` | `web_noise_loop.mjs` | ci `voice-dsp` |
 | What a room's RTCRtpSender carries in the browser is suppressed, before and after a restart; a legacy call's too; no wasm keeps the browser's suppressor | `web_noise_loop.mjs --app` | ci `voice-dsp` |
@@ -526,7 +526,7 @@ browser suppression broken. The Rust and Dart tests run in `test`, which
 Ordered by how badly it hurts if wrong.
 
 1. **Windows.** The native loop runs on Linux. Windows shares the C++ hook
-   (`cockhouse_external_audio_processing.h`, checked by the contracts), the
+   (`rooster_external_audio_processing.h`, checked by the contracts), the
    Dart manager and the Rust library, and CI compiles it, but nothing plays
    audio through it. In Settings → VoIP, "Test microphone" with "Hear
    myself" off: the status line must read "Processing 48 kHz audio".
@@ -651,7 +651,7 @@ Preference: `voipSpeakerBleed` ("Filter out sound from your speakers"),
 on by default. Report flags: `speakerBleed` (the gate is held for bleed),
 `referenceActive` (system audio is arriving); the settings status line says
 "Holding back sound from your speakers." while the first is set. ABI 2:
-`Params::speaker_bleed` took the padding byte, `cockhouse_dsp_feed_reference`
+`Params::speaker_bleed` took the padding byte, `rooster_dsp_feed_reference`
 is new.
 
 Still not verified: any of this with a real microphone in a real room. The
@@ -669,7 +669,7 @@ your speakers." within two seconds of the video starting.
 - Other people talking, singing, and noise as loud as the voice: see
   "Background noise".
 - Size: DeepFilterNet brings tract and its 8 MB model into
-  `librust_lib_cockhouse` (38 MB in a Linux release build, 30 MB stripped),
+  `librust_lib_rooster` (38 MB in a Linux release build, 30 MB stripped),
   and `audio_dsp.wasm` went from 0.5 to 24 MB, fetched by the web app when a call or the
   microphone test first needs the DSP. tract's wasm SIMD kernel was tried
   and ran slower than its generic one for this model's shapes (RTF 0.70
@@ -717,7 +717,7 @@ your speakers." within two seconds of the video starting.
     update stopped re-applying options on re-enable. Then the options have
     to travel with the custom source instead (option A): create the screen
     audio and music sources with the microphone's options
-    (`flutter_screen_capture.cc`, `cockhouse_music_source.h`; the values from
+    (`flutter_screen_capture.cc`, `rooster_music_source.h`; the values from
     `microphoneConstraints`), and recreate them when the preference flips.
   - It prints "no longer changes the microphone's processing" when "with the
     custom source" stays near "before": the leak is gone in that libwebrtc

@@ -123,7 +123,7 @@ class FlutterWebRTCBase {
   bool warp_enabled_ = false;
   scoped_refptr<RTCPeerConnectionFactory> factory_;
   scoped_refptr<RTCAudioDevice> audio_device_;
-  // COCKHOUSE: the microphone selected last (getUserMedia, selectAudioInput) and
+  // ROOSTER: the microphone selected last (getUserMedia, selectAudioInput) and
   // its index in the device list then; see ReselectRecordingDevice.
   std::string recording_device_id_;
   int recording_device_index_ = -1;

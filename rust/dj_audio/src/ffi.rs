@@ -1,5 +1,5 @@
 //! C ABI. Dart controls the player with `dart:ffi`; the WebRTC plugin's C++
-//! pacing thread calls `cockhouse_music_pull` every 10 ms with the same handle.
+//! pacing thread calls `rooster_music_pull` every 10 ms with the same handle.
 //!
 //! `open`, `stop`, `seek`, `set_paused`, `set_gain` and `status` may run on
 //! one thread concurrently with `pull` on another. `open` and `seek` block
@@ -50,21 +50,21 @@ unsafe fn player<'a>(p: *mut c_void) -> Option<&'a Player> {
 }
 
 #[no_mangle]
-pub extern "C" fn cockhouse_music_abi_version() -> u32 {
+pub extern "C" fn rooster_music_abi_version() -> u32 {
     ABI_VERSION
 }
 
 #[no_mangle]
-pub extern "C" fn cockhouse_music_new() -> *mut c_void {
+pub extern "C" fn rooster_music_new() -> *mut c_void {
     catch_unwind(|| Box::into_raw(Box::new(Player::new())) as *mut c_void)
         .unwrap_or(std::ptr::null_mut())
 }
 
 /// # Safety
-/// `p` must be null or come from `cockhouse_music_new`, freed once, with no
+/// `p` must be null or come from `rooster_music_new`, freed once, with no
 /// concurrent call on it.
 #[no_mangle]
-pub unsafe extern "C" fn cockhouse_music_free(p: *mut c_void) {
+pub unsafe extern "C" fn rooster_music_free(p: *mut c_void) {
     if p.is_null() {
         return;
     }
@@ -74,7 +74,7 @@ pub unsafe extern "C" fn cockhouse_music_free(p: *mut c_void) {
 /// # Safety
 /// `p` must be a live handle; `path_utf8` null or a NUL-terminated string.
 #[no_mangle]
-pub unsafe extern "C" fn cockhouse_music_open(
+pub unsafe extern "C" fn rooster_music_open(
     p: *mut c_void,
     path_utf8: *const c_char,
     start_ms: u64,
@@ -108,7 +108,7 @@ unsafe fn path_arg<'a>(path_utf8: *const c_char) -> Option<&'a Path> {
 /// # Safety
 /// `path_utf8` must be null or a NUL-terminated string.
 #[no_mangle]
-pub unsafe extern "C" fn cockhouse_music_file_growing(
+pub unsafe extern "C" fn rooster_music_file_growing(
     path_utf8: *const c_char,
     total_len: u64,
     duration_ms: u64,
@@ -123,7 +123,7 @@ pub unsafe extern "C" fn cockhouse_music_file_growing(
 /// # Safety
 /// `path_utf8` must be null or a NUL-terminated string.
 #[no_mangle]
-pub unsafe extern "C" fn cockhouse_music_file_done(path_utf8: *const c_char, ok: u8) {
+pub unsafe extern "C" fn rooster_music_file_done(path_utf8: *const c_char, ok: u8) {
     if let Some(path) = path_arg(path_utf8) {
         let _ = catch_unwind(|| growing::finish(path, ok != 0));
     }
@@ -132,7 +132,7 @@ pub unsafe extern "C" fn cockhouse_music_file_done(path_utf8: *const c_char, ok:
 /// # Safety
 /// `p` must be null or a live handle.
 #[no_mangle]
-pub unsafe extern "C" fn cockhouse_music_stop(p: *mut c_void) {
+pub unsafe extern "C" fn rooster_music_stop(p: *mut c_void) {
     if let Some(player) = player(p) {
         let _ = catch_unwind(AssertUnwindSafe(|| player.stop()));
     }
@@ -141,7 +141,7 @@ pub unsafe extern "C" fn cockhouse_music_stop(p: *mut c_void) {
 /// # Safety
 /// `p` must be null or a live handle.
 #[no_mangle]
-pub unsafe extern "C" fn cockhouse_music_set_paused(p: *mut c_void, paused: u8) {
+pub unsafe extern "C" fn rooster_music_set_paused(p: *mut c_void, paused: u8) {
     if let Some(player) = player(p) {
         player.set_paused(paused != 0);
     }
@@ -150,7 +150,7 @@ pub unsafe extern "C" fn cockhouse_music_set_paused(p: *mut c_void, paused: u8) 
 /// # Safety
 /// `p` must be null or a live handle.
 #[no_mangle]
-pub unsafe extern "C" fn cockhouse_music_seek(p: *mut c_void, ms: u64) -> i32 {
+pub unsafe extern "C" fn rooster_music_seek(p: *mut c_void, ms: u64) -> i32 {
     let Some(player) = player(p) else {
         return ERR_ARGS;
     };
@@ -160,7 +160,7 @@ pub unsafe extern "C" fn cockhouse_music_seek(p: *mut c_void, ms: u64) -> i32 {
 /// # Safety
 /// `p` must be null or a live handle.
 #[no_mangle]
-pub unsafe extern "C" fn cockhouse_music_set_gain(p: *mut c_void, gain: f32) {
+pub unsafe extern "C" fn rooster_music_set_gain(p: *mut c_void, gain: f32) {
     if let Some(player) = player(p) {
         player.set_gain(gain);
     }
@@ -169,7 +169,7 @@ pub unsafe extern "C" fn cockhouse_music_set_gain(p: *mut c_void, gain: f32) {
 /// # Safety
 /// `p` must be null or a live handle; `out` null or writable.
 #[no_mangle]
-pub unsafe extern "C" fn cockhouse_music_status(p: *mut c_void, out: *mut MusicStatus) {
+pub unsafe extern "C" fn rooster_music_status(p: *mut c_void, out: *mut MusicStatus) {
     if out.is_null() {
         return;
     }
@@ -195,7 +195,7 @@ pub unsafe extern "C" fn cockhouse_music_status(p: *mut c_void, out: *mut MusicS
 /// `ctx` must be null or a live handle; `out` null or writable for
 /// `frames * channels` samples.
 #[no_mangle]
-pub unsafe extern "C" fn cockhouse_music_pull(
+pub unsafe extern "C" fn rooster_music_pull(
     ctx: *mut c_void,
     out: *mut i16,
     frames: usize,
@@ -250,7 +250,7 @@ pub struct ClipBytes {
 }
 
 #[no_mangle]
-pub extern "C" fn cockhouse_clip_abi_version() -> u32 {
+pub extern "C" fn rooster_clip_abi_version() -> u32 {
     CLIP_ABI_VERSION
 }
 
@@ -260,7 +260,7 @@ pub extern "C" fn cockhouse_clip_abi_version() -> u32 {
 /// # Safety
 /// `path` must be null or a NUL-terminated string; `out` null or writable.
 #[no_mangle]
-pub unsafe extern "C" fn cockhouse_clip_decode(
+pub unsafe extern "C" fn rooster_clip_decode(
     path: *const c_char,
     start_ms: u64,
     max_ms: u64,
@@ -294,9 +294,9 @@ pub unsafe extern "C" fn cockhouse_clip_decode(
 }
 
 /// # Safety
-/// `samples`/`len` must come from `cockhouse_clip_decode`, and be freed once.
+/// `samples`/`len` must come from `rooster_clip_decode`, and be freed once.
 #[no_mangle]
-pub unsafe extern "C" fn cockhouse_clip_decode_free(samples: *mut f32, len: usize) {
+pub unsafe extern "C" fn rooster_clip_decode_free(samples: *mut f32, len: usize) {
     free(samples, len);
 }
 
@@ -307,7 +307,7 @@ pub unsafe extern "C" fn cockhouse_clip_decode_free(samples: *mut f32, len: usiz
 /// `samples` must be null or point to `len` readable floats; `out` null or
 /// writable.
 #[no_mangle]
-pub unsafe extern "C" fn cockhouse_clip_encode_ogg_opus(
+pub unsafe extern "C" fn rooster_clip_encode_ogg_opus(
     samples: *const f32,
     len: usize,
     channels: u32,
@@ -337,10 +337,10 @@ pub unsafe extern "C" fn cockhouse_clip_encode_ogg_opus(
 }
 
 /// # Safety
-/// `data`/`len` must come from `cockhouse_clip_encode_ogg_opus`, and be freed
+/// `data`/`len` must come from `rooster_clip_encode_ogg_opus`, and be freed
 /// once.
 #[no_mangle]
-pub unsafe extern "C" fn cockhouse_clip_bytes_free(data: *mut u8, len: usize) {
+pub unsafe extern "C" fn rooster_clip_bytes_free(data: *mut u8, len: usize) {
     free(data, len);
 }
 

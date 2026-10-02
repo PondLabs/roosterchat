@@ -3,7 +3,7 @@
 This is research for replacing the free-text emoji field in the Space
 soundboard settings with the app's emoticon picker, so admins can pick custom
 Space emoji (mxc). Everything here was read from the source. Paths are
-relative to `cockhouse/` unless they start with `tiamat/` or `docs/`.
+relative to `rooster/` unless they start with `tiamat/` or `docs/`.
 
 ## 1. `SoundboardSound` model and storage
 
@@ -272,10 +272,10 @@ relative to `cockhouse/` unless they start with `tiamat/` or `docs/`.
 
 ## 7. Popover utilities
 
-- There is no generic `showPopover` helper in `cockhouse/` or `tiamat/`. The
+- There is no generic `showPopover` helper in `rooster/` or `tiamat/`. The
   existing patterns are:
   - `just_the_tooltip`'s `JustTheTooltip`, a dependency of both packages
-    (`cockhouse/pubspec.yaml:31`, `tiamat/pubspec.yaml:18`). It is used as a
+    (`rooster/pubspec.yaml:31`, `tiamat/pubspec.yaml:18`). It is used as a
     modal popover in `message_input.dart:990-1014` and for hovers in
     `tiamat/lib/atoms/tooltip.dart:42`, `side_navigation_bar.dart:62` and
     `account_management_tab.dart:219`.

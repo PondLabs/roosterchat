@@ -2,7 +2,7 @@
 
 A status link previews as an X card, laid out like iframely's: the author's avatar, name, verified mark and @handle, the X logo, the post's text, its media, the quoted post, and the date with reply, repost and like counts. The links are `x.com`, `twitter.com` and `mobile.` hosts, and the fxtwitter, vxtwitter, fixupx, fixvx and twittpr mirrors, in the `/<user>/status/<id>` form. Clicking the card opens the post. Links, @mentions and #hashtags in the text open on their own, and so does the quoted post.
 
-`TwitterProvider` (`cockhouse/lib/client/components/video_embed/providers/twitter_provider.dart`) recognises the link and fetches the status. `XPost` (`.../video_embed/x_post.dart`) is the parsed status. `MatrixUrlPreviewComponent._xPostPreview` puts it on `UrlPreviewData.xPost`, and `UrlPreviewWidget._buildXCard` draws it.
+`TwitterProvider` (`rooster/lib/client/components/video_embed/providers/twitter_provider.dart`) recognises the link and fetches the status. `XPost` (`.../video_embed/x_post.dart`) is the parsed status. `MatrixUrlPreviewComponent._xPostPreview` puts it on `UrlPreviewData.xPost`, and `UrlPreviewWidget._buildXCard` draws it.
 
 ## Data: fxtwitter's API
 
@@ -39,4 +39,4 @@ curl -s -H 'Origin: https://example.com' -D - -o /dev/null \
   https://api.fxtwitter.com/SpaceX/status/1732824684683784516 | grep -i access-control
 ```
 
-The test fixture `cockhouse/unit_test/fixtures/x_status_fxtwitter.json` is SpaceX's video post with Ellen's Oscars selfie set as its quote. Both are trimmed from real replies.
+The test fixture `rooster/unit_test/fixtures/x_status_fxtwitter.json` is SpaceX's video post with Ellen's Oscars selfie set as its quote. Both are trimmed from real replies.

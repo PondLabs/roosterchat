@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECT_PATH: cockhouse
-  COCKHOUSE_PROD: 1
+  PROJECT_PATH: rooster
+  ROOSTER_PROD: 1
 
 jobs:
   release-windows:
@@ -44,24 +44,24 @@ jobs:
           if ($null -eq $archive) { throw "locked CEF archive was not fetched" }
           python tools/cef_runtime.py stage-sdk --platform windows-x64 $archive.FullName $sdk
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          "COCKHOUSE_BUILD_CEF_HOST=ON" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "ROOSTER_BUILD_CEF_HOST=ON" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "CEF_ROOT=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Code Generation
         run: |
-          cd .\cockhouse
+          cd .\rooster
           git config --global core.longpaths true
           dart run scripts/codegen.dart
 
       - name: Build Windows App
         run: |
-          cd .\cockhouse
+          cd .\rooster
           dart run scripts/build_release.dart --platform windows --version_tag ${{ github.event.release.tag_name || 'v0.0.0-artifact' }} --git_hash ${{ github.sha }}
 
       - name: Qualify Windows CEF artifact
         shell: pwsh
         run: |
-          $bundle = ".\cockhouse\build\windows\x64\runner\Release"
+          $bundle = ".\rooster\build\windows\x64\runner\Release"
           $payload = Join-Path $bundle "cef_host"
           $stage = Join-Path $env:GITHUB_WORKSPACE ".cef-stage"
           $metadata = Join-Path $env:GITHUB_WORKSPACE ".cef-metadata"
@@ -75,7 +75,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Archive 
-        run: tar -a -c -f cockhouse-windows.zip -C .\cockhouse\build\windows\x64\runner\ Release
+        run: tar -a -c -f rooster-windows.zip -C .\rooster\build\windows\x64\runner\ Release
       
       - name: Upload to release
         if: github.event_name == 'release'
@@ -84,16 +84,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: .\cockhouse-windows.zip
-          asset_name: cockhouse-windows.zip
+          asset_path: .\rooster-windows.zip
+          asset_name: rooster-windows.zip
           asset_content_type: application/zip
 
       - name: Upload Artifact
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: cockhouse-windows.zip
-          path: .\cockhouse-windows.zip
+          name: rooster-windows.zip
+          path: .\rooster-windows.zip
 
 
   release-android:
@@ -169,16 +169,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: cockhouse/build/app/outputs/flutter-apk/app-release.apk
-          asset_name: cockhouse-android.apk
+          asset_path: rooster/build/app/outputs/flutter-apk/app-release.apk
+          asset_name: rooster-android.apk
           asset_content_type: application/vnd.android.package-archive
 
       - name: Upload Artifact
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: cockhouse-android.apk
-          path: cockhouse/build/app/outputs/flutter-apk/app-release.apk
+          name: rooster-android.apk
+          path: rooster/build/app/outputs/flutter-apk/app-release.apk
 
   release-android-google-services:
     runs-on: ubuntu-24.04
@@ -255,8 +255,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: cockhouse/build/app/outputs/flutter-apk/app-release.apk
-          asset_name: cockhouse-android-google-services.apk
+          asset_path: rooster/build/app/outputs/flutter-apk/app-release.apk
+          asset_name: rooster-android-google-services.apk
           asset_content_type: application/vnd.android.package-archive
 
 
@@ -264,8 +264,8 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: cockhouse-android-google-services.apk
-          path: cockhouse/build/app/outputs/flutter-apk/app-release.apk
+          name: rooster-android-google-services.apk
+          path: rooster/build/app/outputs/flutter-apk/app-release.apk
 
   release-linux-debian:
   
@@ -331,13 +331,13 @@ jobs:
       - name: Create Package
         run: | 
           mv $PROJECT_PATH/linux/debian/DEBIAN/control-${{ matrix.os }} $PROJECT_PATH/linux/debian/DEBIAN/control
-          cp -r $PROJECT_PATH/linux/debian ./cockhouse-pkg
-          cp -r $PROJECT_PATH/build/linux/x64/release/bundle ./cockhouse-pkg/usr/lib/com.pondlabs.cockhouse
+          cp -r $PROJECT_PATH/linux/debian ./rooster-pkg
+          cp -r $PROJECT_PATH/build/linux/x64/release/bundle ./rooster-pkg/usr/lib/com.pondlabs.rooster
           version=$(echo ${{ github.event.release.tag_name || 'v0.0.0-artifact' }} | grep -oP '[0-9]+([.][0-9]+)+')
           echo $version
-          cd ./cockhouse-pkg
+          cd ./rooster-pkg
           sed -i "s/{{VERSION_TAG}}/$version/g" ./DEBIAN/control
-          dpkg-deb --build ./ cockhouse-linux-x64.deb
+          dpkg-deb --build ./ rooster-linux-x64.deb
       
       - name: Upload to release
         if: github.event_name == 'release'
@@ -346,16 +346,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: cockhouse-pkg/cockhouse-linux-x64.deb
-          asset_name: cockhouse-${{ matrix.os }}-x64.deb
+          asset_path: rooster-pkg/rooster-linux-x64.deb
+          asset_name: rooster-${{ matrix.os }}-x64.deb
           asset_content_type: application/vnd.debian.binary-package
 
       - name: Upload Artifact
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: cockhouse-${{ matrix.os }}-x64.deb
-          path: cockhouse-pkg/cockhouse-linux-x64.deb
+          name: rooster-${{ matrix.os }}-x64.deb
+          path: rooster-pkg/rooster-linux-x64.deb
 
   release-linux-flatpak:
     runs-on: ubuntu-24.04
@@ -418,15 +418,15 @@ jobs:
         run: | 
           sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
           sudo flatpak install -y flathub org.gnome.Platform//48 org.gnome.Sdk//48
-          mkdir -p cockhouse/linux/flatpak/cockhouse
-          cp -r $PROJECT_PATH/build/linux/x64/release/bundle $PROJECT_PATH/linux/flatpak/cockhouse/bundle
+          mkdir -p rooster/linux/flatpak/rooster
+          cp -r $PROJECT_PATH/build/linux/x64/release/bundle $PROJECT_PATH/linux/flatpak/rooster/bundle
           version=$(echo ${{ github.event.release.tag_name || 'v0.0.0-artifact' }} | grep -oP '[0-9]+([.][0-9]+)+')
           echo $version
           cd $PROJECT_PATH/linux/flatpak
-          sed -i "s/{{VERSION_TAG}}/$version/g" ./com.pondlabs.cockhouse.desktop
-          sed -i "s/{{VERSION_TAG}}/$version/g" ./com.pondlabs.cockhouse.metainfo.xml
-          flatpak-builder --force-clean build-dir com.pondlabs.cockhouse.yaml --repo=repo
-          flatpak build-bundle repo com.pondlabs.cockhouse.flatpak com.pondlabs.cockhouse
+          sed -i "s/{{VERSION_TAG}}/$version/g" ./com.pondlabs.rooster.desktop
+          sed -i "s/{{VERSION_TAG}}/$version/g" ./com.pondlabs.rooster.metainfo.xml
+          flatpak-builder --force-clean build-dir com.pondlabs.rooster.yaml --repo=repo
+          flatpak build-bundle repo com.pondlabs.rooster.flatpak com.pondlabs.rooster
 
       - name: Qualify Flatpak CEF artifact
         run: |
@@ -439,7 +439,7 @@ jobs:
           if [ -z "$ARCHIVE" ]; then echo "locked CEF archive was not cached" >&2; exit 1; fi
           python tools/cef_runtime.py stage --platform linux-x64 "$ARCHIVE" "$STAGE"
           python tools/cef_runtime.py metadata --platform linux-x64 "$STAGE" "$METADATA"
-          python tools/qualify_flatpak_artifact.py --bundle cockhouse/linux/flatpak/build-dir/files --metadata "$METADATA" --manifest cockhouse/linux/flatpak/com.pondlabs.cockhouse.yaml
+          python tools/qualify_flatpak_artifact.py --bundle rooster/linux/flatpak/build-dir/files --metadata "$METADATA" --manifest rooster/linux/flatpak/com.pondlabs.rooster.yaml
           rm -rf "$STAGE" "$METADATA"
 
       - name: Qualify release candidate gate
@@ -460,16 +460,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: cockhouse/linux/flatpak/com.pondlabs.cockhouse.flatpak
-          asset_name: com.pondlabs.cockhouse.flatpak
+          asset_path: rooster/linux/flatpak/com.pondlabs.rooster.flatpak
+          asset_name: com.pondlabs.rooster.flatpak
           asset_content_type: application/octet-stream
 
       - name: Upload Artifact
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: com.pondlabs.cockhouse.flatpak
-          path: cockhouse/linux/flatpak/com.pondlabs.cockhouse.flatpak
+          name: com.pondlabs.rooster.flatpak
+          path: rooster/linux/flatpak/com.pondlabs.rooster.flatpak
 
   release-linux-portable:
     runs-on: ubuntu-24.04
@@ -531,7 +531,7 @@ jobs:
       - name: Create archive
         run: |
           cd $PROJECT_PATH/build/linux/x64/release
-          tar -czf cockhouse-linux-portable-x64.tar.gz bundle
+          tar -czf rooster-linux-portable-x64.tar.gz bundle
       
       - name: Upload to release
         if: github.event_name == 'release'
@@ -540,16 +540,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: cockhouse/build/linux/x64/release/cockhouse-linux-portable-x64.tar.gz
-          asset_name: cockhouse-linux-portable-x64.tar.gz
+          asset_path: rooster/build/linux/x64/release/rooster-linux-portable-x64.tar.gz
+          asset_name: rooster-linux-portable-x64.tar.gz
           asset_content_type: application/gzip
 
       - name: Upload Artifact
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: cockhouse-linux-portable-x64.tar.gz
-          path: cockhouse/build/linux/x64/release/cockhouse-linux-portable-x64.tar.gz
+          name: rooster-linux-portable-x64.tar.gz
+          path: rooster/build/linux/x64/release/rooster-linux-portable-x64.tar.gz
 
 
   release-web:
@@ -597,7 +597,7 @@ jobs:
       - name: Create archive
         run: |
           cd $PROJECT_PATH/build
-          tar -czf cockhouse-web.tar.gz web
+          tar -czf rooster-web.tar.gz web
       
       - name: Upload to release
         if: github.event_name == 'release'
@@ -606,16 +606,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: cockhouse/build/cockhouse-web.tar.gz
-          asset_name: cockhouse-web.tar.gz
+          asset_path: rooster/build/rooster-web.tar.gz
+          asset_name: rooster-web.tar.gz
           asset_content_type: application/gzip
 
       - name: Upload Artifact
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: cockhouse-web.tar.gz
-          path: cockhouse/build/cockhouse-web.tar.gz
+          name: rooster-web.tar.gz
+          path: rooster/build/rooster-web.tar.gz
 
   atomic-release-gate:
     # Final atomic gate for the CEF BrowserRuntime cutover (epic #110,

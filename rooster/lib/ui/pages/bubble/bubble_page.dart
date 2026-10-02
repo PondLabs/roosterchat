@@ -1,0 +1,85 @@
+import 'dart:async';
+import 'package:rooster/client/client.dart';
+import 'package:rooster/client/client_manager.dart';
+import 'package:rooster/ui/atoms/room_header.dart';
+import 'package:rooster/ui/atoms/scaled_safe_area.dart';
+import 'package:rooster/ui/organisms/chat/chat.dart';
+import 'package:flutter/material.dart';
+import 'package:tiamat/tiamat.dart';
+import 'package:flutter/material.dart' as material;
+
+class BubblePage extends StatefulWidget {
+  const BubblePage(this.clientManager,
+      {super.key, this.initialClientId, this.initialRoom});
+  final ClientManager clientManager;
+  final String? initialRoom;
+  final String? initialClientId;
+
+  @override
+  State<BubblePage> createState() => BubblePageState();
+}
+
+class BubblePageState extends State<BubblePage> {
+  Room? _currentRoom;
+
+  StreamSubscription? onSpaceUpdateSubscription;
+  StreamSubscription? onRoomUpdateSubscription;
+
+  ClientManager get clientManager => widget.clientManager;
+
+  Room? get currentRoom => _currentRoom;
+
+  @override
+  void initState() {
+    super.initState();
+
+    if (widget.initialClientId != null && widget.initialRoom != null) {
+      _currentRoom = clientManager
+          .getClient(widget.initialClientId!)
+          ?.getRoom(widget.initialRoom!);
+    }
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return currentRoom == null
+        ? const Placeholder()
+        : Foundation(
+            child: Tile(
+              child: material.Scaffold(
+                backgroundColor: Colors.transparent,
+                body: ScaledSafeArea(
+                  child: Column(
+                    children: [
+                      Tile.low(
+                        caulkClipBottomRight: true,
+                        caulkClipBottomLeft: true,
+                        caulkBorderBottom: true,
+                        child: SizedBox(
+                          height: 50,
+                          child: RoomHeader(
+                            currentRoom!,
+                          ),
+                        ),
+                      ),
+                      Flexible(
+                        child: Chat(
+                          currentRoom!,
+                          key: ValueKey(
+                              "room-timeline-key-${currentRoom!.localId}"),
+                          isBubble: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+  }
+}

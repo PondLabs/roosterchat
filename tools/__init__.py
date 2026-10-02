@@ -1,1 +1,1 @@
-"""Release and supply-chain tooling for Cockhouse."""
+"""Release and supply-chain tooling for Rooster."""

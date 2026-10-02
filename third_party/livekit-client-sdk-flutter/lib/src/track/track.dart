@@ -227,11 +227,11 @@ abstract class Track extends DisposableChangeNotifier with EventsEmittable<Track
     _mediaStreamTrack = track;
   }
 
-  // COCKHOUSE
+  // ROOSTER
   @internal
   rtc.MediaStreamTrack? get originalTrack => _originalTrack;
 
-  // COCKHOUSE: undo setProcessedTrack.
+  // ROOSTER: undo setProcessedTrack.
   @internal
   void restoreOriginalTrack() {
     if (_originalTrack != null) {

@@ -45,7 +45,7 @@ jobs:
       - name: Find tests
         id: find
         run: |
-          if find cockhouse/unit_test -name '*_test.dart' 2> /dev/null | grep -q .; then
+          if find rooster/unit_test -name '*_test.dart' 2> /dev/null | grep -q .; then
             echo "dart=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -77,7 +77,7 @@ jobs:
           cache: true
 
       # The noise suppression tests put a recording through the voice DSP's
-      # own library (cockhouse/unit_test/noise_suppression/voice_dsp_fixture.dart);
+      # own library (rooster/unit_test/noise_suppression/voice_dsp_fixture.dart);
       # without these they fail rather than skip in CI. The fixture is built
       # with the debug build's dependencies: a release build would compile
       # DeepFilterNet's tract a second time for nothing.
@@ -89,7 +89,7 @@ jobs:
 
       # The soundboard playback-end test plays through media_kit's real
       # player on mpv's null audio output
-      # (cockhouse/unit_test/soundboard/mediakit_playback_end_test.dart); without
+      # (rooster/unit_test/soundboard/mediakit_playback_end_test.dart); without
       # libmpv it fails rather than skips in CI.
       - name: Install libmpv
         if: steps.find.outputs.dart == 'true'
@@ -99,7 +99,7 @@ jobs:
 
       - name: Dart unit tests
         if: steps.find.outputs.dart == 'true'
-        working-directory: cockhouse
+        working-directory: rooster
         run: |
           dart run scripts/codegen.dart
           flutter test unit_test
@@ -142,7 +142,7 @@ jobs:
         uses: browser-actions/setup-chrome@v1
 
       - name: Code generation
-        working-directory: cockhouse
+        working-directory: rooster
         run: dart run scripts/codegen.dart
 
       - name: Noise suppression in the browser
@@ -173,7 +173,7 @@ jobs:
             base=${last#v}
             commits=$(git log --format='%s%n%b' "$last..HEAD")
           else
-            base=$(sed -nE 's/^version: *([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' cockhouse/pubspec.yaml)
+            base=$(sed -nE 's/^version: *([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' rooster/pubspec.yaml)
             commits=$(git log --format='%s%n%b')
           fi
 
@@ -216,7 +216,7 @@ jobs:
       - name: Download release builds
         uses: actions/download-artifact@v4
         with:
-          pattern: cockhouse-*-release
+          pattern: rooster-*-release
           path: dist
           merge-multiple: true
 
@@ -249,7 +249,7 @@ jobs:
       - name: Download debug builds
         uses: actions/download-artifact@v4
         with:
-          pattern: cockhouse-*-debug
+          pattern: rooster-*-debug
           path: dist
           merge-multiple: true
 
