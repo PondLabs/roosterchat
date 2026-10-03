@@ -17,6 +17,7 @@ class CallMembershipState {
     this.media = const {},
     this.voice = const {},
     this.away = false,
+    this.dj,
   });
 
   /// What we publish: screen share, camera.
@@ -30,6 +31,9 @@ class CallMembershipState {
   /// absorbs along with everything else.
   final bool away;
 
+  /// Null when we aren't the DJ, otherwise whether our music is playing.
+  final bool? dj;
+
   static const _media = SetEquality<LiveMedia>();
   static const _voice = SetEquality<VoiceState>();
 
@@ -38,14 +42,16 @@ class CallMembershipState {
       other is CallMembershipState &&
       _media.equals(media, other.media) &&
       _voice.equals(voice, other.voice) &&
-      away == other.away;
+      away == other.away &&
+      dj == other.dj;
 
   @override
-  int get hashCode => Object.hash(_media.hash(media), _voice.hash(voice), away);
+  int get hashCode =>
+      Object.hash(_media.hash(media), _voice.hash(voice), away, dj);
 
   @override
   String toString() =>
-      "CallMembershipState(media: $media, voice: $voice, away: $away)";
+      "CallMembershipState(media: $media, voice: $voice, away: $away, dj: $dj)";
 }
 
 class CallMembershipPublisher {

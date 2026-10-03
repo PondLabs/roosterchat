@@ -198,13 +198,11 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
               timeline: widget.timeline!,
               initialIndex: index)
           : null,
-      urlPreviews: previewComponent != null &&
-              doUrlPreview &&
-              widget.timeline != null &&
-              event != null
+      urlPreviews: previewComponent != null && doUrlPreview && event != null
           ? TimelineEventViewUrlPreviews(
               event: event!,
-              timeline: widget.timeline!,
+              room: room!,
+              timeline: widget.timeline,
               component: previewComponent!,
               key: urlPreviewsKey,
             )
@@ -215,8 +213,8 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
               timeline: widget.timeline!,
               component: threadComponent!)
           : null,
-      onAvatarTapped: () => UserProfile.show(context,
-          client: widget.timeline!.client, userId: senderId),
+      onAvatarTapped: () =>
+          UserProfile.show(context, client: room!.client, userId: senderId),
     );
   }
 
@@ -323,11 +321,15 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
 
     attachments = event.attachments;
 
-    doUrlPreview = widget.timeline != null &&
-        previewComponent?.shouldGetPreviewDataForTimelineEvent(
-                widget.timeline!, event) ==
-            true &&
-        event.getLinks(timeline: widget.timeline!)?.isEmpty == false;
+    // Outside a timeline (pinned messages, search results) the room's own
+    // preview setting decides, and the preview is fetched by its link.
+    final timeline = widget.timeline;
+    doUrlPreview = (timeline != null
+            ? previewComponent?.shouldGetPreviewDataForTimelineEvent(
+                    timeline, event) ==
+                true
+            : previewComponent?.shouldGetPreviewsInRoom(room) == true) &&
+        event.getLinks(timeline: timeline)?.isEmpty == false;
   }
 
   String timestampToString(DateTime time) {

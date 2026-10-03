@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:rooster/client/components/url_preview/url_preview_component.dart';
+import 'package:rooster/client/room.dart';
 import 'package:rooster/client/timeline.dart';
 import 'package:rooster/client/timeline_events/timeline_event.dart';
+import 'package:rooster/client/timeline_events/timeline_event_message.dart';
 import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_url_previews.dart';
 import 'package:rooster/ui/molecules/timeline_events/timeline_event_layout.dart';
 import 'package:rooster/ui/molecules/url_preview_widget.dart';
@@ -23,6 +25,20 @@ class _FakeEvent implements TimelineEvent {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// A synced message with one link, as a pinned message is.
+class _FakeMessage extends _FakeEvent implements TimelineEventMessage {
+  _FakeMessage() : super(TimelineEventStatus.synced, eventId: r'');
+
+  @override
+  List<Uri>? getLinks({Timeline? timeline}) =>
+      [Uri.parse('https://example.com/pinned')];
+}
+
+class _FakeRoom implements Room {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 class _FakeTimeline extends Timeline {
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -31,6 +47,7 @@ class _FakeTimeline extends Timeline {
 class _FakeComponent implements UrlPreviewComponent {
   int getPreviewCalls = 0;
   final List<String> requested = [];
+  final List<Uri> requestedUrls = [];
   Completer<UrlPreviewData?>? pending;
   UrlPreviewData? result = preview;
   Object? error;
@@ -52,6 +69,12 @@ class _FakeComponent implements UrlPreviewComponent {
     requested.add(event.eventId);
     if (error != null) throw error!;
     if (pending != null) return pending!.future;
+    return result;
+  }
+
+  @override
+  Future<UrlPreviewData?> getPreviewForUrl(Room room, Uri url) async {
+    requestedUrls.add(url);
     return result;
   }
 
@@ -81,6 +104,7 @@ void main() {
   Widget preview() => TimelineEventViewUrlPreviews(
         key: previewKey,
         event: event,
+        room: _FakeRoom(),
         timeline: timeline,
         component: component,
       );
@@ -219,5 +243,20 @@ void main() {
 
     expect(component.getPreviewCalls, 1);
     expect(find.byType(UrlPreviewWidget), findsNothing);
+  });
+
+  testWidgets('outside a timeline it fetches the message' 's own link',
+      (tester) async {
+    // Pinned messages and search results have no timeline.
+    await tester.pumpWidget(_testApp(TimelineEventViewUrlPreviews(
+      event: _FakeMessage(),
+      room: _FakeRoom(),
+      component: component,
+    )));
+    await tester.pumpAndSettle();
+
+    expect(component.requestedUrls, [Uri.parse('https://example.com/pinned')]);
+    expect(component.getPreviewCalls, 0);
+    expect(find.text('Resolved title'), findsOneWidget);
   });
 }

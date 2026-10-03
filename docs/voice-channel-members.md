@@ -27,6 +27,24 @@ moves the window's end to four hours past then. The delayed leave (MSC4140,
 30 s, restarted every 10 s) is what takes it down when a client dies; the
 window only covers homeservers without delayed events.
 
+Besides who is there, a membership carries what the list shows next to
+them, in keys other clients ignore: `chat.commet.streams` (LIVE),
+`chat.commet.voice_state` (muted, deafened), `chat.commet.away`, and
+`chat.commet.dj` (`{"playing": bool}` while they are the DJ in the call's
+booth, null otherwise), which shows a record next to them for people outside
+the call, spinning while their music plays. Streams, voice state and the DJ
+are only written while the delayed leave is armed, so a client that dies
+can't leave them behind.
+
+**One person, one device in the call.** Joining a call you are already in
+from another device takes the older device out of it: when its membership
+sync or heartbeat finds a live membership of ours from another device that
+joined later, it hangs up, which frees the DJ booth if it had it and stops
+its screen share (`MatrixCallMembership.supersededBy`,
+`MatrixLivekitVoipSession.leaveIfSuperseded`). The new device joins fresh,
+unmuted. A device that is offline stays listed until its delayed leave or
+window ends; the list shows a person once either way.
+
 ## What went wrong
 
 | # | What happened | Fix |

@@ -38,6 +38,7 @@ class CallControlButtons extends StatefulWidget {
     required this.actions,
     required this.radius,
     this.spacing = 12,
+    this.compact = false,
     this.boothOpen = false,
     this.onToggleBooth,
     this.onHungUp,
@@ -49,6 +50,11 @@ class CallControlButtons extends StatefulWidget {
   final CallControlActions actions;
   final double radius;
   final double spacing;
+
+  /// One evenly spaced row for a phone: mic, deafen, camera, soundboard, a
+  /// "more" sheet (screen share, DJ booth) and hang up. The full set of
+  /// buttons wrapped onto a second, left-aligned row on every common phone.
+  final bool compact;
 
   final bool boothOpen;
 
@@ -99,54 +105,49 @@ class _CallControlButtonsState extends State<CallControlButtons> {
     final soundboard = actions.soundboard;
     final colors = Theme.of(context).colorScheme;
 
-    return Wrap(
-      spacing: widget.spacing,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        tiamat.CircleButton(
-            radius: radius,
-            iconSize: iconSize,
-            icon: Icons.screen_share_outlined,
-            onPressed: actions.pickScreenshareSource),
-        if (session.isSharingScreen)
-          tiamat.CircleButton(
-            radius: radius,
-            iconSize: iconSize,
-            icon: Icons.stop_screen_share,
-            onPressed: actions.stopScreenshare,
-          ),
-        tiamat.CircleButton(
-          radius: radius,
-          iconSize: iconSize,
-          icon: session.isMicrophoneMuted ? Icons.mic_off : Icons.mic,
-          color: session.isMicrophoneMuted ? colors.errorContainer : null,
-          onPressed: () async {
-            await actions.setMicrophoneMute?.call(!session.isMicrophoneMuted);
-            if (mounted) setState(() {});
-          },
-        ),
-        tiamat.CircleButton(
-          radius: radius,
-          iconSize: iconSize,
-          icon: session.isDeafened ? Icons.headset_off : Icons.headset,
-          color: session.isDeafened ? colors.errorContainer : null,
-          onPressed: () async {
-            await actions.setDeafened?.call(!session.isDeafened);
-            if (mounted) setState(() {});
-          },
-        ),
-        tiamat.CircleButton(
-          radius: radius,
-          iconSize: iconSize,
-          icon: session.isCameraEnabled
-              ? Icons.no_photography
-              : Icons.camera_alt_outlined,
-          onPressed: session.isCameraEnabled
-              ? actions.disableCamera
-              : actions.pickCamera,
-        ),
-        if (soundboard != null)
-          SoundboardButton(
+    final shareScreen = tiamat.CircleButton(
+        radius: radius,
+        iconSize: iconSize,
+        icon: Icons.screen_share_outlined,
+        onPressed: actions.pickScreenshareSource);
+    final stopSharing = tiamat.CircleButton(
+      radius: radius,
+      iconSize: iconSize,
+      icon: Icons.stop_screen_share,
+      onPressed: actions.stopScreenshare,
+    );
+    final mic = tiamat.CircleButton(
+      radius: radius,
+      iconSize: iconSize,
+      icon: session.isMicrophoneMuted ? Icons.mic_off : Icons.mic,
+      color: session.isMicrophoneMuted ? colors.errorContainer : null,
+      onPressed: () async {
+        await actions.setMicrophoneMute?.call(!session.isMicrophoneMuted);
+        if (mounted) setState(() {});
+      },
+    );
+    final deafen = tiamat.CircleButton(
+      radius: radius,
+      iconSize: iconSize,
+      icon: session.isDeafened ? Icons.headset_off : Icons.headset,
+      color: session.isDeafened ? colors.errorContainer : null,
+      onPressed: () async {
+        await actions.setDeafened?.call(!session.isDeafened);
+        if (mounted) setState(() {});
+      },
+    );
+    final camera = tiamat.CircleButton(
+      radius: radius,
+      iconSize: iconSize,
+      icon: session.isCameraEnabled
+          ? Icons.no_photography
+          : Icons.camera_alt_outlined,
+      onPressed:
+          session.isCameraEnabled ? actions.disableCamera : actions.pickCamera,
+    );
+    final soundboardButton = soundboard == null
+        ? null
+        : SoundboardButton(
             controller: soundboard,
             deafened: session.isDeafened,
             onOpenChanged: widget.onSoundboardOpenChanged,
@@ -158,9 +159,10 @@ class _CallControlButtonsState extends State<CallControlButtons> {
                   onPressed == null ? Theme.of(context).disabledColor : null,
               onPressed: onPressed,
             ),
-          ),
-        if (widget.onToggleBooth != null)
-          Tooltip(
+          );
+    final booth = widget.onToggleBooth == null
+        ? null
+        : Tooltip(
             message: widget.boothOpen
                 ? 'Close the DJ booth'
                 : 'DJ booth – play music',
@@ -171,19 +173,102 @@ class _CallControlButtonsState extends State<CallControlButtons> {
               color: widget.boothOpen ? colors.primaryContainer : null,
               onPressed: widget.onToggleBooth,
             ),
+          );
+    final hangUp = tiamat.CircleButton(
+      color: colors.errorContainer,
+      radius: radius,
+      iconSize: iconSize,
+      icon: Icons.call_end,
+      onPressed: () async {
+        await actions.hangUp?.call();
+        if (mounted) setState(() {});
+        widget.onHungUp?.call();
+      },
+    );
+
+    if (widget.compact) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          mic,
+          deafen,
+          camera,
+          if (soundboardButton != null) soundboardButton,
+          tiamat.CircleButton(
+            radius: radius,
+            iconSize: iconSize,
+            icon: Icons.more_horiz,
+            color: session.isSharingScreen || widget.boothOpen
+                ? colors.primaryContainer
+                : null,
+            onPressed: () => _showMore(context),
           ),
-        tiamat.CircleButton(
-          color: colors.errorContainer,
-          radius: radius,
-          iconSize: iconSize,
-          icon: Icons.call_end,
-          onPressed: () async {
-            await actions.hangUp?.call();
-            if (mounted) setState(() {});
-            widget.onHungUp?.call();
-          },
-        )
+          hangUp,
+        ],
+      );
+    }
+
+    return Wrap(
+      spacing: widget.spacing,
+      runSpacing: widget.spacing,
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        shareScreen,
+        if (session.isSharingScreen) stopSharing,
+        mic,
+        deafen,
+        camera,
+        if (soundboardButton != null) soundboardButton,
+        if (booth != null) booth,
+        hangUp,
       ],
+    );
+  }
+
+  /// The compact row's "more": what a phone uses less.
+  Future<void> _showMore(BuildContext context) {
+    final session = widget.session;
+    final actions = widget.actions;
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheet) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (session.isSharingScreen)
+              ListTile(
+                leading: const Icon(Icons.stop_screen_share),
+                title: const Text('Stop sharing your screen'),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  actions.stopScreenshare?.call();
+                },
+              )
+            else if (actions.pickScreenshareSource != null)
+              ListTile(
+                leading: const Icon(Icons.screen_share_outlined),
+                title: const Text('Share your screen'),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  actions.pickScreenshareSource?.call();
+                },
+              ),
+            if (widget.onToggleBooth != null)
+              ListTile(
+                leading: const Icon(Icons.album_rounded),
+                title: Text(widget.boothOpen
+                    ? 'Close the DJ booth'
+                    : 'DJ booth – play music'),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  widget.onToggleBooth?.call();
+                },
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

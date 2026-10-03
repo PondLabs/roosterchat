@@ -25,6 +25,12 @@ class MatrixCallMembership {
   /// this about.
   static const awayKey = 'chat.commet.away';
 
+  /// Present while the member is the DJ in the call's booth:
+  ///  while music plays,  while paused. Lets the
+  /// voice channel list show a DJ to people outside the call, who don't get
+  /// the booth's own messages (those go over the call's data channel).
+  static const djKey = 'chat.commet.dj';
+
   /// How long a membership lasts from its join time, the MatrixRTC default.
   static const lifetime = Duration(hours: 4);
 
@@ -63,12 +69,49 @@ class MatrixCallMembership {
   /// else, a client that does not report it included, reads as present.
   static bool isAway(Map<String, Object?> content) => content[awayKey] == true;
 
+  /// Whether [content] says its owner is the DJ: null when not (or the
+  /// client doesn't say), otherwise whether music is playing.
+  static bool? djPlayingOf(Map<String, Object?> content) {
+    final value = content[djKey];
+    if (value is! Map) return null;
+    return value['playing'] == true;
+  }
+
   /// When the member joined: `created_ts` once the membership has been
   /// rewritten, otherwise when it was sent ([sentAt]).
   static DateTime? joinedAt(Map<String, Object?> content, DateTime? sentAt) {
     final created = content['created_ts'];
     if (created is int) return DateTime.fromMillisecondsSinceEpoch(created);
     return sentAt;
+  }
+
+  /// Whether [memberships], the room's call memberships as (sender, content,
+  /// sent at), hold a live one of [userId]'s from another device that joined
+  /// after this device did at [ownJoinedAt]: the same person joined the call
+  /// again somewhere else, and this device should leave it. Joined at the
+  /// same instant, the higher device id counts as the newer, so the two
+  /// devices agree on which one stays.
+  static bool supersededBy(
+    Iterable<({String sender, Map<String, Object?> content, DateTime? sentAt})>
+        memberships, {
+    required String userId,
+    required String deviceId,
+    required DateTime ownJoinedAt,
+    required DateTime now,
+  }) {
+    for (final m in memberships) {
+      if (m.sender != userId || m.content['application'] == null) continue;
+      final other = m.content['device_id'];
+      if (other is! String || other == deviceId) continue;
+      if (isExpired(m.content, m.sentAt, now)) continue;
+      final at = joinedAt(m.content, m.sentAt);
+      if (at == null) continue;
+      if (at.isAfter(ownJoinedAt) ||
+          (at == ownJoinedAt && other.compareTo(deviceId) > 0)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /// When the membership's `expires` window, counted from its join time like
@@ -120,13 +163,17 @@ class MatrixCallMembership {
       required Set<VoiceState> voiceState,
       required DateTime joinedAt,
       required DateTime now,
-      bool away = false}) {
+      bool away = false,
+      bool? dj}) {
     return {
       ...current,
       'created_ts': joinedAt.millisecondsSinceEpoch,
       'expires':
           now.difference(joinedAt).inMilliseconds + lifetime.inMilliseconds,
       awayKey: away,
+      // Written either way: a stale DJ carried over from [current] would
+      // keep spinning in everyone's list.
+      djKey: dj == null ? null : {'playing': dj},
       liveMediaKey: [
         for (final m in LiveMedia.values)
           if (media.contains(m)) m.name,

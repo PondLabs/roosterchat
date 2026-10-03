@@ -1,6 +1,8 @@
 import 'package:rooster/client/components/url_preview/url_preview_component.dart';
+import 'package:rooster/client/room.dart';
 import 'package:rooster/client/timeline.dart';
 import 'package:rooster/client/timeline_events/timeline_event.dart';
+import 'package:rooster/client/timeline_events/timeline_event_message.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/diagnostic/benchmark_values.dart';
 import 'package:rooster/ui/molecules/timeline_events/timeline_event_layout.dart';
@@ -11,7 +13,8 @@ import 'package:flutter/material.dart';
 class TimelineEventViewUrlPreviews extends StatefulWidget {
   const TimelineEventViewUrlPreviews(
       {required this.event,
-      required this.timeline,
+      required this.room,
+      this.timeline,
       required this.component,
       super.key});
 
@@ -19,7 +22,11 @@ class TimelineEventViewUrlPreviews extends StatefulWidget {
   /// Not looked up by index: a message view's index goes stale when newer
   /// messages are inserted below it.
   final TimelineEvent event;
-  final Timeline timeline;
+  final Room room;
+
+  /// Null outside a timeline (pinned messages, search results): the
+  /// preview is then fetched for the message's first link directly.
+  final Timeline? timeline;
   final UrlPreviewComponent component;
 
   @override
@@ -62,7 +69,9 @@ class _TimelineEventViewUrlPreviewsState
   /// view builds us with later.
   @override
   void update(int newIndex) {
-    load(widget.timeline.events[newIndex]);
+    final timeline = widget.timeline;
+    if (timeline == null) return;
+    load(timeline.events[newIndex]);
   }
 
   @override
@@ -82,7 +91,10 @@ class _TimelineEventViewUrlPreviewsState
   void load(TimelineEvent event) {
     if (data != null || fetchState != _FetchState.idle) return;
 
-    final cached = widget.component.getCachedPreview(widget.timeline, event);
+    final timeline = widget.timeline;
+    final cached = timeline == null
+        ? null
+        : widget.component.getCachedPreview(timeline, event);
     if (cached != null) {
       setState(() {
         data = cached;
@@ -100,7 +112,17 @@ class _TimelineEventViewUrlPreviewsState
     fetchState = _FetchState.fetching;
     UrlPreviewData? value;
     try {
-      value = await widget.component.getPreview(widget.timeline, event);
+      final timeline = widget.timeline;
+      if (timeline != null) {
+        value = await widget.component.getPreview(timeline, event);
+      } else {
+        final link = event is TimelineEventMessage
+            ? event.getLinks()?.firstOrNull
+            : null;
+        if (link != null) {
+          value = await widget.component.getPreviewForUrl(widget.room, link);
+        }
+      }
       if (mounted) {
         final photos = value?.images ?? const <UrlPreviewImage>[];
         for (final photo in photos) {
