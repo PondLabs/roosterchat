@@ -15,6 +15,7 @@ import 'package:rooster/ui/atoms/live_media_indicator.dart';
 import 'package:rooster/ui/atoms/speaking_indicator.dart';
 import 'package:rooster/ui/atoms/voice_state_indicator.dart';
 import 'package:rooster/ui/atoms/adaptive_context_menu.dart';
+import 'package:rooster/ui/atoms/anchored_popover.dart';
 import 'package:rooster/ui/atoms/dot_indicator.dart';
 import 'package:rooster/ui/atoms/notification_badge.dart';
 import 'package:rooster/ui/atoms/tiny_pill.dart';
@@ -57,6 +58,11 @@ class RoomTextButton extends StatefulWidget {
     }
     return null;
   }
+
+  /// How many rows of members a voice channel shows under it. A fuller
+  /// channel shows one fewer, and "and N more" on the last row opens the
+  /// rest: a busy channel used to push every room below it off the screen.
+  static const maxVisibleMembers = 8;
 
   final bool highlight;
   final Room room;
@@ -131,6 +137,12 @@ class _RoomTextButtonState extends State<RoomTextButton> {
       name: "labelDjPaused",
       desc: "Tooltip on the record next to someone in a voice channel who "
           "is the DJ with their music paused");
+
+  static String labelMoreMembers(int count) => Intl.message("and $count more",
+      name: "labelMoreMembers",
+      args: [count],
+      desc: "Last row under a voice channel with more people in it than the "
+          "list shows; opens the rest of them");
 
   late List<StreamSubscription> subs;
   CalendarRoom? calendarRoom;
@@ -427,15 +439,122 @@ class _RoomTextButtonState extends State<RoomTextButton> {
                   tiamat.Seperator(
                     padding: 2,
                   ),
-                for (var participant in activity.participants)
-                  buildCallMember(participant,
-                      showActivityIcons: activity.thirdparty == false,
-                      liveMedia: activity.liveMedia[participant] ?? const {},
-                      voiceState: activity.voiceState[participant] ?? const {},
-                      djPlaying: activity.djPlaying[participant]),
+                ...buildCallMembers(activity),
                 if (!activity.thirdparty) buildDj(),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The members of [activity] in the order they are listed. One that fits
+  /// keeps the order it always had. Past [RoomTextButton.maxVisibleMembers]
+  /// only the first ones show, so ourselves and whoever is live come first;
+  /// nobody else moves.
+  List<String> orderedMembers(RoomActivitySession activity) {
+    final members = activity.participants.toList();
+    if (members.length <= RoomTextButton.maxVisibleMembers) return members;
+
+    final self = widget.room.client.self?.identifier;
+    int rank(String id) {
+      if (id == self) return 0;
+      final media = activity.liveMedia[id] ?? const <LiveMedia>{};
+      if (media.contains(LiveMedia.screen)) return 1;
+      if (media.contains(LiveMedia.camera)) return 2;
+      return 3;
+    }
+
+    final position = {for (final (i, id) in members.indexed) id: i};
+    members.sort((a, b) {
+      final byRank = rank(a).compareTo(rank(b));
+      return byRank != 0 ? byRank : position[a]!.compareTo(position[b]!);
+    });
+    return members;
+  }
+
+  /// Everyone in [activity], one row each, with the rows past
+  /// [RoomTextButton.maxVisibleMembers] behind "and N more".
+  List<Widget> buildCallMembers(RoomActivitySession activity) {
+    Widget row(String participant) => buildCallMember(participant,
+        showActivityIcons: activity.thirdparty == false,
+        liveMedia: activity.liveMedia[participant] ?? const {},
+        voiceState: activity.voiceState[participant] ?? const {},
+        djPlaying: activity.djPlaying[participant]);
+
+    final members = orderedMembers(activity);
+    if (members.length <= RoomTextButton.maxVisibleMembers) {
+      return [for (final member in members) row(member)];
+    }
+
+    // The last row is "and N more", so it never stands for one person.
+    final shown = RoomTextButton.maxVisibleMembers - 1;
+    return [
+      for (final member in members.take(shown)) row(member),
+      buildMoreMembers(activity, members.skip(shown).toList(), row),
+    ];
+  }
+
+  /// The row that stands for [hidden], and the list of them it opens.
+  Widget buildMoreMembers(RoomActivitySession activity, List<String> hidden,
+      Widget Function(String participant) row) {
+    final colors = Theme.of(context).colorScheme;
+    // Someone talking behind it still shows: the row takes their ring.
+    final speaking =
+        !activity.thirdparty && hidden.any(speakingMembers.contains);
+
+    return AnchoredPopover(
+      // One per activity: a row that moves must keep its open list.
+      key: ValueKey("moreMembers_${activity.application}"),
+      alignment: PopoverAlignment.start,
+      gap: 4,
+      anchorBuilder: (context, open, toggle) => SizedBox(
+        height: height,
+        child: tiamat.TextButton(
+          labelMoreMembers(hidden.length),
+          textColor: colors.secondary,
+          highlighted: open,
+          avatarPlaceholderText: "+",
+          avatarBuilder: (_) => SpeakingIndicator(
+            speaking: speaking,
+            radius: 12,
+            ringGap: 1.5,
+            ringWidth: 2,
+            waveTravel: 5,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: colors.surfaceContainerHighest,
+                // An avatar's corners, for the ring to follow.
+                borderRadius: BorderRadius.circular(12 / 1.25),
+              ),
+              child: Center(
+                child: Icon(Icons.more_horiz,
+                    size: 16, color: colors.onSurfaceVariant),
+              ),
+            ),
+          ),
+          footer: Icon(open ? Icons.expand_less : Icons.expand_more,
+              size: 18, color: colors.secondary),
+          onTap: toggle,
+        ),
+      ),
+      popoverBuilder: (context, close) => Material(
+        color: colors.surfaceContainer,
+        elevation: 4,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: colors.outlineVariant),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: ConstrainedBox(
+          // Wide enough for a name and its badges, short enough to scroll
+          // rather than cover the screen in a very full channel.
+          constraints: const BoxConstraints(maxWidth: 280, maxHeight: 340),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            children: [for (final member in hidden) row(member)],
           ),
         ),
       ),

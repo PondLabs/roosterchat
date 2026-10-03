@@ -10,6 +10,7 @@ import 'dart:async';
 
 import 'package:collection/collection.dart';
 import 'package:rooster/client/client.dart';
+import 'package:rooster/client/components/activities/activities_component.dart';
 import 'package:rooster/client/components/profile/profile_component.dart';
 import 'package:rooster/client/components/user_presence/user_idle_watcher.dart';
 import 'package:rooster/client/components/voip/audio_processing/audio_processing_manager.dart';
@@ -409,6 +410,39 @@ void main() {
           contains(true));
     });
 
+    // A mute, a stream and the DJ booth were too: with no delayed events
+    // nobody outside the call ever saw who was muted or live in it.
+    test('a mute is published all the same, and says nothing guards it',
+        () async {
+      joined(serverTime);
+      await join();
+      (livekit.localParticipant! as _LocalParticipant)
+          .publications
+          .single
+          .muted = true;
+      // Any change to what we advertise writes all of it.
+      UserIdleWatcher.instance.isAway.value = true;
+      await stay(const Duration(seconds: 5));
+      await Future<void>.delayed(const Duration(seconds: 1));
+
+      final write = homeserver.membershipWrites.last;
+      expect(MatrixCallMembership.voiceStateOf(write), {VoiceState.muted});
+      expect(write[MatrixCallMembership.unguardedKey], isTrue,
+          reason: 'readers drop it once it stops being written');
+    });
+
+    test('with nothing to leave behind, it is not called unguarded', () async {
+      joined(serverTime);
+      await join();
+      UserIdleWatcher.instance.isAway.value = true;
+      await stay(const Duration(seconds: 5));
+      await Future<void>.delayed(const Duration(seconds: 1));
+
+      final write = homeserver.membershipWrites.last;
+      expect(MatrixCallMembership.voiceStateOf(write), isEmpty);
+      expect(write[MatrixCallMembership.unguardedKey], isFalse);
+    });
+
     test('and an hour after that again, still from the same join', () async {
       final joinedAt = serverTime;
       joined(joinedAt);
@@ -515,6 +549,23 @@ void main() {
 
       final write = homeserver.membershipWrites.single;
       expect(expiryOf(write), serverTime.add(MatrixCallMembership.lifetime));
+    });
+
+    test('a mute goes out guarded by the delayed leave', () async {
+      joined(serverTime);
+      await join();
+      expect(session!.heartbeatDelayId, isNotNull);
+      (livekit.localParticipant! as _LocalParticipant)
+          .publications
+          .single
+          .muted = true;
+      UserIdleWatcher.instance.isAway.value = true;
+      await stay(const Duration(seconds: 5));
+      await Future<void>.delayed(const Duration(seconds: 1));
+
+      final write = homeserver.membershipWrites.last;
+      expect(MatrixCallMembership.voiceStateOf(write), {VoiceState.muted});
+      expect(write[MatrixCallMembership.unguardedKey], isFalse);
     });
 
     test('pushing it out keeps saying we are away', () async {

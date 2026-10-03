@@ -10,6 +10,7 @@ import 'package:rooster/client/matrix/components/voip_room/livekit_microphone.da
 import 'package:rooster/client/matrix/components/voip_room/matrix_livekit_voip_session.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_voip_room_component.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
+import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:http/http.dart' as http;
@@ -180,9 +181,11 @@ class MatrixLivekitBackend {
 
     // Local, not a field: two joins can overlap (two views of one room).
     var wroteMembership = false;
+    lk.LocalAudioTrack? earlyMicrophone;
     try {
       return await _connect(lkRoom, sfuUrl, jwt, fociUrl, provider,
-          onMembershipWritten: () => wroteMembership = true);
+          onMembershipWritten: () => wroteMembership = true,
+          onMicrophoneOpened: (track) => earlyMicrophone = track);
     } catch (_) {
       // Don't leave a membership for a call we never got into, nor a room
       // that keeps its connectivity listener and timers alive (issue #48).
@@ -199,6 +202,13 @@ class MatrixLivekitBackend {
         }
       }
       await lkRoom.dispose();
+      // Nor a microphone opened ahead of a room that never connected,
+      // capturing with nothing left that could stop it.
+      try {
+        await earlyMicrophone?.stop();
+      } catch (e, s) {
+        Log.onError(e, s, content: "Could not close the microphone");
+      }
       rethrow;
     }
   }
@@ -208,7 +218,17 @@ class MatrixLivekitBackend {
 
   Future<VoipSession> _connect(lk.Room lkRoom, String sfuUrl, String jwt,
       List<Uri> fociUrl, MatrixLivekitEncryptionKeyProvider? provider,
-      {required void Function() onMembershipWritten}) async {
+      {required void Function() onMembershipWritten,
+      required void Function(lk.LocalAudioTrack track)
+          onMicrophoneOpened}) async {
+    // In a phone's browser, before anything of the call plays: see
+    // openMicrophoneBeforePlayback. Before the membership too, so nobody is
+    // told we are in while a permission prompt is still up.
+    final early = await openMicrophoneBeforePlayback(
+        needed: Layout.isMobileBrowser, options: _microphoneOptions);
+    final earlyTrack = early.track;
+    if (earlyTrack != null) onMicrophoneOpened(earlyTrack);
+
     await lkRoom.prepareConnection(sfuUrl, jwt);
 
     // A clear from the previous call may still be in flight, and would
@@ -243,27 +263,60 @@ class MatrixLivekitBackend {
     await lkRoom.connect(sfuUrl, jwt,
         connectOptions: const lk.ConnectOptions(autoSubscribe: false));
 
-    var device = await WebrtcDefaultDevices.getDefaultMicrophoneId();
-
-    print("Using default device: ${device}");
-
-    final micOptions = await prepareMicrophoneCaptureOptions(
-      dsp: AudioProcessingManager.instance,
-      noiseSuppressionPreference: preferences.voipNoiseSuppression.value,
-      deviceId: device,
-    );
-    lkRoom.localParticipant
-        ?.setMicrophoneEnabled(true, audioCaptureOptions: micOptions)
-        .catchError((Object e, StackTrace s) {
-      // Not awaited on purpose (joining muted is still joining), but a
-      // denied microphone must not end up as an unhandled error.
-      Log.onError(e, s, content: "Could not enable the microphone");
-      return null;
-    });
+    if (earlyTrack != null) {
+      // Not awaited either, and handed over: from here a publish that
+      // fails closes it itself.
+      _publishMicrophone(lkRoom, earlyTrack);
+    } else if (early.retry) {
+      final micOptions = await _microphoneOptions();
+      lkRoom.localParticipant
+          ?.setMicrophoneEnabled(true, audioCaptureOptions: micOptions)
+          .catchError((Object e, StackTrace s) {
+        // Not awaited on purpose (joining muted is still joining), but a
+        // denied microphone must not end up as an unhandled error.
+        Log.onError(e, s, content: "Could not enable the microphone");
+        return null;
+      });
+    }
 
     final session =
         MatrixLivekitVoipSession(room, lkRoom, keyProvider: provider);
     livekitRoom = lkRoom;
     return session;
+  }
+
+  /// A room microphone's capture options, for the default device.
+  Future<lk.AudioCaptureOptions> _microphoneOptions() async {
+    var device = await WebrtcDefaultDevices.getDefaultMicrophoneId();
+
+    print("Using default device: ${device}");
+
+    return prepareMicrophoneCaptureOptions(
+      dsp: AudioProcessingManager.instance,
+      noiseSuppressionPreference: preferences.voipNoiseSuppression.value,
+      deviceId: device,
+    );
+  }
+
+  /// Publishes a microphone that was opened ahead of the room. Never fails:
+  /// joining without a microphone is still joining.
+  Future<void> _publishMicrophone(
+      lk.Room lkRoom, lk.LocalAudioTrack track) async {
+    try {
+      final participant = lkRoom.localParticipant;
+      if (participant == null) {
+        await track.stop();
+        return;
+      }
+      await participant.publishAudioTrack(track);
+    } catch (e, s) {
+      Log.onError(e, s, content: "Could not enable the microphone");
+      try {
+        // The room went away meanwhile: nothing else would stop it.
+        await track.stop();
+      } catch (e, s) {
+        Log.onError(e, s, content: "Could not close the microphone");
+      }
+    }
   }
 }

@@ -7,9 +7,18 @@ import 'package:intl/intl.dart';
 /// microphone while only muted. Members whose client does not report it show
 /// nothing rather than a wrong icon.
 class VoiceStateIndicator extends StatelessWidget {
-  const VoiceStateIndicator(this.state, {super.key});
+  const VoiceStateIndicator(this.state, {super.key})
+      : size = 16,
+        _badge = false;
+
+  /// The same icon for a coloured badge, as on a call tile: it takes the
+  /// colour of the icon theme around it instead of the list's.
+  const VoiceStateIndicator.badge(this.state, {this.size = 18, super.key})
+      : _badge = true;
 
   final Set<VoiceState> state;
+  final double size;
+  final bool _badge;
 
   String get tooltipVoiceMuted => Intl.message("Microphone muted",
       name: "tooltipVoiceMuted",
@@ -29,7 +38,8 @@ class VoiceStateIndicator extends StatelessWidget {
     if (state.contains(VoiceState.deafened)) {
       return Tooltip(
         message: tooltipVoiceDeafened,
-        child: Icon(Icons.headset_off_rounded, size: 16, color: colors.error),
+        child: Icon(Icons.headset_off_rounded,
+            size: size, color: _badge ? null : colors.error),
       );
     }
 
@@ -37,7 +47,7 @@ class VoiceStateIndicator extends StatelessWidget {
       return Tooltip(
         message: tooltipVoiceMuted,
         child: Icon(Icons.mic_off_rounded,
-            size: 16, color: colors.onSurfaceVariant),
+            size: size, color: _badge ? null : colors.onSurfaceVariant),
       );
     }
 

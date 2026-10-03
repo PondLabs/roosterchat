@@ -9,6 +9,7 @@ import 'package:rooster/debug/log.dart';
 import 'package:rooster/ui/organisms/call_view/call_control_buttons.dart';
 import 'package:rooster/ui/organisms/call_view/call_grid_tiles.dart';
 import 'package:rooster/ui/organisms/call_view/voip_stream_view.dart';
+import 'package:rooster/utils/window_management.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -338,7 +339,7 @@ class _NativeFullscreen {
       if (PlatformUtils.isLinux || PlatformUtils.isWindows) {
         // Already fullscreen (F11): leave it that way when the view closes.
         if (await windowManager.isFullScreen()) return false;
-        await windowManager.setFullScreen(true);
+        await WindowManagement.setFullScreen(true);
         return true;
       }
       if (PlatformUtils.isWeb) {
@@ -361,7 +362,7 @@ class _NativeFullscreen {
     if (!await _entered) return;
     try {
       if (PlatformUtils.isLinux || PlatformUtils.isWindows) {
-        await windowManager.setFullScreen(false);
+        await WindowManagement.setFullScreen(false);
       } else if (PlatformUtils.isWeb) {
         await defaultExitNativeFullscreen();
       } else if (PlatformUtils.isAndroid) {
