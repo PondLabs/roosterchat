@@ -21,15 +21,22 @@ class MatrixUserPresenceComponent
       StreamController.broadcast();
 
   late InMemoryCache<DateTime> lastSeen;
+  final List<StreamSubscription> _subscriptions = [];
+  bool _disposed = false;
 
   MatrixUserPresenceComponent(this.client) {
-    client.matrixClient.onPresenceChanged.stream.listen(changed);
-
-    client.matrixClient.onSync.stream.listen(onSync);
+    _subscriptions.addAll([
+      client.matrixClient.onPresenceChanged.stream.listen(changed),
+      client.matrixClient.onSync.stream.listen(onSync),
+    ]);
     lastSeen = InMemoryCache(
+        // A busy community can have hundreds of recently active users.
+        // Bound retention without the utility's small default evicting them
+        // after just fifty events.
+        limit: 2000,
         maxRetention: Duration(minutes: 2),
         pollFrequency: Duration(seconds: 100));
-    lastSeen.onRemove.listen(onLastSeenRemoved);
+    _subscriptions.add(lastSeen.onRemove.listen(onLastSeenRemoved));
 
     UserIdleWatcher.instance.init();
     // Our own dot, without waiting for the homeserver to tell us something
@@ -38,6 +45,7 @@ class MatrixUserPresenceComponent
   }
 
   void _ownAwayChanged() {
+    if (_disposed) return;
     final self = client.self?.identifier;
     if (self == null) return;
     _controller.add((
@@ -178,6 +186,7 @@ class MatrixUserPresenceComponent
   }
 
   void changed(CachedPresence event) {
+    if (_disposed) return;
     _controller.add((event.userid, resolvePresence(event.userid, event)));
   }
 
@@ -210,6 +219,7 @@ class MatrixUserPresenceComponent
   }
 
   void onSync(SyncUpdate event) {
+    if (_disposed) return;
     if (event.rooms?.join != null) {
       for (var update in event.rooms!.join!.entries) {
         handleEvents(update.value.ephemeral);
@@ -229,7 +239,9 @@ class MatrixUserPresenceComponent
           event.senderId,
     };
     for (final sender in senders) {
-      _controller.add((sender, await getUserPresence(sender)));
+      final presence = await getUserPresence(sender);
+      if (_disposed) return;
+      _controller.add((sender, presence));
     }
   }
 
@@ -288,8 +300,10 @@ class MatrixUserPresenceComponent
   }
 
   void sawUser(String id, DateTime timestamp) async {
+    if (_disposed) return;
     final presence = await client.matrixClient
         .fetchCurrentPresence(id, fetchOnlyFromCached: true);
+    if (_disposed) return;
 
     if (presence.presence != PresenceType.offline ||
         presence.statusMsg != null) {
@@ -319,12 +333,26 @@ class MatrixUserPresenceComponent
   }
 
   void onLastSeenRemoved(String event) async {
+    if (_disposed) return;
     final presence = await client.matrixClient
         .fetchCurrentPresence(event, fetchOnlyFromCached: true);
+    if (_disposed) return;
     if (presence.presence == PresenceType.offline && !isInCall(event)) {
       _controller.add((event, UserPresence(UserPresenceStatus.offline)));
     }
   }
 
   void handleRoomMemberEvent(BasicEvent event) {}
+
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    UserIdleWatcher.instance.isAway.removeListener(_ownAwayChanged);
+    for (final sub in _subscriptions) {
+      unawaited(sub.cancel());
+    }
+    _subscriptions.clear();
+    lastSeen.dispose();
+    unawaited(_controller.close());
+  }
 }

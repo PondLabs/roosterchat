@@ -71,6 +71,7 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
   GlobalKey? highlightedEventOffstageKey;
   int? highlightedEventOffstageIndex;
   List<StreamSubscription>? subscriptions;
+  StreamSubscription<String>? _jumpSubscription;
 
   bool wasLastScrollAttachedToBottom = false;
   bool loading = false;
@@ -93,7 +94,7 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
     initFromTimeline(widget.timeline);
 
     controller = ScrollController(initialScrollOffset: -999999);
-    EventBus.jumpToEvent.stream.listen(jumpToEvent);
+    _jumpSubscription = EventBus.jumpToEvent.stream.listen(jumpToEvent);
     WidgetsBinding.instance.addPostFrameCallback(onAfterFirstFrame);
     super.initState();
   }
@@ -167,7 +168,8 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
     for (var element in subscriptions!) {
       element.cancel();
     }
-
+    _jumpSubscription?.cancel();
+    controller.dispose();
     super.dispose();
   }
 
@@ -188,6 +190,7 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
         widget.markAsRead?.call(timeline.events[0]);
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
           scrollToBottom();
 
           widget.markAsRead?.call(timeline.events[0]);
@@ -271,6 +274,7 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
   }
 
   void onAfterFirstFrame(_) {
+    if (!mounted) return;
     if (controller.hasClients) {
       double extent = controller.position.minScrollExtent;
 
@@ -278,11 +282,16 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
         extent = -controller.position.viewportDimension / 2;
       }
 
+      final previousController = controller;
       controller = ScrollController(initialScrollOffset: extent);
       scrollViewKey = GlobalKey();
       controller.addListener(onScroll);
       setState(() {
         firstFrame = false;
+      });
+      // The old Scrollable detaches on the next frame, after setState.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        previousController.dispose();
       });
     }
 
@@ -292,6 +301,7 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
   }
 
   void onScroll() {
+    if (!mounted || !controller.hasClients) return;
     widget.onViewScrolled?.call(
         offset: controller.offset,
         maxScrollExtent: controller.position.maxScrollExtent,
@@ -351,6 +361,7 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
             duration: const Duration(milliseconds: 500),
             curve: Curves.easeOutExpo)
         .then((_) {
+      if (!mounted || !controller.hasClients) return;
       setState(() {
         controller.jumpTo(0);
         animatingToBottom = false;
@@ -598,6 +609,7 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
   }
 
   void jumpToEvent(String eventId, {bool highlight = true}) async {
+    if (!mounted) return;
     if (highlight && highlightedEventState?.mounted == true) {
       highlightedEventState!.setHighlighted(false);
       highlightedEventState = null;
@@ -610,11 +622,13 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
       });
       var newTimeline =
           await timeline.room.getTimeline(contextEventId: eventId);
+      if (!mounted) return;
 
       index =
           newTimeline.events.indexWhere((event) => event.eventId == eventId);
 
       if (index == -1) {
+        setState(() => loading = false);
         return;
       }
 
@@ -624,6 +638,9 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !controller.hasClients || index >= eventKeys.length) {
+        return;
+      }
       var key = eventKeys[index].$1;
       final state = key.currentState;
 

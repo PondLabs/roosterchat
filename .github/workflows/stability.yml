@@ -1,0 +1,148 @@
+name: stability
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    name: Stability (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [linux, windows, macos]
+    runs-on: ${{ matrix.platform == 'windows' && 'windows-2025' || matrix.platform == 'macos' && 'macos-15' || 'ubuntu-24.04' }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Enable long paths
+        if: runner.os == 'Windows'
+        run: git config --global core.longpaths true
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.9'
+          channel: stable
+          cache: true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Select Xcode
+        if: runner.os == 'macOS'
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app
+      - name: Install ATL
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/install-atl
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ninja-build libgtk-3-dev libmpv-dev mpv ffmpeg libmimalloc-dev \
+            libkeybinder-3.0-dev libayatana-appindicator3-dev libpulse-dev libasound2-dev clang lld cmake pkg-config xvfb
+      - name: Code generation
+        working-directory: rooster
+        run: dart run scripts/codegen.dart
+      - name: Native audio stability and allocation regressions
+        run: cargo test -p audio_dsp
+      - name: Lifecycle, recovery, media and voice regressions
+        working-directory: rooster
+        run: |
+          set -o pipefail
+          flutter test --reporter json \
+            unit_test/stability unit_test/matrix_user_presence_test.dart \
+            unit_test/runtime_lifecycle_test.dart unit_test/surface_recovery_test.dart \
+            unit_test/url_preview_widget_test.dart unit_test/timeline_event_view_url_previews_test.dart \
+            unit_test/video_player_controller_test.dart unit_test/video_player_controls_test.dart \
+            unit_test/soundboard/soundboard_engine_test.dart \
+            unit_test/voice_health/microphone_health_test.dart unit_test/voice_health/remote_audio_watch_test.dart \
+            | tee stability-tests.jsonl
+      - name: Profile the timeline in the native application
+        working-directory: rooster
+        run: |
+          set -o pipefail
+          if [ '${{ matrix.platform }}' = linux ]; then
+            xvfb-run -a flutter test integration_test/stability_test.dart -d linux --profile \
+              --dart-define=PLATFORM=linux --reporter expanded | tee stability-profile.log
+          else
+            flutter test integration_test/stability_test.dart -d '${{ matrix.platform }}' --profile \
+              --dart-define=PLATFORM='${{ matrix.platform }}' --reporter expanded | tee stability-profile.log
+          fi
+      - name: Collect measurements
+        if: always()
+        run: python tools/stability_report.py --platform '${{ matrix.platform }}' --output rooster/stability-report.json rooster/stability-tests.jsonl rooster/stability-profile.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stability-${{ matrix.platform }}
+          path: |
+            rooster/stability-tests.jsonl
+            rooster/stability-profile.log
+            rooster/stability-report.json
+          if-no-files-found: error
+
+  web:
+    name: Stability (web desktop and mobile layouts)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.9'
+          channel: stable
+          cache: true
+      - uses: browser-actions/setup-chrome@v1
+        id: chrome
+        with:
+          install-chromedriver: true
+      - name: Code generation
+        working-directory: rooster
+        run: dart run scripts/codegen.dart
+      - name: Regressions in Chrome
+        working-directory: rooster
+        env:
+          CHROME_EXECUTABLE: ${{ steps.chrome.outputs.chrome-path }}
+        run: |
+          set -o pipefail
+          flutter test --platform chrome --reporter json --dart-define=PLATFORM=web \
+            unit_test/stability unit_test/matrix_user_presence_test.dart \
+            unit_test/url_preview_widget_test.dart unit_test/timeline_event_view_url_previews_test.dart \
+            | tee stability-tests.jsonl
+      - name: Release rendering workload in Chrome
+        working-directory: rooster
+        env:
+          CHROME_EXECUTABLE: ${{ steps.chrome.outputs.chrome-path }}
+          CHROMEDRIVER: ${{ steps.chrome.outputs.chromedriver-path }}
+        run: |
+          set -o pipefail
+          "$CHROMEDRIVER" --port=4444 > chromedriver.log 2>&1 &
+          driver_pid=$!
+          trap 'kill "$driver_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            curl --fail --silent http://localhost:4444/status > /dev/null && break
+            sleep 1
+          done
+          flutter drive --driver=test_driver/stability_driver.dart \
+            --target=integration_test/stability_test.dart -d web-server --release \
+            --browser-name=chrome --headless --dart-define=PLATFORM=web \
+            | tee stability-profile.log
+      - name: Collect measurements
+        if: always()
+        run: python3 tools/stability_report.py --platform web --output rooster/stability-report.json rooster/stability-tests.jsonl rooster/stability-profile.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stability-web
+          path: |
+            rooster/stability-tests.jsonl
+            rooster/stability-profile.log
+            rooster/stability-report.json
+            rooster/build/stability-web.json
+            rooster/chromedriver.log
+          if-no-files-found: error

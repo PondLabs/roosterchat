@@ -10,6 +10,7 @@ import 'package:rooster/client/matrix/auth/matrix_sso_login_flow.dart';
 import 'package:rooster/client/matrix/auth/matrix_username_password_login_flow.dart';
 import 'package:rooster/client/matrix/components/matrix_sync_listener.dart';
 import 'package:rooster/client/matrix/components/profile/matrix_profile_component.dart';
+import 'package:rooster/client/matrix/components/user_presence/matrix_user_presence.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_voip_room_component.dart';
 import 'package:rooster/client/matrix/homeserver_clock.dart';
 import 'package:rooster/client/matrix/database/matrix_database.dart';
@@ -636,6 +637,7 @@ class MatrixClient extends Client {
 
   @override
   Future<void> close({bool closeDatabase = true}) async {
+    getComponent<MatrixUserPresenceComponent>()?.dispose();
     await _matrixClient.dispose(closeDatabase: closeDatabase);
   }
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 // An away friend went grey: the dots read getUserPresence once and then
 // follow onPresenceChanged, and that stream passed on the homeserver's
 // presence as is, undoing a call membership that says they are away.
@@ -36,9 +38,11 @@ class FakeSdkClient implements matrix.Client {
   final presences = <String, matrix.CachedPresence>{};
 
   @override
-  final onPresenceChanged = CachedStreamController<matrix.CachedPresence>();
+  final TrackingController<matrix.CachedPresence> onPresenceChanged =
+      TrackingController<matrix.CachedPresence>();
   @override
-  final onSync = CachedStreamController<matrix.SyncUpdate>();
+  final TrackingController<matrix.SyncUpdate> onSync =
+      TrackingController<matrix.SyncUpdate>();
 
   @override
   List<matrix.Room> get rooms => [room];
@@ -63,6 +67,19 @@ class FakeMatrixClient implements MatrixClient {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class TrackingController<T> extends CachedStreamController<T> {
+  final events = StreamController<T>.broadcast();
+
+  @override
+  Stream<T> get stream => events.stream;
+
+  @override
+  void add(T value) => events.add(value);
+
+  @override
+  Future close() => events.close();
 }
 
 void main() {
@@ -97,6 +114,24 @@ void main() {
     component.onPresenceChanged
         .where((e) => e.$1 == friendId)
         .listen((e) => emitted.add(e.$2.status));
+  });
+
+  tearDown(() {
+    component.dispose();
+  });
+
+  test('closing presence releases the SDK streams and the cache', () async {
+    expect(client.sdk.onPresenceChanged.events.hasListener, isTrue);
+    expect(client.sdk.onSync.events.hasListener, isTrue);
+    component.dispose();
+    component.dispose();
+    expect(client.sdk.onPresenceChanged.events.hasListener, isFalse);
+    expect(client.sdk.onSync.events.hasListener, isFalse);
+    component.changed(offline());
+    component.sawUser(friendId, DateTime.now());
+    await pumpEventQueue();
+    expect(emitted, isEmpty);
+    expect(component.lastSeen.get(friendId), isNull);
   });
 
   test('a homeserver update does not turn a friend away in a call grey',

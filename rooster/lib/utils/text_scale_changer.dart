@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:rooster/main.dart';
 import 'package:flutter/material.dart';
 
@@ -10,11 +12,20 @@ class TextScaleChanger extends StatefulWidget {
 }
 
 class _TextScaleChangerState extends State<TextScaleChanger> {
+  StreamSubscription<double>? _textScaleSubscription;
+
   @override
   void initState() {
-    preferences.textScale.onChanged.listen((_) => setState(() {}));
-
     super.initState();
+    _textScaleSubscription = preferences.textScale.onChanged.listen((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _textScaleSubscription?.cancel();
+    super.dispose();
   }
 
   @override
