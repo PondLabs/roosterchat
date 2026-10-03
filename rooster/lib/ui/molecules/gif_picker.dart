@@ -328,7 +328,9 @@ class _GifPickerState extends State<GifPicker> {
                   icon: const Icon(Icons.search),
                   isDense: true,
                   border: InputBorder.none,
-                  hintText: widget.placeholderText),
+                  hintText: widget.placeholderText,
+                  // KLIPY's attribution guidelines; it is the only provider.
+                  suffixText: "Powered by KLIPY"),
             )),
       ),
     );
