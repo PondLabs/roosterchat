@@ -544,7 +544,9 @@ class Preferences {
       defaultValue: 0.0);
 
   StringPreference proxyUrl =
-      StringPreference("proxy_url", defaultValue: "proxy.commet.chat");
+      // Our own Worker (proxy/ at the repo root), holding our KLIPY key.
+      StringPreference("proxy_url",
+          defaultValue: "rooster-proxy.apbiancofriber.workers.dev");
 
   StringPreference fallbackTurnServer = StringPreference("fallback_turn_server",
       defaultValue: "stun:turn.matrix.org");
