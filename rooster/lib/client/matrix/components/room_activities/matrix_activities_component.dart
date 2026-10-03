@@ -193,6 +193,13 @@ class MatrixActivitiesComponent
           activity.voiceState[event.senderId] =
               MatrixCallMembership.voiceStateOf(event.content);
         }
+
+        // Several devices of one person: playing on any of them counts.
+        final dj = MatrixCallMembership.djPlayingOf(event.content);
+        if (dj != null) {
+          activity.djPlaying[event.senderId] =
+              (activity.djPlaying[event.senderId] ?? false) || dj;
+        }
       }
     }
 

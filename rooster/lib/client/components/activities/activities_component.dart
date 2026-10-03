@@ -24,6 +24,11 @@ class RoomActivitySession {
   /// does not report it, and get no indicator rather than a wrong one.
   final Map<String, Set<VoiceState>> voiceState = {};
 
+  /// Who is the DJ in the call's booth, by their membership, and whether
+  /// their music is playing. For people outside the call, who don't get the
+  /// booth's own messages; inside it the booth itself is shown.
+  final Map<String, bool> djPlaying = {};
+
   String application;
 
   bool thirdparty;

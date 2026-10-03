@@ -27,6 +27,7 @@ import 'package:rooster/client/matrix/components/voip_room/matrix_livekit_encryp
 import 'package:rooster/client/matrix/components/voip_room/matrix_livekit_voip_stream.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_voip_room_component.dart';
 import 'package:rooster/client/matrix/components/voip_room/screen_share_watch_list.dart';
+import 'package:rooster/client/components/dj/dj_session.dart';
 import 'package:rooster/client/matrix/homeserver_clock.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/config/platform_utils.dart';
@@ -140,6 +141,9 @@ class MatrixLivekitVoipSession
       @visibleForTesting DateTime Function()? serverNow})
       : _now = now ?? DateTime.now,
         _serverNow = serverNow ?? HomeserverClock.instance.now {
+    // Our membership was written just before this, so this is a moment
+    // after we joined: what we count from if it is gone before we see it.
+    _startedAt = _serverNow();
     // First: if this throws, nothing was registered or started yet, so no
     // half built session is left behind in the call manager.
     keyProvider?.init(livekitRoom.localParticipant!.identity, livekitRoom);
@@ -190,7 +194,10 @@ class MatrixLivekitVoipSession
     // without touching anything.
     _idleWatcher.isAway.addListener(_publishMembershipState);
 
-    DjBooths.open(this, livekitRoom);
+    // Being the DJ, and whether the music plays, is in our membership too,
+    // so people outside the call see the booth in use.
+    _dj = DjBooths.open(this, livekitRoom)
+      ..addListener(_publishMembershipState);
 
     startHeartbeat().catchError((Object e, StackTrace s) {
       Log.onError(e, s, content: "Could not start the membership heartbeat");
@@ -1082,6 +1089,13 @@ class MatrixLivekitVoipSession
         if (_isDeafened) VoiceState.deafened,
       };
 
+  /// The call's DJ booth, from when the session started.
+  DjSession? _dj;
+
+  /// What our membership says about the booth: null unless we are the DJ,
+  /// otherwise whether our music is playing.
+  bool? get _localDj => _dj?.isDj == true ? _dj!.isPlaying : null;
+
   void _publishMembershipState() {
     if (state == VoipState.ended) return;
     // Streams and voice state only with the delayed leave armed: it is what
@@ -1094,7 +1108,10 @@ class MatrixLivekitVoipSession
     _membershipPublisher.update(CallMembershipState(
         media: armed ? _localLiveMedia : const {},
         voice: armed ? _localVoiceState : const {},
-        away: _idleWatcher.isAway.value));
+        away: _idleWatcher.isAway.value,
+        // Like LIVE, only with the delayed leave armed: a DJ whose client
+        // crashed would otherwise spin in the list for hours.
+        dj: armed ? _localDj : null));
   }
 
   // Named `published`, not `state`: `state` is this session's VoipState.
@@ -1117,6 +1134,7 @@ class MatrixLivekitVoipSession
           media: published.media,
           voiceState: published.voice,
           away: published.away,
+          dj: published.dj,
           joinedAt: joinedAt,
           now: _membershipTime()),
     );
@@ -1175,6 +1193,9 @@ class MatrixLivekitVoipSession
   Future<void> _doHangUp() async {
     if (state == VoipState.ended) return;
     Log.i("Hanging up call");
+
+    // Before the booth is closed: it is disposed there.
+    _dj?.removeListener(_publishMembershipState);
 
     // While still connected: a DJ leaving tells the room the booth is free,
     // and stops publishing the music before the room goes away.
@@ -1647,6 +1668,47 @@ class MatrixLivekitVoipSession
   /// write back if the delayed leave cleared it while we were in the call.
   Map<String, Object?>? _lastMembership;
   DateTime? _joinedAt;
+  late final DateTime _startedAt;
+
+  /// Whether this device left the call because we joined it again from
+  /// another device.
+  bool leftForAnotherDevice = false;
+
+  /// Leaves the call when we have joined it again from another device since
+  /// this one joined: the newer device is the one in the call, with the
+  /// decks and our screen share going with this one (the hang up drops
+  /// them). Starts the hang up without waiting for it, because the hang up
+  /// waits for a heartbeat in progress, and the heartbeat calls this.
+  /// Returns whether it did.
+  bool leaveIfSuperseded() {
+    if (_leaving) return false;
+    final states =
+        room.matrixRoom.states[MatrixVoipRoomComponent.callMemberStateEvent];
+    if (states == null) return false;
+    final own = states[_ownMembershipKey];
+    final ownJoinedAt = (own != null && own.content["application"] != null
+            ? MatrixCallMembership.joinedAt(
+                own.content, own is Event ? own.originServerTs : null)
+            : null) ??
+        _joinedAt ??
+        _startedAt;
+    final superseded = MatrixCallMembership.supersededBy(
+      states.values.map((e) => (
+            sender: e.senderId,
+            content: e.content,
+            sentAt: e is Event ? e.originServerTs : null,
+          )),
+      userId: room.client.self!.identifier,
+      deviceId: room.matrixRoom.client.deviceID!,
+      ownJoinedAt: ownJoinedAt,
+      now: _membershipTime(),
+    );
+    if (!superseded) return false;
+    Log.i("Joined this call again from another device: leaving it here");
+    leftForAnotherDevice = true;
+    unawaited(hangUpCall());
+    return true;
+  }
 
   DateTime? _lastMembershipRestore;
   DateTime? _lastExpiryRefresh;
@@ -1777,6 +1839,9 @@ class MatrixLivekitVoipSession
   /// Never fails: neither the timer nor a hang up waiting for it has an
   /// error to deal with.
   Future<void> _heartbeat() async {
+    // First: once we have joined from another device, restoring our cleared
+    // membership below would put this device back in the call.
+    if (leaveIfSuperseded()) return;
     await _keepDelayedLeave();
     if (_leaving) return;
     try {
@@ -1922,6 +1987,7 @@ class MatrixLivekitVoipSession
           media: _localLiveMedia,
           voiceState: _localVoiceState,
           away: _idleWatcher.isAway.value,
+          dj: _localDj,
           joinedAt: _joinedAt ?? now,
           now: now),
     );

@@ -5,6 +5,100 @@ import 'package:test/test.dart';
 void main() {
   final joined = DateTime.utc(2026, 9, 16, 20);
 
+  group('supersededBy', () {
+    const me = '@lion:example.org';
+    final mine = joined;
+    final now = joined.add(const Duration(minutes: 5));
+
+    ({String sender, Map<String, Object?> content, DateTime? sentAt}) m(
+            String device, DateTime sentAt,
+            {String sender = me, Map<String, Object?>? content}) =>
+        (
+          sender: sender,
+          content: content ??
+              {
+                'application': 'm.call',
+                'device_id': device,
+                'expires': 14400000,
+              },
+          sentAt: sentAt,
+        );
+
+    bool superseded(
+            List<
+                    ({
+                      String sender,
+                      Map<String, Object?> content,
+                      DateTime? sentAt
+                    })>
+                ms,
+            {String device = 'PHONE'}) =>
+        MatrixCallMembership.supersededBy(ms,
+            userId: me, deviceId: device, ownJoinedAt: mine, now: now);
+
+    test('a later join of ours from another device pushes this one out', () {
+      expect(
+          superseded([
+            m('PHONE', mine),
+            m('LAPTOP', mine.add(const Duration(seconds: 40))),
+          ]),
+          isTrue);
+    });
+
+    test('an earlier join from another device does not', () {
+      expect(
+          superseded([m('LAPTOP', mine.subtract(const Duration(minutes: 1)))]),
+          isFalse);
+    });
+
+    test('our own membership never does, however recently rewritten', () {
+      expect(superseded([m('PHONE', now)]), isFalse);
+    });
+
+    test('someone else joining later does not', () {
+      expect(
+          superseded([
+            m('THEIRS', now, sender: '@friend:example.org'),
+          ]),
+          isFalse);
+    });
+
+    test('a membership that has been left (empty content) does not', () {
+      expect(superseded([m('LAPTOP', now, content: const {})]), isFalse);
+    });
+
+    test('an expired one does not', () {
+      final long = MatrixCallMembership.supersededBy(
+          [m('LAPTOP', mine.add(const Duration(seconds: 1)))],
+          userId: me,
+          deviceId: 'PHONE',
+          ownJoinedAt: mine,
+          now: mine.add(const Duration(hours: 5)));
+      expect(long, isFalse);
+    });
+
+    test('a rewrite keeps its join time: an older device stays older', () {
+      expect(
+          superseded([
+            m('LAPTOP', now, content: {
+              'application': 'm.call',
+              'device_id': 'LAPTOP',
+              'expires': 14400000,
+              'created_ts': mine
+                  .subtract(const Duration(minutes: 3))
+                  .millisecondsSinceEpoch,
+            }),
+          ]),
+          isFalse);
+    });
+
+    test('joined at the same instant, both devices agree on who stays', () {
+      final both = [m('AAA', mine), m('BBB', mine)];
+      expect(superseded(both, device: 'AAA'), isTrue);
+      expect(superseded(both, device: 'BBB'), isFalse);
+    });
+  });
+
   group('liveMediaOf', () {
     test('reads what a member reports publishing', () {
       expect(
@@ -297,6 +391,36 @@ void main() {
       final back = MatrixCallMembership.withPublishedState(away,
           media: const {}, voiceState: const {}, joinedAt: joined, now: joined);
       expect(MatrixCallMembership.isAway(back), isFalse);
+    });
+
+    test('says whether we are the DJ and our music plays, and clears it', () {
+      Map<String, Object?> write(Map<String, Object?> from, bool? dj) =>
+          MatrixCallMembership.withPublishedState(from,
+              media: const {},
+              voiceState: const {},
+              dj: dj,
+              joinedAt: joined,
+              now: joined);
+
+      final playing = write(joinContent, true);
+      expect(MatrixCallMembership.djPlayingOf(playing), isTrue);
+      final paused = write(playing, false);
+      expect(MatrixCallMembership.djPlayingOf(paused), isFalse);
+      // Leaving the decks clears it, or the record would spin for everyone
+      // outside the call after we stopped.
+      expect(MatrixCallMembership.djPlayingOf(write(paused, null)), isNull);
+    });
+
+    test('a client that does not say, or says nonsense, is not the DJ', () {
+      expect(MatrixCallMembership.djPlayingOf(joinContent), isNull);
+      expect(
+          MatrixCallMembership.djPlayingOf({MatrixCallMembership.djKey: 'yes'}),
+          isNull);
+      expect(
+          MatrixCallMembership.djPlayingOf({
+            MatrixCallMembership.djKey: {'playing': 1}
+          }),
+          isFalse);
     });
 
     test('a membership from a client that does not report it is not away', () {

@@ -181,34 +181,41 @@ class _CallViewState extends State<CallView> {
                 ? 1
                 : 0,
             duration: const Duration(milliseconds: 200),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 24),
-              child: connected
-                  ? CallControlButtons(
-                      session: widget.currentSession,
-                      actions: controlActions,
-                      radius: buttonRadius,
-                      boothOpen: _boothOpen,
-                      onToggleBooth: _dj == null
-                          ? null
-                          : () => setState(() => _boothOpen = !_boothOpen),
-                      onHungUp: () {
-                        if (mounted) setState(() {});
-                      },
-                      onSoundboardOpenChanged: (open) {
-                        if (mounted) setState(() => _soundboardOpen = open);
-                      },
-                    )
-                  : tiamat.CircleButton(
-                      color: Theme.of(context).colorScheme.errorContainer,
-                      radius: buttonRadius,
-                      iconSize: buttonIconSize,
-                      icon: Icons.call_end,
-                      onPressed: () async {
-                        await widget.hangUp?.call();
-                        setState(() {});
-                      },
-                    ),
+            // Above the iPhone's home indicator: the same 24 below the
+            // buttons as before where there is none.
+            child: SafeArea(
+              top: false,
+              minimum: const EdgeInsets.only(bottom: 12),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
+                child: connected
+                    ? CallControlButtons(
+                        session: widget.currentSession,
+                        actions: controlActions,
+                        radius: buttonRadius,
+                        compact: MediaQuery.of(context).mobile,
+                        boothOpen: _boothOpen,
+                        onToggleBooth: _dj == null
+                            ? null
+                            : () => setState(() => _boothOpen = !_boothOpen),
+                        onHungUp: () {
+                          if (mounted) setState(() {});
+                        },
+                        onSoundboardOpenChanged: (open) {
+                          if (mounted) setState(() => _soundboardOpen = open);
+                        },
+                      )
+                    : tiamat.CircleButton(
+                        color: Theme.of(context).colorScheme.errorContainer,
+                        radius: buttonRadius,
+                        iconSize: buttonIconSize,
+                        icon: Icons.call_end,
+                        onPressed: () async {
+                          await widget.hangUp?.call();
+                          setState(() {});
+                        },
+                      ),
+              ),
             ),
           )
         ],
@@ -266,7 +273,7 @@ class _CallViewState extends State<CallView> {
               top: 0,
               // Over the call, it leaves the call's buttons (mute, hang up)
               // uncovered.
-              bottom: beside ? 0 : 84,
+              bottom: beside ? 0 : 84 + MediaQuery.paddingOf(context).bottom,
               right: 0,
               left: beside ? null : 0,
               width: beside ? boothWidth : null,

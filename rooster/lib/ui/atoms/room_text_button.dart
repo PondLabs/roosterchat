@@ -22,12 +22,14 @@ import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/navigation/navigation_utils.dart';
 import 'package:rooster/ui/organisms/dj/dj_booth_panel.dart';
 import 'package:rooster/ui/organisms/dj/dj_member_ui.dart';
+import 'package:rooster/ui/organisms/dj/vinyl_disc.dart';
 import 'package:rooster/ui/pages/settings/room_settings_page.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:rooster/utils/text_utils.dart';
 import 'package:rooster_calendar_widget/calendar.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/atoms/context_menu.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -120,6 +122,16 @@ class RoomTextButton extends StatefulWidget {
 }
 
 class _RoomTextButtonState extends State<RoomTextButton> {
+  String get labelDjPlaying => Intl.message("DJing",
+      name: "labelDjPlaying",
+      desc: "Tooltip on the record next to someone in a voice channel who "
+          "is the DJ and has music playing");
+
+  String get labelDjPaused => Intl.message("DJing, paused",
+      name: "labelDjPaused",
+      desc: "Tooltip on the record next to someone in a voice channel who "
+          "is the DJ with their music paused");
+
   late List<StreamSubscription> subs;
   CalendarRoom? calendarRoom;
   ActivitiesComponent? activities;
@@ -419,7 +431,8 @@ class _RoomTextButtonState extends State<RoomTextButton> {
                   buildCallMember(participant,
                       showActivityIcons: activity.thirdparty == false,
                       liveMedia: activity.liveMedia[participant] ?? const {},
-                      voiceState: activity.voiceState[participant] ?? const {}),
+                      voiceState: activity.voiceState[participant] ?? const {},
+                      djPlaying: activity.djPlaying[participant]),
                 if (!activity.thirdparty) buildDj(),
               ],
             ),
@@ -493,7 +506,8 @@ class _RoomTextButtonState extends State<RoomTextButton> {
   Widget buildCallMember(String identifier,
       {bool showActivityIcons = true,
       Set<LiveMedia> liveMedia = const {},
-      Set<VoiceState> voiceState = const {}}) {
+      Set<VoiceState> voiceState = const {},
+      bool? djPlaying}) {
     var color = Theme.of(context).colorScheme.secondary;
 
     final member = widget.room.getMemberOrFallback(identifier);
@@ -530,6 +544,16 @@ class _RoomTextButtonState extends State<RoomTextButton> {
                       Padding(
                         padding: const EdgeInsets.fromLTRB(4, 0, 0, 0),
                         child: DjMemberBadges(dj: dj, userId: identifier),
+                      )
+                    // Outside the call: what their membership says. The
+                    // record spins while their music plays.
+                    else if (djPlaying != null)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(4, 0, 0, 0),
+                        child: Tooltip(
+                          message: djPlaying ? labelDjPlaying : labelDjPaused,
+                          child: VinylDisc(size: 16, spinning: djPlaying),
+                        ),
                       ),
                     if (voiceState.isNotEmpty)
                       Padding(

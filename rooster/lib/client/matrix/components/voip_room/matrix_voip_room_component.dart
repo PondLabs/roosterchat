@@ -5,6 +5,7 @@ import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip_room/voip_room_component.dart';
 import 'package:rooster/client/matrix/components/matrix_sync_listener.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_livekit_backend.dart';
+import 'package:rooster/client/matrix/components/voip_room/matrix_livekit_voip_session.dart';
 import 'package:rooster/client/matrix/homeserver_clock.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
@@ -60,6 +61,12 @@ class MatrixVoipRoomComponent
     final events = [...?update.state, ...?update.timeline?.events];
     if (events.any((event) => event.type == callMemberStateEvent)) {
       _onParticipantsChanged.add(());
+      // Joined again from another device? This one leaves. On the next
+      // turn, once the sync is in the room state; the heartbeat checks too.
+      final session = currentSession;
+      if (session is MatrixLivekitVoipSession) {
+        Future(session.leaveIfSuperseded);
+      }
     }
   }
 
