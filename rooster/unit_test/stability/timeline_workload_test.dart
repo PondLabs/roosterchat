@@ -34,7 +34,7 @@ class _Database implements matrix.DatabaseApi {
 }
 
 Future<Map<String, Object?>> runTimelineWorkload(WidgetTester tester,
-    {int cycles = 5}) async {
+    {int cycles = 5, List<String> modes = const ['desktop', 'mobile']}) async {
   final samples = <int?>[];
   final client = MatrixClient(identifier: 'stability', database: _Database());
   client.mockComponents();
@@ -43,7 +43,7 @@ Future<Map<String, Object?>> runTimelineWorkload(WidgetTester tester,
   UserIdleWatcher.instance.dispose();
   final room = client.createRoomWithData();
   try {
-    for (final mode in ['desktop', 'mobile']) {
+    for (final mode in modes) {
       await preferences.layoutOverride.set(mode);
       await tester.binding.setSurfaceSize(
           mode == 'mobile' ? const Size(390, 844) : const Size(1440, 900));
@@ -82,7 +82,12 @@ Future<Map<String, Object?>> runTimelineWorkload(WidgetTester tester,
     await tester.binding.setSurfaceSize(null);
     await tester.runAsync(() => client.close());
   }
-  return {'metric': memoryMetric, 'after_cycle_bytes': samples};
+  return {
+    'metric': memoryMetric,
+    'layouts': modes,
+    'cycles_per_layout': cycles,
+    'after_cycle_bytes': samples,
+  };
 }
 
 Future<void> prepareWorkload() async {

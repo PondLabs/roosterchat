@@ -11,13 +11,16 @@ void main() {
   setUpAll(workload.prepareWorkload);
   testWidgets('timeline rendering performance and repeated disposal',
       (tester) async {
-    Map<String, Object?>? memory;
-    await binding.watchPerformance(
-      () async {
-        memory = await workload.runTimelineWorkload(tester, cycles: 10);
-      },
-      reportKey: 'timeline_daily_use',
-    );
+    final memory = <String, Object?>{};
+    for (final mode in ['desktop', 'mobile']) {
+      await binding.watchPerformance(
+        () async {
+          memory[mode] = await workload
+              .runTimelineWorkload(tester, cycles: 10, modes: [mode]);
+        },
+        reportKey: 'timeline_$mode',
+      );
+    }
     binding.reportData!['memory'] = memory;
     debugPrint('STABILITY_METRIC ${jsonEncode(binding.reportData)}');
   }, timeout: const Timeout(Duration(minutes: 8)));

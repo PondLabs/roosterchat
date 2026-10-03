@@ -538,6 +538,10 @@ impl Dsp {
             stream_out_len: 0,
             stream_primed: false,
         });
+        // pthread-backed std mutexes (including macOS) allocate on the first
+        // lock. Initialize them here rather than on render/reference callbacks.
+        drop(dsp.render_band.lock().expect("new render mutex"));
+        drop(dsp.reference_band.lock().expect("new reference mutex"));
         dsp.warm_up_rnnoise();
         dsp.shared.sample_rate.store(NATIVE_RATE as u32, Ordering::Relaxed);
         dsp

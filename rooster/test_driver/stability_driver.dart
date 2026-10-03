@@ -8,7 +8,7 @@ Future<void> main() => integrationDriver(
         if (data == null)
           throw StateError('The workload returned no measurements');
         await Directory('build').create(recursive: true);
-        await File('build/stability-web.json')
+        await File('build/stability-performance.json')
             .writeAsString(const JsonEncoder.withIndent('  ').convert(data));
         // ignore: avoid_print
         print('STABILITY_METRIC ${jsonEncode(data)}');

@@ -49,7 +49,9 @@ jobs:
         working-directory: rooster
         run: dart run scripts/codegen.dart
       - name: Native audio stability and allocation regressions
-        run: cargo test -p audio_dsp
+        run: |
+          set -o pipefail
+          cargo test -p audio_dsp | tee rooster/stability-audio.log
       - name: Lifecycle, recovery, media and voice regressions
         working-directory: rooster
         run: |
@@ -67,15 +69,17 @@ jobs:
         run: |
           set -o pipefail
           if [ '${{ matrix.platform }}' = linux ]; then
-            xvfb-run -a flutter test integration_test/stability_test.dart -d linux --profile \
-              --dart-define=PLATFORM=linux --reporter expanded | tee stability-profile.log
+            xvfb-run -a flutter drive --driver=test_driver/stability_driver.dart \
+              --target=integration_test/stability_test.dart -d linux --profile \
+              --dart-define=PLATFORM=linux | tee stability-profile.log
           else
-            flutter test integration_test/stability_test.dart -d '${{ matrix.platform }}' --profile \
-              --dart-define=PLATFORM='${{ matrix.platform }}' --reporter expanded | tee stability-profile.log
+            flutter drive --driver=test_driver/stability_driver.dart \
+              --target=integration_test/stability_test.dart -d '${{ matrix.platform }}' --profile \
+              --dart-define=PLATFORM='${{ matrix.platform }}' | tee stability-profile.log
           fi
       - name: Collect measurements
         if: always()
-        run: python tools/stability_report.py --platform '${{ matrix.platform }}' --output rooster/stability-report.json rooster/stability-tests.jsonl rooster/stability-profile.log
+        run: python tools/stability_report.py --platform '${{ matrix.platform }}' --output rooster/stability-report.json rooster/stability-tests.jsonl rooster/stability-profile.log rooster/stability-audio.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -84,6 +88,8 @@ jobs:
             rooster/stability-tests.jsonl
             rooster/stability-profile.log
             rooster/stability-report.json
+            rooster/stability-audio.log
+            rooster/build/stability-performance.json
           if-no-files-found: error
 
   web:
@@ -136,7 +142,8 @@ jobs:
           done
           flutter drive --driver=test_driver/stability_driver.dart \
             --target=integration_test/stability_test.dart -d web-server --release \
-            --browser-name=chrome --headless --dart-define=PLATFORM=web \
+            --browser-name=chrome --chrome-binary="$CHROME_EXECUTABLE" --headless \
+            --dart-define=PLATFORM=web \
             | tee stability-profile.log
       - name: Collect measurements
         if: always()
@@ -149,6 +156,6 @@ jobs:
             rooster/stability-tests.jsonl
             rooster/stability-profile.log
             rooster/stability-report.json
-            rooster/build/stability-web.json
+            rooster/build/stability-performance.json
             rooster/chromedriver.log
           if-no-files-found: error

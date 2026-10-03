@@ -17,6 +17,7 @@ then exercised with the corrections in place:
 | Presence cache receiving 10,000 distinct keys | Declared capacity was not enforced | Evict oldest writes immediately; retain 50 entries and observe 9,950 removals |
 | Logging 20,000 distinct messages | All messages remained in the global in-memory list | Retain at most 2,000 entries; preserve consecutive-message coalescing |
 | Reopening a chat timeline 50 times | Global jump subscription retained closed timeline states; scroll controllers were not disposed | Release subscriptions and both replaced/current controllers; verify disposal after every cycle |
+| First render/reference audio callbacks on macOS | Allocation-free processing test found two allocations | Initialize both mutexes in the DSP constructor; retain the zero-allocation assertion |
 
 Presence shutdown now releases SDK subscriptions, the global idle observer,
 the expiry timer and stream. The client invokes it before disposing its SDK.
@@ -24,6 +25,11 @@ Late presence lookups and timeline callbacks check whether their owner is still
 alive. Cache expiry is checked on reads as well as periodic cleanup; cleanup no
 longer waits 200 ms for every entry. Presence explicitly retains up to 2,000
 recent users rather than inheriting the utility's small default capacity.
+
+The macOS failure matches Rust's [pthread mutex implementation](https://github.com/rust-lang/rust/blob/1.99.0/library/std/src/sys/sync/mutex/pthread.rs),
+which allocates its backing mutex on first lock. Constructor initialization
+moves that allocation before the audio callbacks. The remote test determines
+whether this removes the observed two allocations; no test threshold is relaxed.
 
 ## Repeatable workload
 
@@ -37,7 +43,8 @@ selected; resizing a desktop browser alone does not emulate a mobile browser.
 The widget test runs ten cycles. The integration workload runs twenty cycles
 inside the native application in profile mode and Chrome in release mode.
 Flutter `watchPerformance` records build/raster frame measurements where the
-platform exposes them. Samples after each cycle report native process RSS or
+platform exposes them, separately for desktop and mobile layouts. Samples
+after each cycle report native process RSS or
 Chromium JS heap usage. CI stores the original logs and collected measurements
 as `stability-linux`, `stability-windows`, `stability-macos`, and `stability-web`.
 
@@ -62,11 +69,17 @@ requires native media playback. The Rust DSP itself passed all 75 tests,
 including its allocation-free processing check. Python passed all 181 tests.
 Dart analysis had no errors/warnings and 12 existing informational findings.
 The additional two download regressions pass after their correction.
+After building the native DSP and deterministic audio fixture locally, all
+eight previously skipped DSP/FFI tests also passed. The combined stability and
+presence selection passed 17 tests on the next run.
 
 The ten-cycle widget workload passed with no exceptions or retained timeline
 listeners; host elapsed time was 9,890 ms. RSS samples in MiB were 342.3, 353.6,
 356.5, 363.3, 317.0, 315.0, 295.1, 264.1, 261.5, and 262.3. This is a short
 diagnostic run, not a claim of leak freedom or interactive frame performance.
+The next ten-cycle run took 5,196 ms and RSS rose from 348.1 to 388.6 MiB,
+mostly during the early cycles. The differing short-run trends reinforce the
+need for a longer post-warmup soak rather than treating either run as proof.
 Remote PR checks supply platform-specific results; this local host cannot
 establish Windows/macOS application behavior.
 
