@@ -405,6 +405,9 @@ fn load_model(load: ModelLoad) -> (Option<Box<DeepFilter>>, Option<ModelSlot>) {
         }
         ModelLoad::Background => {
             let slot = Arc::new(Mutex::new(None));
+            // collect_model uses try_lock on the audio thread before the
+            // loading thread necessarily reaches this pthread-backed mutex.
+            drop(slot.lock().expect("new model mutex"));
             let loaded = Arc::clone(&slot);
             let spawned = std::thread::Builder::new()
                 .name("rooster-dsp-model".into())
@@ -1233,6 +1236,22 @@ mod tests {
         ARMED.with(|a| a.set(false));
         render.clear();
         assert_eq!(COUNT.with(|c| c.get()), 0, "allocations on the hot path");
+    }
+
+    #[test]
+    fn first_background_model_poll_does_not_allocate() {
+        // Disable inference, whose tract allocations are outside this check,
+        // so model arrival cannot make the allocation count timing dependent.
+        let mut dsp = Dsp::with_model(
+            Params { noise_suppression: 0, ..Default::default() },
+            ModelLoad::Background,
+        );
+        let mut block = [0.0; FRAME_SIZE];
+        COUNT.with(|c| c.set(0));
+        ARMED.with(|a| a.set(true));
+        dsp.process_block(&mut block);
+        ARMED.with(|a| a.set(false));
+        assert_eq!(COUNT.with(|c| c.get()), 0, "allocations on first model poll");
     }
 
     #[test]

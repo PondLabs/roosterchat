@@ -30,6 +30,9 @@ The macOS failure matches Rust's [pthread mutex implementation](https://github.c
 which allocates its backing mutex on first lock. Constructor initialization
 moves that allocation before the audio callbacks. The remote test determines
 whether this removes the observed two allocations; no test threshold is relaxed.
+The background model's shared slot is initialized before spawning its loader
+too. A separate cold-callback test polls it with inference disabled, isolating
+mutex initialization from tract's permitted inference allocations.
 
 ## Repeatable workload
 
@@ -84,11 +87,15 @@ Remote PR checks supply platform-specific results; this local host cannot
 establish Windows/macOS application behavior.
 
 The new CI runs native audio DSP tests, lifecycle/recovery/media/voice tests,
-and the profile workload independently on Windows, Linux and macOS. Chrome
+and the profile workload independently on Windows, Linux and macOS. Stable Chrome
 also runs regressions and the release workload in both layout modes. Existing
+Browser version, logical CPU count and WebGL renderer identification accompany
+the profile results; a separate context is queried after measurement and released.
 static analysis and authenticated Linux integration now run on pull requests.
 Main-branch publication waits for the stability workflow, and macOS build
-failures are no longer ignored by desktop builds.
+failures are no longer ignored by desktop builds. Web Pages deploys the exact
+revision from successful main CI instead of publishing every push before its
+checks finish; explicit manual deployment remains available.
 
 The published Web application was inspected through login and appearance
 settings. No JavaScript errors were observed during that limited session.

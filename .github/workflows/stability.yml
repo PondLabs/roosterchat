@@ -106,6 +106,7 @@ jobs:
       - uses: browser-actions/setup-chrome@v1
         id: chrome
         with:
+          chrome-version: stable
           install-chromedriver: true
       - name: Code generation
         working-directory: rooster

@@ -1,9 +1,11 @@
 # The landing page and the web app, at https://pondlabs.github.io/roosterchat/
-# and .../roosterchat/app/. Every push to main redeploys both.
+# and .../roosterchat/app/. Successful main CI redeploys both.
 name: pages
 
 on:
-  push:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -21,6 +23,7 @@ env:
 
 jobs:
   deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
     environment:
       name: github-pages
@@ -29,6 +32,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2.8.0
@@ -67,7 +71,7 @@ jobs:
             --build-name="${tag#v}" \
             --dart-define BUILD_MODE=release \
             --dart-define PLATFORM=web \
-            --dart-define GIT_HASH=${{ github.sha }} \
+            --dart-define GIT_HASH=${{ github.event.workflow_run.head_sha || github.sha }} \
             --dart-define VERSION_TAG=$tag \
             --dart-define ENABLE_GOOGLE_SERVICES=false \
             --dart-define BUILD_DATE=$(date +%s%3N) \

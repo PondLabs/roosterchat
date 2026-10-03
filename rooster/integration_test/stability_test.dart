@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import '../unit_test/stability/timeline_workload_test.dart' as workload;
+import 'stability_memory.dart';
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -22,6 +23,7 @@ void main() {
       );
     }
     binding.reportData!['memory'] = memory;
+    binding.reportData!['render_environment'] = sampleRenderEnvironment();
     debugPrint('STABILITY_METRIC ${jsonEncode(binding.reportData)}');
   }, timeout: const Timeout(Duration(minutes: 8)));
 }
