@@ -22,9 +22,23 @@ that track, so:
   The booth always sends at full level; how loud the music is, is each
   listener's own business.
 
-Only desktop (Linux, Windows) can DJ: it needs the Rust player
-(`librust_lib_rooster` is not built for Android or web), and reads files and
-runs extensions.
+Desktop (Linux, Windows) DJs everything: the Rust player reads files and
+plays what source extensions download. The browser DJs too, with less
+(`web/web_dj_engine.dart`): the DJ's own files, picked in the browser and
+kept as blob URLs for as long as the page is open (`web/web_dj_files.dart`),
+and direct links to audio files whose server allows web pages to read them
+(CORS; `web/web_dj_link_resolver.dart`). Each song plays in an `<audio>`
+element, streamed rather than decoded whole, through Web Audio into a
+`MediaStreamAudioDestinationNode` published under the same track name, and
+into a gain node for the DJ's own speakers. Songs from source extensions,
+and files on another DJ's computer, are skipped there as unavailable, the
+way a desktop skips a file it doesn't have. Android listens only (no Rust
+player, and no browser player).
+
+The browser DJ hears their music through Web Audio, not WebRTC playout:
+on loudspeakers, how much of it their microphone sends back is up to the
+browser's echo canceller. A phone browser also stops the music when the
+page goes to the background.
 
 The DJ hears their own music through a second, in-process WebRTC connection
 receiving the same track (`DjLocalMonitor` in `native_dj_engine.dart`). A

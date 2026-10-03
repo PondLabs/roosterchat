@@ -15,7 +15,7 @@ widgets/calendar/android/local.properties
 /build
 /target
 .cache/cef/
-tools/__pycache__/
+__pycache__/
 rooster/.livekit/
 rooster/web/e2ee.worker.dart.js.map
 rooster/web/e2ee.worker.dart.js.deps

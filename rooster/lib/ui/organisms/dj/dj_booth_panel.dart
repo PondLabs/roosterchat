@@ -1066,8 +1066,18 @@ class _AddBarState extends State<_AddBar> {
       allowMultiple: true,
       type: FileType.custom,
       allowedExtensions: DjPlatform.audioFileExtensions,
+      // A browser gives the files' contents, not where they are.
+      withData: kIsWeb,
     );
     if (!widget.enabled) return;
+    if (kIsWeb) {
+      final dj = widget.dj;
+      dj.addTracks(await DjPlatform.instance.pickedTracks([
+        for (final file in result?.files ?? const <PlatformFile>[])
+          if (file.bytes != null) (name: file.name, bytes: file.bytes!)
+      ], addedBy: dj.selfUserId, newId: dj.newTrackId));
+      return;
+    }
     await addDjFiles(widget.dj, [
       for (final file in result?.files ?? const <PlatformFile>[])
         if (file.path != null) file.path!
