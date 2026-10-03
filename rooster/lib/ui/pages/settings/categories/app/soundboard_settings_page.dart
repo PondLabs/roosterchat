@@ -1,10 +1,11 @@
 import 'dart:async';
 
+import 'package:rooster/client/client.dart';
+import 'package:rooster/client/components/soundboard/default_sounds.dart';
 import 'package:rooster/client/components/soundboard/soundboard_component.dart';
 import 'package:rooster/client/components/soundboard/soundboard_sound.dart';
 import 'package:rooster/client/components/soundboard/soundboard_engine.dart';
 import 'package:rooster/client/matrix/components/soundboard/soundboard_player_factory.dart';
-import 'package:rooster/client/space.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_call_controller.dart';
 import 'package:rooster/ui/pages/settings/categories/app/double_preference_slider.dart';
@@ -12,6 +13,15 @@ import 'package:rooster/ui/pages/settings/categories/space/space_soundboard_sett
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
+
+/// An entrance sound on offer: where it comes from, how to look it up, the
+/// account that downloads it (null for a bundled sound) and the sound.
+typedef _EntranceOption = (
+  String source,
+  SoundboardSound? Function(String) getById,
+  Client? client,
+  SoundboardSound sound,
+);
 
 /// User soundboard settings: volume and the entrance sound played when
 /// joining a voice channel.
@@ -62,11 +72,6 @@ class _SoundboardSettingsPageState extends State<SoundboardSettingsPage> {
   String get labelSoundboardEntranceNone => Intl.message("None",
       name: "labelSoundboardEntranceNone",
       desc: "Entrance sound option that disables the entrance sound");
-
-  String get labelSoundboardEntranceNoSounds => Intl.message(
-      "None of your spaces have soundboard sounds yet.",
-      name: "labelSoundboardEntranceNoSounds",
-      desc: "Shown when no space has a soundboard to pick an entrance sound");
 
   String labelSoundboardAddSound(String space) => Intl.message(
       "Add a sound to $space",
@@ -148,14 +153,19 @@ class _SoundboardSettingsPageState extends State<SoundboardSettingsPage> {
         ? savedSpaceId
         : null;
 
-    // Sounds offered for the selected space, or for every space.
-    final options =
-        <SoundId, (Space, SpaceSoundboardComponent, SoundboardSound)>{};
+    // Sounds offered for the selected space, or for every space, then the
+    // ones bundled with the app, which play in every call.
+    final options = <SoundId, _EntranceOption>{};
     for (final (space, comp) in spaces) {
       if (spaceId != null && space.identifier != spaceId) continue;
       for (final sound in comp.sounds) {
-        options[sound.soundId] = (space, comp, sound);
+        options[sound.soundId] =
+            (space.displayName, comp.getById, space.client, sound);
       }
+    }
+    for (final sound in defaultSoundboardCatalog.sounds) {
+      options[sound.soundId] =
+          ('Rooster', defaultSoundboardCatalog.getById, null, sound);
     }
     final savedSoundId = preferences.soundboardEntranceSoundId.value;
     final soundId = options.containsKey(savedSoundId) ? savedSoundId : null;
@@ -165,9 +175,7 @@ class _SoundboardSettingsPageState extends State<SoundboardSettingsPage> {
       spacing: 8,
       children: [
         tiamat.Text.labelLow(labelSoundboardEntranceSoundDescription),
-        if (spaces.isEmpty)
-          tiamat.Text.label(labelSoundboardEntranceNoSounds)
-        else ...[
+        if (spaces.isNotEmpty) ...[
           tiamat.Text(labelSoundboardEntranceSpace),
           tiamat.DropdownSelector<String>(
             color: ColorScheme.of(context).surfaceContainerLow,
@@ -181,39 +189,41 @@ class _SoundboardSettingsPageState extends State<SoundboardSettingsPage> {
                     .displayName),
             onItemSelected: (id) => _selectSpace(id, spaces),
           ),
-          tiamat.Text(labelSoundboardEntranceSound),
-          Row(
-            spacing: 8,
-            children: [
-              Expanded(
-                child: tiamat.DropdownSelector<String>(
-                  color: ColorScheme.of(context).surfaceContainerLow,
-                  items: [_any, ...options.keys],
-                  value: soundId ?? _any,
-                  itemBuilder: (id) {
-                    if (id == _any) {
-                      return tiamat.Text(labelSoundboardEntranceNone);
-                    }
-                    final (space, _, sound) = options[id]!;
-                    final label = '${sound.emoji} ${sound.name}';
-                    return tiamat.Text(spaceId == null
-                        ? '$label (${space.displayName})'
-                        : label);
-                  },
-                  onItemSelected: (id) => preferences.soundboardEntranceSoundId
-                      .set(id == null || id == _any ? null : id),
-                ),
-              ),
-              tiamat.IconButton(
-                icon: Icons.play_arrow,
-                size: 24,
-                onPressed:
-                    soundId == null ? null : () => _preview(options[soundId]!),
-              ),
-            ],
-          ),
-          ..._addSound(context, spaces, spaceId),
         ],
+        tiamat.Text(labelSoundboardEntranceSound),
+        Row(
+          spacing: 8,
+          children: [
+            Expanded(
+              child: tiamat.DropdownSelector<String>(
+                color: ColorScheme.of(context).surfaceContainerLow,
+                items: [_any, ...options.keys],
+                value: soundId ?? _any,
+                itemBuilder: (id) {
+                  if (id == _any) {
+                    return tiamat.Text(labelSoundboardEntranceNone);
+                  }
+                  final (source, _, client, sound) = options[id]!;
+                  final label = '${sound.emoji} ${sound.name}';
+                  // A bundled sound is always labeled: it is not the
+                  // chosen space's.
+                  return tiamat.Text(spaceId == null || client == null
+                      ? '$label ($source)'
+                      : label);
+                },
+                onItemSelected: (id) => preferences.soundboardEntranceSoundId
+                    .set(id == null || id == _any ? null : id),
+              ),
+            ),
+            tiamat.IconButton(
+              icon: Icons.play_arrow,
+              size: 24,
+              onPressed:
+                  soundId == null ? null : () => _preview(options[soundId]!),
+            ),
+          ],
+        ),
+        ..._addSound(context, spaces, spaceId),
       ],
     );
   }
@@ -222,6 +232,7 @@ class _SoundboardSettingsPageState extends State<SoundboardSettingsPage> {
   /// manage its soundboard; with every space chosen, a hint to pick one.
   List<Widget> _addSound(BuildContext context,
       List<(Space, SpaceSoundboardComponent)> spaces, String? spaceId) {
+    if (spaces.isEmpty) return const [];
     if (spaceId == null) {
       if (!spaces.any((e) => e.$2.canManage)) return const [];
       return [tiamat.Text.labelLow(labelSoundboardChooseSpaceToAdd)];
@@ -245,26 +256,28 @@ class _SoundboardSettingsPageState extends State<SoundboardSettingsPage> {
     final spaceId = id == null || id == _any ? null : id;
     await preferences.soundboardEntranceSpaceId.set(spaceId);
     if (spaceId == null) return;
-    // A sound from another space can never play in the chosen one.
+    // A sound from another space can never play in the chosen one; a bundled
+    // one plays everywhere.
     final soundId = preferences.soundboardEntranceSoundId.value;
     final comp = spaces.firstWhere((e) => e.$1.identifier == spaceId).$2;
-    if (soundId != null && comp.getById(soundId) == null) {
+    if (soundId != null &&
+        comp.getById(soundId) == null &&
+        defaultSoundboardCatalog.getById(soundId) == null) {
       await preferences.soundboardEntranceSoundId.set(null);
     }
   }
 
   /// Plays the sound for this user only, at the soundboard volume.
-  Future<void> _preview(
-      (Space, SpaceSoundboardComponent, SoundboardSound) option) async {
-    final (space, comp, sound) = option;
+  Future<void> _preview(_EntranceOption option) async {
+    final (_, getById, client, sound) = option;
     await _previewPlayer?.stopAll();
     // The platform player (Web Audio in the browser), so the preview goes
     // through the same path and gain as a call.
     final preview = createSoundboardPlayer(
-      resolveSound: comp.getById,
+      resolveSound: getById,
       resolvePlayableUri: (s) =>
-          SoundboardCallController.resolvePlayableUri(space.client, s),
-      loadBytes: (s) => SoundboardCallController.loadBytes(space.client, s),
+          SoundboardCallController.resolvePlayableUri(client, s),
+      loadBytes: (s) => SoundboardCallController.loadBytes(client, s),
     );
     _previewPlayer = preview;
     // setVolumeFor also stores the listener volume for instances started later.
