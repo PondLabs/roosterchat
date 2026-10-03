@@ -231,6 +231,7 @@ flutter:
     - assets/config/
     - assets/l10n/
     - assets/sound/
+    - assets/soundboard/
     - assets/images/app_icon/
     - assets/images/tray/
     - assets/images/effects/particles/
