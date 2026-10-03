@@ -1,0 +1,45 @@
+name: drop-smoke-tmp
+
+# Temporary: runs the drag-and-drop smoke tests against the latest release,
+# so the scripts can be worked on without a full build each time.
+on:
+  pull_request:
+    paths:
+      - tools/windows_drop_smoke.ps1
+      - tools/linux_drop_smoke.py
+      - .github/workflows/drop-smoke-tmp.yml
+
+jobs:
+  windows:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download the latest release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download --repo ${{ github.repository }} --pattern '*windows-x64-release.zip' --dir dl
+          Expand-Archive (Get-ChildItem dl\*.zip).FullName -DestinationPath app
+      - name: Drag a file onto it
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem app -Recurse -Filter rooster.exe | Select-Object -First 1
+          ./tools/windows_drop_smoke.ps1 -Bundle $exe.DirectoryName
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download --repo ${{ github.repository }} --pattern '*linux-x64-release.tar.gz' --dir dl
+          mkdir app && tar -xzf dl/*.tar.gz -C app
+      - name: Drag a file onto it
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libgtk-3-0 libmpv2 libmimalloc2.0 libkeybinder-3.0-0 libayatana-appindicator3-1 libpulse0 libasound2t64 \
+            xvfb xdotool python3-gi gir1.2-gtk-3.0
+          bundle=$(dirname "$(find app -type f -name rooster | head -1)")
+          xvfb-run -a -s '-screen 0 1920x1080x24' python3 tools/linux_drop_smoke.py --bundle "$bundle"
