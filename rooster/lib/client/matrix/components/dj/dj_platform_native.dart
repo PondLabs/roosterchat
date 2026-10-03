@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:rooster/client/components/dj/dj_engine.dart';
 import 'package:rooster/client/components/dj/dj_models.dart';
@@ -48,4 +49,12 @@ class _NativeDjPlatform implements DjPlatform {
         await DjLocalFiles.instance.track(path, id: newId(), addedBy: addedBy),
     ];
   }
+
+  /// Desktop adds files by path ([localTracks]).
+  @override
+  Future<List<DjTrack>> pickedTracks(
+          List<({String name, Uint8List bytes})> files,
+          {required String addedBy,
+          required String Function() newId}) async =>
+      const [];
 }

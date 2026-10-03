@@ -1,6 +1,7 @@
 // What this platform brings to the DJ booth. Desktop (Linux, Windows) can DJ:
 // it has the Rust player, plays the DJ's own files and runs source
-// extensions. Web and Android listen only.
+// extensions. The browser can DJ the DJ's own files and direct links to
+// audio files (web/web_dj_engine.dart). Android listens only.
 import 'package:rooster/client/components/dj/dj_engine.dart';
 import 'package:rooster/client/components/dj/dj_models.dart';
 import 'package:rooster/client/components/dj/dj_session.dart';
@@ -27,6 +28,13 @@ abstract class DjPlatform {
   /// Queue entries for audio files on this computer, added by [addedBy].
   Future<List<DjTrack>> localTracks(List<String> paths,
       {required String addedBy, required String Function() newId});
+
+  /// Queue entries for files picked where there are no paths (a browser):
+  /// their names and contents. Empty where files are added by path.
+  Future<List<DjTrack>> pickedTracks(
+      List<({String name, Uint8List bytes})> files,
+      {required String addedBy,
+      required String Function() newId});
 
   static final DjPlatform instance = platform.createDjPlatform();
 
