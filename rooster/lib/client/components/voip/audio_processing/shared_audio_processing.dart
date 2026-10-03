@@ -2,20 +2,26 @@
 // process: WebRTC's echo canceller, gain control and noise suppressor, for
 // every microphone capture. Each audio sender writes its source's options
 // into it when it starts sending (WebRtcVoiceSendChannel::SetAudioSend →
-// SetOptions → ApplyAudioProcessingOptions, in libwebrtc), and the last one
-// to write wins. Removing a sender writes nothing back.
+// SetOptions → ApplyAudioProcessingOptions, in libwebrtc) and again every
+// time its connection negotiates (SetSenderParameters), in the order of the
+// connection's media sections, and the last one to write wins.
 //
-// Screen-share system audio and the DJ booth's music are custom sources,
-// created with echo cancellation, gain control and noise suppression off
-// (right for them: they do not go through the APM). Publishing one used to
-// switch those off for the microphone until it was muted and unmuted: echo
-// for everyone listening to someone on loudspeakers, and no noise
-// suppression where WebRTC's is the one meant to run.
+// Screen-share system audio and the DJ booth's music are custom sources.
+// They do not go through the APM, so their options only matter for what
+// they write over the microphone's. Created with everything off, as they
+// used to be, they switched echo cancellation, gain control and noise
+// suppression off for the microphone: echo for everyone listening to
+// someone on loudspeakers. So the vendored flutter-webrtc creates them with
+// the microphone's echo cancellation and gain control (on), and the music
+// with the microphone's noise suppression too (`noiseSuppression` of
+// roosterCreateMusicTrack): whenever they write, nothing changes.
 //
-// restoreMicrophoneProcessing writes the microphone's options back after a
-// custom source has written its own, by turning the microphone's capture
-// track off and on: re-enabling a track makes its sender apply its options
-// again. That is a libwebrtc internal, not an API. If an update changes it,
+// What is left is noise suppression where it differs: screen audio always
+// writes it off, and the music what the microphone had when the booth
+// opened. restoreMicrophoneProcessing writes the microphone's options back
+// after a custom source has written its own, by turning the microphone's
+// capture track off and on: re-enabling a track makes its sender apply its
+// options again. It holds until the connection negotiates again. That is a libwebrtc internal, not an API. If an update changes it,
 // integration_test/voice_dsp/native_noise_test.dart ("a custom audio source
 // leaves the microphone's processing alone") fails; see
 // docs/voice-audio-processing.md, "Known gaps".

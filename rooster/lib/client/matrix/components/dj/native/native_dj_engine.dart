@@ -344,6 +344,14 @@ class NativeDjEngine implements DjPlaybackEngine {
         'roosterCreateMusicTrack', <String, dynamic>{
       'ctx': player.handleAddress,
       'pull': player.pullAddress,
+      // What the track's sender writes onto the audio processing it shares
+      // with the microphone, at every negotiation: the microphone's own
+      // (shared_audio_processing.dart).
+      'noiseSuppression': microphonePublication(participant)
+              ?.track
+              ?.currentOptions
+              .noiseSuppression ??
+          false,
     });
     if (response == null) throw StateError('No music track');
     // The pacing thread runs from here on: remembered before anything else
@@ -536,10 +544,9 @@ class NativeDjEngine implements DjPlaybackEngine {
 /// Plays a local track to this machine's speakers through WebRTC: a sending
 /// and a receiving peer connection in the same process, linked directly.
 /// The DJ hearing their own music: a sender and a receiver connected in
-/// this process. The sender is a custom source's, so on desktop it switches
-/// the microphone's echo cancellation off (shared_audio_processing.dart) and
-/// [start] puts it back, or everyone the DJ hears on loudspeakers comes back
-/// to the room through the DJ's microphone.
+/// this process. The sender is a custom source's, so on desktop it writes
+/// its options over the microphone's (shared_audio_processing.dart) and
+/// [start] puts those back once it is sending.
 @visibleForTesting
 class DjLocalMonitor {
   rtc.RTCPeerConnection? _sender;

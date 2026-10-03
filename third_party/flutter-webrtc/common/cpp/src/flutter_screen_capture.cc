@@ -243,12 +243,17 @@ void FlutterScreenCapture::GetDisplayMedia(
       loopback_capturer_.reset();
     }
 
-    // Disable all audio processing for loopback capture.  Echo cancellation,
-    // AGC, and noise suppression are designed for microphone input; applied to
-    // system audio they treat the captured content as echo/noise and destroy it.
+    // ROOSTER: a custom source's audio does not go through the audio
+    // processing module, so these are not for the system audio. Its sender
+    // writes them onto the module the microphone shares, and again at every
+    // negotiation, last: with them off, the microphone lost its echo
+    // cancellation whenever the call negotiated during the share. Echo
+    // cancellation and gain control are the microphone's (on, as every
+    // microphone here has them); noise suppression is put back from Dart
+    // (restoreMicrophoneProcessing) where WebRTC's is the one in use.
     RTCAudioOptions loopback_opts;
-    loopback_opts.echo_cancellation = false;
-    loopback_opts.auto_gain_control = false;
+    loopback_opts.echo_cancellation = true;
+    loopback_opts.auto_gain_control = true;
     loopback_opts.noise_suppression = false;
     const std::string loopback_source_label =
       "screen_loopback_input_" + base_->GenerateUUID();

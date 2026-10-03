@@ -404,6 +404,131 @@ void main() {
     });
   });
 
+  // Putting the microphone's options back lasts until the next negotiation:
+  // applying an answer makes every audio sender write its options again,
+  // the custom source's after the microphone's. A DJ whose call negotiated
+  // while they had the decks (a camera, a screen share, a reconnect) went
+  // without echo cancellation until they left the booth; the music covered
+  // it while it played, and once a song ended everyone heard themselves
+  // back through the DJ's microphone. The music source is now created with
+  // the microphone's options, so what it writes changes nothing.
+  //
+  // Measured as above, WebRTC's suppressor standing for all three options:
+  // A before the music, B with it sent and nothing restored, C after
+  // another negotiation.
+  testWidgets("music created with the microphone's options leaves them on",
+      (tester) async {
+    expect(_roomNoise, isNotEmpty,
+        reason: 'run tools/voice_dsp/native_noise_loop.sh');
+
+    await tester.runAsync(() async {
+      await preferences.init();
+      await preferences.voipNoiseSuppression.set(false);
+      await preferences.voipInputSensitivityAuto.set(false);
+      await preferences.voipInputSensitivityDb.set(-90);
+      await preferences.voipFarEndDucking.set(false);
+      await preferences.voipSpeakerBleed.set(false);
+      await preferences.voipDefaultAudioInput.set(_mic);
+      await preferences.voipDefaultAudioOutput.set(_out);
+
+      final dsp =
+          AudioProcessingManager.instance as NativeAudioProcessingManager;
+      await WebrtcDefaultDevices.selectOutputDevice();
+      // ignore: invalid_use_of_visible_for_testing_member
+      NativeAudioProcessingManager.debugMicTestConstraints['noiseSuppression'] =
+          true;
+      // ignore: invalid_use_of_visible_for_testing_member
+      addTearDown(() => NativeAudioProcessingManager.debugMicTestConstraints
+          .remove('noiseSuppression'));
+      expect(await dsp.startMicTest(), isTrue);
+      await dsp.setMicTestMonitor(false);
+      // ignore: invalid_use_of_visible_for_testing_member
+      final mic = dsp.debugMicTestMicrophone!;
+
+      final started = DateTime.now();
+      double now() => DateTime.now().difference(started).inMilliseconds / 1000;
+      final samples = <({double t, double energy, double duration})>[];
+      var sampling = true;
+      final sampler = () async {
+        double? lastE, lastD;
+        while (sampling) {
+          // ignore: invalid_use_of_visible_for_testing_member
+          for (final r in await dsp.debugMicTestStats()) {
+            final v = r.values;
+            if (r.type != 'media-source' || v['trackIdentifier'] != mic.id) {
+              continue;
+            }
+            final e = (v['totalAudioEnergy'] as num?)?.toDouble();
+            final d = (v['totalSamplesDuration'] as num?)?.toDouble();
+            if (e != null && d != null && lastE != null && d > lastD!) {
+              samples.add((t: now(), energy: e - lastE, duration: d - lastD));
+            }
+            lastE = e;
+            lastD = d;
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        }
+      }();
+
+      final noise =
+          await Process.start('paplay', ['--device=$_micSink', _roomNoise]);
+      Future<void> until(double t) => Future<void>.delayed(
+          Duration(milliseconds: ((t - now()) * 1000).round()));
+
+      await until(4.5);
+      final player = DjMusicPlayer(DjMusicBindings.load()!);
+      final response = await rtc.WebRTC.invokeMethod(
+          'roosterCreateMusicTrack', <String, dynamic>{
+        'ctx': player.handleAddress,
+        'pull': player.pullAddress,
+        // The microphone test's, as the booth passes its call's.
+        'noiseSuppression': true,
+      });
+      final music = MediaStreamNative(response['streamId'], 'local')
+        ..setMediaTracks(response['audioTracks'], response['videoTracks']);
+      final musicTrack = music.getAudioTracks().first;
+      // ignore: invalid_use_of_visible_for_testing_member
+      await dsp.debugMicTestAddTrack(musicTrack, music);
+
+      await until(9.0);
+      // ignore: invalid_use_of_visible_for_testing_member
+      await dsp.debugMicTestRenegotiate();
+
+      await until(14.0);
+      sampling = false;
+      await sampler;
+      noise.kill();
+      await noise.exitCode;
+      await rtc.WebRTC.invokeMethod(
+          'roosterStopMusicTrack', <String, dynamic>{'trackId': musicTrack.id});
+      player.free();
+      await dsp.stopMicTest();
+
+      double level(double from, double to) {
+        var e = 0.0, d = 0.0;
+        for (final s in samples.where((s) => s.t >= from && s.t < to)) {
+          e += s.energy;
+          d += s.duration;
+        }
+        return d > 0 ? 10 * math.log(e / d) / math.ln10 : double.nan;
+      }
+
+      final a = level(2.0, 4.5), b = level(6.5, 9.0), c = level(11.0, 14.0);
+      final summary = 'before ${a.toStringAsFixed(1)} dB, with the music '
+          '${b.toStringAsFixed(1)} dB, after another negotiation '
+          '${c.toStringAsFixed(1)} dB';
+      await File('$_results/music_options.txt').writeAsString('$summary\n');
+      // ignore: avoid_print
+      print("music with the microphone's options: $summary");
+      expect(b, lessThan(a + 3),
+          reason: "the music switched the microphone's processing off: "
+              '$summary');
+      expect(c, lessThan(a + 3),
+          reason: "a negotiation switched the microphone's processing off: "
+              '$summary');
+    });
+  });
+
   // Turned off is off. Turning our noise suppression off used to hand the
   // job to WebRTC's own suppressor, so with it "off" and the sensitivity all
   // the way up the room's noise still never went out. The room noise is

@@ -328,8 +328,8 @@ class LivekitMicrophoneHealth {
 /// the microphone, writes the microphone's back (see
 /// shared_audio_processing.dart). A custom source writes them when its
 /// sender is negotiated, which LiveKit does after announcing the
-/// publication, so this waits for the sender to have outbound RTP
-/// statistics, and restores anyway after [timeout].
+/// publication, so this waits for the sender to send, and restores anyway
+/// after [timeout].
 Future<bool> restoreMicrophoneProcessingAfter(
   lk.LocalTrackPublication custom,
   lk.LocalParticipant participant, {
@@ -361,9 +361,9 @@ Future<bool> restoreMicrophoneProcessingOnceSending(
   if (!(overridden ?? customAudioSourcesOverrideMicrophone)) return false;
   if (sender != null) {
     final deadline = DateTime.now().add(timeout);
-    while (!await _negotiated(sender)) {
+    while (!await _sending(sender)) {
       if (DateTime.now().isAfter(deadline)) {
-        Log.w("Voice: a custom audio source was not negotiated in "
+        Log.w("Voice: a custom audio source sent nothing in "
             "${timeout.inSeconds} s; restoring the microphone's processing "
             "anyway");
         break;
@@ -376,10 +376,10 @@ Future<bool> restoreMicrophoneProcessingOnceSending(
   return restoreMicrophoneProcessing(track, overridden: overridden);
 }
 
-Future<bool> _negotiated(rtc.RTCRtpSender sender) async {
-  try {
-    return (await sender.getStats()).any((r) => r.type == 'outbound-rtp');
-  } catch (_) {
-    return false;
-  }
-}
+/// Whether [sender] has sent a packet. It writes its options when its
+/// description is set, when the answer to it is applied and when its
+/// connection comes up, and only sends after the last of those; having
+/// statistics, which this used to go by, comes before a new connection is
+/// up (the DJ's monitor is one).
+Future<bool> _sending(rtc.RTCRtpSender sender) async =>
+    ((await readSenderCounters(sender)).packetsSent ?? 0) > 0;
