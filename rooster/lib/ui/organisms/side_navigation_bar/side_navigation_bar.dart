@@ -210,9 +210,11 @@ class _SideNavigationBarState extends State<SideNavigationBar> {
                         CommonStrings.promptHome,
                         Stack(
                           children: [
+                            // Home is the app's own icon, top left.
                             ImageButton(
                               size: 70,
-                              icon: Icons.home,
+                              image: const AssetImage(
+                                  "assets/images/app_icon/app_icon_filled.png"),
                               onTap: () {
                                 widget.onHomeSelected?.call();
                               },
