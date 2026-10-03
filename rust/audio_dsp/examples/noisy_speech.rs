@@ -27,7 +27,7 @@ use audio_dsp::FRAME_SIZE;
 const RATE: usize = 48_000;
 const LEAD_S: f32 = 3.0;
 const TAIL_S: f32 = 2.0;
-const ROOM_NOISE_S: f32 = 16.0;
+const ROOM_NOISE_S: f32 = 24.0;
 /// Only the first two utterances: long enough to measure, short enough that
 /// a real-time loop stays under ten seconds.
 const SPEECH_S: f32 = 5.5;
