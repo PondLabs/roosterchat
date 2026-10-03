@@ -34,6 +34,9 @@ class LogEntryException extends LogEntry {
 }
 
 class Log {
+  // Release builds also retain logs for the in-app diagnostics page.
+  static const maxEntries = 2000;
+
   static final NotifyingList<LogEntry> log =
       NotifyingList.empty(growable: true);
 
@@ -45,6 +48,9 @@ class Log {
         log.last.rawContent == entry.rawContent) {
       log.last.count += 1;
     } else {
+      while (log.length >= maxEntries) {
+        log.removeAt(0);
+      }
       log.add(entry);
     }
   }

@@ -1,0 +1,47 @@
+name: voice-dsp
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  voice-dsp:
+    name: Web voice processing and recovery
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.9'
+          channel: stable
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: browser-actions/setup-chrome@v1
+        id: chrome
+        with:
+          chrome-version: stable
+      - name: Code generation
+        working-directory: rooster
+        run: dart run scripts/codegen.dart
+      - name: Noise suppression, restarts and worker failures in the browser
+        env:
+          CHROME: ${{ steps.chrome.outputs.chrome-path }}
+        run: |
+          set -o pipefail
+          tools/voice_dsp/web_loops.sh 2>&1 | tee rooster/stability-web-voice.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stability-web-voice
+          path: rooster/stability-web-voice.log
+          if-no-files-found: error

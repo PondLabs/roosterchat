@@ -61,6 +61,8 @@ abstract class BackgroundTaskWithIntegerProgress extends BackgroundTask {
 
 class AsyncTask implements BackgroundTask {
   StreamController stream = StreamController.broadcast();
+  Timer? _removalTimer;
+  bool _disposed = false;
 
   @override
   Stream<void> get statusChanged => stream.stream;
@@ -87,9 +89,11 @@ class AsyncTask implements BackgroundTask {
   }
 
   void onFutureComplete(BackgroundTaskStatus result) {
+    if (_disposed) return;
     status = result;
     stream.add(null);
-    Timer(const Duration(seconds: 5), () {
+    _removalTimer?.cancel();
+    _removalTimer = Timer(const Duration(seconds: 5), () {
       shouldRemoveTask = true;
       stream.add(null);
     });
@@ -105,6 +109,9 @@ class AsyncTask implements BackgroundTask {
 
   @override
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _removalTimer?.cancel();
     stream.close();
   }
 

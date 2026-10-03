@@ -2,9 +2,8 @@ name: ci
 
 # Every push to main: tests and the Windows, Linux and macOS release builds
 # start at once (the builds only need the version), and publishing the GitHub
-# release waits for all of them. macOS cannot hold the release up — see
-# continue-on-error in desktop-build.yml — so a broken macOS leg costs that one
-# asset and nothing else. The debug bundles only run when the workflow is
+# release waits for all of them and the cross-platform stability workload.
+# The debug bundles only run when the workflow is
 # started by hand with them ticked; attaching the debug bundles waits for the
 # release and the debug builds.
 on:
@@ -34,6 +33,11 @@ permissions:
   contents: read
 
 jobs:
+  stability:
+    uses: ./.github/workflows/stability.yml
+    with:
+      include_voice: false
+
   test:
     runs-on: ubuntu-24.04
     steps:
@@ -115,40 +119,7 @@ jobs:
   # The release waits for it. See docs/voice-audio-processing.md, "What the
   # tests guard".
   voice-dsp:
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.41.9'
-          channel: stable
-          cache: true
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      - name: Setup Chrome
-        id: chrome
-        uses: browser-actions/setup-chrome@v1
-
-      - name: Code generation
-        working-directory: rooster
-        run: dart run scripts/codegen.dart
-
-      - name: Noise suppression in the browser
-        env:
-          CHROME: ${{ steps.chrome.outputs.chrome-path }}
-        run: tools/voice_dsp/web_loops.sh
+    uses: ./.github/workflows/voice-dsp.yml
 
   version:
     runs-on: ubuntu-24.04
@@ -208,7 +179,7 @@ jobs:
       platforms: '["windows", "linux", "macos"]'
 
   publish:
-    needs: [test, voice-dsp, version, build-release]
+    needs: [test, voice-dsp, stability, version, build-release]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
