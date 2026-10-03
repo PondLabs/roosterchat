@@ -43,6 +43,18 @@ checks immediate subscription release, then completes the request. Unlike the
 table's failures, this case has not been replayed against a pre-fix application;
 its post-fix integration result is recorded in the PR.
 
+That integration regression exposed a separate native process termination on
+the macOS runner during accelerated video-output initialization, before file
+resolution. Web, Linux and Windows pass the same scenario. CI now retains macOS
+crash reports and stderr and supports focused platform runs. The application
+probes the OpenGL pixel format, context and texture cache required by the locked
+media_kit_video backend before its native forced unwraps. Capable Macs keep
+hardware rendering; unavailable contexts use the existing software backend.
+Five regression tests cover the renderer decision, including native-probe
+errors and other platforms. Native crash diagnosis and the latest post-fix
+execution results are recorded in the PR; compilation alone is not validation
+of this media scenario.
+
 ## Repeatable workload
 
 `rooster/unit_test/stability/timeline_workload_test.dart` uses actual Matrix event

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:rooster/cache/file_provider.dart';
+import 'package:rooster/utils/video_rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -87,8 +88,6 @@ class _VideoPlayerImplementationState extends State<VideoPlayerImplementation> {
       player.stream.tracks.listen((_) => _updateTrackSettings()),
       player.stream.track.listen((_) => _updateTrackSettings()),
     ]);
-
-    controller = VideoController(player);
 
     Future.microtask(_openMedia);
   }
@@ -218,6 +217,14 @@ class _VideoPlayerImplementationState extends State<VideoPlayerImplementation> {
     if (!mounted) return;
     widget.controller.setBuffering(true);
     try {
+      final hardwareRendering = await supportsHardwareVideoRendering();
+      if (!mounted) return;
+      controller = VideoController(
+        player,
+        configuration: VideoControllerConfiguration(
+          enableHardwareAcceleration: hardwareRendering,
+        ),
+      );
       final Uri? mediaUri;
       if (widget.streamUrl != null) {
         mediaUri = widget.streamUrl;
