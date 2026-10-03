@@ -312,7 +312,9 @@ String? djString(Object? value, int max) {
 /// [value] as a non-negative int, when it is a finite number.
 int? djInt(Object? value) {
   if (value is! num || !value.isFinite || value < 0) return null;
-  return value > (1 << 53) ? null : value.toInt();
+  // 2^53, written out: on the web, ints shift in 32 bits and `1 << 53` is 0,
+  // which turned every epoch and position into null and the booth idle.
+  return value > 9007199254740992 ? null : value.toInt();
 }
 
 /// What a participant's client can do in the booth, announced by itself.

@@ -35,6 +35,12 @@ class MatrixSpaceSoundboardComponent
         .listen((_) {
       _refreshFromStates();
     });
+    // The sounds are not an important state type, so they may only reach
+    // the room once its full state is read from the database. On the web
+    // that read always finished after this was built, and the soundboard
+    // stayed empty: no sounds listed, and other people's plays dropped as
+    // unknown sounds (no audio, no emoji).
+    matrixSpace.fullStateLoaded.then((_) => _refreshFromStates());
     _onChanged.add(null);
   }
 

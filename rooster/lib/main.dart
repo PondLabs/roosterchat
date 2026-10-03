@@ -253,6 +253,10 @@ Future<void> initNecessary() async {
 Future<void> initGuiRequirements() async {
   isHeadless = false;
 
+  // The app has its own right-click menus (messages, rooms, members); in
+  // the browser the page's own menu would open over them.
+  if (kIsWeb) await BrowserContextMenu.disableContextMenu();
+
   MediaKit.ensureInitialized();
 
   var locale = PlatformDispatcher.instance.locale;

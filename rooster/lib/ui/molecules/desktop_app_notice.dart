@@ -39,19 +39,31 @@ class DesktopAppNotice extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-        child: Row(
+        padding: const EdgeInsets.fromLTRB(12, 10, 8, 4),
+        // The button goes under the text, not beside it: in a narrow side
+        // panel a row squeezed the text into a column a few words wide.
+        child: Column(
           mainAxisSize: MainAxisSize.min,
-          spacing: 10,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.desktop_windows_outlined, size: 20),
-            Flexible(
-              child: tiamat.Text.labelLow('$message $labelDesktopPlatforms'),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 10,
+              children: [
+                const Icon(Icons.desktop_windows_outlined, size: 20),
+                Flexible(
+                  child:
+                      tiamat.Text.labelLow('$message $labelDesktopPlatforms'),
+                ),
+              ],
             ),
-            TextButton.icon(
-              onPressed: () => openDownloads(context),
-              icon: const Icon(Icons.download_rounded, size: 18),
-              label: Text(labelDownloadDesktopApp),
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: TextButton.icon(
+                onPressed: () => openDownloads(context),
+                icon: const Icon(Icons.download_rounded, size: 18),
+                label: Text(labelDownloadDesktopApp),
+              ),
             ),
           ],
         ),
