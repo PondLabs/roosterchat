@@ -1,0 +1,605 @@
+<!doctype html>
+<!--
+  Rooster's demo video, drawn as a function of time. render_demo.py calls
+  seek(t) for every frame and screenshots the 1920x1080 stage. Open it in a
+  browser and it plays in real time (without the music).
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+@font-face { font-family: Sora; src: url("../../../rooster/assets/font/sora/Sora-VariableFont_wght.ttf"); font-weight: 100 800; }
+@font-face { font-family: Nunito; src: url("../../../rooster/assets/font/nunito/NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf"); font-weight: 200 1000; }
+@font-face { font-family: Twemoji; src: url("../../../rooster/assets/font/emoji-font/TwemojiCOLR.otf"); }
+
+:root {
+  --ink: #211614; --comb: #E8382A; --yolk: #F89B17; --cream: #F7EDE1;
+  --stone: #8D8178; --moss: #5E8F4E; --dusk: #3F4F6E;
+  --found: #1B1613; --surface: #2A221E; --c0: #161210; --c1: #1F1916;
+  --c2: #241D1A; --c3: #362C27; --text: #F5EBDD; --muted: #9C8F85;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1920px; height: 1080px; overflow: hidden; background: #000; }
+#stage {
+  position: relative; width: 1920px; height: 1080px; overflow: hidden;
+  background: #171110; color: var(--text); font-family: Nunito, sans-serif;
+}
+.abs { position: absolute; }
+.emo { font-family: Twemoji, sans-serif; font-weight: normal; }
+.sora { font-family: Sora, sans-serif; }
+
+/* decoration: big soft comb lobes drifting behind everything */
+.lobe { position: absolute; border-radius: 50%; background: #1F1714; }
+
+/* ---------------------------------------------------------------- intro */
+#intro { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+#intro-mark { width: 300px; height: 300px; }
+#intro-word { margin-top: 18px; display: flex; font-family: Sora; font-weight: 800; font-size: 150px; letter-spacing: -5px; line-height: 1; }
+#intro-word span { display: inline-block; }
+#intro-tag { margin-top: 34px; display: flex; gap: 28px; font-family: Sora; font-weight: 600; font-size: 54px; }
+#intro-tag span { display: inline-block; }
+
+/* -------------------------------------------------------------- captions */
+.caption {
+  position: absolute; left: 0; right: 0; top: 0; padding: 54px 0 26px; text-align: center; z-index: 10;
+  background: #171110;
+  font-family: Sora; font-weight: 700; font-size: 62px; letter-spacing: -1.5px;
+}
+.caption em { font-style: normal; color: var(--comb); }
+.caption .sub { display: block; margin-top: 10px; font-family: Nunito; font-weight: 600; font-size: 30px; letter-spacing: 0; color: var(--muted); }
+
+/* ---------------------------------------------------------------- window */
+#win {
+  position: absolute; left: 210px; top: 196px; width: 1500px; height: 840px;
+  border-radius: 22px; overflow: hidden; background: var(--surface);
+  box-shadow: 0 40px 140px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.04);
+  transform-origin: 50% 50%;
+}
+#rail { position: absolute; left: 0; top: 0; bottom: 0; width: 84px; background: var(--c0); padding-top: 18px; }
+.space { position: absolute; left: 16px; width: 52px; height: 52px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-family: Sora; font-weight: 800; font-size: 22px; }
+.space img { width: 38px; height: 38px; }
+.space.sel::before { content: ""; position: absolute; left: -16px; top: 12px; width: 5px; height: 28px; border-radius: 0 4px 4px 0; background: var(--text); }
+
+#chlist { position: absolute; left: 84px; top: 0; bottom: 0; width: 280px; background: var(--c1); }
+#banner { height: 112px; background: var(--comb); position: relative; overflow: hidden; }
+#banner .name { position: absolute; left: 20px; bottom: 14px; font-family: Sora; font-weight: 800; font-size: 26px; color: #fff; }
+#banner .lobe2 { position: absolute; border-radius: 50%; background: rgba(255,255,255,.13); }
+.chan { position: absolute; left: 12px; right: 12px; height: 38px; border-radius: 9px; display: flex; align-items: center; gap: 10px; padding: 0 12px; font-size: 19px; font-weight: 600; color: var(--muted); }
+.chan .ic { width: 20px; height: 20px; flex: none; }
+.chan.sel { background: var(--c3); color: var(--text); }
+.member { position: absolute; left: 40px; right: 12px; height: 34px; display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 700; color: var(--text); }
+.member .av { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; color: #fff; flex: none; }
+.member .badge { margin-left: auto; font-size: 20px; }
+.sect { position: absolute; left: 22px; font-size: 14px; font-weight: 800; letter-spacing: 1.2px; color: var(--muted); }
+
+#main { position: absolute; left: 364px; top: 0; right: 0; bottom: 0; }
+#callhead { position: absolute; left: 28px; top: 22px; display: flex; align-items: center; gap: 12px; font-family: Sora; font-weight: 700; font-size: 24px; }
+#callhead .count { font-family: Nunito; font-weight: 700; font-size: 18px; color: var(--muted); }
+#callhead .live { font-family: Nunito; font-size: 15px; font-weight: 800; color: #fff; background: var(--moss); border-radius: 6px; padding: 3px 9px; }
+
+.tile { position: absolute; border-radius: 18px; background: var(--c3); overflow: hidden; }
+.tile .av { position: absolute; left: 50%; top: 50%; width: 132px; height: 132px; margin: -66px 0 0 -66px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: Sora; font-weight: 800; font-size: 54px; color: #fff; }
+.tile .ring { position: absolute; left: 50%; top: 50%; width: 148px; height: 148px; margin: -74px 0 0 -74px; border-radius: 50%; border: 5px solid #7FC36A; box-shadow: 0 0 28px rgba(127,195,106,.55); opacity: 0; }
+.tile .label { position: absolute; left: 14px; bottom: 12px; display: flex; align-items: center; gap: 8px; background: rgba(22,18,16,.75); border-radius: 8px; padding: 4px 10px; font-size: 17px; font-weight: 800; }
+.tile .hp { position: absolute; right: 14px; top: 12px; font-size: 28px; opacity: 0; }
+.tile .share { position: absolute; inset: 0; opacity: 0; }
+.float { position: absolute; font-size: 84px; opacity: 0; }
+
+#callbar {
+  position: absolute; left: 50%; bottom: 22px; height: 76px; transform: translateX(-50%);
+  background: var(--c0); border-radius: 22px; display: flex; align-items: center; gap: 12px; padding: 0 14px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.35);
+}
+.btn { width: 52px; height: 52px; border-radius: 16px; background: var(--c3); display: flex; align-items: center; justify-content: center; flex: none; }
+.btn svg { width: 26px; height: 26px; }
+.btn.red { background: var(--comb); width: 70px; }
+.btn.on { background: var(--cream); }
+#np { height: 52px; border-radius: 16px; background: var(--c3); display: flex; align-items: center; gap: 10px; padding: 0 16px; font-size: 17px; font-weight: 800; overflow: hidden; white-space: nowrap; }
+#np .eq { display: flex; align-items: flex-end; gap: 3px; height: 22px; }
+#np .eq i { display: block; width: 4px; background: var(--comb); border-radius: 2px; }
+
+/* soundboard popover */
+#sb {
+  position: absolute; width: 470px; height: 330px; border-radius: 20px; background: var(--c2);
+  box-shadow: 0 24px 60px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.05);
+  padding: 20px; transform-origin: 50% 100%;
+}
+#sb h3 { font-family: Sora; font-size: 22px; margin-bottom: 14px; }
+#sb .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.snd { height: 112px; border-radius: 14px; background: var(--c3); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 16px; font-weight: 800; position: relative; overflow: hidden; }
+.snd .e { font-size: 44px; }
+.snd .fill { position: absolute; left: 0; bottom: 0; height: 5px; background: var(--comb); width: 0; }
+
+/* DJ panel */
+#dj {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 400px; background: var(--c1);
+  box-shadow: -20px 0 50px rgba(0,0,0,.35); padding: 26px 26px;
+}
+#dj h3 { font-family: Sora; font-size: 26px; display: flex; align-items: center; gap: 10px; }
+#vinyl { position: relative; margin: 30px auto 0; width: 230px; height: 230px; }
+#disc { position: absolute; inset: 0; border-radius: 50%; background: repeating-radial-gradient(circle, #141010 0 3px, #1F1A18 3px 5px); box-shadow: 0 10px 30px rgba(0,0,0,.5); }
+#disc .label { position: absolute; left: 50%; top: 50%; width: 86px; height: 86px; margin: -43px 0 0 -43px; border-radius: 50%; background: var(--comb); display: flex; align-items: center; justify-content: center; }
+#disc .label img { width: 52px; }
+#disc .shine { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(from 0deg, transparent 0 40deg, rgba(255,255,255,.06) 60deg, transparent 80deg 220deg, rgba(255,255,255,.05) 240deg, transparent 260deg); }
+#arm { position: absolute; right: -14px; top: -6px; width: 18px; height: 150px; transform-origin: 50% 9px; }
+#arm i { position: absolute; left: 6px; top: 6px; width: 6px; height: 140px; border-radius: 3px; background: #B9AEA4; }
+#arm b { position: absolute; left: 0; top: 0; width: 18px; height: 18px; border-radius: 50%; background: #D8CEC5; }
+#arm u { position: absolute; left: 1px; bottom: -8px; width: 16px; height: 24px; border-radius: 4px; background: #D8CEC5; }
+.track { margin-top: 30px; }
+.track .t { font-family: Sora; font-weight: 700; font-size: 24px; }
+.track .a { font-size: 18px; font-weight: 700; color: var(--muted); margin-top: 4px; }
+.bar { margin-top: 18px; height: 6px; border-radius: 3px; background: var(--c3); position: relative; }
+.bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--comb); }
+.times { display: flex; justify-content: space-between; font-size: 15px; font-weight: 700; color: var(--muted); margin-top: 8px; }
+.djby { display: flex; align-items: center; gap: 10px; margin-top: 22px; font-size: 17px; font-weight: 800; }
+.djby .av { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #fff; }
+.queue { margin-top: 20px; }
+.queue .q { display: flex; gap: 12px; align-items: center; height: 46px; font-size: 17px; font-weight: 700; color: var(--muted); }
+.queue .q b { width: 34px; height: 34px; border-radius: 8px; background: var(--c3); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+
+/* cursor */
+#cursor { position: absolute; width: 34px; height: 34px; opacity: 0; z-index: 50; }
+#click { position: absolute; width: 60px; height: 60px; border-radius: 50%; border: 3px solid var(--cream); opacity: 0; z-index: 49; }
+
+/* ----------------------------------------------------------- matrix scene */
+#net { position: absolute; inset: 0; }
+.node { position: absolute; width: 200px; height: 200px; margin: -100px 0 0 -100px; border-radius: 40px; background: var(--c2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.45); }
+.node img { width: 92px; }
+.node .ini { width: 92px; height: 92px; border-radius: 26px; display: flex; align-items: center; justify-content: center; font-family: Sora; font-weight: 800; font-size: 42px; color: #fff; }
+.node .dom { font-size: 19px; font-weight: 800; color: var(--muted); }
+.node.me { width: 250px; height: 250px; margin: -125px 0 0 -125px; border: 4px solid var(--comb); }
+.node.me img { width: 120px; }
+.node.me .dom { color: var(--text); font-size: 22px; }
+.pkt { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: var(--yolk); box-shadow: 0 0 16px rgba(248,155,23,.8); }
+#lock { position: absolute; left: 50%; top: 905px; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; background: var(--c2); border-radius: 18px; padding: 16px 26px; font-size: 26px; font-weight: 800; }
+
+/* ----------------------------------------------------------------- outro */
+#outro { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+#outro-lock { display: flex; align-items: center; gap: 34px; }
+#outro-lock img { width: 210px; }
+#outro-word { font-family: Sora; font-weight: 800; font-size: 150px; letter-spacing: -5px; line-height: 1; }
+#outro-tag { font-family: Sora; font-weight: 600; font-size: 44px; color: var(--stone); margin-top: 6px; }
+#chips { display: flex; gap: 16px; margin-top: 60px; }
+.chip { background: var(--c2); border-radius: 14px; padding: 14px 24px; font-size: 26px; font-weight: 800; }
+#url { margin-top: 34px; font-size: 30px; font-weight: 800; color: var(--comb); }
+#fade { position: absolute; inset: 0; background: #000; opacity: 0; z-index: 100; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="lobe" id="deco1" style="width:900px;height:900px;left:-300px;top:-360px"></div>
+  <div class="lobe" id="deco2" style="width:700px;height:700px;right:-260px;bottom:-300px"></div>
+
+  <!-- intro -->
+  <div id="intro">
+    <img id="intro-mark" src="../logo/mark.svg">
+    <div id="intro-word"></div>
+    <div id="intro-tag"><span>Talk.</span><span>Play.</span><span style="color:var(--comb)">Hang out.</span></div>
+  </div>
+
+  <!-- captions -->
+  <div class="caption" id="cap1">Drop into voice rooms <em>that stay open.</em></div>
+  <div class="caption" id="cap2">Share your screen. <em>Watch together.</em></div>
+  <div class="caption" id="cap3">Hit the <em>soundboard.</em></div>
+  <div class="caption" id="cap4">Take the <em>decks.</em><span class="sub">Everyone in the room hears the same song, in sync.</span></div>
+  <div class="caption" id="cap5">Your server. <em>Your rules.</em><span class="sub">Built on Matrix. Open source.</span></div>
+
+  <!-- app window -->
+  <div id="win">
+    <div id="rail">
+      <div class="space" style="top:18px;background:var(--c3)"><img src="../logo/mark.svg"></div>
+      <div class="space sel" style="top:90px;background:var(--comb)">C</div>
+      <div class="space" style="top:156px;background:var(--moss)">G</div>
+      <div class="space" style="top:222px;background:var(--dusk)">B</div>
+      <div class="space" style="top:288px;background:var(--c3);color:var(--muted);font-size:30px;font-weight:400">+</div>
+    </div>
+    <div id="chlist">
+      <div id="banner">
+        <div class="lobe2" style="width:160px;height:160px;right:-40px;top:-70px"></div>
+        <div class="lobe2" style="width:110px;height:110px;right:70px;top:-60px"></div>
+        <div class="name">The Coop</div>
+      </div>
+      <div class="sect" style="top:132px">TEXT</div>
+      <div class="chan" style="top:156px"><svg class="ic" viewBox="0 0 24 24"><path d="M9 3 7 21M17 3l-2 18M4 8h17M3 16h17" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg>general</div>
+      <div class="chan" style="top:198px"><svg class="ic" viewBox="0 0 24 24"><path d="M9 3 7 21M17 3l-2 18M4 8h17M3 16h17" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg>memes</div>
+      <div class="chan" style="top:240px"><svg class="ic" viewBox="0 0 24 24"><path d="M9 3 7 21M17 3l-2 18M4 8h17M3 16h17" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg>clips</div>
+      <div class="sect" style="top:300px">VOICE</div>
+      <div class="chan sel" style="top:324px" id="lounge"><svg class="ic" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>Lounge</div>
+      <div id="members"></div>
+      <div class="chan" id="gaming" style="top:370px"><svg class="ic" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>Game night</div>
+    </div>
+    <div id="main">
+      <div id="callhead"><svg width="26" height="26" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>Lounge <span class="count" id="count">1 here</span><span class="live" id="livebadge" style="opacity:0">LIVE</span></div>
+      <div id="tiles"></div>
+      <div id="dj">
+        <h3><span class="emo">🎧</span> DJ Booth</h3>
+        <div id="vinyl"><div id="disc"><div class="shine"></div><div class="label"><img src="../logo/mark.svg"></div></div><div id="arm"><i></i><b></b><u></u></div></div>
+        <div class="track"><div class="t">Sunrise Strut</div><div class="a">The Night Owls</div></div>
+        <div class="bar"><i id="prog"></i></div>
+        <div class="times"><span id="tcur">0:42</span><span>3:18</span></div>
+        <div class="djby"><div class="av" style="background:var(--comb)">P</div>Pat is on the decks</div>
+        <div class="queue">
+          <div class="q"><b class="emo">🎵</b>Coffee Run · Low Tide</div>
+          <div class="q"><b class="emo">🎵</b>Neon Hen · Barnyard FM</div>
+        </div>
+      </div>
+      <div id="callbar">
+        <div class="btn" id="b-mic"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" fill="#F5EBDD"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4" stroke="#F5EBDD" stroke-width="2" fill="none" stroke-linecap="round"/></svg></div>
+        <div class="btn"><svg viewBox="0 0 24 24"><path d="M4 15v-3a8 8 0 0 1 16 0v3" stroke="#F5EBDD" stroke-width="2.2" fill="none"/><rect x="3" y="14" width="5" height="7" rx="2" fill="#F5EBDD"/><rect x="16" y="14" width="5" height="7" rx="2" fill="#F5EBDD"/></svg></div>
+        <div class="btn"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="3" fill="#F5EBDD"/><path d="M15 10.5 21 7v10l-6-3.5z" fill="#F5EBDD"/></svg></div>
+        <div class="btn" id="b-share"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2.5" stroke="#F5EBDD" stroke-width="2" fill="none"/><path d="M8 21h8M12 17v4M12 14V8m-3 3 3-3 3 3" stroke="#F5EBDD" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="btn" id="b-sb"><span class="emo" style="font-size:26px">🎺</span></div>
+        <div class="btn" id="b-dj"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#F5EBDD"/><circle cx="12" cy="12" r="3" fill="#E8382A"/></svg></div>
+        <div id="np" style="width:0;padding:0"><div class="eq"><i></i><i></i><i></i></div><span>Sunrise Strut</span></div>
+        <div class="btn red"><svg viewBox="0 0 24 24"><path d="M3 14.5c5-5 13-5 18 0l-2.5 2.5-3-2v-3a12 12 0 0 0-7 0v3l-3 2z" fill="#fff"/></svg></div>
+      </div>
+      <div id="sb">
+        <h3>Soundboard</h3>
+        <div class="grid">
+          <div class="snd" id="s-0"><span class="e emo">🐓</span>Wake up!<div class="fill"></div></div>
+          <div class="snd" id="s-1"><span class="e emo">📯</span>Airhorn<div class="fill"></div></div>
+          <div class="snd" id="s-2"><span class="e emo">🥁</span>Ba dum tss<div class="fill"></div></div>
+          <div class="snd" id="s-3"><span class="e emo">👏</span>Applause<div class="fill"></div></div>
+          <div class="snd" id="s-4"><span class="e emo">🦗</span>Crickets<div class="fill"></div></div>
+          <div class="snd" id="s-5"><span class="e emo">😂</span>Bruh<div class="fill"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- matrix scene -->
+  <div id="net">
+    <svg id="links" class="abs" width="1920" height="1080" style="left:0;top:0"></svg>
+    <div class="node me" id="n0" style="left:960px;top:590px"><img src="../logo/mark.svg"><div class="dom">your.server</div></div>
+    <div class="node" id="n1" style="left:470px;top:420px"><div class="ini" style="background:var(--dusk)">m</div><div class="dom">matrix.org</div></div>
+    <div class="node" id="n2" style="left:1450px;top:420px"><div class="ini" style="background:var(--moss)">L</div><div class="dom">lan-party.chat</div></div>
+    <div class="node" id="n3" style="left:560px;top:820px"><div class="ini" style="background:var(--yolk)">B</div><div class="dom">bookclub.place</div></div>
+    <div class="node" id="n4" style="left:1360px;top:820px"><div class="ini" style="background:var(--comb)">C</div><div class="dom">the-coop.social</div></div>
+    <div id="pkts"></div>
+    <div id="lock"><span class="emo">🔒</span>End-to-end encrypted</div>
+  </div>
+
+  <!-- outro -->
+  <div id="outro">
+    <div id="outro-lock"><img src="../logo/mark.svg" id="outro-mark"><div><div id="outro-word">Rooster</div><div id="outro-tag">Talk. Play. Hang out.</div></div></div>
+    <div id="chips"><div class="chip">Windows</div><div class="chip">Linux</div><div class="chip">macOS</div><div class="chip">Browser</div></div>
+    <div id="url">pondlabs.github.io/roosterchat</div>
+  </div>
+
+  <svg id="cursor" viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.6L10 19z" fill="#fff" stroke="#000" stroke-width="1.4" stroke-linejoin="round"/></svg>
+  <div id="click"></div>
+  <div id="fade"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const E = {
+  lin: x => x,
+  out: x => 1 - Math.pow(1 - x, 3),
+  in: x => x * x * x,
+  io: x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2,
+  back: x => { const c1 = 1.9, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); },
+};
+// 0..1 progress of t through [t0, t0+d], eased.
+const p = (t, t0, d, e = E.out) => e(clamp((t - t0) / d));
+// In at t0, out at t1, each over d.
+const win = (t, t0, t1, d = .35) => p(t, t0, d) * (1 - p(t, t1 - d, d, E.in));
+const lerp = (a, b, k) => a + (b - a) * k;
+const BEAT = .5; // 120 bpm, the music's tempo
+
+// ------------------------------------------------------------- people
+const PEOPLE = [
+  { name: 'Max', color: 'var(--yolk)', join: 4.8, talk: [[8.6, 9.3], [19.3, 19.9], [28.1, 29]] },
+  { name: 'Pat', color: 'var(--comb)', join: 5.6, talk: [[8.1, 8.5], [9.5, 10.6], [13.6, 14.8], [26, 27.2]] },
+  { name: 'Sam', color: 'var(--moss)', join: 6.4, talk: [[10.8, 11.8], [15.2, 16.3], [22, 22.8]] },
+  { name: 'Alex', color: 'var(--dusk)', join: 7.2, talk: [[12.3, 13.3], [16.6, 17.5], [29.4, 30.4]] },
+];
+const tilesEl = $('tiles'), membersEl = $('members');
+PEOPLE.forEach((m, i) => {
+  m.tile = document.createElement('div');
+  m.tile.className = 'tile';
+  m.tile.innerHTML = `<div class="share"></div><div class="ring"></div>
+    <div class="av" style="background:${m.color}">${m.name[0]}</div>
+    <div class="label">${m.name}${i === 0 ? ' <span style="color:var(--muted);font-weight:700">(you)</span>' : ''}</div>
+    <div class="hp emo">🎧</div>`;
+  tilesEl.appendChild(m.tile);
+  m.row = document.createElement('div');
+  m.row.className = 'member';
+  m.row.innerHTML = `<div class="av" style="background:${m.color}">${m.name[0]}</div>${m.name}<span class="badge emo"></span>`;
+  membersEl.appendChild(m.row);
+  m.float = document.createElement('div');
+  m.float.className = 'float emo';
+  $('main').appendChild(m.float);
+});
+$('main').appendChild($('callbar'));
+$('main').appendChild($('sb'));
+
+// Alex's screen share: a little kart race.
+PEOPLE[3].tile.querySelector('.share').innerHTML = `
+  <svg viewBox="0 0 800 450" preserveAspectRatio="none" style="width:100%;height:100%">
+    <rect width="800" height="450" fill="#3F6E9E"/>
+    <circle cx="640" cy="95" r="46" fill="#F8C35A"/>
+    <path d="M0 220 Q 120 150 240 205 T 520 190 T 800 215 V 260 H0z" fill="#5E8F4E"/>
+    <rect y="240" width="800" height="210" fill="#4F7F40"/>
+    <path d="M330 240 H470 L760 450 H40z" fill="#4A4442"/>
+    <g id="dashes"></g>
+    <g id="kart1"><rect x="-38" y="-24" width="76" height="40" rx="12" fill="#E8382A"/><rect x="-24" y="-40" width="48" height="22" rx="8" fill="#FCF8F1"/><circle cx="-26" cy="18" r="11" fill="#211614"/><circle cx="26" cy="18" r="11" fill="#211614"/></g>
+    <g id="kart2"><rect x="-30" y="-19" width="60" height="32" rx="10" fill="#F89B17"/><rect x="-19" y="-32" width="38" height="17" rx="6" fill="#FCF8F1"/><circle cx="-21" cy="14" r="9" fill="#211614"/><circle cx="21" cy="14" r="9" fill="#211614"/></g>
+    <text x="28" y="54" font-family="Sora" font-weight="800" font-size="34" fill="#fff">LAP 2/3</text>
+    <text x="772" y="420" text-anchor="end" font-family="Sora" font-weight="800" font-size="52" fill="#fff">1st</text>
+  </svg>`;
+const dashes = PEOPLE[3].tile.querySelector('#dashes');
+for (let i = 0; i < 7; i++) dashes.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'path'));
+
+// Intro wordmark, letter by letter.
+'Rooster'.split('').forEach(ch => { const s = document.createElement('span'); s.textContent = ch; $('intro-word').appendChild(s); });
+
+// Matrix links and packets.
+const NODES = [[960, 590], [470, 420], [1450, 420], [560, 820], [1360, 820]];
+const LINKS = [[0, 1], [0, 2], [0, 3], [0, 4], [1, 2], [3, 1], [4, 2]];
+LINKS.forEach(([a, b]) => {
+  const l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  l.setAttribute('x1', NODES[a][0]); l.setAttribute('y1', NODES[a][1]);
+  l.setAttribute('x2', NODES[b][0]); l.setAttribute('y2', NODES[b][1]);
+  l.setAttribute('stroke', '#362C27'); l.setAttribute('stroke-width', '6'); l.setAttribute('stroke-linecap', 'round');
+  const len = Math.hypot(NODES[b][0] - NODES[a][0], NODES[b][1] - NODES[a][1]);
+  l.setAttribute('stroke-dasharray', len); l.dataset.len = len;
+  $('links').appendChild(l);
+});
+const PKTS = [];
+for (let i = 0; i < 10; i++) { const d = document.createElement('div'); d.className = 'pkt'; $('pkts').appendChild(d); PKTS.push(d); }
+
+// ------------------------------------------------------------- layout
+const MAIN_W = 1500 - 364, TOP = 84, BOTTOM = 840 - 120;
+function gridRects(width) {
+  const gap = 16, x0 = 28, w = (width - 56 - gap) / 2, h = (BOTTOM - TOP - gap) / 2;
+  return PEOPLE.map((_, i) => [x0 + (i % 2) * (w + gap), TOP + Math.floor(i / 2) * (h + gap), w, h]);
+}
+function shareRects(width) {
+  const gap = 16, x0 = 28, sw = 250, bw = width - 56 - gap - sw, H = BOTTOM - TOP;
+  const sh = (H - 2 * gap) / 3;
+  const r = [];
+  let k = 0;
+  PEOPLE.forEach((_, i) => {
+    if (i === 3) r.push([x0, TOP, bw, H]);
+    else { r.push([x0 + bw + gap, TOP + k * (sh + gap), sw, sh]); k++; }
+  });
+  return r;
+}
+const set = (el, s) => Object.assign(el.style, s);
+
+// ------------------------------------------------------------- seek
+function seek(t) {
+  // decoration drifts slowly
+  set($('deco1'), { transform: `translate(${Math.sin(t * .2) * 40}px, ${Math.cos(t * .17) * 30}px)` });
+  set($('deco2'), { transform: `translate(${Math.cos(t * .15) * 40}px, ${Math.sin(t * .22) * 30}px)` });
+
+  // ---- intro 0-4
+  const introOut = p(t, 3.55, .45, E.in);
+  set($('intro'), { opacity: 1 - introOut, transform: `scale(${1 + introOut * .12})`, display: t < 4.05 ? 'flex' : 'none' });
+  const mk = p(t, .25, .7, E.back);
+  set($('intro-mark'), { transform: `scale(${mk}) rotate(${(1 - p(t, .25, .9)) * -14}deg)`, opacity: clamp(mk * 2) });
+  [...$('intro-word').children].forEach((s, i) => {
+    const k = p(t, .95 + i * .06, .45, E.back);
+    set(s, { transform: `translateY(${(1 - k) * 60}px)`, opacity: clamp(k * 1.5) });
+  });
+  [...$('intro-tag').children].forEach((s, i) => {
+    const k = p(t, 2 + i * BEAT, .35, E.back);
+    set(s, { transform: `scale(${.6 + .4 * k})`, opacity: clamp(k * 1.5) });
+  });
+
+  // ---- captions
+  const caps = [['cap1', 4.3, 11.85], ['cap2', 12.05, 17.85], ['cap3', 18.05, 23.85], ['cap4', 24.05, 30.9], ['cap5', 31.3, 35.8]];
+  caps.forEach(([id, a, b]) => {
+    const k = win(t, a, b, .4);
+    set($(id), { opacity: k, transform: `translateY(${(1 - k) * 26}px)` });
+  });
+
+  // ---- window 4-31.8
+  const wIn = p(t, 3.9, .7, E.out), wOut = p(t, 30.9, .9, E.io);
+  const wShow = t > 3.85 && t < 31.9;
+  const wScale = lerp(.9 + .1 * wIn, .16, wOut);
+  const wx = lerp(0, 960 - (210 + 750), wOut), wy = lerp((1 - wIn) * 40, 590 - (196 + 420), wOut);
+  // the camera: [t, zoom, focus x, focus y], focus in window coordinates
+  const CAM = [
+    [4, 1, 750, 420], [11.6, 1.04, 750, 420], [12.7, 1.1, 560, 470], [17.1, 1.12, 560, 470],
+    [18.0, 1, 750, 420], [19.1, 1, 750, 420], [19.8, 1.3, 930, 530], [22.5, 1.33, 930, 530],
+    [23.5, 1, 750, 420], [24.6, 1, 750, 420], [25.4, 1.2, 1200, 430], [30.4, 1.23, 1200, 430],
+    [31, 1, 750, 420],
+  ];
+  let cam = CAM[0].slice(1);
+  for (let i = 0; i < CAM.length - 1; i++) {
+    const [ta, ...A] = CAM[i], [tb, ...B] = CAM[i + 1];
+    if (t >= ta && t <= tb) { const k = E.io(clamp((t - ta) / (tb - ta))); cam = A.map((v, j) => lerp(v, B[j], k)); }
+    else if (t > tb) cam = B;
+  }
+  const [zoom, fx, fy] = cam;
+  // zoom about the focus, and slide the focus toward the window's centre
+  const ox = (750 - fx) * (zoom - 1) * .6, oy = (420 - fy) * (zoom - 1) * .6;
+  set($('win'), {
+    display: wShow ? 'block' : 'none', opacity: wIn * (1 - p(t, 31.45, .4)),
+    transformOrigin: `${fx}px ${fy}px`,
+    transform: `translate(${wx + ox}px, ${wy + oy}px) scale(${wScale * zoom})`,
+  });
+
+  // people join, sidebar rows
+  let here = 0, rowY = 370;
+  PEOPLE.forEach((m, i) => {
+    const j = p(t, m.join, .45, E.back);
+    if (t >= m.join) here++;
+    const rowK = p(t, m.join, .35);
+    set(m.row, { top: `${rowY}px`, opacity: clamp(rowK * 1.4), transform: `translateX(${(1 - rowK) * -20}px)` });
+    rowY += 36 * rowK;
+    m._j = j;
+  });
+  set($('gaming'), { top: `${rowY + 8}px` });
+  $('count').textContent = `${Math.max(here, 1)} here`;
+
+  // speaking
+  PEOPLE.forEach((m, i) => {
+    let s = 0;
+    m.talk.forEach(([a, b]) => { s = Math.max(s, win(t, a, b, .12)); });
+    const flick = .75 + .25 * Math.sin(t * 31 + i * 2);
+    set(m.tile.querySelector('.ring'), { opacity: s * flick, transform: `scale(${1 + .05 * s * Math.sin(t * 19 + i)})` });
+    set(m.row.querySelector('.av'), { boxShadow: s > .05 ? `0 0 0 ${3 * s}px #7FC36A` : 'none' });
+  });
+
+  // tile layout: grid -> share -> grid, narrowing for the DJ panel
+  const djK = p(t, 24.55, .6, E.io) * (1 - p(t, 31, .2));
+  const width = MAIN_W - djK * 420;
+  const shareK = p(t, 12.2, .8, E.io) * (1 - p(t, 17.3, .7, E.io));
+  const g = gridRects(width), s = shareRects(width);
+  PEOPLE.forEach((m, i) => {
+    const r = g[i].map((v, k) => lerp(v, s[i][k], shareK));
+    const bob = t > 25.2 && t < 31 ? -6 * Math.abs(Math.sin(Math.PI * (t - 25) / BEAT)) * p(t, 25.2, .5) : 0;
+    set(m.tile, {
+      left: `${r[0]}px`, top: `${r[1] + bob}px`, width: `${r[2]}px`, height: `${r[3]}px`,
+      opacity: clamp(m._j * 1.5), transform: `scale(${.85 + .15 * clamp(m._j)})`,
+    });
+    const avScale = i === 3 ? 1 - shareK : (1 - .45 * shareK);
+    set(m.tile.querySelector('.av'), { transform: `scale(${avScale})` });
+    set(m.tile.querySelector('.ring'), { width: `${148}px` });
+  });
+  // the shared screen
+  const sh = PEOPLE[3].tile.querySelector('.share');
+  set(sh, { opacity: shareK });
+  [...dashes.children].forEach((d, k) => {
+    const z = ((k / 7) + (t * .9) % 1) % 1;
+    const y = 245 + z * z * 205, w = 4 + z * 18, h = 6 + z * 40;
+    d.setAttribute('d', `M${400 - w / 2} ${y} h${w} v${h} h${-w}z`);
+    d.setAttribute('fill', '#F5EBDD');
+  });
+  const k1 = PEOPLE[3].tile.querySelector('#kart1'), k2 = PEOPLE[3].tile.querySelector('#kart2');
+  k1.setAttribute('transform', `translate(${400 + Math.sin(t * 1.7) * 90} ${380 + Math.sin(t * 9) * 2}) scale(1.6)`);
+  k2.setAttribute('transform', `translate(${430 + Math.sin(t * 1.3 + 1) * 40} ${300}) scale(1)`);
+  set($('livebadge'), { opacity: shareK });
+  set($('b-share'), { background: shareK > .5 ? 'var(--moss)' : 'var(--c3)' });
+
+  // ---- soundboard
+  const sbK = p(t, 19.0, .3, E.back) * (1 - p(t, 22.6, .3, E.in));
+  const sbBtn = $('b-sb').getBoundingClientRect(), mainR = $('main').getBoundingClientRect();
+  const sc = wScale * zoom || 1; // screen rects are scaled by both
+  set($('sb'), {
+    display: sbK > .001 ? 'block' : 'none',
+    left: `${(sbBtn.left - mainR.left) / sc + 26 - 235}px`, top: `${(sbBtn.top - mainR.top) / sc - 350}px`,
+    opacity: clamp(sbK * 1.4), transform: `scale(${.85 + .15 * sbK}) translateY(${(1 - sbK) * 14}px)`,
+  });
+  set($('b-sb'), { background: sbK > .5 ? 'var(--cream)' : 'var(--c3)' });
+  const play = (el, t0) => {
+    const k = clamp((t - t0) / 1.4);
+    set(el.querySelector('.fill'), { width: `${t >= t0 && k < 1 ? k * 100 : 0}%` });
+    set(el, { transform: `scale(${t >= t0 && t < t0 + .25 ? 1 - .06 * Math.sin(Math.PI * (t - t0) / .25) : 1})`, background: t >= t0 && k < 1 ? '#4A3B34' : 'var(--c3)' });
+  };
+  play($('s-0'), 20.0); play($('s-1'), 21.1);
+  // emoji floats over the player's tile, and a badge by their name
+  const flt = (m, emoji, t0) => {
+    const k = clamp((t - t0) / 1.6);
+    const r = m.tile;
+    const on = t >= t0 && k < 1;
+    m.float.textContent = emoji;
+    set(m.float, {
+      left: `${parseFloat(r.style.left) + parseFloat(r.style.width) / 2 - 42}px`,
+      top: `${parseFloat(r.style.top) + parseFloat(r.style.height) / 2 - 70 - k * 95}px`,
+      opacity: on ? Math.min(1, k * 6) * (1 - p(t, t0 + 1.1, .5)) : 0,
+      transform: `scale(${on ? E.back(clamp(k * 3)) : 0}) rotate(${Math.sin(k * 9) * 10}deg)`,
+    });
+    m.row.querySelector('.badge').textContent = t >= t0 && t < t0 + 2.2 ? emoji : '';
+  };
+  flt(PEOPLE[0], '🐓', 20.0);
+  flt(PEOPLE[2], '📯', 21.1);
+
+  // ---- DJ booth
+  set($('dj'), { transform: `translateX(${(1 - djK) * 440}px)`, display: djK > .001 ? 'block' : 'none' });
+  set($('disc'), { transform: `rotate(${(t - 24) * 200}deg)` });
+  set($('arm'), { transform: `rotate(${lerp(-28, 6, p(t, 25, .6, E.io))}deg)` });
+  const sec = 42 + Math.max(0, t - 25);
+  $('tcur').textContent = `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
+  set($('prog'), { width: `${sec / 198 * 100}%` });
+  set($('b-dj'), { background: djK > .5 ? 'var(--cream)' : 'var(--c3)' });
+  const npK = p(t, 25.0, .5, E.out) * (1 - p(t, 31, .2));
+  set($('np'), { width: `${npK * 190}px`, padding: npK > .02 ? '0 16px' : '0', opacity: npK });
+  [...$('np').querySelectorAll('.eq i')].forEach((b, i) => {
+    set(b, { height: `${6 + 16 * Math.abs(Math.sin(t * (7 + i * 2.3) + i))}px` });
+  });
+  set(PEOPLE[1].tile.querySelector('.hp'), { opacity: djK, transform: `rotate(${Math.sin(t * Math.PI * 2) * 10}deg)` });
+
+  // ---- matrix 31.3-36
+  const nIn = t > 31.2 && t < 36.4;
+  set($('net'), { display: nIn ? 'block' : 'none', opacity: 1 - p(t, 35.75, .45, E.in) });
+  [...document.querySelectorAll('.node')].forEach((n, i) => {
+    const k = p(t, i === 0 ? 31.35 : 31.9 + i * .18, .5, E.back);
+    set(n, { transform: `scale(${k})`, opacity: clamp(k * 1.5) });
+  });
+  [...$('links').children].forEach((l, i) => {
+    const k = p(t, 32.3 + i * .08, .6);
+    l.setAttribute('stroke-dashoffset', l.dataset.len * (1 - k));
+  });
+  PKTS.forEach((d, i) => {
+    const [a, b] = LINKS[i % LINKS.length];
+    const start = 32.9 + i * .23;
+    const k = ((t - start) / 1.1) % 1;
+    const on = t > start;
+    const fw = i % 2 === 0;
+    const [ax, ay] = NODES[fw ? a : b], [bx, by] = NODES[fw ? b : a];
+    set(d, { left: `${lerp(ax, bx, k)}px`, top: `${lerp(ay, by, k)}px`, opacity: on ? Math.sin(Math.PI * k) : 0 });
+  });
+  const lk = p(t, 33.4, .5, E.back);
+  set($('lock'), { opacity: clamp(lk * 1.5), transform: `translateX(-50%) scale(${lk})` });
+
+  // ---- outro 36.2-40
+  const oIn = t > 36.1;
+  set($('outro'), { display: oIn ? 'flex' : 'none' });
+  const om = p(t, 36.2, .7, E.back);
+  set($('outro-mark'), { transform: `scale(${om}) rotate(${(1 - om) * -20}deg)` });
+  const ow = p(t, 36.6, .6, E.out);
+  set($('outro-word'), { opacity: ow, transform: `translateX(${(1 - ow) * 40}px)` });
+  const ot = p(t, 37.0, .6, E.out);
+  set($('outro-tag'), { opacity: ot, transform: `translateX(${(1 - ot) * 40}px)` });
+  [...$('chips').children].forEach((c, i) => {
+    const k = p(t, 37.5 + i * .12, .45, E.back);
+    set(c, { opacity: clamp(k * 1.5), transform: `translateY(${(1 - k) * 24}px)` });
+  });
+  const uk = p(t, 38.1, .5);
+  set($('url'), { opacity: uk });
+
+  // ---- cursor and clicks, last: it aims at elements laid out above.
+  // [t, target]: an element id (its centre, where it is now) or [x, y].
+  const at = target => {
+    if (Array.isArray(target)) return target;
+    const r = $(target).getBoundingClientRect();
+    return [r.left + r.width / 2 - 6, r.top + r.height / 2 - 4];
+  };
+  const CUR = [
+    [18.25, [1520, 990]], [18.9, 'b-sb'], [19.5, 'b-sb'], [19.95, 's-0'], [20.9, 's-0'],
+    [21.5, [1300, 900]], [23.5, [1300, 900]], [24.15, 'b-dj'], [24.6, 'b-dj'], [25.4, [1520, 900]],
+  ];
+  let [cx, cy] = CUR[0][1];
+  for (let i = 0; i < CUR.length - 1; i++) {
+    const [ta, A] = CUR[i], [tb, B] = CUR[i + 1];
+    if (t >= ta && t <= tb) {
+      const k = E.io(clamp((t - ta) / (tb - ta)));
+      const [xa, ya] = at(A), [xb, yb] = at(B);
+      cx = lerp(xa, xb, k); cy = lerp(ya, yb, k);
+    } else if (t > tb && i === CUR.length - 2) { [cx, cy] = at(B); }
+  }
+  set($('cursor'), { left: `${cx}px`, top: `${cy}px`, opacity: win(t, 18.2, 25.5, .25) });
+  let ck = 0;
+  [19.0, 20.0, 24.45].forEach(c => { if (t >= c && t < c + .45) ck = (t - c) / .45; });
+  set($('click'), { left: `${cx - 26}px`, top: `${cy - 26}px`, opacity: ck ? 1 - ck : 0, transform: `scale(${.3 + ck})` });
+
+  set($('fade'), { opacity: p(t, 39.3, .7, E.io) });
+}
+
+// Frame pump for real-time preview; render_demo.py drives seek() itself.
+window.DURATION = 40;
+if (!navigator.webdriver && !location.hash.includes('render')) {
+  const t0 = performance.now();
+  const tick = () => { seek(((performance.now() - t0) / 1000) % window.DURATION); requestAnimationFrame(tick); };
+  document.fonts.ready.then(tick);
+} else {
+  seek(0);
+}
+</script>
+</body>
+</html>

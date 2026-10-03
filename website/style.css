@@ -79,6 +79,12 @@ h1 {
 
 main { max-width: 1040px; margin: 0 auto; padding: 0 24px 48px; }
 
+.demo { max-width: 1040px; margin: 8px auto 40px; padding: 0 24px; }
+.demo video {
+  display: block; width: 100%; height: auto; border-radius: 18px;
+  background: #171110; box-shadow: 0 30px 80px rgba(0, 0, 0, .45);
+}
+
 .features {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));

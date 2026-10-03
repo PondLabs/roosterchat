@@ -175,6 +175,23 @@ The mark, big, on the chest. `merch/tee-on-dark.svg` and `tee-on-light.svg` are 
 
 It also works for caps (the mark embroidered), hoodies, die-cut stickers (the app icon and the sticker faces), enamel pins (ink, comb red, yolk and white enamel) and mugs.
 
+## Demo videos
+
+Two videos show the app: `website/rooster-demo.mp4` (40 s, 1920×1080, on the landing page) and `website/rooster-reel.mp4` (27 s, 1080×1920, for Instagram Reels and other vertical feeds). Both are made from code in [`demo/`](demo):
+
+- `demo.html` and `reel.html` draw every scene as a function of time, with made-up people and rooms, never real accounts. Open either in a browser to watch it play live, without sound.
+- `music.py` synthesizes the music and sound effects from nothing (so they are free to use anywhere), timed by a cue sheet per video.
+- `render_demo.py` renders each frame in headless Chrome and encodes the MP4 with ffmpeg:
+
+```sh
+/tmp/brand/bin/pip install websocket-client numpy scipy
+/tmp/brand/bin/python docs/brand/demo/render_demo.py           # the demo
+/tmp/brand/bin/python docs/brand/demo/render_demo.py --reel    # the reel
+/tmp/brand/bin/python docs/brand/demo/render_demo.py --stills 9,20   # frames to check
+```
+
+A full render takes about five minutes. In the reel, Instagram draws over the bottom ~320 px and a column on the right, so nothing important goes there.
+
 ## What is renamed, and what is not
 
 Everything that is the app's own is **Rooster**. That covers the display name everywhere a person sees it, the app ID `com.pondlabs.rooster`, the `rooster` executable, the data directories, the `rooster/` folder and Dart package, and the release asset names. Installs from before the renames (Rooster, and Commet before it) update in place and bring their data with them.
