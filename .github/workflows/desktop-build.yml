@@ -189,6 +189,14 @@ jobs:
           }
           if ($code -ne 0) { exit $code }
 
+      # Drags a file onto the built app the way Explorer does (a real OLE
+      # drag, the mouse moved with the button held) and fails when the app
+      # refuses it.
+      - name: Drag a file onto the Windows build
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: ./tools/windows_drop_smoke.ps1 -Bundle $env:BUNDLE
+
       # Plays a real YouTube embed through the host and keeps the last frame,
       # so every run shows whether the video plays.  YouTube may refuse
       # datacenter addresses, so this cannot fail the build.
