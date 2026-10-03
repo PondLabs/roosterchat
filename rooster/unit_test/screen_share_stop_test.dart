@@ -174,6 +174,14 @@ class _LocalParticipant implements lk.LocalParticipant {
   @override
   bool get isMuted => false;
 
+  /// Read whenever the session says what it advertises: whether we are
+  /// muted goes out with or without a delayed leave.
+  @override
+  List<lk.LocalTrackPublication<lk.LocalAudioTrack>>
+      get audioTrackPublications => trackPublications.values
+          .whereType<lk.LocalTrackPublication<lk.LocalAudioTrack>>()
+          .toList();
+
   @override
   bool isCameraEnabled() => false;
 

@@ -33,8 +33,19 @@ them, in keys other clients ignore: `chat.commet.streams` (LIVE),
 `chat.commet.dj` (`{"playing": bool}` while they are the DJ in the call's
 booth, null otherwise), which shows a record next to them for people outside
 the call, spinning while their music plays. Streams, voice state and the DJ
-are only written while the delayed leave is armed, so a client that dies
-can't leave them behind.
+are written with or without a delayed leave. Without one (a homeserver
+without delayed events) nothing takes them down if the client dies, so that
+write also says `chat.commet.unguarded: true`, and readers stop believing the
+three of them 90 minutes after it was written
+(`MatrixCallMembership.unguardedStateLifetime`): its owner writes it again
+every hour while it is alive. The member stays listed until the membership
+itself lapses.
+
+The sidebar shows up to eight rows of members under a channel
+(`RoomTextButton.maxVisibleMembers`). A fuller channel shows seven, ourselves
+and whoever is live first, and "and N more" on the eighth row opens the rest
+in a list of their own. The channel's page shows everyone, with the same
+badges on their tiles, before joining too.
 
 **One person, one device in the call.** Joining a call you are already in
 from another device takes the older device out of it: when its membership
@@ -59,6 +70,7 @@ window ends; the list shows a person once either way.
 | 8 | A list is only worked out again when a membership changes. Worked out right after the app starts, before any sync has said what time it is, it stayed as the wrong clock had it for up to an hour. | `HomeserverClock.onCorrected` fires when a reading moves its time by more than 30 s; the sidebar, the channel's page and the key provider work their lists out again, and the lapse timer is set again. |
 | 9 | The sidebar asked for the member (name, avatar) of the people listed when the row was built only. Anyone who turned up later showed as their user id. | Everyone listed is asked for once, whenever they turn up (`RoomTextButton.fetchNewMembers`). |
 | 10 | A heartbeat waited for its restart of the delayed leave for as long as the HTTP client did, 35 s, and the heartbeats after it waited for that one. A restart lost to a dropped connection (a network blip, a Wi-Fi roam) therefore outlived the delayed leave's 30 s: it fired, and the member dropped out of the list of everyone outside the call while still talking, until a later heartbeat put the membership back, a minute or more on. | A restart is given up on after 8 s (`MatrixLivekitVoipSession.restartTimeout`), before the next heartbeat is due, and that one restarts it in time. |
+| 11 | Streams, voice state and the DJ were only written with the delayed leave armed. On a homeserver without delayed events nobody outside the call saw who was live, on camera, muted or deafened in it: the badges only showed once inside, from LiveKit. | Written either way, marked `chat.commet.unguarded` without a delayed leave, and dropped by readers 90 minutes after the last write (`_publishMembershipState`, `MatrixCallMembership.publishedStateIsStale`). |
 
 ## What the tests guard
 
@@ -70,6 +82,8 @@ window ends; the list shows a person once either way.
 | When a membership is due, and the lapse timer counting by the homeserver's clock | `unit_test/matrix_call_membership_test.dart` |
 | The sidebar row itself shows everyone under the channel by name, someone in for five hours included; on a clock three hours ahead, the ones in for hours turn up, by name, as soon as a sync says what time it is | `unit_test/voice_channel_sidebar_row_test.dart` |
 | A rewrite waits its turn, is covered by a write going out anyway, is retried when it fails, and does nothing once stopped | `unit_test/call_membership_publisher_test.dart` |
+| A mute is published without delayed events, marked unguarded, and guarded with them; unguarded badges show while they are kept written, go 90 minutes after the last write with no event, and their owner stays listed | `unit_test/call_membership_keepalive_test.dart`, `unit_test/voice_channel_member_list_test.dart` ("Badges of a member without a delayed leave"), `unit_test/matrix_call_membership_test.dart` |
+| Badges show in the sidebar row and on the channel's page before joining; a full channel lists seven and opens the rest from "and N more", whoever is live among the seven | `unit_test/voice_channel_sidebar_row_test.dart`, `unit_test/voice_channel_page_badges_test.dart` |
 
 Reverting any one of these fixes turns at least one of these tests red
 (checked by hand on 2026-09-30, twenty-two mutations).

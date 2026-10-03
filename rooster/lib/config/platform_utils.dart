@@ -24,6 +24,11 @@ class PlatformUtils {
     return Platform.isAndroid;
   }
 
+  static bool get isIOS {
+    if (kIsWeb) return false;
+    return Platform.isIOS;
+  }
+
   static bool get isWeb {
     return kIsWeb;
   }

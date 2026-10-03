@@ -151,8 +151,52 @@ class WindowManagement {
   }
 
   static void _toggleFullscreen() async {
-    var isFullScreen = await windowManager.isFullScreen();
-    await windowManager.setFullScreen(!isFullScreen);
+    try {
+      await setFullScreen(!await windowManager.isFullScreen());
+    } catch (e, s) {
+      Log.onError(e, s, content: "Could not toggle fullscreen");
+    }
+  }
+
+  /// The window was maximized when it went fullscreen, and is maximized
+  /// again when it comes back.
+  static bool _maximizedBeforeFullscreen = false;
+
+  /// Puts the app window in or out of fullscreen (Linux and Windows).
+  ///
+  /// On Windows, window_manager only takes the frame off a window that is
+  /// not maximized. From a maximized one, which is how most people keep the
+  /// app, it left the title bar on and the taskbar showing: a maximized
+  /// window with a dead maximize button, not fullscreen. So a maximized
+  /// window is restored first, and maximized again on the way out.
+  /// [windows] is for tests, which run on another platform.
+  static Future<void> setFullScreen(bool fullscreen, {bool? windows}) async {
+    if (!(windows ?? PlatformUtils.isWindows)) {
+      await windowManager.setFullScreen(fullscreen);
+      return;
+    }
+
+    if (await windowManager.isFullScreen() == fullscreen) return;
+
+    if (!fullscreen) {
+      await windowManager.setFullScreen(false);
+      if (_maximizedBeforeFullscreen) {
+        _maximizedBeforeFullscreen = false;
+        await windowManager.maximize();
+      }
+      return;
+    }
+
+    _maximizedBeforeFullscreen = await windowManager.isMaximized();
+    if (_maximizedBeforeFullscreen) {
+      await windowManager.unmaximize();
+      // The restore is posted to the window, not done by the time the call
+      // returns: going fullscreen before it lands is the bug all over again.
+      for (var i = 0; i < 20 && await windowManager.isMaximized(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 25));
+      }
+    }
+    await windowManager.setFullScreen(true);
   }
 
   static String? _currentSpaceName;

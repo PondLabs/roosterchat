@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:rooster/client/components/voip/voip_session.dart';
+import 'package:rooster/ui/molecules/screen_share_start_reporting.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_button.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_call_controller.dart';
 import 'package:flutter/material.dart';
@@ -64,6 +66,20 @@ class CallControlButtons extends StatefulWidget {
   final VoidCallback? onHungUp;
   final ValueChanged<bool>? onSoundboardOpenChanged;
 
+  /// The least room left between two buttons of the compact row.
+  static const double _compactGap = 4;
+
+  /// The radius the compact row's [count] buttons get in [width]: the one
+  /// asked for where they fit, smaller where they do not. A foldable's
+  /// cover screen (280 logical pixels on the early ones) is narrower than
+  /// six touch-sized buttons, and the row ran off its edge.
+  static double compactRadius(
+      {required double asked, required double width, required int count}) {
+    if (!width.isFinite) return asked;
+    final fits = (width / count - _compactGap) / 2;
+    return min(asked, max(fits, 12));
+  }
+
   @override
   State<CallControlButtons> createState() => _CallControlButtonsState();
 }
@@ -98,17 +114,35 @@ class _CallControlButtonsState extends State<CallControlButtons> {
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.compact) return _buildButtons(context, widget.radius);
+    return LayoutBuilder(
+      builder: (context, constraints) => _buildButtons(
+          context,
+          CallControlButtons.compactRadius(
+              asked: widget.radius,
+              width: constraints.maxWidth,
+              // Mic, deafen, camera, more and hang up, and the soundboard.
+              count: widget.actions.soundboard == null ? 5 : 6)),
+    );
+  }
+
+  Widget _buildButtons(BuildContext context, double radius) {
     final session = widget.session;
     final actions = widget.actions;
-    final radius = widget.radius;
     final iconSize = radius * 1.2;
     final soundboard = actions.soundboard;
     final colors = Theme.of(context).colorScheme;
 
+    // Where the screen cannot be captured (a phone's browser, also on an
+    // unfolded foldable, which gets this full row) the button stays, greyed
+    // out, and says why when pressed: it used to look ready and do nothing.
     final shareScreen = tiamat.CircleButton(
         radius: radius,
         iconSize: iconSize,
         icon: Icons.screen_share_outlined,
+        iconColor: session.supportsScreenshare
+            ? null
+            : Theme.of(context).disabledColor,
         onPressed: actions.pickScreenshareSource);
     final stopSharing = tiamat.CircleButton(
       radius: radius,
@@ -248,8 +282,15 @@ class _CallControlButtonsState extends State<CallControlButtons> {
               )
             else if (actions.pickScreenshareSource != null)
               ListTile(
+                key: const ValueKey('callControls_shareScreen'),
                 leading: const Icon(Icons.screen_share_outlined),
                 title: const Text('Share your screen'),
+                // A phone's browser cannot capture the screen: said here,
+                // rather than a tile that does nothing when tapped.
+                enabled: session.supportsScreenshare,
+                subtitle: session.supportsScreenshare
+                    ? null
+                    : Text(messageScreenShareUnsupported),
                 onTap: () {
                   Navigator.pop(sheet);
                   actions.pickScreenshareSource?.call();

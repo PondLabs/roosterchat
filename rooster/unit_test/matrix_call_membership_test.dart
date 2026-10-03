@@ -203,6 +203,65 @@ void main() {
     });
   });
 
+  // What a client without a delayed leave advertises (a homeserver without
+  // delayed events) has nothing to take it down if that client dies.
+  group('unguarded state', () {
+    const unguarded = {
+      'application': 'm.call',
+      'chat.commet.streams': ['screen'],
+      'chat.commet.unguarded': true,
+    };
+
+    test('is believed for ninety minutes after it was written', () {
+      final staleAt =
+          MatrixCallMembership.publishedStateStaleAt(unguarded, joined);
+      expect(staleAt, joined.add(const Duration(minutes: 90)));
+      expect(
+          MatrixCallMembership.publishedStateIsStale(
+              unguarded, joined, staleAt!),
+          isFalse);
+      expect(
+          MatrixCallMembership.publishedStateIsStale(
+              unguarded, joined, staleAt.add(const Duration(seconds: 1))),
+          isTrue);
+    });
+
+    test('a guarded membership never goes stale: older builds wrote no key',
+        () {
+      for (final content in [
+        const {
+          'chat.commet.streams': <String>['screen']
+        },
+        const {
+          'chat.commet.streams': <String>['screen'],
+          'chat.commet.unguarded': false
+        },
+      ]) {
+        expect(MatrixCallMembership.publishedStateStaleAt(content, joined),
+            isNull);
+        expect(
+            MatrixCallMembership.publishedStateIsStale(
+                content, joined, joined.add(const Duration(hours: 3))),
+            isFalse);
+      }
+    });
+
+    test('a rewrite says whether it is guarded, whatever it said before', () {
+      Map<String, Object?> rewrite(Map<String, Object?> current,
+              {required bool unguarded}) =>
+          MatrixCallMembership.withPublishedState(current,
+              media: const {LiveMedia.screen},
+              voiceState: const {},
+              joinedAt: joined,
+              now: joined,
+              unguarded: unguarded);
+
+      expect(rewrite(const {}, unguarded: true)['chat.commet.unguarded'], true);
+      expect(
+          rewrite(unguarded, unguarded: false)['chat.commet.unguarded'], false);
+    });
+  });
+
   group('nextExpiry', () {
     test('is the earliest expiry not yet passed', () {
       final now = joined.add(const Duration(hours: 1));

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/voip/android_screencapture_source.dart';
 import 'package:rooster/client/components/voip/deafen_rule.dart';
+import 'package:rooster/client/components/voip/screen_capture_support.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/client/components/voip/webrtc_default_devices.dart';
@@ -87,7 +88,7 @@ class MatrixVoipSession implements VoipSession {
   String? get remoteUserName => session.remoteUser?.displayName;
 
   @override
-  bool get supportsScreenshare => true;
+  bool get supportsScreenshare => canCaptureScreen;
 
   @override
   bool get isSharingScreen => session.localScreenSharingStream != null;

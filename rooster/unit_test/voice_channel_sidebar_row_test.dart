@@ -19,14 +19,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tiamat/config/style/theme_extensions.dart';
+import 'package:tiamat/tiamat.dart' as tiamat;
 
 const _roomId = '!hangout:example.org';
 const _me = '@me:example.org';
 
-const _names = {
+final _names = {
   '@alice:example.org': 'Alice',
   '@bob:example.org': 'Bob',
   '@carol:example.org': 'Carol',
+  // A full channel.
+  for (var i = 1; i <= 12; i++) '@guest$i:example.org': 'Guest $i',
 };
 
 /// The homeserver's time: three hours behind this machine's clock, as a
@@ -206,7 +209,9 @@ void main() {
   }
 
   void member(String userId,
-      {required Duration joinedAgo, Duration? writtenAgo}) {
+      {required Duration joinedAgo,
+      Duration? writtenAgo,
+      Map<String, Object?> says = const {}}) {
     final joined = _serverNow().subtract(joinedAgo);
     final written =
         writtenAgo == null ? joined : _serverNow().subtract(writtenAgo);
@@ -228,6 +233,7 @@ void main() {
         if (writtenAgo != null) 'created_ts': joined.millisecondsSinceEpoch,
         'expires': (written.difference(joined) + const Duration(hours: 4))
             .inMilliseconds,
+        ...says,
       },
     );
   }
@@ -277,6 +283,124 @@ void main() {
     expect(find.text('Bob'), findsOneWidget);
     expect(find.text('Carol'), findsOneWidget);
     await done(tester, list);
+  });
+
+  // Asked for with a screenshot of the list: who is live, muted or
+  // deafened showed only to people already in the call. On a homeserver
+  // without delayed events their clients never published it.
+  testWidgets('who is live, on camera, muted or deafened shows before joining',
+      (tester) async {
+    final clock = HomeserverClock()
+      ..readSync(_syncAt(_serverNow()), homeserver: 'example.org');
+    final list = listFor(clock);
+    const unguarded = {'chat.commet.unguarded': true};
+    member('@alice:example.org', joinedAgo: const Duration(minutes: 30), says: {
+      ...unguarded,
+      'chat.commet.streams': ['screen'],
+      'chat.commet.voice_state': ['muted'],
+    });
+    member('@bob:example.org', joinedAgo: const Duration(minutes: 20), says: {
+      ...unguarded,
+      'chat.commet.streams': ['camera'],
+      'chat.commet.voice_state': ['muted', 'deafened'],
+    });
+    member('@carol:example.org', joinedAgo: const Duration(minutes: 10));
+
+    await show(tester);
+
+    // Their own row: the channel's button is around all of them.
+    Finder inRow(String name, Finder what) => find.descendant(
+        of: find
+            .ancestor(
+                of: find.text(name), matching: find.byType(tiamat.TextButton))
+            .first,
+        matching: what);
+
+    expect(inRow('Alice', find.text('LIVE')), findsOneWidget);
+    expect(inRow('Alice', find.byIcon(Icons.mic_off_rounded)), findsOneWidget);
+    expect(inRow('Bob', find.byIcon(Icons.videocam_rounded)), findsOneWidget);
+    expect(
+        inRow('Bob', find.byIcon(Icons.headset_off_rounded)), findsOneWidget);
+    expect(inRow('Carol', find.byType(Icon)), findsNothing);
+    expect(inRow('Carol', find.text('LIVE')), findsNothing);
+    await done(tester, list);
+  });
+
+  group('a channel with more people than the list has rows for', () {
+    void guests(int count, {int? live}) {
+      for (var i = 1; i <= count; i++) {
+        member('@guest$i:example.org',
+            joinedAgo: Duration(minutes: 60 - i),
+            says: {
+              if (i == live) 'chat.commet.streams': ['screen'],
+            });
+      }
+    }
+
+    testWidgets('lists everyone while they fit', (tester) async {
+      final clock = HomeserverClock()
+        ..readSync(_syncAt(_serverNow()), homeserver: 'example.org');
+      final list = listFor(clock);
+      guests(RoomTextButton.maxVisibleMembers);
+
+      await show(tester);
+
+      for (var i = 1; i <= RoomTextButton.maxVisibleMembers; i++) {
+        expect(find.text('Guest $i'), findsOneWidget);
+      }
+      expect(find.textContaining('more'), findsNothing);
+      await done(tester, list);
+    });
+
+    testWidgets('shows the first of them, and the rest behind "and N more"',
+        (tester) async {
+      final clock = HomeserverClock()
+        ..readSync(_syncAt(_serverNow()), homeserver: 'example.org');
+      final list = listFor(clock);
+      guests(12);
+
+      await show(tester);
+
+      for (var i = 1; i <= 7; i++) {
+        expect(find.text('Guest $i'), findsOneWidget);
+      }
+      for (var i = 8; i <= 12; i++) {
+        expect(find.text('Guest $i'), findsNothing);
+      }
+      expect(find.text('and 5 more'), findsOneWidget);
+
+      await tester.tap(find.text('and 5 more'));
+      await tester.pump();
+      await tester.pump();
+
+      // Nobody is left out: the rest are a tap away, by name.
+      for (var i = 1; i <= 12; i++) {
+        expect(find.text('Guest $i'), findsOneWidget);
+      }
+
+      // And it closes again.
+      await tester.tapAt(const Offset(700, 500));
+      await tester.pump();
+      expect(find.text('Guest 12'), findsNothing);
+      await done(tester, list);
+    });
+
+    testWidgets('keeps whoever is live among the ones shown', (tester) async {
+      final clock = HomeserverClock()
+        ..readSync(_syncAt(_serverNow()), homeserver: 'example.org');
+      final list = listFor(clock);
+      guests(12, live: 11);
+
+      await show(tester);
+
+      expect(find.text('Guest 11'), findsOneWidget);
+      expect(find.text('LIVE'), findsOneWidget);
+      // Everyone else keeps their place; the last of the seven makes room.
+      expect(find.text('Guest 6'), findsOneWidget);
+      expect(find.text('Guest 7'), findsNothing);
+      expect(find.text('and 5 more'), findsOneWidget);
+      await done(tester, list);
+    });
   });
 
   testWidgets(
