@@ -178,8 +178,17 @@ class MatrixActivitiesComponent
       expiries.add(MatrixCallMembership.expiresAt(event.content, sentAt));
 
       // Only full events: stripped state has no timestamp, so it never
-      // expires and a stale LIVE badge would stay forever.
-      if (application == "m.call" && event is Event) {
+      // expires and a stale LIVE badge would stay forever. Nor from a
+      // client without a delayed leave that has stopped writing: it is
+      // gone, and listed only until its membership lapses.
+      if (application == "m.call" &&
+          event is Event &&
+          !MatrixCallMembership.publishedStateIsStale(
+              event.content, sentAt, now)) {
+        // Looked at again when that happens: nothing arrives then either.
+        expiries.add(
+            MatrixCallMembership.publishedStateStaleAt(event.content, sentAt));
+
         final media = MatrixCallMembership.liveMediaOf(event.content);
         if (media.isNotEmpty) {
           activity.liveMedia

@@ -202,9 +202,11 @@ class _VoipStreamViewState extends State<VoipStreamView> {
               Align(
                 alignment: Alignment.bottomLeft,
                 child: IgnorePointer(
-                  ignoring: !(hovering || MediaQuery.of(context).mobile),
+                  ignoring: !(hovering || MediaQuery.of(context).touchControls),
                   child: AnimatedOpacity(
-                    opacity: hovering || MediaQuery.of(context).mobile ? 1 : 0,
+                    opacity: hovering || MediaQuery.of(context).touchControls
+                        ? 1
+                        : 0,
                     duration: const Duration(milliseconds: 200),
                     child: Padding(
                       padding: const EdgeInsets.all(8),

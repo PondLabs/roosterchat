@@ -12,6 +12,7 @@ import 'package:rooster/client/components/voip/deafen_rule.dart';
 import 'package:rooster/client/components/voip/microphone_health_notice.dart';
 import 'package:rooster/client/components/voip/remote_audio_watch.dart';
 import 'package:rooster/client/components/voip/share_cues.dart';
+import 'package:rooster/client/components/voip/screen_capture_support.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/client/components/user_presence/user_idle_watcher.dart';
@@ -1098,20 +1099,27 @@ class MatrixLivekitVoipSession
 
   void _publishMembershipState() {
     if (state == VoipState.ended) return;
-    // Streams and voice state only with the delayed leave armed: it is what
-    // clears the membership, and a LIVE badge with it, if this client
-    // crashes while streaming. Away goes out either way: left behind it
-    // marks nothing that is not already stale, and without it someone away
-    // on a homeserver without delayed events (Synapse by default) read as
-    // present to everyone.
+    // Streams, voice state and the DJ go out with or without the delayed
+    // leave: they used to wait for it, so on a homeserver without delayed
+    // events (Synapse by default) nobody outside the call ever saw who was
+    // live, muted or deafened in it. The delayed leave is what clears the
+    // membership, and a LIVE badge with it, if this client crashes while
+    // streaming; without one the write says so, and readers stop believing
+    // it once it has not been written again for ninety minutes
+    // (MatrixCallMembership.unguardedKey).
     final armed = heartbeatDelayId != null;
+    final media = _localLiveMedia;
+    final voice = _localVoiceState;
+    final dj = _localDj;
     _membershipPublisher.update(CallMembershipState(
-        media: armed ? _localLiveMedia : const {},
-        voice: armed ? _localVoiceState : const {},
+        media: media,
+        voice: voice,
         away: _idleWatcher.isAway.value,
-        // Like LIVE, only with the delayed leave armed: a DJ whose client
-        // crashed would otherwise spin in the list for hours.
-        dj: armed ? _localDj : null));
+        dj: dj,
+        // Only with something a dead client would leave behind: saying it
+        // of a membership that lists nothing would cost a write per join.
+        unguarded:
+            !armed && (media.isNotEmpty || voice.isNotEmpty || dj != null)));
   }
 
   // Named `published`, not `state`: `state` is this session's VoipState.
@@ -1135,6 +1143,7 @@ class MatrixLivekitVoipSession
           voiceState: published.voice,
           away: published.away,
           dj: published.dj,
+          unguarded: published.unguarded,
           joinedAt: joinedAt,
           now: _membershipTime()),
     );
@@ -1608,7 +1617,7 @@ class MatrixLivekitVoipSession
   List<VoipStream> streams = List<VoipStream>.empty(growable: true);
 
   @override
-  bool get supportsScreenshare => true;
+  bool get supportsScreenshare => canCaptureScreen;
 
   @override
   Future<void> updateStats() async {}
@@ -1943,8 +1952,9 @@ class MatrixLivekitVoipSession
 
       await _restoreMembershipIfCleared();
     } catch (e, s) {
-      // Stop advertising streams until a heartbeat works again: without the
-      // delayed leave, nothing would clear them if this client died.
+      // What we advertise is unguarded until a heartbeat works again:
+      // without the delayed leave, nothing would clear it if this client
+      // died.
       Log.onError(e, s, content: "Call membership heartbeat failed");
       if (heartbeatDelayId != null) {
         heartbeatDelayId = null;

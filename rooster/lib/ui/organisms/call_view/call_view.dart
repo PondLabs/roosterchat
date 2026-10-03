@@ -155,8 +155,11 @@ class _CallViewState extends State<CallView> {
   }
 
   Widget callButtons({bool connected = false, required Widget child}) {
-    // Mobile keeps touch-sized buttons; the desktop row only shows on hover.
-    final buttonRadius = MediaQuery.of(context).mobile ? 24.0 : 18.0;
+    // Touch keeps touch-sized buttons that are always there; with a mouse
+    // the row only shows on hover. An unfolded foldable has the desktop
+    // layout and no mouse: going by the layout hid its buttons for good.
+    final touch = MediaQuery.of(context).touchControls;
+    final buttonRadius = touch ? 24.0 : 18.0;
     final buttonIconSize = buttonRadius * 1.2;
     return MouseRegion(
       onEnter: (event) {
@@ -175,11 +178,7 @@ class _CallViewState extends State<CallView> {
           child,
           AnimatedOpacity(
             // Stay visible while the soundboard popover is anchored here.
-            opacity: MediaQuery.of(context).mobile ||
-                    isMouseHovering ||
-                    _soundboardOpen
-                ? 1
-                : 0,
+            opacity: touch || isMouseHovering || _soundboardOpen ? 1 : 0,
             duration: const Duration(milliseconds: 200),
             // Above the iPhone's home indicator: the same 24 below the
             // buttons as before where there is none.

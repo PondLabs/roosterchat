@@ -4,11 +4,11 @@ import 'dart:math';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/client/room.dart';
-import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/anchored_popover.dart';
 import 'package:rooster/ui/atoms/speaking_indicator.dart';
 import 'package:rooster/ui/molecules/call_session_live_panel.dart';
+import 'package:rooster/ui/molecules/screen_share_start_reporting.dart';
 import 'package:rooster/ui/molecules/screen_share_stop_reporting.dart';
 import 'package:rooster/ui/organisms/call_view/call_view.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_button.dart';
@@ -102,11 +102,6 @@ class _CallSessionPanelState extends State<CallSessionPanel>
       desc:
           "Tooltip on the voice panel button while the screen picker is open");
 
-  String get messageCouldNotShareScreen =>
-      Intl.message("Could not share your screen.",
-          name: "messageCouldNotShareScreen",
-          desc: "Shown when starting a screen share fails");
-
   @override
   void initState() {
     room = widget.session.client.getRoom(widget.session.roomId);
@@ -160,23 +155,13 @@ class _CallSessionPanelState extends State<CallSessionPanel>
     if (!mounted || _screenShareBusy) return;
     setState(() => _screenShareBusy = true);
 
-    final messenger = ScaffoldMessenger.maybeOf(context);
     try {
       if (widget.session.isSharingScreen) {
         await stopScreenshareOrReportFailure(context, widget.session);
         return;
       }
 
-      final source = await widget.session.pickScreenCapture(context);
-      if (source != null && mounted) {
-        await widget.session.setScreenShare(source);
-      }
-    } catch (e, s) {
-      Log.onError(e, s, content: "Could not start screen sharing");
-      if (mounted && messenger != null && messenger.mounted) {
-        messenger
-            .showSnackBar(SnackBar(content: Text(messageCouldNotShareScreen)));
-      }
+      await startScreenshareOrReportFailure(context, widget.session);
     } finally {
       if (mounted) setState(() => _screenShareBusy = false);
     }

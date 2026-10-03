@@ -1,6 +1,7 @@
 // Opens the soundboard popover above a call control. Disabled while the
 // user is deafened, like Discord.
 import 'package:rooster/client/matrix/components/soundboard/matrix_soundboard_emoji_image.dart';
+import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/ui/atoms/anchored_popover.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_call_controller.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_popover.dart';
@@ -63,6 +64,9 @@ class _SoundboardButtonState extends State<SoundboardButton> {
           volume01: ctrl.volume01,
           onVolumeChanged: ctrl.setVolume01,
           imageFor: (emoji) => soundboardEmojiImage(emoji, ctrl.session.client),
+          // Also an unfolded foldable or a tablet whose browser names
+          // itself a computer.
+          touch: MediaQuery.of(context).touchControls,
           onAddSound: (source) {
             final soundboard = ctrl.soundboardOf(source);
             if (soundboard == null) return;

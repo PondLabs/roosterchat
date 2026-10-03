@@ -8,6 +8,7 @@ import 'package:rooster/client/components/component.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/client/matrix/components/room_activities/matrix_activities_component.dart';
+import 'package:rooster/client/matrix/components/voip_room/matrix_call_membership.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_voip_room_component.dart';
 import 'package:rooster/client/matrix/homeserver_clock.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
@@ -459,6 +460,86 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(changes, hasLength(1));
+    });
+  });
+
+  // A client with no delayed leave (a homeserver without delayed events)
+  // publishes its streams and its mute all the same, marked as unguarded:
+  // if it dies they are only believed for as long as it would have taken to
+  // write them again.
+  group("Badges of a member without a delayed leave", () {
+    const unguarded = {"chat.commet.unguarded": true};
+
+    void setMemberships(List<matrix.StrippedStateEvent> memberships) {
+      room.matrixRoom.states[MatrixActivitiesComponent.callMemberStateEvent] = {
+        for (final m in memberships) m.stateKey!: m,
+      };
+    }
+
+    test("show to people outside the call while they are kept written", () {
+      setMemberships([
+        callMemberEvent(room, otherUserId, "DEVICEB",
+            streams: ["screen", "camera"],
+            voiceState: ["muted", "deafened"],
+            sentAt: DateTime.now().subtract(const Duration(minutes: 61)),
+            extra: unguarded),
+      ]);
+
+      final call = callSession(component);
+      expect(call.liveMedia[otherUserId], {LiveMedia.screen, LiveMedia.camera});
+      expect(call.voiceState[otherUserId],
+          {VoiceState.muted, VoiceState.deafened});
+    });
+
+    test("are dropped once nobody has written them for ninety minutes", () {
+      setMemberships([
+        callMemberEvent(room, otherUserId, "DEVICEB",
+            streams: ["screen"],
+            voiceState: ["muted"],
+            sentAt: DateTime.now().subtract(const Duration(minutes: 91)),
+            extra: {
+              ...unguarded,
+              "chat.commet.dj": {"playing": true}
+            }),
+      ]);
+
+      final call = callSession(component);
+      expect(call.participants, {otherUserId},
+          reason: "still in the call until the membership itself lapses");
+      expect(call.liveMedia[otherUserId], isNull);
+      expect(call.voiceState[otherUserId], isNull);
+      expect(call.djPlaying[otherUserId], isNull);
+    });
+
+    test("stay for one whose delayed leave guards them, however old", () {
+      setMemberships([
+        callMemberEvent(room, otherUserId, "DEVICEB",
+            streams: ["screen"],
+            sentAt: DateTime.now().subtract(const Duration(hours: 3))),
+      ]);
+
+      expect(callSession(component).liveMedia[otherUserId], {LiveMedia.screen});
+    });
+
+    test("go when they turn stale, with no event", () async {
+      setMemberships([
+        callMemberEvent(room, otherUserId, "DEVICEB",
+            streams: ["screen"],
+            sentAt: DateTime.now().subtract(
+                MatrixCallMembership.unguardedStateLifetime -
+                    const Duration(milliseconds: 50)),
+            extra: unguarded),
+      ]);
+      final changes = <void>[];
+      final sub = component.onSessionsChanged.listen(changes.add);
+      addTearDown(sub.cancel);
+
+      expect(callSession(component).liveMedia[otherUserId], {LiveMedia.screen});
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+
+      expect(changes, hasLength(1));
+      expect(callSession(component).liveMedia[otherUserId], isNull);
+      expect(callParticipants(component), {otherUserId});
     });
   });
 

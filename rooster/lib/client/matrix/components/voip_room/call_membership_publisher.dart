@@ -18,6 +18,7 @@ class CallMembershipState {
     this.voice = const {},
     this.away = false,
     this.dj,
+    this.unguarded = false,
   });
 
   /// What we publish: screen share, camera.
@@ -34,6 +35,11 @@ class CallMembershipState {
   /// Null when we aren't the DJ, otherwise whether our music is playing.
   final bool? dj;
 
+  /// No delayed leave backs what is advertised here: readers stop believing
+  /// it once it has not been written again for a while (see
+  /// MatrixCallMembership.unguardedKey).
+  final bool unguarded;
+
   static const _media = SetEquality<LiveMedia>();
   static const _voice = SetEquality<VoiceState>();
 
@@ -43,15 +49,17 @@ class CallMembershipState {
       _media.equals(media, other.media) &&
       _voice.equals(voice, other.voice) &&
       away == other.away &&
-      dj == other.dj;
+      dj == other.dj &&
+      unguarded == other.unguarded;
 
   @override
   int get hashCode =>
-      Object.hash(_media.hash(media), _voice.hash(voice), away, dj);
+      Object.hash(_media.hash(media), _voice.hash(voice), away, dj, unguarded);
 
   @override
   String toString() =>
-      "CallMembershipState(media: $media, voice: $voice, away: $away, dj: $dj)";
+      "CallMembershipState(media: $media, voice: $voice, away: $away, "
+      "dj: $dj, unguarded: $unguarded)";
 }
 
 class CallMembershipPublisher {
