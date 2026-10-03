@@ -14,6 +14,24 @@ Rooster is the weird, warm little house on the internet where your people hang o
 
 Rooster started as a fork of [Commet](https://github.com/commetchat/commet). Its brand guide is in [`docs/brand`](docs/brand/README.md).
 
+# Why Rooster instead of Discord?
+
+Rooster has the voice rooms, soundboard, screen sharing and text channels you know from Discord or TeamSpeak. What's different is who owns the house.
+
+| | Rooster | Discord |
+|---|---|---|
+| Who runs the server | You, or any Matrix homeserver you pick | Discord Inc. |
+| Text messages | End-to-end encrypted in encrypted rooms | Not end-to-end encrypted |
+| Source code | Open source (AGPL-3.0) | Closed |
+| Talk to other communities | Federates with every Matrix server and client | Discord only |
+| If the company goes away | Your server and history stay where they are | Your community goes with it |
+| Stream quality, custom emoji everywhere | Free. You set your own bitrate and framerate | Higher tiers are part of Nitro |
+| Leaving | Your account and rooms work in any Matrix client | No portable account |
+
+Some things Discord has that Rooster doesn't yet: mobile apps, a big bot ecosystem, and everyone already being there. Rooster is built by a small team and it's honest about that.
+
+<sub>Discord is a trademark of Discord Inc. and TeamSpeak is a trademark of TeamSpeak Systems GmbH. Rooster is not affiliated with either. Comparison reflects public information as of October 2026.</sub>
+
 # Download
 
 Builds are published on the [releases page](https://github.com/PondLabs/roosterchat/releases/latest):
@@ -40,6 +58,9 @@ Unpack the archive and run `Rooster` from inside it. The macOS archive holds `Ro
 - Push Notifications
 - URL Preview
 - Voice rooms with screen sharing, per-stream volume and a soundboard
+- End-to-end encrypted voice in encrypted rooms
+- Noise suppression (DeepFilterNet3)
+- DJ booth: play music to the whole voice room
 
 # Reporting a problem
 
