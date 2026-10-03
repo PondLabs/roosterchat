@@ -1,6 +1,9 @@
 [workspace]
 resolver = "3"
 members = ["rust/rust", "rust/audio_dsp"]
+# prepare-web.sh clones dart-vodozemac here to build it to wasm; it is not
+# ours, and cargo refuses a package inside a workspace it is not a member of.
+exclude = ["rooster/.vodozemac"]
 
 # DeepFilterNet's inference (tract, in rust/audio_dsp) runs about thirty times
 # slower unoptimised: too slow for real time in a debug build of the app,
