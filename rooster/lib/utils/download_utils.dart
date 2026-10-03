@@ -15,6 +15,8 @@ class DownloadFileTask implements BackgroundTaskWithOptionalProgress {
   late String filename;
 
   String? destinationPath;
+  Timer? _removalTimer;
+  bool _disposed = false;
 
   @override
   void Function()? action;
@@ -24,7 +26,11 @@ class DownloadFileTask implements BackgroundTaskWithOptionalProgress {
 
   @override
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     sub?.cancel();
+    _removalTimer?.cancel();
+    unawaited(controller.close());
   }
 
   @override
@@ -60,20 +66,24 @@ class DownloadFileTask implements BackgroundTaskWithOptionalProgress {
   }
 
   Future<void> run() async {
+    if (_disposed) return;
     try {
       var result = await _doDownload();
+      if (_disposed) return;
       status = switch (result) {
         true => BackgroundTaskStatus.completed,
         false => BackgroundTaskStatus.failed,
       };
     } catch (exception, trace) {
       Log.onError(exception, trace);
+      if (_disposed) return;
       status = BackgroundTaskStatus.failed;
     }
 
     controller.add(());
 
-    Timer(const Duration(seconds: 5), () {
+    _removalTimer?.cancel();
+    _removalTimer = Timer(const Duration(seconds: 5), () {
       shouldRemoveTask = true;
       controller.add(null);
     });
@@ -81,6 +91,7 @@ class DownloadFileTask implements BackgroundTaskWithOptionalProgress {
 
   Future<bool> _doDownload() async {
     sub = file.onProgressChanged?.listen((downloadProgress) {
+      if (_disposed) return;
       final amount = downloadProgress.downloaded.toDouble() /
           downloadProgress.total.toDouble();
       progress = amount;

@@ -13,6 +13,7 @@ then exercised with the corrections in place:
 | Text scaling after repeatedly closing a view | Global preferences subscription retained disposed states; subsequent changes raised `setState() called after dispose()` | Cancel subscription on disposal; mount/unmount 30 times, then change preference |
 | Safe-area focus events after closing a view | Global focus subscription remained registered | Cancel subscription; assert the event bus has no listener after each of 30 cycles |
 | Async task completed after removal, or removed before delayed cleanup | Future callback or five-second timer added to a closed stream | Track disposal and cancel the timer; exercise both completion orders |
+| Download removed while running or after completion | Status stream stayed open and delayed removal still ran | Close the stream, cancel the timer, ignore late updates; reproduce both completion orders |
 | Presence cache receiving 10,000 distinct keys | Declared capacity was not enforced | Evict oldest writes immediately; retain 50 entries and observe 9,950 removals |
 | Logging 20,000 distinct messages | All messages remained in the global in-memory list | Retain at most 2,000 entries; preserve consecutive-message coalescing |
 | Reopening a chat timeline 50 times | Global jump subscription retained closed timeline states; scroll controllers were not disposed | Release subscriptions and both replaced/current controllers; verify disposal after every cycle |
@@ -55,10 +56,19 @@ desktop release builds, Linux integration against Synapse, static analysis and
 Web publication. Those results validate the original revision only.
 
 Local reproduction used Flutter 3.41.9 / Dart 3.11.5 on an Android ARM64 host with
-the patched Linux test runtime. Regression tests pass after the corrections,
-including the fifty timeline disposal cycles and the ten-cycle full timeline
-workload. The local full-suite outcome and remote PR checks are recorded in the
-PR. This host cannot establish Windows/macOS application behavior.
+the patched Linux test runtime. The full suite passed: 1,215 tests, nine skips,
+zero failures. Eight skips require the native DSP library/fixture and one
+requires native media playback. The Rust DSP itself passed all 75 tests,
+including its allocation-free processing check. Python passed all 181 tests.
+Dart analysis had no errors/warnings and 12 existing informational findings.
+The additional two download regressions pass after their correction.
+
+The ten-cycle widget workload passed with no exceptions or retained timeline
+listeners; host elapsed time was 9,890 ms. RSS samples in MiB were 342.3, 353.6,
+356.5, 363.3, 317.0, 315.0, 295.1, 264.1, 261.5, and 262.3. This is a short
+diagnostic run, not a claim of leak freedom or interactive frame performance.
+Remote PR checks supply platform-specific results; this local host cannot
+establish Windows/macOS application behavior.
 
 The new CI runs native audio DSP tests, lifecycle/recovery/media/voice tests,
 and the profile workload independently on Windows, Linux and macOS. Chrome
@@ -91,6 +101,6 @@ Intel/ARM, and ordinary Windows/Linux machines with production bundles and CEF
 enabled. The synthetic profile workload does not qualify that browser runtime.
 
 Additional candidates found during review require focused reproduction:
-image decoding listeners without error completion, download-task timer/progress
-ownership, and media-source resolution completing after player disposal.
+image decoding listeners without error completion and media-source resolution
+completing after player disposal.
 Treat these as investigation leads, not confirmed defects or completed fixes.

@@ -110,9 +110,15 @@ jobs:
           CHROME_EXECUTABLE: ${{ steps.chrome.outputs.chrome-path }}
         run: |
           set -o pipefail
+          # Flutter's web test compiler roots virtual imports under test/.
+          # Keep the repository's unit_test layout while exposing its files
+          # and relative integration helpers within that compiler root.
+          mkdir -p test
+          ln -s ../unit_test test/unit_test
+          ln -s ../integration_test test/integration_test
           flutter test --platform chrome --reporter json --dart-define=PLATFORM=web \
-            unit_test/stability unit_test/matrix_user_presence_test.dart \
-            unit_test/url_preview_widget_test.dart unit_test/timeline_event_view_url_previews_test.dart \
+            test/unit_test/stability test/unit_test/matrix_user_presence_test.dart \
+            test/unit_test/url_preview_widget_test.dart test/unit_test/timeline_event_view_url_previews_test.dart \
             | tee stability-tests.jsonl
       - name: Release rendering workload in Chrome
         working-directory: rooster
