@@ -1,7 +1,7 @@
 name: rooster
 version: 0.4.2+920
 publish_to: none
-description: Your space to connect
+description: Talk. Play. Hang out.
 environment: 
   sdk: '>=3.6.0 <4.0.0'
 resolution: workspace

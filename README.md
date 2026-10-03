@@ -1,8 +1,6 @@
 <p align="center" style="padding-top:20px">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/logo/lockup-on-dark.svg">
-  <img src="docs/brand/logo/lockup-on-light.svg" width="420" alt="Rooster">
-</picture>
+<img src="docs/brand/logo/lockup-on-light.svg#gh-light-mode-only" width="420" alt="Rooster">
+<img src="docs/brand/logo/lockup-on-dark.svg#gh-dark-mode-only" width="420" alt="Rooster">
 
 <p align="center">
     <a href="https://github.com/PondLabs/roosterchat/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/PondLabs/roosterchat?style=for-the-badge&color=e8382a"></a>

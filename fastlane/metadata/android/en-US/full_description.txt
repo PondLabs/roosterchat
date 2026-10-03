@@ -18,7 +18,7 @@
     <li>➕ And more!</li>
 </ul>
 
-<h3>Your space to connect</h3>
+<h3>Talk. Play. Hang out.</h3>
 
 <p>In addition to text and calls, Rooster provides additional tools to help you hang out and connect with your friends.
     Easily plan events with a shared calendar, and upload all the photos to a shared album!</p>
