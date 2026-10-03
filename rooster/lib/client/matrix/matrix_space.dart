@@ -46,6 +46,13 @@ class MatrixSpace extends Space {
 
   late final List<SpaceComponent<MatrixClient, MatrixSpace>> _components;
 
+  /// Completes when the space's state types that are not loaded at startup
+  /// (everything outside the client's importantStateEvents) have been read
+  /// from the database into the room. Components are built before that, and
+  /// reading those types then is a race; the database read does not show up
+  /// in onRoomState, so they read again when this completes.
+  late final Future<void> fullStateLoaded;
+
   matrix.Room get matrixRoom => _matrixRoom;
   @override
   String get topic => _matrixRoom.topic;
@@ -202,7 +209,7 @@ class MatrixSpace extends Space {
     _permissions = MatrixRoomPermissions(_matrixRoom);
     refresh();
 
-    _matrixRoom.postLoad();
+    fullStateLoaded = _matrixRoom.postLoad();
     _components = ComponentRegistry.getMatrixSpaceComponents(client, this);
 
     _subscriptions = List.from([
