@@ -195,9 +195,9 @@ jobs:
       - name: Drag a file onto the Linux build
         if: matrix.platform == 'linux'
         run: |
-          sudo apt-get install -y xvfb xdotool python3-gi gir1.2-gtk-3.0
+          sudo apt-get install -y libgles2 xvfb xdotool openbox python3-gi gir1.2-gtk-3.0
           xvfb-run -a -s '-screen 0 1920x1080x24' \
-            python3 tools/linux_drop_smoke.py --bundle "$BUNDLE"
+            tools/linux_drop_smoke.py --bundle "$BUNDLE" --window-manager openbox
 
       # Drags a file onto the built app the way Explorer does (a real OLE
       # drag, the mouse moved with the button held) and fails when the app

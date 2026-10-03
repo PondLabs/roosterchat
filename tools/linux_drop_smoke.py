@@ -6,10 +6,11 @@ xdotool presses on it, moves over Rooster with the button held and lets go.
 Fails when Rooster does not ask for the file, which is what someone dragging
 from a file manager would see as a refused drop.
 
-    xvfb-run -s '-screen 0 1920x1080x24' \
-        python3 tools/linux_drop_smoke.py --bundle rooster/build/linux/x64/release/bundle
+    xvfb-run -s '-screen 0 1920x1080x24' tools/linux_drop_smoke.py \
+        --bundle rooster/build/linux/x64/release/bundle --window-manager openbox
 
-Needs python3-gi, gir1.2-gtk-3.0 and xdotool, and an X display.
+Needs python3-gi, gir1.2-gtk-3.0 and xdotool, and an X display with a window
+manager (--window-manager starts one).
 """
 import argparse
 import os
@@ -57,6 +58,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--bundle", required=True)
     parser.add_argument("--startup-seconds", type=float, default=90)
+    parser.add_argument(
+        "--window-manager",
+        help="started first, for a bare display such as Xvfb: a drag finds "
+        "the window under the pointer by what a window manager sets on it",
+    )
     args = parser.parse_args()
 
     exe = pathlib.Path(args.bundle).resolve() / "rooster"
@@ -70,6 +76,10 @@ def main() -> int:
     # X, not Wayland: xdotool moves the pointer of an X display.
     env = dict(os.environ, GDK_BACKEND="x11")
     Gdk.set_allowed_backends("x11")
+    manager = None
+    if args.window_manager:
+        manager = subprocess.Popen([args.window_manager])
+        time.sleep(1)
     app = subprocess.Popen([str(exe)], cwd=exe.parent, env=env)
     try:
         window = wait_for_window(app.pid, args.startup_seconds)
@@ -138,6 +148,8 @@ def main() -> int:
             app.wait(timeout=10)
         except subprocess.TimeoutExpired:
             app.kill()
+        if manager is not None:
+            manager.terminate()
 
 
 if __name__ == "__main__":

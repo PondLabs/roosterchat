@@ -40,6 +40,6 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y libgtk-3-0 libmpv2 libmimalloc2.0 libkeybinder-3.0-0 libayatana-appindicator3-1 libpulse0 libasound2t64 \
-            xvfb xdotool python3-gi gir1.2-gtk-3.0
+            libgles2 xvfb xdotool openbox python3-gi gir1.2-gtk-3.0
           bundle=$(dirname "$(find app -type f -name rooster | head -1)")
-          xvfb-run -a -s '-screen 0 1920x1080x24' python3 tools/linux_drop_smoke.py --bundle "$bundle"
+          xvfb-run -a -s '-screen 0 1920x1080x24' tools/linux_drop_smoke.py --bundle "$bundle" --window-manager openbox
