@@ -12,6 +12,20 @@ import 'package:flutter/material.dart';
 import 'package:tiamat/tiamat.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
+/// The narrowest a video is shown in the timeline: the player's controls
+/// fit in it.
+const double minVideoWidth = 360;
+
+/// How big a video of [aspectRatio] is in the timeline. A wide video is as
+/// short as 160; a tall or square one is given up to twice that, and the
+/// width its controls need, with the picture centred in it.
+Size videoAttachmentSize(double aspectRatio) {
+  if (!aspectRatio.isFinite || aspectRatio <= 0) aspectRatio = 1;
+  final width =
+      aspectRatio * 160 < minVideoWidth ? minVideoWidth : aspectRatio * 160;
+  return Size(width, (width / aspectRatio).clamp(160.0, 320.0));
+}
+
 class MessageAttachment extends StatefulWidget {
   const MessageAttachment(this.attachment,
       {super.key,
@@ -107,12 +121,13 @@ class _MessageAttachmentState extends State<MessageAttachment> {
     bool showInfo =
         widget.attachment.name != null && attachment.fileSize != null;
 
-    double height = 160;
+    final size = videoAttachmentSize(attachment.aspectRatio);
+    final height = widget.constrainSize ? size.height : 160.0;
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),
       child: SizedBox(
         height: widget.constrainSize ? height + (showInfo ? 30 : 0) : null,
-        width: widget.constrainSize ? attachment.aspectRatio * height : null,
+        width: widget.constrainSize ? size.width : null,
         child: Panel(
             mainAxisSize: MainAxisSize.min,
             header: showInfo

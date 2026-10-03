@@ -1,18 +1,22 @@
 import 'package:rooster/cache/file_provider.dart';
 import 'package:rooster/client/components/video_embed/video_capabilities.dart';
+import 'package:rooster/ui/atoms/message_attachment.dart';
 import 'package:rooster/ui/molecules/video_player/video_player.dart';
 import 'package:rooster/ui/molecules/video_player/video_player_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tiamat/config/style/theme_extensions.dart';
 
-Widget _testApp(Widget child) {
+Widget _testApp(Widget child, {double width = 800, double height = 450}) {
   return MaterialApp(
     theme: ThemeData.light().copyWith(
       extensions: const [ThemeSettings()],
     ),
     home: Scaffold(
-      body: SizedBox(width: 800, height: 450, child: child),
+      body: Align(
+        alignment: Alignment.topLeft,
+        child: SizedBox(width: width, height: height, child: child),
+      ),
     ),
   );
 }
@@ -72,6 +76,52 @@ void main() {
     final titleRect = tester.getRect(title);
     expect(titleRect.bottom <= seekBar.top, isTrue);
   });
+
+  test('a video in the timeline is never narrower than its controls', () {
+    // A reel, 9:16: it was 90 wide.
+    expect(videoAttachmentSize(9 / 16), const Size(360, 320));
+    expect(videoAttachmentSize(1), const Size(360, 320));
+    expect(videoAttachmentSize(16 / 9), const Size(360, 202.5));
+    // A wide video keeps its shape at the usual height.
+    expect(videoAttachmentSize(3), const Size(480, 160));
+    // No size in the event.
+    expect(videoAttachmentSize(double.nan), const Size(360, 320));
+    expect(videoAttachmentSize(0), const Size(360, 320));
+  });
+
+  for (final width in [360.0, 200.0]) {
+    testWidgets('every control is inside a player $width wide', (tester) async {
+      final stream = Uri.parse('https://example.com/video.mp4');
+      final controller = VideoPlayerController();
+
+      await tester.pumpWidget(
+        _testApp(
+          VideoPlayer(
+            WebFileProvider(stream),
+            streamUrl: stream,
+            fileName: 'rooster-reel.mp4',
+            controller: controller,
+            canGoFullscreen: true,
+            capabilities: VideoCapabilities.native,
+          ),
+          width: width,
+          height: 320,
+        ),
+      );
+
+      final player = tester.getRect(find.byType(VideoPlayer));
+      for (final icon in [
+        Icons.volume_up_rounded,
+        Icons.settings_rounded,
+        Icons.fullscreen_rounded,
+      ]) {
+        final rect = tester.getRect(find.byIcon(icon));
+        expect(player.contains(rect.topLeft), isTrue, reason: '$icon');
+        expect(player.contains(rect.bottomRight), isTrue, reason: '$icon');
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('shows the exit icon while the host is fullscreen',
       (tester) async {

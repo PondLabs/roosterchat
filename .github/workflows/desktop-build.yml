@@ -183,6 +183,26 @@ jobs:
           }
           if ($code -ne 0) { exit $code }
 
+      # Drags a file onto the built app the way a file manager does (a GTK
+      # drag source offering text/uri-list, the mouse moved by xdotool) and
+      # fails when the app does not take it.
+      - name: Drag a file onto the Linux build
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get install -y libgles2 xvfb xdotool openbox python3-gi gir1.2-gtk-3.0
+          xvfb-run -a -s '-screen 0 1920x1080x24' \
+            tools/linux_drop_smoke.py --bundle "$BUNDLE" --window-manager openbox
+
+      # Drags a file onto the built app the way Explorer does (a real OLE
+      # drag, the mouse moved with the button held) and fails when the app
+      # refuses it.
+      - name: Drag a file onto the Windows build
+        if: matrix.platform == 'windows'
+        # Windows PowerShell: its Add-Type compiles against Windows Forms
+        # as it is.
+        shell: powershell
+        run: ./tools/windows_drop_smoke.ps1 -Bundle $env:BUNDLE
+
       # Plays a real YouTube embed through the host and keeps the last frame,
       # so every run shows whether the video plays.  YouTube may refuse
       # datacenter addresses, so this cannot fail the build.

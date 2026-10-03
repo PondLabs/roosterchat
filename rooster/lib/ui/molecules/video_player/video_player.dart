@@ -337,9 +337,26 @@ class VideoPlayerState extends State<VideoPlayer> {
   }
 
   Widget bottomBar(VideoPlayerSettings settings) {
-    final capabilities = widget.capabilities;
-    final showSeekBar = widget.showProgressBar && capabilities.supportsSeeking;
+    final showSeekBar =
+        widget.showProgressBar && widget.capabilities.supportsSeeking;
     final showTime = length > Duration.zero;
+
+    return LayoutBuilder(builder: (context, constraints) {
+      // In a narrow player the buttons take the row: the time and the
+      // volume slider would push them out of reach.
+      final narrow = constraints.maxWidth < narrowBarWidth;
+      return bottomBarContent(settings, showSeekBar, showTime && !narrow,
+          narrow: narrow);
+    });
+  }
+
+  /// Below this width the bottom bar is its buttons only.
+  static const double narrowBarWidth = 340;
+
+  Widget bottomBarContent(
+      VideoPlayerSettings settings, bool showSeekBar, bool showTime,
+      {required bool narrow}) {
+    final capabilities = widget.capabilities;
 
     return GradientBackground(
       begin: Alignment.topCenter,
@@ -395,7 +412,8 @@ class VideoPlayerState extends State<VideoPlayer> {
                     ),
                   ),
                 const Spacer(),
-                if (capabilities.supportsVolume) volumeControl(settings),
+                if (capabilities.supportsVolume)
+                  volumeControl(settings, inlineSlider: !narrow),
                 if (capabilities.supportsPlaybackRate ||
                     (capabilities.supportsQualitySelection &&
                         settings.qualities.length > 1) ||
@@ -433,7 +451,8 @@ class VideoPlayerState extends State<VideoPlayer> {
   /// Mute toggle plus, on desktop, an inline slider so the level can be set
   /// without opening the settings sheet. Mobile keeps the toggle only; the
   /// slider lives in the sheet where there is room for a finger.
-  Widget volumeControl(VideoPlayerSettings settings) {
+  Widget volumeControl(VideoPlayerSettings settings,
+      {bool inlineSlider = true}) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -449,7 +468,7 @@ class VideoPlayerState extends State<VideoPlayer> {
             preferences.videoPlayerVolume.set(controller.settings.volume);
           },
         ),
-        if (!BuildConfig.MOBILE)
+        if (!BuildConfig.MOBILE && inlineSlider)
           SizedBox(
             width: 90,
             child: SliderTheme(
