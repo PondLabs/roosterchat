@@ -42,6 +42,7 @@ class _VideoPlayerImplementationState extends State<VideoPlayerImplementation> {
   Uri? file;
   final GlobalKey<VideoState> videoKey = GlobalKey<VideoState>();
   final List<StreamSubscription> _subscriptions = [];
+  StreamSubscription<DownloadProgress>? _downloadSubscription;
 
   @override
   void initState() {
@@ -94,6 +95,7 @@ class _VideoPlayerImplementationState extends State<VideoPlayerImplementation> {
 
   @override
   void dispose() {
+    _downloadSubscription?.cancel();
     for (final sub in _subscriptions) {
       sub.cancel();
     }
@@ -213,18 +215,19 @@ class _VideoPlayerImplementationState extends State<VideoPlayerImplementation> {
   }
 
   Future<void> _openMedia() async {
-    StreamSubscription<DownloadProgress>? downloadSubscription;
+    if (!mounted) return;
     widget.controller.setBuffering(true);
     try {
       final Uri? mediaUri;
       if (widget.streamUrl != null) {
         mediaUri = widget.streamUrl;
       } else {
-        downloadSubscription =
+        _downloadSubscription =
             widget.videoFile.onProgressChanged?.listen((data) {
-          widget.controller.setBufferingProgress(data);
+          if (mounted) widget.controller.setBufferingProgress(data);
         });
         mediaUri = await widget.videoFile.resolve();
+        if (!mounted) return;
         file = mediaUri;
       }
 
@@ -242,13 +245,15 @@ class _VideoPlayerImplementationState extends State<VideoPlayerImplementation> {
         ]),
         play: shouldPlay,
       );
+      if (!mounted) return;
       _updateTrackSettings();
       if (mounted) setState(() => loaded = true);
     } catch (error) {
-      widget.controller.setError(error.toString());
+      if (mounted) widget.controller.setError(error.toString());
     } finally {
-      await downloadSubscription?.cancel();
-      widget.controller.setBuffering(false);
+      await _downloadSubscription?.cancel();
+      _downloadSubscription = null;
+      if (mounted) widget.controller.setBuffering(false);
     }
   }
 }

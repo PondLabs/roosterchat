@@ -4,12 +4,27 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      include_voice:
+        description: Run the full Web voice and recovery checks
+        required: false
+        type: boolean
+        default: true
   workflow_call:
+    inputs:
+      include_voice:
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: read
 
 jobs:
+  web-voice:
+    if: github.event_name == 'pull_request' || inputs.include_voice
+    uses: ./.github/workflows/voice-dsp.yml
+
   desktop:
     name: Stability (${{ matrix.platform }})
     strategy:

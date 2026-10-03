@@ -36,6 +36,7 @@ class _Database implements matrix.DatabaseApi {
 Future<Map<String, Object?>> runTimelineWorkload(WidgetTester tester,
     {int cycles = 5, List<String> modes = const ['desktop', 'mobile']}) async {
   final samples = <int?>[];
+  final displayGeometry = <String, Object?>{};
   final client = MatrixClient(identifier: 'stability', database: _Database());
   client.mockComponents();
   client.self = MatrixProfile(client,
@@ -45,8 +46,17 @@ Future<Map<String, Object?>> runTimelineWorkload(WidgetTester tester,
   try {
     for (final mode in modes) {
       await preferences.layoutOverride.set(mode);
-      await tester.binding.setSurfaceSize(
-          mode == 'mobile' ? const Size(390, 844) : const Size(1440, 900));
+      final surface =
+          mode == 'mobile' ? const Size(390, 844) : const Size(1440, 900);
+      await tester.binding.setSurfaceSize(surface);
+      displayGeometry[mode] = {
+        'logical_surface': [surface.width, surface.height],
+        'physical_view': [
+          tester.view.physicalSize.width,
+          tester.view.physicalSize.height,
+        ],
+        'device_pixel_ratio': tester.view.devicePixelRatio,
+      };
       for (var cycle = 0; cycle < cycles; cycle++) {
         final timeline = room.getBenchmarkTimeline();
         await tester.pumpWidget(MaterialApp(
@@ -86,6 +96,7 @@ Future<Map<String, Object?>> runTimelineWorkload(WidgetTester tester,
     'metric': memoryMetric,
     'layouts': modes,
     'cycles_per_layout': cycles,
+    'display_geometry': displayGeometry,
     'after_cycle_bytes': samples,
   };
 }

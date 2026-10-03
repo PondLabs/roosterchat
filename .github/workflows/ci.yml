@@ -35,6 +35,8 @@ permissions:
 jobs:
   stability:
     uses: ./.github/workflows/stability.yml
+    with:
+      include_voice: false
 
   test:
     runs-on: ubuntu-24.04
@@ -117,40 +119,7 @@ jobs:
   # The release waits for it. See docs/voice-audio-processing.md, "What the
   # tests guard".
   voice-dsp:
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.41.9'
-          channel: stable
-          cache: true
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      - name: Setup Chrome
-        id: chrome
-        uses: browser-actions/setup-chrome@v1
-
-      - name: Code generation
-        working-directory: rooster
-        run: dart run scripts/codegen.dart
-
-      - name: Noise suppression in the browser
-        env:
-          CHROME: ${{ steps.chrome.outputs.chrome-path }}
-        run: tools/voice_dsp/web_loops.sh
+    uses: ./.github/workflows/voice-dsp.yml
 
   version:
     runs-on: ubuntu-24.04

@@ -28,11 +28,20 @@ recent users rather than inheriting the utility's small default capacity.
 
 The macOS failure matches Rust's [pthread mutex implementation](https://github.com/rust-lang/rust/blob/1.99.0/library/std/src/sys/sync/mutex/pthread.rs),
 which allocates its backing mutex on first lock. Constructor initialization
-moves that allocation before the audio callbacks. The remote test determines
-whether this removes the observed two allocations; no test threshold is relaxed.
+moves that allocation before the audio callbacks. The corrected macOS run passes
+the same zero-allocation assertion; no test threshold is relaxed.
 The background model's shared slot is initialized before spawning its loader
 too. A separate cold-callback test polls it with inference disabled, isolating
 mutex initialization from tract's permitted inference allocations.
+
+Review also found that a video file resolving after its preview closes could
+update a closed playback controller or open a disposed player. The preview now
+owns and cancels its download-progress subscription and checks its lifetime
+after asynchronous operations and before reporting errors/cleanup. A real-media
+backend integration regression closes a preview with resolution still pending,
+checks immediate subscription release, then completes the request. Unlike the
+table's failures, this case has not been replayed against a pre-fix application;
+its post-fix integration result is recorded in the PR.
 
 ## Repeatable workload
 
@@ -88,10 +97,19 @@ establish Windows/macOS application behavior.
 
 The new CI runs native audio DSP tests, lifecycle/recovery/media/voice tests,
 and the profile workload independently on Windows, Linux and macOS. Stable Chrome
-also runs regressions and the release workload in both layout modes. Existing
+also runs regressions and the release workload in both layout modes.
 Browser version, logical CPU count and WebGL renderer identification accompany
 the profile results; a separate context is queried after measurement and released.
-static analysis and authenticated Linux integration now run on pull requests.
+Logical surface sizes, physical view dimensions and device pixel ratio are
+recorded too: forcing a layout does not ensure identical pixel workloads on
+different runners. Timing comparisons require equivalent hardware and display
+geometry. Existing static analysis and authenticated Linux integration now run
+on pull requests.
+The existing Web voice suite is reusable and runs on PRs too: it builds the
+actual DSP WebAssembly, checks release assets, puts recorded noisy speech
+through the app's Dart/LiveKit/WebRTC sender, and exercises microphone restarts,
+missing assets, worker traps/hangs and audio-context recovery. Main CI calls it
+once rather than duplicating that suite inside its stability job.
 Main-branch publication waits for the stability workflow, and macOS build
 failures are no longer ignored by desktop builds. Web Pages deploys the exact
 revision from successful main CI instead of publishing every push before its
@@ -102,6 +120,41 @@ settings. No JavaScript errors were observed during that limited session.
 It was the baseline deployment, without an authenticated account. The browser
 was background-throttled, so its animation timing was discarded. It supplies
 no performance claim for this change.
+
+## Measured CI snapshot
+
+Revision `1484e062da723fdb79da4c348e2ef65f10d81bba` passed
+[all four platform stability jobs](https://github.com/PondLabs/roosterchat/actions/runs/37099982474),
+[static analysis](https://github.com/PondLabs/roosterchat/actions/runs/37099982478),
+[Synapse integration and native WebRTC audio](https://github.com/PondLabs/roosterchat/actions/runs/37099982471),
+and [all three production desktop builds](https://github.com/PondLabs/roosterchat/actions/runs/37100102669).
+Each native stability job passed 76 audio DSP tests and 110 Flutter regressions;
+Web passed 30 regressions. Each platform completed twenty timeline cycles.
+The later media-disposal regression and reusable PR Web voice job are additional
+checks: their latest results are recorded in the accompanying PR.
+
+Measurements below are milliseconds per frame, with separate build/raster
+measurements; they do not sum into end-to-end frame latency.
+
+| Runner / layout | Frames | p90 build | p90 raster | p99 build | p99 raster |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Linux / desktop | 417 | 5.576 | 15.473 | 8.995 | 111.270 |
+| Linux / mobile | 503 | 2.938 | 7.541 | 3.809 | 15.016 |
+| Windows / desktop | 529 | 3.599 | 2.394 | 9.248 | 10.311 |
+| Windows / mobile | 529 | 2.130 | 1.530 | 3.092 | 2.449 |
+| macOS / desktop | 450 | 3.800 | 1.793 | 10.406 | 46.356 |
+| macOS / mobile | 442 | 2.254 | 1.477 | 4.114 | 28.195 |
+| Web / desktop | 530 | 23.900 | 55.500 | 44.699 | 82.600 |
+| Web / mobile | 531 | 10.500 | 23.600 | 15.000 | 32.000 |
+
+Chrome reported ANGLE Vulkan SwiftShader, a software renderer, with four logical
+CPUs. Its desktop workload exceeded Flutter's 16 ms raster budget in 510 of 530
+frames, and mobile in 496 of 531. This is a reproducible CI performance finding,
+not proof of equivalent performance on a physical GPU or a 60 FPS guarantee.
+Native p99 raster outliers also merit device profiling. Hardware/display
+differences prevent ranking operating systems using these numbers.
+Web heap samples varied with garbage collection (desktop roughly 91–149 MiB,
+mobile 95–156 MiB); neither these samples nor native RSS establish leak freedom.
 
 ## Limits and recommended follow-up
 
@@ -121,6 +174,6 @@ Intel/ARM, and ordinary Windows/Linux machines with production bundles and CEF
 enabled. The synthetic profile workload does not qualify that browser runtime.
 
 Additional candidates found during review require focused reproduction:
-image decoding listeners without error completion and media-source resolution
-completing after player disposal.
+image decoding listeners without error completion and ownership of context
+timelines when overlapping requests complete.
 Treat these as investigation leads, not confirmed defects or completed fixes.
