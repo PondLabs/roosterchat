@@ -1,7 +1,7 @@
 // Desktop: screen-share audio and the DJ booth's music write their own
 // processing options (echo cancellation, gain control and noise suppression
 // off) onto the audio processing module WebRTC shares with the microphone.
-// The microphone's are written back once the custom source is negotiated
+// The microphone's are written back once the custom source is sending
 // (shared_audio_processing.dart). What that does inside WebRTC is measured
 // by integration_test/voice_dsp/native_noise_test.dart; these pin when it
 // happens.
@@ -30,7 +30,9 @@ class _Capture implements rtc.MediaStreamTrack {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-/// A sender that is negotiated after [pollsBefore] looks at its stats.
+/// A sender that sends its first packet after [pollsBefore] looks at its
+/// stats. Until then it is as a call's is between its offer and the
+/// server's answer: there, with statistics, and nothing sent.
 class _Sender implements rtc.RTCRtpSender {
   int pollsBefore;
   int polls = 0;
@@ -39,9 +41,11 @@ class _Sender implements rtc.RTCRtpSender {
   @override
   Future<List<rtc.StatsReport>> getStats() async {
     polls++;
-    return polls > pollsBefore
-        ? [rtc.StatsReport('RTCOutboundRTPAudioStream', 'outbound-rtp', 0, {})]
-        : [rtc.StatsReport('RTCMediaSourceStats', 'media-source', 0, {})];
+    return [
+      rtc.StatsReport('RTCMediaSourceStats', 'media-source', 0, {}),
+      rtc.StatsReport('RTCOutboundRTPAudioStream', 'outbound-rtp', 0,
+          {'kind': 'audio', 'packetsSent': polls > pollsBefore ? 12 : 0}),
+    ];
   }
 
   @override
@@ -103,12 +107,14 @@ void main() {
           timeout: timeout,
           poll: const Duration(milliseconds: 1));
 
-  test('after the screen audio is negotiated, the microphone writes its own',
+  // Not once it has statistics: it has those from the offer on, and the
+  // answer, which comes later, makes it write its options again.
+  test('once the screen audio is sending, the microphone writes its own',
       () async {
     final sender = _Sender(3);
     expect(
         await restore(custom(lk.TrackSource.screenShareAudio, sender)), isTrue);
-    expect(sender.polls, 4, reason: 'restored before it was negotiated');
+    expect(sender.polls, 4, reason: 'restored before it sent anything');
     expect(mic.sets, [false, true]);
     expect(mic.enabled, isTrue);
   });
@@ -146,7 +152,7 @@ void main() {
     expect(mic.sets, isEmpty);
   });
 
-  test('a source that never gets negotiated still gets it restored', () async {
+  test('a source that never sends still gets it restored', () async {
     expect(
         await restore(custom(lk.TrackSource.unknown, _Sender(1 << 30)),
             timeout: const Duration(milliseconds: 20)),

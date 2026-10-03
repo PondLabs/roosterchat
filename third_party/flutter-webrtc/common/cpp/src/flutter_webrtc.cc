@@ -1378,10 +1378,19 @@ void FlutterWebRTC::HandleMethodCall(
       return;
     }
 
+    // ROOSTER: a custom source's audio does not go through the audio
+    // processing module, so these are not for the music. Its sender writes
+    // them onto the module the microphone shares, and again at every
+    // negotiation, last: with them off, the microphone lost its echo
+    // cancellation whenever the call negotiated while the booth was open.
+    // So they are the microphone's: echo cancellation and gain control on,
+    // as every microphone here has them, and noise suppression as the
+    // caller says the microphone has it (`noiseSuppression`, off if not
+    // given).
     RTCAudioOptions options;
-    options.echo_cancellation = false;
-    options.auto_gain_control = false;
-    options.noise_suppression = false;
+    options.echo_cancellation = true;
+    options.auto_gain_control = true;
+    options.noise_suppression = findBoolean(params, "noiseSuppression");
     const std::string source_label = "rooster_music_" + GenerateUUID();
     scoped_refptr<RTCAudioSource> source = factory_->CreateAudioSource(
         source_label.c_str(), RTCAudioSource::SourceType::kCustom, options);

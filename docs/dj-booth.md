@@ -45,6 +45,11 @@ receiving the same track (`DjLocalMonitor` in `native_dj_engine.dart`). A
 media player would bypass WebRTC's playout, and a DJ on loudspeakers would
 send the music back into the room through their microphone.
 
+The music track and the monitor's sender are custom sources, whose options
+WebRTC writes over the microphone's on desktop. They are created with the
+microphone's, or the DJ's microphone loses its echo cancellation for as long
+as they have the decks (`docs/voice-audio-processing.md`, "Known gaps").
+
 ## Pieces
 
 | Where | What |

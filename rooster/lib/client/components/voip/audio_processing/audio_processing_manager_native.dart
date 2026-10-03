@@ -515,6 +515,14 @@ class NativeAudioProcessingManager extends AudioProcessingManager {
     await _loopback?.addTrack(track, stream);
   }
 
+  /// Negotiates the microphone test's connection again, as a call does
+  /// whenever anything is published or unpublished, for the native noise
+  /// loop.
+  @visibleForTesting
+  Future<void> debugMicTestRenegotiate() async {
+    await _loopback?.negotiate();
+  }
+
   @override
   Future<void> setMicTestMonitor(bool enabled) async {
     _monitor = enabled;
@@ -648,6 +656,10 @@ class _MicLoopback {
   Future<void> addTrack(
       webrtc.MediaStreamTrack track, webrtc.MediaStream stream) async {
     await send.addTrack(track, stream);
+    await negotiate();
+  }
+
+  Future<void> negotiate() async {
     final offer = await send.createOffer({});
     await send.setLocalDescription(offer);
     await recv.setRemoteDescription(offer);
