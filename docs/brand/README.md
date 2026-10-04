@@ -138,6 +138,7 @@ Motion should be lively and organic, never flashy.
 - The rooster can bob its head to the beat when the DJ booth is playing. Once in a while, not constantly.
 - The DJ booth gets more energy than anything else.
 - Short easing (150 to 250 ms), no bouncy overshoot on functional UI, and respect reduced-motion settings.
+- The loading screen's rooster whistles along to its headphones at a slow lofi tempo, eyes closed, music notes floating up off its beak. Its frames are drawn from the mark by [`src/build_loading.py`](src/build_loading.py) into `rooster/assets/images/loading/rooster_vibing.webp`; change the script, not the file.
 
 ## Voice and copy
 

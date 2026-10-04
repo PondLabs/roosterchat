@@ -22,6 +22,7 @@ import 'package:rooster/single_instance.dart';
 import 'package:rooster/ui/organisms/overlay_windows/overlay_window_manager.dart';
 import 'package:rooster/ui/pages/bubble/bubble_page.dart';
 import 'package:rooster/ui/pages/fatal_error/fatal_error_page.dart';
+import 'package:rooster/ui/pages/loading/loading_page.dart';
 import 'package:rooster/ui/pages/login/login_page.dart';
 import 'package:rooster/ui/pages/main/main_page.dart';
 import 'package:rooster/ui/pages/setup/menus/check_for_updates.dart';
@@ -177,6 +178,10 @@ void appMain() async {
 
     isHeadless = PlatformUtils.isAndroid &&
         AppLifecycleState.detached == WidgetsBinding.instance.lifecycleState;
+
+    // The browser keeps showing the splash in web/index.html until our first
+    // frame, so only native needs something drawn while we start.
+    if (!isHeadless && !kIsWeb) runApp(const LoadingPage());
 
     loading = initNecessary();
 

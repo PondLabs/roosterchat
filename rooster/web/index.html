@@ -91,6 +91,94 @@
       max-width: 200px;
     }
 
+    /* The loading screen: the rooster whistling along to its headphones (frames drawn
+       by docs/brand/src/build_loading.py), the comb dots taking turns and a
+       changing caption. Keep in step with lib/ui/pages/loading/loading_page.dart. */
+    @font-face {
+      font-family: "Sora";
+      src: url("assets/assets/font/sora/Sora-VariableFont_wght.ttf");
+      font-weight: 100 900;
+      font-display: swap;
+    }
+
+    #splash {
+      --accent: #E8382A;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    @media (prefers-color-scheme: light) {
+      #splash {
+        --accent: #C9452B;
+      }
+    }
+
+    #splash > * {
+      animation: splash-in 250ms ease-out backwards;
+    }
+
+    #splash img {
+      display: block;
+      width: 220px;
+      height: 220px;
+    }
+
+    .splash-dots {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .splash-dots span {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      opacity: 0.45;
+      animation: splash-dot 0.8s ease-in-out infinite;
+    }
+
+    .splash-dots span:nth-child(2) {
+      animation-delay: 0.12s;
+    }
+
+    .splash-dots span:nth-child(3) {
+      animation-delay: 0.24s;
+    }
+
+    .splash-caption {
+      margin: 16px 0 0;
+      min-height: 1.4em;
+      font: 500 15px/1.4 "Sora", system-ui, sans-serif;
+      color: #8D8178;
+      white-space: nowrap;
+      transition: opacity 250ms ease-in-out;
+    }
+
+    @keyframes splash-in {
+      from { opacity: 0; transform: scale(0.92); }
+    }
+
+    @keyframes splash-dot {
+      0%, 50%, 100% { opacity: 0.45; transform: translateY(0) scale(1); }
+      25% { opacity: 1; transform: translateY(-4px) scale(1.35); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #splash *, #splash > * {
+        animation: none !important;
+      }
+
+      .splash-caption {
+        transition: none;
+      }
+    }
+
     .contain {
       display: block;
       width: 100%;
@@ -141,15 +229,32 @@
 </head>
 
 <body>
-  <picture id="splash">
-    <source
-      srcset="splash/img/light-1x.png 1x, splash/img/light-2x.png 2x, splash/img/light-3x.png 3x, splash/img/light-4x.png 4x"
-      media="(prefers-color-scheme: light)">
-    <source
-      srcset="splash/img/dark-1x.png 1x, splash/img/dark-2x.png 2x, splash/img/dark-3x.png 3x, splash/img/dark-4x.png 4x"
-      media="(prefers-color-scheme: dark)">
-    <img class="center" aria-hidden="true" src="splash/img/light-1x.png" alt="">
-  </picture>
+  <div id="splash">
+    <picture aria-hidden="true">
+      <source srcset="splash/img/dark-2x.png" media="(prefers-reduced-motion: reduce)">
+      <img src="assets/assets/images/loading/rooster_vibing.webp" alt="">
+    </picture>
+    <div class="splash-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+    <p class="splash-caption" id="splash-caption" role="status">Waking up the flock&hellip;</p>
+  </div>
+  <script>
+    (function () {
+      var lines = ["Waking up the flock…", "Tuning the headphones…",
+        "Warming up the mics…", "Pull up a chair."];
+      var caption = document.getElementById("splash-caption");
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      var i = 0;
+      var timer = setInterval(function () {
+        if (!caption.isConnected) return clearInterval(timer);
+        caption.style.opacity = 0;
+        setTimeout(function () {
+          i = (i + 1) % lines.length;
+          caption.textContent = lines[i];
+          caption.style.opacity = 1;
+        }, 250);
+      }, 2800);
+    })();
+  </script>
 
 
   <script>
