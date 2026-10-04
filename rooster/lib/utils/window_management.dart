@@ -128,6 +128,7 @@ class WindowManagement {
   static Future<void> openMainWindow() async {
     if (!_desktop) return;
     try {
+      await windowManager.ensureInitialized();
       await windowManager.setSize(const Size(1280, 720));
       await windowManager.center();
     } catch (e, s) {
