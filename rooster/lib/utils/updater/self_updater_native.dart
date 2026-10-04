@@ -57,8 +57,8 @@ bool isSelfInstallable(String platform, String executable) {
 /// puts back the symlinks and resource data an .app needs to open.
 Future<void> unpack(File archive, Directory into) async {
   if (Platform.isMacOS) {
-    final ditto = await Process.run(
-        'ditto', ['-x', '-k', archive.path, into.path]);
+    final ditto =
+        await Process.run('ditto', ['-x', '-k', archive.path, into.path]);
     if (ditto.exitCode != 0) throw StateError('ditto: ${ditto.stderr}');
     return;
   }
@@ -163,7 +163,8 @@ UpdateTarget updateTargetFor(
   String? startMenu,
 }) {
   final context = windows ? p.windows : p.posix;
-  final app = RegExp(r'^(.+\.app)/Contents/MacOS/[^/]+$').firstMatch(executable);
+  final app =
+      RegExp(r'^(.+\.app)/Contents/MacOS/[^/]+$').firstMatch(executable);
   if (!windows && app != null) {
     return UpdateTarget(
       install: app[1]!,

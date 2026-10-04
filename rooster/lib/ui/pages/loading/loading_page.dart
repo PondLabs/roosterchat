@@ -124,9 +124,8 @@ class _LoadingPageState extends State<LoadingPage>
                             caption,
                             // Not keyed on the percentage: the caption
                             // should not fade out at every step.
-                            key: ValueKey(updating == null
-                                ? _caption
-                                : progress.stage),
+                            key: ValueKey(
+                                updating == null ? _caption : progress.stage),
                             style: const TextStyle(
                               fontFamily: "Sora",
                               fontSize: 15,
