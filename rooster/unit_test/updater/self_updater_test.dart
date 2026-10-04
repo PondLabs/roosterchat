@@ -78,7 +78,17 @@ void main() {
     test('only the desktop platforms install over themselves', () {
       expect(isSelfInstallable('android', '/data/app/rooster'), isFalse);
       expect(isSelfInstallable('web', '/rooster'), isFalse);
-      expect(isSelfInstallable('macos', '/Applications/Rooster.app'), isFalse);
+    });
+
+    test('a macOS app installs over itself only once in a folder of its own',
+        () {
+      const exe = 'Rooster.app/Contents/MacOS/Rooster';
+      expect(isSelfInstallable('macos', '/Applications/$exe'), isTrue);
+      expect(isSelfInstallable('macos', '/Volumes/Rooster/$exe'), isFalse);
+      expect(
+          isSelfInstallable(
+              'macos', '/private/var/folders/x/T/AppTranslocation/ABC/d/$exe'),
+          isFalse);
     });
   });
 

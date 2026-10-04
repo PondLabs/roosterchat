@@ -28,8 +28,18 @@ const _managedPrefixes = ['/usr/', '/app/', '/snap/', '/nix/store/'];
 
 /// Whether a build living at [executable] is ours to replace.
 ///
+/// On macOS, not an app still on the disk image it came on (read only), nor
+/// one macOS runs from a read only copy because it was opened where it was
+/// downloaded (App Translocation): both have to be dragged to Applications
+/// first.
+///
 /// Pulled out so it can be tested without an install to point at.
 bool isSelfInstallable(String platform, String executable) {
+  if (platform == 'macos') {
+    return executable.contains('.app/Contents/MacOS/') &&
+        !executable.startsWith('/Volumes/') &&
+        !executable.contains('/AppTranslocation/');
+  }
   if (platform != 'windows' && platform != 'linux') return false;
   final path = executable.replaceAll('\\', '/');
   return !_managedPrefixes.any(path.startsWith);
@@ -42,7 +52,16 @@ bool isSelfInstallable(String platform, String executable) {
 /// every desktop already has (Windows has shipped bsdtar, which reads zip
 /// too, since Windows 10 1803). The Dart one is kept for whatever does not
 /// have it, slow but working.
+///
+/// On macOS, ditto: the zip is ditto's (`desktop-build.yml`), and only ditto
+/// puts back the symlinks and resource data an .app needs to open.
 Future<void> unpack(File archive, Directory into) async {
+  if (Platform.isMacOS) {
+    final ditto = await Process.run(
+        'ditto', ['-x', '-k', archive.path, into.path]);
+    if (ditto.exitCode != 0) throw StateError('ditto: ${ditto.stderr}');
+    return;
+  }
   try {
     final tar =
         await _runQuietly('tar', ['-xf', archive.path, '-C', into.path]);
@@ -130,6 +149,7 @@ List<String> legacyExecutableNames({required bool windows}) => windows
 ///   directory ([tempDir]): the update goes to `Programs\Rooster` in
 ///   [localAppData], with a Start menu shortcut, since the next click on the
 ///   zip would start the old build again.
+/// - A macOS app: the `.app` itself.
 /// - Otherwise the build's own directory.
 ///
 /// Reads the file system (the recovery looks for the build that was left
@@ -143,6 +163,13 @@ UpdateTarget updateTargetFor(
   String? startMenu,
 }) {
   final context = windows ? p.windows : p.posix;
+  final app = RegExp(r'^(.+\.app)/Contents/MacOS/[^/]+$').firstMatch(executable);
+  if (!windows && app != null) {
+    return UpdateTarget(
+      install: app[1]!,
+      workRoot: context.join(context.dirname(app[1]!), updateDirName),
+    );
+  }
   final exeNames = {
     context.basename(executable),
     executableName(windows: windows),
@@ -203,11 +230,7 @@ class NativeSelfUpdater implements SelfUpdater {
 
   /// Not a bool: a macOS build that called itself linux would pass
   /// [isSelfInstallable] and then download the Linux tarball.
-  String get _platform => Platform.isWindows
-      ? 'windows'
-      : Platform.isMacOS
-          ? 'macos'
-          : 'linux';
+  String get _platform => Platform.operatingSystem;
 
   late final UpdateTarget _target = updateTargetFor(
     File(Platform.resolvedExecutable).absolute.path,
@@ -339,8 +362,11 @@ class NativeSelfUpdater implements SelfUpdater {
 
   /// The release's own name, not the one this build was started by: a build
   /// started through a legacy `cockhouse` or `commet` copy still updates to, and restarts
-  /// as, `rooster`.
-  String get _executableName => executableName(windows: Platform.isWindows);
+  /// as, `rooster`. On macOS, where the install is the `.app`, the binary in
+  /// it.
+  String get _executableName => Platform.isMacOS
+      ? 'Contents/MacOS/Rooster'
+      : executableName(windows: Platform.isWindows);
 
   /// A fresh directory for [tag] under the work root. Fresh, because the
   /// root may hold what earlier attempts left (the running build, even).
@@ -452,7 +478,8 @@ class NativeSelfUpdater implements SelfUpdater {
             install: install,
             exe: exe,
             work: workRoot,
-            stamp: stamp));
+            stamp: stamp,
+            open: Platform.isMacOS));
     if (!Platform.isWindows) {
       await Process.run('chmod', ['+x', script.path]);
     }
@@ -600,6 +627,8 @@ Remove-Item -LiteralPath \$old -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath \$work -Recurse -Force -ErrorAction SilentlyContinue
 ''';
 
+/// Linux, and macOS with [open]: there [install] is the `.app`, which is
+/// started through Launch Services rather than by running [exe].
 String linuxSwapScript({
   required int waitFor,
   required String staged,
@@ -607,6 +636,7 @@ String linuxSwapScript({
   required String exe,
   required String work,
   required int stamp,
+  bool open = false,
 }) =>
     '''
 #!/bin/sh
@@ -636,7 +666,7 @@ if ! mv "\$staged" "\$install"; then
   [ -e "\$old" ] && mv "\$old" "\$install"
   exit 1
 fi
-(cd "\$install" && exec ${_sh(exe)}) &
+${open ? 'open "\$install"' : '(cd "\$install" && exec ${_sh(exe)}) &'}
 # Last, and from outside it: this script lives in there.
 cd /
 rm -rf "\$old" ${_sh(work)}

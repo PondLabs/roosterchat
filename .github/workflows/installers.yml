@@ -1,0 +1,154 @@
+name: installers
+
+# The installers for a release, each platform on its own runner, made from
+# the release builds desktop-build.yml uploads:
+#
+# - Windows: rooster-<tag>-windows-x64-setup.exe (Inno Setup, per user, no
+#   admin; rooster/windows/installer/rooster.iss).
+# - macOS:   rooster-<tag>-macos-universal.dmg (Rooster.app and a link to
+#   Applications to drag it onto).
+# - Linux:   rooster-<tag>-linux-x64-setup.sh (per user, no root;
+#   rooster/linux/installer/setup.sh).
+#
+# Each installs where the in-app updater can replace it, which is what keeps
+# an installed Rooster updating itself (docs/updating.md). Updates are still
+# the archives; the installers are only for a first install.
+#
+# ci.yml calls this for every release and attaches what it makes. Started by
+# hand, it builds the installers for an existing release from that release's
+# archives and attaches them to it.
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      attach:
+        description: Take the builds from the release and attach the installers to it, rather than this run's artifacts
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release tag, e.g. v0.5.0
+        required: true
+        type: string
+      attach:
+        description: Take the builds from the release and attach the installers to it
+        type: boolean
+        default: true
+
+jobs:
+  installer:
+    name: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            runner: windows-2025
+            build: windows-x64-release
+            ext: zip
+            installer: windows-x64-setup.exe
+          - platform: macos
+            runner: macos-15
+            build: macos-universal-release
+            ext: zip
+            installer: macos-universal.dmg
+          - platform: linux
+            runner: ubuntu-24.04
+            build: linux-x64-release
+            ext: tar.gz
+            installer: linux-x64-setup.sh
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    env:
+      VERSION: ${{ inputs.version }}
+      BUILD: rooster-${{ inputs.version }}-${{ matrix.build }}
+      INSTALLER: rooster-${{ inputs.version }}-${{ matrix.installer }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch the release build from this run
+        if: ${{ !inputs.attach }}
+        uses: actions/download-artifact@v4
+        with:
+          name: rooster-${{ inputs.version }}-${{ matrix.build }}
+          path: in
+
+      - name: Fetch the release build from the release
+        if: inputs.attach
+        run: >-
+          gh release download "$VERSION" --repo "$GITHUB_REPOSITORY"
+          --pattern "$BUILD.${{ matrix.ext }}" --dir in
+
+      - name: Windows installer
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          7z x "in/$env:BUILD.zip" -oin | Out-Null
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          & $iscc /Q "/DVersion=$env:VERSION" "/DSource=$PWD\in\$env:BUILD" `
+            "/DOutput=$PWD\dist" "/DOutputName=$($env:INSTALLER -replace '\.exe$', '')" `
+            rooster/windows/installer/rooster.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: macOS disk image
+        if: matrix.platform == 'macos'
+        run: |
+          ditto -x -k "in/$BUILD.zip" in/app
+          mkdir -p dmg dist
+          # ditto, not cp: an .app is a tree of symlinks around its signature.
+          ditto in/app/Rooster.app dmg/Rooster.app
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname Rooster -srcfolder dmg -ov -format UDZO "dist/$INSTALLER"
+
+      - name: Linux installer
+        if: matrix.platform == 'linux'
+        run: |
+          tar -xzf "in/$BUILD.tar.gz" -C in
+          mkdir -p payload dist
+          mv "in/$BUILD" payload/Rooster
+          # The flatpak's entry: Exec=rooster and the app id as its icon.
+          cp rooster/linux/flatpak/com.pondlabs.rooster.desktop payload/rooster.desktop
+          cp rooster/linux/debian/usr/share/icons/hicolor/256x256/apps/rooster.png payload/rooster.png
+          tar -czf payload.tar.gz -C payload .
+          cat rooster/linux/installer/setup.sh payload.tar.gz > "dist/$INSTALLER"
+          chmod +x "dist/$INSTALLER"
+
+      # Into a scratch home: installed where the updater can replace it, with
+      # a launcher entry pointing at it, and gone again on --uninstall.
+      - name: Try the Linux installer
+        if: matrix.platform == 'linux'
+        run: |
+          export HOME=$(mktemp -d)
+          unset XDG_DATA_HOME DISPLAY WAYLAND_DISPLAY
+          sh "dist/$INSTALLER"
+          test -x "$HOME/.local/opt/Rooster/rooster"
+          grep -q "^Exec=\"$HOME/.local/opt/Rooster/rooster\"" \
+            "$HOME/.local/share/applications/com.pondlabs.rooster.desktop"
+          test -L "$HOME/.local/bin/rooster"
+          sh "dist/$INSTALLER" --uninstall
+          test ! -e "$HOME/.local/opt/Rooster"
+
+      - name: Upload the installer
+        if: ${{ !inputs.attach }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: rooster-${{ inputs.version }}-${{ matrix.platform }}-installer
+          path: dist/${{ env.INSTALLER }}
+          if-no-files-found: error
+
+      - name: Attach to the release
+        if: inputs.attach
+        run: gh release upload "$VERSION" "dist/$INSTALLER" --repo "$GITHUB_REPOSITORY" --clobber

@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:rooster/utils/updater/self_updater.dart';
 
 /// What the window shows while the app starts: the rooster whistling to its
 /// headphones (frames drawn by docs/brand/src/build_loading.py), the comb dots
@@ -11,8 +13,14 @@ import 'package:flutter/widgets.dart';
 /// uses the brand colours directly and English captions. The browser shows
 /// the same thing from `web/index.html` until the app's first frame; keep the
 /// two in step.
+///
+/// On desktop this is also the updater: while [update] is fetching a newer
+/// release the caption says so, with a bar, and the window stays this small
+/// until the app restarts into it.
 class LoadingPage extends StatefulWidget {
-  const LoadingPage({super.key});
+  const LoadingPage({super.key, this.update});
+
+  final ValueListenable<UpdateProgress>? update;
 
   static const captions = [
     "Waking up the flock…",
@@ -20,6 +28,21 @@ class LoadingPage extends StatefulWidget {
     "Warming up the mics…",
     "Pull up a chair.",
   ];
+
+  /// What to say instead of the captions while an update is on its way in,
+  /// or null when there is none.
+  static String? updateCaption(UpdateProgress progress) {
+    var tag = progress.release?.tag ?? "";
+    return switch (progress.stage) {
+      UpdateStage.downloading => progress.fraction == null
+          ? "Fetching $tag…"
+          : "Fetching $tag… ${(progress.fraction! * 100).round()}%",
+      UpdateStage.verifying => "Checking $tag…",
+      UpdateStage.unpacking => "Unpacking $tag…",
+      UpdateStage.ready => "Restarting into $tag…",
+      _ => null,
+    };
+  }
 
   @override
   State<LoadingPage> createState() => _LoadingPageState();
@@ -87,24 +110,78 @@ class _LoadingPageState extends State<LoadingPage>
                 const SizedBox(height: 20),
                 _Dots(animation: _controller, color: accent),
                 const SizedBox(height: 16),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 250),
-                  child: Text(
-                    LoadingPage.captions[_caption],
-                    key: ValueKey(_caption),
-                    style: const TextStyle(
-                      fontFamily: "Sora",
-                      fontSize: 15,
-                      height: 1.4,
-                      fontWeight: FontWeight.w500,
-                      fontVariations: [FontVariation.weight(500)],
-                      color: Color(0xFF8D8178),
-                      decoration: TextDecoration.none,
-                    ),
-                  ),
+                ValueListenableBuilder<UpdateProgress>(
+                  valueListenable: widget.update ?? _noUpdate,
+                  builder: (context, progress, _) {
+                    var updating = LoadingPage.updateCaption(progress);
+                    var caption = updating ?? LoadingPage.captions[_caption];
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 250),
+                          child: Text(
+                            caption,
+                            // Not keyed on the percentage: the caption
+                            // should not fade out at every step.
+                            key: ValueKey(updating == null
+                                ? _caption
+                                : progress.stage),
+                            style: const TextStyle(
+                              fontFamily: "Sora",
+                              fontSize: 15,
+                              height: 1.4,
+                              fontWeight: FontWeight.w500,
+                              fontVariations: [FontVariation.weight(500)],
+                              color: Color(0xFF8D8178),
+                              decoration: TextDecoration.none,
+                            ),
+                          ),
+                        ),
+                        if (progress.fraction != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: _Bar(
+                                fraction: progress.fraction!, color: accent),
+                          ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+final _noUpdate = ValueNotifier(const UpdateProgress(UpdateStage.idle));
+
+/// How much of the update has arrived.
+class _Bar extends StatelessWidget {
+  const _Bar({required this.fraction, required this.color});
+
+  final double fraction;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 200,
+      height: 4,
+      alignment: Alignment.centerLeft,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(2),
+      ),
+      child: FractionallySizedBox(
+        widthFactor: fraction.clamp(0, 1),
+        child: Container(
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(2),
           ),
         ),
       ),

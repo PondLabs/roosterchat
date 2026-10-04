@@ -54,12 +54,16 @@ class UpdateRelease {
   final String tag;
   final List<UpdateAsset> assets;
 
-  /// The archive built for [platform] (`windows` or `linux`), if this release
-  /// has one. Release builds only: a debug bundle is not something to hand
-  /// somebody as an update.
+  /// The archive built for [platform] (`windows`, `linux` or `macos`), if
+  /// this release has one. Release builds only: a debug bundle is not
+  /// something to hand somebody as an update. The installers beside them are
+  /// for a first install; an update is always the archive.
   UpdateAsset? assetFor(String platform) {
-    final suffix = platform == 'windows' ? '.zip' : '.tar.gz';
-    final wanted = '-$platform-x64-release$suffix';
+    final wanted = switch (platform) {
+      'windows' => '-windows-x64-release.zip',
+      'macos' => '-macos-universal-release.zip',
+      _ => '-$platform-x64-release.tar.gz',
+    };
     for (final asset in assets) {
       if (asset.name.endsWith(wanted)) return asset;
     }
