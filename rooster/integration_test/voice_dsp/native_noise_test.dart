@@ -158,7 +158,9 @@ void main() {
   // what changes the room noise is WebRTC's own processing on the
   // microphone, measured on what its sender encodes: A before the custom
   // source, B once it is sent too, C after the microphone's options are
-  // written back.
+  // written back. Writing them back restarts WebRTC's suppressor, which
+  // takes several seconds to settle (CI read -34 dB 2 to 3 s after), so C
+  // starts 5 s after the restore, as in the DJ monitor test below.
   testWidgets("a custom audio source leaves the microphone's processing alone",
       (tester) async {
     expect(_roomNoise, isNotEmpty,
@@ -236,7 +238,7 @@ void main() {
       await until(9.0);
       final restored = restoreMicrophoneProcessing(mic);
 
-      await until(14.0);
+      await until(16.5);
       sampling = false;
       await sampler;
       noise.kill();
@@ -255,7 +257,7 @@ void main() {
         return d > 0 ? 10 * math.log(e / d) / math.ln10 : double.nan;
       }
 
-      final a = level(2.0, 4.5), b = level(6.5, 9.0), c = level(11.0, 14.0);
+      final a = level(2.0, 4.5), b = level(6.5, 9.0), c = level(14.0, 16.5);
       final summary = 'before ${a.toStringAsFixed(1)} dB, with the custom '
           'source ${b.toStringAsFixed(1)} dB, restored ${c.toStringAsFixed(1)} dB';
       await File('$_results/custom_source.txt').writeAsString('$summary\n');
@@ -497,7 +499,9 @@ void main() {
       // ignore: invalid_use_of_visible_for_testing_member
       await dsp.debugMicTestRenegotiate();
 
-      await until(14.0);
+      // The negotiation writes the options again, restarting the suppressor:
+      // C starts 5 s after it, as in the custom source test.
+      await until(16.5);
       sampling = false;
       await sampler;
       noise.kill();
@@ -516,7 +520,7 @@ void main() {
         return d > 0 ? 10 * math.log(e / d) / math.ln10 : double.nan;
       }
 
-      final a = level(2.0, 4.5), b = level(6.5, 9.0), c = level(11.0, 14.0);
+      final a = level(2.0, 4.5), b = level(6.5, 9.0), c = level(14.0, 16.5);
       final summary = 'before ${a.toStringAsFixed(1)} dB, with the music '
           '${b.toStringAsFixed(1)} dB, after another negotiation '
           '${c.toStringAsFixed(1)} dB';
