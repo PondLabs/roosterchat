@@ -22,6 +22,7 @@ import 'package:rooster/single_instance.dart';
 import 'package:rooster/ui/organisms/overlay_windows/overlay_window_manager.dart';
 import 'package:rooster/ui/pages/bubble/bubble_page.dart';
 import 'package:rooster/ui/pages/fatal_error/fatal_error_page.dart';
+import 'package:rooster/ui/pages/loading/loading_page.dart';
 import 'package:rooster/ui/pages/login/login_page.dart';
 import 'package:rooster/ui/pages/main/main_page.dart';
 import 'package:rooster/ui/pages/setup/menus/check_for_updates.dart';
@@ -41,6 +42,7 @@ import 'package:rooster/utils/shortcuts_manager.dart';
 import 'package:rooster/utils/system_wide_shortcuts/system_wide_shortcuts.dart';
 import 'package:rooster/utils/text_scale_changer.dart';
 import 'package:rooster/utils/update_checker.dart';
+import 'package:rooster/utils/updater/self_updater.dart';
 import 'package:rooster/utils/voice_controls/voice_control_surfaces.dart';
 import 'package:rooster/utils/window_management.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -178,6 +180,14 @@ void appMain() async {
     isHeadless = PlatformUtils.isAndroid &&
         AppLifecycleState.detached == WidgetsBinding.instance.lifecycleState;
 
+    // The browser keeps showing the splash in web/index.html until our first
+    // frame, so only native needs something drawn while we start.
+    if (!isHeadless && !kIsWeb) {
+      await WindowManagement.showLauncher();
+      runApp(LoadingPage(update: SelfUpdater.instance.progress));
+      if (await _updateBeforeStart()) return;
+    }
+
     loading = initNecessary();
 
     if (isHeadless) {
@@ -194,6 +204,23 @@ void appMain() async {
   } catch (error, stacktrace) {
     runApp(FatalErrorPage(error, stacktrace));
   }
+}
+
+/// A desktop build that installs its own updates fetches a newer release
+/// while the loading window is up, and restarts into it before the app opens
+/// (see docs/updating.md). True when this process is closing for that.
+Future<bool> _updateBeforeStart() async {
+  final updater = SelfUpdater.instance;
+  if (!updater.canInstall) return false;
+  await preferences.init();
+  // Only a no stops it: whoever installed Rooster wants the current one.
+  if (preferences.checkForUpdates.value == false) return false;
+
+  await updater.checkAndPrepare();
+  if (updater.progress.value.stage != UpdateStage.ready) return false;
+  if (!await updater.installAndRestart()) return false;
+  await WindowManagement.close();
+  return true;
 }
 
 WidgetsBinding ensureBindingInit() {
@@ -338,6 +365,7 @@ Future<void> startGui() async {
     preferences.storeRoomsListCache(roomsListCache);
   }
 
+  await WindowManagement.openMainWindow();
   runApp(App(
     clientManager: clientManager!,
     initialTheme: initialTheme,

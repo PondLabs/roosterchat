@@ -233,6 +233,7 @@ flutter:
     - assets/sound/
     - assets/soundboard/
     - assets/images/app_icon/
+    - assets/images/loading/
     - assets/images/tray/
     - assets/images/effects/particles/
     - assets/images/placeholders/

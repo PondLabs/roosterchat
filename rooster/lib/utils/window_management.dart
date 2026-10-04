@@ -105,6 +105,36 @@ class WindowManagement {
     }
   }
 
+  static bool get _desktop =>
+      PlatformUtils.isLinux || PlatformUtils.isWindows || PlatformUtils.isMacOS;
+
+  /// The small window the app starts in: the loading rooster, and any update
+  /// installed before the app opens. The runners already open it this size
+  /// (Linux, macOS) or keep it hidden until the first frame (Windows); this
+  /// centres it. Never throws: a window in the wrong place is no reason not
+  /// to start.
+  static Future<void> showLauncher() async {
+    if (!_desktop) return;
+    try {
+      await windowManager.ensureInitialized();
+      await windowManager.setSize(const Size(380, 440));
+      await windowManager.center();
+    } catch (e, s) {
+      Log.onError(e, s, content: "Could not size the loading window");
+    }
+  }
+
+  /// Grows the loading window into the app's.
+  static Future<void> openMainWindow() async {
+    if (!_desktop) return;
+    try {
+      await windowManager.setSize(const Size(1280, 720));
+      await windowManager.center();
+    } catch (e, s) {
+      Log.onError(e, s, content: "Could not size the app window");
+    }
+  }
+
   static Future<void> init() async {
     if (!(PlatformUtils.isLinux || PlatformUtils.isWindows)) return;
 

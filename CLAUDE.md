@@ -13,7 +13,7 @@ Hard fork of Commet (a Flutter Matrix client) by PondLabs, shipped as **Rooster*
 - Who is in a voice channel: call memberships read by the homeserver's clock (`HomeserverClock`), written again hourly by their owners for the whole call, plus everyone in LiveKit while we are in it. See `docs/voice-channel-members.md`.
 - Away status: the amber dot, and where idle time comes from on each platform. See `docs/away-status.md`.
 - Call controls outside the window: taskbar thumbnail buttons (Windows), Dock menu (macOS), launcher actions and quicklist (Linux), floating panel (browser). See `docs/voice-controls.md`.
-- Updating: check GitHub Releases, and on desktop install one over the running build. See `docs/updating.md`.
+- Installing and updating: per-user installers for Windows, macOS and Linux (`installers.yml`); on desktop the app starts as a small loading window that installs a newer GitHub release before opening. See `docs/updating.md`.
 - Instagram reels and posts in the chat: native builds play the MP4 from the embed page and show photo posts as their photos, web frames Instagram's embed. See `docs/instagram-reels.md`.
 - X posts in the chat: an iframely-style X card (author, text, media, quote, counts) from fxtwitter's CORS-open JSON API on every platform, with the plain preview as the fallback. See `docs/x-posts.md`.
 - `proxy/` our Cloudflare Worker (`rooster-proxy`), the app's default `proxyUrl`: KLIPY GIF search with our key (secret `KLIPY_API_KEY`), KLIPY media, and Signal sticker pack import. Deploy with `npx wrangler deploy` from `proxy/`.

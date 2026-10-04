@@ -29,7 +29,10 @@ static void my_application_activate(GApplication* application) {
   path iconPath = execDir / "data/flutter_assets" / iconFilename;
   gtk_window_set_icon_from_file(GTK_WINDOW(window), iconPath.c_str(), NULL);
 
-  gtk_window_set_default_size(window, 1280, 720);
+  // ROOSTER: opens as the small loading window; Dart grows it into the app
+  // (WindowManagement.openMainWindow).
+  gtk_window_set_default_size(window, 380, 440);
+  gtk_window_set_position(window, GTK_WIN_POS_CENTER);
   gtk_widget_show(GTK_WIDGET(window));
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();

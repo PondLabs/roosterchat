@@ -21,6 +21,38 @@ as no version at all, so a development build never reports an update.
 `v0.0.0-artifact`, which the release workflow passes for builds that are not
 releases, turns the whole thing off (`UpdateChecker.shouldCheckForUpdates`).
 
+## Installers
+
+`installers.yml` makes one installer per platform from those builds, each on
+its own runner, and the release carries them beside the archives:
+
+| Platform | File | Installs to |
+|----------|------|-------------|
+| Windows | `rooster-<tag>-windows-x64-setup.exe` (Inno Setup, `rooster/windows/installer/rooster.iss`) | `%LOCALAPPDATA%\Programs\Rooster`, Start menu shortcut, uninstall entry. No admin. |
+| macOS | `rooster-<tag>-macos-universal.dmg` | Wherever `Rooster.app` is dragged; Applications is offered. |
+| Linux | `rooster-<tag>-linux-x64-setup.sh` (`rooster/linux/installer/setup.sh` with the bundle appended) | `~/.local/opt/Rooster`, a launcher entry, an icon, `~/.local/bin/rooster`. No root. `--uninstall` removes it. |
+
+Every one installs somewhere the user owns, so the updater below can replace
+it. That is also why there is no .deb: `/usr` belongs to the package manager.
+The Windows uninstaller lives in `Programs\.rooster-uninstall`, outside the
+install, because an update replaces the install directory whole; uninstalling
+deletes that directory rather than a list of files. Started by hand with a
+tag, `installers.yml` makes the installers for an existing release and
+attaches them.
+
+## At launch
+
+On desktop the app opens as a small window with the loading rooster
+(`LoadingPage`, `WindowManagement.showLauncher`). Before anything else loads,
+a build that can install over itself (below) looks for a newer release, and
+when there is one the window stays small and shows it downloading, then the
+app restarts into it. Otherwise, or when the check fails, it carries on and
+the window grows into the app (`WindowManagement.openMainWindow`). Only
+turning "check for updates" off stops this; not having answered yet does
+not. The Linux and macOS runners open the window at the small size so it
+does not flash at full size first; the Windows one stays hidden until the
+first frame.
+
 ## Checking
 
 | Where | What |
@@ -42,7 +74,7 @@ turned it off should still be able to ask.
 
 ## Installing over the running build
 
-Only where the build was unpacked from the archive above. A flatpak (`/app`),
+Only where the build was installed or unpacked from the archives above. A flatpak (`/app`),
 a .deb or a distro package (`/usr`), a snap and a nix store path all belong to
 something else and are refused (`isSelfInstallable`); so are Android and the
 web. There, the button opens the release page, which is all the app ever did.
@@ -84,6 +116,8 @@ On Windows:
 `updateTargetFor` works it out from the running executable:
 
 - **Its own directory**, normally.
+- **The `.app`** on macOS, staged beside it and started again with `open`.
+  The archive is unpacked with `ditto`, which keeps what an .app needs.
 - **Run from inside `.rooster-update/`** (a swap that never happened, the
   staged build started by hand, maybe more than once, each staging the next
   inside itself): the build left beside the outermost `.rooster-update/` is
@@ -121,6 +155,13 @@ an install.
 - An install under `Program Files` needs elevation to swap. This does not ask
   for it: the write probe fails, so the download lands in the temp directory
   and the move across filesystems is a copy.
-- macOS has no self-update path, in line with there being no macOS release.
+- macOS builds are only ad-hoc signed, not notarized: the first open of a
+  downloaded one needs System Settings → Privacy & Security → Open Anyway.
+  An app still on the disk image or translocated (opened where it was
+  downloaded) is read only and is not updated in place until it has been
+  moved to Applications (`isSelfInstallable`). Updates fetched by the app
+  are not quarantined, so they open without asking.
+- The version Windows lists under installed apps is the one the installer
+  wrote; updates do not change it.
 - Every push to `main` publishes a release, so "update available" is a
   frequent thing to see.

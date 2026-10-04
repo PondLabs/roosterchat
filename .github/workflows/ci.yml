@@ -1,8 +1,9 @@
 name: ci
 
 # Every push to main: tests and the Windows, Linux and macOS release builds
-# start at once (the builds only need the version), and publishing the GitHub
-# release waits for all of them and the cross-platform stability workload.
+# start at once (the builds only need the version), the installers are made
+# from the builds (installers.yml), and publishing the GitHub release waits
+# for all of them and the cross-platform stability workload.
 # The debug bundles only run when the workflow is
 # started by hand with them ticked; attaching the debug bundles waits for the
 # release and the debug builds.
@@ -178,8 +179,17 @@ jobs:
       version: ${{ needs.version.outputs.version }}
       platforms: '["windows", "linux", "macos"]'
 
+  # An installer per platform, each on its own runner, from the builds above.
+  installers:
+    needs: [version, build-release]
+    permissions:
+      contents: write
+    uses: ./.github/workflows/installers.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+
   publish:
-    needs: [test, voice-dsp, stability, version, build-release]
+    needs: [test, voice-dsp, stability, version, build-release, installers]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -188,6 +198,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: rooster-*-release
+          path: dist
+          merge-multiple: true
+
+      - name: Download installers
+        uses: actions/download-artifact@v4
+        with:
+          pattern: rooster-*-installer
           path: dist
           merge-multiple: true
 

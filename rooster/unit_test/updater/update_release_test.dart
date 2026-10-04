@@ -48,6 +48,25 @@ void main() {
         endsWith('-windows-x64-release.zip'));
   });
 
+  test('macOS takes the universal zip, never an installer', () {
+    final release = parse(_release(assets: [
+      for (final name in [
+        'rooster-v0.13.2-macos-universal.dmg',
+        'rooster-v0.13.2-windows-x64-setup.exe',
+        'rooster-v0.13.2-macos-universal-release.zip',
+      ])
+        {
+          'name': name,
+          'browser_download_url': 'https://example.invalid/$name',
+          'size': 1,
+          'digest': 'sha256:$_sha',
+        }
+    ]));
+    expect(release.assetFor('macos')!.name,
+        'rooster-v0.13.2-macos-universal-release.zip');
+    expect(release.assetFor('windows'), isNull);
+  });
+
   test('a platform with no archive in the release has none', () {
     final release = parse(_release(assets: [
       {
