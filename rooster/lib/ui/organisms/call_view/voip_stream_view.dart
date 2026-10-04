@@ -15,6 +15,7 @@ import 'package:rooster/ui/organisms/dj/dj_booth_panel.dart';
 import 'package:rooster/ui/organisms/dj/dj_member_ui.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_emoji_overlay.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_overlay_registry.dart';
+import 'package:rooster/ui/organisms/soundboard/soundboard_user_volume.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -274,7 +275,22 @@ class _VoipStreamViewState extends State<VoipStreamView> {
                 child: StreamVolumeSlider(volumeStream),
               );
             },
-          )
+          ),
+        // Their soundboard sounds, apart from their voice and the DJ's music.
+        if (stream.type == VoipStreamType.audio)
+          tiamat.ContextMenuItem(
+            text: "Sound effects volume",
+            customBuilder: (context, onClicked, {closeMenu}) => Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 0, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const tiamat.Text.labelLow("Sound effects"),
+                  SoundboardUserVolumeSlider(user.identifier),
+                ],
+              ),
+            ),
+          ),
       ]
     ];
   }

@@ -13,6 +13,7 @@
 //! downloaded file is decoded for the trim editor, and the part kept is
 //! encoded to Ogg Opus for upload.
 
+pub mod board;
 pub mod clip;
 pub mod ffi;
 pub mod growing;

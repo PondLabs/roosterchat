@@ -198,7 +198,7 @@ fn soft_clip(x: f32) -> f32 {
     }
 }
 
-fn to_i16(x: f32) -> i16 {
+pub(crate) fn to_i16(x: f32) -> i16 {
     // NaN casts to 0; soft_clip keeps everything else within full scale.
     (soft_clip(x) * 32767.0).round() as i16
 }

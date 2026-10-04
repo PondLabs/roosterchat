@@ -299,6 +299,7 @@ class MatrixLivekitVoipSession
     for (final participant in livekitRoom.remoteParticipants.values) {
       for (final publication in participant.trackPublications.values) {
         if (publication.kind != lk.TrackType.AUDIO) continue;
+        if (_isSoundboard(publication)) continue;
         publications[publication.sid] = publication;
         final track = publication.track;
         int? packets;
@@ -331,10 +332,7 @@ class MatrixLivekitVoipSession
 
     for (final sid in _remoteAudio.check(vitals).keys) {
       final publication = publications[sid]!;
-      bool stillWanted() =>
-          state != VoipState.ended &&
-          _watchList.shouldSubscribe(
-              publication.participant.identity, publication.source);
+      bool stillWanted() => state != VoipState.ended && _wants(publication);
       unawaited(publication
           .resubscribe(stillWanted: stillWanted)
           .catchError((Object e, StackTrace s) {
@@ -384,6 +382,7 @@ class MatrixLivekitVoipSession
         if (entry.value.muted && entry.value.kind == lk.TrackType.VIDEO) {
           continue;
         }
+        if (_isSoundboard(entry.value)) continue;
 
         streams.add(
             MatrixLivekitVoipStream(entry.value, room.client.self!.identifier));
@@ -407,7 +406,9 @@ class MatrixLivekitVoipSession
         // for when it unmutes.
         _syncSubscription(stream.value);
 
-        if (_hiddenWhileMuted(stream.value)) continue;
+        if (_hiddenWhileMuted(stream.value) || _isSoundboard(stream.value)) {
+          continue;
+        }
 
         String userId = entry.key;
         userId = userId.split(":").getRange(0, 2).join(":");
@@ -457,6 +458,7 @@ class MatrixLivekitVoipSession
 
   void onTrackUnmutedEvent(lk.TrackUnmutedEvent event) {
     _updateShareCues();
+    if (_isSoundboard(event.publication)) return;
     final participant =
         event.participant.identity.split(":").getRange(0, 2).join(":");
 
@@ -498,7 +500,8 @@ class MatrixLivekitVoipSession
     }
     _syncSubscription(event.publication);
 
-    if (!_hiddenWhileMuted(event.publication)) {
+    if (!_hiddenWhileMuted(event.publication) &&
+        !_isSoundboard(event.publication)) {
       _addRemoteStream(event.participant, event.publication);
     }
     _stateChanged.add(());
@@ -545,8 +548,7 @@ class MatrixLivekitVoipSession
   void onTrackSubscribed(lk.TrackSubscribedEvent event) {
     // Stop watching was clicked while the subscription was still on its way:
     // unsubscribe() ignores publications without a track.
-    if (!_watchList.shouldSubscribe(
-        event.participant.identity, event.publication.source)) {
+    if (!_wants(event.publication)) {
       // Silent until it is gone: the audio element plays at full volume
       // until the unsubscribe lands, a round trip away.
       for (final stream in _streamsWithSid(event.publication.sid)) {
@@ -614,16 +616,12 @@ class MatrixLivekitVoipSession
     final publication = event.participant?.getTrackPublicationBySid(sid);
     if (publication == null || publication.subscribed) return;
     // Not for a screen share the user stopped watching in the meantime.
-    if (!_watchList.shouldSubscribe(
-        publication.participant.identity, publication.source)) {
+    if (!_wants(publication)) {
       return;
     }
     try {
       await publication.resubscribe(
-          stillWanted: () =>
-              state != VoipState.ended &&
-              _watchList.shouldSubscribe(
-                  publication.participant.identity, publication.source));
+          stillWanted: () => state != VoipState.ended && _wants(publication));
     } catch (e, s) {
       Log.onError(e, s, content: "Could not subscribe to track $sid again");
     }
@@ -779,7 +777,9 @@ class MatrixLivekitVoipSession
       for (final publication in participant.trackPublications.values) {
         _syncSubscription(publication);
         if (_streamsWithSid(publication.sid).isNotEmpty) continue;
-        if (_hiddenWhileMuted(publication)) continue;
+        if (_hiddenWhileMuted(publication) || _isSoundboard(publication)) {
+          continue;
+        }
         _addRemoteStream(participant, publication);
       }
     }
@@ -797,9 +797,20 @@ class MatrixLivekitVoipSession
 
   /// Subscribes to or unsubscribes from a remote publication, as
   /// [_watchList] wants.
+  /// A soundboard track, ours or anyone's: Rooster plays soundboard presses
+  /// from the press itself, so it never subscribes to one and never makes a
+  /// stream (or a tile) of it (MatrixLivekitVoipStream.soundboardTrackName).
+  static bool _isSoundboard(lk.TrackPublication publication) =>
+      publication.name == MatrixLivekitVoipStream.soundboardTrackName;
+
+  /// Whether to be subscribed to [publication].
+  bool _wants(lk.RemoteTrackPublication publication) =>
+      !_isSoundboard(publication) &&
+      _watchList.shouldSubscribe(
+          publication.participant.identity, publication.source);
+
   Future<void> _syncSubscription(lk.RemoteTrackPublication publication) async {
-    final subscribe = _watchList.shouldSubscribe(
-        publication.participant.identity, publication.source);
+    final subscribe = _wants(publication);
     if (subscribe == publication.subscribed) return;
     try {
       if (subscribe) {
@@ -1035,7 +1046,7 @@ class MatrixLivekitVoipSession
       _ownCaptureTrack(track);
     }
 
-    // Screen-share audio or the DJ booth's music: on desktop they switch
+    // Screen-share audio, the DJ booth's music or the soundboard: on desktop they switch
     // the microphone's echo cancellation, gain control and WebRTC noise
     // suppression off unless it is put back (shared_audio_processing.dart).
     // Also for a republished share refused below: removing a source does not
@@ -1058,6 +1069,8 @@ class MatrixLivekitVoipSession
       await _refuseRepublishedShare(event.publication);
       return;
     }
+    // Ours, playing from each press already: no stream of its own.
+    if (_isSoundboard(event.publication)) return;
 
     final participant =
         event.participant.identity.split(":").getRange(0, 2).join(":");
