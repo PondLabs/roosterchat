@@ -281,4 +281,56 @@ void main() {
       InMemorySoundboardTransport.resetAll();
     });
   });
+
+  group('the call track and per-person volume', () {
+    test('only our own presses go to the call, and a restart stops the old',
+        () async {
+      final broadcast = FakeBroadcast();
+      final engine = SoundboardEngine(player: FakePlayer(), nowMs: () => 1000)
+        ..broadcast = broadcast;
+      engine.localTrigger(soundId: 'bonk', senderId: '@me:x', eventId: 'e1');
+      await engine.onRemoteEvent(const SoundboardEvent(
+          soundId: 'bonk', senderId: '@b:x', eventId: 'r1', timestampMs: 1000));
+      expect(broadcast.played, ['e1:bonk']);
+
+      engine.localTrigger(soundId: 'bonk', senderId: '@me:x', eventId: 'e2');
+      expect(broadcast.stopped, ['e1']);
+      expect(broadcast.played, ['e1:bonk', 'e2:bonk']);
+    });
+
+    test("one person's sounds are turned down on their own", () async {
+      final player = FakePlayer();
+      final quiet = {'@b:x': 0.25};
+      final engine = SoundboardEngine(
+          player: player,
+          nowMs: () => 1000,
+          senderVolume: (id) => quiet[id] ?? 1.0)
+        ..setVolume(0.8);
+      engine.localTrigger(soundId: 'bonk', senderId: '@a:x', eventId: 'a1');
+      await engine.onRemoteEvent(const SoundboardEvent(
+          soundId: 'bonk', senderId: '@b:x', eventId: 'b1', timestampMs: 1000));
+      expect(player.volumes['a1'], closeTo(0.8, 1e-9));
+      expect(player.volumes['b1'], closeTo(0.2, 1e-9));
+
+      quiet['@b:x'] = 0;
+      engine.applyVolumes();
+      expect(player.volumes['b1'], 0);
+      expect(player.volumes['a1'], closeTo(0.8, 1e-9));
+    });
+  });
+}
+
+class FakeBroadcast implements SoundboardBroadcast {
+  final List<String> played = [];
+  final List<String> stopped = [];
+
+  @override
+  void play(String instanceId, String soundId) =>
+      played.add('$instanceId:$soundId');
+
+  @override
+  void stop(String instanceId) => stopped.add(instanceId);
+
+  @override
+  Future<void> shutdown() async {}
 }

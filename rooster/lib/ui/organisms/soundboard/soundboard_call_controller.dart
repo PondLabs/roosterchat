@@ -25,6 +25,7 @@ import 'package:rooster/client/components/voip_room/voip_room_component.dart';
 import 'package:rooster/client/matrix/components/soundboard/livekit_soundboard_transport.dart';
 import 'package:rooster/client/matrix/components/soundboard/matrix_soundboard_emoji_image.dart';
 import 'package:rooster/client/matrix/components/soundboard/matrix_todevice_soundboard_transport.dart';
+import 'package:rooster/client/matrix/components/soundboard/soundboard_broadcast.dart';
 import 'package:rooster/client/matrix/components/soundboard/soundboard_media_download.dart';
 import 'package:rooster/client/matrix/components/soundboard/soundboard_player_factory.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
@@ -66,6 +67,15 @@ class SoundboardCallController extends ChangeNotifier {
   List<SoundboardSource> sources = const [];
 
   SoundboardPlayer? _player;
+  SoundboardBroadcast? _broadcast;
+
+  /// Someone's sounds were turned up or down: every call applies it to the
+  /// sounds already playing.
+  static void applySenderVolumes() {
+    for (final controller in _bySession.values) {
+      controller.soundboard?.engine.applyVolumes();
+    }
+  }
 
   /// Shared by every call so all open popovers see the same favorites.
   static final SoundboardFavorites favorites =
@@ -99,7 +109,18 @@ class SoundboardCallController extends ChangeNotifier {
       // Audio completion, not the overlay timer, ends an activation.
       onInstanceFinished: (id) => engine.onAudioCompleted(id),
     );
-    engine = SoundboardEngine(player: player);
+    engine = SoundboardEngine(
+        player: player, senderVolume: preferences.getSoundboardUserVolume);
+    // Our presses also go to the call as audio, for clients that don't play
+    // them from the press. Only over LiveKit: a 1:1 Matrix call has nowhere
+    // to put a second track.
+    final lkRoom = _livekitRoomOf(session);
+    if (lkRoom != null) {
+      engine.broadcast = _broadcast = createSoundboardBroadcast(lkRoom,
+          resolveSound: (id) => catalog.getById(id),
+          resolvePlayableUri: _resolvePlayableUri,
+          loadBytes: _loadBytes);
+    }
     // Bridge engine activations -> avatar overlays (sender-specific), for as
     // long as each one's audio plays.
     engine.addListener(_syncOverlays);
@@ -336,6 +357,10 @@ class SoundboardCallController extends ChangeNotifier {
     _disposed = true;
     _engineSub?.cancel();
     _sessionSub?.cancel();
+    final broadcast = _broadcast;
+    _broadcast = null;
+    broadcast?.shutdown().catchError((Object e, StackTrace s) =>
+        Log.onError(e, s, content: 'Soundboard: could not stop the track'));
     soundboard?.dispose();
     final catalog = this.catalog;
     if (catalog is _CompositeCatalog) catalog.dispose();

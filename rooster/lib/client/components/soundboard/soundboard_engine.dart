@@ -28,6 +28,18 @@ abstract class SoundboardPlayer {
   bool isPlaying(String instanceId);
 }
 
+/// Puts our own presses into the call as audio, on a track of their own, for
+/// whoever does not play soundboard presses themselves (Element Call, any
+/// client but Rooster). Rooster clients play the sound from the press and
+/// never subscribe to that track.
+abstract class SoundboardBroadcast {
+  void play(String instanceId, String soundId);
+  void stop(String instanceId);
+
+  /// Unpublishes the track, at the end of the call.
+  Future<void> shutdown();
+}
+
 /// One visible/audible activation. It lasts until its audio ends, and the
 /// sender's avatar shows the sound's emoji for as long.
 class ActiveSound {
@@ -65,6 +77,13 @@ class SoundboardEngine {
   double _userVolume = 0.8;
   double get userVolume => _userVolume;
 
+  /// How loud each sender's sounds are for this listener (0..1), apart from
+  /// [userVolume]: one person's sounds can be turned down on their own.
+  final double Function(String senderId) senderVolume;
+
+  /// Where our own presses also go, when the call can take them.
+  SoundboardBroadcast? broadcast;
+
   final List<void Function()> _listeners = [];
 
   SoundboardEngine({
@@ -72,9 +91,11 @@ class SoundboardEngine {
     SoundboardDedup? dedup,
     NowMs? nowMs,
     SoundboardClocks? clocks,
+    double Function(String senderId)? senderVolume,
   })  : dedup = dedup ?? SoundboardDedup(),
         nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch),
-        clocks = clocks ?? SoundboardClocks();
+        clocks = clocks ?? SoundboardClocks(),
+        senderVolume = senderVolume ?? ((_) => 1.0);
 
   void addListener(void Function() l) => _listeners.add(l);
   void removeListener(void Function() l) => _listeners.remove(l);
@@ -86,10 +107,18 @@ class SoundboardEngine {
 
   void setVolume(double volume) {
     _userVolume = volume.clamp(0.0, 1.5);
-    for (final id in active.keys) {
-      player.setVolumeFor(id, _userVolume);
+    applyVolumes();
+  }
+
+  /// Applies the volumes again, after [senderVolume] changed.
+  void applyVolumes() {
+    for (final sound in active.values) {
+      player.setVolumeFor(sound.eventId, _volumeOf(sound.senderId));
     }
   }
+
+  double _volumeOf(String senderId) =>
+      _userVolume * senderVolume(senderId).clamp(0.0, 1.0);
 
   /// Local click path: play immediately (no network wait), return the event
   /// to send. Caller transmits it; the echo will be dropped by [onRemoteEvent].
@@ -110,6 +139,7 @@ class SoundboardEngine {
       eventId: eventId,
       now: now,
     );
+    broadcast?.play(eventId, soundId);
     return SoundboardEvent(
       soundId: soundId,
       senderId: senderId,
@@ -167,13 +197,18 @@ class SoundboardEngine {
       startedAtMs: now,
     );
     _notify();
-    player.setVolumeFor(eventId, _userVolume);
+    player.setVolumeFor(eventId, _volumeOf(senderId));
     player.start(eventId, soundId);
   }
 
   /// Called by audio completion, or with [stopAudio] to cut a sound.
   void markFinished(String eventId, {bool stopAudio = false}) {
-    if (stopAudio) player.stop(eventId);
+    if (stopAudio) {
+      player.stop(eventId);
+      // A press of ours cut short (restarted, or pushed out by newer ones)
+      // stops in the call too. One that ended plays out there by itself.
+      if (_ownEventIds.contains(eventId)) broadcast?.stop(eventId);
+    }
     if (active.remove(eventId) != null) _notify();
   }
 

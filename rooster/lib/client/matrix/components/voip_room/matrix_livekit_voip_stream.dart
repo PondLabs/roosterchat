@@ -313,6 +313,12 @@ class MatrixLivekitVoipStream implements VoipStream {
   static bool isMusicTrackName(String? name) =>
       name == musicTrackName || name == _renamedMusicTrackName;
 
+  /// Name our soundboard presses are published under, for clients that do
+  /// not play them from the press (soundboard_broadcast.dart). Rooster plays
+  /// them from the press, at each listener's soundboard volume, and never
+  /// subscribes to this; another client hears it as the presser's audio.
+  static const soundboardTrackName = 'commet-soundboard';
+
   /// Maps a LiveKit publication's kind and source onto the app's stream
   /// types. System audio captured with a screen share is its own type so the
   /// call grid can fold it into the screen share tile instead of drawing a

@@ -126,6 +126,9 @@ class _Publication implements lk.LocalTrackPublication<lk.LocalTrack> {
   final String sid;
 
   @override
+  String get name => '';
+
+  @override
   final lk.LocalParticipant participant;
 
   @override
