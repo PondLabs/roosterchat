@@ -16,7 +16,6 @@ import 'package:rooster/main.dart';
 import 'package:rooster/utils/image_or_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:matrix/matrix.dart';
-import 'package:matrix/matrix_api_lite/model/sync_update.dart';
 
 class MatrixActivitiesComponent
     implements
@@ -114,6 +113,7 @@ class MatrixActivitiesComponent
     List<RoomActivitySession> activities = List.empty(growable: true);
     final now = _clock.now();
     final expiries = <DateTime?>[];
+    final voiceMemberships = <String, Event>{};
 
     for (var entry in state.entries) {
       if (entry.value.content.isEmpty) continue;
@@ -183,6 +183,23 @@ class MatrixActivitiesComponent
       activity.participants.add(entry.value.senderId);
       expiries.add(MatrixCallMembership.expiresAt(event.content, sentAt));
 
+      if (application == "m.call" && event is Event) {
+        // One user can have an old device's membership left behind. Its
+        // heartbeat must not overwrite the voice state of the later join,
+        // whichever order Matrix returns the state keys in.
+        final previous = voiceMemberships[event.senderId];
+        if (previous == null || _compareJoins(event, previous) > 0) {
+          voiceMemberships[event.senderId] = event;
+          activity.voiceState.remove(event.senderId);
+          if (!MatrixCallMembership.publishedStateIsStale(
+                  event.content, sentAt, now) &&
+              event.content.containsKey(MatrixCallMembership.voiceStateKey)) {
+            activity.voiceState[event.senderId] =
+                MatrixCallMembership.voiceStateOf(event.content);
+          }
+        }
+      }
+
       // Only full events: stripped state has no timestamp, so it never
       // expires and a stale LIVE badge would stay forever. Nor from a
       // client without a delayed leave that has stopped writing: it is
@@ -200,13 +217,6 @@ class MatrixActivitiesComponent
           activity.liveMedia
               .putIfAbsent(event.senderId, () => {})
               .addAll(media);
-        }
-
-        // Only for a membership that says anything about it: a client that
-        // does not report its voice state must not read as unmuted.
-        if (event.content.containsKey(MatrixCallMembership.voiceStateKey)) {
-          activity.voiceState[event.senderId] =
-              MatrixCallMembership.voiceStateOf(event.content);
         }
 
         // Several devices of one person: playing on any of them counts.
@@ -257,6 +267,19 @@ class MatrixActivitiesComponent
     final joined = MatrixCallMembership.joinedAt(event.content, sentAt);
     if (joined == null || now.difference(joined) < joiningTime) return false;
     return !roster.connectedUserIds.contains(event.senderId);
+  }
+
+  /// The later join is the device that stays in the call, as in
+  /// [MatrixCallMembership.supersededBy]. A heartbeat changes the send time,
+  /// not the join time. Equal joins use the same device-id tie break; two
+  /// state keys for the same device then use the latest write.
+  static int _compareJoins(Event a, Event b) {
+    final joined = MatrixCallMembership.joinedAt(a.content, a.originServerTs)!
+        .compareTo(MatrixCallMembership.joinedAt(b.content, b.originServerTs)!);
+    if (joined != 0) return joined;
+    final device = (a.content.tryGet<String>('device_id') ?? '')
+        .compareTo(b.content.tryGet<String>('device_id') ?? '');
+    return device != 0 ? device : a.originServerTs.compareTo(b.originServerTs);
   }
 
   /// For people in our own call, LiveKit is right away what their
