@@ -22,8 +22,9 @@ from build_brand import APP, BRAND, COMB, INK, YOLK, svg, render
 
 OUT = os.path.join(APP, "assets", "images", "loading", "rooster_vibing.webp")
 
-FRAMES = 40       # 12.5 fps on a 3.2 s loop: four beats at 75 bpm
-PER_BEAT = 10
+FPS = 50          # smooth, and 20 ms a frame, which WebP stores exactly
+FRAMES = 160      # a 3.2 s loop: four beats at 75 bpm
+PER_BEAT = FRAMES // 4
 SIZE = 400        # shown at about 220 px, so sharp at 2x
 VIEW = (-40, -140, 1220, 1220)  # room above the beak for the notes
 
@@ -37,7 +38,7 @@ EYE = (638, 511)
 
 # A note leaves the beak every other beat and floats up for this many frames.
 NOTE_EVERY = 2 * PER_BEAT
-NOTE_LIFE = 36
+NOTE_LIFE = FRAMES * 9 // 10
 NOTE_COLOURS = (YOLK, COMB)
 
 # Drawn around the note head, stems up.
@@ -153,12 +154,12 @@ def main():
     mark = parts()
     with tempfile.TemporaryDirectory() as tmp:
         for f in range(FRAMES):
-            render(frame(f, mark), os.path.join(tmp, "frame%02d.png" % f), SIZE)
+            render(frame(f, mark), os.path.join(tmp, "frame%03d.png" % f), SIZE)
         os.makedirs(os.path.dirname(OUT), exist_ok=True)
         # ffmpeg, not ImageMagick: ImageMagick blends each frame over the
         # last, so the notes leave trails.
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error",
-                        "-framerate", "12.5", "-i", os.path.join(tmp, "frame%02d.png"),
+                        "-framerate", str(FPS), "-i", os.path.join(tmp, "frame%03d.png"),
                         "-c:v", "libwebp_anim", "-pix_fmt", "yuva420p",
                         "-quality", "82", "-loop", "0", OUT], check=True)
     print(OUT)
