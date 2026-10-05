@@ -42,6 +42,11 @@ abstract class MatrixTimelineEvent implements TimelineEvent {
         matrix.EventStatus.synced => TimelineEventStatus.synced,
       };
 
+  /// The event's text, or its type when it has none: the SDK's own fallback
+  /// reads "Unknown message format of type ...", which the timeline's folded
+  /// summary and failed sends would show.
   @override
-  String get plainTextBody => event.plaintextBody;
+  String get plainTextBody => event.redacted || event.text.isNotEmpty
+      ? event.plaintextBody
+      : event.type;
 }

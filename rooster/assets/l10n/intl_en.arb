@@ -2043,6 +2043,29 @@
       "emote": {}
     }
   },
+  "messageUserReactedWith": "{user} reacted {emoji}",
+  "@messageUserReactedWith": {
+    "description": "A reaction: the user who reacted, then the emoji, or its :shortcode: for a custom one",
+    "type": "text",
+    "placeholders": {
+      "user": {},
+      "emoji": {}
+    }
+  },
+  "messageUserReacted": "{user} reacted",
+  "@messageUserReacted": {
+    "description": "A reaction whose emoji is unknown, with the user who reacted",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "labelCustomEmoji": "with a custom emoji",
+  "@labelCustomEmoji": {
+    "description": "Ends 'Alice reacted ...' for a custom emoji reaction whose name is unknown",
+    "type": "text",
+    "placeholders": {}
+  },
   "messagePlaceholderUserEditedCalendar": "{user} edited the calendar",
   "@messagePlaceholderUserEditedCalendar": {
     "description": "Message body for when a user edits the room calendar",
