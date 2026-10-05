@@ -52,9 +52,9 @@ class _CallWidgetState extends State<CallWidget> {
 
   Future<void> setDeafened(bool isDeafened) {
     if (isDeafened) {
-      clientManager?.callManager.playMuteSound();
+      clientManager?.callManager.playDeafenSound();
     } else {
-      clientManager?.callManager.playUnmuteSound();
+      clientManager?.callManager.playUndeafenSound();
     }
 
     return widget.session.setDeafened(isDeafened);
