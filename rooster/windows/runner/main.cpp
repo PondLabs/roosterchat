@@ -55,6 +55,18 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
+  // ROOSTER: one Rooster at a time. The named pipe single_instance.dart
+  // checks has gaps (between two connections, and while the running one is
+  // too busy to answer), and a launch that fell into one ran as a second
+  // full copy: two syncs of the same account, two toasts per message. Windows
+  // makes this check atomically. The handle is never closed, so the lock
+  // lasts as long as the process. A launch that is not the first only hands
+  // over to the running one and quits (main.dart).
+  ::CreateMutexW(nullptr, FALSE, L"Local\\com.pondlabs.rooster.instance");
+  if (::GetLastError() == ERROR_ALREADY_EXISTS) {
+    command_line_arguments.push_back("--rooster-secondary");
+  }
+
   flutter::DartProject project(L"data");
 
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
