@@ -7,10 +7,37 @@ import 'package:rooster/debug/log.dart';
 import 'package:dart_ipc/dart_ipc.dart';
 import 'dart:convert';
 
-import 'package:window_manager/window_manager.dart';
+import 'package:rooster/utils/window_management.dart';
 
 class SingleInstance {
-  static Future<bool> tryConnectToMainInstance(List<String> args) async {
+  /// Set by the Windows runner when another Rooster already holds its
+  /// instance lock (windows/runner/main.cpp). Such a launch never runs as a
+  /// second copy, whether or not it reaches the running one.
+  static const secondaryFlag = '--rooster-secondary';
+
+  /// How long a launch the runner knows is not the first keeps trying to
+  /// reach the running one: it can be busy, or between two connections.
+  static const secondaryRetryFor = Duration(seconds: 15);
+
+  static Future<bool> tryConnectToMainInstance(List<String> args,
+      {Duration retryFor = Duration.zero}) {
+    return retry(() => _tryConnect(args), retryFor: retryFor);
+  }
+
+  /// Runs [attempt] until it succeeds or [retryFor] has passed, [every]
+  /// apart. Once at least.
+  static Future<bool> retry(Future<bool> Function() attempt,
+      {required Duration retryFor,
+      Duration every = const Duration(milliseconds: 500)}) async {
+    final deadline = DateTime.now().add(retryFor);
+    while (true) {
+      if (await attempt()) return true;
+      if (!DateTime.now().isBefore(deadline)) return false;
+      await Future<void>.delayed(every);
+    }
+  }
+
+  static Future<bool> _tryConnect(List<String> args) async {
     var path = await AppConfig.getSocketPath();
 
     print("Connecting to socket... $path");
@@ -84,7 +111,8 @@ class SingleInstance {
 
     if (message["type"] == "new_instance_started") {
       Log.i("Bringing to front");
-      windowManager.show();
+      // ROOSTER: show() alone left a minimized window minimized.
+      WindowManagement.bringToFront();
     }
   }
 }

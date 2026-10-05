@@ -166,7 +166,15 @@ void appMain() async {
       // socket included.
       await migrateLegacyDesktopData();
 
-      if (await SingleInstance.tryConnectToMainInstance(commandLineArgs)) {
+      // Not the first, by the Windows runner's lock: hand over and quit even
+      // when the running one does not answer. A second copy would sync the
+      // same account and show every notification twice.
+      final secondary = commandLineArgs.contains(SingleInstance.secondaryFlag);
+      if (await SingleInstance.tryConnectToMainInstance(commandLineArgs,
+              retryFor: secondary
+                  ? SingleInstance.secondaryRetryFor
+                  : Duration.zero) ||
+          secondary) {
         // exit() wedges this process; quit through the window manager instead.
         await WindowManagement.close();
         return;
