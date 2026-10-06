@@ -32,6 +32,12 @@ abstract class CallRoster {
   /// The user ids of everyone in the call right now, ourselves included.
   /// Empty once it has ended.
   Set<String> get connectedUserIds;
+
+  /// Whether [connectedUserIds] is everyone in the call: we have been
+  /// connected long enough to have been told about everyone in it. Someone
+  /// whose call membership says they are in the call, but who is missing
+  /// from it then, is an app that lost the call without leaving it.
+  bool get rosterComplete;
 }
 
 abstract class VoipSession {

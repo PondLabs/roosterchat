@@ -186,8 +186,11 @@ class MatrixLivekitVoipSession
     // reaches the call.
     _settingsSub =
         preferences.onSettingChanged.listen((_) => _noiseSuppression.update());
+    _lastConnectedAt = _now();
     _dspWatchdog = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (state != VoipState.ended) _watchVoice();
+      if (state == VoipState.ended) return;
+      _watchConnection();
+      _watchVoice();
     });
 
     // Being away from the machine is part of what our membership says, so
@@ -368,6 +371,53 @@ class MatrixLivekitVoipSession
       _watchingVoice = false;
     }
   }
+
+  /// Longer than LiveKit's own reconnect attempts take (about 45 s of
+  /// waits, plus the attempts themselves).
+  static const lostConnectionTimeout = Duration(minutes: 3);
+
+  /// How long LiveKit has to be connected before its participants are
+  /// everyone in the call ([rosterComplete]).
+  static const rosterSettleTime = Duration(seconds: 30);
+
+  late DateTime _lastConnectedAt;
+  DateTime? _connectedSince;
+  bool _rosterComplete = false;
+
+  @override
+  bool get rosterComplete => _rosterComplete;
+
+  /// Once a second: hangs up a call LiveKit has not been connected to for
+  /// [lostConnectionTimeout]. LiveKit could give up on reconnecting without
+  /// saying so (a disconnect it emitted while a full reconnect was pending
+  /// was dropped), and the session lived on with no call under it: the
+  /// heartbeat kept our membership up, and everyone saw us in a call we
+  /// were not in, for hours.
+  void _watchConnection() {
+    if (_leaving) return;
+    final now = _now();
+    if (_connected()) {
+      _lastConnectedAt = now;
+      final since = _connectedSince ??= now;
+      if (!_rosterComplete && now.difference(since) >= rosterSettleTime) {
+        _rosterComplete = true;
+        _stateChanged.add(());
+      }
+      return;
+    }
+
+    _connectedSince = null;
+    _rosterComplete = false;
+    if (now.difference(_lastConnectedAt) < lostConnectionTimeout) return;
+    Log.w("Livekit has not been connected for "
+        "${lostConnectionTimeout.inMinutes} minutes "
+        "(${livekitRoom.connectionState}), ending the call");
+    unawaited(hangUpCall());
+  }
+
+  /// One pass of the connection watch, for tests.
+  @visibleForTesting
+  void debugWatchConnection() => _watchConnection();
 
   lk.EventsListener<lk.RoomEvent>? _roomListener;
   Timer? _volumeTimer;

@@ -711,5 +711,74 @@ void main() {
 
       expect(call.connectedUserIds, isEmpty);
     });
+
+    test('is everyone in the call once connected for 30 s, and says so',
+        () async {
+      joined(serverTime);
+      final call = await join();
+      final changes = <void>[];
+      final sub = call.onStateChanged.listen(changes.add);
+      addTearDown(sub.cancel);
+
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      localTime = localTime.add(const Duration(seconds: 29));
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      expect(call.rosterComplete, isFalse);
+
+      localTime = localTime.add(const Duration(seconds: 1));
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      await pumpEventQueue();
+      expect(call.rosterComplete, isTrue);
+      expect(changes, hasLength(1), reason: 'the sidebar looks again');
+
+      livekit.connectionState = lk.ConnectionState.reconnecting;
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      expect(call.rosterComplete, isFalse);
+    });
+  });
+
+  group('lost connection', () {
+    test('a call LiveKit gave up on without saying so is hung up', () async {
+      joined(serverTime);
+      final call = await join();
+
+      livekit.connectionState = lk.ConnectionState.reconnecting;
+      localTime = localTime.add(const Duration(minutes: 2, seconds: 59));
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      await pumpEventQueue();
+      expect(call.state, isNot(VoipState.ended),
+          reason: 'LiveKit may still be reconnecting');
+
+      localTime = localTime.add(const Duration(seconds: 1));
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      await pumpEventQueue(times: 100);
+      expect(call.state, VoipState.ended);
+    });
+
+    test('reconnecting in time keeps the call', () async {
+      joined(serverTime);
+      final call = await join();
+
+      livekit.connectionState = lk.ConnectionState.reconnecting;
+      localTime = localTime.add(const Duration(minutes: 2));
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      livekit.connectionState = lk.ConnectionState.connected;
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      livekit.connectionState = lk.ConnectionState.reconnecting;
+      localTime = localTime.add(const Duration(minutes: 2));
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      await pumpEventQueue();
+
+      expect(call.state, isNot(VoipState.ended));
+    });
   });
 }

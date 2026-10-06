@@ -106,6 +106,9 @@ class FakeVoipSession implements VoipSession, CallRoster {
   @override
   Set<String> get connectedUserIds => connected;
 
+  @override
+  bool rosterComplete = false;
+
   final StreamController<void> _stateChanged =
       StreamController.broadcast(sync: true);
 
@@ -738,6 +741,40 @@ void main() {
       clientManager.callManager.currentSessions.add(session);
 
       expect(callParticipants(sidebar), {selfUserId, otherUserId});
+    });
+
+    test(
+        "in our call, someone whose membership is live but who is not in it "
+        "is not listed", () {
+      // Their app lost the call without noticing, and keeps its membership
+      // up (2026-10-05: listed for hours, alone in LiveKit).
+      setMemberships([
+        callMembership(selfUserId, selfDeviceId),
+        callMemberEvent(room, otherUserId, "DEVICEB",
+            sentAt: serverNow().subtract(const Duration(minutes: 40)),
+            extra: {
+              "created_ts": serverNow()
+                  .subtract(const Duration(hours: 12))
+                  .millisecondsSinceEpoch,
+              "expires": const Duration(hours: 16).inMilliseconds,
+            }),
+        // Joined a moment ago, still connecting.
+        callMemberEvent(room, thirdUserId, "DEVICEC",
+            sentAt: serverNow().subtract(const Duration(seconds: 5))),
+      ]);
+      final session = FakeVoipSession(client, roomId, "session-1")
+        ..connected.add(selfUserId);
+      clientManager.callManager.currentSessions.add(session);
+
+      expect(callParticipants(sidebar), {selfUserId, otherUserId, thirdUserId},
+          reason: "until we have been connected a while, LiveKit may not "
+              "have told us about everyone");
+
+      session.rosterComplete = true;
+      expect(callParticipants(sidebar), {selfUserId, thirdUserId});
+
+      session.connect(otherUserId);
+      expect(callParticipants(sidebar), {selfUserId, otherUserId, thirdUserId});
     });
 
     test("in our call, the list is looked at again when someone connects",

@@ -147,6 +147,12 @@ class MatrixActivitiesComponent
         continue;
       }
 
+      if (application == "m.call" && _missingFromOurCall(event, sentAt, now)) {
+        Log.i("Not listing ${event.senderId} in ${room.identifier}: their "
+            "call membership is live, but they are not in the call with us");
+        continue;
+      }
+
       if (activity == null) {
         var widgetComp = client.getComponent<WidgetComponent>();
         var widgets = widgetComp?.getWidgets(room);
@@ -232,6 +238,25 @@ class MatrixActivitiesComponent
     _lapseTimer.schedule(MatrixCallMembership.nextExpiry(expiries, now));
 
     return activities;
+  }
+
+  /// How long after joining someone may still be on their way into the
+  /// call: their membership is written before they connect.
+  static const joiningTime = Duration(seconds: 30);
+
+  /// In our call, LiveKit says who is in it. Someone who joined a while ago
+  /// and is not there holds a membership their app keeps up while it is no
+  /// longer in the call (it lost the call without noticing), and is not
+  /// listed. Outside the call there is no telling.
+  bool _missingFromOurCall(
+      StrippedStateEvent event, DateTime? sentAt, DateTime now) {
+    final session = _callManager?.getCallInRoom(client, room.identifier);
+    if (session is! CallRoster) return false;
+    final roster = session as CallRoster;
+    if (!roster.rosterComplete) return false;
+    final joined = MatrixCallMembership.joinedAt(event.content, sentAt);
+    if (joined == null || now.difference(joined) < joiningTime) return false;
+    return !roster.connectedUserIds.contains(event.senderId);
   }
 
   /// For people in our own call, LiveKit is right away what their
