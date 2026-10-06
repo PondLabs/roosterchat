@@ -12,6 +12,12 @@
     "type": "text",
     "placeholders": {}
   },
+  "fileDragDropNoChat": "Select a text channel first to send files",
+  "@fileDragDropNoChat": {
+    "description": "Shown when a file is dragged or dropped where there is no message box to send it from",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelHomeRecentActivity": "Recent Activity",
   "@labelHomeRecentActivity": {
     "description": "Short label for header of recent room activity",

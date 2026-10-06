@@ -1496,20 +1496,46 @@ class MessageInputState extends State<MessageInput> {
   Widget displayAttachments() {
     return SizedBox(
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: widget.attachments!.map((e) {
-          return Padding(
-            padding: const EdgeInsets.all(2.0),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(5),
-              child: GestureDetector(
-                onTap: () {},
-                child: SizedBox(
-                  height: 40,
-                  width: 40,
-                  child: AttachmentIcon(
-                    e,
-                    removeAttachment: () => widget.removeAttachment?.call(e),
-                  ),
+          final name = e.name ?? e.path?.split(RegExp(r"[/\\]")).last ?? "";
+          // Its name under it, cut short to fit; the whole of it on hover.
+          return Tooltip(
+            message: name,
+            child: Padding(
+              padding: const EdgeInsets.all(2.0),
+              child: SizedBox(
+                width: 64,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(5),
+                      child: GestureDetector(
+                        onTap: () {},
+                        child: SizedBox(
+                          height: 40,
+                          width: 40,
+                          child: AttachmentIcon(
+                            e,
+                            removeAttachment: () =>
+                                widget.removeAttachment?.call(e),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (name.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),

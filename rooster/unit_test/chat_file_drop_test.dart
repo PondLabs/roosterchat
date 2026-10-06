@@ -77,6 +77,41 @@ void main() {
     expect(received, isEmpty);
   });
 
+  testWidgets(
+      'with no text channel open, a drop says to select one, for a moment',
+      (tester) async {
+    final received = <DropDoneDetails>[];
+    await tester.pumpWidget(MaterialApp(
+      theme: ThemeData.dark().copyWith(extensions: const [ThemeSettings()]),
+      home: Scaffold(
+        body: DragDropFileTarget(
+          canReceive: () => false,
+          onDropComplete: received.add,
+        ),
+      ),
+    ));
+
+    await drop(tester, files, const Offset(200, 200));
+    // What desktop_drop sends once the drag has gone.
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+        'desktop_drop',
+        const StandardMethodCodec()
+            .encodeMethodCall(const MethodCall('exited', null)),
+        (_) {});
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(received, isEmpty);
+    expect(find.text('Select a text channel first to send files'),
+        findsOneWidget);
+    final message = find.ancestor(
+        of: find.text('Select a text channel first to send files'),
+        matching: find.byType(AnimatedOpacity));
+    expect(tester.widget<AnimatedOpacity>(message).opacity, 1);
+
+    await tester.pump(const Duration(seconds: 2));
+    expect(tester.widget<AnimatedOpacity>(message).opacity, 0);
+  });
+
   test('every kind of file becomes an attachment, with its type', () async {
     final attachments = await attachmentsFromDroppedFiles(files.map(XFile.new));
 
