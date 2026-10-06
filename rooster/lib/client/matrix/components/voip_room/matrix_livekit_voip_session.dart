@@ -380,9 +380,42 @@ class MatrixLivekitVoipSession
   /// everyone in the call ([rosterComplete]).
   static const rosterSettleTime = Duration(seconds: 30);
 
+  /// How long LiveKit may be gone before we stop being listed in the call.
+  /// A resume after a network blip takes a second or two.
+  static const stepOutAfter = Duration(seconds: 5);
+
   late DateTime _lastConnectedAt;
   DateTime? _connectedSince;
   bool _rosterComplete = false;
+
+  /// Whether we took our membership down while LiveKit is gone, and whether
+  /// that was tried in this time without LiveKit.
+  bool _steppedOut = false;
+  bool _stepOutTried = false;
+
+  /// Takes our membership down while LiveKit is gone, so everyone outside
+  /// the call stops listing us within seconds, not when we hang up. The
+  /// heartbeat neither restarts the delayed leave nor restores the
+  /// membership until LiveKit is back; then it arms a new one and writes the
+  /// membership again. Where sending it fails (the network is what went),
+  /// the delayed leave fires on its own, with nothing restarting it.
+  Future<void> _stepOut() async {
+    final delayId = _delayedLeaveId ?? heartbeatDelayId;
+    // Without a delayed leave nothing could put it back safely.
+    if (delayId == null || _leaving) return;
+    Log.w("Livekit has not been connected for ${stepOutAfter.inSeconds} s, "
+        "leaving the call's member list until it is back");
+    try {
+      await CallMembershipWrites.clearing(
+          _ownMembershipKey, _delayedLeaveAction(delayId, "send"));
+    } catch (e) {
+      Log.w("Could not send our delayed leave, it fires on its own: $e");
+      return;
+    }
+    if (_delayedLeaveId == delayId) _delayedLeaveId = null;
+    if (heartbeatDelayId == delayId) heartbeatDelayId = null;
+    _steppedOut = true;
+  }
 
   @override
   bool get rosterComplete => _rosterComplete;
@@ -398,6 +431,13 @@ class MatrixLivekitVoipSession
     final now = _now();
     if (_connected()) {
       _lastConnectedAt = now;
+      _stepOutTried = false;
+      if (_steppedOut) {
+        // Back in the call: our membership goes back up now, not at the
+        // next heartbeat.
+        _steppedOut = false;
+        unawaited(_beat());
+      }
       final since = _connectedSince ??= now;
       if (!_rosterComplete && now.difference(since) >= rosterSettleTime) {
         _rosterComplete = true;
@@ -408,7 +448,12 @@ class MatrixLivekitVoipSession
 
     _connectedSince = null;
     _rosterComplete = false;
-    if (now.difference(_lastConnectedAt) < lostConnectionTimeout) return;
+    final lostFor = now.difference(_lastConnectedAt);
+    if (lostFor >= stepOutAfter && !_stepOutTried) {
+      _stepOutTried = true;
+      unawaited(_stepOut());
+    }
+    if (lostFor < lostConnectionTimeout) return;
     Log.w("Livekit has not been connected for "
         "${lostConnectionTimeout.inMinutes} minutes "
         "(${livekitRoom.connectionState}), ending the call");
@@ -1722,8 +1767,8 @@ class MatrixLivekitVoipSession
   /// clears our membership, and how often we send one. Several heartbeats
   /// fit in one window, so one slow or lost request no longer drops us from
   /// everyone's call list while we are still in the call.
-  static const _delayedLeaveTimeout = Duration(seconds: 30);
-  static const _heartbeatInterval = Duration(seconds: 10);
+  static const _delayedLeaveTimeout = Duration(seconds: 15);
+  static const _heartbeatInterval = Duration(seconds: 5);
 
   /// How long a heartbeat waits for the homeserver to restart the delayed
   /// leave. One that was lost (sent down a connection that died with the
@@ -1733,7 +1778,7 @@ class MatrixLivekitVoipSession
   /// while we were still in it. Given up on before the next heartbeat is
   /// due, that heartbeat tries again in time.
   @visibleForTesting
-  static Duration restartTimeout = const Duration(seconds: 8);
+  static Duration restartTimeout = const Duration(seconds: 4);
 
   /// The delayed leave the heartbeat restarts. Unlike [heartbeatDelayId],
   /// kept while restarts fail, so the next heartbeat retries it.
@@ -1921,6 +1966,9 @@ class MatrixLivekitVoipSession
     // First: once we have joined from another device, restoring our cleared
     // membership below would put this device back in the call.
     if (leaveIfSuperseded()) return;
+    // Out of LiveKit we are not in the call: the delayed leave is left to
+    // fire, and nothing is put back until LiveKit is (see _stepOut).
+    if (!_connected()) return;
     await _keepDelayedLeave();
     if (_leaving) return;
     try {
@@ -1997,7 +2045,17 @@ class MatrixLivekitVoipSession
   /// or arms it where there is none yet.
   Future<void> _keepDelayedLeave() async {
     final delayId = _delayedLeaveId;
-    if (delayId == null) return _armDelayedLeaveWhenDue();
+    if (delayId == null) {
+      await _armDelayedLeaveWhenDue();
+      if (heartbeatDelayId == null) return;
+      // Our membership was taken down while LiveKit was gone.
+      try {
+        await _restoreMembershipIfCleared();
+      } catch (e, s) {
+        Log.onError(e, s, content: "Could not restore our call membership");
+      }
+      return;
+    }
 
     try {
       try {

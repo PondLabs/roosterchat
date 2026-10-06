@@ -183,6 +183,9 @@ class _SdkClient implements matrix.Client {
   int restartsLost = 0;
   int restarts = 0;
 
+  /// How many delayed leaves were sent rather than left to fire.
+  int delayedLeavesSent = 0;
+
   /// Our membership as written, write by write.
   final List<Map<String, Object?>> membershipWrites = [];
 
@@ -223,6 +226,7 @@ class _SdkClient implements matrix.Client {
       }
       return {'delay_id': 'delay-$armAttempts'};
     }
+    if (data is String && data.contains('"send"')) delayedLeavesSent++;
     // Restarting, sending or cancelling a delayed leave.
     if (data is String && data.contains('restart')) {
       restarts++;
@@ -657,6 +661,56 @@ void main() {
           .timeout(const Duration(seconds: 2));
       expect(homeserver.restarts, 2);
       expect(session!.heartbeatDelayId, isNotNull);
+    });
+
+    test(
+        'LiveKit gone for 5 s takes our membership down, and it goes back up '
+        'as soon as LiveKit is back', () async {
+      joined(serverTime.subtract(const Duration(minutes: 1)));
+      final call = await join();
+      expect(call.heartbeatDelayId, isNotNull);
+
+      livekit.connectionState = lk.ConnectionState.reconnecting;
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      localTime = localTime.add(const Duration(seconds: 4));
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      await pumpEventQueue();
+      expect(homeserver.delayedLeavesSent, 0, reason: 'a blip');
+
+      localTime = localTime.add(const Duration(seconds: 1));
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      await pumpEventQueue();
+      expect(homeserver.delayedLeavesSent, 1);
+
+      // The homeserver cleared it; nothing keeps it up or puts it back
+      // while we are out of the call.
+      room.matrixRoom.states[MatrixVoipRoomComponent.callMemberStateEvent] = {
+        _ownKey: matrix.Event(
+          type: MatrixVoipRoomComponent.callMemberStateEvent,
+          content: const {},
+          senderId: _me,
+          stateKey: _ownKey,
+          eventId: r'$left',
+          originServerTs: serverTime,
+          room: room.matrixRoom,
+        ),
+      };
+      final restarts = homeserver.restarts;
+      final writes = homeserver.membershipWrites.length;
+      await stay(const Duration(seconds: 20));
+      expect(homeserver.restarts, restarts);
+      expect(homeserver.membershipWrites, hasLength(writes));
+
+      livekit.connectionState = lk.ConnectionState.connected;
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      await pumpEventQueue();
+      expect(homeserver.armAttempts, 2, reason: 'a new delayed leave');
+      expect(homeserver.membershipWrites, hasLength(writes + 1));
+      expect(homeserver.membershipWrites.last['application'], 'm.call');
     });
 
     test('a homeserver that could not be asked is asked again', () async {

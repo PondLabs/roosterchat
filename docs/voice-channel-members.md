@@ -24,8 +24,9 @@ under the channel and on the channel's own page ("It's quiet in here").
 
 A membership stays open because its owner keeps writing it: each write
 moves the window's end to four hours past then. The delayed leave (MSC4140,
-30 s, restarted every 10 s) is what takes it down when a client dies; the
-window only covers homeservers without delayed events.
+15 s, restarted every 5 s) is what takes it down when a client dies, and
+a client that loses LiveKit sends it after 5 s (fix 14); the window only
+covers homeservers without delayed events.
 
 Besides who is there, a membership carries what the list shows next to
 them, in keys other clients ignore: `chat.commet.streams` (LIVE),
@@ -73,7 +74,7 @@ window ends; the list shows a person once either way.
 | 11 | Streams, voice state and the DJ were only written with the delayed leave armed. On a homeserver without delayed events nobody outside the call saw who was live, on camera, muted or deafened in it: the badges only showed once inside, from LiveKit. | Written either way, marked `chat.commet.unguarded` without a delayed leave, and dropped by readers 90 minutes after the last write (`_publishMembershipState`, `MatrixCallMembership.publishedStateIsStale`). |
 | 12 | A denied or unavailable microphone produces no publication or mute event. Without delayed events, nothing published its initial muted state, so people outside the call saw it as unmuted. | Publish the session's initial state after registering its listeners and DJ booth, even if no track event follows. |
 | 13 | A full reconnect clears LiveKit's publication map while screen capture continues. Stopping then emits no unpublish event, leaving LIVE advertised after the capture stops. | Publish the state after `stopScreenshare` verifies that the capture and its publications have stopped. |
-| 11 | Report (2026-10-05): someone listed in the channel, on its page and online for hours while nobody was in the call; in it, alone in LiveKit. Their app had lost LiveKit without noticing, and its heartbeat kept the membership up. LiveKit (vendored) emitted its disconnect from an attempt it could not recover from while a full reconnect was pending, and the room took it for part of that reconnect and never said it was disconnected. | The engine cleans up before it says so, as it does after its last attempt (`// ROOSTER` in `engine.dart`). Whatever else keeps LiveKit from saying it, a call LiveKit has not been connected to for three minutes is hung up (`MatrixLivekitVoipSession.lostConnectionTimeout`). In our call, once connected for 30 s (`CallRoster.rosterComplete`), someone whose membership is live but who joined more than 30 s ago and is not in LiveKit is not listed in the sidebar: a member on an older build stays out of our list while we are in the call. |
+| 14 | Report (2026-10-05): someone listed in the channel, on its page and online for hours while nobody was in the call; in it, alone in LiveKit. Their app had lost LiveKit without noticing, and its heartbeat kept the membership up. LiveKit (vendored) emitted its disconnect from an attempt it could not recover from while a full reconnect was pending, and the room took it for part of that reconnect and never said it was disconnected. Even noticed, a client kept its membership up for as long as LiveKit tried to reconnect. | The engine cleans up before it says so, as it does after its last attempt (`// ROOSTER` in `engine.dart`). A client that has not been connected to LiveKit for 5 s sends its delayed leave (`MatrixLivekitVoipSession.stepOutAfter`): everyone outside the call stops listing it within seconds. Its heartbeat neither restarts the delayed leave nor restores the membership while LiveKit is gone; once LiveKit is back it arms a new one and writes the membership again. A call LiveKit has not been connected to for three minutes is hung up (`lostConnectionTimeout`). The delayed leave is 15 s, restarted every 5 s, each restart given up on after 4 s, so a client that dies is gone from the list in 15 s. In our call, once connected for 30 s (`CallRoster.rosterComplete`), someone whose membership is live but who joined more than 30 s ago and is not in LiveKit is not listed in the sidebar: a member on an older build is gone from our list as soon as they leave LiveKit. |
 
 ## What the tests guard
 
@@ -84,7 +85,7 @@ window ends; the list shows a person once either way.
 | Written again an hour after each write, from the same join, with or without delayed events, away included; a clock three hours behind, a lagging homeserver time and a clock set back all still write a full window; a delayed leave, or the question, that failed is tried again 30 s later and not before, and less often while it keeps failing; a restart that is lost does not hold up the next heartbeat; LiveKit's participants are who is connected | `unit_test/call_membership_keepalive_test.dart` |
 | When a membership is due, and the lapse timer counting by the homeserver's clock | `unit_test/matrix_call_membership_test.dart` |
 | The sidebar row itself shows everyone under the channel by name, someone in for five hours included; on a clock three hours ahead, the ones in for hours turn up, by name, as soon as a sync says what time it is | `unit_test/voice_channel_sidebar_row_test.dart` |
-| A call LiveKit has not been connected to for three minutes is hung up, and one that reconnects in time is not; LiveKit's participants count as everyone once connected for 30 s; in our call, a live membership whose owner is not in LiveKit is not listed, unless they just joined or we just connected | `unit_test/call_membership_keepalive_test.dart` ("lost connection", "who is connected"), `unit_test/voice_channel_member_list_test.dart` |
+| LiveKit gone for 5 s takes our membership down, nothing keeps it up or puts it back until LiveKit returns, and then it goes back up at once; a call LiveKit has not been connected to for three minutes is hung up, and one that reconnects in time is not; LiveKit's participants count as everyone once connected for 30 s; in our call, a live membership whose owner is not in LiveKit is not listed, unless they just joined or we just connected | `unit_test/call_membership_keepalive_test.dart` ("lost connection", "who is connected", "LiveKit gone for 5 s"), `unit_test/voice_channel_member_list_test.dart` |
 | A rewrite waits its turn, is covered by a write going out anyway, is retried when it fails, and does nothing once stopped | `unit_test/call_membership_publisher_test.dart` |
 | A mute is published without delayed events, marked unguarded, and guarded with them; unguarded badges show while they are kept written, go 90 minutes after the last write with no event, and their owner stays listed | `unit_test/call_membership_keepalive_test.dart`, `unit_test/voice_channel_member_list_test.dart` ("Badges of a member without a delayed leave"), `unit_test/matrix_call_membership_test.dart` |
 | Badges show in the sidebar row and on the channel's page before joining; a full channel lists seven and opens the rest from "and N more", whoever is live among the seven | `unit_test/voice_channel_sidebar_row_test.dart`, `unit_test/voice_channel_page_badges_test.dart` |
@@ -123,8 +124,11 @@ Reverting any one of these fixes turns at least one of these tests red
 - **A homeserver that sends no `unsigned.age`.** Synapse sends it. Without
   it the clock stays this machine's; the hourly writes still leave three
   hours of room for a wrong clock.
-- **Outside the call** there is no asking LiveKit who is in it: a member
-  whose app lost the call is listed until it hangs up (three minutes on a
-  build with fix 11), or until their delayed leave or window ends.
+- **Outside the call** Rooster does not ask LiveKit who is in it (that
+  means joining the LiveKit room, and showing up in the call for a
+  moment). It goes by memberships, which a member on a build with fix 14
+  takes down within seconds of leaving LiveKit, and their homeserver within
+  15 s of their app dying. A member on an older build who lost LiveKit
+  stays listed for people outside the call until they update or restart.
 - **The call's own grid** shows a tile per stream. Someone in the call with
   no stream at all is in the sidebar list but has no tile.
