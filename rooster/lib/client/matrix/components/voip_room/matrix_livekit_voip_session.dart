@@ -1766,7 +1766,9 @@ class MatrixLivekitVoipSession
   /// How long the server waits for a heartbeat before its delayed leave
   /// clears our membership, and how often we send one. Several heartbeats
   /// fit in one window, so one slow or lost request no longer drops us from
-  /// everyone's call list while we are still in the call.
+  /// everyone's call list while we are still in the call. Before changing
+  /// these, see "Tuning how fast someone drops off the list" in
+  /// docs/voice-channel-members.md.
   static const _delayedLeaveTimeout = Duration(seconds: 15);
   static const _heartbeatInterval = Duration(seconds: 5);
 

@@ -114,6 +114,35 @@ Reverting any one of these fixes turns at least one of these tests red
   window closed. For someone still in the call, look at their log for the
   lines above.
 
+## Tuning how fast someone drops off the list
+
+Set on 2026-10-06 (fix 14) to make people who leave disappear within
+seconds. If matrix.org turns out too slow for them, these are the knobs, all
+in `MatrixLivekitVoipSession`
+(`rooster/lib/client/matrix/components/voip_room/matrix_livekit_voip_session.dart`):
+
+| Constant | Now | Was | What it sets |
+|----------|-----|-----|--------------|
+| `_delayedLeaveTimeout` | 15 s | 30 s | How long after a client dies (crash, network gone) it drops off the list. |
+| `_heartbeatInterval` | 5 s | 10 s | How often the delayed leave is restarted. One request per member in a call per interval. |
+| `restartTimeout` | 4 s | 8 s | How long one restart is waited for before the next heartbeat tries again. |
+| `stepOutAfter` | 5 s | none | How long LiveKit may be gone before a client takes its own membership down. |
+| `lostConnectionTimeout` | 3 min | none | How long LiveKit may be gone before the call is hung up. |
+| `rosterSettleTime` | 30 s | none | How long we must be connected before people missing from LiveKit are left out of the sidebar. |
+
+Keep `restartTimeout` under `_heartbeatInterval`, and `_delayedLeaveTimeout`
+at least three heartbeats long: two heartbeats in a row can then fail
+before the delayed leave fires. Raise all three together, in proportion
+(30 s / 10 s / 8 s was the old, roomier set).
+
+Signs they are too tight: people flicker out of the list and back in while
+they are in the call, and their logs show `Our delayed leave is gone,
+arming a new one` followed by `Our call membership was cleared while we are
+in the call, restoring it`, or `Call membership heartbeat failed`. If people
+flicker out on network blips instead, raise `stepOutAfter`; their logs show
+`Livekit has not been connected for 5 s, leaving the call's member list
+until it is back`.
+
 ## Known limits
 
 - **Members on older builds.** Readers now go by the homeserver's clock,
