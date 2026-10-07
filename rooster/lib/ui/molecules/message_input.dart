@@ -258,6 +258,26 @@ class MessageInputState extends State<MessageInput> {
   }
 
   String? lastSearchText;
+
+  bool get isMentionAutofill {
+    final range = autoFillRange;
+    if (range == null || range.$1 < 0 || range.$2 > controller.text.length) {
+      return false;
+    }
+    return controller.text.substring(range.$1, range.$2).startsWith('@');
+  }
+
+  void moveAutoFillSelection(int delta) {
+    final results = autoFillResults;
+    if (results == null || results.isEmpty) return;
+
+    setState(() {
+      final current = autoFillSelection ?? (delta > 0 ? -1 : 0);
+      autoFillSelection = (current + delta) % results.length;
+      updateAutofillScroll();
+    });
+  }
+
   void onTextfieldUpdated(String value) {
     widget.onTextUpdated?.call(controller.text);
     var range = getAutofillTextRange();
@@ -585,6 +605,25 @@ class MessageInputState extends State<MessageInput> {
   }
 
   KeyEventResult onKey(FocusNode node, KeyEvent event) {
+    final hasAutofillOptions = autoFillResults?.isNotEmpty == true &&
+        autoFillRange != null;
+    final isKeyDown = event is KeyDownEvent || event is KeyRepeatEvent;
+
+    if (hasAutofillOptions && isKeyDown &&
+        (event.logicalKey == LogicalKeyboardKey.arrowDown ||
+            event.logicalKey == LogicalKeyboardKey.arrowUp)) {
+      moveAutoFillSelection(
+          event.logicalKey == LogicalKeyboardKey.arrowDown ? 1 : -1);
+      return KeyEventResult.handled;
+    }
+
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.enter &&
+        hasAutofillOptions && autoFillSelection != null) {
+      applyAutoFill(autoFillResults![autoFillSelection!]);
+      return KeyEventResult.handled;
+    }
+
     if (BuildConfig.MOBILE) return KeyEventResult.ignored;
 
     if (!preferences.disableTextCursorManagement.value) {
@@ -650,11 +689,6 @@ class MessageInputState extends State<MessageInput> {
     if (widget.disableEnterToSend != true) {
       if (HardwareKeyboard.instance
           .isLogicalKeyPressed(LogicalKeyboardKey.enter)) {
-        if (autoFillSelection != null && autoFillRange != null) {
-          applyAutoFill(autoFillResults![autoFillSelection!]);
-          return KeyEventResult.handled;
-        }
-
         if (HardwareKeyboard.instance.isShiftPressed) {
           return KeyEventResult.ignored;
         }
@@ -748,6 +782,8 @@ class MessageInputState extends State<MessageInput> {
                   if (widget.attachments != null &&
                       widget.attachments!.isNotEmpty)
                     displayAttachments(),
+                  if (isMentionAutofill && autoFillResults != null)
+                    mentionAutofillPanel(),
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxHeight: 200),
                     child: Padding(
@@ -796,9 +832,11 @@ class MessageInputState extends State<MessageInput> {
                             children: [
                               const SizedBox(height: 30),
                               if (senderOverride != null) senderOverrideView(),
-                              if (autoFillResults != null)
+                              if (autoFillResults != null &&
+                                  !isMentionAutofill)
                                 autofillResultsList(),
-                              if (autoFillResults == null)
+                              if (autoFillResults == null ||
+                                  isMentionAutofill)
                                 const Expanded(child: SizedBox()),
                             ]),
                       ),
@@ -855,6 +893,179 @@ class MessageInputState extends State<MessageInput> {
                 ),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget mentionAutofillPanel() {
+    final results = autoFillResults ?? const <AutofillSearchResult>[];
+    final colors = Theme.of(context).colorScheme;
+    final visibleResults = results;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+      child: Material(
+        color: colors.surfaceContainerHigh,
+        elevation: 8,
+        shadowColor: Colors.black.withValues(alpha: 0.28),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.6)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 320),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: tiamat.Text.labelLow(
+                        'MENÇÕES',
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                    tiamat.Text.labelLow(
+                      '${results.length} ${results.length == 1 ? 'pessoa' : 'pessoas'}',
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ],
+                ),
+              ),
+              if (visibleResults.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: tiamat.Text.labelLow(
+                    'Nenhuma pessoa encontrada',
+                    color: colors.onSurfaceVariant,
+                  ),
+                )
+              else
+                Flexible(
+                  child: ListView.builder(
+                    controller: autofillScrollController,
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    itemCount: visibleResults.length,
+                    itemBuilder: (context, index) {
+                      final result = visibleResults[index];
+                      final selected = autoFillSelection == index;
+                      final avatar = result is AutofillSearchResultAvatar
+                          ? result
+                          : null;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 1),
+                        child: Material(
+                          color: selected
+                              ? colors.secondaryContainer.withValues(
+                                  alpha: 0.72,
+                                )
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () => applyAutoFill(result),
+                            child: Container(
+                              constraints: const BoxConstraints(minHeight: 54),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 7,
+                              ),
+                              child: Row(
+                                children: [
+                                  if (avatar != null)
+                                    tiamat.Avatar(
+                                      image: avatar.image,
+                                      radius: 17,
+                                      placeholderColor: avatar.fallbackColor,
+                                      placeholderText: avatar.result,
+                                    )
+                                  else
+                                    CircleAvatar(
+                                      radius: 17,
+                                      backgroundColor:
+                                          colors.secondaryContainer,
+                                      child: Icon(
+                                        Icons.alternate_email,
+                                        size: 17,
+                                        color: colors.onSecondaryContainer,
+                                      ),
+                                    ),
+                                  const SizedBox(width: 11),
+                                  Expanded(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        tiamat.Text.name(result.result),
+                                        if (avatar != null)
+                                          tiamat.Text.labelLow(
+                                            avatar.slug,
+                                            color: colors.onSurfaceVariant,
+                                          )
+                                        else
+                                          tiamat.Text.labelLow(
+                                            'Menção para todos',
+                                            color: colors.onSurfaceVariant,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (selected)
+                                    Icon(
+                                      Icons.keyboard_return_rounded,
+                                      size: 18,
+                                      color: colors.onSurfaceVariant,
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              Divider(
+                height: 1,
+                color: colors.outlineVariant.withValues(alpha: 0.5),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 9, 14, 10),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.keyboard_arrow_up,
+                      size: 17,
+                      color: colors.onSurfaceVariant,
+                    ),
+                    Icon(
+                      Icons.keyboard_arrow_down,
+                      size: 17,
+                      color: colors.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 5),
+                    tiamat.Text.labelLow(
+                      'Navegar',
+                      color: colors.onSurfaceVariant,
+                    ),
+                    const Spacer(),
+                    const _KeyboardHint(label: 'Enter'),
+                    const SizedBox(width: 5),
+                    tiamat.Text.labelLow(
+                      'Selecionar',
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1612,5 +1823,27 @@ class MessageInputState extends State<MessageInput> {
       clearKeyboardOverride(debounce: false);
       event.handled = true;
     }
+  }
+}
+
+class _KeyboardHint extends StatelessWidget {
+  const _KeyboardHint({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHighest,
+        border: Border.all(color: colors.outlineVariant),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        child: Text(label, style: Theme.of(context).textTheme.labelSmall),
+      ),
+    );
   }
 }
