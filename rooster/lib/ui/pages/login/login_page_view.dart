@@ -26,6 +26,7 @@ class LoginPageView extends StatefulWidget {
       this.doSsoLogin,
       this.doPasswordLogin,
       this.loadingServerInfo = false,
+      this.serverInfoError,
       this.isServerValid = false,
       this.hasSsoSupport = false,
       this.hasPasswordSupport = false,
@@ -36,6 +37,7 @@ class LoginPageView extends StatefulWidget {
   final double? progress;
   final List<LoginFlow>? flows;
   final bool loadingServerInfo;
+  final String? serverInfoError;
   final bool isServerValid;
   final bool hasSsoSupport;
   final bool hasPasswordSupport;
@@ -213,6 +215,14 @@ class _LoginPageViewState extends State<LoginPageView> {
       const tiamat.Text.labelLow("Come on in."),
       const SizedBox(height: 16),
       homeserverEntry(),
+      if (widget.serverInfoError != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: tiamat.Text.labelLow(widget.serverInfoError!),
+          ),
+        ),
       const SizedBox(height: 16),
       if (widget.hasPasswordSupport) usenamePasswordLoginInputs(),
       if (widget.hasSsoSupport)

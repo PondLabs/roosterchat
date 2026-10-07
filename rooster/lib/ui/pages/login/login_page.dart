@@ -45,6 +45,9 @@ class LoginPageState extends State<LoginPage> {
   double? progress;
   List<LoginFlow>? loginFlows;
   Client? loginClient;
+  String? pendingHomeserver;
+  String? serverInfoError;
+  int homeserverRequestId = 0;
 
   final Debouncer homeserverUpdateDebouncer = Debouncer(
     delay: const Duration(seconds: 1),
@@ -57,15 +60,35 @@ class LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     var internalId = RandomUtils.getRandomString(20);
-    MatrixClient.create(internalId).then((client) {
+    _initializeLoginClient(internalId);
+
+    super.initState();
+  }
+
+  Future<void> _initializeLoginClient(String internalId) async {
+    try {
+      final client = await MatrixClient.create(internalId)
+          .timeout(const Duration(seconds: 15));
+      if (!mounted) return;
       loginClient = client;
 
       progressSubscription = loginClient!.connectionStatusChanged.stream.listen(
         onLoginProgressChanged,
       );
-    });
 
-    super.initState();
+      // The initial homeserver check can be scheduled before the Matrix client
+      // is ready. Retry the latest value once initialization completes.
+      if (pendingHomeserver != null && loadingServerInfo) {
+        updateHomeserver(pendingHomeserver!);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        loadingServerInfo = false;
+        serverInfoError =
+            'Could not open browser storage. Use HTTPS or localhost, then reload.';
+      });
+    }
   }
 
   @override
@@ -78,6 +101,7 @@ class LoginPageState extends State<LoginPage> {
           loginFlows = null;
           isServerValid = false;
           loadingServerInfo = true;
+          serverInfoError = null;
         });
         homeserverUpdateDebouncer.run(() => updateHomeserver(value));
       },
@@ -90,6 +114,7 @@ class LoginPageState extends State<LoginPage> {
       hasPasswordSupport:
           loginFlows?.whereType<PasswordLoginFlow>().isNotEmpty == true,
       isServerValid: isServerValid,
+      serverInfoError: serverInfoError,
     );
   }
 
@@ -168,7 +193,14 @@ class LoginPageState extends State<LoginPage> {
   }
 
   Future<void> updateHomeserver(String input) async {
-    if (loginClient == null) return;
+    pendingHomeserver = input;
+    final requestId = ++homeserverRequestId;
+
+    if (loginClient == null) {
+      // Keep the spinner state until initState's client creation callback
+      // retries this value.
+      return;
+    }
 
     setState(() {
       loginFlows = null;
@@ -181,12 +213,26 @@ class LoginPageState extends State<LoginPage> {
     var uri = input.startsWith('http://') || input.startsWith('https://')
         ? Uri.parse(input)
         : Uri.https(input);
-    var result = await loginClient!.setHomeserver(uri);
+    var result = await loginClient!
+        .setHomeserver(uri)
+        .timeout(const Duration(seconds: 15), onTimeout: () => (false, null));
+
+    if (!mounted || requestId != homeserverRequestId) return;
 
     setState(() {
       loadingServerInfo = false;
       isServerValid = result.$1;
       loginFlows = result.$2;
+      serverInfoError = result.$1
+          ? null
+          : 'Could not verify the homeserver. Check the address and connection.';
     });
+  }
+
+  @override
+  void dispose() {
+    homeserverUpdateDebouncer.cancel();
+    progressSubscription?.cancel();
+    super.dispose();
   }
 }
