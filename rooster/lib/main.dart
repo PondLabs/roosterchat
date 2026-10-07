@@ -161,6 +161,16 @@ void appMain() async {
 
     ensureBindingInit();
 
+    // The first thing someone who clicked Rooster sees is the loading window,
+    // so they know it opened. On Windows the runner's lock already says
+    // whether this is the first copy, so it goes up before anything that can
+    // take a while (moving old data, asking a running copy, which waits up to
+    // 3 s): with none of it on screen, a click looked like nothing happened.
+    // A second copy shows nothing; it only hands over and quits.
+    final secondary = commandLineArgs.contains(SingleInstance.secondaryFlag);
+    final loadingShown = PlatformUtils.isWindows && !secondary;
+    if (loadingShown) await _showLoadingWindow();
+
     if (PlatformUtils.isLinux || PlatformUtils.isWindows) {
       // Before anything opens the data directory, the single instance
       // socket included.
@@ -169,7 +179,6 @@ void appMain() async {
       // Not the first, by the Windows runner's lock: hand over and quit even
       // when the running one does not answer. A second copy would sync the
       // same account and show every notification twice.
-      final secondary = commandLineArgs.contains(SingleInstance.secondaryFlag);
       if (await SingleInstance.tryConnectToMainInstance(commandLineArgs,
               retryFor: secondary
                   ? SingleInstance.secondaryRetryFor
@@ -191,8 +200,7 @@ void appMain() async {
     // The browser keeps showing the splash in web/index.html until our first
     // frame, so only native needs something drawn while we start.
     if (!isHeadless && !kIsWeb) {
-      await WindowManagement.showLauncher();
-      runApp(LoadingPage(update: SelfUpdater.instance.progress));
+      if (!loadingShown) await _showLoadingWindow();
       if (await _updateBeforeStart()) return;
     }
 
@@ -212,6 +220,13 @@ void appMain() async {
   } catch (error, stacktrace) {
     runApp(FatalErrorPage(error, stacktrace));
   }
+}
+
+/// The small window with the loading rooster, which also shows an update
+/// being fetched.
+Future<void> _showLoadingWindow() async {
+  await WindowManagement.showLauncher();
+  runApp(LoadingPage(update: SelfUpdater.instance.progress));
 }
 
 /// A desktop build that installs its own updates fetches a newer release
