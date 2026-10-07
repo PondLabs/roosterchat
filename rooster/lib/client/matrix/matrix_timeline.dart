@@ -170,23 +170,30 @@ class MatrixTimeline extends Timeline {
 
   Future<void> removeReaction(
       TimelineEvent reactingTo, Emoticon reaction) async {
-    var event = await _matrixRoom.getEventById(reactingTo.eventId);
-    if (event == null) return;
+    var timeline = _matrixTimeline;
+    if (timeline == null) return;
 
-    if (!event.hasAggregatedEvents(
-        _matrixTimeline!, matrix.RelationshipTypes.reaction)) return;
+    // Read the aggregation the reaction chips are drawn from: fetching the
+    // event again can miss it, and leaves the chip stuck on
+    var reactions = timeline.aggregatedEvents[reactingTo.eventId]
+            ?[matrix.RelationshipTypes.reaction] ??
+        const <matrix.Event>{};
 
-    var events = event
-        .aggregatedEvents(_matrixTimeline!, matrix.RelationshipTypes.reaction)
-        .where((element) => element.senderId == _matrixRoom.client.userID);
+    var ownReactions = reactions.where((e) {
+      if (e.senderId != _matrixRoom.client.userID) return false;
+      var content = e.content["m.relates_to"];
+      return content is Map && content["key"] == reaction.key;
+    }).toList();
 
-    for (var e in events) {
-      if (!e.content.containsKey("m.relates_to")) continue;
-      var content = e.content["m.relates_to"] as Map<String, Object?>;
-
-      if (content.containsKey("key") && content["key"] == reaction.key) {
+    // Remove every match: a double click can react twice with the same key
+    for (var e in ownReactions) {
+      if (e.status.isError) {
+        await e.cancelSend();
+      } else if (e.status.isSending) {
+        var eventId = await _room.reactionSentEventId(e.eventId);
+        if (eventId != null) await _matrixRoom.redactEvent(eventId);
+      } else {
         await _matrixRoom.redactEvent(e.eventId);
-        return;
       }
     }
   }

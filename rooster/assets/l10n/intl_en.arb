@@ -2332,5 +2332,28 @@
     "description": "Search the next page of messages",
     "type": "text",
     "placeholders": {}
+  },
+  "labelReactionTooltipYou": "You",
+  "@labelReactionTooltipYou": {
+    "description": "Stands for the current user in the list of who reacted",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelReactionTooltipOthers": "{howMany,plural, =1{and 1 other}other{and {howMany} others}}",
+  "@labelReactionTooltipOthers": {
+    "description": "Ends the list of who reacted when there are too many names",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "labelReactionTooltipReactedWith": "{howMany,plural, =1{reacted with {emoji}}other{reacted with {emoji}}}",
+  "@labelReactionTooltipReactedWith": {
+    "description": "Follows the names of who reacted, in the reaction tooltip",
+    "type": "text",
+    "placeholders": {
+      "howMany": {},
+      "emoji": {}
+    }
   }
 }

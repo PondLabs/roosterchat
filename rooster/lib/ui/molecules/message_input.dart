@@ -259,6 +259,43 @@ class MessageInputState extends State<MessageInput> {
 
   String? lastSearchText;
 
+  String? mentionCandidatesRoomId;
+
+  // Rooms lazy-load their members, so only people seen recently are known
+  // locally. Fetch the whole list once so anyone can be mentioned, then
+  // search again with what the user has typed.
+  Future<void> loadAllMentionCandidates() async {
+    final room = widget.room;
+    if (room == null ||
+        room.isMembersListComplete ||
+        mentionCandidatesRoomId == room.identifier) {
+      return;
+    }
+    mentionCandidatesRoomId = room.identifier;
+
+    try {
+      await room.fetchMembersList(cache: true);
+    } catch (_) {
+      mentionCandidatesRoomId = null;
+      return;
+    }
+
+    if (!mounted || widget.room != room || !isMentionAutofill) return;
+
+    final range = autoFillRange!;
+    final text = controller.text.substring(range.$1, range.$2);
+    final results = widget.processAutofill?.call(text);
+    setState(() {
+      autoFillResults = results;
+      if (results == null || results.isEmpty) {
+        autoFillSelection = null;
+      } else if (autoFillSelection != null) {
+        autoFillSelection = autoFillSelection!.clamp(0, results.length - 1);
+      }
+      updateAutofillScroll();
+    });
+  }
+
   bool get isMentionAutofill {
     final range = autoFillRange;
     if (range == null || range.$1 < 0 || range.$2 > controller.text.length) {
@@ -313,6 +350,8 @@ class MessageInputState extends State<MessageInput> {
 
       return;
     }
+
+    if (text.startsWith('@')) loadAllMentionCandidates();
 
     var result = widget.processAutofill?.call(text);
     autoFillRange = range;
@@ -488,6 +527,14 @@ class MessageInputState extends State<MessageInput> {
     if (textFocus.hasFocus) {
       clearKeyboardOverride();
     }
+    // The mention panel only shows while the text box has focus
+    if (mounted && isMentionAutofill) {
+      setState(() {});
+      if (textFocus.hasFocus) {
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => scrollMentionSelectionIntoView());
+      }
+    }
   }
 
   void updateAutofillScroll() {
@@ -496,6 +543,13 @@ class MessageInputState extends State<MessageInput> {
     }
     if (autoFillSelection == null) {
       autofillScrollController.jumpTo(0);
+      return;
+    }
+
+    if (isMentionAutofill) {
+      // Runs after layout, so a fresh result list has its new extents
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => scrollMentionSelectionIntoView());
       return;
     }
 
@@ -527,6 +581,37 @@ class MessageInputState extends State<MessageInput> {
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeInOutExpo);
     }
+  }
+
+  void scrollMentionSelectionIntoView() {
+    final selection = autoFillSelection;
+    final count = autoFillResults?.length ?? 0;
+    if (!mounted ||
+        selection == null ||
+        count == 0 ||
+        !autofillScrollController.hasClients) {
+      return;
+    }
+
+    // Every row has the prototype's height, so the content splits evenly
+    final position = autofillScrollController.position;
+    final itemExtent =
+        (position.maxScrollExtent + position.viewportDimension) / count;
+    final itemTop = selection * itemExtent;
+    final itemBottom = itemTop + itemExtent;
+
+    double? target;
+    if (itemTop < position.pixels) {
+      target = itemTop;
+    } else if (itemBottom > position.pixels + position.viewportDimension) {
+      target = itemBottom - position.viewportDimension;
+    }
+    if (target == null) return;
+
+    autofillScrollController.animateTo(
+        target.clamp(0.0, position.maxScrollExtent),
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic);
   }
 
   bool isKnownAutofillMatch(String text) {
@@ -605,11 +690,12 @@ class MessageInputState extends State<MessageInput> {
   }
 
   KeyEventResult onKey(FocusNode node, KeyEvent event) {
-    final hasAutofillOptions = autoFillResults?.isNotEmpty == true &&
-        autoFillRange != null;
+    final hasAutofillOptions =
+        autoFillResults?.isNotEmpty == true && autoFillRange != null;
     final isKeyDown = event is KeyDownEvent || event is KeyRepeatEvent;
 
-    if (hasAutofillOptions && isKeyDown &&
+    if (hasAutofillOptions &&
+        isKeyDown &&
         (event.logicalKey == LogicalKeyboardKey.arrowDown ||
             event.logicalKey == LogicalKeyboardKey.arrowUp)) {
       moveAutoFillSelection(
@@ -619,7 +705,8 @@ class MessageInputState extends State<MessageInput> {
 
     if (event is KeyDownEvent &&
         event.logicalKey == LogicalKeyboardKey.enter &&
-        hasAutofillOptions && autoFillSelection != null) {
+        hasAutofillOptions &&
+        autoFillSelection != null) {
       applyAutoFill(autoFillResults![autoFillSelection!]);
       return KeyEventResult.handled;
     }
@@ -782,7 +869,9 @@ class MessageInputState extends State<MessageInput> {
                   if (widget.attachments != null &&
                       widget.attachments!.isNotEmpty)
                     displayAttachments(),
-                  if (isMentionAutofill && autoFillResults != null)
+                  if (isMentionAutofill &&
+                      autoFillResults != null &&
+                      textFocus.hasFocus)
                     mentionAutofillPanel(),
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxHeight: 200),
@@ -832,11 +921,9 @@ class MessageInputState extends State<MessageInput> {
                             children: [
                               const SizedBox(height: 30),
                               if (senderOverride != null) senderOverrideView(),
-                              if (autoFillResults != null &&
-                                  !isMentionAutofill)
+                              if (autoFillResults != null && !isMentionAutofill)
                                 autofillResultsList(),
-                              if (autoFillResults == null ||
-                                  isMentionAutofill)
+                              if (autoFillResults == null || isMentionAutofill)
                                 const Expanded(child: SizedBox()),
                             ]),
                       ),
@@ -952,84 +1039,8 @@ class MessageInputState extends State<MessageInput> {
                     shrinkWrap: true,
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     itemCount: visibleResults.length,
-                    itemBuilder: (context, index) {
-                      final result = visibleResults[index];
-                      final selected = autoFillSelection == index;
-                      final avatar = result is AutofillSearchResultAvatar
-                          ? result
-                          : null;
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 1),
-                        child: Material(
-                          color: selected
-                              ? colors.secondaryContainer.withValues(
-                                  alpha: 0.72,
-                                )
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(8),
-                            onTap: () => applyAutoFill(result),
-                            child: Container(
-                              constraints: const BoxConstraints(minHeight: 54),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 7,
-                              ),
-                              child: Row(
-                                children: [
-                                  if (avatar != null)
-                                    tiamat.Avatar(
-                                      image: avatar.image,
-                                      radius: 17,
-                                      placeholderColor: avatar.fallbackColor,
-                                      placeholderText: avatar.result,
-                                    )
-                                  else
-                                    CircleAvatar(
-                                      radius: 17,
-                                      backgroundColor:
-                                          colors.secondaryContainer,
-                                      child: Icon(
-                                        Icons.alternate_email,
-                                        size: 17,
-                                        color: colors.onSecondaryContainer,
-                                      ),
-                                    ),
-                                  const SizedBox(width: 11),
-                                  Expanded(
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        tiamat.Text.name(result.result),
-                                        if (avatar != null)
-                                          tiamat.Text.labelLow(
-                                            avatar.slug,
-                                            color: colors.onSurfaceVariant,
-                                          )
-                                        else
-                                          tiamat.Text.labelLow(
-                                            'Menção para todos',
-                                            color: colors.onSurfaceVariant,
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (selected)
-                                    Icon(
-                                      Icons.keyboard_return_rounded,
-                                      size: 18,
-                                      color: colors.onSurfaceVariant,
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
+                    prototypeItem: mentionAutofillItem(0),
+                    itemBuilder: (context, index) => mentionAutofillItem(index),
                   ),
                 ),
               Divider(
@@ -1066,6 +1077,83 @@ class MessageInputState extends State<MessageInput> {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget mentionAutofillItem(int index) {
+    final results = autoFillResults!;
+    final colors = Theme.of(context).colorScheme;
+    final result = results[index];
+    final selected = autoFillSelection == index;
+    final avatar = result is AutofillSearchResultAvatar ? result : null;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: Material(
+        color: selected
+            ? colors.secondaryContainer.withValues(
+                alpha: 0.72,
+              )
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => applyAutoFill(result),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 54),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 7,
+            ),
+            child: Row(
+              children: [
+                if (avatar != null)
+                  tiamat.Avatar(
+                    image: avatar.image,
+                    radius: 17,
+                    placeholderColor: avatar.fallbackColor,
+                    placeholderText: avatar.result,
+                  )
+                else
+                  CircleAvatar(
+                    radius: 17,
+                    backgroundColor: colors.secondaryContainer,
+                    child: Icon(
+                      Icons.alternate_email,
+                      size: 17,
+                      color: colors.onSecondaryContainer,
+                    ),
+                  ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      tiamat.Text.name(result.result),
+                      if (avatar != null)
+                        tiamat.Text.labelLow(
+                          avatar.slug,
+                          color: colors.onSurfaceVariant,
+                        )
+                      else
+                        tiamat.Text.labelLow(
+                          'Menção para todos',
+                          color: colors.onSurfaceVariant,
+                        ),
+                    ],
+                  ),
+                ),
+                if (selected)
+                  Icon(
+                    Icons.keyboard_return_rounded,
+                    size: 18,
+                    color: colors.onSurfaceVariant,
+                  ),
+              ],
+            ),
           ),
         ),
       ),

@@ -23,11 +23,16 @@ Widget wbTooltip(BuildContext context) {
 class Tooltip extends StatefulWidget {
   const Tooltip(
       {required this.child,
-      required this.text,
+      this.text,
+      this.content,
       this.preferredDirection = AxisDirection.up,
-      super.key});
+      super.key})
+      : assert(text != null || content != null);
   final Widget child;
-  final String text;
+  final String? text;
+
+  /// Shown instead of [text] when set.
+  final Widget? content;
   final AxisDirection preferredDirection;
 
   @override
@@ -44,11 +49,12 @@ class _TooltipState extends State<Tooltip> {
           data: Theme.of(context),
           child: Padding(
             padding: const EdgeInsets.all(8.0),
-            child: tiamat.Text(
-              widget.text,
-              type: tiamat.TextType.body,
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
+            child: widget.content ??
+                tiamat.Text(
+                  widget.text!,
+                  type: tiamat.TextType.body,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
           ),
         ),
         triggerMode: TooltipTriggerMode.manual,
@@ -58,12 +64,10 @@ class _TooltipState extends State<Tooltip> {
         tailBaseWidth: 5,
         controller: controller,
         backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
-        child:
-         MouseRegion(
-           onEnter: (event) => controller.showTooltip(),
-           onExit: (event) => controller.hideTooltip(),
-           child: widget.child,
-         )
-    );
+        child: MouseRegion(
+          onEnter: (event) => controller.showTooltip(),
+          onExit: (event) => controller.hideTooltip(),
+          child: widget.child,
+        ));
   }
 }
