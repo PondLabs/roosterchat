@@ -199,7 +199,13 @@ async function runInChrome(url, wav, drive) {
     }
   } finally {
     proc.kill("SIGKILL");
-    rmSync(profile, { recursive: true, force: true });
+    // Chrome's helpers can still be writing the profile a moment after the
+    // kill: retry, and never let the cleanup fail a run that passed.
+    try {
+      rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    } catch (e) {
+      console.warn(`could not remove ${profile}: ${e.message}`);
+    }
   }
 }
 
