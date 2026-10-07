@@ -33,11 +33,11 @@ class _DragDropFileTargetState extends State<DragDropFileTarget> {
       name: "fileDragDropPrompt",
       desc: "Text that is shown when a user is dragging a file");
 
-  String get fileDragDropNoChat => Intl.message(
-      "Select a text channel first to send files",
-      name: "fileDragDropNoChat",
-      desc: "Shown when a file is dragged or dropped where there is no "
-          "message box to send it from");
+  String get fileDragDropNoChat =>
+      Intl.message("Select a text channel first to send files",
+          name: "fileDragDropNoChat",
+          desc: "Shown when a file is dragged or dropped where there is no "
+              "message box to send it from");
 
   bool get _canReceive => widget.canReceive?.call() ?? true;
 

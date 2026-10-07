@@ -101,8 +101,8 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
 
     expect(received, isEmpty);
-    expect(find.text('Select a text channel first to send files'),
-        findsOneWidget);
+    expect(
+        find.text('Select a text channel first to send files'), findsOneWidget);
     final message = find.ancestor(
         of: find.text('Select a text channel first to send files'),
         matching: find.byType(AnimatedOpacity));

@@ -302,9 +302,6 @@ class _Room implements lk.Room {
   final lk.LocalParticipant? localParticipant;
 
   @override
-  final lk.ConnectionState connectionState = lk.ConnectionState.connected;
-
-  @override
   final UnmodifiableMapView<String, lk.RemoteParticipant> remoteParticipants =
       UnmodifiableMapView({});
 
