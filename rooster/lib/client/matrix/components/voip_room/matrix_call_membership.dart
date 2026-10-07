@@ -39,7 +39,20 @@ class MatrixCallMembership {
   static const unguardedKey = 'chat.commet.unguarded';
 
   /// How long a membership lasts from its join time, the MatrixRTC default.
+  /// Written so while a delayed leave is armed: the homeserver clears the
+  /// membership of a client that dies.
   static const lifetime = Duration(hours: 4);
+
+  /// The window of a membership written with no delayed leave armed (the
+  /// homeserver has none, as matrix.org since 2026-10-07, or arming
+  /// failed). Nothing clears it if its owner dies, so it is kept short and
+  /// written again every half minute while its owner is in the call: one
+  /// that dies drops off everyone's list within two minutes.
+  static const unguardedLifetime = Duration(minutes: 2);
+
+  /// An unguarded membership is written again once this much of its window
+  /// is left: half a minute after each write.
+  static const unguardedRefreshWhenLeft = Duration(seconds: 90);
 
   /// How long what an unguarded membership advertises is believed after it
   /// was written. Its owner writes it again every hour while in the call
@@ -167,10 +180,18 @@ class MatrixCallMembership {
   /// Whether our own membership, [content] sent at [sentAt], is due to be
   /// written again at [now] to keep it from lapsing (see [refreshWhenLeft]).
   /// Also once it has lapsed: we are still in the call.
+  /// Without a delayed leave ([guarded] false) the window is kept short
+  /// ([unguardedLifetime]): written again half a minute after each write,
+  /// and right away when a long one is left from while there was one.
   static bool needsRefresh(
-      Map<String, Object?> content, DateTime? sentAt, DateTime now) {
+      Map<String, Object?> content, DateTime? sentAt, DateTime now,
+      {bool guarded = true}) {
     final expiry = expiresAt(content, sentAt);
-    return expiry != null && expiry.difference(now) <= refreshWhenLeft;
+    if (expiry == null) return false;
+    final left = expiry.difference(now);
+    if (guarded) return left <= refreshWhenLeft;
+    return left <= unguardedRefreshWhenLeft ||
+        left > unguardedLifetime + const Duration(seconds: 30);
   }
 
   /// The earliest of [expiries] still ahead of [now], when the list of who is
@@ -189,8 +210,9 @@ class MatrixCallMembership {
   /// [current] rewritten to list [media], [voiceState] and [away]. Every
   /// other key is kept, the join time is recorded in `created_ts` (without it
   /// other clients take the rewrite for a new join, re-key, and reorder the
-  /// oldest_membership focus choice), and the expiry moves [lifetime] past
-  /// [now]. [unguarded] says no delayed leave backs what is listed (see
+  /// oldest_membership focus choice), and the expiry moves [window] past
+  /// [now]: [lifetime], or [unguardedLifetime] with no delayed leave armed.
+  /// [unguarded] says no delayed leave backs what is listed (see
   /// [unguardedKey]).
   static Map<String, Object?> withPublishedState(Map<String, Object?> current,
       {required Set<LiveMedia> media,
@@ -199,12 +221,13 @@ class MatrixCallMembership {
       required DateTime now,
       bool away = false,
       bool? dj,
-      bool unguarded = false}) {
+      bool unguarded = false,
+      Duration window = lifetime}) {
     return {
       ...current,
       'created_ts': joinedAt.millisecondsSinceEpoch,
       'expires':
-          now.difference(joinedAt).inMilliseconds + lifetime.inMilliseconds,
+          now.difference(joinedAt).inMilliseconds + window.inMilliseconds,
       awayKey: away,
       // Written either way: one carried over from [current] would have a
       // guarded membership's badges dropped after ninety minutes.

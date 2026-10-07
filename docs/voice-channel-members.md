@@ -75,6 +75,7 @@ window ends; the list shows a person once either way.
 | 12 | A denied or unavailable microphone produces no publication or mute event. Without delayed events, nothing published its initial muted state, so people outside the call saw it as unmuted. | Publish the session's initial state after registering its listeners and DJ booth, even if no track event follows. |
 | 13 | A full reconnect clears LiveKit's publication map while screen capture continues. Stopping then emits no unpublish event, leaving LIVE advertised after the capture stops. | Publish the state after `stopScreenshare` verifies that the capture and its publications have stopped. |
 | 14 | Report (2026-10-05): someone listed in the channel, on its page and online for hours while nobody was in the call; in it, alone in LiveKit. Their app had lost LiveKit without noticing, and its heartbeat kept the membership up. LiveKit (vendored) emitted its disconnect from an attempt it could not recover from while a full reconnect was pending, and the room took it for part of that reconnect and never said it was disconnected. Even noticed, a client kept its membership up for as long as LiveKit tried to reconnect. | The engine cleans up before it says so, as it does after its last attempt (`// ROOSTER` in `engine.dart`). A client that has not been connected to LiveKit for 5 s sends its delayed leave (`MatrixLivekitVoipSession.stepOutAfter`): everyone outside the call stops listing it within seconds. Its heartbeat neither restarts the delayed leave nor restores the membership while LiveKit is gone; once LiveKit is back it arms a new one and writes the membership again. A call LiveKit has not been connected to for three minutes is hung up (`lostConnectionTimeout`). The delayed leave is 15 s, restarted every 5 s, each restart given up on after 4 s, so a client that dies is gone from the list in 15 s. In our call, once connected for 30 s (`CallRoster.rosterComplete`), someone whose membership is live but who joined more than 30 s ago and is not in LiveKit is not listed in the sidebar: a member on an older build is gone from our list as soon as they leave LiveKit. |
+| 15 | Report (2026-10-07): someone listed in the channel for hours, nobody in LiveKit. matrix.org stopped allowing delayed events (`/versions` no longer lists MSC4140; arming one answers 403 "Sending delayed events has been disallowed"), while clients still had the old `/versions` cached for days. With no delayed leave nothing on the homeserver clears a membership, fix 14's step out sent nothing, and a membership written with no delayed leave kept a four-hour window, rewritten hourly by a client that thought it was still in the call. | A membership written with no delayed leave armed gets a two-minute window (`MatrixCallMembership.unguardedLifetime`), written again half a minute after each write (`unguardedRefreshWhenLeft`), and a long window left from before is cut down right away: a client that dies drops off in two minutes, for readers on any build, since they all go by `expires`. With no delayed leave, stepping out (fix 14) clears the membership by hand, and it is written again as soon as LiveKit is back (`_comeBack`). A 403 to arming one counts as a homeserver without delayed events: not asked again. |
 
 ## What the tests guard
 
@@ -129,6 +130,8 @@ in `MatrixLivekitVoipSession`
 | `stepOutAfter` | 5 s | none | How long LiveKit may be gone before a client takes its own membership down. |
 | `lostConnectionTimeout` | 3 min | none | How long LiveKit may be gone before the call is hung up. |
 | `rosterSettleTime` | 30 s | none | How long we must be connected before people missing from LiveKit are left out of the sidebar. |
+| `MatrixCallMembership.unguardedLifetime` | 2 min | 4 h | The window of a membership with no delayed leave (matrix.org since 2026-10-07): how long after a client dies it drops off the list. |
+| `MatrixCallMembership.unguardedRefreshWhenLeft` | 90 s | 3 h | When such a membership is written again: half a minute after each write. One state write per member per half minute. |
 
 Keep `restartTimeout` under `_heartbeatInterval`, and `_delayedLeaveTimeout`
 at least three heartbeats long: two heartbeats in a row can then fail
@@ -153,6 +156,12 @@ until it is back`.
 - **A homeserver that sends no `unsigned.age`.** Synapse sends it. Without
   it the clock stays this machine's; the hourly writes still leave three
   hours of room for a wrong clock.
+- **matrix.org has no delayed events** (since 2026-10-07). Fix 15 keeps
+  the list right without them, at one state write per member in a call
+  every half minute. A client that thinks it is still in LiveKit while the
+  server has dropped it (seen once, from a browser tab) keeps writing its
+  membership: people outside the call list it until that client notices,
+  or hangs up; people in the call do not (fix 11).
 - **Outside the call** Rooster does not ask LiveKit who is in it (that
   means joining the LiveKit room, and showing up in the call for a
   moment). It goes by memberships, which a member on a build with fix 14

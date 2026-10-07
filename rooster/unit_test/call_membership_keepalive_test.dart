@@ -176,6 +176,10 @@ class _SdkClient implements matrix.Client {
 
   /// How many of the next delayed leaves fail to be scheduled.
   int armFailures = 0;
+
+  /// Says it has delayed events, then refuses them, as matrix.org did from
+  /// 2026-10-07 to clients that read /versions before.
+  bool refusesDelayedEvents = false;
   int armAttempts = 0;
 
   /// How many of the next restarts of the delayed leave are lost, and how
@@ -220,6 +224,12 @@ class _SdkClient implements matrix.Client {
       Map<String, Object?>? query}) async {
     if (query?.containsKey('org.matrix.msc4140.delay') == true) {
       armAttempts++;
+      if (refusesDelayedEvents) {
+        throw matrix.MatrixException.fromJson({
+          'errcode': 'M_FORBIDDEN',
+          'error': 'Sending delayed events has been disallowed',
+        });
+      }
       if (armFailures > 0) {
         armFailures--;
         throw Exception('M_LIMIT_EXCEEDED');
@@ -385,6 +395,25 @@ void main() {
   DateTime? expiryOf(Map<String, Object?> written) =>
       MatrixCallMembership.expiresAt(written, serverTime);
 
+  /// The homeserver sends our last write back over sync.
+  void synced() {
+    room.matrixRoom
+            .states[MatrixVoipRoomComponent.callMemberStateEvent]![_ownKey] =
+        matrix.Event(
+      type: MatrixVoipRoomComponent.callMemberStateEvent,
+      content: homeserver.membershipWrites.last,
+      senderId: _me,
+      stateKey: _ownKey,
+      eventId: '\$written${homeserver.membershipWrites.length}',
+      originServerTs: serverTime,
+      room: room.matrixRoom,
+    );
+  }
+
+  /// Long enough for the publisher's debounce and the gap it keeps between
+  /// two writes (the rate limit is shared with messages).
+  Future<void> settle() => Future<void>.delayed(const Duration(seconds: 3));
+
   group('on a homeserver without delayed events', () {
     test('joining without a microphone publishes the initial mute', () async {
       joined(serverTime);
@@ -400,21 +429,40 @@ void main() {
       expect(write[MatrixCallMembership.unguardedKey], isTrue);
     });
 
-    test('our membership is pushed out an hour after it was written', () async {
+    // Nothing clears it if we die: a window of hours kept someone whose
+    // client had died listed for hours (matrix.org, 2026-10-07).
+    test('the window the join wrote is cut to two minutes right away',
+        () async {
       final joinedAt = serverTime;
       joined(joinedAt);
       await join();
 
-      await stay(const Duration(minutes: 59));
-      expect(homeserver.membershipWrites, isEmpty,
-          reason: 'more than three hours of it are left');
-
-      await stay(const Duration(minutes: 2));
       final write = homeserver.membershipWrites.single;
       expect(write['application'], 'm.call');
       expect(write['created_ts'], joinedAt.millisecondsSinceEpoch,
           reason: 'still the same join, to everyone reading it');
-      expect(expiryOf(write), serverTime.add(MatrixCallMembership.lifetime));
+      expect(expiryOf(write),
+          serverTime.add(MatrixCallMembership.unguardedLifetime));
+    });
+
+    test('and written again half a minute after each write', () async {
+      final joinedAt = serverTime;
+      joined(joinedAt);
+      await join();
+      synced();
+      await settle();
+
+      await stay(const Duration(seconds: 25));
+      expect(homeserver.membershipWrites, hasLength(1),
+          reason: 'more than ninety seconds of it are left');
+
+      await stay(const Duration(seconds: 10));
+      await settle();
+      expect(homeserver.membershipWrites, hasLength(2));
+      final second = homeserver.membershipWrites.last;
+      expect(second['created_ts'], joinedAt.millisecondsSinceEpoch);
+      expect(expiryOf(second),
+          serverTime.add(MatrixCallMembership.unguardedLifetime));
     });
 
     // Away was only published with the delayed leave armed: here someone
@@ -422,9 +470,10 @@ void main() {
     test('going away is published all the same', () async {
       joined(serverTime);
       await join();
+      synced();
       UserIdleWatcher.instance.isAway.value = true;
       await stay(const Duration(seconds: 5));
-      await Future<void>.delayed(const Duration(seconds: 1));
+      await settle();
 
       expect(homeserver.membershipWrites.map(MatrixCallMembership.isAway),
           contains(true));
@@ -440,10 +489,11 @@ void main() {
           .publications
           .single
           .muted = true;
+      synced();
       // Any change to what we advertise writes all of it.
       UserIdleWatcher.instance.isAway.value = true;
       await stay(const Duration(seconds: 5));
-      await Future<void>.delayed(const Duration(seconds: 1));
+      await settle();
 
       final write = homeserver.membershipWrites.last;
       expect(MatrixCallMembership.voiceStateOf(write), {VoiceState.muted});
@@ -463,81 +513,68 @@ void main() {
       expect(write[MatrixCallMembership.unguardedKey], isFalse);
     });
 
-    test('and an hour after that again, still from the same join', () async {
-      final joinedAt = serverTime;
-      joined(joinedAt);
-      await join();
-      await stay(const Duration(minutes: 61));
-      // What the homeserver sends back once it has taken the write.
-      room.matrixRoom
-              .states[MatrixVoipRoomComponent.callMemberStateEvent]![_ownKey] =
-          matrix.Event(
-        type: MatrixVoipRoomComponent.callMemberStateEvent,
-        content: homeserver.membershipWrites.single,
-        senderId: _me,
-        stateKey: _ownKey,
-        eventId: r'$written',
-        originServerTs: serverTime,
-        room: room.matrixRoom,
-      );
-      // Writes are spaced out (the rate limit is shared with messages).
-      await Future<void>.delayed(const Duration(milliseconds: 2100));
-
-      await stay(const Duration(minutes: 30));
-      expect(homeserver.membershipWrites, hasLength(1),
-          reason: 'three and a half hours of it are left');
-
-      await stay(const Duration(minutes: 31));
-      expect(homeserver.membershipWrites, hasLength(2));
-      final second = homeserver.membershipWrites.last;
-      expect(second['created_ts'], joinedAt.millisecondsSinceEpoch);
-      expect(expiryOf(second), serverTime.add(MatrixCallMembership.lifetime));
-    });
-
     test("the homeserver's time lagging behind ours does not cut it short",
         () async {
-      joined(serverTime);
-      await join();
-
       // Just woken from a sleep, before a sync has said what time it is:
       // what we know of the homeserver's time lags behind.
       localTime = serverTime.add(const Duration(minutes: 61));
-      serverTime = serverTime.add(const Duration(minutes: 1));
-      // ignore: invalid_use_of_visible_for_testing_member
-      await session!.debugHeartbeat();
-      await pumpEventQueue();
+      joined(serverTime);
+      await join();
 
       expect(expiryOf(homeserver.membershipWrites.single),
-          localTime.add(MatrixCallMembership.lifetime));
+          localTime.add(MatrixCallMembership.unguardedLifetime));
     });
 
     test("this machine's clock being set back does not hold it up", () async {
       joined(serverTime);
       await join();
-      await stay(const Duration(minutes: 61));
-      room.matrixRoom
-              .states[MatrixVoipRoomComponent.callMemberStateEvent]![_ownKey] =
-          matrix.Event(
-        type: MatrixVoipRoomComponent.callMemberStateEvent,
-        content: homeserver.membershipWrites.single,
-        senderId: _me,
-        stateKey: _ownKey,
-        eventId: r'$written',
-        originServerTs: serverTime,
-        room: room.matrixRoom,
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 2100));
+      synced();
+      await settle();
 
-      // An hour on, and someone fixed a clock that ran three hours ahead.
-      serverTime = serverTime.add(const Duration(minutes: 61));
-      localTime = localTime.subtract(const Duration(hours: 2));
+      // Someone fixed a clock that ran three hours ahead.
+      serverTime = serverTime.add(const Duration(seconds: 35));
+      localTime = localTime.subtract(const Duration(hours: 3));
       // ignore: invalid_use_of_visible_for_testing_member
       await session!.debugHeartbeat();
-      await pumpEventQueue();
+      await settle();
 
       expect(homeserver.membershipWrites, hasLength(2));
       expect(expiryOf(homeserver.membershipWrites.last),
-          serverTime.add(MatrixCallMembership.lifetime));
+          serverTime.add(MatrixCallMembership.unguardedLifetime));
+    });
+
+    test(
+        'LiveKit gone for 5 s clears our membership by hand, and it goes back '
+        'up as soon as LiveKit is back', () async {
+      joined(serverTime);
+      final call = await join();
+      synced();
+      await settle();
+      final writes = homeserver.membershipWrites.length;
+
+      livekit.connectionState = lk.ConnectionState.reconnecting;
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      localTime = localTime.add(const Duration(seconds: 5));
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      await pumpEventQueue();
+      expect(homeserver.membershipWrites, hasLength(writes + 1));
+      expect(homeserver.membershipWrites.last, isEmpty, reason: 'cleared');
+
+      // Nothing keeps it up while we are out of the call.
+      await stay(const Duration(minutes: 1));
+      expect(homeserver.membershipWrites, hasLength(writes + 1));
+
+      livekit.connectionState = lk.ConnectionState.connected;
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      await pumpEventQueue();
+      expect(homeserver.membershipWrites, hasLength(writes + 2));
+      final back = homeserver.membershipWrites.last;
+      expect(back['application'], 'm.call');
+      expect(expiryOf(back),
+          serverTime.add(MatrixCallMembership.unguardedLifetime));
     });
 
     test('nothing asks the homeserver about delayed events again and again',
@@ -550,6 +587,28 @@ void main() {
 
       expect(homeserver.versionsAsked, 1);
       expect(homeserver.armAttempts, 0);
+    });
+  });
+
+  group('delayed events advertised, then refused', () {
+    setUp(() {
+      homeserver.delayedEvents = true;
+      homeserver.refusesDelayedEvents = true;
+    });
+
+    test('is asked once, and the window is cut short as without them',
+        () async {
+      final joinedAt = serverTime;
+      joined(joinedAt);
+      final call = await join();
+      for (var i = 0; i < 12; i++) {
+        await stay(const Duration(seconds: 10));
+      }
+
+      expect(homeserver.armAttempts, 1);
+      expect(call.heartbeatDelayId, isNull);
+      expect(expiryOf(homeserver.membershipWrites.first),
+          joinedAt.add(MatrixCallMembership.unguardedLifetime));
     });
   });
 

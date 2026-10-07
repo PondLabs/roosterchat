@@ -394,28 +394,73 @@ class MatrixLivekitVoipSession
   bool _stepOutTried = false;
 
   /// Takes our membership down while LiveKit is gone, so everyone outside
-  /// the call stops listing us within seconds, not when we hang up. The
-  /// heartbeat neither restarts the delayed leave nor restores the
-  /// membership until LiveKit is back; then it arms a new one and writes the
-  /// membership again. Where sending it fails (the network is what went),
-  /// the delayed leave fires on its own, with nothing restarting it.
+  /// the call stops listing us within seconds, not when we hang up: sends
+  /// the delayed leave, or, with none (matrix.org stopped allowing them on
+  /// 2026-10-07), clears the membership itself. The heartbeat keeps nothing
+  /// up while LiveKit is gone; once it is back the membership is written
+  /// again ([_comeBack]). Where the request fails (the network is what
+  /// went), a delayed leave fires on its own, and a short window
+  /// ([MatrixCallMembership.unguardedLifetime]) lapses on its own.
   Future<void> _stepOut() async {
-    final delayId = _delayedLeaveId ?? heartbeatDelayId;
-    // Without a delayed leave nothing could put it back safely.
-    if (delayId == null || _leaving) return;
+    if (_leaving) return;
+    final current =
+        room.matrixRoom.states[MatrixVoipRoomComponent.callMemberStateEvent]
+            ?[_ownMembershipKey];
+    if (current != null && current.content["application"] != null) {
+      _lastMembership = Map.of(current.content);
+      _joinedAt ??= MatrixCallMembership.joinedAt(
+          current.content, current is Event ? current.originServerTs : null);
+    }
+    if (_lastMembership == null) return;
     Log.w("Livekit has not been connected for ${stepOutAfter.inSeconds} s, "
         "leaving the call's member list until it is back");
+    final delayId = _delayedLeaveId ?? heartbeatDelayId;
     try {
-      await CallMembershipWrites.clearing(
-          _ownMembershipKey, _delayedLeaveAction(delayId, "send"));
+      if (delayId != null) {
+        await CallMembershipWrites.clearing(
+            _ownMembershipKey, _delayedLeaveAction(delayId, "send"));
+      } else {
+        await clearRoomCallState();
+      }
     } catch (e) {
-      Log.w("Could not send our delayed leave, it fires on its own: $e");
+      Log.w("Could not leave the member list, it lapses on its own: $e");
       return;
     }
     if (_delayedLeaveId == delayId) _delayedLeaveId = null;
     if (heartbeatDelayId == delayId) heartbeatDelayId = null;
     _steppedOut = true;
   }
+
+  /// Back in LiveKit after [_stepOut]: our membership goes up again. Our
+  /// clear has gone through by then, so this lands after it, whether or not
+  /// sync has shown it yet.
+  Future<void> _comeBack() async {
+    final membership = _lastMembership;
+    if (!_steppedOut || membership == null || _leaving) return;
+    final now = _membershipTime();
+    await room.matrixRoom.client.setRoomStateWithKey(
+      room.matrixRoom.id,
+      MatrixVoipRoomComponent.callMemberStateEvent,
+      _ownMembershipKey,
+      MatrixCallMembership.withPublishedState(membership,
+          media: _localLiveMedia,
+          voiceState: _localVoiceState,
+          away: _idleWatcher.isAway.value,
+          dj: _localDj,
+          joinedAt: _joinedAt ?? now,
+          now: now,
+          window: _window),
+    );
+    _steppedOut = false;
+    Log.i("Livekit is back, in the call's member list again");
+  }
+
+  /// How long our membership's window is written for: long while the
+  /// homeserver holds a delayed leave that clears it if we die, short when
+  /// nothing would.
+  Duration get _window => heartbeatDelayId != null
+      ? MatrixCallMembership.lifetime
+      : MatrixCallMembership.unguardedLifetime;
 
   @override
   bool get rosterComplete => _rosterComplete;
@@ -432,12 +477,9 @@ class MatrixLivekitVoipSession
     if (_connected()) {
       _lastConnectedAt = now;
       _stepOutTried = false;
-      if (_steppedOut) {
-        // Back in the call: our membership goes back up now, not at the
-        // next heartbeat.
-        _steppedOut = false;
-        unawaited(_beat());
-      }
+      // Back in the call: our membership goes back up now, not at the next
+      // heartbeat.
+      if (_steppedOut) unawaited(_beat());
       final since = _connectedSince ??= now;
       if (!_rosterComplete && now.difference(since) >= rosterSettleTime) {
         _rosterComplete = true;
@@ -1257,7 +1299,8 @@ class MatrixLivekitVoipSession
           dj: published.dj,
           unguarded: published.unguarded,
           joinedAt: joinedAt,
-          now: _membershipTime()),
+          now: _membershipTime(),
+          window: _window),
     );
   }
 
@@ -1973,6 +2016,14 @@ class MatrixLivekitVoipSession
     if (!_connected()) return;
     await _keepDelayedLeave();
     if (_leaving) return;
+    if (_steppedOut) {
+      try {
+        await _comeBack();
+      } catch (e, s) {
+        Log.onError(e, s, content: "Could not put our call membership back");
+      }
+      return;
+    }
     try {
       _keepMembershipFromLapsing();
     } catch (e, s) {
@@ -2026,6 +2077,7 @@ class MatrixLivekitVoipSession
       await _armDelayedLeave();
       _armFailures = 0;
     } catch (e, s) {
+      if (_refusesDelayedEvents(e)) return;
       _armFailures++;
       Log.onError(e, s,
           content: "Could not arm our delayed leave "
@@ -2043,14 +2095,29 @@ class MatrixLivekitVoipSession
     }
   }
 
+  /// Whether [error] is the homeserver refusing delayed events while saying
+  /// it has them (matrix.org from 2026-10-07: "Sending delayed events has
+  /// been disallowed", with /versions read days before). Asking again would
+  /// only fail again: the call goes on as on a homeserver without them.
+  bool _refusesDelayedEvents(Object error) {
+    if (error is! MatrixException || error.error != MatrixError.M_FORBIDDEN) {
+      return false;
+    }
+    if (_hasDelayedEvents != false) {
+      Log.w("Homeserver refuses delayed events: ${error.errorMessage}");
+    }
+    _hasDelayedEvents = false;
+    return true;
+  }
+
   /// Keeps our delayed leave from firing while we are here: restarts it,
   /// or arms it where there is none yet.
   Future<void> _keepDelayedLeave() async {
     final delayId = _delayedLeaveId;
     if (delayId == null) {
       await _armDelayedLeaveWhenDue();
-      if (heartbeatDelayId == null) return;
-      // Our membership was taken down while LiveKit was gone.
+      // Taken down while LiveKit was gone: _comeBack puts it up.
+      if (heartbeatDelayId == null || _steppedOut) return;
       try {
         await _restoreMembershipIfCleared();
       } catch (e, s) {
@@ -2085,6 +2152,7 @@ class MatrixLivekitVoipSession
       // What we advertise is unguarded until a heartbeat works again:
       // without the delayed leave, nothing would clear it if this client
       // died.
+      if (_refusesDelayedEvents(e)) _delayedLeaveId = null;
       Log.onError(e, s, content: "Call membership heartbeat failed");
       if (heartbeatDelayId != null) {
         heartbeatDelayId = null;
@@ -2129,7 +2197,8 @@ class MatrixLivekitVoipSession
           away: _idleWatcher.isAway.value,
           dj: _localDj,
           joinedAt: _joinedAt ?? now,
-          now: now),
+          now: now,
+          window: _window),
     );
   }
 
@@ -2144,13 +2213,22 @@ class MatrixLivekitVoipSession
             ?[_ownMembershipKey];
     // Cleared: putting it back is the delayed leave's heartbeat's to do.
     if (current is! Event || current.content["application"] == null) return;
+    final now = _membershipTime();
     if (!MatrixCallMembership.needsRefresh(
-        current.content, current.originServerTs, _membershipTime())) {
+        current.content, current.originServerTs, now,
+        guarded: heartbeatDelayId != null)) {
       return;
     }
 
-    // The write only shows in the room state once it comes back over sync.
-    if (!_waited(_lastExpiryRefresh, const Duration(minutes: 5))) return;
+    // The write only shows in the room state once it comes back over sync:
+    // not again before then, a short window allowing.
+    final left =
+        MatrixCallMembership.expiresAt(current.content, current.originServerTs)!
+            .difference(now);
+    final wait = left < const Duration(minutes: 10)
+        ? const Duration(seconds: 20)
+        : const Duration(minutes: 5);
+    if (!_waited(_lastExpiryRefresh, wait)) return;
     _lastExpiryRefresh = _now();
 
     Log.i("Extending our call membership before it expires");
