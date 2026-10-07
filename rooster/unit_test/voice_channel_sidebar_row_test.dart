@@ -210,12 +210,13 @@ void main() {
 
   void member(String userId,
       {required Duration joinedAgo,
+      String deviceId = 'DEVICE',
       Duration? writtenAgo,
       Map<String, Object?> says = const {}}) {
     final joined = _serverNow().subtract(joinedAgo);
     final written =
         writtenAgo == null ? joined : _serverNow().subtract(writtenAgo);
-    final key = '_${userId}_DEVICE_m.call';
+    final key = '_${userId}_${deviceId}_m.call';
     (room.matrixRoom.states[MatrixActivitiesComponent.callMemberStateEvent] ??=
         {})[key] = matrix.Event(
       type: MatrixActivitiesComponent.callMemberStateEvent,
@@ -227,7 +228,7 @@ void main() {
       content: {
         'application': 'm.call',
         'call_id': '',
-        'device_id': 'DEVICE',
+        'device_id': deviceId,
         'scope': 'm.room',
         // Written again: the window runs four hours past then, from the join.
         if (writtenAgo != null) 'created_ts': joined.millisecondsSinceEpoch,
@@ -323,6 +324,81 @@ void main() {
         inRow('Bob', find.byIcon(Icons.headset_off_rounded)), findsOneWidget);
     expect(inRow('Carol', find.byType(Icon)), findsNothing);
     expect(inRow('Carol', find.text('LIVE')), findsNothing);
+    await done(tester, list);
+  });
+
+  for (final oldFirst in [true, false]) {
+    testWidgets(
+        'an older device cannot hide a deafened member (old first: $oldFirst)',
+        (tester) async {
+      final clock = HomeserverClock()
+        ..readSync(_syncAt(_serverNow()), homeserver: 'example.org');
+      final list = listFor(clock);
+      void oldDevice() => member('@bob:example.org',
+          deviceId: 'OLD',
+          joinedAgo: const Duration(minutes: 30),
+          // A heartbeat rewrites the old device more recently than the new
+          // device's deafen. Its join is still the older one.
+          writtenAgo: Duration.zero,
+          says: {'chat.commet.voice_state': <String>[]});
+      void currentDevice() => member('@bob:example.org',
+              deviceId: 'CURRENT',
+              joinedAgo: const Duration(minutes: 5),
+              writtenAgo: const Duration(seconds: 30),
+              says: {
+                'chat.commet.voice_state': ['muted', 'deafened'],
+              });
+      if (oldFirst) {
+        oldDevice();
+        currentDevice();
+      } else {
+        currentDevice();
+        oldDevice();
+      }
+
+      await show(tester);
+
+      expect(find.text('Bob'), findsOneWidget);
+      expect(find.byIcon(Icons.headset_off_rounded), findsOneWidget);
+      await done(tester, list);
+    });
+  }
+
+  testWidgets('deafen changes refresh an open sidebar before joining',
+      (tester) async {
+    final clock = HomeserverClock()
+      ..readSync(_syncAt(_serverNow()), homeserver: 'example.org');
+    final list = listFor(clock);
+    member('@bob:example.org', joinedAgo: const Duration(minutes: 5));
+    await show(tester);
+    expect(find.byIcon(Icons.headset_off_rounded), findsNothing);
+    matrix.Event currentMembership() =>
+        room.matrixRoom.states[MatrixActivitiesComponent.callMemberStateEvent]![
+            '_@bob:example.org_DEVICE_m.call'] as matrix.Event;
+
+    member('@bob:example.org',
+        joinedAgo: const Duration(minutes: 5),
+        writtenAgo: Duration.zero,
+        says: {
+          'chat.commet.voice_state': ['muted', 'deafened'],
+        });
+    list.onSync(matrix.JoinedRoomUpdate(state: [
+      currentMembership(),
+    ]));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byIcon(Icons.headset_off_rounded), findsOneWidget);
+
+    member('@bob:example.org',
+        joinedAgo: const Duration(minutes: 5),
+        writtenAgo: Duration.zero,
+        says: {'chat.commet.voice_state': <String>[]});
+    list.onSync(matrix.JoinedRoomUpdate(
+        timeline: matrix.TimelineUpdate(events: [currentMembership()])));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byIcon(Icons.headset_off_rounded), findsNothing);
+    expect(find.text('Bob'), findsOneWidget);
     await done(tester, list);
   });
 

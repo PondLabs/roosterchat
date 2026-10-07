@@ -89,6 +89,16 @@ class _LocalParticipant implements lk.LocalParticipant {
       publications.firstWhereOrNull((p) => p.source == source);
 
   @override
+  Future<lk.LocalTrackPublication?> setMicrophoneEnabled(bool enabled,
+      {lk.AudioCaptureOptions? audioCaptureOptions}) async {
+    final mic = publications.firstOrNull;
+    if (mic == null) return null;
+    mic.muted = !enabled;
+    mic.track?.mediaStreamTrack.enabled = enabled;
+    return mic;
+  }
+
+  @override
   Future<void> publishData(List<int> data,
       {bool? reliable,
       List<String>? destinationIdentities,
@@ -415,6 +425,33 @@ void main() {
   Future<void> settle() => Future<void>.delayed(const Duration(seconds: 3));
 
   group('on a homeserver without delayed events', () {
+    test('deafening and undeafening publish the current voice state', () async {
+      joined(serverTime);
+      final call = await join();
+
+      await call.setDeafened(true);
+      // The join's heartbeat has just written: the publisher's rate limit.
+      await Future<void>.delayed(const Duration(milliseconds: 2100));
+
+      expect(call.isDeafened, isTrue);
+      expect(
+          MatrixCallMembership.voiceStateOf(homeserver.membershipWrites.last),
+          {VoiceState.muted, VoiceState.deafened});
+      expect(
+          homeserver.membershipWrites.last[MatrixCallMembership.unguardedKey],
+          isTrue);
+
+      await call.setDeafened(false);
+      // The second write respects the publisher's rate limit.
+      await Future<void>.delayed(const Duration(milliseconds: 2100));
+
+      expect(call.isDeafened, isFalse);
+      expect(call.isMicrophoneMuted, isFalse);
+      expect(
+          MatrixCallMembership.voiceStateOf(homeserver.membershipWrites.last),
+          isEmpty);
+    });
+
     test('joining without a microphone publishes the initial mute', () async {
       joined(serverTime);
       (livekit.localParticipant! as _LocalParticipant).publications.clear();

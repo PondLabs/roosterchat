@@ -589,6 +589,68 @@ void main() {
       expect(callSession(component).voiceState[otherUserId], isNull);
     });
 
+    test('an older deafened device cannot override a later unmuted join', () {
+      final now = DateTime.now();
+      setMemberships([
+        callMemberEvent(room, otherUserId, 'CURRENT', voiceState: [], extra: {
+          'created_ts':
+              now.subtract(const Duration(minutes: 5)).millisecondsSinceEpoch,
+        }),
+        callMemberEvent(room, otherUserId, 'OLD', voiceState: [
+          'deafened'
+        ], extra: {
+          'created_ts':
+              now.subtract(const Duration(minutes: 30)).millisecondsSinceEpoch,
+        }),
+      ]);
+
+      expect(callSession(component).voiceState[otherUserId], isEmpty);
+    });
+
+    test('equal joins use the same device tie break as superseding a call', () {
+      final now = DateTime.now();
+      setMemberships([
+        callMemberEvent(room, otherUserId, 'BBB',
+            sentAt: now, voiceState: ['deafened']),
+        callMemberEvent(room, otherUserId, 'AAA', sentAt: now, voiceState: []),
+      ]);
+
+      expect(callSession(component).voiceState[otherUserId],
+          {VoiceState.muted, VoiceState.deafened});
+    });
+
+    test('an unknown state on the latest join does not inherit an old deafen',
+        () {
+      final now = DateTime.now();
+      setMemberships([
+        callMemberEvent(room, otherUserId, 'CURRENT', sentAt: now),
+        callMemberEvent(room, otherUserId, 'OLD',
+            sentAt: now.subtract(const Duration(minutes: 5)),
+            voiceState: ['deafened']),
+      ]);
+
+      expect(callSession(component).voiceState[otherUserId], isNull);
+    });
+
+    test('stale badges on the latest join do not revive an old device deafen',
+        () {
+      final now = DateTime.now();
+      setMemberships([
+        callMemberEvent(room, otherUserId, 'CURRENT',
+            sentAt: now.subtract(const Duration(minutes: 91)),
+            voiceState: [],
+            extra: {'chat.commet.unguarded': true}),
+        callMemberEvent(room, otherUserId, 'OLD', sentAt: now, voiceState: [
+          'deafened'
+        ], extra: {
+          'created_ts':
+              now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
+        }),
+      ]);
+
+      expect(callSession(component).voiceState[otherUserId], isNull);
+    });
+
     test("in our call, LiveKit decides who is muted", () {
       setMemberships([
         // Unmuted a moment ago; the membership hasn't caught up.
