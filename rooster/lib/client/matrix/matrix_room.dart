@@ -634,13 +634,40 @@ class MatrixRoom extends Room {
     var recent = client.getComponent<RecentEmoticonComponent>();
     recent?.reactedEmoticon(this, reaction);
 
-    var id = await _matrixRoom.sendReaction(reactingTo.eventId, reaction.key);
+    // Our own txid is the local echo's event id until the server answers, so
+    // removing the reaction meanwhile can wait for the real id
+    final txid = _matrixRoom.client.generateUniqueTransactionId();
+    final send =
+        _matrixRoom.sendReaction(reactingTo.eventId, reaction.key, txid: txid);
+    _pendingReactionSends[txid] = send;
+
+    String? id;
+    try {
+      id = await send;
+    } finally {
+      _pendingReactionSends.remove(txid);
+    }
+
     if (id != null) {
       var event = await _matrixRoom.getEventById(id);
       return convertEvent(event!);
     }
 
     return null;
+  }
+
+  final Map<String, Future<String?>> _pendingReactionSends = {};
+
+  /// The server's event id for a reaction still being sent as [txid], or null
+  /// when this session isn't sending it.
+  Future<String?> reactionSentEventId(String txid) async {
+    final send = _pendingReactionSends[txid];
+    if (send == null) return null;
+    try {
+      return await send;
+    } catch (_) {
+      return null;
+    }
   }
 
   @override

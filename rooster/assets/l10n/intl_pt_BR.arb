@@ -1828,5 +1828,28 @@
     "roomSearchFailed": "Não foi possível buscar mensagens",
     "roomSearchRetry": "Tentar novamente",
     "roomSearchClear": "Limpar busca",
-    "roomSearchNext": "Próxima"
+    "roomSearchNext": "Próxima",
+    "labelReactionTooltipYou": "Você",
+    "@labelReactionTooltipYou": {
+        "description": "Stands for the current user in the list of who reacted",
+        "type": "text",
+        "placeholders": {}
+    },
+    "labelReactionTooltipOthers": "{howMany,plural, =1{e mais 1}other{e mais {howMany}}}",
+    "@labelReactionTooltipOthers": {
+        "description": "Ends the list of who reacted when there are too many names",
+        "type": "text",
+        "placeholders": {
+            "howMany": {}
+        }
+    },
+    "labelReactionTooltipReactedWith": "{howMany,plural, =1{reagiu com {emoji}}other{reagiram com {emoji}}}",
+    "@labelReactionTooltipReactedWith": {
+        "description": "Follows the names of who reacted, in the reaction tooltip",
+        "type": "text",
+        "placeholders": {
+            "howMany": {},
+            "emoji": {}
+        }
+    }
 }
