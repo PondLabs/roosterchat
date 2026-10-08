@@ -13,6 +13,7 @@ import 'package:rooster/client/room.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/rich_text/matrix_html_parser.dart';
 import 'package:rooster/utils/image/lod_image.dart';
+import 'package:rooster/debug/log.dart';
 import 'package:rooster/utils/image_utils.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -287,11 +288,21 @@ class NotificationModifierLinuxFormatting implements NotificationModifier {
       return cached;
     }
 
-    if (image case LODImageProvider _) {
-      await image.fetchFullRes();
-    }
+    // One image that will not decode (a 404, a corrupt file) must not keep
+    // the notification from showing: it shows without the picture.
+    ui.Image i;
+    try {
+      if (image case LODImageProvider _) {
+        await image.fetchFullRes().timeout(const Duration(seconds: 10));
+      }
 
-    var i = await ImageUtils.imageProviderToImage(image);
+      i = await ImageUtils.imageProviderToImage(image,
+          timeout: const Duration(seconds: 10));
+    } catch (e, s) {
+      Log.onError(e, s,
+          content: "Could not decode an image for a notification");
+      return null;
+    }
 
     var recorder = ui.PictureRecorder();
     Canvas c = Canvas(recorder);

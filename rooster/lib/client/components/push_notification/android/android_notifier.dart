@@ -348,9 +348,15 @@ class AndroidNotifier implements Notifier {
 
   Future<Uint8List?> getImageBytes(ImageProvider? provider) async {
     if (provider != null) {
-      var data = await ImageUtils.imageProviderToImage(provider);
-      var bytes = await data.toByteData(format: ImageByteFormat.png);
-      return bytes?.buffer.asUint8List();
+      try {
+        var data = await ImageUtils.imageProviderToImage(provider,
+            timeout: const Duration(seconds: 10));
+        var bytes = await data.toByteData(format: ImageByteFormat.png);
+        return bytes?.buffer.asUint8List();
+      } catch (e, s) {
+        // The notification shows without the picture.
+        Log.onError(e, s, content: "Could not decode a notification image");
+      }
     }
     return null;
   }

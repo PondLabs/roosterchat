@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:rooster/debug/log.dart';
+
 import 'package:rooster/cache/file_provider.dart';
 import 'package:rooster/config/build_config.dart';
 import 'package:rooster/config/layout_config.dart';
@@ -123,6 +125,8 @@ class _LightboxState extends State<Lightbox> with TickerProviderStateMixin {
   @override
   void dispose() {
     onLodChanged?.cancel();
+    _controller.dispose();
+    controller.dispose();
     super.dispose();
   }
 
@@ -193,7 +197,14 @@ class _LightboxState extends State<Lightbox> with TickerProviderStateMixin {
   }
 
   void getImageInfo() async {
-    var image = await getImage();
+    ui.Image? image;
+    try {
+      image = await getImage();
+    } catch (e, s) {
+      // Shown anyway, fitted whole: the image widget reports the failure.
+      Log.onError(e, s, content: "Could not read the image's size");
+    }
+    if (!mounted) return;
     setState(() {
       knowsImageSize = image != null;
       if (image != null) aspectRatio = image.width / image.height;
@@ -251,12 +262,16 @@ class _LightboxState extends State<Lightbox> with TickerProviderStateMixin {
     }
   }
 
+  /// The decoded image, for its size, or null for one whose size cannot be
+  /// read. The listener comes off the stream once it has answered: left on,
+  /// every image ever opened stayed decoded in memory, and an animated one
+  /// kept ticking after the viewer closed.
   Future<ui.Image?> getImage() {
     Completer<ui.Image?> completer = Completer<ui.Image?>();
-
-    displayImage!
-        .resolve(const ImageConfiguration())
-        .addListener(ImageStreamListener((info, synchronousCall) {
+    final stream = displayImage!.resolve(const ImageConfiguration());
+    late final ImageStreamListener listener;
+    listener = ImageStreamListener((info, synchronousCall) {
+      stream.removeListener(listener);
       if (completer.isCompleted) return;
       try {
         completer.complete(info.image);
@@ -264,7 +279,11 @@ class _LightboxState extends State<Lightbox> with TickerProviderStateMixin {
         // An <img> element on web has no pixels to hand over.
         completer.complete(null);
       }
-    }));
+    }, onError: (error, stackTrace) {
+      stream.removeListener(listener);
+      if (!completer.isCompleted) completer.completeError(error, stackTrace);
+    });
+    stream.addListener(listener);
     return completer.future;
   }
 
