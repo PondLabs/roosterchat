@@ -70,8 +70,14 @@ abstract class MatrixTimelineEvent implements TimelineEvent {
   /// The event's text, or its type when it has none: the SDK's own fallback
   /// reads "Unknown message format of type ...", which the timeline's folded
   /// summary and failed sends would show.
+  ///
+  /// Computed once: the SDK parses the formatted body (HTML) to text on
+  /// every call, and the room panel, the reply quotes and the chat asked
+  /// for it on every rebuild. A changed event is a new instance.
   @override
-  String get plainTextBody => event.redacted || event.text.isNotEmpty
-      ? event.plaintextBody
-      : event.type;
+  String get plainTextBody =>
+      _plainTextBody ??= event.redacted || event.text.isNotEmpty
+          ? event.plaintextBody
+          : event.type;
+  String? _plainTextBody;
 }

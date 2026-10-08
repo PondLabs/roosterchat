@@ -90,11 +90,26 @@ abstract class Timeline {
   @protected
   Future<TimelineEvent?> fetchEventByIdInternal(String eventId);
 
-  Future<TimelineEvent?> fetchEventById(String eventId) async {
-    var event = await fetchEventByIdInternal(eventId);
-    if (event == null) return null;
-    _eventsDict[event.eventId] = event;
-    return event;
+  /// Fetches in flight, so two quotes of one event (or a quote and a jump)
+  /// share a request.
+  final Map<String, Future<TimelineEvent?>> _fetching = {};
+
+  /// The event, from the timeline when it has it, else fetched (from the
+  /// store, then the server) and kept, so the next ask for it (a reply
+  /// quote scrolled back into view) has it at once.
+  Future<TimelineEvent?> fetchEventById(String eventId) {
+    final known = _eventsDict[eventId];
+    if (known != null) return Future.value(known);
+    return _fetching[eventId] ??= () async {
+      try {
+        var event = await fetchEventByIdInternal(eventId);
+        if (event == null) return null;
+        _eventsDict[event.eventId] = event;
+        return event;
+      } finally {
+        _fetching.remove(eventId);
+      }
+    }();
   }
 
   void insertEvent(int index, TimelineEvent event) {

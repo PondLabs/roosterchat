@@ -180,11 +180,10 @@ class MatrixTimeline extends Timeline {
   }
 
   @override
-  Future<TimelineEvent?> fetchEventByIdInternal(String eventId) async {
-    var event = await _matrixRoom.getEventById(eventId);
-    if (event == null) return null;
-    return _room.convertEvent(event);
-  }
+  Future<TimelineEvent?> fetchEventByIdInternal(String eventId) =>
+      // The room's own fetch: it also asks for the key of an encrypted
+      // event this device cannot read yet.
+      _room.getEvent(eventId);
 
   Future<void> removeReaction(
       TimelineEvent reactingTo, Emoticon reaction) async {
