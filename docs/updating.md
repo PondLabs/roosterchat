@@ -31,7 +31,11 @@ publishes no Dart SDK and no engine for `windows-arm64` (the current stable,
 x64. `desktop-build.yml` accepts the platform and stops at that point rather
 than ship an x64 build under an arm64 name; everything else for it is in
 place. Until then Windows on Arm runs the x64 build under emulation, as it
-always has.
+always has. A first try of the desktop builds with 3.47.6 (October 2026)
+got the arm64 Dart SDK on the Windows arm64 runner, but code generation
+then stalled on every platform in `build_runner build` (build_runner
+2.5.4 under that Dart), so the upgrade needs the generators brought up
+together, as a change of its own.
 
 `release.yml` is the older Commet pipeline and uploads different names
 (`rooster-windows.zip`). Nothing runs it today.
