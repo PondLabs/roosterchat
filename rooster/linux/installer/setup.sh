@@ -1,14 +1,15 @@
 #!/bin/sh
-# The Linux installer: rooster-<tag>-linux-x64-setup.sh. This script with the
-# release bundle, the launcher entry and the icon appended as a tar.gz after
-# the marker line at the end (.github/workflows/installers.yml).
+# The Linux installer: rooster-<tag>-linux-<arch>-setup.sh (x64 or arm64).
+# This script with the release bundle, the launcher entry, the icon and the
+# bundle's architecture appended as a tar.gz after the marker line at the
+# end (.github/workflows/installers.yml).
 #
 # Installs for this user only, no root: into ~/.local/opt/Rooster, with a
 # launcher entry, an icon and ~/.local/bin/rooster. A directory the user owns
 # is one the updater can replace (docs/updating.md); a .deb under /usr is not.
 #
-#   sh rooster-<tag>-linux-x64-setup.sh              install, or reinstall
-#   sh rooster-<tag>-linux-x64-setup.sh --uninstall  remove it again
+#   sh rooster-<tag>-linux-<arch>-setup.sh              install, or reinstall
+#   sh rooster-<tag>-linux-<arch>-setup.sh --uninstall  remove it again
 set -eu
 
 data=${XDG_DATA_HOME:-$HOME/.local/share}
@@ -28,6 +29,21 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 line=$(awk '/^__PAYLOAD__$/ { print NR + 1; exit }' "$0")
 tail -n +"$line" "$0" | tar -xz -C "$tmp"
+
+# A bundle for another CPU would install fine and never start.
+if [ -f "$tmp/arch" ]; then
+  case "$(uname -m)" in
+    x86_64 | amd64) machine=x64 ;;
+    aarch64 | arm64) machine=arm64 ;;
+    *) machine=$(uname -m) ;;
+  esac
+  built=$(cat "$tmp/arch")
+  if [ "$built" != "$machine" ]; then
+    echo "This installer holds the $built build of Rooster; this computer is $machine." >&2
+    echo "Take rooster-<tag>-linux-$machine-setup.sh from the release instead." >&2
+    exit 1
+  fi
+fi
 
 # A rename, so a reinstall over a running Rooster never leaves half of one.
 mkdir -p "$opt" "$(dirname "$desktop")" "$(dirname "$icon")" "$(dirname "$bin")"

@@ -1,14 +1,14 @@
 name: installers
 
-# The installers for a release, each platform on its own runner, made from
-# the release builds desktop-build.yml uploads:
+# The installers for a release, each on its own runner, made from the
+# release builds desktop-build.yml uploads:
 #
-# - Windows: rooster-<tag>-windows-x64-setup.exe (Inno Setup, per user, no
-#   admin; rooster/windows/installer/rooster.iss).
+# - Windows: rooster-<tag>-windows-<arch>-setup.exe (Inno Setup, per user, no
+#   admin; rooster/windows/installer/rooster.iss), x64 and arm64.
 # - macOS:   rooster-<tag>-macos-universal.dmg (Rooster.app and a link to
 #   Applications to drag it onto).
-# - Linux:   rooster-<tag>-linux-x64-setup.sh (per user, no root;
-#   rooster/linux/installer/setup.sh).
+# - Linux:   rooster-<tag>-linux-<arch>-setup.sh (per user, no root;
+#   rooster/linux/installer/setup.sh), x64 and arm64.
 #
 # Each installs where the in-app updater can replace it, which is what keeps
 # an installed Rooster updating itself (docs/updating.md). Updates are still
@@ -46,20 +46,44 @@ jobs:
       matrix:
         include:
           - platform: windows
+            os: windows
+            arch: x64
             runner: windows-2025
             build: windows-x64-release
             ext: zip
             installer: windows-x64-setup.exe
+          # Inno Setup packs an arm64 bundle on any Windows; nothing here runs
+          # the build.
+          - platform: windows-arm64
+            os: windows
+            arch: arm64
+            runner: windows-2025
+            build: windows-arm64-release
+            ext: zip
+            installer: windows-arm64-setup.exe
           - platform: macos
+            os: macos
+            arch: universal
             runner: macos-15
             build: macos-universal-release
             ext: zip
             installer: macos-universal.dmg
           - platform: linux
+            os: linux
+            arch: x64
             runner: ubuntu-24.04
             build: linux-x64-release
             ext: tar.gz
             installer: linux-x64-setup.sh
+          # On the arm64 runner, so trying the installer below installs a
+          # bundle this machine could run.
+          - platform: linux-arm64
+            os: linux
+            arch: arm64
+            runner: ubuntu-24.04-arm
+            build: linux-arm64-release
+            ext: tar.gz
+            installer: linux-arm64-setup.sh
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: write
@@ -89,7 +113,7 @@ jobs:
           --pattern "$BUILD.${{ matrix.ext }}" --dir in
 
       - name: Windows installer
-        if: matrix.platform == 'windows'
+        if: matrix.os == 'windows'
         shell: pwsh
         run: |
           7z x "in/$env:BUILD.zip" -oin | Out-Null
@@ -98,13 +122,13 @@ jobs:
             choco install innosetup -y --no-progress
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
-          & $iscc /Q "/DVersion=$env:VERSION" "/DSource=$PWD\in\$env:BUILD" `
+          & $iscc /Q "/DVersion=$env:VERSION" "/DArch=${{ matrix.arch }}" "/DSource=$PWD\in\$env:BUILD" `
             "/DOutput=$PWD\dist" "/DOutputName=$($env:INSTALLER -replace '\.exe$', '')" `
             rooster/windows/installer/rooster.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: macOS disk image
-        if: matrix.platform == 'macos'
+        if: matrix.os == 'macos'
         run: |
           ditto -x -k "in/$BUILD.zip" in/app
           mkdir -p dmg dist
@@ -114,7 +138,7 @@ jobs:
           hdiutil create -volname Rooster -srcfolder dmg -ov -format UDZO "dist/$INSTALLER"
 
       - name: Linux installer
-        if: matrix.platform == 'linux'
+        if: matrix.os == 'linux'
         run: |
           tar -xzf "in/$BUILD.tar.gz" -C in
           mkdir -p payload dist
@@ -122,14 +146,18 @@ jobs:
           # The flatpak's entry: Exec=rooster and the app id as its icon.
           cp rooster/linux/flatpak/com.pondlabs.rooster.desktop payload/rooster.desktop
           cp rooster/linux/debian/usr/share/icons/hicolor/256x256/apps/rooster.png payload/rooster.png
+          # What the bundle was built for; the script refuses another CPU.
+          echo "${{ matrix.arch }}" > payload/arch
           tar -czf payload.tar.gz -C payload .
           cat rooster/linux/installer/setup.sh payload.tar.gz > "dist/$INSTALLER"
           chmod +x "dist/$INSTALLER"
 
       # Into a scratch home: installed where the updater can replace it, with
-      # a launcher entry pointing at it, and gone again on --uninstall.
+      # a launcher entry pointing at it, and gone again on --uninstall. The
+      # bundle is this runner's architecture, so the script lets it through;
+      # claiming another makes it refuse.
       - name: Try the Linux installer
-        if: matrix.platform == 'linux'
+        if: matrix.os == 'linux'
         run: |
           export HOME=$(mktemp -d)
           unset XDG_DATA_HOME DISPLAY WAYLAND_DISPLAY
@@ -139,6 +167,13 @@ jobs:
             "$HOME/.local/share/applications/com.pondlabs.rooster.desktop"
           test -L "$HOME/.local/bin/rooster"
           sh "dist/$INSTALLER" --uninstall
+          test ! -e "$HOME/.local/opt/Rooster"
+          other=arm64
+          if [ "${{ matrix.arch }}" = arm64 ]; then other=x64; fi
+          echo "$other" > payload/arch
+          tar -czf other.tar.gz -C payload .
+          cat rooster/linux/installer/setup.sh other.tar.gz > other-setup.sh
+          if sh other-setup.sh; then echo "the $other installer ran on ${{ matrix.arch }}" >&2; exit 1; fi
           test ! -e "$HOME/.local/opt/Rooster"
 
       - name: Upload the installer
