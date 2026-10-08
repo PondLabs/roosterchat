@@ -628,4 +628,9 @@ class Preferences {
 
   StringListPreference expandedSpaceGroups =
       StringListPreference("expanded_space_groups", defaultValue: []);
+
+  /// Channel categories closed in a space's sidebar, as
+  /// "<space local id>/<category id>".
+  StringListPreference collapsedChannelCategories =
+      StringListPreference("collapsed_channel_categories", defaultValue: []);
 }

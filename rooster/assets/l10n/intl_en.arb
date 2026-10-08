@@ -2355,5 +2355,204 @@
       "howMany": {},
       "emoji": {}
     }
+  },
+  "labelTextChannels": "Text channels",
+  "@labelTextChannels": {
+    "description": "Heading in a space's sidebar over its text channels",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelVoiceChannels": "Voice channels",
+  "@labelVoiceChannels": {
+    "description": "Heading in a space's sidebar over its voice channels",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptCreateChannel": "Create channel",
+  "@promptCreateChannel": {
+    "description": "Button on a channel category heading that adds a channel under it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptCreateCategory": "Create category",
+  "@promptCreateCategory": {
+    "description": "Menu entry that adds a heading to a space's channel list",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRenameCategory": "Rename category",
+  "@promptRenameCategory": {
+    "description": "Menu entry that renames a heading of a space's channel list",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptDeleteCategory": "Delete category",
+  "@promptDeleteCategory": {
+    "description": "Menu entry that removes a heading of a space's channel list",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptDeleteCategoryConfirmation": "Delete the category {name}? Its channels stay, back under text channels and voice channels.",
+  "@promptDeleteCategoryConfirmation": {
+    "description": "Asks before removing a heading of a space's channel list",
+    "type": "text",
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "promptMoveCategoryUp": "Move up",
+  "@promptMoveCategoryUp": {
+    "description": "Menu entry that moves a channel category above the one before it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptMoveCategoryDown": "Move down",
+  "@promptMoveCategoryDown": {
+    "description": "Menu entry that moves a channel category below the one after it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptCollapseCategory": "Collapse",
+  "@promptCollapseCategory": {
+    "description": "Menu entry that hides the channels under a category",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptExpandCategory": "Expand",
+  "@promptExpandCategory": {
+    "description": "Menu entry that shows the channels under a collapsed category",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelCategoryName": "Category name",
+  "@labelCategoryName": {
+    "description": "Placeholder of the text field naming a channel category",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelRenameBuiltInCategory": "Leave it empty to use the default name.",
+  "@labelRenameBuiltInCategory": {
+    "description": "Under the field renaming the built-in text or voice channel category",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptMoveToCategory": "Move to category",
+  "@promptMoveToCategory": {
+    "description": "Menu entry on a channel that puts it under another heading",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorSaveCategories": "Could not save the categories",
+  "@errorSaveCategories": {
+    "description": "Title of the error shown when changing the channel categories fails",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptInvitePeople": "Invite people",
+  "@promptInvitePeople": {
+    "description": "Button on a channel in the sidebar that invites someone into it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelInviteToVoice": "Invite to voice",
+  "@labelInviteToVoice": {
+    "description": "Row under a voice channel we are in, which lists people to call over",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptSeeMoreInvitees": "See more…",
+  "@promptSeeMoreInvitees": {
+    "description": "Last entry of the short list of people to invite to a voice channel; opens all of them",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelEveryoneIsHere": "Everyone's already here.",
+  "@labelEveryoneIsHere": {
+    "description": "Shown instead of the people to invite to a voice channel when there is nobody left to invite",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptSendVoiceInvite": "Invite",
+  "@promptSendVoiceInvite": {
+    "description": "Button next to someone in the list of people to invite to a voice channel",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelVoiceInviteSent": "Invited",
+  "@labelVoiceInviteSent": {
+    "description": "Next to someone already sent an invite to a voice channel",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorVoiceInvite": "Could not send the invite, try again",
+  "@errorVoiceInvite": {
+    "description": "Next to someone the invite to a voice channel failed for",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelSearchPeople": "Search",
+  "@labelSearchPeople": {
+    "description": "Placeholder of the field filtering the people to invite to a voice channel",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVoiceInvite": "Come hang out in 🔊 {channel}: {link}",
+  "@messageVoiceInvite": {
+    "description": "Direct message sent to someone invited to a voice channel, with the link that opens it",
+    "type": "text",
+    "placeholders": {
+      "channel": {},
+      "link": {}
+    }
+  },
+  "tooltipOpenChannelChat": "Open chat",
+  "@tooltipOpenChannelChat": {
+    "description": "Button on a voice channel in the sidebar that opens its text chat rather than the call",
+    "type": "text",
+    "placeholders": {}
+  },
+  "tooltipEditChannel": "Edit channel",
+  "@tooltipEditChannel": {
+    "description": "Button on a channel in the sidebar that opens its settings",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelSetVoiceChannelStatus": "Set a channel status",
+  "@labelSetVoiceChannelStatus": {
+    "description": "Under the name of a voice channel we are in, while it has no status; opens the field to set one",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelVoiceChannelStatus": "Channel status",
+  "@labelVoiceChannelStatus": {
+    "description": "Title of the dialog setting what a voice channel is up to",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelVoiceChannelStatusDescription": "Everyone sees it under the channel's name. Leave it empty to clear it.",
+  "@labelVoiceChannelStatusDescription": {
+    "description": "Explains the status of a voice channel, in the dialog setting it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelVoiceChannelStatusPlaceholder": "What's going on in here?",
+  "@labelVoiceChannelStatusPlaceholder": {
+    "description": "Placeholder of the field setting a voice channel's status",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptHideInviteToVoice": "Hide",
+  "@promptHideInviteToVoice": {
+    "description": "Button closing the invite to voice row under a voice channel",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelNewMessagesBelow": "{howMany,plural, =1{1 new message}other{{howMany} new messages}}",
+  "@labelNewMessagesBelow": {
+    "description": "Button that jumps the chat down to the messages that came in while reading further up",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
   }
 }

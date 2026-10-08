@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:rooster/client/client.dart';
+import 'package:rooster/client/components/space_categories/channel_categories.dart';
+import 'package:rooster/client/components/space_categories/space_categories_component.dart';
 import 'package:rooster/client/room_preview.dart';
 import 'package:rooster/client/space_child.dart';
 import 'package:rooster/main.dart';
@@ -8,6 +10,8 @@ import 'package:rooster/ui/atoms/adaptive_context_menu.dart';
 import 'package:rooster/ui/atoms/room_preview_text_button.dart';
 import 'package:rooster/ui/atoms/room_text_button.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
+import 'package:rooster/ui/organisms/channel_categories/channel_category_actions.dart';
+import 'package:rooster/ui/organisms/channel_categories/channel_category_header.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:flutter/material.dart';
 import 'package:implicitly_animated_list/implicitly_animated_list.dart';
@@ -43,6 +47,10 @@ class _SpaceListState extends State<SpaceList> {
   late List<StreamSubscription> subs;
 
   Room? selectedRoom;
+
+  /// The headings the channels are listed under.
+  SpaceCategoriesComponent? categories;
+
   String get labelRoomsList => Intl.message("Rooms",
       desc: "Header label for the list of rooms", name: "labelRoomsList");
 
@@ -50,6 +58,7 @@ class _SpaceListState extends State<SpaceList> {
   void initState() {
     children = widget.space.children;
     previews = widget.space.childPreviews;
+    categories = ChannelCategoryActions.componentOf(widget.space);
 
     subs = [
       widget.space.onChildRoomPreviewAdded
@@ -66,6 +75,10 @@ class _SpaceListState extends State<SpaceList> {
       widget.space.onRoomRemoved.listen(onRoomUpdated),
       for (var room in widget.space.rooms) room.onUpdate.listen(onRoomUpdated),
       preferences.onSettingChanged.listen((_) => setState(() {})),
+      if (categories != null)
+        categories!.onChanged.listen((_) {
+          if (mounted) setState(() {});
+        }),
     ];
 
     super.initState();
@@ -107,14 +120,93 @@ class _SpaceListState extends State<SpaceList> {
 
   @override
   Widget build(BuildContext context) {
+    final sections =
+        (categories?.categories ?? ChannelCategories.defaults).layout<Room>(
+      children.whereType<SpaceChildRoom>().map((child) => child.child),
+      idOf: (room) => room.identifier,
+      kindOf: ChannelCategoryActions.kindOf,
+    );
+
     return Column(
       children: [
-        for (var child in children) buildChild(child),
+        for (final section in sections) ...buildSection(section),
+        for (var child in children)
+          if (child is SpaceChildSpace) buildChild(child),
         if (preferences.showRoomPreviewsInSpaceSidebar.value)
           for (var preview in previews) buildPreviewChild(preview),
       ],
     );
   }
+
+  String collapsedKey(ChannelCategory category) =>
+      "${widget.space.localId}/${category.id}";
+
+  void toggleCollapsed(ChannelCategory category) {
+    final key = collapsedKey(category);
+    if (preferences.collapsedChannelCategories.value.contains(key)) {
+      preferences.collapsedChannelCategories.remove(key);
+    } else {
+      preferences.collapsedChannelCategories.add(key);
+    }
+    setState(() {});
+  }
+
+  /// A channel that stays in sight under a collapsed heading: the one open,
+  /// one with something unread, or the call we are in.
+  bool showsWhenCollapsed(Room room) =>
+      room == selectedRoom ||
+      room.displayNotificationCount > 0 ||
+      room.displayHighlightedNotificationCount > 0 ||
+      RoomTextButton.callSessionIn(
+              room, clientManager?.callManager.currentSessions ?? const []) !=
+          null;
+
+  /// A heading and the channels under it. In a space nested in this one
+  /// the built-in headings are left out: its channels only keep text
+  /// before voice.
+  List<Widget> buildSection(ChannelSection<Room> section) {
+    final category = section.category;
+    final showHeader = widget.isTopLevel || !category.isBuiltIn;
+    final collapsed = showHeader &&
+        preferences.collapsedChannelCategories.value
+            .contains(collapsedKey(category));
+    final canAddChannel = widget.space.permissions.canEditChildren;
+
+    return [
+      if (showHeader)
+        ChannelCategoryHeader(
+          key: ValueKey("channel-category-${category.id}"),
+          name: ChannelCategoryActions.nameOf(category),
+          collapsed: collapsed,
+          onToggle: () => toggleCollapsed(category),
+          addChannelTooltip: ChannelCategoryActions.promptCreateChannel,
+          onAddChannel: canAddChannel
+              ? () => ChannelCategoryActions.addChannel(
+                  context, widget.space, category)
+              : null,
+          menuItems: ChannelCategoryActions.menuItems(
+            context,
+            widget.space,
+            category,
+            collapsed: collapsed,
+            toggleCollapsed: () => toggleCollapsed(category),
+          ),
+        ),
+      for (final room in section.channels)
+        if (!collapsed || showsWhenCollapsed(room)) buildRoom(room),
+    ];
+  }
+
+  Widget buildRoom(Room room) => RoomTextButton(
+        room,
+        // Keyed: the button keeps per-room state (who is in its voice
+        // channel), which must not be handed to another room when a room is
+        // added, removed or moved above it.
+        key: ValueKey(room.identifier),
+        onTap: widget.onRoomSelected,
+        highlight: selectedRoom == room,
+        space: widget.space,
+      );
 
   Widget roomsList() {
     if (widget.isTopLevel) {
@@ -203,16 +295,7 @@ class _SpaceListState extends State<SpaceList> {
       }
     }
 
-    if (child case SpaceChildRoom _)
-      return RoomTextButton(
-        child.child,
-        // Keyed: the button keeps per-room state (who is in its voice
-        // channel), which must not be handed to another room when a room is
-        // added, removed or moved above it.
-        key: ValueKey(child.child.identifier),
-        onTap: widget.onRoomSelected,
-        highlight: selectedRoom == child.child,
-      );
+    if (child case SpaceChildRoom _) return buildRoom(child.child);
 
     return Container();
   }

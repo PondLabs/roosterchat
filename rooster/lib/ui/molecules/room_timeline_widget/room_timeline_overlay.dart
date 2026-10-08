@@ -43,10 +43,21 @@ class TimelineOverlayState extends State<TimelineOverlay> {
 
   bool isAttatchedToBottom = true;
 
+  /// Messages that came in below while reading further up.
+  int newMessageCount = 0;
+
   String get labelJumpToLatest => Intl.message("Jump to latest",
       desc:
           "Label for the button which jumps the room timeline view to the latest message",
       name: "labelJumpToLatest");
+
+  String labelNewMessagesBelow(int howMany) => Intl.plural(howMany,
+      one: "1 new message",
+      other: "$howMany new messages",
+      desc: "Button that jumps the chat down to the messages that came in "
+          "while reading further up",
+      name: "labelNewMessagesBelow",
+      args: [howMany]);
 
   @override
   Widget build(BuildContext context) {
@@ -84,7 +95,10 @@ class TimelineOverlayState extends State<TimelineOverlay> {
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeInOutCubic,
             child: RoomTimelineOverlayButton(
-              text: labelJumpToLatest,
+              text: newMessageCount > 0
+                  ? labelNewMessagesBelow(newMessageCount)
+                  : labelJumpToLatest,
+              icon: newMessageCount > 0 ? Icons.arrow_downward_rounded : null,
               onTap: widget.jumpToLatest,
             ),
           ),
@@ -227,6 +241,14 @@ class TimelineOverlayState extends State<TimelineOverlay> {
       currentMenu = menu;
       selectedEntry = null;
     });
+  }
+
+  void setNewMessageCount(int value) {
+    if (value != newMessageCount) {
+      setState(() {
+        newMessageCount = value;
+      });
+    }
   }
 
   void setAttachedToBottom(bool value) {

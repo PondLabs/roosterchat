@@ -525,6 +525,13 @@ class MatrixRoom extends Room {
         mentionsList.remove("@room");
       }
 
+      // A reply calls on whoever it answers, as the Matrix spec has it (and
+      // as Discord does): they are notified and see it highlighted.
+      if (replyingTo != null &&
+          replyingTo.senderId != _matrixRoom.client.userID) {
+        mentionsList.add(replyingTo.senderId);
+      }
+
       if (mentionsList.isNotEmpty) {
         mentions["user_ids"] = mentionsList.toList();
       }
@@ -916,6 +923,19 @@ class MatrixRoom extends Room {
 
     _onUpdate.add(null);
   }
+
+  @override
+  RoomType get roomType => switch (
+          matrixRoom.getState(matrix.EventTypes.RoomCreate)?.content['type']) {
+        'org.matrix.msc3417.call' => RoomType.voipRoom,
+        'chat.commet.photo_album' => RoomType.photoAlbum,
+        'chat.commet.calendar' => RoomType.calendar,
+        'm.space' => RoomType.space,
+        _ => RoomType.defaultRoom,
+      };
+
+  @override
+  Future<Uri> getShareLink() => _matrixRoom.matrixToInviteLink();
 
   @override
   bool get isSpecialRoomType =>

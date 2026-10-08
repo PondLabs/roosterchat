@@ -93,6 +93,13 @@ abstract class Room {
 
   bool get isSpecialRoomType;
 
+  /// What the room was made for. A voice channel stays one where we cannot
+  /// join calls, unlike its [VoipRoomComponent], which is then absent.
+  RoomType get roomType;
+
+  /// A link that opens this room, to send someone.
+  Future<Uri> getShareLink();
+
   Future<void> setAsFavorite(bool favorite);
 
   bool get isFavorite;

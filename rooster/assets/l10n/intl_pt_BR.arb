@@ -1851,5 +1851,210 @@
             "howMany": {},
             "emoji": {}
         }
+    },
+    "labelTextChannels": "Canais de texto",
+    "@labelTextChannels": {
+        "description": "Heading in a space's sidebar over its text channels",
+        "type": "text",
+        "placeholders": {}
+    },
+    "labelVoiceChannels": "Canais de voz",
+    "@labelVoiceChannels": {
+        "description": "Heading in a space's sidebar over its voice channels",
+        "type": "text",
+        "placeholders": {}
+    },
+    "promptCreateChannel": "Criar canal",
+    "@promptCreateChannel": {
+        "description": "Button on a channel category heading that adds a channel under it",
+        "type": "text",
+        "placeholders": {}
+    },
+    "promptCreateCategory": "Criar categoria",
+    "@promptCreateCategory": {
+        "description": "Menu entry that adds a heading to a space's channel list",
+        "type": "text",
+        "placeholders": {}
+    },
+    "promptRenameCategory": "Renomear categoria",
+    "@promptRenameCategory": {
+        "description": "Menu entry that renames a heading of a space's channel list",
+        "type": "text",
+        "placeholders": {}
+    },
+    "promptDeleteCategory": "Excluir categoria",
+    "@promptDeleteCategory": {
+        "description": "Menu entry that removes a heading of a space's channel list",
+        "type": "text",
+        "placeholders": {}
+    },
+    "promptDeleteCategoryConfirmation": "Excluir a categoria {name}? Os canais dela continuam, de volta em canais de texto e canais de voz.",
+    "@promptDeleteCategoryConfirmation": {
+        "description": "Asks before removing a heading of a space's channel list",
+        "type": "text",
+        "placeholders": {
+            "name": {}
+        }
+    },
+    "promptMoveCategoryUp": "Mover para cima",
+    "@promptMoveCategoryUp": {
+        "description": "Menu entry that moves a channel category above the one before it",
+        "type": "text",
+        "placeholders": {}
+    },
+    "promptMoveCategoryDown": "Mover para baixo",
+    "@promptMoveCategoryDown": {
+        "description": "Menu entry that moves a channel category below the one after it",
+        "type": "text",
+        "placeholders": {}
+    },
+    "promptCollapseCategory": "Recolher",
+    "@promptCollapseCategory": {
+        "description": "Menu entry that hides the channels under a category",
+        "type": "text",
+        "placeholders": {}
+    },
+    "promptExpandCategory": "Expandir",
+    "@promptExpandCategory": {
+        "description": "Menu entry that shows the channels under a collapsed category",
+        "type": "text",
+        "placeholders": {}
+    },
+    "labelCategoryName": "Nome da categoria",
+    "@labelCategoryName": {
+        "description": "Placeholder of the text field naming a channel category",
+        "type": "text",
+        "placeholders": {}
+    },
+    "labelRenameBuiltInCategory": "Deixe vazio para usar o nome padrão.",
+    "@labelRenameBuiltInCategory": {
+        "description": "Under the field renaming the built-in text or voice channel category",
+        "type": "text",
+        "placeholders": {}
+    },
+    "promptMoveToCategory": "Mover para categoria",
+    "@promptMoveToCategory": {
+        "description": "Menu entry on a channel that puts it under another heading",
+        "type": "text",
+        "placeholders": {}
+    },
+    "errorSaveCategories": "Não foi possível salvar as categorias",
+    "@errorSaveCategories": {
+        "description": "Title of the error shown when changing the channel categories fails",
+        "type": "text",
+        "placeholders": {}
+    },
+    "promptInvitePeople": "Convidar pessoas",
+    "@promptInvitePeople": {
+        "description": "Button on a channel in the sidebar that invites someone into it",
+        "type": "text",
+        "placeholders": {}
+    },
+    "labelInviteToVoice": "Convidar para voz",
+    "@labelInviteToVoice": {
+        "description": "Row under a voice channel we are in, which lists people to call over",
+        "type": "text",
+        "placeholders": {}
+    },
+    "promptSeeMoreInvitees": "Ver mais…",
+    "@promptSeeMoreInvitees": {
+        "description": "Last entry of the short list of people to invite to a voice channel; opens all of them",
+        "type": "text",
+        "placeholders": {}
+    },
+    "labelEveryoneIsHere": "Todo mundo já está aqui.",
+    "@labelEveryoneIsHere": {
+        "description": "Shown instead of the people to invite to a voice channel when there is nobody left to invite",
+        "type": "text",
+        "placeholders": {}
+    },
+    "promptSendVoiceInvite": "Convidar",
+    "@promptSendVoiceInvite": {
+        "description": "Button next to someone in the list of people to invite to a voice channel",
+        "type": "text",
+        "placeholders": {}
+    },
+    "labelVoiceInviteSent": "Convidado",
+    "@labelVoiceInviteSent": {
+        "description": "Next to someone already sent an invite to a voice channel",
+        "type": "text",
+        "placeholders": {}
+    },
+    "errorVoiceInvite": "Não foi possível enviar o convite, tente de novo",
+    "@errorVoiceInvite": {
+        "description": "Next to someone the invite to a voice channel failed for",
+        "type": "text",
+        "placeholders": {}
+    },
+    "labelSearchPeople": "Buscar",
+    "@labelSearchPeople": {
+        "description": "Placeholder of the field filtering the people to invite to a voice channel",
+        "type": "text",
+        "placeholders": {}
+    },
+    "messageVoiceInvite": "Vem pra call em 🔊 {channel}: {link}",
+    "@messageVoiceInvite": {
+        "description": "Direct message sent to someone invited to a voice channel, with the link that opens it",
+        "type": "text",
+        "placeholders": {
+            "channel": {},
+            "link": {}
+        }
+    },
+    "tooltipOpenChannelChat": "Abrir chat",
+    "@tooltipOpenChannelChat": {
+        "description": "Button on a voice channel in the sidebar that opens its text chat rather than the call",
+        "type": "text",
+        "placeholders": {}
+    },
+    "tooltipEditChannel": "Editar canal",
+    "@tooltipEditChannel": {
+        "description": "Button on a channel in the sidebar that opens its settings",
+        "type": "text",
+        "placeholders": {}
+    },
+    "labelSetVoiceChannelStatus": "Definir um status do canal",
+    "@labelSetVoiceChannelStatus": {
+        "description": "Under the name of a voice channel we are in, while it has no status; opens the field to set one",
+        "type": "text",
+        "placeholders": {}
+    },
+    "labelVoiceChannelStatus": "Status do canal",
+    "@labelVoiceChannelStatus": {
+        "description": "Title of the dialog setting what a voice channel is up to",
+        "type": "text",
+        "placeholders": {}
+    },
+    "labelVoiceChannelStatusDescription": "Todo mundo vê abaixo do nome do canal. Deixe vazio para limpar.",
+    "@labelVoiceChannelStatusDescription": {
+        "description": "Explains the status of a voice channel, in the dialog setting it",
+        "type": "text",
+        "placeholders": {}
+    },
+    "labelVoiceChannelStatusPlaceholder": "O que está rolando aqui?",
+    "@labelVoiceChannelStatusPlaceholder": {
+        "description": "Placeholder of the field setting a voice channel's status",
+        "type": "text",
+        "placeholders": {}
+    },
+    "promptHideInviteToVoice": "Ocultar",
+    "@promptHideInviteToVoice": {
+        "description": "Button closing the invite to voice row under a voice channel",
+        "type": "text",
+        "placeholders": {}
+    },
+    "labelNewMessagesBelow": "{howMany,plural, =1{1 nova mensagem}other{{howMany} novas mensagens}}",
+    "@labelNewMessagesBelow": {
+        "description": "Button that jumps the chat down to the messages that came in while reading further up",
+        "type": "text",
+        "placeholders": {
+            "howMany": {}
+        }
+    },
+    "labelTimelineNewMessagesMarker": "Novas mensagens",
+    "@labelTimelineNewMessagesMarker": {
+        "description": "Text that is shown below the last read message",
+        "type": "text",
+        "placeholders": {}
     }
 }
