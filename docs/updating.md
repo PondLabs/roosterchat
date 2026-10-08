@@ -125,8 +125,8 @@ web. There, the button opens the release page, which is all the app ever did.
    started detached: it waits for the process to go, moves the install aside,
    moves the new one in, starts it, and clears up all of `.rooster-update/`.
    If the new one will not go in, the old one is moved back — a failure
-   leaves the build that was already working, and on Windows starts it
-   again and keeps `install-<stamp>.log` in `.rooster-update/`.
+   leaves the build that was already working, starts it again and keeps
+   `install-<stamp>.log` in `.rooster-update/`.
 
 On Windows:
 
@@ -138,6 +138,26 @@ On Windows:
   install is busy (the CEF helpers closing, a virus scanner). `Move-Item`
   moves a directory with a busy file in it one file at a time and leaves
   half an install.
+
+On Linux:
+
+- The process ends as soon as its window is destroyed
+  (`linux/my_application.cc`), which `WindowManagement.close` does last,
+  once everything is released. The engine's teardown that used to follow
+  waits for the raster thread to finish with a window already hidden: run
+  on Ubuntu 24.04 with software GL (October 2026), the process stayed a
+  minute after its window went and then died of a bus error in plugin
+  teardown. The swap script waits a minute, so it could give up without
+  swapping or starting anything, and the app did not come back.
+- The script waits that minute, then ends a Rooster still there with
+  SIGKILL, but only while `/proc/<pid>/exe` is the build being replaced.
+  A zombie counts as gone.
+- Builds up to v1.16.0 waited for ever for the running copy to answer on
+  the single instance socket. With one stuck closing, no launch opened,
+  the launcher entry included, until that process was killed. v1.17.0
+  waits 3 seconds.
+- A staged build whose executable cannot be run is refused: the Dart
+  unpacker, the fallback when `tar` fails, drops the executable bit.
 
 ### Where the install is
 

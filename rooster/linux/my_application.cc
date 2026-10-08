@@ -7,7 +7,10 @@
 
 #include "flutter/generated_plugin_registrant.h"
 
-#include <filesystem> 
+#include <unistd.h>
+
+#include <cstdio>
+#include <filesystem>
 using namespace std;
 using namespace std::filesystem;
 
@@ -17,6 +20,18 @@ struct _MyApplication {
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
+
+// ROOSTER: the window only goes once Dart has let go of everything
+// (WindowManagement.close), so the process goes with it. The engine's
+// teardown after that waits for the raster thread to finish with a window
+// that is already hidden; on software GL that took a minute and then crashed
+// in plugin teardown. All that time the process is still there, and the
+// updater's swap script, which waits a minute for it, can give up without
+// swapping or starting anything (docs/updating.md).
+static void on_window_destroy(GtkWidget* window, gpointer data) {
+  fflush(nullptr);
+  _exit(0);
+}
 
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
@@ -33,6 +48,7 @@ static void my_application_activate(GApplication* application) {
   // (WindowManagement.openMainWindow).
   gtk_window_set_default_size(window, 380, 440);
   gtk_window_set_position(window, GTK_WIN_POS_CENTER);
+  g_signal_connect(window, "destroy", G_CALLBACK(on_window_destroy), nullptr);
   gtk_widget_show(GTK_WIDGET(window));
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
