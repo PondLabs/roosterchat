@@ -74,6 +74,9 @@ class MatrixBackgroundTimelineEventMessage implements TimelineEventMessage {
   List<String> get mentions => throw UnimplementedError();
 
   @override
+  bool get mentionsSelf => false;
+
+  @override
   TimelineEventStatus get status => throw UnimplementedError();
 
   @override

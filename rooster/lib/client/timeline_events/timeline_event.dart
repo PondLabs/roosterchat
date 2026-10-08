@@ -12,6 +12,12 @@ abstract class TimelineEvent<T extends Client> {
   bool get mentionsRoom;
   List<String> get mentions;
 
+  /// Whether the event calls on us, for the timeline to highlight it: it
+  /// mentions us or the whole room, or, from a client that lists no
+  /// mentions, says our name (what our push rules highlight). Never one of
+  /// our own.
+  bool get mentionsSelf;
+
   bool get editable;
 
   @override

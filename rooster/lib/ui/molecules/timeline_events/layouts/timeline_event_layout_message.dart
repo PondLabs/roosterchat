@@ -46,6 +46,10 @@ class TimelineEventLayoutMessage extends StatelessWidget {
 
   final double avatarSize;
 
+  /// The bar and tint of a message that calls on us: the brand's yolk, as
+  /// Discord's gold, whatever the theme.
+  static const mentionColor = Color(0xFFF89B17);
+
   String get messageEditedMarker => Intl.message("(Edited)",
       name: "messageEditedMarker",
       desc: "Short text to mark that a message has been edited");
@@ -131,10 +135,9 @@ class TimelineEventLayoutMessage extends StatelessWidget {
         decoration: BoxDecoration(
             border: Border(
                 left: BorderSide(
-                    color: Theme.of(context).colorScheme.tertiary,
-                    width: mentionHighlightSize)),
-            color:
-                Theme.of(context).colorScheme.tertiaryContainer.withAlpha(30)),
+                    color: mentionColor, width: mentionHighlightSize)),
+            color: mentionColor.withAlpha(
+                Theme.of(context).brightness == Brightness.dark ? 28 : 40)),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(0, 0, 0, 0),
           child: result,

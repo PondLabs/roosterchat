@@ -2042,5 +2042,19 @@
         "description": "Button closing the invite to voice row under a voice channel",
         "type": "text",
         "placeholders": {}
+    },
+    "labelNewMessagesBelow": "{howMany,plural, =1{1 nova mensagem}other{{howMany} novas mensagens}}",
+    "@labelNewMessagesBelow": {
+        "description": "Button that jumps the chat down to the messages that came in while reading further up",
+        "type": "text",
+        "placeholders": {
+            "howMany": {}
+        }
+    },
+    "labelTimelineNewMessagesMarker": "Novas mensagens",
+    "@labelTimelineNewMessagesMarker": {
+        "description": "Text that is shown below the last read message",
+        "type": "text",
+        "placeholders": {}
     }
 }

@@ -525,6 +525,13 @@ class MatrixRoom extends Room {
         mentionsList.remove("@room");
       }
 
+      // A reply calls on whoever it answers, as the Matrix spec has it (and
+      // as Discord does): they are notified and see it highlighted.
+      if (replyingTo != null &&
+          replyingTo.senderId != _matrixRoom.client.userID) {
+        mentionsList.add(replyingTo.senderId);
+      }
+
       if (mentionsList.isNotEmpty) {
         mentions["user_ids"] = mentionsList.toList();
       }

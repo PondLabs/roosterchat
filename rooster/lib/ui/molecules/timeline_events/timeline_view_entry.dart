@@ -278,6 +278,16 @@ class TimelineViewEntryState extends State<TimelineViewEntry>
   }
 
   @override
+  void didUpdateWidget(covariant TimelineViewEntry oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The line moves while the room is open, to the first message that
+    // arrived unseen.
+    if (oldWidget.lastReadEventId != widget.lastReadEventId) {
+      showUnreadMarker = shouldEventShowUnreadMarker(index);
+    }
+  }
+
+  @override
   void update(int newIndex) {
     index = newIndex;
     setState(() {
