@@ -23,11 +23,20 @@ class SpaceSelector extends StatefulWidget {
       required this.width,
       this.shouldShowAvatarForSpace,
       this.header,
-      this.footer});
+      this.footer,
+      this.trailing,
+      this.filler});
   final List<SidebarEntry> spaces;
   final double width;
   final Widget? header;
   final Widget? footer;
+
+  /// Comes right after the footer.
+  final Widget? trailing;
+
+  /// Fills what is left of the column below everything else, and gets no
+  /// room once the list is longer than the column.
+  final Widget? filler;
   final void Function(Space space)? onSelected;
   final void Function()? clearSelection;
   final bool Function(Space space)? shouldShowAvatarForSpace;
@@ -73,75 +82,76 @@ class SpaceSelectorState extends State<SpaceSelector> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Flexible(
-          child: ScrollConfiguration(
-            behavior:
-                ScrollConfiguration.of(context).copyWith(scrollbars: false),
-            child: SingleChildScrollView(
-              physics:
-                  BuildConfig.ANDROID ? const BouncingScrollPhysics() : null,
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                    0, MediaQuery.of(context).scale().padding.top, 0, 0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (widget.header != null)
-                      Padding(
-                        padding: SpaceSelector.padding,
-                        child: widget.header!,
-                      ),
-                    if (widget.header != null) const Seperator(),
-                    ListView.builder(
-                      shrinkWrap: true,
-                      padding: const EdgeInsets.all(0),
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: items.length,
-                      itemBuilder: (context, index) {
-                        var data = items[index];
-                        return Column(
-                          children: [
-                            ExpandingDropTarget<SidebarEntryDrag>(
-                              onWillAcceptWithDetails: (p0) {
-                                return true;
-                              },
-                              onAcceptWithDetails: (p0) {
-                                if (p0 is DragTargetDetails) {
-                                  handleSpaceOrderDropped(p0, index);
-                                }
-                              },
-                              position: dragPosition,
-                            ),
-                            buildItem(context, data, index),
-                            if (index == widget.spaces.length - 1)
-                              ExpandingDropTarget<SidebarEntryDrag>(
-                                onWillAcceptWithDetails: (p0) {
-                                  return true;
-                                },
-                                onAcceptWithDetails: (p0) {
-                                  handleSpaceOrderDropped(p0, index);
-                                },
-                                position: dragPosition,
-                              ),
-                          ],
-                        );
-                      },
+    final header = widget.header;
+    final footer = widget.footer;
+    return ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+      child: CustomScrollView(
+        physics: BuildConfig.ANDROID ? const BouncingScrollPhysics() : null,
+        slivers: [
+          SliverPadding(
+            padding: EdgeInsets.only(
+                top: MediaQuery.of(context).scale().padding.top),
+            sliver: SliverToBoxAdapter(
+              child: header == null
+                  ? const SizedBox.shrink()
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(padding: SpaceSelector.padding, child: header),
+                        const Seperator(),
+                      ],
                     ),
-                    if (widget.footer != null)
-                      Padding(
-                        padding: SpaceSelector.padding,
-                        child: widget.footer!,
-                      ),
-                  ],
-                ),
-              ),
             ),
           ),
-        ),
-      ],
+          SliverList.builder(
+            itemCount: items.length,
+            itemBuilder: (context, index) {
+              var data = items[index];
+              return Column(
+                children: [
+                  ExpandingDropTarget<SidebarEntryDrag>(
+                    onWillAcceptWithDetails: (p0) {
+                      return true;
+                    },
+                    onAcceptWithDetails: (p0) {
+                      if (p0 is DragTargetDetails) {
+                        handleSpaceOrderDropped(p0, index);
+                      }
+                    },
+                    position: dragPosition,
+                  ),
+                  buildItem(context, data, index),
+                  if (index == widget.spaces.length - 1)
+                    ExpandingDropTarget<SidebarEntryDrag>(
+                      onWillAcceptWithDetails: (p0) {
+                        return true;
+                      },
+                      onAcceptWithDetails: (p0) {
+                        handleSpaceOrderDropped(p0, index);
+                      },
+                      position: dragPosition,
+                    ),
+                ],
+              );
+            },
+          ),
+          if (footer != null)
+            SliverToBoxAdapter(
+              child: Padding(padding: SpaceSelector.padding, child: footer),
+            ),
+          if (widget.trailing != null)
+            SliverToBoxAdapter(child: widget.trailing),
+          // What is left of the column, down to its bottom: the filler is
+          // laid out at that height, and at none once the list is longer
+          // than the column.
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: widget.filler ?? const SizedBox.shrink(),
+          ),
+        ],
+      ),
     );
   }
 

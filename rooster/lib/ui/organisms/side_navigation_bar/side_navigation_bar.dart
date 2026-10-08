@@ -4,13 +4,17 @@ import 'package:rooster/client/client.dart';
 import 'package:rooster/client/client_manager.dart';
 import 'package:rooster/client/components/profile/profile_component.dart';
 import 'package:rooster/client/components/sidebar_component/sidebar_entries_component.dart';
+import 'package:rooster/client/components/soundboard/entrance_sound.dart';
+import 'package:rooster/client/live_voice_channels.dart';
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/dot_indicator.dart';
+import 'package:rooster/ui/atoms/night_sky.dart';
 import 'package:rooster/ui/atoms/notification_badge.dart';
 import 'package:rooster/ui/molecules/space_selector.dart';
 import 'package:rooster/ui/organisms/home_screen/home_screen_view.dart';
 import 'package:rooster/ui/organisms/side_navigation_bar/side_navigation_bar_direct_messages.dart';
+import 'package:rooster/ui/organisms/side_navigation_bar/whos_around_rail.dart';
 import 'package:rooster/ui/pages/get_or_create_room/get_or_create_room.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/event_bus.dart';
@@ -79,6 +83,9 @@ class _SideNavigationBarState extends State<SideNavigationBar> {
 
   late List<StreamSubscription> subs;
 
+  /// Who is in a voice channel right now, for the rail under the spaces.
+  late final LiveVoiceChannels liveVoice;
+
   String get promptAddSpace => Intl.message("Add Space",
       name: "promptAddSpace", desc: "Prompt to add a new space");
 
@@ -92,6 +99,7 @@ class _SideNavigationBarState extends State<SideNavigationBar> {
   @override
   void initState() {
     _clientManager = Provider.of<ClientManager>(context, listen: false);
+    liveVoice = LiveVoiceChannels(_clientManager);
 
     void setFilterClient(Client? event) {
       setState(() {
@@ -119,6 +127,7 @@ class _SideNavigationBarState extends State<SideNavigationBar> {
       preferences.showRoomsInSidebar.onChanged.listen((_) => setState(() {
             updateNotificationCounts();
           })),
+      preferences.showWhosAround.onChanged.listen((_) => setState(() {})),
     ];
 
     getSpaces();
@@ -189,7 +198,21 @@ class _SideNavigationBarState extends State<SideNavigationBar> {
     for (var sub in subs) {
       sub.cancel();
     }
+    liveVoice.dispose();
     super.dispose();
+  }
+
+  void openChannel(Room room) =>
+      EventBus.doOpenRoom(room.identifier, clientId: room.client.identifier);
+
+  void openChannelChat(Room room) => EventBus.doOpenRoom(room.identifier,
+      clientId: room.client.identifier, bypassSpecialRoomType: true);
+
+  /// Opens the channel and has its page join the call, the way "Join
+  /// Without Entrance Sound" does, with the sound.
+  void joinChannel(Room room) {
+    EntranceSoundGate.instance.requestJoin(room.identifier);
+    openChannel(room);
   }
 
   @override
@@ -204,6 +227,17 @@ class _SideNavigationBarState extends State<SideNavigationBar> {
                 width: 70,
                 clearSelection: widget.clearSpaceSelection,
                 shouldShowAvatarForSpace: shouldShowAvatarForSpace,
+                trailing: preferences.showWhosAround.value
+                    ? WhosAroundRail(
+                        source: liveVoice,
+                        width: 70,
+                        filterClient: filterClient,
+                        onOpen: openChannel,
+                        onOpenChat: openChannelChat,
+                        onJoin: joinChannel,
+                      )
+                    : null,
+                filler: const NightSky(),
                 header: Column(
                   children: [
                     SideNavigationBar.tooltip(
@@ -257,26 +291,19 @@ class _SideNavigationBarState extends State<SideNavigationBar> {
                     ),
                   ],
                 ),
-                footer: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 2, 0, 4),
-                      child: SideNavigationBar.tooltip(
-                          promptAddSpace,
-                          ImageButton(
-                            size: 70,
-                            icon: Icons.add,
-                            onTap: () {
-                              GetOrCreateRoom.show(null, context,
-                                  pickExisting: false, createSpace: true);
-                            },
-                          ),
-                          context),
-                    ),
-                    SizedBox(
-                      height: MediaQuery.sizeOf(context).height / 2,
-                    )
-                  ],
+                footer: Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 2, 0, 4),
+                  child: SideNavigationBar.tooltip(
+                      promptAddSpace,
+                      ImageButton(
+                        size: 70,
+                        icon: Icons.add,
+                        onTap: () {
+                          GetOrCreateRoom.show(null, context,
+                              pickExisting: false, createSpace: true);
+                        },
+                      ),
+                      context),
                 ),
                 onSelected: (space) {
                   widget.onSpaceSelected?.call(space);

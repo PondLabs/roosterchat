@@ -91,6 +91,18 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
       desc:
           "Description for the toggle which shows an extra entry for rooms which are not contained in a space in the sidebar");
 
+  String get labelShowWhosAround =>
+      Intl.message("Show who's around under the spaces",
+          name: "labelShowWhosAround",
+          desc: "Label for the toggle which shows the rail under the spaces "
+              "in the sidebar: the voice channels with people in them");
+
+  String get labelShowWhosAroundDescription => Intl.message(
+      "The voice channels with people in them, in every space you're in, and a chair to pull up when it's quiet",
+      name: "labelShowWhosAroundDescription",
+      desc: "Description for the toggle which shows the rail under the "
+          "spaces in the sidebar");
+
   @override
   void initState() {
     super.initState();
@@ -155,6 +167,12 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
                   preference: preferences.showRoomsInSidebar,
                   title: labelShowRoomsInSidebar,
                   description: labelShowRoomsInSidebarDescription,
+                ),
+                const Seperator(),
+                BooleanPreferenceToggle(
+                  preference: preferences.showWhosAround,
+                  title: labelShowWhosAround,
+                  description: labelShowWhosAroundDescription,
                 ),
                 const Seperator(),
                 BooleanPreferenceToggle(

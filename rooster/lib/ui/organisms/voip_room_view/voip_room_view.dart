@@ -53,9 +53,9 @@ class _VoipRoomViewState extends State<VoipRoomView> {
     call = readCall();
 
     subs = [
-      EntranceSoundGate.instance.onSilentJoinRequested
+      EntranceSoundGate.instance.onJoinRequested
           .where((id) => id == widget.voip.room.identifier)
-          .listen((_) => _takeSilentJoinRequest()),
+          .listen((_) => _takeJoinRequest()),
       widget.voip.onParticipantsChanged.listen((_) {
         // when the participant list changes, the resolved focus may change
         updateCallUrl();
@@ -75,8 +75,7 @@ class _VoipRoomViewState extends State<VoipRoomView> {
 
     fetchNewMembers();
     updateCallUrl();
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) => _takeSilentJoinRequest());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _takeJoinRequest());
     widget.voip.clearStaleOwnMembership().catchError((e, s) {
       Log.onError(e, s);
     });
@@ -100,16 +99,18 @@ class _VoipRoomViewState extends State<VoipRoomView> {
     }
   }
 
-  void _takeSilentJoinRequest() {
+  void _takeJoinRequest() {
     if (!mounted) return;
-    // Picks up "Join Without Entrance Sound" from the room's context menu,
-    // whether this view was already open or opens because of it.
-    final gate = EntranceSoundGate.instance;
-    if (!gate.takeSilentJoinRequest(widget.voip.room.identifier)) return;
+    // Picks up "Join Without Entrance Sound" from the room's context menu
+    // and "Join call" from the rail under the spaces, whether this view was
+    // already open or opens because of it.
+    final silent =
+        EntranceSoundGate.instance.takeJoinRequest(widget.voip.room.identifier);
+    if (silent == null) return;
     final inCall =
         currentSession != null && currentSession!.state != VoipState.ended;
     if (inCall || joining || !widget.voip.canJoinCall) return;
-    joinRoomCall(withoutEntranceSound: true);
+    joinRoomCall(withoutEntranceSound: silent);
   }
 
   void updateCallUrl() {

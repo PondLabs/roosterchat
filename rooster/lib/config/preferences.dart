@@ -424,6 +424,11 @@ class Preferences {
   BoolPreference showRoomsInSidebar =
       BoolPreference("show_rooms_in_sidebar", defaultValue: false);
 
+  /// The rail under the spaces: who is in a voice channel right now, and a
+  /// chair to pull up when nobody is (docs/whos-around-rail.md).
+  BoolPreference showWhosAround =
+      BoolPreference("show_whos_around", defaultValue: true);
+
   BoolPreference usePlaceholderRoomAvatars =
       BoolPreference("use_placeholder_room_avatars", defaultValue: false);
 
