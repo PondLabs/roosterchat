@@ -41,7 +41,9 @@ class _PhotoAlbumViewState extends State<PhotoAlbumView> {
   bool loadingMorePhotos = false;
   var controller = ScrollController();
 
-  late List<StreamSubscription> subs;
+  // Empty until the timeline loads: closing the album before then used to
+  // throw from dispose.
+  List<StreamSubscription> subs = [];
 
   void onAdded(Photo event) {
     setState(() {
@@ -78,6 +80,8 @@ class _PhotoAlbumViewState extends State<PhotoAlbumView> {
     for (var sub in subs) {
       sub.cancel();
     }
+    timeline?.dispose();
+    controller.dispose();
     super.dispose();
   }
 

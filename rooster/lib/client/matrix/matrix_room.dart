@@ -90,7 +90,11 @@ class MatrixRoom extends Room {
 
   @override
   String get displayName =>
-      _displayName.startsWith("#") ? _displayName.substring(1) : _displayName;
+      // The leading # of an alias-like name goes; a name that is only "#"
+      // stays, since an empty name broke the sidebar entry.
+      _displayName.startsWith("#") && _displayName.length > 1
+          ? _displayName.substring(1)
+          : _displayName;
 
   @override
   Stream<void> get onUpdate => _onUpdate.stream;
@@ -184,7 +188,7 @@ class MatrixRoom extends Room {
 
     await _matrixRoom.setPushRuleState(newRule);
     _pushRule = _matrixRoom.pushRuleState;
-    _onUpdate.add(null);
+    _notifyUpdate();
   }
 
   @override
@@ -214,7 +218,11 @@ class MatrixRoom extends Room {
   @override
   Timeline? get timeline => _timeline;
 
-  StreamSubscription? _onUpdateSubscription;
+  /// Everything this wrapper listens to on the SDK client, cancelled in
+  /// [close]: a room that sync dropped (left, kicked, upgraded) used to keep
+  /// three of these for the life of the app, converting every event and
+  /// running every notification of a room it no longer stood for.
+  final List<StreamSubscription> _subscriptions = [];
 
   MatrixRoom(
       MatrixClient client, matrix.Room room, matrix.Client matrixClient) {
@@ -239,21 +247,20 @@ class MatrixRoom extends Room {
 
     updateAvatar();
 
-    _onUpdateSubscription = _matrixRoom.client.onRoomState.stream
-        .where((event) => event.roomId == _matrixRoom.id)
-        .listen(onRoomStateUpdated);
-
-    _matrixRoom.client.onSync.stream
-        .where((i) => i.rooms?.join?.containsKey(_matrixRoom.id) == true)
-        .listen(onRoomSyncUpdate);
-
-    _matrixRoom.client.onEvent.stream
-        .where((event) => event.roomID == _matrixRoom.id)
-        .listen(onEvent);
-
-    _matrixRoom.client.onNotification.stream
-        .where((event) => event.roomId == _matrixRoom.id)
-        .listen(onNotification);
+    _subscriptions.addAll([
+      _matrixRoom.client.onRoomState.stream
+          .where((event) => event.roomId == _matrixRoom.id)
+          .listen(onRoomStateUpdated),
+      _matrixRoom.client.onSync.stream
+          .where((i) => i.rooms?.join?.containsKey(_matrixRoom.id) == true)
+          .listen(onRoomSyncUpdate),
+      _matrixRoom.client.onEvent.stream
+          .where((event) => event.roomID == _matrixRoom.id)
+          .listen(onEvent),
+      _matrixRoom.client.onNotification.stream
+          .where((event) => event.roomId == _matrixRoom.id)
+          .listen(onNotification),
+    ]);
 
     _permissions = MatrixRoomPermissions(_matrixRoom);
   }
@@ -272,7 +279,7 @@ class MatrixRoom extends Room {
       }
     }
 
-    _onUpdate.add(null);
+    _notifyUpdate();
   }
 
   void onEvent(matrix.EventUpdate eventUpdate) async {
@@ -291,10 +298,10 @@ class MatrixRoom extends Room {
       var event = convertEvent(roomEvent);
       if (lastEvent == null) {
         lastEvent = event;
-        _onUpdate.add(null);
+        _notifyUpdate();
       } else if (event.originServerTs.isAfter(lastEvent!.originServerTs)) {
         lastEvent = event;
-        _onUpdate.add(null);
+        _notifyUpdate();
       }
 
       if (event is TimelineEventMessage ||
@@ -302,10 +309,10 @@ class MatrixRoom extends Room {
           event is TimelineEventEmote) {
         if (lastMessage == null) {
           lastMessage = event;
-          _onUpdate.add(null);
+          _notifyUpdate();
         } else if (event.originServerTs.isAfter(lastMessage!.originServerTs)) {
           lastMessage = event;
-          _onUpdate.add(null);
+          _notifyUpdate();
         }
       }
     }
@@ -625,7 +632,7 @@ class MatrixRoom extends Room {
   @override
   Future<void> setDisplayName(String newName) async {
     _displayName = newName;
-    _onUpdate.add(null);
+    _notifyUpdate();
     await _matrixRoom.setName(newName);
   }
 
@@ -699,17 +706,37 @@ class MatrixRoom extends Room {
 
   @override
   Future<void> close() async {
+    for (final subscription in _subscriptions) {
+      await subscription.cancel();
+    }
+    _subscriptions.clear();
     await _onUpdate.close();
-    await _onUpdateSubscription?.cancel();
     await timeline?.close();
+    _timeline = null;
   }
 
   @override
   Future<Timeline> getTimeline({String? contextEventId}) async {
-    _timeline = MatrixTimeline(client as MatrixClient, this, matrixRoom);
-    await _timeline!.initTimeline(contextEventId: contextEventId);
+    final existing = _timeline;
+    if (existing != null && contextEventId == null) return existing;
+    final timeline = await _loadTimeline(contextEventId: contextEventId);
+    final previous = _timeline;
+    _timeline = timeline;
+    // The one this replaces kept its SDK subscriptions, and converted every
+    // incoming event, for as long as the app ran.
+    if (previous != null) await previous.close();
     onTimelineLoaded.add(null);
-    return _timeline!;
+    return timeline;
+  }
+
+  @override
+  Future<Timeline> loadTimeline({String? contextEventId}) =>
+      _loadTimeline(contextEventId: contextEventId);
+
+  Future<MatrixTimeline> _loadTimeline({String? contextEventId}) async {
+    final timeline = MatrixTimeline(client as MatrixClient, this, matrixRoom);
+    await timeline.initTimeline(contextEventId: contextEventId);
+    return timeline;
   }
 
   @override
@@ -863,7 +890,7 @@ class MatrixRoom extends Room {
     if (event.state.type == "m.room.name" ||
         event.state.type == "m.room.avatar" ||
         event.state.type == "m.room.topic") {
-      _onUpdate.add(null);
+      _notifyUpdate();
     }
   }
 
@@ -921,6 +948,24 @@ class MatrixRoom extends Room {
 
     if (update == null) return;
 
+    // Typing notices and receipts (the ephemeral part) change nothing a
+    // listener of this shows: the sidebar, the room panel, the counts. One
+    // of those used to rebuild every channel list on every keystroke of
+    // someone typing in any room.
+    if (update.timeline == null &&
+        update.state == null &&
+        update.accountData == null &&
+        update.summary == null &&
+        update.unreadNotifications == null) {
+      return;
+    }
+
+    _notifyUpdate();
+  }
+
+  /// Tells listeners the room changed; nothing after [close].
+  void _notifyUpdate() {
+    if (_onUpdate.isClosed) return;
     _onUpdate.add(null);
   }
 
@@ -979,7 +1024,7 @@ class MatrixRoom extends Room {
   @override
   Future<void> setTopic(String topic) async {
     await matrixRoom.setDescription(topic);
-    _onUpdate.add(null);
+    _notifyUpdate();
   }
 
   @override
@@ -995,12 +1040,14 @@ class MatrixRoom extends Room {
 
     await matrixRoom.setAvatar(matrix.MatrixFile(bytes: bytes, name: name));
     _avatar = MemoryImage(bytes);
-    _onUpdate.add(null);
+    _notifyUpdate();
   }
 
   @override
   Future<void> markAsRead() async {
-    var tl = await matrixRoom.getTimeline();
+    // The open timeline when there is one: an SDK timeline made here held
+    // its five subscriptions for ever, once per press.
+    var tl = _timeline?.matrixTimeline ?? await matrixRoom.getTimeline();
     var readReceiptComponent = getComponent<MatrixReadReceiptComponent>();
 
     bool public = true;
@@ -1014,7 +1061,11 @@ class MatrixRoom extends Room {
       public = readReceiptComponent!.usePublicReadReceiptsForRoom!;
     }
 
-    await tl.setReadMarker(public: public);
+    try {
+      await tl.setReadMarker(public: public);
+    } finally {
+      if (tl != _timeline?.matrixTimeline) tl.cancelSubscriptions();
+    }
   }
 
   @override

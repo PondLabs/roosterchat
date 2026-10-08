@@ -15,7 +15,17 @@ class MatrixEncryptedRoomEventSearchSession extends EventSearchSession {
   String? currentSearchTerm;
   String? lastPrevBatch;
 
-  MatrixEncryptedRoomEventSearchSession(this.timeline);
+  /// Loaded for this search, so closed with it. One per debounced
+  /// keystroke used to replace the room's timeline and leak the last.
+  final bool ownsTimeline;
+
+  MatrixEncryptedRoomEventSearchSession(this.timeline,
+      {this.ownsTimeline = false});
+
+  @override
+  Future<void> dispose() async {
+    if (ownsTimeline) await timeline.close();
+  }
 
   @override
   bool currentlySearching = false;
@@ -210,7 +220,15 @@ class MatrixSearchParameters {
 class MatrixServerEventSearchSession extends EventSearchSession {
   MatrixTimeline timeline;
 
-  MatrixServerEventSearchSession(this.timeline);
+  /// Loaded for this search, so closed with it.
+  final bool ownsTimeline;
+
+  MatrixServerEventSearchSession(this.timeline, {this.ownsTimeline = false});
+
+  @override
+  Future<void> dispose() async {
+    if (ownsTimeline) await timeline.close();
+  }
 
   List<TimelineEvent<Client>> events = [];
 
@@ -313,12 +331,16 @@ class MatrixEventSearchComponent implements EventSearchComponent<MatrixClient> {
 
   @override
   Future<EventSearchSession> createSearchSession(Room room) async {
+    // The room's own timeline when it has one (the chat is open behind the
+    // search); otherwise one the session loads and closes.
+    final existing = room.timeline;
+    final timeline = (existing ?? await room.loadTimeline()) as MatrixTimeline;
+    final owned = existing == null;
     if (room.isE2EE) {
-      var timeline = await room.getTimeline();
-      return MatrixEncryptedRoomEventSearchSession(timeline as MatrixTimeline);
+      return MatrixEncryptedRoomEventSearchSession(timeline,
+          ownsTimeline: owned);
     } else {
-      var timeline = await room.getTimeline();
-      return MatrixServerEventSearchSession(timeline as MatrixTimeline);
+      return MatrixServerEventSearchSession(timeline, ownsTimeline: owned);
     }
   }
 

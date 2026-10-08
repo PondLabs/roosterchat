@@ -144,11 +144,24 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView>
     if (state == AppLifecycleState.resumed) acknowledgeIfLooking();
   }
 
+  /// A timeline loaded around an event jumped to, which this view owns:
+  /// closed when the view goes back to [widget.timeline], jumps elsewhere
+  /// or is disposed. Each used to replace the room's timeline and leak the
+  /// one before.
+  Timeline? _contextTimeline;
+  int _jumpGeneration = 0;
+
   void initFromTimeline(Timeline timeline) {
     if (subscriptions != null) {
       for (var sub in subscriptions!) {
         sub.cancel();
       }
+    }
+
+    final leaving = _contextTimeline;
+    if (leaving != null && !identical(leaving, timeline)) {
+      _contextTimeline = null;
+      leaving.close();
     }
 
     String? targetEventId = timeline.room.lastRead;
@@ -214,6 +227,9 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView>
     for (var element in subscriptions!) {
       element.cancel();
     }
+    _jumpGeneration++;
+    _contextTimeline?.close();
+    _contextTimeline = null;
     _jumpSubscription?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     controller.dispose();
@@ -791,22 +807,36 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView>
 
     int index = timeline.events.indexWhere((event) => event.eventId == eventId);
     if (index == -1) {
+      final generation = ++_jumpGeneration;
       setState(() {
         loading = true;
       });
-      var newTimeline =
-          await timeline.room.getTimeline(contextEventId: eventId);
-      if (!mounted) return;
+      Timeline newTimeline;
+      try {
+        newTimeline = await timeline.room.loadTimeline(contextEventId: eventId);
+      } catch (e, s) {
+        Log.onError(e, s,
+            content: "Could not load the timeline around an event");
+        if (mounted) setState(() => loading = false);
+        return;
+      }
+      // A later jump, or the view going away, while this one loaded.
+      if (!mounted || generation != _jumpGeneration) {
+        await newTimeline.close();
+        return;
+      }
 
       index =
           newTimeline.events.indexWhere((event) => event.eventId == eventId);
 
       if (index == -1) {
-        setState(() => loading = false);
+        await newTimeline.close();
+        if (mounted) setState(() => loading = false);
         return;
       }
 
       setState(() {
+        _contextTimeline = newTimeline;
         initFromTimeline(newTimeline);
       });
     }
