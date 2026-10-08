@@ -91,17 +91,17 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
       desc:
           "Description for the toggle which shows an extra entry for rooms which are not contained in a space in the sidebar");
 
-  String get labelShowWhosAround =>
-      Intl.message("Show who's around under the spaces",
-          name: "labelShowWhosAround",
-          desc: "Label for the toggle which shows the rail under the spaces "
-              "in the sidebar: the voice channels with people in them");
+  String get labelShowWhosAround => Intl.message("Show who's around on Home",
+      name: "labelShowWhosAround",
+      desc: "Label for the toggle which shows, at the top of the Home "
+          "screen's list, the voice channels with people in them and "
+          "the quiet ones");
 
   String get labelShowWhosAroundDescription => Intl.message(
-      "The voice channels with people in them, in every space you're in, and a chair to pull up when it's quiet",
+      "At the top of the Home screen's list: the voice channels with people in them, in every space you're in, and the quiet ones to pull up a chair in",
       name: "labelShowWhosAroundDescription",
-      desc: "Description for the toggle which shows the rail under the "
-          "spaces in the sidebar");
+      desc: "Description for the toggle which shows who's around on the Home "
+          "screen");
 
   @override
   void initState() {
