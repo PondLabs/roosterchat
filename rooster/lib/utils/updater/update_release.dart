@@ -1,8 +1,10 @@
 // A release on GitHub, and the file of it this build would install.
 //
 // `ci.yml` cuts a release for every push to main and attaches one archive per
-// desktop platform, named `rooster-<tag>-<platform>-x64-<mode>`, each holding
-// a single top level directory of the same name. GitHub reports a sha256 for
+// desktop platform and architecture, named
+// `rooster-<tag>-<platform>-<arch>-<mode>` (`x64` or `arm64`; macOS builds
+// are `universal`), each holding a single top level directory of the same
+// name. GitHub reports a sha256 for
 // every asset, which is what makes installing one without a browser
 // defensible: the download is checked against it before anything is unpacked.
 import 'dart:convert';
@@ -54,15 +56,16 @@ class UpdateRelease {
   final String tag;
   final List<UpdateAsset> assets;
 
-  /// The archive built for [platform] (`windows`, `linux` or `macos`), if
-  /// this release has one. Release builds only: a debug bundle is not
-  /// something to hand somebody as an update. The installers beside them are
-  /// for a first install; an update is always the archive.
-  UpdateAsset? assetFor(String platform) {
+  /// The archive built for [platform] (`windows`, `linux` or `macos`) and
+  /// [arch] (`x64` or `arm64`; a macOS build carries both), if this release
+  /// has one. Release builds only: a debug bundle is not something to hand
+  /// somebody as an update. The installers beside them are for a first
+  /// install; an update is always the archive.
+  UpdateAsset? assetFor(String platform, {String arch = 'x64'}) {
     final wanted = switch (platform) {
-      'windows' => '-windows-x64-release.zip',
+      'windows' => '-windows-$arch-release.zip',
       'macos' => '-macos-universal-release.zip',
-      _ => '-$platform-x64-release.tar.gz',
+      _ => '-$platform-$arch-release.tar.gz',
     };
     for (final asset in assets) {
       if (asset.name.endsWith(wanted)) return asset;

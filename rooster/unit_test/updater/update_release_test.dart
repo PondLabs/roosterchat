@@ -48,6 +48,40 @@ void main() {
         endsWith('-windows-x64-release.zip'));
   });
 
+  test('an arm64 build takes the arm64 archive, and only that', () {
+    final release = parse(_release(assets: [
+      for (final name in [
+        'rooster-v0.13.2-linux-x64-release.tar.gz',
+        'rooster-v0.13.2-linux-arm64-release.tar.gz',
+        'rooster-v0.13.2-windows-x64-release.zip',
+        'rooster-v0.13.2-windows-arm64-release.zip',
+        'rooster-v0.13.2-windows-arm64-setup.exe',
+        'rooster-v0.13.2-linux-arm64-setup.sh',
+      ])
+        {
+          'name': name,
+          'browser_download_url': 'https://example.invalid/$name',
+          'size': 1,
+          'digest': 'sha256:$_sha',
+        }
+    ]));
+    expect(release.assetFor('linux', arch: 'arm64')!.name,
+        'rooster-v0.13.2-linux-arm64-release.tar.gz');
+    expect(release.assetFor('windows', arch: 'arm64')!.name,
+        'rooster-v0.13.2-windows-arm64-release.zip');
+    // The x64 builds keep taking the x64 archives, as before.
+    expect(release.assetFor('linux')!.name,
+        'rooster-v0.13.2-linux-x64-release.tar.gz');
+    expect(release.assetFor('windows', arch: 'x64')!.name,
+        'rooster-v0.13.2-windows-x64-release.zip');
+  });
+
+  test('a release without an arm64 archive has none for an arm64 build', () {
+    final release = parse(_release());
+    expect(release.assetFor('linux', arch: 'arm64'), isNull);
+    expect(release.assetFor('windows', arch: 'arm64'), isNull);
+  });
+
   test('macOS takes the universal zip, never an installer', () {
     final release = parse(_release(assets: [
       for (final name in [
