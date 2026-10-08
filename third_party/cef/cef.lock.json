@@ -106,6 +106,98 @@
         ]
       }
     },
+    "windows-arm64": {
+      "archive": {
+        "filename": "cef_binary_152.0.8+g1ce985c+chromium-152.0.7977.134_windowsarm64.tar.bz2",
+        "url": "https://cef-builds.spotifycdn.com/cef_binary_152.0.8+g1ce985c+chromium-152.0.7977.134_windowsarm64.tar.bz2",
+        "size": 335645500,
+        "sha1": "600323ad2cda4a8144ec5da20cf8fbbf181b91d5",
+        "upstream_sha1": "600323ad2cda4a8144ec5da20cf8fbbf181b91d5",
+        "sidecar_sha1": "600323ad2cda4a8144ec5da20cf8fbbf181b91d5",
+        "sha256": "cad85bb58ef65e1cf567af205e428d1bb87d6778d4d2493fff02a619b0c5d667",
+        "project_sha256": "cad85bb58ef65e1cf567af205e428d1bb87d6778d4d2493fff02a619b0c5d667"
+      },
+      "raw_manifest_sha256": "347fd4b4b7d887c0564bedd73b09b71524dfde16d0c4cb2fb7ee514e206a8467",
+      "bootstrap": {
+        "archive": [
+          "Release/bootstrap.exe"
+        ],
+        "project": [
+          "cef_host.dll"
+        ]
+      },
+      "runtime": {
+        "required": [
+          "Release/bootstrap.exe",
+          "Release/chrome_elf.dll",
+          "Release/d3dcompiler_47.dll",
+          "Release/dxcompiler.dll",
+          "Release/dxil.dll",
+          "Release/libEGL.dll",
+          "Release/libGLESv2.dll",
+          "Release/libcef.dll",
+          "Release/v8_context_snapshot.bin",
+          "Release/vk_swiftshader.dll",
+          "Release/vk_swiftshader_icd.json",
+          "Release/vulkan-1.dll",
+          "Resources/chrome_100_percent.pak",
+          "Resources/chrome_200_percent.pak",
+          "Resources/icudtl.dat",
+          "Resources/resources.pak",
+          "Resources/locales/*.pak",
+          "LICENSE.txt",
+          "CREDITS.html"
+        ],
+        "allowlist": [
+          "Release/bootstrap.exe",
+          "Release/chrome_elf.dll",
+          "Release/d3dcompiler_47.dll",
+          "Release/dxcompiler.dll",
+          "Release/dxil.dll",
+          "Release/libEGL.dll",
+          "Release/libGLESv2.dll",
+          "Release/libcef.dll",
+          "Release/v8_context_snapshot.bin",
+          "Release/vk_swiftshader.dll",
+          "Release/vk_swiftshader_icd.json",
+          "Release/vulkan-1.dll",
+          "Resources/chrome_100_percent.pak",
+          "Resources/chrome_200_percent.pak",
+          "Resources/icudtl.dat",
+          "Resources/resources.pak",
+          "Resources/locales/*.pak",
+          "LICENSE.txt",
+          "CREDITS.html"
+        ],
+        "forbidden": [
+          "Release/bootstrapc.exe",
+          "Release/libcef.lib",
+          "Debug/**",
+          "include/**",
+          "libcef_dll/**",
+          "tests/**"
+        ]
+      },
+      "build_sdk": {
+        "required": [
+          "Release/libcef.lib",
+          "include/cef_app.h",
+          "cmake/cef_variables.cmake",
+          "libcef_dll/CMakeLists.txt"
+        ],
+        "allowlist": [
+          "Release/*.lib",
+          "cmake/**",
+          "include/**",
+          "libcef_dll/**"
+        ],
+        "forbidden": [
+          "Debug/**",
+          "tests/**",
+          "tools/**"
+        ]
+      }
+    },
     "linux-x64": {
       "archive": {
         "filename": "cef_binary_152.0.8+g1ce985c+chromium-152.0.7977.134_linux64.tar.bz2",
@@ -118,6 +210,82 @@
         "project_sha256": "4967293a608424b98f2ff4ab15f4119064de966018df6458a80f2a7073dd1dc0"
       },
       "raw_manifest_sha256": "fd82d90e1f0d6d632b8423499264c95e65a6a2eec623069faea51bc49b96612e",
+      "bootstrap": {
+        "archive": [],
+        "project": []
+      },
+      "runtime": {
+        "required": [
+          "Release/chrome-sandbox",
+          "Release/libEGL.so",
+          "Release/libGLESv2.so",
+          "Release/libcef.so",
+          "Release/libvk_swiftshader.so",
+          "Release/libvulkan.so.1",
+          "Release/v8_context_snapshot.bin",
+          "Release/vk_swiftshader_icd.json",
+          "Resources/chrome_100_percent.pak",
+          "Resources/chrome_200_percent.pak",
+          "Resources/icudtl.dat",
+          "Resources/resources.pak",
+          "Resources/locales/*.pak",
+          "LICENSE.txt",
+          "CREDITS.html"
+        ],
+        "allowlist": [
+          "Release/chrome-sandbox",
+          "Release/libEGL.so",
+          "Release/libGLESv2.so",
+          "Release/libcef.so",
+          "Release/libvk_swiftshader.so",
+          "Release/libvulkan.so.1",
+          "Release/v8_context_snapshot.bin",
+          "Release/vk_swiftshader_icd.json",
+          "Resources/chrome_100_percent.pak",
+          "Resources/chrome_200_percent.pak",
+          "Resources/icudtl.dat",
+          "Resources/resources.pak",
+          "Resources/locales/*.pak",
+          "LICENSE.txt",
+          "CREDITS.html"
+        ],
+        "forbidden": [
+          "Debug/**",
+          "include/**",
+          "libcef_dll/**",
+          "tests/**"
+        ]
+      },
+      "build_sdk": {
+        "required": [
+          "include/cef_app.h",
+          "cmake/cef_variables.cmake",
+          "libcef_dll/CMakeLists.txt"
+        ],
+        "allowlist": [
+          "cmake/**",
+          "include/**",
+          "libcef_dll/**"
+        ],
+        "forbidden": [
+          "Debug/**",
+          "tests/**",
+          "tools/**"
+        ]
+      }
+    },
+    "linux-arm64": {
+      "archive": {
+        "filename": "cef_binary_152.0.8+g1ce985c+chromium-152.0.7977.134_linuxarm64.tar.bz2",
+        "url": "https://cef-builds.spotifycdn.com/cef_binary_152.0.8+g1ce985c+chromium-152.0.7977.134_linuxarm64.tar.bz2",
+        "size": 865741319,
+        "sha1": "76d3f21cf83702bf220a4ee60717a7997a0be893",
+        "upstream_sha1": "76d3f21cf83702bf220a4ee60717a7997a0be893",
+        "sidecar_sha1": "76d3f21cf83702bf220a4ee60717a7997a0be893",
+        "sha256": "e0eb276906347d377f0abef7e64309a3cf0858421def4dcb7af5d7ae81f8ffec",
+        "project_sha256": "e0eb276906347d377f0abef7e64309a3cf0858421def4dcb7af5d7ae81f8ffec"
+      },
+      "raw_manifest_sha256": "100656f2caf37d704fa8d7f45f0094b4644f82efaf0f8da8e2cb4604cc301b1c",
       "bootstrap": {
         "archive": [],
         "project": []

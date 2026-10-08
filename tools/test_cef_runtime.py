@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import copy
 import hashlib
 import http.server
@@ -68,7 +69,7 @@ LINUX_FILES = {
 
 def _write_tar(path: Path, platform: str) -> None:
     root = f"cef_binary_152.0.8+g1ce985c+chromium-152.0.7977.134_{platform}"
-    files = WINDOWS_FILES if platform == "windows64" else LINUX_FILES
+    files = WINDOWS_FILES if platform.startswith("windows") else LINUX_FILES
     with tarfile.open(path, "w:bz2") as archive:
         directory_names = {root}
         for relative in files:
@@ -91,7 +92,7 @@ def _write_tar(path: Path, platform: str) -> None:
 def _fixture_lock(directory: Path) -> tuple[dict, dict[str, Path]]:
     lock = copy.deepcopy(cef_runtime.load_lock())
     archives: dict[str, Path] = {}
-    for platform, suffix in (("windows-x64", "windows64"), ("linux-x64", "linux64")):
+    for platform, suffix in cef_runtime.ARCHIVE_SUFFIXES.items():
         archive = directory / lock["platforms"][platform]["archive"]["filename"]
         _write_tar(archive, suffix)
         manifest, manifest_sha256 = cef_runtime.archive_manifest(archive)
@@ -111,7 +112,7 @@ def _fixture_lock(directory: Path) -> tuple[dict, dict[str, Path]]:
 
 
 class CEFRuntimeToolTests(unittest.TestCase):
-    def test_canonical_lock_has_one_real_pair(self) -> None:
+    def test_canonical_lock_has_one_real_tuple(self) -> None:
         lock = cef_runtime.load_lock()
         self.assertEqual(lock["cef_version"], "152.0.8+g1ce985c+chromium-152.0.7977.134")
         self.assertEqual(lock["chromium_version"], "152.0.7977.134")
@@ -139,7 +140,99 @@ class CEFRuntimeToolTests(unittest.TestCase):
             lock["platforms"]["linux-x64"]["raw_manifest_sha256"],
             "fd82d90e1f0d6d632b8423499264c95e65a6a2eec623069faea51bc49b96612e",
         )
+        # The arm64 archives of the same tuple, from the same builder index.
+        self.assertEqual(
+            lock["platforms"]["windows-arm64"]["archive"]["filename"],
+            "cef_binary_152.0.8+g1ce985c+chromium-152.0.7977.134_windowsarm64.tar.bz2",
+        )
+        self.assertEqual(
+            lock["platforms"]["windows-arm64"]["archive"]["sha1"],
+            "600323ad2cda4a8144ec5da20cf8fbbf181b91d5",
+        )
+        self.assertEqual(
+            lock["platforms"]["windows-arm64"]["archive"]["sha256"],
+            "cad85bb58ef65e1cf567af205e428d1bb87d6778d4d2493fff02a619b0c5d667",
+        )
+        self.assertEqual(
+            lock["platforms"]["windows-arm64"]["raw_manifest_sha256"],
+            "347fd4b4b7d887c0564bedd73b09b71524dfde16d0c4cb2fb7ee514e206a8467",
+        )
+        self.assertEqual(
+            lock["platforms"]["linux-arm64"]["archive"]["filename"],
+            "cef_binary_152.0.8+g1ce985c+chromium-152.0.7977.134_linuxarm64.tar.bz2",
+        )
+        self.assertEqual(
+            lock["platforms"]["linux-arm64"]["archive"]["sha1"],
+            "76d3f21cf83702bf220a4ee60717a7997a0be893",
+        )
+        self.assertEqual(
+            lock["platforms"]["linux-arm64"]["archive"]["sha256"],
+            "e0eb276906347d377f0abef7e64309a3cf0858421def4dcb7af5d7ae81f8ffec",
+        )
+        self.assertEqual(
+            lock["platforms"]["linux-arm64"]["raw_manifest_sha256"],
+            "100656f2caf37d704fa8d7f45f0094b4644f82efaf0f8da8e2cb4604cc301b1c",
+        )
         self.assertFalse(lock["codec"]["proprietary_codecs"])
+
+    def test_lock_needs_every_desktop_platform(self) -> None:
+        # One release ships the four desktop builds together, so a lock
+        # without the arm64 records is as wrong as one without Linux.
+        for platform in cef_runtime.PLATFORMS:
+            lock = copy.deepcopy(cef_runtime.load_lock())
+            del lock["platforms"][platform]
+            with self.assertRaises(cef_runtime.LockError, msg=platform):
+                cef_runtime.validate_lock(lock)
+
+    def test_platform_argument_knows_arm64_and_the_builder_suffixes(self) -> None:
+        for given, expected in (
+            ("windows", "windows-x64"),
+            ("windowsarm64", "windows-arm64"),
+            ("windows-arm64", "windows-arm64"),
+            ("linux64", "linux-x64"),
+            ("linuxarm64", "linux-arm64"),
+            ("linux-arm64", "linux-arm64"),
+        ):
+            self.assertEqual(cef_runtime._platform_argument(given), expected)
+        with self.assertRaises(argparse.ArgumentTypeError):
+            cef_runtime._platform_argument("windows-x86")
+
+    def test_arm64_platforms_stage_like_their_x64_siblings(self) -> None:
+        with TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            lock, archives = _fixture_lock(directory)
+            project_root = directory / "project"
+            project_root.mkdir()
+            (project_root / "cef_host.dll").write_bytes(b"client")
+            windows = cef_runtime.stage_runtime(
+                "windows-arm64",
+                archives["windows-arm64"],
+                directory / "windows",
+                lock,
+                project_root=project_root,
+            )
+            self.assertIn("Release/libcef.dll", windows["files"])
+            self.assertIn("Release/vk_swiftshader.dll", windows["files"])
+            self.assertTrue((directory / "windows/Release/icudtl.dat").is_file())
+            self.assertEqual(windows["bootstrap_project"][0]["path"], "cef_host.dll")
+            linux = cef_runtime.stage_runtime(
+                "linux-arm64", archives["linux-arm64"], directory / "linux", lock
+            )
+            self.assertIn("Release/libcef.so", linux["files"])
+            self.assertTrue((directory / "linux/Release/locales/en-US.pak").is_file())
+            self.assertEqual(linux["bootstrap_project"], [])
+            sdk = cef_runtime.stage_sdk(
+                "windows-arm64", archives["windows-arm64"], directory / "sdk", lock
+            )
+            self.assertIn("Release/libcef.lib", sdk["files"])
+            self.assertEqual(
+                cef_runtime.staged_path("windows-arm64", "Resources/icudtl.dat"),
+                "Release/icudtl.dat",
+            )
+            self.assertEqual(
+                cef_runtime.staged_path("linux-arm64", "Resources/locales/*.pak"),
+                "Release/locales/*.pak",
+            )
 
     def test_lock_cannot_drop_required_runtime_inputs(self) -> None:
         lock = copy.deepcopy(cef_runtime.load_lock())

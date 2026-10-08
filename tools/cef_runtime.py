@@ -3,7 +3,8 @@
 
 This module is deliberately independent from the application.  It is release
 tooling only: the application never imports it and never downloads CEF at
-runtime.  The lock file is the source of truth for both desktop archives.
+runtime.  The lock file is the source of truth for the desktop archives: one
+per platform and architecture (Windows and Linux, x64 and arm64).
 
 The implementation uses only the Python standard library so it can run on the
 Windows and Linux release images before Flutter or the native host is built.
@@ -36,13 +37,24 @@ LOCK_SCHEMA_VERSION = 1
 SOURCE_HOST = "cef-builds.spotifycdn.com"
 HEX_RE = re.compile(r"^[0-9a-f]+$", re.IGNORECASE)
 ARCHIVE_RE = re.compile(
-    r"^cef_binary_(?P<version>[^_]+)_(?P<platform>windows64|linux64)\.tar\.bz2$"
+    r"^cef_binary_(?P<version>[^_]+)_(?P<platform>windows64|windowsarm64|linux64|linuxarm64)\.tar\.bz2$"
 )
+# The platforms a release carries CEF for, as the lock keys them, and the
+# suffix the CEF builder gives each one's standard archive.  Every record
+# of one lock pins the same CEF/Chromium tuple.
+PLATFORMS = ("windows-x64", "windows-arm64", "linux-x64", "linux-arm64")
+ARCHIVE_SUFFIXES = {
+    "windows-x64": "windows64",
+    "windows-arm64": "windowsarm64",
+    "linux-x64": "linux64",
+    "linux-arm64": "linuxarm64",
+}
 MAX_MEMBER_COUNT = 100_000
 MAX_MEMBER_BYTES = 8 * 1024 * 1024 * 1024
 MAX_EXTRACTED_BYTES = 16 * 1024 * 1024 * 1024
-REQUIRED_RUNTIME_PATTERNS = {
-    "windows-x64": frozenset(
+# The arm64 distributions ship the same runtime files as their x64
+# siblings (SwiftShader and the DirectX compilers included).
+_WINDOWS_RUNTIME = frozenset(
         {
             "Release/bootstrap.exe",
             "Release/chrome_elf.dll",
@@ -64,8 +76,8 @@ REQUIRED_RUNTIME_PATTERNS = {
             "LICENSE.txt",
             "CREDITS.html",
         }
-    ),
-    "linux-x64": frozenset(
+    )
+_LINUX_RUNTIME = frozenset(
         {
             "Release/chrome-sandbox",
             "Release/libEGL.so",
@@ -83,19 +95,27 @@ REQUIRED_RUNTIME_PATTERNS = {
             "LICENSE.txt",
             "CREDITS.html",
         }
-    ),
+    )
+REQUIRED_RUNTIME_PATTERNS = {
+    "windows-x64": _WINDOWS_RUNTIME,
+    "windows-arm64": _WINDOWS_RUNTIME,
+    "linux-x64": _LINUX_RUNTIME,
+    "linux-arm64": _LINUX_RUNTIME,
 }
+_WINDOWS_BOOTSTRAP = {"archive": ["Release/bootstrap.exe"], "project": ["cef_host.dll"]}
+_LINUX_BOOTSTRAP: dict[str, list[str]] = {"archive": [], "project": []}
 BOOTSTRAP_PATTERNS = {
-    "windows-x64": {"archive": ["Release/bootstrap.exe"], "project": ["cef_host.dll"]},
-    "linux-x64": {"archive": [], "project": []},
+    "windows-x64": _WINDOWS_BOOTSTRAP,
+    "windows-arm64": _WINDOWS_BOOTSTRAP,
+    "linux-x64": _LINUX_BOOTSTRAP,
+    "linux-arm64": _LINUX_BOOTSTRAP,
 }
 # Where archive paths land in a staged runtime.  CEF loads ICU data, the .pak
 # resources and locales/ from the directory that holds libcef (libcef.so,
 # libcef.dll), whatever CefSettings says, so staged runtimes move the
 # archive's Resources/ into Release/.  The build SDK keeps the archive layout.
 STAGED_PREFIXES: dict[str, tuple[tuple[str, str], ...]] = {
-    "linux-x64": (("Resources/", "Release/"),),
-    "windows-x64": (("Resources/", "Release/"),),
+    platform: (("Resources/", "Release/"),) for platform in PLATFORMS
 }
 
 
@@ -270,11 +290,10 @@ def validate_lock(lock: Mapping[str, Any]) -> dict[str, Any]:
         raise LockError("source.archive_base_url must point to the official builder origin")
 
     platforms = lock.get("platforms")
-    if not isinstance(platforms, dict) or set(platforms) != {"windows-x64", "linux-x64"}:
-        raise LockError("lock.platforms must contain exactly windows-x64 and linux-x64")
+    if not isinstance(platforms, dict) or set(platforms) != set(PLATFORMS):
+        raise LockError(f"lock.platforms must contain exactly {', '.join(PLATFORMS)}")
 
-    expected_suffix = {"windows-x64": "windows64", "linux-x64": "linux64"}
-    for platform, suffix in expected_suffix.items():
+    for platform, suffix in ARCHIVE_SUFFIXES.items():
         record = _platform_record(lock, platform)
         archive = record.get("archive")
         if not isinstance(archive, dict):
@@ -377,7 +396,7 @@ def validate_lock(lock: Mapping[str, Any]) -> dict[str, Any]:
         if not isinstance(value, int) or value <= 0:
             raise LockError(f"lock.policy.{field} must be a positive integer")
 
-    # Both archives must represent one atomic release tuple.
+    # Every archive must represent one atomic release tuple.
     versions = {
         _platform_record(lock, platform)["archive"]["filename"]
         for platform in platforms
@@ -776,12 +795,12 @@ def fetch_archive(
 def fetch_pair(
     cache_dir: Path | str, lock: Mapping[str, Any] | None = None
 ) -> dict[str, Path]:
-    """Fetch and verify both members of the one locked desktop pair."""
+    """Fetch and verify every member of the one locked desktop set."""
 
     lock = validate_lock(lock or load_lock())
     return {
         platform: fetch_archive(platform, cache_dir, lock)
-        for platform in ("windows-x64", "linux-x64")
+        for platform in PLATFORMS
     }
 
 
@@ -844,7 +863,7 @@ def _strip_libraries(platform: str, destination: Path) -> list[str]:
     the libraries still load and link exactly as before.
     """
 
-    if platform != "linux-x64":
+    if not platform.startswith("linux-"):
         raise LockError("only the Linux runtime is stripped")
     release = destination / "Release"
     stripped: list[str] = []
@@ -1180,10 +1199,17 @@ def generate_metadata(
 
 
 def _platform_argument(value: str) -> str:
-    aliases = {"windows": "windows-x64", "win64": "windows-x64", "linux": "linux-x64", "linux64": "linux-x64"}
+    aliases = {
+        "windows": "windows-x64",
+        "win64": "windows-x64",
+        "linux": "linux-x64",
+        "linux64": "linux-x64",
+        "windowsarm64": "windows-arm64",
+        "linuxarm64": "linux-arm64",
+    }
     value = aliases.get(value, value)
-    if value not in ("windows-x64", "linux-x64"):
-        raise argparse.ArgumentTypeError("platform must be windows-x64 or linux-x64")
+    if value not in PLATFORMS:
+        raise argparse.ArgumentTypeError(f"platform must be one of {', '.join(PLATFORMS)}")
     return value
 
 
@@ -1200,7 +1226,7 @@ def _parser() -> argparse.ArgumentParser:
     fetch.add_argument("--platform", type=_platform_argument, required=True)
     fetch.add_argument("--cache-dir", type=Path, required=True)
 
-    fetch_pair_parser = subparsers.add_parser("fetch-pair", help="fetch both locked archives")
+    fetch_pair_parser = subparsers.add_parser("fetch-pair", help="fetch every locked archive")
     fetch_pair_parser.add_argument("--cache-dir", type=Path, required=True)
 
     verify = subparsers.add_parser("verify", help="verify a local archive offline")

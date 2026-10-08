@@ -67,7 +67,12 @@ from tools import cef_runtime  # noqa: E402
 
 
 LOCK_PATH = cef_runtime.LOCK_PATH
+#: The lock record a bundle is checked against: x64 unless told otherwise.
+#: The arm64 bundle is the same payload from the windowsarm64 archive.
 PLATFORM = "windows-x64"
+WINDOWS_PLATFORMS = tuple(
+    platform for platform in cef_runtime.PLATFORMS if platform.startswith("windows-")
+)
 
 #: Archive bootstrap input renamed by the CMake POST_BUILD step.
 BOOTSTRAP_RENAME = {"Release/bootstrap.exe": "cef_host.exe"}
@@ -184,12 +189,12 @@ def _payload_relative(payload: Path, path: Path) -> str:
     return path.relative_to(payload).as_posix()
 
 
-def _lock_to_payload_name(archive_name: str) -> str:
+def _lock_to_payload_name(archive_name: str, platform: str = PLATFORM) -> str:
     """Map a lock or staged ``Release/...``/``Resources/...`` name to payload
     layout."""
     if archive_name in BOOTSTRAP_RENAME:
         return BOOTSTRAP_RENAME[archive_name]
-    staged = cef_runtime.staged_path(PLATFORM, archive_name)
+    staged = cef_runtime.staged_path(platform, archive_name)
     if staged.startswith("Release/"):
         return staged[len("Release/") :]
     return staged
@@ -235,17 +240,19 @@ def _match_lock_pattern(path: str, pattern: str) -> bool:
     return fnmatch.fnmatchcase(path, pattern)
 
 
-def check_staged(lock: Mapping[str, Any], payload: Path) -> dict[str, Any]:
+def check_staged(
+    lock: Mapping[str, Any], payload: Path, platform: str = PLATFORM
+) -> dict[str, Any]:
     """Every locked runtime input must be staged in the payload."""
 
-    record = lock["platforms"][PLATFORM]
+    record = lock["platforms"][platform]
     required: list[str] = record["runtime"]["required"]
     files = _payload_files(payload)
     missing: list[str] = []
     for pattern in required:
         if pattern in NOTICE_INPUTS:
             continue
-        payload_pattern = _lock_to_payload_name(pattern)
+        payload_pattern = _lock_to_payload_name(pattern, platform)
         if not any(_match_lock_pattern(name, payload_pattern) for name in files):
             missing.append(pattern)
     if "locales/en-US.pak" not in files:
@@ -286,16 +293,16 @@ def _load_manifest(metadata: Path) -> dict[str, Any]:
 
 
 def check_hashes(
-    lock: Mapping[str, Any], payload: Path, metadata: Path
+    lock: Mapping[str, Any], payload: Path, metadata: Path, platform: str = PLATFORM
 ) -> dict[str, Any]:
     """Payload bytes must match the signed-byte-ready manifest."""
 
     manifest = _load_manifest(metadata)
-    if manifest.get("platform") != PLATFORM:
-        raise QualificationError("manifest platform is not windows-x64")
+    if manifest.get("platform") != platform:
+        raise QualificationError(f"manifest platform is not {platform}")
     if manifest.get("cef_version") != lock["cef_version"]:
         raise QualificationError("manifest CEF version does not match the lock")
-    if manifest.get("raw_manifest_sha256") != lock["platforms"][PLATFORM]["raw_manifest_sha256"]:
+    if manifest.get("raw_manifest_sha256") != lock["platforms"][platform]["raw_manifest_sha256"]:
         raise QualificationError("manifest raw digest does not match the lock")
     manifest_files = manifest.get("files")
     if not isinstance(manifest_files, list) or not manifest_files:
@@ -344,8 +351,8 @@ def check_hashes(
     # Any staged locale beyond en-US is allowed when it matches the lock's
     # locales pattern; extras outside the allow-list fail.
     allowlist = [
-        cef_runtime.staged_path(PLATFORM, pattern)
-        for pattern in lock["platforms"][PLATFORM]["runtime"]["allowlist"]
+        cef_runtime.staged_path(platform, pattern)
+        for pattern in lock["platforms"][platform]["runtime"]["allowlist"]
     ]
     unexpected = sorted(
         name
@@ -370,10 +377,12 @@ def _payload_to_staged_name(payload_name: str) -> str:
     return payload_name
 
 
-def check_metadata(lock: Mapping[str, Any], metadata: Path) -> dict[str, Any]:
+def check_metadata(
+    lock: Mapping[str, Any], metadata: Path, platform: str = PLATFORM
+) -> dict[str, Any]:
     """Notices, SBOM, and provenance must be complete and lock-consistent."""
 
-    record = lock["platforms"][PLATFORM]
+    record = lock["platforms"][platform]
     manifest = _load_manifest(metadata)
     notices_path = metadata / "THIRD_PARTY_NOTICES.txt"
     sbom_path = metadata / "cef.sbom.cdx.json"
@@ -421,8 +430,8 @@ def check_metadata(lock: Mapping[str, Any], metadata: Path) -> dict[str, Any]:
     if record["archive"]["url"] not in urls:
         raise QualificationError("SBOM CEF source URL does not match the lock")
     provenance = _read_json(provenance_path)
-    if provenance.get("platform") != PLATFORM:
-        raise QualificationError("provenance platform is not windows-x64")
+    if provenance.get("platform") != platform:
+        raise QualificationError(f"provenance platform is not {platform}")
     if provenance.get("cef_version") != lock["cef_version"]:
         raise QualificationError("provenance CEF version does not match the lock")
     if provenance.get("runtime_download") is not False:
@@ -587,19 +596,26 @@ def qualify(
     lock: Mapping[str, Any] | None = None,
     *,
     require_signatures: bool = False,
+    platform: str = PLATFORM,
 ) -> dict[str, Any]:
-    """Qualify one Windows bundle plus its generated metadata directory."""
+    """Qualify one Windows bundle plus its generated metadata directory.
 
+    [platform] is the lock record the bundle was built from, ``windows-x64``
+    or ``windows-arm64``.
+    """
+
+    if platform not in WINDOWS_PLATFORMS:
+        raise QualificationError(f"platform must be one of {', '.join(WINDOWS_PLATFORMS)}")
     lock = cef_runtime.validate_lock(lock if lock is not None else cef_runtime.load_lock())
     bundle = Path(bundle)
     metadata = Path(metadata)
     if metadata.is_symlink() or not metadata.is_dir():
         raise QualificationError(f"metadata must be a real directory: {metadata}")
     payload = find_cef_payload(bundle)
-    staged = check_staged(lock, payload)
+    staged = check_staged(lock, payload, platform)
     check_no_unexpected_payload_files(payload)
-    hashes = check_hashes(lock, payload, metadata)
-    metadata_result = check_metadata(lock, metadata)
+    hashes = check_hashes(lock, payload, metadata, platform)
+    metadata_result = check_metadata(lock, metadata, platform)
     signatures = check_signatures(payload, metadata, require_signatures=require_signatures)
     sandbox = check_sandbox_bootstrap(payload)
     foreign = check_no_foreign_backends(bundle, payload)
@@ -607,7 +623,7 @@ def qualify(
     manifest = _load_manifest(metadata)
     report = {
         "schema_version": 1,
-        "platform": PLATFORM,
+        "platform": platform,
         "cef_version": lock["cef_version"],
         "chromium_version": lock["chromium_version"],
         "bundle": str(bundle),
@@ -635,6 +651,12 @@ def qualify(
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--lock", type=Path, default=LOCK_PATH, help="path to cef.lock.json")
+    parser.add_argument(
+        "--platform",
+        type=cef_runtime._platform_argument,
+        default=PLATFORM,
+        help="the lock record the bundle was built from: windows-x64 or windows-arm64",
+    )
     parser.add_argument("--bundle", type=Path, required=True, help="built Windows bundle directory")
     parser.add_argument(
         "--metadata",
@@ -660,6 +682,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.metadata,
             lock,
             require_signatures=args.require_signatures,
+            platform=args.platform,
         )
     except (cef_runtime.LockError, QualificationError) as exc:
         print(f"qualify-windows-artifact: error: {exc}", file=sys.stderr)
