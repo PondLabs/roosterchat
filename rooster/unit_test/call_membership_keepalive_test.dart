@@ -647,6 +647,79 @@ void main() {
       expect(expiryOf(homeserver.membershipWrites.first),
           joinedAt.add(MatrixCallMembership.unguardedLifetime));
     });
+
+    // Regression (2026-10-07): with no delayed leave, a membership kept a
+    // window of hours, and people stayed listed for hours after their app
+    // had died. Judged here as every reader judges it (the sidebar, the
+    // channel's page, the online dot): by its `expires`.
+    test(
+        'someone in the call stays listed between writes, and is gone two '
+        'minutes after their app dies, not hours', () async {
+      joined(serverTime);
+      await join();
+      synced();
+      await settle();
+
+      for (var i = 0; i < 4; i++) {
+        final writes = homeserver.membershipWrites.length;
+        await stay(const Duration(seconds: 31));
+        await settle();
+        expect(homeserver.membershipWrites, hasLength(writes + 1),
+            reason: 'written again half a minute after the last write');
+        synced();
+        // Until the next write is due, with room for one that is late.
+        expect(
+            MatrixCallMembership.isExpired(homeserver.membershipWrites.last,
+                serverTime, serverTime.add(const Duration(seconds: 90))),
+            isFalse,
+            reason: 'still in the call: listed');
+      }
+
+      // The app dies here: what it wrote last is all anyone has.
+      final last = homeserver.membershipWrites.last;
+      final diedAt = serverTime;
+      expect(
+          MatrixCallMembership.isExpired(
+              last, diedAt, diedAt.add(const Duration(minutes: 1))),
+          isFalse);
+      expect(
+          MatrixCallMembership.isExpired(
+              last, diedAt, diedAt.add(const Duration(minutes: 2, seconds: 1))),
+          isTrue,
+          reason: 'listed for hours after it died (2026-10-07)');
+    });
+
+    // Regression (2026-10-05, 2026-10-07): an app that lost LiveKit but kept
+    // running kept its membership up, so it was listed in a call it was not
+    // in, for hours (ggflores23, then Enzo in a browser tab).
+    test(
+        'an app that lost LiveKit but keeps running takes itself off the list '
+        'within seconds, and stays off', () async {
+      joined(serverTime);
+      final call = await join();
+      synced();
+      await settle();
+      final writes = homeserver.membershipWrites.length;
+
+      livekit.connectionState = lk.ConnectionState.reconnecting;
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      localTime = localTime.add(const Duration(seconds: 5));
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      await pumpEventQueue();
+      expect(homeserver.membershipWrites, hasLength(writes + 1));
+      expect(homeserver.membershipWrites.last, isEmpty,
+          reason: 'off the list five seconds after LiveKit went');
+
+      // Minutes on with LiveKit still gone (the call is hung up after three):
+      // nothing puts the membership back.
+      for (var i = 0; i < 20; i++) {
+        await stay(const Duration(seconds: 30));
+      }
+      await settle();
+      expect(homeserver.membershipWrites.skip(writes), everyElement(isEmpty));
+    });
   });
 
   group('with delayed events', () {
