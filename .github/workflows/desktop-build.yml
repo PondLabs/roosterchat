@@ -4,11 +4,19 @@ name: desktop-build
 # uploads each as an artifact named rooster-<version>-<os>-<arch>-<mode>.
 #
 # The platforms are windows, linux and macos (x64; macOS universal), plus
-# windows-arm64 and linux-arm64, built natively on GitHub's arm64 runners:
+# linux-arm64 and windows-arm64, built natively on GitHub's arm64 runners:
 # Flutter cross-builds neither Windows nor Linux, and every native dependency
 # (CEF, libwebrtc, libmpv and ANGLE, the Rust crates) has an arm64 build.
 # After the build, every native binary in the bundle is checked to be for the
 # architecture the bundle claims (tools/check_bundle_arch.py).
+#
+# windows-arm64 is accepted but cannot be built yet: Flutter 3.41.9 publishes
+# no Dart SDK (dart-sdk-windows-arm64.zip) and no engine
+# (windows-arm64-release/windows-arm64-flutter.zip) for it, so Flutter on an
+# arm64 Windows takes the x64 Dart and builds x64. The setup step says so and
+# stops rather than let an x64 build be called arm64. Everything else for it
+# (the CEF lock, cargokit, the vendored Windows video libraries, the
+# installer) is in place for when Flutter ships them.
 #
 # Also runnable by hand, on any branch, which ci.yml is not: a push to main
 # there cuts a release, so it is a costly way to find out whether a platform
@@ -128,7 +136,10 @@ jobs:
           & "$env:RUNNER_TEMP\flutter\bin\flutter.bat" --version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $dart = & "$env:RUNNER_TEMP\flutter\bin\dart.bat" --version 2>&1 | Out-String
-          if ($dart -notmatch 'windows_arm64') { throw "not the arm64 Dart SDK: $dart" }
+          if ($dart -notmatch 'windows_arm64') {
+            throw ("Flutter took the x64 Dart SDK, which builds x64: this Flutter publishes no " +
+              "dart-sdk-windows-arm64.zip or windows-arm64 engine. Got: $dart")
+          }
 
       # cargokit builds librust_lib_rooster with cargo during the Flutter build
       - name: Setup Rust

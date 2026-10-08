@@ -4,7 +4,8 @@ name: installers
 # release builds desktop-build.yml uploads:
 #
 # - Windows: rooster-<tag>-windows-<arch>-setup.exe (Inno Setup, per user, no
-#   admin; rooster/windows/installer/rooster.iss), x64 and arm64.
+#   admin; rooster/windows/installer/rooster.iss), x64 (arm64 when Flutter
+#   can build it, see desktop-build.yml).
 # - macOS:   rooster-<tag>-macos-universal.dmg (Rooster.app and a link to
 #   Applications to drag it onto).
 # - Linux:   rooster-<tag>-linux-<arch>-setup.sh (per user, no root;
@@ -52,15 +53,11 @@ jobs:
             build: windows-x64-release
             ext: zip
             installer: windows-x64-setup.exe
-          # Inno Setup packs an arm64 bundle on any Windows; nothing here runs
-          # the build.
-          - platform: windows-arm64
-            os: windows
-            arch: arm64
-            runner: windows-2025
-            build: windows-arm64-release
-            ext: zip
-            installer: windows-arm64-setup.exe
+          # A windows-arm64 row goes here (arch: arm64, which rooster.iss
+          # turns into ArchitecturesAllowed=arm64) once desktop-build.yml can
+          # make that build: Flutter 3.41.9 publishes no Dart SDK or engine
+          # for Windows arm64. Inno Setup packs an arm64 bundle on any
+          # Windows; nothing here runs the build.
           - platform: macos
             os: macos
             arch: universal

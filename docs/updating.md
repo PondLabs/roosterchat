@@ -13,18 +13,25 @@ attached. They are named `rooster-<tag>-<platform>-<arch>-<mode>.<zip|tar.gz>`
 (`x64` or `arm64`; macOS builds are `universal`) and each holds a single top
 level directory of the same name, which is the bundle.
 
-The arm64 builds are made natively on GitHub's `windows-11-arm` and
-`ubuntu-24.04-arm` runners (Flutter cross-builds neither), from a git
-checkout of the Flutter tag, since the Flutter SDK archives for Linux and
-Windows are x64 only. The same locked CEF tuple has `windowsarm64` and
-`linuxarm64` archives (`third_party/cef/cef.lock.json`), libwebrtc ships
-`win-arm64` and `linux-arm64`, the Rust crates build for the host, and the
-Windows video libraries come from a vendored `media_kit_libs_windows_video`
-that fetches arm64 libmpv and ANGLE (see `third_party/README.md`). After
-each build, `tools/check_bundle_arch.py` reads the machine field of every
-PE and ELF file in the bundle and fails the job if one is for another
-architecture, so a dependency that silently shipped x64 cannot reach a
-release.
+The arm64 builds are made natively on GitHub's arm64 runners (Flutter
+cross-builds neither Windows nor Linux), from a git checkout of the Flutter
+tag, since the Flutter SDK archives for Linux and Windows are x64 only. The
+same locked CEF tuple has `windowsarm64` and `linuxarm64` archives
+(`third_party/cef/cef.lock.json`), libwebrtc ships `win-arm64` and
+`linux-arm64`, the Rust crates build for the host, and the Windows video
+libraries come from a vendored `media_kit_libs_windows_video` that fetches
+arm64 libmpv and ANGLE (see `third_party/README.md`). After each build,
+`tools/check_bundle_arch.py` reads the machine field of every PE and ELF
+file in the bundle and fails the job if one is for another architecture, so
+a dependency that silently shipped x64 cannot reach a release.
+
+Linux arm64 ships today. Windows arm64 does not yet: Flutter 3.41.9
+publishes no Dart SDK and no engine for `windows-arm64` (the current stable,
+3.47.6, does), so Flutter on an arm64 Windows takes the x64 Dart and builds
+x64. `desktop-build.yml` accepts the platform and stops at that point rather
+than ship an x64 build under an arm64 name; everything else for it is in
+place. Until then Windows on Arm runs the x64 build under emulation, as it
+always has.
 
 `release.yml` is the older Commet pipeline and uploads different names
 (`rooster-windows.zip`). Nothing runs it today.
@@ -42,7 +49,7 @@ its own runner, and the release carries them beside the archives:
 
 | Platform | File | Installs to |
 |----------|------|-------------|
-| Windows | `rooster-<tag>-windows-x64-setup.exe` and `rooster-<tag>-windows-arm64-setup.exe` (Inno Setup, `rooster/windows/installer/rooster.iss`) | `%LOCALAPPDATA%\Programs\Rooster`, Start menu shortcut, uninstall entry. No admin. The arm64 one only runs on Windows on Arm; the x64 one still installs there too, under emulation. |
+| Windows | `rooster-<tag>-windows-x64-setup.exe` (Inno Setup, `rooster/windows/installer/rooster.iss`; `/DArch=arm64` makes the arm64 one, once there is an arm64 build) | `%LOCALAPPDATA%\Programs\Rooster`, Start menu shortcut, uninstall entry. No admin. The x64 installer also installs on Windows on Arm, under emulation. |
 | macOS | `rooster-<tag>-macos-universal.dmg` | Wherever `Rooster.app` is dragged; Applications is offered. |
 | Linux | `rooster-<tag>-linux-x64-setup.sh` and `rooster-<tag>-linux-arm64-setup.sh` (`rooster/linux/installer/setup.sh` with the bundle appended) | `~/.local/opt/Rooster`, a launcher entry, an icon, `~/.local/bin/rooster`. No root. `--uninstall` removes it. The script refuses a bundle built for another CPU. |
 
