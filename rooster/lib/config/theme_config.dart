@@ -6,14 +6,22 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 
 class ThemeConfig {
-  static Future<Directory> getCustomThemesDir() async {
+  static Future<Directory>? _customThemesDir;
+
+  /// The custom themes directory, found once: resolving the theme asks for
+  /// it at startup and from every theme getter, and each call went to the
+  /// platform for the support directory and probed the file system.
+  static Future<Directory> getCustomThemesDir() =>
+      _customThemesDir ??= _findCustomThemesDir();
+
+  static Future<Directory> _findCustomThemesDir() async {
     var dir = await getApplicationSupportDirectory();
     var p = dir.path;
 
     var directory = Directory(path.join(p, "theme", "custom"));
     var exists = await directory.exists();
     if (!exists) {
-      directory.create(recursive: true);
+      await directory.create(recursive: true);
     }
 
     return directory;
