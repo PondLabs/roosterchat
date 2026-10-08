@@ -115,7 +115,7 @@ MUST_CONTAIN = [
      "audio_dsp.wasm builds without wasm-bindgen imports, which the worker cannot give it"),
     ("Cargo.toml", r'^\[profile\.dev\.package\."\*"\]\nopt-level = 3',
      "DeepFilterNet keeps up in real time in debug builds of the app"),
-    ("rooster/web/index.html", r'<script src="audio_dsp\.js"></script>',
+    ("rooster/web/index.html", r'<script src="audio_dsp\.js"( defer)?></script>',
      "the web app loads the DSP glue"),
     ("rooster/web/audio_dsp.js", r"new Worker\(WORKER_URL\)",
      "the web DSP runs in audio_dsp.worker.js, off the audio thread"),
