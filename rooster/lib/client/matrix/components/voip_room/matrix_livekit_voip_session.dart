@@ -1075,8 +1075,13 @@ class MatrixLivekitVoipSession
 
   void onParticipantDisconnected(lk.ParticipantDisconnectedEvent event) {
     _updateShareCues();
-    _deafenedIdentities.remove(event.participant.identity);
-    _callManager?.endCallSound();
+    // A full reconnect emits one of these for every remote participant
+    // while nobody left: no leave sound for that, and their deafened
+    // badges stay (they only broadcast again on a real join).
+    if (_connected()) {
+      _deafenedIdentities.remove(event.participant.identity);
+      _callManager?.endCallSound();
+    }
     _stateChanged.add(());
   }
 
@@ -1406,6 +1411,13 @@ class MatrixLivekitVoipSession
     });
 
     try {
+      // A microphone change still running (a restart for the noise
+      // suppression preference, a repair) opens a new capture after the
+      // room has let go of the track: waited for, briefly, so the capture
+      // it makes is one this session still stops (see restartTrack).
+      await _captureChanges
+          .run(() async {})
+          .timeout(const Duration(seconds: 3), onTimeout: () {});
       // First, so no membership write lands after the clear below: leaving
       // unpublishes our tracks, which would schedule one.
       _idleWatcher.isAway.removeListener(_publishMembershipState);

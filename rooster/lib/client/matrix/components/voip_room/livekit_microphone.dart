@@ -37,8 +37,17 @@ Future<lk.AudioCaptureOptions> prepareMicrophoneCaptureOptions({
   required AudioProcessingManager dsp,
   required bool noiseSuppressionPreference,
   String? deviceId,
+  Duration readyTimeout = const Duration(seconds: 8),
 }) async {
-  final ready = await dsp.ensureReady();
+  // Bounded: on the web this is a 11 MB wasm fetched and test-run, and the
+  // room was already connected (everyone saw a silent user) while the Join
+  // button waited for it on a slow link. Past the bound the call opens
+  // with the browser's own suppressor; the DSP goes on when it is ready.
+  final ready = await dsp.ensureReady().timeout(readyTimeout, onTimeout: () {
+    Log.w("Voice: the DSP was not ready in ${readyTimeout.inSeconds} s; "
+        "opening the microphone without it");
+    return false;
+  });
   final reason = dsp.unavailableReason;
   if (noiseSuppressionPreference && !ready && reason != null) {
     warnNoiseSuppressionUnavailable(reason);
