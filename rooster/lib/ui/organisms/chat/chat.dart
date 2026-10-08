@@ -191,51 +191,61 @@ class ChatState extends State<Chat> {
       processing = true;
     });
 
-    for (var file in attachments) {
-      await file.resolve();
-      var exif = await readExifFromBytes(file.data!);
+    List<ProcessedAttachment> processedAttachments;
+    var targetRoom = room;
+    var targetThread = threadsComponent;
+    try {
+      for (var file in attachments) {
+        await file.resolve();
+        // A file picked earlier that cannot be read now (moved, deleted):
+        // nothing to look at, and processAttachments skips it too.
+        var data = file.data;
+        if (data == null) continue;
+        var exif = await readExifFromBytes(data);
 
-      if (exif.keys.any((e) => e.toLowerCase().contains("gps"))) {
-        // ignore: use_build_context_synchronously
-        var confirmation = await AdaptiveDialog.confirmation(context,
-            title: file.name ?? "File",
-            confirmationText: "Send File",
-            cancelText: "Don't send file",
-            dangerous: true,
-            prompt:
-                "Location data was detected in file '${file.name}', are you sure you want to send?");
+        if (exif.keys.any((e) => e.toLowerCase().contains("gps"))) {
+          // ignore: use_build_context_synchronously
+          var confirmation = await AdaptiveDialog.confirmation(context,
+              title: file.name ?? "File",
+              confirmationText: "Send File",
+              cancelText: "Don't send file",
+              dangerous: true,
+              prompt:
+                  "Location data was detected in file '${file.name}', are you sure you want to send?");
 
-        if (confirmation != true) {
-          setState(() {
-            processing = false;
-          });
+          if (confirmation != true) {
+            return;
+          }
+        }
+      }
+
+      if (overrideClient != null) {
+        var newRoom = overrideClient.getRoom(targetRoom.identifier);
+        if (newRoom != null) {
+          targetRoom = newRoom;
+          targetThread = targetRoom.client.getComponent<ThreadsComponent>();
+          Log.d("Overriding room for client: ${overrideClient}");
+        } else {
+          Log.e(
+              "Failed to find correct room to send event for override client. Cancelling");
+
           return;
         }
       }
-    }
 
-    var targetRoom = room;
-    var targetThread = threadsComponent;
-
-    if (overrideClient != null) {
-      var newRoom = overrideClient.getRoom(targetRoom.identifier);
-      if (newRoom != null) {
-        targetRoom = newRoom;
-        targetThread = targetRoom.client.getComponent<ThreadsComponent>();
-        Log.d("Overriding room for client: ${overrideClient}");
-      } else {
-        Log.e(
-            "Failed to find correct room to send event for override client. Cancelling");
-
-        return;
+      processedAttachments = await targetRoom.processAttachments(attachments);
+    } catch (e, s) {
+      // The composer stays usable: it was left faded and dead for the rest
+      // of the visit when anything above threw.
+      Log.onError(e, s, content: "Could not prepare the message to send");
+      return;
+    } finally {
+      if (mounted) {
+        setState(() {
+          processing = false;
+        });
       }
     }
-
-    var processedAttachments = await targetRoom.processAttachments(attachments);
-
-    setState(() {
-      processing = false;
-    });
 
     var component = targetRoom.client.getComponent<CommandComponent>();
 
