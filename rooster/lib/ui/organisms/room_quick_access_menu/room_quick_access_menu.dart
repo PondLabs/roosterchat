@@ -62,7 +62,7 @@ class RoomQuickAccessMenu {
                 calls.startCall(room.identifier, CallType.voice),
             icon: Icons.call),
       if (preferences.hideRoomSidePanel.value == false ||
-          MediaQuery.of(context).mobile) ...[
+          MediaQuery.sizeOf(context).mobile) ...[
         if (calendar?.hasCalendar == true && calendar?.isCalendarRoom == false)
           RoomQuickAccessMenuEntry(
               name: "Calendar",
@@ -84,7 +84,7 @@ class RoomQuickAccessMenu {
               action: (context) => EventBus.openWidgets.add(null),
               icon: Icons.widgets),
       ],
-      if (MediaQuery.of(context).desktop)
+      if (MediaQuery.sizeOf(context).desktop)
         RoomQuickAccessMenuEntry(
             name: "Toggle Panel",
             action: (context) => EventBus.toggleRoomSidePanel.add(null),

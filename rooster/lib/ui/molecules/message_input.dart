@@ -373,7 +373,7 @@ class MessageInputState extends State<MessageInput> {
     setState(() {
       autoFillResults = result;
 
-      if (MediaQuery.of(context).desktop && result?.isNotEmpty == true) {
+      if (MediaQuery.sizeOf(context).desktop && result?.isNotEmpty == true) {
         autoFillSelection = 0;
       } else {
         autoFillSelection = null;
@@ -457,7 +457,7 @@ class MessageInputState extends State<MessageInput> {
     print("Keyboard open: $keyboardOpen");
 
     setState(() {
-      if (MediaQuery.of(context).mobile) {
+      if (MediaQuery.sizeOf(context).mobile) {
         if (showEmotePicker && !keyboardOpen && showGifPickerPanel != gif) {
           // Panel is already open on the other picker, just switch
           showGifPickerPanel = gif;
@@ -484,7 +484,7 @@ class MessageInputState extends State<MessageInput> {
         }
       }
 
-      if (MediaQuery.of(context).desktop) {
+      if (MediaQuery.sizeOf(context).desktop) {
         showEmotePicker = !showEmotePicker;
         emotePickerActive = showEmotePicker;
         emojiTooltipController.showTooltip(autoClose: false);
@@ -849,11 +849,12 @@ class MessageInputState extends State<MessageInput> {
             opacity: widget.isProcessing ? 0.5 : 1,
             child: KeyboardAdaptor(
               enabled: widget.enableKeyboardAdapter,
-              paddingContent: (MediaQuery.of(context).mobile && showEmotePicker)
-                  ? (showGifPickerPanel && canSendGifs
-                      ? buildGifPicker()
-                      : buildEmojiPicker())
-                  : Container(),
+              paddingContent:
+                  (MediaQuery.sizeOf(context).mobile && showEmotePicker)
+                      ? (showGifPickerPanel && canSendGifs
+                          ? buildGifPicker()
+                          : buildEmojiPicker())
+                      : Container(),
               shouldPushContent: () {
                 if (emojiSearchFocus.hasFocus) {
                   return true;
@@ -1198,7 +1199,7 @@ class MessageInputState extends State<MessageInput> {
             height: 30,
             child: Listener(
               onPointerSignal: (event) {
-                if (!MediaQuery.of(context).desktop) return;
+                if (!MediaQuery.sizeOf(context).desktop) return;
                 if (event is PointerScrollEvent) {
                   final offset = event.scrollDelta.dy;
 
@@ -1339,12 +1340,12 @@ class MessageInputState extends State<MessageInput> {
         child: RandomEmojiButton(
             size: widget.size,
             onTap: toggleEmojiOverlay,
-            toggled: MediaQuery.of(context).mobile
+            toggled: MediaQuery.sizeOf(context).mobile
                 ? (emojiTooltipController.value == TooltipStatus.isShowing ||
                     (emotePickerActive == true && !showGifPickerPanel))
                 : false));
 
-    if (MediaQuery.of(context).mobile) return button;
+    if (MediaQuery.sizeOf(context).mobile) return button;
 
     return Padding(
         padding: const EdgeInsets.fromLTRB(0, 0, 2, 0),
@@ -1354,7 +1355,7 @@ class MessageInputState extends State<MessageInput> {
           controller: emojiTooltipController,
           backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
           onDismiss: () {
-            if (MediaQuery.of(context).desktop) {
+            if (MediaQuery.sizeOf(context).desktop) {
               textFocus.requestFocus();
             }
           },
@@ -1390,7 +1391,7 @@ class MessageInputState extends State<MessageInput> {
           ),
         );
 
-    if (MediaQuery.of(context).mobile) {
+    if (MediaQuery.sizeOf(context).mobile) {
       return buildButton(emotePickerActive && showGifPickerPanel);
     }
 
@@ -1400,7 +1401,7 @@ class MessageInputState extends State<MessageInput> {
       controller: gifTooltipController,
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
       onDismiss: () {
-        if (MediaQuery.of(context).desktop) {
+        if (MediaQuery.sizeOf(context).desktop) {
           textFocus.requestFocus();
         }
       },
@@ -1426,7 +1427,7 @@ class MessageInputState extends State<MessageInput> {
   }
 
   Future<void> onGifButtonPressed() async {
-    if (MediaQuery.of(context).desktop &&
+    if (MediaQuery.sizeOf(context).desktop &&
         gifTooltipController.value == TooltipStatus.isShowing) {
       closeGifPicker();
       return;
@@ -1445,7 +1446,7 @@ class MessageInputState extends State<MessageInput> {
       if (!mounted) return;
     }
 
-    if (MediaQuery.of(context).desktop) {
+    if (MediaQuery.sizeOf(context).desktop) {
       gifTooltipController.showTooltip(autoClose: false);
     } else {
       await toggleEmojiOverlay(gif: true);
@@ -1455,7 +1456,7 @@ class MessageInputState extends State<MessageInput> {
   void closeGifPicker() {
     if (!mounted) return;
 
-    if (MediaQuery.of(context).desktop) {
+    if (MediaQuery.sizeOf(context).desktop) {
       gifTooltipController.hideTooltip();
       // Back to typing, as when the picker is dismissed by clicking outside
       textFocus.requestFocus();

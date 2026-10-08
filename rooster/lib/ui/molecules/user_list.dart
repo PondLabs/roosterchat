@@ -247,7 +247,7 @@ class _RoomMemberListState extends State<RoomMemberList> {
                 doSafeArea: false,
                 key: ValueKey("room-user-list-user-${member.identifier}"),
                 userId: member.identifier,
-                bannerHeight: MediaQuery.of(context).mobile ? 200 : 120,
+                bannerHeight: MediaQuery.sizeOf(context).mobile ? 200 : 120,
                 client: widget.room.client,
                 showMessageButton: false,
               ),

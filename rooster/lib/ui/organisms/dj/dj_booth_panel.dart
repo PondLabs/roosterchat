@@ -1316,7 +1316,7 @@ class _QueueRowState extends State<_QueueRow> {
     final scheme = Theme.of(context).colorScheme;
     // Without a mouse there is no hover: the handle is always there.
     final showHandle =
-        widget.editable && (_hover || MediaQuery.of(context).touchControls);
+        widget.editable && (_hover || MediaQuery.sizeOf(context).touchControls);
     final number = SizedBox(
       width: 28,
       child: Center(
@@ -1379,7 +1379,7 @@ class _QueueRowState extends State<_QueueRow> {
                 width: 32,
                 // Not there while hidden: no clicking or tabbing to it.
                 child: Visibility(
-                  visible: _hover || MediaQuery.of(context).touchControls,
+                  visible: _hover || MediaQuery.sizeOf(context).touchControls,
                   maintainSize: true,
                   maintainAnimation: true,
                   maintainState: true,

@@ -79,7 +79,7 @@ class _RoomTimelineWidgetState extends State<RoomTimelineWidget>
       markAsRead: markAsRead,
     );
 
-    if (MediaQuery.of(context).desktop) {
+    if (MediaQuery.sizeOf(context).desktop) {
       result = TimelineSelectionArea(child: result);
     }
 

@@ -32,7 +32,7 @@ class _RoomMembersListWidgetState extends State<RoomMembersListWidget> {
         if (!isDirectMessage) const tiamat.Text.labelLow("Room Members"),
         Expanded(
           child: SizedBox(
-            width: MediaQuery.of(context).desktop
+            width: MediaQuery.sizeOf(context).desktop
                 ? isDirectMessage
                     ? 300
                     : 200

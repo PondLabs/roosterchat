@@ -198,7 +198,7 @@ class _PhotoAlbumViewState extends State<PhotoAlbumView> {
       }
     }
 
-    var callback = MediaQuery.of(context).desktop
+    var callback = MediaQuery.sizeOf(context).desktop
         ? null
         : () {
             if (widget.component is MatrixPhotoAlbumRoomComponent) {
@@ -307,7 +307,7 @@ class _PhotoAlbumViewState extends State<PhotoAlbumView> {
             timeline: (timeline! as MatrixPhotoAlbumTimeline).matrixTimeline,
             event: (item as MatrixPhoto).event);
 
-        if (MediaQuery.of(context).desktop) {
+        if (MediaQuery.sizeOf(context).desktop) {
           result = tiamat.ContextMenu(
             items: (menu.primaryActions + menu.secondaryActions)
                 .map((e) => tiamat.ContextMenuItem(

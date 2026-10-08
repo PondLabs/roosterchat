@@ -224,7 +224,7 @@ class GeneralSettingsPageState extends State<GeneralSettingsPage> {
               title: labelMediaPreviewPublicRoomsToggle,
               description: labelMediaPreviewPublicRoomsToggleDescription,
             ),
-            if (MediaQuery.of(context).mobile) ...[
+            if (MediaQuery.sizeOf(context).mobile) ...[
               Seperator(),
               BooleanPreferenceToggle(
                 preference: preferences.autoRotateImages,
@@ -258,7 +258,7 @@ class GeneralSettingsPageState extends State<GeneralSettingsPage> {
                     children: [
                       tiamat.Text.labelEmphasised(labelRefreshApp),
                       tiamat.Text.labelLow(labelRefreshAppDescription),
-                      if (!MediaQuery.of(context).mobile)
+                      if (!MediaQuery.sizeOf(context).mobile)
                         tiamat.Text.labelLow(labelRefreshAppShortcut(
                             defaultTargetPlatform == TargetPlatform.macOS
                                 ? "Cmd+R"

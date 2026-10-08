@@ -64,7 +64,8 @@ class _TimelineEventViewPollState extends State<TimelineEventViewPoll>
       showSender: true,
       formattedContent: ConstrainedBox(
         constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).desktop ? 500 : double.infinity),
+            maxWidth:
+                MediaQuery.sizeOf(context).desktop ? 500 : double.infinity),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.start,

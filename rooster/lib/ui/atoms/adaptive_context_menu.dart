@@ -25,7 +25,7 @@ class AdaptiveContextMenu extends StatelessWidget {
       return child;
     }
 
-    if (MediaQuery.of(context).desktop) {
+    if (MediaQuery.sizeOf(context).desktop) {
       return tiamat.ContextMenu(
         child: child,
         items: items,

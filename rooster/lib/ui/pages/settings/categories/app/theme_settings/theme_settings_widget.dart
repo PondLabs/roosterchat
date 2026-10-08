@@ -111,7 +111,7 @@ class _ThemeListWidgetState extends State<ThemeListWidget> {
           }
         },
         builder: (context, child) {
-          if (MediaQuery.of(context).mobile)
+          if (MediaQuery.sizeOf(context).mobile)
             return GestureDetector(
               onLongPress: () => AdaptiveDialog.show(
                 context,
