@@ -152,7 +152,17 @@ class MatrixRoomEmoticonComponent extends MatrixEmoticonComponent
 
   /// Packs of every space the room is in, including through subspaces, so
   /// server emoji come first in the picker.
+  ///
+  /// Kept for a second: this walks every space and subspace, and the
+  /// timeline asked for it three times per message entry built, for every
+  /// entry, on every incoming message and every hover.
   List<EmoticonPack> _spacePacks() {
+    final now = DateTime.now();
+    final cached = _spacePacksCache;
+    if (cached != null &&
+        now.difference(_spacePacksCachedAt!) < _spacePacksCacheFor) {
+      return List.of(cached);
+    }
     final result = List<EmoticonPack>.empty(growable: true);
     for (final space
         in room.client.spaces.where((space) => _spaceContainsRoom(space, {}))) {
@@ -160,8 +170,14 @@ class MatrixRoomEmoticonComponent extends MatrixEmoticonComponent
       if (component == null) continue;
       result.addAll(component.ownedPacks.where((e) => !result.contains(e)));
     }
+    _spacePacksCache = List.of(result);
+    _spacePacksCachedAt = now;
     return result;
   }
+
+  static const _spacePacksCacheFor = Duration(seconds: 1);
+  List<EmoticonPack>? _spacePacksCache;
+  DateTime? _spacePacksCachedAt;
 
   bool _spaceContainsRoom(Space space, Set<String> visited) {
     if (!visited.add(space.identifier)) return false;

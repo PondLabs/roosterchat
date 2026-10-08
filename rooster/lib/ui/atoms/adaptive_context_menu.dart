@@ -5,17 +5,23 @@ import 'package:tiamat/tiamat.dart' as tiamat;
 
 class AdaptiveContextMenu extends StatelessWidget {
   const AdaptiveContextMenu(
-      {required this.items,
+      {this.items = const [],
+      this.itemsBuilder,
       this.modal = false,
       required this.child,
       super.key});
   final List<tiamat.ContextMenuItem> items;
+
+  /// The items, made when the menu opens rather than on every build of the
+  /// widget behind it (a message entry rebuilds on every incoming message
+  /// and every hover; its menu walks every space the room is in).
+  final List<tiamat.ContextMenuItem> Function()? itemsBuilder;
   final Widget child;
   final bool modal;
 
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) {
+    if (items.isEmpty && itemsBuilder == null) {
       return child;
     }
 
@@ -23,6 +29,7 @@ class AdaptiveContextMenu extends StatelessWidget {
       return tiamat.ContextMenu(
         child: child,
         items: items,
+        itemsBuilder: itemsBuilder,
         modal: modal,
       );
     } else {
@@ -37,7 +44,7 @@ class AdaptiveContextMenu extends StatelessWidget {
                     child: Column(
                       spacing: 4,
                       mainAxisSize: MainAxisSize.min,
-                      children: items.map((item) {
+                      children: (itemsBuilder?.call() ?? items).map((item) {
                         if (item.customBuilder != null) {
                           return item.customBuilder!.call(
                             context,

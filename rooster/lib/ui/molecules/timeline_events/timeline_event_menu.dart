@@ -203,9 +203,9 @@ class TimelineEventMenu {
     }
 
     if (canAddReaction) {
-      var recent = timeline.room.client
-          .getComponent<RecentEmoticonComponent>()
-          ?.getRecentReactionEmoticon(timeline.room);
+      // The same list as above (it sorts the recents and walks the packs
+      // each time it is asked).
+      var recent = reactions != null ? recentReactions : null;
 
       var availableEmoji = emoticons!.availableEmoji;
 
@@ -240,7 +240,7 @@ class TimelineEventMenu {
     }
 
     primaryActions = [
-      if (MediaQuery.of(context).mobile) ...[
+      if (MediaQuery.sizeOf(context).mobile) ...[
         if (canFavoriteGif)
           TimelineEventMenuEntry(
             name: promptFavoriteGif,
