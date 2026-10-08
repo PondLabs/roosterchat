@@ -197,6 +197,15 @@ class MainPageState extends State<MainPage> {
     });
 
     _eventBusSubscriptions.addAll([
+      // A room sync dropped (left elsewhere, kicked, upgraded) while open:
+      // the chat of a room the client no longer has stays on screen
+      // otherwise, every message of it an error box.
+      clientManager.rooms.onRemove.listen((removed) {
+        if (!mounted || _currentRoom != removed) return;
+        setState(() {
+          _currentRoom = null;
+        });
+      }),
       EventBus.openRoom.stream.listen(onOpenRoomSignal),
       EventBus.openHomeScreen.stream.listen((_) {
         clearRoomSelection();
