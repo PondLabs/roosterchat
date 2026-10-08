@@ -276,13 +276,14 @@ class NativeSelfUpdater implements SelfUpdater {
           message: message);
 
   @override
-  Future<void> checkAndPrepare() async {
+  Future<void> checkAndPrepare({Duration? checkTimeout}) async {
     if (_running) return;
     _running = true;
     try {
       _set(UpdateStage.checking);
-      final release =
-          await UpdateRelease.fetchLatest(UpdateChecker.releasesApiUrl);
+      final release = await UpdateRelease.fetchLatest(
+          UpdateChecker.releasesApiUrl,
+          timeout: checkTimeout ?? UpdateRelease.defaultTimeout);
       if (release == null) {
         _set(UpdateStage.failed,
             message: 'Could not reach GitHub to look for updates.');

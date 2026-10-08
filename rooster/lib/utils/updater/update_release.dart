@@ -86,14 +86,18 @@ class UpdateRelease {
     );
   }
 
-  /// The newest release, or null when the request failed or said something
-  /// unexpected. Never throws: no part of this is worth breaking over.
-  static Future<UpdateRelease?> fetchLatest(String apiUrl) async {
+  static const defaultTimeout = Duration(seconds: 20);
+
+  /// The newest release, or null when the request failed, took longer than
+  /// [timeout] or said something unexpected. Never throws: no part of this
+  /// is worth breaking over.
+  static Future<UpdateRelease?> fetchLatest(String apiUrl,
+      {Duration timeout = defaultTimeout}) async {
     try {
       final response = await http.get(Uri.parse(apiUrl), headers: {
         // GitHub's stable JSON media type. Dart supplies its own User-Agent.
         'Accept': 'application/vnd.github+json',
-      }).timeout(const Duration(seconds: 20));
+      }).timeout(timeout);
       if (response.statusCode != 200) {
         Log.i('Update check failed: HTTP ${response.statusCode}');
         return null;

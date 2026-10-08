@@ -199,9 +199,15 @@ void appMain() async {
 
     // The browser keeps showing the splash in web/index.html until our first
     // frame, so only native needs something drawn while we start.
+    //
+    // The update check goes to GitHub while the rest starts: preferences,
+    // the database, the accounts. It used to come first, and every launch
+    // waited for that request (a second on a good day, 20 on a bad one)
+    // before anything else began.
+    Future<bool> updating = Future.value(false);
     if (!isHeadless && !kIsWeb) {
       if (!loadingShown) await _showLoadingWindow();
-      if (await _updateBeforeStart()) return;
+      updating = _updateBeforeStart();
     }
 
     loading = initNecessary();
@@ -213,6 +219,8 @@ void appMain() async {
     } else {
       await loading;
     }
+
+    if (await updating) return;
 
     SystemWideShortcuts.init();
 
@@ -232,18 +240,28 @@ Future<void> _showLoadingWindow() async {
 /// A desktop build that installs its own updates fetches a newer release
 /// while the loading window is up, and restarts into it before the app opens
 /// (see docs/updating.md). True when this process is closing for that.
+///
+/// Never throws: an update that could not be looked for is not a reason to
+/// keep the app from opening.
 Future<bool> _updateBeforeStart() async {
-  final updater = SelfUpdater.instance;
-  if (!updater.canInstall) return false;
-  await preferences.init();
-  // Only a no stops it: whoever installed Rooster wants the current one.
-  if (preferences.checkForUpdates.value == false) return false;
+  try {
+    final updater = SelfUpdater.instance;
+    if (!updater.canInstall) return false;
+    await preferences.init();
+    // Only a no stops it: whoever installed Rooster wants the current one.
+    if (preferences.checkForUpdates.value == false) return false;
 
-  await updater.checkAndPrepare();
-  if (updater.progress.value.stage != UpdateStage.ready) return false;
-  if (!await updater.installAndRestart()) return false;
-  await WindowManagement.close();
-  return true;
+    // A short look: the app is waiting to open behind this. The home
+    // screen looks again, at its own pace, once the app is up.
+    await updater.checkAndPrepare(checkTimeout: const Duration(seconds: 5));
+    if (updater.progress.value.stage != UpdateStage.ready) return false;
+    if (!await updater.installAndRestart()) return false;
+    await WindowManagement.close();
+    return true;
+  } catch (e, s) {
+    Log.onError(e, s, content: "Could not check for an update at startup");
+    return false;
+  }
 }
 
 WidgetsBinding ensureBindingInit() {

@@ -37,12 +37,30 @@ class Preferences {
       StreamController.broadcast();
   Stream get onSettingChanged => onSettingChangedController.stream;
   bool isInit = false;
+  Future<void>? _initializing;
 
-  Future<void> init() async {
+  /// Loads the preferences. Callers that overlap (the startup update check
+  /// and the rest of initialisation) share the one load rather than each
+  /// opening and rewriting the file; a later call loads again, which the
+  /// tests rely on between cases.
+  Future<void> init() {
+    final inFlight = _initializing;
+    if (inFlight != null) return inFlight;
+    final load = _init();
+    _initializing = load;
+    load.whenComplete(() {
+      if (identical(_initializing, load)) _initializing = null;
+    });
+    return load;
+  }
+
+  Future<void> _init() async {
     _preferences = await SharedPreferences.getInstance();
     // Remove the resumable donation-flow state left by older releases. The
     // flow no longer exists, so retaining this value would orphan user data.
-    await _preferences!.remove("running_donation_check_flow");
+    if (_preferences!.containsKey("running_donation_check_flow")) {
+      await _preferences!.remove("running_donation_check_flow");
+    }
     Preference.preferences = _preferences;
     isInit = true;
   }
