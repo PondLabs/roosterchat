@@ -330,12 +330,15 @@ Future<void> initGuiRequirements() async {
   var locale = PlatformDispatcher.instance.locale;
 
   UnicodeEmojis.load();
+  // Awaited: on the web the translations are a deferred part fetched over
+  // the network, and a first frame built before it arrived showed the
+  // untranslated strings until the next rebuild.
   if (!preferences.debugTranslations.value) {
-    initializeMessages(locale.languageCode);
+    await initializeMessages(locale.languageCode);
   } else {
     initializeMessagesDebug();
   }
-  initializeDateFormatting(locale.languageCode);
+  await initializeDateFormatting(locale.languageCode);
 
   tiamat.getAppScale = () {
     return preferences.appScale.value;
@@ -349,7 +352,7 @@ Future<void> startGui() async {
   String? initialRoomId;
   String? initialClientId;
 
-  initGuiRequirements();
+  await initGuiRequirements();
   AppRefresh.init();
 
   // The picked microphone and speakers, before anything plays: WebRTC only

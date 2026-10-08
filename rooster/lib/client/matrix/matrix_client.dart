@@ -219,7 +219,9 @@ class MatrixClient extends Client {
     ClientManager manager, {
     bool isBackgroundService = false,
   }) async {
-    await _checkSystem(manager);
+    // vodozemac (on the web, a wasm fetched and compiled) loads while the
+    // databases open; only init, which brings up encryption, waits for it.
+    final system = _checkSystem(manager);
 
     await Diagnostics.general.timeAsync("loadFromDB", () async {
       var clients = preferences.getRegisteredMatrixClients();
@@ -227,8 +229,11 @@ class MatrixClient extends Client {
       List<Future> futures = List.empty(growable: true);
 
       if (clients != null) {
-        for (var clientName in clients) {
-          var client = await MatrixClient.create(clientName);
+        // Every account's database at once, not one after the other.
+        final created = await Future.wait(clients.map(MatrixClient.create));
+        await system;
+        for (var client in created) {
+          final clientName = client.identifier;
           manager.addClient(client);
           futures.add(
             Diagnostics.general.timeAsync(
