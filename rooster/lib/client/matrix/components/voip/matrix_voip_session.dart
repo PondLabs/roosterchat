@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:rooster/client/client.dart';
+import 'package:rooster/config/platform_utils.dart';
 import 'package:rooster/client/components/voip/android_screencapture_source.dart';
 import 'package:rooster/client/components/voip/deafen_rule.dart';
 import 'package:rooster/client/components/voip/screen_capture_support.dart';
@@ -242,6 +243,15 @@ class MatrixVoipSession implements VoipSession {
   Future<void> setScreenShare(ScreenCaptureSource source) async {
     MediaStream? stream;
 
+    if (source is WebrtcBrowserScreenCaptureSource) {
+      stream = await webrtc.navigator.mediaDevices.getDisplayMedia({
+        'video': {
+          'frameRate': preferences.streamFramerate.value,
+        },
+        'audio': source.captureAudio,
+      });
+    }
+
     if (source is WebrtcAndroidScreencaptureSource) {
       stream = await webrtc.navigator.mediaDevices.getDisplayMedia({
         'video': {
@@ -366,6 +376,12 @@ class MatrixVoipSession implements VoipSession {
 
   @override
   Future<ScreenCaptureSource?> pickScreenCapture(BuildContext context) async {
+    // The browser picks the screen itself in getDisplayMedia; the desktop
+    // source list this asked for is not implemented there, so the button
+    // did nothing on the web.
+    if (PlatformUtils.isWeb) {
+      return WebrtcBrowserScreenCaptureSource();
+    }
     return WebrtcScreencaptureSource.showSelectSourcePrompt(context);
   }
 
