@@ -5,6 +5,12 @@ on:
     branches: [main]
 name: integration-test
 
+# A newer push to the same branch supersedes the run in progress: a pull
+# request pushed to twice does not hold two runners for an hour.
+concurrency:
+  group: integration-test-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   HOMESERVER: localhost
   USER1_NAME: alice

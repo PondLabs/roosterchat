@@ -5,6 +5,12 @@ on:
   push:
     branches: [main]
 
+# A newer push to the same branch supersedes the run in progress: a pull
+# request pushed to twice does not hold two runners for an hour.
+concurrency:
+  group: static-analysis-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   PROJECT_PATH: rooster
 
