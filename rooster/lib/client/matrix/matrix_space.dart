@@ -477,11 +477,14 @@ class MatrixSpace extends Space {
       }
     }
 
-    for (var id in update.keys) {
-      if (roomsWithChildren.any((i) => i.identifier == id)) {
-        _updateTopLevelStatus();
-        _onUpdate.add(null);
-      }
+    // One update for the sync, however many of this space's rooms it
+    // touched: every listener (the sidebar, the nav bar counts, the colour
+    // scheme) used to run once per room, and roomsWithChildren walks the
+    // subspaces on every call.
+    final children = roomsWithChildren;
+    if (update.keys.any((id) => children.any((i) => i.identifier == id))) {
+      _updateTopLevelStatus();
+      _onUpdate.add(null);
     }
   }
 

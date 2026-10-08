@@ -25,7 +25,6 @@ import 'package:rooster/config/global_config.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/diagnostic/diagnostics.dart';
 import 'package:rooster/main.dart';
-import 'package:rooster/utils/list_extension.dart';
 import 'package:rooster/utils/notifying_list.dart';
 import 'package:rooster/utils/notifying_list_filter.dart';
 import 'package:rooster/utils/stored_stream_controller.dart';
@@ -60,6 +59,41 @@ class MatrixClient extends Client {
 
   final NotifyingList<Room> _rooms = NotifyingList.empty(growable: true);
   final NotifyingList<Space> _spaces = NotifyingList.empty(growable: true);
+
+  /// The same rooms and spaces by id: getRoom and hasRoom run for every
+  /// room of every sync, and scanned the lists (an exception per miss).
+  /// The lists are public and get added to from outside (tests, fixtures),
+  /// so an index whose size no longer matches its list is rebuilt from it.
+  final Map<String, Room> _roomsById = {};
+  final Map<String, Space> _spacesById = {};
+
+  Map<String, Room> get _roomIndex {
+    if (_roomsById.length != _rooms.length) {
+      _roomsById
+        ..clear()
+        ..addEntries(_rooms.map((room) => MapEntry(room.identifier, room)));
+    }
+    return _roomsById;
+  }
+
+  Map<String, Space> get _spaceIndex {
+    if (_spacesById.length != _spaces.length) {
+      _spacesById
+        ..clear()
+        ..addEntries(_spaces.map((space) => MapEntry(space.identifier, space)));
+    }
+    return _spacesById;
+  }
+
+  void _addRoom(Room room) {
+    _roomsById[room.identifier] = room;
+    _rooms.add(room);
+  }
+
+  void _addSpace(Space space) {
+    _spacesById[space.identifier] = space;
+    _spaces.add(space);
+  }
 
   final NotifyingList<Peer> _peers = NotifyingList.empty(growable: true);
 
@@ -432,12 +466,26 @@ class MatrixClient extends Client {
       (element) => !element.isSpace && element.membership.isJoin,
     );
 
+    final joinedIds = <String>{};
     for (var room in joinedRooms) {
+      joinedIds.add(room.id);
       if (hasRoom(room.id)) continue;
-      rooms.add(MatrixRoom(this, room, _matrixClient));
+      _addRoom(MatrixRoom(this, room, _matrixClient));
     }
 
-    rooms.removeWhere((e) => !joinedRooms.any((r) => r.id == e.identifier));
+    // A room sync dropped (left, kicked, upgraded) is closed, or its wrapper
+    // keeps listening to the client for the life of the app.
+    final dropped =
+        rooms.where((e) => !joinedIds.contains(e.identifier)).toList();
+    for (final room in dropped) {
+      _roomsById.remove(room.identifier);
+      room.close().catchError((Object e, StackTrace s) {
+        Log.onError(e, s, content: "Could not close a room sync dropped");
+      });
+    }
+    if (dropped.isNotEmpty) {
+      rooms.removeWhere((e) => !joinedIds.contains(e.identifier));
+    }
   }
 
   void _updateSpacesList() {
@@ -449,7 +497,7 @@ class MatrixClient extends Client {
     bool didChange = false;
     for (var space in allSpaces) {
       if (hasSpace(space.id)) continue;
-      spaces.add(MatrixSpace(this, space, _matrixClient));
+      _addSpace(MatrixSpace(this, space, _matrixClient));
       didChange = true;
     }
 
@@ -583,7 +631,7 @@ class MatrixClient extends Client {
 
     if (hasRoom(id)) return getRoom(id)!;
     var room = MatrixRoom(this, matrixRoom, _matrixClient);
-    rooms.add(room);
+    _addRoom(room);
     return room;
   }
 
@@ -603,7 +651,7 @@ class MatrixClient extends Client {
       _matrixClient.getRoomById(id)!,
       _matrixClient,
     );
-    spaces.add(space);
+    _addSpace(space);
     return space;
   }
 
@@ -622,7 +670,7 @@ class MatrixClient extends Client {
       _matrixClient.getRoomById(id)!,
       _matrixClient,
     );
-    spaces.add(space);
+    _addSpace(space);
     return space;
   }
 
@@ -638,7 +686,7 @@ class MatrixClient extends Client {
     if (hasRoom(id)) return getRoom(id)!;
 
     var room = MatrixRoom(this, _matrixClient.getRoomById(id)!, _matrixClient);
-    rooms.add(room);
+    _addRoom(room);
     return room;
   }
 
@@ -683,14 +731,10 @@ class MatrixClient extends Client {
   }
 
   @override
-  Room? getRoom(String identifier) {
-    return _rooms.tryFirstWhere((element) => element.identifier == identifier);
-  }
+  Room? getRoom(String identifier) => _roomIndex[identifier];
 
   @override
-  Space? getSpace(String identifier) {
-    return _spaces.tryFirstWhere((element) => element.identifier == identifier);
-  }
+  Space? getSpace(String identifier) => _spaceIndex[identifier];
 
   @override
   bool hasPeer(String identifier) {
@@ -698,14 +742,10 @@ class MatrixClient extends Client {
   }
 
   @override
-  bool hasRoom(String identifier) {
-    return _rooms.any((element) => element.identifier == identifier);
-  }
+  bool hasRoom(String identifier) => _roomIndex.containsKey(identifier);
 
   @override
-  bool hasSpace(String identifier) {
-    return _spaces.any((element) => element.identifier == identifier);
-  }
+  bool hasSpace(String identifier) => _spaceIndex.containsKey(identifier);
 
   (String, List<String>?)? parseAddressToIdAndVia(String address) {
     String id = address;
