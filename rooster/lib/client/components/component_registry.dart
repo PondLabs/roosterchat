@@ -1,4 +1,5 @@
 import 'package:rooster/client/components/component.dart';
+import 'package:rooster/client/components/voip/media_capture_support.dart';
 import 'package:rooster/client/components/room_component.dart';
 import 'package:rooster/client/components/space_component.dart';
 import 'package:rooster/client/matrix/components/account_switch_prefix/matrix_account_switch_prefix.dart';
@@ -53,7 +54,10 @@ class ComponentRegistry {
       MatrixPushNotificationComponent(client),
       MatrixCommandComponent(client),
 
-      MatrixVoipComponent(client),
+      // A browser on an insecure (http) origin has no navigator.mediaDevices,
+      // and the SDK's VoIP sets ondevicechange on it in its constructor: the
+      // app died at startup on such a page (text login still works).
+      if (supportsMediaCapture) MatrixVoipComponent(client),
       // MatrixRTCDataChannelComponent(client),
       // MatrixRtcScreenShareAnnotationComponent(client),
       MatrixUrlPreviewComponent(client),
@@ -85,6 +89,9 @@ class ComponentRegistry {
       MatrixReadReceiptComponent(client, room),
       MatrixTypingIndicatorsComponent(client, room),
       MatrixPinnedMessagesComponent(client, room),
+      // On every origin: the room's icon, its view and who is in the call
+      // come from this; joining is what needs a capture, and the view says
+      // so where there is none.
       if (MatrixVoipRoomComponent.isVoipRoom(room))
         MatrixVoipRoomComponent(client, room),
       // Shown in the sidebar on every platform, joinable here or not.
