@@ -29,36 +29,28 @@ class _RoomTimelineWidgetState extends State<RoomTimelineWidget>
     with WidgetsBindingObserver {
   GlobalKey timelineViewKey = GlobalKey();
 
-  StreamSubscription? sub;
-
   @override
   void initState() {
-    sub = widget.timeline.onEventAdded.stream.listen(onEventReceived);
     WidgetsBinding.instance.addObserver(this);
     super.initState();
   }
 
   @override
   void dispose() {
-    sub?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  void onEventReceived(int index) {
-    if (index == 0) {
-      var state = timelineViewKey.currentState as RoomTimelineWidgetViewState?;
-      if (state?.attachedToBottom == true) {
-        markAsRead(widget.timeline.events[index]);
-      }
-    }
-  }
+  // A new message at the bottom is marked read by the view, which is the
+  // one that knows whether the reader is there (it calls markAsRead when
+  // attached); this used to ask as well, for a second request per message.
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) async {
     if (state == AppLifecycleState.resumed) {
       var state = timelineViewKey.currentState as RoomTimelineWidgetViewState?;
-      if (state?.attachedToBottom == true) {
+      if (state?.attachedToBottom == true &&
+          widget.timeline.events.isNotEmpty) {
         markAsRead(widget.timeline.events.first);
         widget.clearNotifications?.call(widget.timeline.room);
       }
