@@ -36,17 +36,38 @@ Future<ProcessResult> runSwap({
   required String install,
   required String staged,
   String exe = '/bin/true',
+  int? waitFor,
+  String? restart,
+  Duration patience = const Duration(seconds: 60),
 }) async {
   final script = File(p.join(work.path, 'install.sh'));
   script.writeAsStringSync(linuxSwapScript(
-    waitFor: await deadPid(),
+    waitFor: waitFor ?? await deadPid(),
     staged: staged,
     install: install,
     exe: exe,
     work: work.path,
     stamp: 1234,
+    restart: restart,
+    patience: patience,
   ));
   return Process.run('/bin/sh', [script.path]);
+}
+
+/// A script standing in for a build: running it writes [marker].
+File launcher(Directory root, String name, String marker) {
+  final file = File(p.join(root.path, name))
+    ..writeAsStringSync('#!/bin/sh\necho up > $marker\n');
+  Process.runSync('chmod', ['+x', file.path]);
+  return file;
+}
+
+/// Waits a little for a backgrounded launch to land.
+Future<bool> appears(String path) async {
+  for (var i = 0; i < 50 && !File(path).existsSync(); i++) {
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+  return File(path).existsSync();
 }
 
 void main() {
@@ -196,6 +217,27 @@ void main() {
       expect(File(p.join(install.path, 'which')).readAsStringSync(), 'old');
     });
 
+    test('a swap that fails starts the build that was running, and says why',
+        () async {
+      final install = buildDir(root, 'Rooster', 'old');
+      final work = Directory(p.join(root.path, '.rooster-update'))
+        ..createSync();
+      final started = p.join(root.path, 'started');
+      final running = launcher(root, 'running.sh', started);
+
+      final result = await runSwap(
+          work: work,
+          install: install.path,
+          staged: p.join(work.path, 'unpacked', 'not-there'),
+          restart: running.path);
+
+      expect(result.exitCode, isNot(0));
+      // Restarting to update never leaves Rooster closed.
+      expect(await appears(started), isTrue);
+      final log = File(p.join(work.path, 'install-1234.log'));
+      expect(log.readAsStringSync(), contains('could not move the new build'));
+    });
+
     test('starts the new build once it is in place', () async {
       final install = buildDir(root, 'Rooster', 'old');
       final work = Directory(p.join(root.path, '.rooster-update'))
@@ -203,21 +245,14 @@ void main() {
       final staged = buildDir(work, 'unpacked/rooster-v2-linux', 'new');
       // Stands in for the app: writing the file is how it says it ran.
       final started = p.join(root.path, 'started');
-      final launcher = File(p.join(root.path, 'launch.sh'))
-        ..writeAsStringSync('#!/bin/sh\necho up > ${started}\n');
-      await Process.run('chmod', ['+x', launcher.path]);
 
       await runSwap(
           work: work,
           install: install.path,
           staged: staged.path,
-          exe: launcher.path);
+          exe: launcher(root, 'launch.sh', started).path);
 
-      // The launch is backgrounded, so give it a moment to land.
-      for (var i = 0; i < 50 && !File(started).existsSync(); i++) {
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-      }
-      expect(File(started).existsSync(), isTrue);
+      expect(await appears(started), isTrue);
     });
 
     test('will not swap under a Rooster that is still running', () async {
@@ -226,25 +261,47 @@ void main() {
         ..createSync();
       final staged = buildDir(work, 'unpacked/rooster-v2-linux', 'new');
 
-      // Something that outlives the script's patience.
-      final alive = await Process.start('/bin/sh', ['-c', 'sleep 120']);
+      // Something that outlives the script's patience, and is not the build
+      // being replaced, so the script has no business ending it.
+      final alive = await Process.start('sleep', ['120']);
       addTearDown(alive.kill);
-      final script = File(p.join(work.path, 'install.sh'));
-      script.writeAsStringSync(linuxSwapScript(
-        waitFor: alive.pid,
-        staged: staged.path,
-        install: install.path,
-        exe: '/bin/true',
-        work: work.path,
-        stamp: 1234,
-      ));
-      // The wait is 60s; this only has to outlast the script giving up.
-      final result = await Process.run('/bin/sh', [script.path])
-          .timeout(const Duration(seconds: 90));
+      final result = await runSwap(
+          work: work,
+          install: install.path,
+          staged: staged.path,
+          waitFor: alive.pid,
+          restart: '/not/what/is/running',
+          patience: const Duration(seconds: 1));
 
       expect(result.exitCode, isNot(0));
       expect(File(p.join(install.path, 'which')).readAsStringSync(), 'old');
-    }, timeout: const Timeout(Duration(minutes: 2)));
+      expect(Directory('/proc/${alive.pid}').existsSync(), isTrue,
+          reason: 'it was not the script\'s to end');
+    });
+
+    test('ends a Rooster stuck on its way out, then swaps', () async {
+      final install = buildDir(root, 'Rooster', 'old');
+      final work = Directory(p.join(root.path, '.rooster-update'))
+        ..createSync();
+      final staged = buildDir(work, 'unpacked/rooster-v2-linux', 'new');
+
+      // Stands in for a Rooster whose window has gone but whose process has
+      // not: it is the build being replaced, by what it runs.
+      final stuck = await Process.start('sleep', ['120']);
+      addTearDown(stuck.kill);
+      final result = await runSwap(
+          work: work,
+          install: install.path,
+          staged: staged.path,
+          waitFor: stuck.pid,
+          restart: Link('/proc/${stuck.pid}/exe').targetSync(),
+          patience: const Duration(seconds: 1));
+
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      expect(await stuck.exitCode.timeout(const Duration(seconds: 5)),
+          -ProcessSignal.sigkill.signalNumber);
+      expect(File(p.join(install.path, 'which')).readAsStringSync(), 'new');
+    });
 
     test('a build with nothing where it goes is moved in all the same',
         () async {

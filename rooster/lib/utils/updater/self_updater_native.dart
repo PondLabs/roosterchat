@@ -355,8 +355,15 @@ class NativeSelfUpdater implements SelfUpdater {
       if (root == null) {
         throw StateError('the archive does not hold one directory');
       }
-      if (!await File(p.join(root.path, _executableName)).exists()) {
+      final executable = File(p.join(root.path, _executableName));
+      if (!await executable.exists()) {
         throw StateError('no $_executableName in the archive');
+      }
+      // The Dart unpacker drops the executable bit. Swapped in, a build that
+      // cannot be started leaves nothing that opens, launcher entry included.
+      // 0x49 is 0111, execute for anyone.
+      if (!Platform.isWindows && (await executable.stat()).mode & 0x49 == 0) {
+        throw StateError('$_executableName in the archive cannot be run');
       }
       _staged = root;
       _set(UpdateStage.ready,
@@ -496,6 +503,7 @@ class NativeSelfUpdater implements SelfUpdater {
             exe: exe,
             work: workRoot,
             stamp: stamp,
+            restart: Platform.resolvedExecutable,
             open: Platform.isMacOS));
     if (!Platform.isWindows) {
       await Process.run('chmod', ['+x', script.path]);
@@ -646,6 +654,13 @@ Remove-Item -LiteralPath \$work -Recurse -Force -ErrorAction SilentlyContinue
 
 /// Linux, and macOS with [open]: there [install] is the `.app`, which is
 /// started through Launch Services rather than by running [exe].
+///
+/// [restart] is the build that was running. When the swap fails it is
+/// started again, so restarting to update never leaves Rooster closed. On
+/// Linux it also says which process is ours to end: one still there after
+/// [patience], its window already gone, is stuck on the way out. What
+/// happened goes in `install-<stamp>.log` in [work], which is only cleared
+/// when the swap worked.
 String linuxSwapScript({
   required int waitFor,
   required String staged,
@@ -653,38 +668,84 @@ String linuxSwapScript({
   required String exe,
   required String work,
   required int stamp,
+  String? restart,
+  Duration patience = const Duration(seconds: 60),
   bool open = false,
-}) =>
-    '''
+}) {
+  final ticks = patience.inMilliseconds ~/ 200;
+  final relaunch = restart == null
+      ? null
+      : open
+          ? 'open "\$install"'
+          : '(cd ${_sh(p.posix.dirname(restart))} && exec ${_sh(restart)}) &';
+  return '''
 #!/bin/sh
-# Wait for Rooster to go, so the new build does not start beside the old one.
-i=0
-while [ \$i -lt 300 ] && kill -0 $waitFor 2>/dev/null; do
-  sleep 0.2
-  i=\$((i + 1))
-done
-# Unlike Windows, a directory here can be moved out from under a running
-# program. Waiting out rather than swapping under it: two roscords sharing
-# one account is worse than an update that did not happen.
-if kill -0 $waitFor 2>/dev/null; then
-  exit 1
-fi
+work=${_sh(work)}
+log="\$work/install-$stamp.log"
+say() {
+  echo "\$(date '+%Y-%m-%dT%H:%M:%S') \$*" >> "\$log" 2>/dev/null
+}
 install=${_sh(install)}
 staged=${_sh(staged)}
 old=${_sh('$install.old-$stamp')}
+
+# A zombie has gone already; only its parent has not noticed yet.
+alive() {
+  kill -0 $waitFor 2>/dev/null || return 1
+  case "\$(sed 's/.*) //' /proc/$waitFor/stat 2>/dev/null)" in
+    Z*) return 1 ;;
+  esac
+}
+
+fail() {
+  say "\$1"
+${relaunch == null ? '' : '  $relaunch\n'}  exit 1
+}
+
+# Wait for Rooster to go, so the new build does not start beside the old one.
+say 'waiting for Rooster (process $waitFor) to close'
+i=0
+while [ \$i -lt $ticks ] && alive; do
+  sleep 0.2
+  i=\$((i + 1))
+done
+${restart == null || open ? '' : '''# Rooster closes its window as this starts waiting, so one still here is
+# stuck on the way out, and would keep the old build in place for good. It
+# is ended, but only while it runs the build being replaced, not when
+# something else has taken its pid.
+if alive && [ "\$(readlink /proc/$waitFor/exe 2>/dev/null)" = ${_sh(restart)} ]; then
+  say 'Rooster did not close in ${patience.inSeconds} seconds; ending it'
+  kill -KILL $waitFor 2>/dev/null
+  i=0
+  while [ \$i -lt 25 ] && alive; do
+    sleep 0.2
+    i=\$((i + 1))
+  done
+fi
+'''}# Unlike Windows, a directory here can be moved out from under a running
+# program. Not swapping under it: two Roosters sharing one account is worse
+# than an update that did not happen.
+if alive; then
+  fail 'Rooster is still running; nothing was changed'
+fi
+
 # The install may not be there: a recovered one can be moving out of the
 # staging directory it was run from.
 if [ -e "\$install" ]; then
-  mv "\$install" "\$old" || exit 1
+  mv "\$install" "\$old" || fail "could not move \$install aside"
 else
-  mkdir -p "\$(dirname "\$install")" || exit 1
+  mkdir -p "\$(dirname "\$install")" || fail "could not create \$install"
 fi
 if ! mv "\$staged" "\$install"; then
+  # Across filesystems mv copies, and one that stopped half way leaves part
+  # of a build there, which the old one would be moved into.
+  rm -rf "\$install"
   [ -e "\$old" ] && mv "\$old" "\$install"
-  exit 1
+  fail 'could not move the new build in; the old one is back'
 fi
 ${open ? 'open "\$install"' : '(cd "\$install" && exec ${_sh(exe)}) &'}
 # Last, and from outside it: this script lives in there.
 cd /
-rm -rf "\$old" ${_sh(work)}
+rm -rf "\$old" "\$work"
 ''';
+}
