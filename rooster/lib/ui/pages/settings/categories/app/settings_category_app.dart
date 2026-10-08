@@ -132,7 +132,10 @@ class SettingsCategoryApp implements SettingsCategory {
         // Where there is something to set: UnifiedPush on Android, the
         // Linux and Windows notifiers' toggles (Windows had the toggles and
         // no tab to reach them).
-        if (BuildConfig.LINUX || BuildConfig.ANDROID || BuildConfig.WINDOWS)
+        if (BuildConfig.LINUX ||
+            BuildConfig.ANDROID ||
+            BuildConfig.WINDOWS ||
+            BuildConfig.WEB)
           SettingsTab(
               label: labelSettingsAppNotifications,
               icon: m.Icons.notifications,
