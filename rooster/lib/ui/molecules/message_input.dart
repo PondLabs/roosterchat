@@ -226,6 +226,20 @@ class MessageInputState extends State<MessageInput> {
     setInputTextSubscription?.cancel();
     preferencesSubscription?.cancel();
     onScopePopInvoked?.cancel();
+    // Everything this made, released: the chat subtree is rebuilt on every
+    // room switch, and these kept each old composer alive.
+    controller.removeListener(controllerListener);
+    controller.dispose();
+    textFocus.removeListener(onTextFocusChanged);
+    textFocus.dispose();
+    emojiSearchFocus.dispose();
+    stickerSearchFocus.dispose();
+    gifSearchFocus.dispose();
+    gifPickerSearchFocus.dispose();
+    emojiOverlayController.dispose();
+    gifTooltipController.dispose();
+    emojiTooltipController.dispose();
+    autofillScrollController.dispose();
     super.dispose();
   }
 

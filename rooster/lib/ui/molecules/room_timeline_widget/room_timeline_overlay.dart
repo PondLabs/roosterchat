@@ -43,6 +43,12 @@ class TimelineOverlayState extends State<TimelineOverlay> {
 
   bool isAttatchedToBottom = true;
 
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
   /// Messages that came in below while reading further up.
   int newMessageCount = 0;
 

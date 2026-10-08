@@ -48,8 +48,9 @@ class _RoomPreviewTextButtonState extends State<RoomPreviewTextButton> {
             ? widget.room.displayName
             : null;
 
+    final firstCharacter = widget.room.displayName.characters.firstOrNull;
     bool startsWithEmoji =
-        TextUtils.isEmoji(widget.room.displayName.characters.first);
+        firstCharacter != null && TextUtils.isEmoji(firstCharacter);
 
     if (startsWithEmoji && widget.room.avatar == null) {
       var emoji = displayName.characters.first;

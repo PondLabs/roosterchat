@@ -50,7 +50,9 @@ class PlatformUtils {
 
     final env = Platform.environment;
 
-    return env["XDG_SESSION_TYPE"]!;
+    // Unset in a session without a login manager; the About page asked
+    // for this and threw.
+    return env["XDG_SESSION_TYPE"];
   }
 
   static bool isDesktopEnvironment(DesktopEnvironment desktopEnvironment) {

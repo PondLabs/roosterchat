@@ -24,7 +24,14 @@ class _AccountEmojiViewState extends State<AccountEmojiView> {
     super.initState();
   }
 
+  @override
+  void dispose() {
+    sub?.cancel();
+    super.dispose();
+  }
+
   void updateState() {
+    if (!mounted) return;
     setState(() {
       globalPacks = widget.component.globalPacks();
     });

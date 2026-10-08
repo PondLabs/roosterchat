@@ -151,6 +151,11 @@ class ChatState extends State<Chat> {
         "Disposing room timeline for: ${widget.room.displayName} ${widget.threadId ?? ""}");
 
     onFileDroppedSubscription?.cancel();
+    onFocusMessageInput.close();
+    setMessageInputText.close();
+    // A thread timeline is this chat's own (the room keeps the main one):
+    // left open, it went on collecting replies for the life of the app.
+    if (isThread) _timeline?.close();
     _open.remove(this);
     super.dispose();
   }

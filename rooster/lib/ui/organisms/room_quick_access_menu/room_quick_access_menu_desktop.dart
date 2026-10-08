@@ -21,9 +21,15 @@ class _RoomQuickAccessMenuViewDesktopState
 
   @override
   void initState() {
-    preferences.onSettingChanged.listen(onChanged);
+    sub = preferences.onSettingChanged.listen(onChanged);
 
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    sub?.cancel();
+    super.dispose();
   }
 
   @override

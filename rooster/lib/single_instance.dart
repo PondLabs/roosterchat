@@ -45,7 +45,10 @@ class SingleInstance {
       var socket = await connect(path).timeout(Duration(seconds: 3));
       print("Connected to socket: $socket");
 
-      var msg = await socket.first;
+      // A main instance that accepts and then says nothing must not keep
+      // the second launch (and on Windows, its loading window) waiting
+      // for ever.
+      var msg = await socket.first.timeout(const Duration(seconds: 3));
 
       var data = jsonDecode(utf8.decode(msg));
 
