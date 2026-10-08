@@ -346,6 +346,17 @@ class MatrixClient extends Client {
     _updateRoomslist();
     _updateSpacesList();
     _handleSpaceChildren(update);
+    _trimSdkLogs();
+  }
+
+  /// The SDK keeps every log event it ever made in Logs().outputEvents,
+  /// whatever the level, and only clears it on logout: a long session
+  /// grew by every sync. The newest thousand are enough for the log page.
+  static void _trimSdkLogs() {
+    final events = matrix.Logs().outputEvents;
+    if (events.length > 2000) {
+      events.removeRange(0, events.length - 1000);
+    }
   }
 
   void _handleSpaceChildren(matrix.SyncUpdate update) {
@@ -410,7 +421,9 @@ class MatrixClient extends Client {
       },
       nativeImplementations: nativeImplementations,
       database: database,
-      logLevel: matrix.Level.verbose,
+      // No logLevel: the SDK constructor would override the level set at
+      // startup (warning, verbose only in developer mode), and every
+      // SDK message went through print on every sync.
     );
 
     client.onSyncStatus.stream.listen(onSyncStatusChanged);

@@ -39,7 +39,7 @@ class DirectMessagesAggregator implements DirectMessagesInterface {
     );
 
     highlightedRoomsList.onListUpdated.listen((_) {
-      Log.i("Highlihgted rooms list updated!");
+      Log.d("Highlighted rooms list updated!");
     });
   }
 }

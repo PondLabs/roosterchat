@@ -348,14 +348,14 @@ class NotifyingListFilter<T> implements INotifyingList<T> {
   void _onBaseItemAdded(T event) {
     if (whereFunction(event)) {
       _internalList.add(event);
-      Log.i("Adding item to filtered list: $event");
+      Log.d("Adding item to filtered list: $event");
     }
   }
 
   void onFilterChanged(event) {
     var items = _internalList.toList();
 
-    Log.i("Received filter change event!");
+    Log.d("Received filter change event!");
 
     for (var item in items) {
       if (whereFunction(item) == false) {
