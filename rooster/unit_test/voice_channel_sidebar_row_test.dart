@@ -7,13 +7,16 @@ import 'package:rooster/client/client_manager.dart';
 import 'package:rooster/client/components/component.dart';
 import 'package:rooster/client/components/profile/profile_component.dart';
 import 'package:rooster/client/components/room_component.dart';
+import 'package:rooster/client/components/voice_channel_status/voice_channel_status_component.dart';
 import 'package:rooster/client/matrix/components/room_activities/matrix_activities_component.dart';
 import 'package:rooster/client/matrix/homeserver_clock.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/member.dart';
+import 'package:rooster/client/permissions.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/room_text_button.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:matrix/matrix.dart' as matrix;
@@ -122,6 +125,24 @@ class _Member implements Member {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _Permissions extends Permissions {}
+
+class _Status implements VoiceChannelStatusComponent {
+  _Status(this.status, {this.canSetStatus = true});
+
+  @override
+  final String? status;
+
+  @override
+  final bool canSetStatus;
+
+  @override
+  Stream<void> get onChanged => const Stream.empty();
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 /// A voice channel. A member is known by name only once asked for, as with
 /// the members a homeserver lazy loads.
 class _Room implements MatrixRoom {
@@ -138,11 +159,17 @@ class _Room implements MatrixRoom {
 
   late RoomComponent activities;
 
+  RoomComponent? status;
+
   final Set<String> fetched = {};
 
   @override
-  T? getComponent<T extends RoomComponent>() =>
-      activities is T ? activities as T : null;
+  T? getComponent<T extends RoomComponent>() {
+    for (final component in [activities, status]) {
+      if (component is T) return component;
+    }
+    return null;
+  }
 
   @override
   Member getMemberOrFallback(String id) =>
@@ -171,6 +198,9 @@ class _Room implements MatrixRoom {
 
   @override
   bool get isSpecialRoomType => true;
+
+  @override
+  Permissions get permissions => _Permissions();
 
   @override
   int get notificationCount => 0;
@@ -500,6 +530,64 @@ void main() {
     expect(find.text('Alice'), findsOneWidget);
     expect(find.text('Bob'), findsOneWidget);
     expect(find.text('Carol'), findsOneWidget);
+    await done(tester, list);
+  });
+
+  testWidgets("a voice channel's status shows under its name, to everyone",
+      (tester) async {
+    final clock = HomeserverClock()
+      ..readSync(_syncAt(_serverNow()), homeserver: 'example.org');
+    final list = listFor(clock);
+    room.status = _Status('Movie night', canSetStatus: false);
+    hangout();
+
+    await show(tester);
+
+    expect(find.text('Movie night'), findsOneWidget);
+    expect(find.byIcon(Icons.edit_rounded), findsNothing);
+    expect(find.text('Alice'), findsOneWidget);
+    await done(tester, list);
+  });
+
+  testWidgets('outside the call there is nothing to set a status with',
+      (tester) async {
+    final clock = HomeserverClock()
+      ..readSync(_syncAt(_serverNow()), homeserver: 'example.org');
+    final list = listFor(clock);
+    room.status = _Status(null);
+    hangout();
+
+    await show(tester);
+
+    expect(find.text('Set a channel status'), findsNothing);
+    expect(find.byIcon(Icons.edit_rounded), findsNothing);
+    await done(tester, list);
+  });
+
+  testWidgets("the channel's buttons show under the pointer, not before",
+      (tester) async {
+    final clock = HomeserverClock()
+      ..readSync(_syncAt(_serverNow()), homeserver: 'example.org');
+    final list = listFor(clock);
+    hangout();
+
+    await show(tester);
+    expect(find.byIcon(Icons.person_add_alt_1_rounded), findsNothing);
+    expect(find.byIcon(Icons.settings_rounded), findsNothing);
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getCenter(find.text('Hangout')));
+    await tester.pump();
+
+    expect(find.byIcon(Icons.person_add_alt_1_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.settings_rounded), findsOneWidget);
+
+    // Over someone in the channel: those are the channel's, not theirs.
+    await mouse.moveTo(tester.getCenter(find.text('Alice')));
+    await tester.pump();
+    expect(find.byIcon(Icons.person_add_alt_1_rounded), findsNothing);
     await done(tester, list);
   });
 }

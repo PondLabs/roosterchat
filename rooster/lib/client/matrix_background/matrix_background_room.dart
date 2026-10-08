@@ -421,6 +421,14 @@ class MatrixBackgroundRoom implements Room {
   bool get isSpecialRoomType => false;
 
   @override
+  RoomType get roomType => RoomType.defaultRoom;
+
+  @override
+  Future<Uri> getShareLink() {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<void> banUser(String id) {
     // TODO: implement banUser
     throw UnimplementedError();

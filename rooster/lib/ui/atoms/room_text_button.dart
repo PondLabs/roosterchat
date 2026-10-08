@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:rooster/client/components/activities/activities_component.dart';
 import 'package:rooster/client/components/calendar_room/calendar_room_component.dart';
 import 'package:rooster/client/components/soundboard/entrance_sound.dart';
+import 'package:rooster/client/components/voice_channel_status/voice_channel_status_component.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/client/components/voip_room/voip_room_component.dart';
 import 'package:rooster/client/components/widgets/widget_component.dart';
 import 'package:rooster/client/matrix/components/dj/dj_booths.dart';
 import 'package:rooster/client/room.dart';
+import 'package:rooster/client/space.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/live_media_indicator.dart';
@@ -19,8 +21,12 @@ import 'package:rooster/ui/atoms/anchored_popover.dart';
 import 'package:rooster/ui/atoms/dot_indicator.dart';
 import 'package:rooster/ui/atoms/notification_badge.dart';
 import 'package:rooster/ui/atoms/tiny_pill.dart';
+import 'package:rooster/ui/molecules/show_on_hover.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
+import 'package:rooster/ui/navigation/adaptive_text_dialog.dart';
 import 'package:rooster/ui/navigation/navigation_utils.dart';
+import 'package:rooster/ui/organisms/channel_categories/channel_category_actions.dart';
+import 'package:rooster/ui/organisms/channel_invites/channel_invites.dart';
 import 'package:rooster/ui/organisms/dj/dj_booth_panel.dart';
 import 'package:rooster/ui/organisms/dj/dj_member_ui.dart';
 import 'package:rooster/ui/organisms/dj/vinyl_disc.dart';
@@ -39,6 +45,7 @@ class RoomTextButton extends StatefulWidget {
     this.room, {
     this.highlight = false,
     this.onTap,
+    this.space,
     super.key,
   });
 
@@ -47,7 +54,6 @@ class RoomTextButton extends StatefulWidget {
   /// call manager while it is being made, before the component gets it back
   /// from the join, so on that list update the component still said none,
   /// and nothing came after it to look again. The row then never lit up.
-  @visibleForTesting
   static VoipSession? callSessionIn(Room room, Iterable<VoipSession> sessions) {
     for (final session in sessions) {
       if (session.roomId == room.identifier &&
@@ -68,12 +74,73 @@ class RoomTextButton extends StatefulWidget {
   final Room room;
   final Function(Room room, {bool bypassSpecialRoomType})? onTap;
 
+  /// The space whose sidebar lists the room, if any: its people can be
+  /// invited, and its admins put the room under another heading.
+  final Space? space;
+
   @override
   State<RoomTextButton> createState() => _RoomTextButtonState();
 
+  static String get tooltipOpenChannelChat => Intl.message("Open chat",
+      name: "tooltipOpenChannelChat",
+      desc: "Button on a voice channel in the sidebar that opens its text "
+          "chat rather than the call");
+
+  static String get tooltipEditChannel => Intl.message("Edit channel",
+      name: "tooltipEditChannel",
+      desc: "Button on a channel in the sidebar that opens its settings");
+
+  static String get labelSetVoiceChannelStatus =>
+      Intl.message("Set a channel status",
+          name: "labelSetVoiceChannelStatus",
+          desc: "Under the name of a voice channel we are in, while it has no "
+              "status; opens the field to set one");
+
+  static String get labelVoiceChannelStatus => Intl.message("Channel status",
+      name: "labelVoiceChannelStatus",
+      desc: "Title of the dialog setting what a voice channel is up to");
+
+  static String get labelVoiceChannelStatusDescription => Intl.message(
+      "Everyone sees it under the channel's name. Leave it empty to clear it.",
+      name: "labelVoiceChannelStatusDescription",
+      desc: "Explains the status of a voice channel, in the dialog setting it");
+
+  static String get labelVoiceChannelStatusPlaceholder =>
+      Intl.message("What's going on in here?",
+          name: "labelVoiceChannelStatusPlaceholder",
+          desc: "Placeholder of the field setting a voice channel's status");
+
+  static String get promptHideInviteToVoice => Intl.message("Hide",
+      name: "promptHideInviteToVoice",
+      desc: "Button closing the invite to voice row under a voice channel");
+
+  /// Asks for [status]'s new text and sets it.
+  static Future<void> editVoiceChannelStatus(
+      BuildContext context, VoiceChannelStatusComponent status) async {
+    final text = await AdaptiveTextDialog.show(context,
+        title: labelVoiceChannelStatus,
+        description: labelVoiceChannelStatusDescription,
+        placeholder: labelVoiceChannelStatusPlaceholder,
+        defaultText: status.status);
+    if (text == null) return;
+    try {
+      await status.setStatus(text);
+    } catch (e, s) {
+      Log.onError(e, s, content: "Could not set the voice channel status");
+      if (context.mounted) {
+        AdaptiveDialog.showError(context, e, s, title: labelVoiceChannelStatus);
+      }
+    }
+  }
+
   static List<ContextMenuItem> createRoomContextMenuItems(
-      BuildContext context, Room room) {
+      BuildContext context, Room room,
+      {Space? space}) {
     var voipRoom = room.getComponent<VoipRoomComponent>();
+    final status = room.getComponent<VoiceChannelStatusComponent>();
+    final inCall = callSessionIn(
+            room, clientManager?.callManager.currentSessions ?? const []) !=
+        null;
     return [
       ContextMenuItem(
           text: "Mark as Read",
@@ -95,6 +162,29 @@ class RoomTextButton extends StatefulWidget {
             icon: Icons.tag,
             onPressed: () => EventBus.doOpenRoom(room.identifier,
                 clientId: room.client.identifier, bypassSpecialRoomType: true)),
+      if (room.permissions.canInviteUser)
+        ContextMenuItem(
+            text: ChannelInvites.promptInvitePeople,
+            icon: Icons.person_add_alt_1_rounded,
+            onPressed: () =>
+                ChannelInvites.inviteToChannel(context, room, space: space)),
+      if (inCall)
+        ContextMenuItem(
+            text: ChannelInvites.labelInviteToVoice,
+            icon: Icons.group_add_outlined,
+            onPressed: () => ChannelInvites.showVoiceInviteDialog(context, room,
+                space: space)),
+      if (inCall && status != null && status.canSetStatus)
+        ContextMenuItem(
+            text: labelSetVoiceChannelStatus,
+            icon: Icons.edit_outlined,
+            onPressed: () => editVoiceChannelStatus(context, status)),
+      if (space != null && ChannelCategoryActions.canEdit(space))
+        ContextMenuItem(
+            text: ChannelCategoryActions.promptMoveToCategory,
+            icon: Icons.drive_file_move_outline,
+            onPressed: () =>
+                ChannelCategoryActions.moveChannel(context, space, room)),
       if (voipRoom != null &&
           voipRoom.canJoinCall &&
           voipRoom.currentSession == null &&
@@ -121,6 +211,7 @@ class RoomTextButton extends StatefulWidget {
                 context,
                 RoomSettingsPage(
                   room: room,
+                  contextSpace: space,
                 ));
           }),
     ];
@@ -159,10 +250,22 @@ class _RoomTextButtonState extends State<RoomTextButton> {
   /// Who in the list has had their member asked for, once each.
   final Set<String> fetchedMembers = {};
 
+  /// What the voice channel is up to, under its name.
+  VoiceChannelStatusComponent? statusComponent;
+
+  /// The pointer is over the channel's own row (not the people under it):
+  /// its buttons show.
+  bool hovering = false;
+
+  /// Calls whose "Invite to voice" row was closed. Per call, so the next
+  /// one offers it again.
+  static final Expando<bool> inviteRowHidden = Expando();
+
   @override
   void initState() {
     calendarRoom = widget.room.getComponent<CalendarRoom>();
     activities = widget.room.getComponent<ActivitiesComponent>();
+    statusComponent = widget.room.getComponent<VoiceChannelStatusComponent>();
     final isVoiceRoom = widget.room.getComponent<VoipRoomComponent>() != null;
 
     subs = [
@@ -172,8 +275,17 @@ class _RoomTextButtonState extends State<RoomTextButton> {
       if (activities != null)
         activities!.onSessionsChanged.listen(onSessionsChanged),
       if (isVoiceRoom && clientManager != null)
-        clientManager!.callManager.currentSessions.onListUpdated
-            .listen((_) => attachVoiceSession()),
+        clientManager!.callManager.currentSessions.onListUpdated.listen((_) {
+          final before = voiceSession;
+          attachVoiceSession();
+          // In the call or out of it: the status prompt and the invite
+          // row come and go with it, speaking or not.
+          if (!identical(before, voiceSession) && mounted) setState(() {});
+        }),
+      if (statusComponent != null)
+        statusComponent!.onChanged.listen((_) {
+          if (mounted) setState(() {});
+        }),
       if (isVoiceRoom)
         DjBooths.onChanged.listen((_) {
           if (mounted) setState(() {});
@@ -325,15 +437,40 @@ class _RoomTextButtonState extends State<RoomTextButton> {
       avatarPlaceholderColor = Colors.transparent;
       avatarPlaceholderText = emoji;
     }
-    var customBuilder = null;
+    Widget Function(Widget header, BuildContext context)? body;
 
     if (calendarEvents?.isNotEmpty == true) {
-      customBuilder = buildEvents;
+      body = buildEvents;
     }
 
     if (activitySessions?.isNotEmpty == true) {
-      customBuilder = buildActivities;
+      body = buildActivities;
     }
+
+    final statusLine = buildStatusLine();
+
+    // The channel's own row, under which the rest hangs.
+    Widget Function(Widget child, BuildContext context)? customBuilder;
+    if (body != null || statusLine != null) {
+      customBuilder = (child, context) {
+        final header = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            hoverable(SizedBox(height: height, child: child)),
+            if (statusLine != null) statusLine,
+          ],
+        );
+        return body == null ? header : body(header, context);
+      };
+    }
+
+    final badge = widget.room.displayHighlightedNotificationCount > 0
+        ? NotificationBadge(widget.room.displayHighlightedNotificationCount)
+        : widget.room.displayNotificationCount > 0
+            ? const Padding(padding: EdgeInsets.all(2.0), child: DotIndicator())
+            : null;
+    final showActions = (hovering || widget.highlight) &&
+        !ShowOnHover.useTouchControls(context);
 
     Widget result = SizedBox(
       height: customBuilder == null ? height : null,
@@ -352,24 +489,186 @@ class _RoomTextButtonState extends State<RoomTextButton> {
         textColor: color,
         softwrap: false,
         onTap: () => widget.onTap?.call(widget.room),
-        footer: widget.room.displayHighlightedNotificationCount > 0
-            ? NotificationBadge(widget.room.displayHighlightedNotificationCount)
-            : widget.room.displayNotificationCount > 0
-                ? const Padding(
-                    padding: EdgeInsets.all(2.0), child: DotIndicator())
-                : null,
+        footer: (showActions ? buildRowActions() : null) ?? badge,
       ),
     );
 
+    if (customBuilder == null) result = hoverable(result);
+
     result = AdaptiveContextMenu(
-      items: RoomTextButton.createRoomContextMenuItems(context, widget.room),
+      items: RoomTextButton.createRoomContextMenuItems(context, widget.room,
+          space: widget.space),
       child: result,
     );
 
     return result;
   }
 
-  Widget buildActivities(Widget child, BuildContext context) {
+  Widget hoverable(Widget child) => MouseRegion(
+        onEnter: (_) => setState(() => hovering = true),
+        onExit: (_) => setState(() => hovering = false),
+        child: child,
+      );
+
+  /// The buttons at the end of the channel's row, under the pointer or
+  /// while it is open: its chat (a voice channel's), invite, settings.
+  Widget? buildRowActions() {
+    final room = widget.room;
+    final onTap = widget.onTap;
+    final actions = [
+      if (room.isSpecialRoomType && onTap != null)
+        buildRowAction(
+            Icons.chat_bubble_rounded,
+            RoomTextButton.tooltipOpenChannelChat,
+            () => onTap(room, bypassSpecialRoomType: true)),
+      if (room.permissions.canInviteUser)
+        buildRowAction(
+            Icons.person_add_alt_1_rounded,
+            ChannelInvites.promptInvitePeople,
+            () => ChannelInvites.inviteToChannel(context, room,
+                space: widget.space)),
+      if (room.permissions.canEditAnything)
+        buildRowAction(
+            Icons.settings_rounded,
+            RoomTextButton.tooltipEditChannel,
+            () => NavigationUtils.navigateTo(context,
+                RoomSettingsPage(room: room, contextSpace: widget.space))),
+    ];
+    if (actions.isEmpty) return null;
+    return Row(mainAxisSize: MainAxisSize.min, children: actions);
+  }
+
+  Widget buildRowAction(IconData icon, String tooltip, VoidCallback onTap) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.all(3),
+          child: Icon(icon,
+              size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
+      ),
+    );
+  }
+
+  /// The voice channel's status under its name, or, in the call and
+  /// allowed to, the prompt to set one.
+  Widget? buildStatusLine() {
+    final component = statusComponent;
+    if (component == null) return null;
+    final status = component.status;
+    final canEdit = voiceSession != null && component.canSetStatus;
+    if (status == null && !canEdit) return null;
+
+    final color = Theme.of(context).colorScheme.secondary;
+    Widget line = Padding(
+      // Under the channel's name, past its icon.
+      padding: const EdgeInsets.fromLTRB(42, 0, 8, 4),
+      child: Row(
+        children: [
+          Flexible(
+            child: Text(
+              status ?? RoomTextButton.labelSetVoiceChannelStatus,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context)
+                  .textTheme
+                  .labelSmall
+                  ?.copyWith(color: color),
+            ),
+          ),
+          if (canEdit)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 0, 0, 0),
+              child: Icon(Icons.edit_rounded, size: 12, color: color),
+            ),
+        ],
+      ),
+    );
+
+    if (canEdit) {
+      line = InkWell(
+        onTap: () => RoomTextButton.editVoiceChannelStatus(context, component),
+        borderRadius: BorderRadius.circular(4),
+        child: line,
+      );
+    }
+    return line;
+  }
+
+  /// Under the people in our call: a row listing who else to call over.
+  Widget buildInviteToVoice() {
+    final session = voiceSession;
+    if (session == null || inviteRowHidden[session] == true) {
+      return const SizedBox.shrink();
+    }
+    final colors = Theme.of(context).colorScheme;
+
+    return AnchoredPopover(
+      key: const ValueKey("inviteToVoice"),
+      alignment: PopoverAlignment.start,
+      gap: 4,
+      anchorBuilder: (context, open, toggle) => SizedBox(
+        height: height,
+        child: tiamat.TextButton(
+          ChannelInvites.labelInviteToVoice,
+          textColor: colors.secondary,
+          highlighted: open,
+          avatarPlaceholderText: "+",
+          avatarBuilder: (_) => DecoratedBox(
+            decoration: BoxDecoration(
+              color: colors.surfaceContainerHighest,
+              // An avatar's corners, as the people above have.
+              borderRadius: BorderRadius.circular(12 / 1.25),
+            ),
+            child: Center(
+              child: Icon(Icons.person_add_alt_1_rounded,
+                  size: 14, color: colors.onSurfaceVariant),
+            ),
+          ),
+          footer: Tooltip(
+            message: RoomTextButton.promptHideInviteToVoice,
+            child: InkWell(
+              onTap: () => setState(() => inviteRowHidden[session] = true),
+              borderRadius: BorderRadius.circular(4),
+              child: Padding(
+                padding: const EdgeInsets.all(3),
+                child: Icon(Icons.close_rounded,
+                    size: 16, color: colors.secondary),
+              ),
+            ),
+          ),
+          onTap: toggle,
+        ),
+      ),
+      popoverBuilder: (context, close) => Material(
+        color: colors.surfaceContainer,
+        elevation: 4,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: colors.outlineVariant),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 280, maxHeight: 340),
+          child: VoiceInviteList(
+            room: widget.room,
+            space: widget.space,
+            limit: 5,
+            onSeeMore: () {
+              close();
+              ChannelInvites.showVoiceInviteDialog(this.context, widget.room,
+                  space: widget.space);
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget buildActivities(Widget header, BuildContext context) {
     Iterable<RoomActivitySession> sessions = activitySessions!;
 
     if (activitySessions!.any((i) => i.thirdparty == false)) {
@@ -379,7 +678,7 @@ class _RoomTextButtonState extends State<RoomTextButton> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(height: height, child: child),
+        header,
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 0, 0, 4),
           child: Column(
@@ -441,6 +740,7 @@ class _RoomTextButtonState extends State<RoomTextButton> {
                   ),
                 ...buildCallMembers(activity),
                 if (!activity.thirdparty) buildDj(),
+                if (!activity.thirdparty) buildInviteToVoice(),
               ],
             ),
           ),
@@ -593,11 +893,11 @@ class _RoomTextButtonState extends State<RoomTextButton> {
     );
   }
 
-  Widget buildEvents(Widget child, BuildContext context) {
+  Widget buildEvents(Widget header, BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(height: height, child: child),
+        header,
         Padding(
           padding: const EdgeInsets.fromLTRB(28, 0, 0, 4),
           child: DecoratedBox(

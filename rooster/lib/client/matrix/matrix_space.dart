@@ -7,9 +7,11 @@ import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/component_registry.dart';
 import 'package:rooster/client/components/space_component.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
+import 'package:rooster/client/matrix/matrix_member.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
 import 'package:rooster/client/matrix/matrix_room_permissions.dart';
 import 'package:rooster/client/matrix/matrix_room_preview.dart';
+import 'package:rooster/client/member.dart';
 import 'package:rooster/client/permissions.dart';
 import 'package:rooster/client/room_preview.dart';
 import 'package:rooster/client/space_child.dart';
@@ -443,6 +445,13 @@ class MatrixSpace extends Space {
   @override
   bool containsRoom(String identifier) {
     return _rooms.any((element) => element.identifier == identifier);
+  }
+
+  @override
+  Future<List<Member>> fetchMembers() async {
+    final users = await _matrixRoom
+        .requestParticipants([matrix.Membership.join], true, true);
+    return users.map((user) => MatrixMember(_client, user)).toList();
   }
 
   @override

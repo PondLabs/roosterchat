@@ -24,10 +24,12 @@ import 'package:rooster/client/matrix/components/room_activities/matrix_activiti
 import 'package:rooster/client/matrix/components/sidebar_entries/matrix_sidebar_entries_component.dart';
 import 'package:rooster/client/matrix/components/soundboard/matrix_space_soundboard_component.dart';
 import 'package:rooster/client/matrix/components/space_banner/matrix_space_banner_component.dart';
+import 'package:rooster/client/matrix/components/space_categories/matrix_space_categories_component.dart';
 import 'package:rooster/client/matrix/components/space_color_scheme/matrix_space_color_scheme_component.dart';
 import 'package:rooster/client/matrix/components/user_color/matrix_user_color_component.dart';
 import 'package:rooster/client/matrix/components/petname/matrix_petname_component.dart';
 import 'package:rooster/client/matrix/components/user_presence/matrix_user_presence.dart';
+import 'package:rooster/client/matrix/components/voice_channel_status/matrix_voice_channel_status_component.dart';
 import 'package:rooster/client/matrix/components/voip/matrix_voip_component.dart';
 import 'package:rooster/client/matrix/components/read_receipts/matrix_read_receipt_component.dart';
 import 'package:rooster/client/matrix/components/threads/matrix_threads_component.dart';
@@ -85,6 +87,9 @@ class ComponentRegistry {
       MatrixPinnedMessagesComponent(client, room),
       if (MatrixVoipRoomComponent.isVoipRoom(room))
         MatrixVoipRoomComponent(client, room),
+      // Shown in the sidebar on every platform, joinable here or not.
+      if (MatrixVoipRoomComponent.isVoipRoom(room))
+        MatrixVoiceChannelStatusComponent(client, room),
       if (MatrixPhotoAlbumRoomComponent.isPhotoAlbumRoom(room))
         MatrixPhotoAlbumRoomComponent(client, room),
       MatrixCalendarRoomComponent(client, room),
@@ -99,6 +104,7 @@ class ComponentRegistry {
       MatrixSpaceColorSchemeComponent(client, space),
       MatrixSpaceBannerComponent(client, space),
       MatrixSpaceSoundboardComponent(client, space),
+      MatrixSpaceCategoriesComponent(client, space),
     ];
   }
 }

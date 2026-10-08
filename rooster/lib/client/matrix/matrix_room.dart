@@ -918,6 +918,19 @@ class MatrixRoom extends Room {
   }
 
   @override
+  RoomType get roomType => switch (
+          matrixRoom.getState(matrix.EventTypes.RoomCreate)?.content['type']) {
+        'org.matrix.msc3417.call' => RoomType.voipRoom,
+        'chat.commet.photo_album' => RoomType.photoAlbum,
+        'chat.commet.calendar' => RoomType.calendar,
+        'm.space' => RoomType.space,
+        _ => RoomType.defaultRoom,
+      };
+
+  @override
+  Future<Uri> getShareLink() => _matrixRoom.matrixToInviteLink();
+
+  @override
   bool get isSpecialRoomType =>
       matrixRoom
           .getState(matrix.EventTypes.RoomCreate)

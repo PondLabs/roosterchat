@@ -12,6 +12,7 @@ Hard fork of Commet (a Flutter Matrix client) by PondLabs, shipped as **Rooster*
 - Voice call health: every second a voice room checks that our microphone still gets through and that we still receive everyone, and repairs either without a rejoin. See `docs/voice-call-health.md`.
 - Who is in a voice channel: call memberships read by the homeserver's clock (`HomeserverClock`), written again hourly by their owners for the whole call, plus everyone in LiveKit while we are in it. See `docs/voice-channel-members.md`.
 - Away status: the amber dot, and where idle time comes from on each platform. See `docs/away-status.md`.
+- A space's sidebar lists text channels and voice channels apart, under the built-in headings and the admin's own (one `chat.commet.space_categories` state event in the space), with Discord's buttons on each channel and a voice channel status. See `docs/channel-categories.md`.
 - Call controls outside the window: taskbar thumbnail buttons (Windows), Dock menu (macOS), launcher actions and quicklist (Linux), floating panel (browser). See `docs/voice-controls.md`.
 - Installing and updating: per-user installers for Windows, macOS and Linux (`installers.yml`); on desktop the app starts as a small loading window that installs a newer GitHub release before opening. See `docs/updating.md`.
 - Instagram reels and posts in the chat: native builds play the MP4 from the embed page and show photo posts as their photos, web frames Instagram's embed. See `docs/instagram-reels.md`.
