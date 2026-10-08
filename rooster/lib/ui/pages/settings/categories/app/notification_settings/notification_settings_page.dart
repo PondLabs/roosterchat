@@ -40,8 +40,13 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
     notifier = NotificationManager.notifier;
   }
 
+  // Everywhere there is a notifier with something to set: push on Android,
+  // the toggles on Linux and Windows (Windows had the toggles and a page
+  // that said notifications were not supported).
   bool get canConfigureNotifications =>
-      PlatformUtils.isAndroid || PlatformUtils.isLinux;
+      PlatformUtils.isAndroid ||
+      PlatformUtils.isLinux ||
+      PlatformUtils.isWindows;
 
   @override
   Widget build(BuildContext context) {

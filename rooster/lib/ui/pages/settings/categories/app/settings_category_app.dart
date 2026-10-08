@@ -129,8 +129,10 @@ class SettingsCategoryApp implements SettingsCategory {
               pageBuilder: (context) {
                 return const WindowSettingsPage();
               }),
-        // We really only need to configure on unified push
-        if (BuildConfig.LINUX || BuildConfig.ANDROID)
+        // Where there is something to set: UnifiedPush on Android, the
+        // Linux and Windows notifiers' toggles (Windows had the toggles and
+        // no tab to reach them).
+        if (BuildConfig.LINUX || BuildConfig.ANDROID || BuildConfig.WINDOWS)
           SettingsTab(
               label: labelSettingsAppNotifications,
               icon: m.Icons.notifications,
