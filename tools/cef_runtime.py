@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import hashlib
+import http.client
 import json
 import os
 import posixpath
@@ -694,10 +695,19 @@ class _RejectRedirect(urllib.request.HTTPRedirectHandler):
     http_error_308 = _reject
 
 
-def _open_locked_url(url: str) -> Any:
+def _open_locked_url(
+    url: str,
+    *,
+    headers: Mapping[str, str] | None = None,
+    accepted: tuple[int, ...] = (200,),
+) -> Any:
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": "rooster-cef-lock/1", "Accept": "application/octet-stream"},
+        headers={
+            "User-Agent": "rooster-cef-lock/1",
+            "Accept": "application/octet-stream",
+            **(headers or {}),
+        },
         method="GET",
     )
     opener = urllib.request.build_opener(_RejectRedirect())
@@ -711,10 +721,76 @@ def _open_locked_url(url: str) -> Any:
         response.close()
         raise LockError(f"locked URL changed during fetch: {url}")
     status = getattr(response, "status", response.getcode())
-    if status != 200:
+    if status not in accepted:
         response.close()
         raise LockError(f"locked URL returned HTTP {status}: {url}")
     return response
+
+
+def _download_locked(
+    url: str, size: int, temporary: Path, *, attempts: int = 12
+) -> tuple[str, str]:
+    """Download the locked [url], which is [size] bytes, into [temporary].
+
+    Returns the SHA-1 and SHA-256 of what arrived.  The CEF builder's CDN
+    closes a long transfer early now and then (the Linux archives are
+    hundreds of megabytes), so a short read is taken up where it stopped
+    with a Range request, which the origin honours.  A server that answers
+    a Range request with 200 is starting the file over, and so does this.
+    Every byte is hashed as it arrives, so a resumed download is checked
+    whole, like one that came in one piece.
+    """
+
+    sha1 = hashlib.sha1()
+    sha256 = hashlib.sha256()
+    have = 0
+    for attempt in range(1, attempts + 1):
+        headers = {"Range": f"bytes={have}-"} if have else {}
+        accepted = (206, 200) if have else (200,)
+        response = _open_locked_url(url, headers=headers, accepted=accepted)
+        try:
+            status = getattr(response, "status", response.getcode())
+            if status == 206:
+                content_range = response.headers.get("Content-Range", "")
+                if content_range != f"bytes {have}-{size - 1}/{size}":
+                    raise LockError(
+                        f"locked CEF archive Content-Range does not continue the download: {content_range!r}"
+                    )
+            else:
+                content_length = response.headers.get("Content-Length")
+                if content_length is not None and int(content_length) != size:
+                    raise LockError("locked CEF archive Content-Length does not match the lock")
+                if have:
+                    sha1 = hashlib.sha1()
+                    sha256 = hashlib.sha256()
+                    have = 0
+                    temporary.unlink()
+            with temporary.open("ab") as output:
+                while True:
+                    try:
+                        chunk = response.read(1024 * 1024)
+                    except (OSError, http.client.HTTPException):
+                        # A connection that dropped: the next attempt resumes.
+                        break
+                    if not chunk:
+                        break
+                    have += len(chunk)
+                    if have > size:
+                        raise LockError("locked CEF archive exceeded its locked size")
+                    output.write(chunk)
+                    sha1.update(chunk)
+                    sha256.update(chunk)
+        finally:
+            response.close()
+        if have == size:
+            return sha1.hexdigest(), sha256.hexdigest()
+        print(
+            f"cef-runtime: the download ended at {have} of {size} bytes (attempt {attempt}); resuming",
+            file=sys.stderr,
+        )
+    raise LockError(
+        f"locked CEF archive ended before its locked size ({have} of {size} bytes) after {attempts} attempts"
+    )
 
 
 def _read_sidecar(url: str, expected_sha1: str) -> None:
@@ -758,34 +834,19 @@ def fetch_archive(
         return target
 
     _read_sidecar(archive_info["url"], archive_info["sha1"])
-    response = _open_locked_url(archive_info["url"])
     temporary = target.with_name(f".{target.name}.part")
     try:
-        content_length = response.headers.get("Content-Length")
-        if content_length is not None and int(content_length) != archive_info["size"]:
-            raise LockError("locked CEF archive Content-Length does not match the lock")
-        sha1 = hashlib.sha1()
-        sha256 = hashlib.sha256()
-        total = 0
-        with temporary.open("xb") as output:
-            for chunk in iter(lambda: response.read(1024 * 1024), b""):
-                total += len(chunk)
-                if total > archive_info["size"]:
-                    raise LockError("locked CEF archive exceeded its locked size")
-                output.write(chunk)
-                sha1.update(chunk)
-                sha256.update(chunk)
-        if total != archive_info["size"]:
-            raise LockError("locked CEF archive ended before its locked size")
-        if sha1.hexdigest() != archive_info["sha1"]:
+        if temporary.exists():
+            temporary.unlink()
+        sha1, sha256 = _download_locked(archive_info["url"], archive_info["size"], temporary)
+        if sha1 != archive_info["sha1"]:
             raise LockError("downloaded CEF archive SHA-1 does not match the lock")
-        if sha256.hexdigest() != archive_info["sha256"]:
+        if sha256 != archive_info["sha256"]:
             raise LockError("downloaded CEF archive SHA-256 does not match the lock")
         os.replace(temporary, target)
     except (OSError, ValueError) as exc:
         raise LockError(f"cannot cache locked CEF archive: {exc}") from exc
     finally:
-        response.close()
         if temporary.exists():
             temporary.unlink()
     verify_archive(platform, target, lock)

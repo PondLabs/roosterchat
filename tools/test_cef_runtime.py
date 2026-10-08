@@ -410,6 +410,75 @@ class CEFRuntimeToolTests(unittest.TestCase):
             with self.assertRaises(cef_runtime.LockError):
                 cef_runtime.stage_runtime("linux-x64", archive, directory / "staged", lock)
 
+    def test_locked_download_resumes_where_the_origin_cut_it(self) -> None:
+        # The CDN closes long transfers early now and then: the download goes
+        # on from where it stopped, and the hashes cover the whole file.
+        payload = bytes(range(256)) * 4096  # 1 MiB
+        cut = 300_000
+        requests: list[str] = []
+
+        class CuttingHandler(http.server.BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def do_GET(self) -> None:  # noqa: N802 - stdlib handler API
+                range_header = self.headers.get("Range")
+                requests.append(range_header or "")
+                if range_header is None:
+                    self.send_response(200)
+                    self.send_header("Content-Length", str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload[:cut])
+                    self.wfile.flush()
+                    self.connection.close()
+                    return
+                start = int(range_header.removeprefix("bytes=").rstrip("-"))
+                self.send_response(206)
+                self.send_header("Content-Range", f"bytes {start}-{len(payload) - 1}/{len(payload)}")
+                self.send_header("Content-Length", str(len(payload) - start))
+                self.end_headers()
+                self.wfile.write(payload[start:])
+
+            def log_message(self, *_args: object) -> None:
+                return
+
+        with socketserver.TCPServer(("127.0.0.1", 0), CuttingHandler) as server, TemporaryDirectory() as temporary:
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            url = f"http://127.0.0.1:{server.server_address[1]}/archive"
+            part = Path(temporary) / "archive.part"
+            sha1, sha256 = cef_runtime._download_locked(url, len(payload), part)
+            server.shutdown()
+            thread.join(timeout=2)
+            self.assertEqual(sha1, hashlib.sha1(payload).hexdigest())
+            self.assertEqual(sha256, hashlib.sha256(payload).hexdigest())
+            self.assertEqual(part.read_bytes(), payload)
+        self.assertEqual(requests, ["", f"bytes={cut}-"])
+
+    def test_locked_download_gives_up_on_an_origin_that_never_finishes(self) -> None:
+        class StubbornHandler(http.server.BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def do_GET(self) -> None:  # noqa: N802 - stdlib handler API
+                # Always the first byte only, whatever was asked for.
+                self.send_response(200)
+                self.send_header("Content-Length", "10")
+                self.end_headers()
+                self.wfile.write(b"x")
+                self.wfile.flush()
+                self.connection.close()
+
+            def log_message(self, *_args: object) -> None:
+                return
+
+        with socketserver.TCPServer(("127.0.0.1", 0), StubbornHandler) as server, TemporaryDirectory() as temporary:
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            url = f"http://127.0.0.1:{server.server_address[1]}/archive"
+            with self.assertRaises(cef_runtime.LockError):
+                cef_runtime._download_locked(url, 10, Path(temporary) / "archive.part", attempts=3)
+            server.shutdown()
+            thread.join(timeout=2)
+
     def test_locked_fetch_rejects_redirects(self) -> None:
         class RedirectHandler(http.server.BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802 - stdlib handler API
