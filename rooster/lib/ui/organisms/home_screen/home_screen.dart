@@ -100,7 +100,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        if (MediaQuery.of(context).mobile)
+        if (MediaQuery.sizeOf(context).mobile)
           tiamat.Tile.low(
             caulkClipBottomRight: true,
             caulkClipBottomLeft: true,
@@ -112,7 +112,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: SizedBox(
                 height: 50,
                 child: HeaderView(
-                  showBurger: MediaQuery.of(context).mobile,
+                  showBurger: MediaQuery.sizeOf(context).mobile,
                   onBurgerMenuTap: widget.onBurgerMenuTap,
                   text: CommonStrings.promptHome,
                   menu: SizedBox(
@@ -126,7 +126,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-        if (MediaQuery.of(context).desktop)
+        if (MediaQuery.sizeOf(context).desktop)
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
             child: Material(
@@ -144,7 +144,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         Icon(Icons.search),
                         tiamat.Text.labelLow(CommonStrings.promptSearch),
                       ]),
-                      if (MediaQuery.of(context).desktop)
+                      if (MediaQuery.sizeOf(context).desktop)
                         Padding(
                           padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
                           child: tiamat.Text.labelLow("Ctrl + K"),

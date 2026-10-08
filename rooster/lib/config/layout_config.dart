@@ -75,6 +75,32 @@ class Layout {
   /// line between phones and tablets, which an unfolded foldable is past.
   static const double phoneWidth = 600;
 
+  /// The layout for a window [width] wide (see [LayoutQuerySize]).
+  static LayoutType forWidth(double width) {
+    if (preferences.layoutOverride.value == "mobile") {
+      return LayoutType.mobile;
+    }
+
+    if (preferences.layoutOverride.value == "desktop") {
+      return LayoutType.desktop;
+    }
+
+    if (PlatformUtils.isWeb && _isWebDesktop()) {
+      return LayoutType.desktop;
+    }
+
+    if (PlatformUtils.isAndroid || PlatformUtils.isWeb) {
+      if (isPhoneSized(
+          width: width,
+          screenShortestSide: screenShortestSide,
+          scale: preferences.appScale.value)) {
+        return LayoutType.mobile;
+      }
+    }
+
+    return LayoutType.desktop;
+  }
+
   /// Whether the app runs in the browser of a phone, a tablet or a foldable.
   static bool get isMobileBrowser => PlatformUtils.isWeb && !_isWebDesktop();
 
@@ -92,31 +118,24 @@ enum LayoutType {
   desktop;
 }
 
+/// The layout for a window of this size: what the widgets ask through
+/// MediaQuery.sizeOf. The layout only depends on the width, and
+/// MediaQuery.of made every widget that asked rebuild whenever anything
+/// in the media query changed: every frame of the keyboard animating
+/// in or out on a phone, every frame of a window resize on the desktop.
+extension LayoutQuerySize on Size {
+  LayoutType get layout => Layout.forWidth(width);
+
+  bool get mobile => layout == LayoutType.mobile;
+
+  bool get desktop => layout == LayoutType.desktop;
+
+  /// See [LayoutQueryData.touchControls].
+  bool get touchControls => mobile || Layout.isTouchDevice;
+}
+
 extension LayoutQueryData on MediaQueryData {
-  LayoutType get layout {
-    if (preferences.layoutOverride.value == "mobile") {
-      return LayoutType.mobile;
-    }
-
-    if (preferences.layoutOverride.value == "desktop") {
-      return LayoutType.desktop;
-    }
-
-    if (PlatformUtils.isWeb && Layout._isWebDesktop()) {
-      return LayoutType.desktop;
-    }
-
-    if (PlatformUtils.isAndroid || PlatformUtils.isWeb) {
-      if (Layout.isPhoneSized(
-          width: size.width,
-          screenShortestSide: screenShortestSide,
-          scale: preferences.appScale.value)) {
-        return LayoutType.mobile;
-      }
-    }
-
-    return LayoutType.desktop;
-  }
+  LayoutType get layout => size.layout;
 
   bool get mobile {
     return layout == LayoutType.mobile;

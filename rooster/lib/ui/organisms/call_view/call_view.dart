@@ -158,7 +158,7 @@ class _CallViewState extends State<CallView> {
     // Touch keeps touch-sized buttons that are always there; with a mouse
     // the row only shows on hover. An unfolded foldable has the desktop
     // layout and no mouse: going by the layout hid its buttons for good.
-    final touch = MediaQuery.of(context).touchControls;
+    final touch = MediaQuery.sizeOf(context).touchControls;
     final buttonRadius = touch ? 24.0 : 18.0;
     final buttonIconSize = buttonRadius * 1.2;
     return MouseRegion(
@@ -192,7 +192,7 @@ class _CallViewState extends State<CallView> {
                         session: widget.currentSession,
                         actions: controlActions,
                         radius: buttonRadius,
-                        compact: MediaQuery.of(context).mobile,
+                        compact: MediaQuery.sizeOf(context).mobile,
                         boothOpen: _boothOpen,
                         onToggleBooth: _dj == null
                             ? null

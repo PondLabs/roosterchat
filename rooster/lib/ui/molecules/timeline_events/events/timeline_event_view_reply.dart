@@ -51,7 +51,10 @@ class _TimelineEventViewReplyState extends State<TimelineEventViewReply> {
 
     if (replyEvent == null) {
       loading = true;
-      widget.timeline.room.getEvent(e.relatedEventId!).then((value) {
+      // Through the timeline, which keeps what it fetched: the quote used
+      // to fetch the event again (store, then server) every time it was
+      // scrolled into view.
+      widget.timeline.fetchEventById(e.relatedEventId!).then((value) {
         if (mounted && value != null) {
           setStateFromEvent(value);
         }

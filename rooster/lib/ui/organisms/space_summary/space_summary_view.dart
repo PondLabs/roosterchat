@@ -321,7 +321,7 @@ class SpaceSummaryViewState extends State<SpaceSummaryView> {
     return Stack(
       children: [
         Padding(
-          padding: MediaQuery.of(context).desktop
+          padding: MediaQuery.sizeOf(context).desktop
               ? EdgeInsetsGeometry.only(left: 8, right: 8)
               : EdgeInsetsGeometry.zero,
           child: DecoratedBox(
@@ -423,7 +423,7 @@ class SpaceSummaryViewState extends State<SpaceSummaryView> {
   }
 
   Widget buildChildrenList() {
-    bool showHandles = MediaQuery.of(context).desktop && canChangeOrder;
+    bool showHandles = MediaQuery.sizeOf(context).desktop && canChangeOrder;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
@@ -436,7 +436,7 @@ class SpaceSummaryViewState extends State<SpaceSummaryView> {
             var key = ValueKey(item.id);
 
             var pad = EdgeInsets.fromLTRB(0, 0, showHandles ? 50 : 0, 0);
-            if (MediaQuery.of(context).mobile) {
+            if (MediaQuery.sizeOf(context).mobile) {
               return ReorderableDelayedDragStartListener(
                   key: key,
                   enabled: canChangeOrder,

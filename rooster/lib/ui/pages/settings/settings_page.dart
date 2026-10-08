@@ -18,10 +18,10 @@ class SettingsPage extends StatelessWidget {
   }
 
   Widget pickChatView(BuildContext context) {
-    if (MediaQuery.of(context).desktop) {
+    if (MediaQuery.sizeOf(context).desktop) {
       return DesktopSettingsPage(settings: settings, buttons: buttons);
     }
-    if (MediaQuery.of(context).mobile) {
+    if (MediaQuery.sizeOf(context).mobile) {
       return MobileSettingsPage(settings: settings, buttons: buttons);
     }
 

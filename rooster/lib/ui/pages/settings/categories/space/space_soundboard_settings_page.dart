@@ -55,7 +55,7 @@ Future<void> showSpaceSoundboardDialog(
     scrollable: false,
     builder: (context) {
       final size = MediaQuery.sizeOf(context);
-      final desktop = MediaQuery.of(context).desktop;
+      final desktop = MediaQuery.sizeOf(context).desktop;
       return SizedBox(
         width: desktop ? math.min(680, size.width - 80) : size.width,
         height: math.min(640, size.height * (desktop ? 0.8 : 0.7)),

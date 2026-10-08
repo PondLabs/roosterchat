@@ -125,7 +125,7 @@ class _ContextMenuOverlayState extends State<ContextMenuOverlay>
     var view = WidgetsBinding.instance.platformDispatcher.views.first;
     var viewSize = view.physicalSize;
 
-    var scale = (tiamat.getAppScale?.call() ?? 1.0)  * view.devicePixelRatio;
+    var scale = (tiamat.getAppScale?.call() ?? 1.0) * view.devicePixelRatio;
 
     if (calculatedOffset == null) {
       return Container(
@@ -212,11 +212,17 @@ class ContextMenu extends StatefulWidget {
       {super.key,
       required this.child,
       this.separator,
-      required this.items,
+      this.items = const [],
+      this.itemsBuilder,
       this.modal = false});
 
   final Seperator? separator;
   final List<ContextMenuItem> items;
+
+  /// The items, made when the menu opens, for a menu whose items are
+  /// costly to make and change (a message's): given this, [items] is not
+  /// read.
+  final List<ContextMenuItem> Function()? itemsBuilder;
   final Widget child;
   final bool modal;
 
@@ -253,7 +259,7 @@ class _ContextMenuState extends State<ContextMenu> {
               data: Theme.of(context),
               child: ContextMenuOverlay(
                 globalOffset: mousePosition,
-                items: widget.items,
+                items: widget.itemsBuilder?.call() ?? widget.items,
                 close: removeOverlay,
               ),
             ),

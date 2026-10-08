@@ -9,6 +9,8 @@ import 'package:rooster/client/components/push_notification/modifiers/suppress_a
 import 'package:rooster/client/components/push_notification/modifiers/suppress_other_device_active.dart';
 import 'package:rooster/client/components/push_notification/notification_content.dart';
 import 'package:rooster/client/components/push_notification/notifier.dart';
+import 'package:rooster/client/components/push_notification/web/web_notifier_stub.dart'
+    if (dart.library.js_interop) 'package:rooster/client/components/push_notification/web/web_notifier.dart';
 import 'package:rooster/client/components/push_notification/windows/windows_notifier.dart';
 import 'package:rooster/config/build_config.dart';
 import 'package:rooster/config/platform_utils.dart';
@@ -74,6 +76,10 @@ class NotificationManager {
 
     if (PlatformUtils.isWindows) {
       return WindowsNotifier();
+    }
+
+    if (PlatformUtils.isWeb) {
+      return createWebNotifier();
     }
 
     if (PlatformUtils.isAndroid) {

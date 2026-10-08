@@ -561,7 +561,9 @@ class UserProfileViewState extends State<UserProfileView> {
                                   crossAxisSpacing: 3,
                                   mainAxisSpacing: 3,
                                   crossAxisCount:
-                                      MediaQuery.of(context).mobile ? 5 : 10),
+                                      MediaQuery.sizeOf(context).mobile
+                                          ? 5
+                                          : 10),
                           children: [
                             for (int i = 0; i < 20; i++)
                               buildColorSchemeItem(

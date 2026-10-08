@@ -1,6 +1,8 @@
 import 'package:rooster/client/components/push_notification/android/unified_push_notifier.dart';
 import 'package:rooster/client/components/push_notification/notification_manager.dart';
 import 'package:rooster/client/components/push_notification/notifier.dart';
+import 'package:rooster/client/components/push_notification/web/web_notifier_stub.dart'
+    if (dart.library.js_interop) 'package:rooster/client/components/push_notification/web/web_notifier.dart';
 import 'package:rooster/client/components/push_notification/push_notification_component.dart';
 import 'package:rooster/config/platform_utils.dart';
 import 'package:rooster/main.dart';
@@ -40,8 +42,51 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
     notifier = NotificationManager.notifier;
   }
 
+  // Everywhere there is a notifier with something to set: push on Android,
+  // the toggles on Linux, Windows and the web (Windows had the toggles and
+  // a page that said notifications were not supported).
   bool get canConfigureNotifications =>
-      PlatformUtils.isAndroid || PlatformUtils.isLinux;
+      PlatformUtils.isAndroid ||
+      PlatformUtils.isLinux ||
+      PlatformUtils.isWindows ||
+      PlatformUtils.isWeb;
+
+  /// The browser's own permission, which only the user can grant: asked
+  /// for from here, said when it was refused (that is undone in the
+  /// browser's site settings), and when this browser has none to give.
+  Widget buildBrowserPermission() {
+    final notifier = this.notifier;
+    if (notifier is! WebNotifier) return const SizedBox();
+    final String text;
+    if (!WebNotifier.supported) {
+      text = "This browser cannot show notifications here (an http page, "
+          "or notifications turned off for the browser).";
+    } else if (notifier.hasPermission) {
+      text = "The browser shows notifications for messages that arrive "
+          "while this tab is in the background.";
+    } else if (notifier.canAsk) {
+      text = "The browser has to allow notifications first.";
+    } else {
+      text = "Notifications were refused for this site; allow them in the "
+          "browser's site settings to get them.";
+    }
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Row(
+        children: [
+          Expanded(child: tiamat.Text.labelLow(text)),
+          if (notifier.canAsk)
+            tiamat.Button(
+              text: "Allow notifications",
+              onTap: () async {
+                await notifier.requestPermission();
+                if (mounted) setState(() {});
+              },
+            ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -100,7 +145,10 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
             description:
                 "When another device or client is active, silence notifications on this device",
           ),
-        if (PlatformUtils.isLinux || PlatformUtils.isWindows)
+        if (PlatformUtils.isWeb) buildBrowserPermission(),
+        if (PlatformUtils.isLinux ||
+            PlatformUtils.isWindows ||
+            PlatformUtils.isWeb)
           Column(
             children: [
               BooleanPreferenceToggle(

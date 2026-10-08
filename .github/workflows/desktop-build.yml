@@ -1,7 +1,22 @@
 name: desktop-build
 
 # Reusable: builds the desktop bundles for the given platforms in one mode and
-# uploads each as an artifact named rooster-<version>-<platform>-<arch>-<mode>.
+# uploads each as an artifact named rooster-<version>-<os>-<arch>-<mode>.
+#
+# The platforms are windows, linux and macos (x64; macOS universal), plus
+# linux-arm64 and windows-arm64, built natively on GitHub's arm64 runners:
+# Flutter cross-builds neither Windows nor Linux, and every native dependency
+# (CEF, libwebrtc, libmpv and ANGLE, the Rust crates) has an arm64 build.
+# After the build, every native binary in the bundle is checked to be for the
+# architecture the bundle claims (tools/check_bundle_arch.py).
+#
+# windows-arm64 is accepted but cannot be built yet: Flutter 3.41.9 publishes
+# no Dart SDK (dart-sdk-windows-arm64.zip) and no engine
+# (windows-arm64-release/windows-arm64-flutter.zip) for it, so Flutter on an
+# arm64 Windows takes the x64 Dart and builds x64. The setup step says so and
+# stops rather than let an x64 build be called arm64. Everything else for it
+# (the CEF lock, cargokit, the vendored Windows video libraries, the
+# installer) is in place for when Flutter ships them.
 #
 # Also runnable by hand, on any branch, which ci.yml is not: a push to main
 # there cuts a release, so it is a costly way to find out whether a platform
@@ -20,14 +35,14 @@ on:
         required: true
         type: string
       platforms:
-        description: JSON array of platforms to build, from windows, linux and macos
+        description: JSON array of platforms to build, from windows, linux, macos, windows-arm64 and linux-arm64
         required: false
         type: string
         default: '["windows", "linux"]'
   workflow_dispatch:
     inputs:
       platforms:
-        description: JSON array of platforms to build, from windows, linux and macos
+        description: JSON array of platforms to build, from windows, linux, macos, windows-arm64 and linux-arm64
         required: false
         type: string
         default: '["macos"]'
@@ -49,20 +64,40 @@ jobs:
       fail-fast: false
       matrix:
         platform: ${{ fromJSON(inputs.platforms) }}
-    # Blacksmith has no macOS image, so that one leg runs on GitHub's.
-    runs-on: ${{ matrix.platform == 'windows' && 'windows-2025' || matrix.platform == 'macos' && 'macos-15' || 'ubuntu-24.04' }}
+    # GitHub's own runners. The arm64 images build arm64 natively.
+    runs-on: ${{ matrix.platform == 'windows' && 'windows-2025' || matrix.platform == 'windows-arm64' && 'windows-11-arm' || matrix.platform == 'linux-arm64' && 'ubuntu-24.04-arm' || matrix.platform == 'macos' && 'macos-15' || 'ubuntu-24.04' }}
     env:
-      # Flutter builds macOS release binaries for both architectures.
-      ARCH: ${{ matrix.platform == 'macos' && 'universal' || 'x64' }}
-      ASSET_NAME: rooster-${{ inputs.version }}-${{ matrix.platform }}-${{ matrix.platform == 'macos' && 'universal' || 'x64' }}-${{ inputs.build_mode }}
+      # The operating system and CPU architecture the platform name stands
+      # for. Flutter builds macOS release binaries for both architectures.
+      # (Not OS: Windows has its own OS variable, which tools read.)
+      TARGET_OS: ${{ startsWith(matrix.platform, 'windows') && 'windows' || startsWith(matrix.platform, 'linux') && 'linux' || 'macos' }}
+      TARGET_ARCH: ${{ endsWith(matrix.platform, '-arm64') && 'arm64' || matrix.platform == 'macos' && 'universal' || 'x64' }}
       # Release builds get the production application id, debug builds the
       # .develop one so both can be installed side by side.
       ROOSTER_PROD: ${{ inputs.build_mode == 'release' && '1' || '0' }}
-      BUNDLE: ${{ matrix.platform == 'windows' && format('rooster/build/windows/x64/runner/{0}', inputs.build_mode == 'debug' && 'Debug' || 'Release') || matrix.platform == 'macos' && format('rooster/build/macos/Build/Products/{0}/Rooster.app', inputs.build_mode == 'debug' && 'Debug' || 'Release') || format('rooster/build/linux/x64/{0}/bundle', inputs.build_mode) }}
-      ARCHIVE: ${{ matrix.platform == 'linux' && 'tar.gz' || 'zip' }}
+      ARCHIVE: ${{ startsWith(matrix.platform, 'linux') && 'tar.gz' || 'zip' }}
     steps:
+      # What the build is called, where Flutter puts it, and which locked CEF
+      # record it takes (the lock keys them <os>-<arch>).
+      - name: Name the build
+        shell: bash
+        run: |
+          mode='${{ inputs.build_mode }}'
+          config=Release
+          if [ "$mode" = debug ]; then config=Debug; fi
+          case "$TARGET_OS" in
+            windows) bundle="rooster/build/windows/$TARGET_ARCH/runner/$config" ;;
+            macos) bundle="rooster/build/macos/Build/Products/$config/Rooster.app" ;;
+            *) bundle="rooster/build/linux/$TARGET_ARCH/$mode/bundle" ;;
+          esac
+          {
+            echo "ASSET_NAME=rooster-${{ inputs.version }}-$TARGET_OS-$TARGET_ARCH-$mode"
+            echo "BUNDLE=$bundle"
+            echo "CEF_PLATFORM=$TARGET_OS-$TARGET_ARCH"
+          } >> "$GITHUB_ENV"
+
       - name: Enable long paths
-        if: runner.os == 'Windows'
+        if: env.TARGET_OS == 'windows'
         run: git config --global core.longpaths true
 
       - name: Checkout
@@ -71,11 +106,40 @@ jobs:
           submodules: true
 
       - name: Setup Flutter
+        if: env.TARGET_ARCH != 'arm64'
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.41.9'
           channel: stable
           cache: true
+
+      # Flutter's SDK archives for Linux and Windows are x64 only, and an x64
+      # Dart on an arm64 host builds x64 (Windows, under emulation) or does
+      # not run at all (Linux). A clone of the release tag fetches the host's
+      # own Dart SDK on first use. Windows goes through flutter.bat: the shell
+      # script always takes the x64 Dart there.
+      - name: Setup Flutter (Linux arm64)
+        if: env.TARGET_ARCH == 'arm64' && env.TARGET_OS == 'linux'
+        run: |
+          git clone --quiet --depth 1 --branch 3.41.9 https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/flutter/bin/flutter" --version
+          "$RUNNER_TEMP/flutter/bin/dart" --version 2>&1 | grep -q linux_arm64
+
+      - name: Setup Flutter (Windows arm64)
+        if: env.TARGET_ARCH == 'arm64' && env.TARGET_OS == 'windows'
+        shell: pwsh
+        run: |
+          git clone --quiet --depth 1 --branch 3.41.9 https://github.com/flutter/flutter.git "$env:RUNNER_TEMP\flutter"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "$env:RUNNER_TEMP\flutter\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & "$env:RUNNER_TEMP\flutter\bin\flutter.bat" --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $dart = & "$env:RUNNER_TEMP\flutter\bin\dart.bat" --version 2>&1 | Out-String
+          if ($dart -notmatch 'windows_arm64') {
+            throw ("Flutter took the x64 Dart SDK, which builds x64: this Flutter publishes no " +
+              "dart-sdk-windows-arm64.zip or windows-arm64 engine. Got: $dart")
+          }
 
       # cargokit builds librust_lib_rooster with cargo during the Flutter build
       - name: Setup Rust
@@ -86,41 +150,42 @@ jobs:
       # Xcode 26.1.1 or later). This only changes the SDK the app is built
       # against. The deployment target stays at 10.15.
       - name: Select Xcode 26
-        if: matrix.platform == 'macos'
+        if: env.TARGET_OS == 'macos'
         run: sudo xcode-select -s /Applications/Xcode_26.3.app
 
-      # The Blacksmith Windows image ships VS Build Tools without ATL, and
-      # flutter_local_notifications_windows needs atlbase.h.
+      # flutter_local_notifications_windows needs atlbase.h, and an arm64
+      # build the ARM64 ATL libraries, which Visual Studio installs apart.
       - name: Install ATL
-        if: matrix.platform == 'windows'
+        if: env.TARGET_OS == 'windows'
         uses: ./.github/actions/install-atl
 
-      # The locked CEF archives (about 360 MB for Windows, 675 MB for Linux)
-      # never change for a given lock.  Every tool below still verifies them.
+      # The locked CEF archives (about 360 MB for Windows, 675 MB for Linux,
+      # 335 MB and 865 MB for their arm64 builds) never change for a given
+      # lock. Every tool below still verifies them.
       - name: Cache the locked CEF archive
-        if: matrix.platform != 'macos'
+        if: env.TARGET_OS != 'macos'
         uses: actions/cache@v4
         with:
           path: .cef-cache
           key: cef-archive-${{ matrix.platform }}-${{ hashFiles('third_party/cef/cef.lock.json') }}
 
       - name: Stage locked CEF host SDK
-        if: matrix.platform == 'windows'
+        if: env.TARGET_OS == 'windows'
         shell: pwsh
         run: |
           $cache = Join-Path $env:GITHUB_WORKSPACE ".cef-cache"
           $sdk = Join-Path $env:GITHUB_WORKSPACE ".cef-sdk"
-          python tools/cef_runtime.py fetch --platform windows-x64 --cache-dir $cache
+          python tools/cef_runtime.py fetch --platform $env:CEF_PLATFORM --cache-dir $cache
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $archive = Get-ChildItem -LiteralPath $cache -Filter "*.tar.bz2" -File -Recurse | Select-Object -First 1
           if ($null -eq $archive) { throw "locked CEF archive was not fetched" }
-          python tools/cef_runtime.py stage-sdk --platform windows-x64 $archive.FullName $sdk
+          python tools/cef_runtime.py stage-sdk --platform $env:CEF_PLATFORM $archive.FullName $sdk
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           "ROOSTER_BUILD_CEF_HOST=ON" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "CEF_ROOT=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Install Linux build dependencies
-        if: runner.os == 'Linux'
+        if: env.TARGET_OS == 'linux'
         run: |
           sudo apt-get update -y
           sudo apt-get install -y ninja-build libgtk-3-dev libmpv-dev mpv ffmpeg libmimalloc-dev \
@@ -130,13 +195,13 @@ jobs:
       # is built against the locked SDK.  The runtime is staged flat (every
       # file CEF loads next to libcef.so) and stripped (1.4 GB -> 268 MB).
       - name: Stage locked CEF SDK and runtime
-        if: matrix.platform == 'linux'
+        if: env.TARGET_OS == 'linux'
         run: |
-          python3 tools/cef_runtime.py fetch --platform linux-x64 --cache-dir .cef-cache > /dev/null
-          archive=$(find .cef-cache -type f -name '*_linux64.tar.bz2' | head -n 1)
+          python3 tools/cef_runtime.py fetch --platform "$CEF_PLATFORM" --cache-dir .cef-cache > /dev/null
+          archive=$(find .cef-cache -type f -name '*.tar.bz2' | head -n 1)
           if [ -z "$archive" ]; then echo "locked CEF archive was not fetched" >&2; exit 1; fi
-          python3 tools/cef_runtime.py stage-sdk --platform linux-x64 "$archive" .cef-sdk > /dev/null
-          python3 tools/cef_runtime.py stage --platform linux-x64 --strip "$archive" .cef-runtime > /dev/null
+          python3 tools/cef_runtime.py stage-sdk --platform "$CEF_PLATFORM" "$archive" .cef-sdk > /dev/null
+          python3 tools/cef_runtime.py stage --platform "$CEF_PLATFORM" --strip "$archive" .cef-runtime > /dev/null
           {
             echo "ROOSTER_BUILD_CEF_HOST=ON"
             echo "ROOSTER_CEF_SDK_ROOT=$GITHUB_WORKSPACE/.cef-sdk"
@@ -151,31 +216,42 @@ jobs:
         working-directory: rooster
         run: >-
           dart run scripts/build_release.dart
-          --platform ${{ matrix.platform }}
+          --platform ${{ env.TARGET_OS }}
           --build_mode ${{ inputs.build_mode }}
           --version_tag ${{ inputs.version }}
           --git_hash ${{ github.sha }}
-          --build_detail ${{ matrix.platform }}-${{ env.ARCH }}
+          --build_detail ${{ env.TARGET_OS }}-${{ env.TARGET_ARCH }}
+
+      # Every native binary in the bundle is for the architecture the build
+      # claims. A prebuilt dependency that only ships x64 would otherwise
+      # land in an arm64 bundle and fail to load on the user's machine.
+      - name: Check the bundle's architecture
+        if: env.TARGET_OS != 'macos'
+        shell: bash
+        run: |
+          python=python3
+          if [ "$TARGET_OS" = windows ]; then python=python; fi
+          "$python" tools/check_bundle_arch.py --bundle "$BUNDLE" --arch "$TARGET_ARCH"
 
       # Runs the bundled host for real: opens a page, types into it, reads
       # its frames from the shared-memory ring, closes it, and checks the host
       # exits.  On Windows the '@' goes in as AltGr does (Ctrl+Alt).
       - name: Smoke-test the Linux CEF host
-        if: matrix.platform == 'linux'
+        if: env.TARGET_OS == 'linux'
         run: |
           # Ubuntu 24.04 keeps unprivileged user namespaces, which the CEF
           # sandbox needs, behind AppArmor.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           python3 tools/cef_host_smoke.py --bundle "$BUNDLE" --seconds 6 --software \
-            --type 'Rooster@ok' --png cef-smoke-linux.png
+            --type 'Rooster@ok' --png "cef-smoke-${{ matrix.platform }}.png"
 
       - name: Smoke-test the Windows CEF host
-        if: matrix.platform == 'windows'
+        if: env.TARGET_OS == 'windows'
         shell: pwsh
         run: |
           $env:ROOSTER_CEF_LOG_FILE = Join-Path $env:GITHUB_WORKSPACE "cef-windows.log"
           python tools/cef_host_smoke.py --bundle $env:BUNDLE --seconds 6 --software `
-            --type 'Rooster@ok' --png cef-smoke-windows.png
+            --type 'Rooster@ok' --png "cef-smoke-${{ matrix.platform }}.png"
           $code = $LASTEXITCODE
           if ($code -ne 0 -and (Test-Path $env:ROOSTER_CEF_LOG_FILE)) {
             Write-Output "---- CEF log ----"
@@ -187,7 +263,7 @@ jobs:
       # drag source offering text/uri-list, the mouse moved by xdotool) and
       # fails when the app does not take it.
       - name: Drag a file onto the Linux build
-        if: matrix.platform == 'linux'
+        if: env.TARGET_OS == 'linux'
         run: |
           sudo apt-get install -y libgles2 xvfb xdotool openbox python3-gi gir1.2-gtk-3.0
           xvfb-run -a -s '-screen 0 1920x1080x24' \
@@ -197,7 +273,7 @@ jobs:
       # drag, the mouse moved with the button held) and fails when the app
       # refuses it.
       - name: Drag a file onto the Windows build
-        if: matrix.platform == 'windows'
+        if: env.TARGET_OS == 'windows'
         # Windows PowerShell: its Add-Type compiles against Windows Forms
         # as it is.
         shell: powershell
@@ -207,17 +283,17 @@ jobs:
       # so every run shows whether the video plays.  YouTube may refuse
       # datacenter addresses, so this cannot fail the build.
       - name: Play a YouTube embed through the CEF host
-        if: matrix.platform != 'macos'
+        if: env.TARGET_OS != 'macos'
         continue-on-error: true
         shell: bash
         run: |
           python=python3
-          if [ "${{ matrix.platform }}" = windows ]; then python=python; fi
+          if [ "$TARGET_OS" = windows ]; then python=python; fi
           "$python" tools/cef_host_smoke.py --bundle "$BUNDLE" --youtube aqz-KE-bpKQ \
             --seconds 15 --software --png "cef-youtube-${{ matrix.platform }}.png"
 
       - name: Upload the CEF host frames
-        if: matrix.platform != 'macos' && always()
+        if: env.TARGET_OS != 'macos' && always()
         uses: actions/upload-artifact@v4
         with:
           name: cef-frames-${{ matrix.platform }}
@@ -225,7 +301,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Qualify Windows CEF artifact
-        if: matrix.platform == 'windows'
+        if: env.TARGET_OS == 'windows'
         shell: pwsh
         run: |
           $bundle = $env:BUNDLE
@@ -234,18 +310,18 @@ jobs:
           $metadata = Join-Path $env:GITHUB_WORKSPACE ".cef-metadata"
           $archive = Get-ChildItem -LiteralPath (Join-Path $env:GITHUB_WORKSPACE ".cef-cache") -Filter "*.tar.bz2" -File -Recurse | Select-Object -First 1
           if ($null -eq $archive) { throw "locked CEF archive was not cached" }
-          python tools/cef_runtime.py stage --platform windows-x64 $archive.FullName $stage --project-root $payload
+          python tools/cef_runtime.py stage --platform $env:CEF_PLATFORM $archive.FullName $stage --project-root $payload
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python tools/cef_runtime.py metadata --platform windows-x64 $stage $metadata --project-root $payload
+          python tools/cef_runtime.py metadata --platform $env:CEF_PLATFORM $stage $metadata --project-root $payload
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python tools/qualify_windows_artifact.py --bundle $bundle --metadata $metadata
+          python tools/qualify_windows_artifact.py --platform $env:CEF_PLATFORM --bundle $bundle --metadata $metadata
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Package
         shell: bash
         run: |
           mkdir -p dist
-          case "${{ matrix.platform }}" in
+          case "$TARGET_OS" in
             macos)
               # An .app is a tree of symlinks (every framework's
               # Versions/Current) around an ad-hoc signature, and anything

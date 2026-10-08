@@ -29,6 +29,12 @@ class _WidgetSessionsPanelState extends State<WidgetSessionsPanel> {
   }
 
   @override
+  void dispose() {
+    sub?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     if (WidgetComponent.currentSessions.isEmpty) return Container();
 

@@ -309,6 +309,11 @@ class MatrixBackgroundRoom implements Room {
   }
 
   @override
+  Future<Timeline> loadTimeline({String? contextEventId}) {
+    throw UnimplementedError();
+  }
+
+  @override
   int get highlightedNotificationCount => throw UnimplementedError();
 
   @override

@@ -51,12 +51,27 @@ export default {
   },
 };
 
+// An upstream that hangs must not hang the app's request with it (the GIF
+// picker waited on the browser's own limit), and one that fails must come
+// back as a response with CORS headers, not as a thrown exception the
+// browser shows the app as an opaque CORS failure.
+const UPSTREAM_TIMEOUT_MS = 8000;
+
 async function relay(upstream, cacheSeconds) {
-  const response = await fetch(upstream, {
-    cf: { cacheEverything: true, cacheTtl: cacheSeconds },
-  });
+  let response;
+  try {
+    response = await fetch(upstream, {
+      cf: { cacheEverything: true, cacheTtl: cacheSeconds },
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    });
+  } catch (error) {
+    const timedOut = error && error.name === "TimeoutError";
+    return text(timedOut ? "Upstream timed out" : "Upstream unavailable", timedOut ? 504 : 502);
+  }
   const headers = new Headers(CORS);
-  for (const name of ["Content-Type", "Content-Length", "Cache-Control"]) {
+  // Not Content-Length: the runtime may have decompressed the body, and a
+  // length that no longer matches it truncates the response.
+  for (const name of ["Content-Type", "Cache-Control"]) {
     const value = response.headers.get(name);
     if (value) headers.set(name, value);
   }

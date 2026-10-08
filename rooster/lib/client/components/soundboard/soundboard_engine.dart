@@ -74,6 +74,22 @@ class SoundboardEngine {
   /// EventIds produced locally; echoes arriving via transport are dropped.
   final Set<String> _ownEventIds = {};
 
+  /// When each sender's recent presses arrived, for [maxPressesPerWindow]:
+  /// the data channel is not a trust boundary, and a client sending presses
+  /// at tens a second churned every player this listener has.
+  final Map<String, List<int>> _recentPresses = {};
+  static const int maxPressesPerWindow = 6;
+  static const int pressWindowMs = 2000;
+
+  /// Whether [sender] may play another sound at [now]; remembers it if so.
+  bool _withinRate(String sender, int now) {
+    final recent = _recentPresses.putIfAbsent(sender, () => []);
+    recent.removeWhere((at) => now - at >= pressWindowMs);
+    if (recent.length >= maxPressesPerWindow) return false;
+    recent.add(now);
+    return true;
+  }
+
   double _userVolume = 0.8;
   double get userVolume => _userVolume;
 
@@ -163,6 +179,7 @@ class SoundboardEngine {
         : event.senderId;
     if (!clocks.isFresh(event, sender, now)) return false;
     clocks.observe(sender, event.timestampMs, now);
+    if (!_withinRate(sender, now)) return false;
     _startPlayback(
       soundId: event.soundId,
       senderId: sender,

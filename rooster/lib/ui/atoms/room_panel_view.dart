@@ -99,6 +99,14 @@ class _RoomPanelViewState extends State<RoomPanelView> {
   }
 
   @override
+  void dispose() {
+    // A list entry that went away while someone was typing kept this
+    // ticking, and itself alive, for the life of the app.
+    timer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     var shimmerColor = Theme.of(context).colorScheme.surfaceContainerHighest;
     bool shimmer = widget.loading;

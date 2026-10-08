@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:rooster/client/auth.dart';
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
+import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/pages/login/login_page_view.dart';
 import 'package:rooster/utils/debounce.dart';
@@ -132,7 +133,16 @@ class LoginPageState extends State<LoginPage> {
 
     try {
       result = await login();
-    } catch (_) {}
+    } catch (e, s) {
+      // Said, not swallowed: a throw outside the flows' own handling (the
+      // SSO flow, the profile fetch after the server accepted the login)
+      // used to stop the spinner and show nothing, with a device already
+      // made on the server.
+      Log.onError(e, s, content: "Login threw");
+      result = LoginResultError("$messageLoginFailed\n$e");
+    }
+
+    if (!mounted) return;
 
     if (!(result is LoginResultSuccess)) {
       setState(() {
@@ -146,8 +156,7 @@ class LoginPageState extends State<LoginPage> {
       LoginResultCancelled _ => "Login Cancelled",
       LoginResultAlreadyLoggedIn _ => messageAlreadyLoggedIn,
       LoginResultFailed _ => messageLoginFailed,
-      LoginResult() => throw UnimplementedError(),
-      null => throw UnimplementedError(),
+      LoginResult() => messageLoginFailed,
     };
 
     if (message != null) {

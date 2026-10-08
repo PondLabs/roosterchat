@@ -213,8 +213,14 @@ abstract class Room {
   /// Gets the color of a user based on their ID
   Color getColorOfUser(String userId);
 
-  /// Gets the timeline of a room, loading it if not yet loaded
+  /// The room's timeline, for the chat: made on the first call, kept in
+  /// [timeline] and reused, replaced (and the old one closed) when asked
+  /// for around [contextEventId].
   Future<Timeline> getTimeline({String? contextEventId});
+
+  /// A timeline of this room that the caller owns and closes: a jump to an
+  /// event, a search, an album. [timeline] is left as it is.
+  Future<Timeline> loadTimeline({String? contextEventId});
 
   /// Enables end to end encryption in a room
   Future<void> enableE2EE();

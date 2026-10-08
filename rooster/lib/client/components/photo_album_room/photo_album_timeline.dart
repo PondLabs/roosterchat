@@ -9,4 +9,7 @@ abstract class PhotoAlbumTimeline {
 
   bool get canLoadMorePhotos;
   Future<void> loadMorePhotos();
+
+  /// Lets go of the room timeline this reads and everything listening to it.
+  Future<void> dispose();
 }

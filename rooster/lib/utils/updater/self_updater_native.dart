@@ -6,6 +6,7 @@
 // and moved back if the new one will not go in, so a failure leaves the
 // build that was already working.
 import 'dart:async';
+import 'dart:ffi' show Abi;
 import 'dart:io';
 
 import 'package:archive/archive_io.dart';
@@ -44,6 +45,16 @@ bool isSelfInstallable(String platform, String executable) {
   final path = executable.replaceAll('\\', '/');
   return !_managedPrefixes.any(path.startsWith);
 }
+
+/// The architecture a build was made for, as the release names it (`x64` or
+/// `arm64`), from the ABI the build runs as. An x64 build on an arm64
+/// Windows runs under emulation and reports x64, so it keeps updating to the
+/// x64 release it was installed from; the arm64 build is a separate
+/// install.
+String archName(Abi abi) => switch (abi) {
+      Abi.windowsArm64 || Abi.linuxArm64 || Abi.macosArm64 => 'arm64',
+      _ => 'x64',
+    };
 
 /// Unpacks [archive] into [into].
 ///
@@ -89,7 +100,7 @@ Future<int> _runQuietly(String executable, List<String> arguments) async {
 
 /// The one directory an archive holds, which is the new install.
 ///
-/// `ci.yml` packs `rooster-<tag>-<platform>-x64-<mode>/` and nothing else.
+/// `ci.yml` packs `rooster-<tag>-<platform>-<arch>-<mode>/` and nothing else.
 /// Anything else is not an archive we made, and is refused rather than
 /// guessed at.
 Directory? singleRootOf(Directory unpacked) {
@@ -233,6 +244,10 @@ class NativeSelfUpdater implements SelfUpdater {
   /// [isSelfInstallable] and then download the Linux tarball.
   String get _platform => Platform.operatingSystem;
 
+  /// `x64` or `arm64`: the build this one is, so an arm64 install never
+  /// downloads the x64 archive, which would not start.
+  String get _arch => archName(Abi.current());
+
   late final UpdateTarget _target = updateTargetFor(
     File(Platform.resolvedExecutable).absolute.path,
     windows: Platform.isWindows,
@@ -261,13 +276,14 @@ class NativeSelfUpdater implements SelfUpdater {
           message: message);
 
   @override
-  Future<void> checkAndPrepare() async {
+  Future<void> checkAndPrepare({Duration? checkTimeout}) async {
     if (_running) return;
     _running = true;
     try {
       _set(UpdateStage.checking);
-      final release =
-          await UpdateRelease.fetchLatest(UpdateChecker.releasesApiUrl);
+      final release = await UpdateRelease.fetchLatest(
+          UpdateChecker.releasesApiUrl,
+          timeout: checkTimeout ?? UpdateRelease.defaultTimeout);
       if (release == null) {
         _set(UpdateStage.failed,
             message: 'Could not reach GitHub to look for updates.');
@@ -295,7 +311,7 @@ class NativeSelfUpdater implements SelfUpdater {
   }
 
   Future<void> _prepare(UpdateRelease release) async {
-    final asset = release.assetFor(_platform);
+    final asset = release.assetFor(_platform, arch: _arch);
     if (asset == null) {
       _set(UpdateStage.available,
           release: release,

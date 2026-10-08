@@ -96,10 +96,10 @@ class MatrixSessionView extends StatelessWidget {
                     ),
                   ],
                 ),
-                if (MediaQuery.of(context).desktop) verifyButton()
+                if (MediaQuery.sizeOf(context).desktop) verifyButton()
               ],
             ),
-            if (MediaQuery.of(context).mobile) Align(child: verifyButton()),
+            if (MediaQuery.sizeOf(context).mobile) Align(child: verifyButton()),
           ],
         ),
       ),

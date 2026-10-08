@@ -83,8 +83,8 @@ class _MatrixRoomAddressSettingsViewState
   }
 
   Widget aliasList() {
-    double boxSize = MediaQuery.of(context).mobile ? 40 : 30;
-    double iconSize = MediaQuery.of(context).mobile ? 25 : 20;
+    double boxSize = MediaQuery.sizeOf(context).mobile ? 40 : 30;
+    double iconSize = MediaQuery.sizeOf(context).mobile ? 25 : 20;
     return Panel(
       mode: TileType.surfaceContainer,
       child: Column(

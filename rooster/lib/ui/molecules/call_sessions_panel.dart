@@ -41,6 +41,12 @@ class _CallSessionsPanelState extends State<CallSessionsPanel> {
   }
 
   @override
+  void dispose() {
+    sub?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(

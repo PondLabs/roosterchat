@@ -122,8 +122,11 @@ class MatrixLivekitBackend {
     final selectedFocus = fociUrl.first;
     Log.d("Got Foci Url: ${fociUrl}");
 
-    final token = await room.matrixRoom.client
-        .requestOpenIdToken(room.matrixRoom.client.userID!, {});
+    // Bounded: the Join button is disabled while this runs, so a request
+    // that never answers left no way to try again.
+    final token = await room.matrixRoom.client.requestOpenIdToken(
+        room.matrixRoom.client.userID!,
+        {}).timeout(const Duration(seconds: 15));
 
     if (selectedFocus.scheme != "https") {
       throw Exception("Selected focus JWT does not use HTTPS");
@@ -142,7 +145,9 @@ class MatrixLivekitBackend {
       }
     };
 
-    var result = await http.post(uri, body: jsonEncode(body));
+    var result = await http
+        .post(uri, body: jsonEncode(body))
+        .timeout(const Duration(seconds: 15));
     if (result.statusCode != 200) {
       throw Exception("Failed to get sfu! HTTP Error ${result.statusCode}");
     }

@@ -45,6 +45,12 @@ class Session implements EventSearchSession {
   final stream = StreamController<List<TimelineEvent>>();
   String? term;
   int pages = 0;
+  bool disposed = false;
+  @override
+  Future<void> dispose() async {
+    disposed = true;
+  }
+
   @override
   bool currentlySearching = false;
   @override

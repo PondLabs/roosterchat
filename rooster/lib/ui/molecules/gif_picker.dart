@@ -125,7 +125,7 @@ class _GifPickerState extends State<GifPicker> {
 
     // Not on mobile: the keyboard would cover most of the panel
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && MediaQuery.of(context).desktop) {
+      if (mounted && MediaQuery.sizeOf(context).desktop) {
         widget.focus?.requestFocus();
       }
     });

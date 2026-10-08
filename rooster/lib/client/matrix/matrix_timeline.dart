@@ -149,24 +149,41 @@ class MatrixTimeline extends Timeline {
     }
   }
 
+  /// The event the read marker was last sent for, so the three places that
+  /// ask on every incoming message (the view when attached, again after the
+  /// frame, and every change to the newest event) make one request between
+  /// them, and none when the server already has it.
+  String? _readMarkerSentFor;
+
   @override
   void markAsRead(TimelineEvent event) async {
     var receipts = room.getComponent<MatrixReadReceiptComponent>();
     if (event.status == TimelineEventStatus.synced ||
         event.status == TimelineEventStatus.sent) {
-      await _matrixTimeline?.setReadMarker(
-          public: receipts?.usePublicReadReceiptsForRoom);
+      if (event.eventId == _readMarkerSentFor ||
+          event.eventId == _matrixRoom.fullyRead) {
+        return;
+      }
+      _readMarkerSentFor = event.eventId;
+      try {
+        await _matrixTimeline?.setReadMarker(
+            public: receipts?.usePublicReadReceiptsForRoom);
+      } catch (e, s) {
+        // Asked again next time: the server does not have it.
+        if (_readMarkerSentFor == event.eventId) _readMarkerSentFor = null;
+        Log.onError(e, s, content: "Could not set the read marker");
+        return;
+      }
 
       receipts?.handleEvent(event.eventId, room.client.self!.identifier);
     }
   }
 
   @override
-  Future<TimelineEvent?> fetchEventByIdInternal(String eventId) async {
-    var event = await _matrixRoom.getEventById(eventId);
-    if (event == null) return null;
-    return _room.convertEvent(event);
-  }
+  Future<TimelineEvent?> fetchEventByIdInternal(String eventId) =>
+      // The room's own fetch: it also asks for the key of an encrypted
+      // event this device cannot read yet.
+      _room.getEvent(eventId);
 
   Future<void> removeReaction(
       TimelineEvent reactingTo, Emoticon reaction) async {

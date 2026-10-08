@@ -78,6 +78,8 @@ class _RoomEventSearchWidgetState extends State<RoomEventSearchWidget> {
     debouncer.cancel();
     controller.dispose();
     currentSubscription?.cancel();
+    searchSession?.dispose();
+    searchSession = null;
     super.dispose();
   }
 
@@ -243,8 +245,13 @@ class _RoomEventSearchWidgetState extends State<RoomEventSearchWidget> {
     try {
       final search = widget.room.client.getComponent<EventSearchComponent>()!;
       final session = await search.createSearchSession(widget.room);
-      if (!isCurrent(revision)) return;
+      if (!isCurrent(revision)) {
+        await session.dispose();
+        return;
+      }
+      final previous = searchSession;
       searchSession = session;
+      await previous?.dispose();
       listen(session.startSearch(value), revision);
     } catch (_) {
       onSearchFailed(revision);

@@ -71,7 +71,8 @@ abstract class SelfUpdater {
 
   /// Looks for a newer release and, when there is one and [canInstall],
   /// fetches and unpacks it. Safe to call again; does nothing while busy.
-  Future<void> checkAndPrepare();
+  /// [checkTimeout] bounds the look at GitHub, not the download.
+  Future<void> checkAndPrepare({Duration? checkTimeout});
 
   /// Swaps in what [checkAndPrepare] unpacked and starts it. The caller
   /// closes the app straight after: the swap only happens once this process

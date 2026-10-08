@@ -7,6 +7,7 @@
 @TestOn('linux')
 library;
 
+import 'dart:ffi' show Abi;
 import 'dart:io';
 
 import 'package:rooster/utils/updater/self_updater_native.dart';
@@ -49,6 +50,19 @@ Future<ProcessResult> runSwap({
 }
 
 void main() {
+  test('the archive is named after the ABI the build runs as', () {
+    // An arm64 build asks for the arm64 archive: the x64 one would not start.
+    expect(archName(Abi.windowsArm64), 'arm64');
+    expect(archName(Abi.linuxArm64), 'arm64');
+    expect(archName(Abi.macosArm64), 'arm64');
+    // An x64 build, even one emulated on an arm64 Windows, stays x64.
+    expect(archName(Abi.windowsX64), 'x64');
+    expect(archName(Abi.linuxX64), 'x64');
+    expect(archName(Abi.macosX64), 'x64');
+    // Whatever this test runs as, the name is one the release has.
+    expect(['x64', 'arm64'], contains(archName(Abi.current())));
+  });
+
   late Directory root;
 
   setUp(() => root = Directory.systemTemp.createTempSync('rooster-upd-'));

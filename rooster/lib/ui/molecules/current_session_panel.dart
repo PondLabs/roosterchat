@@ -23,7 +23,7 @@ class CurrentSessionPanel extends StatefulWidget {
 }
 
 class _CurrentSessionPanelState extends State<CurrentSessionPanel> {
-  double get profileHeight => MediaQuery.of(context).mobile ? 60 : 50;
+  double get profileHeight => MediaQuery.sizeOf(context).mobile ? 60 : 50;
 
   Profile? currentUser;
 

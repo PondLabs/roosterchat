@@ -7,10 +7,35 @@ nothing is downloaded or replaced without being asked for.
 ## Where the versions come from
 
 `ci.yml` cuts a release on every push to `main`: it runs the tests, builds
-Windows and Linux through `desktop-build.yml`, works out the next tag, and
-`gh release create`s it with both archives attached. They are named
-`rooster-<tag>-<platform>-x64-<mode>.<zip|tar.gz>` and each holds a single
-top level directory of the same name, which is the bundle.
+Windows and Linux (x64 and arm64) and macOS through `desktop-build.yml`,
+works out the next tag, and `gh release create`s it with every archive
+attached. They are named `rooster-<tag>-<platform>-<arch>-<mode>.<zip|tar.gz>`
+(`x64` or `arm64`; macOS builds are `universal`) and each holds a single top
+level directory of the same name, which is the bundle.
+
+The arm64 builds are made natively on GitHub's arm64 runners (Flutter
+cross-builds neither Windows nor Linux), from a git checkout of the Flutter
+tag, since the Flutter SDK archives for Linux and Windows are x64 only. The
+same locked CEF tuple has `windowsarm64` and `linuxarm64` archives
+(`third_party/cef/cef.lock.json`), libwebrtc ships `win-arm64` and
+`linux-arm64`, the Rust crates build for the host, and the Windows video
+libraries come from a vendored `media_kit_libs_windows_video` that fetches
+arm64 libmpv and ANGLE (see `third_party/README.md`). After each build,
+`tools/check_bundle_arch.py` reads the machine field of every PE and ELF
+file in the bundle and fails the job if one is for another architecture, so
+a dependency that silently shipped x64 cannot reach a release.
+
+Linux arm64 ships today. Windows arm64 does not yet: Flutter 3.41.9
+publishes no Dart SDK and no engine for `windows-arm64` (the current stable,
+3.47.6, does), so Flutter on an arm64 Windows takes the x64 Dart and builds
+x64. `desktop-build.yml` accepts the platform and stops at that point rather
+than ship an x64 build under an arm64 name; everything else for it is in
+place. Until then Windows on Arm runs the x64 build under emulation, as it
+always has. A first try of the desktop builds with 3.47.6 (October 2026)
+got the arm64 Dart SDK on the Windows arm64 runner, but code generation
+then stalled on every platform in `build_runner build` (build_runner
+2.5.4 under that Dart), so the upgrade needs the generators brought up
+together, as a change of its own.
 
 `release.yml` is the older Commet pipeline and uploads different names
 (`rooster-windows.zip`). Nothing runs it today.
@@ -28,9 +53,9 @@ its own runner, and the release carries them beside the archives:
 
 | Platform | File | Installs to |
 |----------|------|-------------|
-| Windows | `rooster-<tag>-windows-x64-setup.exe` (Inno Setup, `rooster/windows/installer/rooster.iss`) | `%LOCALAPPDATA%\Programs\Rooster`, Start menu shortcut, uninstall entry. No admin. |
+| Windows | `rooster-<tag>-windows-x64-setup.exe` (Inno Setup, `rooster/windows/installer/rooster.iss`; `/DArch=arm64` makes the arm64 one, once there is an arm64 build) | `%LOCALAPPDATA%\Programs\Rooster`, Start menu shortcut, uninstall entry. No admin. The x64 installer also installs on Windows on Arm, under emulation. |
 | macOS | `rooster-<tag>-macos-universal.dmg` | Wherever `Rooster.app` is dragged; Applications is offered. |
-| Linux | `rooster-<tag>-linux-x64-setup.sh` (`rooster/linux/installer/setup.sh` with the bundle appended) | `~/.local/opt/Rooster`, a launcher entry, an icon, `~/.local/bin/rooster`. No root. `--uninstall` removes it. |
+| Linux | `rooster-<tag>-linux-x64-setup.sh` and `rooster-<tag>-linux-arm64-setup.sh` (`rooster/linux/installer/setup.sh` with the bundle appended) | `~/.local/opt/Rooster`, a launcher entry, an icon, `~/.local/bin/rooster`. No root. `--uninstall` removes it. The script refuses a bundle built for another CPU. |
 
 Every one installs somewhere the user owns, so the updater below can replace
 it. That is also why there is no .deb: `/usr` belongs to the package manager.
@@ -58,7 +83,7 @@ first frame.
 | Where | What |
 |-------|------|
 | `lib/utils/update_checker.dart` | The startup check and the "update available" alert. Runs once per launch from the home screen, only when `preferences.checkForUpdates` is true. |
-| `lib/utils/updater/update_release.dart` | A release and its assets, and picking the archive for this platform. Release builds only: a debug bundle is not an update. |
+| `lib/utils/updater/update_release.dart` | A release and its assets, and picking the archive for this platform and architecture. Release builds only: a debug bundle is not an update. |
 | `lib/utils/updater/self_updater.dart` | The stages the button shows, and the platform switch. |
 | `lib/utils/updater/self_updater_native.dart` | Desktop: download, verify, unpack, swap. |
 | `lib/ui/organisms/update_button.dart` | The button in general settings. |
@@ -79,7 +104,10 @@ a .deb or a distro package (`/usr`), a snap and a nix store path all belong to
 something else and are refused (`isSelfInstallable`); so are Android and the
 web. There, the button opens the release page, which is all the app ever did.
 
-1. **Download** the archive for this platform to `.rooster-update/<tag>/`
+1. **Download** the archive for this platform and architecture (the ABI the
+   build runs as, `Abi.current()`: an arm64 build takes the arm64 archive,
+   an x64 build the x64 one, also when it is running under emulation on an
+   arm64 Windows) to `.rooster-update/<tag>/`
    beside the install, or the temp directory when that is not writable.
    Beside it means putting it in place is a rename rather than a copy
    between filesystems. Where the install is comes from `updateTargetFor`

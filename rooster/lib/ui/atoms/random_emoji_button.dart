@@ -53,7 +53,7 @@ class _RandomEmojiButtonState extends State<RandomEmojiButton> {
             });
           },
           onTap: () {
-            if (MediaQuery.of(context).mobile) {
+            if (MediaQuery.sizeOf(context).mobile) {
               setState(() {
                 newRandomEmoji();
               });

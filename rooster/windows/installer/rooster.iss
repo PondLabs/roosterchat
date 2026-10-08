@@ -1,6 +1,6 @@
-; The Windows installer: rooster-<tag>-windows-x64-setup.exe, built by
+; The Windows installer: rooster-<tag>-windows-<arch>-setup.exe, built by
 ; .github/workflows/installers.yml with
-;   iscc /DVersion=<tag> /DSource=<release bundle> /DOutput=<dir> /DOutputName=<name> rooster.iss
+;   iscc /DVersion=<tag> /DArch=<x64|arm64> /DSource=<release bundle> /DOutput=<dir> /DOutputName=<name> rooster.iss
 ;
 ; Per user, no elevation, into %LOCALAPPDATA%\Programs\Rooster: the same place
 ; the updater moves a build run from a zip to, and one it can replace without
@@ -11,6 +11,12 @@
 
 #ifndef Version
   #define Version "v0.0.0"
+#endif
+; The architecture the bundle was built for. The arm64 installer only runs
+; on Windows on Arm; the x64 one also installs there, under emulation, as
+; it always has, for whoever wants it.
+#ifndef Arch
+  #define Arch "x64"
 #endif
 
 [Setup]
@@ -23,8 +29,13 @@ DefaultDirName={localappdata}\Programs\Rooster
 DisableDirPage=yes
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
+#if Arch == "arm64"
+ArchitecturesAllowed=arm64
+ArchitecturesInstallIn64BitMode=arm64
+#else
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+#endif
 UninstallFilesDir={localappdata}\Programs\.rooster-uninstall
 UninstallDisplayIcon={app}\rooster.exe
 UninstallDisplayName=Rooster

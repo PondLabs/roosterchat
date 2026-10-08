@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:rooster/client/components/activities/activities_component.dart';
 import 'package:rooster/client/components/soundboard/entrance_sound.dart';
+import 'package:rooster/client/components/voip/media_capture_support.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip_room/voip_room_component.dart';
 import 'package:rooster/debug/log.dart';
@@ -217,7 +218,11 @@ class _VoipRoomViewState extends State<VoipRoomView> {
                               "It's quiet in here. Pull up a chair.")))),
             ),
           ),
-        if (widget.voip.canJoinCall)
+        if (!supportsMediaCapture)
+          const Center(
+              child: tiamat.Text.labelLow(
+                  "Voice needs a secure page: open Rooster over HTTPS to join"))
+        else if (widget.voip.canJoinCall)
           Center(
             child: tiamat.Button(
               isLoading: joining,
@@ -227,8 +232,8 @@ class _VoipRoomViewState extends State<VoipRoomView> {
                   withoutEntranceSound:
                       HardwareKeyboard.instance.isShiftPressed),
             ),
-          ),
-        if (!widget.voip.canJoinCall)
+          )
+        else
           Center(
               child: tiamat.Text.labelLow(
                   "You do not have permission to join this call"))
@@ -333,6 +338,8 @@ class _VoipRoomViewState extends State<VoipRoomView> {
   }
 
   joinRoomCall({bool withoutEntranceSound = false}) async {
+    // No capture on this origin (an http page): nothing to join with.
+    if (!supportsMediaCapture) return;
     final roomId = widget.voip.room.identifier;
     setState(() {
       joining = true;

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:ui';
 
-import 'package:rooster/utils/image_utils.dart';
 import 'package:rooster/utils/mime.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -76,18 +75,24 @@ class LODImageProvider extends ImageProvider<String> {
     return completer!;
   }
 
-  Future<void> fetchThumbnail() async {
+  /// Makes sure there is a completer to fetch through: resolving creates
+  /// one (through the image cache, which keeps it alive while the image is
+  /// cached) without leaving a listener on it, which is what used to keep
+  /// every image fetched this way decoded, and animating, for ever.
+  void _ensureCompleter() {
     if (completer == null) {
-      ImageUtils.imageProviderToImage(this);
+      resolve(const ImageConfiguration());
     }
+  }
+
+  Future<void> fetchThumbnail() async {
+    _ensureCompleter();
 
     await completer?.fetchThumbnail();
   }
 
   Future<void> fetchFullRes() async {
-    if (completer == null) {
-      ImageUtils.imageProviderToImage(this);
-    }
+    _ensureCompleter();
 
     await completer?.fetchFullRes();
   }

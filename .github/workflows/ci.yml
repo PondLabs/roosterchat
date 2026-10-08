@@ -1,9 +1,12 @@
 name: ci
 
-# Every push to main: tests and the Windows, Linux and macOS release builds
-# start at once (the builds only need the version), the installers are made
-# from the builds (installers.yml), and publishing the GitHub release waits
-# for all of them and the cross-platform stability workload.
+# Every push to main: tests and the Windows, Linux (x64 and arm64) and macOS
+# release builds start at once (the builds only need the version), the
+# installers are made from the builds (installers.yml), and publishing the
+# GitHub release waits for all of them and the cross-platform stability
+# workload. No Windows arm64 build yet: Flutter 3.41.9 publishes no Dart SDK
+# or engine for it (see desktop-build.yml); Windows on Arm runs the x64
+# build under emulation, as it always has.
 # The debug bundles only run when the workflow is
 # started by hand with them ticked; attaching the debug bundles waits for the
 # release and the debug builds.
@@ -67,7 +70,7 @@ jobs:
       - name: Verify locked CEF release inputs
         run: |
           python3 tools/cef_runtime.py validate-lock
-          python3 -m unittest tools.test_cef_runtime tools.test_cef_host_contract
+          python3 -m unittest tools.test_cef_runtime tools.test_cef_host_contract tools.test_check_bundle_arch
 
       - name: Setup Rust
         if: steps.find.outputs.rust_crates != '' || steps.find.outputs.dart == 'true'
@@ -177,7 +180,7 @@ jobs:
     with:
       build_mode: release
       version: ${{ needs.version.outputs.version }}
-      platforms: '["windows", "linux", "macos"]'
+      platforms: '["windows", "linux", "macos", "linux-arm64"]'
 
   # An installer per platform, each on its own runner, from the builds above.
   installers:
@@ -226,7 +229,7 @@ jobs:
     with:
       build_mode: debug
       version: ${{ needs.version.outputs.version }}
-      platforms: '["windows", "linux", "macos"]'
+      platforms: '["windows", "linux", "macos", "linux-arm64"]'
 
   attach-debug:
     needs: [version, publish, build-debug]

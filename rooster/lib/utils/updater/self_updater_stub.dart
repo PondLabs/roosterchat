@@ -13,7 +13,7 @@ class _NoSelfUpdater implements SelfUpdater {
   bool get canInstall => false;
 
   @override
-  Future<void> checkAndPrepare() async {}
+  Future<void> checkAndPrepare({Duration? checkTimeout}) async {}
 
   @override
   Future<bool> installAndRestart() async => false;

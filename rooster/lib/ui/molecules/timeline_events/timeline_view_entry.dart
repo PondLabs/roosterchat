@@ -301,6 +301,79 @@ class TimelineViewEntryState extends State<TimelineViewEntry>
     }
   }
 
+  /// The right-click menu's items, made when the menu opens: the menu
+  /// walks every space the room is in and every emoticon pack three times
+  /// over, and this used to run for every built entry on every rebuild of
+  /// the timeline (every incoming message, every hover).
+  List<ContextMenuItem> _desktopMenuItems(TimelineEvent event) {
+    var menu = TimelineEventMenu(
+        timeline: widget.timeline,
+        event: event,
+        context: context,
+        setEditingEvent: widget.setEditingEvent,
+        setReplyingEvent: widget.setReplyingEvent);
+    final items = <ContextMenuItem>[
+      if (menu.addReactionAction != null)
+        ContextMenuItem(
+          text: "Add Reaction",
+          customBuilder: (context, onClick, {closeMenu}) => Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                for (var i = 0; i < 3 && i < menu.recentReactions.length; i++)
+                  InkWell(
+                      onTap: () {
+                        widget.timeline.room
+                            .addReaction(event, menu.recentReactions[i]);
+                        onClick();
+                      },
+                      child: SizedBox(
+                          height: 30,
+                          width: 30,
+                          child: EmojiWidget(menu.recentReactions[i]))),
+                tiamat.IconButton(
+                  icon: Icons.add_reaction,
+                  size: 24,
+                  onPressed: () {
+                    onClick();
+
+                    AdaptiveDialog.show(
+                      context,
+                      builder: (newContext) {
+                        return SizedBox(
+                            width: 500,
+                            height: 500,
+                            child: menu.addReactionAction!.secondaryMenuBuilder!
+                                .call(
+                              newContext,
+                              () {
+                                Navigator.of(newContext).pop();
+                              },
+                            ));
+                      },
+                    );
+                    menu.addReactionAction?.action?.call(context);
+                  },
+                )
+              ],
+            ),
+          ),
+        ),
+      for (var i in menu.primaryActions)
+        ContextMenuItem(
+            text: i.name,
+            icon: i.icon,
+            onPressed: () => i.action?.call(context)),
+      for (var i in menu.secondaryActions)
+        ContextMenuItem(
+            text: i.name,
+            icon: i.icon,
+            onPressed: () => i.action?.call(context))
+    ];
+    return items;
+  }
+
   @override
   Widget build(BuildContext context) {
     BenchmarkValues.numTimelineEventsBuilt += 1;
@@ -405,14 +478,14 @@ class TimelineViewEntryState extends State<TimelineViewEntry>
       );
     }
 
-    if (MediaQuery.of(context).desktop) {
+    if (MediaQuery.sizeOf(context).desktop) {
       result = MouseRegion(
         onEnter: (_) => widget.onEventHovered?.call(eventId),
         child: result,
       );
     }
 
-    if (MediaQuery.of(context).mobile) {
+    if (MediaQuery.sizeOf(context).mobile) {
       result = InkWell(
         onLongPress: () {
           var event = widget.timeline.tryGetEvent(eventId);
@@ -443,77 +516,11 @@ class TimelineViewEntryState extends State<TimelineViewEntry>
       );
     }
 
-    if (MediaQuery.of(context).desktop) {
+    if (MediaQuery.sizeOf(context).desktop) {
       var event = widget.timeline.tryGetEvent(eventId);
       if (event != null) {
-        var menu = TimelineEventMenu(
-            timeline: widget.timeline,
-            event: event,
-            context: context,
-            setEditingEvent: widget.setEditingEvent,
-            setReplyingEvent: widget.setReplyingEvent);
-        result = AdaptiveContextMenu(items: [
-          if (menu.addReactionAction != null)
-            ContextMenuItem(
-              text: "Add Reaction",
-              customBuilder: (context, onClick, {closeMenu}) => Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    for (var i = 0;
-                        i < 3 && i < menu.recentReactions.length;
-                        i++)
-                      InkWell(
-                          onTap: () {
-                            widget.timeline.room
-                                .addReaction(event, menu.recentReactions[i]);
-                            onClick();
-                          },
-                          child: SizedBox(
-                              height: 30,
-                              width: 30,
-                              child: EmojiWidget(menu.recentReactions[i]))),
-                    tiamat.IconButton(
-                      icon: Icons.add_reaction,
-                      size: 24,
-                      onPressed: () {
-                        onClick();
-
-                        AdaptiveDialog.show(
-                          context,
-                          builder: (newContext) {
-                            return SizedBox(
-                                width: 500,
-                                height: 500,
-                                child: menu
-                                    .addReactionAction!.secondaryMenuBuilder!
-                                    .call(
-                                  newContext,
-                                  () {
-                                    Navigator.of(newContext).pop();
-                                  },
-                                ));
-                          },
-                        );
-                        menu.addReactionAction?.action?.call(context);
-                      },
-                    )
-                  ],
-                ),
-              ),
-            ),
-          for (var i in menu.primaryActions)
-            ContextMenuItem(
-                text: i.name,
-                icon: i.icon,
-                onPressed: () => i.action?.call(context)),
-          for (var i in menu.secondaryActions)
-            ContextMenuItem(
-                text: i.name,
-                icon: i.icon,
-                onPressed: () => i.action?.call(context))
-        ], child: result);
+        result = AdaptiveContextMenu(
+            itemsBuilder: () => _desktopMenuItems(event), child: result);
       }
     }
 

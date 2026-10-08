@@ -66,7 +66,7 @@ class _SoundboardButtonState extends State<SoundboardButton> {
           imageFor: (emoji) => soundboardEmojiImage(emoji, ctrl.session.client),
           // Also an unfolded foldable or a tablet whose browser names
           // itself a computer.
-          touch: MediaQuery.of(context).touchControls,
+          touch: MediaQuery.sizeOf(context).touchControls,
           onAddSound: (source) {
             final soundboard = ctrl.soundboardOf(source);
             if (soundboard == null) return;
