@@ -434,23 +434,46 @@ class MatrixLivekitVoipSession
   /// Back in LiveKit after [_stepOut]: our membership goes up again. Our
   /// clear has gone through by then, so this lands after it, whether or not
   /// sync has shown it yet.
+  /// Coming back is tried from the one-second connection watch, so a
+  /// homeserver that refuses the write (rate limited, slow, the network
+  /// still flapping) is asked again after a wait that doubles from five
+  /// seconds to a minute, not once a second.
+  DateTime? _lastComeBackAttempt;
+  int _comeBackFailures = 0;
+
+  Duration get _comeBackRetryInterval {
+    final doublings = min(max(_comeBackFailures - 1, 0), 4);
+    return const Duration(seconds: 5) * (1 << doublings);
+  }
+
   Future<void> _comeBack() async {
     final membership = _lastMembership;
     if (!_steppedOut || membership == null || _leaving) return;
+    if (_comeBackFailures > 0 &&
+        !_waited(_lastComeBackAttempt, _comeBackRetryInterval)) {
+      return;
+    }
+    _lastComeBackAttempt = _now();
     final now = _membershipTime();
-    await room.matrixRoom.client.setRoomStateWithKey(
-      room.matrixRoom.id,
-      MatrixVoipRoomComponent.callMemberStateEvent,
-      _ownMembershipKey,
-      MatrixCallMembership.withPublishedState(membership,
-          media: _localLiveMedia,
-          voiceState: _localVoiceState,
-          away: _idleWatcher.isAway.value,
-          dj: _localDj,
-          joinedAt: _joinedAt ?? now,
-          now: now,
-          window: _window),
-    );
+    try {
+      await room.matrixRoom.client.setRoomStateWithKey(
+        room.matrixRoom.id,
+        MatrixVoipRoomComponent.callMemberStateEvent,
+        _ownMembershipKey,
+        MatrixCallMembership.withPublishedState(membership,
+            media: _localLiveMedia,
+            voiceState: _localVoiceState,
+            away: _idleWatcher.isAway.value,
+            dj: _localDj,
+            joinedAt: _joinedAt ?? now,
+            now: now,
+            window: _window),
+      );
+    } catch (_) {
+      _comeBackFailures += 1;
+      rethrow;
+    }
+    _comeBackFailures = 0;
     _steppedOut = false;
     Log.i("Livekit is back, in the call's member list again");
   }
@@ -1386,7 +1409,12 @@ class MatrixLivekitVoipSession
       // First, so no membership write lands after the clear below: leaving
       // unpublishes our tracks, which would schedule one.
       _idleWatcher.isAway.removeListener(_publishMembershipState);
-      await _membershipPublisher.stop();
+      // Bounded like the heartbeat below it: a membership write stalled on
+      // a dead network kept the hang up (and the button) waiting on the
+      // SDK's own timeout.
+      await _membershipPublisher
+          .stop()
+          .timeout(const Duration(seconds: 5), onTimeout: () {});
       // Likewise a heartbeat that is restoring our membership.
       heartbeatTimer?.cancel();
       await _heartbeatInFlight?.timeout(const Duration(seconds: 5),
@@ -1421,6 +1449,15 @@ class MatrixLivekitVoipSession
       state = VoipState.ended;
       _volumeTimer?.cancel();
       _volumeTimer = null;
+      // Also when a step above threw: left running, the watchdog ticked
+      // every second and the settings listener restarted noise suppression
+      // against a disposed room, for the life of the app.
+      heartbeatTimer?.cancel();
+      heartbeatTimer = null;
+      _settingsSub?.cancel();
+      _settingsSub = null;
+      _dspWatchdog?.cancel();
+      _dspWatchdog = null;
       _stateChanged.add(());
       _onConnectionChanged.add(state);
 
