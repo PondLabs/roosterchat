@@ -424,8 +424,8 @@ class Preferences {
   BoolPreference showRoomsInSidebar =
       BoolPreference("show_rooms_in_sidebar", defaultValue: false);
 
-  /// The rail under the spaces: who is in a voice channel right now, and a
-  /// chair to pull up when nobody is (docs/whos-around-rail.md).
+  /// The top of the Home screen's list: who is in a voice channel right
+  /// now, and the quiet channels to pull up a chair in (docs/whos-around.md).
   BoolPreference showWhosAround =
       BoolPreference("show_whos_around", defaultValue: true);
 

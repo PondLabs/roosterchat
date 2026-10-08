@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/client_manager.dart';
+import 'package:rooster/client/live_voice_channels.dart';
 import 'package:rooster/client/components/direct_messages/direct_message_component.dart';
 import 'package:rooster/client/components/invitation/invitation_component.dart';
 import 'package:rooster/client/components/profile/profile_component.dart';
@@ -70,6 +71,10 @@ class MainPageState extends State<MainPage> {
   late INotifyingList<Room> singleRooms;
 
   late INotifyingList<Room> directMessages;
+
+  /// Who is in a voice channel right now, for the Home screen's list
+  /// (docs/whos-around.md).
+  late final LiveVoiceChannels liveVoice;
 
   StreamSubscription? onSpaceUpdateSubscription;
   StreamSubscription? onRoomUpdateSubscription;
@@ -185,6 +190,8 @@ class MainPageState extends State<MainPage> {
       clientManager.rooms.onListUpdated
     ]);
 
+    liveVoice = LiveVoiceChannels(clientManager);
+
     ServicesBinding.instance.keyboard.addHandler(_onKeyPressed);
 
     // backgroundTaskManager.onListUpdate.listen((event) {
@@ -264,6 +271,7 @@ class MainPageState extends State<MainPage> {
     for (final sub in _eventBusSubscriptions) {
       sub.cancel();
     }
+    liveVoice.dispose();
     ServicesBinding.instance.keyboard.removeHandler(_onKeyPressed);
     super.dispose();
   }

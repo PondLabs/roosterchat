@@ -1,15 +1,16 @@
-// The rail under the spaces as the user sees it (docs/whos-around-rail.md):
-// a bubble per voice channel, the ones with people in them first with their
-// faces, the quiet ones dimmed; "+N" past eight of them; nothing without a
-// voice channel anywhere.
+// The top of the Home screen's list as the user sees it
+// (docs/whos-around.md): the voice channels with people in them, with a
+// button to join them; the quiet ones under "Pull up a chair"; nothing
+// without a voice channel anywhere, or with the setting off.
 import 'dart:async';
 
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/room_component.dart';
+import 'package:rooster/client/components/voip_room/voip_room_component.dart';
 import 'package:rooster/client/live_voice_channels.dart';
 import 'package:rooster/client/member.dart';
 import 'package:rooster/main.dart';
-import 'package:rooster/ui/organisms/side_navigation_bar/whos_around_rail.dart';
+import 'package:rooster/ui/organisms/home_screen/whos_around_section.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -53,6 +54,15 @@ class _Client implements Client {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// A channel we can join.
+class _Voip implements VoipRoomComponent {
+  @override
+  bool get canJoinCall => true;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 class _Room implements Room {
   _Room(this.client, this.identifier, this.displayName);
 
@@ -65,6 +75,8 @@ class _Room implements Room {
   @override
   final String displayName;
 
+  final _Voip voip = _Voip();
+
   @override
   ImageProvider? get avatar => null;
 
@@ -75,7 +87,7 @@ class _Room implements Room {
   Future<Member> fetchMember(String id) async => getMemberOrFallback(id);
 
   @override
-  T? getComponent<T extends RoomComponent>() => null;
+  T? getComponent<T extends RoomComponent>() => voip is T ? voip as T : null;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -129,6 +141,7 @@ void main() {
   late _Client client;
   late _Source source;
   late List<Room> opened;
+  late List<Room> joined;
 
   setUp(() async {
     // ignore: invalid_use_of_visible_for_testing_member
@@ -137,6 +150,7 @@ void main() {
     client = _Client('client');
     source = _Source();
     opened = [];
+    joined = [];
   });
 
   _Room room(String name) =>
@@ -150,16 +164,13 @@ void main() {
         body: Align(
           alignment: Alignment.topLeft,
           child: SizedBox(
-            width: 70,
-            height: 700,
-            // Loosely, as the space column holds it.
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: WhosAroundRail(
+            width: 320,
+            child: SingleChildScrollView(
+              child: WhosAroundSection(
                 source: source,
-                width: 70,
                 filterClient: filterClient,
                 onOpen: opened.add,
+                onJoin: joined.add,
               ),
             ),
           ),
@@ -169,31 +180,57 @@ void main() {
     await tester.pump();
   }
 
-  Finder bubble(Room room) =>
+  Finder row(Room room) =>
       find.byKey(ValueKey("whos-around-client-${room.identifier}"));
 
-  Finder quietBubble(Room room) =>
+  Finder quietRow(Room room) =>
       find.byKey(ValueKey("whos-around-quiet-client-${room.identifier}"));
 
-  testWidgets('a bubble per channel with people in it, with their initials',
-      (tester) async {
+  testWidgets(
+      'lists the channels with people in them, with their initials, how '
+      'many, the space, and a button to join them', (tester) async {
     final lounge = room('Lounge');
     final games = room('Games');
+    final house = _Space(client, 'House');
     source.channels = [
-      _live(lounge, ['@alice:example.org', '@bob:example.org']),
+      _live(lounge, ['@alice:example.org', '@bob:example.org'], space: house),
       _live(games, ['@carol:example.org']),
     ];
     source.voiceChannels = [lounge, games];
     await show(tester);
 
-    expect(bubble(lounge), findsOneWidget);
-    expect(bubble(games), findsOneWidget);
+    expect(find.text(WhosAroundSection.labelWhosAround), findsOneWidget);
+    expect(row(lounge), findsOneWidget);
+    expect(row(games), findsOneWidget);
     expect(find.text('A'), findsOneWidget);
     expect(find.text('B'), findsOneWidget);
     expect(find.text('C'), findsOneWidget);
+    expect(find.text('House · 2 people'), findsOneWidget);
+    expect(find.text('1 person'), findsOneWidget);
     // A channel with people in it is not also listed as quiet.
-    expect(quietBubble(lounge), findsNothing);
-    expect(quietBubble(games), findsNothing);
+    expect(find.text(WhosAroundSection.labelPullUpAChair), findsNothing);
+    expect(quietRow(lounge), findsNothing);
+
+    await tester.tap(find.descendant(
+        of: row(games), matching: find.text(WhosAroundSection.labelJoinCall)));
+    await tester.pump();
+    expect(joined, [games]);
+
+    await tester.tap(find.text('Lounge'));
+    await tester.pump();
+    expect(opened, [lounge]);
+  });
+
+  testWidgets('the call we are in says so instead of offering to join',
+      (tester) async {
+    final lounge = room('Lounge');
+    source.channels = [
+      _live(lounge, ['@me:example.org', '@alice:example.org'], ours: true)
+    ];
+    await show(tester);
+
+    expect(find.text(WhosAroundSection.labelYouAreInHere), findsOneWidget);
+    expect(find.text(WhosAroundSection.labelJoinCall), findsNothing);
   });
 
   testWidgets("a fuller channel's fourth cell counts the rest", (tester) async {
@@ -204,136 +241,88 @@ void main() {
     await show(tester);
 
     expect(find.text('A'), findsOneWidget);
-    expect(find.text('B'), findsOneWidget);
-    expect(find.text('C'), findsOneWidget);
-    // Six in the channel: three faces and the three others counted.
     expect(find.text('+3'), findsOneWidget);
     expect(find.text('D'), findsNothing);
-  });
-
-  testWidgets('tapping a bubble opens its channel', (tester) async {
-    final lounge = room('Lounge');
-    source.channels = [
-      _live(lounge, ['@alice:example.org'])
-    ];
-    await show(tester);
-
-    await tester.tap(bubble(lounge));
-    await tester.pump();
-
-    expect(opened, [lounge]);
+    expect(find.text('6 people'), findsOneWidget);
   });
 
   testWidgets(
-      'the quiet channels show dimmed after the live ones, by their initial, '
+      'the quiet channels follow under "Pull up a chair", five at a time, '
       'and open on tap', (tester) async {
-    final lounge = room('Lounge');
-    final games = room('Games');
-    final solo = room('Solo');
-    source.channels = [
-      _live(games, ['@alice:example.org'])
-    ];
-    source.voiceChannels = [lounge, games, solo];
-    await show(tester);
-
-    expect(bubble(games), findsOneWidget);
-    expect(quietBubble(lounge), findsOneWidget);
-    expect(quietBubble(solo), findsOneWidget);
-    expect(find.text('L'), findsOneWidget);
-    expect(find.text('S'), findsOneWidget);
-    // Live first.
-    expect(tester.getTopLeft(bubble(games)).dy,
-        lessThan(tester.getTopLeft(quietBubble(lounge)).dy));
-    expect(tester.getTopLeft(quietBubble(lounge)).dy,
-        lessThan(tester.getTopLeft(quietBubble(solo)).dy));
-
-    await tester.tap(quietBubble(solo));
-    await tester.pump();
-
-    expect(opened, [solo]);
-  });
-
-  testWidgets(
-      'more than eight channels fold into +N, which lists who is around and '
-      'then the quiet ones', (tester) async {
-    final liveRooms = [
-      for (final name in ['Lounge', 'Games']) room(name)
-    ];
-    final quietRooms = [
+    final rooms = [
       for (final name in [
+        'Lounge',
+        'Games',
         'Music',
         'Movies',
         'Study',
         'Gym',
-        'Kitchen',
-        'Garage',
         'Attic'
       ])
         room(name)
     ];
     final house = _Space(client, 'House');
-    source.channels = [
-      for (final room in liveRooms) _live(room, ['@alice:example.org'])
-    ];
-    source.voiceChannels = [...liveRooms, ...quietRooms];
-    for (final room in quietRooms) {
+    source.voiceChannels = rooms;
+    for (final room in rooms) {
       source.spaces[room] = house;
     }
     await show(tester);
 
-    // Nine channels: seven bubbles and the count of the other two.
-    for (final room in liveRooms) {
-      expect(bubble(room), findsOneWidget);
+    expect(find.text(WhosAroundSection.labelWhosAround), findsNothing);
+    expect(find.text(WhosAroundSection.labelPullUpAChair), findsOneWidget);
+    for (final room in rooms.take(5)) {
+      expect(quietRow(room), findsOneWidget);
     }
-    for (final room in quietRooms.take(5)) {
-      expect(quietBubble(room), findsOneWidget);
+    for (final room in rooms.skip(5)) {
+      expect(quietRow(room), findsNothing);
     }
-    for (final room in quietRooms.skip(5)) {
-      expect(quietBubble(room), findsNothing);
-    }
-    expect(find.text('+2'), findsOneWidget);
+    expect(find.text(WhosAroundSection.labelMoreChannels(2)), findsOneWidget);
+    expect(find.text(WhosAroundSection.labelJoinCall), findsNothing);
 
-    await tester.tap(find.text('+2'));
+    await tester.tap(find.text(WhosAroundSection.labelMoreChannels(2)));
     await tester.pump();
 
-    expect(find.text(WhosAroundRail.labelWhosAround), findsOneWidget);
-    expect(find.text(WhosAroundRail.labelPullUpAChair), findsOneWidget);
-    for (final room in liveRooms) {
-      expect(find.text(room.displayName), findsOneWidget);
+    for (final room in rooms) {
+      expect(quietRow(room), findsOneWidget);
     }
-    expect(find.text(WhosAroundRail.labelPeopleInChannel(1)),
-        findsNWidgets(liveRooms.length));
-    expect(find.text('House'), findsWidgets);
-    // The list builds its rows as they scroll into view.
-    for (final room in quietRooms) {
-      await tester.scrollUntilVisible(find.text(room.displayName), 60,
-          scrollable: find.byType(Scrollable).last);
-      expect(find.text(room.displayName), findsOneWidget);
-    }
+    expect(find.text(WhosAroundSection.labelMoreChannels(2)), findsNothing);
 
     await tester.tap(find.text('Attic'));
     await tester.pump();
-
-    expect(opened, [quietRooms.last]);
-    expect(find.text(WhosAroundRail.labelWhosAround), findsNothing);
+    expect(opened, [rooms.last]);
   });
 
-  testWidgets('nothing at all without a voice channel anywhere',
-      (tester) async {
+  testWidgets('nothing without a voice channel anywhere', (tester) async {
     await show(tester);
 
-    expect(find.byType(Tooltip), findsNothing);
-    expect(tester.getSize(find.byType(WhosAroundRail)), Size.zero);
+    expect(tester.getSize(find.byType(WhosAroundSection)).height, 0);
+  });
+
+  testWidgets('nothing with the setting off', (tester) async {
+    final lounge = room('Lounge');
+    source.channels = [
+      _live(lounge, ['@alice:example.org'])
+    ];
+    await preferences.showWhosAround.set(false);
+    await show(tester);
+
+    expect(tester.getSize(find.byType(WhosAroundSection)).height, 0);
+
+    await preferences.showWhosAround.set(true);
+    // The change reaches the section's listener a microtask later.
+    await tester.pumpAndSettle();
+
+    expect(row(lounge), findsOneWidget);
   });
 
   testWidgets(
-      'follows the source: a quiet channel lights up when someone comes in, '
-      'and dims again when they leave', (tester) async {
+      'follows the source: a quiet channel moves up when someone comes in, '
+      'and back when they leave', (tester) async {
     final lounge = room('Lounge');
     source.voiceChannels = [lounge];
     await show(tester);
-    expect(quietBubble(lounge), findsOneWidget);
-    expect(bubble(lounge), findsNothing);
+    expect(quietRow(lounge), findsOneWidget);
+    expect(row(lounge), findsNothing);
 
     source.channels = [
       _live(lounge, ['@alice:example.org'])
@@ -341,16 +330,16 @@ void main() {
     source.change();
     await tester.pump();
 
-    expect(bubble(lounge), findsOneWidget);
-    expect(quietBubble(lounge), findsNothing);
+    expect(row(lounge), findsOneWidget);
+    expect(quietRow(lounge), findsNothing);
     expect(find.text('A'), findsOneWidget);
 
     source.channels = [];
     source.change();
     await tester.pump();
 
-    expect(bubble(lounge), findsNothing);
-    expect(quietBubble(lounge), findsOneWidget);
+    expect(row(lounge), findsNothing);
+    expect(quietRow(lounge), findsOneWidget);
   });
 
   testWidgets("lists one account's channels while accounts are not mixed",
@@ -366,9 +355,8 @@ void main() {
     source.voiceChannels = [lounge, theirs, theirQuiet];
     await show(tester, filterClient: client);
 
-    expect(bubble(lounge), findsOneWidget);
-    expect(find.text('A'), findsOneWidget);
-    expect(find.text('B'), findsNothing);
-    expect(find.text('Q'), findsNothing);
+    expect(row(lounge), findsOneWidget);
+    expect(find.text('Theirs'), findsNothing);
+    expect(find.text('Quiet'), findsNothing);
   });
 }

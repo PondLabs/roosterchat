@@ -2059,65 +2059,19 @@
     },
     "labelWhosAround": "Quem está por aí",
     "@labelWhosAround": {
-        "description": "Title of the list of every voice channel with people in it, opened from the rail under the spaces",
-        "type": "text",
-        "placeholders": {}
-    },
-    "labelMoreLiveChannels": "{howMany,plural, =1{mais 1 canal com gente}other{mais {howMany} canais com gente}}",
-    "@labelMoreLiveChannels": {
-        "description": "Tooltip of the +N bubble under the spaces, which stands for the voice channels with people in them that the rail has no room for",
-        "type": "text",
-        "placeholders": {
-            "howMany": {}
-        }
-    },
-    "labelQuietPullUpAChair": "Está quieto por aqui. Puxe uma cadeira.",
-    "@labelQuietPullUpAChair": {
-        "description": "Under the name of a voice channel with nobody in it, in the tooltip of its bubble under the spaces",
+        "description": "Header of the voice channels with people in them, at the top of the Home screen's list",
         "type": "text",
         "placeholders": {}
     },
     "labelPullUpAChair": "Puxe uma cadeira",
     "@labelPullUpAChair": {
-        "description": "Heading of the voice channels with nobody in them, in the list opened from the +N bubble under the spaces",
+        "description": "Header of the voice channels with nobody in them, under who's around on the Home screen",
         "type": "text",
         "placeholders": {}
     },
     "labelPeopleInChannel": "{howMany,plural, =1{1 pessoa}other{{howMany} pessoas}}",
     "@labelPeopleInChannel": {
-        "description": "How many people are in a voice channel, in the list of channels with people in them",
-        "type": "text",
-        "placeholders": {
-            "howMany": {}
-        }
-    },
-    "labelOpenChannel": "Abrir canal",
-    "@labelOpenChannel": {
-        "description": "Menu entry on a voice channel in the rail under the spaces that opens the channel's page",
-        "type": "text",
-        "placeholders": {}
-    },
-    "labelJoinCall": "Entrar na chamada",
-    "@labelJoinCall": {
-        "description": "Menu entry on a voice channel in the rail under the spaces that joins its call",
-        "type": "text",
-        "placeholders": {}
-    },
-    "labelShowWhosAround": "Mostrar quem está por aí abaixo dos espaços",
-    "@labelShowWhosAround": {
-        "description": "Label for the toggle which shows the rail under the spaces in the sidebar: the voice channels with people in them",
-        "type": "text",
-        "placeholders": {}
-    },
-    "labelShowWhosAroundDescription": "Os canais de voz com gente dentro, em todos os espaços de que você participa, e uma cadeira para puxar quando está quieto",
-    "@labelShowWhosAroundDescription": {
-        "description": "Description for the toggle which shows the rail under the spaces in the sidebar",
-        "type": "text",
-        "placeholders": {}
-    },
-    "labelAndMoreInChannel": "e mais {howMany}",
-    "@labelAndMoreInChannel": {
-        "description": "Last line of a bubble's tooltip under the spaces, for the people in the channel past the six it names",
+        "description": "How many people are in a voice channel, under its name on the Home screen",
         "type": "text",
         "placeholders": {
             "howMany": {}
@@ -2125,10 +2079,46 @@
     },
     "labelMoreChannels": "{howMany,plural, =1{mais 1 canal}other{mais {howMany} canais}}",
     "@labelMoreChannels": {
-        "description": "Tooltip of the +N bubble under the spaces, which stands for the voice channels the rail has no room for, none of them with people in it",
+        "description": "Row under the quiet voice channels on the Home screen that shows the rest of them",
         "type": "text",
         "placeholders": {
             "howMany": {}
         }
+    },
+    "labelJoinCall": "Entrar na chamada",
+    "@labelJoinCall": {
+        "description": "Button on a voice channel with people in it, on the Home screen, that joins its call",
+        "type": "text",
+        "placeholders": {}
+    },
+    "labelOpenChannel": "Abrir canal",
+    "@labelOpenChannel": {
+        "description": "Menu entry on a voice channel on the Home screen that opens the channel's page",
+        "type": "text",
+        "placeholders": {}
+    },
+    "labelYouAreInHere": "Você está aqui",
+    "@labelYouAreInHere": {
+        "description": "On the Home screen, next to the voice channel whose call we are in, where the join button would be",
+        "type": "text",
+        "placeholders": {}
+    },
+    "labelNoDirectMessages": "Nenhuma conversa ainda.",
+    "@labelNoDirectMessages": {
+        "description": "Under the Direct Messages header on the Home screen while there are none; the button beside the header starts one",
+        "type": "text",
+        "placeholders": {}
+    },
+    "labelShowWhosAround": "Mostrar quem está por aí na Home",
+    "@labelShowWhosAround": {
+        "description": "Label for the toggle which shows, at the top of the Home screen's list, the voice channels with people in them and the quiet ones",
+        "type": "text",
+        "placeholders": {}
+    },
+    "labelShowWhosAroundDescription": "No topo da lista da tela inicial: os canais de voz com gente dentro, em todos os espaços de que você participa, e os vazios para puxar uma cadeira",
+    "@labelShowWhosAroundDescription": {
+        "description": "Description for the toggle which shows who's around on the Home screen",
+        "type": "text",
+        "placeholders": {}
     }
 }
