@@ -33,14 +33,9 @@ flutter:
     - assets/images/placeholder/generic/
   shaders:
     - assets/shader/texture_coordinate.frag
-  fonts:
-    - family: EmojiFont
-      fonts: 
-        - asset: assets/font/emoji-font/NotoColorEmoji.ttf
-
-    - family: RobotoCustom
-      fonts: 
-        - asset: assets/font/roboto/Roboto-Regular.ttf
-        - asset: assets/font/roboto/Roboto-Bold.ttf
-          weight: 700
+  # No fonts: the app declares the families the themes name (EmojiFont,
+  # Roboto, NunitoSans), and a package font is registered as
+  # packages/tiamat/<family>, which nothing asks for. The 24 MB Noto Color
+  # Emoji this used to declare was downloaded before the first frame on
+  # the web, and shipped in every bundle, for nothing.
 
