@@ -19,9 +19,11 @@ cannot be picked (see [Hidden languages](#hidden-languages)).
    [glossary](#glossary) keeps it, because it is the word people actually
    use (DJ, GIF, link, soundboard).
 3. **English first.** A new feature is written in English in the code, then
-   translated into Portuguese in the same pull request. A string with no
-   translation fails `unit_test/l10n/translations_test.dart`, so the
-   Portuguese app never falls back to English.
+   translated into every language that ships (today Brazilian Portuguese)
+   in the same pull request. A string with no translation fails
+   `unit_test/l10n/translations_test.dart`, so no language ever falls back
+   to English. `AGENTS.md` at the root holds these rules for every agent
+   working in the repository.
 4. **Ready for more languages.** Nothing in the code assumes English: no
    sentences glued from pieces, no plurals made with `"s"`, no word order
    baked into string concatenation, dates and numbers formatted with `intl`.
@@ -105,9 +107,9 @@ From `rooster/`:
    `assets/l10n/intl_en.arb`, puts the other ARB files in the same order,
    drops strings the code no longer has, and lists what is missing from
    each translation.
-3. Add the Portuguese to `assets/l10n/intl_pt.arb`, with the same key and
-   the same `{placeholders}`. Plurals keep the ICU form:
-   `{howMany,plural, =1{1 som}other{{howMany} sons}}`.
+3. Translate it into every other `assets/l10n/intl_<code>.arb` (today
+   `intl_pt.arb`), with the same key and the same `{placeholders}`. Plurals
+   keep the ICU form: `{howMany,plural, =1{1 som}other{{howMany} sons}}`.
 4. `dart run scripts/codegen.dart` (or only `dart run intl_utils:generate`)
    regenerates `lib/generated/`.
 5. `flutter test unit_test/l10n` checks that the English file matches the
