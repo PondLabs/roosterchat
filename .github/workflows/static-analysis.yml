@@ -50,7 +50,9 @@ jobs:
             echo "flutter pub get failed (attempt $attempt of 3), retrying in 30 s"
             sleep 30
           done
-          rm -r lib/generated
+          # Generated code is not checked for style. Since gen-l10n went
+          # (docs/localization.md), pub get no longer creates lib/generated.
+          rm -rf lib/generated
           dart format -o none --show all --set-exit-if-changed .
         
       - name: Code Generation __φ(．．;)
