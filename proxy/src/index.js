@@ -36,11 +36,15 @@ export default {
       upstream.searchParams.set("key", env.KLIPY_API_KEY);
       upstream.searchParams.set("client_key", "rooster");
       upstream.searchParams.set("contentfilter", "medium");
-      return relay(upstream, 300);
+      // Not cached: KLIPY counts each request (measurement, ads), and a shared
+      // cache would answer users it never saw.
+      return relay(upstream, null);
     }
 
     if (path.startsWith("/proxy/klipy/media/")) {
-      return relay(`https://static.klipy.com/${path.slice(19)}`, 86400);
+      // With its query: KLIPY requires its URL parameters kept as given. Cached
+      // only as long as KLIPY's own Cache-Control says.
+      return relay(`https://static.klipy.com/${path.slice(19)}${url.search}`, undefined);
     }
 
     if (path.startsWith("/proxy/signal/stickers/")) {
@@ -57,11 +61,17 @@ export default {
 // browser shows the app as an opaque CORS failure.
 const UPSTREAM_TIMEOUT_MS = 8000;
 
+// cacheSeconds: a TTL of ours; undefined follows the upstream's Cache-Control;
+// null does not cache at all.
 async function relay(upstream, cacheSeconds) {
+  const cf =
+    cacheSeconds === null ? { cacheTtl: 0, cacheEverything: false }
+    : cacheSeconds === undefined ? {}
+    : { cacheEverything: true, cacheTtl: cacheSeconds };
   let response;
   try {
     response = await fetch(upstream, {
-      cf: { cacheEverything: true, cacheTtl: cacheSeconds },
+      cf,
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
   } catch (error) {
