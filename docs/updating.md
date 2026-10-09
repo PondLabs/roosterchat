@@ -76,7 +76,10 @@ when there is a newer release the window stays small and shows it
 downloading, then the app restarts into it. Otherwise, or when the check
 failed, it carries on and the window grows into the app
 (`WindowManagement.openMainWindow`). Only turning "check for updates" off
-stops this; not having answered yet does not. The Linux and macOS runners
+stops this; not having answered yet does not, and the first-run question
+shows the switch on and takes going past it as a yes (until October 2026 it
+showed it off and wrote a no, which also kept the home screen's check from
+ever running). The Linux and macOS runners
 open the window at the small size so it does not flash at full size first;
 the Windows one stays hidden until the first frame.
 
@@ -229,3 +232,6 @@ an install.
   wrote; updates do not change it.
 - Every push to `main` publishes a release, so "update available" is a
   frequent thing to see.
+- A new build that does not start after the swap leaves nothing to go back
+  to: the swap deletes the old one once the new one has been started, and
+  does not wait to see it open.
