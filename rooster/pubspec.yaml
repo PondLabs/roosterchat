@@ -255,6 +255,7 @@ flutter:
     - assets/js/package/
     - assets/vodozemac/
     - assets/data/
+    - assets/licenses/
   shaders: 
     - assets/shader/texture_coordinate.frag
     - assets/shader/constellation.frag
