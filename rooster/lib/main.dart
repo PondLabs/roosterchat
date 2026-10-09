@@ -149,6 +149,17 @@ void main(List<String> args) async {
   runZonedGuarded(appMain, Log.onError, zoneSpecification: Log.spec);
 }
 
+// The licence page only knows Dart packages; these are Rust crates linked
+// into the voice DSP, whose licences ask to ship their notice.
+void _registerNativeLicenses() {
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks(['DeepFilterNet'],
+        await rootBundle.loadString('assets/licenses/deep_filter_MIT.txt'));
+    yield LicenseEntryWithLineBreaks(['nnnoiseless', 'RNNoise'],
+        await rootBundle.loadString('assets/licenses/nnnoiseless_BSD.txt'));
+  });
+}
+
 void appMain() async {
   Log.prefix = "main";
   try {
@@ -160,6 +171,7 @@ void appMain() async {
     }
 
     ensureBindingInit();
+    _registerNativeLicenses();
 
     // The first thing someone who clicked Rooster sees is the loading window,
     // so they know it opened. On Windows the runner's lock already says
