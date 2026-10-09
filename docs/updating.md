@@ -126,7 +126,8 @@ web. There, the button opens the release page, which is all the app ever did.
    moves the new one in, starts it, and clears up all of `.rooster-update/`.
    If the new one will not go in, the old one is moved back — a failure
    leaves the build that was already working, starts it again and keeps
-   `install-<stamp>.log` in `.rooster-update/`.
+   `install-<stamp>.log` in `.rooster-update/`. On Linux the same happens
+   when the new one goes in but will not start (below).
 
 On Windows:
 
@@ -158,6 +159,27 @@ On Linux:
   waits 3 seconds.
 - A staged build whose executable cannot be run is refused: the Dart
   unpacker, the fallback when `tar` fails, drops the executable bit.
+- The bundle carries keybinder, which `hotkey_manager` links, as
+  `lib/libkeybinder-3.0.so.0`, and the plugin looks for it beside itself
+  (`$ORIGIN`; the executable's `$ORIGIN/lib` only covers what the
+  executable links). Most desktops do not install keybinder (Arch and
+  Manjaro, Fedora, a fresh Ubuntu), and without it the loader refuses to
+  start Rooster. Until October 2026 the bundle took the system's. On a
+  Manjaro that ran Rooster with a copy kept inside the install by hand (a
+  `local-libs/` directory, put on `LD_LIBRARY_PATH` by a launcher script),
+  every update swapped fine and then would not open, since the swap
+  replaces the install whole. `desktop-build.yml` takes keybinder off the
+  runner after the build and fails when `ldd` finds a library missing, and
+  the smoke tests after it run the bundle that way.
+- Once started, the new build is watched for ten seconds. One that exits
+  with an error in that time did not start (127 is the loader not finding
+  a library): it is taken out, the old build is moved back and started
+  again, and `did-not-start-<tag>` is left in `.rooster-update/`, so that
+  release is not fetched and swapped in again at every launch. The
+  settings page says so, and the next release is tried; a swap that works
+  clears the marker with the rest of `.rooster-update/`. Before, the old
+  build was deleted as soon as the new one had been started, and an
+  update that would not open left nothing that did.
 
 ### Where the install is
 
@@ -213,3 +235,10 @@ an install.
   wrote; updates do not change it.
 - Every push to `main` publishes a release, so "update available" is a
   frequent thing to see.
+- The Linux bundle still takes libmpv, libayatana-appindicator3 and
+  libpulse from the system. A desktop without one does not start Rooster
+  from the installer either, so it does not get as far as an update; one
+  removed later makes the new build exit as it starts, and the swap puts
+  the old one back, which will not start either.
+- On Windows a new build that will not start is not caught: a missing DLL
+  is a dialog, not an exit, and the old build is gone by then.
