@@ -7,6 +7,7 @@ import 'package:rooster/ui/molecules/profile/mini_profile_view.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/utils/debounce.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -40,6 +41,33 @@ class _SendInvitationWidgetState extends State<SendInvitationWidget> {
   List<Profile>? searchResults;
 
   bool loading = false;
+
+  String get messageRoomInviteNoUsers => Intl.message(
+      "Could not find any users",
+      name: "messageRoomInviteNoUsers",
+      desc:
+          "In the dialog that invites people to a room, when searching found nobody; a button under it still sends the invite to what was typed");
+
+  String get promptRoomInviteSend => Intl.message("Send invite",
+      name: "promptRoomInviteSend",
+      desc:
+          "Button in the invite dialog that invites the Matrix ID typed in the search field, when searching found nobody");
+
+  String get labelRoomInviteRecommended => Intl.message("Recommended",
+      name: "labelRoomInviteRecommended",
+      desc:
+          "Header in the invite dialog over the people we have direct messages with, suggested to invite");
+
+  String promptRoomInviteConfirm(String userId, String roomName) => Intl.message(
+      "Are you sure you want to invite $userId to the room $roomName?",
+      name: "promptRoomInviteConfirm",
+      args: [userId, roomName],
+      desc:
+          "Confirmation before inviting someone (their Matrix ID) to a room (its name)");
+
+  String get labelRoomInviteConfirmTitle => Intl.message("Invitation",
+      name: "labelRoomInviteConfirmTitle",
+      desc: "Title of the confirmation before inviting someone to a room");
 
   bool get showRecommendations =>
       (!(isSearching || searchResults?.isNotEmpty == true)) &&
@@ -97,9 +125,9 @@ class _SendInvitationWidgetState extends State<SendInvitationWidget> {
                 if (!isSearching && searchResults?.isEmpty == true)
                   Column(
                     children: [
-                      tiamat.Text("Could not find any users"),
+                      tiamat.Text(messageRoomInviteNoUsers),
                       tiamat.Button(
-                        text: "Send invite",
+                        text: promptRoomInviteSend,
                         onTap: () => invitePeer(controller.text),
                       )
                     ],
@@ -108,7 +136,7 @@ class _SendInvitationWidgetState extends State<SendInvitationWidget> {
                   Column(
                     children: [
                       const tiamat.Seperator(),
-                      const tiamat.Text.labelLow("Recommended"),
+                      tiamat.Text.labelLow(labelRoomInviteRecommended),
                       ListView.builder(
                         shrinkWrap: true,
                         itemCount: recommended.length,
@@ -164,9 +192,8 @@ class _SendInvitationWidgetState extends State<SendInvitationWidget> {
     }
 
     final confirm = await AdaptiveDialog.confirmation(context,
-        prompt:
-            "Are you sure you want to Invite $userId to the room ${widget.displayName}?",
-        title: "Invitation");
+        prompt: promptRoomInviteConfirm(userId, widget.displayName ?? ""),
+        title: labelRoomInviteConfirmTitle);
     if (confirm != true) {
       return;
     }

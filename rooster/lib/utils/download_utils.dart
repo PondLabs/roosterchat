@@ -9,8 +9,16 @@ import 'package:rooster/utils/background_tasks/background_task_manager.dart';
 import 'package:rooster/utils/file_utils.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 
 class DownloadFileTask implements BackgroundTaskWithOptionalProgress {
+  static String labelAppDownloadingFile(String filename) =>
+      Intl.message("Downloading '$filename'...",
+          name: "labelAppDownloadingFile",
+          args: [filename],
+          desc: "In the small task panel while a file from a chat is saved to "
+              "this device; filename is the file's name");
+
   FileProvider file;
   late String filename;
 
@@ -54,7 +62,7 @@ class DownloadFileTask implements BackgroundTaskWithOptionalProgress {
   DownloadFileTask(this.file, String? fileName) {
     filename = fileName ?? "unnamed";
 
-    this.label = "Downloading '$filename'...";
+    this.label = labelAppDownloadingFile(filename);
 
     action = navigateToFile;
   }

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
   <!--
@@ -234,9 +234,35 @@
   </div>
   <script>
     (function () {
-      var lines = ["Waking up the flock…", "Tuning the headphones…",
-        "Warming up the mics…", "Pull up a chair."];
+      // In the app's language (docs/localization.md): the one picked in
+      // settings, which shared_preferences keeps in localStorage, else the
+      // browser's first that Rooster has, else English. The lines are the
+      // loading window's (lib/ui/pages/loading/loading_page.dart).
+      var captions = {
+        en: { tag: "en", lines: ["Waking up the flock…",
+          "Tuning the headphones…", "Warming up the mics…",
+          "Pull up a chair."] },
+        pt: { tag: "pt-BR", lines: ["Acordando o galinheiro…",
+          "Ajustando os fones…", "Aquecendo os microfones…",
+          "Puxe uma cadeira."] }
+      };
+      function language() {
+        try {
+          var picked = JSON.parse(localStorage.getItem("flutter.app_language"));
+          if (captions[picked]) return captions[picked];
+        } catch (e) {}
+        var preferred = navigator.languages || [navigator.language];
+        for (var i = 0; i < preferred.length; i++) {
+          var code = String(preferred[i] || "").toLowerCase().split("-")[0];
+          if (captions[code]) return captions[code];
+        }
+        return captions.en;
+      }
+      var shown = language();
+      var lines = shown.lines;
       var caption = document.getElementById("splash-caption");
+      document.documentElement.lang = shown.tag;
+      caption.textContent = lines[0];
       if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
       var animation = new Image();
       animation.onload = function () {

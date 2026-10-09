@@ -151,6 +151,41 @@ class UserProfileViewState extends State<UserProfileView> {
       desc:
           "Show the raw data of a user profile, typically this is hidden behind developer mode");
 
+  String labelProfileLocalTime(String day, String time) =>
+      Intl.message("$day, $time",
+          name: "labelProfileLocalTime",
+          args: [day, time],
+          desc: "The time where a user is, on their profile, when it is "
+              "another day there: the weekday, then the time");
+
+  String tooltipProfileLocalTimezone(String timezone) =>
+      Intl.message("Local Timezone: $timezone",
+          name: "tooltipProfileLocalTimezone",
+          args: [timezone],
+          desc: "Tooltip of the user's local time on their profile, with "
+              "their timezone (such as America/Sao_Paulo)");
+
+  String get labelProfileColorOverrideDescription => Intl.message(
+      "Set a local color override for a user. This is only visible to you",
+      name: "labelProfileColorOverrideDescription",
+      desc: "In the dialog that picks a color to show another user's name "
+          "in, only on this device");
+
+  String get promptProfileSetNickname => Intl.message("Set Nickname",
+      name: "promptProfileSetNickname",
+      desc: "Entry in a user's profile menu: gives them a name of the user's "
+          "own choosing, only shown to the user");
+
+  String get labelProfileNickname => Intl.message("Nickname",
+      name: "labelProfileNickname",
+      desc: "Title of the dialog where the user types the nickname they give "
+          "someone");
+
+  String get labelProfileEnterColorCode => Intl.message("Enter Color Code",
+      name: "labelProfileEnterColorCode",
+      desc: "Title of the dialog where the user types a color as a hex code "
+          "(#FFFFFF) for their profile's colors");
+
   bool editingColorScheme = false;
 
   Timer? timezoneTimer;
@@ -481,14 +516,14 @@ class UserProfileViewState extends State<UserProfileView> {
 
     var result = time;
     if (day != localDay) {
-      result = "$day, $time";
+      result = labelProfileLocalTime(day, time);
     }
 
     final colors = Theme.of(context).colorScheme;
     return tiamat.Tooltip(
       child: TinyPill(result,
           background: colors.tertiary, foreground: colors.onTertiary),
-      text: "Local Timezone: ${widget.timezone!}",
+      text: tooltipProfileLocalTimezone(widget.timezone!),
     );
   }
 
@@ -552,7 +587,7 @@ class UserProfileViewState extends State<UserProfileView> {
                       Padding(
                         padding: const EdgeInsets.all(8.0),
                         child: tiamat.Text.labelLow(
-                            "Set a local color override for a user. This is only visible to you"),
+                            labelProfileColorOverrideDescription),
                       ),
                       GridView(
                           shrinkWrap: true,
@@ -587,7 +622,7 @@ class UserProfileViewState extends State<UserProfileView> {
           },
           icon: Icons.colorize),
       profileMenuItem(
-        text: "Set Nickame",
+        text: promptProfileSetNickname,
         icon: Icons.badge,
         onClearPressed:
             widget.hasPetName ? () => widget.setPetName?.call(null) : null,
@@ -595,7 +630,7 @@ class UserProfileViewState extends State<UserProfileView> {
           final text = await AdaptiveDialog.textPrompt(
             context,
             initialText: widget.currentPetName ?? '',
-            title: "Nickname",
+            title: labelProfileNickname,
           );
           if (text != null) {
             await widget.setPetName
@@ -649,10 +684,13 @@ class UserProfileViewState extends State<UserProfileView> {
                                 color: c,
                                 size: 20,
                               ),
-                              tiamat.Text(text,
-                                  type: tiamat.TextType.body,
-                                  maxLines: 1,
-                                  color: c),
+                              Flexible(
+                                child: tiamat.Text(text,
+                                    type: tiamat.TextType.body,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    color: c),
+                              ),
                             ],
                           ))),
                 ),
@@ -716,7 +754,9 @@ class UserProfileViewState extends State<UserProfileView> {
                         icon: Icons.tag,
                         onTap: (_) async {
                           var hexCode = await AdaptiveDialog.textPrompt(context,
-                              title: "Enter Color Code", hintText: "#FFFFFF");
+                              title: labelProfileEnterColorCode,
+                              // Not translated: an example of a color code.
+                              hintText: "#FFFFFF");
                           if (hexCode != null) {
                             var color = ColorUtils.fromHexCode(hexCode);
                             widget.setPreviewColor?.call(color);

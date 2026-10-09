@@ -4,6 +4,7 @@ import 'package:rooster/utils/common_strings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_highlighter/flutter_highlighter.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 const _darkTheme = {
@@ -236,6 +237,16 @@ class _ExpandableCodeBlockState extends State<ExpandableCodeBlock> {
 
   bool get canExpand => lines.length > 5;
 
+  String get promptChatCodeShowMore => Intl.message("Show More",
+      name: "promptChatCodeShowMore",
+      desc: "Under a long code block in a message, cut after five lines: "
+          "shows all of it");
+
+  String get promptChatCodeShowLess => Intl.message("Show Less",
+      name: "promptChatCodeShowLess",
+      desc: "Under an expanded code block in a message: cuts it back to "
+          "five lines");
+
   @override
   void initState() {
     expanded = widget.expanded;
@@ -319,7 +330,9 @@ class _ExpandableCodeBlockState extends State<ExpandableCodeBlock> {
                           size: 20,
                         ),
                         tiamat.Text.labelLow(
-                          expanded ? "Show Less" : "Show More",
+                          expanded
+                              ? promptChatCodeShowLess
+                              : promptChatCodeShowMore,
                         ),
                       ],
                     ),

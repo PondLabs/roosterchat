@@ -23,6 +23,11 @@ class LogPage extends StatefulWidget {
 class _LogPageState extends State<LogPage> {
   int count = 0;
 
+  String get promptDeveloperReportIssue => Intl.message("Report Issue",
+      name: "promptDeveloperReportIssue",
+      desc: "Button on an error in the Logs page that opens a new GitHub "
+          "issue filled in with the error");
+
   StreamSubscription? sub;
 
   static const Map<String, TextStyle> ansiStyleMap = {
@@ -184,7 +189,7 @@ class _LogPageState extends State<LogPage> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
                 child: tiamat.Button.secondary(
-                  text: "Report Issue",
+                  text: promptDeveloperReportIssue,
                   onTap: () => reportIssue(entry),
                 ),
               ),

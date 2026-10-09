@@ -18,6 +18,7 @@ Hard fork of Commet (a Flutter Matrix client) by PondLabs, shipped as **Rooster*
 - A space's sidebar lists text channels and voice channels apart, under the built-in headings and the admin's own (one `chat.commet.space_categories` state event in the space), with Discord's buttons on each channel and a voice channel status. See `docs/channel-categories.md`.
 - Call controls outside the window: taskbar thumbnail buttons (Windows), Dock menu (macOS), launcher actions and quicklist (Linux), floating panel (browser). See `docs/voice-controls.md`.
 - Installing and updating: per-user installers for Windows, macOS and Linux (`installers.yml`); on desktop the app starts as a small loading window that installs a newer GitHub release before opening. See `docs/updating.md`.
+- Localization: English (the source) and Brazilian Portuguese (`pt`) ship; Commet's other translations are hidden in `rooster/l10n/inactive/`. The language follows the system or Settings, App, General, Language (`lib/config/languages.dart`, `lib/utils/language/app_language.dart`). See `docs/localization.md` and `docs/adr/0005-english-and-brazilian-portuguese.md`.
 - Audits: `docs/stability-audit.md` (2026-10-03) and `docs/performance-audit-2026-10.md` (startup, sync, timeline, voice, web delivery, parity; what was fixed and what was left, with evidence). Read them before another audit, so it does not repeat theirs.
 - Instagram reels and posts in the chat: native builds play the MP4 from the embed page and show photo posts as their photos, web frames Instagram's embed. See `docs/instagram-reels.md`.
 - X posts in the chat: an iframely-style X card (author, text, media, quote, counts) from fxtwitter's CORS-open JSON API on every platform, with the plain preview as the fallback. See `docs/x-posts.md`.
@@ -29,6 +30,8 @@ Hard fork of Commet (a Flutter Matrix client) by PondLabs, shipped as **Rooster*
 - **Never target upstream.** Do not prepare patches, PRs or "upstreamable" designs for Commet (commetchat) or the commetchat forks of flutter-webrtc, livekit-client-sdk-flutter and matrix-dart-sdk. When their code needs changing, copy it into `third_party/` and change it here. Mark local changes with `// ROOSTER` comments.
 - Path dependencies for vendored packages go in `dependency_overrides` in `rooster/pubspec.yaml`.
 - Browser support matters as much as desktop. Any voice feature needs a web path.
+- **The repository is English.** Code, comments, commit messages, PRs, issues, docs and ARB descriptions are written in English, even when the conversation is in another language. Only the translations (`rooster/assets/l10n/intl_<language>.arb`) hold other languages.
+- **Every string a person can read is an `Intl.message`, written in English first and translated into Brazilian Portuguese in the same change.** Never hardcode UI text (a literal that must stay as it is, like a unit or a protocol value, gets a `// Not translated: <why>` comment), never show two languages on one screen, never glue sentences from pieces. After adding strings: `dart run scripts/extract_strings.dart` (from `rooster/`), add the Portuguese to `intl_pt.arb`, then `flutter test unit_test/l10n`. Layouts must hold text a third longer than the English. See `docs/localization.md` (conventions, glossary, adding a language).
 
 ## Toolchains
 

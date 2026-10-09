@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:intl/intl.dart';
 import 'package:rooster/utils/background_tasks/background_task_manager.dart';
 
 class FakeBackgroundTask implements BackgroundTask {
@@ -8,8 +9,14 @@ class FakeBackgroundTask implements BackgroundTask {
   @override
   Stream<void> get statusChanged => stream.stream;
 
+  static String get labelDeveloperFakeBackgroundTask =>
+      Intl.message("Fake background task",
+          name: "labelDeveloperFakeBackgroundTask",
+          desc: "Name of a pretend task started from Developer settings > "
+              "Background Tasks, shown in the list of running tasks");
+
   @override
-  String get label => "Fake background task";
+  String get label => labelDeveloperFakeBackgroundTask;
 
   @override
   BackgroundTaskStatus status = BackgroundTaskStatus.running;
@@ -55,8 +62,18 @@ class FakeBackgroundTaskWithProgress
   @override
   Stream<void> get statusChanged => stream.stream;
 
+  static String labelDeveloperFakeBackgroundTaskWithProgress(
+          int current, int total) =>
+      Intl.message("Fake background task with progress ($current/$total)",
+          name: "labelDeveloperFakeBackgroundTaskWithProgress",
+          args: [current, total],
+          desc: "Name of a pretend task started from Developer settings > "
+              "Background Tasks, with how many of its steps are done out of "
+              "how many");
+
   @override
-  String get label => "Fake background task with progress ($current/$total)";
+  String get label =>
+      labelDeveloperFakeBackgroundTaskWithProgress(current, total);
 
   @override
   int current = 0;

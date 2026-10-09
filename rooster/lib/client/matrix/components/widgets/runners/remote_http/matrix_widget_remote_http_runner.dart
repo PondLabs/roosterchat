@@ -15,6 +15,7 @@ import 'package:rooster/utils/notifying_list.dart';
 import 'package:rooster/utils/rng.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:pretty_qr_code/pretty_qr_code.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -55,6 +56,12 @@ class MatrixUserWidgetRemoteHttpRunner implements MatrixWidgetRunner {
   bool useInsecureHttp;
 
   bool allowRemoteConnection;
+
+  static String get promptWidgetCopyLink => Intl.message("Copy Link",
+      name: "promptWidgetCopyLink",
+      desc:
+          "Button under the QR code that opens a room widget on another device: copies the same link");
+
   MatrixUserWidgetRemoteHttpRunner({
     required this.room,
     required String url,
@@ -148,7 +155,7 @@ class MatrixUserWidgetRemoteHttpRunner implements MatrixWidgetRunner {
               child: SizedBox(
                 height: 30,
                 child: tiamat.TextButton(
-                  "Copy Link",
+                  promptWidgetCopyLink,
                   icon: Icons.copy,
                   onTap: () {
                     Clipboard.setData(ClipboardData(text: url.toString()));

@@ -26,19 +26,13 @@ class MatrixTimelineEventAddReaction extends MatrixTimelineEvent
   /// reaction carries one.
   static String describe(
       {required String sender, String? key, String? shortcode}) {
-    final String what;
-    if (key == null || key.isEmpty) {
-      what = '';
-    } else if (!key.startsWith('mxc://')) {
-      what = key;
-    } else if (shortcode != null && shortcode.isNotEmpty) {
-      what = shortcode.startsWith(':') ? shortcode : ':$shortcode:';
-    } else {
-      what = labelCustomEmoji;
+    if (key == null || key.isEmpty) return messageUserReacted(sender);
+    if (!key.startsWith('mxc://')) return messageUserReactedWith(sender, key);
+    if (shortcode != null && shortcode.isNotEmpty) {
+      return messageUserReactedWith(
+          sender, shortcode.startsWith(':') ? shortcode : ':$shortcode:');
     }
-    return what.isEmpty
-        ? messageUserReacted(sender)
-        : messageUserReactedWith(sender, what);
+    return messageUserReactedWithCustomEmoji(sender);
   }
 
   static String messageUserReactedWith(String user, String emoji) =>
@@ -48,10 +42,12 @@ class MatrixTimelineEventAddReaction extends MatrixTimelineEvent
           desc: "A reaction: the user who reacted, then the emoji, or its "
               ":shortcode: for a custom one");
 
-  static String get labelCustomEmoji => Intl.message("with a custom emoji",
-      name: "labelCustomEmoji",
-      desc: "Ends 'Alice reacted ...' for a custom emoji reaction whose name "
-          "is unknown");
+  static String messageUserReactedWithCustomEmoji(String user) =>
+      Intl.message("$user reacted with a custom emoji",
+          name: "messageUserReactedWithCustomEmoji",
+          args: [user],
+          desc: "A reaction with a custom emoji whose name is unknown, with "
+              "the user who reacted");
 
   static String messageUserReacted(String user) => Intl.message("$user reacted",
       name: "messageUserReacted",

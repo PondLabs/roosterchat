@@ -1,6 +1,7 @@
 import 'package:rooster/config/preferences/string_list_preference.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -23,6 +24,11 @@ class StringListPreferenceEditor extends StatefulWidget {
 class _StringListPreferenceEditorState
     extends State<StringListPreferenceEditor> {
   late List<String> items;
+
+  String get labelSettingsNoEntries => Intl.message("No Entries",
+      name: "labelSettingsNoEntries",
+      desc: "In a settings list of text entries (such as addresses) that is "
+          "still empty");
 
   @override
   void initState() {
@@ -54,8 +60,9 @@ class _StringListPreferenceEditorState
                       if (items.isEmpty)
                         SizedBox(
                           height: 50,
-                          child:
-                              Center(child: tiamat.Text.labelLow("No Entries")),
+                          child: Center(
+                              child:
+                                  tiamat.Text.labelLow(labelSettingsNoEntries)),
                         ),
                       if (items.isNotEmpty)
                         Column(
@@ -80,7 +87,7 @@ class _StringListPreferenceEditorState
                                           }
                                         },
                                       ),
-                                      tiamat.Text.labelLow(i),
+                                      Flexible(child: tiamat.Text.labelLow(i)),
                                     ],
                                   ))
                               .toList(),

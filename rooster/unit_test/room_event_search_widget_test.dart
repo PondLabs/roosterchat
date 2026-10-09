@@ -82,8 +82,8 @@ Future<void> submit(WidgetTester tester, String text) async {
 
 void main() {
   test('search actions and errors are translated in Portuguese', () async {
-    await initializeMessages('pt_BR');
-    Intl.withLocale('pt_BR', () {
+    await initializeMessages('pt');
+    Intl.withLocale('pt', () {
       expect(RoomEventSearchWidget.roomSearchClear, 'Limpar busca');
       expect(RoomEventSearchWidget.roomSearchRetry, 'Tentar novamente');
       expect(RoomEventSearchWidget.roomSearchFailed,

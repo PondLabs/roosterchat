@@ -109,7 +109,7 @@ class _CalendarViewWeekState extends State<CalendarViewWeek> {
                     bool isToday = date.year == now.year &&
                         date.month == now.month &&
                         date.day == now.day;
-                    var format = DateFormat('EEEE').format(date);
+                    var weekday = DateFormat('EEEEE').format(date);
 
                     return Material(
                       color: isToday ? colorScheme.primary : Colors.transparent,
@@ -130,7 +130,7 @@ class _CalendarViewWeekState extends State<CalendarViewWeek> {
                                 Center(
                                   child: Center(
                                     child: Text(
-                                      format.substring(0, 1), //.day.toString(),
+                                      weekday,
                                       style: isToday
                                           ? Theme.of(
                                               context,

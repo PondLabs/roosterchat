@@ -44,12 +44,6 @@ class _TimelineEventViewGenericState extends State<TimelineEventViewGeneric>
           args: [user],
           name: "messagePlaceholderSticker");
 
-  String messagePlaceholderUserCreatedRoom(String user) =>
-      Intl.message("$user created the room!",
-          desc: "Message body for when a user created the room",
-          args: [user],
-          name: "messagePlaceholderUserCreatedRoom");
-
   String get errorMessageFailedToSend => Intl.message("Failed to send",
       desc:
           "Text that is placed below a message when the message fails to send",

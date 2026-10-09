@@ -1,12 +1,29 @@
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/room_preview.dart';
+import 'package:rooster/ui/pages/get_or_create_room/room_creation_strings.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class RoomPreviewView extends StatelessWidget {
   const RoomPreviewView({required this.previewData, super.key});
   final RoomPreview previewData;
+
+  static String get labelRoomTypeChatRoom => Intl.message("Chat Room",
+      name: "labelRoomTypeChatRoom",
+      desc:
+          "Tooltip on the icon of a room's preview (before joining it) when it is an ordinary text room");
+
+  /// The kind of room, as the tooltip on its icon says it.
+  static String typeName(RoomType type) => switch (type) {
+        RoomType.defaultRoom => labelRoomTypeChatRoom,
+        RoomType.photoAlbum => RoomCreationStrings.labelRoomTypePhotoAlbum,
+        RoomType.space => RoomCreationStrings.labelRoomTypeSpace,
+        RoomType.voipRoom => RoomCreationStrings.labelRoomTypeVoiceChat,
+        RoomType.calendar => RoomCreationStrings.labelRoomTypeCalendar,
+      };
+
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -33,7 +50,7 @@ class RoomPreviewView extends StatelessWidget {
                   children: [
                     if (previewData.type != null)
                       tiamat.Tooltip(
-                          text: previewData.type!.string,
+                          text: typeName(previewData.type!),
                           child: Icon(size: 15, previewData.type!.icon)),
                     if (previewData.numMembers != null)
                       Row(

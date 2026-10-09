@@ -162,28 +162,34 @@ class _ContextMenuOverlayState extends State<ContextMenuOverlay>
   }
 
   Widget buildMenu(BuildContext context, {GlobalKey? key}) {
-    return IntrinsicWidth(
+    // As wide as the widest entry, but never wider than the screen: a long
+    // entry (a long name, a longer language) is cut short instead.
+    return ConstrainedBox(
       key: key,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: widget.items
-            .map(
-              (e) => e.build(
-                context,
-                () {
-                  e.onPressed?.call();
-                  _controller
-                      .animateTo(0)
-                      .then((value) => widget.close?.call());
-                },
-                closeMenu: () {
-                  _controller
-                      .animateTo(0)
-                      .then((value) => widget.close?.call());
-                },
-              ),
-            )
-            .toList(),
+      constraints:
+          BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width - 16),
+      child: IntrinsicWidth(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: widget.items
+              .map(
+                (e) => e.build(
+                  context,
+                  () {
+                    e.onPressed?.call();
+                    _controller
+                        .animateTo(0)
+                        .then((value) => widget.close?.call());
+                  },
+                  closeMenu: () {
+                    _controller
+                        .animateTo(0)
+                        .then((value) => widget.close?.call());
+                  },
+                ),
+              )
+              .toList(),
+        ),
       ),
     );
   }
@@ -332,8 +338,13 @@ class ContextMenuItem {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   mainAxisSize: MainAxisSize.max,
                   children: [
-                    tiamat.Text(text,
-                        type: TextType.body, maxLines: 1, color: c),
+                    Flexible(
+                      child: tiamat.Text(text,
+                          type: TextType.body,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          color: c),
+                    ),
                     if (icon != null)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(20, 0, 0, 0),

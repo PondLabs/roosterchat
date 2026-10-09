@@ -12,6 +12,7 @@ import 'dart:convert';
 
 import 'package:rooster/debug/log.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 
 /// One file attached to a release.
 class UpdateAsset {
@@ -89,6 +90,30 @@ class UpdateRelease {
 
   static const defaultTimeout = Duration(seconds: 20);
 
+  static String get messageUpdateNotARelease =>
+      Intl.message("the answer was not a release",
+          name: "messageUpdateNotARelease",
+          desc: "Why the look for an update failed, shown in Settings after "
+              "'Could not reach GitHub to look for updates:'. Lower case: it "
+              "continues that sentence");
+
+  static String messageUpdateNoAnswerSeconds(int seconds) => Intl.message(
+      "no answer in $seconds s",
+      name: "messageUpdateNoAnswerSeconds",
+      args: [seconds],
+      desc: "Why the look for an update failed: GitHub did not answer within "
+          "that many seconds (s is the unit symbol). Shown in Settings after "
+          "'Could not reach GitHub to look for updates:', so lower case");
+
+  static String messageUpdateNoAnswerMilliseconds(int milliseconds) =>
+      Intl.message("no answer in $milliseconds ms",
+          name: "messageUpdateNoAnswerMilliseconds",
+          args: [milliseconds],
+          desc: "Why the look for an update failed: GitHub did not answer "
+              "within that many milliseconds (ms is the unit symbol). Shown "
+              "in Settings after 'Could not reach GitHub to look for "
+              "updates:', so lower case");
+
   /// The newest release, or no release and why: the request failed, took
   /// longer than [timeout] or said something unexpected. The why is what
   /// the settings page shows, since "could not reach GitHub" on its own has
@@ -109,12 +134,12 @@ class UpdateRelease {
       final release = fromJson(jsonDecode(response.body));
       if (release == null) {
         Log.i('Update check failed: the answer was not a release');
-        return (release: null, problem: 'the answer was not a release');
+        return (release: null, problem: messageUpdateNotARelease);
       }
       return (release: release, problem: null);
     } on TimeoutException {
       Log.i('Update check failed: no answer in ${describe(timeout)}');
-      return (release: null, problem: 'no answer in ${describe(timeout)}');
+      return (release: null, problem: noAnswerIn(timeout));
     } catch (e, s) {
       Log.onError(e, s, content: 'Update check failed');
       return (release: null, problem: describeProblem(e));
@@ -125,6 +150,12 @@ class UpdateRelease {
   static String describe(Duration duration) => duration.inSeconds >= 1
       ? '${duration.inSeconds} s'
       : '${duration.inMilliseconds} ms';
+
+  /// "No answer in" [duration], as [describe] puts it, for the settings
+  /// page: in the user's language, where [describe] is for the log.
+  static String noAnswerIn(Duration duration) => duration.inSeconds >= 1
+      ? messageUpdateNoAnswerSeconds(duration.inSeconds)
+      : messageUpdateNoAnswerMilliseconds(duration.inMilliseconds);
 
   /// [error] in a line for the settings page: without the exception types
   /// in front, and not for ever.

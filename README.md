@@ -68,7 +68,7 @@ Open an [issue](https://github.com/PondLabs/roosterchat/issues/new). The "Report
 
 # Translation
 
-Strings live in `rooster/assets/l10n/intl_*.arb`. `intl_en.arb` is the source of truth; the other locales are edited to match it. See [Development](#development) for how translations are regenerated.
+Rooster is in English and Brazilian Portuguese, and follows your system's language unless you pick one in Settings, App, General, Language. Strings live in `rooster/assets/l10n/intl_*.arb`: `intl_en.arb` comes from the code, and the translations match it. How to add or translate a string, and how to bring back one of the languages Commet had, is in [docs/localization.md](docs/localization.md).
 
 # Development
 

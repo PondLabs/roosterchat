@@ -12,6 +12,7 @@ import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/utils/mime.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -32,6 +33,87 @@ class _SpaceEmojiSettingsViewState extends State<SpaceEmojiSettingsView> {
   String? _error;
 
   SpaceEmoticonComponent get component => widget.component;
+
+  String labelSpaceEmojiUploadProgress(int current, int total) => Intl.message(
+      "Uploading $current of $total...",
+      name: "labelSpaceEmojiUploadProgress",
+      args: [current, total],
+      desc:
+          "In a space's emoji settings, while several picked images are uploaded as emoji: which one is being uploaded, of how many");
+
+  String messageSpaceEmojiCouldNotRead(String fileName) => Intl.message(
+      "$fileName: could not read the file",
+      name: "messageSpaceEmojiCouldNotRead",
+      args: [fileName],
+      desc:
+          "In a space's emoji settings, one line of the errors after an upload: a picked image file that could not be read, with its file name");
+
+  String messageSpaceEmojiFileFailed(String fileName, String error) =>
+      Intl.message("$fileName: $error",
+          name: "messageSpaceEmojiFileFailed",
+          args: [fileName, error],
+          desc:
+              "In a space's emoji settings, one line of the errors after an upload: a picked image's file name, then why it could not be added");
+
+  String promptSpaceEmojiRemoveConfirm(String shortcode) => Intl.message(
+      "Remove :$shortcode: from this space?",
+      name: "promptSpaceEmojiRemoveConfirm",
+      args: [shortcode],
+      desc:
+          "Confirmation before removing one of a space's emoji, with the emoji's name between colons (keep the colons)");
+
+  String get errorSpaceEmojiForbidden => Intl.message(
+      "You are not allowed to change this space's emoji",
+      name: "errorSpaceEmojiForbidden",
+      desc:
+          "Error in a space's emoji settings when the server refuses a change because we lack the permission");
+
+  String get errorSpaceEmojiTooLarge => Intl.message(
+      "The image is too large for the homeserver",
+      name: "errorSpaceEmojiTooLarge",
+      desc:
+          "Error in a space's emoji settings when the server refuses an image for being too large");
+
+  String errorSpaceEmojiRejected(String reason) => Intl.message(
+      "The homeserver rejected the request: $reason",
+      name: "errorSpaceEmojiRejected",
+      args: [reason],
+      desc:
+          "Error in a space's emoji settings when the server refuses a change, with the server's own reason (usually in English)");
+
+  String get errorSpaceEmojiUnknown => Intl.message("Something went wrong",
+      name: "errorSpaceEmojiUnknown",
+      desc:
+          "Error in a space's emoji settings when a change failed for an unknown reason");
+
+  String get labelSpaceEmojiServerEmojis => Intl.message("Server emojis",
+      name: "labelSpaceEmojiServerEmojis",
+      desc:
+          "Header of a space's own emoji list in its settings (as Discord's server emoji: the space plays the part of a Discord server)");
+
+  String labelSpaceEmojiSlotsUsed(int quota, int used) => Intl.plural(quota,
+      one: "$used of 1 slot used",
+      other: "$used of $quota slots used",
+      name: "labelSpaceEmojiSlotsUsed",
+      args: [quota, used],
+      desc:
+          "Under the header of a space's emoji list: how many of the space's emoji slots are taken, of how many there are");
+
+  String get promptSpaceEmojiAdd => Intl.message("Add emoji",
+      name: "promptSpaceEmojiAdd",
+      desc:
+          "Button in a space's emoji settings that picks images to upload as the space's emoji");
+
+  String get labelSpaceEmojiHelp => Intl.message(
+      "PNG, GIF or WebP. Names use letters, numbers and underscores. "
+      "Every member can use these emoji in any room of the space.",
+      name: "labelSpaceEmojiHelp",
+      desc:
+          "Help under the emoji list of a space's settings, for people who may edit it (PNG, GIF and WebP are image formats)");
+
+  String get labelSpaceEmojiEmpty => Intl.message("No emoji yet.",
+      name: "labelSpaceEmojiEmpty",
+      desc: "In a space's emoji settings, while the space has no emoji");
 
   @override
   void initState() {
@@ -57,12 +139,12 @@ class _SpaceEmojiSettingsViewState extends State<SpaceEmojiSettingsView> {
 
     for (final (i, file) in picked.files.indexed) {
       if (!mounted) return;
-      setState(() =>
-          _uploadStatus = 'Uploading ${i + 1} of ${picked.files.length}...');
+      setState(() => _uploadStatus =
+          labelSpaceEmojiUploadProgress(i + 1, picked.files.length));
 
       final data = file.bytes;
       if (data == null) {
-        failures.add('${file.name}: could not read the file');
+        failures.add(messageSpaceEmojiCouldNotRead(file.name));
         continue;
       }
 
@@ -75,7 +157,7 @@ class _SpaceEmojiSettingsViewState extends State<SpaceEmojiSettingsView> {
         );
       } catch (e, s) {
         Log.onError(e, s, content: 'Failed to upload space emoji');
-        failures.add('${file.name}: ${_friendlyError(e)}');
+        failures.add(messageSpaceEmojiFileFailed(file.name, _friendlyError(e)));
       }
     }
 
@@ -102,7 +184,7 @@ class _SpaceEmojiSettingsViewState extends State<SpaceEmojiSettingsView> {
 
   Future<void> _remove(Emoticon emoji) async {
     final confirm = await AdaptiveDialog.confirmation(context,
-        prompt: 'Remove :${emoji.shortcode}: from this space?',
+        prompt: promptSpaceEmojiRemoveConfirm(emoji.shortcode ?? ""),
         dangerous: true);
     if (confirm != true) return;
 
@@ -118,14 +200,14 @@ class _SpaceEmojiSettingsViewState extends State<SpaceEmojiSettingsView> {
     if (e is SpaceEmojiError) return e.message;
     if (e is matrix.MatrixException) {
       if (e.error == matrix.MatrixError.M_FORBIDDEN) {
-        return 'You are not allowed to change this space\'s emoji';
+        return errorSpaceEmojiForbidden;
       }
       if (e.error == matrix.MatrixError.M_TOO_LARGE) {
-        return 'The image is too large for the homeserver';
+        return errorSpaceEmojiTooLarge;
       }
-      return 'The homeserver rejected the request: ${e.errorMessage}';
+      return errorSpaceEmojiRejected(e.errorMessage);
     }
-    return 'Something went wrong';
+    return errorSpaceEmojiUnknown;
   }
 
   @override
@@ -144,14 +226,14 @@ class _SpaceEmojiSettingsViewState extends State<SpaceEmojiSettingsView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const tiamat.Text.labelEmphasised('Server emojis'),
-                  tiamat.Text.labelLow('$used of $quota slots used'),
+                  tiamat.Text.labelEmphasised(labelSpaceEmojiServerEmojis),
+                  tiamat.Text.labelLow(labelSpaceEmojiSlotsUsed(quota, used)),
                 ],
               ),
             ),
             if (widget.editable)
               tiamat.Button(
-                text: 'Add emoji',
+                text: promptSpaceEmojiAdd,
                 onTap: full || _uploadStatus != null ? null : _upload,
               ),
           ],
@@ -162,11 +244,9 @@ class _SpaceEmojiSettingsViewState extends State<SpaceEmojiSettingsView> {
           child: LinearProgressIndicator(value: used / quota),
         ),
         if (widget.editable)
-          const Padding(
-            padding: EdgeInsets.only(top: 4),
-            child: tiamat.Text.labelLow(
-                'PNG, GIF or WebP. Names use letters, numbers and underscores. '
-                'Every member can use these emoji in any room of the space.'),
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: tiamat.Text.labelLow(labelSpaceEmojiHelp),
           ),
         if (_uploadStatus != null)
           Padding(
@@ -180,9 +260,9 @@ class _SpaceEmojiSettingsViewState extends State<SpaceEmojiSettingsView> {
           ),
         const SizedBox(height: 8),
         if (emoji.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(8),
-            child: tiamat.Text.labelLow('No emoji yet.'),
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: tiamat.Text.labelLow(labelSpaceEmojiEmpty),
           ),
         for (final e in emoji)
           _SpaceEmojiRow(

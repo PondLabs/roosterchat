@@ -37,8 +37,11 @@ class MatrixTimelineEventMessage extends MatrixTimelineEvent
   @override
   bool get editable => true;
 
+  /// The SDK's text for a deleted message is the English "Redacted".
   @override
-  String? get body => event.plaintextBody;
+  String? get body => event.redacted
+      ? MatrixTimelineEvent.messageTimelineRedactedBody
+      : event.plaintextBody;
 
   String get formattedBody =>
       event.formattedText != "" ? event.formattedText : event.plaintextBody;
@@ -49,7 +52,9 @@ class MatrixTimelineEventMessage extends MatrixTimelineEvent
       "chat.commet.custom.matrix_plain";
 
   @override
-  String get plainTextBody => event.plaintextBody;
+  String get plainTextBody => event.redacted
+      ? MatrixTimelineEvent.messageTimelineRedactedBody
+      : event.plaintextBody;
 
   String _getPlaintextBody({Timeline? timeline}) {
     var e = getDisplayEvent(timeline);

@@ -5,6 +5,7 @@ import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/utils/autofill_utils.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/atoms/image_button.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 import 'package:rooster/client/components/emoticon/emoji_pack.dart';
@@ -35,6 +36,18 @@ class EmojiPicker extends StatefulWidget {
   final List<AutofillSearchResultEmoticon> Function(String text)?
       searchDelegate;
   final AxisDirection preferredTooltipDirection;
+
+  /// The name of the pack of recent emoji the pickers put first.
+  static String get labelChatEmojiFrequentlyUsed =>
+      Intl.message("Frequently Used",
+          name: "labelChatEmojiFrequentlyUsed",
+          desc: "Name of the group of emoji the user picks most, shown first "
+              "in the emoji picker (as a header and as its button's tooltip)");
+
+  static String get labelChatEmojiNoResults =>
+      Intl.message("No results found :(",
+          name: "labelChatEmojiNoResults",
+          desc: "In the emoji picker when a search finds no emoji");
 
   @override
   State<EmojiPicker> createState() => _EmojiPickerState();
@@ -262,7 +275,8 @@ class _EmojiPickerState extends State<EmojiPicker> {
                     SizedBox(
                       height: 50,
                       child: Center(
-                          child: tiamat.Text.labelLow("No results found :(")),
+                          child: tiamat.Text.labelLow(
+                              EmojiPicker.labelChatEmojiNoResults)),
                     ),
                   ])),
                 if (searchResults?.isNotEmpty == true)

@@ -6,5 +6,6 @@ class MatrixTimelineEventUnknown extends MatrixTimelineEvent
   MatrixTimelineEventUnknown(super.event, {required super.client});
 
   @override
-  String get plainTextBody => "Unknown Event Type: ${event.type}";
+  String get plainTextBody =>
+      MatrixTimelineEvent.messageTimelineUnknownEventType(event.type);
 }

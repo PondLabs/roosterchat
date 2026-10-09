@@ -24,6 +24,7 @@ import 'package:rooster/ui/molecules/timeline_events/timeline_event_menu.dart';
 import 'package:rooster/ui/molecules/timeline_events/timeline_event_menu_dialog.dart';
 import 'package:rooster/ui/molecules/user_panel.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
+import 'package:rooster/utils/common_strings.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:tiamat/atoms/context_menu.dart';
@@ -119,6 +120,20 @@ class TimelineViewEntryState extends State<TimelineViewEntry>
   String get labelTimelineNewMessagesMarker => Intl.message("New messages",
       desc: "Text that is shown below the last read message",
       name: "labelTimelineNewMessagesMarker");
+
+  String labelTimelineCollapsedMore(int howMany, String summary) =>
+      Intl.plural(howMany,
+          one: "$summary and 1 more",
+          other: "$summary and $howMany more",
+          name: "labelTimelineCollapsedMore",
+          args: [howMany, summary],
+          desc: "A folded run of room events (joins, name changes…): the "
+              "first few, separated by commas, then how many more the run "
+              "holds");
+
+  String get labelTimelineReadReceipts => Intl.message("Read Receipts",
+      name: "labelTimelineReadReceipts",
+      desc: "Title of the dialog listing who has read up to a message");
 
   @override
   void initState() {
@@ -315,7 +330,7 @@ class TimelineViewEntryState extends State<TimelineViewEntry>
     final items = <ContextMenuItem>[
       if (menu.addReactionAction != null)
         ContextMenuItem(
-          text: "Add Reaction",
+          text: CommonStrings.promptAddReaction,
           customBuilder: (context, onClick, {closeMenu}) => Padding(
             padding: const EdgeInsets.all(8.0),
             child: Row(
@@ -421,7 +436,7 @@ class TimelineViewEntryState extends State<TimelineViewEntry>
       var diff = count - bodies.length;
       var text = bodies.join(", ");
       if (diff > 0) {
-        text += " and $diff more";
+        text = labelTimelineCollapsedMore(diff, text);
       }
       return ExpansionTile(
         title: Padding(
@@ -707,7 +722,8 @@ class TimelineViewEntryState extends State<TimelineViewEntry>
   }
 
   onReadReceiptsTapped() {
-    AdaptiveDialog.show(context, title: "Read Receipts", builder: (context) {
+    AdaptiveDialog.show(context, title: labelTimelineReadReceipts,
+        builder: (context) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: readReceipts

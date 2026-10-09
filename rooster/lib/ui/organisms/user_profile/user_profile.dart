@@ -63,7 +63,9 @@ class UserProfile extends StatefulWidget {
               child: Center(child: UserProfile(userId: userId, client: client)),
             );
           },
-          barrierLabel: "USER_PROFILE_BARRIER",
+          // Read out by screen readers: tapping outside closes the profile.
+          barrierLabel:
+              MaterialLocalizations.of(context).modalBarrierDismissLabel,
           barrierDismissible: dismissible,
           transitionDuration: const Duration(milliseconds: 300),
           transitionBuilder: (context, animation, secondaryAnimation, child) =>
@@ -95,6 +97,16 @@ class _UserProfileState extends State<UserProfile> {
   ThemeData? theme;
 
   late UserProfileComponent component;
+
+  String get labelProfileChangeName => Intl.message("Change name",
+      name: "labelProfileChangeName",
+      desc: "Title of the dialog where the user types a new display name, "
+          "opened by clicking their name on their profile");
+
+  String get labelProfileSourceTitle => Intl.message("Source",
+      name: "labelProfileSourceTitle",
+      desc: "Title of the dialog that shows the raw JSON of a user's profile "
+          "(developer mode)");
 
   ImageProvider? banner;
   String? displayName;
@@ -360,7 +372,7 @@ class _UserProfileState extends State<UserProfile> {
     var text = await AdaptiveDialog.textPrompt(
       context,
       initialText: displayName,
-      title: "Change name",
+      title: labelProfileChangeName,
     );
     if (text?.trim().isNotEmpty == true) {
       setState(() {
@@ -425,7 +437,7 @@ class _UserProfileState extends State<UserProfile> {
   void showSource() {
     AdaptiveDialog.show(
       context,
-      title: "Source",
+      title: labelProfileSourceTitle,
       builder: (context) {
         return SizedBox(
           width: 1000,

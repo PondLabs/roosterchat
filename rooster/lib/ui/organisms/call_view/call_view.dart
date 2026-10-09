@@ -15,6 +15,7 @@ import 'package:rooster/ui/organisms/soundboard/soundboard_call_controller.dart'
 import 'package:rooster/utils/animation/ring_shaker.dart';
 import 'package:rooster/utils/animation/ripple.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/atoms/avatar.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -35,6 +36,9 @@ class CallView extends StatefulWidget {
   final VoipSession currentSession;
 
   static const Duration volumeAnimationDuration = Duration(milliseconds: 150);
+
+  static String get labelCallEnded => Intl.message("Call ended",
+      name: "labelCallEnded", desc: "Shown in place of a call that has ended");
 
   final Future<void> Function(bool)? setMicrophoneMute;
   final Future<void> Function(bool)? setDeafened;
@@ -364,7 +368,7 @@ class _CallViewState extends State<CallView> {
   }
 
   Widget callEndedView() {
-    return const Center(child: tiamat.Text.label("Call ended"));
+    return Center(child: tiamat.Text.label(CallView.labelCallEnded));
   }
 
   Widget callIncomingView() {

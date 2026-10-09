@@ -147,7 +147,13 @@ class _OverlayWindowState extends State<OverlayWindowWidget>
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          tiamat.Text.labelLow(widget.window.title),
+                          Flexible(
+                            child: tiamat.Text.labelLow(
+                              widget.window.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                           Row(
                             children: [
                               if (fullScreen ||

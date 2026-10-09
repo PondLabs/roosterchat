@@ -215,6 +215,32 @@ class MatrixClient extends Client {
         desc: "Title of a warning about encryption",
       );
 
+  static String get labelAppAccountLoadFailed => Intl.message(
+        "Unable to load account",
+        name: "labelAppAccountLoadFailed",
+        desc: "Title of the alert on the Home screen when one of the signed-in "
+            "accounts could not be opened at startup",
+      );
+
+  static String messageAppAccountLoadFailed(String account) => Intl.message(
+        "One of the registered accounts ($account...) was unable to load "
+        "correctly, please check the logs for more details",
+        name: "messageAppAccountLoadFailed",
+        args: [account],
+        desc: "Alert on the Home screen when one of the signed-in accounts "
+            "could not be opened at startup; account is the start of its "
+            "internal id, cut short",
+      );
+
+  static String get labelLoginSsoHomeserver => Intl.message(
+        "homeserver",
+        name: "labelLoginSsoHomeserver",
+        desc: "Stands for the server's own single sign-on when it names no "
+            "provider. It goes into the login button 'Login with …' in place "
+            "of a provider's name, so translate it to read well there (with "
+            "an article if your language needs one)",
+      );
+
   static Future<void> loadFromDB(
     ClientManager manager, {
     bool isBackgroundService = false,
@@ -255,9 +281,9 @@ class MatrixClient extends Client {
                   manager.alertManager.addAlert(
                     Alert(
                       AlertType.warning,
-                      messageGetter: () =>
-                          "One of the registered accounts (${clientName.substring(0, 8)}...) was unable to load correctly, please check the logs for more details",
-                      titleGetter: () => "Unable to load account",
+                      messageGetter: () => messageAppAccountLoadFailed(
+                          clientName.substring(0, 8)),
+                      titleGetter: () => labelAppAccountLoadFailed,
                     ),
                   );
                 }
@@ -920,7 +946,7 @@ class MatrixClient extends Client {
     );
 
     if (result.isEmpty) {
-      result.add(MatrixSSOLoginFlow(name: "homeserver", id: null));
+      result.add(MatrixSSOLoginFlow(name: labelLoginSsoHomeserver, id: null));
     }
 
     return result;

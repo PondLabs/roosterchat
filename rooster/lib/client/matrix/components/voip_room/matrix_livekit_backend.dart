@@ -14,6 +14,7 @@ import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:matrix/matrix.dart';
 
@@ -21,6 +22,28 @@ class MatrixLivekitBackend {
   MatrixRoom room;
   lk.Room? livekitRoom;
   MatrixLivekitBackend(this.room);
+
+  static String get errorCallNoLivekitService =>
+      Intl.message("Failed to find a valid LiveKit service",
+          name: "errorCallNoLivekitService",
+          desc: "Why joining a voice channel's call failed, shown under 'Could "
+              "not join the call': the homeserver names no LiveKit service to "
+              "hold calls. LiveKit is a name");
+
+  static String get errorCallFocusNotHttps => Intl.message(
+      "Selected focus JWT does not use HTTPS",
+      name: "errorCallFocusNotHttps",
+      desc: "Why joining a voice channel's call failed, shown under 'Could "
+          "not join the call': the call's server (its focus, which hands out "
+          "JWT tokens) is not on HTTPS. Technical; JWT and HTTPS are names");
+
+  static String errorCallSfuHttp(int status) =>
+      Intl.message("Failed to get sfu! HTTP Error $status",
+          name: "errorCallSfuHttp",
+          args: [status],
+          desc: "Why joining a voice channel's call failed, shown under 'Could "
+              "not join the call': the call's media server (the SFU) answered "
+              "with an HTTP error, whose number follows");
 
   Future<List<Uri>> getFociUrl() async {
     final selectedFocus = findSelectedFocus();
@@ -116,7 +139,8 @@ class MatrixLivekitBackend {
     final fociUrl = await getFociUrl();
 
     if (fociUrl.isEmpty) {
-      throw Exception("Failed to find a valid LiveKit service");
+      throw CallJoinException(
+          "Failed to find a valid LiveKit service", errorCallNoLivekitService);
     }
 
     final selectedFocus = fociUrl.first;
@@ -129,7 +153,8 @@ class MatrixLivekitBackend {
         {}).timeout(const Duration(seconds: 15));
 
     if (selectedFocus.scheme != "https") {
-      throw Exception("Selected focus JWT does not use HTTPS");
+      throw CallJoinException(
+          "Selected focus JWT does not use HTTPS", errorCallFocusNotHttps);
     }
 
     Log.d("Received token from homeserver: ${token}");
@@ -149,7 +174,9 @@ class MatrixLivekitBackend {
         .post(uri, body: jsonEncode(body))
         .timeout(const Duration(seconds: 15));
     if (result.statusCode != 200) {
-      throw Exception("Failed to get sfu! HTTP Error ${result.statusCode}");
+      throw CallJoinException(
+          "Failed to get sfu! HTTP Error ${result.statusCode}",
+          errorCallSfuHttp(result.statusCode));
     }
 
     var data = jsonDecode(result.body) as Map<String, dynamic>;

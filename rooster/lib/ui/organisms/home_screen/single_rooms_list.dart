@@ -38,10 +38,14 @@ class SingleRoomsList extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: tiamat.Text.labelLow(
-                            HomeScreenView.labelHomeRoomsList,
+                        Flexible(
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: tiamat.Text.labelLow(
+                              HomeScreenView.labelHomeRoomsList,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ),
                         Padding(

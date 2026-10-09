@@ -19,6 +19,31 @@ class DialogResult<T> {
 }
 
 class AdaptiveDialog {
+  static String get labelAppPickAccount => Intl.message("Pick Account",
+      name: "labelAppPickAccount",
+      desc: "Title of the dialog that asks which signed-in account to use, "
+          "when there is more than one");
+
+  static String get labelAppError => Intl.message("Error",
+      name: "labelAppError",
+      desc: "Title of the dialog that shows an error, when the place it came "
+          "from gives none of its own");
+
+  static String get messageAppAreYouSure => Intl.message("Are you sure?",
+      name: "messageAppAreYouSure",
+      desc: "Question in a confirmation dialog, when the action gives no "
+          "question of its own");
+
+  static String get labelAppEnterText => Intl.message("Enter Text",
+      name: "labelAppEnterText",
+      desc: "Title of a dialog that asks for a line of text, when the place "
+          "it came from gives none of its own");
+
+  static String get labelAppRememberChoice => Intl.message("Remember choice:",
+      name: "labelAppRememberChoice",
+      desc: "Beside a switch in a confirmation dialog: keep this answer and "
+          "do not ask again");
+
   static Future<T?> pickOne<T extends Object?>(
     BuildContext context, {
     required List<T> items,
@@ -93,7 +118,7 @@ class AdaptiveDialog {
 
     return AdaptiveDialog.pickOne(
       context,
-      title: "Pick Account",
+      title: labelAppPickAccount,
       items: clientManager!.clients,
       itemBuilder: (context, item, callback) {
         return SizedBox(
@@ -112,14 +137,14 @@ class AdaptiveDialog {
 
   static Future<void> showError(
       BuildContext context, Object exception, StackTrace trace,
-      {String title = "Error"}) {
+      {String? title}) {
     return show(context, builder: (context) {
       return Column(
         children: [
           tiamat.Text.body(exception.toString()),
         ],
       );
-    }, title: title);
+    }, title: title ?? labelAppError);
   }
 
   static Future<T?> show<T extends Object?>(
@@ -182,11 +207,13 @@ class AdaptiveDialog {
       name: "labelDialogConfirmation",
       desc: "label for the dialog which asks the user to confirm some action");
 
+  /// [prompt], [title], [confirmationText] and [cancelText] fall back to
+  /// "Are you sure?", "Confirmation", "Yes" and "No", translated.
   static Future<bool?> confirmation(BuildContext context,
-      {String prompt = "Are you sure?",
-      String title = "Confirmation",
-      String confirmationText = "Yes",
-      String cancelText = "No",
+      {String? prompt,
+      String? title,
+      String? confirmationText,
+      String? cancelText,
       Widget Function(BuildContext)? customBuilder,
       bool dangerous = false}) async {
     var value = await show<DialogResult<bool>?>(context, builder: (context) {
@@ -198,17 +225,17 @@ class AdaptiveDialog {
         customBuilder: customBuilder,
         dangerous: dangerous,
       );
-    }, title: title == "Confirmation" ? labelDialogConfirmation : title);
+    }, title: title ?? labelDialogConfirmation);
 
     return value?.value;
   }
 
   static Future<DialogResult<bool>?> confirmationWithOptions(
       BuildContext context,
-      {String prompt = "Are you sure?",
-      String title = "Confirmation",
-      String confirmationText = "Yes",
-      String cancelText = "No",
+      {String? prompt,
+      String? title,
+      String? confirmationText,
+      String? cancelText,
       Widget Function(BuildContext)? customBuilder,
       bool showRememberChoice = false,
       bool defaultRememberSetting = false,
@@ -224,14 +251,16 @@ class AdaptiveDialog {
         defaultRememberSetting: defaultRememberSetting,
         dangerous: dangerous,
       );
-    }, title: title == "Confirmation" ? labelDialogConfirmation : title);
+    }, title: title ?? labelDialogConfirmation);
 
     return value;
   }
 
+  /// [title] and [submitText] fall back to "Enter Text" and "Submit",
+  /// translated.
   static Future<String?> textPrompt(BuildContext context,
-      {String title = "Enter Text",
-      String submitText = "Submit",
+      {String? title,
+      String? submitText,
       String? hintText,
       String? initialText,
       bool multiline = false,
@@ -260,9 +289,7 @@ class AdaptiveDialog {
                 height: 10,
               ),
               tiamat.Button(
-                text: submitText == "Submit"
-                    ? CommonStrings.promptSubmit
-                    : submitText,
+                text: submitText ?? CommonStrings.promptSubmit,
                 onTap: () {
                   print(result);
                   Navigator.of(context).pop(result);
@@ -272,15 +299,18 @@ class AdaptiveDialog {
           ),
         ),
       );
-    }, title: title);
+    }, title: title ?? labelAppEnterText);
   }
 }
 
+/// [prompt], [confirmationText] and [cancelText] fall back to "Are you
+/// sure?", "Yes" and "No", translated. [title] is the dialog's, shown by
+/// [AdaptiveDialog.show].
 class ConfirmationDialogWidget extends StatefulWidget {
-  final String prompt;
-  final String title;
-  final String confirmationText;
-  final String cancelText;
+  final String? prompt;
+  final String? title;
+  final String? confirmationText;
+  final String? cancelText;
   final Widget Function(BuildContext)? customBuilder;
   final bool showRememberChoice;
   final bool defaultRememberSetting;
@@ -288,10 +318,10 @@ class ConfirmationDialogWidget extends StatefulWidget {
 
   const ConfirmationDialogWidget({
     super.key,
-    this.prompt = "Are you sure?",
-    this.title = "Confirmation",
-    this.confirmationText = "Yes",
-    this.cancelText = "No",
+    this.prompt,
+    this.title,
+    this.confirmationText,
+    this.cancelText,
     this.customBuilder,
     this.showRememberChoice = false,
     this.defaultRememberSetting = false,
@@ -334,7 +364,7 @@ class _ConfirmationDialogWidgetState extends State<ConfirmationDialogWidget> {
                             fontFamily: "Code",
                             backgroundColor: ColorScheme.of(context)
                                 .surfaceContainerLowest)),
-                data: widget.prompt,
+                data: widget.prompt ?? AdaptiveDialog.messageAppAreYouSure,
               ),
             ),
             if (widget.customBuilder != null) widget.customBuilder!(context),
@@ -345,7 +375,10 @@ class _ConfirmationDialogWidgetState extends State<ConfirmationDialogWidget> {
                     child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    tiamat.Text.labelLow("Remember choice: "),
+                    Flexible(
+                      child: tiamat.Text.labelLow(
+                          AdaptiveDialog.labelAppRememberChoice),
+                    ),
                     tiamat.Switch(
                       state: rememberChoice,
                       onChanged: (value) {
@@ -361,9 +394,7 @@ class _ConfirmationDialogWidgetState extends State<ConfirmationDialogWidget> {
               height: 40,
               child: tiamat.Button(
                 type: widget.dangerous ? ButtonType.danger : ButtonType.primary,
-                text: widget.confirmationText == "Yes"
-                    ? CommonStrings.promptYes
-                    : widget.confirmationText,
+                text: widget.confirmationText ?? CommonStrings.promptYes,
                 onTap: () => Navigator.pop(
                     context, DialogResult(true, remember: rememberChoice)),
               ),
@@ -372,9 +403,7 @@ class _ConfirmationDialogWidgetState extends State<ConfirmationDialogWidget> {
               height: 5,
             ),
             tiamat.Button.secondary(
-              text: widget.cancelText == "No"
-                  ? CommonStrings.promptNo
-                  : widget.cancelText,
+              text: widget.cancelText ?? CommonStrings.promptNo,
               onTap: () => Navigator.pop(
                   context, DialogResult(false, remember: rememberChoice)),
             )

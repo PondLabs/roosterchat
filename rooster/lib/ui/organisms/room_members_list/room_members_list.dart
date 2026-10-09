@@ -3,6 +3,7 @@ import 'package:rooster/client/room.dart';
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/ui/molecules/user_list.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class RoomMembersListWidget extends StatefulWidget {
@@ -15,6 +16,12 @@ class RoomMembersListWidget extends StatefulWidget {
 
 class _RoomMembersListWidgetState extends State<RoomMembersListWidget> {
   late bool isDirectMessage;
+
+  String get labelRoomMembersHeader => Intl.message("Room Members",
+      name: "labelRoomMembersHeader",
+      desc:
+          "Header over the list of a room's members, in the room's side panel");
+
   @override
   void initState() {
     isDirectMessage = widget.room.client
@@ -29,7 +36,7 @@ class _RoomMembersListWidgetState extends State<RoomMembersListWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (!isDirectMessage) const tiamat.Text.labelLow("Room Members"),
+        if (!isDirectMessage) tiamat.Text.labelLow(labelRoomMembersHeader),
         Expanded(
           child: SizedBox(
             width: MediaQuery.sizeOf(context).desktop

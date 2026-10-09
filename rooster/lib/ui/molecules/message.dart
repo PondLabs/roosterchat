@@ -3,7 +3,9 @@ import 'package:rooster/client/components/url_preview/url_preview_component.dart
 import 'package:rooster/config/build_config.dart';
 import 'package:rooster/diagnostic/benchmark_values.dart';
 import 'package:rooster/ui/atoms/emoji_reaction.dart';
+import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_reply.dart';
 import 'package:rooster/ui/molecules/url_preview_widget.dart';
+import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/links/link_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -204,14 +206,15 @@ class _MessageState extends State<Message> {
             ),
           ),
           tiamat.Text.name(
-            widget.replySenderName ?? "Loading...",
+            widget.replySenderName ?? CommonStrings.labelLoading,
             color: widget.replySenderColor,
           ),
           Flexible(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
               child: tiamat.Text(
-                widget.replyBody ?? "Unknown",
+                widget.replyBody ??
+                    TimelineEventViewReply.labelMessageReplyUnknownBody,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 color: material.Theme.of(context).colorScheme.secondary,

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:rooster_calendar_widget/calendar.dart';
+import 'package:rooster_calendar_widget/calendar_strings.dart';
 import 'package:rooster_calendar_widget/recurrence_editor.dart';
 import 'package:rooster_calendar_widget/rfc8984.dart';
 import 'package:flutter/foundation.dart';
@@ -38,6 +39,67 @@ class CalendarEventEditor extends StatefulWidget {
 }
 
 class _CalendarEventEditorState extends State<CalendarEventEditor> {
+  String get labelCalendarEventName => Intl.message("Event Name",
+      name: "labelCalendarEventName",
+      desc: "Field for the name of an event, in the calendar's event editor");
+
+  String get labelCalendarEventTypeEvent => Intl.message("Event",
+      name: "labelCalendarEventTypeEvent",
+      desc:
+          "In the calendar's event editor, one of two kinds of entry: an event (the other is 'Unavailability')");
+
+  String get labelCalendarEventDate => Intl.message("Date:",
+      name: "labelCalendarEventDate",
+      desc:
+          "In the calendar's event editor, before the date of an all-day event");
+
+  String get labelCalendarEventFrom => Intl.message("From:",
+      name: "labelCalendarEventFrom",
+      desc:
+          "In the calendar's event editor, before the date and time an event starts");
+
+  String get labelCalendarEventTo => Intl.message("To:",
+      name: "labelCalendarEventTo",
+      desc:
+          "In the calendar's event editor, before the date and time an event ends");
+
+  String get labelCalendarNeverRepeats => Intl.message("Never Repeats",
+      name: "labelCalendarNeverRepeats",
+      desc:
+          "In the calendar's event editor, how an event that happens only once repeats; tapping it sets how it repeats");
+
+  String get labelCalendarAllDay => Intl.message("All Day: ",
+      name: "labelCalendarAllDay",
+      desc:
+          "Next to a switch in the calendar's event editor: the event takes the whole day, with no start or end time");
+
+  String get labelCalendarTimezoneRequired => Intl.message(
+      "A timezone is required when an event repeats more than once a year, and is not an all-day event",
+      name: "labelCalendarTimezoneRequired",
+      desc:
+          "Tooltip on the time zone shown in the calendar's event editor, saying why the event keeps one");
+
+  String get errorCalendarEndBeforeStart => Intl.message(
+      "End time must be after start time",
+      name: "errorCalendarEndBeforeStart",
+      desc:
+          "Error in the calendar's event editor while the event ends before it starts");
+
+  String get errorCalendarEventNeedsName =>
+      Intl.message("Event must have a name",
+          name: "errorCalendarEventNeedsName",
+          desc: "Error in the calendar's event editor while the name is empty");
+
+  String get promptCalendarDelete => Intl.message("Delete",
+      name: "promptCalendarDelete",
+      desc: "Button in the calendar's event editor that deletes the event");
+
+  String get promptCalendarDeleteSyncedEvents => Intl.message(
+      "Delete Synced Events",
+      name: "promptCalendarDeleteSyncedEvents",
+      desc:
+          "Button on an event that came from a synced outside calendar: deletes the events synced from it");
+
   late DateTime pickedStartDate;
   late TimeOfDay pickedStartTime;
 
@@ -151,9 +213,9 @@ class _CalendarEventEditorState extends State<CalendarEventEditor> {
                   child: TextFormField(
                     initialValue: eventName,
                     readOnly: !widget.editable,
-                    decoration: const InputDecoration(
-                      border: UnderlineInputBorder(),
-                      labelText: 'Event Name',
+                    decoration: InputDecoration(
+                      border: const UnderlineInputBorder(),
+                      labelText: labelCalendarEventName,
                     ),
                     onChanged: (value) => setState(() {
                       eventName = value;
@@ -165,9 +227,16 @@ class _CalendarEventEditorState extends State<CalendarEventEditor> {
                   multiSelectionEnabled: false,
                   showSelectedIcon: false,
                   segments: [
-                    ButtonSegment(value: "event", label: Text("Event")),
                     ButtonSegment(
-                        value: "unavailability", label: Text("Unavailability")),
+                        value: "event",
+                        label: Text(labelCalendarEventTypeEvent,
+                            overflow: TextOverflow.ellipsis)),
+                    ButtonSegment(
+                        value: "unavailability",
+                        label: Text(
+                            CalendarStrings
+                                .labelCalendarEventTypeUnavailability,
+                            overflow: TextOverflow.ellipsis)),
                   ],
                   expandedInsets: EdgeInsets.all(0),
                   selected: {eventType},
@@ -179,53 +248,59 @@ class _CalendarEventEditorState extends State<CalendarEventEditor> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    if (allDayEvent) Text("Date:"),
-                    if (!allDayEvent) Text("From:"),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextButton.icon(
-                          onPressed: () => showDatePicker(
-                            context: context,
-                            firstDate: DateTime.fromMicrosecondsSinceEpoch(0),
-                            lastDate: DateTime(2100),
-                            initialDate: pickedStartDate,
-                          ).then(
-                            (v) => setState(() {
-                              pickedStartDate = v ?? pickedStartDate;
-                            }),
-                          ),
-                          label: Text(
-                            DateFormat(
-                              DateFormat.YEAR_MONTH_WEEKDAY_DAY,
-                            ).format(pickedStartDate),
-                          ),
-                        ),
-                        if (!allDayEvent)
-                          TextButton.icon(
-                            onPressed: () => showTimePicker(
-                              context: context,
-                              builder: (context, child) {
-                                return MediaQuery(
-                                  data: MediaQuery.of(context)
-                                      .copyWith(alwaysUse24HourFormat: use24h),
-                                  child: child!,
-                                );
-                              },
-                              initialTime: pickedStartTime,
-                            ).then(
-                              (result) => setState(() {
-                                pickedStartTime = result ?? pickedStartTime;
-                              }),
+                    if (allDayEvent) Text(labelCalendarEventDate),
+                    if (!allDayEvent) Text(labelCalendarEventFrom),
+                    Flexible(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: TextButton.icon(
+                              onPressed: () => showDatePicker(
+                                context: context,
+                                firstDate:
+                                    DateTime.fromMicrosecondsSinceEpoch(0),
+                                lastDate: DateTime(2100),
+                                initialDate: pickedStartDate,
+                              ).then(
+                                (v) => setState(() {
+                                  pickedStartDate = v ?? pickedStartDate;
+                                }),
+                              ),
+                              label: Text(
+                                DateFormat(
+                                  DateFormat.YEAR_MONTH_WEEKDAY_DAY,
+                                ).format(pickedStartDate),
+                              ),
                             ),
-                            label: SizedBox(
-                                width: 70,
-                                child: Align(
-                                    alignment: AlignmentGeometry.centerRight,
-                                    child: Text(formatter.format(startTime)))),
                           ),
-                      ],
-                    )
+                          if (!allDayEvent)
+                            TextButton.icon(
+                              onPressed: () => showTimePicker(
+                                context: context,
+                                builder: (context, child) {
+                                  return MediaQuery(
+                                    data: MediaQuery.of(context).copyWith(
+                                        alwaysUse24HourFormat: use24h),
+                                    child: child!,
+                                  );
+                                },
+                                initialTime: pickedStartTime,
+                              ).then(
+                                (result) => setState(() {
+                                  pickedStartTime = result ?? pickedStartTime;
+                                }),
+                              ),
+                              label: SizedBox(
+                                  width: 70,
+                                  child: Align(
+                                      alignment: AlignmentGeometry.centerRight,
+                                      child:
+                                          Text(formatter.format(startTime)))),
+                            ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
                 // End Time
@@ -233,50 +308,55 @@ class _CalendarEventEditorState extends State<CalendarEventEditor> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text("To:"),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          TextButton.icon(
-                            onPressed: () => showDatePicker(
-                              context: context,
-                              firstDate: DateTime.fromMicrosecondsSinceEpoch(0),
-                              lastDate: DateTime(2100),
-                              initialDate: pickedEndDate,
-                            ).then(
-                              (v) => setState(() {
-                                pickedEndDate = v ?? pickedEndDate;
-                              }),
+                      Text(labelCalendarEventTo),
+                      Flexible(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: TextButton.icon(
+                                onPressed: () => showDatePicker(
+                                  context: context,
+                                  firstDate:
+                                      DateTime.fromMicrosecondsSinceEpoch(0),
+                                  lastDate: DateTime(2100),
+                                  initialDate: pickedEndDate,
+                                ).then(
+                                  (v) => setState(() {
+                                    pickedEndDate = v ?? pickedEndDate;
+                                  }),
+                                ),
+                                label: Text(
+                                  DateFormat(
+                                    DateFormat.YEAR_MONTH_WEEKDAY_DAY,
+                                  ).format(pickedEndDate),
+                                ),
+                              ),
                             ),
-                            label: Text(
-                              DateFormat(
-                                DateFormat.YEAR_MONTH_WEEKDAY_DAY,
-                              ).format(pickedEndDate),
+                            TextButton.icon(
+                              onPressed: () => showTimePicker(
+                                context: context,
+                                builder: (context, child) {
+                                  return MediaQuery(
+                                    data: MediaQuery.of(context).copyWith(
+                                        alwaysUse24HourFormat: use24h),
+                                    child: child!,
+                                  );
+                                },
+                                initialTime: pickedEndTime,
+                              ).then(
+                                (result) => setState(() {
+                                  pickedEndTime = result ?? pickedEndTime;
+                                }),
+                              ),
+                              label: SizedBox(
+                                  width: 70,
+                                  child: Align(
+                                      alignment: AlignmentGeometry.centerRight,
+                                      child: Text(formatter.format(endTime)))),
                             ),
-                          ),
-                          TextButton.icon(
-                            onPressed: () => showTimePicker(
-                              context: context,
-                              builder: (context, child) {
-                                return MediaQuery(
-                                  data: MediaQuery.of(context)
-                                      .copyWith(alwaysUse24HourFormat: use24h),
-                                  child: child!,
-                                );
-                              },
-                              initialTime: pickedEndTime,
-                            ).then(
-                              (result) => setState(() {
-                                pickedEndTime = result ?? pickedEndTime;
-                              }),
-                            ),
-                            label: SizedBox(
-                                width: 70,
-                                child: Align(
-                                    alignment: AlignmentGeometry.centerRight,
-                                    child: Text(formatter.format(endTime)))),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -285,34 +365,37 @@ class _CalendarEventEditorState extends State<CalendarEventEditor> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text("Repeat:"),
-                      TextButton.icon(
-                          onPressed: () {
-                            widget.config
-                                .dialog<RecurrenceRuleEditorResult?>(
-                              context: context,
-                              builder: (context) => RecurrenceRuleEditor(
-                                initialRule: recurrenceRule,
-                              ),
-                            )
-                                .then((result) {
-                              if (result != null) {
-                                setState(() {
-                                  recurrenceRule = result.rule;
-                                });
-                              }
-                            });
-                          },
-                          label: Text(recurrenceRule == null
-                              ? "Never Repeats"
-                              : recurrenceRule!.toString())),
+                      Text(CalendarStrings.labelCalendarRepeat),
+                      Flexible(
+                        child: TextButton.icon(
+                            onPressed: () {
+                              widget.config
+                                  .dialog<RecurrenceRuleEditorResult?>(
+                                context: context,
+                                builder: (context) => RecurrenceRuleEditor(
+                                  initialRule: recurrenceRule,
+                                ),
+                              )
+                                  .then((result) {
+                                if (result != null) {
+                                  setState(() {
+                                    recurrenceRule = result.rule;
+                                  });
+                                }
+                              });
+                            },
+                            label: Text(recurrenceRule == null
+                                ? labelCalendarNeverRepeats
+                                : CalendarStrings.describeRecurrence(
+                                    recurrenceRule!))),
+                      ),
                     ],
                   ),
                 ),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text("All Day: "),
+                    Flexible(child: Text(labelCalendarAllDay)),
                     tiamat.Switch(
                       state: allDayEvent,
                       onChanged: (value) => setState(() {
@@ -325,14 +408,14 @@ class _CalendarEventEditorState extends State<CalendarEventEditor> {
                 if (requiresTimezone && timezone != null)
                   tiamat.Tooltip(
                     child: tiamat.Text.labelLow(timezone!),
-                    text:
-                        "A timezone is required when an event repeats more than once a year, and is not an all-day event",
+                    text: labelCalendarTimezoneRequired,
                   ),
 
                 if (startTime.isAfter(endTime))
-                  tiamat.Text.error("End time must be after start time"),
+                  tiamat.Text.error(errorCalendarEndBeforeStart),
 
-                if (!hasValidName) tiamat.Text.error("Event must have a name"),
+                if (!hasValidName)
+                  tiamat.Text.error(errorCalendarEventNeedsName),
                 if (widget.editable)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(0, 12, 0, 0),
@@ -345,7 +428,7 @@ class _CalendarEventEditorState extends State<CalendarEventEditor> {
                             widget.deleteEvent != null)
                           Expanded(
                             child: tiamat.Button.danger(
-                              text: "Delete",
+                              text: promptCalendarDelete,
                               onTap: () {
                                 widget.deleteEvent
                                     ?.call(widget.initialEvent!)
@@ -357,7 +440,7 @@ class _CalendarEventEditorState extends State<CalendarEventEditor> {
                           ),
                         Expanded(
                           child: tiamat.Button.secondary(
-                            text: "Cancel",
+                            text: CalendarStrings.promptCalendarCancel,
                             onTap: () {
                               Navigator.of(context).pop();
                             },
@@ -369,7 +452,7 @@ class _CalendarEventEditorState extends State<CalendarEventEditor> {
                             child: Opacity(
                               opacity: isValidInput ? 1.0 : 0.3,
                               child: tiamat.Button(
-                                text: "Submit",
+                                text: CalendarStrings.promptCalendarSubmit,
                                 isLoading: submitting,
                                 onTap: () async {
                                   var duration = switch (allDayEvent) {
@@ -463,7 +546,7 @@ class _CalendarEventEditorState extends State<CalendarEventEditor> {
             widget.deleteEvent != null)
           Center(
             child: tiamat.Button.danger(
-              text: "Delete Synced Events",
+              text: promptCalendarDeleteSyncedEvents,
               onTap: () {
                 widget.deleteEvent?.call(widget.initialEvent!).then((_) {
                   Navigator.of(context).pop();

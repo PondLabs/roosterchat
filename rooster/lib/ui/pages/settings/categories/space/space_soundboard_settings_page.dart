@@ -32,15 +32,19 @@ import 'package:rooster/client/matrix/components/soundboard/soundboard_preview_p
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/ui/molecules/desktop_app_notice.dart';
+import 'package:rooster/ui/molecules/emoji_picker.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/molecules/soundboard_emoji_picker.dart';
 import 'package:rooster/ui/molecules/soundboard_trim_editor.dart';
 import 'package:rooster/ui/organisms/dj/dj_prompts.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_call_controller.dart';
+import 'package:rooster/ui/organisms/soundboard/soundboard_popover.dart';
+import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/emoji/unicode_emoji.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -51,7 +55,8 @@ Future<void> showSpaceSoundboardDialog(
     BuildContext context, SpaceSoundboardComponent soundboard) {
   return AdaptiveDialog.show(
     context,
-    title: 'Soundboard · ${soundboard.space.displayName}',
+    title: SpaceSoundboardSettingsPage.labelSoundboardDialogTitle(
+        soundboard.space.displayName),
     scrollable: false,
     builder: (context) {
       final size = MediaQuery.sizeOf(context);
@@ -68,6 +73,192 @@ Future<void> showSpaceSoundboardDialog(
 class SpaceSoundboardSettingsPage extends StatefulWidget {
   final SpaceSoundboardComponent soundboard;
   const SpaceSoundboardSettingsPage({super.key, required this.soundboard});
+
+  static String labelSoundboardDialogTitle(String space) => Intl.message(
+      "Soundboard · $space",
+      name: "labelSoundboardDialogTitle",
+      args: [space],
+      desc: "Title of the popup with a space's soundboard page (add a sound, "
+          "edit the ones there), opened from a call's soundboard or from the "
+          "entrance sound setting. The value is the space's name");
+
+  static String get messageSoundboardOnlyAdminsCanManage => Intl.message(
+      "Only space admins can manage the soundboard.",
+      name: "messageSoundboardOnlyAdminsCanManage",
+      desc: "Shown on a space's soundboard page to someone who may not add, "
+          "edit or remove its sounds");
+
+  static String get labelSoundboardAddSoundHeader => Intl.message("Add sound",
+      name: "labelSoundboardAddSoundHeader",
+      desc: "Heading of the part of a space's soundboard page where a new "
+          "sound is made from an audio file or a link");
+
+  static String get labelSoundboardDesktopAppPitch => Intl.message(
+      "🔊 Clip the best 15 seconds of any YouTube video, X post or file and "
+      "drop it on the soundboard, straight from the desktop app.",
+      name: "labelSoundboardDesktopAppPitch",
+      desc: "On a space's soundboard page in the browser and on phones, where "
+          "sounds can't be added: adding them needs the desktop app, and a "
+          "download link follows. X is the social network");
+
+  static String labelSoundboardSoundsHeader(int count) =>
+      Intl.message("Sounds ($count)",
+          name: "labelSoundboardSoundsHeader",
+          args: [count],
+          desc: "Heading of the list of a space's soundboard sounds, with how "
+              "many there are");
+
+  static String get labelSoundboardLink => Intl.message("Link",
+      name: "labelSoundboardLink",
+      desc: "Label of the field on a space's soundboard page where a link to "
+          "the audio for a new sound is pasted");
+
+  static String get labelSoundboardLinkPlaceholder => Intl.message(
+      "A link to an audio file, or to a page a source takes",
+      name: "labelSoundboardLinkPlaceholder",
+      desc: "Placeholder of the link field on a space's soundboard page. A "
+          "source is a source extension: an add-on that finds and downloads "
+          "the audio of a page (a video, a post)");
+
+  static String get promptSoundboardLoadLink => Intl.message("Load",
+      name: "promptSoundboardLoadLink",
+      desc: "Button next to the link field on a space's soundboard page: "
+          "loads the pasted link's audio into the trim editor");
+
+  static String get promptSoundboardChooseFile => Intl.message("Choose file…",
+      name: "promptSoundboardChooseFile",
+      desc: "Button on a space's soundboard page that picks an audio file on "
+          "this computer to make a sound of");
+
+  static String get labelSoundboardSoundName => Intl.message("Name",
+      name: "labelSoundboardSoundName",
+      desc: "Label of the field with a soundboard sound's name, when adding "
+          "or editing a sound");
+
+  static String get labelSoundboardSoundNamePlaceholder =>
+      Intl.message("Airhorn",
+          name: "labelSoundboardSoundNamePlaceholder",
+          desc: "Example name in the empty name field of a new soundboard "
+              "sound: an air horn, a classic soundboard sound");
+
+  static String get labelSoundboardStartAt => Intl.message("Start at",
+      name: "labelSoundboardStartAt",
+      desc: "Label of the field where the admin types where in a long audio "
+          "(a time like 1:30) the trim editor should start");
+
+  static String get promptSoundboardGoToStart => Intl.message("Go",
+      name: "promptSoundboardGoToStart",
+      desc: "Button next to the \"Start at\" field: opens the trim editor at "
+          "that time of the audio");
+
+  static String labelSoundboardWindowShowing(
+          String from, String to, int seconds) =>
+      Intl.message(
+          "Showing $from–$to. The editor shows up to $seconds s at a time.",
+          name: "labelSoundboardWindowShowing",
+          args: [from, to, seconds],
+          desc: "Next to the \"Start at\" field, for a long audio: which part "
+              "of it the trim editor shows (times like 1:30), and how many "
+              "seconds it can show at once");
+
+  static String get errorSoundboardPasteLinkFirst =>
+      Intl.message("Paste a link first, or choose a file",
+          name: "errorSoundboardPasteLinkFirst",
+          desc: "Shown under the link field of a space's soundboard page when "
+              "Load is pressed with the field empty");
+
+  static String get labelSoundboardChooseSoundFile =>
+      Intl.message("Choose a sound",
+          name: "labelSoundboardChooseSoundFile",
+          desc: "Title of the system's file picker, opened to choose an audio "
+              "file for a new soundboard sound");
+
+  static String get labelSoundboardDecoding => Intl.message("Decoding…",
+      name: "labelSoundboardDecoding",
+      desc: "Shown while the audio picked for a new soundboard sound is read "
+          "for the trim editor");
+
+  static String get errorSoundboardStartFormat =>
+      Intl.message("Write the start like 1:30 or 90s",
+          name: "errorSoundboardStartFormat",
+          desc: "Shown when the \"Start at\" field holds no time the app can "
+              "read. Keep the examples 1:30 and 90s as they are: they are "
+              "what the field reads");
+
+  static String get errorSoundboardLoadFirst =>
+      Intl.message("Load a link or choose a file first",
+          name: "errorSoundboardLoadFirst",
+          desc: "Shown when a new soundboard sound is previewed or added "
+              "before any audio was loaded");
+
+  static String get labelSoundboardEditSound => Intl.message("Edit sound",
+      name: "labelSoundboardEditSound",
+      desc: "Title of the popup that renames a soundboard sound and changes "
+          "its emoji and volume");
+
+  static String get errorSoundboardNoPermission =>
+      Intl.message("You do not have permission to manage sounds.",
+          name: "errorSoundboardNoPermission",
+          desc: "Shown on a space's soundboard page when the server refused "
+              "to add, change or remove a sound because you may not");
+
+  static String get errorSoundboardServerFileTooLarge =>
+      Intl.message("The homeserver rejected the file as too large.",
+          name: "errorSoundboardServerFileTooLarge",
+          desc: "Shown on a space's soundboard page when the Matrix server "
+              "refused to store a new sound's file because of its size");
+
+  static String errorSoundboardServerRejected(String reason) =>
+      Intl.message("The homeserver rejected the request: $reason",
+          name: "errorSoundboardServerRejected",
+          args: [reason],
+          desc: "Shown on a space's soundboard page when the Matrix server "
+              "refused to add, change or remove a sound. The value is the "
+              "server's own error message, usually in English");
+
+  static String errorSoundboardCouldNotAddSound(String error) =>
+      Intl.message("Could not add sound: $error",
+          name: "errorSoundboardCouldNotAddSound",
+          args: [error],
+          desc: "Shown on a space's soundboard page when adding, previewing or "
+              "removing a sound failed for an unexpected reason. The value is "
+              "the technical error, in English");
+
+  static String get labelSoundboardSoundVolume => Intl.message("Sound volume",
+      name: "labelSoundboardSoundVolume",
+      desc: "Label of the slider that sets how loud one soundboard sound "
+          "plays for everyone (0 to 200 %), when adding or editing it");
+
+  static String get promptSoundboardPreview => Intl.message("Preview",
+      name: "promptSoundboardPreview",
+      desc: "Button that plays a soundboard sound for you alone, at the "
+          "volume set, before saving it");
+
+  static String get labelSoundboardTrimPlaceholder => Intl.message(
+      "Paste a link or choose a file: its audio shows up here, to cut the "
+      "part you want and hear it before adding it.",
+      name: "labelSoundboardTrimPlaceholder",
+      desc: "Shown where the trim editor goes on a space's soundboard page, "
+          "before any audio is loaded");
+
+  static String get labelSoundboardPageLinksNeedSource =>
+      Intl.message("Links to pages (a video, a post) need a source extension.",
+          name: "labelSoundboardPageLinksNeedSource",
+          desc: "Under the link field on a space's soundboard page, when no "
+              "installed source extension takes links for the soundboard");
+
+  static String labelSoundboardPageLinksGoThrough(String sources) =>
+      Intl.message("Links to pages go through $sources.",
+          name: "labelSoundboardPageLinksGoThrough",
+          args: [sources],
+          desc: "Under the link field on a space's soundboard page: the "
+              "installed source extensions that take links to pages for the "
+              "soundboard. The value is their names, separated by commas");
+
+  static String get promptSoundboardAddSource => Intl.message("Add a source…",
+      name: "promptSoundboardAddSource",
+      desc: "Button under the link field on a space's soundboard page "
+          "that installs a source extension");
 
   @override
   State<SpaceSoundboardSettingsPage> createState() =>
@@ -182,9 +373,9 @@ class _SpaceSoundboardSettingsPageState
   @override
   Widget build(BuildContext context) {
     if (!widget.soundboard.canManage) {
-      return const Center(
+      return Center(
         child: tiamat.Text.labelLow(
-            'Only space admins can manage the soundboard.'),
+            SpaceSoundboardSettingsPage.messageSoundboardOnlyAdminsCanManage),
       );
     }
     return ListenableBuilder(
@@ -196,17 +387,18 @@ class _SpaceSoundboardSettingsPageState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const tiamat.Text.labelEmphasised('Add sound'),
+              tiamat.Text.labelEmphasised(
+                  SpaceSoundboardSettingsPage.labelSoundboardAddSoundHeader),
               const SizedBox(height: 8),
               if (_import.canImport)
                 ..._addSection()
               else
-                const DesktopAppNotice(
-                    '🔊 Clip the best 15 seconds of any YouTube video, X post '
-                    'or file and drop it on the soundboard, straight from the '
-                    'desktop app.'),
+                DesktopAppNotice(
+                    SpaceSoundboardSettingsPage.labelSoundboardDesktopAppPitch),
               const SizedBox(height: 16),
-              tiamat.Text.labelEmphasised('Sounds (${sounds.length})'),
+              tiamat.Text.labelEmphasised(
+                  SpaceSoundboardSettingsPage.labelSoundboardSoundsHeader(
+                      sounds.length)),
               const SizedBox(height: 8),
               for (final s in sounds)
                 Padding(
@@ -256,9 +448,9 @@ class _SpaceSoundboardSettingsPageState
         children: [
           Expanded(
             child: tiamat.TextInput(
-              label: 'Link',
-              placeholder: 'A link to an audio file, or to a page a source '
-                  'takes',
+              label: SpaceSoundboardSettingsPage.labelSoundboardLink,
+              placeholder:
+                  SpaceSoundboardSettingsPage.labelSoundboardLinkPlaceholder,
               controller: _linkCtrl,
               onSubmitted: (_) {
                 _autoLoad?.cancel();
@@ -268,13 +460,13 @@ class _SpaceSoundboardSettingsPageState
           ),
           const SizedBox(width: 8),
           tiamat.Button.secondary(
-            text: 'Load',
+            text: SpaceSoundboardSettingsPage.promptSoundboardLoadLink,
             isLoading: _loading,
             onTap: _idle ? _loadLink : null,
           ),
           const SizedBox(width: 8),
           tiamat.Button.secondary(
-            text: 'Choose file…',
+            text: SpaceSoundboardSettingsPage.promptSoundboardChooseFile,
             onTap: _idle ? _chooseFile : null,
           ),
         ],
@@ -297,8 +489,9 @@ class _SpaceSoundboardSettingsPageState
         children: [
           Expanded(
             child: tiamat.TextInput(
-              label: 'Name',
-              placeholder: 'Airhorn',
+              label: SpaceSoundboardSettingsPage.labelSoundboardSoundName,
+              placeholder: SpaceSoundboardSettingsPage
+                  .labelSoundboardSoundNamePlaceholder,
               controller: _nameCtrl,
             ),
           ),
@@ -331,7 +524,7 @@ class _SpaceSoundboardSettingsPageState
         ),
       const SizedBox(height: 8),
       tiamat.Button(
-        text: 'Add sound',
+        text: SoundboardPopover.promptSoundboardAddSound,
         isLoading: _busy,
         onTap: _idle && _window != null ? _addSound : null,
       ),
@@ -358,7 +551,8 @@ class _SpaceSoundboardSettingsPageState
     if (source == null || window == null) {
       return [
         const SizedBox(height: 12),
-        _TrimPlaceholder(status: _loading ? _status ?? 'Loading…' : null),
+        _TrimPlaceholder(
+            status: _loading ? _status ?? CommonStrings.labelLoading : null),
       ];
     }
     final clock = SoundboardImportService.clock;
@@ -377,22 +571,23 @@ class _SpaceSoundboardSettingsPageState
             SizedBox(
               width: 120,
               child: tiamat.TextInput(
-                label: 'Start at',
+                label: SpaceSoundboardSettingsPage.labelSoundboardStartAt,
                 placeholder: '1:30',
                 controller: _startCtrl,
               ),
             ),
             const SizedBox(width: 8),
             tiamat.Button.secondary(
-              text: 'Go',
+              text: SpaceSoundboardSettingsPage.promptSoundboardGoToStart,
               onTap: _idle ? _moveWindow : null,
             ),
             const SizedBox(width: 12),
             Flexible(
-              child: tiamat.Text.labelLow('Showing ${clock(window.startMs)}–'
-                  '${clock(window.startMs + window.durationMs)}. The editor '
-                  'shows up to ${SoundboardConstraints.maxWindowMs ~/ 1000} s '
-                  'at a time.'),
+              child: tiamat.Text.labelLow(
+                  SpaceSoundboardSettingsPage.labelSoundboardWindowShowing(
+                      clock(window.startMs),
+                      clock(window.startMs + window.durationMs),
+                      SoundboardConstraints.maxWindowMs ~/ 1000)),
             ),
           ],
         ),
@@ -447,8 +642,8 @@ class _SpaceSoundboardSettingsPageState
   Future<void> _loadLink() => _loadWith(() async {
         final link = _linkCtrl.text.trim();
         if (link.isEmpty) {
-          throw const SoundboardImportError(
-              'Paste a link first, or choose a file');
+          throw SoundboardImportError(
+              SpaceSoundboardSettingsPage.errorSoundboardPasteLinkFirst);
         }
         final source = await _import.fromLink(link,
             onStatus: (status) =>
@@ -458,7 +653,7 @@ class _SpaceSoundboardSettingsPageState
 
   Future<void> _chooseFile() async {
     final result = await FilePicker.platform.pickFiles(
-      dialogTitle: 'Choose a sound',
+      dialogTitle: SpaceSoundboardSettingsPage.labelSoundboardChooseSoundFile,
       type: FileType.custom,
       allowedExtensions: _import.fileExtensions,
     );
@@ -493,7 +688,8 @@ class _SpaceSoundboardSettingsPageState
     final start = whole == null
         ? math.max<int>(0, startMs)
         : startMs.clamp(0, math.max<int>(0, whole - 1000));
-    setState(() => _status = 'Decoding…');
+    setState(
+        () => _status = SpaceSoundboardSettingsPage.labelSoundboardDecoding);
     final pcm = await _import.decode(source,
         startMs: start, maxMs: SoundboardConstraints.maxWindowMs);
     final peaks = pcm.peaks(_waveformBins);
@@ -518,7 +714,8 @@ class _SpaceSoundboardSettingsPageState
         if (source == null) return;
         final start = SoundboardImportService.parseTimeMs(_startCtrl.text);
         if (start == null) {
-          throw const SoundboardImportError('Write the start like 1:30 or 90s');
+          throw SoundboardImportError(
+              SpaceSoundboardSettingsPage.errorSoundboardStartFormat);
         }
         await _openWindow(source, start);
       });
@@ -529,7 +726,8 @@ class _SpaceSoundboardSettingsPageState
     if (cached != null) return cached;
     final window = _window;
     if (window == null) {
-      throw const SoundboardImportError('Load a link or choose a file first');
+      throw SoundboardImportError(
+          SpaceSoundboardSettingsPage.errorSoundboardLoadFirst);
     }
     final start = _startMs;
     final end = _endMs;
@@ -648,7 +846,7 @@ class _SpaceSoundboardSettingsPageState
       if (recent.isNotEmpty)
         DynamicEmoticonPack(
             identifier: 'dynamic_pack_frequently_used_soundboard',
-            displayName: 'Frequently Used',
+            displayName: EmojiPicker.labelChatEmojiFrequentlyUsed,
             icon: Icons.schedule,
             emoticons: recent,
             usage: EmoticonUsage.all),
@@ -673,7 +871,7 @@ class _SpaceSoundboardSettingsPageState
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Edit sound'),
+          title: Text(SpaceSoundboardSettingsPage.labelSoundboardEditSound),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -689,8 +887,10 @@ class _SpaceSoundboardSettingsPageState
                   const SizedBox(width: 8),
                   SizedBox(
                     width: 240,
-                    child:
-                        tiamat.TextInput(label: 'Name', controller: nameCtrl),
+                    child: tiamat.TextInput(
+                        label: SpaceSoundboardSettingsPage
+                            .labelSoundboardSoundName,
+                        controller: nameCtrl),
                   ),
                 ],
               ),
@@ -736,10 +936,10 @@ class _SpaceSoundboardSettingsPageState
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel')),
+                child: Text(CommonStrings.promptCancel)),
             TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Save')),
+                child: Text(CommonStrings.promptSave)),
           ],
         ),
       ),
@@ -766,15 +966,18 @@ class _SpaceSoundboardSettingsPageState
     if (e is SoundboardValidationError) return e.message;
     if (e is matrix.MatrixException) {
       if (e.error == matrix.MatrixError.M_FORBIDDEN) {
-        return 'You do not have permission to manage sounds.';
+        return SpaceSoundboardSettingsPage.errorSoundboardNoPermission;
       }
       if (e.error == matrix.MatrixError.M_TOO_LARGE) {
-        return 'The homeserver rejected the file as too large.';
+        return SpaceSoundboardSettingsPage.errorSoundboardServerFileTooLarge;
       }
-      return 'The homeserver rejected the request: ${e.errorMessage}';
+      return SpaceSoundboardSettingsPage.errorSoundboardServerRejected(
+          e.errorMessage);
     }
+    // Translated where they are thrown (MatrixSpaceSoundboardComponent,
+    // SoundboardCallController).
     if (e is StateError) return e.message;
-    return 'Could not add sound: $e';
+    return SpaceSoundboardSettingsPage.errorSoundboardCouldNotAddSound('$e');
   }
 }
 
@@ -805,7 +1008,8 @@ class _SoundVolumeField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const tiamat.Text.labelLow('Sound volume'),
+        tiamat.Text.labelLow(
+            SpaceSoundboardSettingsPage.labelSoundboardSoundVolume),
         Row(
           children: [
             const Icon(Icons.volume_up, size: 18),
@@ -825,14 +1029,15 @@ class _SoundVolumeField extends StatelessWidget {
             ),
             ValueListenableBuilder(
               valueListenable: playing ?? ValueNotifier<Duration?>(null),
-              builder: (context, position, _) =>
-                  position != null && onStop != null
-                      ? tiamat.Button.secondary(text: 'Stop', onTap: onStop)
-                      : tiamat.Button.secondary(
-                          text: 'Preview',
-                          isLoading: previewing,
-                          onTap: onPreview,
-                        ),
+              builder: (context, position, _) => position != null &&
+                      onStop != null
+                  ? tiamat.Button.secondary(
+                      text: CommonStrings.promptStop, onTap: onStop)
+                  : tiamat.Button.secondary(
+                      text: SpaceSoundboardSettingsPage.promptSoundboardPreview,
+                      isLoading: previewing,
+                      onTap: onPreview,
+                    ),
             ),
           ],
         ),
@@ -854,8 +1059,9 @@ class _TrimPlaceholder extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final status = this.status;
     return Container(
-      height: SoundboardTrimEditor.height,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      // The trim editor's height, or more for a longer text than fits.
+      constraints: const BoxConstraints(minHeight: SoundboardTrimEditor.height),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: colors.outlineVariant),
@@ -875,8 +1081,7 @@ class _TrimPlaceholder extends StatelessWidget {
           ],
           Flexible(
             child: tiamat.Text.labelLow(status ??
-                'Paste a link or choose a file: its audio shows up here, to '
-                    'cut the part you want and hear it before adding it.'),
+                SpaceSoundboardSettingsPage.labelSoundboardTrimPlaceholder),
           ),
         ],
       ),
@@ -907,10 +1112,15 @@ class _SourcesNote extends StatelessWidget {
           children: [
             Flexible(
               child: tiamat.Text.labelLow(names.isEmpty
-                  ? 'Links to pages (a video, a post) need a source extension.'
-                  : 'Links to pages go through ${names.join(', ')}.'),
+                  ? SpaceSoundboardSettingsPage
+                      .labelSoundboardPageLinksNeedSource
+                  : SpaceSoundboardSettingsPage
+                      .labelSoundboardPageLinksGoThrough(names.join(', '))),
             ),
-            TextButton(onPressed: onAdd, child: const Text('Add a source…')),
+            TextButton(
+                onPressed: onAdd,
+                child: Text(
+                    SpaceSoundboardSettingsPage.promptSoundboardAddSource)),
           ],
         );
       },

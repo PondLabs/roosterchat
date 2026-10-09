@@ -2,14 +2,23 @@ import 'package:rooster/config/build_config.dart';
 import 'package:rooster/config/platform_utils.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/utils/links/executor/link_executor.dart';
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class LinkExecutorOpenUri extends LinkExecutor {
   LinkExecutorOpenUri(super.platforms, super.data);
 
+  static String messageLinkOpenWithSystemApp(String url) => Intl.message(
+      "Open the url with the app registered on your system? \n\n `\n$url\n`",
+      name: "messageLinkOpenWithSystemApp",
+      args: [url],
+      desc: "Asked before a link opens in the app installed for it (such as "
+          "Steam), with the address that app gets. Markdown: keep the blank "
+          "line and the backticks around the address");
+
   @override
   String getDescription(Uri uri) {
-    return "Open the url with the app registered on your system? \n\n `\n${getTransformedUri(uri)}\n`";
+    return messageLinkOpenWithSystemApp(getTransformedUri(uri).toString());
   }
 
   String procComponent(String component) {

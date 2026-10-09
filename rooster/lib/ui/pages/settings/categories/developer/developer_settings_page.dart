@@ -22,6 +22,7 @@ import 'package:rooster/utils/system_processes_utils.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:tiamat/atoms/tile.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
@@ -35,6 +36,236 @@ class DeveloperSettingsPage extends StatefulWidget {
 }
 
 class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
+  String get labelDeveloperOtherSettings => Intl.message("Other Settings",
+      name: "labelDeveloperOtherSettings",
+      desc: "Header of the last panel in Developer settings, holding the "
+          "developer toggles that have no section of their own");
+
+  String get labelDeveloperDisableTextCursorManagement =>
+      Intl.message("Disable Text Cursor Management",
+          name: "labelDeveloperDisableTextCursorManagement",
+          desc: "Title of a developer setting that stops the rich text editor "
+              "from moving the text cursor by itself");
+
+  String get labelDeveloperDisableTextCursorManagementDescription => Intl.message(
+      "As part of the implementation for the rich text editor, we sometimes have to make automated changes to the text cursor. This disables that",
+      name: "labelDeveloperDisableTextCursorManagementDescription",
+      desc: "Description under the developer setting 'Disable Text Cursor "
+          "Management'");
+
+  String get labelDeveloperUseSharedIsolateInBackground =>
+      Intl.message("Use shared database isolate in background",
+          name: "labelDeveloperUseSharedIsolateInBackground",
+          desc: "Title of a developer setting: background tasks use the same "
+              "database isolate (a Dart worker thread) as the app");
+
+  String get labelDeveloperShowTranslationKeys =>
+      Intl.message("Show translation keys",
+          name: "labelDeveloperShowTranslationKeys",
+          desc: "Title of a developer setting that shows each string's "
+              "translation key instead of its text, to check translations");
+
+  String get labelDeveloperShowTranslationKeysDescription =>
+      Intl.message("Shows each string's key instead of its text",
+          name: "labelDeveloperShowTranslationKeysDescription",
+          desc: "Description under the developer setting 'Show translation "
+              "keys'");
+
+  String get labelDeveloperPseudoTranslations =>
+      Intl.message("Pseudo-translations",
+          name: "labelDeveloperPseudoTranslations",
+          desc: "Title of a developer setting that shows every string "
+              "accented and stretched, the way a long language would, to find "
+              "text that is cut off or not translated");
+
+  String get labelDeveloperPseudoTranslationsDescription => Intl.message(
+      "Shows every string accented and a lot longer, between brackets, to find text that gets cut off or is not translated",
+      name: "labelDeveloperPseudoTranslationsDescription",
+      desc: "Description under the developer setting 'Pseudo-translations'");
+
+  String get labelDeveloperKeyboardOffset => Intl.message("Keyboard Offset",
+      name: "labelDeveloperKeyboardOffset",
+      desc: "Title of a developer slider: how far the app moves up when the "
+          "on-screen keyboard opens");
+
+  String get labelDeveloperKeyboardOffsetDescription => Intl.message(
+      "Amount to shift the app view up by when the onscreen keyboard is shown",
+      name: "labelDeveloperKeyboardOffsetDescription",
+      desc: "Description under the developer slider 'Keyboard Offset'");
+
+  String get labelDeveloperPerformance => Intl.message("Performance",
+      name: "labelDeveloperPerformance",
+      desc: "Title of the Developer settings section with performance "
+          "measurements");
+
+  String get labelDeveloperDiagnosticsGeneral => Intl.message("General",
+      name: "labelDeveloperDiagnosticsGeneral",
+      desc: "In Developer settings > Performance: the group of performance "
+          "measurements that are not about the database");
+
+  String get labelDeveloperDiagnosticsInitialLoad =>
+      Intl.message("Initial Load Database Diagnostics",
+          name: "labelDeveloperDiagnosticsInitialLoad",
+          desc: "In Developer settings > Performance: the group of database "
+              "timings measured while the app first loads");
+
+  String get labelDeveloperDiagnosticsPostLoad =>
+      Intl.message("Post Load Database Diagnostics",
+          name: "labelDeveloperDiagnosticsPostLoad",
+          desc: "In Developer settings > Performance: the group of database "
+              "timings measured after the app has loaded");
+
+  String get labelDeveloperRendering => Intl.message("Rendering",
+      name: "labelDeveloperRendering",
+      desc: "Title of the Developer settings section with drawing (rendering) "
+          "debug options");
+
+  String get labelDeveloperShowRepaints => Intl.message("Show repaints",
+      name: "labelDeveloperShowRepaints",
+      desc: "Developer toggle that colours every area of the screen each time "
+          "it is drawn again");
+
+  String get labelDeveloperShowPerformanceOverlay => Intl.message(
+      "Show performance overlay",
+      name: "labelDeveloperShowPerformanceOverlay",
+      desc: "Developer toggle that shows Flutter's frame timing graphs over "
+          "the app");
+
+  String get labelDeveloperRequiresRestart => Intl.message("Requires restart",
+      name: "labelDeveloperRequiresRestart",
+      desc: "Under a developer toggle: it only takes effect after the app is "
+          "restarted");
+
+  String get labelDeveloperBenchmarks => Intl.message("Benchmarks",
+      name: "labelDeveloperBenchmarks",
+      desc: "Title of the Developer settings section with performance tests");
+
+  String get promptDeveloperTimelineViewer => Intl.message("Timeline Viewer",
+      name: "promptDeveloperTimelineViewer",
+      desc: "Button in Developer settings > Benchmarks that opens a test chat "
+          "timeline full of generated messages");
+
+  String get promptDeveloperNotificationBadgesStressTest =>
+      Intl.message("Notification Badges Stress Test",
+          name: "promptDeveloperNotificationBadgesStressTest",
+          desc: "Button in Developer settings > Benchmarks that changes the "
+              "unread count badge on the taskbar thousands of times");
+
+  String get labelDeveloperWindowSize => Intl.message("Window Size",
+      name: "labelDeveloperWindowSize",
+      desc: "Title of the Developer settings section with buttons that resize "
+          "the window");
+
+  String get promptDeveloperMaximizeWindow => Intl.message("Maximize",
+      name: "promptDeveloperMaximizeWindow",
+      desc: "Button in Developer settings > Window Size that maximizes the "
+          "window");
+
+  String get labelDeveloperNotifications => Intl.message("Notifications",
+      name: "labelDeveloperNotifications",
+      desc: "Title of the Developer settings section with buttons that show "
+          "test notifications");
+
+  String get promptDeveloperMessageNotification =>
+      Intl.message("Message Notification",
+          name: "promptDeveloperMessageNotification",
+          desc: "Button in Developer settings > Notifications that shows a "
+              "test notification for a message");
+
+  String get messageDeveloperTestMessage => Intl.message("Test Message!",
+      name: "messageDeveloperTestMessage",
+      desc: "Text of the test message notification sent from Developer "
+          "settings > Notifications");
+
+  String get promptDeveloperCallNotification =>
+      Intl.message("Call Notification",
+          name: "promptDeveloperCallNotification",
+          desc: "Button in Developer settings > Notifications that shows a "
+              "test notification for an incoming call");
+
+  String get labelDeveloperTestIncomingCall => Intl.message("Incoming Call!",
+      name: "labelDeveloperTestIncomingCall",
+      desc: "Title of the test incoming call notification sent from Developer "
+          "settings > Notifications");
+
+  String get messageDeveloperTestCallNotification =>
+      Intl.message("Test Call Notification",
+          name: "messageDeveloperTestCallNotification",
+          desc: "Text of the test incoming call notification sent from "
+              "Developer settings > Notifications");
+
+  String get labelDeveloperShortcuts => Intl.message("Shortcuts",
+      name: "labelDeveloperShortcuts",
+      desc: "Title of the Developer settings section (Android) about the "
+          "launcher shortcuts the app creates for chats");
+
+  String get promptDeveloperClearShortcuts => Intl.message("Clear Shortcuts",
+      name: "promptDeveloperClearShortcuts",
+      desc: "Button in Developer settings > Shortcuts (Android) that removes "
+          "every launcher shortcut the app created");
+
+  String get labelDeveloperBackgroundTasks => Intl.message("Background Tasks",
+      name: "labelDeveloperBackgroundTasks",
+      desc: "Title of the Developer settings section with buttons that start "
+          "fake background tasks, to test how they are shown");
+
+  String get promptDeveloperTaskWithProgress => Intl.message("With progress",
+      name: "promptDeveloperTaskWithProgress",
+      desc: "Button in Developer settings > Background Tasks: starts a fake "
+          "task that shows how far along it is");
+
+  String get promptDeveloperTaskIndeterminate => Intl.message("Indeterminate",
+      name: "promptDeveloperTaskIndeterminate",
+      desc: "Button in Developer settings > Background Tasks: starts a fake "
+          "task with no progress to show");
+
+  String get promptDeveloperAsyncTaskWithCrash => Intl.message(
+      "Async task with crash",
+      name: "promptDeveloperAsyncTaskWithCrash",
+      desc: "Button in Developer settings > Background Tasks: starts a fake "
+          "task that fails after a few seconds");
+
+  String get labelDeveloperAsyncTask => Intl.message("Async task",
+      name: "labelDeveloperAsyncTask",
+      desc: "Name of the fake failing background task started from Developer "
+          "settings, shown in the list of running tasks");
+
+  String get labelDeveloperError => Intl.message("Error",
+      name: "labelDeveloperError",
+      desc: "Title of the Developer settings section with buttons that cause "
+          "an error or write to the log, to test error handling");
+
+  String get promptDeveloperThrowError => Intl.message("Throw an error",
+      name: "promptDeveloperThrowError",
+      desc: "Button in Developer settings > Error that makes the app fail on "
+          "purpose");
+
+  String get promptDeveloperPrintSomething => Intl.message("Print Something",
+      name: "promptDeveloperPrintSomething",
+      desc: "Button in Developer settings > Error that writes a line to the "
+          "log");
+
+  String get labelDeveloperDangerous => Intl.message("Dangerous",
+      name: "labelDeveloperDangerous",
+      desc: "Title of the Developer settings section with tools that run "
+          "programs on the computer");
+
+  String get promptDeveloperGetProcessList => Intl.message("Get Process List",
+      name: "promptDeveloperGetProcessList",
+      desc: "Button in Developer settings > Dangerous that lists the programs "
+          "running on the computer");
+
+  String get promptDeveloperExecuteShellCommand =>
+      Intl.message("Execute Shell Command",
+          name: "promptDeveloperExecuteShellCommand",
+          desc: "Button in Developer settings > Dangerous, and the title of "
+              "the dialog it opens, to run a command line on the computer");
+
+  String get promptDeveloperDumpDatabases => Intl.message("Dump Databases",
+      name: "promptDeveloperDumpDatabases",
+      desc: "Title of a Developer settings section and its button: copies the "
+          "app's database files into a folder you pick");
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -50,30 +281,26 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
       dumpDatabases(),
       executeShellCommand(),
       tiamat.Panel(
-        header: "Other Settings",
+        header: labelDeveloperOtherSettings,
         mode: TileType.surfaceContainerLow,
         child: Column(
           children: [
             if (!BuildConfig.MOBILE)
               BooleanPreferenceToggle(
                 preference: preferences.disableTextCursorManagement,
-                title: "Disable Text Cursor Management",
+                title: labelDeveloperDisableTextCursorManagement,
                 description:
-                    "As part of the implementaton for the rich text editor, we sometimes have to make automated changes to the text cursor. This disables that",
+                    labelDeveloperDisableTextCursorManagementDescription,
               ),
             BooleanPreferenceToggle(
                 preference: preferences.useSharedIsolateInBackgroundTasks,
-                title: "Use shared database isolate in background"),
-            BooleanPreferenceToggle(
-                preference: preferences.debugTranslations,
-                title: "Debug Translations"),
+                title: labelDeveloperUseSharedIsolateInBackground),
             DoublePreferenceSlider(
               preference: preferences.customOnscreenKeyboardViewOffset,
-              title: "Keyboard Offset",
+              title: labelDeveloperKeyboardOffset,
               min: 0.0,
               max: 1000,
-              description:
-                  "Amount to shift the app view up by when the onscreen keyboard is shown",
+              description: labelDeveloperKeyboardOffsetDescription,
             ),
           ],
         ),
@@ -88,21 +315,27 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 
   Widget performance() {
     return ExpansionTile(
-        title: const tiamat.Text.labelEmphasised("Performance"),
+        title: tiamat.Text.labelEmphasised(labelDeveloperPerformance),
         initiallyExpanded: false,
         backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
         collapsedBackgroundColor:
             Theme.of(context).colorScheme.surfaceContainerLow,
         children: [
-          Diagnostics.general,
-          Diagnostics.initialLoadDatabaseDiagnostics,
-          Diagnostics.postLoadDatabaseDiagnostics,
-        ].map((e) => CumulativeDiagnosticsWidget(diagnostics: e)).toList());
+          CumulativeDiagnosticsWidget(
+              diagnostics: Diagnostics.general,
+              title: labelDeveloperDiagnosticsGeneral),
+          CumulativeDiagnosticsWidget(
+              diagnostics: Diagnostics.initialLoadDatabaseDiagnostics,
+              title: labelDeveloperDiagnosticsInitialLoad),
+          CumulativeDiagnosticsWidget(
+              diagnostics: Diagnostics.postLoadDatabaseDiagnostics,
+              title: labelDeveloperDiagnosticsPostLoad),
+        ]);
   }
 
   Widget rendering() {
     return ExpansionTile(
-        title: const tiamat.Text.labelEmphasised("Rendering"),
+        title: tiamat.Text.labelEmphasised(labelDeveloperRendering),
         backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
         collapsedBackgroundColor:
             Theme.of(context).colorScheme.surfaceContainerLow,
@@ -113,7 +346,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const tiamat.Text.label("Show repaints"),
+                  Flexible(
+                      child: tiamat.Text.label(labelDeveloperShowRepaints)),
                   tiamat.Switch(
                     state: debugRepaintRainbowEnabled,
                     onChanged: (value) {
@@ -126,9 +360,20 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
               ),
               BooleanPreferenceToggle(
                 preference: preferences.showPerformanceOverlay,
-                title: "Show performance overlay",
-                description: "Requires restart",
-              )
+                title: labelDeveloperShowPerformanceOverlay,
+                description: labelDeveloperRequiresRestart,
+              ),
+              // Both apply at once (AppLanguage listens to them); see
+              // docs/localization.md, Layout.
+              BooleanPreferenceToggle(
+                preference: preferences.pseudoTranslations,
+                title: labelDeveloperPseudoTranslations,
+                description: labelDeveloperPseudoTranslationsDescription,
+              ),
+              BooleanPreferenceToggle(
+                  preference: preferences.debugTranslations,
+                  title: labelDeveloperShowTranslationKeys,
+                  description: labelDeveloperShowTranslationKeysDescription),
             ]),
           )
         ]);
@@ -136,7 +381,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 
   Widget benchmarks() {
     return ExpansionTile(
-        title: const tiamat.Text.labelEmphasised("Benchmarks"),
+        title: tiamat.Text.labelEmphasised(labelDeveloperBenchmarks),
         initiallyExpanded: false,
         backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
         collapsedBackgroundColor:
@@ -147,12 +392,12 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
             runSpacing: 8,
             children: [
               tiamat.Button(
-                text: "Timeline Viewer",
+                text: promptDeveloperTimelineViewer,
                 onTap: () => NavigationUtils.navigateTo(
                     context, const BenchmarkTimelineViewer()),
               ),
               tiamat.Button(
-                  text: "Notification Badges Stress Test",
+                  text: promptDeveloperNotificationBadgesStressTest,
                   onTap: () async {
                     for (int i = 0; i < 10000; i++) {
                       int v = i % 9;
@@ -172,7 +417,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 
   Widget windowSize() {
     return ExpansionTile(
-        title: const tiamat.Text.labelEmphasised("Window Size"),
+        title: tiamat.Text.labelEmphasised(labelDeveloperWindowSize),
         initiallyExpanded: false,
         backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
         collapsedBackgroundColor:
@@ -183,7 +428,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
             runSpacing: 8,
             children: [
               tiamat.Button(
-                text: "Maximize",
+                text: promptDeveloperMaximizeWindow,
                 onTap: () => windowManager.maximize(),
               ),
               tiamat.Button(
@@ -240,14 +485,14 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 
   Widget notificationTests() {
     return ExpansionTile(
-        title: const tiamat.Text.labelEmphasised("Notifications"),
+        title: tiamat.Text.labelEmphasised(labelDeveloperNotifications),
         backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
         collapsedBackgroundColor:
             Theme.of(context).colorScheme.surfaceContainerLow,
         children: [
           Wrap(spacing: 8, runSpacing: 8, children: [
             tiamat.Button(
-              text: "Message Notification",
+              text: promptDeveloperMessageNotification,
               onTap: () async {
                 var client = clientManager!.clients.first;
                 var room = client.rooms.first;
@@ -259,7 +504,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   roomName: room.displayName,
                   roomId: room.identifier,
                   roomImage: await room.getShortcutImage(),
-                  content: "Test Message!",
+                  content: messageDeveloperTestMessage,
                   clientId: client.identifier,
                   eventId: "fake_event_id",
                   isDirectMessage: true,
@@ -267,7 +512,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
               },
             ),
             tiamat.Button(
-              text: "Call Notification",
+              text: promptDeveloperCallNotification,
               onTap: () async {
                 if (!BuildConfig.ANDROID) {
                   clientManager?.callManager.startRingtone();
@@ -277,7 +522,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                 var room = client.rooms.first;
                 var user = client.self!;
                 NotificationManager.notify(CallNotificationContent(
-                  title: "Incoming Call!",
+                  title: labelDeveloperTestIncomingCall,
                   senderImage: user.avatar,
                   senderId: user.identifier,
                   roomName: room.displayName,
@@ -285,7 +530,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   senderName: user.displayName,
                   senderImageId: "fake_call_avatar_id",
                   roomImage: await room.getShortcutImage(),
-                  content: "Test Call Notification",
+                  content: messageDeveloperTestCallNotification,
                   clientId: client.identifier,
                   callId: "fake_call_id",
                   isDirectMessage: true,
@@ -298,14 +543,14 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 
   Widget shortcuts() {
     return ExpansionTile(
-      title: const tiamat.Text.labelEmphasised("Shortcuts"),
+      title: tiamat.Text.labelEmphasised(labelDeveloperShortcuts),
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
       collapsedBackgroundColor:
           Theme.of(context).colorScheme.surfaceContainerLow,
       children: [
         Wrap(spacing: 8, runSpacing: 8, children: [
           tiamat.Button(
-            text: "Clear Shortcuts",
+            text: promptDeveloperClearShortcuts,
             onTap: () async {
               await shortcutsManager.clearAllShortcuts();
             },
@@ -317,25 +562,25 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 
   Widget backgroundTasks() {
     return ExpansionTile(
-      title: const tiamat.Text.labelEmphasised("Background Tasks"),
+      title: tiamat.Text.labelEmphasised(labelDeveloperBackgroundTasks),
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
       collapsedBackgroundColor:
           Theme.of(context).colorScheme.surfaceContainerLow,
       children: [
         Wrap(spacing: 8, runSpacing: 8, children: [
           tiamat.Button(
-              text: "With progress",
+              text: promptDeveloperTaskWithProgress,
               onTap: () => backgroundTaskManager
                   .addTask(FakeBackgroundTaskWithProgress())),
           tiamat.Button(
-              text: "Indeterminate",
+              text: promptDeveloperTaskIndeterminate,
               onTap: () => backgroundTaskManager.addTask(FakeBackgroundTask())),
           tiamat.Button(
-              text: "Async task with crash",
+              text: promptDeveloperAsyncTaskWithCrash,
               onTap: () => backgroundTaskManager.addTask(AsyncTask(() async {
                     await Future.delayed(const Duration(seconds: 5));
                     throw Exception("This background task failed!");
-                  }, "Async task"))),
+                  }, labelDeveloperAsyncTask))),
         ])
       ],
     );
@@ -343,21 +588,21 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 
   Widget error() {
     return ExpansionTile(
-      title: const tiamat.Text.labelEmphasised("Error"),
+      title: tiamat.Text.labelEmphasised(labelDeveloperError),
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
       collapsedBackgroundColor:
           Theme.of(context).colorScheme.surfaceContainerLow,
       children: [
         Wrap(spacing: 8, runSpacing: 8, children: [
           tiamat.Button(
-              text: "Throw an error",
+              text: promptDeveloperThrowError,
               onTap: () {
                 // This should also throw an error!
                 String? empty;
                 empty!.split(" ");
               }),
           tiamat.Button(
-              text: "Print Something",
+              text: promptDeveloperPrintSomething,
               onTap: () {
                 print("Hello, world!");
               }),
@@ -368,14 +613,14 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 
   Widget executeShellCommand() {
     return ExpansionTile(
-      title: const tiamat.Text.labelEmphasised("Dangerous"),
+      title: tiamat.Text.labelEmphasised(labelDeveloperDangerous),
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
       collapsedBackgroundColor:
           Theme.of(context).colorScheme.surfaceContainerLow,
       children: [
         Wrap(spacing: 8, runSpacing: 8, children: [
           tiamat.Button(
-            text: "Get Process List",
+            text: promptDeveloperGetProcessList,
             onTap: () async {
               var list = await SystemProcessesUtils.getProcessList();
               AdaptiveDialog.show(
@@ -391,10 +636,10 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
             },
           ),
           tiamat.Button(
-              text: "Execute Shell Command",
+              text: promptDeveloperExecuteShellCommand,
               onTap: () async {
                 var text = await AdaptiveDialog.textPrompt(context,
-                    title: "Execute Shell Command");
+                    title: promptDeveloperExecuteShellCommand);
                 if (text != null) {
                   var command = text.split(" ");
                   var exe = command.first;
@@ -413,14 +658,14 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 
   Widget dumpDatabases() {
     return ExpansionTile(
-      title: const tiamat.Text.labelEmphasised("Dump Databases"),
+      title: tiamat.Text.labelEmphasised(promptDeveloperDumpDatabases),
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
       collapsedBackgroundColor:
           Theme.of(context).colorScheme.surfaceContainerLow,
       children: [
         Wrap(spacing: 8, runSpacing: 8, children: [
           tiamat.Button(
-              text: "Dump Databases",
+              text: promptDeveloperDumpDatabases,
               onTap: () async {
                 var folder = await FilePicker.platform.getDirectoryPath();
                 var dbDir = Directory(await AppConfig.getDatabasePath());
@@ -502,6 +747,7 @@ class _ProcessOutputViewerState extends State<ProcessOutputViewer> {
           if (widget.showStdOut)
             Expanded(
               child: tiamat.Panel(
+                // Not translated: the names of a process's output streams.
                 header: "stdout",
                 child: SingleChildScrollView(
                   child: Scrollbar(
@@ -522,6 +768,7 @@ class _ProcessOutputViewerState extends State<ProcessOutputViewer> {
           if (widget.showStdErr)
             Expanded(
               child: tiamat.Panel(
+                // Not translated: as stdout above.
                 header: "stderr",
                 child: SingleChildScrollView(
                   child: Scrollbar(

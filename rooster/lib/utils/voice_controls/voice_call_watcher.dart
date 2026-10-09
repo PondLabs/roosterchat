@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:rooster/client/call_manager.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/main.dart';
+import 'package:rooster/utils/language/app_language.dart';
 import 'package:rooster/utils/voice_controls/voice_controls.dart';
 
 /// Tells every surface outside the window (tray, taskbar thumbnail, Dock
@@ -37,11 +38,20 @@ class VoiceCallWatcher {
     if (_started) return;
     _started = true;
     if (poll != null) _poll = Timer.periodic(poll, (_) => refresh());
+    // The surfaces' labels are in the app's language, and none of them is
+    // rebuilt with the window: a new language is told like a change of the
+    // call, so they show it at once.
+    AppLanguage.current.addListener(_languageChanged);
     refresh();
+  }
+
+  void _languageChanged() {
+    if (_started) _changes.add(_state);
   }
 
   void stop() {
     _started = false;
+    AppLanguage.current.removeListener(_languageChanged);
     _poll?.cancel();
     _poll = null;
     for (final sub in [..._listSubs, ..._sessionSubs]) {

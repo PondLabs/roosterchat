@@ -5,6 +5,7 @@ import 'package:rooster/client/timeline_events/timeline_event_sticker.dart';
 import 'package:rooster/ui/atoms/thread_reply_footer.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 class TimelineEventViewThread extends StatefulWidget {
   const TimelineEventViewThread(
@@ -29,6 +30,11 @@ class _TimelineEventViewThreadState extends State<TimelineEventViewThread> {
   Color? senderColor;
 
   late String threadEventId;
+
+  String get labelTimelineUnknownSender => Intl.message("Unknown Sender",
+      name: "labelTimelineUnknownSender",
+      desc: "Stands in for the name of who replied in a thread, under the "
+          "thread's first message, while it is not known");
 
   @override
   void initState() {
@@ -62,7 +68,7 @@ class _TimelineEventViewThreadState extends State<TimelineEventViewThread> {
   Widget build(BuildContext context) {
     return ThreadReplyFooter(
       body: body ?? "",
-      senderName: senderName ?? "Unknown Sender",
+      senderName: senderName ?? labelTimelineUnknownSender,
       senderAvatar: senderAvatar,
       senderColor: senderColor,
       onTap: () => EventBus.openThread.add((

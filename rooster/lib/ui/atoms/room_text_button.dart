@@ -31,6 +31,7 @@ import 'package:rooster/ui/organisms/dj/dj_booth_panel.dart';
 import 'package:rooster/ui/organisms/dj/dj_member_ui.dart';
 import 'package:rooster/ui/organisms/dj/vinyl_disc.dart';
 import 'package:rooster/ui/pages/settings/room_settings_page.dart';
+import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:rooster/utils/text_utils.dart';
 import 'package:rooster_calendar_widget/calendar.dart';
@@ -114,6 +115,55 @@ class RoomTextButton extends StatefulWidget {
       name: "promptHideInviteToVoice",
       desc: "Button closing the invite to voice row under a voice channel");
 
+  static String get promptRoomMarkAsRead => Intl.message("Mark as Read",
+      name: "promptRoomMarkAsRead",
+      desc:
+          "Entry in a room's menu (right-click or long press in the room list) that marks all its messages as read");
+
+  static String get promptRoomSetFavorite => Intl.message("Set as Favorite",
+      name: "promptRoomSetFavorite",
+      desc: "Entry in a room's menu that adds the room to the favorites");
+
+  static String get promptRoomUnfavorite => Intl.message("Unfavorite",
+      name: "promptRoomUnfavorite",
+      desc: "Entry in a room's menu that takes the room out of the favorites");
+
+  static String get promptRoomOpenAsTextChat => Intl.message(
+      "Open as Text Chat",
+      name: "promptRoomOpenAsTextChat",
+      desc:
+          "Entry in the menu of a voice channel, photo album or calendar room: open its plain text chat instead");
+
+  static String get promptRoomJoinWithoutEntranceSound => Intl.message(
+      "Join Without Entrance Sound",
+      name: "promptRoomJoinWithoutEntranceSound",
+      desc:
+          "Entry in a voice channel's menu: join the call without playing our entrance sound this time");
+
+  static String get promptRoomClearCallMemberships => Intl.message(
+      "Clear Membership Status",
+      name: "promptRoomClearCallMemberships",
+      desc:
+          "Developer mode, entry in a voice channel's menu: removes the call membership state events, so nobody is listed in the call any more");
+
+  static String get promptRoomClearActivityMemberships => Intl.message(
+      "Clear Memberships",
+      name: "promptRoomClearActivityMemberships",
+      desc:
+          "Entry in the menu of a call or activity listed under a room: removes the memberships that list people in it");
+
+  static String get labelCalendarToday => Intl.message("Today: ",
+      name: "labelCalendarToday",
+      desc:
+          "Under a calendar room in the room list, before the names of today's events");
+
+  static String promptWidgetOpenActivity(String widgetName) => Intl.message(
+      "Open **$widgetName**?",
+      name: "promptWidgetOpenActivity",
+      args: [widgetName],
+      desc:
+          "Asked when tapping an activity under a room (people using a widget, a small web app added to the room), with the widget's name in bold Markdown");
+
   /// Asks for [status]'s new text and sets it.
   static Future<void> editVoiceChannelStatus(
       BuildContext context, VoiceChannelStatusComponent status) async {
@@ -143,22 +193,22 @@ class RoomTextButton extends StatefulWidget {
         null;
     return [
       ContextMenuItem(
-          text: "Mark as Read",
+          text: promptRoomMarkAsRead,
           icon: Icons.visibility,
           onPressed: () => room.markAsRead()),
       if (!room.isFavorite)
         ContextMenuItem(
-            text: "Set as Favorite",
+            text: promptRoomSetFavorite,
             icon: Icons.favorite,
             onPressed: () => room.setAsFavorite(true)),
       if (room.isFavorite)
         ContextMenuItem(
-            text: "Unfavorite",
+            text: promptRoomUnfavorite,
             icon: Icons.heart_broken_outlined,
             onPressed: () => room.setAsFavorite(false)),
       if (room.isSpecialRoomType)
         ContextMenuItem(
-            text: "Open as Text Chat",
+            text: promptRoomOpenAsTextChat,
             icon: Icons.tag,
             onPressed: () => EventBus.doOpenRoom(room.identifier,
                 clientId: room.client.identifier, bypassSpecialRoomType: true)),
@@ -190,7 +240,7 @@ class RoomTextButton extends StatefulWidget {
           voipRoom.currentSession == null &&
           preferences.soundboardEntranceSoundId.value != null)
         ContextMenuItem(
-            text: "Join Without Entrance Sound",
+            text: promptRoomJoinWithoutEntranceSound,
             icon: Icons.volume_off,
             onPressed: () {
               EntranceSoundGate.instance.requestSilentJoin(room.identifier);
@@ -199,12 +249,12 @@ class RoomTextButton extends StatefulWidget {
             }),
       if (voipRoom != null && preferences.developerMode.value)
         ContextMenuItem(
-          text: "Clear Membership Status",
+          text: promptRoomClearCallMemberships,
           icon: Icons.call_end,
           onPressed: () => voipRoom.clearAllCallMembershipStatus(),
         ),
       ContextMenuItem(
-          text: "Settings",
+          text: CommonStrings.promptSettings,
           icon: Icons.settings,
           onPressed: () {
             NavigationUtils.navigateTo(
@@ -701,7 +751,7 @@ class _RoomTextButtonState extends State<RoomTextButton> {
     return AdaptiveContextMenu(
       items: [
         tiamat.ContextMenuItem(
-          text: "Clear Memberships",
+          text: RoomTextButton.promptRoomClearActivityMemberships,
           onPressed: () {
             activities!.clearMemberships(activity);
           },
@@ -731,7 +781,7 @@ class _RoomTextButtonState extends State<RoomTextButton> {
                             height: 20,
                             width: 20,
                             child: activity.icon.build(context)),
-                        tiamat.Text.labelLow(activity.name),
+                        Flexible(child: tiamat.Text.labelLow(activity.name)),
                       ],
                     ),
                   ),
@@ -912,7 +962,7 @@ class _RoomTextButtonState extends State<RoomTextButton> {
                 spacing: 4,
                 runSpacing: 4,
                 children: [
-                  tiamat.Text.labelLow("Today: "),
+                  tiamat.Text.labelLow(RoomTextButton.labelCalendarToday),
                   for (var event in calendarEvents!) buildEvent(event),
                 ],
               ),
@@ -1054,7 +1104,8 @@ class _RoomTextButtonState extends State<RoomTextButton> {
 
     if (isInActivity == false) {
       var confirm = await AdaptiveDialog.confirmation(context,
-          prompt: "Open **${activity.associatedWidget!.name}**?");
+          prompt: RoomTextButton.promptWidgetOpenActivity(
+              activity.associatedWidget!.name));
       if (confirm == true) {
         WidgetComponent.runWidget(
             widget.room, context, activity.associatedWidget!);

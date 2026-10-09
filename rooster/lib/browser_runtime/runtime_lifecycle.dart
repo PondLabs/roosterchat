@@ -421,6 +421,7 @@ class RuntimeLifecycle {
         reportFailure(
           FailureClass.hostUnresponsive,
           nowMs,
+          // Not translated: a runtime diagnostic, never shown.
           message: 'host heartbeat timed out',
         ),
       );
@@ -535,6 +536,7 @@ class RuntimeLifecycle {
             failureId: disabledFailureId,
             kind: FailureClass.gpuDisabled,
             rawStatus: kind.name,
+            // Not translated: a runtime diagnostic, never shown.
             message: 'software rendering pinned after repeated GPU failures',
           );
           events.add(

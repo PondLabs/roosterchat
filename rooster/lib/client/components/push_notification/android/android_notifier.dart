@@ -15,6 +15,7 @@ import 'package:rooster/client/timeline_events/timeline_event_message.dart';
 import 'package:rooster/client/timeline_events/timeline_event_sticker.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
+import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/custom_uri.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:rooster/utils/image_utils.dart';
@@ -22,8 +23,37 @@ import 'package:rooster/utils/shortcuts_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:intl/intl.dart';
 
 class AndroidNotifier implements Notifier {
+  // The notification channels' names, which Android lists in the app's
+  // notification settings.
+
+  static String get labelNotificationChannelMessages =>
+      Intl.message("Message Received",
+          name: "labelNotificationChannelMessages",
+          desc: "Name of the Android notification category for new messages, "
+              "listed in the system's notification settings for the app");
+
+  static String get labelNotificationChannelCalls =>
+      Intl.message("Incoming Call",
+          name: "labelNotificationChannelCalls",
+          desc: "Name of the Android notification category for incoming calls, "
+              "listed in the system's notification settings for the app");
+
+  static String get labelNotificationChannelErrors =>
+      Intl.message("Error Messages",
+          name: "labelNotificationChannelErrors",
+          desc: "Name of the Android notification category for errors the app "
+              "reports, listed in the system's notification settings for the "
+              "app");
+
+  static String get labelNotificationChannelInvites => Intl.message(
+      "Chat Invitations",
+      name: "labelNotificationChannelInvites",
+      desc: "Name of the Android notification category for invitations to "
+          "rooms, listed in the system's notification settings for the app");
+
   @override
   bool hasPermission = false;
 
@@ -93,8 +123,9 @@ class AndroidNotifier implements Notifier {
 
     if (invite != null) {
       var content = GenericRoomInviteNotificationContent(
-        content: "You received an invitation to chat!",
-        title: "Room Invite",
+        content: GenericRoomInviteNotificationContent
+            .messageNotificationInvitationReceived,
+        title: GenericRoomInviteNotificationContent.labelNotificationRoomInvite,
       );
 
       await NotificationManager.notify(content);
@@ -238,28 +269,29 @@ class AndroidNotifier implements Notifier {
             groupConversation: !content.isDirectMessage,
             messages: [message]);
 
-    var details = AndroidNotificationDetails("messages", "Message Received",
-        importance: Importance.high,
-        priority: Priority.high,
-        icon: "notification_icon",
-        number: style.messages!.length,
-        largeIcon: FilePathAndroidBitmap(roomAvatar.toString()),
-        subText: content.roomName,
-        groupKey: content.roomId,
-        groupAlertBehavior: GroupAlertBehavior.all,
-        styleInformation: style,
-        sound: RawResourceAndroidNotificationSound('message'),
-        shortcutId: content.roomId,
-        silent: content.priority == NotificationPriority.low,
-        ticker: content.content,
-        bubble: bubblesEnabled
-            ? BubbleMetadata(
-                "com.pondlabs.rooster.BubbleActivity",
-                extra: payload,
-                desiredHeight: 600,
-              )
-            : null,
-        color: const Color.fromARGB(0xff, 0x53, 0x4c, 0xdd));
+    var details =
+        AndroidNotificationDetails("messages", labelNotificationChannelMessages,
+            importance: Importance.high,
+            priority: Priority.high,
+            icon: "notification_icon",
+            number: style.messages!.length,
+            largeIcon: FilePathAndroidBitmap(roomAvatar.toString()),
+            subText: content.roomName,
+            groupKey: content.roomId,
+            groupAlertBehavior: GroupAlertBehavior.all,
+            styleInformation: style,
+            sound: RawResourceAndroidNotificationSound('message'),
+            shortcutId: content.roomId,
+            silent: content.priority == NotificationPriority.low,
+            ticker: content.content,
+            bubble: bubblesEnabled
+                ? BubbleMetadata(
+                    "com.pondlabs.rooster.BubbleActivity",
+                    extra: payload,
+                    desiredHeight: 600,
+                  )
+                : null,
+            color: const Color.fromARGB(0xff, 0x53, 0x4c, 0xdd));
 
     await flutterLocalNotificationsPlugin?.show(
         id, null, content.content, NotificationDetails(android: details),
@@ -302,44 +334,44 @@ class AndroidNotifier implements Notifier {
         OpenRoomURI(roomId: content.roomId, clientId: content.clientId)
             .toString();
 
-    var details =
-        AndroidNotificationDetails("incoming_calls_channel_1", "Incoming Call",
-            importance: Importance.high,
-            priority: Priority.high,
-            icon: "notification_icon",
-            timeoutAfter: 60000,
-            largeIcon: FilePathAndroidBitmap(roomAvatar.toString()),
-            subText: content.roomName,
-            fullScreenIntent: true,
-            sound: RawResourceAndroidNotificationSound('ringtone_in'),
-            groupKey: content.roomId,
-            actions: [
-              AndroidNotificationAction(
-                  AcceptCallUri(
-                          roomId: content.roomId,
-                          callId: content.callId,
-                          clientId: content.clientId)
-                      .toString(),
-                  "Accept",
-                  showsUserInterface: true,
-                  semanticAction: SemanticAction.call,
-                  titleColor: Colors.green),
-              AndroidNotificationAction(
-                  DeclineCallUri(
-                          roomId: content.roomId,
-                          callId: content.callId,
-                          clientId: content.clientId)
-                      .toString(),
-                  "Decline",
-                  showsUserInterface: true,
-                  semanticAction: SemanticAction.delete,
-                  titleColor: Colors.red)
-            ],
-            groupAlertBehavior: GroupAlertBehavior.all,
-            shortcutId: content.roomId,
-            silent: false,
-            ticker: content.content,
-            color: const Color.fromARGB(0xff, 0x53, 0x4c, 0xdd));
+    var details = AndroidNotificationDetails(
+        "incoming_calls_channel_1", labelNotificationChannelCalls,
+        importance: Importance.high,
+        priority: Priority.high,
+        icon: "notification_icon",
+        timeoutAfter: 60000,
+        largeIcon: FilePathAndroidBitmap(roomAvatar.toString()),
+        subText: content.roomName,
+        fullScreenIntent: true,
+        sound: RawResourceAndroidNotificationSound('ringtone_in'),
+        groupKey: content.roomId,
+        actions: [
+          AndroidNotificationAction(
+              AcceptCallUri(
+                      roomId: content.roomId,
+                      callId: content.callId,
+                      clientId: content.clientId)
+                  .toString(),
+              CommonStrings.promptAccept,
+              showsUserInterface: true,
+              semanticAction: SemanticAction.call,
+              titleColor: Colors.green),
+          AndroidNotificationAction(
+              DeclineCallUri(
+                      roomId: content.roomId,
+                      callId: content.callId,
+                      clientId: content.clientId)
+                  .toString(),
+              CommonStrings.promptDecline,
+              showsUserInterface: true,
+              semanticAction: SemanticAction.delete,
+              titleColor: Colors.red)
+        ],
+        groupAlertBehavior: GroupAlertBehavior.all,
+        shortcutId: content.roomId,
+        silent: false,
+        ticker: content.content,
+        color: const Color.fromARGB(0xff, 0x53, 0x4c, 0xdd));
 
     await flutterLocalNotificationsPlugin?.show(
         id, null, content.content, NotificationDetails(android: details),
@@ -436,7 +468,7 @@ class AndroidNotifier implements Notifier {
       ErrorNotificationContent notification) async {
     var details = AndroidNotificationDetails(
       "errors",
-      "Error Messages",
+      labelNotificationChannelErrors,
       importance: Importance.high,
       priority: Priority.high,
       icon: "notification_icon",
@@ -455,7 +487,7 @@ class AndroidNotifier implements Notifier {
       GenericRoomInviteNotificationContent notification) async {
     var details = AndroidNotificationDetails(
       "chat_invites",
-      "Chat Invitations",
+      labelNotificationChannelInvites,
       importance: Importance.high,
       priority: Priority.high,
       icon: "notification_icon",

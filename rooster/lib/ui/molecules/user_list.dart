@@ -13,6 +13,7 @@ import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/organisms/user_profile/user_profile.dart';
 import 'package:rooster/utils/error_utils.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import 'package:tiamat/tiamat.dart' as tiamat;
 import '../../client/room.dart';
@@ -23,6 +24,49 @@ class RoomMemberList extends StatefulWidget {
 
   @override
   State<RoomMemberList> createState() => _RoomMemberListState();
+
+  static String get promptProfileSetRole => Intl.message("Set Role",
+      name: "promptProfileSetRole",
+      desc: "Entry in a room member's menu (in the member list or on a "
+          "message's avatar): gives them a role");
+
+  static String labelProfilePickRoleFor(String user) =>
+      Intl.message("Pick Role for $user",
+          name: "labelProfilePickRoleFor",
+          args: [user],
+          desc: "Title of the list of roles to give a room member, with the "
+              "member's name");
+
+  static String get promptProfileKick => Intl.message("Kick",
+      name: "promptProfileKick",
+      desc: "Entry in a room member's menu: removes them from the room");
+
+  static String messageProfileKickConfirmation(String user) =>
+      Intl.message("Are you sure you want to kick $user from the room?",
+          name: "messageProfileKickConfirmation",
+          args: [user],
+          desc: "Asked before removing a member from the room, with the "
+              "member's name");
+
+  static String get promptProfileBan => Intl.message("Ban",
+      name: "promptProfileBan",
+      desc: "Entry in a room member's menu: removes them from the room for "
+          "good");
+
+  static String messageProfileBanConfirmation(String user) =>
+      Intl.message("Are you sure you want to ban $user from the room?",
+          name: "messageProfileBanConfirmation",
+          args: [user],
+          desc: "Asked before banning a member from the room, with the "
+              "member's name");
+
+  static String promptChatMembersShowMore(int howMany) => Intl.plural(howMany,
+      one: "+1 More",
+      other: "+$howMany More",
+      name: "promptChatMembersShowMore",
+      args: [howMany],
+      desc: "Button at the end of a long member list that shows more of it, "
+          "with how many members are not shown yet");
 
   static AdaptiveContextMenu userContextMenu(BuildContext context,
       {required String userId,
@@ -37,13 +81,13 @@ class RoomMemberList extends StatefulWidget {
       items: [
         if (room.permissions.canChangeRoles)
           tiamat.ContextMenuItem(
-              text: "Set Role",
+              text: promptProfileSetRole,
               icon: Icons.shield,
               onPressed: () async {
                 ErrorUtils.tryRun(context, () async {
                   var role = await AdaptiveDialog.pickOne(
                     context,
-                    title: "Pick Role for $userDisplayName",
+                    title: labelProfilePickRoleFor(userDisplayName),
                     items: room.availableRoles,
                     itemBuilder: (context, item, callback) {
                       return SizedBox(
@@ -65,13 +109,13 @@ class RoomMemberList extends StatefulWidget {
               }),
         if (room.permissions.canKick && !isSelf)
           tiamat.ContextMenuItem(
-              text: "Kick",
+              text: promptProfileKick,
               icon: Icons.subdirectory_arrow_left_rounded,
               color: ColorScheme.of(context).error,
               onPressed: () async {
                 if (await AdaptiveDialog.confirmation(context,
                         prompt:
-                            "Are you sure you want to kick $userDisplayName from the room?") ==
+                            messageProfileKickConfirmation(userDisplayName)) ==
                     true) {
                   ErrorUtils.tryRun(context, () async {
                     await room.kickUser(userId);
@@ -81,13 +125,13 @@ class RoomMemberList extends StatefulWidget {
               }),
         if (room.permissions.canBan && !isSelf)
           tiamat.ContextMenuItem(
-              text: "Ban",
+              text: promptProfileBan,
               icon: Icons.shield,
               color: ColorScheme.of(context).error,
               onPressed: () async {
                 if (await AdaptiveDialog.confirmation(context,
                         prompt:
-                            "Are you sure you want to ban $userDisplayName from the room?") ==
+                            messageProfileBanConfirmation(userDisplayName)) ==
                     true) {
                   ErrorUtils.tryRun(context, () async {
                     await room.banUser(userId);
@@ -288,7 +332,7 @@ class _RoomMemberListState extends State<RoomMemberList> {
           return Padding(
             padding: const EdgeInsets.all(8.0),
             child: tiamat.Button.secondary(
-              text: "+$diff More",
+              text: RoomMemberList.promptChatMembersShowMore(diff),
               onTap: () => setState(() {
                 limit += 50;
               }),

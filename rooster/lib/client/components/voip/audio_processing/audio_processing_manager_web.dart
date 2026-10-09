@@ -13,11 +13,19 @@ import 'package:dart_webrtc/dart_webrtc.dart'
     show MediaStreamTrackWeb, MediaStreamWeb;
 import 'package:flutter_webrtc/flutter_webrtc.dart'
     show MediaStream, MediaStreamTrack;
+import 'package:intl/intl.dart' show Intl;
 import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:web/web.dart' as web;
 
 AudioProcessingManager createAudioProcessingManager() =>
     WebAudioProcessingManager();
+
+String get messageVoiceDspScriptNotLoaded => Intl.message(
+    "audio_dsp.js did not load",
+    name: "messageVoiceDspScriptNotLoaded",
+    desc: "Why noise suppression cannot run in the browser, completing "
+        "'Noise suppression can't run: …' (so lowercase, no full stop): the "
+        "script holding it did not load. audio_dsp.js is a file name");
 
 // Bindings to window.roosterAudioDsp, defined in web/audio_dsp.js.
 @JS('roosterAudioDsp')
@@ -32,8 +40,36 @@ extension type _RoosterAudioDsp._(JSObject _) implements JSObject {
 
 extension type _Probe._(JSObject _) implements JSObject {
   external bool get ok;
+
+  /// English, for the log.
   external String get reason;
+
+  /// Set for the failures the app says in its own words: "unsupported" or
+  /// "timeout".
+  external String? get code;
 }
+
+String get messageVoiceDspBrowserUnsupported => Intl.message(
+    "this browser has no AudioWorklet or WebAssembly",
+    name: "messageVoiceDspBrowserUnsupported",
+    desc: "Why noise suppression cannot run in the browser, completing "
+        "'Noise suppression can't run: …' (so lowercase, no full stop): the "
+        "browser lacks what it needs. AudioWorklet and WebAssembly are names");
+
+String get messageVoiceDspNoAnswer => Intl.message(
+    "the voice processor did not answer in time",
+    name: "messageVoiceDspNoAnswer",
+    desc: "Why noise suppression cannot run in the browser, completing "
+        "'Noise suppression can't run: …' (so lowercase, no full stop): its "
+        "worker did not start in time");
+
+/// The reason [result] gives, in the app's language where the app knows it;
+/// anything else is the browser's own text.
+String _probeFailure(_Probe result) => switch (result.code) {
+      "unsupported" => messageVoiceDspBrowserUnsupported,
+      "timeout" => messageVoiceDspNoAnswer,
+      _ => result.reason,
+    };
 
 extension type _DspGraph._(JSObject _) implements JSObject {
   external web.MediaStreamTrack get processedTrack;
@@ -81,7 +117,7 @@ class WebAudioProcessingManager extends AudioProcessingManager {
 
   @override
   String? get unavailableReason {
-    if (_roosterAudioDsp == null) return "audio_dsp.js did not load";
+    if (_roosterAudioDsp == null) return messageVoiceDspScriptNotLoaded;
     return _probeOk == false ? _unavailableReason : null;
   }
 
@@ -91,18 +127,21 @@ class WebAudioProcessingManager extends AudioProcessingManager {
     if (api == null) return Future.value(false);
     if (_probeOk == true) return Future.value(true);
     return _probing ??= () async {
+      // The log gets the English, the interface the app's language.
+      String? logged;
       try {
         final result = await api.probe().toDart;
         _probeOk = result.ok;
-        _unavailableReason = result.ok ? null : result.reason;
+        _unavailableReason = result.ok ? null : _probeFailure(result);
+        logged = result.reason;
       } catch (e) {
         _probeOk = false;
-        _unavailableReason = "$e";
+        _unavailableReason = logged = "$e";
       } finally {
         _probing = null;
       }
       if (_probeOk != true) {
-        Log.w("Voice DSP: cannot run in this browser: $_unavailableReason");
+        Log.w("Voice DSP: cannot run in this browser: $logged");
       }
       notifyStateChanged();
       return _probeOk == true;

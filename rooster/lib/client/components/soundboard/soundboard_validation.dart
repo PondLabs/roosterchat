@@ -1,4 +1,6 @@
 // Validation for admin-provided name/emoji. Pure Dart (unit-testable).
+import 'package:intl/intl.dart';
+
 import 'soundboard_constraints.dart';
 import 'soundboard_emoji.dart';
 
@@ -10,6 +12,45 @@ class SoundboardValidationError implements Exception {
 }
 
 class SoundboardValidator {
+  static String get errorSoundboardNameEmpty =>
+      Intl.message("Name must not be empty",
+          name: "errorSoundboardNameEmpty",
+          desc: "Why a soundboard sound could not be saved: its name is empty");
+
+  static String get errorSoundboardNameTooLong => Intl.message("Name too long",
+      name: "errorSoundboardNameTooLong",
+      desc: "Why a soundboard sound could not be saved: its name is longer "
+          "than 64 characters");
+
+  static String get errorSoundboardNameMarkup =>
+      Intl.message("Name must not contain markup",
+          name: "errorSoundboardNameMarkup",
+          desc: "Why a soundboard sound could not be saved: its name has the "
+              "characters < or >, which names may not have");
+
+  static String get errorSoundboardEmojiNotSingle =>
+      Intl.message("Emoji must be a single emoji",
+          name: "errorSoundboardEmojiNotSingle",
+          desc: "Why a soundboard sound could not be saved: what was picked "
+              "as its emoji is empty or more than one emoji");
+
+  static String get errorSoundboardNotAnEmoji => Intl.message("Not an emoji",
+      name: "errorSoundboardNotAnEmoji",
+      desc: "Why a soundboard sound could not be saved: what was picked as "
+          "its emoji is not an emoji");
+
+  static String get errorSoundboardInvalidEmojiImage =>
+      Intl.message("Invalid custom emoji image",
+          name: "errorSoundboardInvalidEmojiImage",
+          desc: "Why a soundboard sound could not be saved: the image of the "
+              "space's custom emoji picked for it has an invalid address");
+
+  static String get errorSoundboardInvalidEmojiName =>
+      Intl.message("Invalid custom emoji name",
+          name: "errorSoundboardInvalidEmojiName",
+          desc: "Why a soundboard sound could not be saved: the shortcode of "
+              "the space's custom emoji picked for it is not valid");
+
   /// Sanitizes display name: trims, collapses whitespace, rejects markup/
   /// control chars, enforces length. Returns sanitized name.
   static String sanitizeName(String input) {
@@ -17,14 +58,14 @@ class SoundboardValidator {
     // Strip control characters (incl. \n, \t already collapsed).
     name = name.replaceAll(RegExp(r'[\u0000-\u001F\u007F]'), '');
     if (name.length < SoundboardConstraints.minNameLength) {
-      throw const SoundboardValidationError('Name must not be empty');
+      throw SoundboardValidationError(errorSoundboardNameEmpty);
     }
     if (name.runes.length > SoundboardConstraints.maxNameLength) {
-      throw const SoundboardValidationError('Name too long');
+      throw SoundboardValidationError(errorSoundboardNameTooLong);
     }
     // Reject markup / structured-text injection; names are plain text.
     if (name.contains('<') || name.contains('>')) {
-      throw const SoundboardValidationError('Name must not contain markup');
+      throw SoundboardValidationError(errorSoundboardNameMarkup);
     }
     return name;
   }
@@ -40,16 +81,16 @@ class SoundboardValidator {
   static String sanitizeEmoji(String input) {
     final emoji = input.trim();
     if (emoji.isEmpty || emoji.contains(RegExp(r'\s'))) {
-      throw const SoundboardValidationError('Emoji must be a single emoji');
+      throw SoundboardValidationError(errorSoundboardEmojiNotSingle);
     }
     // Split into extended-grapheme-ish clusters: break on ZWJ-joined runs
     // stays together; regional indicators pair into flags.
     final clusters = _splitGraphemes(emoji);
     if (clusters.length != 1) {
-      throw const SoundboardValidationError('Emoji must be a single emoji');
+      throw SoundboardValidationError(errorSoundboardEmojiNotSingle);
     }
     if (!_containsEmoji(emoji)) {
-      throw const SoundboardValidationError('Not an emoji');
+      throw SoundboardValidationError(errorSoundboardNotAnEmoji);
     }
     return emoji;
   }
@@ -64,14 +105,14 @@ class SoundboardValidator {
       return SoundboardEmoji.unicode(sanitizeEmoji(emoji.unicode));
     }
     if (!_mxcPattern.hasMatch(mxc)) {
-      throw const SoundboardValidationError('Invalid custom emoji image');
+      throw SoundboardValidationError(errorSoundboardInvalidEmojiImage);
     }
     var name = (emoji.shortcode ?? '').trim();
     if (name.length >= 2 && name.startsWith(':') && name.endsWith(':')) {
       name = name.substring(1, name.length - 1);
     }
     if (!_shortcodePattern.hasMatch(name)) {
-      throw const SoundboardValidationError('Invalid custom emoji name');
+      throw SoundboardValidationError(errorSoundboardInvalidEmojiName);
     }
     return SoundboardEmoji.custom(mxc: mxc, shortcode: ':$name:');
   }

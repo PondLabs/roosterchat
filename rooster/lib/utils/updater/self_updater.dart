@@ -13,9 +13,19 @@
 // directory on Windows, so the last step has to outlive it.
 import 'package:rooster/utils/updater/update_release.dart';
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 
 import 'self_updater_stub.dart' if (dart.library.io) 'self_updater_native.dart'
     as platform;
+
+/// What the loading window and the update button both say while a release
+/// is being unpacked.
+String labelUpdateUnpacking(String tag) => Intl.message("Unpacking $tag…",
+    name: "labelUpdateUnpacking",
+    args: [tag],
+    desc: "Shown in the loading window and under Version in Settings while a "
+        "downloaded update is unpacked; the tag is the release's version, "
+        "for example v1.18.0");
 
 /// Where an update has got to. The button reads this to know what to show.
 enum UpdateStage {

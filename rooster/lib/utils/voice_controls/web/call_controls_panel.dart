@@ -32,8 +32,13 @@ class PanelButton {
 /// window is its own document with its own media queries.
 class CallControlsPanel {
   CallControlsPanel(this.document,
-      {required this.onPress, required String title}) {
+      {required this.onPress, required String title, String? language}) {
     document.title = title;
+    // The app's language (a BCP 47 tag), which screen readers read the
+    // buttons' names in.
+    if (language != null) {
+      document.documentElement?.setAttribute("lang", language);
+    }
     final style = document.createElement("style")..textContent = _css;
     document.head?.append(style);
     _row = document.createElement("div") as web.HTMLDivElement

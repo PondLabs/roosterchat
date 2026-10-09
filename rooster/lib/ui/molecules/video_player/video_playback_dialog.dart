@@ -9,11 +9,13 @@ import 'package:rooster/client/components/video_embed/video_playback_source.dart
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart' show browserRuntime;
 import 'package:rooster/ui/atoms/filled_icon_button_style.dart';
+import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/links/link_utils.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:intl/intl.dart';
 import 'package:media_kit_video/media_kit_video.dart'
     show defaultEnterNativeFullscreen, defaultExitNativeFullscreen;
 
@@ -44,6 +46,30 @@ class VideoPlaybackDialog extends StatefulWidget {
   /// Looked up once: the bundle does not change while the app runs.
   static final bool _cefBundled = isBundledBrowserRuntimeAvailable();
 
+  static String get tooltipMediaOpenLinkInBrowser =>
+      Intl.message("Open link in browser",
+          name: "tooltipMediaOpenLinkInBrowser",
+          desc: "Tooltip of the button under the video dialog that opens the "
+              "video's link in the web browser");
+
+  static String get labelMediaPlaybackUnavailable =>
+      Intl.message("Video playback unavailable",
+          name: "labelMediaPlaybackUnavailable",
+          desc: "In the video dialog when nothing in the app can play the "
+              "video");
+
+  static String labelMediaWatch(String title) => Intl.message("Watch $title",
+      name: "labelMediaWatch",
+      args: [title],
+      desc: "In the video dialog when the video can only play in the web "
+          "browser, with the video's title, above the button that opens it");
+
+  static String get labelMediaUnableToLoad =>
+      Intl.message("Unable to load this video",
+          name: "labelMediaUnableToLoad",
+          desc: "In the video dialog when the video site's player failed to "
+              "load");
+
   static Future<void> show(
     BuildContext context, {
     required VideoEmbedInfo video,
@@ -52,7 +78,8 @@ class VideoPlaybackDialog extends StatefulWidget {
     return showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
-      barrierLabel: 'VIDEO_PLAYBACK',
+      // Read out by screen readers: tapping outside the video closes it.
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
       barrierColor: Colors.black87,
       transitionDuration: const Duration(milliseconds: 220),
       pageBuilder: (_, __, ___) =>
@@ -247,7 +274,7 @@ class _VideoPlaybackDialogState extends State<VideoPlaybackDialog> {
                 right: 12,
                 child: IconButton.filledTonal(
                   style: filledTonalIconButtonStyle(context),
-                  tooltip: 'Close',
+                  tooltip: CommonStrings.promptClose,
                   onPressed: close,
                   icon: const Icon(Icons.close_rounded),
                 ),
@@ -312,7 +339,7 @@ class _VideoPlaybackDialogState extends State<VideoPlaybackDialog> {
           ),
         ),
         IconButton(
-          tooltip: 'Open link in browser',
+          tooltip: VideoPlaybackDialog.tooltipMediaOpenLinkInBrowser,
           onPressed: openInBrowser,
           icon: const Icon(
             Icons.open_in_new_rounded,
@@ -343,15 +370,16 @@ class _UnavailableView extends StatelessWidget {
             size: 40,
           ),
           const SizedBox(height: 12),
-          const Text(
-            'Video playback unavailable',
-            style: TextStyle(color: Colors.white),
+          Text(
+            VideoPlaybackDialog.labelMediaPlaybackUnavailable,
+            style: const TextStyle(color: Colors.white),
+            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: onOpenInBrowser,
             icon: const Icon(Icons.open_in_new_rounded, size: 16),
-            label: const Text('Open in Browser'),
+            label: Text(VideoPlayer.promptMediaOpenInBrowser),
           ),
         ],
       ),
@@ -437,7 +465,7 @@ class _OfficialVideoEmbedState extends State<_OfficialVideoEmbed> {
               ),
               const SizedBox(height: 12),
               Text(
-                'Watch ${widget.video.title}',
+                VideoPlaybackDialog.labelMediaWatch(widget.video.title),
                 style: const TextStyle(color: Colors.white),
                 textAlign: TextAlign.center,
               ),
@@ -448,7 +476,7 @@ class _OfficialVideoEmbedState extends State<_OfficialVideoEmbed> {
                   LinkUtils.open(widget.video.originalUrl, context: context);
                 },
                 icon: const Icon(Icons.open_in_new_rounded, size: 16),
-                label: const Text('Open in Browser'),
+                label: Text(VideoPlayer.promptMediaOpenInBrowser),
               ),
             ],
           ),
@@ -557,24 +585,28 @@ class _EmbedErrorView extends StatelessWidget {
               size: 36,
             ),
             const SizedBox(height: 12),
-            const Text(
-              'Unable to load this video',
-              style: TextStyle(color: Colors.white),
+            Text(
+              VideoPlaybackDialog.labelMediaUnableToLoad,
+              style: const TextStyle(color: Colors.white),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
-            Row(
-              mainAxisSize: MainAxisSize.min,
+            // Wraps onto two lines when the buttons' words do not fit side
+            // by side (a narrow, vertical video; a long language).
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 OutlinedButton.icon(
                   onPressed: onRetry,
                   icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('Retry'),
+                  label: Text(VideoPlayer.promptMediaRetry),
                 ),
-                const SizedBox(width: 8),
                 OutlinedButton.icon(
                   onPressed: onOpenInBrowser,
                   icon: const Icon(Icons.open_in_new_rounded),
-                  label: const Text('Open in Browser'),
+                  label: Text(VideoPlayer.promptMediaOpenInBrowser),
                 ),
               ],
             ),

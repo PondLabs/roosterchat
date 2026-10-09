@@ -18,6 +18,21 @@ abstract class ScreenCaptureSource {
   bool get captureAudio => true;
 }
 
+/// Joining a call failed for a reason the person can be told: the join
+/// dialog shows [message], the logs get [reason].
+class CallJoinException implements Exception {
+  const CallJoinException(this.reason, this.message);
+
+  /// What went wrong, in English, for the logs.
+  final String reason;
+
+  /// What went wrong, in the person's language.
+  final String message;
+
+  @override
+  String toString() => "CallJoinException: $reason";
+}
+
 class WebrtcBrowserScreenCaptureSource implements ScreenCaptureSource {
   @override
   final bool captureAudio;

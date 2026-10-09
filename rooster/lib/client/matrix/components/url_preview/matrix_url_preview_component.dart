@@ -17,6 +17,7 @@ import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/utils/mime.dart';
 import 'package:flutter/widgets.dart';
+import 'package:intl/intl.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:matrix/matrix_api_lite.dart';
 
@@ -25,6 +26,12 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
   MatrixClient client;
 
   MatrixUrlPreviewComponent(this.client);
+
+  static String labelMediaVideoBy(String author) => Intl.message("by $author",
+      name: "labelMediaVideoBy",
+      args: [author],
+      desc: "Under the title of a video's preview card, with who made or "
+          "posted the video");
 
   Map<String, UrlPreviewData> cache = {};
 
@@ -331,7 +338,7 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
           siteName: videoInfo.platformName,
           title: videoInfo.title,
           description: videoInfo.author != null
-              ? 'by ${videoInfo.author}'
+              ? labelMediaVideoBy(videoInfo.author!)
               : videoInfo.description,
           image: videoInfo.thumbnail,
           video: videoAttachment,

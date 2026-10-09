@@ -42,7 +42,7 @@ class _MainPageViewMobileState extends State<MainPageViewMobile> {
   double height = -1;
 
   String get directMessagesListHeaderMobile => Intl.message("Direct Messages",
-      desc: "The header for the direct messages list on desktop",
+      desc: "The header for the direct messages list on mobile",
       name: "directMessagesListHeaderMobile");
 
   GlobalKey mainPanelKey = GlobalKey();

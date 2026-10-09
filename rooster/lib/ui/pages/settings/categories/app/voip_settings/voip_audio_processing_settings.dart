@@ -119,10 +119,13 @@ class _VoipAudioProcessingSettingsState
       name: "labelVoipInputMeterIdle",
       desc: "Shown under the microphone level meter when nothing is captured");
 
-  String get labelVoipInputMeterInCall =>
-      Intl.message("Live from your current call.",
-          name: "labelVoipInputMeterInCall",
-          desc: "Shown under the microphone level meter during a call");
+  String labelVoipDspStatusInCall(String status) =>
+      Intl.message("Live from your current call. $status",
+          name: "labelVoipDspStatusInCall",
+          args: [status],
+          desc: "Shown under the microphone level meter during a call, "
+              "followed by the processing status line (sample rate, noise "
+              "suppression, gate state)");
 
   String get labelVoipMicTestStart => Intl.message("Test microphone",
       name: "labelVoipMicTestStart",
@@ -154,27 +157,28 @@ class _VoipAudioProcessingSettingsState
           "Diagnostic shown when the voice DSP is installed but not receiving frames");
 
   String labelVoipDspStatus(String rate, String suppression, String gate) =>
-      Intl.message(
-          "Processing $rate audio. Noise suppression $suppression. $gate",
+      Intl.message("Processing $rate audio. $suppression $gate",
           args: [rate, suppression, gate],
           name: "labelVoipDspStatus",
           desc:
-              "Diagnostic line under the level meter: sample rate, whether noise suppression is running, gate state");
+              "Diagnostic line under the level meter: the sample rate, then the noise suppression sentence and the gate sentence");
 
-  String get labelVoipDspOnDeepFilter => Intl.message("on (DeepFilterNet)",
-      name: "labelVoipDspOnDeepFilter",
+  String get labelVoipDspNoiseSuppressionDeepFilter => Intl.message(
+      "Noise suppression on (DeepFilterNet).",
+      name: "labelVoipDspNoiseSuppressionDeepFilter",
       desc:
-          "Noise suppression state in the status line when the DeepFilterNet model is running; DeepFilterNet is a name");
+          "Sentence in the status line when the DeepFilterNet model is running; DeepFilterNet is a name");
 
-  String get labelVoipDspOnBasic => Intl.message(
-      "on (RNNoise only, knocks and typing get through)",
-      name: "labelVoipDspOnBasic",
+  String get labelVoipDspNoiseSuppressionBasic => Intl.message(
+      "Noise suppression on (RNNoise only, knocks and typing get through).",
+      name: "labelVoipDspNoiseSuppressionBasic",
       desc:
-          "Noise suppression state in the status line when only the simpler RNNoise suppressor runs; RNNoise is a name");
+          "Sentence in the status line when only the simpler RNNoise suppressor runs; RNNoise is a name");
 
-  String get labelVoipDspOff => Intl.message("off",
-      name: "labelVoipDspOff",
-      desc: "Noise suppression state in the status line");
+  String get labelVoipDspNoiseSuppressionOff =>
+      Intl.message("Noise suppression off.",
+          name: "labelVoipDspNoiseSuppressionOff",
+          desc: "Sentence in the status line when noise suppression is off");
 
   String get labelVoipDspGateOpen => Intl.message("Transmitting.",
       name: "labelVoipDspGateOpen",
@@ -287,6 +291,7 @@ class _VoipAudioProcessingSettingsState
                   SizedBox(
                     width: 64,
                     child: tiamat.Text.labelLow(
+                        // Not translated: a whole number and its unit.
                         "${preferences.voipInputSensitivityDb.value.toStringAsFixed(0)} dB"),
                   ),
                   Expanded(
@@ -337,10 +342,10 @@ class _VoipAudioProcessingSettingsState
     final status = labelVoipDspStatus(
       rate,
       !report.noiseSuppressionActive
-          ? labelVoipDspOff
+          ? labelVoipDspNoiseSuppressionOff
           : report.deepFilterActive
-              ? labelVoipDspOnDeepFilter
-              : labelVoipDspOnBasic,
+              ? labelVoipDspNoiseSuppressionDeepFilter
+              : labelVoipDspNoiseSuppressionBasic,
       report.speakerBleed
           ? labelVoipDspSpeakerBleed
           : report.gateOpen
@@ -348,7 +353,7 @@ class _VoipAudioProcessingSettingsState
               : labelVoipDspGateClosed,
     );
     return tiamat.Text.labelLow(
-        manager.isInCall ? "$labelVoipInputMeterInCall $status" : status);
+        manager.isInCall ? labelVoipDspStatusInCall(status) : status);
   }
 
   Widget _testControls(AudioProcessingManager manager) {

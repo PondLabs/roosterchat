@@ -31,6 +31,23 @@ class MatrixSessionView extends StatelessWidget {
       desc: "Text on the button to verify a session",
       name: "promptMatrixVerifySession");
 
+  String get labelSettingsThisDevice => Intl.message("This Device",
+      name: "labelSettingsThisDevice",
+      desc: "Settings > Security > Sessions: small tag on the session of the "
+          "device you are using now");
+
+  String get labelSettingsSessionInactive => Intl.message("Inactive",
+      name: "labelSettingsSessionInactive",
+      desc: "Settings > Security > Sessions: small tag on a session (device) "
+          "not used for over two months");
+
+  String labelSettingsSessionLastSeen(String date) =>
+      Intl.message("Last Seen: $date",
+          name: "labelSettingsSessionLastSeen",
+          args: [date],
+          desc: "Settings > Security > Sessions: when a session (device) was "
+              "last used, with the date already formatted");
+
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
@@ -44,57 +61,69 @@ class MatrixSessionView extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(8.0, 16, 16, 16),
-                      child: Icon(
-                        getIcon(),
-                        color: verified ? Colors.green : Colors.redAccent,
+                Flexible(
+                  child: Row(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(8.0, 16, 16, 16),
+                        child: Icon(
+                          getIcon(),
+                          color: verified ? Colors.green : Colors.redAccent,
+                        ),
                       ),
-                    ),
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (displayName != null)
-                          tiamat.Text.labelEmphasised(displayName!),
-                        Row(
+                      Flexible(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (isThisDevice)
+                            if (displayName != null)
+                              tiamat.Text.labelEmphasised(displayName!),
+                            Wrap(
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                if (isThisDevice)
+                                  Padding(
+                                    padding:
+                                        const EdgeInsets.fromLTRB(0, 0, 8, 0),
+                                    child: TinyPill(labelSettingsThisDevice),
+                                  ),
+                                if (inactive)
+                                  Padding(
+                                    padding:
+                                        const EdgeInsets.fromLTRB(0, 0, 8, 0),
+                                    child: TinyPill(
+                                      labelSettingsSessionInactive,
+                                      background: ColorScheme.of(context).error,
+                                      foreground:
+                                          ColorScheme.of(context).onError,
+                                    ),
+                                  ),
+                                tiamat.Text.labelLow(deviceId),
+                              ],
+                            ),
+                            if (lastSeenTimestamp != null)
+                              tiamat.Text.tiny(labelSettingsSessionLastSeen(
+                                  DateFormat(DateFormat.YEAR_MONTH_WEEKDAY_DAY)
+                                      .format(
+                                          DateTime.fromMillisecondsSinceEpoch(
+                                              lastSeenTimestamp!)))),
+                            if (lastSeenIp != null)
                               const Padding(
-                                padding: EdgeInsets.fromLTRB(0, 0, 8, 0),
-                                child: TinyPill("This Device"),
-                              ),
-                            if (inactive)
-                              Padding(
-                                padding: EdgeInsets.fromLTRB(0, 0, 8, 0),
-                                child: TinyPill(
-                                  "Inactive",
-                                  background: ColorScheme.of(context).error,
-                                  foreground: ColorScheme.of(context).onError,
+                                padding: EdgeInsets.fromLTRB(10, 0, 10, 0),
+                                child: SizedBox(
+                                  width: 10,
+                                  child: tiamat.Seperator(
+                                    padding: 0,
+                                  ),
                                 ),
                               ),
-                            tiamat.Text.labelLow(deviceId),
+                            if (lastSeenIp != null)
+                              tiamat.Text.tiny(lastSeenIp!),
                           ],
                         ),
-                        if (lastSeenTimestamp != null)
-                          tiamat.Text.tiny(
-                              "Last Seen: ${DateFormat(DateFormat.YEAR_MONTH_WEEKDAY_DAY).format(DateTime.fromMillisecondsSinceEpoch(lastSeenTimestamp!))}"),
-                        if (lastSeenIp != null)
-                          const Padding(
-                            padding: EdgeInsets.fromLTRB(10, 0, 10, 0),
-                            child: SizedBox(
-                              width: 10,
-                              child: tiamat.Seperator(
-                                padding: 0,
-                              ),
-                            ),
-                          ),
-                        if (lastSeenIp != null) tiamat.Text.tiny(lastSeenIp!),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
                 if (MediaQuery.sizeOf(context).desktop) verifyButton()
               ],

@@ -5,9 +5,21 @@ import 'package:rooster/main.dart';
 import 'package:rooster/utils/event_bus.dart';
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:window_manager/window_manager.dart';
 
 class NotificationModifierSuppressActiveRoom implements NotificationModifier {
+  static String get messageNotificationSuppressedActiveRoom => Intl.message(
+      "The notification was intended for the same room that is currently "
+      "open, and the app was detected as being in focus. If this doesn't seem "
+      "right, you may want to disable the 'Hide notifications for current "
+      "room' setting to bypass this check",
+      name: "messageNotificationSuppressedActiveRoom",
+      desc: "In the notification debugger (Developer settings): why a test "
+          "notification was not shown. Names the notification setting 'Hide "
+          "notifications for current room'; use that setting's translated "
+          "name");
+
   String? roomId = "";
 
   NotificationModifierSuppressActiveRoom() {
@@ -36,8 +48,7 @@ class NotificationModifierSuppressActiveRoom implements NotificationModifier {
       }
 
       if (content.roomId == roomId) {
-        onNotificationRejected?.call(
-            "The notification was intended for the same room that is currently open, and the app was detected as being in focus. If this doesn't seem right, you may want to disable the 'Hide notifications for current room' setting to bypass this check");
+        onNotificationRejected?.call(messageNotificationSuppressedActiveRoom);
         return null;
       }
     }

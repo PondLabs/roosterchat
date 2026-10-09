@@ -35,6 +35,22 @@ class _KeyboardHookShortcutsSettingsPageState
           name: "promptShortcutsClearKeyboardShortcut",
           desc: "Prompt the user to clear a key combination shortcut");
 
+  String get labelSettingsShortcutWarning => Intl.message("Warning",
+      name: "labelSettingsShortcutWarning",
+      desc: "Settings > Shortcuts (Linux): title of the dialog warning that a "
+          "shortcut with Shift may not work");
+
+  String get messageSettingsShiftShortcutUnreliable => Intl.message(
+      "Hotkeys using 'Shift' as a modifier may be unreliable on Linux, consider using a different key combination",
+      name: "messageSettingsShiftShortcutUnreliable",
+      desc: "Settings > Shortcuts (Linux): shown after recording a shortcut "
+          "that uses the Shift key. 'Shift' is the name of the key");
+
+  String get promptSettingsShortcutWarningOkay => Intl.message("Okay!",
+      name: "promptSettingsShortcutWarningOkay",
+      desc: "Settings > Shortcuts (Linux): button that closes the warning "
+          "about Shift shortcuts");
+
   @override
   Widget build(BuildContext context) {
     return tiamat.Panel(
@@ -87,15 +103,15 @@ class _KeyboardHookShortcutsSettingsPageState
                     if (key?.modifiers?.contains(HotKeyModifier.shift) ==
                         true) {
                       await AdaptiveDialog.show(context,
-                          title: "Warning",
+                          title: labelSettingsShortcutWarning,
                           builder: (_) => SizedBox(
                                 width: 500,
                                 child: Column(
                                   children: [
                                     tiamat.Text.label(
-                                        "Hotkeys using 'Shift' as a modifier may be unreliable on Linux, consider using a different key combination"),
+                                        messageSettingsShiftShortcutUnreliable),
                                     tiamat.Button.secondary(
-                                      text: "Okay!",
+                                      text: promptSettingsShortcutWarningOkay,
                                       onTap: () => Navigator.of(context).pop(),
                                     )
                                   ],
@@ -118,7 +134,8 @@ class _KeyboardHookShortcutsSettingsPageState
                     spacing: 12,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      tiamat.Text(shortcut.value.getDisplayName()),
+                      Flexible(
+                          child: tiamat.Text(shortcut.value.getDisplayName())),
                       if (shortcut.value.hotkey != null)
                         HotKeyVirtualView(hotKey: shortcut.value.hotkey!)
                     ],

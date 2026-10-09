@@ -1,4 +1,5 @@
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 
 import '../video_capabilities.dart';
 import '../video_embed_info.dart';
@@ -19,8 +20,14 @@ class GenericVideoProvider implements VideoProvider {
   @override
   String get id => 'generic';
 
+  /// What a video link with nothing else to go by is called.
+  static String get labelMediaVideo => Intl.message("Video",
+      name: "labelMediaVideo",
+      desc: "Name and title of a video from a plain link to a video file, "
+          "on its preview card and in the video player");
+
   @override
-  String get name => 'Video';
+  String get name => labelMediaVideo;
 
   @override
   VideoCapabilities get capabilities => VideoCapabilities.native;
@@ -43,7 +50,7 @@ class GenericVideoProvider implements VideoProvider {
     if (!canHandle(uri)) return null;
 
     final fileName =
-        uri.pathSegments.isNotEmpty ? uri.pathSegments.last : 'Video';
+        uri.pathSegments.isNotEmpty ? uri.pathSegments.last : labelMediaVideo;
 
     return VideoEmbedInfo(
       originalUrl: uri,
@@ -51,7 +58,7 @@ class GenericVideoProvider implements VideoProvider {
       streamUrl: uri,
       playbackSource: NativeVideoSource(uri),
       aspectRatio: 16.0 / 9.0,
-      platformName: 'Video',
+      platformName: labelMediaVideo,
       isShortForm: false,
       capabilities: capabilities,
     );

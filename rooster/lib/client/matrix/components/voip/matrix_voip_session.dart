@@ -12,6 +12,7 @@ import 'package:rooster/client/components/voip/webrtc_screencapture_source.dart'
 import 'package:rooster/client/matrix/components/rtc_data_channel/matrix_rtc_data_channel_component.dart';
 import 'package:rooster/client/matrix/components/voip/matrix_voip_stream.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
+import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/main.dart';
 import 'package:flutter/src/widgets/framework.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -130,7 +131,8 @@ class MatrixVoipSession implements VoipSession {
   }
 
   @override
-  String get roomName => session.room.getLocalizedDisplayname();
+  String get roomName =>
+      session.room.getLocalizedDisplayname(const RoomNameLocalizations());
 
   @override
   Future<void> acceptCall(

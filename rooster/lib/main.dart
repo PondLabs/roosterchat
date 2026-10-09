@@ -9,14 +9,13 @@ import 'package:rooster/client/components/push_notification/notification_manager
 import 'package:rooster/client/components/voip/webrtc_default_devices.dart';
 import 'package:rooster/config/build_config.dart';
 import 'package:rooster/config/global_config.dart';
+import 'package:rooster/config/languages.dart';
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/config/platform_utils.dart';
 import 'package:rooster/config/preferences.dart';
 import 'package:rooster/config/subplatforms/subplatforms.dart';
-import 'package:rooster/debug/l10n_debug_lookup.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/diagnostic/diagnostics.dart';
-import 'package:rooster/generated/intl/messages_all.dart';
 import 'package:rooster/rust/frb_generated.dart';
 import 'package:rooster/single_instance.dart';
 import 'package:rooster/ui/organisms/overlay_windows/overlay_window_manager.dart';
@@ -36,6 +35,7 @@ import 'package:rooster/utils/database/database_server.dart';
 import 'package:rooster/utils/emoji/unicode_emoji.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:rooster/utils/first_time_setup.dart';
+import 'package:rooster/utils/language/app_language.dart';
 import 'package:rooster/utils/focus_node_monitor.dart';
 import 'package:rooster/utils/scaled_app.dart';
 import 'package:rooster/utils/shortcuts_manager.dart';
@@ -51,7 +51,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:logging/logging.dart';
 import 'package:media_kit/media_kit.dart';
@@ -83,6 +82,8 @@ void unifiedPushEntry() async {
   Log.prefix = "unified-push";
   await WidgetsFlutterBinding.ensureInitialized();
   await preferences.init();
+  // The notifications this posts are in the app's language.
+  await AppLanguage.load();
   await UnifiedPushNotifier().init();
 }
 
@@ -121,11 +122,9 @@ void bubble() async {
       theme: initialTheme,
       navigatorKey: navigator,
       debugShowCheckedModeBanner: false,
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
+      locale: AppLanguage.current.value.locale,
+      supportedLocales: _supportedLocales,
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       builder: (context, child) => Provider<ClientManager>(
             create: (context) => clientManager!,
             child: child,
@@ -237,6 +236,9 @@ void appMain() async {
 /// The small window with the loading rooster, which also shows an update
 /// being fetched.
 Future<void> _showLoadingWindow() async {
+  // In the system's language: the language picked in settings is only read
+  // once the data directory may be opened.
+  await AppLanguage.load();
   await WindowManagement.showLauncher();
   runApp(LoadingPage(update: SelfUpdater.instance.progress));
 }
@@ -266,6 +268,8 @@ bool _rustLibReady = false;
 Future<void> initNecessary() async {
   sqfliteFfiInit();
   await preferences.init();
+  // Before anything shows a string or posts a notification.
+  await AppLanguage.load();
   await initDatabaseServer();
 
   // Integration tests call initNecessary once per test; the bridge only
@@ -312,25 +316,13 @@ Future<void> initGuiRequirements() async {
   if (kIsWeb) await BrowserContextMenu.disableContextMenu();
 
   MediaKit.ensureInitialized();
-
-  var locale = PlatformDispatcher.instance.locale;
+  AppLanguage.follow();
 
   UnicodeEmojis.load();
-  // Awaited: on the web the translations are a deferred part fetched over
-  // the network, and a first frame built before it arrived showed the
-  // untranslated strings until the next rebuild.
-  if (!preferences.debugTranslations.value) {
-    await initializeMessages(locale.languageCode);
-  } else {
-    initializeMessagesDebug();
-  }
-  await initializeDateFormatting(locale.languageCode);
 
   tiamat.getAppScale = () {
     return preferences.appScale.value;
   };
-
-  Intl.defaultLocale = locale.languageCode;
 }
 
 /// Initializes gui requirements and launches the gui
@@ -436,6 +428,9 @@ final Map<ShortcutActivator, Intent>? _appShortcuts = BuildConfig.WEB
             const PasteTextIntent(SelectionChangedCause.keyboard),
       };
 
+final List<Locale> _supportedLocales =
+    Languages.supported.map((language) => language.locale).toList();
+
 class App extends StatelessWidget {
   const App(
       {super.key,
@@ -468,22 +463,31 @@ class App extends StatelessWidget {
                 },
                 initialTheme: initialTheme ?? ThemeDark.theme,
                 materialAppBuilder: (context, theme) {
-                  return MaterialApp(
-                    title: BuildConfig.app,
-                    theme: theme,
-                    showPerformanceOverlay:
-                        preferences.showPerformanceOverlay.value,
-                    debugShowCheckedModeBanner: false,
-                    shortcuts: _appShortcuts,
-                    navigatorKey: navigator,
-                    builder: (context, child) => Provider<ClientManager>(
-                      create: (context) => clientManager,
-                      child: child,
-                    ),
-                    home: AppView(
-                      clientManager: clientManager,
-                      initialClientId: initialClientId,
-                      initialRoom: initialRoom,
+                  // The Material widgets' own strings (text selection, date
+                  // pickers) follow the language picked in settings.
+                  return ValueListenableBuilder<Language>(
+                    valueListenable: AppLanguage.current,
+                    builder: (context, language, _) => MaterialApp(
+                      title: BuildConfig.app,
+                      theme: theme,
+                      locale: language.locale,
+                      supportedLocales: _supportedLocales,
+                      localizationsDelegates:
+                          GlobalMaterialLocalizations.delegates,
+                      showPerformanceOverlay:
+                          preferences.showPerformanceOverlay.value,
+                      debugShowCheckedModeBanner: false,
+                      shortcuts: _appShortcuts,
+                      navigatorKey: navigator,
+                      builder: (context, child) => Provider<ClientManager>(
+                        create: (context) => clientManager,
+                        child: child,
+                      ),
+                      home: AppView(
+                        clientManager: clientManager,
+                        initialClientId: initialClientId,
+                        initialRoom: initialRoom,
+                      ),
                     ),
                   );
                 }),

@@ -1,6 +1,7 @@
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/pages/settings/categories/account/security/matrix/session/matrix_session_view.dart';
 import 'package:flutter/widgets.dart';
+import 'package:intl/intl.dart';
 
 import 'package:matrix/matrix.dart';
 
@@ -20,6 +21,12 @@ class MatrixSession extends StatefulWidget {
 
 class _MatrixSessionState extends State<MatrixSession> {
   Function()? previousOnUpdate;
+
+  String get labelSettingsVerificationRequest =>
+      Intl.message("Verification Request",
+          name: "labelSettingsVerificationRequest",
+          desc: "Settings > Security > Sessions: title of the dialog that "
+              "verifies one of your other sessions (devices)");
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +63,7 @@ class _MatrixSessionState extends State<MatrixSession> {
     if (mounted)
       AdaptiveDialog.show(context,
           builder: (_) => MatrixVerificationPage(request: request),
-          title: "Verification Request");
+          title: labelSettingsVerificationRequest);
   }
 
   void onRequestUpdate() {

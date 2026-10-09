@@ -6,6 +6,7 @@ import 'package:rooster/ui/molecules/screen_share_start_reporting.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_button.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_call_controller.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 /// What the call's buttons do. Handed from the call view to the fullscreen
@@ -65,6 +66,29 @@ class CallControlButtons extends StatefulWidget {
 
   final VoidCallback? onHungUp;
   final ValueChanged<bool>? onSoundboardOpenChanged;
+
+  static String get promptCallOpenDjBooth =>
+      Intl.message("DJ booth – play music",
+          name: "promptCallOpenDjBooth",
+          desc: "Tooltip of the call's DJ booth button, and its entry in the "
+              "phone's \"more\" sheet, while the booth is closed: opens the "
+              "booth to play music for everyone in the call");
+
+  static String get promptCallCloseDjBooth => Intl.message("Close the DJ booth",
+      name: "promptCallCloseDjBooth",
+      desc: "Tooltip of the call's DJ booth button, and its entry in the "
+          "phone's \"more\" sheet, while the booth is open");
+
+  static String get promptCallShareScreen => Intl.message("Share your screen",
+      name: "promptCallShareScreen",
+      desc: "Entry in the phone's \"more\" sheet of the call buttons that "
+          "starts sharing the screen");
+
+  static String get promptCallStopSharingScreen =>
+      Intl.message("Stop sharing your screen",
+          name: "promptCallStopSharingScreen",
+          desc: "Entry in the phone's \"more\" sheet of the call buttons that "
+              "stops sharing the screen");
 
   /// The least room left between two buttons of the compact row.
   static const double _compactGap = 4;
@@ -198,8 +222,8 @@ class _CallControlButtonsState extends State<CallControlButtons> {
         ? null
         : Tooltip(
             message: widget.boothOpen
-                ? 'Close the DJ booth'
-                : 'DJ booth – play music',
+                ? CallControlButtons.promptCallCloseDjBooth
+                : CallControlButtons.promptCallOpenDjBooth,
             child: tiamat.CircleButton(
               radius: radius,
               iconSize: iconSize,
@@ -274,7 +298,7 @@ class _CallControlButtonsState extends State<CallControlButtons> {
             if (session.isSharingScreen)
               ListTile(
                 leading: const Icon(Icons.stop_screen_share),
-                title: const Text('Stop sharing your screen'),
+                title: Text(CallControlButtons.promptCallStopSharingScreen),
                 onTap: () {
                   Navigator.pop(sheet);
                   actions.stopScreenshare?.call();
@@ -284,7 +308,7 @@ class _CallControlButtonsState extends State<CallControlButtons> {
               ListTile(
                 key: const ValueKey('callControls_shareScreen'),
                 leading: const Icon(Icons.screen_share_outlined),
-                title: const Text('Share your screen'),
+                title: Text(CallControlButtons.promptCallShareScreen),
                 // A phone's browser cannot capture the screen: said here,
                 // rather than a tile that does nothing when tapped.
                 enabled: session.supportsScreenshare,
@@ -300,8 +324,8 @@ class _CallControlButtonsState extends State<CallControlButtons> {
               ListTile(
                 leading: const Icon(Icons.album_rounded),
                 title: Text(widget.boothOpen
-                    ? 'Close the DJ booth'
-                    : 'DJ booth – play music'),
+                    ? CallControlButtons.promptCallCloseDjBooth
+                    : CallControlButtons.promptCallOpenDjBooth),
                 onTap: () {
                   Navigator.pop(sheet);
                   widget.onToggleBooth?.call();

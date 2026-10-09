@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:rooster/ui/molecules/image_select_dialog.dart';
 import 'package:rooster/utils/picker_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:tiamat/tiamat.dart';
@@ -14,13 +15,15 @@ class ImagePickerButton extends StatefulWidget {
       this.onImageRead,
       this.size = 128,
       this.cropAspectRatio,
-      this.tooltip = "Pick Image",
+      this.tooltip,
       this.withData = false,
       this.icon});
   final ImageProvider? currentImage;
   final bool withData;
   final double? cropAspectRatio;
-  final String tooltip;
+
+  /// "Pick Image" when not given.
+  final String? tooltip;
   final double size;
   final IconData? icon;
   final Function(String filepath)? onImagePicked;
@@ -43,7 +46,7 @@ class _ImagePickerButtonState extends State<ImagePickerButton> {
   @override
   Widget build(BuildContext context) {
     return tiamat.Tooltip(
-      text: widget.tooltip,
+      text: widget.tooltip ?? ImageSelectDialog.pickImagePrompt,
       preferredDirection: AxisDirection.down,
       child: ImageButton(
         icon: image == null ? widget.icon : null,

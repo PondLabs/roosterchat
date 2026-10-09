@@ -7,11 +7,30 @@ import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:flutter/material.dart';
 import 'package:fuzzy/fuzzy.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/atoms/tile.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class QuickSwitcher extends StatefulWidget {
   const QuickSwitcher({super.key});
+
+  static String get labelAppQuickSwitcherSearchResults =>
+      Intl.message("Search Results",
+          name: "labelAppQuickSwitcherSearchResults",
+          desc: "Header over the rooms found in the quick switcher (Ctrl + K), "
+              "as you type");
+
+  static String get labelAppQuickSwitcherDirectMessages =>
+      Intl.message("Direct Messages",
+          name: "labelAppQuickSwitcherDirectMessages",
+          desc: "Header over the direct message avatars in the quick switcher "
+              "(Ctrl + K), before anything is typed");
+
+  static String get labelAppQuickSwitcherRecentActivity =>
+      Intl.message("Recent Activity",
+          name: "labelAppQuickSwitcherRecentActivity",
+          desc: "Header over the rooms with the latest messages in the quick "
+              "switcher (Ctrl + K), before anything is typed");
 
   static bool isShowing = false;
 
@@ -126,7 +145,7 @@ class _QuickSwitcherState extends State<QuickSwitcher> {
           if (searchResults.isNotEmpty)
             tiamat.Panel(
               mode: TileType.surfaceContainerLow,
-              header: "Search Results",
+              header: QuickSwitcher.labelAppQuickSwitcherSearchResults,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(0, 12, 0, 0),
                 child: Column(
@@ -146,7 +165,7 @@ class _QuickSwitcherState extends State<QuickSwitcher> {
       children: [
         tiamat.Panel(
           mode: TileType.surfaceContainerLow,
-          header: "Direct Messages",
+          header: QuickSwitcher.labelAppQuickSwitcherDirectMessages,
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -177,7 +196,7 @@ class _QuickSwitcherState extends State<QuickSwitcher> {
         ),
         tiamat.Panel(
             mode: TileType.surfaceContainerLow,
-            header: "Recent Activity",
+            header: QuickSwitcher.labelAppQuickSwitcherRecentActivity,
             child: Column(
               spacing: 0,
               children: [

@@ -1,46 +1,56 @@
 import 'dart:math';
 
 import 'package:rooster/client/matrix/matrix_member.dart';
+import 'package:rooster/ui/pages/get_or_create_room/room_creation_strings.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class SpaceCreatorDescription extends StatelessWidget {
   SpaceCreatorDescription({super.key});
 
-  final textChannelNames = [
-    "General",
-    "Random",
-    "help",
-    "shipposting",
-    "Modding",
-    "Support",
-    "Chat",
-    "Wisdom",
-    "Showcase",
-    "Community",
-    "Suggestions",
-    "Announcements",
-  ];
+  String get labelSpaceCreatorDescription => Intl.message(
+      "Spaces are a collection of rooms, they can contain text chats, voice chats and more! They are the perfect way to organize your community or group!",
+      name: "labelSpaceCreatorDescription",
+      desc:
+          "Description of a space, in the dialog that adds a room, over a picture of a space's channels");
 
-  final voiceChannelNames = ["Gaming", "Movie Night"];
+  List<String> get textChannelNames => [
+        RoomCreationStrings.labelRoomSampleNameGeneral,
+        RoomCreationStrings.labelRoomSampleNameRandom,
+        RoomCreationStrings.labelRoomSampleNameHelp,
+        RoomCreationStrings.labelRoomSampleNameShipposting,
+        RoomCreationStrings.labelRoomSampleNameModding,
+        RoomCreationStrings.labelRoomSampleNameSupport,
+        RoomCreationStrings.labelRoomSampleNameChat,
+        RoomCreationStrings.labelRoomSampleNameWisdom,
+        RoomCreationStrings.labelRoomSampleNameShowcase,
+        RoomCreationStrings.labelRoomSampleNameCommunity,
+        RoomCreationStrings.labelRoomSampleNameSuggestions,
+        RoomCreationStrings.labelRoomSampleNameAnnouncements,
+      ];
 
-  final photoAlbumNames = [
-    "Random Photo Dump",
-    "Clips",
-    "Art",
-  ];
+  List<String> get voiceChannelNames => [
+        RoomCreationStrings.labelRoomSampleNameGaming,
+        RoomCreationStrings.labelRoomSampleNameMovieNight,
+      ];
 
-  final calendarNames = [
-    "Calendar",
-    "Work Schedule",
-  ];
+  List<String> get photoAlbumNames => [
+        RoomCreationStrings.labelRoomSampleNamePhotoDump,
+        RoomCreationStrings.labelRoomSampleNameClips,
+        RoomCreationStrings.labelRoomSampleNameArt,
+      ];
+
+  List<String> get calendarNames => [
+        RoomCreationStrings.labelRoomSampleNameCalendar,
+        RoomCreationStrings.labelRoomSampleNameWorkSchedule,
+      ];
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        tiamat.Text.labelLow(
-            "Spaces are a collection of rooms, they can contain text chats, voice chats and more! They are the perfect way to organize your community or group!"),
+        tiamat.Text.labelLow(labelSpaceCreatorDescription),
         SizedBox(
           height: 30,
         ),
@@ -55,6 +65,10 @@ class SpaceCreatorDescription extends StatelessWidget {
   }
 
   List<Widget> buildItems(BuildContext context) {
+    final textChannelNames = this.textChannelNames;
+    final voiceChannelNames = this.voiceChannelNames;
+    final photoAlbumNames = this.photoAlbumNames;
+    final calendarNames = this.calendarNames;
     var result = [
       for (int i = 0; i < textChannelNames.length; i++)
         buildSpaceChild(context, textChannelNames[i], Icons.tag, i),

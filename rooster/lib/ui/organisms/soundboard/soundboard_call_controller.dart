@@ -37,10 +37,27 @@ import 'package:rooster/ui/organisms/soundboard/soundboard_popover.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart' show AssetImage, Color;
+import 'package:intl/intl.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 
 class SoundboardCallController extends ChangeNotifier {
   static final Map<VoipSession, SoundboardCallController> _bySession = {};
+
+  static String errorSoundboardCannotPlay(String uri) => Intl.message(
+      "Cannot play $uri",
+      name: "errorSoundboardCannotPlay",
+      args: [uri],
+      desc: "Why a soundboard sound could not be played or previewed: its "
+          "file is not somewhere the app can play it from. The value is the "
+          "file's address (mxc://…)");
+
+  static String errorSoundboardCannotCache(String uri) =>
+      Intl.message("Could not cache $uri for playback",
+          name: "errorSoundboardCannotCache",
+          args: [uri],
+          desc: "Why a soundboard sound could not be previewed: its file could "
+              "not be kept on this device to play it. The value is the file's "
+              "address (mxc://…)");
 
   /// Returns the controller for [session], creating and initializing it on
   /// first use. Every call must be paired with [release].
@@ -237,7 +254,7 @@ class SoundboardCallController extends ChangeNotifier {
     final uri = Uri.parse(sound.mediaUri);
     final bundled = uri.scheme == soundboardAssetScheme;
     if (!bundled && (client is! MatrixClient || uri.scheme != 'mxc')) {
-      throw StateError('Cannot play ${sound.mediaUri}');
+      throw StateError(errorSoundboardCannotPlay(sound.mediaUri));
     }
     final key = uri.toString();
     final cached = await fileCache?.getFile(key);
@@ -249,7 +266,7 @@ class SoundboardCallController extends ChangeNotifier {
             (client as MatrixClient).getMatrixClient(), uri);
     final stored = await fileCache?.putFile(key, bytes);
     if (stored == null) {
-      throw StateError('Could not cache ${sound.mediaUri} for playback');
+      throw StateError(errorSoundboardCannotCache(sound.mediaUri));
     }
     return stored.toString();
   }
@@ -263,7 +280,7 @@ class SoundboardCallController extends ChangeNotifier {
     final uri = Uri.parse(sound.mediaUri);
     if (uri.scheme == soundboardAssetScheme) return _assetBytes(uri);
     if (client is! MatrixClient || uri.scheme != 'mxc') {
-      throw StateError('Cannot play ${sound.mediaUri}');
+      throw StateError(errorSoundboardCannotPlay(sound.mediaUri));
     }
     return downloadSoundboardMedia(client.getMatrixClient(), uri);
   }

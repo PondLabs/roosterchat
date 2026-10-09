@@ -6,6 +6,7 @@ import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/pages/matrix/room_address_settings/matrix_room_add_local_alias_view.dart';
 import 'package:flutter/material.dart';
 import 'package:implicitly_animated_list/implicitly_animated_list.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -47,6 +48,79 @@ class _MatrixRoomAddressSettingsViewState
   String? errorMessage;
   StreamSubscription? subscription;
 
+  String get labelRoomAddresses => Intl.message("Room Addresses",
+      name: "labelRoomAddresses",
+      desc:
+          "Header of the section of a room's (or space's) general settings that lists its addresses (aliases such as #name:server)");
+
+  String get labelRoomAddressesOther => Intl.message("Other Addresses:",
+      name: "labelRoomAddressesOther",
+      desc:
+          "In a room's address settings, over the list of all the room's addresses, under the choice of its main address");
+
+  String get labelRoomAddressesNoneLocal => Intl.message(
+      "This room does not currently have any local Addresses",
+      name: "labelRoomAddressesNoneLocal",
+      desc:
+          "In a room's address settings, while the room has no address on our server");
+
+  String get tooltipRoomAddressUnpublish => Intl.message("Unpublish Address",
+      name: "tooltipRoomAddressUnpublish",
+      desc:
+          "Tooltip of the globe toggle next to a published room address: stop listing it as one of the room's addresses");
+
+  String get tooltipRoomAddressPublish => Intl.message("Publish Address",
+      name: "tooltipRoomAddressPublish",
+      desc:
+          "Tooltip of the globe toggle next to a room address that is not published: list it as one of the room's addresses for everyone to see");
+
+  String get labelRoomAddressMain => Intl.message("Main",
+      name: "labelRoomAddressMain",
+      desc:
+          "Small badge next to the room address that is the room's main one, in the room's address settings");
+
+  String get tooltipRoomAddressDeleteLocal => Intl.message(
+      "Delete local address",
+      name: "tooltipRoomAddressDeleteLocal",
+      desc:
+          "Tooltip of the button that deletes a room address made on our own server");
+
+  String get tooltipRoomAddressAddLocal => Intl.message("Add local address",
+      name: "tooltipRoomAddressAddLocal",
+      desc:
+          "Tooltip of the + button that makes a new room address on our own server");
+
+  String get labelRoomAddressAddLocalTitle => Intl.message("Add Local Address",
+      name: "labelRoomAddressAddLocalTitle",
+      desc:
+          "Title of the dialog that makes a new room address on our own server");
+
+  String get promptRoomAddressSelectMain => Intl.message(
+      "Select a main room address",
+      name: "promptRoomAddressSelectMain",
+      desc:
+          "Hint of the dropdown that picks a room's main address, while none is picked");
+
+  String get labelRoomAddressNoMain => Intl.message(
+      "This room does not have a set main alias",
+      name: "labelRoomAddressNoMain",
+      desc:
+          "In a room's address settings, for people who may not change it, while the room has no main address");
+
+  String promptRoomAddressDeleteConfirm(String address) => Intl.message(
+      "Are you sure you want to delete the address '$address'?",
+      name: "promptRoomAddressDeleteConfirm",
+      args: [address],
+      desc:
+          "Confirmation before deleting one of a room's addresses, with the address (such as #name:server)");
+
+  String errorRoomAddressDeleteForbidden(String address) => Intl.message(
+      "You do not have permission to delete '$address'",
+      name: "errorRoomAddressDeleteForbidden",
+      args: [address],
+      desc:
+          "Error in a room's address settings when deleting an address failed, with the address (such as #name:server)");
+
   @override
   void initState() {
     subscription = widget.mainAliasChangedStream.listen(onMainAliasChanged);
@@ -67,7 +141,7 @@ class _MatrixRoomAddressSettingsViewState
   @override
   Widget build(BuildContext context) {
     return Panel(
-      header: "Room Addresses",
+      header: labelRoomAddresses,
       mode: TileType.surfaceContainerLow,
       child: Column(
         children: [
@@ -91,13 +165,12 @@ class _MatrixRoomAddressSettingsViewState
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const tiamat.Text.labelLow("Other Addresses:"),
+          tiamat.Text.labelLow(labelRoomAddressesOther),
           if (widget.knownAliases.isEmpty)
-            const SizedBox(
+            SizedBox(
               height: 50,
               child: Center(
-                child: tiamat.Text.labelLow(
-                    "This room does not currently have any local Addresses"),
+                child: tiamat.Text.labelLow(labelRoomAddressesNoneLocal),
               ),
             ),
           ImplicitlyAnimatedList(
@@ -118,8 +191,8 @@ class _MatrixRoomAddressSettingsViewState
                             height: boxSize,
                             child: tiamat.Tooltip(
                               text: isPublished(data)
-                                  ? "Unpublish Address"
-                                  : "Publish Address",
+                                  ? tooltipRoomAddressUnpublish
+                                  : tooltipRoomAddressPublish,
                               child: tiamat.IconToggle(
                                 icon: Icons.public,
                                 size: iconSize,
@@ -140,7 +213,8 @@ class _MatrixRoomAddressSettingsViewState
                           child: tiamat.Text.label(data),
                         ),
                       ),
-                      if (data == widget.mainAlias) const TinyPill("Main"),
+                      if (data == widget.mainAlias)
+                        TinyPill(labelRoomAddressMain),
                     ],
                   ),
                   Align(
@@ -150,7 +224,7 @@ class _MatrixRoomAddressSettingsViewState
                       height: boxSize,
                       child: isEditable(data)
                           ? tiamat.Tooltip(
-                              text: "Delete local address",
+                              text: tooltipRoomAddressDeleteLocal,
                               child: tiamat.IconButton(
                                 icon: Icons.close,
                                 size: iconSize,
@@ -170,13 +244,13 @@ class _MatrixRoomAddressSettingsViewState
             children: [
               errorMessage == null
                   ? Container()
-                  : tiamat.Text.error(errorMessage!),
+                  : Flexible(child: tiamat.Text.error(errorMessage!)),
               SizedBox(
                 width: 40,
                 height: 40,
                 child: tiamat.Tooltip(
                   preferredDirection: AxisDirection.left,
-                  text: "Add local address",
+                  text: tooltipRoomAddressAddLocal,
                   child: tiamat.CircleButton(
                     icon: Icons.add,
                     onPressed: showAddAliasDialog,
@@ -193,7 +267,7 @@ class _MatrixRoomAddressSettingsViewState
   void showAddAliasDialog() {
     AdaptiveDialog.show(
       context,
-      title: "Add Local Address",
+      title: labelRoomAddressAddLocalTitle,
       builder: (context) {
         return MatrixRoomAddLocalAliasView(widget.userHomeserver!,
             widget.isAliasAvailable, widget.createAlias);
@@ -213,8 +287,8 @@ class _MatrixRoomAddressSettingsViewState
             value: widget.mainAlias,
             itemHeight: 60,
             hint: tiamat.Text.labelLow(widget.canChangeMainAlias
-                ? "Select a main room address"
-                : "This room does not have a set main alias"),
+                ? promptRoomAddressSelectMain
+                : labelRoomAddressNoMain),
             onItemSelected: (item) => widget.setMainAlias(item!),
             itemBuilder: (item) {
               return Row(
@@ -225,7 +299,7 @@ class _MatrixRoomAddressSettingsViewState
                       child: tiamat.Text.label(item!),
                     ),
                   ),
-                  if (item == widget.mainAlias) const TinyPill("Main"),
+                  if (item == widget.mainAlias) TinyPill(labelRoomAddressMain),
                 ],
               );
             },
@@ -237,7 +311,7 @@ class _MatrixRoomAddressSettingsViewState
 
   Future<void> deleteAlias(String item) async {
     var confirmation = await AdaptiveDialog.confirmation(context,
-        prompt: "Are you sure you want to delete the address '$item'");
+        prompt: promptRoomAddressDeleteConfirm(item));
 
     if (confirmation != true) {
       return;
@@ -247,7 +321,7 @@ class _MatrixRoomAddressSettingsViewState
 
     if (result == false) {
       setState(() {
-        errorMessage = "You do not have permission to delete '$item'";
+        errorMessage = errorRoomAddressDeleteForbidden(item);
       });
     }
   }

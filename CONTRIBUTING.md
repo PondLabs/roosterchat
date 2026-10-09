@@ -4,6 +4,12 @@ Thank you for your interest in contributing to Rooster!
 
 We are open to most types of contributions, but for larger changes and new features, please discuss with maintainers before you begin working. This will allow us to guide you on any preferred implementation details, and ensures you don't spend your time working on something which may be moving in the wrong direction.
 
+## Language
+
+Write code, comments, commit messages, pull requests and issues in English, whatever language you speak with the team.
+
+Rooster itself ships in English and Brazilian Portuguese. Text people read in the app is never written straight into a widget: it is an `Intl.message`, written in English first, and the pull request that adds it also adds its Portuguese translation. The steps, the conventions and the Portuguese glossary are in [docs/localization.md](docs/localization.md).
+
 ## Restrictions on Generative AI Usage
 
 We expect and appreciate authentic engagement in our community.  

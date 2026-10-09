@@ -40,6 +40,7 @@ class MatrixCapabilityTurnServers implements MatrixWidgetCapability {
       return message.createResponseObject();
     }
 
+    // Not translated: a reply to the widget, which the app does not show.
     return message.createResponseError(message: "Unimplemented");
   }
 

@@ -68,7 +68,7 @@
         resolve(r);
       };
       const timer = setTimeout(
-        () => done({ ok: false, reason: WORKER_URL + " did not answer in " + PROBE_TIMEOUT_MS + " ms" }),
+        () => done({ ok: false, code: "timeout", reason: WORKER_URL + " did not answer in " + PROBE_TIMEOUT_MS + " ms" }),
         PROBE_TIMEOUT_MS,
       );
       try {
@@ -96,7 +96,7 @@
   function probe() {
     if (probed) return probed;
     const attempt = (async () => {
-      if (!supported) return { ok: false, reason: "this browser has no AudioWorklet or WebAssembly" };
+      if (!supported) return { ok: false, code: "unsupported", reason: "this browser has no AudioWorklet or WebAssembly" };
       try {
         // The worklet module has to load too: a missing or broken
         // audio_dsp.worklet.js fails every call the same way.

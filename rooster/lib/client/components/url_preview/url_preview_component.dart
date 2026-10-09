@@ -23,6 +23,7 @@ abstract class UrlPreviewComponent<T extends Client> implements Component<T> {
   // nothing cached, or the result was invalid? maybe this is dumb but it was the simplest way
   // to prevent weird ui glitches when failed fetches kept getting retried.
   static UrlPreviewData invalidPreviewData =
+      // Not translated: a cache marker, compared by identity, never drawn.
       UrlPreviewData(Uri.new(), title: "Unable to get url preview ");
 }
 

@@ -22,13 +22,41 @@ class CalendarViewHeader extends StatelessWidget {
   final Function()? prevPage;
   final Function(CalendarViewMode)? setViewMode;
   final bool useMobileLayout;
+
+  static String labelCalendarTodayWithDate(String date) => Intl.message(
+      "Today ($date)",
+      name: "labelCalendarTodayWithDate",
+      args: [date],
+      desc:
+          "Calendar header while it shows today, with today's date written out");
+
+  static String labelCalendarDateRange(String start, String end) => Intl.message(
+      "$start - $end",
+      name: "labelCalendarDateRange",
+      args: [start, end],
+      desc:
+          "Calendar header showing a span of time (a week, months), from the first date to the last");
+
+  static String get tooltipCalendarDayView => Intl.message("Day View",
+      name: "tooltipCalendarDayView",
+      desc: "Tooltip of the button that shows the calendar one day at a time");
+
+  static String get tooltipCalendarWeekView => Intl.message("Week View",
+      name: "tooltipCalendarWeekView",
+      desc: "Tooltip of the button that shows the calendar one week at a time");
+
+  static String get tooltipCalendarMonthView => Intl.message("Month View",
+      name: "tooltipCalendarMonthView",
+      desc:
+          "Tooltip of the button that shows the calendar one month at a time");
+
   String getHeaderText() {
     if (mode == CalendarViewMode.month) {
       var format = DateFormat(DateFormat.YEAR_MONTH);
       var result = format.format(date);
 
       if (secondaryDate != null) {
-        result += " - ${format.format(secondaryDate!)}";
+        result = labelCalendarDateRange(result, format.format(secondaryDate!));
       }
 
       return result;
@@ -42,11 +70,11 @@ class CalendarViewHeader extends StatelessWidget {
           (date.day == now.day &&
               date.month == now.month &&
               date.year == now.year)) {
-        result = "Today (${result})";
+        result = labelCalendarTodayWithDate(result);
       }
 
       if (secondaryDate != null) {
-        result += " - ${format.format(secondaryDate!)}";
+        result = labelCalendarDateRange(result, format.format(secondaryDate!));
       }
 
       return result;
@@ -71,9 +99,15 @@ class CalendarViewHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 0, 0),
-          child: Text(getHeaderText()),
+        Flexible(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 0, 0),
+            child: Text(
+              getHeaderText(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ),
         Align(
             alignment: AlignmentGeometry.centerRight,
@@ -103,7 +137,14 @@ class CalendarViewHeader extends StatelessWidget {
             ),
           ],
         ),
-        Text(getHeaderText()),
+        Flexible(
+          child: Text(
+            getHeaderText(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+          ),
+        ),
         Row(
           children: [
             createLayoutButtons(context),
@@ -122,7 +163,7 @@ class CalendarViewHeader extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         tiamat.Tooltip(
-          text: "Day View",
+          text: tooltipCalendarDayView,
           preferredDirection: AxisDirection.down,
           child: IconButton(
               onPressed: () => setViewMode?.call(CalendarViewMode.day),
@@ -133,7 +174,7 @@ class CalendarViewHeader extends StatelessWidget {
                   Icons.calendar_view_day)),
         ),
         tiamat.Tooltip(
-          text: "Week View",
+          text: tooltipCalendarWeekView,
           preferredDirection: AxisDirection.down,
           child: IconButton(
             onPressed: () => setViewMode?.call(CalendarViewMode.week),
@@ -145,7 +186,7 @@ class CalendarViewHeader extends StatelessWidget {
           ),
         ),
         tiamat.Tooltip(
-          text: "Month View",
+          text: tooltipCalendarMonthView,
           preferredDirection: AxisDirection.down,
           child: IconButton(
             onPressed: () => setViewMode?.call(CalendarViewMode.month),

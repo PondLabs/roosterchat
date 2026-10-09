@@ -25,7 +25,7 @@ class GifPicker extends StatefulWidget {
       this.favoritePicked,
       this.onUnfavoriteGif,
       this.onDismiss,
-      this.placeholderText = "Search Gif"});
+      this.placeholderText});
   final List<FavoriteGif> favorites;
   final Future<void> Function(GifSearchResult gif)? gifPicked;
   final Future<void> Function(FavoriteGif gif)? favoritePicked;
@@ -37,7 +37,8 @@ class GifPicker extends StatefulWidget {
   /// Called when escape is pressed inside the picker
   final void Function()? onDismiss;
 
-  final String placeholderText;
+  /// The search box's hint; [promptChatSearchGif] when not given.
+  final String? placeholderText;
 
   @override
   State<GifPicker> createState() => _GifPickerState();
@@ -89,6 +90,16 @@ class GifPicker extends StatefulWidget {
         desc: "Button to retry loading gifs after an error",
         name: "promptGifPickerRetry",
       );
+
+  static String get promptChatSearchGif => Intl.message("Search Gif",
+      name: "promptChatSearchGif",
+      desc: "Hint in the search box of the GIF picker");
+
+  static String get labelChatGifPoweredByKlipy =>
+      Intl.message("Powered by KLIPY",
+          name: "labelChatGifPoweredByKlipy",
+          desc: "At the end of the GIF picker's search box: the GIFs come "
+              "from KLIPY, as its attribution guidelines ask");
 }
 
 // One scrollable list of results (trending, or the current search)
@@ -328,9 +339,10 @@ class _GifPickerState extends State<GifPicker> {
                   icon: const Icon(Icons.search),
                   isDense: true,
                   border: InputBorder.none,
-                  hintText: widget.placeholderText,
+                  hintText:
+                      widget.placeholderText ?? GifPicker.promptChatSearchGif,
                   // KLIPY's attribution guidelines; it is the only provider.
-                  suffixText: "Powered by KLIPY"),
+                  suffixText: GifPicker.labelChatGifPoweredByKlipy),
             )),
       ),
     );

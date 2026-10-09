@@ -5,8 +5,10 @@ import 'package:rooster/client/components/video_embed/video_capabilities.dart';
 import 'package:rooster/config/build_config.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/molecules/video_player/video_player_implementation.dart';
+import 'package:rooster/utils/common_strings.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../atoms/gradient_background.dart';
 import '../../atoms/icon_button.dart' as i;
@@ -53,6 +55,82 @@ class VideoPlayer extends StatefulWidget {
 
   /// Offered next to Retry when playback fails.
   final VoidCallback? onOpenInBrowser;
+
+  static String get labelMediaUnableToPlay =>
+      Intl.message("Unable to play this video",
+          name: "labelMediaUnableToPlay",
+          desc: "Over a video in the player when it cannot be played");
+
+  static String get promptMediaRetry => Intl.message("Retry",
+      name: "promptMediaRetry",
+      desc: "Button over a video that could not be played or loaded: tries "
+          "again");
+
+  static String get promptMediaOpenInBrowser => Intl.message("Open in Browser",
+      name: "promptMediaOpenInBrowser",
+      desc: "Button over a video that cannot be played in the app: opens its "
+          "link in the web browser");
+
+  static String get labelMediaVolume => Intl.message("Volume",
+      name: "labelMediaVolume",
+      desc: "Heading of the volume slider in the video player's settings "
+          "sheet");
+
+  static String get tooltipMediaMute => Intl.message("Mute",
+      name: "tooltipMediaMute",
+      desc: "Tooltip of the video player's button that turns the video's "
+          "sound off");
+
+  static String get tooltipMediaUnmute => Intl.message("Unmute",
+      name: "tooltipMediaUnmute",
+      desc: "Tooltip of the video player's button that turns the video's "
+          "sound back on");
+
+  static String get labelMediaPlaybackSpeed => Intl.message("Playback speed",
+      name: "labelMediaPlaybackSpeed",
+      desc: "Heading of the speed choices in the video player's settings "
+          "sheet");
+
+  static String labelMediaPlaybackRate(String rate) => Intl.message("${rate}x",
+      name: "labelMediaPlaybackRate",
+      args: [rate],
+      desc: "A playback speed in the video player's settings sheet, as times "
+          "the normal speed (the number is already formatted): 0.5x, 1x, 2x");
+
+  static String get labelMediaQuality => Intl.message("Quality",
+      name: "labelMediaQuality",
+      desc: "Heading of the video quality choices in the video player's "
+          "settings sheet");
+
+  static String get labelMediaSubtitles => Intl.message("Subtitles",
+      name: "labelMediaSubtitles",
+      desc: "Heading of the subtitle choices in the video player's settings "
+          "sheet");
+
+  static String get labelMediaSubtitlesOff => Intl.message("Off",
+      name: "labelMediaSubtitlesOff",
+      desc: "Choice in the video player's subtitle list: no subtitles");
+
+  static String get tooltipMediaPlaybackSettings =>
+      Intl.message("Playback settings",
+          name: "tooltipMediaPlaybackSettings",
+          desc: "Tooltip of the video player's gear button, which opens the "
+              "volume, speed, quality and subtitle settings");
+
+  static String get tooltipMediaFullscreen => Intl.message("Fullscreen",
+      name: "tooltipMediaFullscreen",
+      desc: "Tooltip of the video player's button that fills the screen with "
+          "the video");
+
+  static String get tooltipMediaExitFullscreen =>
+      Intl.message("Exit fullscreen",
+          name: "tooltipMediaExitFullscreen",
+          desc: "Tooltip of the video player's button that leaves fullscreen");
+
+  static String get tooltipMediaReplay => Intl.message("Replay",
+      name: "tooltipMediaReplay",
+      desc: "Tooltip of the video player's play button once the video has "
+          "ended: plays it again from the start");
 
   @override
   State<VideoPlayer> createState() => VideoPlayerState();
@@ -207,9 +285,10 @@ class VideoPlayerState extends State<VideoPlayer> {
                 size: 36,
               ),
               const SizedBox(height: 12),
-              const Text(
-                'Unable to play this video',
-                style: TextStyle(color: Colors.white),
+              Text(
+                VideoPlayer.labelMediaUnableToPlay,
+                style: const TextStyle(color: Colors.white),
+                textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
               Wrap(
@@ -220,13 +299,13 @@ class VideoPlayerState extends State<VideoPlayer> {
                   OutlinedButton.icon(
                     onPressed: retry,
                     icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Retry'),
+                    label: Text(VideoPlayer.promptMediaRetry),
                   ),
                   if (widget.onOpenInBrowser != null)
                     OutlinedButton.icon(
                       onPressed: widget.onOpenInBrowser,
                       icon: const Icon(Icons.open_in_new_rounded),
-                      label: const Text('Open in Browser'),
+                      label: Text(VideoPlayer.promptMediaOpenInBrowser),
                     ),
                 ],
               ),
@@ -272,14 +351,17 @@ class VideoPlayerState extends State<VideoPlayer> {
                         shape: BoxShape.circle,
                       ),
                       padding: const EdgeInsets.all(6),
-                      child: i.IconButton(
-                        icon: isCompleted
-                            ? Icons.replay_rounded
-                            : (settings.playing
-                                ? Icons.pause_rounded
-                                : Icons.play_arrow_rounded),
-                        size: 48,
-                        onPressed: togglePlayback,
+                      child: Tooltip(
+                        message: playbackTooltip(settings),
+                        child: i.IconButton(
+                          icon: isCompleted
+                              ? Icons.replay_rounded
+                              : (settings.playing
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded),
+                          size: 48,
+                          onPressed: togglePlayback,
+                        ),
                       ),
                     ),
                   ),
@@ -390,14 +472,17 @@ class VideoPlayerState extends State<VideoPlayer> {
               ),
             Row(
               children: [
-                i.IconButton(
-                  icon: isCompleted
-                      ? Icons.replay_rounded
-                      : (settings.playing
-                          ? Icons.pause_rounded
-                          : Icons.play_arrow_rounded),
-                  size: 22,
-                  onPressed: togglePlayback,
+                Tooltip(
+                  message: playbackTooltip(settings),
+                  child: i.IconButton(
+                    icon: isCompleted
+                        ? Icons.replay_rounded
+                        : (settings.playing
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded),
+                    size: 22,
+                    onPressed: togglePlayback,
+                  ),
                 ),
                 if (showTime)
                   Padding(
@@ -419,26 +504,34 @@ class VideoPlayerState extends State<VideoPlayer> {
                         settings.qualities.length > 1) ||
                     (capabilities.supportsCaptions &&
                         settings.subtitles.isNotEmpty))
-                  i.IconButton(
-                    icon: Icons.settings_rounded,
-                    size: 22,
-                    onPressed: _showPlaybackSettings,
+                  Tooltip(
+                    message: VideoPlayer.tooltipMediaPlaybackSettings,
+                    child: i.IconButton(
+                      icon: Icons.settings_rounded,
+                      size: 22,
+                      onPressed: _showPlaybackSettings,
+                    ),
                   ),
                 if (widget.canGoFullscreen && capabilities.supportsFullscreen)
-                  i.IconButton(
-                    icon: widget.isFullscreen
-                        ? Icons.fullscreen_exit_rounded
-                        : Icons.fullscreen_rounded,
-                    size: 24,
-                    onPressed: () async {
-                      if (widget.onFullscreen != null) {
-                        widget.onFullscreen?.call();
-                      } else if (widget.isFullscreen) {
-                        await controller.exitFullscreen();
-                      } else {
-                        await controller.enterFullscreen();
-                      }
-                    },
+                  Tooltip(
+                    message: widget.isFullscreen
+                        ? VideoPlayer.tooltipMediaExitFullscreen
+                        : VideoPlayer.tooltipMediaFullscreen,
+                    child: i.IconButton(
+                      icon: widget.isFullscreen
+                          ? Icons.fullscreen_exit_rounded
+                          : Icons.fullscreen_rounded,
+                      size: 24,
+                      onPressed: () async {
+                        if (widget.onFullscreen != null) {
+                          widget.onFullscreen?.call();
+                        } else if (widget.isFullscreen) {
+                          await controller.exitFullscreen();
+                        } else {
+                          await controller.enterFullscreen();
+                        }
+                      },
+                    ),
                   ),
               ],
             ),
@@ -456,17 +549,22 @@ class VideoPlayerState extends State<VideoPlayer> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        i.IconButton(
-          icon: settings.isMuted
-              ? Icons.volume_off_rounded
-              : (settings.volume < 50
-                  ? Icons.volume_down_rounded
-                  : Icons.volume_up_rounded),
-          size: 22,
-          onPressed: () {
-            controller.toggleMute();
-            preferences.videoPlayerVolume.set(controller.settings.volume);
-          },
+        Tooltip(
+          message: settings.isMuted
+              ? VideoPlayer.tooltipMediaUnmute
+              : VideoPlayer.tooltipMediaMute,
+          child: i.IconButton(
+            icon: settings.isMuted
+                ? Icons.volume_off_rounded
+                : (settings.volume < 50
+                    ? Icons.volume_down_rounded
+                    : Icons.volume_up_rounded),
+            size: 22,
+            onPressed: () {
+              controller.toggleMute();
+              preferences.videoPlayerVolume.set(controller.settings.volume);
+            },
+          ),
         ),
         if (!BuildConfig.MOBILE && inlineSlider)
           SizedBox(
@@ -513,6 +611,13 @@ class VideoPlayerState extends State<VideoPlayer> {
     final ss = seconds.toString().padLeft(2, '0');
     return hours > 0 ? '$hours:$mm:$ss' : '$mm:$ss';
   }
+
+  /// What the play button does now: replay, pause or play.
+  String playbackTooltip(VideoPlayerSettings settings) => isCompleted
+      ? VideoPlayer.tooltipMediaReplay
+      : (settings.playing
+          ? CommonStrings.promptPause
+          : CommonStrings.promptPlay);
 
   void togglePlayback() {
     if (isCompleted) {
@@ -653,13 +758,15 @@ class _VideoPlaybackSettingsSheet extends StatelessWidget {
               children: [
                 if (capabilities.supportsVolume) ...[
                   Text(
-                    'Volume',
+                    VideoPlayer.labelMediaVolume,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   Row(
                     children: [
                       IconButton(
-                        tooltip: settings.isMuted ? 'Unmute' : 'Mute',
+                        tooltip: settings.isMuted
+                            ? VideoPlayer.tooltipMediaUnmute
+                            : VideoPlayer.tooltipMediaMute,
                         onPressed: () {
                           controller.toggleMute();
                           preferences.videoPlayerVolume
@@ -691,7 +798,7 @@ class _VideoPlaybackSettingsSheet extends StatelessWidget {
                 ],
                 if (capabilities.supportsPlaybackRate) ...[
                   Text(
-                    'Playback speed',
+                    VideoPlayer.labelMediaPlaybackSpeed,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
@@ -701,7 +808,8 @@ class _VideoPlaybackSettingsSheet extends StatelessWidget {
                     children: [
                       for (final rate in playbackRates)
                         ChoiceChip(
-                          label: Text('${rate.toStringAsPlaybackRate()}x'),
+                          label: Text(VideoPlayer.labelMediaPlaybackRate(
+                              NumberFormat.decimalPattern().format(rate))),
                           selected: settings.rate == rate,
                           onSelected: (_) => controller.setRate(rate),
                         ),
@@ -712,7 +820,7 @@ class _VideoPlaybackSettingsSheet extends StatelessWidget {
                     settings.qualities.length > 1) ...[
                   const SizedBox(height: 20),
                   Text(
-                    'Quality',
+                    VideoPlayer.labelMediaQuality,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
@@ -734,7 +842,7 @@ class _VideoPlaybackSettingsSheet extends StatelessWidget {
                     settings.subtitles.isNotEmpty) ...[
                   const SizedBox(height: 20),
                   Text(
-                    'Subtitles',
+                    VideoPlayer.labelMediaSubtitles,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   RadioGroup<String>(
@@ -746,9 +854,9 @@ class _VideoPlaybackSettingsSheet extends StatelessWidget {
                     },
                     child: Column(
                       children: [
-                        const RadioListTile<String>(
+                        RadioListTile<String>(
                           value: 'no',
-                          title: Text('Off'),
+                          title: Text(VideoPlayer.labelMediaSubtitlesOff),
                         ),
                         for (final subtitle in settings.subtitles)
                           RadioListTile<String>(
@@ -766,9 +874,4 @@ class _VideoPlaybackSettingsSheet extends StatelessWidget {
       },
     );
   }
-}
-
-extension on double {
-  String toStringAsPlaybackRate() =>
-      this == roundToDouble() ? toInt().toString() : toString();
 }
