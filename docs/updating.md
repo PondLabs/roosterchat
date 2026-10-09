@@ -68,21 +68,34 @@ attaches them.
 ## At launch
 
 On desktop the app opens as a small window with the loading rooster
-(`LoadingPage`, `WindowManagement.showLauncher`). Before anything else loads,
-a build that can install over itself (below) looks for a newer release, and
-when there is one the window stays small and shows it downloading, then the
-app restarts into it. Otherwise, or when the check fails, it carries on and
-the window grows into the app (`WindowManagement.openMainWindow`). Only
-turning "check for updates" off stops this; not having answered yet does
-not. The Linux and macOS runners open the window at the small size so it
-does not flash at full size first; the Windows one stays hidden until the
-first frame.
+(`LoadingPage`, `WindowManagement.showLauncher`). While the rest initialises
+(the preferences, the Rust library, the accounts), a build that can install
+over itself (below) looks for a newer release (`StartupUpdate`). Once the
+app could open, it waits for GitHub's answer for five seconds more at most;
+when there is a newer release the window stays small and shows it
+downloading, then the app restarts into it. Otherwise, or when the check
+failed, it carries on and the window grows into the app
+(`WindowManagement.openMainWindow`). Only turning "check for updates" off
+stops this; not having answered yet does not. The Linux and macOS runners
+open the window at the small size so it does not flash at full size first;
+the Windows one stays hidden until the first frame.
+
+A look still unanswered when the app opens is not dropped: it carries on,
+and the home screen's check (below) offers whatever it fetches. Before this
+(v1.17.0 and v1.18.0, October 2026) the request itself was bounded to five
+seconds, counted from before initialisation. The look shares the main
+isolate with initialisation, so on a cold start (nothing in the page cache,
+a launch with the session before the network was up) the five seconds were
+gone before the answer had been read; the app opened on the old build and
+nothing in the session installed the update, since the home screen only
+pointed at the release page.
 
 ## Checking
 
 | Where | What |
 |-------|------|
-| `lib/utils/update_checker.dart` | The startup check and the "update available" alert. Runs once per launch from the home screen, only when `preferences.checkForUpdates` is true. |
+| `lib/utils/updater/startup_update.dart` | The look before the app opens: started beside initialisation, waited for after it, briefly. |
+| `lib/utils/update_checker.dart` | The check from the home screen, once per launch, only when `preferences.checkForUpdates` is true. On a build that installs over itself it runs `InstallableUpdateCheck` (`lib/utils/updater/installable_update_check.dart`): it offers the restart for a release the startup look fetched, or fetches one itself; when GitHub could not be reached it looks again once a sync has got through (the network is up), up to three looks in all, half a minute apart at least. Elsewhere, the "update available" alert that opens the release page. |
 | `lib/utils/updater/update_release.dart` | A release and its assets, and picking the archive for this platform and architecture. Release builds only: a debug bundle is not an update. |
 | `lib/utils/updater/self_updater.dart` | The stages the button shows, and the platform switch. |
 | `lib/utils/updater/self_updater_native.dart` | Desktop: download, verify, unpack, swap. |
@@ -91,7 +104,10 @@ first frame.
 The request is one unauthenticated GET to
 `api.github.com/repos/PondLabs/roosterchat/releases/latest`, which is rate
 limited to 60 an hour per IP. `releases/latest` leaves out prereleases by
-design.
+design. The request is bounded to 20 seconds. When it fails, the settings
+page says why under "Version" ("Could not reach GitHub to look for updates:
+no answer in 20 s", or the socket error), and every stage of an update is
+logged once as `Update: <stage>`.
 
 The button is always shown, whatever the preference says: that preference
 only governs the check that runs by itself at startup, and somebody who
