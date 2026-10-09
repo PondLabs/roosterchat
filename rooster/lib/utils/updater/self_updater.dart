@@ -62,6 +62,9 @@ abstract class SelfUpdater {
   static SelfUpdater? _instance;
   static SelfUpdater get instance => _instance ??= platform.createSelfUpdater();
 
+  @visibleForTesting
+  static set instance(SelfUpdater? updater) => _instance = updater;
+
   /// Follows the update as it goes, for the settings page.
   ValueListenable<UpdateProgress> get progress;
 

@@ -41,10 +41,14 @@ class UpdateCheckerSetup implements SetupMenu {
   @override
   SetupMenuState state = SetupMenuState.canProgress;
 
+  /// Going past the question without touching the switch is a yes, which
+  /// is what the switch showed: a desktop build looks for a newer release
+  /// at every launch unless told not to (docs/updating.md), and the home
+  /// screen's check needs the yes written down.
   @override
   Future<void> submit() async {
     if (preferences.checkForUpdates.value == null) {
-      preferences.checkForUpdates.set(false);
+      preferences.checkForUpdates.set(true);
     }
   }
 }
@@ -63,6 +67,7 @@ class _CheckForUpdatesSettingWidgetState
   Widget build(BuildContext context) {
     return NullableBooleanPreferenceToggle(
       preference: preferences.checkForUpdates,
+      defaultValue: true,
       title: "Check for updates",
       description:
           "Automatically check if there is a newer version of Rooster available",

@@ -11,6 +11,7 @@ Hard fork of Commet (a Flutter Matrix client) by PondLabs, shipped as **Rooster*
 - DJ songs come from the DJ's own files or from source extensions the user installs; the app itself knows no music site. See `docs/source-extensions.md`.
 - Voice call health: every second a voice room checks that our microphone still gets through and that we still receive everyone, and repairs either without a rejoin. See `docs/voice-call-health.md`.
 - Who is in a voice channel: call memberships read by the homeserver's clock (`HomeserverClock`), written again hourly by their owners for the whole call, plus everyone in LiveKit while we are in it. See `docs/voice-channel-members.md`.
+- Call history: a day-by-day view of who was in voice, for how long and what they shared, worked out from the rooms' history of call memberships (nothing new is stored). See `docs/call-history.md`.
 - Away status: the amber dot, and where idle time comes from on each platform. See `docs/away-status.md`.
 - Who's around: the top of the Home screen's list, the voice channels with people in them (faces, a join button) across every space and account, and the quiet ones to pull up a chair in. See `docs/whos-around.md`.
 - The chat timeline follows new messages while you are at the latest ones (a reader-driven `following` state, not the scroll position), marks what arrived unseen with the "New messages" line, and highlights messages that call on you. See `docs/chat-timeline.md`.

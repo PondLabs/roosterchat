@@ -37,6 +37,7 @@ class SpaceSummaryView extends StatefulWidget {
       this.spaceColor,
       this.showSpaceSettingsButton = false,
       this.onInviteButtonTap,
+      this.onHistoryButtonTap,
       this.openSpaceSettings,
       this.onAddRoomButtonTap,
       this.onRoomTap,
@@ -56,6 +57,9 @@ class SpaceSummaryView extends StatefulWidget {
   final Color? spaceColor;
   final Function? openSpaceSettings;
   final Function? onInviteButtonTap;
+
+  /// Opens the space's call history; null when it has no voice channels.
+  final Function? onHistoryButtonTap;
   final Function(Room room)? onRoomSettingsButtonTap;
   final Function(Room room)? onRoomTap;
   final Function(Space space)? onSpaceTap;
@@ -265,6 +269,8 @@ class SpaceSummaryViewState extends State<SpaceSummaryView> {
                       children: [
                         if (widget.onInviteButtonTap != null)
                           buildInviteButton(),
+                        if (widget.onHistoryButtonTap != null)
+                          buildHistoryButton(),
                         if (widget.showSpaceSettingsButton)
                           buildSettingsButton(),
                       ],
@@ -298,6 +304,18 @@ class SpaceSummaryViewState extends State<SpaceSummaryView> {
         icon: Icons.settings,
         radius: BuildConfig.MOBILE ? 24 : 16,
         onPressed: () => widget.openSpaceSettings?.call(),
+      ),
+    );
+  }
+
+  Widget buildHistoryButton() {
+    return tiamat.Tooltip(
+      text: "Call history",
+      preferredDirection: AxisDirection.left,
+      child: tiamat.CircleButton(
+        icon: Icons.history,
+        radius: BuildConfig.MOBILE ? 24 : 16,
+        onPressed: () => widget.onHistoryButtonTap?.call(),
       ),
     );
   }

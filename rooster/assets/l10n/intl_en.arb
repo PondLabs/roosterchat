@@ -2040,6 +2040,20 @@
       "version": {}
     }
   },
+  "labelUpdateReady": "Update ready",
+  "@labelUpdateReady": {
+    "description": "Title of the home screen alert once a newer version is downloaded and waiting for a restart",
+    "type": "text",
+    "placeholders": {}
+  },
+  "descriptionUpdateReady": "Rooster {version} is downloaded and ready. Tap to restart into it.",
+  "@descriptionUpdateReady": {
+    "description": "Update alert body once the newer version is downloaded. Keep the version value unchanged and tell the user that tapping restarts the app into it",
+    "type": "text",
+    "placeholders": {
+      "version": {}
+    }
+  },
   "messageUserEmote": "*{user} {emote}",
   "@messageUserEmote": {
     "description": "Message to display when a user does a custom emote (/me)",

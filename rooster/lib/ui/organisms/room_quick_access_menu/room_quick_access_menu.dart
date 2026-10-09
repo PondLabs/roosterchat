@@ -11,6 +11,7 @@ import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/organisms/invitation_view/send_invitation.dart';
+import 'package:rooster/ui/organisms/voice_activity/voice_activity_view.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:flutter/material.dart';
@@ -55,6 +56,13 @@ class RoomQuickAccessMenu {
                     ),
                 title: "Invite"),
             icon: Icons.person_add),
+      if (isVoipRoom)
+        RoomQuickAccessMenuEntry(
+            name: "Call history",
+            action: (context) => AdaptiveDialog.show(context,
+                builder: (context) => VoiceActivityView(rooms: [room]),
+                title: "Call history"),
+            icon: Icons.history),
       if (canCall)
         RoomQuickAccessMenuEntry(
             name: "Call",
