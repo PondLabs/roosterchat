@@ -4,11 +4,13 @@ import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/invitation/invitation_component.dart';
 import 'package:rooster/client/components/space_banner/space_banner_component.dart';
 import 'package:rooster/client/components/space_color_scheme/space_color_scheme_component.dart';
+import 'package:rooster/client/components/voip_room/voip_room_component.dart';
 import 'package:rooster/client/room_preview.dart';
 import 'package:rooster/client/space_child.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/organisms/invitation_view/send_invitation.dart';
 import 'package:rooster/ui/organisms/space_summary/space_summary_view.dart';
+import 'package:rooster/ui/organisms/voice_activity/voice_activity_view.dart';
 import 'package:rooster/ui/pages/get_or_create_room/get_or_create_room.dart';
 import 'package:rooster/ui/pages/settings/room_settings_page.dart';
 import 'package:rooster/ui/pages/settings/space_settings_page.dart';
@@ -71,6 +73,7 @@ class _SpaceSummaryState extends State<SpaceSummary> {
       onRoomSettingsButtonTap: openRoomSettings,
       onInviteButtonTap:
           widget.space.permissions.canInviteUser ? onInviteTap : null,
+      onHistoryButtonTap: _voiceRooms.isEmpty ? null : onHistoryTap,
       spaceColor: widget.space.color,
       onRoomTap: widget.onRoomTap,
       showSpaceSettingsButton: widget.space.permissions.canEditAnything,
@@ -126,6 +129,17 @@ class _SpaceSummaryState extends State<SpaceSummary> {
     if (room is SpaceChildSpace) {
       widget.space.setSpaceChildSpace(room.child);
     }
+  }
+
+  /// The space's voice channels, those of its subspaces included.
+  List<Room> get _voiceRooms => widget.space.roomsWithChildren
+      .where((room) => room.getComponent<VoipRoomComponent>() != null)
+      .toList();
+
+  void onHistoryTap() {
+    AdaptiveDialog.show(context,
+        builder: (context) => VoiceActivityView(rooms: _voiceRooms),
+        title: "Call history");
   }
 
   onInviteTap() {
