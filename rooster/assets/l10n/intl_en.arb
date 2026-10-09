@@ -5310,6 +5310,27 @@
     "type": "text",
     "placeholders": {}
   },
+  "messageUpdateInstalled": "{app} is now on {version}. Thanks for updating!",
+  "@messageUpdateInstalled": {
+    "description": "The dialog shown the first time the app opens after an update, with the app's name and the version it updated to, such as v1.21.0",
+    "type": "text",
+    "placeholders": {
+      "app": {},
+      "version": {}
+    }
+  },
+  "promptUpdateWhatsNew": "See what's new",
+  "@promptUpdateWhatsNew": {
+    "description": "Button in the dialog shown after an update: opens the notes of the new version's release",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptUpdateInstalledDone": "Let's go",
+  "@promptUpdateInstalledDone": {
+    "description": "Button in the dialog shown after an update: closes it, back to the app",
+    "type": "text",
+    "placeholders": {}
+  },
   "updateInstalledContent": "Thank you for updating! You are now running the latest version.",
   "@updateInstalledContent": {
     "description": "Content for the dialog which is shown when an update has been installed",

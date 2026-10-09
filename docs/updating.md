@@ -93,6 +93,14 @@ gone before the answer had been read; the app opened on the old build and
 nothing in the session installed the update, since the home screen only
 pointed at the release page.
 
+The first time a new version opens with an account signed in (not on the
+web), a dialog with confetti says which version it is ("Rooster is now on
+v1.21.0. Thanks for updating!", `UpdateInstalledDialog`), with **See what's
+new**, the release's notes on GitHub, and **Let's go**, which closes it.
+Until October 2026 its only button was Commet's "No, thanks", left over
+from a donation request that was gone, and people could not tell what it
+declined.
+
 ## Checking
 
 | Where | What |
