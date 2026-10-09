@@ -136,6 +136,13 @@ const updateDirName = '.rooster-update';
 /// What builds from before the renames staged updates in.
 const _legacyUpdateDirNames = ['.cockhouse-update', '.roscord-update'];
 
+/// What the Linux swap leaves in [workRoot] when the build it put in place
+/// for [tag] would not start and the old one went back
+/// ([linuxSwapScript]). That release is not installed again here; the next
+/// one is, and a swap that works clears the whole of [workRoot].
+String didNotStartMarker(String workRoot, String tag) =>
+    p.join(workRoot, 'did-not-start-$tag');
+
 /// The executable a release is started with, and the one an archive must
 /// hold for this build to take it.
 String executableName({required bool windows}) =>
@@ -318,6 +325,17 @@ class NativeSelfUpdater implements SelfUpdater {
   }
 
   Future<void> _prepare(UpdateRelease release) async {
+    // Installed once already and it would not start, so the old build went
+    // back. Again would mean the same download and the same two restarts
+    // at every launch.
+    if (_didNotStartHere(release.tag)) {
+      _set(UpdateStage.failed,
+          release: release,
+          message: '${release.tag} would not start on this computer, so '
+              '${BuildConfig.VERSION_TAG} was put back. The next release '
+              'will be tried.');
+      return;
+    }
     final asset = release.assetFor(_platform, arch: _arch);
     if (asset == null) {
       _set(UpdateStage.available,
@@ -417,9 +435,18 @@ class NativeSelfUpdater implements SelfUpdater {
     try {
       return await fresh(_target.workRoot);
     } catch (_) {
-      return fresh(p.join(Directory.systemTemp.path, 'rooster-update'));
+      return fresh(_tempWorkRoot);
     }
   }
+
+  /// The work root when the one beside the install cannot be written.
+  String get _tempWorkRoot =>
+      p.join(Directory.systemTemp.path, 'rooster-update');
+
+  /// Whether the swap put [tag] in place here before and it would not
+  /// start, in whichever work root that happened.
+  bool _didNotStartHere(String tag) => [_target.workRoot, _tempWorkRoot]
+      .any((root) => File(didNotStartMarker(root, tag)).existsSync());
 
   Future<void> _download(UpdateAsset asset, File target) async {
     final client = HttpClient();
@@ -511,6 +538,8 @@ class NativeSelfUpdater implements SelfUpdater {
             work: workRoot,
             stamp: stamp,
             restart: Platform.resolvedExecutable,
+            // The work directory is named after the release's tag.
+            didNotStart: didNotStartMarker(workRoot, p.basename(work.path)),
             open: Platform.isMacOS));
     if (!Platform.isWindows) {
       await Process.run('chmod', ['+x', script.path]);
@@ -668,6 +697,12 @@ Remove-Item -LiteralPath \$work -Recurse -Force -ErrorAction SilentlyContinue
 /// [patience], its window already gone, is stuck on the way out. What
 /// happened goes in `install-<stamp>.log` in [work], which is only cleared
 /// when the swap worked.
+///
+/// On Linux the new build is watched for [settle] once started. One that
+/// exits with an error in that time did not start (a library it needs is
+/// not on this computer, say): it is taken out, the old build is put back
+/// and started again, and [didNotStart] is created, so the same release is
+/// not installed again at every launch.
 String linuxSwapScript({
   required int waitFor,
   required String staged,
@@ -676,15 +711,57 @@ String linuxSwapScript({
   required String work,
   required int stamp,
   String? restart,
+  String? didNotStart,
   Duration patience = const Duration(seconds: 60),
+  Duration settle = const Duration(seconds: 10),
   bool open = false,
 }) {
   final ticks = patience.inMilliseconds ~/ 200;
+  final settleTicks = settle.inMilliseconds ~/ 200;
   final relaunch = restart == null
       ? null
       : open
           ? 'open "\$install"'
           : '(cd ${_sh(p.posix.dirname(restart))} && exec ${_sh(restart)}) &';
+  final start = open
+      ? '''
+open "\$install"
+# Last, and from outside it: this script lives in there.
+cd /
+rm -rf "\$old" "\$work"
+'''
+      : '''
+(cd "\$install" && exec ${_sh(exe)}) &
+started=\$!
+# Cleared now, from outside it (this script lives in there): the new build
+# may stage an update of its own in there as soon as it starts.
+cd /
+rm -rf "\$work"
+
+# A build that cannot start exits at once (127 when the loader cannot find a
+# library it needs), and swapped in it would leave nothing that opens,
+# launcher entry included. The old one stays beside it until the new one
+# has been watched for a while.
+i=0
+while [ \$i -lt $settleTicks ] && alive \$started; do
+  sleep 0.2
+  i=\$((i + 1))
+done
+if ! alive \$started; then
+  wait \$started
+  status=\$?
+  if [ \$status -ne 0 ]; then
+    mkdir -p "\$work"
+${didNotStart == null ? '' : '    : > ${_sh(didNotStart)}\n'}    if [ -e "\$old" ]; then
+      rm -rf "\$install"
+      mv "\$old" "\$install" ||
+        fail "the new build exited with \$status as it started, and the old one could not be put back"
+    fi
+    fail "the new build exited with \$status as it started; the old one is back"
+  fi
+fi
+rm -rf "\$old"
+''';
   return '''
 #!/bin/sh
 work=${_sh(work)}
@@ -696,10 +773,11 @@ install=${_sh(install)}
 staged=${_sh(staged)}
 old=${_sh('$install.old-$stamp')}
 
-# A zombie has gone already; only its parent has not noticed yet.
+# Whether process \$1 runs. A zombie has gone already; only its parent has
+# not noticed yet.
 alive() {
-  kill -0 $waitFor 2>/dev/null || return 1
-  case "\$(sed 's/.*) //' /proc/$waitFor/stat 2>/dev/null)" in
+  kill -0 "\$1" 2>/dev/null || return 1
+  case "\$(sed 's/.*) //' "/proc/\$1/stat" 2>/dev/null)" in
     Z*) return 1 ;;
   esac
 }
@@ -712,7 +790,7 @@ ${relaunch == null ? '' : '  $relaunch\n'}  exit 1
 # Wait for Rooster to go, so the new build does not start beside the old one.
 say 'waiting for Rooster (process $waitFor) to close'
 i=0
-while [ \$i -lt $ticks ] && alive; do
+while [ \$i -lt $ticks ] && alive $waitFor; do
   sleep 0.2
   i=\$((i + 1))
 done
@@ -720,11 +798,11 @@ ${restart == null || open ? '' : '''# Rooster closes its window as this starts w
 # stuck on the way out, and would keep the old build in place for good. It
 # is ended, but only while it runs the build being replaced, not when
 # something else has taken its pid.
-if alive && [ "\$(readlink /proc/$waitFor/exe 2>/dev/null)" = ${_sh(restart)} ]; then
+if alive $waitFor && [ "\$(readlink /proc/$waitFor/exe 2>/dev/null)" = ${_sh(restart)} ]; then
   say 'Rooster did not close in ${patience.inSeconds} seconds; ending it'
   kill -KILL $waitFor 2>/dev/null
   i=0
-  while [ \$i -lt 25 ] && alive; do
+  while [ \$i -lt 25 ] && alive $waitFor; do
     sleep 0.2
     i=\$((i + 1))
   done
@@ -732,7 +810,7 @@ fi
 '''}# Unlike Windows, a directory here can be moved out from under a running
 # program. Not swapping under it: two Roosters sharing one account is worse
 # than an update that did not happen.
-if alive; then
+if alive $waitFor; then
   fail 'Rooster is still running; nothing was changed'
 fi
 
@@ -750,9 +828,5 @@ if ! mv "\$staged" "\$install"; then
   [ -e "\$old" ] && mv "\$old" "\$install"
   fail 'could not move the new build in; the old one is back'
 fi
-${open ? 'open "\$install"' : '(cd "\$install" && exec ${_sh(exe)}) &'}
-# Last, and from outside it: this script lives in there.
-cd /
-rm -rf "\$old" "\$work"
-''';
+$start''';
 }

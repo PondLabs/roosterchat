@@ -104,6 +104,21 @@ include(flutter/generated_plugins.cmake)
 
 target_link_libraries(${BINARY_NAME} PRIVATE ${MIMALLOC_LIB})
 
+# hotkey_manager links keybinder, which most desktops do not install (Arch,
+# Fedora and a fresh Ubuntu leave it out), and without it the loader refuses
+# to start Rooster at all. The bundle carries the copy it was built against
+# (installed below), and the plugin finds it beside itself: the executable's
+# $ORIGIN/lib only covers what the executable itself links, not what its
+# libraries link. A copy kept anywhere inside the install by hand does not
+# survive an update, which replaces the install whole (docs/updating.md).
+pkg_check_modules(ROOSTER_KEYBINDER REQUIRED keybinder-3.0)
+find_library(ROOSTER_KEYBINDER_LIBRARY NAMES keybinder-3.0
+  HINTS ${ROOSTER_KEYBINDER_LIBRARY_DIRS})
+if(NOT ROOSTER_KEYBINDER_LIBRARY)
+  message(FATAL_ERROR "keybinder-3.0 was found by pkg-config but not its library")
+endif()
+set_property(TARGET hotkey_manager_linux_plugin PROPERTY BUILD_RPATH "\$ORIGIN")
+
 # === Installation ===
 # By default, "installing" just makes a relocatable bundle in the build
 # directory.
@@ -240,6 +255,25 @@ foreach(bundled_library ${PLUGIN_BUNDLED_LIBRARIES})
     DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
     COMPONENT Runtime)
 endforeach(bundled_library)
+
+# Under the name the plugin asks the loader for (its soname), not the
+# development link the search above found.
+get_filename_component(ROOSTER_KEYBINDER_FILE "${ROOSTER_KEYBINDER_LIBRARY}" REALPATH)
+install(FILES "${ROOSTER_KEYBINDER_FILE}"
+  DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+  RENAME "libkeybinder-3.0.so.0"
+  COMPONENT Runtime)
+# Its MIT notice goes with it, from wherever the distribution keeps it.
+find_file(ROOSTER_KEYBINDER_NOTICE NAMES copyright COPYING LICENSE
+  PATHS /usr/share/doc/libkeybinder-3.0-0 /usr/share/licenses/libkeybinder3
+    /app/share/licenses/keybinder-3
+  NO_DEFAULT_PATH)
+if(ROOSTER_KEYBINDER_NOTICE)
+  install(FILES "${ROOSTER_KEYBINDER_NOTICE}"
+    DESTINATION "${CMAKE_INSTALL_PREFIX}/licenses"
+    RENAME "keybinder-3.0"
+    COMPONENT Runtime)
+endif()
 
 # Fully re-copy the assets directory on each build to avoid having stale files
 # from a previous install.

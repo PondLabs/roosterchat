@@ -233,6 +233,27 @@ jobs:
           if [ "$TARGET_OS" = windows ]; then python=python; fi
           "$python" tools/check_bundle_arch.py --bundle "$BUNDLE" --arch "$TARGET_ARCH"
 
+      # The bundle carries keybinder (rooster/linux/CMakeLists.txt): most
+      # desktops do not install it, and without it Rooster does not start,
+      # which also leaves every update that lands there unable to open.
+      # Taken off the runner here, so the loader says whether the bundle
+      # has its own, and the smoke tests below run it as such a desktop
+      # would.
+      - name: Check the Linux bundle starts without the system's keybinder
+        if: env.TARGET_OS == 'linux'
+        run: |
+          sudo apt-get remove -y libkeybinder-3.0-0
+          if /sbin/ldconfig -p | grep -q 'libkeybinder-3\.0\.so\.0'; then
+            echo "keybinder is still installed, so this checks nothing" >&2
+            exit 1
+          fi
+          missing=$(ldd "$BUNDLE/rooster" | grep 'not found' || true)
+          if [ -n "$missing" ]; then
+            echo "The bundle needs libraries it does not carry:" >&2
+            echo "$missing" >&2
+            exit 1
+          fi
+
       # Runs the bundled host for real: opens a page, types into it, reads
       # its frames from the shared-memory ring, closes it, and checks the host
       # exits.  On Windows the '@' goes in as AltGr does (Ctrl+Alt).

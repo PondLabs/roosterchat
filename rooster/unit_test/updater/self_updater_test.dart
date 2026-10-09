@@ -38,7 +38,9 @@ Future<ProcessResult> runSwap({
   String exe = '/bin/true',
   int? waitFor,
   String? restart,
+  String? didNotStart,
   Duration patience = const Duration(seconds: 60),
+  Duration settle = const Duration(seconds: 10),
 }) async {
   final script = File(p.join(work.path, 'install.sh'));
   script.writeAsStringSync(linuxSwapScript(
@@ -49,9 +51,19 @@ Future<ProcessResult> runSwap({
     work: work.path,
     stamp: 1234,
     restart: restart,
+    didNotStart: didNotStart,
     patience: patience,
+    settle: settle,
   ));
   return Process.run('/bin/sh', [script.path]);
+}
+
+/// A script standing in for a build that runs [body].
+File program(Directory root, String name, String body) {
+  final file = File(p.join(root.path, name))
+    ..writeAsStringSync('#!/bin/sh\n$body\n');
+  Process.runSync('chmod', ['+x', file.path]);
+  return file;
 }
 
 /// A script standing in for a build: running it writes [marker].
@@ -253,6 +265,58 @@ void main() {
           exe: launcher(root, 'launch.sh', started).path);
 
       expect(await appears(started), isTrue);
+    });
+
+    test(
+        'a new build that will not start is taken out, and the old one is '
+        'put back, started, and not replaced by that release again', () async {
+      final install = buildDir(root, 'Rooster', 'old');
+      final work = Directory(p.join(root.path, '.rooster-update'))
+        ..createSync();
+      final staged = buildDir(work, 'v2/unpacked/rooster-v2-linux', 'new');
+      final started = p.join(root.path, 'started');
+      final marker = didNotStartMarker(work.path, 'v2');
+
+      // What the loader does when a library the build links is missing.
+      final result = await runSwap(
+          work: work,
+          install: install.path,
+          staged: staged.path,
+          exe: program(root, 'broken.sh', 'exit 127').path,
+          restart: launcher(root, 'running.sh', started).path,
+          didNotStart: marker);
+
+      expect(result.exitCode, isNot(0));
+      expect(File(p.join(install.path, 'which')).readAsStringSync(), 'old');
+      expect(Directory('${install.path}.old-1234').existsSync(), isFalse);
+      expect(await appears(started), isTrue);
+      expect(File(marker).existsSync(), isTrue);
+      final log = File(p.join(work.path, 'install-1234.log'));
+      expect(log.readAsStringSync(), contains('exited with 127'));
+    });
+
+    test(
+        'a new build that starts and keeps running stays, and the old one goes',
+        () async {
+      final install = buildDir(root, 'Rooster', 'old');
+      final work = Directory(p.join(root.path, '.rooster-update'))
+        ..createSync();
+      final staged = buildDir(work, 'v2/unpacked/rooster-v2-linux', 'new');
+      final marker = didNotStartMarker(work.path, 'v2');
+
+      final result = await runSwap(
+          work: work,
+          install: install.path,
+          staged: staged.path,
+          // Still running when the watch ends.
+          exe: program(root, 'running.sh', 'sleep 2').path,
+          didNotStart: marker,
+          settle: const Duration(milliseconds: 600));
+
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      expect(File(p.join(install.path, 'which')).readAsStringSync(), 'new');
+      expect(Directory('${install.path}.old-1234').existsSync(), isFalse);
+      expect(work.existsSync(), isFalse);
     });
 
     test('will not swap under a Rooster that is still running', () async {
