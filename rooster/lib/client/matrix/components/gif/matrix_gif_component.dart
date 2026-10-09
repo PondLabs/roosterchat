@@ -333,9 +333,9 @@ class MatrixGifComponent implements GifComponent<MatrixClient> {
     var uri = Uri.parse(url);
 
     // ROOSTER: the query too; KLIPY requires its URL parameters kept as given
-    var proxyUri = Uri.https(preferences.proxyUrl.value,
-            "/proxy/klipy/media${uri.path}")
-        .replace(query: uri.hasQuery ? uri.query : null);
+    var proxyUri =
+        Uri.https(preferences.proxyUrl.value, "/proxy/klipy/media${uri.path}")
+            .replace(query: uri.hasQuery ? uri.query : null);
 
     // proxyUri = Uri.http("localhost:8788", "/proxy/klipy/media${uri.path}");
 
