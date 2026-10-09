@@ -51,7 +51,22 @@ class _ThemeListWidgetState extends State<ThemeListWidget> {
       name: "labelThemeLight", desc: "Label for the light theme");
 
   String get labelThemeAmoled => Intl.message("Amoled",
-      name: "labelThemeAmoled", desc: "Label for the light theme");
+      name: "labelThemeAmoled",
+      desc: "Label for the AMOLED (pure black) theme");
+
+  String get labelSettingsCustomThemesDesktopAppNotice => Intl.message(
+      "🎨 Make Rooster yours with custom themes, installed in one "
+      "click in the desktop app.",
+      name: "labelSettingsCustomThemesDesktopAppNotice",
+      desc: "Settings > Appearance > Theme in the browser: a short pitch for "
+          "the desktop app, where you can install your own themes. Followed "
+          "by where the desktop app is available, and a download link");
+
+  String get labelSettingsPickThemeArchive =>
+      Intl.message("Pick theme archive file",
+          name: "labelSettingsPickThemeArchive",
+          desc: "Settings > Appearance > Theme: title of the system file "
+              "picker for choosing a theme packed in a .zip file");
 
   List<_ThemeEntry> get defaultThemes => [
         _ThemeEntry(labelThemeLight, (BuildContext context) async {
@@ -171,11 +186,9 @@ class _ThemeListWidgetState extends State<ThemeListWidget> {
         // Themes are installed into the app's folder, which a browser has
         // none of.
         if (BuildConfig.WEB)
-          const Padding(
-            padding: EdgeInsets.all(8.0),
-            child: DesktopAppNotice(
-                '🎨 Make Rooster yours with custom themes, installed in one '
-                'click in the desktop app.'),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: DesktopAppNotice(labelSettingsCustomThemesDesktopAppNotice),
           )
         else
           Padding(
@@ -189,7 +202,7 @@ class _ThemeListWidgetState extends State<ThemeListWidget> {
                     var result = await FilePicker.platform.pickFiles(
                         type: FileType.custom,
                         allowedExtensions: ["zip"],
-                        dialogTitle: "Pick theme archive file");
+                        dialogTitle: labelSettingsPickThemeArchive);
 
                     var file = result?.files.firstOrNull;
                     if (file?.path == null) {

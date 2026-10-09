@@ -43,12 +43,14 @@ class _TimelineEventViewReactionsState extends State<TimelineEventViewReactions>
       desc: "Stands for the current user in the list of who reacted",
       name: "labelReactionTooltipYou");
 
-  String labelReactionTooltipOthers(int howMany) => Intl.plural(howMany,
-      one: "and 1 other",
-      other: "and $howMany others",
-      desc: "Ends the list of who reacted when there are too many names",
-      name: "labelReactionTooltipOthers",
-      args: [howMany]);
+  String labelReactionTooltipNamesAndOthers(int howMany, String names) =>
+      Intl.plural(howMany,
+          one: "$names and 1 other",
+          other: "$names and $howMany others",
+          desc: "Who reacted, when there are too many to name: the first "
+              "names, separated by commas, then how many more",
+          name: "labelReactionTooltipNamesAndOthers",
+          args: [howMany, names]);
 
   String labelReactionTooltipReactedWith(int howMany, String emoji) =>
       Intl.plural(howMany,
@@ -111,7 +113,7 @@ class _TimelineEventViewReactionsState extends State<TimelineEventViewReactions>
     }).join(", ");
 
     var others = senders.length - tooltipNameLimit;
-    if (others > 0) names = "$names ${labelReactionTooltipOthers(others)}";
+    if (others > 0) names = labelReactionTooltipNamesAndOthers(others, names);
 
     var shortcode = emote.shortcode;
     var emojiName =

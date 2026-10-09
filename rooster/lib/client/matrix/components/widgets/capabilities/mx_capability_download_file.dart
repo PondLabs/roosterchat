@@ -34,11 +34,13 @@ class MatrixCapabilityDownloadFile implements MatrixWidgetCapability {
 
     var url = message.data.tryGet<String>("content_uri");
     if (url == null) {
+      // Not translated: a reply to the widget, which the app does not show.
       return message.createResponseError(message: "Invalid request");
     }
 
     var uri = Uri.parse(url);
     if (uri.scheme != "mxc") {
+      // Not translated: a reply to the widget, which the app does not show.
       return message.createResponseError(message: "Invalid request");
     }
 

@@ -44,7 +44,7 @@ class _RoomQuickAccessMenuViewDesktopState
               width: 40,
               height: 40,
               child: tiamat.IconButton(
-                key: ValueKey("room-quick-access-menu-action-${e.name}"),
+                key: ValueKey("room-quick-access-menu-action-${e.id}"),
                 icon: e.icon,
                 onPressed: () => e.action?.call(context),
               )))

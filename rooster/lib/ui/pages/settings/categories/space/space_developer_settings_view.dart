@@ -1,5 +1,6 @@
 import 'package:rooster/client/space.dart';
 import 'package:rooster/ui/atoms/code_block.dart';
+import 'package:rooster/ui/pages/settings/categories/room/developer/room_developer_settings_view.dart';
 import 'package:flutter/material.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -20,7 +21,8 @@ class SpaceDeveloperSettingsView extends StatelessWidget {
 
   Widget jsonDump(BuildContext context) {
     return ExpansionTile(
-      title: const tiamat.Text.labelEmphasised("Room State"),
+      title: tiamat.Text.labelEmphasised(
+          RoomDeveloperSettingsView.labelRoomDeveloperState),
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
       collapsedBackgroundColor:
           Theme.of(context).colorScheme.surfaceContainerLow,

@@ -25,6 +25,11 @@ class ImportantRoomsList extends StatelessWidget {
           desc: "Under the Direct Messages header on the Home screen while "
               "there are none; the button beside the header starts one");
 
+  static String get labelHomeFavorites => Intl.message("Favorites",
+      name: "labelHomeFavorites",
+      desc: "Header over the rooms marked as favorite, in the list on the "
+          "Home screen");
+
   @override
   Widget build(BuildContext context) {
     var padding = const EdgeInsets.fromLTRB(0, 4, 0, 4);
@@ -52,7 +57,7 @@ class ImportantRoomsList extends StatelessWidget {
                   children: [
                     Padding(
                       padding: const EdgeInsets.all(8.0),
-                      child: tiamat.Text.labelLow("Favorites"),
+                      child: tiamat.Text.labelLow(labelHomeFavorites),
                     ),
                     Padding(
                         padding: const EdgeInsetsGeometry.fromLTRB(3, 0, 0, 0),
@@ -93,10 +98,14 @@ class ImportantRoomsList extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: tiamat.Text.labelLow(
-                          directMessagesListHeaderDesktop,
+                      Flexible(
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: tiamat.Text.labelLow(
+                            directMessagesListHeaderDesktop,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ),
                       Padding(

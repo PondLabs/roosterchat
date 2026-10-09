@@ -2,7 +2,9 @@ import 'package:rooster/client/timeline.dart';
 import 'package:rooster/client/timeline_events/timeline_event.dart';
 import 'package:rooster/client/timeline_events/timeline_event_feature_related.dart';
 import 'package:rooster/diagnostic/benchmark_values.dart';
+import 'package:rooster/utils/common_strings.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 import 'package:flutter/material.dart' as material;
 
@@ -17,6 +19,14 @@ class TimelineEventViewReply extends StatefulWidget {
   final Function(String eventId)? jumpToEvent;
   final int index;
   final double avatarSize;
+
+  /// Stands in for the text of the message replied to (or being edited)
+  /// while it is not known.
+  static String get labelMessageReplyUnknownBody => Intl.message("Unknown",
+      name: "labelMessageReplyUnknownBody",
+      desc: "Stands in for the text of the message being replied to (above a "
+          "reply, or above the message box while replying or editing) when "
+          "that message's text is not known");
 
   @override
   State<TimelineEventViewReply> createState() => _TimelineEventViewReplyState();
@@ -103,7 +113,7 @@ class _TimelineEventViewReplyState extends State<TimelineEventViewReply> {
                     maxLines: 2,
                     text: TextSpan(children: [
                       TextSpan(
-                          text: "${senderName ?? "Loading"} ",
+                          text: "${senderName ?? CommonStrings.labelLoading} ",
                           style: Theme.of(context)
                               .textTheme
                               .bodyMedium
@@ -111,7 +121,9 @@ class _TimelineEventViewReplyState extends State<TimelineEventViewReply> {
                                   color: tiamat.Text.adjustColor(
                                       context, senderColor ?? Colors.white))),
                       TextSpan(
-                          text: body ?? "Unknown",
+                          text: body ??
+                              TimelineEventViewReply
+                                  .labelMessageReplyUnknownBody,
                           style: Theme.of(context)
                               .textTheme
                               .bodySmall

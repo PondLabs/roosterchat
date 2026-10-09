@@ -5,6 +5,7 @@ import 'package:rooster/client/matrix/components/widgets/matrix_widget_message_h
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
+import 'package:intl/intl.dart';
 
 class MatrixCapabilityOIDC implements MatrixWidgetCapability {
   @override
@@ -13,6 +14,13 @@ class MatrixCapabilityOIDC implements MatrixWidgetCapability {
   MatrixCapabilityOIDC({required this.runner});
 
   static const String name = "m.oidc";
+
+  static String promptWidgetAllowOpenId(String widgetName) => Intl.message(
+      "Allow $widgetName to verify your user id",
+      name: "promptWidgetAllowOpenId",
+      args: [widgetName],
+      desc:
+          "Asked when a room widget (a small web app added to a room) wants to confirm who we are with the server (OpenID), with the widget's name");
 
   static MatrixWidgetCapabilityConstructorEntry entry = MapEntry(
       name, (runner, type, key) => MatrixCapabilityOIDC(runner: runner));
@@ -75,7 +83,7 @@ class MatrixCapabilityOIDC implements MatrixWidgetCapability {
             AdaptiveDialog.confirmationWithOptions(navigator.currentContext!,
                 showRememberChoice: true,
                 defaultRememberSetting: true,
-                title: "Allow ${runner.info.name} to verify your user id");
+                title: promptWidgetAllowOpenId(runner.info.name));
       }
 
       var promptResult = await currentConfirmationRequest!;

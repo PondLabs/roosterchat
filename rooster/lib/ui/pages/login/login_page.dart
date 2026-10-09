@@ -42,6 +42,29 @@ class LoginPageState extends State<LoginPage> {
       desc:
           "An error message displayed when the user attempts to log into an account using the wrong username/password combination");
 
+  String get messageLoginCancelled => Intl.message("Login Cancelled",
+      name: "messageLoginCancelled",
+      desc: "In the dialog shown when signing in did not finish, when the "
+          "person closed the sign-in page of their server");
+
+  String get labelLoginFailed => Intl.message("Login failed",
+      name: "labelLoginFailed",
+      desc: "Title of the dialog shown when signing in did not work; the "
+          "reason is under it");
+
+  String get errorLoginBrowserStorage => Intl.message(
+      "Could not open browser storage. Use HTTPS or localhost, then reload.",
+      name: "errorLoginBrowserStorage",
+      desc: "Under the homeserver field on the login screen in a browser, "
+          "when the app cannot store anything: the page has to be served "
+          "over HTTPS or from localhost, and reloaded");
+
+  String get errorLoginHomeserverUnverified => Intl.message(
+      "Could not verify the homeserver. Check the address and connection.",
+      name: "errorLoginHomeserverUnverified",
+      desc: "Under the homeserver field on the login screen when the address "
+          "typed does not answer as a Matrix server");
+
   StreamSubscription? progressSubscription;
   double? progress;
   List<LoginFlow>? loginFlows;
@@ -86,8 +109,7 @@ class LoginPageState extends State<LoginPage> {
       if (!mounted) return;
       setState(() {
         loadingServerInfo = false;
-        serverInfoError =
-            'Could not open browser storage. Use HTTPS or localhost, then reload.';
+        serverInfoError = errorLoginBrowserStorage;
       });
     }
   }
@@ -153,7 +175,7 @@ class LoginPageState extends State<LoginPage> {
     String? message = switch (result) {
       LoginResultSuccess _ => null,
       LoginResultError e => e.errorMessage,
-      LoginResultCancelled _ => "Login Cancelled",
+      LoginResultCancelled _ => messageLoginCancelled,
       LoginResultAlreadyLoggedIn _ => messageAlreadyLoggedIn,
       LoginResultFailed _ => messageLoginFailed,
       LoginResult() => messageLoginFailed,
@@ -163,7 +185,7 @@ class LoginPageState extends State<LoginPage> {
       if (mounted) {
         AdaptiveDialog.show(
           context,
-          title: "Login failed",
+          title: labelLoginFailed,
           builder: (_) => tiamat.Text(
             message,
           ),
@@ -232,9 +254,7 @@ class LoginPageState extends State<LoginPage> {
       loadingServerInfo = false;
       isServerValid = result.$1;
       loginFlows = result.$2;
-      serverInfoError = result.$1
-          ? null
-          : 'Could not verify the homeserver. Check the address and connection.';
+      serverInfoError = result.$1 ? null : errorLoginHomeserverUnverified;
     });
   }
 

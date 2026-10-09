@@ -1,5 +1,6 @@
 import 'package:rooster/utils/debounce.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class MatrixRoomAddLocalAliasView extends StatefulWidget {
@@ -22,6 +23,25 @@ class _MatrixRoomAddLocalAliasViewState
 
   bool? isAvailable;
   bool createLoading = false;
+
+  String get labelRoomAliasPlaceholder => Intl.message("my-room",
+      name: "labelRoomAliasPlaceholder",
+      desc:
+          "Example shown in the empty field of the dialog that makes a new room address (#my-room:server). Lowercase, words joined with hyphens, no spaces");
+
+  String get errorRoomAliasInUse => Intl.message("Alias already in use",
+      name: "errorRoomAliasInUse",
+      desc:
+          "In the dialog that makes a new room address: the address typed is taken");
+
+  String get labelRoomAliasAvailable => Intl.message("Alias is available!",
+      name: "labelRoomAliasAvailable",
+      desc:
+          "In the dialog that makes a new room address: the address typed is free");
+
+  String get promptRoomAliasCreate => Intl.message("Create!",
+      name: "promptRoomAliasCreate",
+      desc: "Button that makes the new room address typed in the dialog");
 
   @override
   void initState() {
@@ -55,7 +75,7 @@ class _MatrixRoomAddLocalAliasViewState
       children: [
         tiamat.TextInput(
           controller: controller,
-          placeholder: "my-room",
+          placeholder: labelRoomAliasPlaceholder,
           suffixText: ":${widget.homeserver}",
           prefixText: "#",
         ),
@@ -66,9 +86,9 @@ class _MatrixRoomAddLocalAliasViewState
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             if (isAvailable == false)
-              const tiamat.Text.error("Alias already in use"),
+              Flexible(child: tiamat.Text.error(errorRoomAliasInUse)),
             if (isAvailable == true)
-              const tiamat.Text.label("Alias is available!"),
+              Flexible(child: tiamat.Text.label(labelRoomAliasAvailable)),
             if (isAvailable == null && controller.text.isEmpty) Container(),
             if (isAvailable == null && controller.text.isNotEmpty)
               const Padding(
@@ -77,7 +97,7 @@ class _MatrixRoomAddLocalAliasViewState
                     width: 15, height: 15, child: CircularProgressIndicator()),
               ),
             tiamat.Button(
-              text: "Create!",
+              text: promptRoomAliasCreate,
               onTap: submit,
               isLoading: createLoading,
             )

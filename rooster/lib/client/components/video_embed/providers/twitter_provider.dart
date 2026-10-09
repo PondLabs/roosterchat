@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 
 import '../photo_post.dart';
 import '../video_capabilities.dart';
@@ -29,6 +30,13 @@ class TwitterProvider implements VideoProvider, PhotoPostProvider {
 
   @override
   String get id => 'twitter';
+
+  static String labelMediaXPostFrom(String author) =>
+      Intl.message("Post from $author",
+          name: "labelMediaXPostFrom",
+          args: [author],
+          desc: "Title of a video from an X post that has no text, with who "
+              "posted it: their name and @handle");
 
   @override
   String get name => 'X (Twitter)';
@@ -115,7 +123,7 @@ class TwitterProvider implements VideoProvider, PhotoPostProvider {
 
     return VideoEmbedInfo(
       originalUrl: uri,
-      title: text.isNotEmpty ? text : 'Post from $authorName',
+      title: text.isNotEmpty ? text : labelMediaXPostFrom(authorName),
       author: authorName,
       thumbnailUrl: thumbUrl,
       thumbnail: thumbUrl != null ? NetworkImage(thumbUrl) : null,

@@ -19,6 +19,7 @@ import 'package:rooster/utils/event_bus.dart';
 import 'package:rooster/utils/notifying_list.dart';
 import 'package:rooster/utils/stream_utils.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import 'package:tiamat/tiamat.dart' as tiamat;
 import 'package:unifiedpush/unifiedpush.dart';
@@ -49,6 +50,189 @@ class _NotificationDebuggerState extends State<NotificationDebugger> {
   NotifyingList<_NotificationDebugStep> steps =
       NotifyingList.empty(growable: true);
   bool running = true;
+
+  String get labelDeveloperNotificationTestsFailed =>
+      Intl.message("Tests failed",
+          name: "labelDeveloperNotificationTestsFailed",
+          desc: "Notification debugger (a developer tool): name of the step "
+              "shown when the tests themselves broke");
+
+  String messageDeveloperNotificationTestsError(String error) => Intl.message(
+      "An error occurred while running tests: $error",
+      name: "messageDeveloperNotificationTestsError",
+      args: [error],
+      desc: "Notification debugger (a developer tool): the tests broke, with "
+          "the technical error");
+
+  String get labelDeveloperPushRules => Intl.message("Push Rules",
+      name: "labelDeveloperPushRules",
+      desc: "Notification debugger (a developer tool): name of the step that "
+          "checks the account's Matrix push rules");
+
+  String get labelDeveloperPushRulesDescription => Intl.message(
+      "Check if the event matches your account's defined push rules",
+      name: "labelDeveloperPushRulesDescription",
+      desc: "Notification debugger (a developer tool): what the 'Push Rules' "
+          "step checks");
+
+  String get labelDeveloperCheckPermissions => Intl.message("Check permissions",
+      name: "labelDeveloperCheckPermissions",
+      desc: "Notification debugger (a developer tool): name of the step that "
+          "checks the system lets the app show notifications");
+
+  String get labelDeveloperCheckPermissionsDescription => Intl.message(
+      "Tests if we have permission from the system to display a notification",
+      name: "labelDeveloperCheckPermissionsDescription",
+      desc: "Notification debugger (a developer tool): what the 'Check "
+          "permissions' step checks");
+
+  String get labelDeveloperNotificationRejected =>
+      Intl.message("Notification rejected",
+          name: "labelDeveloperNotificationRejected",
+          desc: "Notification debugger (a developer tool): name of the step "
+              "shown when the app decided not to show the notification, "
+              "followed by the technical reason");
+
+  String get labelDeveloperShouldNotify => Intl.message("Should Notify",
+      name: "labelDeveloperShouldNotify",
+      desc: "Notification debugger (a developer tool): name of the step that "
+          "checks whether the message should cause a notification");
+
+  String get labelDeveloperShouldNotifyDescription => Intl.message(
+      "Tests whether the given event should trigger a notification",
+      name: "labelDeveloperShouldNotifyDescription",
+      desc: "Notification debugger (a developer tool): what the 'Should "
+          "Notify' step checks");
+
+  String get labelDeveloperUnifiedPushConfiguration =>
+      Intl.message("Unified Push Configuration",
+          name: "labelDeveloperUnifiedPushConfiguration",
+          desc: "Notification debugger (a developer tool): name of the step "
+              "that checks the UnifiedPush settings. UnifiedPush is a product "
+              "name");
+
+  String get labelDeveloperUnifiedPushConfigurationDescription =>
+      Intl.message("Checks the current config for unified push",
+          name: "labelDeveloperUnifiedPushConfigurationDescription",
+          desc: "Notification debugger (a developer tool): what the 'Unified "
+              "Push Configuration' step checks");
+
+  String get labelDeveloperUnifiedPushDistributor =>
+      Intl.message("Unified Push Distributor",
+          name: "labelDeveloperUnifiedPushDistributor",
+          desc: "Notification debugger (a developer tool): name of the step "
+              "that checks which UnifiedPush distributor app is in use");
+
+  String labelDeveloperUnifiedPushDistributorDescription(String distributor) =>
+      Intl.message("distributor for unified push: $distributor",
+          name: "labelDeveloperUnifiedPushDistributorDescription",
+          args: [distributor],
+          desc: "Notification debugger (a developer tool): the UnifiedPush "
+              "distributor app found, as a technical name, or null");
+
+  String get labelDeveloperGoogleServicesConfiguration =>
+      Intl.message("Google Services Configuration",
+          name: "labelDeveloperGoogleServicesConfiguration",
+          desc: "Notification debugger (a developer tool): name of the step "
+              "that checks the Google push notification settings");
+
+  String labelDeveloperGoogleServicesConfigurationDescription(String key) =>
+      Intl.message(
+          "Checks the current config for Google services notifications: $key",
+          name: "labelDeveloperGoogleServicesConfigurationDescription",
+          args: [key],
+          desc: "Notification debugger (a developer tool): what the step "
+              "checks, with the start of the push key, or null");
+
+  String get labelDeveloperHasRegisteredPusher =>
+      Intl.message("Has Registered Pusher",
+          name: "labelDeveloperHasRegisteredPusher",
+          desc: "Notification debugger (a developer tool): name of the step "
+              "that checks the homeserver knows where to send this device's "
+              "push notifications (a Matrix 'pusher')");
+
+  String labelDeveloperHasRegisteredPusherDescription(String host) => Intl.message(
+      "Tests if the client has registered a push notification service with the homeserver: $host",
+      name: "labelDeveloperHasRegisteredPusherDescription",
+      args: [host],
+      desc: "Notification debugger (a developer tool): what the step "
+          "checks, with the push service's host name, or null");
+
+  String get labelDeveloperPusherConfiguration =>
+      Intl.message("Pusher configuration",
+          name: "labelDeveloperPusherConfiguration",
+          desc: "Notification debugger (a developer tool): name of the step "
+              "that checks how this device's Matrix pusher is set up");
+
+  String get labelDeveloperPusherConfigurationDescription =>
+      Intl.message("Checks the pusher is configured to use Google services",
+          name: "labelDeveloperPusherConfigurationDescription",
+          desc: "Notification debugger (a developer tool): what the 'Pusher "
+              "configuration' step checks");
+
+  String get labelDeveloperSendTestNotification =>
+      Intl.message("Send test notification",
+          name: "labelDeveloperSendTestNotification",
+          desc: "Notification debugger (a developer tool): name of the step "
+              "that sends a test notification through the push service");
+
+  String get labelDeveloperSendTestNotificationDescription => Intl.message(
+      "Tests if sending a notification to the registered pusher is accepted",
+      name: "labelDeveloperSendTestNotificationDescription",
+      desc: "Notification debugger (a developer tool): what the 'Send test "
+          "notification' step checks");
+
+  String get labelDeveloperReceiveNotification =>
+      Intl.message("Receive notification",
+          name: "labelDeveloperReceiveNotification",
+          desc: "Notification debugger (a developer tool): name of the step "
+              "that waits for the test notification to come back");
+
+  String labelDeveloperReceivedPushData(int milliseconds, String data) =>
+      Intl.message(
+          "Received data back from push service in ${milliseconds}ms: $data",
+          name: "labelDeveloperReceivedPushData",
+          args: [milliseconds, data],
+          desc: "Notification debugger (a developer tool): the test "
+              "notification came back, after how many milliseconds, with the "
+              "raw data received");
+
+  String get labelDeveloperNoPushDataReceived => Intl.message(
+      "Did not receive any data back from push service after waiting 20 seconds",
+      name: "labelDeveloperNoPushDataReceived",
+      desc: "Notification debugger (a developer tool): the test notification "
+          "never came back");
+
+  String labelDeveloperPushDataError(String error) => Intl.message(
+      "Unknown error occurred waiting for notification data: $error",
+      name: "labelDeveloperPushDataError",
+      args: [error],
+      desc: "Notification debugger (a developer tool): waiting for the test "
+          "notification failed, with the technical error");
+
+  String get labelDeveloperHandleNotification =>
+      Intl.message("Handle Notification",
+          name: "labelDeveloperHandleNotification",
+          desc: "Notification debugger (a developer tool): name of the step "
+              "that shows the notification on this computer");
+
+  String get labelDeveloperHandleNotificationDescription =>
+      Intl.message("If you saw a notification, this test passed.",
+          name: "labelDeveloperHandleNotificationDescription",
+          desc: "Notification debugger (a developer tool): the app cannot "
+              "tell whether the notification appeared, so the person checks");
+
+  String get labelDeveloperNotificationTestMinimizeWarning => Intl.message(
+      "The app may be minimized while testing. If minimized, wait for at least 5 seconds before re-opening",
+      name: "labelDeveloperNotificationTestMinimizeWarning",
+      desc: "Notification debugger (a developer tool), on desktop: the window "
+          "is minimized during the test so the notification can show");
+
+  String get labelDeveloperNotificationTestComplete =>
+      Intl.message("Test complete",
+          name: "labelDeveloperNotificationTestComplete",
+          desc: "Notification debugger (a developer tool): all the steps have "
+              "run");
 
   @override
   void initState() {
@@ -84,8 +268,8 @@ class _NotificationDebuggerState extends State<NotificationDebugger> {
       }
     } catch (e) {
       steps.add(_NotificationDebugStep(
-          name: "Tests failed",
-          description: "An error occured while running tests: ${e}",
+          name: labelDeveloperNotificationTestsFailed,
+          description: messageDeveloperNotificationTestsError("$e"),
           passed: false));
     }
     setState(() {
@@ -98,9 +282,8 @@ class _NotificationDebuggerState extends State<NotificationDebugger> {
     var match = evaluator.match(event.event);
 
     steps.add(_NotificationDebugStep(
-        name: "Push Rules",
-        description:
-            "Check if the event matches your account's defined push rules",
+        name: labelDeveloperPushRules,
+        description: labelDeveloperPushRulesDescription,
         passed: match.notify));
   }
 
@@ -117,9 +300,8 @@ class _NotificationDebuggerState extends State<NotificationDebugger> {
     }
 
     var step = _NotificationDebugStep(
-        name: "Check permissions",
-        description:
-            "Tests if we have permission from the system to display a notification",
+        name: labelDeveloperCheckPermissions,
+        description: labelDeveloperCheckPermissionsDescription,
         passed: permission);
 
     steps.add(step);
@@ -130,7 +312,7 @@ class _NotificationDebuggerState extends State<NotificationDebugger> {
       event,
       onNotificationRejected: (reason) {
         var step = _NotificationDebugStep(
-            name: "Notification rejected",
+            name: labelDeveloperNotificationRejected,
             description: "$reason",
             passed: false);
 
@@ -139,9 +321,8 @@ class _NotificationDebuggerState extends State<NotificationDebugger> {
     );
 
     var step = _NotificationDebugStep(
-        name: "Should Notify",
-        description:
-            "Tests whether the given event should trigger a notification",
+        name: labelDeveloperShouldNotify,
+        description: labelDeveloperShouldNotifyDescription,
         passed: shouldNotify);
 
     steps.add(step);
@@ -154,8 +335,8 @@ class _NotificationDebuggerState extends State<NotificationDebugger> {
 
     if (BuildConfig.ENABLE_GOOGLE_SERVICES == false) {
       steps.add(_NotificationDebugStep(
-          name: "Unified Push Configuration",
-          description: "Checks the current config for unified push",
+          name: labelDeveloperUnifiedPushConfiguration,
+          description: labelDeveloperUnifiedPushConfigurationDescription,
           passed: preferences.unifiedPushEnabled.value == true &&
               preferences.unifiedPushEndpoint.value != null));
 
@@ -163,16 +344,20 @@ class _NotificationDebuggerState extends State<NotificationDebugger> {
         var distributor = await UnifiedPush.getDistributor();
 
         steps.add(_NotificationDebugStep(
-            name: "Unified Push Distributor",
-            description: "distributor for unified push: $distributor",
+            name: labelDeveloperUnifiedPushDistributor,
+            description:
+                labelDeveloperUnifiedPushDistributorDescription("$distributor"),
             passed: distributor != null));
       }
     } else {
+      final fcmKey = preferences.fcmKey.value;
+      final fcmKeyDisplay =
+          fcmKey == null ? "null" : "${fcmKey.substring(0, 10)}...";
       steps.add(_NotificationDebugStep(
-          name: "Google Services Configuration",
-          description:
-              "Checks the current config for Google services notifications: ${preferences.fcmKey.value == null ? "null" : preferences.fcmKey.value!.substring(0, 10) + "..."}",
-          passed: preferences.fcmKey.value != null));
+          name: labelDeveloperGoogleServicesConfiguration,
+          description: labelDeveloperGoogleServicesConfigurationDescription(
+              fcmKeyDisplay),
+          passed: fcmKey != null));
     }
 
     String? pushKey = BuildConfig.ENABLE_GOOGLE_SERVICES
@@ -186,9 +371,9 @@ class _NotificationDebuggerState extends State<NotificationDebugger> {
         .firstOrNull;
 
     var step = _NotificationDebugStep(
-        name: "Has Registered Pusher",
-        description:
-            "Tests if the client has registered a push notification service with the homeserver: ${pusher?.data.url?.host}",
+        name: labelDeveloperHasRegisteredPusher,
+        description: labelDeveloperHasRegisteredPusherDescription(
+            "${pusher?.data.url?.host}"),
         passed: pusher != null);
 
     steps.add(step);
@@ -197,9 +382,8 @@ class _NotificationDebuggerState extends State<NotificationDebugger> {
       if (BuildConfig.ENABLE_GOOGLE_SERVICES &&
           pusher.data.additionalProperties["type"] == "fcm") {
         steps.add(_NotificationDebugStep(
-            name: "Pusher configuration",
-            description:
-                "Checks the pusher is configured to use Google services",
+            name: labelDeveloperPusherConfiguration,
+            description: labelDeveloperPusherConfigurationDescription,
             passed: true));
       }
 
@@ -237,9 +421,8 @@ class _NotificationDebuggerState extends State<NotificationDebugger> {
       });
 
       var step = _NotificationDebugStep(
-          name: "Send test notification",
-          description:
-              "Tests if sending a notification to the registered pusher is accepted",
+          name: labelDeveloperSendTestNotification,
+          description: labelDeveloperSendTestNotificationDescription,
           passed: result.statusCode == 200);
 
       steps.add(step);
@@ -248,26 +431,24 @@ class _NotificationDebuggerState extends State<NotificationDebugger> {
         var endTime = DateTime.now();
         var length = endTime.difference(startTime);
         var step = _NotificationDebugStep(
-            name: "Receive notification",
-            description:
-                "Received data back from push service in ${length.inMilliseconds}ms: $result",
+            name: labelDeveloperReceiveNotification,
+            description: labelDeveloperReceivedPushData(
+                length.inMilliseconds, "$result"),
             passed: true);
 
         steps.add(step);
       } catch (e) {
         if (e is TimeoutException) {
           var step = _NotificationDebugStep(
-              name: "Receive notification",
-              description:
-                  "Did not receive any data back from push service after waiting 20 seconds",
+              name: labelDeveloperReceiveNotification,
+              description: labelDeveloperNoPushDataReceived,
               passed: false);
 
           steps.add(step);
         } else {
           var step = _NotificationDebugStep(
-              name: "Receive notification",
-              description:
-                  "Unknown error occured waiting for notification data: $e",
+              name: labelDeveloperReceiveNotification,
+              description: labelDeveloperPushDataError("$e"),
               passed: false);
 
           steps.add(step);
@@ -281,7 +462,7 @@ class _NotificationDebuggerState extends State<NotificationDebugger> {
       event,
       onNotificationRejected: (reason) {
         var step = _NotificationDebugStep(
-            name: "Notification rejected",
+            name: labelDeveloperNotificationRejected,
             description: "$reason",
             passed: false);
 
@@ -292,8 +473,8 @@ class _NotificationDebuggerState extends State<NotificationDebugger> {
     await f;
 
     var step = _NotificationDebugStep(
-        name: "Handle Notification",
-        description: "If you saw a notification, this test passed.",
+        name: labelDeveloperHandleNotification,
+        description: labelDeveloperHandleNotificationDescription,
         passed: null);
 
     steps.add(step);
@@ -311,14 +492,14 @@ class _NotificationDebuggerState extends State<NotificationDebugger> {
               children: [
                 if (usesDesktopNotification)
                   tiamat.Text.labelLow(
-                      "The app may be minimized while testing. if minimized, wait for atleast 5 seconds before re-opening"),
+                      labelDeveloperNotificationTestMinimizeWarning),
                 CircularProgressIndicator(),
               ],
             ),
           if (!running)
             Padding(
               padding: const EdgeInsets.all(8.0),
-              child: tiamat.Text.label("Test complete"),
+              child: tiamat.Text.label(labelDeveloperNotificationTestComplete),
             ),
           Flexible(
             child: NotifyingListBuilder(

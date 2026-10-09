@@ -4,6 +4,7 @@ import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room_permissions.dart';
 import 'package:rooster/client/timeline.dart';
 import 'package:rooster/client/timeline_events/timeline_event.dart';
+import 'package:intl/intl.dart';
 import 'package:matrix/matrix.dart' as matrix;
 
 abstract class MatrixTimelineEvent implements TimelineEvent {
@@ -12,6 +13,21 @@ abstract class MatrixTimelineEvent implements TimelineEvent {
   matrix.Event event;
 
   MatrixTimelineEvent(this.event, {required this.client});
+
+  /// The text of a deleted event: the SDK's own is the English "Redacted".
+  static String get messageTimelineRedactedBody => Intl.message("Redacted",
+      name: "messageTimelineRedactedBody",
+      desc: "Stands in for the text of a message that was deleted (Matrix "
+          "calls it redacted), such as above a reply to it");
+
+  /// An event the app has no words for, by its Matrix type. The SDK's own
+  /// text for one is English.
+  static String messageTimelineUnknownEventType(String type) =>
+      Intl.message("Unknown Event Type: $type",
+          name: "messageTimelineUnknownEventType",
+          args: [type],
+          desc: "Stands for a room event the app cannot show (seen in "
+              "developer mode and in previews), with its Matrix event type");
 
   @override
   bool get editable => false;
@@ -75,8 +91,9 @@ abstract class MatrixTimelineEvent implements TimelineEvent {
   /// every call, and the room panel, the reply quotes and the chat asked
   /// for it on every rebuild. A changed event is a new instance.
   @override
-  String get plainTextBody =>
-      _plainTextBody ??= event.redacted || event.text.isNotEmpty
+  String get plainTextBody => _plainTextBody ??= event.redacted
+      ? messageTimelineRedactedBody
+      : event.text.isNotEmpty
           ? event.plaintextBody
           : event.type;
   String? _plainTextBody;

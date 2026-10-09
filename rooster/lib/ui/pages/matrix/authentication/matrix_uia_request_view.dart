@@ -1,5 +1,6 @@
 import 'package:rooster/utils/common_strings.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 // have to do it this way to avoid some widgetbook codegen issue
 // ignore: implementation_imports
 import 'package:matrix/src/utils/uia_request.dart';
@@ -39,6 +40,38 @@ class _MatrixUIARequestViewState extends State<MatrixUIARequestView> {
   bool get canUseAnyNextStep => canUsePassword || canUseSso;
 
   UIAStep? pickedStep;
+
+  String get promptRoomUiaContinueWithPassword => Intl.message(
+      "Continue with password",
+      name: "promptRoomUiaContinueWithPassword",
+      desc:
+          "Button in the dialog where the server asks us to sign in again before a sensitive action: confirm with the account's password");
+
+  String get promptRoomUiaContinueWithSso => Intl.message("Continue with SSO",
+      name: "promptRoomUiaContinueWithSso",
+      desc:
+          "Button in the dialog where the server asks us to sign in again before a sensitive action: confirm through single sign-on (SSO) in the browser");
+
+  String get messageRoomUiaNoSupportedMethod => Intl.message(
+      "Sorry, none of the authentication methods provided by the server are supported.",
+      name: "messageRoomUiaNoSupportedMethod",
+      desc:
+          "In the dialog where the server asks us to sign in again: the app supports none of the ways the server offers");
+
+  String get labelRoomUiaAccountPassword => Intl.message("Account Password",
+      name: "labelRoomUiaAccountPassword",
+      desc:
+          "Placeholder of the password field in the dialog where the server asks us to sign in again before a sensitive action");
+
+  String get messageRoomUiaSuccess => Intl.message("Success!",
+      name: "messageRoomUiaSuccess",
+      desc:
+          "Shown when signing in again for a sensitive action worked, in the dialog where the server asked for it");
+
+  String get messageRoomUiaLoginFailed => Intl.message("Login failed...",
+      name: "messageRoomUiaLoginFailed",
+      desc:
+          "Shown when signing in again for a sensitive action failed, in the dialog where the server asked for it");
 
   @override
   void initState() {
@@ -83,14 +116,14 @@ class _MatrixUIARequestViewState extends State<MatrixUIARequestView> {
         children: [
           if (canUsePassword)
             tiamat.Button(
-              text: "Continue with password",
+              text: promptRoomUiaContinueWithPassword,
               onTap: () => setState(() {
                 pickedStep = UIAStep.password;
               }),
             ),
           if (canUseSso)
             tiamat.Button(
-                text: "Continue with SSO",
+                text: promptRoomUiaContinueWithSso,
                 onTap: () {
                   widget.onSubmitSso?.call();
                   setState(() {
@@ -98,8 +131,7 @@ class _MatrixUIARequestViewState extends State<MatrixUIARequestView> {
                   });
                 }),
           if (canUseAnyNextStep == false) ...[
-            tiamat.Text.labelLow(
-                "Sorry, none of the authentication methods provided by the server are supported."),
+            tiamat.Text.labelLow(messageRoomUiaNoSupportedMethod),
             tiamat.Text.labelLow(widget.nextSteps.toString()),
           ]
         ],
@@ -136,7 +168,7 @@ class _MatrixUIARequestViewState extends State<MatrixUIARequestView> {
       spacing: 12,
       children: [
         TextInput(
-          placeholder: "Account Password",
+          placeholder: labelRoomUiaAccountPassword,
           obscureText: true,
           controller: passwordFieldController,
         ),
@@ -173,7 +205,7 @@ class _MatrixUIARequestViewState extends State<MatrixUIARequestView> {
                 size: 40,
               ),
             ),
-            const tiamat.Text.largeTitle("Success!")
+            Flexible(child: tiamat.Text.largeTitle(messageRoomUiaSuccess))
           ],
         ),
         SizedBox(
@@ -203,7 +235,7 @@ class _MatrixUIARequestViewState extends State<MatrixUIARequestView> {
                 size: 40,
               ),
             ),
-            const tiamat.Text.largeTitle("Login failed...")
+            Flexible(child: tiamat.Text.largeTitle(messageRoomUiaLoginFailed))
           ],
         ),
         SizedBox(

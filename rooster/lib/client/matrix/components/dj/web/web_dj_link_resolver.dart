@@ -3,6 +3,7 @@
 // extension, which only the desktop app runs.
 import 'dart:math';
 
+import 'package:intl/intl.dart';
 import 'package:rooster/client/components/dj/dj_engine.dart';
 import 'package:rooster/client/components/dj/dj_links.dart';
 import 'package:rooster/client/components/dj/dj_models.dart';
@@ -27,17 +28,36 @@ class WebDjLinkResolver implements DjResolver {
 
   @override
   String? sourceFor(DjLink link) =>
-      audioFileOf(link) == null ? null : 'a link to an audio file';
+      audioFileOf(link) == null ? null : labelDjWebAudioLinkSource;
 
   @override
-  String? get hint => 'Add songs, or paste a link to an audio file. YouTube '
-      'and SoundCloud play from the desktop app.';
+  String? get hint => labelDjWebAddHint;
+
+  static String get labelDjWebAudioLinkSource => Intl.message(
+      "a link to an audio file",
+      name: "labelDjWebAudioLinkSource",
+      desc: "In the DJ booth in the browser, what plays a pasted link to an "
+          "audio file: fills \"Played by ...\" under the link");
+
+  static String get labelDjWebAddHint => Intl.message(
+      "Add songs, or paste a link to an audio file. YouTube and SoundCloud "
+      "play from the desktop app.",
+      name: "labelDjWebAddHint",
+      desc: "Placeholder of the DJ booth's box for links, in the browser");
+
+  static String errorDjWebLinkNeedsDesktop(String host) =>
+      Intl.message("Links from $host play from the desktop app",
+          name: "errorDjWebLinkNeedsDesktop",
+          args: [host],
+          desc: "Why a link pasted in the DJ booth in the browser could not be "
+              "added: links from that site (the placeholder) need the desktop "
+              "app. Follows \"Couldn't add <link>:\"");
 
   @override
   Future<List<DjTrack>> resolve(DjLink link, {required String addedBy}) async {
     final name = audioFileOf(link);
     if (name == null) {
-      throw StateError('Links from ${link.host} play from the desktop app');
+      throw StateError(errorDjWebLinkNeedsDesktop(link.host));
     }
     final dot = name.lastIndexOf('.');
     final title = Uri.decodeComponent(name.substring(0, dot)).trim();

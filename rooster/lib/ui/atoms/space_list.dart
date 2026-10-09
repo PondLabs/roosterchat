@@ -54,6 +54,20 @@ class _SpaceListState extends State<SpaceList> {
   String get labelRoomsList => Intl.message("Rooms",
       desc: "Header label for the list of rooms", name: "labelRoomsList");
 
+  String promptRoomJoinConfirm(String roomName) => Intl.message(
+      "Are you sure you want to join the room '$roomName'?",
+      name: "promptRoomJoinConfirm",
+      args: [roomName],
+      desc:
+          "Confirmation before joining a room of a space we are not in yet, from the space's sidebar, with the room's name");
+
+  String promptSpaceRemoveFrom(String spaceName) => Intl.message(
+      "Remove from $spaceName",
+      name: "promptSpaceRemoveFrom",
+      args: [spaceName],
+      desc:
+          "Entry in the menu of a space listed inside another space's sidebar: takes it out of that space (named)");
+
   @override
   void initState() {
     children = widget.space.children;
@@ -248,8 +262,7 @@ class _SpaceListState extends State<SpaceList> {
 
   Future<void> joinRoomWithConfirmation(RoomPreview preview) async {
     if (await AdaptiveDialog.confirmation(context,
-            prompt:
-                "Are you sure you want to join the room '${preview.displayName}' ?") ==
+            prompt: promptRoomJoinConfirm(preview.displayName)) ==
         true) {
       Room room = await widget.space.client.joinRoomFromPreview(preview);
       await widget.onRoomSelected?.call(room);
@@ -265,7 +278,7 @@ class _SpaceListState extends State<SpaceList> {
             if (widget.space.permissions.canEditChildren)
               tiamat.ContextMenuItem(
                 icon: Icons.remove_circle,
-                text: "Remove from ${widget.space.displayName}",
+                text: promptSpaceRemoveFrom(widget.space.displayName),
                 onPressed: () async {
                   if (await AdaptiveDialog.confirmation(context) == true) {
                     widget.space.removeChild(child);

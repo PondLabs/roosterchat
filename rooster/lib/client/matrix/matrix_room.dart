@@ -55,6 +55,7 @@ import 'package:flutter/material.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:html_unescape/html_unescape.dart';
+import 'package:intl/intl.dart';
 import 'package:matrix/matrix_api_lite/model/stripped_state_event.dart';
 
 // ignore: implementation_imports
@@ -64,7 +65,104 @@ import '../attachment.dart';
 import '../client.dart';
 import 'package:matrix/matrix.dart' as matrix;
 
+/// The names the Matrix SDK makes up for a room that has none of its own
+/// (from its members, or "Empty chat"), in the app's language.
+class RoomNameLocalizations extends matrix.MatrixDefaultLocalizations {
+  const RoomNameLocalizations();
+
+  static String get labelRoomNameEmpty => Intl.message("Empty chat",
+      name: "labelRoomNameEmpty",
+      desc: "Name shown for a room that has no name and nobody else in it");
+
+  static String labelRoomNameGroupWith(String names) => Intl.message(
+      "Group with $names",
+      name: "labelRoomNameGroupWith",
+      args: [names],
+      desc:
+          "Name shown for a room that has no name of its own, with the names of some of its members, separated by commas");
+
+  static String labelRoomNameInvitedBy(String name) => Intl.message(
+      "Invited by $name",
+      name: "labelRoomNameInvitedBy",
+      args: [name],
+      desc:
+          "Name shown for a room we are invited to that has no name, with who invited us");
+
+  static String labelRoomNameWasDirectChat(String name) => Intl.message(
+      "Empty chat (was $name)",
+      name: "labelRoomNameWasDirectChat",
+      args: [name],
+      desc:
+          "Name shown for a direct message room everyone else left, with the name of who it was with");
+
+  static String get labelRoomNameUnknownUser => Intl.message("Unknown user",
+      name: "labelRoomNameUnknownUser",
+      desc:
+          "Stands for someone whose name is not known, in a room name made from its members");
+
+  @override
+  String get emptyChat => labelRoomNameEmpty;
+
+  @override
+  String groupWith(String displayname) => labelRoomNameGroupWith(displayname);
+
+  @override
+  String invitedBy(String senderName) => labelRoomNameInvitedBy(senderName);
+
+  @override
+  String wasDirectChatDisplayName(String oldDisplayName) =>
+      labelRoomNameWasDirectChat(oldDisplayName);
+
+  @override
+  String get unknownUser => labelRoomNameUnknownUser;
+}
+
 class MatrixRoom extends Room {
+  // Why a notification was not shown, in the notification debugger
+  // (Developer settings).
+
+  static String get messageRoomNotificationShouldNotNotify => Intl.message(
+      "shouldNotify returned false",
+      name: "messageRoomNotificationShouldNotNotify",
+      desc:
+          "Notification debugger (Developer settings): why a test notification was not shown. shouldNotify is the name of the check in the code and false its answer: keep both as they are");
+
+  static String get messageRoomNotificationEventTypeIgnored => Intl.message(
+      "Event type does not trigger notifications",
+      name: "messageRoomNotificationEventTypeIgnored",
+      desc:
+          "Notification debugger (Developer settings): why a test notification was not shown");
+
+  static String get messageRoomNotificationAndroidPush => Intl.message(
+      "Notifications should be handled by a push service on Android, but we are in the desktop notifications handler",
+      name: "messageRoomNotificationAndroidPush",
+      desc:
+          "Notification debugger (Developer settings): why a test notification was not shown on Android, where notifications come from a push service instead");
+
+  static String get messageRoomNotificationNoContent => Intl.message(
+      "Notification content was null",
+      name: "messageRoomNotificationNoContent",
+      desc:
+          "Notification debugger (Developer settings): why a test notification was not shown: nothing could be made of the message to show");
+
+  static String get messageRoomNotificationOwnMessage => Intl.message(
+      "Message came from a user logged in to this client",
+      name: "messageRoomNotificationOwnMessage",
+      desc:
+          "Notification debugger (Developer settings): why a test notification was not shown: the message was sent by one of our own accounts in the app");
+
+  static String get messageRoomNotificationTooOld => Intl.message(
+      "Message is over 10 minutes old",
+      name: "messageRoomNotificationTooOld",
+      desc:
+          "Notification debugger (Developer settings): why a test notification was not shown");
+
+  static String get messageRoomNotificationPushRules => Intl.message(
+      "Did not pass push rules",
+      name: "messageRoomNotificationPushRules",
+      desc:
+          "Notification debugger (Developer settings): why a test notification was not shown: the account's notification rules (Matrix push rules) say not to");
+
   late matrix.Room _matrixRoom;
 
   late String _displayName;
@@ -327,21 +425,20 @@ class MatrixRoom extends Room {
   Future<void> handleNotification(TimelineEvent event,
       {Function(String reason)? onNotificationRejected}) async {
     if (!shouldNotify(event, onNotificationRejected: onNotificationRejected)) {
-      onNotificationRejected?.call("shouldNotify returned false");
+      onNotificationRejected?.call(messageRoomNotificationShouldNotNotify);
       return;
     }
 
     if (event is MatrixTimelineEventCall ||
         event is MatrixTimelineEventUnknown) {
-      onNotificationRejected?.call("Event type does not trigger notifications");
+      onNotificationRejected?.call(messageRoomNotificationEventTypeIgnored);
       return;
     }
 
     if (event is TimelineEventMessage || event is TimelineEventSticker) {
       // let push notifications handle it
       if (BuildConfig.ANDROID) {
-        onNotificationRejected?.call(
-            "Notifications should be handled by a push service on Android, but we are in the desktop notifications handler");
+        onNotificationRejected?.call(messageRoomNotificationAndroidPush);
         return;
       }
 
@@ -351,7 +448,7 @@ class MatrixRoom extends Room {
         NotificationManager.notify(notification,
             onNotificationRejected: onNotificationRejected);
       } else {
-        onNotificationRejected?.call("Notification content was null");
+        onNotificationRejected?.call(messageRoomNotificationNoContent);
       }
     }
   }
@@ -367,8 +464,7 @@ class MatrixRoom extends Room {
     if (clientManager?.clients
             .any((element) => element.self?.identifier == event.senderId) ==
         true) {
-      onNotificationRejected
-          ?.call("Message came from a user logged in to this client");
+      onNotificationRejected?.call(messageRoomNotificationOwnMessage);
       return false;
     }
 
@@ -376,7 +472,7 @@ class MatrixRoom extends Room {
 
     // dont notify if we are receiving an old message
     if (timeDiff.inMinutes > 10) {
-      onNotificationRejected?.call("Message is over 10 minutes old");
+      onNotificationRejected?.call(messageRoomNotificationTooOld);
       return false;
     }
 
@@ -384,7 +480,7 @@ class MatrixRoom extends Room {
     var match = evaluator.match((event as MatrixTimelineEvent).event);
 
     if (match.notify == false) {
-      onNotificationRejected?.call("Did not pass push rules");
+      onNotificationRejected?.call(messageRoomNotificationPushRules);
     }
 
     return match.notify;
@@ -859,7 +955,8 @@ class MatrixRoom extends Room {
   }
 
   void _updateDisplayName() {
-    _displayName = _matrixRoom.getLocalizedDisplayname();
+    _displayName =
+        _matrixRoom.getLocalizedDisplayname(const RoomNameLocalizations());
 
     var comp = client.getComponent<DirectMessagesComponent>();
 
@@ -1006,7 +1103,7 @@ class MatrixRoom extends Room {
         MatrixRole(50),
         if (getComponent<MatrixCalendarRoomComponent>()?.hasCalendar == true)
           MatrixRole(25,
-              nameOverride: "Calendar Moderator",
+              nameOverride: MatrixRole.labelCalendarRoleModerator,
               iconOverride: Icons.calendar_month),
         MatrixRole(0),
       ];

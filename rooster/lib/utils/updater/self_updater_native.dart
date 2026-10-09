@@ -18,6 +18,7 @@ import 'package:rooster/utils/update_checker.dart';
 import 'package:rooster/utils/windows_hidden_process.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 
 SelfUpdater createSelfUpdater() => NativeSelfUpdater();
@@ -239,6 +240,77 @@ UpdateTarget updateTargetFor(
 }
 
 class NativeSelfUpdater implements SelfUpdater {
+  // What the settings page shows under Version (UpdateProgress.message).
+  // The log lines and the swap scripts stay in English.
+
+  static String messageUpdateCouldNotReachGitHub(String problem) =>
+      Intl.message("Could not reach GitHub to look for updates: $problem.",
+          name: "messageUpdateCouldNotReachGitHub",
+          args: [problem],
+          desc: "Under Version in Settings when the look for a newer release "
+              "failed. The problem is a short technical reason, such as "
+              "'no answer in 20 s' or an HTTP status");
+
+  static String messageUpdateAppIsLatest(String app, String version) =>
+      Intl.message("$app $version is the latest.",
+          name: "messageUpdateAppIsLatest",
+          args: [app, version],
+          desc: "Under Version in Settings when the running version is the "
+              "newest release; app is the app's name (Rooster), version its "
+              "version, for example v1.18.0");
+
+  static String get messageUpdateCouldNotPrepare =>
+      Intl.message("The update could not be prepared.",
+          name: "messageUpdateCouldNotPrepare",
+          desc: "Under Version in Settings when something went wrong getting "
+              "an update ready");
+
+  static String messageUpdateDidNotStart(String tag, String version) =>
+      Intl.message(
+          "$tag would not start on this computer, so $version was put back. "
+          "The next release will be tried.",
+          name: "messageUpdateDidNotStart",
+          args: [tag, version],
+          desc: "Under Version in Settings when a release was installed once, "
+              "did not start, and the running version was restored; tag is "
+              "the release that failed, version the one running now");
+
+  static String get messageUpdateNoBuildForPlatform =>
+      Intl.message("That release has no build for this platform.",
+          name: "messageUpdateNoBuildForPlatform",
+          desc: "Under Version in Settings when the newer release has nothing "
+              "to install on this operating system or processor");
+
+  static String get messageUpdateNotChecksummed => Intl.message(
+      "That release is not checksummed, so it has to be installed by hand.",
+      name: "messageUpdateNotChecksummed",
+      desc: "Under Version in Settings when the newer release has no checksum "
+          "to check the download against, so the app does not install it");
+
+  static String messageUpdateReadyMoves(String tag, String app, String path) =>
+      Intl.message(
+          "$tag is ready. Restarting moves $app to $path, with a Start menu "
+          "shortcut, so it no longer runs from the zip.",
+          name: "messageUpdateReadyMoves",
+          args: [tag, app, path],
+          desc: "Under Version in Settings on Windows, when the app was "
+              "started from inside a zip: the update installs it in a lasting "
+              "folder (path) with a Start menu shortcut. Tag is the release, "
+              "app the app's name (Rooster)");
+
+  static String get messageUpdateCouldNotDownload => Intl.message(
+      "The update could not be downloaded. "
+      "You can still install it from the release page.",
+      name: "messageUpdateCouldNotDownload",
+      desc: "Under Version in Settings when downloading or unpacking the "
+          "newer release failed");
+
+  static String get messageUpdateCouldNotStart =>
+      Intl.message("The update could not be started. Nothing was changed.",
+          name: "messageUpdateCouldNotStart",
+          desc: "Under Version in Settings when restarting into the "
+              "downloaded update failed before anything was replaced");
+
   @override
   final ValueNotifier<UpdateProgress> progress =
       ValueNotifier(const UpdateProgress(UpdateStage.idle));
@@ -299,15 +371,14 @@ class NativeSelfUpdater implements SelfUpdater {
       final release = look.release;
       if (release == null) {
         _set(UpdateStage.failed,
-            message: 'Could not reach GitHub to look for updates: '
-                '${look.problem}.');
+            message: messageUpdateCouldNotReachGitHub('${look.problem}'));
         return;
       }
       if (!UpdateChecker.isNewer(release.tag, BuildConfig.VERSION_TAG)) {
         _set(UpdateStage.upToDate,
             release: release,
-            message:
-                '${BuildConfig.app} ${BuildConfig.VERSION_TAG} is the latest.');
+            message: messageUpdateAppIsLatest(
+                BuildConfig.app, BuildConfig.VERSION_TAG));
         return;
       }
       if (!canInstall) {
@@ -318,7 +389,7 @@ class NativeSelfUpdater implements SelfUpdater {
       await _prepare(release);
     } catch (e, s) {
       Log.onError(e, s, content: 'Update: could not prepare');
-      _set(UpdateStage.failed, message: 'The update could not be prepared.');
+      _set(UpdateStage.failed, message: messageUpdateCouldNotPrepare);
     } finally {
       _running = false;
     }
@@ -331,25 +402,21 @@ class NativeSelfUpdater implements SelfUpdater {
     if (_didNotStartHere(release.tag)) {
       _set(UpdateStage.failed,
           release: release,
-          message: '${release.tag} would not start on this computer, so '
-              '${BuildConfig.VERSION_TAG} was put back. The next release '
-              'will be tried.');
+          message:
+              messageUpdateDidNotStart(release.tag, BuildConfig.VERSION_TAG));
       return;
     }
     final asset = release.assetFor(_platform, arch: _arch);
     if (asset == null) {
       _set(UpdateStage.available,
-          release: release,
-          message: 'That release has no build for this platform.');
+          release: release, message: messageUpdateNoBuildForPlatform);
       return;
     }
     if (asset.sha256 == null) {
       // Without a checksum there is no way to know what arrived, and this
       // unpacks over the app: the browser can have this one.
       _set(UpdateStage.available,
-          release: release,
-          message: 'That release is not checksummed, so it has to be '
-              'installed by hand.');
+          release: release, message: messageUpdateNotChecksummed);
       return;
     }
 
@@ -394,18 +461,15 @@ class NativeSelfUpdater implements SelfUpdater {
       _set(UpdateStage.ready,
           release: release,
           message: _target.moves
-              ? '${release.tag} is ready. Restarting moves ${BuildConfig.app} to '
-                  '${_target.install}, with a Start menu shortcut, so it no '
-                  'longer runs from the zip.'
+              ? messageUpdateReadyMoves(
+                  release.tag, BuildConfig.app, _target.install)
               : null);
       Log.i('Update: ${release.tag} is unpacked at ${root.path}');
     } catch (e, s) {
       Log.onError(e, s, content: 'Update: could not stage ${release.tag}');
       await _delete(work);
       _set(UpdateStage.failed,
-          release: release,
-          message: 'The update could not be downloaded. '
-              'You can still install it from the release page.');
+          release: release, message: messageUpdateCouldNotDownload);
     }
   }
 
@@ -489,8 +553,7 @@ class NativeSelfUpdater implements SelfUpdater {
       return true;
     } catch (e, s) {
       Log.onError(e, s, content: 'Update: could not start the installer');
-      _set(UpdateStage.failed,
-          message: 'The update could not be started. Nothing was changed.');
+      _set(UpdateStage.failed, message: messageUpdateCouldNotStart);
       return false;
     }
   }

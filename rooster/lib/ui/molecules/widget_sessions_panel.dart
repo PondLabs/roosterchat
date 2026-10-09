@@ -47,23 +47,25 @@ class _WidgetSessionsPanelState extends State<WidgetSessionsPanel> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              SizedBox(
-                  height: widget.height,
-                  width: widget.height,
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: first.info.icon.build(context),
-                  )),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  tiamat.Text(first.info.name),
-                ],
-              ),
-            ],
+          Flexible(
+            child: Row(
+              children: [
+                SizedBox(
+                    height: widget.height,
+                    width: widget.height,
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: first.info.icon.build(context),
+                    )),
+                Flexible(
+                  child: tiamat.Text(
+                    first.info.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
           ),
           Row(
             spacing: 2,

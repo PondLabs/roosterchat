@@ -168,9 +168,16 @@ class TextUtils {
     return intl.DateFormat().format(time.toLocal());
   }
 
+  static String labelAppDurationSeconds(int seconds) =>
+      intl.Intl.message("${seconds}s",
+          name: "labelAppDurationSeconds",
+          args: [seconds],
+          desc: "A duration under a minute, in seconds, as a short badge on a "
+              "video in a photo album (s is the unit symbol, as in 45s)");
+
   static String formatDuration(Duration duration) {
     if (duration.inSeconds < 60) {
-      return "${duration.inSeconds}s";
+      return labelAppDurationSeconds(duration.inSeconds);
     }
 
     if (duration.inMinutes < 60) {
@@ -198,13 +205,14 @@ class TextUtils {
       affix++;
     }
 
-    String result =
-        (runningPreviousDivider == 0 ? size : size / runningPreviousDivider)
-            .toStringAsFixed(round);
+    final value =
+        runningPreviousDivider == 0 ? size : size / runningPreviousDivider;
 
-    //Check if the result ends with .00000 (depending on how many decimals) and remove it if found.
-    if (result.endsWith("0" * round))
-      result = result.substring(0, result.length - round - 1);
+    // Two decimals, none when both are zero, with the language's decimal
+    // separator ("1,5 MB" in Portuguese).
+    final whole = (value * 100).round() % 100 == 0;
+    final result =
+        intl.NumberFormat(whole ? '0' : '0.${'0' * round}').format(value);
 
     return "$result ${affixes[affix]}";
   }

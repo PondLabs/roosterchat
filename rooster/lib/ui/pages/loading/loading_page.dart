@@ -3,16 +3,18 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:intl/intl.dart' show Intl;
 import 'package:rooster/utils/updater/self_updater.dart';
 
 /// What the window shows while the app starts: the rooster whistling to its
 /// headphones (frames drawn by docs/brand/src/build_loading.py), the comb dots
 /// taking turns and a changing caption.
 ///
-/// Drawn before the preferences, the theme and the translations exist, so it
-/// uses the brand colours directly and English captions. The browser shows
-/// the same thing from `web/index.html` until the app's first frame; keep the
-/// two in step.
+/// Drawn before the preferences and the theme exist, so it uses the brand
+/// colours directly. Its captions are translated like the rest of the app,
+/// so the translations have to be loaded before this window shows. The
+/// browser shows the same thing from `web/index.html` until the app's first
+/// frame; keep the two in step.
 ///
 /// On desktop this is also the updater: while [update] is fetching a newer
 /// release the caption says so, with a bar, and the window stays this small
@@ -22,12 +24,67 @@ class LoadingPage extends StatefulWidget {
 
   final ValueListenable<UpdateProgress>? update;
 
-  static const captions = [
-    "Waking up the flock…",
-    "Tuning the headphones…",
-    "Warming up the mics…",
-    "Pull up a chair.",
-  ];
+  static String get labelAppLoadingWakingUp => Intl.message(
+      "Waking up the flock…",
+      name: "labelAppLoadingWakingUp",
+      desc: "Caption under the loading rooster while the app starts, one of "
+          "four shown in turn. Playful: the flock is the people on Rooster, "
+          "waking up");
+
+  static String get labelAppLoadingTuningHeadphones => Intl.message(
+      "Tuning the headphones…",
+      name: "labelAppLoadingTuningHeadphones",
+      desc: "Caption under the loading rooster (who wears headphones) while "
+          "the app starts, one of four shown in turn");
+
+  static String get labelAppLoadingWarmingUpMics => Intl.message(
+      "Warming up the mics…",
+      name: "labelAppLoadingWarmingUpMics",
+      desc: "Caption under the loading rooster while the app starts, one of "
+          "four shown in turn; mics are microphones");
+
+  static String get labelAppLoadingPullUpAChair => Intl.message(
+      "Pull up a chair.",
+      name: "labelAppLoadingPullUpAChair",
+      desc: "Last caption under the loading rooster while the app starts: a "
+          "friendly invitation to sit down and join, as among friends");
+
+  static List<String> get captions => [
+        labelAppLoadingWakingUp,
+        labelAppLoadingTuningHeadphones,
+        labelAppLoadingWarmingUpMics,
+        labelAppLoadingPullUpAChair,
+      ];
+
+  static String labelUpdateFetching(String tag) =>
+      Intl.message("Fetching $tag…",
+          name: "labelUpdateFetching",
+          args: [tag],
+          desc: "Caption in the loading window while a newer release is "
+              "downloaded before the app opens; the tag is its version, for "
+              "example v1.18.0");
+
+  static String labelUpdateFetchingPercent(String tag, int percent) =>
+      Intl.message("Fetching $tag… $percent%",
+          name: "labelUpdateFetchingPercent",
+          args: [tag, percent],
+          desc: "Caption in the loading window while a newer release is "
+              "downloaded before the app opens, with how much of it has "
+              "arrived, from 0 to 100 percent");
+
+  static String labelUpdateCheckingTag(String tag) =>
+      Intl.message("Checking $tag…",
+          name: "labelUpdateCheckingTag",
+          args: [tag],
+          desc: "Caption in the loading window while the downloaded release is "
+              "checked against its checksum; the tag is its version");
+
+  static String labelUpdateRestartingInto(String tag) =>
+      Intl.message("Restarting into $tag…",
+          name: "labelUpdateRestartingInto",
+          args: [tag],
+          desc: "Caption in the loading window just before the app restarts as "
+              "the newer release it downloaded; the tag is its version");
 
   /// What to say instead of the captions while an update is on its way in,
   /// or null when there is none.
@@ -35,11 +92,11 @@ class LoadingPage extends StatefulWidget {
     var tag = progress.release?.tag ?? "";
     return switch (progress.stage) {
       UpdateStage.downloading => progress.fraction == null
-          ? "Fetching $tag…"
-          : "Fetching $tag… ${(progress.fraction! * 100).round()}%",
-      UpdateStage.verifying => "Checking $tag…",
-      UpdateStage.unpacking => "Unpacking $tag…",
-      UpdateStage.ready => "Restarting into $tag…",
+          ? labelUpdateFetching(tag)
+          : labelUpdateFetchingPercent(tag, (progress.fraction! * 100).round()),
+      UpdateStage.verifying => labelUpdateCheckingTag(tag),
+      UpdateStage.unpacking => labelUpdateUnpacking(tag),
+      UpdateStage.ready => labelUpdateRestartingInto(tag),
       _ => null,
     };
   }

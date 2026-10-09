@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 
 import '../photo_post.dart';
 import '../video_capabilities.dart';
@@ -224,6 +225,21 @@ class InstagramProvider implements VideoProvider, PhotoPostProvider {
   @override
   String get id => 'instagram';
 
+  static String get labelMediaInstagramReel => Intl.message("Instagram Reel",
+      name: "labelMediaInstagramReel",
+      desc: "Title of a preview card for an Instagram reel whose caption "
+          "could not be read");
+
+  static String get labelMediaInstagramPost => Intl.message("Instagram Post",
+      name: "labelMediaInstagramPost",
+      desc: "Title of a preview card for an Instagram post whose caption "
+          "could not be read");
+
+  static String get labelMediaInstagramVideo => Intl.message("Instagram Video",
+      name: "labelMediaInstagramVideo",
+      desc: "Title of a preview card for an Instagram video with no "
+          "caption");
+
   @override
   String get name => 'Instagram';
 
@@ -287,7 +303,7 @@ class InstagramProvider implements VideoProvider, PhotoPostProvider {
     return VideoEmbedInfo(
       originalUrl: uri,
       // A /p/ link may hold photos as well as a video.
-      title: isReel ? 'Instagram Reel' : 'Instagram Post',
+      title: isReel ? labelMediaInstagramReel : labelMediaInstagramPost,
       aspectRatio: defaultAspect,
       platformName: platformName,
       isShortForm: isReel,
@@ -345,7 +361,7 @@ class InstagramProvider implements VideoProvider, PhotoPostProvider {
       originalUrl: uri,
       title: firstLine?.isNotEmpty == true
           ? firstLine!
-          : (isReel ? 'Instagram Reel' : 'Instagram Video'),
+          : (isReel ? labelMediaInstagramReel : labelMediaInstagramVideo),
       author: author,
       thumbnailUrl: thumbnailUrl,
       thumbnail: thumbnailUrl != null ? NetworkImage(thumbnailUrl) : null,

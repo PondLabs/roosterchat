@@ -53,6 +53,44 @@ class CalendarCreatorDescription extends StatelessWidget {
       "Create a shared calendar to keep track of your plans, and import your schedule from other calendars to let your friends know when you are busy.",
       name: "labelCalendarDescription");
 
+  // Made-up events of two friends, in the picture of a calendar in the dialog
+  // that adds a room.
+
+  String get labelCalendarSampleMovies => Intl.message("Movies",
+      name: "labelCalendarSampleMovies",
+      desc:
+          "Example event title in the picture of a calendar, in the dialog that adds a room");
+
+  String get labelCalendarSampleUnavailable => Intl.message("Unavailable",
+      name: "labelCalendarSampleUnavailable",
+      desc:
+          "Example title of a time someone is busy, in the picture of a calendar, in the dialog that adds a room");
+
+  String get labelCalendarSampleDinner => Intl.message("Dinner",
+      name: "labelCalendarSampleDinner",
+      desc:
+          "Example event title in the picture of a calendar, in the dialog that adds a room");
+
+  String get labelCalendarSampleWork => Intl.message("Work",
+      name: "labelCalendarSampleWork",
+      desc:
+          "Example title of a time someone is busy at work, in the picture of a calendar, in the dialog that adds a room");
+
+  String get labelCalendarSampleWorkLowercase => Intl.message("work",
+      name: "labelCalendarSampleWorkLowercase",
+      desc:
+          "Example title of a time someone else is busy at work, typed in lowercase on purpose, in the picture of a calendar, in the dialog that adds a room");
+
+  String get labelCalendarSampleGaming => Intl.message("Gaminggg",
+      name: "labelCalendarSampleGaming",
+      desc:
+          "Example event title, playing games, with the last letters repeated for fun, in the picture of a calendar, in the dialog that adds a room");
+
+  String get labelCalendarSampleBeachNight => Intl.message("Beach Night",
+      name: "labelCalendarSampleBeachNight",
+      desc:
+          "Example event title in the picture of a calendar, in the dialog that adds a room");
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -83,7 +121,7 @@ class CalendarCreatorDescription extends StatelessWidget {
                           buildFakeEvent(
                             width: width,
                             height: 100,
-                            text: "Movies",
+                            text: labelCalendarSampleMovies,
                             senderId: "@luna:example.com",
                           ),
                           SizedBox(
@@ -92,7 +130,7 @@ class CalendarCreatorDescription extends StatelessWidget {
                           buildFakeEvent(
                             width: width,
                             height: 100,
-                            text: "Unavailable",
+                            text: labelCalendarSampleUnavailable,
                             type: "unavailability",
                             senderId: "@pluto:example.com",
                           ),
@@ -102,7 +140,7 @@ class CalendarCreatorDescription extends StatelessWidget {
                           buildFakeEvent(
                             width: width,
                             height: 50,
-                            text: "Dinner",
+                            text: labelCalendarSampleDinner,
                             senderId: "@pluto:example.com",
                           )
                         ],
@@ -117,7 +155,7 @@ class CalendarCreatorDescription extends StatelessWidget {
                             width: width,
                             height: 250,
                             type: "unavailability",
-                            text: "Work",
+                            text: labelCalendarSampleWork,
                             senderId: "@luna:example.com"),
                       ],
                     ),
@@ -130,7 +168,7 @@ class CalendarCreatorDescription extends StatelessWidget {
                             width: width,
                             height: 150,
                             type: "unavailability",
-                            text: "work",
+                            text: labelCalendarSampleWorkLowercase,
                             senderId: "@pluto:example.com"),
                         SizedBox(
                           height: 40,
@@ -138,7 +176,7 @@ class CalendarCreatorDescription extends StatelessWidget {
                         buildFakeEvent(
                             width: width,
                             height: 70,
-                            text: "Gaminggg",
+                            text: labelCalendarSampleGaming,
                             senderId: "@pluto:example.com"),
                       ],
                     ),
@@ -150,7 +188,7 @@ class CalendarCreatorDescription extends StatelessWidget {
                         buildFakeEvent(
                             width: width,
                             height: 100,
-                            text: "Beach Night",
+                            text: labelCalendarSampleBeachNight,
                             senderId: "@luna:example.com"),
                       ],
                     ),

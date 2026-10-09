@@ -21,12 +21,14 @@ import 'package:rooster/ui/organisms/dj/dj_member_ui.dart';
 import 'package:rooster/ui/molecules/desktop_app_notice.dart';
 import 'package:rooster/ui/organisms/dj/dj_prompts.dart';
 import 'package:rooster/ui/organisms/dj/vinyl_disc.dart';
+import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/links/link_utils.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 /// "3:07", "1:02:45".
@@ -83,6 +85,15 @@ class DjBoothPanel extends StatelessWidget {
   final DjSession dj;
   final VoidCallback? onClose;
 
+  static String get labelDjBoothTitle => Intl.message("DJ Booth",
+      name: "labelDjBoothTitle",
+      desc: "Title of the DJ booth panel in a call: music everyone in the "
+          "call hears, played by one of them, the DJ");
+
+  static String get tooltipDjCloseBooth => Intl.message("Close the booth",
+      name: "tooltipDjCloseBooth",
+      desc: "Tooltip on the button that closes the DJ booth panel");
+
   Member _member(String userId) =>
       session.client.getRoom(session.roomId)!.getMemberOrFallback(userId);
 
@@ -121,10 +132,10 @@ class DjBoothPanel extends StatelessWidget {
         children: [
           VinylDisc(size: 20, spinning: dj.isPlaying && !dj.isBuffering),
           const SizedBox(width: 10),
-          const Expanded(child: tiamat.Text.largeTitle('DJ Booth')),
+          Expanded(child: tiamat.Text.largeTitle(labelDjBoothTitle)),
           if (onClose != null)
             IconButton(
-              tooltip: 'Close the booth',
+              tooltip: tooltipDjCloseBooth,
               icon: const Icon(Icons.close_rounded, size: 20),
               onPressed: onClose,
             ),
@@ -139,6 +150,32 @@ class _Vacant extends StatelessWidget {
 
   final DjSession dj;
 
+  static String get labelDjDecksFree => Intl.message("The decks are free",
+      name: "labelDjDecksFree",
+      desc: "Title of the DJ booth while nobody is the DJ (\"the decks\" are "
+          "the DJ's controls)");
+
+  static String labelDjLeftoverSongs(int howMany) => Intl.plural(howMany,
+      one: "Pick up where the last DJ left off: 1 song waiting.",
+      other: "Pick up where the last DJ left off: $howMany songs waiting.",
+      name: "labelDjLeftoverSongs",
+      args: [howMany],
+      desc: "In the DJ booth while nobody is the DJ, when the last DJ left "
+          "songs in the queue; the number is how many");
+
+  static String get labelDjVacantDescription => Intl.message(
+      "Play music everyone in the call hears at the same time. Each listener "
+      "sets their own volume.",
+      name: "labelDjVacantDescription",
+      desc: "Explains the DJ booth while nobody is the DJ and nothing is "
+          "queued");
+
+  static String get promptDjTakeDecksToPlay =>
+      Intl.message("Take the decks to play music",
+          name: "promptDjTakeDecksToPlay",
+          desc: "Button in the DJ booth while nobody is the DJ: makes the user "
+              "the DJ");
+
   @override
   Widget build(BuildContext context) {
     final leftover = dj.current != null || dj.queue.isNotEmpty;
@@ -152,19 +189,14 @@ class _Vacant extends StatelessWidget {
           children: [
             const VinylDisc(size: 120, spinning: false),
             const SizedBox(height: 4),
-            const tiamat.Text.largeTitle('The decks are free'),
+            tiamat.Text.largeTitle(labelDjDecksFree),
             tiamat.Text.labelLow(
-              leftover
-                  ? 'Pick up where the last DJ left off: $count '
-                      '${count == 1 ? 'song' : 'songs'} waiting.'
-                  : 'Play music everyone in the call hears at the same time. '
-                      'Each listener sets their own volume.',
+              leftover ? labelDjLeftoverSongs(count) : labelDjVacantDescription,
             ),
             const SizedBox(height: 4),
             if (dj.caps.canDj)
               tiamat.Button(
-                  text: 'Take the decks to play music',
-                  onTap: () => dj.becomeDj())
+                  text: promptDjTakeDecksToPlay, onTap: () => dj.becomeDj())
             else
               const DjDesktopOnlyNote(),
           ],
@@ -177,12 +209,17 @@ class _Vacant extends StatelessWidget {
 class DjDesktopOnlyNote extends StatelessWidget {
   const DjDesktopOnlyNote({super.key});
 
+  static String get labelDjDesktopOnlyNote => Intl.message(
+      "🎧 Want the aux? Play YouTube, SoundCloud or your own tracks for the "
+      "whole call from the desktop app. Until then, enjoy the set from here.",
+      name: "labelDjDesktopOnlyNote",
+      desc: "In the DJ booth of an app that can't be the DJ (web, phones): "
+          "being the DJ needs the desktop app. A link to download it "
+          "follows");
+
   @override
   Widget build(BuildContext context) {
-    return const DesktopAppNotice(
-        '🎧 Want the aux? Play YouTube, SoundCloud or your own tracks for the '
-        'whole call from the desktop app. Until then, enjoy the set from '
-        'here.');
+    return DesktopAppNotice(labelDjDesktopOnlyNote);
   }
 }
 
@@ -195,6 +232,44 @@ class _Booth extends StatelessWidget {
   final VoipSession session;
   final DjSession dj;
   final Member Function(String userId) memberOf;
+
+  static String get labelDjAskedHowTo => Intl.message(
+      "You asked for the decks. Once the DJ passes them to you, you can add "
+      "music.",
+      name: "labelDjAskedHowTo",
+      desc: "In the DJ booth, to someone who asked the DJ to pass them the "
+          "booth (\"the decks\")");
+
+  static String get labelDjHowToStart => Intl.message(
+      "Want to play music? Ask for the decks above; the DJ can pass them to "
+      "you.",
+      name: "labelDjHowToStart",
+      desc: "In the DJ booth, to a listener: how to become the DJ (\"Ask for "
+          "the decks\" is the button above)");
+
+  static String get labelDjQueueEmptyDj =>
+      Intl.message("Songs you add line up here. Drag them to reorder.",
+          name: "labelDjQueueEmptyDj",
+          desc: "In the DJ booth's empty queue, to the DJ");
+
+  static String get labelDjQueueEmpty => Intl.message("Nothing queued.",
+      name: "labelDjQueueEmpty",
+      desc: "In the DJ booth's empty queue, to listeners");
+
+  static String labelDjHandingOverLocked(String name) => Intl.message(
+      "Handing the decks to $name. The music keeps playing; the queue is "
+      "locked until they take over.",
+      name: "labelDjHandingOverLocked",
+      args: [name],
+      desc: "In the DJ booth, to the DJ, while the booth is being passed to "
+          "someone (the placeholder)");
+
+  static String labelDjHandingOver(String name) => Intl.message(
+      "Handing the decks to $name…",
+      name: "labelDjHandingOver",
+      args: [name],
+      desc: "In the DJ booth, to listeners, while the DJ passes the booth to "
+          "someone (the placeholder)");
 
   /// Editing is the DJ's, and stops while the decks change hands.
   bool get editable => dj.isDj && dj.passTarget == null;
@@ -230,11 +305,8 @@ class _Booth extends StatelessWidget {
             key: const ValueKey('how-to-start'),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: tiamat.Text.labelLow(dj.hasRequested
-                  ? 'You asked for the decks. Once the DJ passes them to '
-                      'you, you can add music.'
-                  : 'Want to play music? Ask for the decks above; the DJ '
-                      'can pass them to you.'),
+              child: tiamat.Text.labelLow(
+                  dj.hasRequested ? labelDjAskedHowTo : labelDjHowToStart),
             ),
           ),
         if (dj.isDj && dj.requests.isNotEmpty)
@@ -250,9 +322,8 @@ class _Booth extends StatelessWidget {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-              child: tiamat.Text.labelLow(dj.isDj
-                  ? 'Songs you add line up here. Drag them to reorder.'
-                  : 'Nothing queued.'),
+              child: tiamat.Text.labelLow(
+                  dj.isDj ? labelDjQueueEmptyDj : labelDjQueueEmpty),
             ),
           )
         else if (editable)
@@ -307,14 +378,13 @@ class _Booth extends StatelessWidget {
                   child: CircularProgressIndicator(strokeWidth: 2)),
               Expanded(
                 child: tiamat.Text.labelLow(dj.isDj
-                    ? 'Handing the decks to ${member.displayName}. The music '
-                        'keeps playing; the queue is locked until they take '
-                        'over.'
-                    : 'Handing the decks to ${member.displayName}…'),
+                    ? labelDjHandingOverLocked(member.displayName)
+                    : labelDjHandingOver(member.displayName)),
               ),
               if (dj.isDj)
                 TextButton(
-                    onPressed: dj.cancelPass, child: const Text('Cancel')),
+                    onPressed: dj.cancelPass,
+                    child: Text(CommonStrings.promptCancel)),
             ],
           ),
         ),
@@ -329,26 +399,62 @@ class _DjStrip extends StatelessWidget {
   final DjSession dj;
   final Member Function(String userId) memberOf;
 
+  static String labelDjHandingYou(String name) =>
+      Intl.message("$name is handing you the decks…",
+          name: "labelDjHandingYou",
+          args: [name],
+          desc: "Top of the DJ booth while the DJ (the placeholder) passes the "
+              "booth to the user");
+
+  static String get labelDjGettingReady =>
+      Intl.message("Getting the decks ready…",
+          name: "labelDjGettingReady",
+          desc: "Top of the DJ booth while the user's app gets ready to be the "
+              "DJ");
+
+  static String get labelDjYouOnDecks => Intl.message("You're on the decks",
+      name: "labelDjYouOnDecks",
+      desc: "Top of the DJ booth when the user is the DJ");
+
+  static String labelDjOnDecks(String name) =>
+      Intl.message("$name is on the decks",
+          name: "labelDjOnDecks",
+          args: [name],
+          desc: "Top of the DJ booth: who the DJ is (the placeholder)");
+
+  static String get promptDjAskedCancel => Intl.message("✋ Asked · Cancel",
+      name: "promptDjAskedCancel",
+      desc: "Button at the top of the DJ booth after the user asked to "
+          "become the DJ: shows they asked, and takes the request back");
+
+  static String get promptDjAskForDecks => Intl.message("Ask for the decks",
+      name: "promptDjAskForDecks",
+      desc: "Button at the top of the DJ booth: asks the DJ to pass the "
+          "booth (\"the decks\") to the user");
+
   @override
   Widget build(BuildContext context) {
     final member = memberOf(dj.djUserId ?? dj.selfUserId);
     final you = dj.isDj || dj.djIdentity == dj.selfIdentity;
     final String line;
     if (dj.isJoining && dj.djIdentity != dj.selfIdentity) {
-      line = '${member.displayName} is handing you the decks…';
+      line = labelDjHandingYou(member.displayName);
     } else if (dj.isJoining) {
-      line = 'Getting the decks ready…';
+      line = labelDjGettingReady;
     } else {
-      line =
-          you ? "You're on the decks" : '${member.displayName} is on the decks';
+      line = you ? labelDjYouOnDecks : labelDjOnDecks(member.displayName);
     }
+
+    // On one line: a label too long for the row is cut short (see below).
+    Widget label(String text) =>
+        Text(text, maxLines: 1, overflow: TextOverflow.ellipsis);
 
     Widget? action;
     if (dj.isDj) {
       action = TextButton.icon(
         onPressed: () => dj.stopDjing(),
         icon: const Icon(Icons.logout_rounded, size: 16),
-        label: const Text('Stop DJing'),
+        label: label(promptDjStopDjing),
       );
     } else if (dj.isJoining) {
       action = Row(
@@ -357,28 +463,33 @@ class _DjStrip extends StatelessWidget {
           const SizedBox.square(
               dimension: 18, child: CircularProgressIndicator(strokeWidth: 2)),
           if (dj.djIdentity != dj.selfIdentity)
-            TextButton(
-                onPressed: () => dj.stopDjing(),
-                child: const Text('No thanks')),
+            Flexible(
+              child: TextButton(
+                  onPressed: () => dj.stopDjing(),
+                  child: label(CommonStrings.promptPoliteNo)),
+            ),
         ],
       );
     } else if (dj.caps.canDj && dj.canTakeOver) {
-      action = TextButton.icon(
-        onPressed: () => dj.takeOver(),
-        icon: const Icon(Icons.album_rounded, size: 16),
-        label: Text(takeOverLabel),
+      action = Tooltip(
+        message: takeOverLabel,
+        child: TextButton.icon(
+          onPressed: () => dj.takeOver(),
+          icon: const Icon(Icons.album_rounded, size: 16),
+          label: label(takeOverLabel),
+        ),
       );
     } else if (dj.caps.canDj) {
       final away = dj.djAwayFor;
       action = dj.hasRequested
           ? TextButton(
               onPressed: () => dj.requestDj(false),
-              child: const Text('$djHandEmoji Asked · Cancel'),
+              child: label(promptDjAskedCancel),
             )
           : TextButton.icon(
               onPressed: () => dj.requestDj(true),
               icon: const Icon(Icons.back_hand_outlined, size: 16),
-              label: const Text('Ask for the decks'),
+              label: label(promptDjAskForDecks),
             );
       if (away != null) {
         action = Tooltip(
@@ -386,33 +497,43 @@ class _DjStrip extends StatelessWidget {
       }
     }
 
+    final trailing = action;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 8, 0),
-      child: Row(
-        children: [
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              tiamat.Avatar(
-                  radius: 16,
-                  image: member.avatar,
-                  placeholderColor: member.defaultColor,
-                  placeholderText: member.displayName),
-              Positioned(
-                right: -4,
-                bottom: -4,
-                child: VinylDisc(
-                    size: 16, spinning: dj.isPlaying && !dj.isBuffering),
+      child: LayoutBuilder(
+        builder: (context, constraints) => Row(
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                tiamat.Avatar(
+                    radius: 16,
+                    image: member.avatar,
+                    placeholderColor: member.defaultColor,
+                    placeholderText: member.displayName),
+                Positioned(
+                  right: -4,
+                  bottom: -4,
+                  child: VinylDisc(
+                      size: 16, spinning: dj.isPlaying && !dj.isBuffering),
+                ),
+              ],
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: tiamat.Text.labelEmphasised(line,
+                  overflow: TextOverflow.ellipsis),
+            ),
+            // A long label (a longer language, the take-over one) is cut
+            // short rather than pushing the row past the booth's edge.
+            if (trailing != null)
+              ConstrainedBox(
+                constraints:
+                    BoxConstraints(maxWidth: constraints.maxWidth * 0.6),
+                child: trailing,
               ),
-            ],
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: tiamat.Text.labelEmphasised(line,
-                overflow: TextOverflow.ellipsis),
-          ),
-          if (action != null) action,
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -423,6 +544,17 @@ class _Requests extends StatelessWidget {
 
   final DjSession dj;
   final Member Function(String userId) memberOf;
+
+  static String get labelDjAskingForDecks => Intl.message(
+      "✋ Asking for the decks",
+      name: "labelDjAskingForDecks",
+      desc: "Heading, in the DJ's booth, of the list of people who asked to "
+          "become the DJ");
+
+  static String get promptDjPassDecks => Intl.message("Pass the decks",
+      name: "promptDjPassDecks",
+      desc: "Button next to someone who asked to become the DJ: passes them "
+          "the DJ booth");
 
   @override
   Widget build(BuildContext context) {
@@ -439,28 +571,42 @@ class _Requests extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             spacing: 4,
             children: [
-              const tiamat.Text.labelLow('$djHandEmoji Asking for the decks'),
+              tiamat.Text.labelLow(labelDjAskingForDecks),
               for (final identity in dj.requests)
                 Builder(builder: (context) {
                   final member = memberOf(djUserIdOf(identity));
                   final canPass = dj.passTarget == null &&
                       dj.capsOf(identity)?.canDj == true;
-                  return Row(
-                    spacing: 10,
-                    children: [
-                      tiamat.Avatar(
-                          radius: 12,
-                          image: member.avatar,
-                          placeholderColor: member.defaultColor,
-                          placeholderText: member.displayName),
-                      Expanded(
-                          child: tiamat.Text.label(member.displayName,
-                              overflow: TextOverflow.ellipsis)),
-                      TextButton(
-                        onPressed: canPass ? () => dj.passTo(identity) : null,
-                        child: const Text('Pass the decks'),
-                      ),
-                    ],
+                  return LayoutBuilder(
+                    builder: (context, constraints) => Row(
+                      spacing: 10,
+                      children: [
+                        tiamat.Avatar(
+                            radius: 12,
+                            image: member.avatar,
+                            placeholderColor: member.defaultColor,
+                            placeholderText: member.displayName),
+                        Expanded(
+                            child: tiamat.Text.label(member.displayName,
+                                overflow: TextOverflow.ellipsis)),
+                        // Half the row at most, cut short with its whole
+                        // label in the tooltip: a longer language's label
+                        // ran past the booth's edge.
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                              maxWidth: constraints.maxWidth / 2),
+                          child: Tooltip(
+                            message: promptDjPassDecks,
+                            child: TextButton(
+                              onPressed:
+                                  canPass ? () => dj.passTo(identity) : null,
+                              child: Text(promptDjPassDecks,
+                                  maxLines: 1, overflow: TextOverflow.ellipsis),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   );
                 }),
             ],
@@ -478,6 +624,45 @@ class _NowPlaying extends StatefulWidget {
 
   final VoipSession session;
   final DjSession dj;
+
+  static String get labelDjIdleDj => Intl.message(
+      "Nothing on the decks. Paste a link below to start the music.",
+      name: "labelDjIdleDj",
+      desc: "In the DJ booth, to the DJ, while no song plays");
+
+  static String get labelDjIdleListener => Intl.message("Nothing playing yet.",
+      name: "labelDjIdleListener",
+      desc: "In the DJ booth, to listeners, while no song plays");
+
+  static String get labelDjSongPaused => Intl.message("Paused",
+      name: "labelDjSongPaused",
+      desc: "Under the song in the DJ booth while the DJ has paused it");
+
+  static String get tooltipDjRestart => Intl.message("Back to the start",
+      name: "tooltipDjRestart",
+      desc: "Tooltip on the DJ's button that plays the song from its start");
+
+  static String get tooltipDjPauseForEveryone =>
+      Intl.message("Pause for everyone",
+          name: "tooltipDjPauseForEveryone",
+          desc: "Tooltip on the DJ's pause button: the music pauses for the "
+              "whole call");
+
+  static String get tooltipDjStopNothingNext =>
+      Intl.message("Stop (nothing next)",
+          name: "tooltipDjStopNothingNext",
+          desc: "Tooltip on the DJ's next-song button when the queue is empty: "
+              "it stops the music");
+
+  static String get tooltipDjNextSong => Intl.message("Next song",
+      name: "tooltipDjNextSong",
+      desc: "Tooltip on the DJ's button that plays the next song in the "
+          "queue");
+
+  static String get promptDjOpenSongPage => Intl.message("Open the song page",
+      name: "promptDjOpenSongPage",
+      desc: "Button and menu entry in the DJ booth that opens the web page a "
+          "song came from");
 
   @override
   State<_NowPlaying> createState() => _NowPlayingState();
@@ -535,9 +720,8 @@ class _NowPlayingState extends State<_NowPlaying> {
             const VinylDisc(size: 56, spinning: false),
             Expanded(
               child: tiamat.Text.labelLow(dj.isDj
-                  ? 'Nothing on the decks. Paste a link below to start the '
-                      'music.'
-                  : 'Nothing playing yet.'),
+                  ? _NowPlaying.labelDjIdleDj
+                  : _NowPlaying.labelDjIdleListener),
             ),
           ],
         ),
@@ -574,9 +758,15 @@ class _NowPlayingState extends State<_NowPlaying> {
                     children: [
                       DjSourceChip(track.kind),
                       if (dj.isBuffering)
-                        const tiamat.Text.tiny('Loading…')
+                        Flexible(
+                          child: tiamat.Text.tiny(CommonStrings.labelLoading,
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                        )
                       else if (!dj.isPlaying)
-                        const tiamat.Text.tiny('Paused'),
+                        Flexible(
+                          child: tiamat.Text.tiny(_NowPlaying.labelDjSongPaused,
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
                     ],
                   ),
                 ],
@@ -623,14 +813,16 @@ class _NowPlayingState extends State<_NowPlaying> {
           children: [
             if (dj.isDj) ...[
               IconButton(
-                tooltip: 'Back to the start',
+                tooltip: _NowPlaying.tooltipDjRestart,
                 icon: const Icon(Icons.replay_rounded),
                 onPressed:
                     controls && !dj.isBuffering ? () => dj.seek(0) : null,
               ),
               IconButton.filled(
                 style: filledIconButtonStyle(context),
-                tooltip: dj.isPlaying ? 'Pause for everyone' : 'Play',
+                tooltip: dj.isPlaying
+                    ? _NowPlaying.tooltipDjPauseForEveryone
+                    : CommonStrings.promptPlay,
                 iconSize: 28,
                 icon: Icon(dj.isPlaying
                     ? Icons.pause_rounded
@@ -638,7 +830,9 @@ class _NowPlayingState extends State<_NowPlaying> {
                 onPressed: controls ? dj.togglePause : null,
               ),
               IconButton(
-                tooltip: dj.queue.isEmpty ? 'Stop (nothing next)' : 'Next song',
+                tooltip: dj.queue.isEmpty
+                    ? _NowPlaying.tooltipDjStopNothingNext
+                    : _NowPlaying.tooltipDjNextSong,
                 icon: const Icon(Icons.skip_next_rounded),
                 onPressed: controls ? dj.skip : null,
               ),
@@ -646,7 +840,7 @@ class _NowPlayingState extends State<_NowPlaying> {
             const Spacer(),
             if (track.pageUrl case final page?)
               IconButton(
-                tooltip: 'Open the song page',
+                tooltip: _NowPlaying.promptDjOpenSongPage,
                 icon: const Icon(Icons.open_in_new_rounded, size: 18),
                 onPressed: () =>
                     LinkUtils.open(Uri.parse(page), context: context),
@@ -777,9 +971,18 @@ class DjSourceChip extends StatelessWidget {
     return _palette[hash % _palette.length];
   }
 
+  static String get labelDjSourceFile => Intl.message("File",
+      name: "labelDjSourceFile",
+      desc: "Tag on a song in the DJ booth that plays from a file on the "
+          "DJ's computer");
+
+  static String get labelDjSourceLink => Intl.message("Link",
+      name: "labelDjSourceLink",
+      desc: "Tag on a song in the DJ booth that plays from a link");
+
   static String nameOf(String kind) {
-    if (kind == DjTrack.fileKind) return 'File';
-    if (kind == DjTrack.linkKind) return 'Link';
+    if (kind == DjTrack.fileKind) return labelDjSourceFile;
+    if (kind == DjTrack.linkKind) return labelDjSourceLink;
     // Clients from before extensions sent lowercase names.
     return kind == kind.toLowerCase()
         ? kind[0].toUpperCase() + kind.substring(1)
@@ -817,6 +1020,23 @@ class DjMusicVolume extends StatefulWidget {
 
   final VoipSession session;
   final double? width;
+
+  static String tooltipDjMusicVolume(int percent) => Intl.message(
+      "Music volume, only for you ($percent%)",
+      name: "tooltipDjMusicVolume",
+      args: [percent],
+      desc: "Tooltip on the DJ booth's music volume slider, which only "
+          "changes what the user hears; the number is the level in percent");
+
+  static String get tooltipDjUnmuteMusic => Intl.message("Unmute the music",
+      name: "tooltipDjUnmuteMusic",
+      desc: "Tooltip on the button that brings back the DJ booth's music for "
+          "the user");
+
+  static String get tooltipDjMuteMusic => Intl.message("Mute the music for you",
+      name: "tooltipDjMuteMusic",
+      desc: "Tooltip on the button that mutes the DJ booth's music for the "
+          "user only");
 
   @override
   State<DjMusicVolume> createState() => _DjMusicVolumeState();
@@ -870,7 +1090,7 @@ class _DjMusicVolumeState extends State<DjMusicVolume> {
         .clamp(0.0, maxDjMusicVolume);
     final fill = widget.width == null;
     final slider = Tooltip(
-      message: 'Music volume, only for you (${(volume * 100).round()}%)',
+      message: DjMusicVolume.tooltipDjMusicVolume((volume * 100).round()),
       child: SliderTheme(
         data: SliderTheme.of(context).copyWith(
           trackHeight: 5,
@@ -893,7 +1113,9 @@ class _DjMusicVolumeState extends State<DjMusicVolume> {
       mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
       children: [
         IconButton(
-          tooltip: volume == 0 ? 'Unmute the music' : 'Mute the music for you',
+          tooltip: volume == 0
+              ? DjMusicVolume.tooltipDjUnmuteMusic
+              : DjMusicVolume.tooltipDjMuteMusic,
           icon: Icon(
             volume == 0
                 ? Icons.volume_off_rounded
@@ -951,6 +1173,10 @@ class _BoothDrop extends StatefulWidget {
   final DjSession dj;
   final Widget child;
 
+  static String get labelDjDropSongs => Intl.message("Drop songs to queue them",
+      name: "labelDjDropSongs",
+      desc: "Over the DJ booth while the DJ drags audio files onto it");
+
   @override
   State<_BoothDrop> createState() => _BoothDropState();
 }
@@ -995,9 +1221,9 @@ class _BoothDropState extends State<_BoothDrop> {
                     border: Border.all(color: scheme.primary, width: 2),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Center(
+                  child: Center(
                       child:
-                          tiamat.Text.largeTitle('Drop songs to queue them')),
+                          tiamat.Text.largeTitle(_BoothDrop.labelDjDropSongs)),
                 ),
               ),
             ),
@@ -1013,6 +1239,101 @@ class _AddBar extends StatefulWidget {
 
   final DjSession dj;
   final bool enabled;
+
+  static String get labelDjAddSongsDialogTitle =>
+      Intl.message("Add songs from this computer",
+          name: "labelDjAddSongsDialogTitle",
+          desc: "Title of the file chooser that adds audio files to the DJ "
+              "booth's queue");
+
+  static String labelDjLinkCount(int howMany) => Intl.plural(howMany,
+      one: "1 link",
+      other: "$howMany links",
+      name: "labelDjLinkCount",
+      args: [howMany],
+      desc: "Under the DJ booth's box for links: how many links were pasted");
+
+  static String labelDjNoSourceForHost(String host) =>
+      Intl.message("No installed source plays links from $host",
+          name: "labelDjNoSourceForHost",
+          args: [host],
+          desc: "Under the DJ booth's box for links: no installed source "
+              "extension takes links from that site (the placeholder)");
+
+  static String labelDjPlayedBy(String source) =>
+      Intl.message("Played by $source",
+          name: "labelDjPlayedBy",
+          args: [source],
+          desc: "Under the DJ booth's box for links: what will play the pasted "
+              "link, usually the name of a source extension");
+
+  static String get labelDjAddLocked => Intl.message(
+      "Locked while the decks change hands",
+      name: "labelDjAddLocked",
+      desc: "Placeholder of the DJ booth's box for links while the booth is "
+          "being passed to someone else");
+
+  static String get labelDjAddHintLinks =>
+      Intl.message("Paste a link or drop files",
+          name: "labelDjAddHintLinks",
+          desc: "Placeholder of the DJ booth's box for links, with a source "
+              "extension installed");
+
+  static String get labelDjAddHintFiles =>
+      Intl.message("Drop songs here, or choose files",
+          name: "labelDjAddHintFiles",
+          desc: "Placeholder of the DJ booth's box for links, with no source "
+              "extension installed (only audio files can be added)");
+
+  static String get promptDjChooseFiles => Intl.message("Choose files…",
+      name: "promptDjChooseFiles",
+      desc: "Button in the DJ booth that picks audio files to queue");
+
+  static String get tooltipDjPlayNext => Intl.message("Play next (Shift+Enter)",
+      name: "tooltipDjPlayNext",
+      desc: "Tooltip on the DJ booth's button that queues the pasted link "
+          "first; Shift+Enter is its keyboard shortcut");
+
+  static String get tooltipDjAddMusicEmpty =>
+      Intl.message("Paste a link above, or pick songs from this computer",
+          name: "tooltipDjAddMusicEmpty",
+          desc: "Tooltip on the DJ booth's Add music button while no link is "
+              "pasted: it then picks files");
+
+  static String get tooltipDjAddToQueue => Intl.message(
+      "Add to the queue (Enter)",
+      name: "tooltipDjAddToQueue",
+      desc: "Tooltip on the DJ booth's Add music button with a link pasted; "
+          "Enter is its keyboard shortcut");
+
+  static String get promptDjAddMusic => Intl.message("Add music",
+      name: "promptDjAddMusic",
+      desc: "Button in the DJ booth that queues the pasted link, or picks "
+          "audio files");
+
+  static String get promptDjAddAnotherSource => Intl.message(
+      "Add another music source…",
+      name: "promptDjAddAnotherSource",
+      desc: "Button in the DJ booth that installs one more source extension "
+          "(what lets the booth play links from a site)");
+
+  static String get promptDjAddSource => Intl.message("Add a music source…",
+      name: "promptDjAddSource",
+      desc: "Button in the DJ booth that installs a source extension (what "
+          "lets the booth play links from a site)");
+
+  static String labelDjAddingLink(String link) => Intl.message("Adding $link",
+      name: "labelDjAddingLink",
+      args: [link],
+      desc: "In the DJ booth while a pasted link (the placeholder) is looked "
+          "up to be queued");
+
+  static String labelDjAddingLinks(int howMany) => Intl.plural(howMany,
+      one: "Adding 1 link…",
+      other: "Adding $howMany links…",
+      name: "labelDjAddingLinks",
+      args: [howMany],
+      desc: "In the DJ booth while pasted links are looked up to be queued");
 
   @override
   State<_AddBar> createState() => _AddBarState();
@@ -1062,7 +1383,7 @@ class _AddBarState extends State<_AddBar> {
 
   Future<void> _addFiles() async {
     final result = await FilePicker.platform.pickFiles(
-      dialogTitle: 'Add songs from this computer',
+      dialogTitle: _AddBar.labelDjAddSongsDialogTitle,
       allowMultiple: true,
       type: FileType.custom,
       allowedExtensions: DjPlatform.audioFileExtensions,
@@ -1089,12 +1410,12 @@ class _AddBarState extends State<_AddBar> {
   void _primary() => _links.isEmpty ? _addFiles() : _add();
 
   String _describe(List<DjLink> links) {
-    if (links.length > 1) return '${links.length} links';
+    if (links.length > 1) return _AddBar.labelDjLinkCount(links.length);
     final link = links.single;
     final source = widget.dj.resolver?.sourceFor(link);
     return source == null
-        ? 'No installed source plays links from ${link.host}'
-        : 'Played by $source';
+        ? _AddBar.labelDjNoSourceForHost(link.host)
+        : _AddBar.labelDjPlayedBy(source);
   }
 
   @override
@@ -1103,11 +1424,11 @@ class _AddBarState extends State<_AddBar> {
     final pending = widget.dj.pendingAdds;
     final canAdd = widget.enabled && _links.isNotEmpty;
     final hint = !widget.enabled
-        ? 'Locked while the decks change hands'
+        ? _AddBar.labelDjAddLocked
         : widget.dj.resolver?.hint ??
             (_hasSources
-                ? 'Paste a link or drop files'
-                : 'Drop songs here, or choose files');
+                ? _AddBar.labelDjAddHintLinks
+                : _AddBar.labelDjAddHintFiles);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 6,
@@ -1148,22 +1469,27 @@ class _AddBarState extends State<_AddBar> {
             OutlinedButton.icon(
               onPressed: widget.enabled ? _addFiles : null,
               icon: const Icon(Icons.audio_file_outlined, size: 18),
-              label: const Text('Choose files…'),
+              label: Text(_AddBar.promptDjChooseFiles),
             ),
             Row(mainAxisSize: MainAxisSize.min, children: [
               IconButton(
-                tooltip: 'Play next (Shift+Enter)',
+                tooltip: _AddBar.tooltipDjPlayNext,
                 icon: const Icon(Icons.low_priority_rounded, size: 20),
                 onPressed: canAdd ? () => _add(next: true) : null,
               ),
-              Tooltip(
-                message: _links.isEmpty
-                    ? 'Paste a link above, or pick songs from this computer'
-                    : 'Add to the queue (Enter)',
-                child: FilledButton.icon(
-                  onPressed: widget.enabled ? _primary : null,
-                  icon: const Icon(Icons.playlist_add_rounded, size: 20),
-                  label: const Text('Add music'),
+              // Its label is cut short rather than running past the booth's
+              // edge in a longer language.
+              Flexible(
+                child: Tooltip(
+                  message: _links.isEmpty
+                      ? _AddBar.tooltipDjAddMusicEmpty
+                      : _AddBar.tooltipDjAddToQueue,
+                  child: FilledButton.icon(
+                    onPressed: widget.enabled ? _primary : null,
+                    icon: const Icon(Icons.playlist_add_rounded, size: 20),
+                    label: Text(_AddBar.promptDjAddMusic,
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ),
                 ),
               ),
             ]),
@@ -1181,8 +1507,8 @@ class _AddBarState extends State<_AddBar> {
             child: TextButton.icon(
               icon: const Icon(Icons.extension_outlined, size: 16),
               label: Text(_hasSources
-                  ? 'Add another music source…'
-                  : 'Add a music source…'),
+                  ? _AddBar.promptDjAddAnotherSource
+                  : _AddBar.promptDjAddSource),
               onPressed: () => installDjSource(context),
             ),
           ),
@@ -1197,8 +1523,8 @@ class _AddBarState extends State<_AddBar> {
               Expanded(
                 child: tiamat.Text.tiny(
                     pending.length == 1
-                        ? 'Adding ${pending.single.link.url}'
-                        : 'Adding ${pending.length} links…',
+                        ? _AddBar.labelDjAddingLink(pending.single.link.url)
+                        : _AddBar.labelDjAddingLinks(pending.length),
                     overflow: TextOverflow.ellipsis),
               ),
             ],
@@ -1214,6 +1540,45 @@ class _QueueHeader extends StatelessWidget {
   final DjSession dj;
   final bool editable;
 
+  static String get labelDjUpNext => Intl.message("Up next",
+      name: "labelDjUpNext",
+      desc: "Heading of the DJ booth's queue while it is empty");
+
+  static String labelDjUpNextSongs(int howMany) => Intl.plural(howMany,
+      one: "Up next · 1 song",
+      other: "Up next · $howMany songs",
+      name: "labelDjUpNextSongs",
+      args: [howMany],
+      desc: "Heading of the DJ booth's queue: how many songs it holds");
+
+  static String labelDjUpNextSongsTime(int howMany, String time) =>
+      Intl.plural(howMany,
+          one: "Up next · 1 song · $time",
+          other: "Up next · $howMany songs · $time",
+          name: "labelDjUpNextSongsTime",
+          args: [howMany, time],
+          desc: "Heading of the DJ booth's queue: how many songs it holds "
+              "and how long they play, like 1:02:45");
+
+  static String get tooltipDjShuffle => Intl.message("Shuffle",
+      name: "tooltipDjShuffle",
+      desc: "Tooltip on the DJ's button that shuffles the queue");
+
+  static String get tooltipDjClearQueue => Intl.message("Clear the queue",
+      name: "tooltipDjClearQueue",
+      desc: "Tooltip on the DJ's button that empties the queue");
+
+  static String get labelDjClearQueueTitle => Intl.message("Clear the queue?",
+      name: "labelDjClearQueueTitle",
+      desc: "Title of the window asking the DJ whether to empty the queue");
+
+  static String labelDjClearQueuePrompt(int howMany) => Intl.plural(howMany,
+      one: "Removes 1 song. The one playing keeps playing.",
+      other: "Removes $howMany songs. The one playing keeps playing.",
+      name: "labelDjClearQueuePrompt",
+      args: [howMany],
+      desc: "In the window asking the DJ whether to empty the queue");
+
   @override
   Widget build(BuildContext context) {
     final queue = dj.queue;
@@ -1224,28 +1589,27 @@ class _QueueHeader extends StatelessWidget {
         children: [
           Expanded(
             child: tiamat.Text.labelLow(queue.isEmpty
-                ? 'Up next'
-                : 'Up next · ${queue.length} '
-                    '${queue.length == 1 ? 'song' : 'songs'}'
-                    '${total > 0 ? ' · ${formatDjTime(total)}' : ''}'),
+                ? labelDjUpNext
+                : total > 0
+                    ? labelDjUpNextSongsTime(queue.length, formatDjTime(total))
+                    : labelDjUpNextSongs(queue.length)),
           ),
           if (editable && queue.length > 1)
             IconButton(
-              tooltip: 'Shuffle',
+              tooltip: tooltipDjShuffle,
               icon: const Icon(Icons.shuffle_rounded, size: 18),
               onPressed: dj.shuffle,
             ),
           if (editable && queue.isNotEmpty)
             IconButton(
-              tooltip: 'Clear the queue',
+              tooltip: tooltipDjClearQueue,
               icon: const Icon(Icons.clear_all_rounded, size: 20),
               onPressed: () async {
                 final yes = await AdaptiveDialog.confirmation(context,
-                    title: 'Clear the queue?',
-                    prompt: 'Removes ${queue.length} songs. The one playing '
-                        'keeps playing.',
-                    confirmationText: 'Clear',
-                    cancelText: 'Keep',
+                    title: labelDjClearQueueTitle,
+                    prompt: labelDjClearQueuePrompt(queue.length),
+                    confirmationText: CommonStrings.promptClear,
+                    cancelText: promptDjKeep,
                     dangerous: true);
                 if (yes == true) dj.clearQueue();
               },
@@ -1272,6 +1636,26 @@ class _QueueRow extends StatefulWidget {
   final bool editable;
   final Member addedBy;
 
+  static String get promptDjPlayNow => Intl.message("Play now",
+      name: "promptDjPlayNow",
+      desc: "Menu entry on a song in the DJ booth's queue: plays it at once");
+
+  static String get promptDjPlayNext => Intl.message("Play next",
+      name: "promptDjPlayNext",
+      desc: "Menu entry on a song in the DJ booth's queue: moves it to the "
+          "top of the queue");
+
+  static String get tooltipDjDragToReorder => Intl.message("Drag to reorder",
+      name: "tooltipDjDragToReorder",
+      desc: "Tooltip on the handle that moves a song within the DJ booth's "
+          "queue");
+
+  static String labelDjAddedBy(String name) => Intl.message("added by $name",
+      name: "labelDjAddedBy",
+      args: [name],
+      desc: "Under a song in the DJ booth's queue: who queued it. Follows "
+          "the artist, after a dot");
+
   @override
   State<_QueueRow> createState() => _QueueRowState();
 }
@@ -1284,28 +1668,28 @@ class _QueueRowState extends State<_QueueRow> {
   List<tiamat.ContextMenuItem> _items(BuildContext context) => [
         if (widget.editable) ...[
           tiamat.ContextMenuItem(
-              text: 'Play now',
+              text: _QueueRow.promptDjPlayNow,
               icon: Icons.play_arrow_rounded,
               onPressed: () => widget.dj.playNow(track.id)),
           if (widget.index > 0)
             tiamat.ContextMenuItem(
-                text: 'Play next',
+                text: _QueueRow.promptDjPlayNext,
                 icon: Icons.low_priority_rounded,
                 onPressed: () => widget.dj.playNext(track.id)),
           tiamat.ContextMenuItem(
-              text: 'Edit',
+              text: CommonStrings.promptEdit,
               icon: Icons.edit_rounded,
               onPressed: () => editDjTrack(context, widget.dj, track)),
         ],
         if (track.pageUrl case final page?)
           tiamat.ContextMenuItem(
-              text: 'Open the song page',
+              text: _NowPlaying.promptDjOpenSongPage,
               icon: Icons.open_in_new_rounded,
               onPressed: () =>
                   LinkUtils.open(Uri.parse(page), context: context)),
         if (widget.editable)
           tiamat.ContextMenuItem(
-              text: 'Remove',
+              text: CommonStrings.promptRemove,
               icon: Icons.delete_outline_rounded,
               color: Theme.of(context).colorScheme.error,
               onPressed: () => widget.dj.remove(track.id)),
@@ -1326,7 +1710,7 @@ class _QueueRowState extends State<_QueueRow> {
                 child: MouseRegion(
                   cursor: SystemMouseCursors.grab,
                   child: Tooltip(
-                    message: 'Drag to reorder',
+                    message: _QueueRow.tooltipDjDragToReorder,
                     child: Icon(Icons.drag_indicator_rounded,
                         size: 18, color: scheme.outline),
                   ),
@@ -1362,7 +1746,8 @@ class _QueueRowState extends State<_QueueRow> {
                         child: tiamat.Text.tiny(
                           [
                             if (track.artist != null) track.artist!,
-                            'added by ${widget.addedBy.displayName}',
+                            _QueueRow.labelDjAddedBy(
+                                widget.addedBy.displayName),
                           ].join(' · '),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -1384,7 +1769,7 @@ class _QueueRowState extends State<_QueueRow> {
                   maintainAnimation: true,
                   maintainState: true,
                   child: IconButton(
-                    tooltip: 'Remove',
+                    tooltip: CommonStrings.promptRemove,
                     iconSize: 18,
                     padding: EdgeInsets.zero,
                     icon: const Icon(Icons.close_rounded),
@@ -1422,6 +1807,26 @@ class _EditTrackDialog extends StatefulWidget {
 
   final DjTrack track;
 
+  static String get labelDjEditSongTitle => Intl.message("Edit song",
+      name: "labelDjEditSongTitle",
+      desc: "Title of the window where the DJ changes a queued song's title "
+          "or link");
+
+  static String get labelDjSongTitleField => Intl.message("Title",
+      name: "labelDjSongTitleField",
+      desc: "Label of the box for a queued song's title, when the DJ edits "
+          "it");
+
+  static String get labelDjSongLinkField => Intl.message("Link",
+      name: "labelDjSongLinkField",
+      desc: "Label of the box for a queued song's link, when the DJ edits it");
+
+  static String get labelDjSongLinkHelper =>
+      Intl.message("Played by the music source that takes it",
+          name: "labelDjSongLinkHelper",
+          desc: "Under the box for a queued song's link: the source extension "
+              "that takes links from that site plays it");
+
   @override
   State<_EditTrackDialog> createState() => _EditTrackDialogState();
 }
@@ -1442,7 +1847,7 @@ class _EditTrackDialogState extends State<_EditTrackDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Edit song'),
+      title: Text(_EditTrackDialog.labelDjEditSongTitle),
       content: SizedBox(
         width: 420,
         child: Column(
@@ -1452,13 +1857,15 @@ class _EditTrackDialogState extends State<_EditTrackDialog> {
             TextField(
               controller: _title,
               maxLength: DjTrack.maxText,
-              decoration: const InputDecoration(labelText: 'Title'),
+              decoration: InputDecoration(
+                  labelText: _EditTrackDialog.labelDjSongTitleField),
             ),
             TextField(
               controller: _link,
-              decoration: const InputDecoration(
-                  labelText: 'Link',
-                  helperText: 'Played by the music source that takes it'),
+              decoration: InputDecoration(
+                  labelText: _EditTrackDialog.labelDjSongLinkField,
+                  helperText: _EditTrackDialog.labelDjSongLinkHelper,
+                  helperMaxLines: 3),
             ),
           ],
         ),
@@ -1466,10 +1873,10 @@ class _EditTrackDialogState extends State<_EditTrackDialog> {
       actions: [
         TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
+            child: Text(CommonStrings.promptCancel)),
         FilledButton(
             onPressed: () => Navigator.pop(context, (_link.text, _title.text)),
-            child: const Text('Save')),
+            child: Text(CommonStrings.promptSave)),
       ],
     );
   }
@@ -1489,6 +1896,12 @@ class DjNowPlayingPill extends StatelessWidget {
   /// Around the pill, only while it shows.
   final EdgeInsets padding;
 
+  static String get labelDjPillIdle => Intl.message(
+      "DJ booth · nothing playing",
+      name: "labelDjPillIdle",
+      desc: "Pill at the top of a call that opens the DJ booth, while someone "
+          "is the DJ and nothing plays");
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -1501,7 +1914,7 @@ class DjNowPlayingPill extends StatelessWidget {
           return const SizedBox.shrink();
         }
         final line = track == null
-            ? 'DJ booth · nothing playing'
+            ? labelDjPillIdle
             : track.artist == null
                 ? track.title
                 : '${track.title} · ${track.artist}';

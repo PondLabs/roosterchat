@@ -9,6 +9,7 @@ import 'package:rooster/client/room_preview.dart';
 import 'package:rooster/client/space_child.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/organisms/invitation_view/send_invitation.dart';
+import 'package:rooster/ui/organisms/room_quick_access_menu/room_quick_access_menu.dart';
 import 'package:rooster/ui/organisms/space_summary/space_summary_view.dart';
 import 'package:rooster/ui/organisms/voice_activity/voice_activity_view.dart';
 import 'package:rooster/ui/pages/get_or_create_room/get_or_create_room.dart';
@@ -139,7 +140,7 @@ class _SpaceSummaryState extends State<SpaceSummary> {
   void onHistoryTap() {
     AdaptiveDialog.show(context,
         builder: (context) => VoiceActivityView(rooms: _voiceRooms),
-        title: "Call history");
+        title: RoomQuickAccessMenu.labelRoomCallHistory);
   }
 
   onInviteTap() {
@@ -150,7 +151,7 @@ class _SpaceSummaryState extends State<SpaceSummary> {
               widget.space.client, invitation,
               roomId: widget.space.identifier,
               displayName: widget.space.displayName),
-          title: "Invite");
+          title: RoomQuickAccessMenu.promptRoomInvite);
     }
   }
 

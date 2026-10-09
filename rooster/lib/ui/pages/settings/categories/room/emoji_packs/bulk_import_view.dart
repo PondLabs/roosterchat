@@ -8,6 +8,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
+import 'package:intl/intl.dart';
 import 'package:signal_sticker_api/signal_sticker_api.dart';
 import 'package:tiamat/atoms/panel.dart';
 
@@ -43,6 +44,63 @@ class _EmoticonBulkImportDialogState extends State<EmoticonBulkImportDialog> {
 
   bool useAsEmoji = false;
   bool useAsSticker = true;
+
+  String promptRoomEmoticonImportCount(int howMany) => Intl.plural(howMany,
+      one: "Import 1 Emoticon!",
+      other: "Import $howMany Emoticons!",
+      name: "promptRoomEmoticonImportCount",
+      args: [howMany],
+      desc:
+          "Button at the bottom of the dialog that imports an emoticon pack into a room, with how many emoticons it will import");
+
+  String get labelRoomEmoticonImportPackName => Intl.message("Pack Name",
+      name: "labelRoomEmoticonImportPackName",
+      desc:
+          "Field for the name of the emoticon pack being imported into a room");
+
+  String get labelRoomEmoticonImportOptional => Intl.message("Optional:",
+      name: "labelRoomEmoticonImportOptional",
+      desc:
+          "Over the optional fields (prefix, name override) of the dialog that imports an emoticon pack");
+
+  String get labelRoomEmoticonImportPrefix => Intl.message("Prefix",
+      name: "labelRoomEmoticonImportPrefix",
+      desc:
+          "Field in the emoticon pack import dialog: text put before the name of every imported emoticon");
+
+  String get labelRoomEmoticonImportOverrideName => Intl.message(
+      "Override Name",
+      name: "labelRoomEmoticonImportOverrideName",
+      desc:
+          "Field in the emoticon pack import dialog: one name for every imported emoticon, numbered, instead of their own names");
+
+  String get labelRoomEmoticonImportSource => Intl.message("Select pack source",
+      name: "labelRoomEmoticonImportSource",
+      desc:
+          "Header of the emoticon pack import dialog, over the link field and the button that picks files");
+
+  String get promptRoomEmoticonImportEnterUrl => Intl.message("Enter URL",
+      name: "promptRoomEmoticonImportEnterUrl",
+      desc:
+          "Placeholder of the field for the link to a sticker pack, in the emoticon pack import dialog");
+
+  String get labelRoomEmoticonImportSupports => Intl.message(
+      "Supports: sgnl:// and signal.art",
+      name: "labelRoomEmoticonImportSupports",
+      desc:
+          "Under the link field of the emoticon pack import dialog: the kinds of links it accepts (Signal sticker packs). Keep sgnl:// and signal.art as they are");
+
+  String labelRoomEmoticonImportProxied(String proxyUrl) => Intl.message(
+      "Request will be proxied via $proxyUrl",
+      name: "labelRoomEmoticonImportProxied",
+      args: [proxyUrl],
+      desc:
+          "Under the link field of the emoticon pack import dialog: the pack is fetched through this proxy server, given by its address");
+
+  String get promptRoomEmoticonImportSelectFiles => Intl.message("Select Files",
+      name: "promptRoomEmoticonImportSelectFiles",
+      desc:
+          "Button in the emoticon pack import dialog that picks image files to import instead of a link");
 
   @override
   void initState() {
@@ -227,7 +285,7 @@ class _EmoticonBulkImportDialogState extends State<EmoticonBulkImportDialog> {
               padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
               child: tiamat.Button(
                 isLoading: !loadingFinished,
-                text: "Import ${names!.length} Emoticons!",
+                text: promptRoomEmoticonImportCount(names!.length),
                 onTap: () {
                   if (canCreatePack()) {
                     var finalNames =
@@ -272,12 +330,13 @@ class _EmoticonBulkImportDialogState extends State<EmoticonBulkImportDialog> {
                 children: [
                   tiamat.TextInput(
                     controller: _packNameEditor,
-                    label: "Pack Name",
+                    label: labelRoomEmoticonImportPackName,
                     maxLines: 1,
                   ),
-                  const Padding(
-                    padding: EdgeInsets.all(8.0),
-                    child: tiamat.Text.labelLow("Optional:"),
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child:
+                        tiamat.Text.labelLow(labelRoomEmoticonImportOptional),
                   ),
                   Row(
                     mainAxisSize: MainAxisSize.min,
@@ -285,7 +344,7 @@ class _EmoticonBulkImportDialogState extends State<EmoticonBulkImportDialog> {
                       Flexible(
                         child: tiamat.TextInput(
                           controller: _emotePrefixEditor,
-                          label: "Prefix",
+                          label: labelRoomEmoticonImportPrefix,
                           maxLines: 1,
                         ),
                       ),
@@ -295,7 +354,7 @@ class _EmoticonBulkImportDialogState extends State<EmoticonBulkImportDialog> {
                       Flexible(
                         child: tiamat.TextInput(
                           controller: _overrideNameEditor,
-                          label: "Override Name",
+                          label: labelRoomEmoticonImportOverrideName,
                           maxLines: 1,
                         ),
                       ),
@@ -312,24 +371,24 @@ class _EmoticonBulkImportDialogState extends State<EmoticonBulkImportDialog> {
 
   Widget sourceSelection() {
     return Panel(
-        header: "Select pack source",
+        header: labelRoomEmoticonImportSource,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             tiamat.TextInput(
-              placeholder: "Enter URL",
+              placeholder: promptRoomEmoticonImportEnterUrl,
               controller: _controller,
               maxLines: 1,
             ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Flexible(
-                    child: tiamat.Text.labelLow(
-                        "Supports: sgnl:// and signal.art")),
                 Flexible(
-                  child: tiamat.Text.labelLow(
-                      "Request will be proxied via ${preferences.proxyUrl.value}"),
+                    child:
+                        tiamat.Text.labelLow(labelRoomEmoticonImportSupports)),
+                Flexible(
+                  child: tiamat.Text.labelLow(labelRoomEmoticonImportProxied(
+                      preferences.proxyUrl.value)),
                 ),
               ],
             ),
@@ -354,7 +413,7 @@ class _EmoticonBulkImportDialogState extends State<EmoticonBulkImportDialog> {
               ),
             ),
             tiamat.Button(
-              text: "Select Files",
+              text: promptRoomEmoticonImportSelectFiles,
               onTap: pickFolder,
             ),
           ],

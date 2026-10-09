@@ -32,6 +32,32 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage> {
       desc: "Explains what sticker compatibility mode does",
       name: "labelSettingsStickerCompatibilityExplanation");
 
+  String get labelSettingsOverrideLayout => Intl.message("Override Layout",
+      name: "labelSettingsOverrideLayout",
+      desc: "Settings > Advanced: header of the setting that forces the "
+          "desktop or the phone layout of the app, whatever the window size");
+
+  String get labelSettingsOverrideLayoutRestart => Intl.message(
+      "You may need to restart the app for this to take effect",
+      name: "labelSettingsOverrideLayoutRestart",
+      desc: "Settings > Advanced > Override Layout: changing the layout may "
+          "need a restart");
+
+  String get labelSettingsLayoutNoOverride => Intl.message("No Override",
+      name: "labelSettingsLayoutNoOverride",
+      desc: "Settings > Advanced > Override Layout: choice that leaves the "
+          "layout to the window size");
+
+  String get labelSettingsLayoutDesktop => Intl.message("desktop",
+      name: "labelSettingsLayoutDesktop",
+      desc: "Settings > Advanced > Override Layout: choice that always uses "
+          "the computer (desktop) layout");
+
+  String get labelSettingsLayoutMobile => Intl.message("mobile",
+      name: "labelSettingsLayoutMobile",
+      desc: "Settings > Advanced > Override Layout: choice that always uses "
+          "the phone (mobile) layout");
+
   @override
   void initState() {
     super.initState();
@@ -66,16 +92,21 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage> {
         ),
         Panel(
             mode: tiamat.TileType.surfaceContainerLow,
-            header: "Override Layout",
+            header: labelSettingsOverrideLayout,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                tiamat.Text.labelLow(
-                    "You may need to restart the app for this to take effect"),
+                tiamat.Text.labelLow(labelSettingsOverrideLayoutRestart),
                 tiamat.DropdownSelector(
                     items: [null, "desktop", "mobile"],
-                    itemBuilder: (item) =>
-                        tiamat.Text.label(item ?? "No Override"),
+                    // The items are the preference's values; these are
+                    // what they are called on screen.
+                    itemBuilder: (item) => tiamat.Text.label(switch (item) {
+                          "desktop" => labelSettingsLayoutDesktop,
+                          "mobile" => labelSettingsLayoutMobile,
+                          String other => other,
+                          null => labelSettingsLayoutNoOverride,
+                        }),
                     onItemSelected: (item) async {
                       await preferences.layoutOverride.set(item);
                       setState(() {});

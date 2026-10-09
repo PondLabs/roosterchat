@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:rooster/client/matrix/components/push_notifications/matrix_push_notification_component.dart';
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:tiamat/atoms/panel.dart';
 import 'package:tiamat/atoms/tile.dart';
@@ -20,6 +21,16 @@ class MatrixNotifierComponentView extends StatefulWidget {
 class _MatrixNotifierComponentViewState
     extends State<MatrixNotifierComponentView> {
   List<matrix.Pusher>? pushers;
+
+  String get labelDeveloperPushersThisDevice => Intl.message("This Device",
+      name: "labelDeveloperPushersThisDevice",
+      desc: "Settings > Notifications, in developer mode: header of the push "
+          "services registered for the device you are using now");
+
+  String get labelDeveloperPushersOtherDevices => Intl.message("Other Devices",
+      name: "labelDeveloperPushersOtherDevices",
+      desc: "Settings > Notifications, in developer mode: header of the push "
+          "services registered for your other devices");
 
   @override
   void initState() {
@@ -49,7 +60,7 @@ class _MatrixNotifierComponentViewState
 
     return Column(children: [
       Panel(
-        header: "This Device",
+        header: labelDeveloperPushersThisDevice,
         mode: TileType.surfaceContainerLowest,
         child: Column(
             children: ourPushers
@@ -62,7 +73,7 @@ class _MatrixNotifierComponentViewState
         height: 10,
       ),
       Panel(
-        header: "Other Devices",
+        header: labelDeveloperPushersOtherDevices,
         mode: TileType.surfaceContainerLowest,
         child: Column(
             children: otherPushers
@@ -102,11 +113,16 @@ class _MatrixNotifierComponentViewState
             children: [
               tiamat.Text.label(pusher.appDisplayName),
               tiamat.Text.labelLow(pusher.appId),
+              // Not translated: the pusher's own field names, as the
+              // homeserver has them.
               tiamat.Text.labelLow("key: $keyDisplay"),
+              // Not translated: a field name, as above.
               tiamat.Text.labelLow("device: ${pusher.deviceDisplayName}",
                   maxLines: 1, overflow: TextOverflow.ellipsis),
               tiamat.Text.labelLow(
+                  // Not translated: a field name, as above.
                   "data: ${const JsonEncoder.withIndent("  ").convert(pusher.data.toJson())}"),
+              // Not translated: a field name, as above.
               tiamat.Text.labelLow("kind: ${pusher.kind}"),
             ],
           ),

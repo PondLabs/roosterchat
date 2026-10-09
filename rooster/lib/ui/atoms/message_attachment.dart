@@ -9,6 +9,7 @@ import 'package:rooster/utils/download_utils.dart';
 import 'package:rooster/utils/mime.dart';
 import 'package:rooster/utils/text_utils.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -41,6 +42,11 @@ class MessageAttachment extends StatefulWidget {
 }
 
 class _MessageAttachmentState extends State<MessageAttachment> {
+  String get labelChatFileUnnamed => Intl.message("unnamed",
+      name: "labelChatFileUnnamed",
+      desc: "Stands in for the name of a file attached to a message when it "
+          "has none");
+
   late Key videoPlayerKey;
   bool isFullscreen = false;
   var controller = VideoPlayerController();
@@ -211,7 +217,7 @@ class _MessageAttachmentState extends State<MessageAttachment> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         tiamat.Text.labelEmphasised(
-                          fileName ?? "unnamed",
+                          fileName ?? labelChatFileUnnamed,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),

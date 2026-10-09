@@ -22,10 +22,12 @@ import 'package:rooster/ui/organisms/overlay_windows/overlay_window_manager.dart
 import 'package:rooster/utils/color_utils.dart';
 import 'package:rooster/utils/error_utils.dart';
 import 'package:rooster/utils/image_or_icon.dart';
+import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/links/link_utils.dart';
 import 'package:dart_ipc/dart_ipc.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:matrix/matrix.dart' show StrippedStateEvent;
 import 'package:matrix/matrix_api_lite/utils/try_get_map_extension.dart';
 import 'package:network_info_plus/network_info_plus.dart';
@@ -338,8 +340,8 @@ class MatrixWidgetComponent implements WidgetComponent<MatrixClient> {
         .asUint8List();
     var scriptText = Utf8Decoder().convert(scriptBytes);
 
-    text =
-        text.replaceAll("\$RUNNER_PAGE_TITLE", "Rooster Widget | ${info.name}");
+    text = text.replaceAll("\$RUNNER_PAGE_TITLE",
+        WidgetComponent.labelWidgetRunnerPageTitle(info.name));
 
     text = text.replaceAll("\$IFRAME_URL", url.toString());
     text = text.replaceAll("\$WIDGET_ID", info.id);
@@ -388,8 +390,8 @@ class MatrixWidgetComponent implements WidgetComponent<MatrixClient> {
         .asUint8List();
     var scriptText = Utf8Decoder().convert(scriptBytes);
 
-    text =
-        text.replaceAll("\$RUNNER_PAGE_TITLE", "Rooster Widget | ${info.name}");
+    text = text.replaceAll("\$RUNNER_PAGE_TITLE",
+        WidgetComponent.labelWidgetRunnerPageTitle(info.name));
 
     text = text.replaceAll("\$IFRAME_URL", url.toString());
 
@@ -585,6 +587,16 @@ class _CefMatrixWidgetState extends State<_CefMatrixWidget> {
   int _revision = 0;
   final FocusNode _focusNode = FocusNode(debugLabel: 'CefMatrixWidget');
 
+  String get messageWidgetLoadFailed => Intl.message(
+      "Unable to load this widget",
+      name: "messageWidgetLoadFailed",
+      desc:
+          "Shown in place of a room widget (a small web app added to a room) when its page could not be loaded, over the Retry and Close buttons");
+
+  String get promptWidgetRetry => Intl.message("Retry",
+      name: "promptWidgetRetry",
+      desc: "Button that tries again to load a room widget that failed");
+
   BrowserRuntime? get _runtime => browserRuntime;
 
   late final MatrixRoom _room;
@@ -706,17 +718,18 @@ class _CefMatrixWidgetState extends State<_CefMatrixWidget> {
           children: [
             const Icon(Icons.error_outline_rounded, size: 36),
             const SizedBox(height: 12),
-            const Text('Unable to load this widget'),
+            Text(messageWidgetLoadFailed, textAlign: TextAlign.center),
             const SizedBox(height: 12),
-            Row(
-              mainAxisSize: MainAxisSize.min,
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 OutlinedButton.icon(
                   onPressed: _retry,
                   icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('Retry'),
+                  label: Text(promptWidgetRetry),
                 ),
-                const SizedBox(width: 8),
                 OutlinedButton.icon(
                   onPressed: () {
                     // Firing the exit stream removes the overlay window,
@@ -726,7 +739,7 @@ class _CefMatrixWidgetState extends State<_CefMatrixWidget> {
                     }
                   },
                   icon: const Icon(Icons.close_rounded),
-                  label: const Text('Close'),
+                  label: Text(CommonStrings.promptClose),
                 ),
               ],
             ),

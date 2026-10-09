@@ -10,6 +10,7 @@ import 'package:rooster/ui/atoms/room_panel_view.dart';
 import 'package:rooster/ui/atoms/room_text_button.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 class RoomPanel extends StatefulWidget {
   const RoomPanel(this.room,
@@ -22,6 +23,11 @@ class RoomPanel extends StatefulWidget {
   State<RoomPanel> createState() => _RoomPanelState();
 
   final bool Function(Room room)? shouldShowAvatarForRoom;
+
+  static String get labelRoomRecentEventYou => Intl.message("You",
+      name: "labelRoomRecentEventYou",
+      desc:
+          "Who sent a room's last message, when it was us, shown before the message in the room's panel on a space's page");
 }
 
 class _RoomPanelState extends State<RoomPanel> {
@@ -87,7 +93,7 @@ class _RoomPanelState extends State<RoomPanel> {
 
     if (eventSender != null) {
       if (eventSender == widget.room.client.self!.identifier) {
-        eventSender = "You";
+        eventSender = RoomPanel.labelRoomRecentEventYou;
       } else {
         if (isDm) {
           eventSender = null;

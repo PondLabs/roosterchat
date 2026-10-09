@@ -1,7 +1,9 @@
 import 'package:rooster/client/components/widgets/widget_component.dart';
 import 'package:rooster/client/matrix/components/widgets/matrix_widget_permission_groups.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
+import 'package:rooster/utils/common_strings.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -25,6 +27,24 @@ class _MatrixWidgetPermissionsViewState
     extends State<MatrixWidgetPermissionsView> {
   Map<String, bool> enabledPermissions = {};
   bool rememberChoice = true;
+
+  String labelWidgetPermissionRequest(String widgetName) => Intl.message(
+      "'$widgetName' would like permission to do the following actions on your behalf:",
+      name: "labelWidgetPermissionRequest",
+      args: [widgetName],
+      desc:
+          "At the top of the dialog where a room widget (a small web app added to a room) asks for permissions, with the widget's name; the permissions are listed under it");
+
+  String get labelWidgetPermissionRemember => Intl.message("Remember choices: ",
+      name: "labelWidgetPermissionRemember",
+      desc:
+          "Next to a switch in a room widget's permission dialog: keep these answers for this widget instead of asking again");
+
+  String get messageWidgetPermissionSomeDenied => Intl.message(
+      "Some permissions will not be granted, the widget may not function as intended",
+      name: "messageWidgetPermissionSomeDenied",
+      desc:
+          "Warning in a room widget's permission dialog while some permissions are unticked");
 
   @override
   void initState() {
@@ -54,7 +74,7 @@ class _MatrixWidgetPermissionsViewState
               Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: tiamat.Text.label(
-                    "'${widget.runner.info.name}' would like permission to do the following actions on your behalf:"),
+                    labelWidgetPermissionRequest(widget.runner.info.name)),
               ),
               buildGroups(),
               ListView.builder(
@@ -74,7 +94,9 @@ class _MatrixWidgetPermissionsViewState
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    tiamat.Text.labelLow("Remember choices: "),
+                    Flexible(
+                        child: tiamat.Text.labelLow(
+                            labelWidgetPermissionRemember)),
                     tiamat.Switch(
                       state: rememberChoice,
                       onChanged: (value) {
@@ -89,11 +111,11 @@ class _MatrixWidgetPermissionsViewState
               if (enabledPermissions.values.any((i) => i == false))
                 Padding(
                   padding: const EdgeInsets.all(8.0),
-                  child: tiamat.Text.labelLow(
-                      "Some permissions will not be granted, the widget may not function as intended"),
+                  child:
+                      tiamat.Text.labelLow(messageWidgetPermissionSomeDenied),
                 ),
               tiamat.Button(
-                text: "Submit",
+                text: CommonStrings.promptSubmit,
                 onTap: () {
                   Navigator.of(context).pop(DialogResult(
                       enabledPermissions.entries
@@ -167,7 +189,8 @@ class _MatrixWidgetPermissionsViewState
                                 size: 20,
                               ),
                             ),
-                            tiamat.Text.labelEmphasised(group.name),
+                            Flexible(
+                                child: tiamat.Text.labelEmphasised(group.name)),
                             Padding(
                               padding: const EdgeInsets.fromLTRB(8, 0, 0, 0),
                               child: tiamat.Text.labelLow(
@@ -250,7 +273,7 @@ class _MatrixWidgetPermissionsViewState
               });
             },
           ),
-          tiamat.Text.labelLow(capability.raw),
+          Flexible(child: tiamat.Text.labelLow(capability.raw)),
         ],
       ),
     );

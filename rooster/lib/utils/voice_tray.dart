@@ -50,6 +50,13 @@ class VoiceTray with TrayListener {
       name: "tooltipTrayMuted",
       desc: "Tray icon tooltip while in a call and muted or deafened");
 
+  static String tooltipVoiceTrayStatus(String app, String status) =>
+      Intl.message("$app: $status",
+          name: "tooltipVoiceTrayStatus",
+          args: [app, status],
+          desc: "Tray icon tooltip during a call: the app's name, then what "
+              "the call is like ('In a voice channel' or 'Muted')");
+
   static const _open = "open";
   static const _quit = "quit";
 
@@ -142,8 +149,10 @@ class VoiceTray with TrayListener {
     try {
       await trayManager.setToolTip(switch (status) {
         VoiceTrayStatus.idle => BuildConfig.app,
-        VoiceTrayStatus.live => "${BuildConfig.app}: $tooltipTrayInCall",
-        VoiceTrayStatus.muted => "${BuildConfig.app}: $tooltipTrayMuted",
+        VoiceTrayStatus.live =>
+          tooltipVoiceTrayStatus(BuildConfig.app, tooltipTrayInCall),
+        VoiceTrayStatus.muted =>
+          tooltipVoiceTrayStatus(BuildConfig.app, tooltipTrayMuted),
       });
     } catch (_) {
       // Appindicators have no tooltips.

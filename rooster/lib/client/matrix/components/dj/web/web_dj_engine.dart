@@ -12,6 +12,7 @@ import 'dart:async';
 import 'dart:js_interop';
 
 import 'package:dart_webrtc/dart_webrtc.dart' show MediaStreamWeb;
+import 'package:intl/intl.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:rooster/client/components/dj/dj_engine.dart';
 import 'package:rooster/client/components/dj/dj_models.dart';
@@ -50,7 +51,7 @@ class WebDjEngine implements DjPlaybackEngine {
 
   Future<void> _start() async {
     final participant = room.localParticipant;
-    if (participant == null) throw StateError('Not connected to the call');
+    if (participant == null) throw StateError(errorDjNotConnected);
 
     final ctx = _ctx = web.AudioContext();
     final audio = _audio = web.HTMLAudioElement()
@@ -105,11 +106,50 @@ class WebDjEngine implements DjPlaybackEngine {
 
   static String _describe(web.MediaError? error) => switch (error?.code) {
         // MEDIA_ERR_NETWORK, MEDIA_ERR_SRC_NOT_SUPPORTED
-        2 => 'The song stopped downloading',
-        4 => 'This browser can\'t play that song, or its site doesn\'t let web '
-            'pages play it',
-        _ => 'The song couldn\'t be played',
+        2 => errorDjWebDownloadStopped,
+        4 => errorDjWebCantPlay,
+        _ => errorDjWebPlayFailed,
       };
+
+  static String get errorDjWebDownloadStopped => Intl.message(
+      "The song stopped downloading",
+      name: "errorDjWebDownloadStopped",
+      desc: "Why a song the DJ plays from the browser stopped: its download "
+          "broke off. Follows \"Couldn't play <song>:\"");
+
+  static String get errorDjWebCantPlay => Intl.message(
+      "This browser can't play that song, or its site doesn't let web pages "
+      "play it",
+      name: "errorDjWebCantPlay",
+      desc: "Why a song the DJ plays from the browser could not play: the "
+          "browser can't decode it, or the site it comes from blocks web "
+          "pages from reading it. Follows \"Couldn't play <song>:\"");
+
+  static String get errorDjWebPlayFailed =>
+      Intl.message("The song couldn't be played",
+          name: "errorDjWebPlayFailed",
+          desc: "Why a song the DJ plays from the browser could not play, when "
+              "the browser says no more. Follows \"Couldn't play <song>:\"");
+
+  static String get errorDjWebFileElsewhere => Intl.message(
+      "A file on someone else's computer",
+      name: "errorDjWebFileElsewhere",
+      desc: "Why the DJ booth in the browser skipped a song: it is a file on "
+          "another person's computer. Follows \"Skipped <song>:\"");
+
+  static String get errorDjWebExtensionSong => Intl.message(
+      "Songs from YouTube, SoundCloud and other sites play from the desktop "
+      "app",
+      name: "errorDjWebExtensionSong",
+      desc: "Why the DJ booth in the browser skipped a song: it comes from a "
+          "site only the desktop app can play from. Follows \"Skipped "
+          "<song>:\"");
+
+  static String get errorDjWebNotAudioLink => Intl.message(
+      "Not a link to an audio file",
+      name: "errorDjWebNotAudioLink",
+      desc: "Why the DJ booth in the browser skipped a song: its link is not "
+          "a link to an audio file. Follows \"Skipped <song>:\"");
 
   @override
   Future<void> shutdown() async {
@@ -152,16 +192,13 @@ class WebDjEngine implements DjPlaybackEngine {
     if (track.isLocalFile) {
       // Only in the browser that picked it.
       url = WebDjFiles.instance.urlOf(track.source) ??
-          (throw const DjTrackUnavailable(
-              'A file on someone else\'s computer'));
+          (throw DjTrackUnavailable(errorDjWebFileElsewhere));
     } else if (track.extensionId != null) {
-      throw const DjTrackUnavailable(
-          'Songs from YouTube, SoundCloud and other sites play from the '
-          'desktop app');
+      throw DjTrackUnavailable(errorDjWebExtensionSong);
     } else {
       final uri = Uri.tryParse(track.source);
       if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) {
-        throw const DjTrackUnavailable('Not a link to an audio file');
+        throw DjTrackUnavailable(errorDjWebNotAudioLink);
       }
       url = track.source;
     }
@@ -173,8 +210,8 @@ class WebDjEngine implements DjPlaybackEngine {
   void load(DjTrack track, {required int positionMs, required bool paused}) {
     final url = _urls[track.id];
     final audio = _audio;
-    if (url == null) throw StateError('the song was not fetched');
-    if (audio == null || _shutDown) throw StateError('the booth is closed');
+    if (url == null) throw StateError(errorDjSongNotFetched);
+    if (audio == null || _shutDown) throw StateError(errorDjBoothClosed);
     _error = null;
     _buffering = true;
     _loadedId = track.id;

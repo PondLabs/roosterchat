@@ -15,7 +15,43 @@ import 'package:rooster/config/rust_library.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart' as webrtc;
+import 'package:intl/intl.dart' show Intl;
 import 'package:livekit_client/livekit_client.dart' as lk;
+
+// Why noise suppression cannot run, for the user: each completes "Noise
+// suppression can't run: …" in the voice settings and in the notice at the
+// start of a call.
+
+String get messageVoiceLibraryMissing => Intl.message(
+    "the voice library (librust_lib_rooster) is missing",
+    name: "messageVoiceLibraryMissing",
+    desc: "Why noise suppression cannot run, completing 'Noise suppression "
+        "can't run: …' (so lowercase, no full stop): the library holding it "
+        "is not installed. librust_lib_rooster is a file name");
+
+String messageVoiceLibraryWrongAbi(int abi, int expected) => Intl.message(
+    "the voice library is ABI $abi, this build expects $expected",
+    name: "messageVoiceLibraryWrongAbi",
+    args: [abi, expected],
+    desc: "Why noise suppression cannot run, completing 'Noise suppression "
+        "can't run: …' (so lowercase, no full stop): the library holding it "
+        "is from another version of the app. ABI means its interface "
+        "version; the two numbers are that version and the one expected");
+
+String get messageVoiceLibraryMismatch => Intl.message(
+    "the voice library's structures do not match this build",
+    name: "messageVoiceLibraryMismatch",
+    desc: "Why noise suppression cannot run, completing 'Noise suppression "
+        "can't run: …' (so lowercase, no full stop): the library holding it "
+        "is from another version of the app");
+
+String messageVoiceLibraryIncomplete(String error) => Intl.message(
+    "the voice library is incomplete ($error)",
+    name: "messageVoiceLibraryIncomplete",
+    args: [error],
+    desc: "Why noise suppression cannot run, completing 'Noise suppression "
+        "can't run: …' (so lowercase, no full stop): the library holding it "
+        "lacks parts. The technical error follows in parentheses");
 
 AudioProcessingManager createAudioProcessingManager() {
   if (PlatformUtils.isLinux || PlatformUtils.isWindows) {
@@ -235,35 +271,37 @@ class NativeAudioProcessingManager extends AudioProcessingManager {
 
   static const _pollInterval = Duration(milliseconds: 100);
 
-  String? _unavailableReason;
+  /// Says why the DSP cannot run, in the user's language when asked: the
+  /// library is looked at once, maybe before the language is known.
+  String Function()? _unavailableReason;
 
   _Bindings? get bindings {
     if (_loadAttempted) return _bindings;
     _loadAttempted = true;
     final lib = _openLibrary();
     if (lib == null) {
-      _unavailableReason = "the voice library (librust_lib_rooster) is missing";
+      _unavailableReason = () => messageVoiceLibraryMissing;
       return null;
     }
     try {
       final b = _Bindings(lib, _symbols);
       final abi = b.abiVersion();
       if (abi != _Bindings.expectedAbi) {
-        _unavailableReason = "the voice library is ABI $abi, "
-            "this build expects ${_Bindings.expectedAbi}";
-        Log.w("Voice DSP: $_unavailableReason");
+        _unavailableReason =
+            () => messageVoiceLibraryWrongAbi(abi, _Bindings.expectedAbi);
+        Log.w("Voice DSP: the voice library is ABI $abi, "
+            "this build expects ${_Bindings.expectedAbi}");
         return null;
       }
       if (b.paramsSize() != sizeOf<DspParams>() ||
           b.reportSize() != sizeOf<DspReport>()) {
-        _unavailableReason =
-            "the voice library's structures do not match this build";
+        _unavailableReason = () => messageVoiceLibraryMismatch;
         Log.w("Voice DSP: struct size mismatch between Dart and Rust");
         return null;
       }
       _bindings = b;
     } catch (e, s) {
-      _unavailableReason = "the voice library is incomplete ($e)";
+      _unavailableReason = () => messageVoiceLibraryIncomplete("$e");
       Log.onError(e, s, content: "Voice DSP: symbol lookup failed");
       return null;
     }
@@ -274,7 +312,8 @@ class NativeAudioProcessingManager extends AudioProcessingManager {
   bool get isSupported => bindings != null;
 
   @override
-  String? get unavailableReason => isSupported ? null : _unavailableReason;
+  String? get unavailableReason =>
+      isSupported ? null : _unavailableReason?.call();
 
   @override
   bool get isActive => _installed;

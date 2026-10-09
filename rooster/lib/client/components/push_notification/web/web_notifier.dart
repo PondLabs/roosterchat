@@ -76,7 +76,8 @@ class WebNotifier implements Notifier {
     final message =
         notification is MessageNotificationContent ? notification : null;
     final title = message != null && !message.isDirectMessage
-        ? "${message.senderName} (${message.roomName})"
+        ? MessageNotificationContent.labelNotificationSenderInRoom(
+            message.senderName, message.roomName)
         : notification.title;
     final options = web.NotificationOptions(
       body: notification.content,

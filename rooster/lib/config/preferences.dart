@@ -401,6 +401,14 @@ class Preferences {
   BoolPreference debugTranslations =
       BoolPreference("enable_translations_debug", defaultValue: false);
 
+  BoolPreference pseudoTranslations =
+      BoolPreference("enable_pseudo_translations", defaultValue: false);
+
+  /// The code of the language picked in settings (`Languages`), or null to
+  /// follow the system's. The web splash reads it from localStorage too.
+  NullableStringPreference language =
+      NullableStringPreference("app_language", defaultValue: null);
+
   BoolPreference tenorGifSearchEnabled =
       BoolPreference("enable_tenor_gif_search", defaultValue: false);
 

@@ -204,7 +204,8 @@ class _SoundboardSettingsPageState extends State<SoundboardSettingsPage> {
                     return tiamat.Text(labelSoundboardEntranceNone);
                   }
                   final (source, _, client, sound) = options[id]!;
-                  final label = '${sound.emoji} ${sound.name}';
+                  // A custom emoji shows its fallback, not its debug text.
+                  final label = '${sound.emoji.unicode} ${sound.name}';
                   // A bundled sound is always labeled: it is not the
                   // chosen space's.
                   return tiamat.Text(spaceId == null || client == null

@@ -214,6 +214,8 @@ dev_dependencies:
     sdk: flutter
   file: any
   
+# The translations: lib/generated/ from assets/l10n by scripts/codegen.dart.
+# See docs/localization.md.
 flutter_intl: 
   class_name: T
   main_locale: en
@@ -241,7 +243,6 @@ flutter_launcher_icons:
 flutter: 
   assets: 
     - assets/config/
-    - assets/l10n/
     - assets/sound/
     - assets/soundboard/
     - assets/images/app_icon/
@@ -286,7 +287,6 @@ flutter:
       fonts: 
         - asset: assets/font/code/JetBrainsMono-Regular.ttf
   uses-material-design: true
-  generate: true
 
 msix_config: 
   display_name: Rooster

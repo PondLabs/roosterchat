@@ -9,6 +9,7 @@ import 'package:rooster/client/components/space_component.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_member.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
+import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/matrix/matrix_room_permissions.dart';
 import 'package:rooster/client/matrix/matrix_room_preview.dart';
 import 'package:rooster/client/member.dart';
@@ -207,7 +208,7 @@ class MatrixSpace extends Space {
     _matrixRoom = room;
     _matrixClient = matrixClient;
     _client = client;
-    _displayName = room.getLocalizedDisplayname();
+    _displayName = room.getLocalizedDisplayname(const RoomNameLocalizations());
     _permissions = MatrixRoomPermissions(_matrixRoom);
     refresh();
 
@@ -228,7 +229,8 @@ class MatrixSpace extends Space {
   }
 
   void refresh() {
-    _displayName = _matrixRoom.getLocalizedDisplayname();
+    _displayName =
+        _matrixRoom.getLocalizedDisplayname(const RoomNameLocalizations());
 
     if (_matrixRoom.avatar != null && _matrixRoom.avatar != _avatarUrl) {
       updateAvatarFromRoomState();

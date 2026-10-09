@@ -66,6 +66,50 @@ class ChatState extends State<Chat> {
           "Title for the dialog that is shown when the user attempts to upload a file that is greater than the allowed size",
       name: "labelChatPageFileTooLargeTitle");
 
+  String get errorTimelineLoadFailed => Intl.message("Error loading timeline",
+      name: "errorTimelineLoadFailed",
+      desc: "Title of the error shown when a room's messages could not be "
+          "loaded");
+
+  String get errorTimelineThreadLoadFailed =>
+      Intl.message("Error loading thread timeline",
+          name: "errorTimelineThreadLoadFailed",
+          desc: "Title of the error shown when a thread's messages could not "
+              "be loaded");
+
+  String get labelChatFileFallbackName => Intl.message("File",
+      name: "labelChatFileFallbackName",
+      desc: "Title of the dialog about a file's location data when the file "
+          "has no name");
+
+  String get promptChatSendFile => Intl.message("Send File",
+      name: "promptChatSendFile",
+      desc: "Button that sends a file even though it holds location data");
+
+  String get promptChatDontSendFile => Intl.message("Don't send file",
+      name: "promptChatDontSendFile",
+      desc: "Button that keeps a file holding location data from being "
+          "sent");
+
+  String messageChatFileHasLocation(String name) => Intl.message(
+      "Location data was detected in file '$name', are you sure you want to send?",
+      name: "messageChatFileHasLocation",
+      args: [name],
+      desc: "Asked before sending a file whose metadata says where it was "
+          "taken, with the file's name");
+
+  String errorChatDropNotAttached(String files) => Intl.message(
+      "Could not attach $files: folders and unreadable files can't be uploaded.",
+      name: "errorChatDropNotAttached",
+      args: [files],
+      desc: "When files dropped on the chat could not be attached, with "
+          "their names separated by commas");
+
+  String get labelChatDropNotAttachedTitle => Intl.message("Not attached",
+      name: "labelChatDropNotAttachedTitle",
+      desc: "Title of the error shown when files dropped on the chat could "
+          "not be attached");
+
   bool processing = false;
   List<PendingFileAttachment> attachments = List.empty(growable: true);
 
@@ -129,7 +173,7 @@ class ChatState extends State<Chat> {
       setState(() {
         _timeline = t;
       });
-    }, title: "Error loading timeline");
+    }, title: errorTimelineLoadFailed);
   }
 
   Future<void> loadThreadTimeline() async {
@@ -142,7 +186,7 @@ class ChatState extends State<Chat> {
       setState(() {
         _timeline = threadTimeline;
       });
-    }, title: "Error loading thread timeline");
+    }, title: errorTimelineThreadLoadFailed);
   }
 
   @override
@@ -210,13 +254,14 @@ class ChatState extends State<Chat> {
 
         if (exif.keys.any((e) => e.toLowerCase().contains("gps"))) {
           // ignore: use_build_context_synchronously
+          var fileName = file.name;
           var confirmation = await AdaptiveDialog.confirmation(context,
-              title: file.name ?? "File",
-              confirmationText: "Send File",
-              cancelText: "Don't send file",
+              title: fileName ?? labelChatFileFallbackName,
+              confirmationText: promptChatSendFile,
+              cancelText: promptChatDontSendFile,
               dangerous: true,
-              prompt:
-                  "Location data was detected in file '${file.name}', are you sure you want to send?");
+              prompt: messageChatFileHasLocation(
+                  fileName ?? labelChatFileFallbackName));
 
           if (confirmation != true) {
             return;
@@ -446,12 +491,9 @@ class ChatState extends State<Chat> {
       skipped.add(name);
     });
     if (skipped.isNotEmpty && mounted) {
-      AdaptiveDialog.showError(
-          context,
-          "Could not attach ${skipped.join(", ")}: folders and unreadable "
-          "files can't be uploaded.",
-          StackTrace.current,
-          title: "Not attached");
+      AdaptiveDialog.showError(context,
+          errorChatDropNotAttached(skipped.join(", ")), StackTrace.current,
+          title: labelChatDropNotAttachedTitle);
     }
 
     for (final attachment in dropped) {

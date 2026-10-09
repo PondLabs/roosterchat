@@ -17,11 +17,17 @@ import 'package:desktop_notifications/desktop_notifications.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_local_notifications_linux/src/model/hint.dart' as notif;
+import 'package:intl/intl.dart';
 import 'package:launcher_entry/launcher_entry.dart';
 import 'package:media_kit/media_kit.dart';
 import 'dart:ui' as ui;
 
 class LinuxNotifier implements Notifier {
+  static String get promptNotificationOpen => Intl.message("Open notification",
+      name: "promptNotificationOpen",
+      desc: "Name of a desktop notification's default action on Linux "
+          "(clicking it), which some notification servers show");
+
   @override
   bool get hasPermission => true;
 
@@ -130,8 +136,8 @@ class LinuxNotifier implements Notifier {
   Future<void> init() async {
     flutterLocalNotificationsPlugin = LinuxFlutterLocalNotificationsPlugin();
 
-    const LinuxInitializationSettings initializationSettingsLinux =
-        LinuxInitializationSettings(defaultActionName: 'Open notification');
+    final LinuxInitializationSettings initializationSettingsLinux =
+        LinuxInitializationSettings(defaultActionName: promptNotificationOpen);
 
     // Talks to the desktop over the D-Bus session bus. Headless sessions
     // (CI, containers) have none; the app must still start, just without
@@ -233,7 +239,8 @@ class LinuxNotifier implements Notifier {
       defaultActionName: openRoom,
       actions: [
         if (capabilities?.otherCapabilities.contains("inline-reply") == true)
-          LinuxNotificationAction(key: "inline-reply", label: "Reply")
+          LinuxNotificationAction(
+              key: "inline-reply", label: CommonStrings.promptReply)
       ],
       customHints: [
         notif.LinuxNotificationCustomHint('desktop-entry',
@@ -242,7 +249,8 @@ class LinuxNotifier implements Notifier {
       category: LinuxNotificationCategory.imReceived,
     );
 
-    var title = "${content.senderName} (${content.roomName})";
+    var title = MessageNotificationContent.labelNotificationSenderInRoom(
+        content.senderName, content.roomName);
     if (content.isDirectMessage) {
       title = content.senderName;
     }

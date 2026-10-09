@@ -106,6 +106,37 @@ class MainPageState extends State<MainPage> {
           "Title for the dialog which is shown when an update has been installed",
       name: "updateInstalledTitle");
 
+  String messageAppSwitchAccountForRoom(String account) => Intl.message(
+      "You tried to open a room for another account ($account), would you "
+      "like to switch?",
+      name: "messageAppSwitchAccountForRoom",
+      args: [account],
+      desc: "Asked when a link or notification opens a room of an account "
+          "other than the one on screen; account is that account's Matrix "
+          "ID, such as @ana:matrix.org");
+
+  String get labelAppSwitchAccount => Intl.message("Switch Account",
+      name: "labelAppSwitchAccount",
+      desc: "Title of the dialog that asks whether to switch to the account "
+          "a room belongs to");
+
+  String labelHomeInviteToChatPrompt(String userId) =>
+      Intl.message("Are you sure you want to invite $userId to chat?",
+          name: "labelHomeInviteToChatPrompt",
+          args: [userId],
+          desc: "Confirmation after picking someone to start a direct message "
+              "with, from the Home screen; userId is their Matrix ID");
+
+  String get labelHomeInvitationTitle => Intl.message("Invitation",
+      name: "labelHomeInvitationTitle",
+      desc: "Title of the confirmation before inviting someone to a direct "
+          "message");
+
+  String get labelHomeStartDirectMessage => Intl.message("Start Direct Message",
+      name: "labelHomeStartDirectMessage",
+      desc: "Title of the dialog, opened from the Home screen, where you "
+          "pick someone to start a direct message with");
+
   @override
   void initState() {
     super.initState();
@@ -493,9 +524,8 @@ class MainPageState extends State<MainPage> {
   Future<void> askSwitchAccount(
       Client newClient, (String, String?) strings) async {
     var confirm = await AdaptiveDialog.confirmation(context,
-        prompt:
-            "You tried to open a room for another account (${newClient.self?.identifier}), would you like to switch?",
-        title: "Switch Account");
+        prompt: messageAppSwitchAccountForRoom("${newClient.self?.identifier}"),
+        title: labelAppSwitchAccount);
     if (confirm != true) return;
 
     EventBus.setFilterClient.add(newClient);
@@ -543,8 +573,8 @@ class MainPageState extends State<MainPage> {
               showSuggestions: false,
               onUserPicked: (userId) async {
                 final confirm = await AdaptiveDialog.confirmation(context,
-                    prompt: "Are you sure you want to invite $userId to chat?",
-                    title: "Invitation");
+                    prompt: labelHomeInviteToChatPrompt(userId),
+                    title: labelHomeInvitationTitle);
                 if (confirm != true) {
                   return;
                 }
@@ -553,7 +583,7 @@ class MainPageState extends State<MainPage> {
                 await comp?.createDirectMessage(userId);
               },
             ),
-        title: "Start Direct Message");
+        title: labelHomeStartDirectMessage);
   }
 
   bool _onKeyPressed(KeyEvent event) {

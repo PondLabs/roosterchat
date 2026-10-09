@@ -56,6 +56,7 @@ class MatrixCapabilitySendEvent implements MatrixWidgetCapability {
     var content = message.data.tryGetMap<String, dynamic>("content");
 
     if (content == null) {
+      // Not translated: a reply to the widget, which the app does not show.
       return message.createResponseError(message: "Invalid request");
     }
 

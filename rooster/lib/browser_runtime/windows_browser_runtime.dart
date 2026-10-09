@@ -385,6 +385,7 @@ class WindowsBrowserRuntime implements BrowserRuntime {
         lifecycle.reportFailure(
           FailureClass.shutdownTimeout,
           DateTime.now().millisecondsSinceEpoch,
+          // Not translated: a runtime diagnostic, never shown.
           message: 'CEF host did not exit within the shutdown deadline',
         ),
       );
@@ -445,6 +446,7 @@ class WindowsBrowserRuntime implements BrowserRuntime {
           lifecycle.reportFailure(
             FailureClass.hostStartFailure,
             DateTime.now().millisecondsSinceEpoch,
+            // Not translated: a runtime diagnostic, never shown.
             message: 'CEF host startup failed',
           ),
         );
@@ -605,6 +607,7 @@ class WindowsBrowserRuntime implements BrowserRuntime {
             lifecycle.reportFailure(
               FailureClass.hostStartFailure,
               DateTime.now().millisecondsSinceEpoch,
+              // Not translated: a runtime diagnostic, never shown.
               message: 'automatic browser restart failed: $error',
             ),
           );

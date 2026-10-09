@@ -11,12 +11,28 @@ import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/shortcuts_manager.dart';
 import 'package:desktop_notifications/desktop_notifications.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:win_toast/win_toast.dart';
 import 'package:path/path.dart' as p;
 
+/// [text] for an attribute of the toast's XML: a translation may hold a
+/// quote or an ampersand.
+String _xml(String text) => text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
+
 class WindowsNotifier implements Notifier {
+  static String get promptNotificationSendReply =>
+      Intl.message("Send a reply...",
+          name: "promptNotificationSendReply",
+          desc: "Placeholder in the reply field of a message notification on "
+              "Windows");
+
   @override
   bool get hasPermission => true;
 
@@ -181,8 +197,8 @@ class WindowsNotifier implements Notifier {
    </visual>
    <audio silent='true'/>
    <actions>
-      <action content="${CommonStrings.promptAccept}" activationType="background" arguments="action=accept_call&amp;client_id=${f(content.clientId)}&amp;room_id=${f(content.roomId)}&amp;call_id=${f(content.callId)}" />
-      <action content="${CommonStrings.promptReject}" activationType="background" arguments="action=reject_call&amp;client_id=${f(content.clientId)}&amp;room_id=${f(content.roomId)}&amp;call_id=${f(content.callId)}" />
+      <action content="${_xml(CommonStrings.promptAccept)}" activationType="background" arguments="action=accept_call&amp;client_id=${f(content.clientId)}&amp;room_id=${f(content.roomId)}&amp;call_id=${f(content.callId)}" />
+      <action content="${_xml(CommonStrings.promptReject)}" activationType="background" arguments="action=reject_call&amp;client_id=${f(content.clientId)}&amp;room_id=${f(content.roomId)}&amp;call_id=${f(content.callId)}" />
    </actions>
 </toast>
   """;
@@ -241,8 +257,8 @@ class WindowsNotifier implements Notifier {
    </visual>
    <audio silent='true'/>
    <actions>
-      <input id="reply" type="text" placeHolderContent="Send a reply..." />
-      <action content="Reply" activationType="background" arguments="action=reply&amp;client_id=${f(content.clientId)}&amp;room_id=${f(content.roomId)}&amp;event_id=${f(content.eventId)}" />
+      <input id="reply" type="text" placeHolderContent="${_xml(promptNotificationSendReply)}" />
+      <action content="${_xml(CommonStrings.promptReply)}" activationType="background" arguments="action=reply&amp;client_id=${f(content.clientId)}&amp;room_id=${f(content.roomId)}&amp;event_id=${f(content.eventId)}" />
    </actions>
 </toast>
   """;

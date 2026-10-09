@@ -13,6 +13,7 @@ import 'package:rooster/ui/molecules/soundboard_emoji_picker.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_favorites.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 /// One Space whose sounds can be played in the current call.
@@ -97,6 +98,56 @@ class SoundboardPopover extends StatefulWidget {
   static bool get touchFirst =>
       defaultTargetPlatform == TargetPlatform.android ||
       defaultTargetPlatform == TargetPlatform.iOS;
+
+  static String get labelSoundboardFavorites => Intl.message("Favorites",
+      name: "labelSoundboardFavorites",
+      desc: "Heading of the section of a call's soundboard with the sounds "
+          "you starred, and its entry in the soundboard's side rail");
+
+  static String get messageSoundboardNoSoundsYet => Intl.message(
+      "No sounds yet. An admin can add some in Space settings.",
+      name: "messageSoundboardNoSoundsYet",
+      desc: "Shown in a call's soundboard when none of the call's spaces has "
+          "a sound yet");
+
+  static String get messageSoundboardNoSoundsFound =>
+      Intl.message("No sounds found",
+          name: "messageSoundboardNoSoundsFound",
+          desc: "Shown in a call's soundboard when no sound's name matches "
+              "the search");
+
+  static String get labelSoundboardSearchHint =>
+      Intl.message("Find the perfect sound",
+          name: "labelSoundboardSearchHint",
+          desc: "Placeholder of the search field at the top of a call's "
+              "soundboard");
+
+  static String get labelSoundboardEffectsVolume =>
+      Intl.message("Sound effects volume",
+          name: "labelSoundboardEffectsVolume",
+          desc: "Tooltip of the volume button in a call's soundboard, and the "
+              "label over the slider it opens: how loud soundboard sounds "
+              "play for you");
+
+  static String get promptSoundboardAddSound => Intl.message("Add sound",
+      name: "promptSoundboardAddSound",
+      desc: "Adds a sound to a space's soundboard: the last tile of a space's "
+          "sounds in a call's soundboard (opens the space's soundboard page), "
+          "and the button on that page that saves the new sound");
+
+  static String tooltipSoundboardAddFavorite(String sound) =>
+      Intl.message("Add $sound to favorites",
+          name: "tooltipSoundboardAddFavorite",
+          args: [sound],
+          desc: "Tooltip of the empty star on a sound in a call's soundboard, "
+              "with the sound's name");
+
+  static String tooltipSoundboardRemoveFavorite(String sound) =>
+      Intl.message("Remove $sound from favorites",
+          name: "tooltipSoundboardRemoveFavorite",
+          args: [sound],
+          desc: "Tooltip of the filled star on a favorite sound in a call's "
+              "soundboard, with the sound's name");
 
   @override
   State<SoundboardPopover> createState() => _SoundboardPopoverState();
@@ -189,7 +240,8 @@ class _SoundboardPopoverState extends State<SoundboardPopover> {
     final showAddable = widget.onAddSound != null && query.isEmpty;
 
     return [
-      _Section(favoritesKey, 'Favorites', null, favorites),
+      _Section(favoritesKey, SoundboardPopover.labelSoundboardFavorites, null,
+          favorites),
       for (final source in widget.sources)
         _Section(source.id, source.name, source,
             source.catalog.sounds.where(matches).toList()),
@@ -249,8 +301,10 @@ class _SoundboardPopoverState extends State<SoundboardPopover> {
                                 child: tiamat.Text.labelLow(
                                   widget.sources.every(
                                           (s) => s.catalog.sounds.isEmpty)
-                                      ? 'No sounds yet. An admin can add some in Space settings.'
-                                      : 'No sounds found',
+                                      ? SoundboardPopover
+                                          .messageSoundboardNoSoundsYet
+                                      : SoundboardPopover
+                                          .messageSoundboardNoSoundsFound,
                                 ),
                               ),
                             )
@@ -276,18 +330,18 @@ class _SoundboardPopoverState extends State<SoundboardPopover> {
               // Not where it would bring a keyboard up over the sounds.
               autofocus: !_touch,
               onChanged: (v) => setState(() => _query = v),
-              decoration: const InputDecoration(
-                hintText: 'Find the perfect sound',
-                prefixIcon: Icon(Icons.search, size: 18),
+              decoration: InputDecoration(
+                hintText: SoundboardPopover.labelSoundboardSearchHint,
+                prefixIcon: const Icon(Icons.search, size: 18),
                 isDense: true,
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
               ),
             ),
           ),
           AnchoredPopover(
             alignment: PopoverAlignment.end,
             anchorBuilder: (context, open, toggle) => IconButton(
-              tooltip: 'Sound effects volume',
+              tooltip: SoundboardPopover.labelSoundboardEffectsVolume,
               isSelected: open,
               icon: Icon(
                   widget.volume01 <= 0 ? Icons.volume_off : Icons.volume_up),
@@ -459,7 +513,7 @@ class _AddSoundTile extends StatelessWidget {
               const SizedBox(width: 4),
               Flexible(
                 child: Text(
-                  'Add sound',
+                  SoundboardPopover.promptSoundboardAddSound,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context)
                       .textTheme
@@ -502,7 +556,8 @@ class _VolumePopoverState extends State<_VolumePopover> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const tiamat.Text.labelLow('Sound effects volume'),
+              tiamat.Text.labelLow(
+                  SoundboardPopover.labelSoundboardEffectsVolume),
               Row(
                 children: [
                   Expanded(
@@ -621,8 +676,10 @@ class _SoundTileState extends State<_SoundTile> {
                       opacity: widget.favorite || _hovered ? 1 : 0,
                       child: IconButton(
                         tooltip: widget.favorite
-                            ? 'Remove ${sound.name} from favorites'
-                            : 'Add ${sound.name} to favorites',
+                            ? SoundboardPopover.tooltipSoundboardRemoveFavorite(
+                                sound.name)
+                            : SoundboardPopover.tooltipSoundboardAddFavorite(
+                                sound.name),
                         iconSize: 14,
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints.tightFor(

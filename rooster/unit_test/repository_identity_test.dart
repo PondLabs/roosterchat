@@ -63,18 +63,10 @@ final _legacyIdentityAllowlist = <_Allowance>[
     count: 1,
     reason: _uriScheme,
   ),
-  _Allowance(
-    path: r'assets/l10n/intl_[^/]+\.arb',
-    token: r':?https://github\.com/commetchat/encrypted_url_preview',
-    count: 13,
-    reason: _thirdPartyProject,
-  ),
-  _Allowance(
-    path: r'assets/l10n/intl_[^/]+\.arb',
-    token: r'Commets|Commeti|Commeten|Commet\.?',
-    count: 12,
-    reason: _thirdPartyProject,
-  ),
+  // The translations that ship (English and Portuguese) no longer name
+  // Commet: its encrypted URL preview text went with the strings the code
+  // dropped, and the other languages are hidden in l10n/inactive/
+  // (docs/adr/0005-english-and-brazilian-portuguese.md).
   _Allowance(
     path:
         r'(?:macos/Runner/Configs/AppInfo\.xcconfig|windows/runner/Runner\.rc)',

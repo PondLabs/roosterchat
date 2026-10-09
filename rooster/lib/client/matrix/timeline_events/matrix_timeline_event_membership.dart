@@ -78,7 +78,7 @@ class MatrixTimelineEventMembership extends MatrixTimelineEvent
       name: "messageUserRetractedInvite");
 
   String messageUserAcceptedInvite(String user) =>
-      Intl.message("$user accepted the invitiation",
+      Intl.message("$user accepted the invitation",
           desc: "Message body for when a user accepted an invitation to a room",
           args: [user],
           name: "messageUserAcceptedInvite");
@@ -94,6 +94,13 @@ class MatrixTimelineEventMembership extends MatrixTimelineEvent
           desc: "Message body for when a user reverts a ban of another user",
           args: [sender, user],
           name: "messageUserUnbanned");
+
+  String messageTimelineUserKicked(String user, String sender) =>
+      Intl.message("$user was kicked from the room by $sender",
+          name: "messageTimelineUserKicked",
+          args: [user, sender],
+          desc: "Room event in the chat: someone removed a member from the "
+              "room; the member, then who removed them");
 
   @override
   IconData get icon => switch (_getType()) {
@@ -177,7 +184,7 @@ class MatrixTimelineEventMembership extends MatrixTimelineEvent
       case _MembershipType.leave:
         return messagePlaceholderUserLeftRoom(memberName);
       case _MembershipType.kick:
-        return "$memberName was kicked from the room by $sender";
+        return messageTimelineUserKicked(memberName, sender);
       case _MembershipType.invite:
         return messagePlaceholderUserInvited(sender, memberName);
       case _MembershipType.updateDisplayName:
@@ -198,7 +205,8 @@ class MatrixTimelineEventMembership extends MatrixTimelineEvent
       case _MembershipType.unban:
         return messageUserUnbanned(sender, memberName);
       case _MembershipType.unknown:
-        return event.body;
+        // A member event has no body: the SDK's stand-in is English.
+        return MatrixTimelineEvent.messageTimelineUnknownEventType(event.type);
     }
   }
 }

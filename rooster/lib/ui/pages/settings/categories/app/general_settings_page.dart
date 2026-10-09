@@ -1,6 +1,7 @@
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/pages/settings/categories/app/boolean_preference_toggle.dart';
+import 'package:rooster/ui/pages/settings/categories/app/language_settings.dart';
 import 'package:rooster/ui/pages/setup/menus/check_for_updates.dart';
 import 'package:rooster/utils/app_refresh/app_refresh.dart';
 import 'package:rooster/ui/organisms/update_button.dart';
@@ -96,7 +97,7 @@ class GeneralSettingsPageState extends State<GeneralSettingsPage> {
   String get labelMediaPreviewPublicRoomsToggle => Intl.message(
         "Public Rooms",
         desc:
-            "Short label for the private rooms toggle in media previews section",
+            "Short label for the public rooms toggle in media previews section",
         name: "labelMediaPreviewPublicRoomsToggle",
       );
 
@@ -123,6 +124,61 @@ class GeneralSettingsPageState extends State<GeneralSettingsPage> {
   String get promptRefreshApp => Intl.message("Refresh",
       desc: "Button that refreshes the app", name: "promptRefreshApp");
 
+  String get labelSettingsAutofocusMessageInput =>
+      Intl.message("Autofocus Message Input",
+          name: "labelSettingsAutofocusMessageInput",
+          desc: "Settings > General > App Behaviour: toggle that puts the "
+              "cursor in the message box when a chat opens");
+
+  String get labelSettingsAutofocusMessageInputDescription => Intl.message(
+      "Automatically focus on the message input text field when opening a chat",
+      name: "labelSettingsAutofocusMessageInputDescription",
+      desc: "Description of the 'Autofocus Message Input' toggle in Settings "
+          "> General");
+
+  String get labelSettingsAlwaysOpenSpace => Intl.message("Always open space",
+      name: "labelSettingsAlwaysOpenSpace",
+      desc: "Settings > General > App Behaviour: toggle that also opens a "
+          "room's space when you go to the room from elsewhere");
+
+  String get labelSettingsAlwaysOpenSpaceDescription => Intl.message(
+      "When navigating to a room from outside of a space, also open the space the room is in, if any",
+      name: "labelSettingsAlwaysOpenSpaceDescription",
+      desc: "Description of the 'Always open space' toggle in Settings > "
+          "General");
+
+  String get labelSettingsOpenAtLastReadMessage =>
+      Intl.message("Open at last read message",
+          name: "labelSettingsOpenAtLastReadMessage",
+          desc: "Settings > General > App Behaviour: toggle that opens a room "
+              "where you stopped reading instead of at the newest message");
+
+  String get labelSettingsOpenAtLastReadMessageDescription =>
+      Intl.message("When opening a room, jump to the last message you read",
+          name: "labelSettingsOpenAtLastReadMessageDescription",
+          desc: "Description of the 'Open at last read message' toggle in "
+              "Settings > General");
+
+  String get labelSettingsRotateImages => Intl.message("Rotate Images",
+      name: "labelSettingsRotateImages",
+      desc: "Settings > General > Media (on phones): toggle that turns "
+          "fullscreen images to fill the screen best");
+
+  String get labelSettingsRotateImagesDescription => Intl.message(
+      "When showing images in fullscreen, automatically rotate the image to best fill the screen",
+      name: "labelSettingsRotateImagesDescription",
+      desc: "Description of the 'Rotate Images' toggle in Settings > General");
+
+  String get labelSettingsRotateVideos => Intl.message("Rotate Videos",
+      name: "labelSettingsRotateVideos",
+      desc: "Settings > General > Media (on phones): toggle that turns "
+          "fullscreen videos to fill the screen best");
+
+  String get labelSettingsRotateVideosDescription => Intl.message(
+      "When showing videos in fullscreen, automatically rotate the video to best fill the screen",
+      name: "labelSettingsRotateVideosDescription",
+      desc: "Description of the 'Rotate Videos' toggle in Settings > General");
+
   @override
   void initState() {
     super.initState();
@@ -132,6 +188,14 @@ class GeneralSettingsPageState extends State<GeneralSettingsPage> {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        Panel(
+          header: LanguageSettings.labelSettingsLanguage,
+          mode: TileType.surfaceContainerLow,
+          child: const LanguageSettings(),
+        ),
+        const SizedBox(
+          height: 10,
+        ),
         Panel(
           header: labelThirdPartyServicesTitle,
           mode: TileType.surfaceContainerLow,
@@ -177,21 +241,18 @@ class GeneralSettingsPageState extends State<GeneralSettingsPage> {
             ),
             BooleanPreferenceToggle(
               preference: preferences.autoFocusMessageTextBox,
-              title: "Autofocus Message Input",
-              description:
-                  "Automatically focus on the message input text field when opening a chat",
+              title: labelSettingsAutofocusMessageInput,
+              description: labelSettingsAutofocusMessageInputDescription,
             ),
             BooleanPreferenceToggle(
               preference: preferences.automaticallyOpenSpace,
-              title: "Always open space",
-              description:
-                  "When navigating to a room from outside of a space, also open the space the room is in, if any",
+              title: labelSettingsAlwaysOpenSpace,
+              description: labelSettingsAlwaysOpenSpaceDescription,
             ),
             BooleanPreferenceToggle(
               preference: preferences.openRoomsAtLastReadMessage,
-              title: "Open at last read message",
-              description:
-                  "When opening a room, jump to the last message you read",
+              title: labelSettingsOpenAtLastReadMessage,
+              description: labelSettingsOpenAtLastReadMessageDescription,
             )
           ]),
         ),
@@ -228,15 +289,13 @@ class GeneralSettingsPageState extends State<GeneralSettingsPage> {
               Seperator(),
               BooleanPreferenceToggle(
                 preference: preferences.autoRotateImages,
-                title: "Rotate Images",
-                description:
-                    "When showing images in fullscreen, automatically rotate the image to best fill the screen",
+                title: labelSettingsRotateImages,
+                description: labelSettingsRotateImagesDescription,
               ),
               BooleanPreferenceToggle(
                 preference: preferences.autoRotateVideos,
-                title: "Rotate Videos",
-                description:
-                    "When showing videos in fullscreen, automatically rotate the video to best fill the screen",
+                title: labelSettingsRotateVideos,
+                description: labelSettingsRotateVideosDescription,
               ),
             ],
           ]),

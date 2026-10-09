@@ -10,6 +10,7 @@ import 'package:rooster/client/matrix/components/emoticon/matrix_space_emoticon_
 import 'package:rooster/client/matrix/extensions/matrix_client_extensions.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
 import 'package:flutter/widgets.dart';
+import 'package:intl/intl.dart';
 import 'package:matrix/matrix.dart';
 
 class MatrixEmoticonPack implements EmoticonPack {
@@ -40,12 +41,17 @@ class MatrixEmoticonPack implements EmoticonPack {
 
   late Map<String, dynamic> state;
 
+  static String get labelChatEmojiPackUnnamed => Intl.message("Unnamed Pack",
+      name: "labelChatEmojiPackUnnamed",
+      desc: "Stands in for the name of an emoji or sticker pack that has "
+          "none, in the emoji picker and the pack settings");
+
   @override
   String get displayName {
     return state
             .tryGetMap<String, dynamic>("pack")
             ?.tryGet<String>("display_name") ??
-        "Unnamed Pack";
+        labelChatEmojiPackUnnamed;
   }
 
   @override

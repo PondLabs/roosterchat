@@ -8,6 +8,7 @@ import 'package:rooster/ui/atoms/notification_badge.dart';
 import 'package:rooster/ui/atoms/shimmer_loading.dart';
 import 'package:rooster/ui/molecules/typing_indicators_widget.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -60,6 +61,13 @@ class RoomPanelView extends StatefulWidget {
   final UserPresence? userPresence;
   @override
   State<RoomPanelView> createState() => _RoomPanelViewState();
+
+  static String labelRoomRecentEventSender(String sender) => Intl.message(
+      "$sender:",
+      name: "labelRoomRecentEventSender",
+      args: [sender],
+      desc:
+          "Before a room's last message in its panel, with who sent it (a name, or 'You'); the message follows");
 }
 
 class _RoomPanelViewState extends State<RoomPanelView> {
@@ -362,7 +370,8 @@ class _RoomPanelViewState extends State<RoomPanelView> {
           text: TextSpan(children: [
             if (widget.recentEventSender != null)
               TextSpan(
-                text: widget.recentEventSender! + ":",
+                text: RoomPanelView.labelRoomRecentEventSender(
+                    widget.recentEventSender!),
                 style: style?.copyWith(color: color),
               ),
             if (widget.recentEventSender != null)

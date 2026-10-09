@@ -4,6 +4,7 @@ import 'package:rooster/client/components/photo_album_room/photo_album_room_comp
 import 'package:rooster/utils/mime.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 import 'package:path/path.dart' as p;
 
@@ -18,6 +19,22 @@ class PhotosAlbumUploadView extends StatefulWidget {
 
 class _PhotosAlbumUploadViewState extends State<PhotosAlbumUploadView> {
   bool sendOriginal = false;
+
+  String get messageRoomPhotoOriginalWarning => Intl.message(
+      "The original image files may contain sensitive metadata, such as the location at which they were taken",
+      name: "messageRoomPhotoOriginalWarning",
+      desc:
+          "Warning in the dialog that uploads photos to a photo album room, while 'Upload Original' is on");
+
+  String get labelRoomPhotoUploadOriginal => Intl.message("Upload Original",
+      name: "labelRoomPhotoUploadOriginal",
+      desc:
+          "Next to a switch in the dialog that uploads photos to a photo album room: send the files as they are, instead of re-encoded copies without their metadata");
+
+  String get promptRoomPhotoUploadFiles => Intl.message("Upload Files",
+      name: "promptRoomPhotoUploadFiles",
+      desc:
+          "Button that uploads the picked photos and videos to a photo album room");
 
   @override
   Widget build(BuildContext context) {
@@ -62,7 +79,7 @@ class _PhotosAlbumUploadViewState extends State<PhotosAlbumUploadView> {
             SizedBox(
               width: 500,
               child: tiamat.Text.error(
-                "The original image files may contain sensitive metadata, such as the location at which they were taken",
+                messageRoomPhotoOriginalWarning,
                 maxLines: 3,
                 softwrap: true,
               ),
@@ -70,7 +87,7 @@ class _PhotosAlbumUploadViewState extends State<PhotosAlbumUploadView> {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              tiamat.Text.label("Upload Original"),
+              Flexible(child: tiamat.Text.label(labelRoomPhotoUploadOriginal)),
               tiamat.Switch(
                 state: sendOriginal,
                 onChanged: (val) => setState(() {
@@ -80,7 +97,7 @@ class _PhotosAlbumUploadViewState extends State<PhotosAlbumUploadView> {
             ],
           ),
           tiamat.Button(
-            text: "Upload Files",
+            text: promptRoomPhotoUploadFiles,
             onTap: () {
               widget.component.uploadPhotos(widget.photos,
                   sendOriginal: sendOriginal, extractMetadata: true);

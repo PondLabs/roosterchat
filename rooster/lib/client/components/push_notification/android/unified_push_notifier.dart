@@ -101,7 +101,7 @@ class UnifiedPushNotifier implements Notifier {
           }
 
           NotificationManager.notify(ErrorNotificationContent(
-            title: "Unknown Notification Data",
+            title: ErrorNotificationContent.labelNotificationUnknownData,
             content: jsonEncode(message),
           ));
         }
@@ -115,7 +115,7 @@ class UnifiedPushNotifier implements Notifier {
           "An error occured while processing unified push background message");
       Log.onError(e, s);
       NotificationManager.notify(ErrorNotificationContent(
-          title: "An error occurred while processing notifications",
+          title: ErrorNotificationContent.labelNotificationProcessingError,
           content: "${e} \n\n ${s}"));
     }
   }

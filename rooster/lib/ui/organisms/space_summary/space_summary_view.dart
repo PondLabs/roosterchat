@@ -11,6 +11,7 @@ import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/ui/atoms/room_panel.dart';
 import 'package:rooster/ui/atoms/room_panel_view.dart';
 import 'package:rooster/ui/atoms/scaled_safe_area.dart';
+import 'package:rooster/ui/organisms/room_quick_access_menu/room_quick_access_menu.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/image/lod_image.dart';
 import 'package:rooster/utils/links/link_utils.dart';
@@ -100,7 +101,7 @@ class SpaceSummaryViewState extends State<SpaceSummaryView> {
       name: "labelSpaceAvailableRoomsList");
 
   String get labelSpaceVisibilityPublic => Intl.message("Public space",
-      desc: "Label to display that the space is publically available",
+      desc: "Label to display that the space is publicly available",
       name: "labelSpaceVisibilityPublic");
 
   String get labelSpaceVisibilityPrivate => Intl.message("Private space",
@@ -310,7 +311,7 @@ class SpaceSummaryViewState extends State<SpaceSummaryView> {
 
   Widget buildHistoryButton() {
     return tiamat.Tooltip(
-      text: "Call history",
+      text: RoomQuickAccessMenu.labelRoomCallHistory,
       preferredDirection: AxisDirection.left,
       child: tiamat.CircleButton(
         icon: Icons.history,
@@ -322,7 +323,7 @@ class SpaceSummaryViewState extends State<SpaceSummaryView> {
 
   Widget buildInviteButton() {
     return tiamat.Tooltip(
-      text: "Invite",
+      text: RoomQuickAccessMenu.promptRoomInvite,
       preferredDirection: AxisDirection.left,
       child: tiamat.CircleButton(
         key: inviteButtonKey,
@@ -432,9 +433,11 @@ class SpaceSummaryViewState extends State<SpaceSummaryView> {
     return Row(
       children: [
         Icon(data),
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: tiamat.Text.label(text),
+        Flexible(
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: tiamat.Text.label(text),
+          ),
         )
       ],
     );

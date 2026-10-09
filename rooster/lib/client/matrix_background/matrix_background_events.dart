@@ -1,11 +1,20 @@
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/client.dart';
+import 'package:rooster/client/components/push_notification/modifiers/hide_content.dart';
 import 'package:rooster/client/timeline.dart';
 import 'package:rooster/client/timeline_events/timeline_event_message.dart';
 import 'package:flutter/src/widgets/framework.dart';
+import 'package:intl/intl.dart';
 import 'package:matrix/matrix.dart' as matrix;
 
 class MatrixBackgroundTimelineEventMessage implements TimelineEventMessage {
+  static String get labelNotificationUnknownEventType =>
+      Intl.message("Unknown event type",
+          name: "labelNotificationUnknownEventType",
+          desc: "Text of a notification on Android for something in a room "
+              "that is neither a message nor encrypted, which the app cannot "
+              "describe");
+
   matrix.MatrixEvent event;
 
   MatrixBackgroundTimelineEventMessage(this.event);
@@ -49,7 +58,8 @@ class MatrixBackgroundTimelineEventMessage implements TimelineEventMessage {
   @override
   String get plainTextBody {
     if (event.type == matrix.EventTypes.Encrypted) {
-      return "Sent a message";
+      return NotificationModifierHideContent
+          .notificationModifiersPrivacyEnhanced;
     }
 
     if (event.type == matrix.EventTypes.Message) {
@@ -58,7 +68,7 @@ class MatrixBackgroundTimelineEventMessage implements TimelineEventMessage {
       }
     }
 
-    return "Unknown event type";
+    return labelNotificationUnknownEventType;
   }
 
   @override

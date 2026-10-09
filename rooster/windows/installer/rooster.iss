@@ -46,6 +46,13 @@ OutputBaseFilename={#OutputName}
 Compression=lzma2/max
 SolidCompression=yes
 CloseApplications=yes
+; The languages the app ships (docs/localization.md), picked by Windows'
+; display language; English for any other.
+ShowLanguageDialog=no
+
+[Languages]
+Name: "en"; MessagesFile: "compiler:Default.isl"
+Name: "pt"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
 
 [Tasks]
 Name: desktopicon; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked

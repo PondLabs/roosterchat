@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 
 import '../video_capabilities.dart';
 import '../video_embed_info.dart';
@@ -15,6 +16,11 @@ class YouTubeProvider implements VideoProvider {
 
   @override
   String get id => 'youtube';
+
+  static String get labelMediaYouTubeVideo => Intl.message("YouTube Video",
+      name: "labelMediaYouTubeVideo",
+      desc: "Title of a preview card for a YouTube video whose title could "
+          "not be fetched");
 
   @override
   String get name => 'YouTube';
@@ -124,7 +130,7 @@ class YouTubeProvider implements VideoProvider {
     }
 
     thumbnailUrl ??= 'https://i.ytimg.com/vi/$videoId/hqdefault.jpg';
-    title ??= shorts ? 'YouTube Shorts' : 'YouTube Video';
+    title ??= shorts ? 'YouTube Shorts' : labelMediaYouTubeVideo;
 
     return VideoEmbedInfo(
       originalUrl: uri,

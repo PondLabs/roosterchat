@@ -23,15 +23,23 @@ class _TypingIndicatorsWidgetState extends State<TypingIndicatorsWidget> {
 
   late String currentText = "";
 
-  String typingUsers(int howMany, String user1, String user2, String user3) =>
+  String typingUsers(int howMany, String user1, String user2) =>
       Intl.plural(howMany,
-          one: "$user1 is typing...",
-          two: "$user1 and $user2 are typing...",
-          few: "$user1, $user2, and $user3 are typing...",
-          other: "Several people are typing...",
-          desc: "Text to display which users are currently typing",
+          one: "$user1 is typing…",
+          two: "$user1 and $user2 are typing…",
+          other: "Several people are typing…",
+          desc: "Text to display which users are currently typing. Exactly "
+              "three people have their own message, typingThreeUsers",
           name: "typingUsers",
-          args: [howMany, user1, user2, user3]);
+          args: [howMany, user1, user2]);
+
+  // Not a case of typingUsers: plural rules give three "other" in English
+  // and Portuguese, so a "few" case there was never shown.
+  String typingThreeUsers(String user1, String user2, String user3) =>
+      Intl.message("$user1, $user2 and $user3 are typing…",
+          desc: "Text to display when exactly three people are typing",
+          name: "typingThreeUsers",
+          args: [user1, user2, user3]);
 
   @override
   void initState() {
@@ -74,18 +82,26 @@ class _TypingIndicatorsWidgetState extends State<TypingIndicatorsWidget> {
                     playing: typingMembers.isNotEmpty,
                   ),
                 ),
-                tiamat.Text.labelLow(currentText)
+                // One line, cut short: long names, or a longer language,
+                // would run past the edge of the chat.
+                Flexible(
+                  child: tiamat.Text.labelLow(
+                    currentText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                )
               ])),
         ));
   }
 
   String getTypingText() {
-    String user1 = typingMembers[0].displayName;
-    String user2 =
-        typingMembers.length >= 2 ? typingMembers[1].displayName : "";
-    String user3 =
-        typingMembers.length >= 3 ? typingMembers[2].displayName : "";
-    return typingUsers(typingMembers.length, user1, user2, user3);
+    final names = typingMembers.map((member) => member.displayName).toList();
+    if (names.length == 3) {
+      return typingThreeUsers(names[0], names[1], names[2]);
+    }
+    return typingUsers(
+        names.length, names[0], names.length >= 2 ? names[1] : "");
   }
 }
 

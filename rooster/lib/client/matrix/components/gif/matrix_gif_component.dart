@@ -16,6 +16,7 @@ import 'package:rooster/main.dart';
 import 'package:rooster/utils/mime.dart';
 import 'package:flutter/src/painting/image_provider.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:tiamat/config/style/theme_json_converter.dart';
@@ -57,7 +58,12 @@ class MatrixGifComponent implements GifComponent<MatrixClient> {
   }
 
   @override
-  String get searchPlaceholder => "Search KLIPY";
+  String get searchPlaceholder => promptChatSearchKlipy;
+
+  static String get promptChatSearchKlipy => Intl.message("Search KLIPY",
+      name: "promptChatSearchKlipy",
+      desc: "Hint in the search box of the GIF picker; KLIPY is the service "
+          "the GIFs come from");
 
   static const String favoritesKey = "chat.commet.favorite_stickers";
 
@@ -327,9 +333,9 @@ class MatrixGifComponent implements GifComponent<MatrixClient> {
     var uri = Uri.parse(url);
 
     // ROOSTER: the query too; KLIPY requires its URL parameters kept as given
-    var proxyUri = Uri.https(preferences.proxyUrl.value,
-            "/proxy/klipy/media${uri.path}")
-        .replace(query: uri.hasQuery ? uri.query : null);
+    var proxyUri =
+        Uri.https(preferences.proxyUrl.value, "/proxy/klipy/media${uri.path}")
+            .replace(query: uri.hasQuery ? uri.query : null);
 
     // proxyUri = Uri.http("localhost:8788", "/proxy/klipy/media${uri.path}");
 

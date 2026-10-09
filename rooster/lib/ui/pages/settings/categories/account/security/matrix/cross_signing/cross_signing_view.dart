@@ -63,7 +63,7 @@ class _MatrixCrossSigningViewState extends State<MatrixCrossSigningView> {
       name: "promptGenerateMatrixRecoveryKey");
 
   String get labelMatrixRecoveryKeyCreateExplanation => Intl.message(
-      "We need to set a security key, which can be used to access message history. We can either generate a key for you, or you can choose your own security phrase",
+      "We need to set a recovery key, which can be used to access message history. We can either generate a key for you, or you can choose your own security phrase",
       desc:
           "Explains what the matrix recovery key does, and that it can be generated or user input",
       name: "labelMatrixRecoveryKeyCreateExplanation");
@@ -126,22 +126,22 @@ class _MatrixCrossSigningViewState extends State<MatrixCrossSigningView> {
       name: "labelMatrixSecurityPhraseShouldNotBePassword");
 
   String get errorMatrixPassphraseMustContainUpperAndLowercase => Intl.message(
-      "Passphrase must contain atleast 1 Uppercase and 1 Lowercase letter",
+      "Passphrase must contain at least 1 uppercase and 1 lowercase letter",
       desc: "Explains constraints of recovery passphrase",
       name: "errorMatrixPassphraseMustContainUpperAndLowercase");
 
   String get errorMatrixPassphraseMustContainNumber =>
-      Intl.message("Passphrase must contain atleast 1 number",
+      Intl.message("Passphrase must contain at least 1 number",
           desc: "Explains constraints of recovery passphrase",
           name: "errorMatrixPassphraseMustContainNumber");
 
   String get errorMatrixPassphraseMustContainSymbol =>
-      Intl.message("Passphrase must contain atleast 1 symbol",
+      Intl.message("Passphrase must contain at least 1 symbol",
           desc: "Explains constraints of recovery passphrase",
           name: "errorMatrixPassphraseMustContainSymbol");
 
   String get erroMatrixPassphraseMustBeLonger =>
-      Intl.message("Passphrase must be atleast 10 characters long",
+      Intl.message("Passphrase must be at least 10 characters long",
           desc: "Explains constraints of recovery passphrase",
           name: "erroMatrixPassphraseMustBeLonger");
 
@@ -182,7 +182,7 @@ class _MatrixCrossSigningViewState extends State<MatrixCrossSigningView> {
       name: "labelMatrixAskWipeBackupToContinue");
 
   String get labelMatrixWarnResetKeysIsPermanent => Intl.message(
-      "Resetting your keys is permanent, and will result in a loss of your chat history backup. You almost definitely dont want to do this!",
+      "Resetting your keys is permanent, and will result in a loss of your chat history backup. You almost definitely don't want to do this!",
       desc:
           "Explains that resetting keys is permanent, should emphasize that this isnt really a great idea",
       name: "labelMatrixWarnResetKeysIsPermanent");
@@ -193,7 +193,7 @@ class _MatrixCrossSigningViewState extends State<MatrixCrossSigningView> {
           name: "labelMatrixAskEnableMessageBackup");
 
   String get labelMatrixExplainOnlineKeyBackup => Intl.message(
-      "Online key backup will allow you to retreive message history in the event that you lose access to all your sessions",
+      "Online key backup will allow you to retrieve message history in the event that you lose access to all your sessions",
       desc: "Explains what the message backup does",
       name: "labelMatrixExplainOnlineKeyBackup");
 
@@ -223,16 +223,20 @@ class _MatrixCrossSigningViewState extends State<MatrixCrossSigningView> {
   Widget build(BuildContext context) {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 500, maxHeight: 500),
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: m.Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            showState(),
-            if (preferences.developerMode.value)
-              tiamat.Text.labelLow(widget.state.toString()),
-          ],
+      // Scrolls rather than overflows when a step's text runs long, as it
+      // does in longer languages.
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: m.Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              showState(),
+              if (preferences.developerMode.value)
+                tiamat.Text.labelLow(widget.state.toString()),
+            ],
+          ),
         ),
       ),
     );

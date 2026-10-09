@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:rooster/client/components/url_preview/url_preview_component.dart';
 import 'package:rooster/client/components/video_embed/composite_video_provider.dart';
+import 'package:rooster/client/components/video_embed/providers/generic_video_provider.dart';
 import 'package:rooster/client/components/video_embed/video_embed_info.dart';
 import 'package:rooster/client/components/video_embed/video_playback_source.dart';
 import 'package:rooster/ui/atoms/lightbox.dart';
@@ -41,6 +42,12 @@ class UrlPreviewWidget extends StatefulWidget {
 
   /// Overrides [VideoPlaybackDialog.supportsOfficialEmbeds], for tests.
   final bool? supportsOfficialEmbeds;
+
+  static String get messageMediaVideoUnavailable =>
+      intl.Intl.message("Video unavailable. Please try again.",
+          name: "messageMediaVideoUnavailable",
+          desc: "Shown at the bottom of the window when a video from a link "
+              "preview could not be opened");
 
   @override
   State<UrlPreviewWidget> createState() => _UrlPreviewWidgetState();
@@ -147,8 +154,8 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
     if (mounted) {
       setState(() => isLoadingPlayback = false);
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(
-          content: Text('Video unavailable. Please try again.'),
+        SnackBar(
+          content: Text(UrlPreviewWidget.messageMediaVideoUnavailable),
         ),
       );
     }
@@ -163,8 +170,10 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
       return (current ??
               VideoEmbedInfo(
                 originalUrl: uri,
-                title: widget.data?.title ?? 'Video',
-                platformName: widget.data?.siteName ?? 'Video',
+                title:
+                    widget.data?.title ?? GenericVideoProvider.labelMediaVideo,
+                platformName: widget.data?.siteName ??
+                    GenericVideoProvider.labelMediaVideo,
                 aspectRatio: widget.data?.video?.aspectRatio,
               ))
           .copyWith(playbackSource: NativeVideoSource(streamUrl));

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:intl/intl.dart' show Intl;
 
 import 'browser_runtime.dart';
 
@@ -333,6 +334,41 @@ class StandaloneBrowserWindow extends StatefulWidget {
   final StandaloneBrowserSurface surface;
   final Widget? placeholder;
 
+  static String get labelBrowserStandaloneClosed =>
+      Intl.message("Standalone browser closed",
+          name: "labelBrowserStandaloneClosed",
+          desc: "In the app where a web page shows in a browser window of its "
+              "own (Windows), once that window closed");
+
+  static String labelBrowserStandaloneFocused(String geometry) => Intl.message(
+      "Standalone browser $geometry focused",
+      name: "labelBrowserStandaloneFocused",
+      args: [geometry],
+      desc: "Status in the app while a web page shows in a browser window of "
+          "its own (Windows) that has the focus; geometry is its size, such "
+          "as 1024x768 @1.0x");
+
+  static String labelBrowserStandaloneUnfocused(String geometry) =>
+      Intl.message("Standalone browser $geometry unfocused",
+          name: "labelBrowserStandaloneUnfocused",
+          args: [geometry],
+          desc: "Status in the app while a web page shows in a browser window "
+              "of its own (Windows) that does not have the focus; geometry "
+              "is its size, such as 1024x768 @1.0x");
+
+  static String get labelBrowserStandaloneConnecting =>
+      Intl.message("connecting",
+          name: "labelBrowserStandaloneConnecting",
+          desc: "Stands in for the window's size in the standalone browser's "
+              "status ('Standalone browser … focused') while it has none yet");
+
+  static String labelBrowserStandaloneStillConnecting(String status) =>
+      Intl.message("$status (connecting)",
+          name: "labelBrowserStandaloneStillConnecting",
+          args: [status],
+          desc: "The standalone browser's status (already translated) while "
+              "its browser is still starting");
+
   @override
   State<StandaloneBrowserWindow> createState() =>
       _StandaloneBrowserWindowState();
@@ -425,15 +461,21 @@ class _StandaloneBrowserWindowState extends State<StandaloneBrowserWindow> {
       return widget.placeholder!;
     }
     if (_closed) {
-      return const Text('Standalone browser closed',
+      return Text(StandaloneBrowserWindow.labelBrowserStandaloneClosed,
           textDirection: TextDirection.ltr);
     }
     final geometry = _geometry;
-    final geometryText = geometry == null ? 'connecting' : '$geometry';
-    final focusText = _focused ? 'focused' : 'unfocused';
+    final geometryText = geometry == null
+        ? StandaloneBrowserWindow.labelBrowserStandaloneConnecting
+        : '$geometry';
+    final status = _focused
+        ? StandaloneBrowserWindow.labelBrowserStandaloneFocused(geometryText)
+        : StandaloneBrowserWindow.labelBrowserStandaloneUnfocused(geometryText);
     return Text(
-      'Standalone browser $geometryText $focusText'
-      '${_ready ? '' : ' (connecting)'}',
+      _ready
+          ? status
+          : StandaloneBrowserWindow.labelBrowserStandaloneStillConnecting(
+              status),
       textDirection: TextDirection.ltr,
     );
   }

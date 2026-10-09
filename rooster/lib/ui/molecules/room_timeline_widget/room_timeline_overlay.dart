@@ -2,6 +2,7 @@ import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/emoji_widget.dart';
 import 'package:rooster/ui/molecules/room_timeline_widget/room_timeline_overlay_button.dart';
 import 'package:rooster/ui/molecules/timeline_events/timeline_event_menu.dart';
+import 'package:rooster/utils/common_strings.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -205,7 +206,7 @@ class TimelineOverlayState extends State<TimelineOverlay> {
                               ? () => togglePopupMenu(e)
                               : () => e.action?.call(context)),
                     buildAction(
-                        name: "Options",
+                        name: CommonStrings.promptOptions,
                         child: Icon(m.Icons.more_vert),
                         size: size,
                         contextMenuItems: currentMenu!.secondaryActions

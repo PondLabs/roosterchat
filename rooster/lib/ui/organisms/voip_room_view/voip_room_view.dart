@@ -18,11 +18,56 @@ import 'package:rooster/ui/organisms/dj/vinyl_disc.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class VoipRoomView extends StatefulWidget {
   final VoipRoomComponent voip;
   const VoipRoomView(this.voip, {super.key});
+
+  static String get tooltipCallRoomEncrypted =>
+      Intl.message("This room is encrypted, your call is secure and private",
+          name: "tooltipCallRoomEncrypted",
+          desc: "Tooltip of the closed lock at the bottom of a voice channel's "
+              "page, before joining its call");
+
+  static String get tooltipCallRoomNotEncrypted => Intl.message(
+      "This room is not encrypted, your call may be accessible by the server "
+      "operator",
+      name: "tooltipCallRoomNotEncrypted",
+      desc: "Tooltip of the open lock at the bottom of a voice channel's "
+          "page, before joining its call");
+
+  static String get labelVoiceChannelEmpty =>
+      Intl.message("It's quiet in here. Pull up a chair.",
+          name: "labelVoiceChannelEmpty",
+          desc: "Shown on a voice channel's page while nobody is in its call; "
+              "a friendly invitation to join it");
+
+  static String get messageVoiceNeedsSecurePage =>
+      Intl.message("Voice needs a secure page: open Rooster over HTTPS to join",
+          name: "messageVoiceNeedsSecurePage",
+          desc: "Shown on a voice channel's page, in place of the join button, "
+              "when the web app was opened over plain HTTP: the browser gives "
+              "no microphone there. Rooster is the app's name");
+
+  static String get messageCallJoinNotAllowed =>
+      Intl.message("You do not have permission to join this call",
+          name: "messageCallJoinNotAllowed",
+          desc: "Shown on a voice channel's page, in place of the join button, "
+              "when the user may not join its call");
+
+  static String get errorCallJoinFailed =>
+      Intl.message("Could not join the call",
+          name: "errorCallJoinFailed",
+          desc: "Title of the dialog shown when joining a voice channel's call "
+              "failed; the dialog says why, and offers to try again");
+
+  static String get messageVoiceE2eeUnsupported => Intl.message(
+      "Sorry, End-to-end encrypted voice rooms are not yet supported.",
+      name: "messageVoiceE2eeUnsupported",
+      desc: "Shown on the page of a voice channel that is end-to-end "
+          "encrypted, where calls cannot be joined yet");
 
   @override
   State<VoipRoomView> createState() => _VoipRoomViewState();
@@ -159,8 +204,8 @@ class _VoipRoomViewState extends State<VoipRoomView> {
           alignment: AlignmentGeometry.bottomLeft,
           child: tiamat.Tooltip(
             text: widget.voip.room.isE2EE
-                ? "This room is encrypted, your call is secure and private"
-                : "This room is not encrypted, your call may be accessible by the server operator",
+                ? VoipRoomView.tooltipCallRoomEncrypted
+                : VoipRoomView.tooltipCallRoomNotEncrypted,
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: Row(
@@ -216,13 +261,13 @@ class _VoipRoomViewState extends State<VoipRoomView> {
                   child: tiamat.Tile.surfaceContainer(
                       child: Center(
                           child: tiamat.Text.labelLow(
-                              "It's quiet in here. Pull up a chair.")))),
+                              VoipRoomView.labelVoiceChannelEmpty)))),
             ),
           ),
         if (!supportsMediaCapture)
-          const Center(
+          Center(
               child: tiamat.Text.labelLow(
-                  "Voice needs a secure page: open Rooster over HTTPS to join"))
+                  VoipRoomView.messageVoiceNeedsSecurePage))
         else if (widget.voip.canJoinCall)
           Center(
             child: tiamat.Button(
@@ -236,8 +281,8 @@ class _VoipRoomViewState extends State<VoipRoomView> {
           )
         else
           Center(
-              child: tiamat.Text.labelLow(
-                  "You do not have permission to join this call"))
+              child:
+                  tiamat.Text.labelLow(VoipRoomView.messageCallJoinNotAllowed))
       ],
     );
   }
@@ -263,6 +308,10 @@ class _VoipRoomViewState extends State<VoipRoomView> {
               (constraints.biggest.shortestSide * 0.3).clamp(12.0, 50.0);
           final showName = constraints.maxHeight >= radius * 2 + 56 &&
               constraints.maxWidth >= 72;
+          // Who is live goes beside the name on a wide tile, else in the
+          // corner: beside a name, LIVE (longer in some languages, "AO VIVO")
+          // left a small tile's name no room, or ran past its edge.
+          final badgeBesideName = showName && constraints.maxWidth >= 160;
 
           return Stack(
             alignment: Alignment.center,
@@ -322,14 +371,15 @@ class _VoipRoomViewState extends State<VoipRoomView> {
                             child: tiamat.Text.label(member.displayName,
                                 overflow: TextOverflow.ellipsis),
                           ),
-                          if (media.isNotEmpty) LiveMediaIndicator(media),
+                          if (media.isNotEmpty && badgeBesideName)
+                            LiveMediaIndicator(media),
                         ],
                       ),
                     ),
                 ],
               ),
-              // No room for the name: who is live still shows.
-              if (!showName && media.isNotEmpty)
+              // No room beside the name: who is live still shows.
+              if (!badgeBesideName && media.isNotEmpty)
                 Positioned(top: 6, right: 6, child: LiveMediaIndicator(media)),
             ],
           );
@@ -373,10 +423,10 @@ class _VoipRoomViewState extends State<VoipRoomView> {
       });
 
       final retry = await AdaptiveDialog.confirmation(context,
-          title: "Could not join the call",
-          prompt: e.toString(),
-          confirmationText: "Retry",
-          cancelText: "Close");
+          title: VoipRoomView.errorCallJoinFailed,
+          prompt: e is CallJoinException ? e.message : e.toString(),
+          confirmationText: CommonStrings.promptRetry,
+          cancelText: CommonStrings.promptClose);
       if (retry == true && mounted && !joining) {
         joinRoomCall(withoutEntranceSound: withoutEntranceSound);
       }
@@ -387,8 +437,7 @@ class _VoipRoomViewState extends State<VoipRoomView> {
     return Center(
         child: Padding(
       padding: const EdgeInsets.all(24.0),
-      child: tiamat.Text.label(
-          "Sorry, End-to-end encrypted voice rooms are not yet supported."),
+      child: tiamat.Text.label(VoipRoomView.messageVoiceE2eeUnsupported),
     ));
   }
 }

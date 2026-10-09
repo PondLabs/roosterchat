@@ -18,7 +18,9 @@ import 'package:rooster/ui/atoms/rich_text_field.dart';
 import 'package:rooster/ui/molecules/attachment_icon.dart';
 import 'package:rooster/ui/molecules/overlapping_panels.dart';
 import 'package:rooster/ui/molecules/poll_creator.dart';
+import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_reply.dart';
 import 'package:rooster/ui/organisms/attachment_processor/attachment_processor.dart';
+import 'package:rooster/ui/molecules/emoji_picker.dart';
 import 'package:rooster/ui/molecules/emoticon_picker.dart';
 import 'package:rooster/ui/molecules/gif_picker.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
@@ -184,6 +186,79 @@ class MessageInputState extends State<MessageInput> {
 
   String get promptCancelEnableGifSearch => Intl.message("Cancel",
       desc: "Cancels enabling gif search", name: "promptCancelEnableGifSearch");
+
+  String labelChatSendingAs(String name) => Intl.message("Sending as: $name",
+      name: "labelChatSendingAs",
+      args: [name],
+      desc: "Under the message box when the message will be sent from "
+          "another of the user's accounts (picked by typing its prefix), "
+          "with that account's display name");
+
+  String get labelChatMentionsHeader => Intl.message("MENTIONS",
+      name: "labelChatMentionsHeader",
+      desc: "Header, in capitals, of the list of people to mention that "
+          "opens above the message box while typing @");
+
+  String labelChatMentionPeopleCount(int howMany) => Intl.plural(howMany,
+      one: "1 person",
+      other: "$howMany people",
+      name: "labelChatMentionPeopleCount",
+      args: [howMany],
+      desc: "Beside the header of the mention list: how many people match "
+          "what was typed after @");
+
+  String get labelChatMentionNoMatches => Intl.message("No one found",
+      name: "labelChatMentionNoMatches",
+      desc: "In the mention list when nobody matches what was typed after @");
+
+  String get labelChatMentionNavigateHint => Intl.message("Navigate",
+      name: "labelChatMentionNavigateHint",
+      desc: "Keyboard hint at the bottom of the mention list, after the up "
+          "and down arrow keys: they move through the list");
+
+  String get labelChatKeyEnter => Intl.message("Enter",
+      name: "labelChatKeyEnter",
+      desc: "The Enter key as printed on keyboards, drawn as a key cap in the "
+          "keyboard hints at the bottom of the mention list");
+
+  String get labelChatMentionSelectHint => Intl.message("Select",
+      name: "labelChatMentionSelectHint",
+      desc: "Keyboard hint at the bottom of the mention list, after the Enter "
+          "key: it picks the highlighted person");
+
+  String get labelChatMentionEveryone =>
+      Intl.message("Mention everyone in the room",
+          name: "labelChatMentionEveryone",
+          desc: "Under @room in the mention list: picking it notifies "
+              "everyone in the room");
+
+  String get promptChatAddPoll => Intl.message("Poll",
+      name: "promptChatAddPoll",
+      desc: "Entry in the menu of the send button, while the message box is "
+          "empty, that opens the poll creator");
+
+  String get labelPollCreateTitle => Intl.message("Create Poll",
+      name: "labelPollCreateTitle",
+      desc: "Title of the dialog where a new poll is written");
+
+  String get promptChatAttachGallery => Intl.message("Gallery",
+      name: "promptChatAttachGallery",
+      desc: "Choice when adding an attachment to a message (Android): pick "
+          "photos from the phone's gallery");
+
+  String get promptChatAttachFile => Intl.message("File",
+      name: "promptChatAttachFile",
+      desc: "Choice when adding an attachment to a message: pick any file");
+
+  String get promptChatAttachMedia => Intl.message("Media",
+      name: "promptChatAttachMedia",
+      desc: "Choice when adding an attachment to a message (Android, "
+          "developer mode): pick photos and videos");
+
+  String get promptChatAttachTakePhoto => Intl.message("Take a photo",
+      name: "promptChatAttachTakePhoto",
+      desc: "Choice when adding an attachment to a message (Android): take a "
+          "photo with the camera and attach it");
 
   StreamSubscription? keyboardFocusSubscription;
   StreamSubscription? setInputTextSubscription;
@@ -962,36 +1037,48 @@ class MessageInputState extends State<MessageInput> {
       alignment: Alignment.centerLeft,
       child: SizedBox(
         height: 30,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 2, 2, 2),
-          child: Material(
-            borderRadius: BorderRadius.circular(8),
-            clipBehavior: Clip.hardEdge,
-            color: Theme.of(context).colorScheme.secondaryContainer,
-            child: InkWell(
-              onTap: () {
-                widget.onTapOverrideClient?.call(senderOverride!);
-              },
-              child: Padding(
-                padding: const EdgeInsets.all(2),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 5,
-                    ),
-                    tiamat.Avatar(
-                        radius: 10,
-                        image: profile.avatar,
-                        placeholderColor: profile.defaultColor,
-                        placeholderText: profile.displayName),
-                    SizedBox(
-                      width: 10,
-                    ),
-                    tiamat.Text.labelLow("Sending as: ${profile.displayName}"),
-                    SizedBox(
-                      width: 5,
-                    )
-                  ],
+        child: ConstrainedBox(
+          // A long name, or a longer language, is cut short rather than
+          // pushing the row past the edge.
+          constraints: const BoxConstraints(maxWidth: 300),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 2, 2, 2),
+            child: Material(
+              borderRadius: BorderRadius.circular(8),
+              clipBehavior: Clip.hardEdge,
+              color: Theme.of(context).colorScheme.secondaryContainer,
+              child: InkWell(
+                onTap: () {
+                  widget.onTapOverrideClient?.call(senderOverride!);
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 5,
+                      ),
+                      tiamat.Avatar(
+                          radius: 10,
+                          image: profile.avatar,
+                          placeholderColor: profile.defaultColor,
+                          placeholderText: profile.displayName),
+                      SizedBox(
+                        width: 10,
+                      ),
+                      Flexible(
+                        child: tiamat.Text.labelLow(
+                          labelChatSendingAs(profile.displayName),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      SizedBox(
+                        width: 5,
+                      )
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1028,12 +1115,14 @@ class MessageInputState extends State<MessageInput> {
                   children: [
                     Expanded(
                       child: tiamat.Text.labelLow(
-                        'MENÇÕES',
+                        labelChatMentionsHeader,
                         color: colors.onSurfaceVariant,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     tiamat.Text.labelLow(
-                      '${results.length} ${results.length == 1 ? 'pessoa' : 'pessoas'}',
+                      labelChatMentionPeopleCount(results.length),
                       color: colors.onSurfaceVariant,
                     ),
                   ],
@@ -1043,7 +1132,7 @@ class MessageInputState extends State<MessageInput> {
                 Padding(
                   padding: const EdgeInsets.all(18),
                   child: tiamat.Text.labelLow(
-                    'Nenhuma pessoa encontrada',
+                    labelChatMentionNoMatches,
                     color: colors.onSurfaceVariant,
                   ),
                 )
@@ -1077,15 +1166,20 @@ class MessageInputState extends State<MessageInput> {
                       color: colors.onSurfaceVariant,
                     ),
                     const SizedBox(width: 5),
-                    tiamat.Text.labelLow(
-                      'Navegar',
-                      color: colors.onSurfaceVariant,
+                    // Takes the room between the two hints, and gives way
+                    // first when a language's words are long.
+                    Expanded(
+                      child: tiamat.Text.labelLow(
+                        labelChatMentionNavigateHint,
+                        color: colors.onSurfaceVariant,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    const Spacer(),
-                    const _KeyboardHint(label: 'Enter'),
+                    _KeyboardHint(label: labelChatKeyEnter),
                     const SizedBox(width: 5),
                     tiamat.Text.labelLow(
-                      'Selecionar',
+                      labelChatMentionSelectHint,
                       color: colors.onSurfaceVariant,
                     ),
                   ],
@@ -1148,15 +1242,21 @@ class MessageInputState extends State<MessageInput> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       tiamat.Text.name(result.result),
+                      // One line each: every row takes the first row's
+                      // height (the list's prototype item).
                       if (avatar != null)
                         tiamat.Text.labelLow(
                           avatar.slug,
                           color: colors.onSurfaceVariant,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         )
                       else
                         tiamat.Text.labelLow(
-                          'Menção para todos',
+                          labelChatMentionEveryone,
                           color: colors.onSurfaceVariant,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                     ],
                   ),
@@ -1289,13 +1389,13 @@ class MessageInputState extends State<MessageInput> {
                       : [
                           if (pollComponent != null)
                             tiamat.ContextMenuItem(
-                              text: "Poll",
+                              text: promptChatAddPoll,
                               icon: Icons.poll,
                               onPressed: () async {
                                 var createArgs =
                                     await AdaptiveDialog.show<PollCreateArgs>(
                                         context,
-                                        title: "Create Poll",
+                                        title: labelPollCreateTitle,
                                         builder: (context) => PollCreator());
 
                                 if (createArgs != null) {
@@ -1554,7 +1654,7 @@ class MessageInputState extends State<MessageInput> {
           0,
           DynamicEmoticonPack(
               identifier: "dynamic_pack_frequently_used_typing",
-              displayName: "Frequently Used",
+              displayName: EmojiPicker.labelChatEmojiFrequentlyUsed,
               icon: Icons.schedule,
               emoticons: recent,
               usage: EmoticonUsage.all));
@@ -1634,7 +1734,7 @@ class MessageInputState extends State<MessageInput> {
       if (PlatformUtils.isAndroid)
         AttachmentPicker(
             icon: Icons.photo,
-            label: "Gallery",
+            label: promptChatAttachGallery,
             execute: () async {
               var picker = ImagePicker();
               var result = await picker.pickMultiImage();
@@ -1649,7 +1749,7 @@ class MessageInputState extends State<MessageInput> {
             }),
       AttachmentPicker(
           icon: Icons.attach_file,
-          label: "File",
+          label: promptChatAttachFile,
           execute: () async {
             FilePickerResult? result = await FilePicker.platform.pickFiles(
                 type: FileType.any, withData: true, allowMultiple: true);
@@ -1668,7 +1768,7 @@ class MessageInputState extends State<MessageInput> {
       if (PlatformUtils.isAndroid && preferences.developerMode.value)
         AttachmentPicker(
             icon: Icons.perm_media,
-            label: "Media",
+            label: promptChatAttachMedia,
             execute: () async {
               var picker = ImagePicker();
               var result = await picker.pickMultipleMedia();
@@ -1684,7 +1784,7 @@ class MessageInputState extends State<MessageInput> {
       if (PlatformUtils.isAndroid)
         AttachmentPicker(
             icon: Icons.camera_alt,
-            label: "Take a photo",
+            label: promptChatAttachTakePhoto,
             execute: () async {
               var picker = ImagePicker();
               var file = await picker.pickImage(source: ImageSource.camera);
@@ -1794,7 +1894,8 @@ class MessageInputState extends State<MessageInput> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
                 child: tiamat.Text(
-                  widget.relatedEventBody ?? "Unknown",
+                  widget.relatedEventBody ??
+                      TimelineEventViewReply.labelMessageReplyUnknownBody,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   color: Theme.of(context).colorScheme.secondary,

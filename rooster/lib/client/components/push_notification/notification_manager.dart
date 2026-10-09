@@ -19,9 +19,35 @@ import 'package:rooster/main.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:rooster/utils/window_management.dart';
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 import 'package:media_kit/media_kit.dart';
 
 class NotificationManager {
+  // Why a notification was not shown, for the notification debugger in
+  // Developer settings.
+
+  static String get messageNotificationNotifierNotReady =>
+      Intl.message("Notifier has not been initialized",
+          name: "messageNotificationNotifierNotReady",
+          desc: "In the notification debugger (Developer settings): why a "
+              "test notification was not shown. The notifier is the part of "
+              "the app that shows notifications, and it has not started yet");
+
+  static String get messageNotificationAlreadyShown =>
+      Intl.message("This message was already shown",
+          name: "messageNotificationAlreadyShown",
+          desc: "In the notification debugger (Developer settings): why a "
+              "test notification was not shown again");
+
+  static String messageNotificationModifierRejected(String modifier) =>
+      Intl.message(
+          "Notification modifier '$modifier' rejected the notification",
+          name: "messageNotificationModifierRejected",
+          args: [modifier],
+          desc: "In the notification debugger (Developer settings): one of "
+              "the app's notification filters stopped the notification; "
+              "modifier is its technical name");
+
   static Notifier? _notifier;
 
   static Notifier? get notifier => _notifier;
@@ -116,7 +142,7 @@ class NotificationManager {
       Function(String reason)? onNotificationRejected}) async {
     if (_notifier == null) {
       Log.e("Failed to show notification, notifier has not been initialzied");
-      onNotificationRejected?.call("Notifier has not been initialized");
+      onNotificationRejected?.call(messageNotificationNotifierNotReady);
       return;
     }
 
@@ -129,7 +155,7 @@ class NotificationManager {
     // Before any await: the copies arrive together.
     if (notification is MessageNotificationContent && !forceShow) {
       if (!_shownMessageIds.add(notification.eventId)) {
-        onNotificationRejected?.call("This message was already shown");
+        onNotificationRejected?.call(messageNotificationAlreadyShown);
         return;
       }
       if (_shownMessageIds.length > 200) {
@@ -149,8 +175,8 @@ class NotificationManager {
       if (content == null) {
         Log.d("Modifier returned null notification, returning");
 
-        onNotificationRejected?.call(
-            "Notification modifier '${modifier}' rejected the notification");
+        onNotificationRejected
+            ?.call(messageNotificationModifierRejected("$modifier"));
         return;
       }
     }

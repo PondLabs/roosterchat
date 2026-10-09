@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:rooster/cache/file_provider.dart';
 import 'package:rooster/utils/video_rendering.dart';
 import 'package:flutter/widgets.dart';
+import 'package:intl/intl.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
@@ -30,6 +31,24 @@ class VideoPlayerImplementation extends StatefulWidget {
   final bool autoPlay;
   final Map<String, String> httpHeaders;
   final VideoPlayerController controller;
+
+  static String get labelMediaTrackAuto => Intl.message("Auto",
+      name: "labelMediaTrackAuto",
+      desc: "Choice in the video player's quality and subtitle lists that "
+          "lets the player pick");
+
+  static String labelMediaQualityTrack(String id) => Intl.message("Track $id",
+      name: "labelMediaQualityTrack",
+      args: [id],
+      desc: "A video quality with no name or height in the video player's "
+          "settings, with the track's number");
+
+  static String labelMediaSubtitleTrack(String id) =>
+      Intl.message("Subtitle $id",
+          name: "labelMediaSubtitleTrack",
+          args: [id],
+          desc: "A subtitle track with no name or language in the video "
+              "player's settings, with the track's number");
 
   @override
   State<VideoPlayerImplementation> createState() =>
@@ -185,9 +204,12 @@ class _VideoPlayerImplementationState extends State<VideoPlayerImplementation> {
           (track) => VideoQualityOption(
             id: track.id,
             label: track.id == 'auto'
-                ? 'Auto'
+                ? VideoPlayerImplementation.labelMediaTrackAuto
                 : track.title ??
-                    (track.h == null ? 'Track ${track.id}' : '${track.h}p'),
+                    (track.h == null
+                        ? VideoPlayerImplementation.labelMediaQualityTrack(
+                            track.id)
+                        : '${track.h}p'),
           ),
         )
         .toList();
@@ -198,8 +220,10 @@ class _VideoPlayerImplementationState extends State<VideoPlayerImplementation> {
           (track) => VideoSubtitleOption(
             id: track.id,
             label: track.id == 'auto'
-                ? 'Auto'
-                : track.title ?? track.language ?? 'Subtitle ${track.id}',
+                ? VideoPlayerImplementation.labelMediaTrackAuto
+                : track.title ??
+                    track.language ??
+                    VideoPlayerImplementation.labelMediaSubtitleTrack(track.id),
             language: track.language,
           ),
         )

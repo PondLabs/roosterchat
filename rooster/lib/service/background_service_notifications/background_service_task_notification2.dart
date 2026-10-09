@@ -11,8 +11,25 @@ import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/utils/database/database_server.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:intl/intl.dart';
 
 class BackgroundNotificationsManager2 {
+  static String messageNotificationClientNotFound(String clientId) =>
+      Intl.message("Failed to find client: $clientId",
+          name: "messageNotificationClientNotFound",
+          args: [clientId],
+          desc: "Text of an error notification on Android when a push "
+              "arrived for an account this device no longer has; clientId is "
+              "the account's internal id");
+
+  static String messageNotificationRoomNotFound(String roomId, String data) =>
+      Intl.message("Failed to find room: $roomId  $data",
+          name: "messageNotificationRoomNotFound",
+          args: [roomId, data],
+          desc: "Text of an error notification on Android when a push arrived "
+              "for a room the account does not have; roomId is the room's "
+              "Matrix ID and data the push's raw contents");
+
   ServiceInstance? instance;
 
   BackgroundNotificationsManager2(this.instance);
@@ -87,7 +104,7 @@ class BackgroundNotificationsManager2 {
 
       try {
         NotificationManager.notify(ErrorNotificationContent(
-            title: "An error occurred while processing notifications",
+            title: ErrorNotificationContent.labelNotificationProcessingError,
             content: "${e} \n\n ${s}"));
       } catch (_) {}
     }
@@ -128,8 +145,8 @@ class BackgroundNotificationsManager2 {
       final clients = preferences.getRegisteredMatrixClients();
       if (clients?.contains(localClientId) != true) {
         NotificationManager.notify(ErrorNotificationContent(
-            title: "An error occurred while processing notifications",
-            content: "Failed to find client: $localClientId"));
+            title: ErrorNotificationContent.labelNotificationProcessingError,
+            content: messageNotificationClientNotFound(localClientId)));
         return;
       }
 
@@ -150,8 +167,8 @@ class BackgroundNotificationsManager2 {
 
       if (room == null) {
         NotificationManager.notify(ErrorNotificationContent(
-            title: "An error occurred while processing notifications",
-            content: "Failed to find room: $roomId  ${data}"));
+            title: ErrorNotificationContent.labelNotificationProcessingError,
+            content: messageNotificationRoomNotFound(roomId, "$data")));
         return;
       }
 
@@ -206,7 +223,7 @@ class BackgroundNotificationsManager2 {
       Log.onError(e, s);
 
       NotificationManager.notify(ErrorNotificationContent(
-          title: "An error occurred while processing notifications",
+          title: ErrorNotificationContent.labelNotificationProcessingError,
           content: "${e} \n\n ${s}"));
     }
   }

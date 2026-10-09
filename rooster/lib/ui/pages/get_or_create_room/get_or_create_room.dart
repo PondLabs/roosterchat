@@ -369,7 +369,8 @@ class _GetOrCreateRoomState extends State<GetOrCreateRoom> {
                             createEntry(widget.existing!),
                           if (widget.join != null) createEntry(widget.join!),
                           if (widget.creators.isNotEmpty)
-                            tiamat.Text.labelLow("Create Room:"),
+                            tiamat.Text.labelLow(
+                                RoomCreationStrings.labelRoomCreateRoomHeading),
                           for (var entry in widget.creators) createEntry(entry)
                         ],
                       ),
@@ -562,7 +563,7 @@ class _GetOrCreateRoomState extends State<GetOrCreateRoom> {
 
       await AdaptiveDialog.show(
         context,
-        title: "Error",
+        title: RoomCreationStrings.labelRoomCreateErrorTitle,
         builder: (context) {
           return tiamat.Text.body(e.toString());
         },

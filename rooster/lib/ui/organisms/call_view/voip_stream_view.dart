@@ -66,6 +66,11 @@ class _VoipStreamViewState extends State<VoipStreamView> {
           args: [user],
           desc: "Shown on a screen share tile you are not watching");
 
+  static String get labelCallSoundEffects => Intl.message("Sound effects",
+      name: "labelCallSoundEffects",
+      desc: "Over the slider, in the menu of someone's tile in a call, that "
+          "sets how loud their soundboard sounds play for you");
+
   late Member user;
 
   bool speaking = false;
@@ -287,7 +292,7 @@ class _VoipStreamViewState extends State<VoipStreamView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const tiamat.Text.labelLow("Sound effects"),
+                  tiamat.Text.labelLow(labelCallSoundEffects),
                   SoundboardUserVolumeSlider(user.identifier),
                 ],
               ),
@@ -471,6 +476,11 @@ mixin _FollowsStreamVolume<T extends StatefulWidget> on State<T> {
 /// through audio elements, which stop at 100%; native WebRTC can boost.
 double get maxStreamVolume => kIsWeb ? 1.0 : 2.5;
 
+/// [volume] (1 is 100%) as a percentage, the way the user's language writes
+/// one.
+String _volumePercent(double volume) =>
+    NumberFormat.percentPattern().format(volume.clamp(0.0, maxStreamVolume));
+
 class StreamVolumeSlider extends StatefulWidget {
   const StreamVolumeSlider(this.stream, {super.key});
 
@@ -489,8 +499,7 @@ class _StreamVolumeSliderState extends State<StreamVolumeSlider>
     return Row(
       mainAxisSize: MainAxisSize.max,
       children: [
-        tiamat.Text.labelLow(
-            "${(widget.stream.volume.clamp(0.0, maxStreamVolume) * 100).round()}%"),
+        tiamat.Text.labelLow(_volumePercent(widget.stream.volume)),
         Expanded(
           child: tiamat.Slider(
             min: 0.0,
@@ -586,7 +595,7 @@ class _StreamVolumeControlState extends State<StreamVolumeControl>
               ),
             ),
             const SizedBox(width: 8),
-            Text("${(volume * 100).round()}%",
+            Text(_volumePercent(volume),
                 style: const TextStyle(color: Colors.white, fontSize: 12)),
           ],
         ),

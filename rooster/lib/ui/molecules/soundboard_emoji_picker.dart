@@ -6,6 +6,7 @@ import 'package:rooster/client/components/soundboard/soundboard_emoji.dart';
 import 'package:rooster/ui/molecules/emoji_picker.dart';
 import 'package:rooster/utils/autofill_utils.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:just_the_tooltip/just_the_tooltip.dart';
 
 /// Resolves the image of a custom [SoundboardEmoji], or null when it can't be
@@ -69,6 +70,11 @@ class SoundboardEmojiPickerButton extends StatefulWidget {
     this.imageFor,
   });
 
+  static String get tooltipSoundboardChooseEmoji => Intl.message("Choose emoji",
+      name: "tooltipSoundboardChooseEmoji",
+      desc: "Tooltip of the button that picks the emoji shown with a "
+          "soundboard sound, next to the sound's name");
+
   @override
   State<SoundboardEmojiPickerButton> createState() =>
       _SoundboardEmojiPickerButtonState();
@@ -123,7 +129,7 @@ class _SoundboardEmojiPickerButtonState
         ),
       ),
       child: Tooltip(
-        message: 'Choose emoji',
+        message: SoundboardEmojiPickerButton.tooltipSoundboardChooseEmoji,
         child: OutlinedButton(
           style: OutlinedButton.styleFrom(
             minimumSize: const Size(56, 48),

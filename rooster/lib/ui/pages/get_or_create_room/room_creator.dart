@@ -106,6 +106,13 @@ class RoomFieldEncryption implements RoomField {
         desc: "Explains that encryption cannot be disabled once enabled",
       );
 
+  String get tooltipRoomEncryptionUnsupported => Intl.message(
+        "Sorry, Encryption is not yet supported on this type of room",
+        name: "tooltipRoomEncryptionUnsupported",
+        desc:
+            "Tooltip over the greyed-out encryption switch when creating a kind of room that cannot be encrypted yet (voice chats)",
+      );
+
   RoomFieldEncryption(
       {required this.defaultEnabled, this.canEnableEncryption = true});
 
@@ -118,12 +125,14 @@ class RoomFieldEncryption implements RoomField {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                tiamat.Text.label(promptEnableEncryption),
-                tiamat.Text.labelLow(encryptionCannotBeDisabledExplanation)
-              ],
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  tiamat.Text.label(promptEnableEncryption),
+                  tiamat.Text.labelLow(encryptionCannotBeDisabledExplanation)
+                ],
+              ),
             ),
             tiamat.Switch(
               state: args.enableE2EE == true,
@@ -138,9 +147,8 @@ class RoomFieldEncryption implements RoomField {
     );
 
     if (!canEnableEncryption) {
-      result = tiamat.Tooltip(
-          child: result,
-          text: "Sorry, Encryption is not yet supported on this type of room");
+      result =
+          tiamat.Tooltip(child: result, text: tooltipRoomEncryptionUnsupported);
     }
 
     return result;
@@ -170,7 +178,7 @@ class RoomFieldVisibility implements RoomField {
       );
 
   static String get roomVisibilityPublicExplanation => Intl.message(
-        "This room will be publically accessible by anyone on the internet",
+        "This room will be publicly accessible by anyone on the internet",
         name: "roomVisibilityPublicExplanation",
         desc: "Explains what 'public' visibility means",
       );
@@ -188,7 +196,7 @@ class RoomFieldVisibility implements RoomField {
       );
 
   static String get roomVisibilityRestrictedExplanation => Intl.message(
-        "This room will be available to anyone who is a member of it's parent spaces",
+        "This room will be available to anyone who is a member of its parent spaces",
         name: "roomVisibilityRestrictedExplanation",
         desc: "Explains what 'restricted' visibility means",
       );
@@ -283,13 +291,16 @@ class RoomFieldVisibility implements RoomField {
                   padding: const EdgeInsets.fromLTRB(0, 2, 8, 0),
                   child: icon,
                 ),
-                tiamat.Text.label(title!),
+                Flexible(child: tiamat.Text.label(title!)),
               ],
             ),
           ),
+          // Two lines at most: the entries have a fixed height, and the
+          // explanation is longer in some languages.
           tiamat.Text.labelLow(
             subtitle!,
-            overflow: TextOverflow.fade,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

@@ -1,5 +1,7 @@
+import 'package:rooster_calendar_widget/calendar_strings.dart';
 import 'package:rooster_calendar_widget/rfc8984.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -17,6 +19,26 @@ class RecurrenceRuleEditorResult {
 }
 
 class _RecurrenceRuleEditorState extends State<RecurrenceRuleEditor> {
+  String get labelCalendarRepeatNever => Intl.message("Never",
+      name: "labelCalendarRepeatNever",
+      desc:
+          "Choice in the dialog that sets how a calendar event repeats: it does not repeat");
+
+  String get labelCalendarRepeatDaily => Intl.message("Daily",
+      name: "labelCalendarRepeatDaily",
+      desc:
+          "Choice in the dialog that sets how a calendar event repeats: every day");
+
+  String get labelCalendarRepeatWeekly => Intl.message("Weekly",
+      name: "labelCalendarRepeatWeekly",
+      desc:
+          "Choice in the dialog that sets how a calendar event repeats: every week, on the days picked under it");
+
+  String get labelCalendarRepeatYearly => Intl.message("Yearly",
+      name: "labelCalendarRepeatYearly",
+      desc:
+          "Choice in the dialog that sets how a calendar event repeats: every year");
+
   late String frequency;
   Set<String> selectedDays = {};
   @override
@@ -46,22 +68,22 @@ class _RecurrenceRuleEditorState extends State<RecurrenceRuleEditor> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          tiamat.Text.labelLow("Repeat:"),
+          tiamat.Text.labelLow(CalendarStrings.labelCalendarRepeat),
           Padding(
             padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
             child: DropdownButtonFormField<String>(
               initialValue: frequency,
               items: [
                 DropdownMenuItem(
-                  child: Text("Never"),
+                  child: Text(labelCalendarRepeatNever),
                   value: "never",
                 ),
                 DropdownMenuItem(
-                  child: Text("Daily"),
+                  child: Text(labelCalendarRepeatDaily),
                   value: "daily",
                 ),
                 DropdownMenuItem(
-                  child: Text("Weekly"),
+                  child: Text(labelCalendarRepeatWeekly),
                   value: "weekly",
                 ),
                 // TODO: support monthly recurrence
@@ -70,7 +92,7 @@ class _RecurrenceRuleEditorState extends State<RecurrenceRuleEditor> {
                 //   value: "monthly",
                 // ),
                 DropdownMenuItem(
-                  child: Text("Yearly"),
+                  child: Text(labelCalendarRepeatYearly),
                   value: "yearly",
                 ),
               ],
@@ -87,13 +109,10 @@ class _RecurrenceRuleEditorState extends State<RecurrenceRuleEditor> {
                 multiSelectionEnabled: true,
                 showSelectedIcon: false,
                 segments: [
-                  ButtonSegment(value: "mo", label: Text("M")),
-                  ButtonSegment(value: "tu", label: Text("T")),
-                  ButtonSegment(value: "we", label: Text("W")),
-                  ButtonSegment(value: "th", label: Text("T")),
-                  ButtonSegment(value: "fr", label: Text("F")),
-                  ButtonSegment(value: "sa", label: Text("S")),
-                  ButtonSegment(value: "su", label: Text("S")),
+                  for (var i = 0; i < CalendarStrings.dayCodes.length; i++)
+                    ButtonSegment(
+                        value: CalendarStrings.dayCodes[i],
+                        label: Text(CalendarStrings.narrowWeekday(i))),
                 ],
                 expandedInsets: EdgeInsets.all(0),
                 selected: selectedDays,
@@ -111,13 +130,13 @@ class _RecurrenceRuleEditorState extends State<RecurrenceRuleEditor> {
               children: [
                 Expanded(
                   child: tiamat.Button.secondary(
-                    text: "Cancel",
+                    text: CalendarStrings.promptCalendarCancel,
                     onTap: () => Navigator.of(context).pop(null),
                   ),
                 ),
                 Expanded(
                   child: tiamat.Button(
-                    text: "Submit",
+                    text: CalendarStrings.promptCalendarSubmit,
                     onTap: () => {
                       Navigator.of(context)
                           .pop(RecurrenceRuleEditorResult(result))

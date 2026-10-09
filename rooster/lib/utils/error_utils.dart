@@ -3,8 +3,9 @@ import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:flutter/widgets.dart';
 
 class ErrorUtils {
+  /// [title] falls back to "Error", translated ([AdaptiveDialog.showError]).
   static Future<void> tryRun(BuildContext context, Future<void> function(),
-      {Future<void> Function()? onError, String title = "Error"}) async {
+      {Future<void> Function()? onError, String? title}) async {
     try {
       await function();
     } catch (e, s) {

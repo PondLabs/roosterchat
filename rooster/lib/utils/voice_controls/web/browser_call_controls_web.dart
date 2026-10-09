@@ -10,6 +10,7 @@ import 'package:rooster/utils/voice_controls/browser_call_controls.dart';
 import 'package:rooster/utils/voice_controls/voice_call_watcher.dart';
 import 'package:rooster/utils/voice_controls/voice_controls.dart';
 import 'package:rooster/utils/voice_controls/web/call_controls_panel.dart';
+import 'package:rooster/utils/language/app_language.dart';
 import 'package:web/web.dart' as web;
 
 /// The Media Session members for calls, which package:web does not have.
@@ -123,7 +124,9 @@ void popOut() {
   pictureInPicture.requestWindow(options).toDart.then((window) {
     _panelWindow = window;
     final panel = _panel = CallControlsPanel(window.document,
-        onPress: _watcher.pressNamed, title: BuildConfig.app);
+        onPress: _watcher.pressNamed,
+        title: BuildConfig.app,
+        language: AppLanguage.current.value.tag);
     panel.render(_buttons(_watcher.state));
     window.addEventListener(
         "pagehide",

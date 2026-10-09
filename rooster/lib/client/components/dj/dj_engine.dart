@@ -4,6 +4,7 @@
 // Production adapters live in client/matrix/components/dj/; tests fake them.
 import 'dart:async';
 
+import 'package:intl/intl.dart';
 import 'package:rooster/client/components/dj/dj_links.dart';
 import 'package:rooster/client/components/dj/dj_models.dart';
 
@@ -166,3 +167,33 @@ class DjPendingAdd {
 
   const DjPendingAdd(this.id, this.link);
 }
+
+// What the players and resolvers say went wrong. Their errors end up in the
+// booth's notices ("Couldn't play <song>: the booth is closed"), so they are
+// written for the user.
+
+String get errorDjNotConnected => Intl.message("Not connected to the call",
+    name: "errorDjNotConnected",
+    desc: "Why the DJ booth could not start playing music: this app is not "
+        "connected to the call. Follows \"Couldn't start the DJ booth:\"");
+
+String get errorDjSongNotFetched => Intl.message("the song was not fetched",
+    name: "errorDjSongNotFetched",
+    desc: "Why a song in the DJ booth could not play: it had not been "
+        "downloaded yet. Follows \"Couldn't play <song>:\"");
+
+String get errorDjBoothClosed => Intl.message("the booth is closed",
+    name: "errorDjBoothClosed",
+    desc: "Why a song in the DJ booth could not play: the DJ's player was "
+        "shut down meanwhile. Follows \"Couldn't play <song>:\"");
+
+String get errorDjDecoderFailed => Intl.message("the decoder failed",
+    name: "errorDjDecoderFailed",
+    desc: "Why a song in the DJ booth stopped: its audio could not be "
+        "decoded. Follows \"Couldn't play <song>:\"");
+
+String get errorDjNothingPlayable =>
+    Intl.message("Nothing playable in that link",
+        name: "errorDjNothingPlayable",
+        desc: "Shown when a link pasted in the DJ booth holds no song that can "
+            "be played");

@@ -15,10 +15,43 @@ import 'package:rooster/ui/organisms/voice_activity/voice_activity_view.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 class RoomQuickAccessMenu {
   final Room room;
   late final List<RoomQuickAccessMenuEntry> actions;
+
+  static String get promptRoomInvite => Intl.message("Invite",
+      name: "promptRoomInvite",
+      desc:
+          "Button in a room's header (and on a space's page) that invites people to it, and the title of the invite dialog it opens");
+
+  static String get labelRoomCallHistory => Intl.message("Call history",
+      name: "labelRoomCallHistory",
+      desc:
+          "Button of a voice channel (or a space) that shows who was in its calls, day by day, and the title of that dialog");
+
+  static String get promptRoomCall => Intl.message("Call",
+      name: "promptRoomCall",
+      desc: "Button in a direct message's header that starts a voice call");
+
+  static String get promptRoomOpenCalendar => Intl.message("Calendar",
+      name: "promptRoomOpenCalendar",
+      desc: "Button in a room's header that shows the room's calendar");
+
+  static String get promptRoomPinnedMessages => Intl.message("Pinned Messages",
+      name: "promptRoomPinnedMessages",
+      desc: "Button in a room's header that shows the room's pinned messages");
+
+  static String get promptRoomWidgets => Intl.message("Widgets",
+      name: "promptRoomWidgets",
+      desc:
+          "Button in a room's header that lists the room's widgets (small web apps added to the room)");
+
+  static String get promptRoomToggleSidePanel => Intl.message("Toggle Panel",
+      name: "promptRoomToggleSidePanel",
+      desc:
+          "Button in a room's header that shows or hides the panel on the right (members, search, pinned messages)");
 
   RoomQuickAccessMenu({required this.room, required BuildContext context}) {
     final bool canSearch =
@@ -45,7 +78,8 @@ class RoomQuickAccessMenu {
     actions = [
       if (invitation != null)
         RoomQuickAccessMenuEntry(
-            name: "Invite",
+            id: "Invite",
+            name: promptRoomInvite,
             action: (context) => AdaptiveDialog.show(context,
                 builder: (context) => SendInvitationWidget(
                       room.client,
@@ -54,18 +88,20 @@ class RoomQuickAccessMenu {
                       displayName: room.displayName,
                       existingMembers: room.memberIds,
                     ),
-                title: "Invite"),
+                title: promptRoomInvite),
             icon: Icons.person_add),
       if (isVoipRoom)
         RoomQuickAccessMenuEntry(
-            name: "Call history",
+            id: "Call history",
+            name: labelRoomCallHistory,
             action: (context) => AdaptiveDialog.show(context,
                 builder: (context) => VoiceActivityView(rooms: [room]),
-                title: "Call history"),
+                title: labelRoomCallHistory),
             icon: Icons.history),
       if (canCall)
         RoomQuickAccessMenuEntry(
-            name: "Call",
+            id: "Call",
+            name: promptRoomCall,
             action: (context) =>
                 calls.startCall(room.identifier, CallType.voice),
             icon: Icons.call),
@@ -73,28 +109,33 @@ class RoomQuickAccessMenu {
           MediaQuery.sizeOf(context).mobile) ...[
         if (calendar?.hasCalendar == true && calendar?.isCalendarRoom == false)
           RoomQuickAccessMenuEntry(
-              name: "Calendar",
+              id: "Calendar",
+              name: promptRoomOpenCalendar,
               action: (context) => EventBus.openCalendar.add(null),
               icon: Icons.calendar_month),
         if (supportsPinnedMessages)
           RoomQuickAccessMenuEntry(
-              name: "Pinned Messages",
+              id: "Pinned Messages",
+              name: promptRoomPinnedMessages,
               action: (context) => EventBus.openPinnedMessages.add(null),
               icon: Icons.push_pin),
         if (canSearch)
           RoomQuickAccessMenuEntry(
+              id: "Search",
               name: CommonStrings.promptSearch,
               action: (context) => EventBus.startSearch.add(null),
               icon: Icons.search),
         if (hasWidgets)
           RoomQuickAccessMenuEntry(
-              name: "Widgets",
+              id: "Widgets",
+              name: promptRoomWidgets,
               action: (context) => EventBus.openWidgets.add(null),
               icon: Icons.widgets),
       ],
       if (MediaQuery.sizeOf(context).desktop)
         RoomQuickAccessMenuEntry(
-            name: "Toggle Panel",
+            id: "Toggle Panel",
+            name: promptRoomToggleSidePanel,
             action: (context) => EventBus.toggleRoomSidePanel.add(null),
             icon: preferences.hideRoomSidePanel.value
                 ? Icons.chevron_left
@@ -104,10 +145,15 @@ class RoomQuickAccessMenu {
 }
 
 class RoomQuickAccessMenuEntry {
+  /// Stable, untranslated: names the entry in widget keys.
+  final String id;
   final String name;
   final Function(BuildContext context)? action;
   final IconData icon;
 
   RoomQuickAccessMenuEntry(
-      {required this.name, required this.action, required this.icon});
+      {required this.id,
+      required this.name,
+      required this.action,
+      required this.icon});
 }

@@ -44,6 +44,23 @@ class _AccountManagementSettingsTabState
       desc: "Label for header of accounts list",
       name: "labelCurrentAccountsHeader");
 
+  String get promptSettingsSetAccountPrefix => Intl.message("Set Prefix",
+      name: "promptSettingsSetAccountPrefix",
+      desc: "Settings > Manage Accounts: menu entry on an account, and the "
+          "title of the dialog it opens, to set the short prefix you type to "
+          "send a message from that account");
+
+  String get promptSettingsEnterAccountPrefix => Intl.message("Enter Prefix",
+      name: "promptSettingsEnterAccountPrefix",
+      desc: "Placeholder of the text box in the 'Set Prefix' dialog of "
+          "Settings > Manage Accounts");
+
+  String get labelSettingsAccountPrefixDescription => Intl.message(
+      "When more than one of your logged in accounts share the same room, you can type this prefix to quickly send messages from this account",
+      name: "labelSettingsAccountPrefixDescription",
+      desc: "Explanation in the 'Set Prefix' dialog of Settings > Manage "
+          "Accounts");
+
   @override
   Widget build(BuildContext context) {
     return manageAccountsTab(context);
@@ -160,7 +177,7 @@ class _AccountManagementSettingsTabState
               : [
                   if (_numClients > 1)
                     tiamat.ContextMenuItem(
-                        text: "Set Prefix",
+                        text: promptSettingsSetAccountPrefix,
                         onPressed: () {
                           setPrefixDialog(client);
                         })
@@ -168,14 +185,16 @@ class _AccountManagementSettingsTabState
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                children: [
-                  UserPanelView(
-                    displayName: displayName,
-                    avatar: avatar,
-                    detail: detailString,
-                  ),
-                ],
+              Flexible(
+                child: Column(
+                  children: [
+                    UserPanelView(
+                      displayName: displayName,
+                      avatar: avatar,
+                      detail: detailString,
+                    ),
+                  ],
+                ),
               ),
               tiamat.Button.danger(
                 text: promptLogoutSingleAccount,
@@ -198,10 +217,9 @@ class _AccountManagementSettingsTabState
     }
 
     final newPrefix = await AdaptiveTextDialog.show(
-        title: "Set Prefix",
-        placeholder: "Enter Prefix",
-        description:
-            "When more than one of your logged in accounts share the same room, you can type this prefix to quickly send messages from this account",
+        title: promptSettingsSetAccountPrefix,
+        placeholder: promptSettingsEnterAccountPrefix,
+        description: labelSettingsAccountPrefixDescription,
         context,
         defaultText: component.clientPrefix);
     if (newPrefix == null) {

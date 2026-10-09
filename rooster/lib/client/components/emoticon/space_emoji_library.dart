@@ -1,6 +1,8 @@
 // Discord-style "server emoji" rules over a space's im.ponies.room_emotes
 // packs. Pure Dart (unit-testable).
 
+import 'package:intl/intl.dart';
+
 class SpaceEmojiError implements Exception {
   final String message;
   const SpaceEmojiError(this.message);
@@ -37,6 +39,41 @@ class SpaceEmojiLibrary {
   static const maxShortcodeLength = 32;
 
   static final _validShortcode = RegExp(r'^[A-Za-z0-9_]+$');
+
+  // Shown to the person as they are, in the space's emoji settings.
+
+  static String get errorChatEmojiNoSlotsLeft =>
+      Intl.message("This space has no emoji slots left",
+          name: "errorChatEmojiNoSlotsLeft",
+          desc: "Space emoji settings: the space already has as many custom "
+              "emoji as it may");
+
+  static String errorChatEmojiNameTaken(String name) =>
+      Intl.message("An emoji named :$name: already exists",
+          name: "errorChatEmojiNameTaken",
+          args: [name],
+          desc: "Space emoji settings: another custom emoji of the space has "
+              "this name (written between colons, as it is typed)");
+
+  static String errorChatEmojiNotFound(String name) =>
+      Intl.message("There is no emoji named :$name:",
+          name: "errorChatEmojiNotFound",
+          args: [name],
+          desc: "Space emoji settings: the custom emoji to rename or remove "
+              "is gone");
+
+  static String errorChatEmojiNameLength(int min, int max) =>
+      Intl.message("Emoji names must be between $min and $max characters",
+          name: "errorChatEmojiNameLength",
+          args: [min, max],
+          desc: "Space emoji settings: the name given to a custom emoji is "
+              "too short or too long, with the shortest and longest allowed");
+
+  static String get errorChatEmojiNameCharacters => Intl.message(
+      "Emoji names may only contain letters, numbers and underscores",
+      name: "errorChatEmojiNameCharacters",
+      desc: "Space emoji settings: the name given to a custom emoji has "
+          "other characters");
 
   final Map<String, dynamic> _packs;
 
@@ -92,10 +129,10 @@ class SpaceEmojiLibrary {
   SpaceEmojiEdit add(String shortcode, String url) {
     shortcode = validateShortcode(shortcode);
     if (freeSlots <= 0) {
-      throw const SpaceEmojiError('This space has no emoji slots left');
+      throw SpaceEmojiError(errorChatEmojiNoSlotsLeft);
     }
     if (_isTaken(shortcode)) {
-      throw SpaceEmojiError('An emoji named :$shortcode: already exists');
+      throw SpaceEmojiError(errorChatEmojiNameTaken(shortcode));
     }
 
     final content = _copy(_map(_packs[defaultPackKey]));
@@ -112,7 +149,7 @@ class SpaceEmojiLibrary {
     for (final key in _packKeys) {
       if (_images(key).containsKey(shortcode)) return key;
     }
-    throw SpaceEmojiError('There is no emoji named :$shortcode:');
+    throw SpaceEmojiError(errorChatEmojiNotFound(shortcode));
   }
 
   /// Renames an image in whichever pack holds it, keeping its position.
@@ -120,7 +157,7 @@ class SpaceEmojiLibrary {
     final packKey = _owningPack(shortcode);
     newShortcode = validateShortcode(newShortcode);
     if (newShortcode != shortcode && _isTaken(newShortcode)) {
-      throw SpaceEmojiError('An emoji named :$newShortcode: already exists');
+      throw SpaceEmojiError(errorChatEmojiNameTaken(newShortcode));
     }
 
     final content = _copy(_map(_packs[packKey]));
@@ -169,12 +206,11 @@ class SpaceEmojiLibrary {
 
     if (shortcode.length < minShortcodeLength ||
         shortcode.length > maxShortcodeLength) {
-      throw const SpaceEmojiError('Emoji names must be between '
-          '$minShortcodeLength and $maxShortcodeLength characters');
+      throw SpaceEmojiError(
+          errorChatEmojiNameLength(minShortcodeLength, maxShortcodeLength));
     }
     if (!_validShortcode.hasMatch(shortcode)) {
-      throw const SpaceEmojiError(
-          'Emoji names may only contain letters, numbers and underscores');
+      throw SpaceEmojiError(errorChatEmojiNameCharacters);
     }
     return shortcode;
   }

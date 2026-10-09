@@ -6,6 +6,7 @@ import 'package:rooster/ui/atoms/code_block.dart';
 import 'package:rooster/ui/atoms/notifying_list_builder.dart';
 import 'package:rooster/ui/pages/settings/categories/developer/log_page.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:matrix/matrix_api_lite/utils/try_get_map_extension.dart';
 
 import 'package:tiamat/tiamat.dart' as tiamat;
@@ -14,6 +15,21 @@ import 'package:flutter/material.dart' as m;
 class WidgetDebugView extends StatelessWidget {
   const WidgetDebugView(this.runner, {super.key});
   final MatrixWidgetRunner runner;
+
+  static String get labelWidgetDebugMessages => Intl.message("Messages",
+      name: "labelWidgetDebugMessages",
+      desc:
+          "Developer mode, a room widget's debug panel: tab with the messages exchanged with the widget");
+
+  static String get labelWidgetDebugCapabilities => Intl.message("Capabilities",
+      name: "labelWidgetDebugCapabilities",
+      desc:
+          "Developer mode, a room widget's debug panel: tab with the capabilities (permissions) the widget was granted");
+
+  static String get labelWidgetDebugLogs => Intl.message("Logs",
+      name: "labelWidgetDebugLogs",
+      desc: "Developer mode, a room widget's debug panel: tab with its logs");
+
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
@@ -25,13 +41,13 @@ class WidgetDebugView extends StatelessWidget {
           bottom: TabBar(
             tabs: [
               Tab(
-                text: "Messages",
+                text: labelWidgetDebugMessages,
               ),
               Tab(
-                text: "Capabilities",
+                text: labelWidgetDebugCapabilities,
               ),
               Tab(
-                text: "Logs",
+                text: labelWidgetDebugLogs,
               ),
             ],
           ),

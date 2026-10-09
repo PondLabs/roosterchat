@@ -94,7 +94,7 @@ class _VoipSettingsPage extends State<VoipSettingsPage> {
           "label for setting slider to set the framerate at which the screen should be captured when streaming");
 
   String get labelVoipStreamFramerateDescription => Intl.message(
-        "Target frames per second for screen sharing. Higher has smoother motion, but maybe reduce visual clarity.",
+        "Target frames per second for screen sharing. Higher has smoother motion, but may reduce visual clarity.",
         name: "labelVoipStreamFramerateDescription",
       );
 
@@ -134,6 +134,34 @@ class _VoipSettingsPage extends State<VoipSettingsPage> {
       name: "labelVoipAudioBitrateSettingsDescription",
       desc:
           "describes the behavior for the slider to adjust the bitrate of outgoing audio on a call");
+
+  String get labelVoipWebrtcDebugMenu => Intl.message("WebRTC Debug Menu",
+      name: "labelVoipWebrtcDebugMenu",
+      desc: "Header of the voice settings panel, shown in developer mode, "
+          "with the TURN server and connection tests. WebRTC is a name");
+
+  String get labelVoipDefaultAudioInput => Intl.message("Default Audio Input",
+      name: "labelVoipDefaultAudioInput",
+      desc: "Label over the picker of the microphone calls use, in the voice "
+          "settings");
+
+  String get labelVoipAudioOutput => Intl.message("Audio Output",
+      name: "labelVoipAudioOutput",
+      desc: "Label over the picker of the speakers or headphones calls play "
+          "through, in the voice settings");
+
+  String get labelVoipNoDefaultDevice => Intl.message("No Default Selected",
+      name: "labelVoipNoDefaultDevice",
+      desc: "First entry of the voice settings' device pickers: no device "
+          "picked, the system's default is used");
+
+  String messageVoipDeviceNotConnected(String device) => Intl.message(
+      "\"$device\" is not connected, so the system default is in use. It will "
+      "be picked up again when it comes back.",
+      name: "messageVoipDeviceNotConnected",
+      args: [device],
+      desc: "Under a device picker in the voice settings when the microphone "
+          "or speakers picked, whose name is given, are not plugged in");
 
   @override
   void initState() {
@@ -248,12 +276,12 @@ class _VoipSettingsPage extends State<VoipSettingsPage> {
                         ])
                 ])),
         if (preferences.developerMode.value)
-          const Padding(
-            padding: EdgeInsets.fromLTRB(0, 8, 0, 0),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(0, 8, 0, 0),
             child: tiamat.Panel(
-              header: "WebRTC Debug Menu",
+              header: labelVoipWebrtcDebugMenu,
               mode: tiamat.TileType.surfaceContainerLow,
-              child: VoipDebugSettings(),
+              child: const VoipDebugSettings(),
             ),
           ),
       ],
@@ -264,7 +292,7 @@ class _VoipSettingsPage extends State<VoipSettingsPage> {
     return Column(spacing: 8, children: [
       if (microphones != null && !PlatformUtils.isAndroid)
         buildPicker(
-          "Default Audio Input",
+          labelVoipDefaultAudioInput,
           preferences.voipDefaultAudioInput.value,
           microphones!,
           kind: AudioDeviceKind.input,
@@ -278,7 +306,7 @@ class _VoipSettingsPage extends State<VoipSettingsPage> {
         ),
       if (speakers != null)
         buildPicker(
-          "Audio Output",
+          labelVoipAudioOutput,
           preferences.voipDefaultAudioOutput.value,
           speakers!,
           kind: AudioDeviceKind.output,
@@ -324,7 +352,7 @@ class _VoipSettingsPage extends State<VoipSettingsPage> {
             onItemSelected: onSelected,
             itemBuilder: (item) {
               if (item == null) {
-                return tiamat.Text.labelLow("No Default Selected");
+                return tiamat.Text.labelLow(labelVoipNoDefaultDevice);
               } else {
                 return tiamat.Text(item.label);
               }
@@ -335,9 +363,8 @@ class _VoipSettingsPage extends State<VoipSettingsPage> {
         if (selected != null && selectedDevice == null)
           Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: tiamat.Text.labelLow(
-                '"$selected" is not connected, so the system default is in '
-                'use. It will be picked up again when it comes back.'),
+            child:
+                tiamat.Text.labelLow(messageVoipDeviceNotConnected(selected)),
           ),
       ],
     );

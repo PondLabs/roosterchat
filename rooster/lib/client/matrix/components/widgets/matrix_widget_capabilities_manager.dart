@@ -24,6 +24,7 @@ import 'package:rooster/main.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/utils/notifying_list.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:matrix/matrix_api_lite/utils/try_get_map_extension.dart';
 import 'package:matrix/matrix.dart' as matrix;
 
@@ -51,6 +52,12 @@ class MatrixWidgetCapabilitiesManager
       dispose();
     });
   }
+
+  static String get labelWidgetPermissionsTitle => Intl.message(
+      "Widget Permissions",
+      name: "labelWidgetPermissionsTitle",
+      desc:
+          "Title of the dialog where a room widget (a small web app added to a room) asks for permissions");
 
   static const List<String> defaultCapabilities = const [
     // It is safe to allow this by default, as the implementation will only return events
@@ -113,7 +120,7 @@ class MatrixWidgetCapabilitiesManager
 
       var picked = await AdaptiveDialog.show<DialogResult<List<String>>>(
         navigator.currentContext!,
-        title: "Widget Permissions",
+        title: labelWidgetPermissionsTitle,
         builder: (context) => MatrixWidgetPermissionsView(
             runner: runner,
             groupedPermissions: groups.$1,
@@ -294,6 +301,7 @@ class MatrixWidgetCapabilitiesManager
     var key = eventToCapabilityName(event);
 
     if (rejectedCapabilities.contains(key)) {
+      // Not translated: a reply to the widget, which the app does not show.
       return event.createResponseError(message: "Rejected");
     }
 
@@ -304,12 +312,14 @@ class MatrixWidgetCapabilitiesManager
           return response;
         } catch (e, s) {
           Log.onError(e, s, content: "Error handling widget message: $event");
+          // Not translated: a reply to the widget, which the app does not show.
           return event.createResponseError(message: "Unknown error occurred");
         }
       }
     }
 
     return event.createResponseError(
+        // Not translated: a reply to the widget, which the app does not show.
         message: "Unhandled widget request ${event.action}\n${event.data}");
   }
 

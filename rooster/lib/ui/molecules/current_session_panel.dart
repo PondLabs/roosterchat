@@ -11,12 +11,19 @@ import 'package:rooster/ui/molecules/widget_sessions_panel.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class CurrentSessionPanel extends StatefulWidget {
   const CurrentSessionPanel({this.currentUser, super.key});
   final Profile? currentUser;
+
+  static String get promptVoicePanelMixAccounts => Intl.message("Mix Accounts",
+      name: "promptVoicePanelMixAccounts",
+      desc: "Menu entry on the user panel at the bottom of the sidebar, with "
+          "more than one account signed in: shows every account's rooms "
+          "together instead of one account's");
 
   @override
   State<CurrentSessionPanel> createState() => _CurrentSessionPanelState();
@@ -96,7 +103,7 @@ class _CurrentSessionPanelState extends State<CurrentSessionPanel> {
               items: [
                 if (clientManager!.clients.length > 1)
                   tiamat.ContextMenuItem(
-                      text: "Mix Accounts",
+                      text: CurrentSessionPanel.promptVoicePanelMixAccounts,
                       onPressed: () {
                         EventBus.setFilterClient.add(null);
                         preferences.filterClient.set(null);

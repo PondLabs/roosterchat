@@ -25,6 +25,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class PhotoAlbumView extends StatefulWidget {
@@ -44,6 +45,21 @@ class _PhotoAlbumViewState extends State<PhotoAlbumView> {
   // Empty until the timeline loads: closing the album before then used to
   // throw from dispose.
   List<StreamSubscription> subs = [];
+
+  String get labelRoomPhotoVideoBadge => Intl.message("Video",
+      name: "labelRoomPhotoVideoBadge",
+      desc:
+          "Small badge on a video in a photo album room, shown instead of its length when the length is unknown");
+
+  String get promptRoomPhotoPickPhotos => Intl.message("Photos",
+      name: "promptRoomPhotoPickPhotos",
+      desc:
+          "On Android, when adding to a photo album room: pick from the phone's photos");
+
+  String get promptRoomPhotoBrowseFiles => Intl.message("Browse Files",
+      name: "promptRoomPhotoBrowseFiles",
+      desc:
+          "On Android, when adding to a photo album room: pick any photo or video file");
 
   void onAdded(Photo event) {
     setState(() {
@@ -275,7 +291,7 @@ class _PhotoAlbumViewState extends State<PhotoAlbumView> {
                       tiamat.Text.tiny(
                         attachment.duration != null
                             ? TextUtils.formatDuration(attachment.duration!)
-                            : "Video",
+                            : labelRoomPhotoVideoBadge,
                         color: scheme.onSecondaryContainer,
                       ),
                     ],
@@ -340,7 +356,7 @@ class _PhotoAlbumViewState extends State<PhotoAlbumView> {
           itemBuilder: (context, item, onTapped) => SizedBox(
                 height: 50,
                 child: tiamat.TextButton(
-                  item ? "Photos" : "Browse Files",
+                  item ? promptRoomPhotoPickPhotos : promptRoomPhotoBrowseFiles,
                   icon: item ? Icons.add_to_photos : Icons.file_open,
                   onTap: onTapped,
                 ),

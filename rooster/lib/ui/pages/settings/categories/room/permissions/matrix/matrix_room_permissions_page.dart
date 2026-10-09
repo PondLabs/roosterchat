@@ -1,3 +1,4 @@
+import 'package:rooster/client/matrix/matrix_role.dart';
 import 'package:rooster/client/matrix/matrix_room_permissions.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
@@ -144,7 +145,7 @@ class _MatrixRoomPermissionsPageState extends State<MatrixRoomPermissionsPage> {
   String get labelMatrixPermissionsRoomAvatarTitle => Intl.message(
         "Set Room Avatar",
         name: "labelMatrixPermissionsRoomAvatarTitle",
-        desc: "Title for the permission to add change the rooms avatar image",
+        desc: "Description of the permission to change the room's avatar image",
       );
 
   String get labelMatrixPermissionsRoomAvatarDescription => Intl.message(
@@ -256,6 +257,14 @@ class _MatrixRoomPermissionsPageState extends State<MatrixRoomPermissionsPage> {
             "Description for the permission to allow users to create an event on the calendar",
       );
 
+  String labelRoomPermissionSendEventType(String eventType) => Intl.message(
+        "Allow the user to send events of type '$eventType'",
+        name: "labelRoomPermissionSendEventType",
+        args: [eventType],
+        desc:
+            "Developer mode, in a room's permission settings: description of a permission Rooster has no name for, with the Matrix event type it covers (keep the type as it is)",
+      );
+
   void initPermissions() {
     bool isCalendarRoom = widget.showCalendarPermissions;
     var version = int.tryParse(widget.room.roomVersion ?? "1");
@@ -278,7 +287,7 @@ class _MatrixRoomPermissionsPageState extends State<MatrixRoomPermissionsPage> {
       ),
       if (isCalendarRoom)
         MatrixRoomRoleEntry(
-          name: "Calendar Moderator",
+          name: MatrixRole.labelCalendarRoleModerator,
           powerlevel: 25,
           icon: Icons.edit_calendar,
         ),
@@ -431,8 +440,7 @@ class _MatrixRoomPermissionsPageState extends State<MatrixRoomPermissionsPage> {
                 key: entry.key,
                 title: entry.key,
                 keyParent: "events",
-                description:
-                    "Allow the user to send events of type '${entry.key}'",
+                description: labelRoomPermissionSendEventType(entry.key),
                 icon: Icons.question_mark_rounded,
                 powerLevel: entry.value));
           }

@@ -6,6 +6,7 @@ import 'package:rooster/client/matrix/components/profile/matrix_profile_componen
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
 import 'package:rooster/client/matrix/matrix_peer.dart';
+import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/utils/notifying_list.dart';
 import 'package:matrix/matrix.dart' as matrix;
@@ -64,7 +65,8 @@ class MatrixInvitationComponent
           avatar: avatar,
           senderId: sender,
           color: MatrixPeer.hashColor(room.id),
-          displayName: room.getLocalizedDisplayname());
+          displayName:
+              room.getLocalizedDisplayname(const RoomNameLocalizations()));
 
       invitations.add(entry);
     }

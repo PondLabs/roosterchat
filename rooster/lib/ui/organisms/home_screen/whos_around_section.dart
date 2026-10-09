@@ -365,17 +365,29 @@ class _LiveRowState extends State<_LiveRow> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      spacing: 6,
-                      children: [
-                        Flexible(
-                          child: tiamat.Text.name(room.displayName,
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
-                        ),
-                        if (channel.dj != null)
-                          VinylDisc(size: 14, spinning: channel.musicPlaying),
-                        if (media.isNotEmpty) LiveMediaIndicator(media),
-                      ],
+                    LayoutBuilder(
+                      builder: (context, line) => Row(
+                        spacing: 6,
+                        children: [
+                          Flexible(
+                            child: tiamat.Text.name(room.displayName,
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ),
+                          if (channel.dj != null)
+                            VinylDisc(size: 14, spinning: channel.musicPlaying),
+                          // Shrinks rather than overflows when a longer
+                          // language's LIVE meets a narrow sidebar.
+                          if (media.isNotEmpty)
+                            ConstrainedBox(
+                              constraints:
+                                  BoxConstraints(maxWidth: line.maxWidth / 2),
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: LiveMediaIndicator(media),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                     tiamat.Text.labelLow(
                         space == null
@@ -386,22 +398,28 @@ class _LiveRowState extends State<_LiveRow> {
                   ],
                 ),
               ),
-              if (channel.ours)
-                _Chip(
-                  WhosAroundSection.labelYouAreInHere,
-                  icon: Icons.headset_mic_rounded,
-                  background: colors.surfaceContainerHighest,
-                  foreground: colors.onSurfaceVariant,
-                  compact: compact,
-                )
-              else if (canJoin)
-                _Chip(
-                  WhosAroundSection.labelJoinCall,
-                  icon: Icons.call_rounded,
-                  background: colors.primary,
-                  foreground: colors.onPrimary,
-                  compact: compact,
-                  onTap: () => widget.onJoin(room),
+              // At most 40% of the row, so a longer language's label is cut
+              // short (the tooltip has it whole) instead of the row.
+              if (channel.ours || canJoin)
+                ConstrainedBox(
+                  constraints:
+                      BoxConstraints(maxWidth: constraints.maxWidth * 0.4),
+                  child: channel.ours
+                      ? _Chip(
+                          WhosAroundSection.labelYouAreInHere,
+                          icon: Icons.headset_mic_rounded,
+                          background: colors.surfaceContainerHighest,
+                          foreground: colors.onSurfaceVariant,
+                          compact: compact,
+                        )
+                      : _Chip(
+                          WhosAroundSection.labelJoinCall,
+                          icon: Icons.call_rounded,
+                          background: colors.primary,
+                          foreground: colors.onPrimary,
+                          compact: compact,
+                          onTap: () => widget.onJoin(room),
+                        ),
                 ),
             ],
           );
@@ -560,12 +578,19 @@ class _Chip extends StatelessWidget {
             spacing: 4,
             children: [
               Icon(icon, size: 14, color: foreground),
-              if (!compact) tiamat.Text.tiny(text, color: foreground),
+              if (!compact)
+                Flexible(
+                  child: tiamat.Text.tiny(text,
+                      color: foreground,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                ),
             ],
           ),
         ),
       ),
     );
-    return compact ? Tooltip(message: text, child: chip) : chip;
+    // Compact, or cut short, the label is in the tooltip.
+    return Tooltip(message: text, child: chip);
   }
 }
