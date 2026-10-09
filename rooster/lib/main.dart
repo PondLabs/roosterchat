@@ -43,6 +43,7 @@ import 'package:rooster/utils/system_wide_shortcuts/system_wide_shortcuts.dart';
 import 'package:rooster/utils/text_scale_changer.dart';
 import 'package:rooster/utils/update_checker.dart';
 import 'package:rooster/utils/updater/self_updater.dart';
+import 'package:rooster/utils/updater/startup_update.dart';
 import 'package:rooster/utils/voice_controls/voice_control_surfaces.dart';
 import 'package:rooster/utils/window_management.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -203,11 +204,14 @@ void appMain() async {
     // The update check goes to GitHub while the rest starts: preferences,
     // the database, the accounts. It used to come first, and every launch
     // waited for that request (a second on a good day, 20 on a bad one)
-    // before anything else began.
-    Future<bool> updating = Future.value(false);
+    // before anything else began. It is waited for below, once the rest is
+    // done and only briefly (StartupUpdate).
+    StartupUpdate? update;
     if (!isHeadless && !kIsWeb) {
       if (!loadingShown) await _showLoadingWindow();
-      updating = _updateBeforeStart();
+      update = StartupUpdate(SelfUpdater.instance,
+          wanted: _updateWanted, close: WindowManagement.close)
+        ..begin();
     }
 
     loading = initNecessary();
@@ -220,7 +224,7 @@ void appMain() async {
       await loading;
     }
 
-    if (await updating) return;
+    if (update != null && await update.finish()) return;
 
     SystemWideShortcuts.init();
 
@@ -237,31 +241,13 @@ Future<void> _showLoadingWindow() async {
   runApp(LoadingPage(update: SelfUpdater.instance.progress));
 }
 
-/// A desktop build that installs its own updates fetches a newer release
-/// while the loading window is up, and restarts into it before the app opens
-/// (see docs/updating.md). True when this process is closing for that.
-///
-/// Never throws: an update that could not be looked for is not a reason to
-/// keep the app from opening.
-Future<bool> _updateBeforeStart() async {
-  try {
-    final updater = SelfUpdater.instance;
-    if (!updater.canInstall) return false;
-    await preferences.init();
-    // Only a no stops it: whoever installed Rooster wants the current one.
-    if (preferences.checkForUpdates.value == false) return false;
-
-    // A short look: the app is waiting to open behind this. The home
-    // screen looks again, at its own pace, once the app is up.
-    await updater.checkAndPrepare(checkTimeout: const Duration(seconds: 5));
-    if (updater.progress.value.stage != UpdateStage.ready) return false;
-    if (!await updater.installAndRestart()) return false;
-    await WindowManagement.close();
-    return true;
-  } catch (e, s) {
-    Log.onError(e, s, content: "Could not check for an update at startup");
-    return false;
-  }
+/// Whether a desktop build may fetch a newer release while the loading
+/// window is up and restart into it before the app opens (see
+/// docs/updating.md). Only a no stops it: whoever installed Rooster wants
+/// the current one, and not having answered yet is not a no.
+Future<bool> _updateWanted() async {
+  await preferences.init();
+  return preferences.checkForUpdates.value != false;
 }
 
 WidgetsBinding ensureBindingInit() {

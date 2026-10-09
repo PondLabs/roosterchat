@@ -269,11 +269,17 @@ class NativeSelfUpdater implements SelfUpdater {
       isSelfInstallable(_platform, Platform.resolvedExecutable);
 
   void _set(UpdateStage stage,
-          {UpdateRelease? release, double? fraction, String? message}) =>
-      progress.value = UpdateProgress(stage,
-          release: release ?? progress.value.release,
-          fraction: fraction,
-          message: message);
+      {UpdateRelease? release, double? fraction, String? message}) {
+    // Each stage once, not every chunk of the download: what the settings
+    // page says, in the log, for when it has to be asked about later.
+    if (stage != progress.value.stage) {
+      Log.i('Update: ${stage.name}${message == null ? '' : ': $message'}');
+    }
+    progress.value = UpdateProgress(stage,
+        release: release ?? progress.value.release,
+        fraction: fraction,
+        message: message);
+  }
 
   @override
   Future<void> checkAndPrepare({Duration? checkTimeout}) async {
@@ -281,12 +287,13 @@ class NativeSelfUpdater implements SelfUpdater {
     _running = true;
     try {
       _set(UpdateStage.checking);
-      final release = await UpdateRelease.fetchLatest(
-          UpdateChecker.releasesApiUrl,
+      final look = await UpdateRelease.lookUp(UpdateChecker.releasesApiUrl,
           timeout: checkTimeout ?? UpdateRelease.defaultTimeout);
+      final release = look.release;
       if (release == null) {
         _set(UpdateStage.failed,
-            message: 'Could not reach GitHub to look for updates.');
+            message: 'Could not reach GitHub to look for updates: '
+                '${look.problem}.');
         return;
       }
       if (!UpdateChecker.isNewer(release.tag, BuildConfig.VERSION_TAG)) {

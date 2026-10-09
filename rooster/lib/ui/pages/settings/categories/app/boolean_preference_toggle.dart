@@ -45,11 +45,16 @@ class NullableBooleanPreferenceToggle extends StatefulWidget {
       {required this.preference,
       required this.title,
       this.description,
+      this.defaultValue = false,
       super.key});
   final NullableBoolPreference preference;
 
   final String title;
   final String? description;
+
+  /// What the switch shows while the preference has not been set: what
+  /// the app does with it unanswered.
+  final bool defaultValue;
 
   @override
   State<NullableBooleanPreferenceToggle> createState() =>
@@ -81,7 +86,7 @@ class _NullableBooleanPreferenceToggleState
         Padding(
           padding: const EdgeInsets.fromLTRB(8, 8, 0, 8),
           child: tiamat.Switch(
-            state: widget.preference.value ?? false,
+            state: widget.preference.value ?? widget.defaultValue,
             onChanged: (value) async {
               await widget.preference.set(value);
               setState(() {});

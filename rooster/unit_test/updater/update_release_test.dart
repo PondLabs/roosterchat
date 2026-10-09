@@ -2,6 +2,7 @@
 // the shape `ci.yml` produces: one archive per desktop platform, each with a
 // sha256 digest.
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:rooster/utils/updater/update_release.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,6 +34,8 @@ UpdateRelease parse(Map<String, Object?> json) =>
     UpdateRelease.fromJson(jsonDecode(jsonEncode(json)))!;
 
 void main() {
+  lookUpTests();
+
   test('a release yields its tag and both desktop archives', () {
     final release = parse(_release());
     expect(release.tag, 'v0.13.2');
@@ -169,5 +172,92 @@ void main() {
     ]));
     expect(release.assets.length, 1);
     expect(release.assetFor('windows'), isNotNull);
+  });
+}
+
+/// Why a look came back empty is what the settings page shows, so the
+/// reasons are pinned against a server of our own.
+void lookUpTests() {
+  group('lookUp', () {
+    test('a release comes back with nothing to report', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((request) {
+        request.response
+          ..headers.contentType = ContentType.json
+          ..write(jsonEncode(_release()))
+          ..close();
+      });
+      final look =
+          await UpdateRelease.lookUp('http://127.0.0.1:${server.port}/latest');
+      await server.close();
+
+      expect(look.release?.tag, 'v0.13.2');
+      expect(look.problem, isNull);
+    });
+
+    test('says which status was answered', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((request) {
+        request.response
+          ..statusCode = 503
+          ..close();
+      });
+      final look =
+          await UpdateRelease.lookUp('http://127.0.0.1:${server.port}/latest');
+      await server.close();
+
+      expect(look.release, isNull);
+      expect(look.problem, 'HTTP 503');
+    });
+
+    test('says when there is no answer in time', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final requests = <HttpRequest>[];
+      server.listen(requests.add);
+      final look = await UpdateRelease.lookUp(
+          'http://127.0.0.1:${server.port}/latest',
+          timeout: const Duration(milliseconds: 200));
+      for (final request in requests) {
+        request.response.close();
+      }
+      await server.close(force: true);
+
+      expect(look.release, isNull);
+      expect(look.problem, 'no answer in 200 ms');
+    });
+
+    test('says when there is nothing to connect to', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final port = server.port;
+      await server.close();
+      final look = await UpdateRelease.lookUp('http://127.0.0.1:$port/latest');
+
+      expect(look.release, isNull);
+      expect(look.problem, contains('refused'));
+      expect(look.problem, isNot(startsWith('ClientException')));
+      expect(look.problem, isNot(startsWith('SocketException')));
+    });
+
+    test('says when the answer is not a release', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((request) {
+        request.response
+          ..write('[]')
+          ..close();
+      });
+      final look =
+          await UpdateRelease.lookUp('http://127.0.0.1:${server.port}/latest');
+      await server.close();
+
+      expect(look.release, isNull);
+      expect(look.problem, 'the answer was not a release');
+    });
+  });
+
+  test('a problem is one line, without the exception types in front', () {
+    expect(UpdateRelease.describeProblem(StateError('no')), 'Bad state: no');
+    expect(UpdateRelease.describeProblem('x' * 200), hasLength(160));
+    expect(UpdateRelease.describe(const Duration(seconds: 20)), '20 s');
+    expect(UpdateRelease.describe(const Duration(milliseconds: 250)), '250 ms');
   });
 }

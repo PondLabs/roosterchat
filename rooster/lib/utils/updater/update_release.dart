@@ -7,6 +7,7 @@
 // name. GitHub reports a sha256 for
 // every asset, which is what makes installing one without a browser
 // defensible: the download is checked against it before anything is unpacked.
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:rooster/debug/log.dart';
@@ -88,10 +89,13 @@ class UpdateRelease {
 
   static const defaultTimeout = Duration(seconds: 20);
 
-  /// The newest release, or null when the request failed, took longer than
-  /// [timeout] or said something unexpected. Never throws: no part of this
-  /// is worth breaking over.
-  static Future<UpdateRelease?> fetchLatest(String apiUrl,
+  /// The newest release, or no release and why: the request failed, took
+  /// longer than [timeout] or said something unexpected. The why is what
+  /// the settings page shows, since "could not reach GitHub" on its own has
+  /// had to be guessed at from afar. Never throws: no part of this is worth
+  /// breaking over.
+  static Future<({UpdateRelease? release, String? problem})> lookUp(
+      String apiUrl,
       {Duration timeout = defaultTimeout}) async {
     try {
       final response = await http.get(Uri.parse(apiUrl), headers: {
@@ -100,12 +104,36 @@ class UpdateRelease {
       }).timeout(timeout);
       if (response.statusCode != 200) {
         Log.i('Update check failed: HTTP ${response.statusCode}');
-        return null;
+        return (release: null, problem: 'HTTP ${response.statusCode}');
       }
-      return fromJson(jsonDecode(response.body));
+      final release = fromJson(jsonDecode(response.body));
+      if (release == null) {
+        Log.i('Update check failed: the answer was not a release');
+        return (release: null, problem: 'the answer was not a release');
+      }
+      return (release: release, problem: null);
+    } on TimeoutException {
+      Log.i('Update check failed: no answer in ${describe(timeout)}');
+      return (release: null, problem: 'no answer in ${describe(timeout)}');
     } catch (e, s) {
       Log.onError(e, s, content: 'Update check failed');
-      return null;
+      return (release: null, problem: describeProblem(e));
     }
+  }
+
+  /// [duration] in whole seconds, or milliseconds under one.
+  static String describe(Duration duration) => duration.inSeconds >= 1
+      ? '${duration.inSeconds} s'
+      : '${duration.inMilliseconds} ms';
+
+  /// [error] in a line for the settings page: without the exception types
+  /// in front, and not for ever.
+  static String describeProblem(Object error) {
+    var text = error
+        .toString()
+        .replaceFirst(RegExp(r'^ClientException with '), '')
+        .replaceFirst(RegExp(r'^\w+(Exception|Error): '), '')
+        .replaceFirst(RegExp(r', uri=\S+$'), '');
+    return text.length > 160 ? '${text.substring(0, 159)}…' : text;
   }
 }
