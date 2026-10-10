@@ -25,6 +25,10 @@ class MatrixCallMembership {
   /// this about.
   static const awayKey = 'chat.commet.away';
 
+  /// A status the member chose that Matrix presence cannot carry:
+  /// `invisible` (shown as offline). Absent when they chose neither.
+  static const statusKey = 'chat.commet.status';
+
   /// Present while the member is the DJ in the call's booth:
   ///  while music plays,  while paused. Lets the
   /// voice channel list show a DJ to people outside the call, who don't get
@@ -95,6 +99,12 @@ class MatrixCallMembership {
   /// Whether [content] says its owner is away from their machine. Anything
   /// else, a client that does not report it included, reads as present.
   static bool isAway(Map<String, Object?> content) => content[awayKey] == true;
+
+  /// The status [content] says its owner chose (see [statusKey]), or null.
+  static String? statusOf(Map<String, Object?> content) {
+    final value = content[statusKey];
+    return value is String ? value : null;
+  }
 
   /// Whether [content] says its owner is the DJ: null when not (or the
   /// client doesn't say), otherwise whether music is playing.
@@ -220,6 +230,7 @@ class MatrixCallMembership {
       required DateTime joinedAt,
       required DateTime now,
       bool away = false,
+      String? status,
       bool? dj,
       bool unguarded = false,
       Duration window = lifetime}) {
@@ -229,6 +240,7 @@ class MatrixCallMembership {
       'expires':
           now.difference(joinedAt).inMilliseconds + window.inMilliseconds,
       awayKey: away,
+      statusKey: status,
       // Written either way: one carried over from [current] would have a
       // guarded membership's badges dropped after ninety minutes.
       unguardedKey: unguarded,

@@ -198,7 +198,8 @@ class UserPanelView extends material.StatelessWidget {
                       placeholderColor: shimmer ? shimmerColor : avatarColor,
                     ),
                     if (presence?.status != null)
-                      createPresenceIcon(context, presence!.status),
+                      createPresenceIcon(context, presence!.status,
+                          size: avatarSize * 0.75),
                   ],
                 ),
                 Flexible(
@@ -299,7 +300,8 @@ class UserPanelView extends material.StatelessWidget {
   }
 
   static material.DecoratedBox createPresenceIcon(
-      BuildContext context, UserPresenceStatus status) {
+      BuildContext context, UserPresenceStatus status,
+      {double size = 8}) {
     var scheme = Theme.of(context).colorScheme;
 
     var backgroundColor = scheme.surfaceContainer;
@@ -316,8 +318,8 @@ class UserPanelView extends material.StatelessWidget {
             color: backgroundColor),
       ),
       child: SizedBox(
-        width: 8,
-        height: 8,
+        width: size,
+        height: size,
       ),
     );
   }

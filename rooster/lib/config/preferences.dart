@@ -642,6 +642,11 @@ class Preferences {
   BoolPreference voipAutoWatchScreenShares =
       BoolPreference("voip_auto_watch_screen_shares", defaultValue: false);
 
+  /// The status chosen from the dot by our name: a `UserPresenceStatus`
+  /// name, online (which still turns away when idle) by default.
+  StringPreference presenceStatus =
+      StringPreference("presence_status", defaultValue: "online");
+
   NullableStringPreference filterClient =
       NullableStringPreference("filter_client_id", defaultValue: null);
 

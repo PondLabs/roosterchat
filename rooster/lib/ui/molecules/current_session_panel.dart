@@ -1,11 +1,14 @@
 import 'dart:async';
 
 import 'package:rooster/client/components/profile/profile_component.dart';
+import 'package:rooster/client/components/user_presence/user_idle_watcher.dart';
+import 'package:rooster/client/components/user_presence/user_presence_component.dart';
 import 'package:rooster/client/components/widgets/widget_component.dart';
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/adaptive_context_menu.dart';
 import 'package:rooster/ui/molecules/call_sessions_panel.dart';
+import 'package:rooster/ui/molecules/user_panel.dart';
 import 'package:rooster/ui/molecules/user_panel_settings.dart';
 import 'package:rooster/ui/molecules/widget_sessions_panel.dart';
 import 'package:rooster/utils/event_bus.dart';
@@ -65,6 +68,49 @@ class _CurrentSessionPanelState extends State<CurrentSessionPanel> {
     });
 
     super.didUpdateWidget(oldWidget);
+  }
+
+  /// [avatar] with our status dot; clicking it chooses the status.
+  Widget withStatus(Widget avatar) => ValueListenableBuilder(
+        valueListenable: UserIdleWatcher.instance.status,
+        builder: (context, status, _) => MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            onTapUp: (details) => chooseStatus(details.globalPosition),
+            child: Stack(
+              alignment: Alignment.bottomRight,
+              children: [
+                avatar,
+                UserPanelView.createPresenceIcon(context, status, size: 11),
+              ],
+            ),
+          ),
+        ),
+      );
+
+  Future<void> chooseStatus(Offset at) async {
+    final choice = await showMenu<UserPresenceStatus>(
+      context: context,
+      position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx, at.dy),
+      items: [
+        for (final status in UserIdleWatcher.choices)
+          PopupMenuItem(
+            value: status,
+            child: Row(
+              spacing: 10,
+              children: [
+                UserPanelView.createPresenceIcon(context, status, size: 11),
+                Text(switch (status) {
+                  UserPresenceStatus.unavailable => "Away",
+                  UserPresenceStatus.offline => "Invisible",
+                  _ => "Online",
+                }),
+              ],
+            ),
+          ),
+      ],
+    );
+    if (choice != null) await UserIdleWatcher.instance.choose(choice);
   }
 
   @override
@@ -130,12 +176,12 @@ class _CurrentSessionPanelState extends State<CurrentSessionPanel> {
                       spacing: 8,
                       children: [
                         if (current != null)
-                          tiamat.Avatar(
+                          withStatus(tiamat.Avatar(
                             radius: 12,
                             image: current.avatar,
                             placeholderColor: current.defaultColor,
                             placeholderText: current.displayName,
-                          ),
+                          )),
                         if (current != null)
                           Flexible(
                             child: Column(
@@ -182,12 +228,12 @@ class _CurrentSessionPanelState extends State<CurrentSessionPanel> {
                                     height: 24,
                                     child: AspectRatio(
                                       aspectRatio: 1.0,
-                                      child: tiamat.Avatar(
+                                      child: withStatus(tiamat.Avatar(
                                         radius: 12,
                                         placeholderColor: i.self!.defaultColor,
                                         placeholderText: i.self!.displayName,
                                         image: i.self!.avatar,
-                                      ),
+                                      )),
                                     ),
                                   )),
                       ],

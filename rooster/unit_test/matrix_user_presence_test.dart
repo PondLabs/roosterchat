@@ -89,7 +89,7 @@ void main() {
   late MatrixUserPresenceComponent component;
   late List<UserPresenceStatus> emitted;
 
-  void inCall({required bool away}) {
+  void inCall({required bool away, String? status}) {
     client.sdk.room.states[MatrixVoipRoomComponent.callMemberStateEvent] = {
       "${friendId}_DEVICE": matrix.StrippedStateEvent(
         type: MatrixVoipRoomComponent.callMemberStateEvent,
@@ -98,6 +98,7 @@ void main() {
         content: {
           "application": "m.call",
           MatrixCallMembership.awayKey: away,
+          MatrixCallMembership.statusKey: status,
         },
       ),
     };
@@ -171,5 +172,14 @@ void main() {
     expect(emitted, [UserPresenceStatus.online]);
     expect((await component.getUserPresence(friendId)).status,
         UserPresenceStatus.online);
+  });
+
+  test('a friend invisible in a call stays grey', () async {
+    inCall(away: false, status: "invisible");
+
+    component.sawUser(friendId, DateTime.now());
+    await pumpEventQueue();
+
+    expect(emitted, [UserPresenceStatus.offline]);
   });
 }

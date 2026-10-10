@@ -16,6 +16,7 @@ import 'package:rooster/client/components/voip/screen_capture_support.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/client/components/user_presence/user_idle_watcher.dart';
+import 'package:rooster/client/components/user_presence/user_presence_component.dart';
 import 'package:rooster/client/components/voip/webrtc_default_devices.dart';
 import 'package:rooster/client/components/voip/webrtc_screencapture_source.dart';
 import 'package:rooster/client/components/voip/android_screencapture_source.dart';
@@ -193,10 +194,10 @@ class MatrixLivekitVoipSession
       _watchVoice();
     });
 
-    // Being away from the machine is part of what our membership says, so
-    // the channel list shows it for someone who is sitting in the call
-    // without touching anything.
-    _idleWatcher.isAway.addListener(_publishMembershipState);
+    // Being away from the machine, or invisible, is part of what our
+    // membership says, so the channel list shows it for someone who is
+    // sitting in the call without touching anything.
+    _idleWatcher.status.addListener(_publishMembershipState);
 
     // Being the DJ, and whether the music plays, is in our membership too,
     // so people outside the call see the booth in use.
@@ -219,6 +220,13 @@ class MatrixLivekitVoipSession
   StreamSubscription? _settingsSub;
 
   final UserIdleWatcher _idleWatcher = UserIdleWatcher.instance;
+
+  /// The chosen status our membership carries where presence cannot
+  /// (MatrixCallMembership.statusKey).
+  String? get _membershipStatus => switch (_idleWatcher.status.value) {
+        UserPresenceStatus.offline => "invisible",
+        _ => null,
+      };
 
   /// Who takes the noise out of our microphone, kept true for the call: our
   /// DSP, or WebRTC's (the browser's) own suppressor when ours is off or
@@ -463,7 +471,8 @@ class MatrixLivekitVoipSession
         MatrixCallMembership.withPublishedState(membership,
             media: _localLiveMedia,
             voiceState: _localVoiceState,
-            away: _idleWatcher.isAway.value,
+            away: _idleWatcher.status.value == UserPresenceStatus.unavailable,
+            status: _membershipStatus,
             dj: _localDj,
             joinedAt: _joinedAt ?? now,
             now: now,
@@ -1296,7 +1305,8 @@ class MatrixLivekitVoipSession
     _membershipPublisher.update(CallMembershipState(
         media: media,
         voice: voice,
-        away: _idleWatcher.isAway.value,
+        away: _idleWatcher.status.value == UserPresenceStatus.unavailable,
+        status: _membershipStatus,
         dj: dj,
         // Only with something a dead client would leave behind: saying it
         // of a membership that lists nothing would cost a write per join.
@@ -1324,6 +1334,7 @@ class MatrixLivekitVoipSession
           media: published.media,
           voiceState: published.voice,
           away: published.away,
+          status: published.status,
           dj: published.dj,
           unguarded: published.unguarded,
           joinedAt: joinedAt,
@@ -1420,7 +1431,7 @@ class MatrixLivekitVoipSession
           .timeout(const Duration(seconds: 3), onTimeout: () {});
       // First, so no membership write lands after the clear below: leaving
       // unpublishes our tracks, which would schedule one.
-      _idleWatcher.isAway.removeListener(_publishMembershipState);
+      _idleWatcher.status.removeListener(_publishMembershipState);
       // Bounded like the heartbeat below it: a membership write stalled on
       // a dead network kept the hang up (and the button) waiting on the
       // SDK's own timeout.
@@ -2243,7 +2254,8 @@ class MatrixLivekitVoipSession
       MatrixCallMembership.withPublishedState(membership,
           media: _localLiveMedia,
           voiceState: _localVoiceState,
-          away: _idleWatcher.isAway.value,
+          away: _idleWatcher.status.value == UserPresenceStatus.unavailable,
+          status: _membershipStatus,
           dj: _localDj,
           joinedAt: _joinedAt ?? now,
           now: now,

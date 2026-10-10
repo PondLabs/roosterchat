@@ -25,7 +25,9 @@ class UserIdleWatcher {
     DateTime Function()? now,
   })  : _idleTime = idleTime ?? systemIdleTime,
         _publish = publish ?? _setStatusOnEveryClient,
-        _now = now ?? DateTime.now;
+        _now = now ?? DateTime.now {
+    isAway.addListener(_updateStatus);
+  }
 
   static final UserIdleWatcher instance = UserIdleWatcher();
 
@@ -47,16 +49,36 @@ class UserIdleWatcher {
   /// presence, and the presence component publishes it as our status.
   final ValueNotifier<bool> isAway = ValueNotifier(false);
 
+  /// What we show everyone: the status chosen from the menu on our own dot,
+  /// with online turning to away while [isAway]. Away and invisible
+  /// ([UserPresenceStatus.offline]) hold however active we are.
+  final ValueNotifier<UserPresenceStatus> status =
+      ValueNotifier(UserPresenceStatus.online);
+
+  UserPresenceStatus _chosen = UserPresenceStatus.online;
+
+  /// The statuses the menu offers.
+  static const choices = [
+    UserPresenceStatus.online,
+    UserPresenceStatus.unavailable,
+    UserPresenceStatus.offline,
+  ];
+
   Timer? _timer;
   AppLifecycleListener? _lifecycle;
   DateTime? _hiddenSince;
   bool _isInit = false;
   bool _polling = false;
-  bool? _published;
+  UserPresenceStatus? _published;
 
   void init() {
     if (_isInit) return;
     _isInit = true;
+
+    final saved = UserPresenceStatus.values
+        .asNameMap()[preferences.presenceStatus.value];
+    if (saved != null && choices.contains(saved)) _chosen = saved;
+    _updateStatus();
 
     _lifecycle = AppLifecycleListener(
       onShow: _foreground,
@@ -92,17 +114,39 @@ class UserIdleWatcher {
 
       if (away != isAway.value) isAway.value = away;
 
-      // Recorded after the write, not before: a write that failed is worth
-      // trying again on the next poll.
-      if (away != _published) {
-        await _publish(
-            away ? UserPresenceStatus.unavailable : UserPresenceStatus.online);
-        _published = away;
-      }
+      await _publishStatus();
     } catch (e) {
       Log.w("Could not tell whether we are away: $e");
     } finally {
       _polling = false;
+    }
+  }
+
+  /// Shows [choice] from now on, and remembers it across restarts.
+  Future<void> choose(UserPresenceStatus choice) async {
+    _chosen = choice;
+    await preferences.presenceStatus.set(choice.name);
+    try {
+      await _publishStatus();
+    } catch (e) {
+      Log.w("Could not set our status: $e");
+    }
+  }
+
+  void _updateStatus() =>
+      status.value = _chosen == UserPresenceStatus.online && isAway.value
+          ? UserPresenceStatus.unavailable
+          : _chosen;
+
+  Future<void> _publishStatus() async {
+    _updateStatus();
+    final next = status.value;
+
+    // Recorded after the write, not before: a write that failed is worth
+    // trying again on the next poll.
+    if (next != _published) {
+      await _publish(next);
+      _published = next;
     }
   }
 

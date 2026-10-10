@@ -41,19 +41,14 @@ class MatrixUserPresenceComponent
     UserIdleWatcher.instance.init();
     // Our own dot, without waiting for the homeserver to tell us something
     // it may never tell anyone.
-    UserIdleWatcher.instance.isAway.addListener(_ownAwayChanged);
+    UserIdleWatcher.instance.status.addListener(_ownStatusChanged);
   }
 
-  void _ownAwayChanged() {
+  void _ownStatusChanged() {
     if (_disposed) return;
     final self = client.self?.identifier;
     if (self == null) return;
-    _controller.add((
-      self,
-      UserPresence(UserIdleWatcher.instance.isAway.value
-          ? UserPresenceStatus.unavailable
-          : UserPresenceStatus.online)
-    ));
+    _controller.add((self, UserPresence(UserIdleWatcher.instance.status.value)));
   }
 
   @override
@@ -102,12 +97,18 @@ class MatrixUserPresenceComponent
   /// raw homeserver update there undid a membership saying they are away,
   /// and an away friend went grey.
   UserPresence resolvePresence(String userId, CachedPresence presence) {
+    // Our own status is whatever we chose, or away while idle, here first.
+    if (userId == client.self?.identifier) {
+      return convertPresence(presence)
+        ..status = UserIdleWatcher.instance.status.value;
+    }
+
     final call = callPresence(userId);
 
-    // A membership that says its owner is away is first hand and recent,
-    // where the homeserver's idea of their presence is neither.
-    if (call == UserPresenceStatus.unavailable) {
-      return convertPresence(presence)..status = UserPresenceStatus.unavailable;
+    // A membership that says its owner is away or invisible is first hand
+    // and recent, where the homeserver's idea of their presence is neither.
+    if (call != null && call != UserPresenceStatus.online) {
+      return convertPresence(presence)..status = call;
     }
 
     if (presence.presence == PresenceType.offline && call != null) {
@@ -131,7 +132,8 @@ class MatrixUserPresenceComponent
   /// What being in a voice call says about [userId]: null when they are in
   /// none. Homeservers that don't share presence (matrix.org) report everyone
   /// as offline, and someone in a call is plainly online — or away, where
-  /// their membership says they have left their machine.
+  /// their membership says they have left their machine, or invisible
+  /// (offline), where it says they chose that.
   UserPresenceStatus? callPresence(String userId) {
     // Memberships lapse by the homeserver's clock.
     final now = HomeserverClock.instance.now();
@@ -147,12 +149,19 @@ class MatrixUserPresenceComponent
         if (MatrixCallMembership.isExpired(event.content, sentAt, now)) {
           continue;
         }
+        final said = switch (MatrixCallMembership.statusOf(event.content)) {
+          "invisible" => UserPresenceStatus.offline,
+          _ => MatrixCallMembership.isAway(event.content)
+              ? UserPresenceStatus.unavailable
+              : UserPresenceStatus.online,
+        };
         // Away only where every membership they have says so: one device
-        // left idle while they talk on another is not away.
-        if (!MatrixCallMembership.isAway(event.content)) {
-          return UserPresenceStatus.online;
+        // left idle while they talk on another is not away. Away beats
+        // invisible.
+        if (said == UserPresenceStatus.online) return said;
+        if (status == null || said == UserPresenceStatus.unavailable) {
+          status = said;
         }
-        status = UserPresenceStatus.unavailable;
       }
     }
 
@@ -300,7 +309,8 @@ class MatrixUserPresenceComponent
   }
 
   void sawUser(String id, DateTime timestamp) async {
-    if (_disposed) return;
+    // Our own dot follows what we chose (see [_ownStatusChanged]).
+    if (_disposed || id == client.self?.identifier) return;
     final presence = await client.matrixClient
         .fetchCurrentPresence(id, fetchOnlyFromCached: true);
     if (_disposed) return;
@@ -321,14 +331,11 @@ class MatrixUserPresenceComponent
         }
       }
 
-      // Online, unless their call membership says they are away: the event
-      // may be their client rewriting that membership on its own.
-      _controller.add((
-        id,
-        UserPresence(callPresence(id) == UserPresenceStatus.unavailable
-            ? UserPresenceStatus.unavailable
-            : UserPresenceStatus.online)
-      ));
+      // Online, unless their call membership says they are away or
+      // invisible: the event may be their client rewriting that membership
+      // on its own.
+      _controller.add(
+          (id, UserPresence(callPresence(id) ?? UserPresenceStatus.online)));
     }
   }
 
@@ -347,7 +354,7 @@ class MatrixUserPresenceComponent
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    UserIdleWatcher.instance.isAway.removeListener(_ownAwayChanged);
+    UserIdleWatcher.instance.status.removeListener(_ownStatusChanged);
     for (final sub in _subscriptions) {
       unawaited(sub.cancel());
     }

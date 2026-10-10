@@ -4,6 +4,7 @@ import 'package:rooster/client/components/emoticon/emoticon_component.dart';
 import 'package:rooster/client/components/profile/profile_component.dart';
 import 'package:rooster/client/components/user_color/user_color_component.dart';
 import 'package:rooster/client/components/user_presence/user_presence_component.dart';
+import 'package:rooster/client/components/user_presence/user_idle_watcher.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/debug/log.dart';
@@ -411,10 +412,10 @@ class _UserProfileState extends State<UserProfile> {
       client.getComponent<UserProfileComponent>()?.setStatus(text);
       client
           .getComponent<UserPresenceComponent>()
-          ?.setStatus(UserPresenceStatus.online, message: text);
+          ?.setStatus(UserIdleWatcher.instance.status.value, message: text);
 
       setState(() {
-        presence = UserPresence(UserPresenceStatus.online,
+        presence = UserPresence(UserIdleWatcher.instance.status.value,
             message: UserPresenceMessage(text, PresenceMessageType.userCustom));
       });
     }
@@ -425,12 +426,12 @@ class _UserProfileState extends State<UserProfile> {
     await client.getComponent<UserProfileComponent>()?.setStatus(null);
 
     await client.getComponent<UserPresenceComponent>()?.setStatus(
-        UserPresenceStatus.online,
+        UserIdleWatcher.instance.status.value,
         message: null,
         clearMessage: true);
 
     setState(() {
-      presence = UserPresence(UserPresenceStatus.online);
+      presence = UserPresence(UserIdleWatcher.instance.status.value);
     });
   }
 

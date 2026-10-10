@@ -17,6 +17,7 @@ class CallMembershipState {
     this.media = const {},
     this.voice = const {},
     this.away = false,
+    this.status,
     this.dj,
     this.unguarded = false,
   });
@@ -31,6 +32,10 @@ class CallMembershipState {
   /// away. Changes at most twice an hour or so, which the debounce below
   /// absorbs along with everything else.
   final bool away;
+
+  /// A chosen status presence cannot carry: `invisible`
+  /// (MatrixCallMembership.statusKey).
+  final String? status;
 
   /// Null when we aren't the DJ, otherwise whether our music is playing.
   final bool? dj;
@@ -49,16 +54,19 @@ class CallMembershipState {
       _media.equals(media, other.media) &&
       _voice.equals(voice, other.voice) &&
       away == other.away &&
+      status == other.status &&
       dj == other.dj &&
       unguarded == other.unguarded;
 
   @override
   int get hashCode =>
-      Object.hash(_media.hash(media), _voice.hash(voice), away, dj, unguarded);
+      Object.hash(_media.hash(media), _voice.hash(voice), away, status, dj,
+          unguarded);
 
   @override
   String toString() =>
       "CallMembershipState(media: $media, voice: $voice, away: $away, "
+      "status: $status, "
       "dj: $dj, unguarded: $unguarded)";
 }
 
