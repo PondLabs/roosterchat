@@ -176,9 +176,19 @@ The mark, big, on the chest. `merch/tee-on-dark.svg` and `tee-on-light.svg` are 
 
 It also works for caps (the mark embroidered), hoodies, die-cut stickers (the app icon and the sticker faces), enamel pins (ink, comb red, yolk and white enamel) and mugs.
 
+## Landing page
+
+The landing page is `website/`, plain HTML, CSS and a little JavaScript with no build step, published to GitHub Pages at `pondlabs.github.io/roosterchat` with the web app under `/app/` (`.github/workflows/pages.yml`). It follows this guide: dark first, flat colour, Sora for headlines and Nunito Sans for text, the comb lobes drifting behind the hero, and the rooster bobbing its head once in a while at the bottom.
+
+It comes in English (`website/index.html`) and Brazilian Portuguese (`website/pt-br/index.html`), the same page in the same voice as the app's own translation ("Pode entrar.", "Puxe uma cadeira.", "galinheiro"): a change to one goes into the other. Both follow the system's light or dark theme until someone picks one with the button in the header. The light theme keeps the palette, cream for the ground and ink for the text; where a colour is too light to read on cream it takes a deeper tone of itself, as comb red does by day (`#C9452B`): yolk becomes a deep amber (`#8F5200`) for small text and icons, and the speaking green deepens to `#2F7A24`. The screenshots stay in the app's dark theme in both.
+
+Its screens are the real app with a made-up crew in it, not drawings. How they are taken, and how to take them again when the app changes, is in [`screens/`](screens). The phone and laptop around them are SVG drawings (`website/media/devices/`). The laptop opens and the phones rise as the page scrolls; that motion is CSS scroll-driven animation, and with reduced motion, or in a browser without it, everything is open and still.
+
+The comparison with Discord is dated: check its figures (Nitro's price and limits, upload sizes, encryption) when you touch it.
+
 ## Demo videos
 
-Two videos show the app: `website/rooster-demo.mp4` (40 s, 1920×1080, on the landing page) and `website/rooster-reel.mp4` (27 s, 1080×1920, for Instagram Reels and other vertical feeds). Both are made from code in [`demo/`](demo):
+Two videos show the app: `website/rooster-demo.mp4` (40 s, 1920×1080) and `website/rooster-reel.mp4` (27 s, 1080×1920, for Instagram Reels and other vertical feeds), both published with the site. Both are made from code in [`demo/`](demo):
 
 - `demo.html` and `reel.html` draw every scene as a function of time, with made-up people and rooms, never real accounts. Open either in a browser to watch it play live, without sound.
 - `music.py` synthesizes the music and sound effects from nothing (so they are free to use anywhere), timed by a cue sheet per video.

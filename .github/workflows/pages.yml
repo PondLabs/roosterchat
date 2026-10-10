@@ -83,9 +83,8 @@ jobs:
       - name: Assemble the site
         run: |
           mkdir _site
-          cp website/* _site/
+          cp -r website/. _site/
           cp docs/brand/logo/mark.svg docs/brand/logo/app-icon.svg docs/brand/logo/app-icon-1024.png _site/
-          cp rooster/assets/font/sora/Sora-VariableFont_wght.ttf _site/
           cp -r $PROJECT_PATH/build/web _site/app
 
       - uses: actions/upload-pages-artifact@v3

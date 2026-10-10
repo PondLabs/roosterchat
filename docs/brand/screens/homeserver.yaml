@@ -1,0 +1,52 @@
+# Synapse for the landing page screenshots. setup.sh writes it to
+# $ROOSTER_SHOTS/synapse with @WORK@ filled in. The server name only exists
+# on this machine: nothing here federates, and the browsers answer its
+# well-known themselves (capture.mjs).
+server_name: "the-coop.social"
+pid_file: "@WORK@/synapse/homeserver.pid"
+public_baseurl: http://localhost:8008/
+listeners:
+  - port: 8008
+    bind_addresses: ['127.0.0.1']
+    type: http
+    x_forwarded: false
+    resources:
+      # openid and federation: jwt-service.mjs checks people's OpenID
+      # tokens here.
+      - names: [client, federation, openid]
+        compress: false
+database:
+  name: sqlite3
+  args:
+    database: "@WORK@/synapse/homeserver.db"
+log_config: "@WORK@/synapse/log.config"
+media_store_path: "@WORK@/synapse/media_store"
+max_upload_size: 100M
+enable_registration: true
+enable_registration_without_verification: true
+report_stats: false
+signing_key_path: "@WORK@/synapse/the-coop.signing.key"
+trusted_key_servers: []
+suppress_key_server_warning: true
+macaroon_secret_key: "rooster-landing-shots-macaroon"
+form_secret: "rooster-landing-shots-form"
+url_preview_enabled: false
+presence:
+  enabled: true
+max_event_delay_duration: 24h
+# Seven apps logging in and syncing at once, and a seed script: no limits.
+rc_message: {per_second: 1000, burst_count: 1000}
+rc_registration: {per_second: 1000, burst_count: 1000}
+rc_joins: {local: {per_second: 1000, burst_count: 1000}, remote: {per_second: 1000, burst_count: 1000}}
+rc_invites: {per_room: {per_second: 1000, burst_count: 1000}, per_user: {per_second: 1000, burst_count: 1000}}
+rc_login: {address: {per_second: 1000, burst_count: 1000}, account: {per_second: 1000, burst_count: 1000}, failed_attempts: {per_second: 1000, burst_count: 1000}}
+rc_delayed_event_mgmt: {per_second: 1000, burst_count: 1000}
+rc_presence: {per_user: {per_second: 1000, burst_count: 1000}}
+experimental_features:
+  msc3266_enabled: true
+  msc4222_enabled: true
+  msc4143_enabled: true
+extra_well_known_client_content:
+  org.matrix.msc4143.rtc_foci:
+    - type: livekit
+      livekit_service_url: https://localhost:8443
