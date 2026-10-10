@@ -28,6 +28,21 @@ class CurrentSessionPanel extends StatefulWidget {
           "more than one account signed in: shows every account's rooms "
           "together instead of one account's");
 
+  static String get labelStatusOnline => Intl.message("Online",
+      name: "labelStatusOnline",
+      desc: "In the menu opened from the status dot on our own avatar at the "
+          "bottom of the sidebar: online, turning away by itself when idle");
+
+  static String get labelStatusAway => Intl.message("Away",
+      name: "labelStatusAway",
+      desc: "In the menu opened from the status dot on our own avatar at the "
+          "bottom of the sidebar: show as away");
+
+  static String get labelStatusInvisible => Intl.message("Invisible",
+      name: "labelStatusInvisible",
+      desc: "In the menu opened from the status dot on our own avatar at the "
+          "bottom of the sidebar: show as offline to everyone");
+
   @override
   State<CurrentSessionPanel> createState() => _CurrentSessionPanelState();
 }
@@ -101,9 +116,11 @@ class _CurrentSessionPanelState extends State<CurrentSessionPanel> {
               children: [
                 UserPanelView.createPresenceIcon(context, status, size: 11),
                 Text(switch (status) {
-                  UserPresenceStatus.unavailable => "Away",
-                  UserPresenceStatus.offline => "Invisible",
-                  _ => "Online",
+                  UserPresenceStatus.unavailable =>
+                    CurrentSessionPanel.labelStatusAway,
+                  UserPresenceStatus.offline =>
+                    CurrentSessionPanel.labelStatusInvisible,
+                  _ => CurrentSessionPanel.labelStatusOnline,
                 }),
               ],
             ),

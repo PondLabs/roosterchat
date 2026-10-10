@@ -48,7 +48,8 @@ class MatrixUserPresenceComponent
     if (_disposed) return;
     final self = client.self?.identifier;
     if (self == null) return;
-    _controller.add((self, UserPresence(UserIdleWatcher.instance.status.value)));
+    _controller
+        .add((self, UserPresence(UserIdleWatcher.instance.status.value)));
   }
 
   @override

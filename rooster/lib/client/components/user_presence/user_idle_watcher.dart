@@ -75,8 +75,8 @@ class UserIdleWatcher {
     if (_isInit) return;
     _isInit = true;
 
-    final saved = UserPresenceStatus.values
-        .asNameMap()[preferences.presenceStatus.value];
+    final saved =
+        UserPresenceStatus.values.asNameMap()[preferences.presenceStatus.value];
     if (saved != null && choices.contains(saved)) _chosen = saved;
     _updateStatus();
 

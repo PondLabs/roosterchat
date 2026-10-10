@@ -2622,6 +2622,24 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelStatusOnline": "Online",
+  "@labelStatusOnline": {
+    "description": "In the menu opened from the status dot on our own avatar at the bottom of the sidebar: online, turning away by itself when idle",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelStatusAway": "Away",
+  "@labelStatusAway": {
+    "description": "In the menu opened from the status dot on our own avatar at the bottom of the sidebar: show as away",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelStatusInvisible": "Invisible",
+  "@labelStatusInvisible": {
+    "description": "In the menu opened from the status dot on our own avatar at the bottom of the sidebar: show as offline to everyone",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelDownloadDesktopApp": "Get the desktop app",
   "@labelDownloadDesktopApp": {
     "description": "Link to the releases page, shown where a feature needs the desktop app",

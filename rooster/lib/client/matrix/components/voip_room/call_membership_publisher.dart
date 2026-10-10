@@ -59,9 +59,8 @@ class CallMembershipState {
       unguarded == other.unguarded;
 
   @override
-  int get hashCode =>
-      Object.hash(_media.hash(media), _voice.hash(voice), away, status, dj,
-          unguarded);
+  int get hashCode => Object.hash(
+      _media.hash(media), _voice.hash(voice), away, status, dj, unguarded);
 
   @override
   String toString() =>
