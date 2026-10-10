@@ -1,8 +1,9 @@
+# Pushes to main run this from ci.yml, whose publish waits for it: a release
+# does not go out with the native noise suppression loop red.
 on:
   pull_request:
     branches: [main]
-  push:
-    branches: [main]
+  workflow_call:
 name: integration-test
 
 # A newer push to the same branch supersedes the run in progress: a pull

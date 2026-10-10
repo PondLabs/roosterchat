@@ -519,8 +519,11 @@ tools/voice_dsp/native_noise_loop.sh
 | A capture WebRTC stopped recording from, a web DSP whose worker traps or hangs, a suspended audio context: the call repairs them or keeps the microphone going (docs/voice-call-health.md) | `native_noise_loop.sh`, `web_health_loop.mjs`, `unit_test/voice_health/` | integration-test, ci |
 
 `publish` in ci.yml waits for `voice-dsp`: a release does not go out with
-browser suppression broken. The Rust and Dart tests run in `test`, which
-`publish` waits for too.
+browser suppression broken. It waits for `integration-test` too, which ci.yml
+runs on every push to main, so a red native loop (`native_noise_loop.sh`)
+stops the release as well (before, the workflow ran on its own and v1.7.2,
+v1.8.0 and v1.10.1 shipped with it red). The Rust and Dart tests run in
+`test`, which `publish` waits for too.
 
 ## What still needs a person
 

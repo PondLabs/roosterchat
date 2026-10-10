@@ -125,6 +125,13 @@ jobs:
   voice-dsp:
     uses: ./.github/workflows/voice-dsp.yml
 
+  # The Synapse integration tests and noise suppression inside the real
+  # WebRTC on Linux (tools/voice_dsp/native_noise_loop.sh). The release waits
+  # for it: v1.7.2, v1.8.0 and v1.10.1 went out with this loop red while it
+  # ran on its own.
+  integration-test:
+    uses: ./.github/workflows/integration-test.yml
+
   version:
     runs-on: ubuntu-24.04
     outputs:
@@ -192,7 +199,7 @@ jobs:
       version: ${{ needs.version.outputs.version }}
 
   publish:
-    needs: [test, voice-dsp, stability, version, build-release, installers]
+    needs: [test, voice-dsp, integration-test, stability, version, build-release, installers]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
