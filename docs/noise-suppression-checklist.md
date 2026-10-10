@@ -84,7 +84,7 @@ buffer, then bug 18).
 
 ## Hardening
 
-- [x] CI: ci `test` (Dart + Rust), ci `voice-dsp` (contracts, web build, both web loops; `publish` waits for it), ci `integration-test` (Synapse tests, native loop; `publish` waits for it)
+- [x] CI: ci `test` (Dart + Rust), ci `voice-dsp` (contracts, web build, both web loops; `publish` waits for it), ci `voice-dsp-native` (native loop; `publish` waits for it)
 - [x] `// ROOSTER` marker floor and the vendored changes the DSP needs (`check_contracts.py`)
 - [x] `audio_dsp.wasm` in the web build (`check_contracts.py --web-build`, in ci, build and release)
 - [x] visible failure: toast when the DSP gives up or cannot run, the reason in Settings
