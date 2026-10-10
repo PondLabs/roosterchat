@@ -244,6 +244,47 @@ def check_abi(problems):
                 problems.append(f"{rel}: {what} {m.group(1)}, rust/audio_dsp says {want}")
 
 
+def check_params(problems):
+    """audio_dsp::Params, written by hand in Dart (FFI) and in the browser
+    worker (from AudioDspSettings.toMap()): same fields, same order, same
+    byte offsets, and every key the worker reads sent by Dart. A key renamed
+    on one side reads as undefined in the worker, which is 0: noise
+    suppression off, with nothing failing."""
+    rust = re.search(r"pub struct Params \{(.*?)\n\}", read("rust/audio_dsp/src/lib.rs") or "", re.S)
+    if not rust:
+        problems.append("rust/audio_dsp/src/lib.rs: cannot find struct Params")
+        return
+    camel = lambda name: re.sub(r"_(\w)", lambda m: m.group(1).upper(), name)
+    fields, offsets, at = [], {}, 0
+    for name, ty in re.findall(r"pub (\w+): (u8|f32),", rust.group(1)):
+        size = 1 if ty == "u8" else 4
+        at = (at + size - 1) // size * size
+        fields.append(camel(name))
+        offsets[camel(name)] = at
+        at += size
+
+    dart_rel = "rooster/lib/client/components/voip/audio_processing/audio_processing_manager_native.dart"
+    dart = re.search(r"final class DspParams extends Struct \{(.*?)\n\}", read(dart_rel) or "", re.S)
+    dart_fields = re.findall(r"external (?:int|double) (\w+);", dart.group(1)) if dart else []
+    if dart_fields != fields:
+        problems.append(f"{dart_rel}: DspParams fields {dart_fields}, audio_dsp::Params has {fields}")
+
+    worker_rel = "rooster/web/audio_dsp.worker.js"
+    worker = read(worker_rel) or ""
+    written = {key: int(off) for off, key in re.findall(r"view\.set(?:Uint8|Float32)\((\d+), (?:num\()?p\.(\w+)", worker)}
+    written["inputScale"] = int(m.group(1)) if (m := re.search(r"view\.setFloat32\((\d+), I16_SCALE", worker)) else -1
+    for key, off in offsets.items():
+        if written.get(key) != off:
+            problems.append(f"{worker_rel}: writes {key} at {written.get(key)}, audio_dsp::Params has it at {off}")
+
+    settings_rel = "rooster/lib/client/components/voip/audio_processing/audio_dsp_settings.dart"
+    to_map = re.search(r"toMap\(\) => \{(.*?)\};", read(settings_rel) or "", re.S)
+    sent = set(re.findall(r'"(\w+)":', to_map.group(1))) if to_map else set()
+    read_keys = set(written) - {"inputScale"}
+    if sent != read_keys:
+        problems.append(f"{settings_rel}: toMap() sends {sorted(sent)}, the worker reads {sorted(read_keys)}")
+
+
 def check_channels(problems):
     """Every rooster* method channel call has a native handler."""
     native = "".join(read(rel) or "" for rel in [
@@ -332,6 +373,7 @@ def main():
     check_restart_makes_before_breaking(problems)
     check_symbols(problems)
     check_abi(problems)
+    check_params(problems)
     check_channels(problems)
     check_overrides(problems)
     if args.web_build:

@@ -1134,9 +1134,9 @@
     "type": "text",
     "placeholders": {}
   },
-  "messageNoiseSuppressionFellBack": "Noise suppression isn't getting your microphone, so the basic one is on for the rest of this call.",
+  "messageNoiseSuppressionFellBack": "Noise suppression stopped working, so the basic one is on for the rest of this call.",
   "@messageNoiseSuppressionFellBack": {
-    "description": "Shown during a call when the app's noise suppression stopped receiving microphone audio and a simpler one took over",
+    "description": "Shown during a call when the app's noise suppression stopped receiving microphone audio or stopped suppressing, and a simpler one took over",
     "type": "text",
     "placeholders": {}
   },

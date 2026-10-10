@@ -6,10 +6,10 @@ import 'package:rooster/ui/organisms/dj/dj_toast.dart';
 import 'package:intl/intl.dart';
 
 String get messageNoiseSuppressionFellBack => Intl.message(
-    "Noise suppression isn't getting your microphone, so the basic one is on for the rest of this call.",
+    "Noise suppression stopped working, so the basic one is on for the rest of this call.",
     name: "messageNoiseSuppressionFellBack",
     desc:
-        "Shown during a call when the app's noise suppression stopped receiving microphone audio and a simpler one took over");
+        "Shown during a call when the app's noise suppression stopped receiving microphone audio or stopped suppressing, and a simpler one took over");
 
 /// Our DSP was given up on for the rest of the call.
 void warnNoiseSuppressionFellBack() =>

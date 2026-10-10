@@ -168,7 +168,7 @@
   "messageVoiceDspScriptNotLoaded": "o audio_dsp.js não carregou",
   "messageVoiceDspBrowserUnsupported": "este navegador não tem AudioWorklet nem WebAssembly",
   "messageVoiceDspNoAnswer": "o processador de voz não respondeu a tempo",
-  "messageNoiseSuppressionFellBack": "A supressão de ruído não está recebendo o som do seu microfone, então a básica fica ligada pelo resto desta chamada.",
+  "messageNoiseSuppressionFellBack": "A supressão de ruído parou de funcionar, então a básica fica ligada pelo resto desta chamada.",
   "messageNoiseSuppressionUnavailable": "A supressão de ruído não consegue rodar ({reason}). A básica está ligada no lugar dela.",
   "messageMicrophoneNotGettingThrough": "Seu microfone parou de chegar à chamada. Estamos tentando trazê-lo de volta; se ele não voltar, confira o dispositivo ou entre de novo na chamada.",
   "messageMicrophoneBack": "Seu microfone voltou a chegar à chamada.",
