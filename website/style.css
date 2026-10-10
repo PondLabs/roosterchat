@@ -1,138 +1,2494 @@
-/* Rooster's landing page. Palette and type from docs/brand/README.md. */
+/* Rooster's landing page. Palette, type and voice from docs/brand/README.md:
+   flat colour, dark first, comb red as the one loud colour. The motion is
+   all CSS (scroll-driven where the browser has it) plus site.js, which only
+   writes data-* attributes and custom properties; with neither, the page is
+   complete and still. */
+
 @font-face {
   font-family: "Sora";
-  src: url("Sora-VariableFont_wght.ttf") format("truetype");
+  src: url("fonts/sora-latin.woff2") format("woff2");
   font-weight: 100 800;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Nunito Sans";
+  src: url("fonts/nunito-sans-latin.woff2") format("woff2");
+  font-weight: 200 1000;
   font-display: swap;
 }
 
 :root {
   --ink: #211614;
-  --comb: #E8382A;
-  --yolk: #F89B17;
-  --cream: #F7EDE1;
-  --stone: #8D8178;
-  --surface: #2A221E;
-  --text: #F5EBDD;
-  --link: #8FB4DA;
+  --bg: #1b1613;
+  --bg-2: #1f1916;
+  --surface: #2a221e;
+  --surface-2: #362c27;
+  --sunk: #161210;
+  --panel: #1b1613;
+  --line: rgb(245 235 221 / 0.09);
+  --line-strong: rgb(245 235 221 / 0.17);
+  --text: #f5ebdd;
+  --muted: #b5a89d;
+  --stone: #8d8178;
+  --comb: #e8382a;
+  --comb-hover: #f04a3c;
+  --comb-soft: #ff8466;
+  --on-comb: #fff7ee;
+  --yolk: #f89b17;
+  --accent: #f89b17;
+  --cream: #f7ede1;
+  --moss: #5e8f4e;
+  --dusk: #3f4f6e;
+  --spruce: #2e3b33;
+  --talk: #7fc36a;
+  --link: #8fb4da;
+  --lobe: #221a16;
+  --shade: rgb(0 0 0 / 0.75);
+  --shade-soft: rgb(0 0 0 / 0.8);
+  --ring: rgb(255 255 255 / 0.06);
+  --shade-phone: rgb(0 0 0 / 0.5);
+  --header-h: 4.25rem;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --shadow: 0 48px 96px -44px var(--shade);
   color-scheme: dark;
 }
 
-* { box-sizing: border-box; }
+/* The light theme, from the same palette: cream for the ground, ink for the
+   text, and the app's light theme for the surfaces (docs/brand/README.md).
+   Where a brand colour is too light to read on cream it gets a deeper tone
+   of itself, the way comb red is #C9452B by day: yolk becomes a deep amber
+   for text and icons (--accent), and the speaking green deepens too. The
+   page follows the system until someone picks a theme with the header's
+   button (site.js), which sets data-theme on <html>. A browser without
+   light-dark() keeps the dark page, and the button hides. */
+@supports (color: light-dark(#000, #fff)) {
+  :root {
+    color-scheme: light dark;
+    --bg: light-dark(#f7ede1, #1b1613);
+    --bg-2: light-dark(#f0e6d8, #1f1916);
+    --surface: light-dark(#fffcf7, #2a221e);
+    --surface-2: light-dark(#e6dacb, #362c27);
+    --sunk: light-dark(#f0e7da, #161210);
+    --panel: light-dark(#fffcf7, #1b1613);
+    --line: light-dark(rgb(35 26 22 / 0.1), rgb(245 235 221 / 0.09));
+    --line-strong: light-dark(rgb(35 26 22 / 0.18), rgb(245 235 221 / 0.17));
+    --text: light-dark(#231a16, #f5ebdd);
+    --muted: light-dark(#5f534b, #b5a89d);
+    --stone: light-dark(#776a61, #8d8178);
+    --comb: light-dark(#c9452b, #e8382a);
+    --comb-hover: light-dark(#b33a22, #f04a3c);
+    --comb-soft: light-dark(#a9361f, #ff8466);
+    --on-comb: light-dark(#ffffff, #fff7ee);
+    --accent: light-dark(#8f5200, #f89b17);
+    --talk: light-dark(#2f7a24, #7fc36a);
+    --link: light-dark(#3d6b98, #8fb4da);
+    --lobe: light-dark(#efe2d2, #221a16);
+    --shade: light-dark(rgb(80 50 30 / 0.3), rgb(0 0 0 / 0.75));
+    --shade-soft: light-dark(rgb(80 50 30 / 0.28), rgb(0 0 0 / 0.8));
+    --ring: light-dark(rgb(35 26 22 / 0.1), rgb(255 255 255 / 0.06));
+    --shade-phone: light-dark(rgb(80 50 30 / 0.26), rgb(0 0 0 / 0.5));
+  }
+
+  :root[data-theme="light"] {
+    color-scheme: light;
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+  }
+
+  /* What is drawn on the devices' screens (the macOS bars, the phone's
+     status bar) goes with the screenshots, which are the app's dark theme. */
+  .laptop-screen,
+  .phone-screen {
+    color-scheme: dark;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: calc(var(--header-h) + 1rem);
+  -webkit-text-size-adjust: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
 
 body {
   margin: 0;
-  background: var(--ink);
+  background: var(--bg);
   color: var(--text);
-  font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 400 1.0625rem/1.6 "Nunito Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overflow-x: clip;
 }
 
-a { color: var(--link); }
-a:hover { color: var(--text); }
+img,
+svg,
+picture {
+  display: block;
+  max-width: 100%;
+}
 
-h1, h2, .tagline, .button, .downloads strong {
+img {
+  height: auto;
+}
+
+a {
+  color: var(--link);
+}
+
+a:hover {
+  color: var(--text);
+}
+
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+h1,
+h2,
+h3 {
   font-family: "Sora", system-ui, sans-serif;
+  text-wrap: balance;
 }
 
-.hero {
-  text-align: center;
-  padding: 72px 24px 48px;
-  max-width: 720px;
-  margin: 0 auto;
+p {
+  text-wrap: pretty;
 }
 
-.mark { display: block; margin: 0 auto 8px; }
-
-h1 {
-  font-size: 64px;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  margin: 0;
-  line-height: 1;
+.frame {
+  width: min(1240px, 100% - 2.5rem);
+  margin-inline: auto;
 }
 
-.tagline {
-  font-weight: 500;
-  font-size: 22px;
-  color: var(--stone);
-  margin: 10px 0 24px;
+@media (min-width: 768px) {
+  .frame {
+    width: min(1240px, 100% - 4rem);
+  }
 }
 
-.lede { font-size: 19px; margin: 0 auto 32px; }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 
-.cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin: 0; }
-
-.button {
-  display: inline-block;
-  padding: 14px 26px;
-  border-radius: 12px;
+.skip {
+  position: absolute;
+  left: 1rem;
+  top: -4rem;
+  z-index: 100;
+  padding: 0.6rem 1rem;
+  border-radius: 999px;
   background: var(--comb);
-  color: #FFF7EE;
+  color: var(--on-comb);
   font-weight: 700;
   text-decoration: none;
 }
-.button:hover { background: #F04A3C; color: #FFF7EE; }
-.button.secondary { background: var(--surface); color: var(--text); }
-.button.secondary:hover { background: #362C27; }
 
-.note { color: var(--stone); font-size: 15px; margin-top: 16px; }
-
-main { max-width: 1040px; margin: 0 auto; padding: 0 24px 48px; }
-
-.demo { max-width: 1040px; margin: 8px auto 40px; padding: 0 24px; }
-.demo video {
-  display: block; width: 100%; height: auto; border-radius: 18px;
-  background: #171110; box-shadow: 0 30px 80px rgba(0, 0, 0, .45);
+.skip:focus {
+  top: 1rem;
 }
 
-.features {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
-  gap: 20px;
-  margin: 24px 0 72px;
-}
-.features div {
-  background: var(--surface);
-  border-radius: 16px;
-  padding: 24px 24px 8px;
-}
-.features h2 { font-size: 20px; margin: 0 0 8px; }
-
-.downloads { text-align: center; }
-.downloads h2 { font-size: 34px; margin: 0 0 20px; }
-.downloads ul {
-  list-style: none;
-  padding: 0;
-  margin: 0 auto;
-  display: flex;
-  gap: 16px;
+/* ----------------------------------------------------------- buttons */
+.button {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.95rem 1.5rem;
+  border-radius: 14px;
+  background: var(--comb);
+  color: var(--on-comb);
+  font: 700 1rem/1.1 "Sora", system-ui, sans-serif;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+  transition: background-color 0.2s ease;
 }
-.downloads li a {
+
+.button:hover {
+  background: var(--comb-hover);
+  color: var(--on-comb);
+}
+
+.button.ghost {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.button.ghost:hover {
+  background: var(--surface-2);
+}
+
+.button.small {
+  padding: 0.65rem 1.05rem;
+  border-radius: 12px;
+  font-size: 0.9rem;
+}
+
+.cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+}
+
+/* ------------------------------------------------------------ header */
+.top-sentinel {
+  position: absolute;
+  top: 0;
+  height: 1px;
+  width: 1px;
+}
+
+.site-header {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 50;
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid transparent;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+[data-scrolled] .site-header {
+  background: var(--bg);
+  border-bottom-color: var(--line);
+}
+
+.header-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+@media (min-width: 880px) {
+  .header-row {
+    gap: 2rem;
+  }
+}
+
+/* On the narrowest phones the mark stands for the name, which stays the
+   link's accessible name. */
+@media (max-width: 379px) {
+  .site-header .brand span {
+    display: none;
+  }
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--text);
+  font: 800 1.35rem/1 "Sora", system-ui, sans-serif;
+  letter-spacing: -0.035em;
+  text-decoration: none;
+}
+
+.brand:hover {
+  color: var(--text);
+}
+
+.brand img {
+  width: 34px;
+  height: auto;
+}
+
+.site-nav {
+  display: none;
+  gap: 1.75rem;
+  margin-left: auto;
+}
+
+.site-nav a {
+  color: var(--muted);
+  font-weight: 650;
+  font-size: 0.95rem;
+  text-decoration: none;
+}
+
+.site-nav a:hover {
+  color: var(--text);
+}
+
+.header-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+@media (min-width: 880px) {
+  .site-nav {
+    display: flex;
+  }
+
+  .header-tools {
+    margin-left: 0;
+  }
+}
+
+/* The other language, and the light or dark theme. */
+.lang,
+.theme-toggle {
+  display: inline-grid;
+  place-items: center;
+  min-width: 2.5rem;
+  height: 2.5rem;
+  padding: 0 0.6rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: 700 0.82rem/1 "Sora", system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.lang:hover,
+.theme-toggle:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.theme-toggle {
+  padding: 0;
+}
+
+.theme-toggle svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The moon by day (switch to dark), the sun by night (switch to light). */
+.theme-toggle .sun {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-toggle .sun {
+    display: block;
+  }
+
+  :root:not([data-theme="light"]) .theme-toggle .moon {
+    display: none;
+  }
+}
+
+:root[data-theme="dark"] .theme-toggle .sun {
   display: block;
-  width: 200px;
-  padding: 20px;
+}
+
+:root[data-theme="dark"] .theme-toggle .moon {
+  display: none;
+}
+
+@supports not (color: light-dark(#000, #fff)) {
+  .theme-toggle {
+    display: none;
+  }
+}
+
+/* ----------------------------------------------- comb lobes (decor) */
+/* Big flat circles drifting behind the hero and the last call to action,
+   the same decoration as the demo video: flat, no blur. */
+.lobes {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.lobe {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: var(--size);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--lobe);
+}
+
+/* -------------------------------------------------------------- hero */
+.hero {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  overflow: clip;
+}
+
+.hero-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--header-h) + 2.25rem) 0 2rem;
+}
+
+.hero-split {
+  margin-block: auto;
+  display: grid;
+  gap: 3.25rem;
+  align-items: center;
+  padding-block: 1rem;
+}
+
+@media (min-width: 1024px) {
+  .hero-split {
+    grid-template-columns: minmax(0, 5.6fr) minmax(0, 6.4fr);
+    gap: 3.5rem;
+  }
+}
+
+.tagline {
+  margin: 0;
+  color: var(--stone);
+  font: 500 1.125rem/1.3 "Sora", system-ui, sans-serif;
+}
+
+.hero h1 {
+  margin: 0.85rem 0 0;
+  font-size: clamp(2.6rem, 3.6vw + 1.4rem, 4.35rem);
+  font-weight: 750;
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+}
+
+.hero h1 em,
+.final h2 em {
+  font-style: normal;
+  color: var(--comb);
+}
+
+.lede {
+  max-width: 33rem;
+  margin: 1.4rem 0 0;
+  color: var(--muted);
+  font-size: 1.15rem;
+}
+
+.hero .cta {
+  margin-top: 2rem;
+}
+
+.hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  margin: 1.5rem 0 0;
+  color: var(--stone);
+  font-size: 0.9rem;
+}
+
+.hero-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+@media (max-width: 639px) {
+  .hero-meta {
+    flex-direction: column;
+  }
+}
+
+@media (min-width: 640px) {
+  .hero-meta span + span::before {
+    content: "";
+  }
+}
+
+.hero-meta span + span::before {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--surface-2);
+}
+
+/* The 3D stage: the screenshot tilts with the pointer (site.js writes
+   --rx and --ry), and the chips float at their own depths. */
+.stage {
+  perspective: 1500px;
+}
+
+.tilt {
+  position: relative;
+  transform: rotateX(var(--ry, 0deg)) rotateY(var(--rx, 0deg));
+  transform-style: preserve-3d;
+}
+
+.app-window {
+  overflow: hidden;
+  border-radius: 18px;
+  background: var(--sunk);
+  box-shadow: var(--shadow), 0 0 0 1px var(--ring);
+}
+
+.chip {
+  position: absolute;
+  display: none;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 1rem 0.55rem 0.65rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 28px 48px -24px var(--shade-soft);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+@media (min-width: 1024px) {
+  .chip {
+    display: flex;
+  }
+}
+
+.chip strong {
+  display: block;
+  font: 700 0.875rem/1.25 "Sora", system-ui, sans-serif;
+}
+
+.chip small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+.depth {
+  transform: translateZ(var(--z, 0px));
+}
+
+.faces {
+  display: flex;
+}
+
+.faces img {
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+}
+
+.faces img + img {
+  margin-left: -9px;
+}
+
+.eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  width: 30px;
+  height: 22px;
+  padding: 0 4px;
+}
+
+.eq i {
+  flex: 1;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--comb);
+  transform-origin: bottom;
+  transform: scaleY(0.55);
+}
+
+.dot-live {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  margin: 0 5px;
+  border-radius: 50%;
+  background: var(--talk);
+}
+
+/* What comes after the hero, as an index that ends the first screen. Only
+   on screens tall enough that the split above still fits. */
+.next {
+  display: none;
+  margin-top: 2.75rem;
+}
+
+@media (min-width: 768px) and (min-height: 820px) {
+  .next {
+    display: block;
+  }
+}
+
+.next ol {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem 2rem;
+  margin: 0;
+  padding: 1.5rem 0 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+@media (min-width: 1024px) {
+  .next ol {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.next a {
+  display: flex;
+  gap: 0.75rem;
+  color: var(--text);
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.next .arrow {
+  color: var(--accent);
+  font-weight: 800;
+  transition: transform 0.3s var(--ease);
+}
+
+.next a:hover .arrow {
+  transform: translateY(3px);
+}
+
+.next strong {
+  display: block;
+  font-family: "Sora", system-ui, sans-serif;
+  font-weight: 650;
+}
+
+.next small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+/* ------------------------------------------------- section furniture */
+.section-head {
+  max-width: 46rem;
+}
+
+.section-head.center {
+  margin-inline: auto;
+  text-align: center;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--accent);
+  font: 700 0.78rem/1.2 "Sora", system-ui, sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.section-head h2 {
+  margin: 0.7rem 0 0;
+  font-size: clamp(2.2rem, 2.6vw + 1.3rem, 3.4rem);
+  font-weight: 750;
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+}
+
+.section-lede {
+  margin: 1.15rem 0 0;
+  max-width: 60ch;
+  color: var(--muted);
+  font-size: 1.125rem;
+}
+
+.section-head.center .section-lede {
+  margin-inline: auto;
+}
+
+/* --------------------------------------------------------- statement */
+.statement-band {
+  padding: clamp(5rem, 10vw, 8.5rem) 0;
+  border-top: 1px solid var(--line);
+  background: var(--bg-2);
+}
+
+.statement {
+  max-width: 22ch;
+  margin: 0 auto;
+  font-size: clamp(2rem, 2.8vw + 1.2rem, 3.6rem);
+  font-weight: 750;
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+  text-align: center;
+}
+
+.statement .dim {
+  display: block;
+  color: var(--stone);
+}
+
+.pillars {
+  display: grid;
+  gap: 1.75rem 2rem;
+  margin: clamp(3rem, 6vw, 4.5rem) 0 0;
+  padding: 2.25rem 0 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+@media (min-width: 640px) {
+  .pillars {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .pillars {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.pillars li {
+  display: flex;
+  gap: 0.9rem;
+}
+
+.pillars svg,
+.platforms svg {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pillars strong {
+  display: block;
+  font: 650 1rem/1.3 "Sora", system-ui, sans-serif;
+}
+
+.pillars small {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+/* ---------------------------------------------------------- features */
+.features {
+  padding: clamp(5rem, 9vw, 8rem) 0 clamp(4rem, 7vw, 6rem);
+}
+
+.tour {
+  display: grid;
+  gap: 3rem;
+  margin-top: clamp(3rem, 6vw, 4.5rem);
+}
+
+@media (min-width: 1024px) {
+  .tour {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    gap: 4.5rem;
+    align-items: start;
+  }
+}
+
+/* The stage sticks beside the steps; only the current screenshot shows,
+   and a switch is a short crossfade. It repeats what the steps say, so it
+   is out of the accessibility tree. */
+.tour-stage {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .tour-stage {
+    display: block;
+    position: sticky;
+    top: max(calc(var(--header-h) + 2.5rem), calc(50dvh - 15vw));
+    aspect-ratio: 1512 / 891;
+  }
+}
+
+.tour-progress {
+  position: absolute;
+  inset: -1.4rem 0 auto;
+  display: flex;
+  gap: 6px;
+}
+
+.tour-progress i {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-2);
+  transition: background-color 0.4s ease;
+}
+
+.tour-progress i[data-reached] {
+  background: var(--comb);
+}
+
+.tour-shot {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  overflow: hidden;
   border-radius: 16px;
+  background: var(--sunk);
+  box-shadow: var(--shadow), 0 0 0 1px var(--ring);
+  opacity: 0;
+  transform: translateY(0.75rem) scale(0.985);
+}
+
+.tour-shot[data-current] {
+  opacity: 1;
+  transform: none;
+}
+
+.tour-shot img {
+  width: 100%;
+}
+
+.steps-wrap {
+  position: relative;
+}
+
+/* The track the reading line draws down, behind the markers. */
+.steps-track,
+.steps-line {
+  position: absolute;
+  left: calc(1.5rem - 1px);
+  top: 1.5rem;
+  bottom: 1.5rem;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--line-strong);
+}
+
+.steps-line {
+  background: var(--comb);
+  transform-origin: top;
+}
+
+.steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr);
+  gap: 1.25rem;
+  padding-bottom: 3.5rem;
+}
+
+.step:last-child {
+  padding-bottom: 0;
+}
+
+@media (min-width: 1024px) {
+  .step {
+    min-height: 58vh;
+    padding-bottom: 2rem;
+  }
+
+  .step:last-child {
+    min-height: 0;
+  }
+}
+
+.marker {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--muted);
+  transition: background-color 0.4s ease, color 0.4s ease, border-color 0.4s ease;
+}
+
+.marker svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.step[data-reached] .marker {
+  border-color: transparent;
+  background: var(--comb);
+  color: var(--on-comb);
+}
+
+.step-text {
+  padding-top: 0.55rem;
+  transition: opacity 0.5s ease;
+}
+
+.step-text h3 {
+  margin: 0;
+  font-size: 1.45rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.step-text p {
+  margin: 0.7rem 0 0;
+  color: var(--muted);
+}
+
+@media (min-width: 1024px) {
+  [data-steps]:has([data-current]) .step:not([data-current]) .step-text {
+    opacity: 0.5;
+  }
+}
+
+.step-shot {
+  margin: 1.5rem 0 0;
+  overflow: hidden;
+  border-radius: 14px;
+  box-shadow: var(--shadow), 0 0 0 1px var(--ring);
+}
+
+@media (min-width: 1024px) {
+  .step-shot {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------ inside */
+.inside {
+  padding: clamp(5rem, 9vw, 8rem) 0;
+  border-top: 1px solid var(--line);
+  background: var(--bg-2);
+  /* clip, not hidden: hidden would make the section a scroll container,
+     and the scroll-driven animations inside would measure against it. */
+  overflow-x: clip;
+}
+
+.scene-caption {
+  max-width: 60ch;
+  margin: 1.5rem 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+/* Scene 1, the laptop. Geometry from the frames in media/devices (a
+   MacBook Pro 14" drawn in SVG, 3806 x 2298 open, with the lid's screen at
+   1512 x 982 points): the lid turns on its bottom edge, the hinge. From
+   1024 px the phone stands beside it, on the same line as its base. */
+.laptop-scene {
+  position: relative;
+  margin-top: clamp(3.5rem, 7vw, 5rem);
+}
+
+@media (min-width: 1024px) {
+  .laptop-scene {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 21%;
+    align-items: end;
+    gap: 4%;
+  }
+}
+
+.laptop-stage {
+  position: relative;
+}
+
+.laptop {
+  position: relative;
+  aspect-ratio: 3806 / 2298;
+}
+
+.laptop-camera {
+  position: absolute;
+  inset: 0;
+  perspective: 3200px;
+  /* A little above the hinge, which sits at 93% of the laptop's height:
+     the closed lid is a blade over the base. The angles in lid-open are
+     worked out for this camera. */
+  perspective-origin: 50% 83%;
+}
+
+.lid {
+  position: absolute;
+  top: 0;
+  left: 8.8019%;
+  width: 82.3962%;
+  aspect-ratio: 3136 / 2140;
+  transform-origin: bottom;
+  transform-style: preserve-3d;
+}
+
+.lid-back,
+.lid-front,
+.lid-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.lid-back {
+  transform: rotateX(180deg);
+  backface-visibility: hidden;
+}
+
+.lid-front {
+  backface-visibility: hidden;
+}
+
+.laptop-screen {
+  position: absolute;
+  left: 1.7857%;
+  top: 2.5701%;
+  width: 96.4286%;
+  height: 91.7757%;
+  overflow: hidden;
+  background: var(--sunk);
+  container-type: inline-size;
+}
+
+/* One macOS point on the laptop's screen, which is 1512 points wide. */
+.laptop-screen > * {
+  --pt: calc(100cqw / 1512);
+}
+
+.menu-bar {
+  position: absolute;
+  inset: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: calc(37 * var(--pt));
+  padding-inline: calc(20 * var(--pt));
+  background: #120e0c;
+  color: var(--text);
+  font: 500 calc(13 * var(--pt)) / 1 system-ui, -apple-system, sans-serif;
+}
+
+/* Each side stops short of the camera notch, which the frame draws over
+   the middle of the bar. */
+.menu-bar > span {
+  display: flex;
+  align-items: center;
+  gap: calc(18 * var(--pt));
+  width: calc(50% - 197 * var(--pt));
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.menu-bar .status {
+  justify-content: flex-end;
+  gap: calc(14 * var(--pt));
+}
+
+.menu-bar svg,
+.browser-bar svg {
+  width: calc(15 * var(--pt));
+  height: calc(15 * var(--pt));
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.battery {
+  position: relative;
+  display: inline-block;
+  width: calc(24 * var(--pt));
+  height: calc(12 * var(--pt));
+  padding: calc(1.5 * var(--pt));
+  border: calc(1 * var(--pt)) solid rgb(245 235 221 / 0.45);
+  border-radius: calc(3.5 * var(--pt));
+}
+
+.battery i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: calc(2 * var(--pt));
+  background: currentColor;
+}
+
+.battery::after {
+  content: "";
+  position: absolute;
+  right: calc(-3.5 * var(--pt));
+  top: 50%;
+  width: calc(1.5 * var(--pt));
+  height: calc(4 * var(--pt));
+  border-radius: 0 calc(1 * var(--pt)) calc(1 * var(--pt)) 0;
+  background: rgb(245 235 221 / 0.45);
+  transform: translateY(-50%);
+}
+
+.browser-bar {
+  position: absolute;
+  inset: calc(37 * var(--pt)) 0 auto;
+  display: flex;
+  align-items: center;
+  gap: calc(12 * var(--pt));
+  height: calc(54 * var(--pt));
+  padding-inline: calc(14 * var(--pt));
+  border-bottom: 1px solid rgb(255 255 255 / 0.06);
+  background: #241d1a;
+  color: var(--muted);
+  font: 500 calc(13 * var(--pt)) / 1 system-ui, -apple-system, sans-serif;
+}
+
+.browser-bar .faint {
+  opacity: 0.45;
+}
+
+.lights {
+  display: flex;
+  gap: calc(8 * var(--pt));
+}
+
+.lights i {
+  width: calc(12 * var(--pt));
+  height: calc(12 * var(--pt));
+  border-radius: 50%;
+  background: rgb(245 235 221 / 0.22);
+}
+
+.address {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(6 * var(--pt));
+  min-width: 0;
+  height: calc(30 * var(--pt));
+  margin-inline: calc(40 * var(--pt));
+  border-radius: calc(8 * var(--pt));
+  background: var(--sunk);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.address svg {
+  width: calc(11 * var(--pt));
+  height: calc(11 * var(--pt));
+}
+
+.screen-capture {
+  position: absolute;
+  inset: calc(91 * var(--pt)) 0 auto;
+}
+
+.screen-capture img {
+  width: 100%;
+}
+
+.laptop-base {
+  position: absolute;
+  inset: auto 0 0;
+  width: 100%;
+}
+
+/* The phones: an iPhone 18 Pro drawn in SVG, 1318 x 2717 device pixels,
+   with a 402 x 874 point screen. The status bar sits either side of the
+   Dynamic Island; the capture starts below the top safe area. */
+.phone {
+  position: relative;
+  aspect-ratio: 1318 / 2717;
+  filter: drop-shadow(0 40px 50px var(--shade-phone));
+}
+
+.phone-screen {
+  position: absolute;
+  left: 4.2489%;
+  top: 1.7667%;
+  width: 91.5023%;
+  height: 96.5035%;
+  overflow: hidden;
+  border-radius: 15.4229% / 7.0938%;
+  background: var(--bg);
+  container-type: inline-size;
+}
+
+.phone-screen > * {
+  --pt: calc(100cqw / 402);
+}
+
+.status-bar {
+  position: absolute;
+  inset: 0 0 auto;
+  height: calc(62 * var(--pt));
+  background: var(--status-bg, #1f1916);
+  color: var(--text);
+  font: 600 calc(17 * var(--pt)) / 1 system-ui, -apple-system, sans-serif;
+}
+
+.status-bar > span {
+  position: absolute;
+  top: calc(21.33 * var(--pt));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(5 * var(--pt));
+  width: calc(154 * var(--pt));
+  height: calc(22 * var(--pt));
+}
+
+.status-bar .clock {
+  left: 0;
+  letter-spacing: -0.02em;
+}
+
+.status-bar .glyphs {
+  right: 0;
+}
+
+.status-bar svg {
+  width: calc(17 * var(--pt));
+  height: calc(13 * var(--pt));
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+
+.signal {
+  display: flex;
+  align-items: flex-end;
+  gap: calc(1.5 * var(--pt));
+  height: calc(10.5 * var(--pt));
+}
+
+.signal i {
+  width: calc(3 * var(--pt));
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.signal i:nth-child(1) { height: 38%; }
+.signal i:nth-child(2) { height: 57%; }
+.signal i:nth-child(3) { height: 76%; }
+.signal i:nth-child(4) { height: 100%; }
+
+.status-bar .battery {
+  width: calc(24 * var(--pt));
+  height: calc(12 * var(--pt));
+}
+
+.phone-screen picture {
+  position: absolute;
+  inset: calc(62 * var(--pt)) 0 auto;
+}
+
+.phone-screen picture img {
+  width: 100%;
+}
+
+.home-indicator {
+  position: absolute;
+  left: 50%;
+  bottom: calc(8 * var(--pt));
+  width: calc(134 * var(--pt));
+  height: calc(5 * var(--pt));
+  border-radius: 999px;
+  background: var(--text);
+  transform: translateX(-50%);
+}
+
+.phone-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.phone-beside {
+  width: 15rem;
+  max-width: 100%;
+  margin: 3rem auto 0;
+}
+
+@media (min-width: 1024px) {
+  .phone-beside {
+    width: 100%;
+    margin: 0;
+  }
+}
+
+/* Scene 2: the house's home slides in from the left, a phone rises in the
+   corner with the chat, and a card floats over the bottom with parallax. */
+.chat-scene {
+  position: relative;
+  margin-top: clamp(4.5rem, 9vw, 8rem);
+}
+
+@media (min-width: 1024px) {
+  .chat-scene {
+    padding-right: 22%;
+  }
+}
+
+.shot-card {
+  overflow: hidden;
+  border-radius: 18px;
+  background: var(--sunk);
+  box-shadow: var(--shadow), 0 0 0 1px var(--ring);
+}
+
+.shot-card img {
+  width: 100%;
+}
+
+.chat-scene-extras {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2.5rem;
+  margin-top: 2rem;
+}
+
+@media (min-width: 640px) {
+  .chat-scene-extras {
+    flex-direction: row;
+    justify-content: center;
+    align-items: flex-end;
+  }
+}
+
+.float-card {
+  width: 18rem;
+  max-width: 100%;
+}
+
+.phone-corner {
+  flex: none;
+  width: 15rem;
+  max-width: 100%;
+}
+
+@media (min-width: 1024px) {
+  .chat-scene + .scene-caption {
+    margin-top: 6.5rem;
+  }
+
+  .chat-scene-extras {
+    display: contents;
+  }
+
+  .float-card {
+    position: absolute;
+    bottom: -9%;
+    left: 4%;
+    width: 30%;
+  }
+
+  .phone-corner {
+    position: absolute;
+    top: -8%;
+    right: 0;
+    width: 23%;
+  }
+}
+
+.platforms {
+  display: grid;
+  gap: 2rem;
+  margin: clamp(4rem, 8vw, 6rem) 0 0;
+  padding: 2.5rem 0 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+@media (min-width: 640px) {
+  .platforms {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .platforms {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.platforms li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem 0.9rem;
+}
+
+.platforms svg {
+  grid-row: span 2;
+}
+
+.platforms h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+
+.platforms p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+/* -------------------------------------------------------------- more */
+.more {
+  padding: clamp(5rem, 9vw, 8rem) 0;
+  border-top: 1px solid var(--line);
+}
+
+.bento {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: clamp(2.5rem, 5vw, 3.5rem);
+}
+
+@media (min-width: 720px) {
+  .bento {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tile-wide {
+    grid-column: span 2;
+  }
+}
+
+@media (min-width: 1100px) {
+  .bento {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1.75rem;
+  min-height: 17rem;
+  padding: 1.75rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--surface);
+}
+
+@media (min-width: 720px) {
+  .tile-wide {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .tile-wide .tile-text {
+    flex: 1 1 22rem;
+  }
+
+  .tile-wide > :last-child {
+    flex: 1 1 18rem;
+  }
+}
+
+.tile h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+}
+
+.tile p {
+  margin: 0.6rem 0 0;
+  color: var(--muted);
+  font-size: 0.97rem;
+  line-height: 1.55;
+}
+
+/* Noise suppression: the comb-shaped speaking meter (rounded bars), busy
+   with noise on top and only the voice underneath. */
+.meters {
+  display: grid;
+  gap: 1rem;
+}
+
+.meter span {
+  display: block;
+  margin-bottom: 0.4rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.meter b {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 56px;
+  padding: 0 14px;
+  border-radius: 16px;
+  background: var(--sunk);
+}
+
+.meter i {
+  flex: 1;
+  height: 100%;
+  border-radius: 99px;
+  transform-origin: center;
+}
+
+.meter.noisy i {
+  background: var(--stone);
+  transform: scaleY(var(--h, 0.5));
+}
+
+.meter.clean i {
+  background: var(--talk);
+  transform: scaleY(var(--h, 0.12));
+}
+
+.meter i:nth-child(1) { --h: 0.42; --d: -0.1s; }
+.meter i:nth-child(2) { --h: 0.7; --d: -0.5s; }
+.meter i:nth-child(3) { --h: 0.35; --d: -0.9s; }
+.meter i:nth-child(4) { --h: 0.82; --d: -0.3s; }
+.meter i:nth-child(5) { --h: 0.55; --d: -1.2s; }
+.meter i:nth-child(6) { --h: 0.95; --d: -0.7s; }
+.meter i:nth-child(7) { --h: 0.6; --d: -0.2s; }
+.meter i:nth-child(8) { --h: 0.78; --d: -1s; }
+.meter i:nth-child(9) { --h: 0.4; --d: -0.6s; }
+.meter i:nth-child(10) { --h: 0.88; --d: -0.4s; }
+.meter i:nth-child(11) { --h: 0.5; --d: -1.1s; }
+.meter i:nth-child(12) { --h: 0.66; --d: -0.8s; }
+.meter i:nth-child(13) { --h: 0.3; --d: -0.15s; }
+.meter i:nth-child(14) { --h: 0.58; --d: -0.65s; }
+
+.meter.clean i:nth-child(n) { --h: 0.1; }
+.meter.clean i:nth-child(5),
+.meter.clean i:nth-child(9) { --h: 0.45; }
+.meter.clean i:nth-child(6),
+.meter.clean i:nth-child(8) { --h: 0.75; }
+.meter.clean i:nth-child(7) { --h: 0.95; }
+
+/* Real crops of the app inside the tiles. */
+.real-crop {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--sunk);
+  box-shadow: 0 24px 48px -28px var(--shade-soft);
+}
+
+.real-crop img {
+  width: 100%;
+}
+
+.real-crop.tall {
+  max-width: 19rem;
+  max-height: 16rem;
+}
+
+/* Controls outside the window, in the app's own round buttons. */
+.mini-controls {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border-radius: 20px;
+  background: var(--sunk);
+  width: fit-content;
+}
+
+.mini-controls span {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--surface-2);
+}
+
+.mini-controls span.hang {
+  background: #b0231a;
+}
+
+.mini-controls svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.mini-controls .hang svg {
+  fill: #fff7ee;
+  stroke: none;
+}
+
+/* Your own sounds, trimmed: a waveform with the kept part between the
+   handles. */
+.wave {
+  position: relative;
+  height: 72px;
+  border-radius: 16px;
+  background: var(--sunk);
+}
+
+.wave b {
+  position: absolute;
+  inset: 12px 14px;
+  background: url("media/wave.svg") center / 100% 100% no-repeat;
+}
+
+.wave .trim {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 24%;
+  width: 46%;
+  border: 3px solid var(--accent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+/* Bring your own server: a small federation of houses. */
+.federation {
+  position: relative;
+  aspect-ratio: 320 / 170;
+  min-height: 12rem;
+}
+
+.federation svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.federation .link {
+  fill: none;
+  stroke: var(--surface-2);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.federation .packet {
+  fill: var(--yolk);
+  offset-rotate: 0deg;
+  opacity: 0;
+}
+
+.federation .p1 { offset-path: path("M60 40 L160 85 L250 140"); }
+.federation .p2 { offset-path: path("M260 40 L160 85 L70 140"); }
+.federation .p3 { offset-path: path("M60 40 L260 40"); }
+
+.node {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  transform: translate(-50%, -50%);
+}
+
+.node b,
+.node img {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  color: #fff;
+  font: 800 1rem/1 "Sora", system-ui, sans-serif;
+}
+
+.node.me img {
+  width: 44px;
+  height: 50px;
+  object-fit: contain;
+  border-radius: 0;
+}
+
+.node small {
+  padding: 0.1rem 0.45rem;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.node.me small {
+  color: var(--text);
+}
+
+/* Speaks your language. */
+.hello {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.hello span {
+  padding: 0.65rem 1rem;
+  border-radius: 18px 18px 18px 6px;
+  background: var(--sunk);
+  font-weight: 700;
+}
+
+.hello span + span {
+  border-radius: 18px 18px 6px 18px;
+  background: var(--comb);
+  color: var(--on-comb);
+}
+
+/* ----------------------------------------------------------- compare */
+.compare {
+  padding: clamp(5rem, 9vw, 8rem) 0;
+  border-top: 1px solid var(--line);
+  background: var(--bg-2);
+}
+
+.compare-table {
+  margin-top: clamp(2.5rem, 5vw, 3.5rem);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.compare-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.6rem 1.25rem;
+  padding: 1.1rem 1.25rem;
+  border-top: 1px solid var(--line);
+}
+
+.compare-row.head {
+  border-top: 0;
+  background: var(--sunk);
+  font: 700 1rem/1.2 "Sora", system-ui, sans-serif;
+}
+
+.compare-row.head > :first-child {
+  display: none;
+}
+
+.compare-row > [role="rowheader"] {
+  grid-column: 1 / -1;
+  font: 650 0.98rem/1.35 "Sora", system-ui, sans-serif;
+}
+
+@media (min-width: 760px) {
+  .compare-row {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.2fr) minmax(0, 1.2fr);
+    align-items: center;
+    padding: 1.05rem 1.75rem;
+  }
+
+  .compare-row.head > :first-child {
+    display: block;
+  }
+
+  .compare-row > [role="rowheader"] {
+    grid-column: auto;
+  }
+}
+
+.compare-row .us {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--text);
+}
+
+.compare-row .us img {
+  width: 22px;
+}
+
+.compare-row .yes,
+.compare-row .no {
+  position: relative;
+  padding-left: 1.75rem;
+  font-size: 0.97rem;
+  line-height: 1.45;
+}
+
+.compare-row .yes::before,
+.compare-row .no::before {
+  position: absolute;
+  left: 0;
+  top: 0.1rem;
+  display: grid;
+  place-items: center;
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 50%;
+  font: 800 0.72rem/1 "Sora", system-ui, sans-serif;
+}
+
+.compare-row .yes::before {
+  content: "✓";
+  background: var(--comb);
+  color: var(--on-comb);
+}
+
+.compare-row .no {
+  color: var(--muted);
+}
+
+.compare-row .no::before {
+  content: "–";
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.fineprint {
+  margin-top: 1.25rem;
+  color: var(--stone);
+  font-size: 0.82rem;
+}
+
+.fineprint p {
+  margin: 0;
+}
+
+/* --------------------------------------------------------------- faq */
+.faq {
+  padding: clamp(5rem, 9vw, 8rem) 0;
+  border-top: 1px solid var(--line);
+}
+
+.faq-split {
+  display: grid;
+  gap: 2.5rem;
+}
+
+@media (min-width: 1024px) {
+  .faq-split {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+    gap: 4rem;
+  }
+}
+
+.faq-list {
+  border-top: 1px solid var(--line);
+}
+
+.faq-list details {
+  border-bottom: 1px solid var(--line);
+}
+
+.faq-list summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.2rem 0.25rem;
+  cursor: pointer;
+  list-style: none;
+  font: 650 1.08rem/1.35 "Sora", system-ui, sans-serif;
+}
+
+.faq-list summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq-list summary::after {
+  content: "+";
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--accent);
+  font-size: 1.2rem;
+  transition: transform 0.3s var(--ease);
+}
+
+.faq-list details[open] summary::after {
+  transform: rotate(45deg);
+}
+
+.faq-list details p {
+  margin: 0;
+  padding: 0 0.25rem 1.4rem;
+  max-width: 62ch;
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------- download */
+.download {
+  padding: clamp(5rem, 9vw, 8rem) 0;
+  border-top: 1px solid var(--line);
+  background: var(--bg-2);
+}
+
+.downloads {
+  display: grid;
+  gap: 1rem;
+  max-width: 64rem;
+  margin: clamp(2.5rem, 5vw, 3.5rem) auto 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 640px) {
+  .downloads {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .downloads {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.downloads li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.downloads .dl {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 1.4rem 1.4rem 1.25rem;
+  border: 2px solid var(--line);
+  border-radius: 20px;
   background: var(--surface);
   color: var(--text);
   text-decoration: none;
-  border: 2px solid transparent;
+  transition: border-color 0.2s ease, transform 0.3s var(--ease);
 }
-.downloads li a:hover { border-color: var(--comb); }
-.downloads li strong { display: block; font-size: 20px; }
-.downloads li span { color: var(--stone); font-size: 14px; }
 
-footer {
-  border-top: 1px solid var(--surface);
+.downloads .dl:hover {
+  border-color: var(--comb);
+}
+
+.downloads .dl.mine {
+  border-color: var(--comb);
+}
+
+.downloads strong {
+  font: 700 1.25rem/1.2 "Sora", system-ui, sans-serif;
+}
+
+.downloads .dl span {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.downloads .dl small {
+  margin-top: 0.6rem;
+  color: var(--comb-soft);
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.downloads .alt {
+  padding-left: 1.4rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.downloads .alt:hover {
+  color: var(--text);
+}
+
+.download-note {
+  max-width: 44rem;
+  margin: 2rem auto 0;
   color: var(--stone);
-  font-size: 14px;
+  font-size: 0.92rem;
   text-align: center;
-  padding: 24px;
 }
 
-@media (max-width: 600px) {
-  .hero { padding-top: 48px; }
-  .mark { width: 160px; height: 160px; }
-  h1 { font-size: 48px; }
+/* --------------------------------------------------------- final cta */
+.final {
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+  padding: clamp(5rem, 10vw, 9rem) 0;
+  border-top: 1px solid var(--line);
+}
+
+.final-row {
+  display: grid;
+  gap: 2.5rem;
+  align-items: center;
+}
+
+@media (min-width: 760px) {
+  .final-row {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 4rem;
+  }
+}
+
+.final .bob {
+  width: clamp(120px, 15vw, 200px);
+  transform-origin: 50% 85%;
+}
+
+.final h2 {
+  margin: 0;
+  font-size: clamp(2.5rem, 3.6vw + 1.2rem, 4.4rem);
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+}
+
+.final p {
+  margin: 1.2rem 0 2rem;
+  color: var(--muted);
+  font-size: 1.15rem;
+}
+
+/* ------------------------------------------------------------ footer */
+.site-footer {
+  padding: 2.5rem 0 2.75rem;
+  border-top: 1px solid var(--line);
+  color: var(--stone);
+  font-size: 0.9rem;
+}
+
+.footer-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 1.5rem 3rem;
+}
+
+.footer-row p {
+  margin: 0.5rem 0 0;
+}
+
+.footer-row .brand {
+  font-size: 1.15rem;
+}
+
+.footer-row .brand img {
+  width: 28px;
+}
+
+.footer-row nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.75rem;
+}
+
+.footer-row nav a {
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 650;
+}
+
+.footer-row nav a:hover {
+  color: var(--text);
+}
+
+.site-footer .fineprint {
+  margin-top: 1.5rem;
+}
+
+.site-footer .fineprint a {
+  color: var(--muted);
+}
+
+/* ============================================================ motion */
+/* Everything that moves is here, inside screen and no-preference: with
+   reduced motion, and in print, the page stands still and whole. Scroll-
+   driven pieces animate transform only, since a scroll can stop halfway
+   and translucent text loses contrast. */
+@media screen and (prefers-reduced-motion: no-preference) {
+  .rise {
+    animation: rise 0.8s var(--ease) both;
+    animation-delay: var(--delay, 0ms);
+  }
+
+  /* The headline is the LCP element: it only settles, without fading. */
+  .settle {
+    animation: settle 0.9s var(--ease) both;
+  }
+
+  .lobe {
+    animation: drift 26s ease-in-out infinite alternate;
+    animation-delay: var(--delay, 0s);
+  }
+
+  .chip {
+    animation: float 7s ease-in-out infinite alternate;
+    animation-delay: var(--float, 0s);
+  }
+
+  .tilt {
+    transition: transform 0.6s var(--ease);
+  }
+
+  [data-magnet] {
+    transform: translate(var(--mx, 0px), var(--my, 0px));
+    transition: transform 0.4s var(--ease), background-color 0.2s ease;
+  }
+
+  .eq i {
+    animation: eq 0.9s ease-in-out infinite alternate;
+  }
+
+  .eq i:nth-child(2) { animation-duration: 0.7s; animation-delay: -0.3s; }
+  .eq i:nth-child(3) { animation-duration: 1.1s; animation-delay: -0.6s; }
+  .eq i:nth-child(4) { animation-duration: 0.8s; animation-delay: -0.2s; }
+
+  .dot-live::after {
+    content: "";
+    position: absolute;
+    inset: -5px;
+    border: 2px solid var(--talk);
+    border-radius: 50%;
+    animation: ping 1.8s ease-out infinite;
+  }
+
+  .tour-shot {
+    transition: opacity 0.5s var(--ease), transform 0.5s var(--ease);
+  }
+
+  .meter i {
+    animation: meter 1.3s ease-in-out infinite alternate;
+    animation-delay: var(--d, 0s);
+  }
+
+  .meter.clean i {
+    animation-name: voice;
+    animation-duration: 1.6s;
+  }
+
+
+  .federation .packet {
+    animation: travel 3.6s linear infinite;
+  }
+
+  .federation .p2 { animation-delay: -1.2s; }
+  .federation .p3 { animation-delay: -2.4s; }
+
+  .final .bob {
+    animation: bob 8s ease-in-out infinite;
+  }
+
+  /* Blocks reveal as they come into view, from below or above, as many
+     times as they pass (site.js sets data-reveal-state). Blocks that come
+     in together get a growing --offset and arrive one after the other. */
+  [data-reveal-state="shown"] {
+    transition:
+      opacity 0.7s var(--ease) var(--offset, 0ms),
+      transform 0.7s var(--ease) var(--offset, 0ms);
+  }
+
+  [data-reveal-state="pending"] {
+    opacity: 0;
+    transform: translateY(1.5rem);
+  }
+
+  [data-reveal-state="pending"][data-reveal-from="top"] {
+    transform: translateY(-1.5rem);
+  }
+
+  [data-reveal-state="pending"] [data-stagger] {
+    opacity: 0;
+  }
+
+  [data-reveal-state="shown"] [data-stagger] {
+    animation: rise 0.7s var(--ease) both;
+    animation-delay: calc(var(--offset, 0ms) + var(--index, 0) * var(--step, 70ms));
+  }
+
+  [data-reveal-state="shown"][data-reveal-from="top"] [data-stagger] {
+    animation-name: sink;
+  }
+
+  @supports (animation-timeline: view()) {
+    /* Each scroll-driven entrance ends when the middle of the piece reaches
+       the middle of the window (cover 50%), so it happens in plain view. */
+    .parallax {
+      animation: parallax linear both;
+      animation-timeline: view();
+      animation-range: cover 0% cover 100%;
+    }
+
+    /* The reading line (40% down the window) draws the track. */
+    .steps-line {
+      animation: draw linear both;
+      animation-timeline: view(block 0% 60%);
+      animation-range: entry 0% entry 100%;
+    }
+
+    /* The laptop opens on its own timeline. Closed, the lid is a blade on
+       the base at the bottom of its box, so the box starts 92% higher,
+       right under the text. Once the closed laptop is whole on screen (its
+       base 2rem above the window's bottom edge), the box moves down as fast
+       as the page moves up: the base holds still and the lid rises into the
+       room the text leaves, open by the time the laptop is whole on screen
+       again. */
+    .laptop {
+      view-timeline: --laptop block;
+    }
+
+    .lid {
+      animation: lid-open linear both;
+      animation-timeline: --laptop;
+      animation-range: entry calc(8% + 2rem) entry calc(100% + 2rem);
+    }
+
+    .laptop-camera {
+      animation: laptop-hold linear both;
+      animation-timeline: --laptop;
+      animation-range: entry calc(8% + 2rem) entry calc(100% + 2rem);
+    }
+
+    /* Scene 2: the home slides in from the left while the phone rises,
+       straightening up, each on its own box's timeline. Each animates a
+       box inside the one that gives the timeline, so its own movement
+       doesn't change the measure. */
+    .slide-track {
+      view-timeline: --slide block;
+    }
+
+    .slide {
+      animation: slide-in linear both;
+      animation-timeline: --slide;
+      animation-range: entry 0% cover 50%;
+    }
+
+    .phone-track {
+      view-timeline: --phone block;
+    }
+
+    .phone {
+      animation: phone-rise linear both;
+      animation-timeline: --phone;
+      animation-range: entry 0% cover 50%;
+    }
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+}
+
+@keyframes sink {
+  from {
+    opacity: 0;
+    transform: translateY(-1rem);
+  }
+}
+
+@keyframes settle {
+  from {
+    transform: translateY(0.875rem);
+  }
+}
+
+@keyframes drift {
+  from {
+    transform: translate3d(-5%, -4%, 0);
+  }
+
+  to {
+    transform: translate3d(7%, 6%, 0);
+  }
+}
+
+@keyframes float {
+  from {
+    translate: 0 -0.4rem;
+  }
+
+  to {
+    translate: 0 0.4rem;
+  }
+}
+
+@keyframes eq {
+  from {
+    transform: scaleY(0.25);
+  }
+
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes ping {
+  from {
+    opacity: 0.8;
+    transform: scale(0.6);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+@keyframes meter {
+  from {
+    transform: scaleY(calc(var(--h) * 0.45));
+  }
+
+  to {
+    transform: scaleY(var(--h));
+  }
+}
+
+@keyframes voice {
+  0%,
+  30% {
+    transform: scaleY(0.08);
+  }
+
+  60%,
+  100% {
+    transform: scaleY(var(--h));
+  }
+}
+
+@keyframes travel {
+  0% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+
+  10%,
+  90% {
+    opacity: 1;
+  }
+
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+
+/* The rooster bobs its head to the beat, once in a while (brand: "not
+   constantly"): four beats at 120 bpm, then a rest. */
+@keyframes bob {
+  0%,
+  25%,
+  100% {
+    transform: none;
+  }
+
+  3.125%,
+  9.375%,
+  15.625%,
+  21.875% {
+    transform: rotate(-4deg) translateY(4px);
+  }
+
+  6.25%,
+  12.5%,
+  18.75% {
+    transform: none;
+  }
+}
+
+@keyframes parallax {
+  from {
+    transform: translate3d(0, var(--parallax, 2rem), 0);
+  }
+
+  to {
+    transform: translate3d(0, calc(var(--parallax, 2rem) * -1), 0);
+  }
+}
+
+@keyframes draw {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+/* The closed laptop's box starts 92% above its place and comes down as
+   fast as the page goes up, so the base stands still while the lid opens. */
+@keyframes laptop-hold {
+  from {
+    transform: translateY(-92%);
+  }
+}
+
+/* The lid rises so that its top edge, seen from the camera above, goes up
+   as fast as the box comes down: always right under the text, never over
+   it. The angles come from projecting the top edge turning on the hinge;
+   the end is faster because, nearly upright, the lid turns without
+   getting taller. */
+@keyframes lid-open {
+  0% { transform: rotateX(-88deg); }
+  10% { transform: rotateX(-83.6deg); }
+  20% { transform: rotateX(-78.7deg); }
+  30% { transform: rotateX(-73.7deg); }
+  40% { transform: rotateX(-68.4deg); }
+  50% { transform: rotateX(-62.9deg); }
+  60% { transform: rotateX(-56.9deg); }
+  70% { transform: rotateX(-50.3deg); }
+  80% { transform: rotateX(-42.7deg); }
+  90% { transform: rotateX(-32.9deg); }
+  95% { transform: rotateX(-26.2deg); }
+  98% { transform: rotateX(-20.5deg); }
+  100% { transform: none; }
+}
+
+@keyframes slide-in {
+  from {
+    transform: translate3d(-8%, 0, 0) scale(0.95);
+  }
+}
+
+@keyframes phone-rise {
+  from {
+    transform: translate3d(0, 45%, 0) rotate(8deg);
+  }
 }
