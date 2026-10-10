@@ -1316,6 +1316,115 @@ mod tests {
         assert!(rms_db(&noise) - rms_db(&out[FRAME_SIZE * 50..]) > 15.0);
     }
 
+    /// RNNoise noise attenuation over the second half of `blocks` blocks of
+    /// `rate`, every block checked to be suppressing.
+    fn suppressed_db(dsp: &mut Dsp, rate: usize, blocks: usize, seed: u64) -> f32 {
+        let n = rate / 100;
+        let noise = coloured_noise(n * blocks, 300.0, seed);
+        let mut out = noise.clone();
+        for block in out.chunks_mut(n) {
+            dsp.process_block(block);
+            let flags = dsp.report().flags;
+            assert_eq!(flags & REPORT_FLAG_NS_ACTIVE, REPORT_FLAG_NS_ACTIVE, "{rate} Hz");
+            assert_eq!(flags & REPORT_FLAG_UNSUPPORTED_RATE, 0, "{rate} Hz");
+        }
+        rms_db(&noise[n * blocks / 2..]) - rms_db(&out[n * blocks / 2..])
+    }
+
+    #[test]
+    fn a_model_that_fails_to_load_leaves_rnnoise_suppressing() {
+        let mut dsp = Dsp::with_model(Params { gate_mode: 0, far_end_ducking: 0, ..Default::default() }, ModelLoad::Never);
+        dsp.pending_model = Some(Arc::new(Mutex::new(Some(LoadedModel(Err("no model".into()))))));
+        let drop_db = suppressed_db(&mut dsp, NATIVE_RATE, 100, 37);
+        assert!(drop_db > 15.0, "RNNoise took {drop_db:.1} dB off");
+        assert!(dsp.pending_model.is_none(), "the failed load is collected");
+        assert!(!dsp.has_deep_filter());
+        assert_eq!(dsp.report().flags & REPORT_FLAG_DEEP_FILTER, 0);
+    }
+
+    #[test]
+    fn the_cost_meter_waits_to_settle_and_judges_the_average() {
+        let ms = std::time::Duration::from_millis;
+        let mut slow = dfn::CostMeter::new();
+        for i in 1..100 {
+            assert!(!slow.too_slow(ms(7)), "judged after {i} blocks");
+        }
+        assert!(slow.too_slow(ms(7)));
+
+        let mut fine = dfn::CostMeter::new();
+        for _ in 0..500 {
+            assert!(!fine.too_slow(ms(5)));
+        }
+        // One slow block among fast ones is not a slow machine.
+        assert!(!fine.too_slow(ms(30)));
+    }
+
+    #[test]
+    fn a_model_too_slow_for_the_machine_hands_over_to_rnnoise() {
+        let mut dsp = Dsp::new(Params { gate_mode: 0, far_end_ducking: 0, ..Default::default() });
+        assert!(dsp.has_deep_filter());
+        let mut meter = dfn::CostMeter::new();
+        for _ in 0..200 {
+            meter.too_slow(std::time::Duration::from_millis(20));
+        }
+        dsp.deep_filter_cost = Some(meter);
+        let drop_db = suppressed_db(&mut dsp, NATIVE_RATE, 100, 41);
+        assert!(!dsp.has_deep_filter(), "the model is still running");
+        assert!(drop_db > 15.0, "RNNoise took {drop_db:.1} dB off");
+    }
+
+    #[test]
+    fn a_rebuild_with_the_model_loading_in_the_background_gets_the_model_back() {
+        let mut dsp = Dsp::with_model(Params::default(), ModelLoad::Background);
+        let noise = coloured_noise(FRAME_SIZE * 3000, 300.0, 43);
+        let mut blocks = noise.chunks(FRAME_SIZE);
+        let mut block = |dsp: &mut Dsp| {
+            let mut b = blocks.next().expect("the model never came back").to_vec();
+            dsp.process_block(&mut b);
+            let flags = dsp.report().flags;
+            assert_eq!(flags & REPORT_FLAG_NS_ACTIVE, REPORT_FLAG_NS_ACTIVE);
+            flags & REPORT_FLAG_DEEP_FILTER != 0
+        };
+        while !block(&mut dsp) {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        dsp.debug_poison_state();
+        while dsp.recoveries() == 0 {
+            block(&mut dsp);
+        }
+        while !block(&mut dsp) {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        assert!(dsp.has_deep_filter());
+    }
+
+    #[test]
+    fn suppression_holds_through_capture_rate_changes() {
+        let mut dsp = Dsp::new(Params { gate_mode: 0, far_end_ducking: 0, ..Default::default() });
+        for (i, rate) in [48_000, 16_000, 32_000, 48_000].into_iter().enumerate() {
+            let drop_db = suppressed_db(&mut dsp, rate, 120, 47 + i as u64);
+            assert_eq!(dsp.report().sample_rate, rate as i32);
+            assert!(drop_db > 10.0, "{rate} Hz: {drop_db:.1} dB off");
+        }
+    }
+
+    #[test]
+    fn an_input_scale_that_is_not_positive_does_not_stop_suppression() {
+        for scale in [0.0, -1.0] {
+            let mut dsp = Dsp::new(Params { gate_mode: 0, far_end_ducking: 0, input_scale: scale, ..Default::default() });
+            assert_eq!(dsp.params().input_scale, Params::default().input_scale);
+            let drop_db = suppressed_db(&mut dsp, NATIVE_RATE, 100, 53);
+            assert!(drop_db > 15.0, "scale {scale}: {drop_db:.1} dB off");
+        }
+    }
+
+    #[test]
+    fn a_gate_mode_out_of_range_leaves_suppression_on() {
+        let mut dsp = Dsp::new(Params { gate_mode: 7, far_end_ducking: 0, ..Default::default() });
+        let drop_db = suppressed_db(&mut dsp, NATIVE_RATE, 100, 59);
+        assert!(drop_db > 15.0, "{drop_db:.1} dB off");
+    }
+
     #[test]
     fn passthrough_when_everything_is_off() {
         let p = Params { noise_suppression: 0, gate_mode: 0, far_end_ducking: 0, ..Default::default() };

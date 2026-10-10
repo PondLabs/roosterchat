@@ -508,21 +508,24 @@ tools/voice_dsp/native_noise_loop.sh
 | The web build carries `audio_dsp.js`, the worklet and a real wasm | `check_contracts.py --web-build` | ci `voice-dsp`, build, release |
 | The browser DSP suppresses; a missing or broken wasm or worklet is caught by `probe()` and `create()` | `web_noise_loop.mjs` | ci `voice-dsp` |
 | What a room's RTCRtpSender carries in the browser is suppressed, before and after a restart; a legacy call's too; no wasm keeps the browser's suppressor | `web_noise_loop.mjs --app` | ci `voice-dsp` |
-| Inside the real WebRTC (Linux): the microphone test on the picked device, "Hear myself" off, noise ≥ 20 dB down in what is encoded, DeepFilterNet suppressing by the end (measured 2026-09-25: 61 dB) | `native_noise_loop.sh` | integration-test |
+| Inside the real WebRTC (Linux): the microphone test on the picked device, "Hear myself" off, noise ≥ 20 dB down in what is encoded, DeepFilterNet suppressing by the end (measured 2026-09-25: 61 dB) | `native_noise_loop.sh` | ci `voice-dsp-native` |
 | Screen audio and DJ music do not leave the microphone without WebRTC's processing: restored once the source is sending (not as soon as it has statistics), not for the mic itself, not while muted, desktop only | `shared_audio_processing_test.dart` | ci `test` |
-| ... and inside the real WebRTC, with the DJ's music track: restored to within 3 dB of before (the libwebrtc internal it relies on still holds) | `native_noise_loop.sh` | integration-test |
-| ... and with the DJ's own monitor running too (`DjLocalMonitor`) | `native_noise_loop.sh` | integration-test |
-| ... and music created with the microphone's options changes nothing, with nothing restored and through another negotiation | `native_noise_loop.sh` | integration-test |
-| Noise suppression turned off lets the room noise out, more than 6 dB louder than with WebRTC's suppressor | `native_noise_loop.sh` | integration-test |
-| After a mute during which a device listed before the microphone went away, the microphone is heard again, within 3 dB of before (`ReselectRecordingDevice`) | `native_noise_loop.sh` | integration-test |
+| ... and inside the real WebRTC, with the DJ's music track: restored to within 3 dB of before (the libwebrtc internal it relies on still holds) | `native_noise_loop.sh` | ci `voice-dsp-native` |
+| ... and with the DJ's own monitor running too (`DjLocalMonitor`) | `native_noise_loop.sh` | ci `voice-dsp-native` |
+| ... and music created with the microphone's options changes nothing, with nothing restored and through another negotiation | `native_noise_loop.sh` | ci `voice-dsp-native` |
+| Noise suppression turned off lets the room noise out, more than 6 dB louder than with WebRTC's suppressor | `native_noise_loop.sh` | ci `voice-dsp-native` |
+| After a mute during which a device listed before the microphone went away, the microphone is heard again, within 3 dB of before (`ReselectRecordingDevice`) | `native_noise_loop.sh` | ci `voice-dsp-native` |
+| A model that fails to load, or that is too slow for the machine, leaves RNNoise suppressing; a rebuild while the model loads in the background gets the model back; suppression holds through capture rate changes (48, 16, 32, 48 kHz) and through an input scale or gate mode out of range | `audio_dsp` unit tests | ci `test` |
+| A DSP that runs without suppressing (a rate it cannot process, or suppression given up after its state kept going bad) is given up on like one that gets no audio, and WebRTC's suppressor takes over; a DSP that suppresses, has not reported yet, or was told not to is left alone | `microphone_noise_suppression_test.dart`, `tests/non_finite.rs` (the report flag it reads) | ci `test` |
+| `audio_dsp::Params` is written the same way in Rust, Dart's FFI struct and the browser worker (fields, order, byte offsets), and every key the worker reads is one `AudioDspSettings.toMap()` sends (a renamed key reads as 0 there: suppression off) | `check_contracts.py` | ci `voice-dsp` |
 | One NaN, infinity or huge input sample leaves the voice as it was a second later (it used to silence the DSP for good); state that went bad is rebuilt | `tests/non_finite.rs` | ci `test` |
-| A capture WebRTC stopped recording from, a web DSP whose worker traps or hangs, a suspended audio context: the call repairs them or keeps the microphone going (docs/voice-call-health.md) | `native_noise_loop.sh`, `web_health_loop.mjs`, `unit_test/voice_health/` | integration-test, ci |
+| A capture WebRTC stopped recording from, a web DSP whose worker traps or hangs, a suspended audio context: the call repairs them or keeps the microphone going (docs/voice-call-health.md) | `native_noise_loop.sh`, `web_health_loop.mjs`, `unit_test/voice_health/` | ci `voice-dsp-native`, ci |
 
 `publish` in ci.yml waits for `voice-dsp`: a release does not go out with
-browser suppression broken. It waits for `integration-test` too, which ci.yml
-runs on every push to main, so a red native loop (`native_noise_loop.sh`)
-stops the release as well (before, the workflow ran on its own and v1.7.2,
-v1.8.0 and v1.10.1 shipped with it red). The Rust and Dart tests run in
+browser suppression broken. It waits for `voice-dsp-native` too, the native loop
+(`native_noise_loop.sh`, voice-dsp-native.yml), so a red native loop stops the
+release as well (before, the loop ran on its own in integration-test.yml and
+v1.7.2, v1.8.0 and v1.10.1 shipped with it red). The Rust and Dart tests run in
 `test`, which `publish` waits for too.
 
 ## What still needs a person
@@ -737,7 +740,7 @@ your speakers." within two seconds of the video starting.
   on a libwebrtc internal (a re-enabled sender re-applies its options), not
   on an API. `integration_test/voice_dsp/native_noise_test.dart` ("a custom
   audio source leaves the microphone's processing alone", run by
-  `tools/voice_dsp/native_noise_loop.sh` and the integration-test workflow)
+  `tools/voice_dsp/native_noise_loop.sh` and the voice-dsp-native workflow)
   measures it inside the real WebRTC in three phases and prints them:
   `before -40.7 dB, with the custom source -22.7 dB, restored -40.8 dB`
   (-28.8 in the middle while the source also wrote gain control off).
