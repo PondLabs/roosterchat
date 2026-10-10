@@ -45,6 +45,11 @@ class UpdateChecker {
   static const String releasesPageUrl =
       "https://github.com/PondLabs/roosterchat/releases/latest";
 
+  /// The notes of the release tagged [tag] (`v1.21.0`), for "See what's new"
+  /// after an update.
+  static String releaseNotesUrl(String tag) =>
+      "https://github.com/PondLabs/roosterchat/releases/tag/$tag";
+
   static String get labelUpdateAvailable => Intl.message("Update Available",
       name: "labelUpdateAvailable",
       desc: "Label for the the info popup when an update is available");

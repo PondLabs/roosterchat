@@ -8,7 +8,7 @@ We are open to most types of contributions, but for larger changes and new featu
 
 Write code, comments, commit messages, pull requests and issues in English, whatever language you speak with the team.
 
-Rooster itself ships in English and Brazilian Portuguese. Text people read in the app is never written straight into a widget: it is an `Intl.message`, written in English first, and the pull request that adds it also adds its Portuguese translation. The steps, the conventions and the Portuguese glossary are in [docs/localization.md](docs/localization.md).
+Rooster itself ships in English and Brazilian Portuguese, with more languages to come. Text people read in the app is never written straight into a widget: it is an `Intl.message`, written in English first, and the pull request that adds it also translates it into every language Rooster ships. The rules are in [AGENTS.md](AGENTS.md); the steps, the conventions and the glossary in [docs/localization.md](docs/localization.md).
 
 ## Restrictions on Generative AI Usage
 

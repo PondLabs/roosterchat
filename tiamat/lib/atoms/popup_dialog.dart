@@ -97,11 +97,13 @@ class PopupDialog extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       contentPadding: EdgeInsets.all(contentPadding),
+      // Wraps onto a second line rather than running past the dialog's
+      // edge: a longer language's title in a narrow window did.
       title: title == null
           ? null
           : Row(
               children: [
-                Text(title!),
+                Flexible(child: Text(title!)),
               ],
             ),
       content: content,

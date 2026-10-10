@@ -30,8 +30,7 @@ Hard fork of Commet (a Flutter Matrix client) by PondLabs, shipped as **Rooster*
 - **Never target upstream.** Do not prepare patches, PRs or "upstreamable" designs for Commet (commetchat) or the commetchat forks of flutter-webrtc, livekit-client-sdk-flutter and matrix-dart-sdk. When their code needs changing, copy it into `third_party/` and change it here. Mark local changes with `// ROOSTER` comments.
 - Path dependencies for vendored packages go in `dependency_overrides` in `rooster/pubspec.yaml`.
 - Browser support matters as much as desktop. Any voice feature needs a web path.
-- **The repository is English.** Code, comments, commit messages, PRs, issues, docs and ARB descriptions are written in English, even when the conversation is in another language. Only the translations (`rooster/assets/l10n/intl_<language>.arb`) hold other languages.
-- **Every string a person can read is an `Intl.message`, written in English first and translated into Brazilian Portuguese in the same change.** Never hardcode UI text (a literal that must stay as it is, like a unit or a protocol value, gets a `// Not translated: <why>` comment), never show two languages on one screen, never glue sentences from pieces. After adding strings: `dart run scripts/extract_strings.dart` (from `rooster/`), add the Portuguese to `intl_pt.arb`, then `flutter test unit_test/l10n`. Layouts must hold text a third longer than the English. See `docs/localization.md` (conventions, glossary, adding a language).
+- **Localization, in every change: @AGENTS.md.** The repository is English (commits, comments, PRs, issues, docs), whatever language the conversation is in; every string a person can read is an `Intl.message`, written in English first and translated into every language that ships (today Brazilian Portuguese) in the same change; a screen never mixes languages; layouts hold longer text. Steps, conventions and glossary: `AGENTS.md` and `docs/localization.md`.
 
 ## Toolchains
 
