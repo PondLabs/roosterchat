@@ -53,6 +53,14 @@ and stopping there (`onScrollEnd`) settles the view and follows again.
 Sending a message while reading further up jumps back to the latest, as on
 Discord.
 
+A message that arrives while the reader is at the latest messages, with the
+window in front, floats up into place: it rises 40 px and fades in over
+450 ms with a slight overshoot (`_FloatIn`, as in the demo video). Only
+those: not the messages a room opens with, nor a page of history, nor a
+message that arrives unseen. It is keyed by its event, so the message that
+takes another's place in the list gets a state of its own. Nothing moves
+with the system's reduced motion on.
+
 Only live messages count. A page of the past loaded while scrolling down a
 timeline opened at an old message (`canLoadFuture`) is not "new".
 

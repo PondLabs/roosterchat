@@ -141,6 +141,34 @@ void main() {
   });
 
   testWidgets(
+      'a message that comes in at the latest ones floats up into place, '
+      'and the ones already there stay still', (tester) async {
+    await show(tester);
+    // How far below its place the message is drawn, by the float.
+    double lift(String text) => find
+        .ancestor(of: message(text), matching: find.byType(Transform))
+        .evaluate()
+        .map((e) => (e.widget as Transform).transform.getTranslation().y)
+        .fold(0.0, (a, b) => a + b);
+
+    receive('\$float', 'up comes alpha');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(lift('up comes alpha'), greaterThan(5));
+
+    await settle(tester);
+    expect(lift('up comes alpha'), closeTo(0, 0.5));
+
+    // The next one floats; the one before stays in place.
+    receive('\$float2', 'up comes bravo');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(lift('up comes bravo'), greaterThan(5));
+    expect(lift('up comes alpha'), closeTo(0, 0.5));
+    await done(tester);
+  });
+
+  testWidgets(
       'a burst of tall messages, one growing after it came in, keeps the '
       'latest in view', (tester) async {
     await show(tester);

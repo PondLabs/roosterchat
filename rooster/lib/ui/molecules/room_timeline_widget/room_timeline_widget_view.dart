@@ -142,6 +142,10 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView>
   /// the button that jumps down to them.
   int newMessagesBelow = 0;
 
+  /// Messages that just arrived in front of the reader, at the latest
+  /// messages: each floats up into place the first time it is built.
+  final Set<String> arriving = {};
+
   /// Events reaching index 0 are new ones, not a page of the past loaded
   /// while scrolling down a timeline opened at an old message.
   bool get isLive => !timeline.canLoadFuture && !timeline.isLoadingFuture;
@@ -291,6 +295,10 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView>
       if (recentItemsCount > 0) settleAtBottom();
     } else if (index == 0 || index < recentItemsCount) {
       recentItemsCount += 1;
+    }
+
+    if (live && isMessage && following && appInForeground) {
+      arriving.add(event.eventId);
     }
 
     if (live && isMessage) {
@@ -676,20 +684,24 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView>
                                 ? Colors.blue[200 + sliverIndex % 4 * 100]!
                                     .withAlpha(30)
                                 : null,
-                            child: TimelineViewEntry(
-                                key: key.$1,
-                                timeline: timeline,
-                                onEventHovered: eventHovered,
-                                canCollapse: true,
-                                setEditingEvent: widget.setEditingEvent,
-                                setReplyingEvent: widget.setReplyingEvent,
-                                isThreadTimeline: widget.isThreadTimeline,
-                                highlightedEventId: highlightedEventId,
-                                lastReadEventId: lastReadEventId,
-                                previewMedia:
-                                    widget.timeline.room.shouldPreviewMedia,
-                                jumpToEvent: jumpToEvent,
-                                initialIndex: timelineIndex),
+                            child: _FloatIn(
+                              key: ValueKey(key.$2),
+                              play: arriving.remove(key.$2),
+                              child: TimelineViewEntry(
+                                  key: key.$1,
+                                  timeline: timeline,
+                                  onEventHovered: eventHovered,
+                                  canCollapse: true,
+                                  setEditingEvent: widget.setEditingEvent,
+                                  setReplyingEvent: widget.setReplyingEvent,
+                                  isThreadTimeline: widget.isThreadTimeline,
+                                  highlightedEventId: highlightedEventId,
+                                  lastReadEventId: lastReadEventId,
+                                  previewMedia:
+                                      widget.timeline.room.shouldPreviewMedia,
+                                  jumpToEvent: jumpToEvent,
+                                  initialIndex: timelineIndex),
+                            ),
                           );
                         },
                         findChildIndexCallback: (key) {
@@ -729,20 +741,24 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView>
                                 ? Colors.red[200 + sliverIndex % 4 * 100]!
                                     .withAlpha(30)
                                 : null,
-                            child: TimelineViewEntry(
-                                key: key.$1,
-                                onEventHovered: eventHovered,
-                                timeline: timeline,
-                                canCollapse: true,
-                                setEditingEvent: widget.setEditingEvent,
-                                setReplyingEvent: widget.setReplyingEvent,
-                                isThreadTimeline: widget.isThreadTimeline,
-                                highlightedEventId: highlightedEventId,
-                                previewMedia:
-                                    widget.timeline.room.shouldPreviewMedia,
-                                lastReadEventId: lastReadEventId,
-                                jumpToEvent: jumpToEvent,
-                                initialIndex: timelineIndex),
+                            child: _FloatIn(
+                              key: ValueKey(key.$2),
+                              play: arriving.remove(key.$2),
+                              child: TimelineViewEntry(
+                                  key: key.$1,
+                                  onEventHovered: eventHovered,
+                                  timeline: timeline,
+                                  canCollapse: true,
+                                  setEditingEvent: widget.setEditingEvent,
+                                  setReplyingEvent: widget.setReplyingEvent,
+                                  isThreadTimeline: widget.isThreadTimeline,
+                                  highlightedEventId: highlightedEventId,
+                                  previewMedia:
+                                      widget.timeline.room.shouldPreviewMedia,
+                                  lastReadEventId: lastReadEventId,
+                                  jumpToEvent: jumpToEvent,
+                                  initialIndex: timelineIndex),
+                            ),
                           );
                         },
                         findChildIndexCallback: (key) {
@@ -959,5 +975,64 @@ extension GlobalKeyExtension on GlobalKey {
     } else {
       return null;
     }
+  }
+}
+
+/// A message that just arrived rises a little into place and fades in, as
+/// in the demo video. Keyed by its event, so that a message inserted where
+/// another was gets a state of its own; everything else is built still.
+/// Nothing moves with the system's reduced motion on.
+class _FloatIn extends StatefulWidget {
+  const _FloatIn({required this.play, required this.child, super.key});
+
+  final bool play;
+  final Widget child;
+
+  @override
+  State<_FloatIn> createState() => _FloatInState();
+}
+
+class _FloatInState extends State<_FloatIn>
+    with SingleTickerProviderStateMixin {
+  static const double rise = 40;
+
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 450),
+    value: widget.play ? 0 : 1,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.play) _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_controller.isCompleted || MediaQuery.disableAnimationsOf(context)) {
+      return widget.child;
+    }
+    return AnimatedBuilder(
+      animation: _controller,
+      child: widget.child,
+      builder: (context, child) {
+        final t = _controller.value;
+        final k = Curves.easeOutBack.transform(t);
+        return Opacity(
+          opacity: Curves.easeOut.transform((t * 1.6).clamp(0.0, 1.0)),
+          child: Transform.translate(
+            offset: Offset(0, (1 - k) * rise),
+            child: child,
+          ),
+        );
+      },
+    );
   }
 }
