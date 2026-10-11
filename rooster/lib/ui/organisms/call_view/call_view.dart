@@ -3,6 +3,7 @@ import 'package:rooster/client/components/dj/dj_session.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/matrix/components/dj/dj_booths.dart';
 import 'package:rooster/client/components/voip/voip_stream.dart';
+import 'package:rooster/ui/atoms/appear_in.dart';
 import 'package:rooster/client/room.dart';
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/ui/layout/bento.dart';
@@ -59,6 +60,9 @@ class _CallViewState extends State<CallView> {
   StreamSubscription? sub;
   bool isMouseHovering = false;
   VoipStream? mainStream;
+
+  /// The grid's tiles, to pop in whoever joins while the call is on screen.
+  final Arrivals arrivals = Arrivals();
   late Room room;
   SoundboardCallController? _soundboard;
   bool _soundboardOpen = false;
@@ -307,6 +311,8 @@ class _CallViewState extends State<CallView> {
         ? null
         : streams.where((s) => s.streamId == focusedId).firstOrNull;
     final tiles = callGridTiles(streams);
+    // Someone who joins while the call is on screen pops into the grid.
+    arrivals.update(tiles.map((tile) => tile.stream.streamId));
     return [
       if (mainStream != null)
         Flexible(
@@ -345,22 +351,27 @@ class _CallViewState extends State<CallView> {
           child: BentoLayout(
               tiles.where((tile) => tile.stream != mainStream).map((tile) {
             final e = tile.stream;
-            return GestureDetector(
-                onTap: () {
-                  setState(() {
-                    mainStream = e;
-                  });
-                },
-                child: VoipStreamView(
-                  key: ValueKey("callView__${e.streamId}"),
-                  e,
-                  audioStream: tile.audioStream,
-                  fit: e.type == VoipStreamType.screenshare
-                      ? BoxFit.contain
-                      : BoxFit.cover,
-                  widget.currentSession,
-                  onFullscreen: () => showFullscreen(e),
-                ));
+            return AppearIn(
+              key: ValueKey("callView_appear_${e.streamId}"),
+              play: arrivals.isNew(e.streamId),
+              scale: 0.4,
+              child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      mainStream = e;
+                    });
+                  },
+                  child: VoipStreamView(
+                    key: ValueKey("callView__${e.streamId}"),
+                    e,
+                    audioStream: tile.audioStream,
+                    fit: e.type == VoipStreamType.screenshare
+                        ? BoxFit.contain
+                        : BoxFit.cover,
+                    widget.currentSession,
+                    onFullscreen: () => showFullscreen(e),
+                  )),
+            );
           }).toList()),
         ),
       )

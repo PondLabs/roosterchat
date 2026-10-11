@@ -8,6 +8,7 @@ import 'package:rooster/config/build_config.dart';
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
+import 'package:rooster/ui/atoms/appear_in.dart';
 import 'package:rooster/ui/molecules/room_timeline_widget/room_timeline_overlay.dart';
 import 'package:rooster/ui/molecules/timeline_events/timeline_event_layout.dart';
 import 'package:rooster/ui/molecules/timeline_events/timeline_event_menu.dart';
@@ -143,7 +144,8 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView>
   int newMessagesBelow = 0;
 
   /// Messages that just arrived in front of the reader, at the latest
-  /// messages: each floats up into place the first time it is built.
+  /// messages: each floats up into place ([AppearIn]) the first time it is
+  /// built.
   final Set<String> arriving = {};
 
   /// Events reaching index 0 are new ones, not a page of the past loaded
@@ -684,9 +686,10 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView>
                                 ? Colors.blue[200 + sliverIndex % 4 * 100]!
                                     .withAlpha(30)
                                 : null,
-                            child: _FloatIn(
+                            child: AppearIn(
                               key: ValueKey(key.$2),
                               play: arriving.remove(key.$2),
+                              offset: const Offset(0, 40),
                               child: TimelineViewEntry(
                                   key: key.$1,
                                   timeline: timeline,
@@ -741,9 +744,10 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView>
                                 ? Colors.red[200 + sliverIndex % 4 * 100]!
                                     .withAlpha(30)
                                 : null,
-                            child: _FloatIn(
+                            child: AppearIn(
                               key: ValueKey(key.$2),
                               play: arriving.remove(key.$2),
+                              offset: const Offset(0, 40),
                               child: TimelineViewEntry(
                                   key: key.$1,
                                   onEventHovered: eventHovered,
@@ -975,64 +979,5 @@ extension GlobalKeyExtension on GlobalKey {
     } else {
       return null;
     }
-  }
-}
-
-/// A message that just arrived rises a little into place and fades in, as
-/// in the demo video. Keyed by its event, so that a message inserted where
-/// another was gets a state of its own; everything else is built still.
-/// Nothing moves with the system's reduced motion on.
-class _FloatIn extends StatefulWidget {
-  const _FloatIn({required this.play, required this.child, super.key});
-
-  final bool play;
-  final Widget child;
-
-  @override
-  State<_FloatIn> createState() => _FloatInState();
-}
-
-class _FloatInState extends State<_FloatIn>
-    with SingleTickerProviderStateMixin {
-  static const double rise = 40;
-
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 450),
-    value: widget.play ? 0 : 1,
-  );
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.play) _controller.forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_controller.isCompleted || MediaQuery.disableAnimationsOf(context)) {
-      return widget.child;
-    }
-    return AnimatedBuilder(
-      animation: _controller,
-      child: widget.child,
-      builder: (context, child) {
-        final t = _controller.value;
-        final k = Curves.easeOutBack.transform(t);
-        return Opacity(
-          opacity: Curves.easeOut.transform((t * 1.6).clamp(0.0, 1.0)),
-          child: Transform.translate(
-            offset: Offset(0, (1 - k) * rise),
-            child: child,
-          ),
-        );
-      },
-    );
   }
 }

@@ -13,6 +13,7 @@ import 'package:rooster/client/room.dart';
 import 'package:rooster/client/space.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
+import 'package:rooster/ui/atoms/appear_in.dart';
 import 'package:rooster/ui/atoms/live_media_indicator.dart';
 import 'package:rooster/ui/atoms/speaking_indicator.dart';
 import 'package:rooster/ui/atoms/voice_state_indicator.dart';
@@ -727,6 +728,7 @@ class _RoomTextButtonState extends State<RoomTextButton> {
     if (activitySessions!.any((i) => i.thirdparty == false)) {
       sessions = activitySessions!.where((i) => i.thirdparty == false);
     }
+    memberArrivals.update(sessions.expand((s) => s.participants));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -827,14 +829,23 @@ class _RoomTextButtonState extends State<RoomTextButton> {
     return members;
   }
 
+  /// Who is listed under the channel, to slide in whoever joins while it is
+  /// on screen.
+  final Arrivals memberArrivals = Arrivals();
+
   /// Everyone in [activity], one row each, with the rows past
   /// [RoomTextButton.maxVisibleMembers] behind "and N more".
   List<Widget> buildCallMembers(RoomActivitySession activity) {
-    Widget row(String participant) => buildCallMember(participant,
-        showActivityIcons: activity.thirdparty == false,
-        liveMedia: activity.liveMedia[participant] ?? const {},
-        voiceState: activity.voiceState[participant] ?? const {},
-        djPlaying: activity.djPlaying[participant]);
+    Widget row(String participant) => AppearIn(
+          key: ValueKey("member_appear_$participant"),
+          play: memberArrivals.isNew(participant),
+          offset: const Offset(-40, 0),
+          child: buildCallMember(participant,
+              showActivityIcons: activity.thirdparty == false,
+              liveMedia: activity.liveMedia[participant] ?? const {},
+              voiceState: activity.voiceState[participant] ?? const {},
+              djPlaying: activity.djPlaying[participant]),
+        );
 
     final members = orderedMembers(activity);
     if (members.length <= RoomTextButton.maxVisibleMembers) {
