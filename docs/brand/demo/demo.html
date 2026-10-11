@@ -1,8 +1,15 @@
 <!doctype html>
 <!--
   Rooster's demo video, drawn as a function of time. render_demo.py calls
-  seek(t) for every frame and screenshots the 1920x1080 stage. Open it in a
-  browser and it plays in real time (without the music).
+  seek(t) for every frame and screenshots the stage: 1920x1080 here, and
+  1080x1920 for the Instagram reel with ?reel. Open it in a browser and it
+  plays in real time (without the music).
+
+  Every screen in it is a capture of the real app (website/media/shots,
+  taken by docs/brand/screens). To make the room move, pieces are cut out of
+  those captures (an avatar, a member row, a message, a button) and moved:
+  a patch of the background they sat on covers where they were. Jonas's
+  stream is kart.html, the page he really streamed for the captures.
 -->
 <html>
 <head>
@@ -13,135 +20,62 @@
 @font-face { font-family: Twemoji; src: url("../../../rooster/assets/font/emoji-font/TwemojiCOLR.otf"); }
 
 :root {
-  --ink: #211614; --comb: #E8382A; --yolk: #F89B17; --cream: #F7EDE1;
-  --stone: #8D8178; --moss: #5E8F4E; --dusk: #3F4F6E;
-  --found: #1B1613; --surface: #2A221E; --c0: #161210; --c1: #1F1916;
-  --c2: #241D1A; --c3: #362C27; --text: #F5EBDD; --muted: #9C8F85;
+  --comb: #E8382A; --yolk: #F89B17; --cream: #F7EDE1; --stone: #8D8178;
+  --moss: #5E8F4E; --dusk: #3F4F6E; --c2: #241D1A; --c3: #362C27;
+  --text: #F5EBDD; --muted: #9C8F85; --bg: #171110;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { width: 1920px; height: 1080px; overflow: hidden; background: #000; }
-#stage {
-  position: relative; width: 1920px; height: 1080px; overflow: hidden;
-  background: #171110; color: var(--text); font-family: Nunito, sans-serif;
-}
-.abs { position: absolute; }
-.emo { font-family: Twemoji, sans-serif; font-weight: normal; }
-.sora { font-family: Sora, sans-serif; }
-
-/* decoration: big soft comb lobes drifting behind everything */
+html, body { overflow: hidden; background: #000; }
+#stage { position: relative; overflow: hidden; background: var(--bg); color: var(--text); font-family: Nunito, sans-serif; }
 .lobe { position: absolute; border-radius: 50%; background: #1F1714; }
 
-/* ---------------------------------------------------------------- intro */
+/* intro */
 #intro { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 #intro-mark { width: 300px; height: 300px; }
 #intro-word { margin-top: 18px; display: flex; font-family: Sora; font-weight: 800; font-size: 150px; letter-spacing: -5px; line-height: 1; }
-#intro-word span { display: inline-block; }
+#intro-word span, #intro-tag span { display: inline-block; }
 #intro-tag { margin-top: 34px; display: flex; gap: 28px; font-family: Sora; font-weight: 600; font-size: 54px; }
-#intro-tag span { display: inline-block; }
 
-/* -------------------------------------------------------------- captions */
+/* captions */
 .caption {
-  position: absolute; left: 0; right: 0; top: 0; padding: 54px 0 26px; text-align: center; z-index: 10;
-  background: #171110;
-  font-family: Sora; font-weight: 700; font-size: 62px; letter-spacing: -1.5px;
+  position: absolute; left: 0; right: 0; top: 46px; text-align: center; z-index: 10;
+  font-family: Sora; font-weight: 700; font-size: 60px; letter-spacing: -1.5px; line-height: 1.12;
 }
-.caption em { font-style: normal; color: var(--comb); }
-.caption .sub { display: block; margin-top: 10px; font-family: Nunito; font-weight: 600; font-size: 30px; letter-spacing: 0; color: var(--muted); }
+.caption em { font-style: normal; color: var(--comb); display: inline-block; }
+.caption .sub { display: block; margin-top: 12px; font-family: Nunito; font-weight: 600; font-size: 29px; letter-spacing: 0; line-height: 1.3; color: var(--muted); }
 
-/* ---------------------------------------------------------------- window */
-#win {
-  position: absolute; left: 210px; top: 196px; width: 1500px; height: 840px;
-  border-radius: 22px; overflow: hidden; background: var(--surface);
-  box-shadow: 0 40px 140px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.04);
-  transform-origin: 50% 50%;
+/* a screenshot in a window, the camera over it, and the pieces cut from it */
+.frame {
+  position: absolute; overflow: hidden; border-radius: 20px; background: #1B1613;
+  box-shadow: 0 40px 140px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.05);
 }
-#rail { position: absolute; left: 0; top: 0; bottom: 0; width: 84px; background: var(--c0); padding-top: 18px; }
-.space { position: absolute; left: 16px; width: 52px; height: 52px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-family: Sora; font-weight: 800; font-size: 22px; }
-.space img { width: 38px; height: 38px; }
-.space.sel::before { content: ""; position: absolute; left: -16px; top: 12px; width: 5px; height: 28px; border-radius: 0 4px 4px 0; background: var(--text); }
+.layer { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.layer > img { display: block; }
+.patch, .cut, .fx { position: absolute; }
+.cut { background-repeat: no-repeat; }
+.spot { position: absolute; border-radius: 16px; border: 4px solid var(--comb); box-shadow: 0 0 0 9999px rgba(12,8,7,.62); opacity: 0; }
+.cursor { position: absolute; width: 40px; height: 40px; opacity: 0; transform-origin: 0 0; }
+.ring { position: absolute; width: 70px; height: 70px; border-radius: 50%; border: 4px solid var(--cream); opacity: 0; }
+.emoji { position: absolute; font-family: "Noto Color Emoji", sans-serif; line-height: 1; text-align: center; filter: drop-shadow(0 3px 6px rgba(0,0,0,.45)); opacity: 0; }
+.stream { position: absolute; overflow: hidden; }
+.stream iframe { position: absolute; left: 0; top: 0; width: 1600px; height: 900px; border: 0; transform-origin: 0 0; }
 
-#chlist { position: absolute; left: 84px; top: 0; bottom: 0; width: 280px; background: var(--c1); }
-#banner { height: 112px; background: var(--comb); position: relative; overflow: hidden; }
-#banner .name { position: absolute; left: 20px; bottom: 14px; font-family: Sora; font-weight: 800; font-size: 26px; color: #fff; }
-#banner .lobe2 { position: absolute; border-radius: 50%; background: rgba(255,255,255,.13); }
-.chan { position: absolute; left: 12px; right: 12px; height: 38px; border-radius: 9px; display: flex; align-items: center; gap: 10px; padding: 0 12px; font-size: 19px; font-weight: 600; color: var(--muted); }
-.chan .ic { width: 20px; height: 20px; flex: none; }
-.chan.sel { background: var(--c3); color: var(--text); }
-.member { position: absolute; left: 40px; right: 12px; height: 34px; display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 700; color: var(--text); }
-.member .av { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; color: #fff; flex: none; }
-.member .badge { margin-left: auto; font-size: 20px; }
-.sect { position: absolute; left: 22px; font-size: 14px; font-weight: 800; letter-spacing: 1.2px; color: var(--muted); }
+/* the phone: website/media/devices/phone.svg, 1318 x 2717, a 402 x 874 pt screen */
+.phone { position: absolute; aspect-ratio: 1318 / 2717; filter: drop-shadow(0 40px 50px rgba(0,0,0,.5)); }
+.phone .screen { position: absolute; left: 4.2489%; top: 1.7667%; width: 91.5023%; height: 96.5035%; overflow: hidden; border-radius: 15.4229% / 7.0938%; background: #1F1916; }
+.phone .shot { position: absolute; left: 0; top: 7.0938%; width: 804px; height: 1624px; transform-origin: 0 0; }
+.phone .shot > img { display: block; }
+.phone > img { position: absolute; inset: 0; width: 100%; height: 100%; }
 
-#main { position: absolute; left: 364px; top: 0; right: 0; bottom: 0; }
-#callhead { position: absolute; left: 28px; top: 22px; display: flex; align-items: center; gap: 12px; font-family: Sora; font-weight: 700; font-size: 24px; }
-#callhead .count { font-family: Nunito; font-weight: 700; font-size: 18px; color: var(--muted); }
-#callhead .live { font-family: Nunito; font-size: 15px; font-weight: 800; color: #fff; background: var(--moss); border-radius: 6px; padding: 3px 9px; }
+/* the little things */
+.card { position: absolute; opacity: 0; }
+.card .pic { position: relative; overflow: hidden; border-radius: 18px; box-shadow: 0 30px 80px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.05); }
+.card .pic .inner { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.card .pic .inner > img { display: block; }
+.card .label { margin-top: 18px; font-family: Sora; font-weight: 700; font-size: 30px; }
+.card .label small { display: block; margin-top: 4px; font-family: Nunito; font-weight: 600; font-size: 22px; color: var(--muted); }
 
-.tile { position: absolute; border-radius: 18px; background: var(--c3); overflow: hidden; }
-.tile .av { position: absolute; left: 50%; top: 50%; width: 132px; height: 132px; margin: -66px 0 0 -66px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: Sora; font-weight: 800; font-size: 54px; color: #fff; }
-.tile .ring { position: absolute; left: 50%; top: 50%; width: 148px; height: 148px; margin: -74px 0 0 -74px; border-radius: 50%; border: 5px solid #7FC36A; box-shadow: 0 0 28px rgba(127,195,106,.55); opacity: 0; }
-.tile .label { position: absolute; left: 14px; bottom: 12px; display: flex; align-items: center; gap: 8px; background: rgba(22,18,16,.75); border-radius: 8px; padding: 4px 10px; font-size: 17px; font-weight: 800; }
-.tile .hp { position: absolute; right: 14px; top: 12px; font-size: 28px; opacity: 0; }
-.tile .share { position: absolute; inset: 0; opacity: 0; }
-.float { position: absolute; font-size: 84px; opacity: 0; }
-
-#callbar {
-  position: absolute; left: 50%; bottom: 22px; height: 76px; transform: translateX(-50%);
-  background: var(--c0); border-radius: 22px; display: flex; align-items: center; gap: 12px; padding: 0 14px;
-  box-shadow: 0 10px 30px rgba(0,0,0,.35);
-}
-.btn { width: 52px; height: 52px; border-radius: 16px; background: var(--c3); display: flex; align-items: center; justify-content: center; flex: none; }
-.btn svg { width: 26px; height: 26px; }
-.btn.red { background: var(--comb); width: 70px; }
-.btn.on { background: var(--cream); }
-#np { height: 52px; border-radius: 16px; background: var(--c3); display: flex; align-items: center; gap: 10px; padding: 0 16px; font-size: 17px; font-weight: 800; overflow: hidden; white-space: nowrap; }
-#np .eq { display: flex; align-items: flex-end; gap: 3px; height: 22px; }
-#np .eq i { display: block; width: 4px; background: var(--comb); border-radius: 2px; }
-
-/* soundboard popover */
-#sb {
-  position: absolute; width: 470px; height: 330px; border-radius: 20px; background: var(--c2);
-  box-shadow: 0 24px 60px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.05);
-  padding: 20px; transform-origin: 50% 100%;
-}
-#sb h3 { font-family: Sora; font-size: 22px; margin-bottom: 14px; }
-#sb .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-.snd { height: 112px; border-radius: 14px; background: var(--c3); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 16px; font-weight: 800; position: relative; overflow: hidden; }
-.snd .e { font-size: 44px; }
-.snd .fill { position: absolute; left: 0; bottom: 0; height: 5px; background: var(--comb); width: 0; }
-
-/* DJ panel */
-#dj {
-  position: absolute; top: 0; right: 0; bottom: 0; width: 400px; background: var(--c1);
-  box-shadow: -20px 0 50px rgba(0,0,0,.35); padding: 26px 26px;
-}
-#dj h3 { font-family: Sora; font-size: 26px; display: flex; align-items: center; gap: 10px; }
-#vinyl { position: relative; margin: 30px auto 0; width: 230px; height: 230px; }
-#disc { position: absolute; inset: 0; border-radius: 50%; background: repeating-radial-gradient(circle, #141010 0 3px, #1F1A18 3px 5px); box-shadow: 0 10px 30px rgba(0,0,0,.5); }
-#disc .label { position: absolute; left: 50%; top: 50%; width: 86px; height: 86px; margin: -43px 0 0 -43px; border-radius: 50%; background: var(--comb); display: flex; align-items: center; justify-content: center; }
-#disc .label img { width: 52px; }
-#disc .shine { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(from 0deg, transparent 0 40deg, rgba(255,255,255,.06) 60deg, transparent 80deg 220deg, rgba(255,255,255,.05) 240deg, transparent 260deg); }
-#arm { position: absolute; right: -14px; top: -6px; width: 18px; height: 150px; transform-origin: 50% 9px; }
-#arm i { position: absolute; left: 6px; top: 6px; width: 6px; height: 140px; border-radius: 3px; background: #B9AEA4; }
-#arm b { position: absolute; left: 0; top: 0; width: 18px; height: 18px; border-radius: 50%; background: #D8CEC5; }
-#arm u { position: absolute; left: 1px; bottom: -8px; width: 16px; height: 24px; border-radius: 4px; background: #D8CEC5; }
-.track { margin-top: 30px; }
-.track .t { font-family: Sora; font-weight: 700; font-size: 24px; }
-.track .a { font-size: 18px; font-weight: 700; color: var(--muted); margin-top: 4px; }
-.bar { margin-top: 18px; height: 6px; border-radius: 3px; background: var(--c3); position: relative; }
-.bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--comb); }
-.times { display: flex; justify-content: space-between; font-size: 15px; font-weight: 700; color: var(--muted); margin-top: 8px; }
-.djby { display: flex; align-items: center; gap: 10px; margin-top: 22px; font-size: 17px; font-weight: 800; }
-.djby .av { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #fff; }
-.queue { margin-top: 20px; }
-.queue .q { display: flex; gap: 12px; align-items: center; height: 46px; font-size: 17px; font-weight: 700; color: var(--muted); }
-.queue .q b { width: 34px; height: 34px; border-radius: 8px; background: var(--c3); display: flex; align-items: center; justify-content: center; font-size: 18px; }
-
-/* cursor */
-#cursor { position: absolute; width: 34px; height: 34px; opacity: 0; z-index: 50; }
-#click { position: absolute; width: 60px; height: 60px; border-radius: 50%; border: 3px solid var(--cream); opacity: 0; z-index: 49; }
-
-/* ----------------------------------------------------------- matrix scene */
+/* your server: the landing page's federation picture */
 #net { position: absolute; inset: 0; }
 .node { position: absolute; width: 200px; height: 200px; margin: -100px 0 0 -100px; border-radius: 40px; background: var(--c2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.45); }
 .node img { width: 92px; }
@@ -151,131 +85,81 @@ html, body { width: 1920px; height: 1080px; overflow: hidden; background: #000; 
 .node.me img { width: 120px; }
 .node.me .dom { color: var(--text); font-size: 22px; }
 .pkt { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: var(--yolk); box-shadow: 0 0 16px rgba(248,155,23,.8); }
-#lock { position: absolute; left: 50%; top: 905px; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; background: var(--c2); border-radius: 18px; padding: 16px 26px; font-size: 26px; font-weight: 800; }
+#lock { position: absolute; left: 50%; top: 935px; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; background: var(--c2); border-radius: 18px; padding: 16px 26px; font-size: 26px; font-weight: 800; white-space: nowrap; }
 
-/* ----------------------------------------------------------------- outro */
+/* outro */
 #outro { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 #outro-lock { display: flex; align-items: center; gap: 34px; }
 #outro-lock img { width: 210px; }
 #outro-word { font-family: Sora; font-weight: 800; font-size: 150px; letter-spacing: -5px; line-height: 1; }
 #outro-tag { font-family: Sora; font-weight: 600; font-size: 44px; color: var(--stone); margin-top: 6px; }
-#chips { display: flex; gap: 16px; margin-top: 60px; }
+#chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; margin-top: 60px; }
 .chip { background: var(--c2); border-radius: 14px; padding: 14px 24px; font-size: 26px; font-weight: 800; }
-#url { margin-top: 34px; font-size: 30px; font-weight: 800; color: var(--comb); }
+#free { margin-top: 30px; font-size: 28px; font-weight: 700; color: var(--muted); }
+#url { margin-top: 14px; font-size: 30px; font-weight: 800; color: var(--comb); }
 #fade { position: absolute; inset: 0; background: #000; opacity: 0; z-index: 100; }
+
+/* the reel: the same film, stood up, with room for Instagram's own buttons */
+.reel .caption { top: 250px; padding: 0 60px; font-size: 74px; }
+.reel .caption .sub { font-size: 36px; margin-top: 16px; }
+.reel #intro-mark { width: 330px; height: 330px; }
+.reel #intro-word { font-size: 170px; }
+.reel #intro-tag { flex-direction: column; align-items: center; gap: 10px; font-size: 76px; }
+.reel #outro-lock { flex-direction: column; gap: 20px; text-align: center; }
+.reel #outro-lock img { width: 260px; }
+.reel #outro-word { font-size: 170px; }
+.reel #outro-tag { font-size: 50px; }
+.reel #chips { max-width: 820px; }
+.reel .chip { font-size: 32px; }
+.reel #free { font-size: 34px; }
+.reel #url { font-size: 36px; }
 </style>
 </head>
 <body>
 <div id="stage">
-  <div class="lobe" id="deco1" style="width:900px;height:900px;left:-300px;top:-360px"></div>
-  <div class="lobe" id="deco2" style="width:700px;height:700px;right:-260px;bottom:-300px"></div>
+  <div class="lobe" id="deco1"></div>
+  <div class="lobe" id="deco2"></div>
 
-  <!-- intro -->
   <div id="intro">
     <img id="intro-mark" src="../logo/mark.svg">
     <div id="intro-word"></div>
     <div id="intro-tag"><span>Talk.</span><span>Play.</span><span style="color:var(--comb)">Hang out.</span></div>
   </div>
 
-  <!-- captions -->
-  <div class="caption" id="cap1">Drop into voice rooms <em>that stay open.</em></div>
-  <div class="caption" id="cap2">Share your screen. <em>Watch together.</em></div>
-  <div class="caption" id="cap3">Hit the <em>soundboard.</em></div>
-  <div class="caption" id="cap4">Take the <em>decks.</em><span class="sub">Everyone in the room hears the same song, in sync.</span></div>
-  <div class="caption" id="cap5">Your server. <em>Your rules.</em><span class="sub">Built on Matrix. Open source.</span></div>
+  <div id="scenes"></div>
 
-  <!-- app window -->
-  <div id="win">
-    <div id="rail">
-      <div class="space" style="top:18px;background:var(--c3)"><img src="../logo/mark.svg"></div>
-      <div class="space sel" style="top:90px;background:var(--comb)">C</div>
-      <div class="space" style="top:156px;background:var(--moss)">G</div>
-      <div class="space" style="top:222px;background:var(--dusk)">B</div>
-      <div class="space" style="top:288px;background:var(--c3);color:var(--muted);font-size:30px;font-weight:400">+</div>
-    </div>
-    <div id="chlist">
-      <div id="banner">
-        <div class="lobe2" style="width:160px;height:160px;right:-40px;top:-70px"></div>
-        <div class="lobe2" style="width:110px;height:110px;right:70px;top:-60px"></div>
-        <div class="name">The Coop</div>
-      </div>
-      <div class="sect" style="top:132px">TEXT</div>
-      <div class="chan" style="top:156px"><svg class="ic" viewBox="0 0 24 24"><path d="M9 3 7 21M17 3l-2 18M4 8h17M3 16h17" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg>general</div>
-      <div class="chan" style="top:198px"><svg class="ic" viewBox="0 0 24 24"><path d="M9 3 7 21M17 3l-2 18M4 8h17M3 16h17" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg>memes</div>
-      <div class="chan" style="top:240px"><svg class="ic" viewBox="0 0 24 24"><path d="M9 3 7 21M17 3l-2 18M4 8h17M3 16h17" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg>clips</div>
-      <div class="sect" style="top:300px">VOICE</div>
-      <div class="chan sel" style="top:324px" id="lounge"><svg class="ic" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>Lounge</div>
-      <div id="members"></div>
-      <div class="chan" id="gaming" style="top:370px"><svg class="ic" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>Game night</div>
-    </div>
-    <div id="main">
-      <div id="callhead"><svg width="26" height="26" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>Lounge <span class="count" id="count">1 here</span><span class="live" id="livebadge" style="opacity:0">LIVE</span></div>
-      <div id="tiles"></div>
-      <div id="dj">
-        <h3><span class="emo">🎧</span> DJ Booth</h3>
-        <div id="vinyl"><div id="disc"><div class="shine"></div><div class="label"><img src="../logo/mark.svg"></div></div><div id="arm"><i></i><b></b><u></u></div></div>
-        <div class="track"><div class="t">Sunrise Strut</div><div class="a">The Night Owls</div></div>
-        <div class="bar"><i id="prog"></i></div>
-        <div class="times"><span id="tcur">0:42</span><span>3:18</span></div>
-        <div class="djby"><div class="av" style="background:var(--comb)">P</div>Pat is on the decks</div>
-        <div class="queue">
-          <div class="q"><b class="emo">🎵</b>Coffee Run · Low Tide</div>
-          <div class="q"><b class="emo">🎵</b>Neon Hen · Barnyard FM</div>
-        </div>
-      </div>
-      <div id="callbar">
-        <div class="btn" id="b-mic"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" fill="#F5EBDD"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4" stroke="#F5EBDD" stroke-width="2" fill="none" stroke-linecap="round"/></svg></div>
-        <div class="btn"><svg viewBox="0 0 24 24"><path d="M4 15v-3a8 8 0 0 1 16 0v3" stroke="#F5EBDD" stroke-width="2.2" fill="none"/><rect x="3" y="14" width="5" height="7" rx="2" fill="#F5EBDD"/><rect x="16" y="14" width="5" height="7" rx="2" fill="#F5EBDD"/></svg></div>
-        <div class="btn"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="3" fill="#F5EBDD"/><path d="M15 10.5 21 7v10l-6-3.5z" fill="#F5EBDD"/></svg></div>
-        <div class="btn" id="b-share"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2.5" stroke="#F5EBDD" stroke-width="2" fill="none"/><path d="M8 21h8M12 17v4M12 14V8m-3 3 3-3 3 3" stroke="#F5EBDD" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-        <div class="btn" id="b-sb"><span class="emo" style="font-size:26px">🎺</span></div>
-        <div class="btn" id="b-dj"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#F5EBDD"/><circle cx="12" cy="12" r="3" fill="#E8382A"/></svg></div>
-        <div id="np" style="width:0;padding:0"><div class="eq"><i></i><i></i><i></i></div><span>Sunrise Strut</span></div>
-        <div class="btn red"><svg viewBox="0 0 24 24"><path d="M3 14.5c5-5 13-5 18 0l-2.5 2.5-3-2v-3a12 12 0 0 0-7 0v3l-3 2z" fill="#fff"/></svg></div>
-      </div>
-      <div id="sb">
-        <h3>Soundboard</h3>
-        <div class="grid">
-          <div class="snd" id="s-0"><span class="e emo">🐓</span>Wake up!<div class="fill"></div></div>
-          <div class="snd" id="s-1"><span class="e emo">📯</span>Airhorn<div class="fill"></div></div>
-          <div class="snd" id="s-2"><span class="e emo">🥁</span>Ba dum tss<div class="fill"></div></div>
-          <div class="snd" id="s-3"><span class="e emo">👏</span>Applause<div class="fill"></div></div>
-          <div class="snd" id="s-4"><span class="e emo">🦗</span>Crickets<div class="fill"></div></div>
-          <div class="snd" id="s-5"><span class="e emo">😂</span>Bruh<div class="fill"></div></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- matrix scene -->
   <div id="net">
-    <svg id="links" class="abs" width="1920" height="1080" style="left:0;top:0"></svg>
-    <div class="node me" id="n0" style="left:960px;top:590px"><img src="../logo/mark.svg"><div class="dom">your.server</div></div>
-    <div class="node" id="n1" style="left:470px;top:420px"><div class="ini" style="background:var(--dusk)">m</div><div class="dom">matrix.org</div></div>
-    <div class="node" id="n2" style="left:1450px;top:420px"><div class="ini" style="background:var(--moss)">L</div><div class="dom">lan-party.chat</div></div>
-    <div class="node" id="n3" style="left:560px;top:820px"><div class="ini" style="background:var(--yolk)">B</div><div class="dom">bookclub.place</div></div>
-    <div class="node" id="n4" style="left:1360px;top:820px"><div class="ini" style="background:var(--comb)">C</div><div class="dom">the-coop.social</div></div>
+    <svg id="links" style="position:absolute;left:0;top:0" width="1920" height="1080"></svg>
+    <div class="node me"><img src="../logo/mark.svg"><div class="dom">your.server</div></div>
+    <div class="node"><div class="ini" style="background:var(--dusk)">m</div><div class="dom">matrix.org</div></div>
+    <div class="node"><div class="ini" style="background:var(--moss)">L</div><div class="dom">lan-party.chat</div></div>
+    <div class="node"><div class="ini" style="background:var(--yolk)">B</div><div class="dom">bookclub.place</div></div>
+    <div class="node"><div class="ini" style="background:var(--comb)">C</div><div class="dom">the-coop.social</div></div>
     <div id="pkts"></div>
-    <div id="lock"><span class="emo">🔒</span>End-to-end encrypted</div>
+    <div id="lock"><span style="font-family:Twemoji">🔒</span>End-to-end encrypted</div>
   </div>
 
-  <!-- outro -->
   <div id="outro">
-    <div id="outro-lock"><img src="../logo/mark.svg" id="outro-mark"><div><div id="outro-word">Rooster</div><div id="outro-tag">Talk. Play. Hang out.</div></div></div>
-    <div id="chips"><div class="chip">Windows</div><div class="chip">Linux</div><div class="chip">macOS</div><div class="chip">Browser</div></div>
+    <div id="outro-lock"><img src="../logo/mark.svg" id="outro-mark"><div><div id="outro-word">Rooster</div><div id="outro-tag">Pull up a chair.</div></div></div>
+    <div id="chips"><div class="chip">Windows</div><div class="chip">macOS</div><div class="chip">Linux</div><div class="chip">Browser</div></div>
+    <div id="free">Free and open source</div>
     <div id="url">pondlabs.github.io/roosterchat</div>
   </div>
 
-  <svg id="cursor" viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.6L10 19z" fill="#fff" stroke="#000" stroke-width="1.4" stroke-linejoin="round"/></svg>
-  <div id="click"></div>
   <div id="fade"></div>
+  <div id="preload" style="position:absolute;width:0;height:0;overflow:hidden"></div>
 </div>
 
 <script>
+const REEL = location.search.includes('reel');
+const W = REEL ? 1080 : 1920, H = REEL ? 1920 : 1080;
+const SHOTS = '../../../website/media/shots/';
+// What the landing page doesn't have: screens/capture-video.mjs's captures.
+const VIDEO_SHOTS = 'shots/';
+
 const $ = id => document.getElementById(id);
 const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 const E = {
-  lin: x => x,
   out: x => 1 - Math.pow(1 - x, 3),
   in: x => x * x * x,
   io: x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2,
@@ -284,60 +168,348 @@ const E = {
 // 0..1 progress of t through [t0, t0+d], eased.
 const p = (t, t0, d, e = E.out) => e(clamp((t - t0) / d));
 // In at t0, out at t1, each over d.
-const win = (t, t0, t1, d = .35) => p(t, t0, d) * (1 - p(t, t1 - d, d, E.in));
+const win = (t, t0, t1, d = .4) => p(t, t0, d) * (1 - p(t, t1 - d, d, E.in));
 const lerp = (a, b, k) => a + (b - a) * k;
-const BEAT = .5; // 120 bpm, the music's tempo
+const set = (el, s) => Object.assign(el.style, s);
 
-// ------------------------------------------------------------- people
-const PEOPLE = [
-  { name: 'Max', color: 'var(--yolk)', join: 4.8, talk: [[8.6, 9.3], [19.3, 19.9], [28.1, 29]] },
-  { name: 'Pat', color: 'var(--comb)', join: 5.6, talk: [[8.1, 8.5], [9.5, 10.6], [13.6, 14.8], [26, 27.2]] },
-  { name: 'Sam', color: 'var(--moss)', join: 6.4, talk: [[10.8, 11.8], [15.2, 16.3], [22, 22.8]] },
-  { name: 'Alex', color: 'var(--dusk)', join: 7.2, talk: [[12.3, 13.3], [16.6, 17.5], [29.4, 30.4]] },
+// The music: 120 bpm, the kick on every beat from GROOVE (music.py's cues).
+const BEAT = .5, GROOVE = REEL ? 2.6 : 4;
+// 1 on the kick, falling away before the next one.
+const kick = t => t < GROOVE ? 0 : Math.exp(-((t - GROOVE) % BEAT) / .09);
+// A hop per beat: up between kicks, landing on each one.
+const hop = t => t < GROOVE ? 0 : Math.sin(Math.PI * ((t - GROOVE) % BEAT) / BEAT);
+
+// Keyframes [t, ...values], eased between, held outside.
+function track(keys, t) {
+  if (t <= keys[0][0]) return keys[0].slice(1);
+  for (let i = 0; i < keys.length - 1; i++) {
+    const [ta, ...A] = keys[i], [tb, ...B] = keys[i + 1];
+    if (t <= tb) { const k = E.io(clamp((t - ta) / (tb - ta))); return A.map((v, j) => lerp(v, B[j], k)); }
+  }
+  return keys[keys.length - 1].slice(1);
+}
+
+const el = (tag, cls, parent, html = '') => { const e = document.createElement(tag); e.className = cls; e.innerHTML = html; parent.appendChild(e); return e; };
+const box = (e, x, y, w, h) => set(e, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` });
+
+// A piece cut out of a capture, at the place it was taken from, over a patch
+// of the colour it sat on (null for no patch).
+function cut(parent, src, iw, ih, [x, y, w, h], patch, radius = 0) {
+  if (patch) set(el('div', 'patch', parent), { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px`, background: patch });
+  const c = el('div', 'cut', parent);
+  box(c, x, y, w, h);
+  set(c, { backgroundImage: `url(${src})`, backgroundSize: `${iw}px ${ih}px`, backgroundPosition: `${-x}px ${-y}px`, borderRadius: `${radius}px` });
+  return c;
+}
+// An avatar (with its ring and mute badge): a square around its centre.
+const av = (parent, src, iw, ih, [cx, cy], patch, s = 210) => cut(parent, src, iw, ih, [cx - s / 2, cy - s / 2, s, s], patch);
+
+// Jonas's stream: the game he streamed for the captures, playing.
+const STREAMS = [];
+function stream(parent, [x, y, w, h], patch) {
+  if (patch) set(el('div', 'patch', parent), { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px`, background: patch });
+  const s = el('div', 'stream', parent, '<iframe src="../screens/kart.html#still"></iframe>');
+  box(s, x, y, w, h);
+  set(s.firstChild, { transform: `scale(${w / 1600}, ${h / 900})` });
+  STREAMS.push(s.firstChild);
+  return s;
+}
+
+// A camera: a clip played in its tile, seeked to each frame's time.
+const CLIPS = location.search.includes('work=') ? decodeURIComponent(location.search.split('work=')[1].split('&')[0]) : '/tmp/rooster-demo';
+function video(parent, [x, y, w, h], patch, name) {
+  if (patch) set(el('div', 'patch', parent), { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px`, background: patch });
+  const s = el('div', 'stream', parent, `<video src="file://${CLIPS}/${name}" muted preload="auto"></video>`);
+  box(s, x, y, w, h);
+  set(s.firstChild, { width: '100%', height: '100%', objectFit: 'cover' });
+  return s;
+}
+function seekVideo(v, at) {
+  const want = Math.max(0, at) % 11;
+  if (Math.abs(v.currentTime - want) < .001) return null;
+  return new Promise(r => { v.addEventListener('seeked', r, { once: true }); v.currentTime = want; });
+}
+
+// The tile background, the room's members panel, the chat.
+const TILE = '#1e1816', PANEL = '#564542', CHAT = '#28201c', GAP = '#141110';
+
+// ------------------------------------------------------------- the shots
+// What moves in each capture. build(scene) cuts the pieces; the function it
+// returns moves them at time t (u = t - the scene's start). Coordinates are
+// the capture's pixels (1920 x 1131, phones 804 x 1624).
+const FX = {
+  // Everyone drops into the Lounge, one per beat, Maya last.
+  'call-lounge': (s, L, src) => {
+    const P = [
+      ['theo', [1026, 962], 527], ['priya', [1026, 627], 574], ['jonas', [614, 290], 621], ['lou', [614, 627], 668],
+      ['kenji', [614, 962], 715, 1], ['bia', [1026, 290], 762], ['maya', [1438, 625], 809, 1],
+    ].map(([name, at, row, talks]) => ({ talks, a: av(L, src, 1920, 1131, at, TILE), r: cut(L, src, 1920, 1131, [128, row - 23, 264, 46], PANEL) }));
+    return (t, u) => P.forEach((m, i) => {
+      const tj = .5 + i * BEAT, k = p(u, tj, .5, E.back);
+      const talk = m.talks && u > tj + .5 ? .035 * Math.abs(Math.sin(t * 8 + i)) : 0;
+      set(m.a, { opacity: clamp(k * 2), transform: `scale(${.2 + .8 * k + talk})` });
+      const r = p(u, tj, .4);
+      set(m.r, { opacity: r, transform: `translateX(${(1 - r) * -40}px)` });
+    });
+  },
+
+  // Jonas goes live: his stream pops into the call.
+  'call-share': (s, L, src) => {
+    const live = cut(L, src, 1920, 1131, [330, 607, 46, 30], PANEL, 6);
+    const btns = cut(L, src, 1920, 1131, [1522, 626, 124, 70], GAP);
+    const v = stream(L, [1236, 765, 406, 228], GAP);
+    const A = [[1026, 290], [1438, 375], [614, 962]].map(at => av(L, src, 1920, 1131, at, null));
+    return (t, u) => {
+      const k = p(u, .9, .55, E.back);
+      set(v, { opacity: clamp(k * 2), transform: `scale(${.4 + .6 * k})` });
+      set(btns, { opacity: p(u, 1.3, .4) });
+      const lk = p(u, .9, .45, E.back);
+      set(live, { opacity: clamp(lk * 2), transform: `scale(${.3 + .7 * lk})` });
+      A.forEach((a, i) => set(a, { transform: `scale(${1 + .035 * Math.abs(Math.sin(t * 8 + i * 2))})` }));
+    };
+  },
+
+  // Maya hits Rooster, then Bonk: the button gives, and the sound's emoji
+  // sits on her avatar while it plays (SoundboardEmojiOverlay).
+  'call-soundboard': (s, L, src) => {
+    stream(L, [1236, 262, 406, 228], null);
+    const maya = av(L, src, 1920, 1131, [1438, 875], TILE);
+    const btns = s.press.map(([, x, y, w, h]) => cut(L, src, 1920, 1131, [x, y, w, h], '#29211e', 10));
+    const emo = el('div', 'emoji', L);
+    return (t, u) => {
+      let cur = null;
+      s.press.forEach(([tp, , , , , e], i) => {
+        const d = t - tp;
+        set(btns[i], { transform: `scale(${d >= 0 && d < .3 ? 1 - .08 * Math.sin(Math.PI * d / .3) : 1})`, filter: d >= 0 && d < .6 ? `brightness(${1.5 - d / 1.2})` : 'none' });
+        if (d >= 0) cur = [tp, e];
+      });
+      const talk = cur && t - cur[0] < 1.6;
+      set(maya, { transform: `scale(${1 + (talk ? .05 * Math.abs(Math.sin(t * 10)) : 0)})` });
+      if (!cur) return set(emo, { opacity: 0 });
+      const d = t - cur[0], k = p(d, 0, .35, E.back), out = p(d, 1.6, .25, E.in);
+      emo.textContent = cur[1];
+      box(emo, 1450, 790, 80, 80);
+      set(emo, { fontSize: '64px', opacity: clamp(k * 2) * (1 - out), transform: `scale(${(.4 + .6 * k) * (1 - .4 * out)})` });
+    };
+  },
+
+  // Priya on the decks: the room bounces to the beat, the record spins,
+  // the song plays on and the queue fills.
+  'call-dj': (s, L, src) => {
+    const A = [[533, 240], [785, 240], [1037, 330], [533, 597], [785, 597], [1037, 860], [785, 955]].map(at => av(L, src, 1920, 1131, at, TILE, 200));
+    const Q = [700, 766, 832].map(y => cut(L, src, 1920, 1131, [1182, y, 440, 66], TILE));
+    // the record turning under the sleeve
+    const disc = el('div', 'fx', L);
+    box(disc, 1292 - 48, 255 - 48, 96, 96);
+    set(disc, { borderRadius: '50%', background: 'conic-gradient(from 0deg, transparent 0 30deg, rgba(255,255,255,.16) 50deg, transparent 75deg 200deg, rgba(255,255,255,.12) 225deg, transparent 250deg)' });
+    cut(L, src, 1920, 1131, [1199, 208, 94, 94], null, 6);
+    // the progress bar, from 0:23 of 3:18
+    // (in two pieces, to keep clear of the 0:23 under its left end)
+    [[1198, 302, 414, 16], [1234, 299, 30, 28]].forEach(r => { const e = el('div', 'fx', L); box(e, ...r); set(e, { background: '#342c25' }); });
+    const rest = el('div', 'fx', L), done = el('div', 'fx', L), knob = el('div', 'fx', L);
+    box(rest, 1208, 311, 392, 4); set(rest, { background: '#74332d', borderRadius: '2px' });
+    set(done, { left: '1208px', top: '310px', height: '6px', background: '#e63622', borderRadius: '3px' });
+    set(knob, { top: '301px', width: '24px', height: '24px', borderRadius: '50%', background: '#e63622' });
+    return (t, u) => {
+      A.forEach((a, i) => {
+        const h = hop(t) * (i % 2 ? 12 : 16) * p(u, .3, .6);
+        set(a, { transform: `translateY(${-h}px)` });
+      });
+      set(disc, { transform: `rotate(${t * 200}deg)` });
+      const x = 1208 + (23 + u) / 198 * 392;
+      set(done, { width: `${x - 1208}px` });
+      set(knob, { left: `${x - 12}px` });
+      Q.forEach((q, i) => {
+        const k = p(u, 1.2 + i * BEAT, .45, E.back);
+        set(q, { opacity: clamp(k * 1.6), transform: `translateX(${(1 - k) * 80}px)` });
+      });
+    };
+  },
+
+  // The evening in #general goes on: the poll, Maya's rematch, Theo calling
+  // on her, Lou.
+  'laptop': (s, L, src) => {
+    const M = [[476, 92], [566, 278], [846, 52], [900, 60], [962, 56]].map(([y, h]) => cut(L, src, 1920, 1131, [408, y, 1236, h], CHAT));
+    return (t, u) => M.forEach((m, i) => {
+      const k = p(u, .7 + i * .75, .45, E.back);
+      set(m, { opacity: clamp(k * 1.5), transform: `translateY(${(1 - k) * 40}px)` });
+    });
+  },
+
+  // Maya's voice settings while her microphone hears someone typing: first
+  // with noise suppression off, then on (the click at s.press[0]). Its meter
+  // and the line under it are live: they play through the frames captured a
+  // moment apart, each kept as the strip they change in.
+  'ns': (s, L, src) => {
+    const on = el('img', '', L);
+    Object.assign(on, { src: VIDEO_SHOTS + 'ns-on.webp', width: 1920, height: 1131 });
+    set(on, { position: 'absolute', left: 0, top: 0, opacity: 0 });
+    const strip = el('div', 'fx', L);
+    box(strip, 0, 690, 1920, 130);
+    set(strip, { backgroundSize: '1920px 130px' });
+    const frames = ['off', 'on'].map(st => [...Array(16).keys()].map(i => VIDEO_SHOTS + `ns-${st}-meter-${String(i).padStart(2, '0')}.webp`));
+    frames.flat().forEach(f => { const i = el('img', '', $('preload')); i.src = f; });
+    return (t, u) => {
+      const st = t >= s.press[0][0] ? 1 : 0;
+      set(on, { opacity: st });
+      set(strip, { backgroundImage: `url(${frames[st][Math.floor(t * 6.5) % 16]})` });
+    };
+  },
+
+  // Jonas's stream full screen: it grows out of its tile (s.grow).
+  'call-fullscreen': (s, L, src) => {
+    stream(L, [0, 26, 1920, 1080], null);
+    cut(L, src, 1920, 1131, [10, 1061, 236, 46], null, 10);
+    return () => {};
+  },
+
+  // Lou turns his camera on, beside Jonas's stream.
+  'call-camera': (s, L, src) => {
+    stream(L, [411, 850, 406, 227], null);
+    const cam = video(L, [1236, 514, 406, 227], GAP, 'kitten.webm');
+    const icon = cut(L, src, 1920, 1131, [348, 655, 28, 28], PANEL);
+    const A = [[1025, 291], [1025, 626], [1437, 963]].map(at => av(L, src, 1920, 1131, at, null));
+    return (t, u) => {
+      const k = p(u, .8, .55, E.back);
+      set(cam, { opacity: clamp(k * 2), transform: `scale(${.4 + .6 * k})` });
+      const ik = p(u, .8, .45, E.back);
+      set(icon, { opacity: clamp(ik * 2), transform: `scale(${.3 + .7 * ik})` });
+      A.forEach((a, i) => set(a, { transform: `scale(${1 + .035 * Math.abs(Math.sin(t * 8 + i * 2))})` }));
+      return seekVideo(cam.firstChild, u - .8);
+    };
+  },
+
+  'phone-call': (s, L, src) => {
+    stream(L, [406, 620, 398, 223], null);
+    const A = [[200, 370], [200, 730], [200, 1090]].map(at => av(L, src, 804, 1624, at, '#1e1715', 300));
+    return (t, u) => A.forEach((a, i) => set(a, { transform: `scale(${1 + .04 * Math.abs(Math.sin(t * 8 + i * 2))})` }));
+  },
+
+  'phone-chat': (s, L, src) => {
+    const M = [[1125, 123], [1250, 93], [1345, 88]].map(([y, h]) => cut(L, src, 804, 1624, [0, y, 804, h], '#2a211d'));
+    return (t, u) => M.forEach((m, i) => {
+      const k = p(u, .9 + i * .8, .45, E.back);
+      set(m, { opacity: clamp(k * 1.5), transform: `translateY(${(1 - k) * 50}px)` });
+    });
+  },
+};
+
+// ------------------------------------------------------------- the film
+// cam: [t, zoom, focus x, focus y] in shot pixels; zoom 1 shows the whole
+// shot. spot: [t0, t1, x, y, w, h], a lit rectangle with the rest dimmed.
+// press: [t, x, y, w, h, emoji], a soundboard button clicked at t; music.py
+// plays the sound then. same: the scene before is the same screen, so it
+// crossfades in place instead of sliding.
+const FRAME = REEL ? { x: 40, y: 600, w: 1000, h: 1000 } : { x: 230, y: 196, w: 1460, h: 860 };
+// The noise suppression switch, and where Jonas's stream sits in call-share.
+const NS_SWITCH = [1806, 477, 60, 40, null], SHARE_TILE = [1236, 765, 406, 228];
+const DESKTOP = [
+  { shot: 'call-lounge', t0: 3.9, t1: 9.8,
+    cap: 'Voice rooms <em>that stay open.</em>', sub: 'Rooms don\'t ring. Drop in, drop out, and see who\'s around before you join.',
+    cam: [[3.9, 1.04, 900, 565], [8.6, 1.1, 820, 600]] },
+  { shot: 'ns', img: VIDEO_SHOTS + 'ns-off.webp', t0: 9.6, t1: 17.6,
+    cap: 'Noise suppression <em>on your machine.</em>', sub: 'Sound on: first the microphone as it is, then what the room hears.',
+    cam: [[9.6, 1, 960, 565], [10.8, 1.22, 1110, 640]],
+    cursor: [[12.4, 1500, 950], [13.4, 1836, 497]], press: [[13.8, ...NS_SWITCH]] },
+  { shot: 'call-share', t0: 17.4, t1: 21.8,
+    cap: 'Share your screen, <em>with its sound.</em>', sub: 'Stream a game, or put a movie on for everyone.',
+    cam: [[17.4, 1, 960, 565], [18.8, 1.3, 1400, 760], [20.2, 1.3, 1400, 760], [20.9, 1, 960, 565]],
+    spot: [18.6, 20.5, 1234, 764, 408, 230],
+    cursor: [[20.6, 1300, 950], [21.2, 1611, 660]], press: [[21.4, 1587, 636, 48, 48, null]] },
+  { shot: 'call-fullscreen', img: VIDEO_SHOTS + 'call-fullscreen.webp', t0: 21.45, t1: 25.2, same: true, grow: SHARE_TILE,
+    cap: 'Full screen, <em>in a click.</em>', sub: 'You pick the bitrate and frame rate. Nobody asks you to pay for 1080p.',
+    cam: [[21.45, 1, 960, 565], [25.2, 1.05, 960, 565]] },
+  { shot: 'call-camera', img: VIDEO_SHOTS + 'call-camera.webp', t0: 25.0, t1: 29.6, same: true,
+    cap: 'Cameras too, <em>side by side.</em>', sub: 'When several people share, watch them side by side.',
+    cam: [[25, 1, 960, 565], [26.4, 1, 960, 565], [27.6, 1.25, 1250, 650]] },
+  { shot: 'call-dj', t0: 29.4, t1: 35.6,
+    cap: 'Take <em>the decks.</em>', sub: 'Everyone hears the same song at the same moment, late joiners included.',
+    cam: [[29.4, 1, 960, 565], [34.6, 1.06, 900, 565]] },
+  { shot: 'call-soundboard', t0: 35.4, t1: 41.4,
+    cap: 'A soundboard <em>in every call.</em>', sub: 'Six classics under the rooster, and your house\'s own sounds.',
+    cam: [[35.4, 1.0, 960, 565], [36.4, 1.18, 900, 700]],
+    cursor: [[36.1, 760, 980], [37.1, 420, 800], [38.7, 420, 800], [39.2, 420, 742]],
+    press: [[37.4, 325, 771, 194, 50, '🐓'], [39.3, 325, 712, 194, 50, '🔨']] },
+  { shot: 'laptop', t0: 41.2, t1: 47.6,
+    cap: 'Text channels <em>for between rounds.</em>', sub: 'Replies, reactions, polls, GIFs, custom emoji and stickers.',
+    cam: [[41.2, 1.25, 900, 420], [42.8, 1.25, 900, 420], [45.8, 1.25, 900, 760]] },
 ];
-const tilesEl = $('tiles'), membersEl = $('members');
-PEOPLE.forEach((m, i) => {
-  m.tile = document.createElement('div');
-  m.tile.className = 'tile';
-  m.tile.innerHTML = `<div class="share"></div><div class="ring"></div>
-    <div class="av" style="background:${m.color}">${m.name[0]}</div>
-    <div class="label">${m.name}${i === 0 ? ' <span style="color:var(--muted);font-weight:700">(you)</span>' : ''}</div>
-    <div class="hp emo">🎧</div>`;
-  tilesEl.appendChild(m.tile);
-  m.row = document.createElement('div');
-  m.row.className = 'member';
-  m.row.innerHTML = `<div class="av" style="background:${m.color}">${m.name[0]}</div>${m.name}<span class="badge emo"></span>`;
-  membersEl.appendChild(m.row);
-  m.float = document.createElement('div');
-  m.float.className = 'float emo';
-  $('main').appendChild(m.float);
-});
-$('main').appendChild($('callbar'));
-$('main').appendChild($('sb'));
+const REELS = [
+  { phone: 'phone-call', t0: 2.6, t1: 6.8,
+    cap: 'Voice rooms <em>that stay open.</em>', sub: 'Drop in, drop out.' },
+  { shot: 'ns', img: VIDEO_SHOTS + 'ns-off.webp', t0: 6.6, t1: 13.0,
+    cap: 'Noise suppression <em>on your device.</em>', sub: 'Sound on: before, then after.',
+    cam: [[6.6, 1, 1300, 720], [7.4, 1.1, 1380, 720]],
+    cursor: [[8.6, 1500, 950], [9.5, 1836, 497]], press: [[9.9, ...NS_SWITCH]] },
+  { shot: 'call-share', t0: 12.8, t1: 16.6,
+    cap: 'Share your screen, <em>with its sound.</em>', sub: 'Stream a game for everyone.',
+    cam: [[12.8, 1, 1240, 700], [14.0, 1.3, 1438, 820]] },
+  { shot: 'call-camera', img: VIDEO_SHOTS + 'call-camera.webp', t0: 16.4, t1: 20.2,
+    cap: 'Cameras too, <em>side by side.</em>', sub: 'Watch everyone who shares at once.',
+    cam: [[16.4, 1, 1300, 640], [17.6, 1.2, 1437, 640]] },
+  { shot: 'call-dj', t0: 20.0, t1: 24.6,
+    cap: 'Take <em>the decks.</em>', sub: 'Everyone hears the same song, in sync.',
+    cam: [[20, 1, 780, 600], [22, 1, 780, 600], [23, 1.15, 1300, 520]] },
+  { shot: 'call-soundboard', t0: 24.4, t1: 29.4,
+    cap: 'A soundboard <em>in every call.</em>', sub: 'Six classics, and your own.',
+    cam: [[24.4, 1, 1100, 700], [25.2, 1.12, 900, 750]],
+    cursor: [[24.9, 760, 980], [25.7, 420, 800], [27.0, 420, 800], [27.5, 420, 742]],
+    press: [[26.0, 325, 771, 194, 50, '🐓'], [27.6, 325, 712, 194, 50, '🔨']] },
+  { phone: 'phone-chat', t0: 29.2, t1: 33.6,
+    cap: 'Text channels <em>for between rounds.</em>', sub: 'Replies, reactions, polls and GIFs.' },
+];
+const SCENES = REEL ? REELS : DESKTOP;
+const NET_T = [47.4, 52.9];
+const OUTRO_T = REEL ? 33.5 : 52.8;
+window.DURATION = REEL ? 38 : 59;
 
-// Alex's screen share: a little kart race.
-PEOPLE[3].tile.querySelector('.share').innerHTML = `
-  <svg viewBox="0 0 800 450" preserveAspectRatio="none" style="width:100%;height:100%">
-    <rect width="800" height="450" fill="#3F6E9E"/>
-    <circle cx="640" cy="95" r="46" fill="#F8C35A"/>
-    <path d="M0 220 Q 120 150 240 205 T 520 190 T 800 215 V 260 H0z" fill="#5E8F4E"/>
-    <rect y="240" width="800" height="210" fill="#4F7F40"/>
-    <path d="M330 240 H470 L760 450 H40z" fill="#4A4442"/>
-    <g id="dashes"></g>
-    <g id="kart1"><rect x="-38" y="-24" width="76" height="40" rx="12" fill="#E8382A"/><rect x="-24" y="-40" width="48" height="22" rx="8" fill="#FCF8F1"/><circle cx="-26" cy="18" r="11" fill="#211614"/><circle cx="26" cy="18" r="11" fill="#211614"/></g>
-    <g id="kart2"><rect x="-30" y="-19" width="60" height="32" rx="10" fill="#F89B17"/><rect x="-19" y="-32" width="38" height="17" rx="6" fill="#FCF8F1"/><circle cx="-21" cy="14" r="9" fill="#211614"/><circle cx="21" cy="14" r="9" fill="#211614"/></g>
-    <text x="28" y="54" font-family="Sora" font-weight="800" font-size="34" fill="#fff">LAP 2/3</text>
-    <text x="772" y="420" text-anchor="end" font-family="Sora" font-weight="800" font-size="52" fill="#fff">1st</text>
-  </svg>`;
-const dashes = PEOPLE[3].tile.querySelector('#dashes');
-for (let i = 0; i < 7; i++) dashes.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'path'));
-
-// Intro wordmark, letter by letter.
+// ------------------------------------------------------------- build
+document.body.className = REEL ? 'reel' : '';
+set(document.body, { width: `${W}px`, height: `${H}px` });
+set($('stage'), { width: `${W}px`, height: `${H}px` });
+set($('deco1'), { width: '900px', height: '900px', left: '-300px', top: '-360px' });
+set($('deco2'), { width: '700px', height: '700px', right: '-260px', bottom: '-300px' });
 'Rooster'.split('').forEach(ch => { const s = document.createElement('span'); s.textContent = ch; $('intro-word').appendChild(s); });
 
-// Matrix links and packets.
-const NODES = [[960, 590], [470, 420], [1450, 420], [560, 820], [1360, 820]];
+const CURSOR = '<svg viewBox="0 0 24 24" width="100%" height="100%"><path d="M5 3l14 8-6 1.6L10 19z" fill="#fff" stroke="#000" stroke-width="1.4" stroke-linejoin="round"/></svg>';
+
+// A phone with a capture on its screen; returns the layer the capture is on.
+function phone(parent, name, h) {
+  const ph = el('div', 'phone', parent, `<div class="screen"><div class="shot"><img src="${SHOTS}${name}-804.webp" width="804" height="1624"></div></div><img src="../../../website/media/devices/phone.svg">`);
+  set(ph, { height: `${h}px` });
+  const sw = h * 1318 / 2717 * .915023;
+  const L = ph.querySelector('.shot');
+  set(L, { transform: `scale(${sw / 804})` });
+  return { ph, L, src: `${SHOTS}${name}-804.webp` };
+}
+
+SCENES.forEach(s => {
+  s.root = el('div', '', $('scenes'));
+  set(s.root, { position: 'absolute', inset: 0 });
+  s.capEl = el('div', 'caption', $('stage'), `${s.cap}<span class="sub">${s.sub}</span>`);
+  if (s.phone) {
+    const { ph, L, src } = phone(s.root, s.phone, 1000);
+    s.ph = ph;
+    set(ph, { left: `${(W - 1000 * 1318 / 2717) / 2}px`, top: '590px' });
+    s.fx = FX[s.phone](s, L, src);
+    return;
+  }
+  s.frame = el('div', 'frame', s.root);
+  box(s.frame, FRAME.x, FRAME.y, FRAME.w, FRAME.h);
+  const src = s.img ?? `${SHOTS}${s.shot}-1920.webp`;
+  s.layer = el('div', 'layer', s.frame, `<img src="${src}" width="1920" height="1131">`);
+  s.base = Math.max(FRAME.w / 1920, FRAME.h / 1131);
+  s.fx = FX[s.shot] ? FX[s.shot](s, s.layer, src) : null;
+  if (s.spot) { s.spotEl = el('div', 'spot', s.layer); const [, , x, y, w, h] = s.spot; box(s.spotEl, x - 8, y - 8, w + 16, h + 16); }
+  if (s.cursor) { s.ring = el('div', 'ring', s.layer); s.cur = el('div', 'cursor', s.layer, CURSOR); }
+});
+
+const netCap = el('div', 'caption', $('stage'), 'Your server. <em>Your rules.</em><span class="sub">Built on Matrix. Sign in with any account, or run a house of your own.</span>');
+
+// The federation picture.
+const NODES = [[960, 600], [470, 430], [1450, 430], [560, 810], [1360, 810]];
 const LINKS = [[0, 1], [0, 2], [0, 3], [0, 4], [1, 2], [3, 1], [4, 2]];
+document.querySelectorAll('.node').forEach((n, i) => set(n, { left: `${NODES[i][0]}px`, top: `${NODES[i][1]}px` }));
 LINKS.forEach(([a, b]) => {
   const l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
   l.setAttribute('x1', NODES[a][0]); l.setAttribute('y1', NODES[a][1]);
@@ -348,251 +520,130 @@ LINKS.forEach(([a, b]) => {
   $('links').appendChild(l);
 });
 const PKTS = [];
-for (let i = 0; i < 10; i++) { const d = document.createElement('div'); d.className = 'pkt'; $('pkts').appendChild(d); PKTS.push(d); }
+for (let i = 0; i < 10; i++) PKTS.push(el('div', 'pkt', $('pkts')));
 
-// ------------------------------------------------------------- layout
-const MAIN_W = 1500 - 364, TOP = 84, BOTTOM = 840 - 120;
-function gridRects(width) {
-  const gap = 16, x0 = 28, w = (width - 56 - gap) / 2, h = (BOTTOM - TOP - gap) / 2;
-  return PEOPLE.map((_, i) => [x0 + (i % 2) * (w + gap), TOP + Math.floor(i / 2) * (h + gap), w, h]);
+// A caption: slides up in, and its coloured words land on a beat.
+function caption(e, t, k, t0) {
+  set(e, { display: k > .001 ? 'block' : 'none', opacity: k, transform: `translateY(${(1 - k) * 26}px)` });
+  if (k <= .001) return;
+  const em = e.querySelector('em'), b = p(t, t0 + .35, .45, E.back);
+  if (em) set(em, { transform: `scale(${.7 + .3 * b})`, opacity: clamp(b * 2) });
 }
-function shareRects(width) {
-  const gap = 16, x0 = 28, sw = 250, bw = width - 56 - gap - sw, H = BOTTOM - TOP;
-  const sh = (H - 2 * gap) / 3;
-  const r = [];
-  let k = 0;
-  PEOPLE.forEach((_, i) => {
-    if (i === 3) r.push([x0, TOP, bw, H]);
-    else { r.push([x0 + bw + gap, TOP + k * (sh + gap), sw, sh]); k++; }
-  });
-  return r;
-}
-const set = (el, s) => Object.assign(el.style, s);
 
 // ------------------------------------------------------------- seek
 function seek(t) {
-  // decoration drifts slowly
+  const waits = [];
   set($('deco1'), { transform: `translate(${Math.sin(t * .2) * 40}px, ${Math.cos(t * .17) * 30}px)` });
   set($('deco2'), { transform: `translate(${Math.cos(t * .15) * 40}px, ${Math.sin(t * .22) * 30}px)` });
+  STREAMS.forEach(f => { try { f.contentWindow.seek(t + 3); } catch (e) { /* not loaded yet, or a browser that keeps file pages apart */ } });
 
-  // ---- intro 0-4
-  const introOut = p(t, 3.55, .45, E.in);
-  set($('intro'), { opacity: 1 - introOut, transform: `scale(${1 + introOut * .12})`, display: t < 4.05 ? 'flex' : 'none' });
-  const mk = p(t, .25, .7, E.back);
-  set($('intro-mark'), { transform: `scale(${mk}) rotate(${(1 - p(t, .25, .9)) * -14}deg)`, opacity: clamp(mk * 2) });
+  // ---- intro
+  const introEnd = REEL ? 2.6 : 4.0;
+  const introOut = p(t, introEnd - .45, .45, E.in);
+  set($('intro'), { opacity: 1 - introOut, transform: `scale(${1 + introOut * .12})`, display: t < introEnd + .05 ? 'flex' : 'none' });
+  const sp = REEL ? .6 : 1; // the reel's intro runs faster
+  const mk = p(t, .25 * sp, .7 * sp, E.back);
+  set($('intro-mark'), { transform: `scale(${mk}) rotate(${(1 - p(t, .25 * sp, .9 * sp)) * -14}deg)`, opacity: clamp(mk * 2) });
   [...$('intro-word').children].forEach((s, i) => {
-    const k = p(t, .95 + i * .06, .45, E.back);
+    const k = p(t, (.95 + i * .06) * sp, .45 * sp, E.back);
     set(s, { transform: `translateY(${(1 - k) * 60}px)`, opacity: clamp(k * 1.5) });
   });
   [...$('intro-tag').children].forEach((s, i) => {
-    const k = p(t, 2 + i * BEAT, .35, E.back);
+    const k = p(t, REEL ? 1.0 + i * .3 : 2 + i * BEAT, .35, E.back);
     set(s, { transform: `scale(${.6 + .4 * k})`, opacity: clamp(k * 1.5) });
   });
 
-  // ---- captions
-  const caps = [['cap1', 4.3, 11.85], ['cap2', 12.05, 17.85], ['cap3', 18.05, 23.85], ['cap4', 24.05, 30.9], ['cap5', 31.3, 35.8]];
-  caps.forEach(([id, a, b]) => {
-    const k = win(t, a, b, .4);
-    set($(id), { opacity: k, transform: `translateY(${(1 - k) * 26}px)` });
+  // ---- scenes: each slides in from the right and out to the left
+  SCENES.forEach((s, i) => {
+    const kin = p(t, s.t0, .5), kout = p(t, s.t1 - .45, .45, E.in);
+    const on = kin > .001 && kout < .999;
+    const next = SCENES[i + 1];
+    const slideIn = s.same ? 0 : (1 - kin) * 160, slideOut = next && next.same ? 0 : kout * 160;
+    set(s.root, { display: on ? 'block' : 'none', opacity: (s.same ? kin : Math.min(kin * 1.4, 1)) * (next && next.same ? 1 : 1 - kout), transform: `translateX(${slideIn - slideOut}px)` });
+    // Where one screen turns into the next in place, its caption hands over
+    // without the two overlapping.
+    const capIn = s.t0 + (s.same ? .35 : .1), capOut = next && next.same ? next.t0 + .1 : s.t1;
+    caption(s.capEl, t, win(t, capIn, capOut, s.same || (next && next.same) ? .25 : .4), capIn - .1);
+    if (!on) return;
+    const u = t - s.t0;
+    if (s.fx) waits.push(s.fx(t, u));
+    if (s.ph) {
+      const r = p(t, s.t0, .9, E.out);
+      set(s.ph, { transform: `translateY(${(1 - r) * 120 - u * 6}px) scale(${.96 + .04 * r})` });
+      return;
+    }
+    // the camera: zoom about the focus, held inside the shot
+    const [zoom, fx, fy] = track(s.cam, t);
+    let sc = s.base * zoom;
+    let tx = clamp(FRAME.w / 2 - fx * sc, FRAME.w - 1920 * sc, 0);
+    let ty = clamp(FRAME.h / 2 - fy * sc, FRAME.h - 1131 * sc, 0);
+    // Full screen grows out of the tile it was in, where the scene before
+    // left it (at zoom 1).
+    if (s.grow) {
+      const g = E.io(clamp(u / .7)), [gx, gy, gw, gh] = s.grow, b = s.base;
+      const from = [FRAME.x + gx * b, FRAME.y + gy * b, gw * b, gh * b], to = [FRAME.x, FRAME.y, FRAME.w, FRAME.h];
+      const [x, y, w, h] = from.map((v, j) => lerp(v, to[j], g));
+      box(s.frame, x, y, w, h);
+      set(s.frame, { borderRadius: `${lerp(6, 20, g)}px` });
+      // the video (y 26 to 1106 of the capture) fills the box as it grows
+      const vs = lerp(w / 1920, sc, g);
+      sc = vs; tx = lerp(0, tx, g); ty = lerp(-26 * vs, ty, g);
+    }
+    set(s.layer, { transform: `translate(${tx}px, ${ty}px) scale(${sc})` });
+    if (s.spotEl) set(s.spotEl, { opacity: win(t, s.spot[0], s.spot[1], .5), borderWidth: `${4 / sc}px` });
+    if (s.cursor) {
+      const [cx, cy] = track(s.cursor, t);
+      set(s.cur, { left: `${cx}px`, top: `${cy}px`, opacity: win(t, s.cursor[0][0], s.t1, .25), transform: `scale(${1 / sc})` });
+      let ck = 0;
+      s.press.forEach(([tp]) => { if (t >= tp && t < tp + .45) ck = (t - tp) / .45; });
+      const r = 35 / sc;
+      set(s.ring, { left: `${cx - r}px`, top: `${cy - r}px`, width: `${2 * r}px`, height: `${2 * r}px`, borderWidth: `${4 / sc}px`, opacity: ck ? 1 - ck : 0, transform: `scale(${.3 + ck})` });
+    }
   });
 
-  // ---- window 4-31.8
-  const wIn = p(t, 3.9, .7, E.out), wOut = p(t, 30.9, .9, E.io);
-  const wShow = t > 3.85 && t < 31.9;
-  const wScale = lerp(.9 + .1 * wIn, .16, wOut);
-  const wx = lerp(0, 960 - (210 + 750), wOut), wy = lerp((1 - wIn) * 40, 590 - (196 + 420), wOut);
-  // the camera: [t, zoom, focus x, focus y], focus in window coordinates
-  const CAM = [
-    [4, 1, 750, 420], [11.6, 1.04, 750, 420], [12.7, 1.1, 560, 470], [17.1, 1.12, 560, 470],
-    [18.0, 1, 750, 420], [19.1, 1, 750, 420], [19.8, 1.3, 930, 530], [22.5, 1.33, 930, 530],
-    [23.5, 1, 750, 420], [24.6, 1, 750, 420], [25.4, 1.2, 1200, 430], [30.4, 1.23, 1200, 430],
-    [31, 1, 750, 420],
-  ];
-  let cam = CAM[0].slice(1);
-  for (let i = 0; i < CAM.length - 1; i++) {
-    const [ta, ...A] = CAM[i], [tb, ...B] = CAM[i + 1];
-    if (t >= ta && t <= tb) { const k = E.io(clamp((t - ta) / (tb - ta))); cam = A.map((v, j) => lerp(v, B[j], k)); }
-    else if (t > tb) cam = B;
+  // ---- your server (desktop)
+  const nk = REEL ? 0 : win(t, NET_T[0], NET_T[1], .45);
+  set($('net'), { display: nk > .001 ? 'block' : 'none', opacity: nk });
+  caption(netCap, t, nk, NET_T[0]);
+  if (nk > .001) {
+    const n0 = NET_T[0];
+    document.querySelectorAll('.node').forEach((n, i) => {
+      const k = p(t, i === 0 ? n0 + .1 : n0 + .6 + i * .18, .5, E.back);
+      set(n, { transform: `scale(${k})`, opacity: clamp(k * 1.5) });
+    });
+    [...$('links').children].forEach((l, i) => l.setAttribute('stroke-dashoffset', l.dataset.len * (1 - p(t, n0 + 1 + i * .08, .6))));
+    PKTS.forEach((d, i) => {
+      const [a, b] = LINKS[i % LINKS.length];
+      const start = n0 + 1.6 + i * .23, k = ((t - start) / 1.1) % 1, fw = i % 2 === 0;
+      const [ax, ay] = NODES[fw ? a : b], [bx, by] = NODES[fw ? b : a];
+      set(d, { left: `${lerp(ax, bx, k)}px`, top: `${lerp(ay, by, k)}px`, opacity: t > start ? Math.sin(Math.PI * k) : 0 });
+    });
+    const lk = p(t, n0 + 2.1, .5, E.back);
+    set($('lock'), { opacity: clamp(lk * 1.5), transform: `translateX(-50%) scale(${lk})` });
   }
-  const [zoom, fx, fy] = cam;
-  // zoom about the focus, and slide the focus toward the window's centre
-  const ox = (750 - fx) * (zoom - 1) * .6, oy = (420 - fy) * (zoom - 1) * .6;
-  set($('win'), {
-    display: wShow ? 'block' : 'none', opacity: wIn * (1 - p(t, 31.45, .4)),
-    transformOrigin: `${fx}px ${fy}px`,
-    transform: `translate(${wx + ox}px, ${wy + oy}px) scale(${wScale * zoom})`,
-  });
 
-  // people join, sidebar rows
-  let here = 0, rowY = 370;
-  PEOPLE.forEach((m, i) => {
-    const j = p(t, m.join, .45, E.back);
-    if (t >= m.join) here++;
-    const rowK = p(t, m.join, .35);
-    set(m.row, { top: `${rowY}px`, opacity: clamp(rowK * 1.4), transform: `translateX(${(1 - rowK) * -20}px)` });
-    rowY += 36 * rowK;
-    m._j = j;
-  });
-  set($('gaming'), { top: `${rowY + 8}px` });
-  $('count').textContent = `${Math.max(here, 1)} here`;
-
-  // speaking
-  PEOPLE.forEach((m, i) => {
-    let s = 0;
-    m.talk.forEach(([a, b]) => { s = Math.max(s, win(t, a, b, .12)); });
-    const flick = .75 + .25 * Math.sin(t * 31 + i * 2);
-    set(m.tile.querySelector('.ring'), { opacity: s * flick, transform: `scale(${1 + .05 * s * Math.sin(t * 19 + i)})` });
-    set(m.row.querySelector('.av'), { boxShadow: s > .05 ? `0 0 0 ${3 * s}px #7FC36A` : 'none' });
-  });
-
-  // tile layout: grid -> share -> grid, narrowing for the DJ panel
-  const djK = p(t, 24.55, .6, E.io) * (1 - p(t, 31, .2));
-  const width = MAIN_W - djK * 420;
-  const shareK = p(t, 12.2, .8, E.io) * (1 - p(t, 17.3, .7, E.io));
-  const g = gridRects(width), s = shareRects(width);
-  PEOPLE.forEach((m, i) => {
-    const r = g[i].map((v, k) => lerp(v, s[i][k], shareK));
-    const bob = t > 25.2 && t < 31 ? -6 * Math.abs(Math.sin(Math.PI * (t - 25) / BEAT)) * p(t, 25.2, .5) : 0;
-    set(m.tile, {
-      left: `${r[0]}px`, top: `${r[1] + bob}px`, width: `${r[2]}px`, height: `${r[3]}px`,
-      opacity: clamp(m._j * 1.5), transform: `scale(${.85 + .15 * clamp(m._j)})`,
-    });
-    const avScale = i === 3 ? 1 - shareK : (1 - .45 * shareK);
-    set(m.tile.querySelector('.av'), { transform: `scale(${avScale})` });
-    set(m.tile.querySelector('.ring'), { width: `${148}px` });
-  });
-  // the shared screen
-  const sh = PEOPLE[3].tile.querySelector('.share');
-  set(sh, { opacity: shareK });
-  [...dashes.children].forEach((d, k) => {
-    const z = ((k / 7) + (t * .9) % 1) % 1;
-    const y = 245 + z * z * 205, w = 4 + z * 18, h = 6 + z * 40;
-    d.setAttribute('d', `M${400 - w / 2} ${y} h${w} v${h} h${-w}z`);
-    d.setAttribute('fill', '#F5EBDD');
-  });
-  const k1 = PEOPLE[3].tile.querySelector('#kart1'), k2 = PEOPLE[3].tile.querySelector('#kart2');
-  k1.setAttribute('transform', `translate(${400 + Math.sin(t * 1.7) * 90} ${380 + Math.sin(t * 9) * 2}) scale(1.6)`);
-  k2.setAttribute('transform', `translate(${430 + Math.sin(t * 1.3 + 1) * 40} ${300}) scale(1)`);
-  set($('livebadge'), { opacity: shareK });
-  set($('b-share'), { background: shareK > .5 ? 'var(--moss)' : 'var(--c3)' });
-
-  // ---- soundboard
-  const sbK = p(t, 19.0, .3, E.back) * (1 - p(t, 22.6, .3, E.in));
-  const sbBtn = $('b-sb').getBoundingClientRect(), mainR = $('main').getBoundingClientRect();
-  const sc = wScale * zoom || 1; // screen rects are scaled by both
-  set($('sb'), {
-    display: sbK > .001 ? 'block' : 'none',
-    left: `${(sbBtn.left - mainR.left) / sc + 26 - 235}px`, top: `${(sbBtn.top - mainR.top) / sc - 350}px`,
-    opacity: clamp(sbK * 1.4), transform: `scale(${.85 + .15 * sbK}) translateY(${(1 - sbK) * 14}px)`,
-  });
-  set($('b-sb'), { background: sbK > .5 ? 'var(--cream)' : 'var(--c3)' });
-  const play = (el, t0) => {
-    const k = clamp((t - t0) / 1.4);
-    set(el.querySelector('.fill'), { width: `${t >= t0 && k < 1 ? k * 100 : 0}%` });
-    set(el, { transform: `scale(${t >= t0 && t < t0 + .25 ? 1 - .06 * Math.sin(Math.PI * (t - t0) / .25) : 1})`, background: t >= t0 && k < 1 ? '#4A3B34' : 'var(--c3)' });
-  };
-  play($('s-0'), 20.0); play($('s-1'), 21.1);
-  // emoji floats over the player's tile, and a badge by their name
-  const flt = (m, emoji, t0) => {
-    const k = clamp((t - t0) / 1.6);
-    const r = m.tile;
-    const on = t >= t0 && k < 1;
-    m.float.textContent = emoji;
-    set(m.float, {
-      left: `${parseFloat(r.style.left) + parseFloat(r.style.width) / 2 - 42}px`,
-      top: `${parseFloat(r.style.top) + parseFloat(r.style.height) / 2 - 70 - k * 95}px`,
-      opacity: on ? Math.min(1, k * 6) * (1 - p(t, t0 + 1.1, .5)) : 0,
-      transform: `scale(${on ? E.back(clamp(k * 3)) : 0}) rotate(${Math.sin(k * 9) * 10}deg)`,
-    });
-    m.row.querySelector('.badge').textContent = t >= t0 && t < t0 + 2.2 ? emoji : '';
-  };
-  flt(PEOPLE[0], '🐓', 20.0);
-  flt(PEOPLE[2], '📯', 21.1);
-
-  // ---- DJ booth
-  set($('dj'), { transform: `translateX(${(1 - djK) * 440}px)`, display: djK > .001 ? 'block' : 'none' });
-  set($('disc'), { transform: `rotate(${(t - 24) * 200}deg)` });
-  set($('arm'), { transform: `rotate(${lerp(-28, 6, p(t, 25, .6, E.io))}deg)` });
-  const sec = 42 + Math.max(0, t - 25);
-  $('tcur').textContent = `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
-  set($('prog'), { width: `${sec / 198 * 100}%` });
-  set($('b-dj'), { background: djK > .5 ? 'var(--cream)' : 'var(--c3)' });
-  const npK = p(t, 25.0, .5, E.out) * (1 - p(t, 31, .2));
-  set($('np'), { width: `${npK * 190}px`, padding: npK > .02 ? '0 16px' : '0', opacity: npK });
-  [...$('np').querySelectorAll('.eq i')].forEach((b, i) => {
-    set(b, { height: `${6 + 16 * Math.abs(Math.sin(t * (7 + i * 2.3) + i))}px` });
-  });
-  set(PEOPLE[1].tile.querySelector('.hp'), { opacity: djK, transform: `rotate(${Math.sin(t * Math.PI * 2) * 10}deg)` });
-
-  // ---- matrix 31.3-36
-  const nIn = t > 31.2 && t < 36.4;
-  set($('net'), { display: nIn ? 'block' : 'none', opacity: 1 - p(t, 35.75, .45, E.in) });
-  [...document.querySelectorAll('.node')].forEach((n, i) => {
-    const k = p(t, i === 0 ? 31.35 : 31.9 + i * .18, .5, E.back);
-    set(n, { transform: `scale(${k})`, opacity: clamp(k * 1.5) });
-  });
-  [...$('links').children].forEach((l, i) => {
-    const k = p(t, 32.3 + i * .08, .6);
-    l.setAttribute('stroke-dashoffset', l.dataset.len * (1 - k));
-  });
-  PKTS.forEach((d, i) => {
-    const [a, b] = LINKS[i % LINKS.length];
-    const start = 32.9 + i * .23;
-    const k = ((t - start) / 1.1) % 1;
-    const on = t > start;
-    const fw = i % 2 === 0;
-    const [ax, ay] = NODES[fw ? a : b], [bx, by] = NODES[fw ? b : a];
-    set(d, { left: `${lerp(ax, bx, k)}px`, top: `${lerp(ay, by, k)}px`, opacity: on ? Math.sin(Math.PI * k) : 0 });
-  });
-  const lk = p(t, 33.4, .5, E.back);
-  set($('lock'), { opacity: clamp(lk * 1.5), transform: `translateX(-50%) scale(${lk})` });
-
-  // ---- outro 36.2-40
-  const oIn = t > 36.1;
-  set($('outro'), { display: oIn ? 'flex' : 'none' });
-  const om = p(t, 36.2, .7, E.back);
+  // ---- outro
+  const o = OUTRO_T;
+  set($('outro'), { display: t > o - .1 ? 'flex' : 'none' });
+  const om = p(t, o, .7, E.back);
   set($('outro-mark'), { transform: `scale(${om}) rotate(${(1 - om) * -20}deg)` });
-  const ow = p(t, 36.6, .6, E.out);
-  set($('outro-word'), { opacity: ow, transform: `translateX(${(1 - ow) * 40}px)` });
-  const ot = p(t, 37.0, .6, E.out);
-  set($('outro-tag'), { opacity: ot, transform: `translateX(${(1 - ot) * 40}px)` });
+  const ow = p(t, o + .4, .6);
+  set($('outro-word'), { opacity: ow, transform: `translate${REEL ? 'Y' : 'X'}(${(1 - ow) * 40}px)` });
+  const ot = p(t, o + .8, .6);
+  set($('outro-tag'), { opacity: ot, transform: `translate${REEL ? 'Y' : 'X'}(${(1 - ot) * 40}px)` });
   [...$('chips').children].forEach((c, i) => {
-    const k = p(t, 37.5 + i * .12, .45, E.back);
+    const k = p(t, o + 1.3 + i * .12, .45, E.back);
     set(c, { opacity: clamp(k * 1.5), transform: `translateY(${(1 - k) * 24}px)` });
   });
-  const uk = p(t, 38.1, .5);
-  set($('url'), { opacity: uk });
+  set($('free'), { opacity: p(t, o + 1.9, .5) });
+  set($('url'), { opacity: p(t, o + 2.1, .5) });
 
-  // ---- cursor and clicks, last: it aims at elements laid out above.
-  // [t, target]: an element id (its centre, where it is now) or [x, y].
-  const at = target => {
-    if (Array.isArray(target)) return target;
-    const r = $(target).getBoundingClientRect();
-    return [r.left + r.width / 2 - 6, r.top + r.height / 2 - 4];
-  };
-  const CUR = [
-    [18.25, [1520, 990]], [18.9, 'b-sb'], [19.5, 'b-sb'], [19.95, 's-0'], [20.9, 's-0'],
-    [21.5, [1300, 900]], [23.5, [1300, 900]], [24.15, 'b-dj'], [24.6, 'b-dj'], [25.4, [1520, 900]],
-  ];
-  let [cx, cy] = CUR[0][1];
-  for (let i = 0; i < CUR.length - 1; i++) {
-    const [ta, A] = CUR[i], [tb, B] = CUR[i + 1];
-    if (t >= ta && t <= tb) {
-      const k = E.io(clamp((t - ta) / (tb - ta)));
-      const [xa, ya] = at(A), [xb, yb] = at(B);
-      cx = lerp(xa, xb, k); cy = lerp(ya, yb, k);
-    } else if (t > tb && i === CUR.length - 2) { [cx, cy] = at(B); }
-  }
-  set($('cursor'), { left: `${cx}px`, top: `${cy}px`, opacity: win(t, 18.2, 25.5, .25) });
-  let ck = 0;
-  [19.0, 20.0, 24.45].forEach(c => { if (t >= c && t < c + .45) ck = (t - c) / .45; });
-  set($('click'), { left: `${cx - 26}px`, top: `${cy - 26}px`, opacity: ck ? 1 - ck : 0, transform: `scale(${.3 + ck})` });
-
-  set($('fade'), { opacity: p(t, 39.3, .7, E.io) });
+  set($('fade'), { opacity: p(t, window.DURATION - .7, .7, E.io) });
+  const pending = waits.filter(Boolean);
+  return pending.length ? Promise.all(pending) : null;
 }
 
 // Frame pump for real-time preview; render_demo.py drives seek() itself.
-window.DURATION = 40;
 if (!navigator.webdriver && !location.hash.includes('render')) {
   const t0 = performance.now();
   const tick = () => { seek(((performance.now() - t0) / 1000) % window.DURATION); requestAnimationFrame(tick); };

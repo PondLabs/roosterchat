@@ -19,7 +19,9 @@ export const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 export const people = {};
 export const log = (...args) => console.log(new Date().toISOString().slice(11, 19), ...args);
 
-export async function open(user, { width = 1280, height = 800, scale = 1, mobile = false, fakeScreen } = {}) {
+// mic and camera: a WAV and a Y4M to use instead of their voice and the
+// browser's test pattern.
+export async function open(user, { width = 1280, height = 800, scale = 1, mobile = false, fakeScreen, mic, camera } = {}) {
   const ctx = await chromium.launchPersistentContext(`${WORK}/profiles/${user}`, {
     channel: "chrome", headless: true,
     viewport: { width, height }, deviceScaleFactor: scale, isMobile: mobile, hasTouch: mobile,
@@ -29,7 +31,8 @@ export async function open(user, { width = 1280, height = 800, scale = 1, mobile
       // The JWT stand-in's certificate is self-signed.
       "--ignore-certificate-errors",
       "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream",
-      `--use-file-for-fake-audio-capture=${WORK}/audio/voice-${VOICES[user]}.wav`,
+      `--use-file-for-fake-audio-capture=${mic ?? `${WORK}/audio/voice-${VOICES[user]}.wav`}`,
+      ...(camera ? [`--use-file-for-fake-video-capture=${camera}`] : []),
       "--autoplay-policy=no-user-gesture-required",
       // Hidden tabs keep their call going at full speed.
       "--disable-background-timer-throttling", "--disable-renderer-backgrounding", "--disable-backgrounding-occluded-windows",
@@ -79,8 +82,14 @@ export async function open(user, { width = 1280, height = 800, scale = 1, mobile
       await field("Homeserver").fill("http://localhost:8008");
       await page.keyboard.press("Enter");
       await field("Username").waitFor({ timeout: 30000 });
-      await field("Username").fill(user);
-      await field("Password").fill(PASSWORD);
+      // A busy machine can drop what's typed into a Flutter field: Synapse
+      // then says the password was wrong. Type until the fields hold it.
+      for (const [name, value] of [["Username", user], ["Password", PASSWORD]]) {
+        for (let i = 0; i < 5 && await field(name).inputValue() !== value; i++) {
+          await field(name).fill(value);
+          await wait(500);
+        }
+      }
       await button(page, "Login").click();
       submitted = true;
     }
@@ -114,8 +123,9 @@ export async function hide(user) {
 export const show = (user) => people[user].page.bringToFront();
 
 // The space rail has no labels: click down it until the header names it.
+// Right after a first login the spaces are still syncing: go round again.
 export async function goToSpace(page, name) {
-  for (const y of [107, 167, 227, 287, 347]) {
+  for (let round = 0; round < 6; round++, await wait(5000)) for (const y of [107, 167, 227, 287, 347]) {
     await page.mouse.click(35, y);
     await wait(900);
     const header = await page.evaluate(() => [...document.querySelectorAll('flt-semantics [role="button"]')]

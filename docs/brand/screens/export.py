@@ -66,3 +66,23 @@ for name, capture, crop, widths in IMAGES:
         print(f"{name}: no {capture}.png, left as it is")
         continue
     encode(name, source, crop, widths)
+
+# The demo video's own screens (capture-video.mjs), at the 1920 the video
+# shows them, WebP only, into docs/brand/demo/shots. Of the noise
+# suppression frames only the first of each is kept whole: in the rest only
+# the meter and the line under it change, so they keep that strip (y 690 to
+# 820 at 1920 wide).
+VIDEO_OUT = os.path.join(ROOT, "docs", "brand", "demo", "shots")
+VIDEO = [("call-camera", "call-camera", None), ("call-fullscreen-1", "call-fullscreen", None)]
+VIDEO += [(f"ns-{s}-00", f"ns-{s}", None) for s in ("on", "off")]
+VIDEO += [(f"ns-{s}-{i:02d}", f"ns-{s}-meter-{i:02d}", "crop=1920:130:0:690") for s in ("on", "off") for i in range(16)]
+os.makedirs(VIDEO_OUT, exist_ok=True)
+for capture, name, crop in VIDEO:
+    source = os.path.join(CAPS, capture + ".png")
+    if not os.path.exists(source):
+        continue
+    out = os.path.join(VIDEO_OUT, name + ".webp")
+    vf = "scale=1920:-1:flags=lanczos" + ("," + crop if crop else "")
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", source, "-vf", vf,
+                    "-c:v", "libwebp", "-quality", "85", out], check=True)
+    print(f"{name}: {os.path.getsize(out) // 1024} KB")

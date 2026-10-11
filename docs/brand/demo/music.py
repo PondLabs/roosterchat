@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
-"""The demo's music and sound effects, synthesized from nothing.
+"""The demo's music and sound effects, synthesized, but for the soundboard.
 
 120 bpm in C, I-V-vi-IV. The arrangement follows demo.html's timeline:
 pads and a riser under the logo, the groove from the app's entrance, a
 breakdown under the Matrix scene, a hit on the outro. Sound effects land on
-the same times as the animation (joins, clicks, the soundboard, the DJ).
+the same times as the animation (clicks, the soundboard, the DJ); the
+soundboard presses play the app's own sounds.
 
     python3 music.py out.wav [duration] [cues]
 
-[cues] picks the timeline from CUES: `demo` (the 40 s landscape video, the
-default) or `reel` (the 27 s vertical one).
+[cues] picks the timeline from CUES: `demo` (the 55 s landscape video, the
+default) or `reel` (the 32 s vertical one).
 """
 
+import os
+import subprocess
 import sys
 import wave
 
@@ -21,27 +24,36 @@ from scipy import signal
 SR = 48000
 BPM = 120
 BEAT = 60 / BPM
-DUR = float(sys.argv[2]) if len(sys.argv) > 2 else 40.0
+DUR = float(sys.argv[2]) if len(sys.argv) > 2 else 55.0
 
 # When things happen in each video, in seconds: the sections of the song
-# and the sound effects, matched to the animation.
+# and the sound effects, matched to the animation. presses are soundboard
+# buttons clicked on screen, played with the app's own sounds. quiet is the
+# noise suppression scene, where mic plays (when, file, from, seconds): the
+# typing as the microphone hears it, then what the room hears.
 CUES = {
     "demo": dict(
-        groove=4, brk=31, hit=36.2, pads_until=38, fade_from=39.2,
-        risers=[(2.4, 1.6, .7), (34.6, 1.4, .55)],
-        whooshes=[(3.6, .6, .8), (12.0, .5, .5), (17.9, .5, .5),
-                  (23.9, .5, .5), (30.9, .9, .7)],
-        chimes=[4.8, 5.6, 6.4, 7.2],
-        ticks=[19.0, 20.0, 24.45], pop=19.02, crow=20.02, airhorn=21.12,
-        scratch=24.5),
+        groove=4, brk=47.4, hit=52.9, pads_until=56, fade_from=58.3,
+        risers=[(2.4, 1.6, .7), (51.5, 1.4, .55)],
+        whooshes=[(3.6, .6, .8), (9.4, .5, .5), (17.2, .5, .5), (21.4, .5, .5),
+                  (24.8, .5, .5), (29.2, .5, .5), (35.2, .5, .5), (41.0, .5, .5),
+                  (47.2, .9, .7)],
+        # the Lounge filling up
+        chimes=[4.4, 4.9, 5.4, 5.9, 6.4, 6.9, 7.4],
+        quiet=(9.9, 17.6),
+        mic=[(10.2, "noisy_48k.wav", 0.0, 3.6), (13.8, "clean_48k.wav", 3.6, 3.6)],
+        ticks=[13.8, 37.4, 39.3], presses=[(37.42, "rooster"), (39.32, "bonk")],
+        scratch=29.8),
     "reel": dict(
-        groove=2, brk=21, hit=24.0, pads_until=25, fade_from=26.3,
-        risers=[(0.6, 1.4, .5), (22.6, 1.4, .55)],
-        whooshes=[(1.8, .5, .8), (7.1, .45, .5), (11.0, .45, .5),
-                  (15.9, .45, .5), (20.9, .7, .7)],
-        chimes=[2.7, 3.2, 3.7, 4.2],
-        ticks=[11.5, 12.4, 16.3, 16.9], pop=11.52, crow=12.42, airhorn=13.42,
-        scratch=17.0),
+        groove=2.6, brk=33.4, hit=33.6, pads_until=36, fade_from=37.3,
+        risers=[(0.6, 1.4, .5), (32.2, 1.4, .55)],
+        whooshes=[(2.2, .5, .8), (6.4, .45, .5), (12.6, .45, .5),
+                  (16.2, .45, .5), (19.8, .45, .5), (24.2, .45, .5), (29.0, .45, .5)],
+        chimes=[],
+        quiet=(6.9, 12.9),
+        mic=[(7.1, "noisy_48k.wav", 0.0, 2.8), (9.9, "clean_48k.wav", 2.8, 2.8)],
+        ticks=[9.9, 26.0, 27.6], presses=[(26.02, "rooster"), (27.62, "bonk")],
+        scratch=20.4),
 }
 C = CUES[sys.argv[3] if len(sys.argv) > 3 else "demo"]
 N = int(SR * DUR)
@@ -274,41 +286,19 @@ def tick():
     return np.sin(2 * np.pi * 2600 * t) * np.exp(-t / .006) * .5
 
 
-def pop():
-    n = at(.18)
-    t = np.arange(n) / SR
-    f = 300 + 900 * (1 - np.exp(-t / .03))
-    return np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t / .05) * .6
+SOUNDS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..",
+                      "rooster", "assets", "soundboard")
 
 
-def crow():
-    """A cartoon 'cock-a-doodle-doo': four syllables of a buzzy, gliding
-    voice through two vowel formants."""
-    syl = [(.10, 520, 600), (.09, 560, 640), (.12, 600, 700), (.55, 760, 640)]
-    out = []
-    for dur, f0, f1 in syl:
-        n = at(dur)
-        t = np.arange(n) / SR
-        f = np.linspace(f0, f1, n) * (1 + .03 * np.sin(2 * np.pi * 7 * t))
-        ph = np.cumsum(f) / SR
-        x = sum(np.sin(2 * np.pi * k * ph) / k for k in range(1, 9))
-        x = bp(x, 700, 1300) * 1.0 + bp(x, 2000, 3200) * .6
-        e = np.minimum(1, t / .015) * np.minimum(1, (dur - t) / .03)
-        out.append(x * e)
-        out.append(np.zeros(at(.025)))
-    return np.concatenate(out) * .9
-
-
-def airhorn():
-    n = at(.75)
-    t = np.arange(n) / SR
-    x = np.zeros(n)
-    for f in (370, 466, 554):
-        for d in (-6, 0, 6):
-            x += saw(f * (1 - .02 * t), n, d)
-    x = lp(x / 9, 3500)
-    e = np.minimum(1, t / .01) * np.where(t > .65, np.exp(-(t - .65) / .03), 1)
-    return np.tanh(x * 2.2 * e) * .5
+def sample(name):
+    """A sound from the app's soundboard (CC0, see its CREDITS.md), mono."""
+    path = next(os.path.join(SOUNDS, f) for f in sorted(os.listdir(SOUNDS))
+                if f.startswith(name + "-"))
+    raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", path, "-ac", "1",
+                          "-ar", str(SR), "-f", "f32le", "-"],
+                         check=True, capture_output=True).stdout
+    x = np.frombuffer(raw, dtype="<f4").astype(float)
+    return x[: at(2.2)] * np.minimum(1, (at(2.2) - np.arange(len(x[: at(2.2)]))) / at(.3))
 
 
 def scratch():
@@ -332,9 +322,8 @@ for i, tj in enumerate(C["chimes"]):
     add(chime(i), tj, gain=.35, pan=(-.3 + .2 * i), verb=.4)
 for tc in C["ticks"]:
     add(tick(), tc, gain=.5)
-add(pop(), C["pop"], gain=.4)
-add(crow(), C["crow"], gain=.55, pan=-.15, verb=.2)
-add(airhorn(), C["airhorn"], gain=.5, pan=.15, verb=.2)
+for i, (tp, name) in enumerate(C["presses"]):
+    add(sample(name), tp, gain=.75, pan=(-.15 if i % 2 == 0 else .15), verb=.15)
 add(scratch(), C["scratch"], gain=.5, verb=.1)
 
 # ------------------------------------------------------------ mix
@@ -359,6 +348,28 @@ L += signal.fftconvolve(v, ir_l)[:N] * .018
 R += signal.fftconvolve(v, ir_r)[:N] * .018
 
 L, R = L * duck, R * duck
+
+# The noise suppression scene: the music all but stops, and a microphone
+# plays, first as it is (someone talking over a keyboard), then as the voice
+# DSP sends it (media.sh makes both from the same recording).
+q0, q1 = C["quiet"]
+hush = np.ones(N)
+tt = np.arange(N) / SR
+hush -= .88 * np.clip(np.minimum((tt - q0) / .4, (q1 - tt) / .4), 0, 1)
+L, R = L * hush, R * hush
+WORK = os.environ.get("DEMO_WORK", "/tmp/rooster-demo")
+for tm, name, start, dur in C["mic"]:
+    with wave.open(os.path.join(WORK, name)) as w:
+        x = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2").astype(float) / 32768
+    x = x[at(start): at(start + dur)].copy()
+    ramp = min(at(.03), len(x) // 2)
+    x[:ramp] *= np.linspace(0, 1, ramp)
+    x[-ramp:] *= np.linspace(1, 0, ramp)
+    i = at(tm)
+    x = x[: max(0, N - i)]
+    L[i:i + len(x)] += x * 1.6
+    R[i:i + len(x)] += x * 1.6
+
 # fade in from silence and out at the end
 fade = np.ones(N)
 fade[: at(.05)] = np.linspace(0, 1, at(.05))

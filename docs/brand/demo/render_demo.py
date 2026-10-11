@@ -78,7 +78,8 @@ class Chrome:
         self.call("Emulation.setDeviceMetricsOverride", width=W, height=H,
                   deviceScaleFactor=1, mobile=False)
         self.call("Page.enable")
-        self.call("Page.navigate", url=f"file://{path}?v={time.time()}#render")
+        sep = "&" if "?" in path else "?"
+        self.call("Page.navigate", url=f"file://{path}{sep}v={time.time()}#render")
         for _ in range(200):
             if self.eval("document.readyState") == "complete":
                 break
@@ -86,7 +87,8 @@ class Chrome:
         self.eval("document.fonts.ready.then(() => Promise.all([...document.images].map(i => i.decode())))")
 
     def frame(self, t):
-        self.eval(f"seek({t}); new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
+        # seek() gives back a promise while a camera clip is still seeking.
+        self.eval(f"Promise.resolve(seek({t})).then(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))))")
         shot = self.call("Page.captureScreenshot", format="png",
                          clip={"x": 0, "y": 0, "width": W, "height": H, "scale": 1})
         return base64.b64decode(shot["data"])
@@ -106,15 +108,15 @@ def main():
     ap.add_argument("--stills", help="comma-separated times; writes stills/t.png")
     ap.add_argument("--fps", type=int, default=60)
     ap.add_argument("--reel", action="store_true",
-                    help="reel.html, 1080x1920, for Instagram")
+                    help="the vertical reel, 1080x1920, for Instagram")
     ap.add_argument("--out")
     args = ap.parse_args()
     global W, H
     if args.reel:
-        page, cues, poster_at, W, H = "reel.html", "reel", 3.0, 1080, 1920
+        page, cues, poster_at, W, H = "demo.html?reel", "reel", 22.0, 1080, 1920
         out = args.out or os.path.join(ROOT, "website", "rooster-reel.mp4")
     else:
-        page, cues, poster_at = "demo.html", "demo", 9.5
+        page, cues, poster_at = "demo.html", "demo", 31.5
         out = args.out or os.path.join(ROOT, "website", "rooster-demo.mp4")
 
     chrome = Chrome()

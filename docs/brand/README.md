@@ -188,20 +188,24 @@ The comparison with Discord is dated: check its figures (Nitro's price and limit
 
 ## Demo videos
 
-Two videos show the app: `website/rooster-demo.mp4` (40 s, 1920×1080) and `website/rooster-reel.mp4` (27 s, 1080×1920, for Instagram Reels and other vertical feeds), both published with the site. Both are made from code in [`demo/`](demo):
+Two videos show the app: `rooster-demo.mp4` (59 s, 1920×1080, for LinkedIn and YouTube) and `rooster-reel.mp4` (38 s, 1080×1920, for Instagram Reels and other vertical feeds). In order: the Lounge filling up, noise suppression (heard before and after), a screen share going full screen, a camera beside it, the DJ booth, the soundboard, #general, your own server, and the logo. Both are made from code in [`demo/`](demo):
 
-- `demo.html` and `reel.html` draw every scene as a function of time, with made-up people and rooms, never real accounts. Open either in a browser to watch it play live, without sound.
-- `music.py` synthesizes the music and sound effects from nothing (so they are free to use anywhere), timed by a cue sheet per video.
+- `demo.html` is both films (`demo.html?reel` is the vertical one), as a function of time. Every screen in them is a real capture of the web app: the landing page's (`website/media/shots`) and the video's own (`demo/shots`, from `screens/capture-video.mjs`: Lou's camera, Jonas's stream full screen, and Maya's noise suppression setting with its meter live). To make the room move, pieces are cut from the captures and moved over a patch of the colour they sat on; Jonas's stream is `screens/kart.html` and Lou's camera is the clip his browser was given. Only the DJ booth moves to the beat. Open it in a browser to watch it play live, without sound.
+- `media.sh` makes what isn't a capture into `/tmp/rooster-demo`: Lou's camera (a CC0 kitten from Wikimedia Commons) and the noise suppression audio, a voice over a keyboard (`rust/audio_dsp`'s test fixtures) and the same recording through the voice DSP with the shipping settings. The video plays both, so what you hear is what the room would.
+- `music.py` synthesizes the music, timed by a cue sheet per video. The soundboard presses play the app's own sounds (CC0, see `rooster/assets/soundboard/CREDITS.md`).
 - `render_demo.py` renders each frame in headless Chrome and encodes the MP4 with ffmpeg:
 
 ```sh
+docs/brand/demo/media.sh
 /tmp/brand/bin/pip install websocket-client numpy scipy
-/tmp/brand/bin/python docs/brand/demo/render_demo.py           # the demo
-/tmp/brand/bin/python docs/brand/demo/render_demo.py --reel    # the reel
+/tmp/brand/bin/python docs/brand/demo/render_demo.py --out rooster-demo.mp4         # the demo
+/tmp/brand/bin/python docs/brand/demo/render_demo.py --reel --out rooster-reel.mp4  # the reel
 /tmp/brand/bin/python docs/brand/demo/render_demo.py --stills 9,20   # frames to check
 ```
 
-A full render takes about five minutes. In the reel, Instagram draws over the bottom ~320 px and a column on the right, so nothing important goes there.
+To take the video's own screens again, run `screens/`'s setup and services as for the landing page, then `ROOSTER_CAMERA=/tmp/rooster-demo/kitten.y4m ROOSTER_NOISY_MIC=/tmp/rooster-demo/noisy_48k.wav node docs/brand/screens/capture-video.mjs` and `docs/brand/screens/export.py`.
+
+A full render takes about fifteen minutes. In the reel, Instagram draws over the bottom ~320 px and a column on the right, so nothing important goes there.
 
 ## What is renamed, and what is not
 
