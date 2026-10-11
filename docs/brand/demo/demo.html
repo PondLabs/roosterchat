@@ -347,10 +347,15 @@ const FX = {
       set(i, { position: 'absolute', left: 0, top: 0, opacity: 0 });
       return i;
     });
+    // The frames are a quarter second apart: Lou's camera and Jonas's
+    // stream play on top of them at the video's own frame rate.
+    stream(L, [1236, 177, 406, 228], null);
+    const cam = video(L, [823, 177, 406, 228], null, 'kitten.webm');
     return (t, u) => {
       const st = t >= s.press[0][0] ? 1 : 0;
       const shown = st * 6 + Math.floor(t * 4) % 6;
       imgs.forEach((im, i) => set(im, { opacity: i === shown ? 1 : 0 }));
+      return seekVideo(cam.firstChild, u + 3);
     };
   },
 
@@ -363,10 +368,10 @@ const FX = {
 
   // Lou turns his camera on, beside Jonas's stream.
   'call-camera': (s, L, src) => {
-    stream(L, [411, 850, 406, 227], null);
-    const cam = video(L, [1236, 514, 406, 227], GAP, 'kitten.webm');
+    stream(L, [1236, 177, 406, 228], null);
+    const cam = video(L, [823, 177, 406, 228], GAP, 'kitten.webm');
     const icon = cut(L, src, 1920, 1131, [348, 655, 28, 28], PANEL);
-    const A = [[1025, 291], [1025, 626], [1437, 963]].map(at => av(L, src, 1920, 1131, at, null));
+    const A = [[614, 290], [1438, 627]].map(at => av(L, src, 1920, 1131, at, null));
     return (t, u) => {
       const k = p(u, .8, .55, E.back);
       set(cam, { opacity: clamp(k * 2), transform: `scale(${.4 + .6 * k})` });
