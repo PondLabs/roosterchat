@@ -33,6 +33,9 @@ class _Client implements Client {
   Profile? self = _Profile("@me:example.org");
 
   @override
+  String get identifier => "client-1";
+
+  @override
   Room? getRoom(String identifier) => null;
 
   @override
@@ -144,17 +147,21 @@ class _Runner {
 final _blank = OverlayImage(1, 1, Uint8List(4));
 
 MessageNotificationContent _message(
-        {String body = "gg", String sender = "Ana"}) =>
+        {String body = "gg",
+        String sender = "Ana",
+        String roomId = "!general:example.org",
+        bool direct = false,
+        bool mentionsMe = false}) =>
     MessageNotificationContent(
       senderName: sender,
       senderId: "@${sender.toLowerCase()}:example.org",
       roomName: "general",
       content: body,
-      eventId: "\$event",
-      roomId: "!general:example.org",
+      eventId: "\$$body",
+      roomId: roomId,
       clientId: "client-1",
-      isDirectMessage: false,
-    );
+      isDirectMessage: direct,
+    )..mentionsMe = mentionsMe;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -435,6 +442,65 @@ void main() {
       overlay.showMessage(_message());
       await pumpEventQueue();
       expect(drawnToasts, isEmpty);
+    });
+
+    group("which messages", () {
+      Future<List<String>> shown(
+          List<MessageNotificationContent> messages) async {
+        await runner.gameInFront();
+        await pumpEventQueue();
+        for (final message in messages) {
+          overlay.showMessage(message);
+          await pumpEventQueue();
+        }
+        return drawnToasts.isEmpty
+            ? []
+            : drawnToasts.last.map((t) => t.body).toList();
+      }
+
+      test("only the kinds picked", () async {
+        await preferences.gameOverlayMessagesOther.set(false);
+        expect(
+            await shown([
+              _message(body: "room"),
+              _message(body: "dm", direct: true),
+              _message(body: "mention", mentionsMe: true),
+            ]),
+            ["dm", "mention"]);
+      });
+
+      test("a message shows when any kind it is is on", () async {
+        await preferences.gameOverlayMessagesOther.set(false);
+        await preferences.gameOverlayMessagesDirect.set(false);
+        expect(
+            await shown(
+                [_message(body: "dm mention", direct: true, mentionsMe: true)]),
+            ["dm mention"]);
+      });
+
+      test("the call's channel is a kind of its own", () async {
+        joinCall();
+        await preferences.gameOverlayMessagesOther.set(false);
+        expect(
+            await shown([
+              _message(body: "call", roomId: "!voice:example.org"),
+              _message(body: "elsewhere"),
+            ]),
+            ["call"]);
+      });
+
+      test("and can be turned off", () async {
+        joinCall();
+        await preferences.gameOverlayMessagesCallChannel.set(false);
+        await preferences.gameOverlayMessagesOther.set(false);
+        expect(
+            await shown([_message(body: "call", roomId: "!voice:example.org")]),
+            isEmpty);
+      });
+
+      test("a message that comes two ways shows once", () async {
+        expect(await shown([_message(), _message()]), ["gg"]);
+      });
     });
   });
 }

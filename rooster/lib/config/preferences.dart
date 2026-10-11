@@ -596,6 +596,24 @@ class Preferences {
       "game_overlay_message_corner",
       defaultValue: "bottomRight");
 
+  /// Which messages the overlay shows; a message shows when any kind it is
+  /// is on. Direct messages.
+  BoolPreference gameOverlayMessagesDirect =
+      BoolPreference("game_overlay_messages_direct", defaultValue: true);
+
+  /// Messages that mention us or one of our keywords.
+  BoolPreference gameOverlayMessagesMentions =
+      BoolPreference("game_overlay_messages_mentions", defaultValue: true);
+
+  /// Every message in the channel of the call we are in, whether it would
+  /// notify or not.
+  BoolPreference gameOverlayMessagesCallChannel =
+      BoolPreference("game_overlay_messages_call_channel", defaultValue: true);
+
+  /// Whatever else notifies: rooms set to notify of every message.
+  BoolPreference gameOverlayMessagesOther =
+      BoolPreference("game_overlay_messages_other", defaultValue: true);
+
   DoublePreference emojiPickerHeight =
       DoublePreference("emoji_picker_height", defaultValue: 300);
 

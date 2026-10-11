@@ -65,6 +65,48 @@ class GameOverlaySettingsPage extends StatefulWidget {
           desc: "Option of the in-game overlay's message corner that turns "
               "messages off");
 
+  static String get labelGameOverlayWhichMessages =>
+      Intl.message("Which messages",
+          name: "labelGameOverlayWhichMessages",
+          desc: "Heading over the toggles that pick which messages the "
+              "in-game overlay shows");
+
+  static String get labelGameOverlayMessagesDirect =>
+      Intl.message("Direct messages",
+          name: "labelGameOverlayMessagesDirect",
+          desc: "Toggle: the in-game overlay shows direct messages");
+
+  static String get labelGameOverlayMessagesMentions =>
+      Intl.message("Mentions of you and your keywords",
+          name: "labelGameOverlayMessagesMentions",
+          desc: "Toggle: the in-game overlay shows messages that mention the "
+              "user or one of their notification keywords");
+
+  static String get labelGameOverlayMessagesCallChannel =>
+      Intl.message("The channel of your call",
+          name: "labelGameOverlayMessagesCallChannel",
+          desc: "Toggle: the in-game overlay shows the messages in the voice "
+              "channel the user is in a call in");
+
+  static String get labelGameOverlayMessagesCallChannelDescription =>
+      Intl.message(
+          "Every message sent there, even if the channel doesn't notify you.",
+          name: "labelGameOverlayMessagesCallChannelDescription",
+          desc: "Under the toggle for the messages in the channel of the "
+              "user's call");
+
+  static String get labelGameOverlayMessagesOther =>
+      Intl.message("Other rooms that notify you",
+          name: "labelGameOverlayMessagesOther",
+          desc: "Toggle: the in-game overlay shows the other messages that "
+              "notify the user");
+
+  static String get labelGameOverlayMessagesOtherDescription => Intl.message(
+      "Rooms and channels set to notify you of every message, in every "
+      "space and account.",
+      name: "labelGameOverlayMessagesOtherDescription",
+      desc: "Under the toggle for the other messages that notify the user");
+
   static String get labelGameOverlayTopLeft => Intl.message("Top left",
       name: "labelGameOverlayTopLeft",
       desc: "A corner of the game's screen for the in-game overlay");
@@ -147,6 +189,34 @@ class _GameOverlaySettingsPageState extends State<GameOverlaySettingsPage> {
               description:
                   GameOverlaySettingsPage.labelGameOverlayMessagesDescription,
             ),
+            if (preferences.gameOverlayMessageCorner.value != _off) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                child: tiamat.Text.labelLow(
+                    GameOverlaySettingsPage.labelGameOverlayWhichMessages),
+              ),
+              BooleanPreferenceToggle(
+                preference: preferences.gameOverlayMessagesDirect,
+                title: GameOverlaySettingsPage.labelGameOverlayMessagesDirect,
+              ),
+              BooleanPreferenceToggle(
+                preference: preferences.gameOverlayMessagesMentions,
+                title: GameOverlaySettingsPage.labelGameOverlayMessagesMentions,
+              ),
+              BooleanPreferenceToggle(
+                preference: preferences.gameOverlayMessagesCallChannel,
+                title:
+                    GameOverlaySettingsPage.labelGameOverlayMessagesCallChannel,
+                description: GameOverlaySettingsPage
+                    .labelGameOverlayMessagesCallChannelDescription,
+              ),
+              BooleanPreferenceToggle(
+                preference: preferences.gameOverlayMessagesOther,
+                title: GameOverlaySettingsPage.labelGameOverlayMessagesOther,
+                description: GameOverlaySettingsPage
+                    .labelGameOverlayMessagesOtherDescription,
+              ),
+            ],
           ],
         ],
       ),

@@ -103,6 +103,21 @@ top of the topmost windows without the foreground changing.
   it is about to show to `GameOverlay.showMessage`, which never throws or
   waits. Windows' Focus Assist holds its own toasts back during games, so
   this is how they are seen. Three at most, six seconds each.
+- Which messages, under Settings, App, Overlay: four kinds, each with its
+  own toggle, and a message shows when any kind it is is on.
+  - Direct messages.
+  - Mentions of us and our keywords: the push rules' `highlight`, which
+    `MatrixRoom.handleNotification` puts on the notification
+    (`mentionsMe`).
+  - The channel of our call: every message sent there, whether it would
+    notify or not. On each read of the call (every 200 ms) the overlay
+    looks at the channel's newest message (`Room.lastMessage`); the first
+    look over a game only notes where the channel is, so nothing older
+    shows. A burst within 200 ms shows its last message.
+  - Everything else that notifies: rooms set to notify of every message, in
+    every space and account.
+  A message that comes both ways (the call's channel, and its notification)
+  shows once.
 - **Screen sharing**: messages are not shown while we share our screen.
   The overlay is not hidden from capture, so a share of the whole screen
   would carry them to everyone watching. The list of the call still shows;

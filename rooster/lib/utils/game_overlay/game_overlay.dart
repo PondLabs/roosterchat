@@ -7,6 +7,8 @@ import 'package:intl/intl.dart';
 import 'package:rooster/client/call_manager.dart';
 import 'package:rooster/client/components/push_notification/notification_content.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
+import 'package:rooster/client/timeline_events/timeline_event_message.dart';
+import 'package:rooster/client/timeline_events/timeline_event_sticker.dart';
 import 'package:rooster/config/platform_utils.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
@@ -108,6 +110,12 @@ class GameOverlay {
   final List<OverlayToast> _toasts = [];
   int _toastDraws = 0;
 
+  /// The event ids of the messages shown lately.
+  final Set<String> _shownMessages = {};
+
+  /// The call's channel, and the newest message in it when last looked at.
+  (String, String)? _callChannelMessage;
+
   Future<void> start() async {
     _channel.setMethodCallHandler(_onRunnerCall);
     _subs.addAll([
@@ -132,17 +140,72 @@ class GameOverlay {
     }
   }
 
-  /// Shows [message] over the game, if one is in front. It returns at once
-  /// and never throws: the system's own notification is shown either way.
+  /// Shows [message] over the game, if one is in front and it is a kind of
+  /// message picked in the settings. It returns at once and never throws:
+  /// the system's own notification is shown either way.
   void showMessage(MessageNotificationContent message) {
     try {
       if (!_gameInFront || _messageCorner == null || _sharingScreen) return;
+      if (!_wanted(message)) return;
+      // The call's channel and its notification can both bring it.
+      if (!_shownMessages.add(message.eventId)) return;
+      if (_shownMessages.length > 50) {
+        _shownMessages.remove(_shownMessages.first);
+      }
       _addToast(message).catchError((Object e, StackTrace s) {
         Log.onError(e, s, content: "Could not show a message over the game");
       });
     } catch (e, s) {
       Log.onError(e, s, content: "Could not show a message over the game");
     }
+  }
+
+  /// A message counts as every kind it is: a mention in the call's channel
+  /// shows if either kind is on.
+  bool _wanted(MessageNotificationContent message) {
+    final session = _session;
+    final inCallChannel = session != null &&
+        session.roomId == message.roomId &&
+        session.client.identifier == message.clientId;
+    final other =
+        !message.isDirectMessage && !message.mentionsMe && !inCallChannel;
+    return (message.isDirectMessage &&
+            preferences.gameOverlayMessagesDirect.value) ||
+        (message.mentionsMe && preferences.gameOverlayMessagesMentions.value) ||
+        (inCallChannel && preferences.gameOverlayMessagesCallChannel.value) ||
+        (other && preferences.gameOverlayMessagesOther.value);
+  }
+
+  /// Every message in the call's channel, not only those that notify: the
+  /// channel's newest one is looked at on every read of the call.
+  ///
+  /// ponytail: only the newest per read (200 ms), so a burst shows its last
+  /// message; listen to the room's events if that falls short.
+  void _watchCallChannel(VoipSession session) {
+    if (!preferences.gameOverlayMessagesCallChannel.value ||
+        _messageCorner == null) {
+      return;
+    }
+    final room = session.client.getRoom(session.roomId);
+    final message = room?.lastMessage;
+    if (room == null || message == null) return;
+
+    final last = _callChannelMessage;
+    _callChannelMessage = (room.identifier, message.eventId);
+    // The first look only notes where the channel is: what came before the
+    // game was in front is not news.
+    if (last == null || last.$1 != room.identifier) return;
+    if (last.$2 == message.eventId) return;
+    if (message is! TimelineEventMessage && message is! TimelineEventSticker) {
+      return;
+    }
+    if (message.senderId == session.client.self?.identifier) return;
+
+    MessageNotificationContent.fromEvent(message, room).then((content) {
+      if (content != null) showMessage(content);
+    }, onError: (Object e, StackTrace s) {
+      Log.onError(e, s, content: "Could not show a message over the game");
+    });
   }
 
   OverlayCorner get _voiceCorner =>
@@ -205,6 +268,7 @@ class GameOverlay {
       _ticker?.cancel();
       _ticker = null;
       _toasts.clear();
+      _callChannelMessage = null;
       _setVoice(null);
       _logged(_showToasts());
     }
@@ -228,6 +292,7 @@ class GameOverlay {
       _setVoice(null);
       return;
     }
+    _watchCallChannel(session);
     // A legacy 1:1 call only reads its levels when asked; LiveKit's does
     // nothing here.
     if (session is! CallRoster) session.updateStats();

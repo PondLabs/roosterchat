@@ -7336,6 +7336,48 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelGameOverlayWhichMessages": "Which messages",
+  "@labelGameOverlayWhichMessages": {
+    "description": "Heading over the toggles that pick which messages the in-game overlay shows",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGameOverlayMessagesDirect": "Direct messages",
+  "@labelGameOverlayMessagesDirect": {
+    "description": "Toggle: the in-game overlay shows direct messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGameOverlayMessagesMentions": "Mentions of you and your keywords",
+  "@labelGameOverlayMessagesMentions": {
+    "description": "Toggle: the in-game overlay shows messages that mention the user or one of their notification keywords",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGameOverlayMessagesCallChannel": "The channel of your call",
+  "@labelGameOverlayMessagesCallChannel": {
+    "description": "Toggle: the in-game overlay shows the messages in the voice channel the user is in a call in",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGameOverlayMessagesCallChannelDescription": "Every message sent there, even if the channel doesn't notify you.",
+  "@labelGameOverlayMessagesCallChannelDescription": {
+    "description": "Under the toggle for the messages in the channel of the user's call",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGameOverlayMessagesOther": "Other rooms that notify you",
+  "@labelGameOverlayMessagesOther": {
+    "description": "Toggle: the in-game overlay shows the other messages that notify the user",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGameOverlayMessagesOtherDescription": "Rooms and channels set to notify you of every message, in every space and account.",
+  "@labelGameOverlayMessagesOtherDescription": {
+    "description": "Under the toggle for the other messages that notify the user",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelGameOverlayTopLeft": "Top left",
   "@labelGameOverlayTopLeft": {
     "description": "A corner of the game's screen for the in-game overlay",

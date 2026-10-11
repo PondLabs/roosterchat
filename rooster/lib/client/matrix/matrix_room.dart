@@ -445,6 +445,9 @@ class MatrixRoom extends Room {
       var notification =
           await MessageNotificationContent.fromEvent(event, this);
       if (notification != null) {
+        notification.mentionsMe = _matrixRoom.client.pushruleEvaluator
+            .match((event as MatrixTimelineEvent).event)
+            .highlight;
         NotificationManager.notify(notification,
             onNotificationRejected: onNotificationRejected);
       } else {

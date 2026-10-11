@@ -82,6 +82,10 @@ class MessageNotificationContent extends NotificationContent {
   ImageProvider? attachedImage;
   Room? room;
 
+  /// It mentions us or one of our keywords (the push rules' highlight). Only
+  /// the in-game overlay, which can keep to mentions, reads it.
+  bool mentionsMe = false;
+
   MessageNotificationContent({
     required String senderName,
     required this.senderId,
