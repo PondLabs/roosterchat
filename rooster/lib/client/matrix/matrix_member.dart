@@ -22,8 +22,12 @@ class MatrixMember implements Member {
   @override
   String? get detail => matrixUser.id.domain;
 
+  /// A nickname for someone else wins over their name. One on ourselves
+  /// (possible before nicknames were for other people only) is ignored.
   String get displayName =>
-      client.getComponent<PetNameComponent>()?.getPetName(identifier) ??
+      (identifier == client.matrixClient.userID
+          ? null
+          : client.getComponent<PetNameComponent>()?.getPetName(identifier)) ??
       matrixUser.calcDisplayname();
 
   @override

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/gif/gif_component.dart';
 import 'package:rooster/client/components/threads/thread_component.dart';
 import 'package:rooster/client/components/url_preview/url_preview_component.dart';
+import 'package:rooster/client/components/user_color/user_color_component.dart';
 import 'package:rooster/client/timeline_events/timeline_event.dart';
 import 'package:rooster/client/timeline_events/timeline_event_encrypted.dart';
 import 'package:rooster/client/timeline_events/timeline_event_feature_reactions.dart';
@@ -105,6 +108,9 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
   ThreadsComponent? threadComponent;
   bool isHeadOfThread = false;
 
+  UserColorComponent? userColors;
+  StreamSubscription<String>? colorSubscription;
+
   bool isGif = false;
   bool isFavoriteGif = false;
 
@@ -125,6 +131,13 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
       threadComponent = client.getComponent<ThreadsComponent>();
     }
 
+    userColors = client.getComponent<UserColorComponent>();
+    colorSubscription = userColors?.onColorChanged
+        .where((id) => id == senderId)
+        .listen((_) => setState(() {
+              senderColor = room.getMemberOrFallback(senderId).defaultColor;
+            }));
+
     if (widget.timeline != null) {
       loadEventState(widget.initialIndex);
     }
@@ -133,6 +146,12 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
       loadStateFromEvent(widget.initialEvent!);
     }
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    colorSubscription?.cancel();
+    super.dispose();
   }
 
   @override
@@ -271,6 +290,7 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
     senderName = sender.displayName;
     senderAvatar = sender.avatar;
     senderColor = sender.defaultColor;
+    userColors?.requestPublicColor(senderId);
 
     sentTime = event.originServerTs;
 

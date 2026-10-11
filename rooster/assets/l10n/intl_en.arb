@@ -5358,41 +5358,9 @@
     "type": "text",
     "placeholders": {}
   },
-  "labelProfileChangeName": "Change name",
-  "@labelProfileChangeName": {
-    "description": "Title of the dialog where the user types a new display name, opened by clicking their name on their profile",
-    "type": "text",
-    "placeholders": {}
-  },
   "labelProfileSourceTitle": "Source",
   "@labelProfileSourceTitle": {
     "description": "Title of the dialog that shows the raw JSON of a user's profile (developer mode)",
-    "type": "text",
-    "placeholders": {}
-  },
-  "labelConfirmShareTimezone": "Are you sure you want to share your timezone '{timezone}' publicly?",
-  "@labelConfirmShareTimezone": {
-    "description": "Ask the user to confirm that they want to share their current timezone as public information on their profile",
-    "type": "text",
-    "placeholders": {
-      "timezone": {}
-    }
-  },
-  "promptProfileWriteBioHint": "Write about yourself",
-  "@promptProfileWriteBioHint": {
-    "description": "Hint text for the profile bio editor",
-    "type": "text",
-    "placeholders": {}
-  },
-  "labelProfileYourBadges": "Your Badges",
-  "@labelProfileYourBadges": {
-    "description": "label for the ui to select which badges to display on the users profile",
-    "type": "text",
-    "placeholders": {}
-  },
-  "labelProfileNoBadges": "You don't have any badges available.",
-  "@labelProfileNoBadges": {
-    "description": "Text shown when the user has no badges available",
     "type": "text",
     "placeholders": {}
   },
@@ -5402,64 +5370,15 @@
     "type": "text",
     "placeholders": {}
   },
-  "promptProfileChangeBanner": "Change Banner",
-  "@promptProfileChangeBanner": {
-    "description": "Prompt to change the banner on the user's profile",
+  "promptProfileEditProfile": "Edit profile",
+  "@promptProfileEditProfile": {
+    "description": "Button on the user's own profile card: opens Settings on their profile, where they change what others see",
     "type": "text",
     "placeholders": {}
   },
-  "promptProfileSetStatus": "Set Status",
-  "@promptProfileSetStatus": {
-    "type": "text",
-    "placeholders": {}
-  },
-  "promptProfileClearStatus": "Clear Status",
-  "@promptProfileClearStatus": {
-    "type": "text",
-    "placeholders": {}
-  },
-  "promptProfileSetBadges": "Set Badges",
-  "@promptProfileSetBadges": {
-    "type": "text",
-    "placeholders": {}
-  },
-  "promptProfileSetBio": "Set Bio",
-  "@promptProfileSetBio": {
-    "type": "text",
-    "placeholders": {}
-  },
-  "promptProfileClearBio": "Clear Bio",
-  "@promptProfileClearBio": {
-    "type": "text",
-    "placeholders": {}
-  },
-  "promptProfileShareTimezone": "Share Timezone",
-  "@promptProfileShareTimezone": {
-    "description": "Prompt the user to add their current timezone to their user profile",
-    "type": "text",
-    "placeholders": {}
-  },
-  "promptProfileClearTimezone": "Remove Timezone",
-  "@promptProfileClearTimezone": {
-    "description": "Prompt to remove the shared timezone from a users profile",
-    "type": "text",
-    "placeholders": {}
-  },
-  "promptProfileEditColorScheme": "Edit Color Scheme",
-  "@promptProfileEditColorScheme": {
-    "description": "Prompt to edit the color scheme of the user's own profile",
-    "type": "text",
-    "placeholders": {}
-  },
-  "promptProfileSetColorOverride": "Set Color Override",
-  "@promptProfileSetColorOverride": {
-    "description": "Prompt to override the display color of a user",
-    "type": "text",
-    "placeholders": {}
-  },
-  "promptProfileClearColorOverride": "Clear Color Override",
-  "@promptProfileClearColorOverride": {
-    "description": "Prompt to remove an override of the display color of a user",
+  "promptProfileRecolorName": "Recolor their name",
+  "@promptProfileRecolorName": {
+    "description": "Entry in the menu of someone else's profile card, and the title of its dialog: pick the color their name shows in, only for the user",
     "type": "text",
     "placeholders": {}
   },
@@ -5486,15 +5405,15 @@
       "timezone": {}
     }
   },
-  "labelProfileColorOverrideDescription": "Set a local color override for a user. This is only visible to you",
-  "@labelProfileColorOverrideDescription": {
-    "description": "In the dialog that picks a color to show another user's name in, only on this device",
+  "labelProfileRecolorDescription": "Only you see this color, on all your devices. Everyone else sees the color they chose, or the automatic one.",
+  "@labelProfileRecolorDescription": {
+    "description": "In the dialog that picks the color someone else's name shows in for the user, above the colors",
     "type": "text",
     "placeholders": {}
   },
-  "promptProfileSetNickname": "Set Nickname",
-  "@promptProfileSetNickname": {
-    "description": "Entry in a user's profile menu: gives them a name of the user's own choosing, only shown to the user",
+  "promptProfileGiveNickname": "Give them a nickname",
+  "@promptProfileGiveNickname": {
+    "description": "Entry in the menu of someone else's profile card: opens a dialog to give them a name only the user sees",
     "type": "text",
     "placeholders": {}
   },
@@ -5504,9 +5423,9 @@
     "type": "text",
     "placeholders": {}
   },
-  "labelProfileEnterColorCode": "Enter Color Code",
-  "@labelProfileEnterColorCode": {
-    "description": "Title of the dialog where the user types a color as a hex code (#FFFFFF) for their profile's colors",
+  "labelProfileNicknameDescription": "Only you see this nickname, on all your devices. Everyone else sees the name they chose.",
+  "@labelProfileNicknameDescription": {
+    "description": "In the dialog where the user gives someone a nickname, above the text field",
     "type": "text",
     "placeholders": {}
   },
@@ -6600,6 +6519,280 @@
   "labelAllowInvitationsDescription": "Allow other users to invite you to rooms",
   "@labelAllowInvitationsDescription": {
     "description": "description for the toggle for enabling and disabling the automatic blocking of invitations",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsAutomaticColor": "Automatic",
+  "@labelProfileSettingsAutomaticColor": {
+    "description": "Settings > Profile: the color choice that lets the color be worked out for you, before the swatches of a color picker",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsColorSwatch": "Color {number} of {count}",
+  "@labelProfileSettingsColorSwatch": {
+    "description": "Settings > Profile: what a screen reader says for a color swatch in a color picker, such as 'Color 3 of 12'",
+    "type": "text",
+    "placeholders": {
+      "number": {},
+      "count": {}
+    }
+  },
+  "labelProfileSettingsIntro": "This is how people see you. Try things out and watch the preview: nobody sees a change until you save.",
+  "@labelProfileSettingsIntro": {
+    "description": "Settings > Profile: the line at the top of the page",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsPictureAndBanner": "Picture and banner",
+  "@labelProfileSettingsPictureAndBanner": {
+    "description": "Settings > Profile: heading of the section with the user's profile picture and banner image",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsPicture": "Your picture",
+  "@labelProfileSettingsPicture": {
+    "description": "Settings > Profile: title of the user's profile picture (avatar)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsPictureDescription": "Everyone sees it, in every Matrix app.",
+  "@labelProfileSettingsPictureDescription": {
+    "description": "Settings > Profile: who sees the user's profile picture",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsBanner": "Your banner",
+  "@labelProfileSettingsBanner": {
+    "description": "Settings > Profile: title of the wide image across the top of the user's profile card",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsBannerDescription": "It goes across the top of your card. People on Rooster see it; most other apps don't show banners.",
+  "@labelProfileSettingsBannerDescription": {
+    "description": "Settings > Profile: where the banner shows and who sees it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsNoBanner": "Without a banner, your card shows a blur of your picture.",
+  "@labelProfileSettingsNoBanner": {
+    "description": "Settings > Profile: inside the empty banner box when the user has no banner but has a profile picture",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptProfileSettingsChangeImage": "Change",
+  "@promptProfileSettingsChangeImage": {
+    "description": "Settings > Profile: button that picks a new image for the profile picture or the banner",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsName": "Name",
+  "@labelProfileSettingsName": {
+    "description": "Settings > Profile: heading of the section with the display name and pronouns",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsDisplayName": "Display name",
+  "@labelProfileSettingsDisplayName": {
+    "description": "Settings > Profile: label of the display name field",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsDisplayNameDescription": "Everyone sees it, in every room. Your username, {username}, never changes.",
+  "@labelProfileSettingsDisplayNameDescription": {
+    "description": "Settings > Profile: under the display name field. The username is the Matrix ID, such as @alice:matrix.org",
+    "type": "text",
+    "placeholders": {
+      "username": {}
+    }
+  },
+  "errorProfileSettingsDisplayNameEmpty": "Your name can't be empty.",
+  "@errorProfileSettingsDisplayNameEmpty": {
+    "description": "Settings > Profile: under the display name field when it was emptied; saving is off until there is a name",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsPronouns": "Pronouns",
+  "@labelProfileSettingsPronouns": {
+    "description": "Settings > Profile: label of the pronouns field",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsPronounsHint": "they/them",
+  "@labelProfileSettingsPronounsHint": {
+    "description": "Settings > Profile: example in the empty pronouns field. Use pronouns in the target language",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsPronounsDescription": "Shown under your name on your card. People on Rooster see them, and so do some other apps.",
+  "@labelProfileSettingsPronounsDescription": {
+    "description": "Settings > Profile: under the pronouns field, where they show and who sees them",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsAboutYou": "About you",
+  "@labelProfileSettingsAboutYou": {
+    "description": "Settings > Profile: heading of the section with the status message, the about me text and the local time",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsStatus": "Status message",
+  "@labelProfileSettingsStatus": {
+    "description": "Settings > Profile: label of the field for a short status line",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsStatusDescription": "A short line next to your picture on your card: people on Rooster see it, and other apps may too, depending on your server. Online, Away and Invisible are set from the dot on your picture at the bottom of the sidebar.",
+  "@labelProfileSettingsStatusDescription": {
+    "description": "Settings > Profile: under the status message field, what it is and who sees it. 'Your server' is the user's Matrix homeserver. Online, Away and Invisible are the options of the menu opened from the presence dot on the user's own picture at the bottom of the sidebar: use that menu's words",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsAboutMe": "About me",
+  "@labelProfileSettingsAboutMe": {
+    "description": "Settings > Profile: label of the field where the user writes about themselves (their bio)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsAboutMeDescription": "Shown on your card. People on Rooster see it, and so do some other apps. Markdown works.",
+  "@labelProfileSettingsAboutMeDescription": {
+    "description": "Settings > Profile: under the about me field, where it shows and who sees it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsShowLocalTime": "Show my local time",
+  "@labelProfileSettingsShowLocalTime": {
+    "description": "Settings > Profile: switch that puts the user's time zone on their card",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsShowLocalTimeDescription": "People see what time it is where you are ({timezone}).",
+  "@labelProfileSettingsShowLocalTimeDescription": {
+    "description": "Settings > Profile: under the local time switch, with the time zone, such as America/Sao_Paulo",
+    "type": "text",
+    "placeholders": {
+      "timezone": {}
+    }
+  },
+  "labelProfileSettingsTimezoneDiffers": "Your card says {card}, but this device is in {device}.",
+  "@labelProfileSettingsTimezoneDiffers": {
+    "description": "Settings > Profile: when the time zone on the user's card is not this device's. Both are time zones, such as America/Sao_Paulo",
+    "type": "text",
+    "placeholders": {
+      "card": {},
+      "device": {}
+    }
+  },
+  "promptProfileSettingsUseDeviceTimezone": "Use this device's time zone",
+  "@promptProfileSettingsUseDeviceTimezone": {
+    "description": "Settings > Profile: button that puts this device's time zone on the user's card",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsColors": "Colors",
+  "@labelProfileSettingsColors": {
+    "description": "Settings > Profile: heading of the section with the name color and the card colors",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsNameColor": "Name color",
+  "@labelProfileSettingsNameColor": {
+    "description": "Settings > Profile: title of the color picker for the user's name in chats",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsNameColorDescription": "Your name in chats and member lists. It's the same in every space and chat. People on Rooster, and in other apps that support name colors, see it. Other apps pick a color from your username.",
+  "@labelProfileSettingsNameColorDescription": {
+    "description": "Settings > Profile: what the name color changes, that it is one color for all of the user's spaces and chats, and who sees it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsColorOverrideNote": "You gave your own name a color earlier that only you see, so your devices show that color instead. Other people don't see it.",
+  "@labelProfileSettingsColorOverrideNote": {
+    "description": "Settings > Profile: under the name color, when the user once recolored their own name with the old only-you color, next to a button that removes it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsCardColors": "Card colors",
+  "@labelProfileSettingsCardColors": {
+    "description": "Settings > Profile: title of the color picker for the user's profile card",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsCardColorsDescription": "The colors of your card. People on Rooster see them; most other apps don't show them. Automatic takes them from your banner or picture and follows each person's theme.",
+  "@labelProfileSettingsCardColorsDescription": {
+    "description": "Settings > Profile: what the card colors change and who sees them. 'Automatic' is the first choice of the picker",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsCardMatchTheme": "Match each person's theme",
+  "@labelProfileSettingsCardMatchTheme": {
+    "description": "Settings > Profile: card style choice, the card is light or dark like the theme of whoever looks at it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsCardAlwaysDark": "Always dark",
+  "@labelProfileSettingsCardAlwaysDark": {
+    "description": "Settings > Profile: card style choice, the card is dark for everyone",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsCardAlwaysLight": "Always light",
+  "@labelProfileSettingsCardAlwaysLight": {
+    "description": "Settings > Profile: card style choice, the card is light for everyone",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsBadges": "Badges",
+  "@labelProfileSettingsBadges": {
+    "description": "Settings > Profile: heading of the section where the user picks which badges show on their card",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsBadgesDescription": "Pick the badges your card shows. People on Rooster see them; most other apps don't show badges.",
+  "@labelProfileSettingsBadgesDescription": {
+    "description": "Settings > Profile: over the list of the user's badges, what they are and who sees them",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptProfileSettingsViewRawProfile": "View raw profile",
+  "@promptProfileSettingsViewRawProfile": {
+    "description": "Settings > Profile, developer mode: button that shows the profile's JSON, and the title of the dialog it opens",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsUnsavedChanges": "You have unsaved changes.",
+  "@labelProfileSettingsUnsavedChanges": {
+    "description": "Settings > Profile: in the bar at the bottom when the user changed something and has not saved it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptProfileSettingsSaveChanges": "Save changes",
+  "@promptProfileSettingsSaveChanges": {
+    "description": "Settings > Profile: button that sends the changes to the server",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorProfileSettingsSaveFailed": "Some changes could not be saved. They are still here, so you can try again.",
+  "@errorProfileSettingsSaveFailed": {
+    "description": "Settings > Profile: under the save bar when part of a save failed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsPreview": "Preview",
+  "@labelProfileSettingsPreview": {
+    "description": "Settings > Profile: heading over the preview of the user's profile card, as other people will see it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsPreviewInChat": "In chat",
+  "@labelProfileSettingsPreviewInChat": {
+    "description": "Settings > Profile: heading over a sample chat message that shows how the user's name, picture and name color look in a chat",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSettingsSampleMessage": "Hey crew, who's around tonight?",
+  "@labelProfileSettingsSampleMessage": {
+    "description": "Settings > Profile: a made-up chat message, sent by the user, in the preview of how their name looks in a chat. Casual, friendly",
     "type": "text",
     "placeholders": {}
   },

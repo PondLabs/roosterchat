@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:rooster/client/components/user_color/user_color_component.dart';
 import 'package:rooster/client/timeline.dart';
 import 'package:rooster/client/timeline_events/timeline_event.dart';
 import 'package:rooster/client/timeline_events/timeline_event_feature_related.dart';
@@ -33,6 +36,7 @@ class TimelineEventViewReply extends StatefulWidget {
 }
 
 class _TimelineEventViewReplyState extends State<TimelineEventViewReply> {
+  String? senderId;
   String? senderName;
   String? body;
   Color? senderColor;
@@ -40,10 +44,26 @@ class _TimelineEventViewReplyState extends State<TimelineEventViewReply> {
   bool loading = false;
   String? replyEventId;
 
+  UserColorComponent? userColors;
+  StreamSubscription<String>? colorSubscription;
+
   @override
   void initState() {
+    userColors = widget.timeline.room.client.getComponent<UserColorComponent>();
+    colorSubscription = userColors?.onColorChanged
+        .where((id) => id == senderId)
+        .listen((id) => setState(() {
+              senderColor =
+                  widget.timeline.room.getMemberOrFallback(id).defaultColor;
+            }));
     getStateFromIndex(widget.index);
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    colorSubscription?.cancel();
+    super.dispose();
   }
 
   void getStateFromIndex(int index) {
@@ -78,11 +98,13 @@ class _TimelineEventViewReplyState extends State<TimelineEventViewReply> {
     setState(() {
       replyEventId = event.eventId;
       var sender = widget.timeline.room.getMemberOrFallback(event.senderId);
+      senderId = sender.identifier;
       senderName = sender.displayName;
       senderColor = sender.defaultColor;
       body = event.plainTextBody;
       loading = false;
     });
+    userColors?.requestPublicColor(senderId!);
   }
 
   @override

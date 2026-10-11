@@ -10,7 +10,6 @@ import 'package:rooster/ui/atoms/adaptive_context_menu.dart';
 import 'package:rooster/ui/atoms/scaled_safe_area.dart';
 import 'package:rooster/ui/atoms/tiny_pill.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
-import 'package:rooster/utils/color_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -28,34 +27,22 @@ class UserProfileView extends StatefulWidget {
       required this.identifier,
       required this.isSelf,
       this.presence,
-      this.onSetBanner,
       this.timezone,
       this.bannerHeight = 230.0,
       this.width = 700,
-      this.setPreviewColor,
       this.hasColorOverride = false,
-      this.setPreviewBrightness,
       this.setColorOverride,
       this.setPetName,
       this.currentPetName,
-      this.hasPetName = false,
-      this.shareCurrentTimezone,
-      this.removeTimezone,
-      this.onSetAvatar,
       this.bio,
-      this.onSetStatus,
-      this.editBadges,
-      this.setBio,
       this.badges = const [],
-      this.clearBio,
       this.showMessageButton = true,
       this.doSafeArea = true,
-      this.onChangeName,
       this.maxBioHeight = 200,
       this.showSource,
       this.pronouns = const [],
-      this.clearStatus,
-      this.savePreviewTheme,
+      this.preview = false,
+      this.onEditProfile,
       this.onMessageButtonClicked});
   final ImageProvider? userAvatar;
   final ImageProvider? userBanner;
@@ -73,26 +60,19 @@ class UserProfileView extends StatefulWidget {
   final bool hasColorOverride;
   final String? timezone;
   final double width;
-  final Future<void> Function()? onSetBanner;
-  final Future<void> Function()? onSetAvatar;
-  final Future<void> Function()? onSetStatus;
-  final Future<void> Function()? onChangeName;
-  final Future<void> Function()? shareCurrentTimezone;
-  final Future<void> Function()? removeTimezone;
-  final Future<void> Function()? setBio;
-  final Future<void> Function()? clearBio;
-  final Future<void> Function()? clearStatus;
-  final Future<void> Function()? editBadges;
   final void Function()? showSource;
-  final void Function(Color)? setPreviewColor;
   final Widget? bio;
-  final Future<void> Function(Brightness)? setPreviewBrightness;
   final Future<void> Function(String?)? setPetName;
   final String? currentPetName;
-  final bool hasPetName;
   final Future<void> Function()? onMessageButtonClicked;
-  final Future<void> Function()? savePreviewTheme;
   final Future<void> Function(Color?)? setColorOverride;
+
+  /// Draws the card as others see it, for a preview: no menu, nothing to
+  /// tap, no buttons.
+  final bool preview;
+
+  /// Shown as an "Edit profile" button on your own card.
+  final Future<void> Function()? onEditProfile;
 
   @override
   State<UserProfileView> createState() => UserProfileViewState();
@@ -105,46 +85,16 @@ class UserProfileViewState extends State<UserProfileView> {
       desc: "Prompt on the button to open a direct message with another user",
       name: "promptOpenDirectMessage");
 
-  String get promptProfileChangeBanner => Intl.message("Change Banner",
-      desc: "Prompt to change the banner on the user's profile",
-      name: "promptProfileChangeBanner");
+  String get promptProfileEditProfile => Intl.message("Edit profile",
+      name: "promptProfileEditProfile",
+      desc: "Button on the user's own profile card: opens Settings on their "
+          "profile, where they change what others see");
 
-  static String get promptProfileSetStatus =>
-      Intl.message("Set Status", name: "promptProfileSetStatus");
-
-  String get promptProfileClearStatus =>
-      Intl.message("Clear Status", name: "promptProfileClearStatus");
-
-  String get promptProfileSetBadges =>
-      Intl.message("Set Badges", name: "promptProfileSetBadges");
-
-  String get promptProfileSetBio =>
-      Intl.message("Set Bio", name: "promptProfileSetBio");
-
-  String get promptProfileClearBio =>
-      Intl.message("Clear Bio", name: "promptProfileClearBio");
-
-  String get promptProfileShareTimezone => Intl.message("Share Timezone",
-      name: "promptProfileShareTimezone",
-      desc:
-          "Prompt the user to add their current timezone to their user profile");
-
-  String get promptProfileClearTimezone => Intl.message("Remove Timezone",
-      name: "promptProfileClearTimezone",
-      desc: "Prompt to remove the shared timezone from a users profile");
-
-  String get promptProfileEditColorScheme => Intl.message("Edit Color Scheme",
-      name: "promptProfileEditColorScheme",
-      desc: "Prompt to edit the color scheme of the user's own profile");
-
-  String get promptProfileSetColorOverride => Intl.message("Set Color Override",
-      name: "promptProfileSetColorOverride",
-      desc: "Prompt to override the display color of a user");
-
-  String get promptProfileClearColorOverride =>
-      Intl.message("Clear Color Override",
-          name: "promptProfileClearColorOverride",
-          desc: "Prompt to remove an override of the display color of a user");
+  String get promptProfileRecolorName => Intl.message("Recolor their name",
+      name: "promptProfileRecolorName",
+      desc: "Entry in the menu of someone else's profile card, and the title "
+          "of its dialog: pick the color their name shows in, only for the "
+          "user");
 
   String get promptProfileShowRawProfile => Intl.message("Show Raw Profile",
       name: "promptProfileShowRawProfile",
@@ -165,28 +115,27 @@ class UserProfileViewState extends State<UserProfileView> {
           desc: "Tooltip of the user's local time on their profile, with "
               "their timezone (such as America/Sao_Paulo)");
 
-  String get labelProfileColorOverrideDescription => Intl.message(
-      "Set a local color override for a user. This is only visible to you",
-      name: "labelProfileColorOverrideDescription",
-      desc: "In the dialog that picks a color to show another user's name "
-          "in, only on this device");
+  String get labelProfileRecolorDescription => Intl.message(
+      "Only you see this color, on all your devices. Everyone else sees the color they chose, or the automatic one.",
+      name: "labelProfileRecolorDescription",
+      desc: "In the dialog that picks the color someone else's name shows in "
+          "for the user, above the colors");
 
-  String get promptProfileSetNickname => Intl.message("Set Nickname",
-      name: "promptProfileSetNickname",
-      desc: "Entry in a user's profile menu: gives them a name of the user's "
-          "own choosing, only shown to the user");
+  String get promptProfileGiveNickname => Intl.message("Give them a nickname",
+      name: "promptProfileGiveNickname",
+      desc: "Entry in the menu of someone else's profile card: opens a dialog "
+          "to give them a name only the user sees");
 
   String get labelProfileNickname => Intl.message("Nickname",
       name: "labelProfileNickname",
       desc: "Title of the dialog where the user types the nickname they give "
           "someone");
 
-  String get labelProfileEnterColorCode => Intl.message("Enter Color Code",
-      name: "labelProfileEnterColorCode",
-      desc: "Title of the dialog where the user types a color as a hex code "
-          "(#FFFFFF) for their profile's colors");
-
-  bool editingColorScheme = false;
+  String get labelProfileNicknameDescription => Intl.message(
+      "Only you see this nickname, on all your devices. Everyone else sees the name they chose.",
+      name: "labelProfileNicknameDescription",
+      desc: "In the dialog where the user gives someone a nickname, above the "
+          "text field");
 
   Timer? timezoneTimer;
 
@@ -196,26 +145,14 @@ class UserProfileViewState extends State<UserProfileView> {
 
   @override
   void initState() {
-    if (widget.timezone != null) {
-      timezoneTimer =
-          Timer.periodic(Duration(seconds: 1), (_) => updateLocalTime());
-      updateLocalTime();
-    }
-
     super.initState();
+    startClock();
   }
 
   @override
-  void didUpdateWidget(oldWidget) {
+  void didUpdateWidget(UserProfileView oldWidget) {
     super.didUpdateWidget(oldWidget);
-
-    timezoneTimer?.cancel();
-
-    if (widget.timezone != null) {
-      timezoneTimer =
-          Timer.periodic(Duration(seconds: 1), (_) => updateLocalTime());
-      updateLocalTime();
-    }
+    if (oldWidget.timezone != widget.timezone) startClock();
   }
 
   @override
@@ -224,13 +161,23 @@ class UserProfileViewState extends State<UserProfileView> {
     super.dispose();
   }
 
+  void startClock() {
+    timezoneTimer?.cancel();
+    timezoneTimer = null;
+    localTime = null;
+    if (widget.timezone == null) return;
+
+    timezoneTimer = Timer.periodic(
+        const Duration(seconds: 1), (_) => setState(updateLocalTime));
+    updateLocalTime();
+  }
+
   void updateLocalTime() {
+    final timezone = widget.timezone;
+    if (timezone == null) return;
+
     try {
-      setState(() {
-        if (widget.timezone != null) ;
-        var location = tz.getLocation(widget.timezone!);
-        localTime = tz.TZDateTime.now(location);
-      });
+      localTime = tz.TZDateTime.now(tz.getLocation(timezone));
     } catch (_) {}
   }
 
@@ -239,6 +186,7 @@ class UserProfileViewState extends State<UserProfileView> {
     var background = Theme.of(context).colorScheme.primaryContainer;
     final bannerHeight = widget.bannerHeight;
     const avatarOverlap = 50.0;
+    final menuItems = contextMenuItems(context);
 
     return ClipRRect(
       borderRadius: BorderRadiusGeometry.circular(8),
@@ -285,31 +233,32 @@ class UserProfileViewState extends State<UserProfileView> {
                                       .surfaceContainerLow,
                                 ),
                     ),
-                    Align(
-                        alignment: AlignmentGeometry.topRight,
-                        child: Padding(
-                          padding: const EdgeInsets.all(4.0),
-                          child: ClipRRect(
-                            borderRadius: BorderRadiusGeometry.circular(15),
-                            child: SizedBox(
-                                width: 30,
-                                height: 30,
-                                child: Material(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .primaryContainer
-                                      .withAlpha(100),
-                                  child: AdaptiveContextMenu(
-                                    modal: true,
-                                    items: contextMenuItems(context),
-                                    child: Icon(
-                                      Icons.more_vert,
-                                      size: 15,
+                    if (menuItems.isNotEmpty)
+                      Align(
+                          alignment: AlignmentGeometry.topRight,
+                          child: Padding(
+                            padding: const EdgeInsets.all(4.0),
+                            child: ClipRRect(
+                              borderRadius: BorderRadiusGeometry.circular(15),
+                              child: SizedBox(
+                                  width: 30,
+                                  height: 30,
+                                  child: Material(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .primaryContainer
+                                        .withAlpha(100),
+                                    child: AdaptiveContextMenu(
+                                      modal: true,
+                                      items: menuItems,
+                                      child: Icon(
+                                        Icons.more_vert,
+                                        size: 15,
+                                      ),
                                     ),
-                                  ),
-                                )),
-                          ),
-                        )),
+                                  )),
+                            ),
+                          )),
                     Padding(
                       padding: EdgeInsets.fromLTRB(
                           0, bannerHeight - avatarOverlap, 0, 0),
@@ -378,7 +327,9 @@ class UserProfileViewState extends State<UserProfileView> {
                                                             widget.timezone !=
                                                                 null)
                                                           userLocalTime(),
-                                                        badges(),
+                                                        if (widget
+                                                            .badges.isNotEmpty)
+                                                          badges(),
                                                       ],
                                                     ),
                                                   )
@@ -393,7 +344,8 @@ class UserProfileViewState extends State<UserProfileView> {
                                                       8, 0, 8, 0),
                                               child: buildBio(context),
                                             ),
-                                          if (!widget.isSelf &&
+                                          if (!widget.preview &&
+                                              !widget.isSelf &&
                                               widget.showMessageButton)
                                             Padding(
                                               padding:
@@ -405,8 +357,17 @@ class UserProfileViewState extends State<UserProfileView> {
                                                 onTap: clickMessageButton,
                                               ),
                                             ),
-                                          if (editingColorScheme)
-                                            buildColorSchemeEditor()
+                                          if (!widget.preview &&
+                                              widget.isSelf &&
+                                              widget.onEditProfile != null)
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.all(8.0),
+                                              child: tiamat.Button(
+                                                text: promptProfileEditProfile,
+                                                onTap: widget.onEditProfile,
+                                              ),
+                                            ),
                                         ],
                                       ),
                                     ),
@@ -418,23 +379,15 @@ class UserProfileViewState extends State<UserProfileView> {
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                MouseRegion(
-                                    cursor: widget.isSelf
-                                        ? SystemMouseCursors.click
-                                        : MouseCursor.defer,
-                                    child: GestureDetector(
-                                        onTap: widget.isSelf
-                                            ? widget.onSetAvatar
-                                            : null,
-                                        child: tiamat.Avatar.large(
-                                          border: BoxBorder.all(
-                                              color: background,
-                                              width: 8,
-                                              strokeAlign: 0.9),
-                                          image: widget.userAvatar,
-                                          placeholderColor: widget.userColor,
-                                          placeholderText: widget.displayName,
-                                        ))),
+                                tiamat.Avatar.large(
+                                  border: BoxBorder.all(
+                                      color: background,
+                                      width: 8,
+                                      strokeAlign: 0.9),
+                                  image: widget.userAvatar,
+                                  placeholderColor: widget.userColor,
+                                  placeholderText: widget.displayName,
+                                ),
                                 if (widget.presence?.message != null)
                                   Flexible(
                                       child: buildPresenceDisplay(background))
@@ -461,19 +414,22 @@ class UserProfileViewState extends State<UserProfileView> {
           opacity: 0.8,
           child: Row(
             children: [
-              Text(
-                widget.identifier,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    fontFamily: "Code",
-                    color: Theme.of(context).colorScheme.onSurface),
+              Flexible(
+                child: Text(
+                  widget.identifier,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      fontFamily: "Code",
+                      color: Theme.of(context).colorScheme.onSurface),
+                ),
               ),
-              tiamat.IconButton(
-                icon: Icons.copy,
-                onPressed: () =>
-                    Clipboard.setData(ClipboardData(text: widget.identifier)),
-                size: Theme.of(context).textTheme.labelSmall?.fontSize ?? 12,
-                iconColor: Theme.of(context).colorScheme.onSurface,
-              ),
+              if (!widget.preview)
+                tiamat.IconButton(
+                  icon: Icons.copy,
+                  onPressed: () =>
+                      Clipboard.setData(ClipboardData(text: widget.identifier)),
+                  size: Theme.of(context).textTheme.labelSmall?.fontSize ?? 12,
+                  iconColor: Theme.of(context).colorScheme.onSurface,
+                ),
             ],
           )),
     );
@@ -527,55 +483,42 @@ class UserProfileViewState extends State<UserProfileView> {
     );
   }
 
+  /// Only for other people: the things about them only you see. Your own
+  /// card has none (you edit your profile in Settings), nor does a preview.
   List<tiamat.ContextMenuItem> contextMenuItems(BuildContext context) {
+    if (widget.preview || widget.isSelf) return [];
+
     return [
-      if (widget.isSelf)
+      if (widget.setPetName != null)
         profileMenuItem(
-            text: promptProfileChangeBanner,
-            onPressed: () => widget.onSetBanner?.call(),
-            icon: Icons.image),
-      if (widget.isSelf)
+          text: promptProfileGiveNickname,
+          icon: Icons.badge,
+          onClearPressed: widget.currentPetName != null
+              ? () => widget.setPetName!(null)
+              : null,
+          onPressed: () async {
+            final text = await AdaptiveDialog.textPrompt(
+              context,
+              initialText: widget.currentPetName,
+              title: labelProfileNickname,
+              description: labelProfileNicknameDescription,
+            );
+            if (text != null) {
+              await widget.setPetName
+                  ?.call(text.trim().isEmpty ? null : text.trim());
+            }
+          },
+        ),
+      if (widget.setColorOverride != null)
         profileMenuItem(
-            text: promptProfileSetStatus,
-            onPressed: () => widget.onSetStatus?.call(),
-            onClearPressed: widget.presence?.message != null
-                ? () => widget.clearStatus?.call()
-                : null,
-            icon: Icons.short_text),
-      if (widget.isSelf)
-        profileMenuItem(
-            text: promptProfileSetBadges,
-            onPressed: () => widget.editBadges?.call(),
-            icon: Icons.star),
-      if (widget.isSelf)
-        profileMenuItem(
-            text: promptProfileSetBio,
-            onPressed: () => widget.setBio?.call(),
-            icon: Icons.text_snippet,
-            onClearPressed: () => widget.clearBio?.call()),
-      if (widget.isSelf)
-        profileMenuItem(
-            text: promptProfileShareTimezone,
-            onPressed: () => widget.shareCurrentTimezone?.call(),
-            icon: Icons.share_arrival_time,
-            onClearPressed: widget.timezone != null
-                ? () => widget.removeTimezone?.call()
-                : null),
-      if (widget.isSelf)
-        profileMenuItem(
-            text: promptProfileEditColorScheme,
-            onPressed: () => setState(() {
-                  editingColorScheme = true;
-                }),
-            icon: Icons.color_lens),
-      profileMenuItem(
-          text: promptProfileSetColorOverride,
+          text: promptProfileRecolorName,
+          icon: Icons.colorize,
           onClearPressed: widget.hasColorOverride
-              ? () => widget.setColorOverride?.call(null)
+              ? () => widget.setColorOverride!(null)
               : null,
           onPressed: () async {
             var color = await AdaptiveDialog.show<Color>(
-              title: promptProfileSetColorOverride,
+              title: promptProfileRecolorName,
               context,
               builder: (context) {
                 return SizedBox(
@@ -587,7 +530,7 @@ class UserProfileViewState extends State<UserProfileView> {
                       Padding(
                         padding: const EdgeInsets.all(8.0),
                         child: tiamat.Text.labelLow(
-                            labelProfileColorOverrideDescription),
+                            labelProfileRecolorDescription),
                       ),
                       GridView(
                           shrinkWrap: true,
@@ -617,28 +560,11 @@ class UserProfileViewState extends State<UserProfileView> {
             );
 
             if (color != null) {
-              widget.setColorOverride?.call(color);
+              await widget.setColorOverride?.call(color);
             }
           },
-          icon: Icons.colorize),
-      profileMenuItem(
-        text: promptProfileSetNickname,
-        icon: Icons.badge,
-        onClearPressed:
-            widget.hasPetName ? () => widget.setPetName?.call(null) : null,
-        onPressed: () async {
-          final text = await AdaptiveDialog.textPrompt(
-            context,
-            initialText: widget.currentPetName ?? '',
-            title: labelProfileNickname,
-          );
-          if (text != null) {
-            await widget.setPetName
-                ?.call(text.trim().isEmpty ? null : text.trim());
-          }
-        },
-      ),
-      if (preferences.developerMode.value)
+        ),
+      if (widget.showSource != null && preferences.developerMode.value)
         profileMenuItem(
             text: promptProfileShowRawProfile,
             onPressed: () => widget.showSource?.call(),
@@ -712,97 +638,17 @@ class UserProfileViewState extends State<UserProfileView> {
     );
   }
 
-  Widget buildColorSchemeEditor() {
-    var run = 8;
-    var count = run * 2;
-    return Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            color: Theme.of(context).colorScheme.surfaceContainer,
-          ),
-          child: SizedBox(
-            width: double.infinity,
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                children: [
-                  GridView(
-                    shrinkWrap: true,
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisSpacing: 3,
-                        mainAxisSpacing: 3,
-                        crossAxisCount: run),
-                    children: [
-                      for (int i = 0; i < count; i++)
-                        buildColorSchemeItem(
-                          color: HSVColor.fromAHSV(1.0,
-                                  (i.toDouble() / (count + 1)) * 360, 0.5, 0.8)
-                              .toColor(),
-                          onTap: (c) => widget.setPreviewColor?.call(c),
-                        ),
-                      buildColorSchemeItem(
-                          icon: Icons.light_mode,
-                          onTap: (_) => widget.setPreviewBrightness
-                              ?.call(Brightness.light)),
-                      buildColorSchemeItem(
-                          icon: Icons.dark_mode,
-                          onTap: (_) => widget.setPreviewBrightness
-                              ?.call(Brightness.dark)),
-                      buildColorSchemeItem(
-                        icon: Icons.tag,
-                        onTap: (_) async {
-                          var hexCode = await AdaptiveDialog.textPrompt(context,
-                              title: labelProfileEnterColorCode,
-                              // Not translated: an example of a color code.
-                              hintText: "#FFFFFF");
-                          if (hexCode != null) {
-                            var color = ColorUtils.fromHexCode(hexCode);
-                            widget.setPreviewColor?.call(color);
-                          }
-                        },
-                      ),
-                      buildColorSchemeItem(
-                        icon: Icons.save,
-                        onTap: (_) {
-                          widget.savePreviewTheme?.call();
-                          setState(() {
-                            editingColorScheme = false;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ));
-  }
-
   Widget buildColorSchemeItem({
-    Color? color,
-    IconData? icon,
-    Function(Color)? onTap,
+    required Color color,
+    required Function(Color) onTap,
   }) {
-    var c = color ?? Theme.of(context).colorScheme.primaryContainer;
     return Material(
       clipBehavior: Clip.antiAlias,
-      color: c,
+      color: color,
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
-        onTap: () => onTap?.call(c),
-        child: SizedBox(
-          height: 30,
-          width: 30,
-          child: icon != null
-              ? Icon(
-                  icon,
-                  color: Theme.of(context).colorScheme.onPrimaryContainer,
-                )
-              : null,
-        ),
+        onTap: () => onTap(color),
+        child: const SizedBox(height: 30, width: 30),
       ),
     );
   }
@@ -827,25 +673,13 @@ class UserProfileViewState extends State<UserProfileView> {
     );
   }
 
-  Widget actionButtons() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        tiamat.Button(
-          text: promptOpenDirectMessage,
-          onTap: clickMessageButton,
-          isLoading: isLoadingDirectMessage,
-        ),
-      ],
-    );
-  }
-
   Future<void> clickMessageButton() async {
     setState(() {
       isLoadingDirectMessage = true;
     });
 
     await widget.onMessageButtonClicked?.call();
+    if (!mounted) return;
 
     setState(() {
       isLoadingDirectMessage = false;
@@ -888,17 +722,11 @@ class UserProfileViewState extends State<UserProfileView> {
   }
 
   Widget displayName() {
-    return MouseRegion(
-      cursor: widget.isSelf ? SystemMouseCursors.click : MouseCursor.defer,
-      child: GestureDetector(
-        onTap: widget.isSelf ? widget.onChangeName : null,
-        child: Text(
-          widget.displayName,
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.onSurface),
-        ),
-      ),
+    return Text(
+      widget.displayName,
+      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+          fontWeight: FontWeight.bold,
+          color: Theme.of(context).colorScheme.onSurface),
     );
   }
 
@@ -916,21 +744,11 @@ class UserProfileViewState extends State<UserProfileView> {
   }
 
   Widget badges() {
-    return Material(
-      clipBehavior: Clip.hardEdge,
-      borderRadius: BorderRadius.circular(8),
-      color: widget.badges.isEmpty && widget.isSelf
-          ? ColorScheme.of(context).surfaceContainerLow
-          : Colors.transparent,
-      child: InkWell(
-        onTap: widget.isSelf ? () => widget.editBadges?.call() : null,
-        child: Padding(
-            padding: EdgeInsetsGeometry.fromLTRB(2, 2, 2, 2),
-            child: Wrap(
-              spacing: 8,
-              children: widget.badges.map((i) => buildBadge(i)).toList(),
-            )),
-      ),
-    );
+    return Padding(
+        padding: EdgeInsetsGeometry.fromLTRB(2, 2, 2, 2),
+        child: Wrap(
+          spacing: 8,
+          children: widget.badges.map((i) => buildBadge(i)).toList(),
+        ));
   }
 }

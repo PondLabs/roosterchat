@@ -1,27 +1,23 @@
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/direct_messages/direct_message_component.dart';
-import 'package:rooster/client/components/emoticon/emoticon_component.dart';
 import 'package:rooster/client/components/profile/profile_component.dart';
 import 'package:rooster/client/components/user_color/user_color_component.dart';
 import 'package:rooster/client/components/user_presence/user_presence_component.dart';
-import 'package:rooster/client/components/user_presence/user_idle_watcher.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/ui/atoms/code_block.dart';
 import 'package:rooster/ui/atoms/inherited_offstage.dart';
-import 'package:rooster/ui/molecules/image_select_dialog.dart';
-import 'package:rooster/ui/molecules/message_input.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
+import 'package:rooster/ui/navigation/navigation_utils.dart';
+import 'package:rooster/ui/organisms/user_profile/profile_card_theme.dart';
+import 'package:rooster/ui/pages/settings/app_settings_page.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:rooster/ui/organisms/user_profile/user_profile_view.dart';
-import 'package:rooster/utils/picker_utils.dart';
 import 'package:rooster/utils/timezone_utils.dart';
 import 'package:rooster/client/components/petname/petname_component.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:intl/intl.dart';
-import 'package:tiamat/tiamat.dart' as tiamat;
 
 class UserProfile extends StatefulWidget {
   const UserProfile(
@@ -32,14 +28,12 @@ class UserProfile extends StatefulWidget {
       required this.client,
       this.maxBioHeight = 200,
       this.doSafeArea = true,
-      this.showMessageButton = true,
-      this.dismiss});
+      this.showMessageButton = true});
   final Client client;
   final String userId;
   final double bannerHeight;
   final double width;
   final double maxBioHeight;
-  final Function? dismiss;
   final bool doSafeArea;
   final bool showMessageButton;
 
@@ -50,10 +44,7 @@ class UserProfile extends StatefulWidget {
     BuildContext context, {
     required Client client,
     required String userId,
-    bool scrollable = true,
     bool dismissible = true,
-    double padding = 8.0,
-    double initialHeightMobile = 0.5,
   }) async {
     if (MediaQuery.sizeOf(context).desktop)
       return showGeneralDialog(
@@ -97,47 +88,48 @@ class _UserProfileState extends State<UserProfile> {
   Profile? profile;
   ThemeData? theme;
 
-  late UserProfileComponent component;
-
-  String get labelProfileChangeName => Intl.message("Change name",
-      name: "labelProfileChangeName",
-      desc: "Title of the dialog where the user types a new display name, "
-          "opened by clicking their name on their profile");
-
   String get labelProfileSourceTitle => Intl.message("Source",
       name: "labelProfileSourceTitle",
       desc: "Title of the dialog that shows the raw JSON of a user's profile "
           "(developer mode)");
 
   ImageProvider? banner;
-  String? displayName;
   ImageProvider? avatar;
   UserPresence? presence;
   String? timezone;
-  String? bioText;
   List<String> pronouns = const [];
   List<ProfileBadge> badges = [];
 
   @override
   void initState() {
     super.initState();
-    component = widget.client.getComponent<UserProfileComponent>()!;
-
-    component.getProfile(widget.userId).then((value) async {
-      await stateFromProfile(value);
-    });
+    loadProfile();
   }
 
-  Future<void> stateFromProfile(Profile? value) async {
-    banner = value?.banner;
-    avatar = value?.avatar;
+  @override
+  void didUpdateWidget(UserProfile oldWidget) {
+    super.didUpdateWidget(oldWidget);
 
-    if (value case ProfileWithBadges p) {
-      badges = await p.getBadges();
+    if (oldWidget.userId != widget.userId ||
+        oldWidget.client != widget.client) {
+      profile = null;
+      loadProfile();
     }
+  }
 
-    ColorScheme? scheme;
-    Brightness? brightness;
+  Future<void> loadProfile() async {
+    final client = widget.client;
+    final userId = widget.userId;
+    // Closed, or now showing someone else: this load's result is not wanted.
+    bool stale() =>
+        !mounted || widget.client != client || widget.userId != userId;
+
+    final value =
+        await client.getComponent<UserProfileComponent>()!.getProfile(userId);
+    if (stale()) return;
+
+    final banner = value.banner;
+    var avatar = value.avatar;
 
     if (avatar case MatrixMxcImage mxc) {
       // create a new image instance so we can load fullres without it loading everywhere
@@ -145,61 +137,61 @@ class _UserProfileState extends State<UserProfile> {
           doThumbnail: false, doFullres: true, autoLoadFullRes: true);
     }
 
-    if (value case ProfileWithColorScheme p) {
-      if (p.brightness != null) {
-        brightness = p.brightness!;
-
-        if (p.color != null) {
-          scheme = ColorScheme.fromSeed(
-              seedColor: p.color!,
-              brightness: brightness,
-              dynamicSchemeVariant: DynamicSchemeVariant.content);
-        }
-      }
+    var badges = <ProfileBadge>[];
+    if (value case ProfileWithBadges p) {
+      badges = await p.getBadges();
+      if (stale()) return;
     }
 
     await TimezoneUtils.instance.init();
+    if (stale()) return;
 
-    if (brightness == null)
-      brightness = Theme.of(context).colorScheme.brightness;
-
-    if (scheme == null) {
-      if (avatar != null) {
-        scheme = await ColorScheme.fromImageProvider(
-            provider: value!.banner ?? value.avatar!,
-            brightness: brightness,
-            dynamicSchemeVariant: DynamicSchemeVariant.tonalSpot);
-      } else {
-        scheme = ColorScheme.fromSeed(
-            seedColor: value!.defaultColor,
-            brightness: brightness,
-            dynamicSchemeVariant: DynamicSchemeVariant.tonalSpot);
-      }
+    Color? color;
+    Brightness? brightness;
+    if (value case ProfileWithColorScheme p) {
+      color = p.color;
+      brightness = p.brightness;
     }
+
+    final scheme = await profileCardColorScheme(
+      viewerBrightness: Theme.of(context).brightness,
+      fallbackColor: value.defaultColor,
+      color: color,
+      brightness: brightness,
+      banner: banner,
+      avatar: value.avatar,
+    );
+    if (stale()) return;
 
     try {
       await Future.wait<dynamic>([
-        if (banner != null) precacheImage(banner!, context),
-        if (avatar != null) precacheImage(avatar!, context),
+        if (banner != null) precacheImage(banner, context),
+        if (avatar != null) precacheImage(avatar, context),
       ]).timeout(Duration(seconds: 5));
     } catch (e, s) {
       Log.onError(e, s, content: "Error while fetching profile images");
     }
+    if (stale()) return;
 
     setState(() {
       theme = Theme.of(context).copyWith(colorScheme: scheme);
       profile = value;
-      displayName = value?.displayName;
+      this.banner = banner;
+      this.avatar = avatar;
+      this.badges = badges;
+      timezone = null;
+      pronouns = const [];
+      presence = null;
 
-      if (profile case ProfileWithTimezone p) {
+      if (value case ProfileWithTimezone p) {
         timezone = p.timezone;
       }
 
-      if (profile case ProfileWithPronouns p) {
+      if (value case ProfileWithPronouns p) {
         pronouns = p.pronouns;
       }
 
-      if (profile case ProfileWithPresence p) {
+      if (value case ProfileWithPresence p) {
         presence = p.precence;
       }
     });
@@ -207,6 +199,7 @@ class _UserProfileState extends State<UserProfile> {
 
   @override
   Widget build(BuildContext context) {
+    final profile = this.profile;
     if (profile == null) {
       return SizedBox(
           height: 300, child: const Center(child: CircularProgressIndicator()));
@@ -215,8 +208,8 @@ class _UserProfileState extends State<UserProfile> {
     Widget? bio;
 
     if (profile case ProfileWithBio p) {
-      if (p.hasBio || bioText != null) {
-        bio = p.buildBio(context, theme!, overrideText: bioText);
+      if (p.hasBio) {
+        bio = p.buildBio(context, theme!);
       }
     }
 
@@ -228,9 +221,9 @@ class _UserProfileState extends State<UserProfile> {
       data: theme!,
       child: UserProfileView(
         userAvatar: avatar,
-        displayName: displayName!,
-        identifier: profile!.identifier,
-        userColor: profile!.defaultColor,
+        displayName: profile.displayName,
+        identifier: profile.identifier,
+        userColor: profile.defaultColor,
         userBanner: banner,
         presence: presence,
         timezone: timezone,
@@ -239,37 +232,24 @@ class _UserProfileState extends State<UserProfile> {
         doSafeArea: widget.doSafeArea,
         maxBioHeight: widget.maxBioHeight,
         showMessageButton: widget.showMessageButton,
-        isSelf: widget.client.self!.identifier == profile!.identifier,
+        isSelf: widget.client.self!.identifier == profile.identifier,
         onMessageButtonClicked: openDirectMessage,
-        onSetBanner: setBanner,
-        setPreviewColor: setPreviewColor,
-        setPreviewBrightness: setPreviewBrightness,
-        removeTimezone: removeTimezone,
-        onChangeName: changeName,
-        savePreviewTheme: savePreviewTheme,
-        setBio: setBio,
-        clearBio: clearBio,
+        // Only from the popup: the card shown inside a page has nothing to
+        // close first.
+        onEditProfile:
+            ModalRoute.of(context) is PopupRoute ? editProfile : null,
         badges: badges,
-        editBadges: editBadges,
         bio: bio,
         setPetName: setPetName,
         currentPetName: widget.client
             .getComponent<PetNameComponent>()
             ?.getPetName(widget.userId),
-        hasPetName: widget.client
-                .getComponent<PetNameComponent>()
-                ?.getPetName(widget.userId) !=
-            null,
-        onSetAvatar: setAvatar,
         setColorOverride: setColorOverride,
         showSource: showSource,
-        onSetStatus: setStatus,
-        clearStatus: clearStatus,
-        shareCurrentTimezone: shareTimezone,
         pronouns: pronouns,
         hasColorOverride: widget.client
                 .getComponent<UserColorComponent>()
-                ?.getColor(profile!.identifier) !=
+                ?.getOverride(profile.identifier) !=
             null,
       ),
     );
@@ -297,142 +277,28 @@ class _UserProfileState extends State<UserProfile> {
       }
     }
 
+    if (!mounted) return;
     Navigator.of(context).pop();
   }
 
-  Future<void> setBanner() async {
-    final action = await ImageSelectDialog.show(
-      context,
-      image: banner,
-    );
-
-    if (!mounted) return;
-
-    if (action == ImageEditAction.remove) {
-      await removeBanner();
-      return;
-    }
-
-    if (action != ImageEditAction.pick) return;
-
-    var result =
-        await PickerUtils.pickImageAndCrop(context, aspectRatio: 700 / 230);
-    if (result == null) return;
-
-    setState(() {
-      banner = Image.memory(result).image;
-    });
-
-    await component.setBanner(result);
-  }
-
-  Future<void> removeBanner() async {
-    await component.removeBanner();
-
-    setState(() {
-      banner = null;
-    });
-  }
-
-  Color previewColor = Colors.blue;
-  Brightness previewBrightness = Brightness.dark;
-
-  void setPreviewColor(Color color) {
-    setState(() {
-      previewColor = color;
-      updatePreviewTheme();
-    });
-  }
-
-  void updatePreviewTheme() {
-    theme = Theme.of(context).copyWith(
-      colorScheme: ColorScheme.fromSeed(
-          seedColor: previewColor,
-          brightness: previewBrightness,
-          dynamicSchemeVariant: DynamicSchemeVariant.content),
-    );
-  }
-
-  Future<void> savePreviewTheme() async {
-    await component.setProfileColorScheme(previewColor, previewBrightness);
-  }
-
-  Future<void> setPreviewBrightness(Brightness p1) async {
-    setState(() {
-      previewBrightness = p1;
-      updatePreviewTheme();
-    });
+  /// Closes the card, then opens Settings on this account's profile.
+  Future<void> editProfile() {
+    final navigator = Navigator.of(context);
+    navigator.pop();
+    return NavigationUtils.navigateTo(
+        navigator.context, AppSettingsPage(editProfileOf: widget.client));
   }
 
   Future<void> setColorOverride(Color? color) async {
     var comp = widget.client.getComponent<UserColorComponent>();
     await comp?.setColor(widget.userId, color);
-  }
-
-  Future<void> changeName() async {
-    var text = await AdaptiveDialog.textPrompt(
-      context,
-      initialText: displayName,
-      title: labelProfileChangeName,
-    );
-    if (text?.trim().isNotEmpty == true) {
-      setState(() {
-        displayName = text!.trim();
-
-        widget.client.setDisplayName(text.trim());
-      });
-    }
+    if (mounted) setState(() {}); // repaint in the new color
   }
 
   Future<void> setPetName(String? name) async {
     var comp = widget.client.getComponent<PetNameComponent>();
     await comp?.setPetName(widget.userId, name);
-    setState(() {}); // refresh so the view shows the new name
-  }
-
-  Future<void> setAvatar() async {
-    var result = await PickerUtils.pickImageAndCrop(context, aspectRatio: 1.0);
-    if (result == null) return;
-
-    setState(() {
-      avatar = Image.memory(result).image;
-    });
-
-    await widget.client.setAvatar(result, "");
-  }
-
-  Future<void> setStatus() async {
-    var text = await AdaptiveDialog.textPrompt(
-      context,
-      initialText: presence?.message?.message,
-      title: UserProfileViewState.promptProfileSetStatus,
-    );
-    if (text != null) {
-      var client = widget.client;
-      client.getComponent<UserProfileComponent>()?.setStatus(text);
-      client
-          .getComponent<UserPresenceComponent>()
-          ?.setStatus(UserIdleWatcher.instance.status.value, message: text);
-
-      setState(() {
-        presence = UserPresence(UserIdleWatcher.instance.status.value,
-            message: UserPresenceMessage(text, PresenceMessageType.userCustom));
-      });
-    }
-  }
-
-  Future<void> clearStatus() async {
-    var client = widget.client;
-    await client.getComponent<UserProfileComponent>()?.setStatus(null);
-
-    await client.getComponent<UserPresenceComponent>()?.setStatus(
-        UserIdleWatcher.instance.status.value,
-        message: null,
-        clearMessage: true);
-
-    setState(() {
-      presence = UserPresence(UserIdleWatcher.instance.status.value);
-    });
+    if (mounted) setState(() {}); // refresh so the view shows the new name
   }
 
   void showSource() {
@@ -449,144 +315,5 @@ class _UserProfileState extends State<UserProfile> {
         );
       },
     );
-  }
-
-  String labelConfirmShareTimezone(String timezone) => Intl.message(
-      "Are you sure you want to share your timezone '$timezone' publicly?",
-      name: "labelConfirmShareTimezone",
-      args: [timezone],
-      desc:
-          "Ask the user to confirm that they want to share their current timezone as public information on their profile");
-
-  Future<void> shareTimezone() async {
-    final currentTimeZone = await FlutterTimezone.getLocalTimezone();
-    if (await AdaptiveDialog.confirmation(context,
-            prompt: labelConfirmShareTimezone(currentTimeZone.identifier)) ==
-        true) {
-      setState(() {
-        timezone = currentTimeZone.identifier;
-      });
-
-      print(currentTimeZone.identifier);
-      return widget.client
-          .getComponent<UserProfileComponent>()
-          ?.setTimezone(currentTimeZone.identifier);
-    }
-  }
-
-  Future<void> removeTimezone() async {
-    await widget.client.getComponent<UserProfileComponent>()?.removeTimezone();
-
-    setState(() {
-      timezone = null;
-    });
-  }
-
-  String get promptProfileWriteBioHint => Intl.message("Write about yourself",
-      name: "promptProfileWriteBioHint",
-      desc: "Hint text for the profile bio editor");
-
-  Future<void> setBio() async {
-    AdaptiveDialog.show(context, builder: (context) {
-      String? plaintext;
-
-      if (profile case ProfileWithBio p) {
-        plaintext = p.plaintextBio;
-      }
-
-      return SizedBox(
-        width: 600,
-        child: MessageInput(
-          hintText: promptProfileWriteBioHint,
-          initialText: bioText ?? plaintext,
-          showAttachmentButton: false,
-          client: widget.client,
-          showGifSearch: false,
-          disableEnterToSend: true,
-          compact: true,
-          enableKeyboardAdapter: false,
-          availibleEmoticons:
-              widget.client.getComponent<EmoticonComponent>()?.availablePacks,
-          onSendMessage: (message, {overrideClient}) {
-            widget.client.getComponent<UserProfileComponent>()?.setBio(message);
-
-            setState(() {
-              bioText = message;
-            });
-
-            Navigator.of(context).pop();
-
-            return MessageInputSendResult.success;
-          },
-        ),
-      );
-    });
-  }
-
-  Future<void> clearBio() async {
-    if (await AdaptiveDialog.confirmation(context) == true) {
-      setState(() {
-        bioText = null;
-      });
-
-      await widget.client.getComponent<UserProfileComponent>()?.removeBio();
-
-      component.getProfile(widget.userId).then((value) async {
-        await stateFromProfile(value);
-      });
-    }
-  }
-
-  String get labelProfileYourBadges => Intl.message("Your Badges",
-      name: "labelProfileYourBadges",
-      desc:
-          "label for the ui to select which badges to display on the users profile");
-
-  String get labelProfileNoBadges =>
-      Intl.message("You don't have any badges available.",
-          name: "labelProfileNoBadges",
-          desc: "Text shown when the user has no badges available");
-
-  Future<void> editBadges() async {
-    var availableBadges = await component.getAvailableBadges();
-
-    if (availableBadges.isEmpty) {
-      AdaptiveDialog.show(context,
-          builder: (context) => SizedBox(
-                height: 200,
-                child: Center(
-                  child: Container(
-                    child: tiamat.Text.labelLow(labelProfileNoBadges),
-                  ),
-                ),
-              ),
-          title: labelProfileYourBadges);
-      return;
-    }
-
-    var selectedBadges = await AdaptiveDialog.pickMultiple<ProfileBadge>(
-      context,
-      selected: badges,
-      items: availableBadges,
-      title: labelProfileYourBadges,
-      itemBuilder: (context, item) {
-        return Row(
-          spacing: 8,
-          children: [
-            SizedBox(width: 30, height: 30, child: Image(image: item.image)),
-            tiamat.Text.labelLow(item.body),
-          ],
-        );
-      },
-    );
-
-    if (selectedBadges != null) {
-      component.setProfileBadges(selectedBadges);
-      setState(() {
-        badges = selectedBadges;
-      });
-    }
-
-    print("Selected badges $selectedBadges");
   }
 }

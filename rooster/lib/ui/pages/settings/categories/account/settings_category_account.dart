@@ -1,3 +1,4 @@
+import 'package:rooster/client/client.dart';
 import 'package:rooster/client/client_manager.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/pages/settings/categories/account/account_emoji/account_emoji_tab.dart';
@@ -14,6 +15,11 @@ import 'account_management/account_management_tab.dart';
 import 'security/security_tab.dart';
 
 class SettingsCategoryAccount implements SettingsCategory {
+  SettingsCategoryAccount({this.editProfileOf});
+
+  /// The account the Profile tab starts on.
+  final Client? editProfileOf;
+
   String get labelSettingsTabManageAccounts => Intl.message("Manage Accounts",
       name: "labelSettingsTabManageAccounts",
       desc: "Label for the Manage Accounts settings");
@@ -58,9 +64,12 @@ class SettingsCategoryAccount implements SettingsCategory {
         SettingsTab(
             label: labelSettingsTabProfile,
             icon: Icons.account_circle,
+            // The page scrolls itself, so the preview and Save bar can stay.
+            makeScrollable: false,
             pageBuilder: (context) {
               return ProfileEditTab(
                 clientManager: Provider.of<ClientManager>(context),
+                initialClient: editProfileOf,
               );
             }),
         SettingsTab(

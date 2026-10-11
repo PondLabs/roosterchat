@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/profile/profile_component.dart';
+import 'package:rooster/client/components/user_color/user_color_component.dart';
 import 'package:rooster/client/components/user_presence/user_idle_watcher.dart';
 import 'package:rooster/client/components/user_presence/user_presence_component.dart';
 import 'package:rooster/client/components/widgets/widget_component.dart';
@@ -64,8 +66,30 @@ class _CurrentSessionPanelState extends State<CurrentSessionPanel> {
       clientManager!.callManager.currentSessions.onListUpdated.listen((_) {
         setState(() {});
       }),
+      clientManager!.clients.onAdd.listen(followProfile),
     ];
+    clientManager!.clients.forEach(followProfile);
     super.initState();
+  }
+
+  /// Our name, picture and name color here change with the account's.
+  void followProfile(Client client) {
+    final colors = client.getComponent<UserColorComponent>();
+    void requestColor() {
+      final me = client.self?.identifier;
+      if (me != null) colors?.requestPublicColor(me);
+    }
+
+    requestColor();
+    subs.add(client.onOwnProfileUpdated.listen((_) {
+      requestColor(); // self may not have existed when the account was added
+      setState(() {});
+    }));
+    if (colors != null) {
+      subs.add(colors.onColorChanged
+          .where((id) => id == client.self?.identifier)
+          .listen((_) => setState(() {})));
+    }
   }
 
   @override
@@ -136,6 +160,15 @@ class _CurrentSessionPanelState extends State<CurrentSessionPanel> {
 
     if (clientManager!.clients.length == 1) {
       current = clientManager!.clients.first.self;
+    } else if (current != null) {
+      // The page passes the profile it had when it was built; the account's
+      // own is replaced when our name or picture changes.
+      final id = current.identifier;
+      current = clientManager!.clients
+              .where((i) => i.self?.identifier == id)
+              .firstOrNull
+              ?.self ??
+          current;
     }
 
     return Padding(
@@ -176,7 +209,6 @@ class _CurrentSessionPanelState extends State<CurrentSessionPanel> {
                       .map((i) => tiamat.ContextMenuItem(
                           text: i.self!.identifier,
                           onPressed: () {
-                            print("Setting filter client");
                             EventBus.setFilterClient.add(i);
                             preferences.filterClient.set(i.identifier);
                           }))

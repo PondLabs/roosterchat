@@ -65,4 +65,56 @@ void main() {
       findsOneWidget,
     );
   });
+
+  Future<void> pumpCard(WidgetTester tester, UserProfileView card) {
+    return tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.light().copyWith(extensions: const [ThemeSettings()]),
+        home: Scaffold(body: SingleChildScrollView(child: card)),
+      ),
+    );
+  }
+
+  testWidgets('your own card has an edit button and no menu', (tester) async {
+    await pumpCard(
+      tester,
+      UserProfileView(
+        displayName: 'Alice',
+        identifier: '@alice:example.org',
+        userColor: Colors.blue,
+        isSelf: true,
+        doSafeArea: false,
+        setPetName: (_) async {},
+        setColorOverride: (_) async {},
+        onEditProfile: () async {},
+      ),
+    );
+
+    expect(find.text('Edit profile'), findsOneWidget);
+    expect(find.byIcon(Icons.more_vert), findsNothing);
+  });
+
+  testWidgets('someone else\'s card has a menu, a preview has nothing',
+      (tester) async {
+    UserProfileView card({required bool preview}) => UserProfileView(
+          displayName: 'Bob',
+          identifier: '@bob:example.org',
+          userColor: Colors.blue,
+          isSelf: false,
+          doSafeArea: false,
+          preview: preview,
+          setPetName: (_) async {},
+          setColorOverride: (_) async {},
+          onMessageButtonClicked: () async {},
+        );
+
+    await pumpCard(tester, card(preview: false));
+    expect(find.byIcon(Icons.more_vert), findsOneWidget);
+    expect(find.text('Message'), findsOneWidget);
+
+    await pumpCard(tester, card(preview: true));
+    expect(find.byIcon(Icons.more_vert), findsNothing);
+    expect(find.text('Message'), findsNothing);
+    expect(find.byIcon(Icons.copy), findsNothing);
+  });
 }

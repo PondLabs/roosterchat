@@ -205,8 +205,14 @@ abstract class Client {
   /// Update the current user avatar
   Future<void> setAvatar(Uint8List bytes, String mimeType);
 
+  /// Remove the current user avatar
+  Future<void> removeAvatar();
+
   /// Set the display name of the current user
   Future<void> setDisplayName(String name);
+
+  /// Fires after [self] was replaced with fresh data (name or picture changed).
+  Stream<void> get onOwnProfileUpdated;
 
   /// End the current session and prepare for disposal
   /// [closeDatabase] false leaves the database open, for an app refresh

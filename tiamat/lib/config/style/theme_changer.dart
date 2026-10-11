@@ -28,6 +28,9 @@ class ThemeChanger extends StatefulWidget {
 
   static StreamController<ThemeData> onThemeChanged = StreamController.broadcast();
 
+  /// The brightness of the app's current theme.
+  static Brightness brightness = Brightness.dark;
+
   static void setTheme(BuildContext context, ThemeData theme) {
     var state = context.findAncestorStateOfType<ThemeChangerState>()
         as ThemeChangerState;
@@ -71,6 +74,7 @@ class ThemeChangerState extends State<ThemeChanger>
         SchedulerBinding.instance.platformDispatcher.platformBrightness;
 
     theme = widget.initialTheme;
+    ThemeChanger.brightness = theme.brightness;
 
     WidgetsBinding.instance.addObserver(this);
   }
@@ -89,7 +93,7 @@ class ThemeChangerState extends State<ThemeChanger>
   }
 
   void setTheme(ThemeData theme) {
-
+    ThemeChanger.brightness = theme.brightness;
     ThemeChanger.onThemeChanged.add(theme);
     setState(() {
       this.theme = theme;

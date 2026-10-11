@@ -101,6 +101,9 @@ class MatrixClient extends Client {
 
   final StreamController _onSync = StreamController.broadcast();
 
+  final StreamController<void> _onOwnProfileUpdated =
+      StreamController.broadcast();
+
   matrix.NativeImplementations get nativeImplentations => BuildConfig.WEB
       ? const matrix.NativeImplementationsDummy()
       : NativeImplementationsCustom(compute);
@@ -175,6 +178,9 @@ class MatrixClient extends Client {
 
   @override
   Stream<void> get onSync => _onSync.stream;
+
+  @override
+  Stream<void> get onOwnProfileUpdated => _onOwnProfileUpdated.stream;
 
   @override
   List<Peer> get peers => _peers;
@@ -486,23 +492,32 @@ class MatrixClient extends Client {
     if (id != null) {
       var data = await _matrixClient.database.getUserProfile(id);
       if (data != null) {
-        self = MatrixProfile(
-            this,
-            matrix.Profile(
-              userId: id,
-              displayName: data.displayname,
-              avatarUrl: data.avatarUrl,
-            ));
+        _setSelf(matrix.Profile(
+          userId: id,
+          displayName: data.displayname,
+          avatarUrl: data.avatarUrl,
+        ));
 
         // Update own profile, but lets not wait for it before continuing
-        _matrixClient.getProfileFromUserId(id).then((profile) {
-          self = MatrixProfile(this, profile);
-        });
+        _matrixClient.getProfileFromUserId(id).then(_setSelf);
       } else {
-        self = MatrixProfile(this,
-            await _matrixClient.getProfileFromUserId(_matrixClient.userID!));
+        _setSelf(await _matrixClient.getProfileFromUserId(id));
       }
     }
+  }
+
+  /// Reads our name and picture from the server after we changed them: the
+  /// SDK's cache still holds the old ones until a sync marks it outdated.
+  Future<void> _refreshOwnProfile() async {
+    _setSelf(await _matrixClient.getProfileFromUserId(
+      _matrixClient.userID!,
+      maxCacheAge: Duration.zero,
+    ));
+  }
+
+  void _setSelf(matrix.Profile profile) {
+    self = MatrixProfile(this, profile);
+    _onOwnProfileUpdated.add(null);
   }
 
   void _updateRoomslist() {
@@ -744,17 +759,21 @@ class MatrixClient extends Client {
   Future<void> setAvatar(Uint8List bytes, String mimeType) async {
     await _matrixClient.setAvatar(matrix.MatrixImageFile(
         bytes: bytes, name: "avatar", mimeType: mimeType));
+    await _refreshOwnProfile();
+  }
 
-    await _updateOwnProfile();
-    // TODO: Handle refresh avatar
-    // await (self as MatrixPeer).refreshAvatar();
+  @override
+  Future<void> removeAvatar() async {
+    await _matrixClient.setAvatar(null);
+    await _refreshOwnProfile();
   }
 
   @override
   Future<void> setDisplayName(String name) async {
-    _matrixClient.setProfileField(_matrixClient.userID!, "displayname", {
+    await _matrixClient.setProfileField(_matrixClient.userID!, "displayname", {
       "displayname": name,
     });
+    await _refreshOwnProfile();
   }
 
   @override

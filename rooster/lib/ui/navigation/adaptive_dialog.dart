@@ -95,9 +95,6 @@ class AdaptiveDialog {
       },
     );
 
-    print("Got result:");
-    print(result);
-
     if (result != null) {
       return result.map((i) => i as T).toList();
     }
@@ -257,49 +254,91 @@ class AdaptiveDialog {
   }
 
   /// [title] and [submitText] fall back to "Enter Text" and "Submit",
-  /// translated.
+  /// translated. [description] shows above the field. Returns the text as
+  /// it is when submitted ([initialText] if left alone), or null if closed.
   static Future<String?> textPrompt(BuildContext context,
       {String? title,
+      String? description,
       String? submitText,
       String? hintText,
       String? initialText,
       bool multiline = false,
       bool dangerous = false}) {
     return show<String?>(context, builder: (context) {
-      String result = "";
-      TextEditingController controller =
-          TextEditingController(text: initialText);
-
-      return SizedBox(
-        width: MediaQuery.sizeOf(context).desktop ? 500 : null,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: controller,
-                maxLines: multiline ? null : 1,
-                decoration: InputDecoration(hintText: hintText),
-                onChanged: (value) => result = value,
-              ),
-              SizedBox(
-                height: 10,
-              ),
-              tiamat.Button(
-                text: submitText ?? CommonStrings.promptSubmit,
-                onTap: () {
-                  print(result);
-                  Navigator.of(context).pop(result);
-                },
-              )
-            ],
-          ),
-        ),
+      return _TextPromptView(
+        description: description,
+        submitText: submitText,
+        hintText: hintText,
+        initialText: initialText,
+        multiline: multiline,
       );
     }, title: title ?? labelAppEnterText);
+  }
+}
+
+class _TextPromptView extends StatefulWidget {
+  const _TextPromptView(
+      {this.description,
+      this.submitText,
+      this.hintText,
+      this.initialText,
+      this.multiline = false});
+  final String? description;
+  final String? submitText;
+  final String? hintText;
+  final String? initialText;
+  final bool multiline;
+
+  @override
+  State<_TextPromptView> createState() => _TextPromptViewState();
+}
+
+class _TextPromptViewState extends State<_TextPromptView> {
+  // Kept in the state: the bottom sheet rebuilds its content when the
+  // keyboard opens, which would otherwise reset what was typed.
+  late final controller = TextEditingController(text: widget.initialText);
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  void submit() => Navigator.of(context).pop(controller.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: MediaQuery.sizeOf(context).desktop ? 500 : null,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.description != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
+                child: tiamat.Text.labelLow(widget.description!),
+              ),
+            TextField(
+              controller: controller,
+              maxLines: widget.multiline ? null : 1,
+              decoration: InputDecoration(hintText: widget.hintText),
+              onSubmitted: widget.multiline ? null : (_) => submit(),
+            ),
+            SizedBox(
+              height: 10,
+            ),
+            tiamat.Button(
+              text: widget.submitText ?? CommonStrings.promptSubmit,
+              onTap: submit,
+            )
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -473,8 +512,6 @@ class __SelectMultipleViewState<T> extends State<_SelectMultipleView<T>> {
                                       selection.remove(i);
                                     });
                                   }
-
-                                  print(selection);
                                 }),
                             widget.itemBuilder(context, i)
                           ],

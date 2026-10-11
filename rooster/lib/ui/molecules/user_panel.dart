@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:rooster/client/client.dart';
+import 'package:rooster/client/components/user_color/user_color_component.dart';
 import 'package:rooster/client/components/user_presence/user_presence_component.dart';
 import 'package:rooster/client/member.dart';
 import 'package:rooster/ui/atoms/shimmer_loading.dart';
@@ -40,16 +41,25 @@ class _UserPanelState extends material.State<UserPanel> {
 
   StreamSubscription? sub;
 
+  UserColorComponent? userColors;
+  StreamSubscription<String>? colorSub;
+
   @override
   initState() {
     presence = UserPresence(UserPresenceStatus.unknown);
 
     super.initState();
     initPresence();
+    userColors = widget.client.getComponent<UserColorComponent>();
+    colorSub = userColors?.onColorChanged
+        .where((id) => id == widget.userId)
+        .listen((_) => setState(getInfoFromMember));
     getInfoFromMember();
   }
 
   void getInfoFromMember() {
+    userColors?.requestPublicColor(widget.userId);
+
     if (widget.isDirectMessage) {
       displayName = widget.contextRoom.displayName;
       color = widget.contextRoom.defaultColor;
@@ -75,6 +85,7 @@ class _UserPanelState extends material.State<UserPanel> {
   dispose() {
     super.dispose();
     sub?.cancel();
+    colorSub?.cancel();
   }
 
   initPresence() async {

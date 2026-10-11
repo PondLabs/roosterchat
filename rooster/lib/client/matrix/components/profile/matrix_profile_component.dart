@@ -13,6 +13,7 @@ import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/ui/atoms/rich_text/matrix_html_parser.dart';
 import 'package:rooster/utils/color_utils.dart';
+import 'package:rooster/utils/language/app_language.dart';
 import 'package:rooster/utils/text_utils.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
@@ -63,7 +64,7 @@ class MatrixProfile
           }
 
           return MatrixMxcImage(
-            Uri.parse(fields[MatrixProfileComponent.bannerKey]),
+            Uri.parse(url),
             doFullres: true,
             doThumbnail: false,
             autoLoadFullRes: true,
@@ -161,6 +162,7 @@ class MatrixProfile
     Map<String, dynamic>? roosterBioContent =
         fields[MatrixProfileComponent.bioKey];
     if (overrideText != null) {
+      content = null;
       roosterBioContent = MatrixProfileComponent.textToContent(
         overrideText,
         client,
@@ -253,6 +255,19 @@ class MatrixProfile
   }
 
   static Future<ProfileBadge?> badgeFromContent(
+    MatrixClient client,
+    String recipientIdentifier,
+    Map<String, dynamic> entry,
+  ) async {
+    try {
+      return await _badgeFromContent(client, recipientIdentifier, entry);
+    } catch (e, s) {
+      Log.onError(e, s, content: "Skipping a badge that does not parse");
+      return null;
+    }
+  }
+
+  static Future<ProfileBadge?> _badgeFromContent(
     MatrixClient client,
     String recipientIdentifier,
     Map<String, dynamic> entry,
@@ -458,33 +473,58 @@ class MatrixProfileComponent implements UserProfileComponent<MatrixClient> {
   Future<void> setField(String field, dynamic content) async {
     final data = {field: content};
 
-    var response = await client.matrixClient.request(
+    await client.matrixClient.request(
       RequestType.PUT,
       "/client/v3/profile/${Uri.encodeComponent(client.self!.identifier)}/$field",
       data: data,
     );
-
-    print(response);
   }
 
   Future<void> removeField(String field) async {
-    var response = await client.matrixClient.request(
+    await client.matrixClient.request(
       RequestType.DELETE,
       "/client/v3/profile/${Uri.encodeComponent(client.self!.identifier)}/$field",
     );
-
-    print(response);
   }
 
   @override
-  Future<void> setProfileColorScheme(Color color, Brightness brightness) async {
-    await setField(colorSchemeKey, {
-      "color": color.toHexCode(),
-      "brightness": switch (brightness) {
-        Brightness.dark => "dark",
-        Brightness.light => "light",
-      },
-    });
+  Future<void> setProfileColorScheme(Color color, Brightness? brightness) {
+    return setField(colorSchemeKey, colorSchemeContent(color, brightness));
+  }
+
+  static Map<String, String> colorSchemeContent(
+    Color color,
+    Brightness? brightness,
+  ) =>
+      {
+        "color": color.toHexCode(),
+        if (brightness != null) "brightness": brightness.name,
+      };
+
+  @override
+  Future<void> removeProfileColorScheme() {
+    return removeField(colorSchemeKey);
+  }
+
+  @override
+  Future<void> setPronouns(String? pronouns) {
+    final content = pronounsContent(pronouns, AppLanguage.current.value.tag);
+    return content == null
+        ? removeField(pronounsKey)
+        : setField(pronounsKey, content);
+  }
+
+  /// MSC4247: our pronouns in [language] (a BCP 47 tag), or null when
+  /// there are none to share.
+  static List<Map<String, String>>? pronounsContent(
+    String? pronouns,
+    String language,
+  ) {
+    final summary = pronouns?.trim() ?? "";
+    if (summary.isEmpty) return null;
+    return [
+      {"language": language, "summary": summary},
+    ];
   }
 
   @override
@@ -554,9 +594,8 @@ class MatrixProfileComponent implements UserProfileComponent<MatrixClient> {
   }
 
   @override
-  Future<void> removeBio() {
-    removeField(msc4440BioKey);
-    return removeField(bioKey);
+  Future<void> removeBio() async {
+    await Future.wait([removeField(msc4440BioKey), removeField(bioKey)]);
   }
 
   @override
