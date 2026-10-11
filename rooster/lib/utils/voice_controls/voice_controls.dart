@@ -51,7 +51,7 @@ class VoiceCallState {
       "VoiceCallState(inCall: $inCall, muted: $muted, deafened: $deafened)";
 
   static VoiceCallState of(Iterable<VoipSession> sessions) {
-    final calls = sessions.where(_isIn);
+    final calls = sessions.where(isIn);
     return VoiceCallState(
       inCall: calls.isNotEmpty,
       muted: calls.isNotEmpty &&
@@ -62,7 +62,7 @@ class VoiceCallState {
 
   /// A call is one being sat in from the moment it is joined or placed, as
   /// Discord shows its buttons while still connecting. One ringing is not.
-  static bool _isIn(VoipSession session) =>
+  static bool isIn(VoipSession session) =>
       session.state == VoipState.connected ||
       session.state == VoipState.connecting ||
       session.state == VoipState.outgoing;

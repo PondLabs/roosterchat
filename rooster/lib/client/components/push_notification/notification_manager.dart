@@ -17,6 +17,7 @@ import 'package:rooster/config/platform_utils.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/utils/event_bus.dart';
+import 'package:rooster/utils/game_overlay/game_overlay.dart';
 import 'package:rooster/utils/window_management.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
@@ -182,6 +183,10 @@ class NotificationManager {
     }
 
     Log.i("Displaying notification content: $content");
+    // Over a fullscreen game too, where Windows holds its own toasts back.
+    if (content is MessageNotificationContent && GameOverlay.supported) {
+      GameOverlay.instance.showMessage(content);
+    }
     await _notifier!.notify(content!);
   }
 

@@ -5,7 +5,6 @@ import 'package:rooster/client/components/calendar_room/calendar_room_component.
 import 'package:rooster/client/components/soundboard/entrance_sound.dart';
 import 'package:rooster/client/components/voice_channel_status/voice_channel_status_component.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
-import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/client/components/voip_room/voip_room_component.dart';
 import 'package:rooster/client/components/widgets/widget_component.dart';
 import 'package:rooster/client/matrix/components/dj/dj_booths.dart';
@@ -37,6 +36,7 @@ import 'package:rooster/ui/pages/settings/room_settings_page.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:rooster/utils/text_utils.dart';
+import 'package:rooster/utils/voice_controls/call_members.dart';
 import 'package:rooster_calendar_widget/calendar.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -414,17 +414,12 @@ class _RoomTextButtonState extends State<RoomTextButton> {
   }
 
   /// Everyone whose voice is coming through right now, ourselves included.
-  /// Screen share audio is not someone talking.
   void updateSpeaking() {
     final session = voiceSession;
     final speaking = session == null
         ? const <String>{}
         : session.streams
-            .where((stream) =>
-                stream.type != VoipStreamType.screenshare &&
-                stream.type != VoipStreamType.screenshareAudio &&
-                stream.type != VoipStreamType.music &&
-                stream.audiolevel > 0.5)
+            .where(CallMember.isTalking)
             .map((stream) => stream.streamUserId)
             .toSet();
 

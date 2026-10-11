@@ -3,10 +3,17 @@
 import 'dart:async';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
+import 'dart:ui' as ui;
 
+import 'package:collection/collection.dart';
+import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/config/build_config.dart';
 import 'package:rooster/debug/log.dart';
+import 'package:rooster/main.dart';
+import 'package:rooster/ui/atoms/voice_state_indicator.dart';
 import 'package:rooster/utils/voice_controls/browser_call_controls.dart';
+import 'package:rooster/utils/voice_controls/call_faces.dart';
+import 'package:rooster/utils/voice_controls/call_members.dart';
 import 'package:rooster/utils/voice_controls/voice_call_watcher.dart';
 import 'package:rooster/utils/voice_controls/voice_controls.dart';
 import 'package:rooster/utils/voice_controls/web/call_controls_panel.dart';
@@ -31,6 +38,15 @@ final Set<CallSessionAction> _handled = {};
 CallControlsPanel? _panel;
 web.Window? _panelWindow;
 bool _opening = false;
+
+/// Reads who is talking while the panel is open, as often as LiveKit says.
+Timer? _membersFeed;
+final CallFaces _faces = CallFaces();
+
+/// Blob URLs of the avatars, by the image they were made from, and the
+/// images being made into one.
+final Map<ui.Image, String> _avatarUrls = {};
+final Set<ui.Image> _encoding = {};
 
 _CallMediaSession? get _mediaSession {
   final navigator = web.window.navigator as JSObject;
@@ -88,7 +104,70 @@ void _apply(VoiceCallState state) {
     _panelWindow?.close();
     _panel = null;
     _panelWindow = null;
+    _stopMembers();
   }
+}
+
+void _feedMembers() {
+  _membersFeed ??= Timer.periodic(
+      const Duration(milliseconds: 200), (_) => _renderMembers());
+  _renderMembers();
+}
+
+void _stopMembers() {
+  _membersFeed?.cancel();
+  _membersFeed = null;
+  for (final url in _avatarUrls.values) {
+    web.URL.revokeObjectURL(url);
+  }
+  _avatarUrls.clear();
+}
+
+void _renderMembers() {
+  final panel = _panel;
+  if (panel == null) return;
+  final session = clientManager?.callManager.currentSessions
+      .firstWhereOrNull(VoiceCallState.isIn);
+  if (session == null) {
+    panel.renderMembers(const []);
+    return;
+  }
+  // A legacy 1:1 call only reads its levels when asked; LiveKit's does
+  // nothing here.
+  if (session is! CallRoster) session.updateStats();
+  panel.renderMembers([
+    for (final member in CallMember.of(session))
+      _listed(member, _faces.of(session, member.userId)),
+  ]);
+}
+
+PanelMember _listed(CallMember member, CallFace face) => PanelMember(
+      id: member.userId,
+      name: face.name ?? member.userId,
+      avatarUrl: _urlOf(face.avatar),
+      talking: member.talking,
+      deafened: member.deafened,
+      silentLabel: member.deafened
+          ? VoiceStateIndicator.tooltipVoiceDeafened
+          : member.muted
+              ? VoiceStateIndicator.tooltipVoiceMuted
+              : null,
+    );
+
+/// [image] as a URL the panel's document can load, once it has been made.
+String? _urlOf(ui.Image? image) {
+  if (image == null) return null;
+  final url = _avatarUrls[image];
+  if (url != null || !_encoding.add(image)) return url;
+  image.toByteData(format: ui.ImageByteFormat.png).then((bytes) {
+    if (bytes == null || _membersFeed == null) return;
+    final png = bytes.buffer
+        .asUint8List(bytes.offsetInBytes, bytes.lengthInBytes);
+    _avatarUrls[image] = web.URL.createObjectURL(web.Blob([png.toJS].toJS));
+  }).catchError((Object e) {
+    Log.w("Could not show an avatar in the call controls: $e");
+  }).whenComplete(() => _encoding.remove(image));
+  return null;
 }
 
 JSFunction _handler(CallSessionAction action) => switch (action) {
@@ -120,7 +199,8 @@ void popOut() {
   }
 
   _opening = true;
-  final options = {"width": 220, "height": 72}.jsify() as JSObject;
+  // Room for the buttons and about six people; it can be resized.
+  final options = {"width": 240, "height": 264}.jsify() as JSObject;
   pictureInPicture.requestWindow(options).toDart.then((window) {
     _panelWindow = window;
     final panel = _panel = CallControlsPanel(window.document,
@@ -128,12 +208,14 @@ void popOut() {
         title: BuildConfig.app,
         language: AppLanguage.current.value.tag);
     panel.render(_buttons(_watcher.state));
+    _feedMembers();
     window.addEventListener(
         "pagehide",
         ((web.Event _) {
           if (_panelWindow == window) {
             _panel = null;
             _panelWindow = null;
+            _stopMembers();
           }
         }).toJS);
   }, onError: (Object e) {

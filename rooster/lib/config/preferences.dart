@@ -577,6 +577,25 @@ class Preferences {
   StringPreference streamDebugInfoCorner =
       StringPreference("stream_debug_info_corner", defaultValue: "topLeft");
 
+  /// The in-game overlay on Windows: who is talking, and messages, over a
+  /// fullscreen or borderless game (docs/game-overlay.md).
+  BoolPreference gameOverlayEnabled =
+      BoolPreference("game_overlay_enabled", defaultValue: true);
+
+  /// Which corner of the game's screen lists the call: topLeft, topRight,
+  /// bottomLeft or bottomRight.
+  StringPreference gameOverlayVoiceCorner =
+      StringPreference("game_overlay_voice_corner", defaultValue: "topLeft");
+
+  /// Whether the call's list only has who is talking right now.
+  BoolPreference gameOverlayOnlyTalking =
+      BoolPreference("game_overlay_only_talking", defaultValue: false);
+
+  /// Which corner shows messages over the game, or "off".
+  StringPreference gameOverlayMessageCorner = StringPreference(
+      "game_overlay_message_corner",
+      defaultValue: "bottomRight");
+
   DoublePreference emojiPickerHeight =
       DoublePreference("emoji_picker_height", defaultValue: 300);
 

@@ -105,6 +105,10 @@ has the same three controls.
 - The panel is plain DOM, because Flutter cannot draw into a second document
   yet. It follows the browser's light or dark look and `forced-colors` live,
   through CSS.
+- Above its buttons it lists who is in the call, with a green ring on whoever
+  is talking: it is the browser's in-game overlay (`docs/game-overlay.md`).
+  The rows are kept from one render to the next, so the avatars (blob URLs
+  of the same circles the native overlay draws) do not reload.
 
 ## Checking by hand
 

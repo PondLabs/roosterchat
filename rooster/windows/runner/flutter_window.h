@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "game_overlay.h"
 #include "voice_thumb_bar.h"
 #include "win32_window.h"
 
@@ -32,6 +33,9 @@ class FlutterWindow : public Win32Window {
 
   // ROOSTER: call controls under the taskbar thumbnail (issue #146).
   std::unique_ptr<VoiceThumbBar> voice_thumb_bar_;
+
+  // ROOSTER: the in-game overlay (docs/game-overlay.md).
+  std::unique_ptr<GameOverlay> game_overlay_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

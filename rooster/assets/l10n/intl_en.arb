@@ -7282,6 +7282,84 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelGameOverlayHeader": "In-game overlay",
+  "@labelGameOverlayHeader": {
+    "description": "Header of the in-game overlay settings",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGameOverlayToggle": "Show the overlay over games",
+  "@labelGameOverlayToggle": {
+    "description": "Toggle that turns the in-game overlay on and off",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGameOverlayToggleDescription": "Who is talking in your call, and the messages that would notify you, over a game running fullscreen or borderless. Rooster draws it in small windows of its own and never touches the game. A game in exclusive fullscreen can't show it: set the game to borderless.",
+  "@labelGameOverlayToggleDescription": {
+    "description": "Explains the in-game overlay toggle, under it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGameOverlayVoiceCorner": "Where the call is listed",
+  "@labelGameOverlayVoiceCorner": {
+    "description": "Picks the corner of the game's screen where the in-game overlay lists who is in the call",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGameOverlayOnlyTalking": "Only show who is talking",
+  "@labelGameOverlayOnlyTalking": {
+    "description": "Toggle that keeps the in-game overlay's list of the call to the people talking right now",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGameOverlayOnlyTalkingDescription": "Leaves out whoever is quiet, muted or deafened.",
+  "@labelGameOverlayOnlyTalkingDescription": {
+    "description": "Explains the toggle that keeps the in-game overlay's list to the people talking",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGameOverlayMessageCorner": "Where messages appear",
+  "@labelGameOverlayMessageCorner": {
+    "description": "Picks the corner of the game's screen where the in-game overlay shows new messages, or turns them off",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGameOverlayMessagesDescription": "They are not shown while you share your screen, so they don't end up in the stream.",
+  "@labelGameOverlayMessagesDescription": {
+    "description": "Under the setting for where the in-game overlay shows messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGameOverlayMessagesOff": "Don't show messages",
+  "@labelGameOverlayMessagesOff": {
+    "description": "Option of the in-game overlay's message corner that turns messages off",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGameOverlayTopLeft": "Top left",
+  "@labelGameOverlayTopLeft": {
+    "description": "A corner of the game's screen for the in-game overlay",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGameOverlayTopRight": "Top right",
+  "@labelGameOverlayTopRight": {
+    "description": "A corner of the game's screen for the in-game overlay",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGameOverlayBottomLeft": "Bottom left",
+  "@labelGameOverlayBottomLeft": {
+    "description": "A corner of the game's screen for the in-game overlay",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGameOverlayBottomRight": "Bottom right",
+  "@labelGameOverlayBottomRight": {
+    "description": "A corner of the game's screen for the in-game overlay",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelThirdPartyServicesTitle": "Third party services",
   "@labelThirdPartyServicesTitle": {
     "description": "Header for the third party services section in settings",
@@ -7718,6 +7796,12 @@
   "labelSettingsAppDj": "DJ",
   "@labelSettingsAppDj": {
     "description": "Label for the App DJ booth settings page",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelSettingsAppGameOverlay": "Overlay",
+  "@labelSettingsAppGameOverlay": {
+    "description": "Label for the in-game overlay settings page",
     "type": "text",
     "placeholders": {}
   },
@@ -9927,6 +10011,14 @@
     "type": "text",
     "placeholders": {
       "filename": {}
+    }
+  },
+  "labelOverlayMoreMembers": "{howMany,plural, =1{1 more}other{{howMany} more}}",
+  "@labelOverlayMoreMembers": {
+    "description": "Last row of the in-game overlay's list of who is in the call, for the people who did not fit",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
     }
   },
   "messageLinkOpenWithSystemApp": "Open the url with the app registered on your system? \n\n `\n{url}\n`",

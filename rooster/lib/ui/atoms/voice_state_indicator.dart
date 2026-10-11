@@ -20,12 +20,12 @@ class VoiceStateIndicator extends StatelessWidget {
   final double size;
   final bool _badge;
 
-  String get tooltipVoiceMuted => Intl.message("Microphone muted",
+  static String get tooltipVoiceMuted => Intl.message("Microphone muted",
       name: "tooltipVoiceMuted",
       desc:
           "Tooltip of the muted icon next to a voice channel member in the room list");
 
-  String get tooltipVoiceDeafened => Intl.message("Deafened",
+  static String get tooltipVoiceDeafened => Intl.message("Deafened",
       name: "tooltipVoiceDeafened",
       desc:
           "Tooltip of the deafened icon next to a voice channel member in the room list");

@@ -8,6 +8,7 @@ import 'package:rooster/ui/pages/settings/categories/app/advanced_settings_page.
 import 'package:rooster/ui/pages/settings/categories/app/appearance_settings_page.dart';
 import 'package:rooster/ui/pages/settings/categories/app/dj_settings_page.dart';
 import 'package:rooster/ui/pages/settings/categories/app/experiments_settings_page.dart';
+import 'package:rooster/ui/pages/settings/categories/app/game_overlay_settings_page.dart';
 import 'package:rooster/ui/pages/settings/categories/app/general_settings_page.dart';
 import 'package:rooster/ui/pages/settings/categories/app/shortcut_settings/shortcut_settings_page.dart';
 import 'package:rooster/ui/pages/settings/categories/app/soundboard_settings_page.dart';
@@ -17,6 +18,7 @@ import 'package:rooster/ui/pages/settings/categories/app/window_settings.dart';
 import 'package:rooster/ui/pages/settings/categories/developer/developer_settings_page.dart';
 import 'package:rooster/ui/pages/settings/settings_category.dart';
 import 'package:rooster/ui/pages/settings/settings_tab.dart';
+import 'package:rooster/utils/game_overlay/game_overlay.dart';
 import 'package:flutter/material.dart' as m;
 import 'package:intl/intl.dart';
 
@@ -71,6 +73,10 @@ class SettingsCategoryApp implements SettingsCategory {
       name: "labelSettingsAppDj",
       desc: "Label for the App DJ booth settings page");
 
+  String get labelSettingsAppGameOverlay => Intl.message("Overlay",
+      name: "labelSettingsAppGameOverlay",
+      desc: "Label for the in-game overlay settings page");
+
   bool get hasVoip =>
       clientManager?.clients
           .any((e) => e.getComponent<VoipComponent>() != null) ==
@@ -114,6 +120,13 @@ class SettingsCategoryApp implements SettingsCategory {
               icon: m.Icons.album_outlined,
               pageBuilder: (context) {
                 return const DjSettingsPage();
+              }),
+        if (hasVoip && GameOverlay.supported)
+          SettingsTab(
+              label: labelSettingsAppGameOverlay,
+              icon: m.Icons.layers_outlined,
+              pageBuilder: (context) {
+                return const GameOverlaySettingsPage();
               }),
         if (PlatformUtils.isLinux || PlatformUtils.isWindows || BuildConfig.WEB)
           SettingsTab(

@@ -31,6 +31,10 @@ bool FlutterWindow::OnCreate() {
   voice_thumb_bar_ = std::make_unique<VoiceThumbBar>(
       GetHandle(), flutter_controller_->engine()->messenger());
 
+  // ROOSTER: the in-game overlay. Only its channel until Dart starts it.
+  game_overlay_ = std::make_unique<GameOverlay>(
+      flutter_controller_->engine()->messenger());
+
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();
   });
@@ -44,8 +48,10 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
-  // ROOSTER: the thumbnail buttons' channel goes before the engine it is on.
+  // ROOSTER: the thumbnail buttons' and the overlay's channels go before the
+  // engine they are on.
   voice_thumb_bar_ = nullptr;
+  game_overlay_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
