@@ -168,6 +168,19 @@
           ctx.resume().catch((e) => console.error("roosterAudioDsp: could not resume: " + e));
         }
       };
+      // Safari on iOS refuses that resume after an interruption (the page
+      // in the background, the phone locked, the notification shade) until
+      // the page is in front and the user touches it: tried again then.
+      const resumeAgain = () => {
+        if (destroyed || ctx.state === "running" || document.hidden) return;
+        ctx.resume().catch(() => {});
+      };
+      const resumeEvents = ["visibilitychange", "pointerdown", "touchend", "keydown"];
+      for (const e of resumeEvents) document.addEventListener(e, resumeAgain, true);
+      // The browser muting the capture is what the microphone watch acts
+      // on; said here so a report shows it.
+      track.addEventListener("mute", () => console.warn("roosterAudioDsp: the browser muted the microphone"));
+      track.addEventListener("unmute", () => console.warn("roosterAudioDsp: the browser unmuted the microphone"));
       let readyResolve;
       let failure = null;
       const ready = new Promise((res) => (readyResolve = res));
@@ -214,6 +227,7 @@
         async destroy() {
           destroyed = true;
           monitoring = false;
+          for (const e of resumeEvents) document.removeEventListener(e, resumeAgain, true);
           try { source.disconnect(); } catch (e) {}
           try { node.disconnect(); } catch (e) {}
           for (const s of farEnd.values()) {

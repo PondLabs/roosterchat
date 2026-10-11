@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:rooster/client/components/voip/voip_session.dart';
+import 'package:rooster/client/components/voip/webrtc_default_devices.dart';
+import 'package:rooster/main.dart';
 import 'package:rooster/ui/molecules/screen_share_start_reporting.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_button.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_call_controller.dart';
@@ -90,6 +92,19 @@ class CallControlButtons extends StatefulWidget {
           desc: "Entry in the phone's \"more\" sheet of the call buttons that "
               "stops sharing the screen");
 
+  static String get promptCallAudioOutput => Intl.message("Audio output",
+      name: "promptCallAudioOutput",
+      desc: "Tooltip of the call's speaker button, and the title of the "
+          "list it opens: where the call's sound plays (speaker, earpiece, "
+          "headphones)");
+
+  static String get messageCallAudioOutputUnavailable => Intl.message(
+      "This device does not let Rooster choose where the sound plays. "
+      "Change it in the system's audio controls.",
+      name: "messageCallAudioOutputUnavailable",
+      desc: "Shown in the call's audio output list when the browser or "
+          "phone lists no output devices to choose from");
+
   /// The least room left between two buttons of the compact row.
   static const double _compactGap = 4;
 
@@ -145,8 +160,9 @@ class _CallControlButtonsState extends State<CallControlButtons> {
           CallControlButtons.compactRadius(
               asked: widget.radius,
               width: constraints.maxWidth,
-              // Mic, deafen, camera, more and hang up, and the soundboard.
-              count: widget.actions.soundboard == null ? 5 : 6)),
+              // Mic, deafen, speaker, camera, more and hang up, and the
+              // soundboard.
+              count: widget.actions.soundboard == null ? 6 : 7)),
     );
   }
 
@@ -193,6 +209,15 @@ class _CallControlButtonsState extends State<CallControlButtons> {
         await actions.setDeafened?.call(!session.isDeafened);
         if (mounted) setState(() {});
       },
+    );
+    final output = Tooltip(
+      message: CallControlButtons.promptCallAudioOutput,
+      child: tiamat.CircleButton(
+        radius: radius,
+        iconSize: iconSize,
+        icon: Icons.volume_up,
+        onPressed: () => _pickAudioOutput(context),
+      ),
     );
     final camera = tiamat.CircleButton(
       radius: radius,
@@ -250,6 +275,7 @@ class _CallControlButtonsState extends State<CallControlButtons> {
         children: [
           mic,
           deafen,
+          output,
           camera,
           if (soundboardButton != null) soundboardButton,
           tiamat.CircleButton(
@@ -276,11 +302,57 @@ class _CallControlButtonsState extends State<CallControlButtons> {
         if (session.isSharingScreen) stopSharing,
         mic,
         deafen,
+        output,
         camera,
         if (soundboardButton != null) soundboardButton,
         if (booth != null) booth,
         hangUp,
       ],
+    );
+  }
+
+  /// Lists where the call can play (speaker, earpiece, headphones) and
+  /// switches to the one picked, saved as the settings' audio output.
+  Future<void> _pickAudioOutput(BuildContext context) async {
+    final devices = (await WebrtcDefaultDevices.getDevices())
+        .where((d) => d.kind == "audiooutput")
+        .toList();
+    final current = await WebrtcDefaultDevices.picked(AudioDeviceKind.output);
+    if (!context.mounted) return;
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheet) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                  title: Text(CallControlButtons.promptCallAudioOutput,
+                      style: Theme.of(sheet).textTheme.titleMedium)),
+              if (devices.isEmpty)
+                ListTile(
+                  leading: const Icon(Icons.info_outline),
+                  title: Text(
+                      CallControlButtons.messageCallAudioOutputUnavailable),
+                ),
+              for (final device in devices)
+                ListTile(
+                  leading: Icon(device.deviceId == current?.deviceId
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked),
+                  // Not translated: the name the system gives the device.
+                  title: Text(device.label),
+                  onTap: () async {
+                    Navigator.pop(sheet);
+                    await preferences.voipDefaultAudioOutput.set(device.label);
+                    await widget.session.applyAudioOutput();
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

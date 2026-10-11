@@ -1592,6 +1592,20 @@ class MatrixLivekitVoipSession
   }
 
   @override
+  Future<void> applyAudioOutput() async {
+    if (!kIsWeb) {
+      await WebrtcDefaultDevices.selectOutputDevice();
+      return;
+    }
+    // In the browser LiveKit plays each remote track in an audio element of
+    // its own, which only its setSinkId reaches.
+    final device = await WebrtcDefaultDevices.picked(AudioDeviceKind.output);
+    if (device == null) return;
+    await livekitRoom.setAudioOutputDevice(lk.MediaDevice(device.deviceId,
+        device.label, device.kind ?? 'audiooutput', device.groupId));
+  }
+
+  @override
   Future<void> setDeafened(bool state) async {
     if (state) {
       _deafen.deafen(micMuted: isMicrophoneMuted);

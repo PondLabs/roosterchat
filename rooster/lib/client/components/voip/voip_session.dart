@@ -103,6 +103,10 @@ abstract class VoipSession {
 
   Future<void> setDeafened(bool state);
 
+  /// Plays the call through the output device the user picked
+  /// (`voipDefaultAudioOutput`), as soon as it is picked.
+  Future<void> applyAudioOutput();
+
   Future<void> updateStats();
 
   Future<ScreenCaptureSource?> pickScreenCapture(BuildContext context);

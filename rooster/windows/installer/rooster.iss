@@ -56,6 +56,9 @@ Name: "pt"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
 
 [Tasks]
 Name: desktopicon; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+; On by default: Rooster opens when you sign in to Windows. Untick it here,
+; or turn it off in Task Manager's Startup apps.
+Name: startup; Description: "{cm:AutoStartProgram,Rooster}"; GroupDescription: "{cm:AutoStartProgramGroupDescription}"
 
 [Files]
 Source: "{#Source}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -64,6 +67,11 @@ Source: "{#Source}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs cre
 ; The name the updater's own Start menu shortcut has (updateTargetFor).
 Name: "{userprograms}\Rooster"; Filename: "{app}\rooster.exe"; WorkingDir: "{app}"
 Name: "{userdesktop}\Rooster"; Filename: "{app}\rooster.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Rooster"; ValueData: """{app}\rooster.exe"""; Flags: uninsdeletevalue; Tasks: startup
+; Unticked on a reinstall: it stops opening on sign-in.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "Rooster"; Flags: deletevalue; Tasks: not startup
 
 [Run]
 Filename: "{app}\rooster.exe"; Description: "{cm:LaunchProgram,Rooster}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent

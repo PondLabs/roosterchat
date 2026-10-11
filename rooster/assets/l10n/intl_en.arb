@@ -3778,6 +3778,18 @@
     "type": "text",
     "placeholders": {}
   },
+  "promptCallAudioOutput": "Audio output",
+  "@promptCallAudioOutput": {
+    "description": "Tooltip of the call's speaker button, and the title of the list it opens: where the call's sound plays (speaker, earpiece, headphones)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageCallAudioOutputUnavailable": "This device does not let Rooster choose where the sound plays. Change it in the system's audio controls.",
+  "@messageCallAudioOutputUnavailable": {
+    "description": "Shown in the call's audio output list when the browser or phone lists no output devices to choose from",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelCallEnded": "Call ended",
   "@labelCallEnded": {
     "description": "Shown in place of a call that has ended",
@@ -5352,9 +5364,17 @@
     "type": "text",
     "placeholders": {}
   },
-  "updateInstalledContent": "Thank you for updating! You are now running the latest version.",
-  "@updateInstalledContent": {
+  "updateInstalledVersion": "Rooster is now on version {version}.",
+  "@updateInstalledVersion": {
     "description": "Content for the dialog which is shown when an update has been installed",
+    "type": "text",
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "promptUpdateInstalledOk": "Got it",
+  "@promptUpdateInstalledOk": {
+    "description": "Button that closes the dialog shown after an update",
     "type": "text",
     "placeholders": {}
   },

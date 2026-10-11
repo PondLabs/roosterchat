@@ -102,6 +102,10 @@ class WebrtcDefaultDevices {
         devices.firstWhereOrNull((d) => d.deviceId == wanted);
   }
 
+  /// The device of [kind] the user picked, if it is here.
+  static Future<webrtc.MediaDeviceInfo?> picked(AudioDeviceKind kind) =>
+      _find(kind);
+
   static Future<bool> _select(
       AudioDeviceKind kind, webrtc.MediaDeviceInfo device) async {
     try {

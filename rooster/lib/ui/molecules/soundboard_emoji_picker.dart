@@ -35,7 +35,11 @@ class SoundboardEmojiView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = Text(emoji.unicode, style: TextStyle(fontSize: size));
+    // Opaque color: color emoji take the text color's alpha, and a disabled
+    // button (the voice member rows) would hand down a faded one.
+    final text = Text(emoji.unicode,
+        style: TextStyle(
+            fontSize: size, color: Theme.of(context).colorScheme.onSurface));
     final image = emoji.isCustom ? this.image : null;
     if (image == null) return text;
     // Emoji glyphs render a bit taller than their font size.

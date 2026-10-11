@@ -45,7 +45,14 @@ runs, in this order:
      and stops when the capture does (native: the capture thread; web: the
      audio context);
    - whether the capture track ended (on the web, the raw capture behind
-     the DSP's processed track);
+     the DSP's processed track), or the browser muted it: Safari on iOS
+     does when the page goes to the background, the phone locks or the
+     system takes the audio, and often leaves it so. A muted capture hands
+     over silence, so the counters look fine. It counts as ended once the
+     app is in front again (nothing is judged while it is not: a hidden
+     page cannot open a capture). The web DSP's audio context is resumed
+     again on the next touch or return to the page, which is all Safari
+     allows after an interruption;
    - whether the web DSP's frame counter moves;
    - `outbound-rtp` `packetsSent` while the DSP hears the user speak (with
      DTX, a quiet microphone sends next to nothing, so only then);

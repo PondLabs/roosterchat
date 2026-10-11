@@ -53,9 +53,9 @@ its own runner, and the release carries them beside the archives:
 
 | Platform | File | Installs to |
 |----------|------|-------------|
-| Windows | `rooster-<tag>-windows-x64-setup.exe` (Inno Setup, `rooster/windows/installer/rooster.iss`; `/DArch=arm64` makes the arm64 one, once there is an arm64 build) | `%LOCALAPPDATA%\Programs\Rooster`, Start menu shortcut, uninstall entry. No admin. The x64 installer also installs on Windows on Arm, under emulation. |
+| Windows | `rooster-<tag>-windows-x64-setup.exe` (Inno Setup, `rooster/windows/installer/rooster.iss`; `/DArch=arm64` makes the arm64 one, once there is an arm64 build) | `%LOCALAPPDATA%\Programs\Rooster`, Start menu shortcut, uninstall entry, and (a task ticked by default) an `HKCU\…\Run` value so Rooster opens on sign-in. No admin. The x64 installer also installs on Windows on Arm, under emulation. |
 | macOS | `rooster-<tag>-macos-universal.dmg` | Wherever `Rooster.app` is dragged; Applications is offered. |
-| Linux | `rooster-<tag>-linux-x64-setup.sh` and `rooster-<tag>-linux-arm64-setup.sh` (`rooster/linux/installer/setup.sh` with the bundle appended) | `~/.local/opt/Rooster`, a launcher entry, an icon, `~/.local/bin/rooster`. No root. `--uninstall` removes it. The script refuses a bundle built for another CPU. |
+| Linux | `rooster-<tag>-linux-x64-setup.sh` and `rooster-<tag>-linux-arm64-setup.sh` (`rooster/linux/installer/setup.sh` with the bundle appended) | `~/.local/opt/Rooster`, a launcher entry, an icon, `~/.local/bin/rooster`, and an entry in `~/.config/autostart` so Rooster opens on login (`--no-autostart` leaves it out, or takes it away on a reinstall). No root. `--uninstall` removes it. The script refuses a bundle built for another CPU. |
 
 Every one installs somewhere the user owns, so the updater below can replace
 it. That is also why there is no .deb: `/usr` belongs to the package manager.

@@ -9,6 +9,8 @@
 # is one the updater can replace (docs/updating.md); a .deb under /usr is not.
 #
 #   sh rooster-<tag>-linux-<arch>-setup.sh              install, or reinstall
+#   sh rooster-<tag>-linux-<arch>-setup.sh --no-autostart  the same, but
+#                                                         not opened on login
 #   sh rooster-<tag>-linux-<arch>-setup.sh --uninstall  remove it again
 set -eu
 
@@ -18,9 +20,10 @@ install=$opt/Rooster
 desktop=$data/applications/com.pondlabs.rooster.desktop
 icon=$data/icons/hicolor/256x256/apps/com.pondlabs.rooster.png
 bin=$HOME/.local/bin/rooster
+autostart=${XDG_CONFIG_HOME:-$HOME/.config}/autostart/com.pondlabs.rooster.desktop
 
 if [ "${1:-}" = --uninstall ]; then
-  rm -rf "$install" "$opt/.rooster-update" "$desktop" "$icon" "$bin"
+  rm -rf "$install" "$opt/.rooster-update" "$desktop" "$icon" "$bin" "$autostart"
   echo "Rooster is uninstalled. Your accounts and settings were left alone."
   exit 0
 fi
@@ -56,6 +59,13 @@ sed -e "s|^Exec=rooster|Exec=\"$install/rooster\"|" -e 's|^Version=.*|Version=1.
   "$tmp/rooster.desktop" > "$desktop"
 cp "$tmp/rooster.png" "$icon"
 ln -sf "$install/rooster" "$bin"
+# Opens on login unless asked not to; a reinstall with the flag turns it off.
+if [ "${1:-}" = --no-autostart ]; then
+  rm -f "$autostart"
+else
+  mkdir -p "$(dirname "$autostart")"
+  cp "$desktop" "$autostart"
+fi
 update-desktop-database "$(dirname "$desktop")" 2> /dev/null || true
 
 echo "Rooster is installed in $install. It is in your applications menu."

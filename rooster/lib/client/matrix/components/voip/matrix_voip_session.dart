@@ -182,6 +182,11 @@ class MatrixVoipSession implements VoipSession {
   }
 
   @override
+  Future<void> applyAudioOutput() async {
+    await WebrtcDefaultDevices.selectOutputDevice();
+  }
+
+  @override
   Future<void> setDeafened(bool state) async {
     if (state) {
       _deafen.deafen(micMuted: isMicrophoneMuted);

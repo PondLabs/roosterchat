@@ -11,6 +11,7 @@ import 'package:rooster/client/components/voip/audio_processing/shared_audio_pro
 import 'package:rooster/client/components/voip/microphone_health.dart';
 import 'package:rooster/client/components/voip/webrtc_microphone.dart';
 import 'package:rooster/debug/log.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleState, WidgetsBinding;
 import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
 import 'package:livekit_client/livekit_client.dart' as lk;
 
@@ -305,6 +306,16 @@ class LivekitMicrophoneHealth {
 
   Future<void> check() => monitor.check();
 
+  /// Whether the page can be seen; one without focus (`inactive`, the
+  /// notification shade over it) can still open a capture.
+  static bool _visible() => switch (WidgetsBinding.instance.lifecycleState) {
+        AppLifecycleState.hidden ||
+        AppLifecycleState.paused ||
+        AppLifecycleState.detached =>
+          false,
+        _ => true,
+      };
+
   Future<MicrophoneVitals> _read() async {
     if (!_connected()) return MicrophoneVitals.none;
     final participant = _participant();
@@ -320,14 +331,18 @@ class LivekitMicrophoneHealth {
       return MicrophoneVitals.none;
     }
     _hadMicrophone = true;
+    // With a processor (the web's DSP) the track the sender carries is
+    // the processed one, which never ends: the capture is the original.
+    // ignore: invalid_use_of_internal_member
+    final capture = track.originalTrack ?? track.mediaStreamTrack;
+    final muted = captureMuted(capture);
+    // A page in the background cannot open a capture (Safari): nothing is
+    // judged until it is visible again, and a new capture is then made.
+    if (muted && !_visible()) return MicrophoneVitals.none;
     final counters = await readSenderCounters(track.sender);
     return MicrophoneVitals(
       sending: true,
-      // With a processor (the web's DSP) the track the sender carries is
-      // the processed one, which never ends: the capture is the original.
-      captureEnded: !track.isActive ||
-          // ignore: invalid_use_of_internal_member
-          captureEnded(track.originalTrack ?? track.mediaStreamTrack),
+      captureEnded: !track.isActive || muted || captureEnded(capture),
       capturedSeconds: counters.capturedSeconds,
       packetsSent: counters.packetsSent,
       talking: _talking?.call() ?? false,

@@ -13,6 +13,7 @@ import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
@@ -314,6 +315,12 @@ class MatrixLivekitBackend {
     final session =
         MatrixLivekitVoipSession(room, lkRoom, keyProvider: provider);
     livekitRoom = lkRoom;
+    // In the browser the pick only reaches LiveKit's own audio elements.
+    if (kIsWeb) {
+      session.applyAudioOutput().catchError((Object e, StackTrace s) {
+        Log.onError(e, s, content: "Could not use the picked speakers");
+      });
+    }
     return session;
   }
 
