@@ -1,7 +1,7 @@
 // The demo video's screens that the landing page doesn't have
 // (docs/brand/demo): Lou's camera in the call, Jonas's stream full screen,
-// and Maya's noise suppression setting with its live meter, on and off,
-// while her microphone hears someone typing. The call is set up as
+// and the call panel's noise suppression button, off and on, while Maya's
+// microphone hears someone typing. The call is set up as
 // capture.mjs sets it up. Run services.sh and seed.mjs first.
 //
 //   ROOSTER_CAMERA=clip.y4m ROOSTER_NOISY_MIC=noisy_48k.wav node capture-video.mjs
@@ -108,43 +108,34 @@ async function run() {
     await wait(2500);
   }
 
-  // Her settings: Voice and Video, noise suppression with the meter live.
-  const gear = (await buttonsAt(maya, `b.y > ${maya.viewportSize().height - 60} && b.x < 300`)).sort((a, b) => b.x - a.x)[0];
-  await maya.mouse.click(gear.x, gear.y);
-  await wait(2500);
-  if (await button(maya, "App Settings").count()) { await button(maya, "App Settings").click(); await wait(1500); }
-  await button(maya, "Voice and Video").click();
-  await wait(2500);
-  if (process.env.DEBUG) log("settings:", (await labels(maya)).filter(Boolean).join(" | "));
-  const toggle = maya.locator('flt-semantics [role="switch"], flt-semantics [role="checkbox"], flt-semantics input[type="checkbox"]');
-  const ns = await maya.evaluate(() => [...document.querySelectorAll("flt-semantics [role], flt-semantics input")]
-    .find((e) => (e.getAttribute("aria-label") || e.textContent || "").includes("Noise suppression"))?.getBoundingClientRect().y);
-  if (ns != null) { await maya.mouse.move(900, 500); await maya.mouse.wheel(0, ns - 200); await wait(1500); }
-  log("switches:", await toggle.count());
+  // Noise suppression from the call panel: the button beside mute and
+  // deafen, its card open, off and then on, while Maya's microphone hears
+  // someone typing (her tile lights up while the typing gets through).
+  await maya.mouse.move(1000, 500);
+  await wait(1500);
+  const panel = await maya.evaluate(() => [...document.querySelectorAll('flt-semantics [role="button"]')]
+    .map((e) => e.getBoundingClientRect())
+    .filter((r) => r.y > innerHeight - 160 && r.x < 330 && r.width > 30 && r.width < 60)
+    .map((r) => [r.x + r.width / 2, r.y + r.height / 2])
+    .sort((a, b) => a[0] - b[0]));
+  if (process.env.DEBUG) log("call panel:", JSON.stringify(panel));
+  // microphone, headphones, noise suppression
+  const [nx, ny] = panel[2];
   const frames = async (name) => {
-    for (let i = 0; i < 16; i++) { await maya.screenshot({ path: `${CAPS}/${name}-${String(i).padStart(2, "0")}.png` }); await wait(150); }
+    for (let i = 0; i < 6; i++) {
+      await maya.screenshot({ path: `${CAPS}/${name}-${String(i).padStart(2, "0")}.png` });
+      await wait(250);
+    }
     log("captured", name);
   };
-  await settle(maya, 2000);
+  await maya.mouse.click(nx, ny); // off
+  await maya.mouse.move(nx + 2, ny - 2);
+  await wait(3000);
+  await frames("ns-off");
+  await maya.mouse.click(nx, ny); // on
+  await maya.mouse.move(nx - 2, ny + 2);
+  await wait(3000);
   await frames("ns-on");
-  // The switch on the noise suppression row: the one level with its title.
-  const sw = await maya.evaluate(() => {
-    const title = [...document.querySelectorAll("flt-semantics *")]
-      .filter((e) => (e.getAttribute("aria-label") || e.textContent || "").trim().startsWith("Noise suppression"))
-      .map((e) => e.getBoundingClientRect()).sort((a, b) => a.height - b.height)[0];
-    const switches = [...document.querySelectorAll('flt-semantics [role="switch"], flt-semantics [role="checkbox"], flt-semantics input[type="checkbox"]')]
-      .map((e) => e.getBoundingClientRect());
-    if (!title) return null;
-    const y = title.y + title.height / 2;
-    return switches.sort((a, b) => Math.abs(a.y + a.height / 2 - y) - Math.abs(b.y + b.height / 2 - y))[0];
-  });
-  log("noise suppression switch:", JSON.stringify(sw));
-  if (sw) {
-    await maya.mouse.click(sw.x + sw.width / 2, sw.y + sw.height / 2);
-    await settle(maya, 2000);
-    await frames("ns-off");
-    await maya.mouse.click(sw.x + sw.width / 2, sw.y + sw.height / 2);
-  }
 
   for (const user of Object.keys(people)) await close(user);
   log("done:", fs.readdirSync(CAPS).join(", "));
