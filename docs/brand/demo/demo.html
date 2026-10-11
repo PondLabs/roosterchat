@@ -241,8 +241,8 @@ const FX = {
   // Everyone drops into the Lounge, one per beat, Maya last.
   'call-lounge': (s, L, src) => {
     const P = [
-      ['theo', [1026, 962], 527], ['priya', [1026, 627], 574], ['jonas', [614, 290], 621], ['lou', [614, 627], 668],
-      ['kenji', [614, 962], 715, 1], ['bia', [1026, 290], 762], ['maya', [1438, 625], 809, 1],
+      ['theo', [614, 962], 809, 1], ['priya', [1026, 627], 762], ['jonas', [1026, 962], 574], ['lou', [614, 290], 668],
+      ['kenji', [614, 627], 621, 1], ['bia', [1026, 290], 527], ['maya', [1438, 625], 715, 1],
     ].map(([name, at, row, talks]) => ({ talks, a: av(L, src, 1920, 1131, at, TILE), r: cut(L, src, 1920, 1131, [128, row - 23, 264, 46], PANEL) }));
     return (t, u) => P.forEach((m, i) => {
       const tj = .5 + i * BEAT, k = p(u, tj, .5, E.back);
@@ -255,7 +255,7 @@ const FX = {
 
   // Jonas goes live: his stream pops into the call.
   'call-share': (s, L, src) => {
-    const live = cut(L, src, 1920, 1131, [330, 607, 46, 30], PANEL, 6);
+    const live = cut(L, src, 1920, 1131, [330, 559, 46, 30], PANEL, 6);
     const btns = cut(L, src, 1920, 1131, [1522, 626, 124, 70], GAP);
     const v = stream(L, [1236, 765, 406, 228], GAP);
     const A = [[1026, 290], [1438, 375], [614, 962]].map(at => av(L, src, 1920, 1131, at, null));
@@ -272,8 +272,8 @@ const FX = {
   // Maya hits Rooster, then Bonk: the button gives, and the sound's emoji
   // sits on her avatar while it plays (SoundboardEmojiOverlay).
   'call-soundboard': (s, L, src) => {
-    stream(L, [1236, 262, 406, 228], null);
-    const maya = av(L, src, 1920, 1131, [1438, 875], TILE);
+    stream(L, [1236, 765, 406, 228], null);
+    const maya = av(L, src, 1920, 1131, [1438, 375], TILE);
     const btns = s.press.map(([, x, y, w, h]) => cut(L, src, 1920, 1131, [x, y, w, h], '#29211e', 10));
     const emo = el('div', 'emoji', L);
     return (t, u) => {
@@ -288,7 +288,7 @@ const FX = {
       if (!cur) return set(emo, { opacity: 0 });
       const d = t - cur[0], k = p(d, 0, .35, E.back), out = p(d, 1.6, .25, E.in);
       emo.textContent = cur[1];
-      box(emo, 1450, 790, 80, 80);
+      box(emo, 1450, 290, 80, 80);
       set(emo, { fontSize: '64px', opacity: clamp(k * 2) * (1 - out), transform: `scale(${(.4 + .6 * k) * (1 - .4 * out)})` });
     };
   },
@@ -296,8 +296,8 @@ const FX = {
   // Priya on the decks: the room bounces to the beat, the record spins,
   // the song plays on and the queue fills.
   'call-dj': (s, L, src) => {
-    const A = [[533, 240], [785, 240], [1037, 330], [533, 597], [785, 597], [1037, 860], [785, 955]].map(at => av(L, src, 1920, 1131, at, TILE, 200));
-    const Q = [700, 766, 832].map(y => cut(L, src, 1920, 1131, [1182, y, 440, 66], TILE));
+    const A = [[597, 240], [973, 240], [597, 597], [973, 597], [597, 955], [973, 955]].map(at => av(L, src, 1920, 1131, at, TILE, 200));
+    const Q = [706, 772].map(y => cut(L, src, 1920, 1131, [1182, y, 440, 66], TILE));
     // the record turning under the sleeve
     const disc = el('div', 'fx', L);
     box(disc, 1292 - 48, 255 - 48, 96, 96);
@@ -336,23 +336,21 @@ const FX = {
     });
   },
 
-  // Maya's voice settings while her microphone hears someone typing: first
-  // with noise suppression off, then on (the click at s.press[0]). Its meter
-  // and the line under it are live: they play through the frames captured a
-  // moment apart, each kept as the strip they change in.
+  // The call panel's noise suppression button, its card open, while Maya's
+  // microphone hears someone typing: off, then on (the click at
+  // s.press[0]). Frames captured a quarter second apart play in a loop.
   'ns': (s, L, src) => {
-    const on = el('img', '', L);
-    Object.assign(on, { src: VIDEO_SHOTS + 'ns-on.webp', width: 1920, height: 1131 });
-    set(on, { position: 'absolute', left: 0, top: 0, opacity: 0 });
-    const strip = el('div', 'fx', L);
-    box(strip, 0, 690, 1920, 130);
-    set(strip, { backgroundSize: '1920px 130px' });
-    const frames = ['off', 'on'].map(st => [...Array(16).keys()].map(i => VIDEO_SHOTS + `ns-${st}-meter-${String(i).padStart(2, '0')}.webp`));
-    frames.flat().forEach(f => { const i = el('img', '', $('preload')); i.src = f; });
+    const frames = ['off', 'on'].map(st => [...Array(6).keys()].map(i => VIDEO_SHOTS + `ns-${st}-${String(i).padStart(2, '0')}.webp`));
+    const imgs = frames.flat().map(f => {
+      const i = el('img', '', L);
+      Object.assign(i, { src: f, width: 1920, height: 1131 });
+      set(i, { position: 'absolute', left: 0, top: 0, opacity: 0 });
+      return i;
+    });
     return (t, u) => {
       const st = t >= s.press[0][0] ? 1 : 0;
-      set(on, { opacity: st });
-      set(strip, { backgroundImage: `url(${frames[st][Math.floor(t * 6.5) % 16]})` });
+      const shown = st * 6 + Math.floor(t * 4) % 6;
+      imgs.forEach((im, i) => set(im, { opacity: i === shown ? 1 : 0 }));
     };
   },
 
@@ -380,8 +378,8 @@ const FX = {
   },
 
   'phone-call': (s, L, src) => {
-    stream(L, [406, 620, 398, 223], null);
-    const A = [[200, 370], [200, 730], [200, 1090]].map(at => av(L, src, 804, 1624, at, '#1e1715', 300));
+    stream(L, [406, 978, 396, 222], null);
+    const A = [];
     return (t, u) => A.forEach((a, i) => set(a, { transform: `scale(${1 + .04 * Math.abs(Math.sin(t * 8 + i * 2))})` }));
   },
 
@@ -402,15 +400,15 @@ const FX = {
 // crossfades in place instead of sliding.
 const FRAME = REEL ? { x: 40, y: 600, w: 1000, h: 1000 } : { x: 230, y: 196, w: 1460, h: 860 };
 // The noise suppression switch, and where Jonas's stream sits in call-share.
-const NS_SWITCH = [1806, 477, 60, 40, null], SHARE_TILE = [1236, 765, 406, 228];
+const NS_SWITCH = [147, 1014, 52, 52, null], SHARE_TILE = [1236, 765, 406, 228];
 const DESKTOP = [
   { shot: 'call-lounge', t0: 3.9, t1: 9.8,
     cap: 'Voice rooms <em>that stay open.</em>', sub: 'Rooms don\'t ring. Drop in, drop out, and see who\'s around before you join.',
     cam: [[3.9, 1.04, 900, 565], [8.6, 1.1, 820, 600]] },
-  { shot: 'ns', img: VIDEO_SHOTS + 'ns-off.webp', t0: 9.6, t1: 17.6,
-    cap: 'Noise suppression <em>on your machine.</em>', sub: 'Sound on: first the microphone as it is, then what the room hears.',
-    cam: [[9.6, 1, 960, 565], [10.8, 1.22, 1110, 640]],
-    cursor: [[12.4, 1500, 950], [13.4, 1836, 497]], press: [[13.8, ...NS_SWITCH]] },
+  { shot: 'ns', img: VIDEO_SHOTS + 'ns-off-00.webp', t0: 9.6, t1: 17.6,
+    cap: 'Noise suppression, <em>one click away.</em>', sub: 'Sound on: the microphone as it is, then what the room hears.',
+    cam: [[9.6, 1, 960, 565], [10.8, 1.3, 520, 840]],
+    cursor: [[12.2, 700, 980], [13.4, 176, 1044]], press: [[13.8, ...NS_SWITCH]] },
   { shot: 'call-share', t0: 17.4, t1: 21.8,
     cap: 'Share your screen, <em>with its sound.</em>', sub: 'Stream a game, or put a movie on for everyone.',
     cam: [[17.4, 1, 960, 565], [18.8, 1.3, 1400, 760], [20.2, 1.3, 1400, 760], [20.9, 1, 960, 565]],
@@ -437,10 +435,10 @@ const DESKTOP = [
 const REELS = [
   { phone: 'phone-call', t0: 2.6, t1: 6.8,
     cap: 'Voice rooms <em>that stay open.</em>', sub: 'Drop in, drop out.' },
-  { shot: 'ns', img: VIDEO_SHOTS + 'ns-off.webp', t0: 6.6, t1: 13.0,
-    cap: 'Noise suppression <em>on your device.</em>', sub: 'Sound on: before, then after.',
-    cam: [[6.6, 1, 1300, 720], [7.4, 1.1, 1380, 720]],
-    cursor: [[8.6, 1500, 950], [9.5, 1836, 497]], press: [[9.9, ...NS_SWITCH]] },
+  { shot: 'ns', img: VIDEO_SHOTS + 'ns-off-00.webp', t0: 6.6, t1: 13.0,
+    cap: 'Noise suppression, <em>one click away.</em>', sub: 'Sound on: before, then after.',
+    cam: [[6.6, 1, 600, 800], [7.4, 1.15, 420, 860]],
+    cursor: [[8.6, 700, 980], [9.5, 176, 1044]], press: [[9.9, ...NS_SWITCH]] },
   { shot: 'call-share', t0: 12.8, t1: 16.6,
     cap: 'Share your screen, <em>with its sound.</em>', sub: 'Stream a game for everyone.',
     cam: [[12.8, 1, 1240, 700], [14.0, 1.3, 1438, 820]] },

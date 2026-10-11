@@ -161,9 +161,12 @@ export async function toggleMic(user) {
   const page = people[user].page;
   await show(user);
   await wait(1000);
+  // The leftmost 40 px button in the sidebar's bottom rows: where the room
+  // name leaves room, it moves.
   const mic = await page.evaluate(() => [...document.querySelectorAll('flt-semantics [role="button"]')]
     .map((e) => e.getBoundingClientRect())
-    .filter((r) => r.y > innerHeight - 160 && Math.abs(r.x - 76) < 3 && Math.abs(r.width - 40) < 3)
+    .filter((r) => r.y > innerHeight - 160 && r.x < 330 && Math.abs(r.width - 40) < 3)
+    .sort((a, b) => a.y - b.y || a.x - b.x)
     .map((r) => [r.x + r.width / 2, r.y + r.height / 2])[0]);
   if (!mic) throw new Error(user + ": no call panel");
   await page.mouse.click(mic[0], mic[1]);
