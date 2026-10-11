@@ -110,7 +110,8 @@ class CallControlsPanel {
       listed.add(member.id);
       final row = _memberRows.putIfAbsent(member.id, () => _MemberRow(this))
         ..show(member);
-      final here = previous == null ? _members.firstChild : previous.nextSibling;
+      final here =
+          previous == null ? _members.firstChild : previous.nextSibling;
       if (here == null || !here.isSameNode(row.element)) {
         _members.insertBefore(row.element, here);
       }
@@ -314,7 +315,8 @@ class _MemberRow {
     _shown = member;
 
     element.setAttribute("data-talking", member.talking.toString());
-    element.setAttribute("data-silent", (member.silentLabel != null).toString());
+    element.setAttribute(
+        "data-silent", (member.silentLabel != null).toString());
     if (member.name != shown?.name) _name.textContent = member.name;
     if (member.avatarUrl != shown?.avatarUrl) {
       final url = member.avatarUrl;

@@ -77,8 +77,7 @@ class GameOverlaySettingsPage extends StatefulWidget {
       name: "labelGameOverlayBottomLeft",
       desc: "A corner of the game's screen for the in-game overlay");
 
-  static String get labelGameOverlayBottomRight => Intl.message(
-      "Bottom right",
+  static String get labelGameOverlayBottomRight => Intl.message("Bottom right",
       name: "labelGameOverlayBottomRight",
       desc: "A corner of the game's screen for the in-game overlay");
 

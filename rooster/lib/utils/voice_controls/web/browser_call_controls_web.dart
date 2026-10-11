@@ -161,8 +161,8 @@ String? _urlOf(ui.Image? image) {
   if (url != null || !_encoding.add(image)) return url;
   image.toByteData(format: ui.ImageByteFormat.png).then((bytes) {
     if (bytes == null || _membersFeed == null) return;
-    final png = bytes.buffer
-        .asUint8List(bytes.offsetInBytes, bytes.lengthInBytes);
+    final png =
+        bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes);
     _avatarUrls[image] = web.URL.createObjectURL(web.Blob([png.toJS].toJS));
   }).catchError((Object e) {
     Log.w("Could not show an avatar in the call controls: $e");

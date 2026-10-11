@@ -115,8 +115,10 @@ class _Runner {
   List<(int, String)> get panelsSet => [
         for (final call in calls)
           if (call.method == "setPanel")
-            ((call.arguments as Map)["id"] as int,
-                (call.arguments as Map)["corner"] as String),
+            (
+              (call.arguments as Map)["id"] as int,
+              (call.arguments as Map)["corner"] as String
+            ),
       ];
 
   List<int> get panelsRemoved => [
@@ -164,10 +166,10 @@ void main() {
           _Stream("@ana:example.org", audiolevel: 1),
           _Stream("@bo:example.org",
               type: VoipStreamType.screenshareAudio, audiolevel: 1),
-          _Stream("@dj:example.org",
-              type: VoipStreamType.music, audiolevel: 1),
+          _Stream("@dj:example.org", type: VoipStreamType.music, audiolevel: 1),
         ];
-      expect(CallMember.of(session).where((m) => m.talking).map((m) => m.userId),
+      expect(
+          CallMember.of(session).where((m) => m.talking).map((m) => m.userId),
           ["@ana:example.org"]);
     });
 
@@ -238,7 +240,9 @@ void main() {
         tick: const Duration(milliseconds: 10),
         toastTime: const Duration(milliseconds: 50),
         drawVoice: (members,
-            {String? more, required double scale, bool alignEnd = false}) async {
+            {String? more,
+            required double scale,
+            bool alignEnd = false}) async {
           drawnCalls.add(members);
           drawnCallDetails.add((more, scale, alignEnd));
           return _blank;
@@ -357,8 +361,8 @@ void main() {
       overlay.showMessage(_message());
       await pumpEventQueue();
 
-      expect(runner.panelsSet.last,
-          (OverlayPanel.messages.index, "bottomRight"));
+      expect(
+          runner.panelsSet.last, (OverlayPanel.messages.index, "bottomRight"));
       final toast = drawnToasts.last.single;
       expect((toast.sender, toast.room, toast.body), ("Ana", "general", "gg"));
       expect(toast.avatar, isNotNull);

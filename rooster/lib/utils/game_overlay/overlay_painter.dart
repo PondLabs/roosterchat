@@ -111,8 +111,8 @@ Future<OverlayImage> drawVoicePanel(List<OverlayMember> members,
     ));
   }
   if (more != null) {
-    final text = _text(more,
-        size: 13, color: _Palette.detail, maxWidth: _maxNameWidth);
+    final text =
+        _text(more, size: 13, color: _Palette.detail, maxWidth: _maxNameWidth);
     rows.add((width: text.width + 24, text: text, member: null));
   }
 

@@ -151,9 +151,8 @@ class GameOverlay {
       OverlayCorner.topLeft;
 
   /// Null when messages are off.
-  OverlayCorner? get _messageCorner =>
-      OverlayCorner.values
-          .asNameMap()[preferences.gameOverlayMessageCorner.value];
+  OverlayCorner? get _messageCorner => OverlayCorner.values
+      .asNameMap()[preferences.gameOverlayMessageCorner.value];
 
   /// The call we are in: the first one, as the other surfaces outside the
   /// window take it.
@@ -164,8 +163,9 @@ class GameOverlay {
   /// watching it: the overlay is not hidden from screen capture, because
   /// hiding from it is what cheats do.
   bool get _sharingScreen =>
-      _calls()?.currentSessions.any(
-          (s) => VoiceCallState.isIn(s) && s.isSharingScreen) ==
+      _calls()
+          ?.currentSessions
+          .any((s) => VoiceCallState.isIn(s) && s.isSharingScreen) ==
       true;
 
   Future<void> _applyEnabled() async {
@@ -294,9 +294,8 @@ class GameOverlay {
     });
     await _showToasts();
 
-    final room = clientManager
-        ?.getClient(message.clientId)
-        ?.getRoom(message.roomId);
+    final room =
+        clientManager?.getClient(message.clientId)?.getRoom(message.roomId);
     toast.avatar = await _faces.avatar(
         color: room?.getColorOfUser(message.senderId) ?? Colors.grey,
         name: message.senderName,

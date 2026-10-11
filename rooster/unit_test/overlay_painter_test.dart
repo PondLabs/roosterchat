@@ -7,8 +7,8 @@ import 'package:rooster/utils/game_overlay/overlay_painter.dart';
 
 const _members = [
   OverlayMember(name: "Ana", talking: true),
-  OverlayMember(name: "Bo, whose name is long enough to need cutting short",
-      muted: true),
+  OverlayMember(
+      name: "Bo, whose name is long enough to need cutting short", muted: true),
 ];
 
 int _alpha(OverlayImage image, int x, int y) =>
