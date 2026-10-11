@@ -6,6 +6,7 @@ import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/client/room.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/anchored_popover.dart';
+import 'package:rooster/ui/atoms/noise_suppression_button.dart';
 import 'package:rooster/ui/atoms/speaking_indicator.dart';
 import 'package:rooster/ui/molecules/call_session_live_panel.dart';
 import 'package:rooster/ui/molecules/screen_share_start_reporting.dart';
@@ -263,6 +264,8 @@ class _CallSessionPanelState extends State<CallSessionPanel>
                                 ? Icons.headset_off_rounded
                                 : Icons.headset_rounded)),
                   ),
+                  // Hides itself where the voice DSP cannot run.
+                  NoiseSuppressionButton(size: iconSize, extent: widget.height),
                   if (widget.session.supportsScreenshare)
                     SizedBox(
                       width: widget.height,

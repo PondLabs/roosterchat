@@ -86,7 +86,7 @@ final class DspParams extends Struct {
   external double duckFarThresholdDb;
 }
 
-/// Mirrors `audio_dsp::Report` (28 bytes).
+/// Mirrors `audio_dsp::Report` (32 bytes).
 final class DspReport extends Struct {
   @Float()
   external double levelDb;
@@ -102,6 +102,8 @@ final class DspReport extends Struct {
   external int frames;
   @Uint32()
   external int flags;
+  @Float()
+  external double gateThresholdDb;
 }
 
 typedef _InitNative = Void Function(Pointer<Void>, Int32, Int32);
@@ -124,7 +126,7 @@ Pointer<T> _lookup<T extends NativeType>(DynamicLibrary library, String name) =>
 /// the call with WebRTC's suppressor already off and nothing of ours on the
 /// hook.
 class _Bindings {
-  static const expectedAbi = 2;
+  static const expectedAbi = 3;
 
   final int Function() abiVersion;
   final int Function() paramsSize;
@@ -597,6 +599,7 @@ class NativeAudioProcessingManager extends AudioProcessingManager {
       sampleRate: r.sampleRate,
       frames: r.frames,
       flags: r.flags,
+      gateThresholdDb: r.gateThresholdDb,
     ));
   }
 }

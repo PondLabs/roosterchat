@@ -18,7 +18,8 @@ use crate::{Dsp, ModelLoad, Params, Report};
 
 /// Bump when the struct layouts, their meaning or the callback signatures
 /// change. 2: `Params::speaker_bleed` (was padding), `rooster_dsp_feed_reference`.
-pub const ABI_VERSION: u32 = 2;
+/// 3: `Report::gate_threshold_db`, and automatic mode sets its own threshold.
+pub const ABI_VERSION: u32 = 3;
 
 #[no_mangle]
 pub extern "C" fn rooster_dsp_abi_version() -> u32 {
@@ -268,7 +269,7 @@ mod tests {
     fn struct_layouts_are_stable() {
         // Dart and JS mirror these by hand.
         assert_eq!(rooster_dsp_params_size(), 24);
-        assert_eq!(rooster_dsp_report_size(), 28);
+        assert_eq!(rooster_dsp_report_size(), 32);
     }
 
     #[test]

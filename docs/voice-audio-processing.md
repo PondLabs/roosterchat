@@ -4,6 +4,20 @@ Client-side noise suppression, input gate and far-end ducking for voice
 rooms. Everything runs on the user's own device before audio leaves the
 client. Browser support is a first-class target.
 
+Status (2026-10-10, last): automatic input sensitivity sets its own
+threshold. The gate tracks the room's background level (down within about
+200 ms, up at most 3 dB a second and only while nobody talks) and opens 10 dB
+above it, never below -50 dBFS nor above -35 dBFS (`gate.rs`,
+`AUTO_MARGIN_DB`, `AUTO_MIN_DB`, `AUTO_MAX_DB`). The report carries the
+threshold the gate applies (`Report::gate_threshold_db`, ABI 3, 32 bytes),
+and the settings page shows it on the slider, greyed out while automatic is
+on; the slider only sets the threshold in manual mode. The -50 dBFS floor is
+the old default: with suppression on the background is all but gone, and a
+lower threshold let through what the models leave of a beat, a piano or the
+restaurant (the background noise tests failed at -70). Noise suppression can
+also be switched from the call panel, beside mute and deafen
+(`NoiseSuppressionButton`).
+
 Status (2026-09-25, last): after the knocks, eighteen other noises were
 measured, alone and under speech, loud and quiet (see "Background noise").
 Two more things were fixed on the way: DeepFilterNet leaves everything
@@ -234,7 +248,8 @@ crate resamples). The worker hands unit-scale 480-sample blocks.
    so a model that arrives mid-stream, one switched back on and one after
    the capture restarts run 20 blocks beside RNNoise before they are heard.
 4. Gate (`gate.rs`): manual threshold, or VAD-driven with hysteresis
-   (open above 0.5, close below 0.3) *and* above the same threshold, 150 ms
+   (open above 0.5, close below 0.3) *and* above a threshold it sets from
+   the background level (see the status at the top), 150 ms
    hold, 5 ms attack, 200 ms release, closed gain -40 dB (not a hard mute).
    Held shut while step 2 says the microphone holds only bleed.
 5. Ducker: when the far-end peak (300 ms hold) is above -45 dBFS and the
@@ -326,8 +341,8 @@ What still comes through:
 - **Other people talking.** Another voice is speech to both models: it
   goes through whole, as it did with RNNoise, and nearby chatter (the
   restaurant) opens the gate a sixth of the time, half the time when loud.
-  The input sensitivity slider is the tool: above the other voices'
-  level, below the user's.
+  The input sensitivity slider, in manual mode, is the tool: above the
+  other voices' level, below the user's.
 - **Singing and instruments.** The pop song, singing included, is removed
   like any music. So would the user's own singing or playing be, with
   suppression on.

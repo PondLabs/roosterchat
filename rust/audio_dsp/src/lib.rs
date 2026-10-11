@@ -153,6 +153,10 @@ pub struct Report {
     /// Capture blocks processed so far.
     pub frames: u32,
     pub flags: u32,
+    /// The level the input gate opens above, dBFS: the slider's in manual
+    /// mode, the one automatic mode set from the room's background noise.
+    /// -120 with the gate off.
+    pub gate_threshold_db: f32,
 }
 
 /// Atomic mirrors of `Params` and `Report`.
@@ -183,6 +187,8 @@ struct Shared {
     sample_rate: AtomicU32,
     frames: AtomicU32,
     flags: AtomicU32,
+    /// `Report::gate_threshold_db` (`gate_threshold_db` above is the slider's).
+    reported_threshold_db: AtomicU32,
     /// How many times state that went bad was rebuilt.
     recoveries: AtomicU32,
 }
@@ -230,6 +236,7 @@ impl Shared {
             sample_rate: AtomicU32::new(0),
             frames: AtomicU32::new(0),
             flags: AtomicU32::new(0),
+            reported_threshold_db: AtomicU32::new(0),
             recoveries: AtomicU32::new(0),
         };
         s.set_params(p);
@@ -287,6 +294,7 @@ impl Shared {
             sample_rate: self.sample_rate.load(Ordering::Relaxed) as i32,
             frames: self.frames.load(Ordering::Relaxed),
             flags: self.flags.load(Ordering::Relaxed),
+            gate_threshold_db: u2f(self.reported_threshold_db.load(Ordering::Relaxed)),
         }
     }
 }
@@ -974,6 +982,8 @@ impl Dsp {
         self.shared.level_db.store(f2u(finite(level, -120.0)), Ordering::Relaxed);
         self.shared.vad.store(f2u(finite(vad, 0.0)), Ordering::Relaxed);
         self.shared.gain_db.store(f2u(finite(gain_db, 0.0)), Ordering::Relaxed);
+        let threshold = self.gate.threshold_db(&cfg);
+        self.shared.reported_threshold_db.store(f2u(finite(threshold, -120.0)), Ordering::Relaxed);
         self.shared.flags.store(flags, Ordering::Relaxed);
         self.shared.frames.fetch_add(1, Ordering::Relaxed);
     }

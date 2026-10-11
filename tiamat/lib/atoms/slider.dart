@@ -55,9 +55,12 @@ class SliderState extends State<Slider> {
         min: widget.min,
         max: widget.max,
         divisions: widget.divisions,
-        onChanged: (value) {
-          widget.onChanged?.call(value);
-        },
+        // Without onChanged the slider is disabled, greyed out.
+        onChanged: widget.onChanged == null
+            ? null
+            : (value) {
+                widget.onChanged?.call(value);
+              },
         onChangeEnd: (value) {
           widget.onChangeEnd?.call(value);
         },

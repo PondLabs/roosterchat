@@ -388,16 +388,16 @@ fn without_a_reference_loudspeaker_bleed_leaks() {
     measure("music at -34 dBFS, no reference", shipping_defaults(), &capture, Feeds::default());
 }
 
-/// The tool there is without a reference: raise the input sensitivity
-/// threshold, which now applies in automatic mode too. It has to clear the
-/// *peaks* of the bleed, not its average: at -28 dBFS, 6 dB above this
-/// fixture's average, the loudest 16 % of frames still open the gate and the
-/// run only comes out 4 dB down. Between the bleed's peak blocks (-25 dBFS
-/// here) and the user's (-13 dBFS) is what the meter and its threshold
-/// marker are for.
+/// The tool there is without a reference: turn automatic input sensitivity
+/// off and raise the threshold (automatic mode sets its own, from the
+/// background noise, which bleed is not). It has to clear the *peaks* of the
+/// bleed, not its average: at -28 dBFS, 6 dB above this fixture's average,
+/// the loudest 16 % of frames still open the gate and the run only comes out
+/// 4 dB down. Between the bleed's peak blocks (-25 dBFS here) and the user's
+/// (-13 dBFS) is what the meter and its threshold marker are for.
 #[test]
-fn a_raised_threshold_gates_the_bleed_in_either_mode() {
-    for (mode, name) in [(2u8, "automatic"), (1u8, "manual")] {
+fn a_raised_threshold_gates_the_bleed_in_manual_mode() {
+    for (mode, name) in [(1u8, "manual")] {
         let params = Params { gate_mode: mode, gate_threshold_db: -20.0, ..shipping_defaults() };
 
         let bleed = speaker_bleed(&media_dialogue(), -34.0);

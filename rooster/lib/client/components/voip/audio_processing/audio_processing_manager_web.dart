@@ -451,6 +451,7 @@ AudioDspReport _reportFromJs(JSObject r) {
     sampleRate: (m["sampleRate"] as num).toInt(),
     frames: (m["frames"] as num).toInt(),
     flags: (m["flags"] as num).toInt(),
+    gateThresholdDb: (m["gateThresholdDb"] as num?)?.toDouble(),
   );
 }
 

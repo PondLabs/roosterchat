@@ -10,7 +10,9 @@ pub enum GateMode {
     /// Open when the frame level exceeds `threshold_db`.
     Manual,
     /// Open when RNNoise's voice probability says there is speech and the
-    /// level is above `threshold_db`.
+    /// level is above a threshold of its own, set a little above the room's
+    /// background level as it goes (`Gate::auto_threshold_db`).
+    /// `threshold_db` is not used.
     Auto,
 }
 
@@ -29,8 +31,7 @@ pub struct BleedState {
 #[derive(Clone, Copy, Debug)]
 pub struct GateConfig {
     pub mode: GateMode,
-    /// Manual mode opens above this level. Automatic mode requires it as
-    /// well as the VAD, so the slider is a floor in both modes.
+    /// Manual mode opens above this level. Automatic mode sets its own.
     pub threshold_db: f32,
     /// Gain applied while closed, in dB (negative). Never a hard mute so
     /// residual room tone stays natural.
@@ -67,6 +68,24 @@ pub const DUCK_HOLD_FRAMES: u32 = 30; // 300 ms peak hold on far-end level
 /// Local speech probability above which we refuse to duck (double talk).
 pub const DUCK_VAD_VETO: f32 = 0.4;
 
+/// Automatic mode opens this far above the background level...
+pub const AUTO_MARGIN_DB: f32 = 10.0;
+/// ...never below this, however quiet the room: with noise suppression on
+/// the background is all but gone, and what the models leave of a noise
+/// between -70 and -50 dBFS (a beat, a piano, voices at the next table)
+/// would open the gate whenever the VAD took it for speech...
+pub const AUTO_MIN_DB: f32 = -50.0;
+/// ...and never asks more than this of a voice, however loud the room: a
+/// normal voice is louder than -35 dBFS at the microphone.
+pub const AUTO_MAX_DB: f32 = -35.0;
+/// The background estimate follows a quieter level at this fraction of the
+/// difference per 10 ms frame (about 200 ms to settle)...
+const BACKGROUND_FALL: f32 = 0.05;
+/// ...and a louder one at most this many dB per frame (3 dB a second), and
+/// only while nobody is talking: the pauses between words pull it back
+/// down, so speech never lifts it for long.
+const BACKGROUND_RISE_DB: f32 = 0.03;
+
 pub fn db_to_gain(db: f32) -> f32 {
     10f32.powf(db / 20.0)
 }
@@ -88,6 +107,8 @@ pub struct Gate {
     release_coef: f32,
     far_hold: u32,
     far_peak_db: f32,
+    /// The room's level when nobody talks, dBFS; None before the first frame.
+    background_db: Option<f32>,
 }
 
 impl Gate {
@@ -100,6 +121,7 @@ impl Gate {
             release_coef: 0.0,
             far_hold: 0,
             far_peak_db: -120.0,
+            background_db: None,
         };
         g.set_rate(sample_rate);
         g
@@ -118,6 +140,39 @@ impl Gate {
         self.current_gain = 1.0;
         self.far_hold = 0;
         self.far_peak_db = -120.0;
+        self.background_db = None;
+    }
+
+    /// Automatic mode's threshold: [`AUTO_MARGIN_DB`] above the background,
+    /// between [`AUTO_MIN_DB`] and [`AUTO_MAX_DB`].
+    pub fn auto_threshold_db(&self) -> f32 {
+        match self.background_db {
+            Some(b) => (b + AUTO_MARGIN_DB).clamp(AUTO_MIN_DB, AUTO_MAX_DB),
+            None => AUTO_MIN_DB,
+        }
+    }
+
+    /// The threshold the gate is applying: the slider's in manual mode, its
+    /// own in automatic mode. Reported for the settings page to show.
+    pub fn threshold_db(&self, cfg: &GateConfig) -> f32 {
+        match cfg.mode {
+            GateMode::Manual => cfg.threshold_db,
+            GateMode::Auto => self.auto_threshold_db(),
+            GateMode::Off => -120.0,
+        }
+    }
+
+    fn track_background(&mut self, level_db: f32, talking: bool) {
+        if !level_db.is_finite() {
+            return;
+        }
+        let b = match self.background_db {
+            None => level_db,
+            Some(b) if level_db < b => b + (level_db - b) * BACKGROUND_FALL,
+            Some(b) if !talking => b + (level_db - b).min(BACKGROUND_RISE_DB),
+            Some(b) => b,
+        };
+        self.background_db = Some(b);
     }
 
     /// Advance the far-end peak hold by one block. Called once per capture
@@ -167,18 +222,20 @@ impl Gate {
         buf: &mut [f32],
     ) {
         let mut target = 1.0f32;
+        let threshold = self.threshold_db(cfg);
+        self.track_background(level_db, have_vad && vad > VAD_CLOSE);
 
         if cfg.mode != GateMode::Off {
             let open_cond = !bleed.suppress
                 && match cfg.mode {
-                    GateMode::Manual => level_db > cfg.threshold_db,
+                    GateMode::Manual => level_db > threshold,
                     GateMode::Auto => {
                         if have_vad {
                             // hysteresis on the probability
                             let thr = if self.open { VAD_CLOSE } else { VAD_OPEN };
-                            vad > thr && level_db > cfg.threshold_db.max(SILENCE_FLOOR_DB)
+                            vad > thr && level_db > threshold
                         } else {
-                            level_db > cfg.threshold_db
+                            level_db > threshold
                         }
                     }
                     GateMode::Off => true,
@@ -205,7 +262,7 @@ impl Gate {
             let speaking = match bleed.far_talk {
                 Some(talking) => talking,
                 None if have_vad => vad > DUCK_VAD_VETO,
-                None => level_db > cfg.threshold_db,
+                None => level_db > threshold,
             };
             if !speaking {
                 target *= db_to_gain(cfg.duck_depth_db);
@@ -279,6 +336,44 @@ mod tests {
         g.process(&cfg, -20.0, 0.1, true, BleedState::default(), &mut b);
         g.process(&cfg, -20.0, 0.1, true, BleedState::default(), &mut b);
         assert!(!g.is_open());
+    }
+
+    #[test]
+    fn auto_threshold_follows_the_room() {
+        let cfg = GateConfig { mode: GateMode::Auto, threshold_db: 0.0, ..Default::default() };
+        let mut g = Gate::new(48000);
+        let mut b = frame(1.0);
+        // A quiet room: the threshold sits at its lowest.
+        for _ in 0..100 {
+            g.process(&cfg, -85.0, 0.0, true, BleedState::default(), &mut b);
+        }
+        assert_eq!(g.threshold_db(&cfg), AUTO_MIN_DB);
+        // A fan comes on at -55 dBFS, 30 dB up: within twelve seconds the
+        // threshold is 10 dB above it, and the fan alone, even taken for
+        // speech, stays out.
+        for _ in 0..1200 {
+            g.process(&cfg, -55.0, 0.0, true, BleedState::default(), &mut b);
+        }
+        assert!((g.threshold_db(&cfg) - -45.0).abs() < 0.5, "threshold {}", g.threshold_db(&cfg));
+        for _ in 0..30 {
+            g.process(&cfg, -55.0, 0.9, true, BleedState::default(), &mut b);
+        }
+        assert!(!g.is_open());
+        // A voice over it opens the gate, and talking does not lift the
+        // threshold.
+        for _ in 0..300 {
+            g.process(&cfg, -30.0, 0.9, true, BleedState::default(), &mut b);
+        }
+        assert!(g.is_open());
+        assert!((g.threshold_db(&cfg) - -45.0).abs() < 0.5, "threshold {}", g.threshold_db(&cfg));
+        // A very loud room never asks more than AUTO_MAX_DB of a voice.
+        for _ in 0..3000 {
+            g.process(&cfg, -20.0, 0.0, true, BleedState::default(), &mut b);
+        }
+        assert_eq!(g.threshold_db(&cfg), AUTO_MAX_DB);
+        // The slider is the threshold in manual mode only.
+        let manual = GateConfig { mode: GateMode::Manual, threshold_db: -42.0, ..cfg };
+        assert_eq!(g.threshold_db(&manual), -42.0);
     }
 
     #[test]

@@ -2370,6 +2370,30 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelVoipNoiseSuppression": "Noise suppression",
+  "@labelVoipNoiseSuppression": {
+    "description": "Label for the toggle that enables microphone noise suppression",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelVoipNoiseSuppressionDescription": "Removes background noise, keyboard clicks and clapping from your microphone before it is sent to others. Runs on your device.",
+  "@labelVoipNoiseSuppressionDescription": {
+    "description": "Describes the microphone noise suppression toggle",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelNoiseSuppressionButtonOn": "On",
+  "@labelNoiseSuppressionButtonOn": {
+    "description": "In the tooltip of the call panel's noise suppression button, after its name: noise suppression is on",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelNoiseSuppressionButtonOff": "Off",
+  "@labelNoiseSuppressionButtonOff": {
+    "description": "In the tooltip of the call panel's noise suppression button, after its name: noise suppression is off",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelRoomCreatedWelcome": "Welcome to {roomName}!",
   "@labelRoomCreatedWelcome": {
     "description": "Big title at the very beginning of a room's history, with the room's name",
@@ -7842,18 +7866,6 @@
     "type": "text",
     "placeholders": {}
   },
-  "labelVoipNoiseSuppression": "Noise suppression",
-  "@labelVoipNoiseSuppression": {
-    "description": "Label for the toggle that enables microphone noise suppression",
-    "type": "text",
-    "placeholders": {}
-  },
-  "labelVoipNoiseSuppressionDescription": "Removes background noise, keyboard clicks and clapping from your microphone before it is sent to others. Runs on your device.",
-  "@labelVoipNoiseSuppressionDescription": {
-    "description": "Describes the microphone noise suppression toggle",
-    "type": "text",
-    "placeholders": {}
-  },
   "labelVoipInputSensitivityAuto": "Automatic input sensitivity",
   "@labelVoipInputSensitivityAuto": {
     "description": "Label for the toggle that lets voice detection decide when the microphone transmits",
@@ -7878,9 +7890,9 @@
     "type": "text",
     "placeholders": {}
   },
-  "labelVoipInputSensitivityAutoFloorDescription": "Speech is transmitted only when it is also louder than the marker. Leave it low unless sound from your speakers gets through; then drag it between that and your voice.",
+  "labelVoipInputSensitivityAutoFloorDescription": "Set for you a little above your room's background noise, and it follows the room as it gets louder or quieter. Turn automatic input sensitivity off to set it yourself.",
   "@labelVoipInputSensitivityAutoFloorDescription": {
-    "description": "Describes the microphone threshold slider while automatic input sensitivity is on, where it acts as a minimum level",
+    "description": "Describes the microphone threshold slider while automatic input sensitivity is on: greyed out, it shows the level the app picked from the background noise",
     "type": "text",
     "placeholders": {}
   },
@@ -7896,7 +7908,7 @@
     "type": "text",
     "placeholders": {}
   },
-  "labelVoipSpeakerBleedDescriptionWeb": "If you use speakers instead of a headset, keeps other people in the call from coming back through your microphone. The browser cannot see other sound playing on your computer; if a video gets through, raise the input sensitivity marker above it.",
+  "labelVoipSpeakerBleedDescriptionWeb": "If you use speakers instead of a headset, keeps other people in the call from coming back through your microphone. The browser cannot see other sound playing on your computer; if a video gets through, turn automatic input sensitivity off and raise the marker above it.",
   "@labelVoipSpeakerBleedDescriptionWeb": {
     "description": "Describes the speaker bleed filter toggle in the browser, where only call audio can be filtered",
     "type": "text",
