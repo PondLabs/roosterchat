@@ -1,6 +1,7 @@
 // The in-game overlay on Windows (docs/game-overlay.md): who is in the call,
 // and what Dart tells the runner to show over a game.
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -140,10 +141,11 @@ class _Runner {
 
 final _blank = OverlayImage(1, 1, Uint8List(4));
 
-MessageNotificationContent _message({String body = "gg"}) =>
+MessageNotificationContent _message(
+        {String body = "gg", String sender = "Ana"}) =>
     MessageNotificationContent(
-      senderName: "Ana",
-      senderId: "@ana:example.org",
+      senderName: sender,
+      senderId: "@${sender.toLowerCase()}:example.org",
       roomName: "general",
       content: body,
       eventId: "\$event",
@@ -210,6 +212,13 @@ void main() {
     late List<List<OverlayMember>> drawnCalls;
     late List<(String?, double, bool)> drawnCallDetails;
     late List<List<OverlayToast>> drawnToasts;
+    // Decoded once: a cold decode is a round trip to the engine's threads,
+    // which a pumped event queue does not wait for.
+    late ui.Image avatar;
+    // Whose avatars take their time, until completed.
+    late Map<String, Completer<ui.Image>> slowAvatars;
+
+    setUpAll(() async => avatar = await createTestImage(width: 1, height: 1));
 
     setUp(() async {
       // ignore: invalid_use_of_visible_for_testing_member
@@ -220,6 +229,7 @@ void main() {
       drawnCalls = [];
       drawnCallDetails = [];
       drawnToasts = [];
+      slowAvatars = {};
       const channel = MethodChannel("test/overlay");
       runner = _Runner(channel);
       overlay = GameOverlay(
@@ -238,7 +248,7 @@ void main() {
           return _blank;
         },
         drawAvatar: ({required color, required name, image}) =>
-            createTestImage(width: 1, height: 1),
+            slowAvatars[name]?.future ?? Future.value(avatar.clone()),
       );
       await overlay.start();
     });
@@ -365,6 +375,37 @@ void main() {
         await pumpEventQueue();
       }
       expect(drawnToasts.last.map((t) => t.body), ["2", "3", "4"]);
+    });
+
+    test("in the order they came, a slow avatar filled in when it loads",
+        () async {
+      slowAvatars["Ana"] = Completer();
+      await runner.gameInFront();
+      await pumpEventQueue();
+      overlay.showMessage(_message(sender: "Ana", body: "first"));
+      overlay.showMessage(_message(sender: "Bo", body: "second"));
+      await pumpEventQueue();
+      expect(drawnToasts.last.map((t) => t.body), ["first", "second"]);
+      expect(drawnToasts.last.first.avatar, isNull);
+
+      final drawn = drawnToasts.length;
+      slowAvatars["Ana"]!.complete(avatar.clone());
+      await pumpEventQueue();
+      expect(drawnToasts, hasLength(greaterThan(drawn)));
+      expect(drawnToasts.last.first.avatar, isNotNull);
+    });
+
+    test("messages already up go when a screen share starts", () async {
+      final session = joinCall();
+      await runner.gameInFront();
+      await pumpEventQueue();
+      overlay.showMessage(_message());
+      await pumpEventQueue();
+      expect(runner.panelsSet.last.$1, OverlayPanel.messages.index);
+
+      session.isSharingScreen = true;
+      await Future.delayed(const Duration(milliseconds: 30));
+      expect(runner.panelsRemoved, contains(OverlayPanel.messages.index));
     });
 
     test("no message without a game in front", () async {

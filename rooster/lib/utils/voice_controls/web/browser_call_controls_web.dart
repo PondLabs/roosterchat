@@ -202,6 +202,11 @@ void popOut() {
   // Room for the buttons and about six people; it can be resized.
   final options = {"width": 240, "height": 264}.jsify() as JSObject;
   pictureInPicture.requestWindow(options).toDart.then((window) {
+    // The call ended while the window was opening.
+    if (!_watcher.state.inCall) {
+      window.close();
+      return;
+    }
     _panelWindow = window;
     final panel = _panel = CallControlsPanel(window.document,
         onPress: _watcher.pressNamed,

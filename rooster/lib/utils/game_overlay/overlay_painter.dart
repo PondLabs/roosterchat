@@ -59,8 +59,8 @@ class OverlayToast {
   /// The room's name; null for a direct message.
   final String? room;
 
-  /// Circle-masked; a grey circle stands in when there is none.
-  final ui.Image? avatar;
+  /// Circle-masked; a grey circle stands in until it has loaded.
+  ui.Image? avatar;
 }
 
 /// Dark pills like Discord's overlay: readable over any game, whatever
@@ -252,7 +252,7 @@ TextPainter _text(String text,
       text: TextSpan(
         // One line per name, and a message's line breaks would waste the
         // two lines it has.
-        text: maxLines == 1 ? text.replaceAll('\n', ' ') : text,
+        text: text.replaceAll(RegExp(r'\s*\n\s*'), ' '),
         style: TextStyle(
           fontFamily: "Roboto",
           fontFamilyFallback: ThemeCommon.fontFamilyFallback(),

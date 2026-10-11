@@ -19,6 +19,10 @@ class CallFace {
   ui.Image? avatar;
 
   bool _loading = false;
+
+  /// When a failed load may be tried again; asked five times a second, it
+  /// would otherwise hammer the homeserver.
+  DateTime? _retryAfter;
 }
 
 /// The names and avatars of the people in calls, for the surfaces outside
@@ -36,10 +40,18 @@ class CallFaces {
     final room = session.client.getRoom(session.roomId);
     final face = _faces.putIfAbsent(userId, CallFace.new);
     face.name ??= room?.getMemberOrFallback(userId).displayName;
-    if (!face._loading && room != null) {
+    final retryAfter = face._retryAfter;
+    if (!face._loading &&
+        room != null &&
+        (retryAfter == null || DateTime.now().isAfter(retryAfter))) {
       face._loading = true;
-      _load(face, room, userId).catchError((Object e, StackTrace s) {
-        Log.onError(e, s, content: "Could not load $userId for the call");
+      _load(face, room, userId).then((_) {
+        face._retryAfter = null;
+      }, onError: (Object e) {
+        // Not loaded yet (a network blip, a slow homeserver): try again.
+        Log.w("Could not load $userId for the call: $e");
+        face._loading = false;
+        face._retryAfter = DateTime.now().add(const Duration(seconds: 30));
       });
     }
     return face;

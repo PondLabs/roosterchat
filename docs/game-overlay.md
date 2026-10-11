@@ -63,9 +63,17 @@ borderless game, DWM composes the overlay with it, which can cost the game
 independent flip (a frame of latency) on GPUs without multiplane overlays,
 the same as Discord's and NVIDIA's overlays.
 
+Nor over a screen saver or a locked screen (`QUNS_NOT_PRESENT`: nobody is
+looking, and messages would sit there for anyone passing), nor in Windows'
+presentation mode (`QUNS_PRESENTATION_MODE`, which exists to hold pop-ups
+back).
+
 The runner checks again on every foreground change and once a second (a
 game going fullscreen, or exclusive, while it has the focus), and hides the
-panels at once when the game loses the focus.
+panels at once when the game loses the focus. The once-a-second check also
+raises the panels over the game again: a topmost game that applies its
+video settings, or gets the focus back between two checks, goes back to the
+top of the topmost windows without the foreground changing.
 
 ## How it is drawn
 

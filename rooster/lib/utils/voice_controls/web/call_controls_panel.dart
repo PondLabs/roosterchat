@@ -229,11 +229,12 @@ body {
   border-radius: 50%;
   background: var(--button);
   object-fit: cover;
-  outline: 2px solid transparent;
   outline-offset: 1.5px;
 }
-.member[data-talking="true"] .face { outline-color: #23a55a; }
-.member[data-silent="true"] .face { outline-color: transparent; opacity: 0.5; }
+.member[data-talking="true"]:not([data-silent="true"]) .face {
+  outline: 2px solid #23a55a;
+}
+.member[data-silent="true"] .face { opacity: 0.5; }
 .name {
   flex: 1;
   min-width: 0;
@@ -271,8 +272,9 @@ svg { width: 24px; height: 24px; fill: currentColor; }
     border-color: ButtonText;
   }
   button[aria-pressed="true"] { color: ButtonText; }
-  .member[data-talking="true"] .face { outline-color: Highlight; }
-  .member[data-silent="true"] .face { outline-color: transparent; }
+  .member[data-talking="true"]:not([data-silent="true"]) .face {
+    outline-color: Highlight;
+  }
   .badge { color: CanvasText; }
 }
 """;

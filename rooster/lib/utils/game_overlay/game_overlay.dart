@@ -278,21 +278,13 @@ class GameOverlay {
     }());
   }
 
+  /// Shows the toast at once, in the order the messages came, and the
+  /// sender's avatar once it has loaded (a full-size download, at worst).
   Future<void> _addToast(MessageNotificationContent message) async {
-    final room = clientManager
-        ?.getClient(message.clientId)
-        ?.getRoom(message.roomId);
-    final avatar = await _faces.avatar(
-        color: room?.getColorOfUser(message.senderId) ?? Colors.grey,
-        name: message.senderName,
-        image: message.senderImage);
-    if (!_gameInFront) return;
-
     final toast = OverlayToast(
         sender: message.senderName,
         room: message.isDirectMessage ? null : message.roomName,
-        body: message.content,
-        avatar: avatar);
+        body: message.content);
     _toasts.add(toast);
     while (_toasts.length > maxToasts) {
       _toasts.removeAt(0);
@@ -301,11 +293,23 @@ class GameOverlay {
       if (_toasts.remove(toast)) _logged(_showToasts());
     });
     await _showToasts();
+
+    final room = clientManager
+        ?.getClient(message.clientId)
+        ?.getRoom(message.roomId);
+    toast.avatar = await _faces.avatar(
+        color: room?.getColorOfUser(message.senderId) ?? Colors.grey,
+        name: message.senderName,
+        image: message.senderImage);
+    if (toast.avatar != null && _toasts.contains(toast)) await _showToasts();
   }
 
   Future<void> _showToasts() async {
     final draw = ++_toastDraws;
     final corner = _messageCorner;
+    // Every draw checks for a share, not only a new message: one can start
+    // while Rooster is in front and go on once the game is back.
+    if (_sharingScreen) _toasts.clear();
     if (_toasts.isEmpty || corner == null || !_gameInFront) {
       await _removePanel(OverlayPanel.messages);
       return;

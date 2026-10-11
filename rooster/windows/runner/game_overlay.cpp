@@ -115,10 +115,13 @@ HWND FullscreenWindowInFront() {
   }
 
   // Exclusive fullscreen shows no other window, and a DXGI game can give up
-  // fullscreen when one covers it. Not knowing counts as exclusive.
+  // fullscreen when one covers it. Not knowing counts as exclusive. A screen
+  // saver (nobody is looking: no messages on it) and presentation mode
+  // (which exists to hold pop-ups back) are left alone too.
   QUERY_USER_NOTIFICATION_STATE state;
   if (FAILED(SHQueryUserNotificationState(&state)) ||
-      state == QUNS_RUNNING_D3D_FULL_SCREEN) {
+      state == QUNS_RUNNING_D3D_FULL_SCREEN || state == QUNS_NOT_PRESENT ||
+      state == QUNS_PRESENTATION_MODE) {
     return nullptr;
   }
   return window;
@@ -321,6 +324,16 @@ void GameOverlay::Check() {
     dpi = FlutterDesktopGetDpiForMonitor(monitor);
   }
   if (game == game_ && EqualRect(&screen, &screen_) && dpi == dpi_) {
+    // A topmost game that comes to the top of the topmost band again while
+    // it keeps the focus (it applied its video settings, or the focus went
+    // away and back between two checks) covers the panels without any
+    // change of foreground to say so.
+    for (auto& [id, panel] : panels_) {
+      if (panel.shown) {
+        SetWindowPos(panel.window, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+      }
+    }
     return;
   }
 
