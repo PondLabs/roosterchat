@@ -13,7 +13,11 @@ class SoundboardEmojiOverlay extends StatelessWidget {
   /// What to show, or null for nothing.
   final SoundboardOverlayEntry? entry;
 
-  const SoundboardEmojiOverlay({super.key, required this.entry});
+  /// Size of the emoji: the call tiles' by default.
+  final double size;
+
+  const SoundboardEmojiOverlay(
+      {super.key, required this.entry, this.size = 34});
 
   @override
   Widget build(BuildContext context) {
@@ -52,7 +56,7 @@ class SoundboardEmojiOverlay extends StatelessWidget {
                 child: SoundboardEmojiView(
                   entry.emoji,
                   image: entry.image,
-                  size: 34,
+                  size: size,
                 ),
               ),
       ),

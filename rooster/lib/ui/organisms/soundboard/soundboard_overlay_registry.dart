@@ -1,8 +1,9 @@
 // Shared overlay state: which sender currently has a visible emoji.
 //
 // Written by the call's SoundboardCallController (from the engine's
-// activations), read by every VoipStreamView. Keyed by Matrix userId so the
-// emoji appears ONLY on the sender's avatar — never broadcast to all tiles.
+// activations), read by every VoipStreamView and by our call's rows in the
+// sidebar (RoomTextButton). Keyed by Matrix userId so the emoji appears
+// ONLY on the sender's avatar — never broadcast to all tiles.
 // An entry stays until the controller clears it, when the sound's audio ends.
 import 'package:rooster/client/components/soundboard/soundboard_emoji.dart';
 import 'package:flutter/widgets.dart';

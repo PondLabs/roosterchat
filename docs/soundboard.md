@@ -6,7 +6,8 @@ A press reaches the call two ways at once.
    on the LiveKit data channel (Matrix to-device `chat.commet.soundboard.play`
    when there is no LiveKit room). Every Rooster client fetches the sound and
    plays it locally, in sync by the sender's clock, at the listener's own
-   volumes (below). The emoji on the sender's avatar comes from this too.
+   volumes (below). The emoji on the sender's avatar, and on their
+   row under the voice channel in the sidebar, comes from this too.
 2. **A track**, for every other client (Element Call, anything that does
    not know the press message): our own presses mixed into one audio track
    named `commet-soundboard`

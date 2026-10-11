@@ -30,6 +30,8 @@ import 'package:rooster/ui/organisms/channel_invites/channel_invites.dart';
 import 'package:rooster/ui/organisms/dj/dj_booth_panel.dart';
 import 'package:rooster/ui/organisms/dj/dj_member_ui.dart';
 import 'package:rooster/ui/organisms/dj/vinyl_disc.dart';
+import 'package:rooster/ui/organisms/soundboard/soundboard_emoji_overlay.dart';
+import 'package:rooster/ui/organisms/soundboard/soundboard_overlay_registry.dart';
 import 'package:rooster/ui/pages/settings/room_settings_page.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/event_bus.dart';
@@ -1010,6 +1012,21 @@ class _RoomTextButtonState extends State<RoomTextButton> {
                 padding: const EdgeInsets.fromLTRB(0, 2, 0, 2),
                 child: Row(
                   children: [
+                    // The emoji of the sound they are playing, as on their
+                    // call tile. Only our own call: presses come over its
+                    // data channel.
+                    if (voiceSession != null)
+                      ListenableBuilder(
+                        listenable: SoundboardOverlayRegistry.instance,
+                        builder: (context, _) => Padding(
+                          padding: const EdgeInsets.fromLTRB(4, 0, 0, 0),
+                          child: SoundboardEmojiOverlay(
+                            entry: SoundboardOverlayRegistry.instance
+                                .entryFor(identifier),
+                            size: 18,
+                          ),
+                        ),
+                      ),
                     if (dj != null)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(4, 0, 0, 0),
