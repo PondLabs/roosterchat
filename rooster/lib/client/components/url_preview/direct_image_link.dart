@@ -13,6 +13,11 @@ class DirectImageLink {
   static bool matches(Uri uri) {
     if (uri.scheme != "https") return false;
 
+    // Some hosts name the format in the query rather than the path: X's
+    // pbs.twimg.com/media/<id>?format=jpg, Unsplash's ?fm=jpg.
+    final format = uri.queryParameters['format'] ?? uri.queryParameters['fm'];
+    if (format != null && _isImage(format)) return true;
+
     final segments = uri.pathSegments;
     if (segments.isEmpty) return false;
 
@@ -20,8 +25,11 @@ class DirectImageLink {
     final dot = name.lastIndexOf(".");
     if (dot == -1) return false;
 
-    return Mime.fromExtenstion(name.substring(dot + 1).toLowerCase()) != null;
+    return _isImage(name.substring(dot + 1));
   }
+
+  static bool _isImage(String extension) =>
+      Mime.fromExtenstion(extension.toLowerCase()) != null;
 
   static UrlPreviewData preview(Uri uri) {
     return UrlPreviewData(
