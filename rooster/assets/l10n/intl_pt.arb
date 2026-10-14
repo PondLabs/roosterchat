@@ -490,6 +490,8 @@
   "labelSoundboardTrimRange": "{start} – {end} de {total} · arraste as bordas para cortar o início ou o fim, e o meio para mover a seleção (máx. {max})",
   "tooltipStreamDebugInfoMove": "Clique para mover para o próximo canto",
   "messagePlaceholderSticker": "{user} enviou uma figurinha",
+  "labelReactionOnMessage": "Em “{message}”",
+  "labelReactionOnUnloadedMessage": "Numa mensagem mais antiga que não foi carregada",
   "errorMessageFailedToSend": "Falha ao enviar",
   "messageFailedToDecrypt": "Falha ao descriptografar evento",
   "labelPollVoteCount": "{howMany,plural, =1{1 voto}other{{howMany} votos}}",

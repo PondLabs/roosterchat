@@ -3269,6 +3269,20 @@
       "user": {}
     }
   },
+  "labelReactionOnMessage": "On “{message}”",
+  "@labelReactionOnMessage": {
+    "description": "Under a reaction shown as its own row in the timeline (developer mode): the start of the message it was on",
+    "type": "text",
+    "placeholders": {
+      "message": {}
+    }
+  },
+  "labelReactionOnUnloadedMessage": "On an older message that is not loaded",
+  "@labelReactionOnUnloadedMessage": {
+    "description": "Under a reaction shown as its own row in the timeline (developer mode), when the message it was on is not loaded",
+    "type": "text",
+    "placeholders": {}
+  },
   "errorMessageFailedToSend": "Failed to send",
   "@errorMessageFailedToSend": {
     "description": "Text that is placed below a message when the message fails to send",

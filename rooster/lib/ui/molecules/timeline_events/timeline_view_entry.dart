@@ -688,6 +688,7 @@ class TimelineViewEntryState extends State<TimelineViewEntry>
             room: widget.timeline.room,
             initialIndex: widget.initialIndex,
             key: eventKey,
+            jumpToEvent: widget.jumpToEvent,
             onReadReceiptsTapped: onReadReceiptsTapped,
             readReceipts: readReceipts,
           )

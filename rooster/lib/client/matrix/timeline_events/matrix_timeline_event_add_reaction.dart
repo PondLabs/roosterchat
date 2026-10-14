@@ -6,6 +6,9 @@ class MatrixTimelineEventAddReaction extends MatrixTimelineEvent
     implements TimelineEventAddReaction {
   MatrixTimelineEventAddReaction(super.event, {required super.client});
 
+  @override
+  String? get reactsTo => event.relationshipEventId;
+
   /// A reaction has no body: without this the timeline's folded summary
   /// (developer mode) and a failed send showed the SDK's "Unknown message
   /// format of type m.reaction".
