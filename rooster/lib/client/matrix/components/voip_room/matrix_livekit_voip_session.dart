@@ -8,6 +8,7 @@ import 'package:rooster/client/components/activities/activities_component.dart';
 import 'package:rooster/client/components/voip/audio_processing/audio_processing_manager.dart';
 import 'package:rooster/client/components/voip/audio_processing/microphone_noise_suppression.dart';
 import 'package:rooster/client/components/voip/audio_processing/noise_suppression_notice.dart';
+import 'package:rooster/client/components/voip/call_connection.dart';
 import 'package:rooster/client/components/voip/deafen_rule.dart';
 import 'package:rooster/client/components/voip/microphone_health_notice.dart';
 import 'package:rooster/client/components/voip/remote_audio_watch.dart';
@@ -78,7 +79,7 @@ lk.VideoPublishOptions buildScreenSharePublishOptions({
 }
 
 class MatrixLivekitVoipSession
-    implements VoipSession, ScreenShareWatching, CallRoster {
+    implements VoipSession, ScreenShareWatching, CallRoster, CallConnection {
   MatrixRoom room;
   lk.Room livekitRoom;
   Timer? heartbeatTimer;
@@ -192,6 +193,7 @@ class MatrixLivekitVoipSession
       if (state == VoipState.ended) return;
       _watchConnection();
       _watchVoice();
+      _sampleConnection();
     });
 
     // Being away from the machine, or invisible, is part of what our
@@ -392,6 +394,30 @@ class MatrixLivekitVoipSession
   /// A resume after a network blip takes a second or two.
   static const stepOutAfter = Duration(seconds: 5);
 
+  /// How long LiveKit may be gone before we say the call is reconnecting.
+  /// A resume after a blip takes about a second, and passes unnoticed.
+  static const reconnectingAfter = Duration(seconds: 2);
+
+  bool _reconnecting = false;
+
+  @override
+  bool get reconnecting => _reconnecting;
+
+  /// The connection dropped, or came back. Like Discord, the call says so
+  /// with the leave and join sounds, and while it is gone shows nobody
+  /// else: their streams, speaking or not, froze when it dropped.
+  void _setReconnecting(bool value) {
+    _reconnecting = value;
+    if (value) {
+      Log.w("Livekit connection lost, showing the call as reconnecting");
+      _callManager?.leftCallSound();
+    } else {
+      Log.i("Livekit connection back");
+      _callManager?.joinCallSound();
+    }
+    _stateChanged.add(());
+  }
+
   late DateTime _lastConnectedAt;
   DateTime? _connectedSince;
   bool _rosterComplete = false;
@@ -509,6 +535,7 @@ class MatrixLivekitVoipSession
     if (_connected()) {
       _lastConnectedAt = now;
       _stepOutTried = false;
+      if (_reconnecting) _setReconnecting(false);
       // Back in the call: our membership goes back up now, not at the next
       // heartbeat.
       if (_steppedOut) unawaited(_beat());
@@ -523,6 +550,9 @@ class MatrixLivekitVoipSession
     _connectedSince = null;
     _rosterComplete = false;
     final lostFor = now.difference(_lastConnectedAt);
+    if (lostFor >= reconnectingAfter && !_reconnecting) {
+      _setReconnecting(true);
+    }
     if (lostFor >= stepOutAfter && !_stepOutTried) {
       _stepOutTried = true;
       unawaited(_stepOut());
@@ -532,6 +562,52 @@ class MatrixLivekitVoipSession
         "${lostConnectionTimeout.inMinutes} minutes "
         "(${livekitRoom.connectionState}), ending the call");
     unawaited(hangUpCall());
+  }
+
+  final List<CallConnectionSample> _connectionHistory = [];
+  bool _sampling = false;
+
+  @override
+  List<CallConnectionSample> get connectionHistory => _connectionHistory;
+
+  @override
+  CallConnectionQuality get connectionQuality => CallConnectionQuality.values
+      .byName((livekitRoom.localParticipant?.connectionQuality ??
+              lk.ConnectionQuality.unknown)
+          .name);
+
+  @override
+  String? get serverName =>
+      livekitRoom.serverRegion ??
+      // ignore: invalid_use_of_internal_member
+      Uri.tryParse(livekitRoom.engine.url ?? "")?.host;
+
+  @override
+  bool get encrypted => keyProvider != null;
+
+  /// Once a second: the ping to the media server and how many of our
+  /// packets it lost, from the peer connection we publish on (the one we
+  /// receive on when we publish nothing).
+  Future<void> _sampleConnection() async {
+    if (_sampling || !_connected()) return;
+    _sampling = true;
+    try {
+      // ignore: invalid_use_of_internal_member
+      final engine = livekitRoom.engine;
+      // ignore: invalid_use_of_internal_member
+      final pc = (engine.publisher ?? engine.subscriber)?.pc;
+      if (pc == null) return;
+      final reports = await pc.getStats().timeout(const Duration(seconds: 2));
+      final now = _now();
+      _connectionHistory.add(CallConnectionSample.fromStats(now, reports,
+          previous: _connectionHistory.lastOrNull));
+      _connectionHistory.removeWhere(
+          (s) => now.difference(s.at) > CallConnection.historyLength);
+    } catch (_) {
+      // Nothing this second; the graph has a gap.
+    } finally {
+      _sampling = false;
+    }
   }
 
   /// One pass of the connection watch, for tests.
@@ -553,7 +629,7 @@ class MatrixLivekitVoipSession
         }
         if (_isSoundboard(entry.value)) continue;
 
-        streams.add(
+        _streams.add(
             MatrixLivekitVoipStream(entry.value, room.client.self!.identifier));
       }
     }
@@ -584,7 +660,7 @@ class MatrixLivekitVoipSession
 
         final s = MatrixLivekitVoipStream(stream.value, userId, watching: this);
         _applyStreamVolume(s);
-        streams.add(s);
+        _streams.add(s);
       }
     }
   }
@@ -596,7 +672,7 @@ class MatrixLivekitVoipSession
   }
 
   void onTrackStreamEvent(lk.TrackStreamStateUpdatedEvent event) {
-    for (var track in streams) {
+    for (var track in _streams) {
       final t = track as MatrixLivekitVoipStream;
       if (t.publication.sid == event.publication.sid) {
         t.onStreamUpdatedEvent();
@@ -614,7 +690,7 @@ class MatrixLivekitVoipSession
       _removeStreamsWithSid(event.publication.sid);
     }
 
-    for (var track in streams) {
+    for (var track in _streams) {
       final t = track as MatrixLivekitVoipStream;
       if (t.publication.sid == event.publication.sid) {
         t.onStreamUpdatedEvent();
@@ -631,7 +707,7 @@ class MatrixLivekitVoipSession
     final participant =
         event.participant.identity.split(":").getRange(0, 2).join(":");
 
-    for (var track in streams) {
+    for (var track in _streams) {
       final t = track as MatrixLivekitVoipStream;
       if (t.publication.sid == event.publication.sid) {
         t.onStreamUpdatedEvent();
@@ -641,7 +717,7 @@ class MatrixLivekitVoipSession
     // A stream we already have (a microphone, a muted screen share) still
     // changed: the room list's mute icon reads it, and would otherwise keep
     // showing a remote member as muted until something else refreshed it.
-    if (streams.any((e) => e.streamId == event.publication.sid)) {
+    if (_streams.any((e) => e.streamId == event.publication.sid)) {
       _stateChanged.add(());
       _publishMembershipState();
       return;
@@ -654,7 +730,7 @@ class MatrixLivekitVoipSession
     s.deafened = remote
         ? _deafenedIdentities.contains(event.participant.identity)
         : _isDeafened;
-    streams.add(s);
+    _streams.add(s);
     _stateChanged.add(());
     _publishMembershipState();
   }
@@ -691,18 +767,18 @@ class MatrixLivekitVoipSession
     final s = MatrixLivekitVoipStream(publication, userId, watching: this);
     _applyStreamVolume(s);
     s.deafened = _deafenedIdentities.contains(participant.identity);
-    streams.add(s);
+    _streams.add(s);
     return s;
   }
 
-  Iterable<MatrixLivekitVoipStream> _streamsWithSid(String sid) => streams
+  Iterable<MatrixLivekitVoipStream> _streamsWithSid(String sid) => _streams
       .whereType<MatrixLivekitVoipStream>()
       .where((s) => s.publication.sid == sid);
 
   /// Removes the streams of a publication and releases what they hold.
   void _removeStreamsWithSid(String sid) {
     final removed = _streamsWithSid(sid).toList();
-    streams.removeWhere(removed.contains);
+    _streams.removeWhere(removed.contains);
     for (final stream in removed) {
       stream.dispose();
     }
@@ -740,7 +816,7 @@ class MatrixLivekitVoipSession
     final outdated = _streamsWithSid(event.publication.sid)
         .where((s) => !identical(s.publication, event.publication))
         .toList();
-    streams.removeWhere(outdated.contains);
+    _streams.removeWhere(outdated.contains);
     for (final stream in outdated) {
       stream.dispose();
     }
@@ -888,7 +964,7 @@ class MatrixLivekitVoipSession
       }
     }
 
-    final hasRemoteStreams = streams
+    final hasRemoteStreams = _streams
         .whereType<MatrixLivekitVoipStream>()
         .any((s) => s.publication is lk.RemoteTrackPublication);
     // The rebuild has not happened yet: dropping everything now would leave
@@ -899,13 +975,13 @@ class MatrixLivekitVoipSession
     }
 
     // Streams of publications that are gone or were rebuilt.
-    final outdated = streams
+    final outdated = _streams
         .whereType<MatrixLivekitVoipStream>()
         .where((s) =>
             s.publication is lk.RemoteTrackPublication &&
             !identical(current[s.publication.sid], s.publication))
         .toList();
-    streams.removeWhere(outdated.contains);
+    _streams.removeWhere(outdated.contains);
     for (final stream in outdated) {
       stream.dispose();
     }
@@ -914,13 +990,13 @@ class MatrixLivekitVoipSession
     // without announcing that the old ones are gone.
     final localPublications =
         livekitRoom.localParticipant?.trackPublications ?? const {};
-    final staleLocal = streams
+    final staleLocal = _streams
         .whereType<MatrixLivekitVoipStream>()
         .where((s) =>
             s.publication is lk.LocalTrackPublication &&
             !identical(localPublications[s.publication.sid], s.publication))
         .toList();
-    streams.removeWhere(staleLocal.contains);
+    _streams.removeWhere(staleLocal.contains);
     for (final stream in staleLocal) {
       stream.dispose();
     }
@@ -1010,7 +1086,7 @@ class MatrixLivekitVoipSession
       await _syncScreenShare(participant);
     }
 
-    for (final stream in streams.whereType<MatrixLivekitVoipStream>()) {
+    for (final stream in _streams.whereType<MatrixLivekitVoipStream>()) {
       if (stream.publication.participant.identity == participantIdentity) {
         stream.onStreamUpdatedEvent();
       }
@@ -1101,8 +1177,9 @@ class MatrixLivekitVoipSession
   Set<String> get connectedUserIds => {
         if (state != VoipState.ended) ...[
           room.client.self!.identifier,
-          for (final identity in livekitRoom.remoteParticipants.keys)
-            if (_userIdOf(identity) case final String userId) userId,
+          if (!_reconnecting)
+            for (final identity in livekitRoom.remoteParticipants.keys)
+              if (_userIdOf(identity) case final String userId) userId,
         ],
       };
 
@@ -1144,7 +1221,7 @@ class MatrixLivekitVoipSession
   }
 
   void _setStreamsDeafened(String identity, bool deafened) {
-    for (var stream in streams) {
+    for (var stream in _streams) {
       final s = stream as MatrixLivekitVoipStream;
       if (s.publication.participant.identity != identity) continue;
       if (s.deafened == deafened) continue;
@@ -1255,7 +1332,7 @@ class MatrixLivekitVoipSession
 
     final s = MatrixLivekitVoipStream(event.publication, participant);
     s.deafened = _isDeafened;
-    streams.add(s);
+    _streams.add(s);
     _stateChanged.add(());
     _publishMembershipState();
   }
@@ -1464,10 +1541,10 @@ class MatrixLivekitVoipSession
       // Even if one of the requests above failed: a session left half open
       // kept the old LiveKit room alive, and rejoining could fail with
       // "no internet connection" until the app restarted (issue #48).
-      for (final stream in streams.whereType<MatrixLivekitVoipStream>()) {
+      for (final stream in _streams.whereType<MatrixLivekitVoipStream>()) {
         stream.dispose();
       }
-      streams.clear();
+      _streams.clear();
 
       state = VoipState.ended;
       _volumeTimer?.cancel();
@@ -1624,7 +1701,7 @@ class MatrixLivekitVoipSession
     // A noise suppression change made while muted is applied now.
     if (!micMuted) unawaited(_noiseSuppression.update());
 
-    for (var stream in streams) {
+    for (var stream in _streams) {
       if (stream is MatrixLivekitVoipStream) {
         _applyStreamVolume(stream);
       }
@@ -1845,8 +1922,16 @@ class MatrixLivekitVoipSession
     }
   }
 
+  final List<VoipStream> _streams = [];
+
+  /// Ours only while reconnecting: everyone else's stopped where the
+  /// connection dropped, talking or sharing, and come back with it.
   @override
-  List<VoipStream> streams = List<VoipStream>.empty(growable: true);
+  List<VoipStream> get streams => _reconnecting
+      ? _streams
+          .where((s) => s.direction == VoipStreamDirection.outgoing)
+          .toList()
+      : _streams;
 
   @override
   bool get supportsScreenshare => canCaptureScreen;

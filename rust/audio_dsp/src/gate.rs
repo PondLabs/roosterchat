@@ -57,27 +57,29 @@ impl Default for GateConfig {
     }
 }
 
+/// Not lower: at 0.4 loud singing in music (tests/background_noise.rs)
+/// opened the gate 5 % of the time, against 0 % here.
 pub const VAD_OPEN: f32 = 0.5;
 pub const VAD_CLOSE: f32 = 0.3;
 /// Below this level nothing opens the gate, whatever the VAD says.
 pub const SILENCE_FLOOR_DB: f32 = -70.0;
 /// Frames the gate stays open after the last open condition.
-pub const HOLD_FRAMES: u32 = 15; // 150 ms
+pub const HOLD_FRAMES: u32 = 25; // 250 ms
 /// Ducking releases faster than the gate so the ramp is not noticeable.
 pub const DUCK_HOLD_FRAMES: u32 = 30; // 300 ms peak hold on far-end level
 /// Local speech probability above which we refuse to duck (double talk).
 pub const DUCK_VAD_VETO: f32 = 0.4;
 
 /// Automatic mode opens this far above the background level...
-pub const AUTO_MARGIN_DB: f32 = 10.0;
+pub const AUTO_MARGIN_DB: f32 = 6.0;
 /// ...never below this, however quiet the room: with noise suppression on
 /// the background is all but gone, and what the models leave of a noise
 /// between -70 and -50 dBFS (a beat, a piano, voices at the next table)
 /// would open the gate whenever the VAD took it for speech...
 pub const AUTO_MIN_DB: f32 = -50.0;
 /// ...and never asks more than this of a voice, however loud the room: a
-/// normal voice is louder than -35 dBFS at the microphone.
-pub const AUTO_MAX_DB: f32 = -35.0;
+/// soft voice is louder than -40 dBFS at the microphone.
+pub const AUTO_MAX_DB: f32 = -40.0;
 /// The background estimate follows a quieter level at this fraction of the
 /// difference per 10 ms frame (about 200 ms to settle)...
 const BACKGROUND_FALL: f32 = 0.05;
@@ -349,12 +351,12 @@ mod tests {
         }
         assert_eq!(g.threshold_db(&cfg), AUTO_MIN_DB);
         // A fan comes on at -55 dBFS, 30 dB up: within twelve seconds the
-        // threshold is 10 dB above it, and the fan alone, even taken for
+        // threshold is 6 dB above it, and the fan alone, even taken for
         // speech, stays out.
         for _ in 0..1200 {
             g.process(&cfg, -55.0, 0.0, true, BleedState::default(), &mut b);
         }
-        assert!((g.threshold_db(&cfg) - -45.0).abs() < 0.5, "threshold {}", g.threshold_db(&cfg));
+        assert!((g.threshold_db(&cfg) - -49.0).abs() < 0.5, "threshold {}", g.threshold_db(&cfg));
         for _ in 0..30 {
             g.process(&cfg, -55.0, 0.9, true, BleedState::default(), &mut b);
         }
@@ -365,7 +367,7 @@ mod tests {
             g.process(&cfg, -30.0, 0.9, true, BleedState::default(), &mut b);
         }
         assert!(g.is_open());
-        assert!((g.threshold_db(&cfg) - -45.0).abs() < 0.5, "threshold {}", g.threshold_db(&cfg));
+        assert!((g.threshold_db(&cfg) - -49.0).abs() < 0.5, "threshold {}", g.threshold_db(&cfg));
         // A very loud room never asks more than AUTO_MAX_DB of a voice.
         for _ in 0..3000 {
             g.process(&cfg, -20.0, 0.0, true, BleedState::default(), &mut b);

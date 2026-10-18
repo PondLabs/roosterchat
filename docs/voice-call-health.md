@@ -103,6 +103,28 @@ it; mutes never wait on it. While a microphone that went missing is being
 published again, the mute button shows what the user chose (not muted),
 not "muted".
 
+## Connection status and losing the internet
+
+The call panel's top row (`ui/molecules/call_connection_status.dart`) says
+"Voice connected", "Connecting…" or "Reconnecting…", colored by LiveKit's
+judgement of our connection (`connectionQuality`: green, amber when poor,
+red when lost). Clicking it opens the details: the ping of the last five
+minutes as a graph, the media server, average and last ping, the share of
+our audio packets the server reports lost, and whether the call is
+end-to-end encrypted. The session reads them once a second from the peer
+connection it publishes on (`CallConnectionSample.fromStats`: the selected
+candidate pair's `currentRoundTripTime`, the audio `outbound-rtp` and
+`remote-inbound-rtp` counters), in the same tick as the checks above.
+
+When LiveKit has not been connected for two seconds
+(`MatrixLivekitVoipSession.reconnectingAfter`; a resume after a blip takes
+about one and passes unnoticed) the call is reconnecting: the leave sound
+plays, and the session shows nobody else (`streams` keeps only ours,
+`connectedUserIds` only us), so nobody stays stuck talking or sharing. The
+streams are hidden, not dropped: after a resume LiveKit announces nothing
+again, so they come back as they were, with the join sound. Three minutes
+without LiveKit still hang up (`lostConnectionTimeout`).
+
 ## Fixes underneath
 
 - **Make before break** (`third_party/livekit-client-sdk-flutter`,

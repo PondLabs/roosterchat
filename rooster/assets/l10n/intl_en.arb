@@ -2580,6 +2580,72 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelCallConnected": "Voice connected",
+  "@labelCallConnected": {
+    "description": "Status at the top of the call panel at the bottom of the sidebar while we are in a voice call",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelCallConnecting": "Connecting…",
+  "@labelCallConnecting": {
+    "description": "Status at the top of the call panel while joining a voice call",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelCallReconnecting": "Reconnecting…",
+  "@labelCallReconnecting": {
+    "description": "Status at the top of the call panel while the connection to the voice call dropped (the internet went down) and is being retried",
+    "type": "text",
+    "placeholders": {}
+  },
+  "tooltipCallConnection": "Connection details",
+  "@tooltipCallConnection": {
+    "description": "Tooltip on the call panel's status, which opens the ping and packet loss of the voice connection",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelConnectionTitle": "Connection",
+  "@labelConnectionTitle": {
+    "description": "Title of the voice connection details opened from the call panel's status",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelAveragePing": "Average ping: {ms} ms",
+  "@labelAveragePing": {
+    "description": "Voice connection details: the average round trip time to the media server over the last minutes, in milliseconds",
+    "type": "text",
+    "placeholders": {
+      "ms": {}
+    }
+  },
+  "labelLastPing": "Last ping: {ms} ms",
+  "@labelLastPing": {
+    "description": "Voice connection details: the latest round trip time to the media server, in milliseconds",
+    "type": "text",
+    "placeholders": {
+      "ms": {}
+    }
+  },
+  "labelOutboundPacketLoss": "Outbound packet loss: {percent}%",
+  "@labelOutboundPacketLoss": {
+    "description": "Voice connection details: the share of our voice packets that did not reach the media server, as a percentage",
+    "type": "text",
+    "placeholders": {
+      "percent": {}
+    }
+  },
+  "labelConnectionAdvice": "Above 250 ms of ping, you and the others hear each other late. Above 10% packet loss, your voice breaks up. If it stays like this, leave the call and join it again.",
+  "@labelConnectionAdvice": {
+    "description": "Voice connection details: what the numbers above mean for the call, and what to do when they are bad",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelEndToEndEncrypted": "End-to-end encrypted",
+  "@labelEndToEndEncrypted": {
+    "description": "Voice connection details: the call's audio and video can only be read by the people in it",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelLive": "LIVE",
   "@labelLive": {
     "description": "Badge shown while sharing screen or camera",

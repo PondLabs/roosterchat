@@ -16,6 +16,7 @@ import 'package:rooster/client/components/user_presence/user_idle_watcher.dart';
 import 'package:rooster/client/components/voip/audio_processing/audio_processing_manager.dart';
 import 'package:rooster/client/components/voip/audio_processing/audio_processing_manager_stub.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
+import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_call_membership.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_livekit_voip_session.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_voip_room_component.dart';
@@ -895,6 +896,40 @@ void main() {
   });
 
   group('who is connected', () {
+    test(
+        'nobody else while reconnecting, after a blip is let pass, and '
+        'everyone again once LiveKit is back', () async {
+      livekit.remote['@bob:example.org:BOB'] =
+          _RemoteParticipant('@bob:example.org:BOB');
+      joined(serverTime);
+      final call = await join();
+      final changes = <void>[];
+      final sub = call.onStateChanged.listen(changes.add);
+      addTearDown(sub.cancel);
+
+      livekit.connectionState = lk.ConnectionState.reconnecting;
+      localTime = localTime.add(const Duration(seconds: 1));
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      expect(call.reconnecting, isFalse, reason: 'a blip');
+
+      localTime = localTime.add(MatrixLivekitVoipSession.reconnectingAfter);
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      await pumpEventQueue();
+      expect(call.reconnecting, isTrue);
+      expect(call.connectedUserIds, {_me});
+      expect(call.streams.where(
+          (s) => s.direction != VoipStreamDirection.outgoing), isEmpty);
+      expect(changes, isNotEmpty);
+
+      livekit.connectionState = lk.ConnectionState.connected;
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      expect(call.reconnecting, isFalse);
+      expect(call.connectedUserIds, {_me, '@bob:example.org'});
+    });
+
     test('everyone in the LiveKit room, publishing or not', () async {
       livekit.remote['@bob:example.org:BOB'] =
           _RemoteParticipant('@bob:example.org:BOB');

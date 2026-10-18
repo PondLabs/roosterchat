@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:rooster/client/call_manager.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/main.dart';
@@ -23,6 +24,19 @@ class VoiceCallWatcher {
   final StreamController<VoiceCallState> _changes =
       StreamController.broadcast();
   Stream<VoiceCallState> get changes => _changes.stream;
+
+  /// Whether we are being heard talking, once [watchSpeaking] was called.
+  /// Apart from [state]: it flips with every word, and only the tray shows
+  /// it.
+  final ValueNotifier<bool> speaking = ValueNotifier(false);
+  bool _watchingSpeaking = false;
+
+  /// Starts following [speaking], five times a second while in a call.
+  void watchSpeaking() {
+    if (_watchingSpeaking) return;
+    _watchingSpeaking = true;
+    if (_started) _watchSessions();
+  }
 
   bool _started = false;
   CallManager? _watching;
@@ -60,6 +74,7 @@ class VoiceCallWatcher {
     _listSubs.clear();
     _sessionSubs.clear();
     _watching = null;
+    speaking.value = false;
   }
 
   /// Presses [control] as the surfaces show it: they all draw [state].
@@ -85,6 +100,7 @@ class VoiceCallWatcher {
 
     final state =
         VoiceCallState.of(calls?.currentSessions ?? const <VoipSession>[]);
+    _readSpeaking();
     if (state == _state) return;
     _state = state;
     _changes.add(state);
@@ -112,6 +128,17 @@ class VoiceCallWatcher {
     _sessionSubs.clear();
     for (final session in _watching?.currentSessions ?? const []) {
       _sessionSubs.add(session.onStateChanged.listen((_) => refresh()));
+      if (_watchingSpeaking) {
+        _sessionSubs.add(
+            session.onUpdateVolumeVisualizers.listen((_) => _readSpeaking()));
+      }
     }
+    _readSpeaking();
+  }
+
+  void _readSpeaking() {
+    if (!_watchingSpeaking) return;
+    speaking.value = VoiceCallState.speaking(
+        _watching?.currentSessions ?? const <VoipSession>[]);
   }
 }

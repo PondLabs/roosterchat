@@ -1,13 +1,13 @@
 import 'dart:async';
-import 'dart:math';
 
+import 'package:rooster/client/components/voip/call_connection.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
-import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/client/room.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/anchored_popover.dart';
 import 'package:rooster/ui/atoms/noise_suppression_button.dart';
 import 'package:rooster/ui/atoms/speaking_indicator.dart';
+import 'package:rooster/ui/molecules/call_connection_status.dart';
 import 'package:rooster/ui/molecules/call_session_live_panel.dart';
 import 'package:rooster/ui/molecules/screen_share_start_reporting.dart';
 import 'package:rooster/ui/molecules/screen_share_stop_reporting.dart';
@@ -17,6 +17,7 @@ import 'package:rooster/ui/organisms/soundboard/soundboard_call_controller.dart'
 import 'package:rooster/utils/animation/ring_shaker.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:rooster/utils/voice_controls/browser_call_controls.dart';
+import 'package:rooster/utils/voice_controls/voice_controls.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -140,18 +141,7 @@ class _CallSessionPanelState extends State<CallSessionPanel>
     super.dispose();
   }
 
-  /// How loud we are in the call: only our own outgoing media, so the
-  /// indicator shows whether we are being heard rather than whether anyone
-  /// is talking. Screen share audio is not us talking. A legacy call carries
-  /// the microphone in a stream typed video while the camera is on, so the
-  /// camera stream counts too.
-  double get localAudioLevel => widget.session.streams
-      .where((stream) =>
-          stream.direction == VoipStreamDirection.outgoing &&
-          stream.type != VoipStreamType.screenshare &&
-          stream.type != VoipStreamType.screenshareAudio &&
-          stream.type != VoipStreamType.music)
-      .fold(0.0, (level, stream) => max(level, stream.audiolevel));
+  double get localAudioLevel => VoiceCallState.ownAudioLevel(widget.session);
 
   void openRoom() {
     EventBus.doOpenRoom(widget.session.roomId,
@@ -181,6 +171,11 @@ class _CallSessionPanelState extends State<CallSessionPanel>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (widget.session case final CallConnection connection)
+            CallConnectionStatus(
+                session: widget.session,
+                connection: connection,
+                onOpenRoom: openRoom),
           buildControlsRow(context),
           // Grows the panel below the button row while sharing screen /
           // camera; renders nothing otherwise.
@@ -212,10 +207,12 @@ class _CallSessionPanelState extends State<CallSessionPanel>
                             child: buildActivityIndicator(context),
                           ),
                         )),
-                    Flexible(
-                      child: tiamat.Text(widget.session.roomName,
-                          overflow: TextOverflow.ellipsis),
-                    ),
+                    // The status row above names the room.
+                    if (widget.session is! CallConnection)
+                      Flexible(
+                        child: tiamat.Text(widget.session.roomName,
+                            overflow: TextOverflow.ellipsis),
+                      ),
                   ],
                 ),
               ),

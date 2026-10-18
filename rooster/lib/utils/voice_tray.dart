@@ -14,15 +14,18 @@ enum VoiceTrayStatus {
   /// Not in a call: the app logo.
   idle,
 
-  /// In a call and heard: a mic.
+  /// In a call, heard and quiet: a mic on grey.
   live,
+
+  /// In a call and talking: a mic on green.
+  speaking,
 
   /// In a call, muted or deafened: a crossed-out mic.
   muted,
 }
 
 /// The system tray icon, like Discord's: the app logo, or while we are in a
-/// voice call a mic showing whether we can be heard. Clicking it (Windows) or
+/// voice call a mic showing whether we can be heard, green while we talk. Clicking it (Windows) or
 /// its "Open" item (Linux, where a click always opens the menu) brings the
 /// window back. In a call its menu has the same controls as the taskbar
 /// thumbnail (see voice_controls/).
@@ -65,13 +68,18 @@ class VoiceTray with TrayListener {
   /// What the icon shows for [sessions]: muted only when every call we are
   /// in has us muted or deafened.
   static VoiceTrayStatus statusOf(Iterable<VoipSession> sessions) =>
-      _statusFor(VoiceCallState.of(sessions));
+      _statusFor(VoiceCallState.of(sessions),
+          speaking: VoiceCallState.speaking(sessions));
 
-  static VoiceTrayStatus _statusFor(VoiceCallState state) => !state.inCall
-      ? VoiceTrayStatus.idle
-      : state.muted
-          ? VoiceTrayStatus.muted
-          : VoiceTrayStatus.live;
+  static VoiceTrayStatus _statusFor(VoiceCallState state,
+          {required bool speaking}) =>
+      !state.inCall
+          ? VoiceTrayStatus.idle
+          : state.muted
+              ? VoiceTrayStatus.muted
+              : speaking
+                  ? VoiceTrayStatus.speaking
+                  : VoiceTrayStatus.live;
 
   /// The menu for [state]: the call controls while in a call, between
   /// opening the window and quitting.
@@ -105,9 +113,33 @@ class VoiceTray with TrayListener {
     }
     _available = true;
 
-    final calls = VoiceCallWatcher.instance..start();
+    final calls = VoiceCallWatcher.instance
+      ..start()
+      ..watchSpeaking();
     _changes = calls.changes.listen(_update);
+    calls.speaking.addListener(_speakingChanged);
     _update(calls.state);
+  }
+
+  /// Talking only changes the icon, many times a minute: the menu and the
+  /// tooltip stay.
+  void _speakingChanged() {
+    if (!_available) return;
+    _setIcon(VoiceCallWatcher.instance.state)
+        .catchError((Object e, StackTrace s) {
+      Log.onError(e, s, content: "Could not update the tray icon");
+    });
+  }
+
+  VoiceTrayStatus? _shown;
+
+  Future<void> _setIcon(VoiceCallState state) async {
+    final status = _statusFor(state,
+        speaking: VoiceCallWatcher.instance.speaking.value);
+    if (status == _shown) return;
+    _shown = status;
+    await trayManager
+        .setIcon(iconAsset(status, windows: PlatformUtils.isWindows));
   }
 
   /// Takes the icon down, so Windows doesn't leave a dead one behind.
@@ -115,6 +147,7 @@ class VoiceTray with TrayListener {
     if (!_available) return;
     _available = false;
     _changes?.cancel();
+    VoiceCallWatcher.instance.speaking.removeListener(_speakingChanged);
     trayManager.removeListener(this);
     try {
       await trayManager.destroy();
@@ -140,16 +173,13 @@ class VoiceTray with TrayListener {
       "assets/images/tray/rooster_tray_${status.name}.${windows ? "ico" : "png"}";
 
   Future<void> _show(VoiceCallState state) async {
-    final status = _statusFor(state);
-
-    await trayManager
-        .setIcon(iconAsset(status, windows: PlatformUtils.isWindows));
+    await _setIcon(state);
     await trayManager.setContextMenu(menuOf(state));
 
     try {
-      await trayManager.setToolTip(switch (status) {
+      await trayManager.setToolTip(switch (_statusFor(state, speaking: false)) {
         VoiceTrayStatus.idle => BuildConfig.app,
-        VoiceTrayStatus.live =>
+        VoiceTrayStatus.live || VoiceTrayStatus.speaking =>
           tooltipVoiceTrayStatus(BuildConfig.app, tooltipTrayInCall),
         VoiceTrayStatus.muted =>
           tooltipVoiceTrayStatus(BuildConfig.app, tooltipTrayMuted),

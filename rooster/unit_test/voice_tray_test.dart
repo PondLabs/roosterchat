@@ -1,13 +1,19 @@
 import 'dart:io';
 
 import 'package:rooster/client/components/voip/voip_session.dart';
+import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/utils/voice_controls/voice_controls.dart';
 import 'package:rooster/utils/voice_tray.dart';
 import 'package:test/test.dart';
 
 class _Session implements VoipSession {
   _Session(this.state,
-      {this.isMicrophoneMuted = false, this.isDeafened = false});
+      {this.isMicrophoneMuted = false,
+      this.isDeafened = false,
+      this.streams = const []});
+
+  @override
+  final List<VoipStream> streams;
 
   @override
   final VoipState state;
@@ -15,6 +21,20 @@ class _Session implements VoipSession {
   final bool isMicrophoneMuted;
   @override
   final bool isDeafened;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _Stream implements VoipStream {
+  _Stream(this.direction, this.audiolevel);
+
+  @override
+  final VoipStreamDirection direction;
+  @override
+  final double audiolevel;
+  @override
+  VoipStreamType get type => VoipStreamType.audio;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -36,6 +56,31 @@ void main() {
     test("a mic while heard", () {
       expect(VoiceTray.statusOf([_Session(VoipState.connected)]),
           VoiceTrayStatus.live);
+    });
+
+    test("a green mic while we talk, not while others do", () {
+      expect(
+          VoiceTray.statusOf([
+            _Session(VoipState.connected,
+                streams: [_Stream(VoipStreamDirection.outgoing, 1)])
+          ]),
+          VoiceTrayStatus.speaking);
+      expect(
+          VoiceTray.statusOf([
+            _Session(VoipState.connected,
+                streams: [_Stream(VoipStreamDirection.incoming, 1)])
+          ]),
+          VoiceTrayStatus.live);
+    });
+
+    test("muted wins over talking", () {
+      expect(
+          VoiceTray.statusOf([
+            _Session(VoipState.connected,
+                isMicrophoneMuted: true,
+                streams: [_Stream(VoipStreamDirection.outgoing, 1)])
+          ]),
+          VoiceTrayStatus.muted);
     });
 
     test("a muted mic while muted", () {

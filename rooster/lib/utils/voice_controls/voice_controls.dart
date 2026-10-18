@@ -1,5 +1,8 @@
+import 'dart:math';
+
 import 'package:rooster/client/call_manager.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
+import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:intl/intl.dart';
 
 /// A call control shown outside the window.
@@ -59,6 +62,27 @@ class VoiceCallState {
       deafened: calls.any((call) => call.isDeafened),
     );
   }
+
+  /// How loud we are in [session]: only our own outgoing media, so it shows
+  /// whether we are being heard rather than whether anyone is talking.
+  /// Screen share audio and the DJ's music are not us talking. A legacy call
+  /// carries the microphone in a stream typed video while the camera is on,
+  /// so the camera stream counts too.
+  static double ownAudioLevel(VoipSession session) => session.streams
+      .where((stream) =>
+          stream.direction == VoipStreamDirection.outgoing &&
+          stream.type != VoipStreamType.screenshare &&
+          stream.type != VoipStreamType.screenshareAudio &&
+          stream.type != VoipStreamType.music)
+      .fold(0.0, (level, stream) => max(level, stream.audiolevel));
+
+  /// Whether we are being heard talking in any of [sessions] right now.
+  static bool speaking(Iterable<VoipSession> sessions) => sessions.any(
+      (call) =>
+          isIn(call) &&
+          !call.isMicrophoneMuted &&
+          !call.isDeafened &&
+          ownAudioLevel(call) > 0);
 
   /// A call is one being sat in from the moment it is joined or placed, as
   /// Discord shows its buttons while still connecting. One ringing is not.

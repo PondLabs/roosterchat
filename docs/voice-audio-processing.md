@@ -4,10 +4,16 @@ Client-side noise suppression, input gate and far-end ducking for voice
 rooms. Everything runs on the user's own device before audio leaves the
 client. Browser support is a first-class target.
 
-Status (2026-10-10, last): automatic input sensitivity sets its own
+Status (2026-10-18, last): automatic input sensitivity is more lenient. It
+cut the start of sentences, so it opens 6 dB above the background (was 10),
+asks at most -40 dBFS of a voice (was -35) and holds open 250 ms (was 150).
+The VAD's 0.5 stays: at 0.4 loud singing in music opened the gate 5 % of the
+time (`tests/background_noise.rs`, `pop_song_with_singing`), against 0 %.
+
+2026-10-10: automatic input sensitivity sets its own
 threshold. The gate tracks the room's background level (down within about
-200 ms, up at most 3 dB a second and only while nobody talks) and opens 10 dB
-above it, never below -50 dBFS nor above -35 dBFS (`gate.rs`,
+200 ms, up at most 3 dB a second and only while nobody talks) and opens 6 dB
+above it, never below -50 dBFS nor above -40 dBFS (`gate.rs`,
 `AUTO_MARGIN_DB`, `AUTO_MIN_DB`, `AUTO_MAX_DB`). The report carries the
 threshold the gate applies (`Report::gate_threshold_db`, ABI 3, 32 bytes),
 and the settings page shows it on the slider, greyed out while automatic is
@@ -249,7 +255,7 @@ crate resamples). The worker hands unit-scale 480-sample blocks.
    the capture restarts run 20 blocks beside RNNoise before they are heard.
 4. Gate (`gate.rs`): manual threshold, or VAD-driven with hysteresis
    (open above 0.5, close below 0.3) *and* above a threshold it sets from
-   the background level (see the status at the top), 150 ms
+   the background level (see the status at the top), 250 ms
    hold, 5 ms attack, 200 ms release, closed gain -40 dB (not a hard mute).
    Held shut while step 2 says the microphone holds only bleed.
 5. Ducker: when the far-end peak (300 ms hold) is above -45 dBFS and the
