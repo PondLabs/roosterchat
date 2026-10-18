@@ -35,6 +35,8 @@ Hard fork of Commet (a Flutter Matrix client) by PondLabs, shipped as **Rooster*
 - **The repository is English.** Code, comments, commit messages, PRs, issues, docs and ARB descriptions are written in English, even when the conversation is in another language. Only the translations (`rooster/assets/l10n/intl_<language>.arb`) hold other languages.
 - **Every string a person can read is an `Intl.message`, written in English first and translated into Brazilian Portuguese in the same change.** Never hardcode UI text (a literal that must stay as it is, like a unit or a protocol value, gets a `// Not translated: <why>` comment), never show two languages on one screen, never glue sentences from pieces. After adding strings: `dart run scripts/extract_strings.dart` (from `rooster/`), add the Portuguese to `intl_pt.arb`, then `flutter test unit_test/l10n`. Layouts must hold text a third longer than the English. See `docs/localization.md` (conventions, glossary, adding a language).
 
+- **Run CI's checks before every push, and check the pipeline after it.** From `rooster/`: `dart format -o none --set-exit-if-changed .` (static-analysis fails on any unformatted file; run `dart format <files>` on what you touched first), `dart analyze` (no new warnings or errors), `flutter test unit_test`, and `cargo test -p <crate>` for any Rust crate you changed. After pushing, `gh run list --branch <branch> --limit 5` until the runs for your commit finish, and fix anything red before calling the work done.
+
 ## Toolchains
 
 - `flake.nix` provides Flutter, Dart and the Android SDK via `nix develop`.

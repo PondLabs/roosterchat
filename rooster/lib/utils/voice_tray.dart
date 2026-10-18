@@ -134,8 +134,8 @@ class VoiceTray with TrayListener {
   VoiceTrayStatus? _shown;
 
   Future<void> _setIcon(VoiceCallState state) async {
-    final status = _statusFor(state,
-        speaking: VoiceCallWatcher.instance.speaking.value);
+    final status =
+        _statusFor(state, speaking: VoiceCallWatcher.instance.speaking.value);
     if (status == _shown) return;
     _shown = status;
     await trayManager
@@ -179,7 +179,8 @@ class VoiceTray with TrayListener {
     try {
       await trayManager.setToolTip(switch (_statusFor(state, speaking: false)) {
         VoiceTrayStatus.idle => BuildConfig.app,
-        VoiceTrayStatus.live || VoiceTrayStatus.speaking =>
+        VoiceTrayStatus.live ||
+        VoiceTrayStatus.speaking =>
           tooltipVoiceTrayStatus(BuildConfig.app, tooltipTrayInCall),
         VoiceTrayStatus.muted =>
           tooltipVoiceTrayStatus(BuildConfig.app, tooltipTrayMuted),

@@ -21,7 +21,8 @@ void main() {
   final t0 = DateTime(2026, 10, 18);
 
   test("the ping is the selected pair's, in milliseconds", () {
-    final sample = CallConnectionSample.fromStats(t0, _stats(sent: 100, lost: 0));
+    final sample =
+        CallConnectionSample.fromStats(t0, _stats(sent: 100, lost: 0));
     expect(sample.pingMs, closeTo(36, 0.001));
     expect(sample.outboundLoss, isNull, reason: "nothing to count from yet");
   });

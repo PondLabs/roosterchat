@@ -919,8 +919,10 @@ void main() {
       await pumpEventQueue();
       expect(call.reconnecting, isTrue);
       expect(call.connectedUserIds, {_me});
-      expect(call.streams.where(
-          (s) => s.direction != VoipStreamDirection.outgoing), isEmpty);
+      expect(
+          call.streams
+              .where((s) => s.direction != VoipStreamDirection.outgoing),
+          isEmpty);
       expect(changes, isNotEmpty);
 
       livekit.connectionState = lk.ConnectionState.connected;

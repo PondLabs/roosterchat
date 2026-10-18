@@ -77,12 +77,11 @@ class VoiceCallState {
       .fold(0.0, (level, stream) => max(level, stream.audiolevel));
 
   /// Whether we are being heard talking in any of [sessions] right now.
-  static bool speaking(Iterable<VoipSession> sessions) => sessions.any(
-      (call) =>
-          isIn(call) &&
-          !call.isMicrophoneMuted &&
-          !call.isDeafened &&
-          ownAudioLevel(call) > 0);
+  static bool speaking(Iterable<VoipSession> sessions) => sessions.any((call) =>
+      isIn(call) &&
+      !call.isMicrophoneMuted &&
+      !call.isDeafened &&
+      ownAudioLevel(call) > 0);
 
   /// A call is one being sat in from the moment it is joined or placed, as
   /// Discord shows its buttons while still connecting. One ringing is not.

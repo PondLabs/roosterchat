@@ -45,8 +45,8 @@ class CallConnectionStatus extends StatefulWidget {
           "packet loss of the voice connection");
 
   /// Green while fine, amber while poor or getting back, red when lost.
-  static Color colorOf(BuildContext context, CallConnection connection,
-      VoipSession session) {
+  static Color colorOf(
+      BuildContext context, CallConnection connection, VoipSession session) {
     if (connection.reconnecting || session.state != VoipState.connected) {
       return Colors.amber;
     }
@@ -130,11 +130,8 @@ class _CallConnectionStatusState extends State<CallConnectionStatus> {
                     child: Text(label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context)
-                            .textTheme
-                            .labelLarge
-                            ?.copyWith(
-                                color: color, fontWeight: FontWeight.w600)),
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            color: color, fontWeight: FontWeight.w600)),
                   ),
                   InkWell(
                     onTap: widget.onOpenRoom,
@@ -170,12 +167,12 @@ class CallConnectionDetails extends StatefulWidget {
       desc: "Title of the voice connection details opened from the call "
           "panel's status");
 
-  static String labelAveragePing(String ms) => Intl.message(
-      "Average ping: $ms ms",
-      name: "labelAveragePing",
-      args: [ms],
-      desc: "Voice connection details: the average round trip time to the "
-          "media server over the last minutes, in milliseconds");
+  static String labelAveragePing(String ms) =>
+      Intl.message("Average ping: $ms ms",
+          name: "labelAveragePing",
+          args: [ms],
+          desc: "Voice connection details: the average round trip time to the "
+              "media server over the last minutes, in milliseconds");
 
   static String labelLastPing(String ms) => Intl.message("Last ping: $ms ms",
       name: "labelLastPing",
@@ -183,12 +180,12 @@ class CallConnectionDetails extends StatefulWidget {
       desc: "Voice connection details: the latest round trip time to the "
           "media server, in milliseconds");
 
-  static String labelOutboundPacketLoss(String percent) => Intl.message(
-      "Outbound packet loss: $percent%",
-      name: "labelOutboundPacketLoss",
-      args: [percent],
-      desc: "Voice connection details: the share of our voice packets that "
-          "did not reach the media server, as a percentage");
+  static String labelOutboundPacketLoss(String percent) =>
+      Intl.message("Outbound packet loss: $percent%",
+          name: "labelOutboundPacketLoss",
+          args: [percent],
+          desc: "Voice connection details: the share of our voice packets that "
+              "did not reach the media server, as a percentage");
 
   static String get labelConnectionAdvice => Intl.message(
       "Above 250 ms of ping, you and the others hear each other late. Above "
@@ -198,11 +195,11 @@ class CallConnectionDetails extends StatefulWidget {
       desc: "Voice connection details: what the numbers above mean for the "
           "call, and what to do when they are bad");
 
-  static String get labelEndToEndEncrypted => Intl.message(
-      "End-to-end encrypted",
-      name: "labelEndToEndEncrypted",
-      desc: "Voice connection details: the call's audio and video can only "
-          "be read by the people in it");
+  static String get labelEndToEndEncrypted =>
+      Intl.message("End-to-end encrypted",
+          name: "labelEndToEndEncrypted",
+          desc: "Voice connection details: the call's audio and video can only "
+              "be read by the people in it");
 
   @override
   State<CallConnectionDetails> createState() => _CallConnectionDetailsState();
@@ -243,8 +240,7 @@ class _CallConnectionDetailsState extends State<CallConnectionDetails> {
     final last = pings.isEmpty ? none : format.format(pings.last.round());
     final loss = losses.isEmpty
         ? none
-        : percent
-            .format(losses.reduce((a, b) => a + b) / losses.length * 100);
+        : percent.format(losses.reduce((a, b) => a + b) / losses.length * 100);
 
     return SizedBox(
       width: CallConnectionDetails.width,
@@ -291,8 +287,8 @@ class _CallConnectionDetailsState extends State<CallConnectionDetails> {
                 ],
               ),
               Text(CallConnectionDetails.labelConnectionAdvice,
-                  style: text.bodySmall
-                      ?.copyWith(color: colors.onSurfaceVariant)),
+                  style:
+                      text.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
               if (widget.connection.encrypted)
                 Container(
                   width: double.infinity,
@@ -344,11 +340,8 @@ class _PingGraph extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     const labelWidth = 28.0;
     final plot = Size(size.width - labelWidth, size.height);
-    final top = max(
-        100.0,
-        history
-            .map((s) => s.pingMs ?? 0)
-            .fold(0.0, (a, b) => max(a, b)));
+    final top = max(100.0,
+        history.map((s) => s.pingMs ?? 0).fold(0.0, (a, b) => max(a, b)));
     final scale = (top / 50).ceil() * 50.0;
 
     final gridPaint = Paint()
