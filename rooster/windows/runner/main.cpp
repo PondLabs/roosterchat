@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <iostream>
 #include "flutter_window.h"
+#include "splash_window.h"
 #include "utils.h"
 
 // ROOSTER: clipboard managers (Win+V, WindowsCM) paste by injecting Ctrl+V
@@ -63,15 +64,22 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // lasts as long as the process. A launch that is not the first only hands
   // over to the running one and quits (main.dart).
   ::CreateMutexW(nullptr, FALSE, L"Local\\com.pondlabs.rooster.instance");
-  if (::GetLastError() == ERROR_ALREADY_EXISTS) {
+  bool secondary = ::GetLastError() == ERROR_ALREADY_EXISTS;
+  if (secondary) {
     command_line_arguments.push_back("--rooster-secondary");
   }
+
+  // ROOSTER: something on screen before the engine starts, so a click on
+  // Rooster is seen to do something. A second copy shows nothing: it only
+  // hands over to the running one and quits.
+  HWND splash = secondary ? nullptr : ShowSplashWindow();
 
   flutter::DartProject project(L"data");
 
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
   FlutterWindow window(project);
+  window.SetSplash(splash);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
   // ROOSTER: window title shows the fork's name, not upstream's.

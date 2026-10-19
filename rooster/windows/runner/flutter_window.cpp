@@ -37,6 +37,11 @@ bool FlutterWindow::OnCreate() {
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();
+    // ROOSTER: Dart has drawn its loading page; the stand-in goes.
+    if (splash_) {
+      DestroyWindow(splash_);
+      splash_ = nullptr;
+    }
   });
 
   // Flutter can complete the first frame before the "show window" callback is

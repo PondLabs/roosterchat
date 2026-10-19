@@ -81,7 +81,12 @@ shows the switch on and takes going past it as a yes (until October 2026 it
 showed it off and wrote a no, which also kept the home screen's check from
 ever running). The Linux and macOS runners
 open the window at the small size so it does not flash at full size first;
-the Windows one stays hidden until the first frame.
+the Windows one stays hidden until the first frame. Since that frame can
+be seconds away on a cold start (the engine, the plugins, Dart starting),
+the Windows runner puts up a native stand-in of the same size and place as
+soon as it starts (`windows/runner/splash_window.cpp`: the brand
+background and the app icon), and closes it when the Flutter window shows.
+A second copy, which only hands over to the running one, shows nothing.
 
 A look still unanswered when the app opens is not dropped: it carries on,
 and the home screen's check (below) offers whatever it fetches. Before this

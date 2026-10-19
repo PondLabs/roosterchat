@@ -17,6 +17,10 @@ class FlutterWindow : public Win32Window {
   explicit FlutterWindow(const flutter::DartProject& project);
   virtual ~FlutterWindow();
 
+  // ROOSTER: the loading square shown before this window (splash_window.h),
+  // closed when this one shows. Set before Create.
+  void SetSplash(HWND splash) { splash_ = splash; }
+
  protected:
   // Win32Window:
   bool OnCreate() override;
@@ -36,6 +40,8 @@ class FlutterWindow : public Win32Window {
 
   // ROOSTER: the in-game overlay (docs/game-overlay.md).
   std::unique_ptr<GameOverlay> game_overlay_;
+
+  HWND splash_ = nullptr;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

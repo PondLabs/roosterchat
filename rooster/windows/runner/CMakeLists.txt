@@ -10,6 +10,7 @@ add_executable(${BINARY_NAME} WIN32
   "flutter_window.cpp"
   "game_overlay.cpp"
   "main.cpp"
+  "splash_window.cpp"
   "utils.cpp"
   "voice_thumb_bar.cpp"
   "win32_window.cpp"
