@@ -2,6 +2,7 @@
 
 #include <optional>
 
+#include "call_ducking.h"
 #include "flutter/generated_plugin_registrant.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -91,6 +92,10 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   switch (message) {
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
+      break;
+    // ROOSTER: a speaker or microphone plugged in gets the opt-out too.
+    case WM_DEVICECHANGE:
+      OptOutOfCallDucking();
       break;
   }
 

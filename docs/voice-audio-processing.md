@@ -104,6 +104,13 @@ nothing:
 The level meter only moved during a call because nothing captures the
 microphone outside one; see "Microphone test" below.
 
+Joining a call on Windows turned every other app down (by 80% with the
+default "When Windows detects communications activity" setting in the Sound
+control panel), because WebRTC opens the communications device. The runner
+(`rooster/windows/runner/call_ducking.cpp`) opts the process's default audio
+session out of that ducking with `IAudioSessionControl2::SetDuckingPreference`
+on every active speaker and microphone, at start and on `WM_DEVICECHANGE`.
+
 ## Decisions
 
 | Question | Decision |

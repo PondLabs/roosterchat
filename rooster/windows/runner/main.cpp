@@ -2,6 +2,7 @@
 #include <flutter/flutter_view_controller.h>
 #include <windows.h>
 #include <iostream>
+#include "call_ducking.h"
 #include "flutter_window.h"
 #include "splash_window.h"
 #include "utils.h"
@@ -73,6 +74,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // Rooster is seen to do something. A second copy shows nothing: it only
   // hands over to the running one and quits.
   HWND splash = secondary ? nullptr : ShowSplashWindow();
+
+  // ROOSTER: a call must not turn the rest of the PC's sound down. After the
+  // splash: it wakes every audio device, which can be slow at login.
+  if (!secondary) {
+    OptOutOfCallDucking();
+  }
 
   flutter::DartProject project(L"data");
 
