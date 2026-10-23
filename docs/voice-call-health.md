@@ -93,7 +93,12 @@ runs, in this order:
 Nothing is judged or repaired while the room is not connected (LiveKit
 unpublishes everything when it gives up, and nothing flows while it
 reconnects) or once the call is being left. A microphone gone for less than
-3 s is LiveKit republishing it after a reconnect, not a fault. Every step
+3 s is LiveKit republishing it after a reconnect, not a fault. A republish
+can take longer than that on a bad connection, and then both microphones
+used to stay: the call showed us once more after every reconnect, everyone
+received us that many times, and muting reached only one of them. Only one
+is kept now, the one published last (`_dropOtherMicrophones` in the
+session). Every step
 is bounded, so one platform call that hangs cannot stop the checks: reads
 5 s, statistics 2 s, the noise suppression update 5 s.
 

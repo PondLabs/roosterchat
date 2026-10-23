@@ -750,4 +750,32 @@ void main() {
     expect(participant.trackPublications.containsKey(publication.sid), isFalse);
     expect(capture.running, isFalse);
   });
+
+  test('a microphone republished after a reconnect leaves one, not two',
+      () async {
+    _Publication microphone(String sid, _Capture capture) => _Publication(
+          sid: sid,
+          participant: participant,
+          track: _LocalScreenAudioTrack(capture),
+          source: lk.TrackSource.microphone,
+          kind: lk.TrackType.AUDIO,
+        );
+    final first = _Capture();
+    final second = _Capture();
+    await announce(microphone('TR_mic', first));
+
+    // A full reconnect clears the map; the microphone watch, seeing none,
+    // publishes a new one before LiveKit has republished the old one.
+    simulateFullReconnect();
+    await announce(microphone('TR_mic_watch', second));
+    await announce(microphone('TR_mic_republished', first));
+
+    final microphones = participant.trackPublications.values
+        .where((p) => p.source == lk.TrackSource.microphone);
+    expect(microphones.map((p) => p.sid), ['TR_mic_republished']);
+    expect(session.streams.map((s) => s.streamId), ['TR_mic_republished']);
+    expect(second.running, isFalse,
+        reason: 'the dropped microphone kept capturing');
+    expect(first.running, isTrue);
+  });
 }

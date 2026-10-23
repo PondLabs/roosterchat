@@ -1323,6 +1323,10 @@ class MatrixLivekitVoipSession
     // Ours, playing from each press already: no stream of its own.
     if (_isSoundboard(event.publication)) return;
 
+    if (event.publication.source == lk.TrackSource.microphone) {
+      await _dropOtherMicrophones(event.publication);
+    }
+
     final participant =
         event.participant.identity.split(":").getRange(0, 2).join(":");
 
@@ -1335,6 +1339,40 @@ class MatrixLivekitVoipSession
     _streams.add(s);
     _stateChanged.add(());
     _publishMembershipState();
+  }
+
+  /// One microphone at a time, the one published last. A full reconnect
+  /// republishes the old microphone some seconds after clearing it, and the
+  /// microphone watch, seeing none for longer than it waits, published a new
+  /// one meanwhile. Both stayed: we were sent, and shown, twice, once more
+  /// for every reconnect, and muting reached only one of them.
+  Future<void> _dropOtherMicrophones(lk.LocalTrackPublication kept) async {
+    final local = livekitRoom.localParticipant;
+    if (local == null) return;
+    final others = local.trackPublications.values
+        .where(
+            (p) => p.source == lk.TrackSource.microphone && p.sid != kept.sid)
+        .toList();
+    for (final other in others) {
+      Log.w("Voice: a second microphone was published (${other.sid}), "
+          "keeping ${kept.sid}");
+      try {
+        await local.removePublishedTrack(other.sid);
+      } catch (e, s) {
+        Log.onError(e, s, content: "Could not remove a second microphone");
+      }
+    }
+    // Nor shown twice, removed or not, and with the stream of the one the
+    // reconnect cleared.
+    final stale = _streams
+        .whereType<MatrixLivekitVoipStream>()
+        .where((s) =>
+            s.publication is lk.LocalTrackPublication &&
+            s.publication.source == lk.TrackSource.microphone &&
+            s.publication.sid != kept.sid)
+        .map((s) => s.publication.sid)
+        .toSet();
+    stale.forEach(_removeStreamsWithSid);
   }
 
   void onLocalTrackUnpublished(lk.LocalTrackUnpublishedEvent event) {
