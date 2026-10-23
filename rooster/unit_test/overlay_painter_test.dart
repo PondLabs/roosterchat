@@ -49,6 +49,19 @@ void main() {
     expect(_premultiplied(image.rgba), isTrue);
   });
 
+  test("a quiet person is barely there, a talking one fully", () async {
+    final image = await drawVoicePanel(const [
+      OverlayMember(name: "Ana", talking: true),
+      OverlayMember(name: "Bo"),
+    ], scale: 1);
+    // The middle of each pill's padding, past the avatar and the name.
+    final talking = _alpha(image, 1, 16);
+    final quiet = _alpha(image, 1, 32 + 4 + 16);
+    expect(talking, greaterThan(0));
+    expect(quiet, lessThan(talking * 0.5));
+    expect(quiet, greaterThan(0));
+  });
+
   test("the count of the rest gets a pill of its own", () async {
     final image = await drawVoicePanel(_members, more: "4 more", scale: 1);
     expect(image.height, 3 * 32 + 2 * 4);

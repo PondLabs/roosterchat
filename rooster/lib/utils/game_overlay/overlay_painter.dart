@@ -69,7 +69,6 @@ abstract final class _Palette {
   static const pill = Color(0xB3000000);
   static const toast = Color(0xE6111214);
   static const name = Color(0xFFFFFFFF);
-  static const idleName = Color(0xBFFFFFFF);
   static const body = Color(0xFFDBDEE1);
   static const detail = Color(0xFFB5BAC1);
   static const badge = Color(0xFFF23F43);
@@ -84,6 +83,10 @@ const _ringGap = 1.5;
 const _ringWidth = 2.0;
 const _maxNameWidth = 200.0;
 const _badgeSize = 16.0;
+
+/// How much of a pill shows while its person is quiet: barely there over
+/// the game, and fully there while they talk.
+const idleOpacity = 0.3;
 
 // The toasts.
 const _toastWidth = 320.0;
@@ -101,7 +104,7 @@ Future<OverlayImage> drawVoicePanel(List<OverlayMember> members,
     final text = _text(member.name,
         size: 14,
         weight: FontWeight.w600,
-        color: member.talking ? _Palette.name : _Palette.idleName,
+        color: _Palette.name,
         maxWidth: _maxNameWidth);
     final badge = member.muted || member.deafened ? 4 + _badgeSize : 0;
     rows.add((
@@ -123,12 +126,17 @@ Future<OverlayImage> drawVoicePanel(List<OverlayMember> members,
     var y = 0.0;
     for (final row in rows) {
       final x = alignEnd ? width - row.width : 0.0;
+      final member = row.member;
+      final pill = Rect.fromLTWH(x, y, row.width, _rowHeight);
+      final quiet = member != null && !member.talking;
+      if (quiet) {
+        canvas.saveLayer(
+            pill, Paint()..color = Color.fromRGBO(0, 0, 0, idleOpacity));
+      }
       canvas.drawRRect(
-          RRect.fromRectAndRadius(Rect.fromLTWH(x, y, row.width, _rowHeight),
-              const Radius.circular(_rowHeight / 2)),
+          RRect.fromRectAndRadius(pill, const Radius.circular(_rowHeight / 2)),
           Paint()..color = _Palette.pill);
 
-      final member = row.member;
       final textY = y + (_rowHeight - row.text.height) / 2;
       if (member == null) {
         row.text.paint(canvas, Offset(x + 12, textY));
@@ -138,10 +146,7 @@ Future<OverlayImage> drawVoicePanel(List<OverlayMember> members,
 
       final center = Offset(x + _rowHeight / 2, y + _rowHeight / 2);
       final silent = member.muted || member.deafened;
-      // As on the call tiles: someone who cannot be heard is dimmed, and
-      // has no ring.
-      _drawAvatar(canvas, member.avatar, center, _avatarRadius,
-          opacity: silent ? 0.5 : 1);
+      _drawAvatar(canvas, member.avatar, center, _avatarRadius);
       if (member.talking && !silent) {
         canvas.drawCircle(
             center,
@@ -154,6 +159,9 @@ Future<OverlayImage> drawVoicePanel(List<OverlayMember> members,
 
       final textX = x + _rowHeight + 4;
       row.text.paint(canvas, Offset(textX, textY));
+      if (quiet) canvas.restore();
+      // At full strength, quiet or not: muted or deafened is read at a
+      // glance.
       if (silent) {
         final icon = _icon(
             member.deafened ? Icons.headset_off_rounded : Icons.mic_off_rounded,
@@ -281,12 +289,10 @@ TextPainter _icon(IconData glyph, double size, Color color) => TextPainter(
       ),
     )..layout();
 
-void _drawAvatar(Canvas canvas, ui.Image? image, Offset center, double radius,
-    {double opacity = 1}) {
+void _drawAvatar(Canvas canvas, ui.Image? image, Offset center, double radius) {
   final circle = Rect.fromCircle(center: center, radius: radius);
   if (image == null) {
-    canvas.drawCircle(center, radius,
-        Paint()..color = _Palette.placeholder.withValues(alpha: opacity));
+    canvas.drawCircle(center, radius, Paint()..color = _Palette.placeholder);
     return;
   }
   canvas.save();
@@ -295,9 +301,7 @@ void _drawAvatar(Canvas canvas, ui.Image? image, Offset center, double radius,
       image,
       Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
       circle,
-      Paint()
-        ..filterQuality = FilterQuality.medium
-        ..color = Color.fromRGBO(255, 255, 255, opacity));
+      Paint()..filterQuality = FilterQuality.medium);
   canvas.restore();
 }
 

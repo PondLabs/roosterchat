@@ -4,8 +4,9 @@ Request (2026-10-11): an in-game overlay like Discord's, without tripping
 anticheats; some games with heavy anticheat flag overlays.
 
 While a game runs fullscreen or borderless on Windows, Rooster shows who is
-in the call (a green ring on whoever is talking, a slashed microphone or
-headset on whoever is muted or deafened), and the messages that would
+in the call (whoever is talking fully drawn with a green ring, everyone
+else at 30% so the game shows through, and a slashed microphone or headset
+at full strength on whoever is muted or deafened), and the messages that would
 notify, as small dark pills in a corner of the game's screen. Clicks go
 through them to the game. Settings, App, Overlay turns it off, picks the
 corners, keeps the list to who is talking, or turns messages off.
