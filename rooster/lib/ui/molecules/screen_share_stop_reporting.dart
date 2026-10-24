@@ -47,3 +47,34 @@ String get messageStopScreenshareFailed => Intl.message(
     "Could not stop sharing your screen. Try again, or leave the call.",
     name: "messageStopScreenshareFailed",
     desc: "Shown when stopping a screen share did not end the share");
+
+/// Turns [session]'s camera off and tells the user when the stop did not end
+/// it. Like [stopScreenshareOrReportFailure], the buttons that host it call
+/// their callback without awaiting it, so a failure must be handled here.
+Future<void> stopCameraOrReportFailure(
+    BuildContext context, VoipSession session) async {
+  final messenger = context.mounted ? ScaffoldMessenger.maybeOf(context) : null;
+
+  try {
+    await session.stopCamera();
+  } catch (e, s) {
+    Log.onError(e, s, content: "Could not turn the camera off");
+    _reportCameraStopFailed(messenger);
+    return;
+  }
+
+  if (session.isCameraEnabled) {
+    Log.w("The camera still looks live after a stop");
+    _reportCameraStopFailed(messenger);
+  }
+}
+
+void _reportCameraStopFailed(ScaffoldMessengerState? messenger) {
+  if (messenger == null || !messenger.mounted) return;
+  messenger.showSnackBar(SnackBar(content: Text(messageStopCameraFailed)));
+}
+
+String get messageStopCameraFailed => Intl.message(
+    "Could not turn off your camera. Try again, or leave the call.",
+    name: "messageStopCameraFailed",
+    desc: "Shown when turning the camera off did not end the camera");

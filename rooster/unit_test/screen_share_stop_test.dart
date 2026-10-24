@@ -21,9 +21,13 @@ class _Capture {
 }
 
 class _LocalVideoTrack implements lk.LocalVideoTrack {
-  _LocalVideoTrack(this.capture, {this.canStop = true});
+  _LocalVideoTrack(this.capture,
+      {this.canStop = true, this.source = lk.TrackSource.screenShareVideo});
 
   final _Capture capture;
+
+  @override
+  final lk.TrackSource source;
 
   /// A capture that refuses to stop. When the media track refuses to release,
   /// `Track.stop()` (`third_party/livekit-client-sdk-flutter/lib/src/track/
@@ -40,9 +44,6 @@ class _LocalVideoTrack implements lk.LocalVideoTrack {
 
   @override
   lk.TrackType get kind => lk.TrackType.VIDEO;
-
-  @override
-  lk.TrackSource get source => lk.TrackSource.screenShareVideo;
 
   @override
   bool get isActive => _active;
@@ -140,8 +141,23 @@ class _Publication implements lk.LocalTrackPublication<lk.LocalTrack> {
   @override
   lk.LocalTrack? track;
 
+  bool _muted = false;
+
   @override
-  bool get muted => false;
+  bool get muted => _muted;
+
+  @override
+  Future<void> mute({bool stopOnMute = true}) async {
+    if (_muted) return;
+    if (stopOnMute) await track?.stop();
+    _muted = true;
+  }
+
+  @override
+  Future<void> unmute({bool stopOnMute = true}) async {
+    if (!_muted) return;
+    _muted = false;
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -195,7 +211,20 @@ class _LocalParticipant implements lk.LocalParticipant {
           .toList();
 
   @override
-  bool isCameraEnabled() => false;
+  bool isCameraEnabled() =>
+      !(getTrackPublicationBySource(lk.TrackSource.camera)?.muted ?? true);
+
+  /// Like livekit_client 2.7.0: finds one camera publication by source and
+  /// mutes it. A second one (a reconnect can leave one behind) is untouched.
+  @override
+  Future<lk.LocalTrackPublication?> setCameraEnabled(bool enabled,
+      {lk.CameraCaptureOptions? cameraCaptureOptions}) async {
+    if (enabled) throw UnimplementedError();
+    final publication = getTrackPublicationBySource(lk.TrackSource.camera);
+    if (publication == null) return null;
+    await publication.mute(stopOnMute: true);
+    return publication;
+  }
 
   @override
   bool isScreenShareEnabled() =>
@@ -413,6 +442,7 @@ void main() {
 
   late _Capture capture;
   late _Capture audioCapture;
+  late _Capture cameraCapture;
   late _LocalParticipant participant;
   late _Room room;
   late MatrixLivekitVoipSession session;
@@ -456,6 +486,21 @@ void main() {
     return publication;
   }
 
+  /// `setCameraEnabled(true)`: LiveKit creates the camera track and announces
+  /// its publication once it is published.
+  Future<_Publication> startCamera(
+      {_Capture? camera, String sid = 'TR_camera'}) async {
+    final track = _LocalVideoTrack(camera ?? cameraCapture,
+        source: lk.TrackSource.camera);
+    await track.start();
+    return announce(_Publication(
+      sid: sid,
+      participant: participant,
+      track: track,
+      source: lk.TrackSource.camera,
+    ));
+  }
+
   /// `LocalParticipant.rePublishAllTracks()` after a full reconnect: it clears
   /// its publication map and republishes the track objects it held, through
   /// `publishVideoTrack`, so they are started again (the wrapper only) and
@@ -468,6 +513,18 @@ void main() {
       sid: sid,
       participant: participant,
       track: track,
+    ));
+  }
+
+  Future<_Publication> republishCamera(lk.LocalTrack track,
+      {String sid = 'TR_camera_republished'}) async {
+    participant.trackPublications.clear();
+    await track.start();
+    return announce(_Publication(
+      sid: sid,
+      participant: participant,
+      track: track,
+      source: lk.TrackSource.camera,
     ));
   }
 
@@ -484,6 +541,7 @@ void main() {
   setUp(() {
     capture = _Capture();
     audioCapture = _Capture();
+    cameraCapture = _Capture();
     participant = _LocalParticipant(me);
     room = _Room(participant);
     participant.listener = room.listener;
@@ -749,6 +807,116 @@ void main() {
 
     expect(participant.trackPublications.containsKey(publication.sid), isFalse);
     expect(capture.running, isFalse);
+  });
+
+  test('a share stopped during a reconnect drops its preview and LIVE pill',
+      () async {
+    await shareScreen();
+
+    // LiveKit cleared its publication map; the panel still holds the
+    // outgoing stream the share added when it started.
+    simulateFullReconnect();
+    expect(session.streams.map((s) => s.streamId), isNotEmpty);
+
+    await session.stopScreenshare();
+
+    expect(session.isSharingScreen, isFalse);
+    expect(session.streams, isEmpty,
+        reason: 'the panel kept a preview of a share that has ended');
+  });
+
+  group('camera', () {
+    test('turning it off during a reconnect stops the capture and the preview',
+        () async {
+      await startCamera();
+      expect(session.isCameraEnabled, isTrue);
+
+      // A full reconnect: LiveKit cleared its publication map while the OS
+      // camera keeps capturing. The stop control has to stay on screen.
+      simulateFullReconnect();
+      expect(session.isCameraEnabled, isTrue,
+          reason: 'the camera is still capturing, so it must not read as off');
+
+      await session.stopCamera();
+
+      expect(cameraCapture.running, isFalse);
+      expect(session.isCameraEnabled, isFalse);
+      expect(session.streams.map((s) => s.streamId), isEmpty,
+          reason: 'the panel kept a preview of a camera that is off');
+    });
+
+    test('turning it off stops a second camera publication too', () async {
+      final first = await startCamera();
+      final secondCapture = _Capture();
+      final second = await startCamera(camera: secondCapture, sid: 'TR_cam_2');
+
+      // LiveKit's own stop reaches one camera publication; the other would
+      // keep sending the camera.
+      await session.stopCamera();
+
+      expect(cameraCapture.running, isFalse);
+      expect(secondCapture.running, isFalse);
+      expect(participant.trackPublications.containsKey(first.sid), isFalse);
+      expect(participant.trackPublications.containsKey(second.sid), isFalse);
+      expect(session.isCameraEnabled, isFalse);
+    });
+
+    test('a camera republished after it was turned off is refused', () async {
+      final original = await startCamera();
+
+      await session.stopCamera();
+      final republished = await republishCamera(original.track!);
+
+      expect(
+          participant.trackPublications.containsKey(republished.sid), isFalse,
+          reason: 'the stopped camera came back as a live publication');
+      expect(session.streams.map((s) => s.streamId), isEmpty);
+      expect(session.isCameraEnabled, isFalse);
+      expect(cameraCapture.running, isFalse);
+    });
+
+    test('turning it off twice stays safe', () async {
+      final publication = await startCamera();
+      await session.stopCamera();
+
+      await session.stopCamera();
+
+      expect(cameraCapture.running, isFalse);
+      expect(session.isCameraEnabled, isFalse);
+      expect(publication.muted, isTrue);
+    });
+
+    test('hanging up mid-camera stops the camera capture', () async {
+      await startCamera();
+
+      // The reconnect window: LiveKit has cleared its map, so its teardown
+      // has nothing to unpublish.
+      simulateFullReconnect();
+
+      await session.hangUpCall();
+
+      expect(cameraCapture.running, isFalse,
+          reason: 'hanging up left the camera on');
+    });
+
+    test('a camera that refuses to stop raises instead of reporting success',
+        () async {
+      final track = _LocalVideoTrack(cameraCapture,
+          canStop: false, source: lk.TrackSource.camera);
+      await track.start();
+      await announce(_Publication(
+        sid: 'TR_camera_stuck',
+        participant: participant,
+        track: track,
+        source: lk.TrackSource.camera,
+      ));
+      simulateFullReconnect();
+
+      await expectLater(session.stopCamera(), throwsA(isA<StateError>()));
+
+      expect(cameraCapture.running, isTrue);
+      expect(session.isCameraEnabled, isTrue);
+    });
   });
 
   test('a microphone republished after a reconnect leaves one, not two',

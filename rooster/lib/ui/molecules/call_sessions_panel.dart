@@ -165,7 +165,7 @@ class _CallSessionPanelState extends State<CallSessionPanel>
     setState(() => _cameraBusy = true);
     try {
       if (widget.session.isCameraEnabled) {
-        await widget.session.stopCamera();
+        await stopCameraOrReportFailure(context, widget.session);
       } else {
         await widget.session.setCamera(null);
       }

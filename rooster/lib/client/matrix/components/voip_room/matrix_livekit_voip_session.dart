@@ -100,16 +100,17 @@ class MatrixLivekitVoipSession
   final ScreenShareWatchList _watchList = ScreenShareWatchList(
       autoWatch: () => preferences.voipAutoWatchScreenShares.value);
 
-  /// The capture tracks this session published for its screen share: the
-  /// screen video and, when system audio is shared, the screen audio. The
-  /// session keeps them because LiveKit's publication map is not a handle on
-  /// the capture — a full reconnect clears it while the OS capture keeps
-  /// running — and [stopScreenshare] still has to stop it (issue #63).
+  /// The capture tracks this session published: the screen share (the screen
+  /// video and, when system audio is shared, the screen audio) and the
+  /// camera. The session keeps them because LiveKit's publication map is not
+  /// a handle on the capture — a full reconnect clears it while the OS
+  /// capture keeps running — and the stops still have to stop them
+  /// (issues #63 and #64).
   final List<lk.LocalTrack> _captureTracks = [];
 
   /// The capture tracks above that the session has stopped. A full reconnect
   /// republishes the track objects LiveKit held before it cleared its map, so
-  /// identity against these is what tells a share that was already stopped
+  /// identity against these is what tells a capture that was already stopped
   /// apart from a new one (issue #64).
   final List<lk.LocalTrack> _stoppedCaptures = [];
 
@@ -1249,11 +1250,23 @@ class MatrixLivekitVoipSession
           Iterable<lk.LocalTrack> tracks, lk.LocalTrack track) =>
       tracks.any((owned) => identical(owned, track));
 
-  /// Owns a capture track of our screen share, once. LiveKit can announce the
-  /// same track more than once: a reconnect republishes the track objects it
-  /// held before clearing its map.
+  /// The capture sources this session starts and has to stop itself: the
+  /// screen share (video and system audio) and the camera.
+  static bool _isCaptureSource(lk.TrackSource source) =>
+      ScreenShareWatchList.isScreenShareSource(source) ||
+      source == lk.TrackSource.camera;
+
+  static bool _isScreenCaptureSource(lk.TrackSource source) =>
+      ScreenShareWatchList.isScreenShareSource(source);
+
+  static bool _isCameraCaptureSource(lk.TrackSource source) =>
+      source == lk.TrackSource.camera;
+
+  /// Owning a capture track once. LiveKit can announce the same track more
+  /// than once: a reconnect republishes the track objects it held before
+  /// clearing its map.
   void _ownCaptureTrack(lk.LocalTrack track) {
-    if (!ScreenShareWatchList.isScreenShareSource(track.source)) {
+    if (!_isCaptureSource(track.source)) {
       return;
     }
     if (_containsIdentical(_captureTracks, track)) return;
@@ -1270,15 +1283,15 @@ class MatrixLivekitVoipSession
   bool _isStoppedCapture(lk.LocalTrack track) =>
       _containsIdentical(_stoppedCaptures, track);
 
-  /// Refuses a screen share LiveKit republished after a reconnect for a
-  /// capture this session already stopped, or a publication a stop left
-  /// behind. The publication is removed through LiveKit so the sender the
-  /// republish recreated is released, and no outgoing stream is added:
-  /// participants see the share end instead of a dead tile, and the panel
-  /// offers no LIVE tile for it (issues #64 and #79).
-  Future<void> _refuseRepublishedShare(
+  /// Refuses a screen share or camera LiveKit republished after a reconnect
+  /// for a capture this session already stopped, or a publication a stop
+  /// left behind. The publication is removed through LiveKit so the sender
+  /// the republish recreated is released, and no outgoing stream is kept:
+  /// participants see it end instead of a dead tile, and the panel offers no
+  /// LIVE tile for it (issues #64 and #79).
+  Future<void> _refuseStoppedCapturePublication(
       lk.LocalTrackPublication publication) async {
-    Log.w("Refusing the screen share ${publication.sid}: "
+    Log.w("Refusing the ${publication.source.name} ${publication.sid}: "
         "its capture is no longer live");
     // A republish accepted before its capture was marked stopped left an
     // outgoing stream behind, and the refusal has to take it off the panel.
@@ -1286,7 +1299,8 @@ class MatrixLivekitVoipSession
     try {
       await livekitRoom.localParticipant?.removePublishedTrack(publication.sid);
     } catch (e, s) {
-      Log.onError(e, s, content: "Could not remove a republished screen share");
+      Log.onError(e, s,
+          content: "Could not remove a republished ${publication.source.name}");
     }
   }
 
@@ -1313,11 +1327,12 @@ class MatrixLivekitVoipSession
     }
 
     // A full reconnect clears LiveKit's publication map and republishes the
-    // track objects it held. A share this session stopped must not come back:
-    // the republish is refused as soon as it arrives, so one click is enough
-    // even when the republish lands after the stop returned (issue #64).
+    // track objects it held. A share or camera this session stopped must not
+    // come back: the republish is refused as soon as it arrives, so one click
+    // is enough even when the republish lands after the stop returned
+    // (issue #64).
     if (track != null && _isStoppedCapture(track)) {
-      await _refuseRepublishedShare(event.publication);
+      await _refuseStoppedCapturePublication(event.publication);
       return;
     }
     // Ours, playing from each press already: no stream of its own.
@@ -1624,7 +1639,19 @@ class MatrixLivekitVoipSession
 
   @override
   bool get isCameraEnabled =>
-      livekitRoom.localParticipant?.isCameraEnabled() ?? false;
+      _hasLiveCameraPublication || _hasActiveCameraCapture;
+
+  /// Whether any camera publication is unmuted. Not
+  /// `LocalParticipant.isCameraEnabled()`, which reads whichever camera
+  /// publication comes first: with a second one left by a reconnect, the
+  /// first could be muted while the other still sent the camera.
+  bool get _hasLiveCameraPublication {
+    final participant = livekitRoom.localParticipant;
+    return participant?.trackPublications.values.any((publication) =>
+            publication.source == lk.TrackSource.camera &&
+            !publication.muted) ??
+        false;
+  }
 
   /// The microphone's own publication decides, not LiveKit's `isMuted`,
   /// which reads whichever audio publication came first: with the DJ
@@ -1642,8 +1669,19 @@ class MatrixLivekitVoipSession
         !(_microphoneWanted && _microphoneHealth.hadMicrophone);
   }
 
-  /// Whether a screen capture this session owns is still running.
-  bool get _hasActiveCapture => _captureTracks.any((track) => track.isActive);
+  /// Whether a screen capture this session owns is still running. A republish
+  /// re-arms the wrapper of a stopped track without restarting the capture,
+  /// so a stopped one does not count.
+  bool get _hasActiveScreenCapture => _captureTracks.any((track) =>
+      _isScreenCaptureSource(track.source) &&
+      track.isActive &&
+      !_isStoppedCapture(track));
+
+  /// Whether a camera capture this session owns is still running.
+  bool get _hasActiveCameraCapture => _captureTracks.any((track) =>
+      _isCameraCaptureSource(track.source) &&
+      track.isActive &&
+      !_isStoppedCapture(track));
 
   /// Sharing follows the capture, not only LiveKit: a full reconnect empties
   /// the publication map while the capture keeps running, and the app must not
@@ -1653,7 +1691,7 @@ class MatrixLivekitVoipSession
   @override
   bool get isSharingScreen =>
       (livekitRoom.localParticipant?.isScreenShareEnabled() ?? false) ||
-      _hasActiveCapture;
+      _hasActiveScreenCapture;
 
   @override
   Stream<void> get onStateChanged => _stateChanged.stream;
@@ -1761,7 +1799,10 @@ class MatrixLivekitVoipSession
   @override
   Future<void> setScreenShare(ScreenCaptureSource source) async {
     if (source is WebrtcAndroidScreencaptureSource) {
-      livekitRoom.localParticipant?.setScreenShareEnabled(true);
+      // Awaited: the publication event that lets the stop own the capture
+      // follows the publish, and a failure to start has to reach the caller
+      // instead of becoming an unhandled error.
+      await livekitRoom.localParticipant?.setScreenShareEnabled(true);
       Log.i("Got android screen capture source!");
       _stateChanged.add(());
       return;
@@ -1833,15 +1874,108 @@ class MatrixLivekitVoipSession
       return;
     }
 
-    await livekitRoom.localParticipant?.setCameraEnabled(true);
+    // A camera this session stopped leaves a publication whose track cannot
+    // capture again: unmuting it would publish a black camera. Drop those so
+    // LiveKit opens a fresh capture instead.
+    await _dropStoppedCameraPublications();
+
+    final participant = livekitRoom.localParticipant;
+    final wasMuted = participant
+            ?.getTrackPublicationBySource(lk.TrackSource.camera)
+            ?.muted ??
+        false;
+
+    await participant?.setCameraEnabled(true);
+
+    // A muted publication was unmuted, which restarts its capture: that
+    // track is live again, not one a stop left behind.
+    if (wasMuted) {
+      final camera =
+          participant?.getTrackPublicationBySource(lk.TrackSource.camera);
+      final track = camera?.track;
+      if (track != null && !camera!.muted) {
+        _stoppedCaptures.removeWhere((stopped) => identical(stopped, track));
+      }
+    }
+
     _stateChanged.add(());
+  }
+
+  /// Removes camera publications whose track is gone or that belong to a
+  /// capture this session stopped: unmuting one would not open a camera.
+  Future<void> _dropStoppedCameraPublications() async {
+    final participant = livekitRoom.localParticipant;
+    if (participant == null) return;
+    final dead = participant.trackPublications.values.where((publication) {
+      if (!_isCameraCaptureSource(publication.source)) return false;
+      final track = publication.track;
+      return track == null || _isStoppedCapture(track);
+    }).toList();
+    for (final publication in dead) {
+      try {
+        await participant.removePublishedTrack(publication.sid);
+      } catch (e, s) {
+        Log.onError(e, s, content: "Could not remove a stopped camera");
+      }
+    }
   }
 
   @override
   Future<void> stopCamera() async {
-    await livekitRoom.localParticipant?.setCameraEnabled(false);
+    final participant = livekitRoom.localParticipant;
 
+    // Ask LiveKit first: on the normal path it mutes the camera publication
+    // and, with stopCameraCaptureOnMute on, stops the capture. A failure here
+    // must not skip the fallbacks below (issue #79).
+    try {
+      await participant?.setCameraEnabled(false);
+    } catch (e, s) {
+      Log.onError(e, s,
+          content: "Could not turn the camera off through livekit");
+    }
+
+    // The SDK stop reaches one camera publication. A full reconnect can
+    // leave another behind, and can leave none at all while the capture
+    // keeps running: turn off every camera publication left, then stop the
+    // captures this session owns (issues #63 and #64).
+    await _muteCameraPublications();
+
+    await _stopOwnedCaptureTracks(
+        where: (track) => _isCameraCaptureSource(track.source));
+
+    // A republish accepted while the stop was running may have re-armed a
+    // capture that is already stopped.
+    await _refuseStoppedCapturePublications();
+
+    // A camera whose capture refuses to stop must not look off.
+    _verifyCameraStopped();
+
+    // During a full reconnect LiveKit emits no mute or unpublish event for
+    // the stop, so the panel would keep the camera preview and LIVE pill.
+    _removeOutgoingStreams(_isCameraCaptureSource);
+
+    _updateShareCues();
     _stateChanged.add(());
+    _publishMembershipState();
+  }
+
+  /// Mutes every camera publication left, not only the first one LiveKit's
+  /// [LocalParticipant.setCameraEnabled] finds. Muting stops the capture with
+  /// the default options.
+  Future<void> _muteCameraPublications() async {
+    final participant = livekitRoom.localParticipant;
+    if (participant == null) return;
+    final cameras = participant.trackPublications.values
+        .where((publication) =>
+            _isCameraCaptureSource(publication.source) && !publication.muted)
+        .toList();
+    for (final publication in cameras) {
+      try {
+        await publication.mute(stopOnMute: true);
+      } catch (e, s) {
+        Log.onError(e, s, content: "Could not turn off a camera publication");
+      }
+    }
   }
 
   /// Stops every capture track this session owns. This is what releases the
@@ -1851,12 +1985,14 @@ class MatrixLivekitVoipSession
   /// to finish either way, and [stopScreenshare] surfaces them through
   /// [_verifyScreenshareStopped]. Stopping a stopped track is a no-op in the
   /// SDK.
-  Future<void> _stopOwnedCaptureTracks() async {
+  Future<void> _stopOwnedCaptureTracks(
+      {bool Function(lk.LocalTrack track)? where}) async {
     for (final track in _captureTracks) {
+      if (where != null && !where(track)) continue;
       try {
         await track.stop();
       } catch (e, s) {
-        Log.onError(e, s, content: "Could not stop a screen capture track");
+        Log.onError(e, s, content: "Could not stop a capture track");
       }
       // Only a capture that really stopped is refused when republished: a
       // stuck track still captures, and its share has to keep flowing until
@@ -1898,7 +2034,8 @@ class MatrixLivekitVoipSession
     // no-op when a full reconnect cleared its publication map, and the OS
     // capture survives that (issue #63). The stop records what actually
     // stopped, so a republish of it is refused below (issue #64).
-    await _stopOwnedCaptureTracks();
+    await _stopOwnedCaptureTracks(
+        where: (track) => _isScreenCaptureSource(track.source));
 
     // A republish that landed while the stop was still running may have been
     // accepted before its capture was marked stopped, and a publication the
@@ -1914,20 +2051,24 @@ class MatrixLivekitVoipSession
       }
     }
 
-    _stateChanged.add(());
-
     _verifyScreenshareStopped();
-    // A full reconnect can leave no publication to emit an unpublish event.
+
+    // A full reconnect can leave no publication to emit an unpublish event,
+    // so the panel would keep the preview and LIVE pill of a share that has
+    // ended. Drop its outgoing streams and report the stop.
+    _removeOutgoingStreams(_isScreenCaptureSource);
+    _updateShareCues();
+    _stateChanged.add(());
     // Publish the verified stop so people outside the call lose the LIVE badge.
     _publishMembershipState();
   }
 
-  /// Removes every screen-share publication whose capture this session has
-  /// stopped, and any that lost its track. A republish arriving while a stop
-  /// is still running reaches [onLocalTrackPublished] before the capture is
-  /// marked stopped, and a stop whose SDK-side removal failed (the H.265
-  /// codec path, issue #79) leaves the publication in the map: the stop cleans
-  /// those up itself instead of leaving a dead share to the next click
+  /// Removes every screen-share or camera publication whose capture this
+  /// session has stopped, and any that lost its track. A republish arriving
+  /// while a stop is still running reaches [onLocalTrackPublished] before the
+  /// capture is marked stopped, and a stop whose SDK-side removal failed (the
+  /// H.265 codec path, issue #79) leaves the publication in the map: the stop
+  /// cleans those up itself instead of leaving a dead share to the next click
   /// (issues #64 and #79).
   Future<void> _refuseStoppedCapturePublications() async {
     final participant = livekitRoom.localParticipant;
@@ -1935,11 +2076,11 @@ class MatrixLivekitVoipSession
 
     final refused = participant.trackPublications.values.where((publication) {
       final track = publication.track;
-      return ScreenShareWatchList.isScreenShareSource(publication.source) &&
+      return _isCaptureSource(publication.source) &&
           (track == null || _isStoppedCapture(track));
     }).toList();
     for (final publication in refused) {
-      await _refuseRepublishedShare(publication);
+      await _refuseStoppedCapturePublication(publication);
     }
   }
 
@@ -1953,10 +2094,37 @@ class MatrixLivekitVoipSession
       lk.TrackSource.screenShareVideo,
       lk.TrackSource.screenShareAudio,
     ].any((source) => participant?.getTrackPublicationBySource(source) != null);
-    final stillCapturing = _hasActiveCapture;
+    final stillCapturing = _hasActiveScreenCapture;
     if (stillPublished || stillCapturing) {
       throw StateError(
           "The screen share could not be stopped: it still looks live");
+    }
+  }
+
+  /// A camera stop is only over once LiveKit has no unmuted camera
+  /// publication and no camera capture this session owns still runs. Like the
+  /// screen share, reporting success while one does leaves the camera on with
+  /// nothing left to click, so this raises instead.
+  void _verifyCameraStopped() {
+    if (_hasLiveCameraPublication || _hasActiveCameraCapture) {
+      throw StateError(
+          "The camera could not be turned off: it still looks live");
+    }
+  }
+
+  /// Drops the outgoing streams of [source]. A stop during a full reconnect
+  /// gets no unpublish or mute event — LiveKit had cleared its publication
+  /// map — so the panel kept the stopped share's preview and LIVE pill.
+  void _removeOutgoingStreams(bool Function(lk.TrackSource source) source) {
+    final sids = _streams
+        .whereType<MatrixLivekitVoipStream>()
+        .where((stream) =>
+            stream.publication is lk.LocalTrackPublication &&
+            source(stream.publication.source))
+        .map((stream) => stream.streamId)
+        .toSet();
+    for (final sid in sids) {
+      _removeStreamsWithSid(sid);
     }
   }
 
