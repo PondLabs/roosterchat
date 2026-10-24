@@ -145,7 +145,7 @@ class _CallSessionLivePanelState extends State<CallSessionLivePanel> {
           key: const ValueKey("live-stop-video"),
           tooltip: tooltipStopCamera,
           icon: Icons.videocam_off_rounded,
-          onPressed: widget.session.stopCamera,
+          onPressed: () => stopCameraOrReportFailure(context, widget.session),
         );
     }
   }

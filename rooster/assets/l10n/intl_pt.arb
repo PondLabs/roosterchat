@@ -496,6 +496,7 @@
   "messageCouldNotShareScreen": "Não foi possível compartilhar sua tela.",
   "messageScreenShareUnsupported": "Este navegador não consegue compartilhar sua tela. Use o aplicativo do Rooster ou um navegador num computador.",
   "messageStopScreenshareFailed": "Não foi possível parar de compartilhar sua tela. Tente de novo ou saia da chamada.",
+  "messageStopCameraFailed": "Não foi possível desligar sua câmera. Tente de novo ou saia da chamada.",
   "tooltipSoundboardChooseEmoji": "Escolher emoji",
   "labelSoundboardTrim": "Recorte",
   "labelSoundboardTrimLength": "Duração {length}",

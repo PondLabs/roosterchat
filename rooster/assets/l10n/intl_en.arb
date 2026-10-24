@@ -3302,6 +3302,12 @@
     "type": "text",
     "placeholders": {}
   },
+  "messageStopCameraFailed": "Could not turn off your camera. Try again, or leave the call.",
+  "@messageStopCameraFailed": {
+    "description": "Shown when turning the camera off did not end the camera",
+    "type": "text",
+    "placeholders": {}
+  },
   "tooltipSoundboardChooseEmoji": "Choose emoji",
   "@tooltipSoundboardChooseEmoji": {
     "description": "Tooltip of the button that picks the emoji shown with a soundboard sound, next to the sound's name",

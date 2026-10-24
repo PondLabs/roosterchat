@@ -71,7 +71,7 @@ class _CallWidgetState extends State<CallWidget> {
   }
 
   Future<void> disableCamera() {
-    return widget.session.stopCamera();
+    return stopCameraOrReportFailure(context, widget.session);
   }
 
   Future<void> declineCall() {
