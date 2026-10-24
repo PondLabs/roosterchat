@@ -90,4 +90,9 @@ class MatrixDirectMessagesComponent
       _notificationsChanged.add(null);
     }
   }
+
+  @override
+  void notificationCountsChanged() {
+    _notificationsChanged.add(null);
+  }
 }
