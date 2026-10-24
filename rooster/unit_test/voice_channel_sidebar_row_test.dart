@@ -102,6 +102,14 @@ class _SdkRoom implements matrix.Room {
   @override
   final Map<String, Map<String, matrix.StrippedStateEvent>> states = {};
 
+  /// Nobody here may move anyone but themselves.
+  @override
+  int getPowerLevelByUserId(String userId) => 0;
+
+  @override
+  matrix.StrippedStateEvent? getState(String typeKey, [String stateKey = '']) =>
+      states[typeKey]?[stateKey];
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

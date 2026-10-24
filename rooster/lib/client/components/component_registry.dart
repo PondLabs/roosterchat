@@ -1,3 +1,4 @@
+import 'package:rooster/client/matrix/components/voip_room/matrix_call_moves_component.dart';
 import 'package:rooster/client/components/component.dart';
 import 'package:rooster/client/components/voip/media_capture_support.dart';
 import 'package:rooster/client/components/room_component.dart';
@@ -58,6 +59,7 @@ class ComponentRegistry {
       // and the SDK's VoIP sets ondevicechange on it in its constructor: the
       // app died at startup on such a page (text login still works).
       if (supportsMediaCapture) MatrixVoipComponent(client),
+      MatrixCallMovesComponent(client),
       // MatrixRTCDataChannelComponent(client),
       // MatrixRtcScreenShareAnnotationComponent(client),
       MatrixUrlPreviewComponent(client),

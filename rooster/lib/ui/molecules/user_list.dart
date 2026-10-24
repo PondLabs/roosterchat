@@ -78,70 +78,88 @@ class RoomMemberList extends StatefulWidget {
       Function? onUserBanned,
       Function? onUserRoleChanged}) {
     return AdaptiveContextMenu(
-      items: [
-        if (room.permissions.canChangeRoles)
-          tiamat.ContextMenuItem(
-              text: promptProfileSetRole,
-              icon: Icons.shield,
-              onPressed: () async {
-                ErrorUtils.tryRun(context, () async {
-                  var role = await AdaptiveDialog.pickOne(
-                    context,
-                    title: labelProfilePickRoleFor(userDisplayName),
-                    items: room.availableRoles,
-                    itemBuilder: (context, item, callback) {
-                      return SizedBox(
-                        height: 50,
-                        child: tiamat.TextButton(
-                          item.name,
-                          icon: item.icon,
-                          onTap: callback,
-                        ),
-                      );
-                    },
-                  );
-
-                  if (role != null) {
-                    await room.setMemberRole(userId, role);
-                    onUserRoleChanged?.call();
-                  }
-                });
-              }),
-        if (room.permissions.canKick && !isSelf)
-          tiamat.ContextMenuItem(
-              text: promptProfileKick,
-              icon: Icons.subdirectory_arrow_left_rounded,
-              color: ColorScheme.of(context).error,
-              onPressed: () async {
-                if (await AdaptiveDialog.confirmation(context,
-                        prompt:
-                            messageProfileKickConfirmation(userDisplayName)) ==
-                    true) {
-                  ErrorUtils.tryRun(context, () async {
-                    await room.kickUser(userId);
-                    onUserKicked?.call();
-                  });
-                }
-              }),
-        if (room.permissions.canBan && !isSelf)
-          tiamat.ContextMenuItem(
-              text: promptProfileBan,
-              icon: Icons.shield,
-              color: ColorScheme.of(context).error,
-              onPressed: () async {
-                if (await AdaptiveDialog.confirmation(context,
-                        prompt:
-                            messageProfileBanConfirmation(userDisplayName)) ==
-                    true) {
-                  ErrorUtils.tryRun(context, () async {
-                    await room.banUser(userId);
-                    onUserBanned?.call();
-                  });
-                }
-              }),
-      ],
+      items: userContextMenuItems(context,
+          userId: userId,
+          userDisplayName: userDisplayName,
+          room: room,
+          isSelf: isSelf,
+          onUserKicked: onUserKicked,
+          onUserBanned: onUserBanned,
+          onUserRoleChanged: onUserRoleChanged),
       child: child,
     );
+  }
+
+  /// A member's role, kick and ban, as far as we may change them.
+  static List<tiamat.ContextMenuItem> userContextMenuItems(BuildContext context,
+      {required String userId,
+      required String userDisplayName,
+      required Room room,
+      required bool isSelf,
+      Function? onUserKicked,
+      Function? onUserBanned,
+      Function? onUserRoleChanged}) {
+    return [
+      if (room.permissions.canChangeRoles)
+        tiamat.ContextMenuItem(
+            text: promptProfileSetRole,
+            icon: Icons.shield,
+            onPressed: () async {
+              ErrorUtils.tryRun(context, () async {
+                var role = await AdaptiveDialog.pickOne(
+                  context,
+                  title: labelProfilePickRoleFor(userDisplayName),
+                  items: room.availableRoles,
+                  itemBuilder: (context, item, callback) {
+                    return SizedBox(
+                      height: 50,
+                      child: tiamat.TextButton(
+                        item.name,
+                        icon: item.icon,
+                        onTap: callback,
+                      ),
+                    );
+                  },
+                );
+
+                if (role != null) {
+                  await room.setMemberRole(userId, role);
+                  onUserRoleChanged?.call();
+                }
+              });
+            }),
+      if (room.permissions.canKick && !isSelf)
+        tiamat.ContextMenuItem(
+            text: promptProfileKick,
+            icon: Icons.subdirectory_arrow_left_rounded,
+            color: ColorScheme.of(context).error,
+            onPressed: () async {
+              if (await AdaptiveDialog.confirmation(context,
+                      prompt:
+                          messageProfileKickConfirmation(userDisplayName)) ==
+                  true) {
+                ErrorUtils.tryRun(context, () async {
+                  await room.kickUser(userId);
+                  onUserKicked?.call();
+                });
+              }
+            }),
+      if (room.permissions.canBan && !isSelf)
+        tiamat.ContextMenuItem(
+            text: promptProfileBan,
+            icon: Icons.shield,
+            color: ColorScheme.of(context).error,
+            onPressed: () async {
+              if (await AdaptiveDialog.confirmation(context,
+                      prompt: messageProfileBanConfirmation(userDisplayName)) ==
+                  true) {
+                ErrorUtils.tryRun(context, () async {
+                  await room.banUser(userId);
+                  onUserBanned?.call();
+                });
+              }
+            }),
+    ];
   }
 }
 

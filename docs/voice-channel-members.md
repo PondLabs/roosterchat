@@ -57,6 +57,28 @@ its screen share (`MatrixCallMembership.supersededBy`,
 unmuted. A device that is offline stays listed until its delayed leave or
 window ends; the list shows a person once either way.
 
+## Clicking, right-clicking and dragging someone
+
+Each person under a voice channel in the sidebar works as in Discord
+(`room_text_button.dart`, `ui/organisms/voice_channel_members/call_member_menu.dart`):
+
+- A click opens their profile.
+- A right-click (a long press on touch) has their volume and sound effects
+  volume when we are in the call with them, Profile, Message, Move To…,
+  Disconnect, Copy User ID, and the member list's role, kick and ban.
+- Dragging them onto another voice channel moves them there; onto the one
+  they came from, nothing.
+
+Matrix has no way to move someone, so the mover sends the person's devices a
+`chat.commet.call.move` to-device message (`room_id`, `to_room_id`, absent to
+disconnect, `sent_at`). Their Rooster acts on it only if it is in that room's
+call, the message is under a minute old, and the sender may move them
+(`MatrixCallMovesComponent.mayMove`): themselves, or someone whose power
+level reaches the room's kick level and is above theirs. It then joins the
+other channel (which leaves the first) or hangs up. The same check decides
+who we can drag and who gets Move To… and Disconnect. Ourselves we move
+directly. Clients other than Rooster ignore the message.
+
 ## What went wrong
 
 | # | What happened | Fix |

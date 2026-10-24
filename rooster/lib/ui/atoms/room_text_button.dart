@@ -8,6 +8,7 @@ import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip_room/voip_room_component.dart';
 import 'package:rooster/client/components/widgets/widget_component.dart';
 import 'package:rooster/client/matrix/components/dj/dj_booths.dart';
+import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/room.dart';
 import 'package:rooster/client/space.dart';
 import 'package:rooster/debug/log.dart';
@@ -32,6 +33,8 @@ import 'package:rooster/ui/organisms/dj/dj_member_ui.dart';
 import 'package:rooster/ui/organisms/dj/vinyl_disc.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_emoji_overlay.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_overlay_registry.dart';
+import 'package:rooster/ui/organisms/user_profile/user_profile.dart';
+import 'package:rooster/ui/organisms/voice_channel_members/call_member_menu.dart';
 import 'package:rooster/ui/pages/settings/room_settings_page.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/event_bus.dart';
@@ -543,6 +546,7 @@ class _RoomTextButtonState extends State<RoomTextButton> {
     );
 
     if (customBuilder == null) result = hoverable(result);
+    result = buildMemberDropTarget(result);
 
     result = AdaptiveContextMenu(
       items: RoomTextButton.createRoomContextMenuItems(context, widget.room,
@@ -551,6 +555,34 @@ class _RoomTextButtonState extends State<RoomTextButton> {
     );
 
     return result;
+  }
+
+  /// A voice channel takes someone dragged from another one: they are
+  /// moved here. Lit up while they are held over it.
+  Widget buildMemberDropTarget(Widget child) {
+    final room = widget.room;
+    final voip = room.getComponent<VoipRoomComponent>();
+    if (voip == null) return child;
+    return DragTarget<CallMemberDrag>(
+      onWillAcceptWithDetails: (details) =>
+          details.data.from != room && voip.canJoinCall,
+      onAcceptWithDetails: (details) => CallMemberMenu.move(
+          context, details.data.from, details.data.userId, room),
+      builder: (context, candidates, rejected) => candidates.isEmpty
+          ? child
+          : DecoratedBox(
+              decoration: BoxDecoration(
+                color: Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withValues(alpha: 0.15),
+                border: Border.all(
+                    color: Theme.of(context).colorScheme.primary, width: 1.5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: child,
+            ),
+    );
   }
 
   Widget hoverable(Widget child) => MouseRegion(
@@ -995,11 +1027,14 @@ class _RoomTextButtonState extends State<RoomTextButton> {
     // Only in our own call: the booth is heard over its data channel.
     final dj = showActivityIcons ? DjBooths.of(voiceSession) : null;
 
-    final row = SizedBox(
+    Widget row = SizedBox(
       height: height,
       child: tiamat.TextButton(
         member.displayName,
         textColor: color,
+        // As in Discord: a click on someone opens their profile.
+        onTap: () => UserProfile.show(context,
+            client: widget.room.client, userId: identifier),
         avatar: member.avatar,
         avatarPlaceholderColor: member.defaultColor,
         avatarPlaceholderText: member.displayName,
@@ -1086,17 +1121,44 @@ class _RoomTextButtonState extends State<RoomTextButton> {
       ),
     );
 
-    if (dj == null) return row;
-    // Built when the menu opens, so it matches the booth at that moment.
-    return ListenableBuilder(
-      listenable: dj,
-      builder: (context, child) => AdaptiveContextMenu(
-        items: djMemberMenuItems(dj,
+    // Dragged onto another voice channel, they are moved there.
+    final room = widget.room;
+    if (showActivityIcons &&
+        room is MatrixRoom &&
+        CallMemberMenu.canMove(room, identifier)) {
+      final feedback = Material(
+        color: Colors.transparent,
+        child: SizedBox(width: 200, child: row),
+      );
+      final dragged = Opacity(opacity: 0.4, child: row);
+      final data = CallMemberDrag(room, identifier);
+      row = ShowOnHover.useTouchControls(context)
+          ? LongPressDraggable<CallMemberDrag>(
+              data: data,
+              feedback: feedback,
+              childWhenDragging: dragged,
+              child: row)
+          : Draggable<CallMemberDrag>(
+              data: data,
+              feedback: feedback,
+              childWhenDragging: dragged,
+              child: row);
+    }
+
+    // Made when the menu opens, so it matches the call and the booth then.
+    return AdaptiveContextMenu(
+      itemsBuilder: () => [
+        if (dj != null)
+          ...djMemberMenuItems(dj,
+              userId: identifier,
+              displayName: member.displayName,
+              musicVolume: DjMusicVolume(session: voiceSession!)),
+        ...CallMemberMenu.items(context,
+            room: widget.room,
             userId: identifier,
-            displayName: member.displayName,
-            musicVolume: DjMusicVolume(session: voiceSession!)),
-        child: child!,
-      ),
+            space: widget.space,
+            session: voiceSession),
+      ],
       child: row,
     );
   }

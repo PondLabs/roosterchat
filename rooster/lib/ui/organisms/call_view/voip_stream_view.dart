@@ -49,6 +49,12 @@ class VoipStreamView extends StatefulWidget {
 
   @override
   State<VoipStreamView> createState() => _VoipStreamViewState();
+
+  /// The menu of someone's stream: who it is, watching it, its volumes.
+  static List<tiamat.ContextMenuItem> streamContextMenuItems(
+          VoipStream stream, Member user, {VoipStream? audioStream}) =>
+      _VoipStreamViewState.streamContextMenuItems(stream, user,
+          audioStream: audioStream);
 }
 
 class _VoipStreamViewState extends State<VoipStreamView> {

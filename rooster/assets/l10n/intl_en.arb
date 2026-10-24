@@ -5682,6 +5682,50 @@
       "minutes": {}
     }
   },
+  "promptCallMemberProfile": "Profile",
+  "@promptCallMemberProfile": {
+    "description": "Entry in the menu of someone in a voice channel in the sidebar: opens their profile",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptCallMemberMessage": "Message",
+  "@promptCallMemberMessage": {
+    "description": "Entry in the menu of someone in a voice channel in the sidebar: opens our direct messages with them",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptCallMemberMoveTo": "Move To…",
+  "@promptCallMemberMoveTo": {
+    "description": "Entry in the menu of someone in a voice channel in the sidebar: picks another voice channel to move them to",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptCallMemberDisconnect": "Disconnect",
+  "@promptCallMemberDisconnect": {
+    "description": "Entry in the menu of someone in a voice channel in the sidebar: takes them out of the call",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptCallMemberCopyUserId": "Copy User ID",
+  "@promptCallMemberCopyUserId": {
+    "description": "Entry in the menu of someone in a voice channel in the sidebar: copies their Matrix user id",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelCallMemberMoveTo": "Move {name} to",
+  "@labelCallMemberMoveTo": {
+    "description": "Title of the list of voice channels to move someone to, with their name",
+    "type": "text",
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "errorCallMemberMove": "Could not move them",
+  "@errorCallMemberMove": {
+    "description": "Title of the error shown when moving someone to another voice channel, or out of the call, failed",
+    "type": "text",
+    "placeholders": {}
+  },
   "tooltipCallRoomEncrypted": "This room is encrypted, your call is secure and private",
   "@tooltipCallRoomEncrypted": {
     "description": "Tooltip of the closed lock at the bottom of a voice channel's page, before joining its call",
