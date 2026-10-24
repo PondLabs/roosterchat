@@ -400,6 +400,8 @@
   "tooltipPopOutControls": "Destacar controles da chamada",
   "tooltipShareScreen": "Compartilhar sua tela",
   "tooltipStopSharingScreen": "Parar de compartilhar",
+  "tooltipTurnOnCamera": "Ligar a câmera",
+  "tooltipTurnOffCamera": "Desligar a câmera",
   "tooltipSelectingScreen": "Escolhendo a tela",
   "promptVoicePanelMixAccounts": "Misturar contas",
   "labelStatusOnline": "Disponível",

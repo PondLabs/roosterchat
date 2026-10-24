@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:rooster/client/components/voip/call_connection.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/room.dart';
+import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/anchored_popover.dart';
 import 'package:rooster/ui/atoms/noise_suppression_button.dart';
 import 'package:rooster/ui/atoms/speaking_indicator.dart';
 import 'package:rooster/ui/molecules/call_connection_status.dart';
+import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/molecules/call_session_live_panel.dart';
 import 'package:rooster/ui/molecules/screen_share_start_reporting.dart';
 import 'package:rooster/ui/molecules/screen_share_stop_reporting.dart';
@@ -105,6 +107,14 @@ class _CallSessionPanelState extends State<CallSessionPanel>
       name: "tooltipStopSharingScreen",
       desc: "Tooltip on the voice panel button that stops screen sharing");
 
+  String get tooltipTurnOnCamera => Intl.message("Turn on camera",
+      name: "tooltipTurnOnCamera",
+      desc: "Tooltip on the voice panel button that turns our camera on");
+
+  String get tooltipTurnOffCamera => Intl.message("Turn off camera",
+      name: "tooltipTurnOffCamera",
+      desc: "Tooltip on the voice panel button that turns our camera off");
+
   String get tooltipSelectingScreen => Intl.message("Selecting screen",
       name: "tooltipSelectingScreen",
       desc:
@@ -146,6 +156,25 @@ class _CallSessionPanelState extends State<CallSessionPanel>
   void openRoom() {
     EventBus.doOpenRoom(widget.session.roomId,
         clientId: widget.session.client.identifier);
+  }
+
+  bool _cameraBusy = false;
+
+  Future<void> toggleCamera() async {
+    if (_cameraBusy) return;
+    setState(() => _cameraBusy = true);
+    try {
+      if (widget.session.isCameraEnabled) {
+        await widget.session.stopCamera();
+      } else {
+        await widget.session.setCamera(null);
+      }
+    } catch (e, s) {
+      Log.onError(e, s, content: "Could not turn the camera on or off");
+      if (mounted) AdaptiveDialog.showError(context, e, s);
+    } finally {
+      if (mounted) setState(() => _cameraBusy = false);
+    }
   }
 
   Future<void> toggleScreenShare() async {
@@ -263,6 +292,25 @@ class _CallSessionPanelState extends State<CallSessionPanel>
                   ),
                   // Hides itself where the voice DSP cannot run.
                   NoiseSuppressionButton(size: iconSize, extent: widget.height),
+                  SizedBox(
+                    width: widget.height,
+                    height: widget.height,
+                    child: Tooltip(
+                      message: widget.session.isCameraEnabled
+                          ? tooltipTurnOffCamera
+                          : tooltipTurnOnCamera,
+                      child: tiamat.IconButton(
+                        onPressed: _cameraBusy ? null : toggleCamera,
+                        size: iconSize,
+                        iconColor: widget.session.isCameraEnabled
+                            ? SpeakingIndicator.color
+                            : null,
+                        icon: widget.session.isCameraEnabled
+                            ? Icons.videocam_rounded
+                            : Icons.videocam_outlined,
+                      ),
+                    ),
+                  ),
                   if (widget.session.supportsScreenshare)
                     SizedBox(
                       width: widget.height,

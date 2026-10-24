@@ -2700,6 +2700,18 @@
     "type": "text",
     "placeholders": {}
   },
+  "tooltipTurnOnCamera": "Turn on camera",
+  "@tooltipTurnOnCamera": {
+    "description": "Tooltip on the voice panel button that turns our camera on",
+    "type": "text",
+    "placeholders": {}
+  },
+  "tooltipTurnOffCamera": "Turn off camera",
+  "@tooltipTurnOffCamera": {
+    "description": "Tooltip on the voice panel button that turns our camera off",
+    "type": "text",
+    "placeholders": {}
+  },
   "tooltipSelectingScreen": "Selecting screen",
   "@tooltipSelectingScreen": {
     "description": "Tooltip on the voice panel button while the screen picker is open",
