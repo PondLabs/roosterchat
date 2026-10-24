@@ -16,4 +16,11 @@ abstract class DirectMessagesComponent<T extends Client>
 
   /// Open a new direct message with another user
   Future<Room?> createDirectMessage(String userId);
+
+  /// Re-evaluates [highlightedRoomsList] now.
+  ///
+  /// The list normally changes on sync. A room that was just read clears its
+  /// counts locally and calls this so the DM rail, header and taskbar badges
+  /// update in the same frame instead of waiting for the homeserver.
+  void notificationCountsChanged();
 }

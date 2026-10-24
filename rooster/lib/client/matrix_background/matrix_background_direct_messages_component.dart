@@ -72,4 +72,9 @@ class MatrixBackgroundClientDirectMessagesComponent
   @override
   // TODO: implement highlightedRoomsList
   INotifyingList<Room> get highlightedRoomsList => throw UnimplementedError();
+
+  @override
+  void notificationCountsChanged() {
+    // The background client has no UI lists to refresh.
+  }
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:collection/collection.dart';
 import 'package:rooster/client/components/emoticon/emoticon.dart';
 import 'package:rooster/client/matrix/components/read_receipts/matrix_read_receipt_component.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
@@ -158,24 +159,53 @@ class MatrixTimeline extends Timeline {
   @override
   void markAsRead(TimelineEvent event) async {
     var receipts = room.getComponent<MatrixReadReceiptComponent>();
-    if (event.status == TimelineEventStatus.synced ||
-        event.status == TimelineEventStatus.sent) {
-      if (event.eventId == _readMarkerSentFor ||
-          event.eventId == _matrixRoom.fullyRead) {
-        return;
-      }
-      _readMarkerSentFor = event.eventId;
-      try {
-        await _matrixTimeline?.setReadMarker(
-            public: receipts?.usePublicReadReceiptsForRoom);
-      } catch (e, s) {
-        // Asked again next time: the server does not have it.
-        if (_readMarkerSentFor == event.eventId) _readMarkerSentFor = null;
-        Log.onError(e, s, content: "Could not set the read marker");
-        return;
-      }
+    if (event.status != TimelineEventStatus.synced &&
+        event.status != TimelineEventStatus.sent) {
+      return;
+    }
 
-      receipts?.handleEvent(event.eventId, room.client.self!.identifier);
+    if (event.eventId == _readMarkerSentFor) {
+      return;
+    }
+
+    if (event.eventId == _matrixRoom.fullyRead) {
+      // The server already has this read; only the local badge can lag
+      // behind, for example from counts loaded before a restart.
+      _room.clearUnreadCountsLocally();
+      return;
+    }
+
+    var timeline = _matrixTimeline;
+    if (timeline == null) return;
+
+    var markerEventId = timeline.events
+        .firstWhereOrNull((e) => e.status == matrix.EventStatus.synced)
+        ?.eventId;
+    if (markerEventId == null) return;
+
+    _readMarkerSentFor = event.eventId;
+    try {
+      await timeline.setReadMarker(
+          eventId: markerEventId,
+          public: receipts?.usePublicReadReceiptsForRoom);
+    } catch (e, s) {
+      // Asked again next time: the server does not have it, so the badge
+      // must stay.
+      if (_readMarkerSentFor == event.eventId) _readMarkerSentFor = null;
+      Log.onError(e, s, content: "Could not set the read marker");
+      return;
+    }
+
+    receipts?.handleEvent(event.eventId, room.client.self!.identifier);
+
+    // A message that arrived while the marker was in flight is newer than
+    // what we read; its sync owns the counts. Otherwise clear the badge now
+    // instead of waiting for the homeserver to echo the read counts.
+    if (timeline.events
+            .firstWhereOrNull((e) => e.status == matrix.EventStatus.synced)
+            ?.eventId ==
+        markerEventId) {
+      _room.clearUnreadCountsLocally();
     }
   }
 

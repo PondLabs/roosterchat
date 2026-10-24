@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui';
+import 'package:collection/collection.dart';
 import 'package:rooster/client/components/component_registry.dart';
 import 'package:rooster/client/components/direct_messages/direct_message_component.dart';
 import 'package:rooster/client/components/emoticon/emoticon.dart';
@@ -208,6 +209,29 @@ class MatrixRoom extends Room {
 
   @override
   int get notificationCount => _matrixRoom.notificationCount;
+
+  /// Clears this room's unread counts without waiting for the next sync.
+  ///
+  /// The homeserver owns these counts and only reports them in `/sync`. Until
+  /// that response arrives, a room the user has just read keeps its badge on
+  /// screen. Mirroring the read locally clears it now; the next sync confirms
+  /// the same value and remains authoritative.
+  void clearUnreadCountsLocally() {
+    final changed =
+        _matrixRoom.notificationCount > 0 || _matrixRoom.highlightCount > 0;
+    _matrixRoom.notificationCount = 0;
+    _matrixRoom.highlightCount = 0;
+
+    _onUpdate.add(null);
+
+    if (changed) {
+      // The DM rail, the header dot and the taskbar count filter and read
+      // from this list, not from each room's update stream.
+      client
+          .getComponent<DirectMessagesComponent>()
+          ?.notificationCountsChanged();
+    }
+  }
 
   late DateTime _lastStateEventTimestamp;
   @override
@@ -1162,7 +1186,24 @@ class MatrixRoom extends Room {
     }
 
     try {
-      await tl.setReadMarker(public: public);
+      var markerEventId = tl.events
+          .firstWhereOrNull((e) => e.status == matrix.EventStatus.synced)
+          ?.eventId;
+      if (markerEventId == null) return;
+
+      await tl.setReadMarker(eventId: markerEventId, public: public);
+
+      // A message that arrived while the marker was in flight is newer than
+      // what was marked read; its sync owns the counts.
+      if (tl.events
+              .firstWhereOrNull((e) => e.status == matrix.EventStatus.synced)
+              ?.eventId ==
+          markerEventId) {
+        clearUnreadCountsLocally();
+      }
+    } catch (e, s) {
+      // The server still has the messages unread, so the badge must stay.
+      Log.onError(e, s, content: "Could not set the read marker");
     } finally {
       if (tl != _timeline?.matrixTimeline) tl.cancelSubscriptions();
     }

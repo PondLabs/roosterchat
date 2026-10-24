@@ -357,6 +357,9 @@ class MatrixSpace extends Space {
   void _onRoomAdded(Room room) {
     _subscriptions.add(room.onUpdate.listen((event) {
       _onChildUpdated.add(room);
+      // Unread counts and last activity are computed from the rooms, and the
+      // space icon, header dot and taskbar badge follow this stream.
+      _onUpdate.add(null);
     }));
   }
 
