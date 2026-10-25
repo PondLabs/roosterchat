@@ -17,8 +17,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:win_toast/win_toast.dart';
 import 'package:path/path.dart' as p;
 
-/// [text] for an attribute of the toast's XML: a translation may hold a
-/// quote or an ampersand.
+/// [text] for the toast's XML, in an attribute or an element: names,
+/// messages and translations may hold a quote, "<" or an ampersand.
 String _xml(String text) => text
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -167,41 +167,7 @@ class WindowsNotifier implements Notifier {
 
     avatarFilePath = avatar == null ? "" : avatar.toFilePath();
 
-    // ignore: prefer_function_declarations_over_variables
-    var f = (String string) => Uri.encodeComponent(string);
-
-    var title = "${content.roomName}";
-
-    var defaultAction =
-        "action=open_room&amp;client_id=${f(content.clientId)}&amp;room_id=${f(content.roomId)}&amp;call_id=${f(content.callId)}";
-
-    var header = '''<header
-        id="${f(content.roomId)}"
-        title="${content.roomName}"
-        arguments="$defaultAction"/>''';
-
-    if (content.isDirectMessage) {
-      header = "";
-    }
-
-    var xml = """
-<?xml version="1.0" encoding="UTF-8"?>
-<toast launch="$defaultAction">
-   $header
-   <visual>
-      <binding template="ToastGeneric">
-         <text>$title</text>
-         <text>${content.content}</text>
-         <image placement='appLogoOverride' src='$avatarFilePath' hint-crop='circle'/>
-      </binding>
-   </visual>
-   <audio silent='true'/>
-   <actions>
-      <action content="${_xml(CommonStrings.promptAccept)}" activationType="background" arguments="action=accept_call&amp;client_id=${f(content.clientId)}&amp;room_id=${f(content.roomId)}&amp;call_id=${f(content.callId)}" />
-      <action content="${_xml(CommonStrings.promptReject)}" activationType="background" arguments="action=reject_call&amp;client_id=${f(content.clientId)}&amp;room_id=${f(content.roomId)}&amp;call_id=${f(content.callId)}" />
-   </actions>
-</toast>
-  """;
+    final xml = callToastXml(content, avatarFilePath);
 
     WinToast.instance().showCustomToast(xml: xml);
   }
@@ -227,32 +193,74 @@ class WindowsNotifier implements Notifier {
 
     avatarFilePath = avatar == null ? "" : avatar.toFilePath();
 
-    // ignore: prefer_function_declarations_over_variables
-    var f = (String string) => Uri.encodeComponent(string);
+    final xml = messageToastXml(content, avatarFilePath);
 
-    var title = content.senderName;
+    var player = NotificationManager.getSoundPlayer();
+    player.open(Media("asset:///assets/sound/message.ogg"));
 
-    var defaultAction =
-        "action=open_room&amp;client_id=${f(content.clientId)}&amp;room_id=${f(content.roomId)}&amp;event_id=${f(content.eventId)}";
+    WinToast.instance().showCustomToast(xml: xml);
+  }
 
-    var header = '''<header
+  /// The toast of an incoming call. Every name and text is escaped: one
+  /// holding "&" or "<" made the XML invalid, and Windows dropped the toast
+  /// without a word.
+  static String callToastXml(
+      CallNotificationContent content, String avatarFilePath) {
+    final f = Uri.encodeComponent;
+    final defaultAction =
+        "action=open_room&amp;client_id=${f(content.clientId)}&amp;room_id=${f(content.roomId)}&amp;call_id=${f(content.callId)}";
+
+    final header = content.isDirectMessage
+        ? ""
+        : '''<header
         id="${f(content.roomId)}"
-        title="${content.roomName}"
+        title="${_xml(content.roomName)}"
         arguments="$defaultAction"/>''';
 
-    if (content.isDirectMessage) {
-      header = "";
-    }
-
-    var xml = """
+    return """
 <?xml version="1.0" encoding="UTF-8"?>
 <toast launch="$defaultAction">
    $header
    <visual>
       <binding template="ToastGeneric">
-         <text>$title</text>
-         <text>${content.content}</text>
-         <image placement='appLogoOverride' src='$avatarFilePath' hint-crop='circle'/>
+         <text>${_xml(content.roomName)}</text>
+         <text>${_xml(content.content)}</text>
+         <image placement='appLogoOverride' src='${_xml(avatarFilePath)}' hint-crop='circle'/>
+      </binding>
+   </visual>
+   <audio silent='true'/>
+   <actions>
+      <action content="${_xml(CommonStrings.promptAccept)}" activationType="background" arguments="action=accept_call&amp;client_id=${f(content.clientId)}&amp;room_id=${f(content.roomId)}&amp;call_id=${f(content.callId)}" />
+      <action content="${_xml(CommonStrings.promptReject)}" activationType="background" arguments="action=reject_call&amp;client_id=${f(content.clientId)}&amp;room_id=${f(content.roomId)}&amp;call_id=${f(content.callId)}" />
+   </actions>
+</toast>
+  """;
+  }
+
+  /// The toast of a message, escaped like [callToastXml]'s: a message with
+  /// a link holding "&", or a "<3", never showed.
+  static String messageToastXml(
+      MessageNotificationContent content, String avatarFilePath) {
+    final f = Uri.encodeComponent;
+    final defaultAction =
+        "action=open_room&amp;client_id=${f(content.clientId)}&amp;room_id=${f(content.roomId)}&amp;event_id=${f(content.eventId)}";
+
+    final header = content.isDirectMessage
+        ? ""
+        : '''<header
+        id="${f(content.roomId)}"
+        title="${_xml(content.roomName)}"
+        arguments="$defaultAction"/>''';
+
+    return """
+<?xml version="1.0" encoding="UTF-8"?>
+<toast launch="$defaultAction">
+   $header
+   <visual>
+      <binding template="ToastGeneric">
+         <text>${_xml(content.senderName)}</text>
+         <text>${_xml(content.content)}</text>
+         <image placement='appLogoOverride' src='${_xml(avatarFilePath)}' hint-crop='circle'/>
       </binding>
    </visual>
    <audio silent='true'/>
@@ -262,11 +270,6 @@ class WindowsNotifier implements Notifier {
    </actions>
 </toast>
   """;
-
-    var player = NotificationManager.getSoundPlayer();
-    player.open(Media("asset:///assets/sound/message.ogg"));
-
-    WinToast.instance().showCustomToast(xml: xml);
   }
 
   @override
