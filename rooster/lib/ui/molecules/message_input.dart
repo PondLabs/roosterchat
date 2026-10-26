@@ -28,6 +28,7 @@ import 'package:rooster/ui/organisms/chat/chat.dart';
 import 'package:rooster/client/components/emoticon/emoji_pack.dart';
 import 'package:rooster/client/components/gif/gif_search_result.dart';
 import 'package:rooster/utils/autofill_utils.dart';
+import 'package:rooster/utils/clipboard/pasted_files.dart';
 import 'package:rooster/utils/debounce.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:file_picker/file_picker.dart';
@@ -301,6 +302,7 @@ class MessageInputState extends State<MessageInput> {
     setInputTextSubscription?.cancel();
     preferencesSubscription?.cancel();
     onScopePopInvoked?.cancel();
+    stopListeningForPastedFiles();
     // Everything this made, released: the chat subtree is rebuilt on every
     // room switch, and these kept each old composer alive.
     controller.removeListener(controllerListener);
@@ -320,6 +322,9 @@ class MessageInputState extends State<MessageInput> {
 
   StreamSubscription? preferencesSubscription;
 
+  /// Web: a screenshot pasted while typing becomes an attachment.
+  late final void Function() stopListeningForPastedFiles;
+
   @override
   void initState() {
     controller = RichTextEditingController(
@@ -333,6 +338,8 @@ class MessageInputState extends State<MessageInput> {
 
     textFocus = FocusNode(onKeyEvent: onKey);
     textFocus.addListener(onTextFocusChanged);
+    stopListeningForPastedFiles = listenForPastedFiles(
+        accept: () => textFocus.hasFocus, onFiles: onFilesPasted);
 
     preferencesSubscription =
         preferences.onSettingChanged.listen((_) => setState(() {}));
@@ -831,7 +838,8 @@ class MessageInputState extends State<MessageInput> {
 
     if (HardwareKeyboard.instance
         .isLogicalKeyPressed(LogicalKeyboardKey.keyV)) {
-      if (HardwareKeyboard.instance.isControlPressed) {
+      // On web the paste itself brings the image, see [onFilesPasted].
+      if (HardwareKeyboard.instance.isControlPressed && !BuildConfig.WEB) {
         readImageFromClipboard();
         return KeyEventResult.ignored;
       }
@@ -1999,12 +2007,26 @@ class MessageInputState extends State<MessageInput> {
       return;
     }
 
+    await attachPasted(PendingFileAttachment(data: image, size: image.length));
+  }
+
+  Future<void> onFilesPasted(List<PastedFile> files) async {
+    for (final file in files) {
+      if (!mounted) return;
+      await attachPasted(PendingFileAttachment(
+          data: file.data,
+          name: file.name,
+          mimeType: file.mimeType,
+          size: file.data.length));
+    }
+  }
+
+  Future<void> attachPasted(PendingFileAttachment attachment) async {
     var processedAttachment =
         await AdaptiveDialog.show<PendingFileAttachment>(context,
             scrollable: false,
             builder: (context) => AttachmentProcessor(
-                  attachment:
-                      PendingFileAttachment(data: image, size: image.length),
+                  attachment: attachment,
                 ));
 
     if (processedAttachment != null) {
