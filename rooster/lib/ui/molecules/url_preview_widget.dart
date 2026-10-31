@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:rooster/client/components/url_preview/url_preview_component.dart';
 import 'package:rooster/client/components/video_embed/composite_video_provider.dart';
 import 'package:rooster/client/components/video_embed/providers/generic_video_provider.dart';
+import 'package:rooster/client/components/video_embed/providers/twitter_provider.dart';
 import 'package:rooster/client/components/video_embed/video_embed_info.dart';
 import 'package:rooster/client/components/video_embed/video_playback_source.dart';
 import 'package:rooster/ui/atoms/lightbox.dart';
@@ -33,6 +34,7 @@ class UrlPreviewWidget extends StatefulWidget {
     this.onOpenVideo,
     this.provider,
     this.supportsOfficialEmbeds,
+    this.networkImage,
   });
 
   final UrlPreviewData? data;
@@ -42,6 +44,10 @@ class UrlPreviewWidget extends StatefulWidget {
 
   /// Overrides [VideoPlaybackDialog.supportsOfficialEmbeds], for tests.
   final bool? supportsOfficialEmbeds;
+
+  /// Loads the X card's avatars and quoted media instead of [NetworkImage],
+  /// for tests.
+  final ImageProvider Function(Uri url)? networkImage;
 
   static String get messageMediaVideoUnavailable =>
       intl.Intl.message("Video unavailable. Please try again.",
@@ -870,7 +876,7 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
       children: [
         Avatar(
           radius: radius,
-          image: avatar == null ? null : NetworkImage(avatar.toString()),
+          image: avatar == null ? null : _networkImage(avatar),
           placeholderText: post.authorName,
           placeholderColor: theme.colorScheme.surfaceContainerHighest,
         ),
@@ -899,10 +905,13 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
                         Icons.verified,
                         key: const ValueKey('x-verified'),
                         size: 16,
-                        // X's colours: gold for businesses, grey for
-                        // governments, blue otherwise.
+                        // X's colours: gold for organizations (fxtwitter's
+                        // name for X's "Business"), grey for governments,
+                        // blue otherwise.
                         color: switch (post.verification) {
-                          'business' => const Color(0xFFE2B719),
+                          'organization' ||
+                          'business' =>
+                            const Color(0xFFE2B719),
                           'government' => const Color(0xFF829AAB),
                           _ => const Color(0xFF1D9BF0),
                         },
@@ -956,10 +965,14 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
     return spans;
   }
 
-  /// The quoted post, nested and smaller; tapping it opens the quote.
+  ImageProvider _networkImage(Uri url) =>
+      widget.networkImage?.call(url) ?? NetworkImage(url.toString());
+
+  /// The quoted post, nested, the way X's official embed draws it: author
+  /// and text, then every photo and video edge to edge. Tapping the card
+  /// opens the quote; a photo opens the lightbox, a video plays.
   Widget _xQuote(XPost quote) {
     final theme = Theme.of(context);
-    final thumbnail = quote.media.firstOrNull?.thumbnailUrl;
     return Material(
       color: Colors.transparent,
       shape: RoundedRectangleBorder(
@@ -970,42 +983,201 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
       child: InkWell(
         key: const ValueKey('x-quote'),
         onTap: () => LinkUtils.open(quote.url, context: context),
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _xAuthor(quote, radius: 11),
-              if (quote.text.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text(
-                  quote.text,
-                  style: theme.textTheme.bodySmall,
-                  maxLines: 4,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-              if (thumbnail != null) ...[
-                const SizedBox(height: 6),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 160),
-                    child: Image.network(
-                      thumbnail.toString(),
-                      fit: BoxFit.cover,
-                      filterQuality: FilterQuality.medium,
-                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _xAuthor(quote, radius: 11),
+                  if (quote.text.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      quote.text,
+                      style: theme.textTheme.bodySmall,
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                ),
-              ],
-            ],
-          ),
+                  ],
+                ],
+              ),
+            ),
+            if (quote.media.isNotEmpty) _xQuoteMedia(quote),
+          ],
         ),
       ),
     );
+  }
+
+  static const double _xQuoteGap = 2;
+
+  // A tall photo or video is cropped to this height rather than letting the
+  // quote grow past the card.
+  static const double _xQuoteMaxMediaHeight = 300;
+
+  /// The official embed's media grid: one item at its own shape, two side by
+  /// side, three as one tall item next to two stacked, four as a 2x2; two to
+  /// four always fill a 16:9 box. X allows four items per post.
+  Widget _xQuoteMedia(XPost quote) {
+    final media = quote.media.take(4).toList();
+    final photos = quote.photos;
+    final gallery = [for (final photo in photos) _networkImage(photo.url)];
+
+    Widget cell(int i) => _xQuoteCell(quote, media[i], gallery,
+        galleryIndex: photos.indexOf(media[i]), index: i);
+
+    Widget row(List<int> items) => Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final i in items) ...[
+              if (i != items.first) const SizedBox(width: _xQuoteGap),
+              Expanded(child: cell(i)),
+            ],
+          ],
+        );
+
+    if (media.length == 1) {
+      final aspectRatio = media.single.aspectRatio ?? 16 / 9;
+      return LayoutBuilder(
+        key: const ValueKey('x-quote-media'),
+        builder: (context, constraints) => SizedBox(
+          width: constraints.maxWidth,
+          height:
+              min(constraints.maxWidth / aspectRatio, _xQuoteMaxMediaHeight),
+          child: cell(0),
+        ),
+      );
+    }
+
+    return AspectRatio(
+      key: const ValueKey('x-quote-media'),
+      aspectRatio: 16 / 9,
+      child: switch (media.length) {
+        2 => row([0, 1]),
+        3 => Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: cell(0)),
+              const SizedBox(width: _xQuoteGap),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(child: cell(1)),
+                    const SizedBox(height: _xQuoteGap),
+                    Expanded(child: cell(2)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        _ => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: row([0, 1])),
+              const SizedBox(height: _xQuoteGap),
+              Expanded(child: row([2, 3])),
+            ],
+          ),
+      },
+    );
+  }
+
+  /// One photo or video of the quoted post, cropped to its cell.
+  Widget _xQuoteCell(XPost quote, XMedia media, List<ImageProvider> gallery,
+      {required int galleryIndex, required int index}) {
+    final thumbnail = media.thumbnailUrl;
+    final picture = thumbnail == null
+        ? ColoredBox(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest)
+        : Image(
+            image: media.type == XMediaType.photo && galleryIndex >= 0
+                ? gallery[galleryIndex]
+                : _networkImage(thumbnail),
+            fit: BoxFit.cover,
+            filterQuality: FilterQuality.medium,
+            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+          );
+
+    if (media.type == XMediaType.photo) {
+      return InkWell(
+        key: ValueKey('x-quote-photo-$index'),
+        onTap: () => Lightbox.show(
+          context,
+          image: gallery[galleryIndex],
+          gallery: gallery,
+          initialIndex: galleryIndex,
+        ),
+        child: picture,
+      );
+    }
+
+    final duration = media.duration;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        picture,
+        Center(
+          child: InkWell(
+            key: ValueKey('x-quote-play-$index'),
+            onTap: () => _playQuoteVideo(quote, media),
+            customBorder: const CircleBorder(),
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.7),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  width: 1.5,
+                ),
+              ),
+              child: const Icon(
+                Icons.play_arrow_rounded,
+                color: Colors.white,
+                size: 26,
+              ),
+            ),
+          ),
+        ),
+        if (duration != null && media.type == XMediaType.video)
+          Positioned(
+            bottom: 6,
+            left: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.8),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                _formatDuration(duration),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _playQuoteVideo(XPost quote, XMedia media) async {
+    final video = TwitterProvider.videoOf(quote, media,
+        thumbnail: media.thumbnailUrl == null
+            ? null
+            : _networkImage(media.thumbnailUrl!));
+    final opener = widget.onOpenVideo ??
+        (context, video, auto) =>
+            VideoPlaybackDialog.show(context, video: video, autoplay: auto);
+    await opener(context, video, true);
   }
 
   Widget _xCount(IconData icon, int count) => Padding(

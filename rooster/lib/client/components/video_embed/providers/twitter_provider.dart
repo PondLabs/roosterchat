@@ -178,6 +178,29 @@ class TwitterProvider implements VideoProvider, PhotoPostProvider {
     return width / height;
   }
 
+  /// [media], a video or GIF of [post], as the video dialog plays it. The X
+  /// card uses it for the quoted post's videos, which [resolve] (the linked
+  /// status only) does not cover.
+  static VideoEmbedInfo videoOf(XPost post, XMedia media,
+      {ImageProvider? thumbnail}) {
+    final author = '${post.authorName} (@${post.handle})';
+    final aspectRatio = media.aspectRatio;
+    return VideoEmbedInfo(
+      originalUrl: post.url,
+      title: post.text.isNotEmpty ? post.text : labelMediaXPostFrom(author),
+      author: author,
+      thumbnailUrl: media.thumbnailUrl?.toString(),
+      thumbnail: thumbnail,
+      streamUrl: media.url,
+      playbackSource: NativeVideoSource(media.url),
+      aspectRatio: aspectRatio ?? 16.0 / 9.0,
+      duration: media.duration,
+      platformName: 'X (Twitter)',
+      isShortForm: aspectRatio != null && aspectRatio < 0.85,
+      capabilities: VideoCapabilities.native,
+    );
+  }
+
   /// The status as the X card shows it. Null when it cannot be fetched.
   Future<XPost?> resolveXPost(Uri uri, {http.Client? client}) async {
     final info = extractStatusInfo(uri);
