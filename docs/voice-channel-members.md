@@ -59,10 +59,18 @@ window ends; the list shows a person once either way.
 
 ## Clicking, right-clicking and dragging someone
 
-Each person under a voice channel in the sidebar works as in Discord
+Each person under a voice channel in the sidebar
 (`room_text_button.dart`, `ui/organisms/voice_channel_members/call_member_menu.dart`):
 
-- A click opens their profile.
+- A click on someone live (LIVE or the camera badge next to them) opens the
+  channel, as a click on the channel does. In the call, their screen goes in
+  the middle, or their camera if they share no screen, already playing: no
+  "Watch stream" to press. The other one, if they show both, stays in the grid.
+  The call view may not be on screen yet, so the request waits for it
+  (`CallFocus`). Outside the call, it stops at the channel's page: joining
+  opens the microphone, so it stays a choice.
+- A click on anyone else does nothing. Their profile is in the right-click
+  menu.
 - A right-click (a long press on touch) has their volume and sound effects
   volume when we are in the call with them, Profile, Message, Move To…,
   Disconnect, Copy User ID, and the member list's role, kick and ban.

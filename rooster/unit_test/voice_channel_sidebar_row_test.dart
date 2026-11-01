@@ -3,11 +3,15 @@
 // (the channel looked empty, or had only whoever came in last), because
 // their memberships were read against this machine's clock, hours ahead of
 // the homeserver's here.
+import 'package:rooster/client/client.dart';
 import 'package:rooster/client/client_manager.dart';
 import 'package:rooster/client/components/component.dart';
 import 'package:rooster/client/components/profile/profile_component.dart';
 import 'package:rooster/client/components/room_component.dart';
 import 'package:rooster/client/components/voice_channel_status/voice_channel_status_component.dart';
+import 'package:rooster/client/components/voip/voip_session.dart';
+import 'package:rooster/client/components/voip/voip_stream.dart';
+import 'package:rooster/client/components/voip_room/voip_room_component.dart';
 import 'package:rooster/client/matrix/components/room_activities/matrix_activities_component.dart';
 import 'package:rooster/client/matrix/homeserver_clock.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
@@ -16,6 +20,7 @@ import 'package:rooster/client/member.dart';
 import 'package:rooster/client/permissions.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/room_text_button.dart';
+import 'package:rooster/ui/organisms/call_view/call_focus.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -151,6 +156,65 @@ class _Status implements VoiceChannelStatusComponent {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _Stream implements VoipStream {
+  _Stream(this.streamUserId, this.type);
+
+  @override
+  final String streamUserId;
+
+  @override
+  final VoipStreamType type;
+
+  @override
+  double get audiolevel => 0;
+
+  @override
+  bool get isMuted => false;
+
+  @override
+  bool get isDeafened => false;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _Voip implements VoipRoomComponent {
+  @override
+  bool get canJoinCall => true;
+
+  @override
+  VoipSession? get currentSession => null;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// Our call in the channel.
+class _Session implements VoipSession {
+  _Session(this.client, this.streams);
+
+  @override
+  final Client client;
+
+  @override
+  final List<VoipStream> streams;
+
+  @override
+  String get roomId => _roomId;
+
+  @override
+  VoipState get state => VoipState.connected;
+
+  @override
+  Stream<void> get onUpdateVolumeVisualizers => const Stream.empty();
+
+  @override
+  Stream<void> get onStateChanged => const Stream.empty();
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 /// A voice channel. A member is known by name only once asked for, as with
 /// the members a homeserver lazy loads.
 class _Room implements MatrixRoom {
@@ -169,11 +233,13 @@ class _Room implements MatrixRoom {
 
   RoomComponent? status;
 
+  RoomComponent? voip;
+
   final Set<String> fetched = {};
 
   @override
   T? getComponent<T extends RoomComponent>() {
-    for (final component in [activities, status]) {
+    for (final component in [activities, status, voip]) {
       if (component is T) return component;
     }
     return null;
@@ -239,9 +305,10 @@ void main() {
     room = _Room(_Client());
   });
 
-  MatrixActivitiesComponent listFor(HomeserverClock clock) {
+  MatrixActivitiesComponent listFor(HomeserverClock clock,
+      {ClientManager? manager}) {
     final activities = MatrixActivitiesComponent(room.client, room,
-        callManager: ClientManager().callManager, clock: clock);
+        callManager: (manager ?? ClientManager()).callManager, clock: clock);
     room.activities = activities;
     return activities;
   }
@@ -287,14 +354,16 @@ void main() {
     member('@carol:example.org', joinedAgo: const Duration(minutes: 10));
   }
 
-  Future<void> show(WidgetTester tester) async {
+  Future<void> show(WidgetTester tester,
+      {void Function(Room room, {bool bypassSpecialRoomType})? onTap}) async {
     await tester.pumpWidget(MaterialApp(
       theme: ThemeData(platform: TargetPlatform.linux)
           .copyWith(extensions: const [ThemeSettings()]),
       home: Scaffold(
         body: Align(
           alignment: Alignment.topLeft,
-          child: SizedBox(width: 240, child: RoomTextButton(room)),
+          child:
+              SizedBox(width: 240, child: RoomTextButton(room, onTap: onTap)),
         ),
       ),
     ));
@@ -363,6 +432,111 @@ void main() {
     expect(inRow('Carol', find.byType(Icon)), findsNothing);
     expect(inRow('Carol', find.text('LIVE')), findsNothing);
     await done(tester, list);
+  });
+
+  // Asked for after a click on someone opened their profile: what matters
+  // about someone live is what they are showing.
+  group('a click on someone', () {
+    late List<Room> opened;
+
+    void onTap(Room room, {bool bypassSpecialRoomType = false}) =>
+        opened.add(room);
+
+    setUp(() => opened = []);
+
+    void camera(String userId) =>
+        member(userId, joinedAgo: const Duration(minutes: 5), says: const {
+          'chat.commet.unguarded': true,
+          'chat.commet.streams': ['camera'],
+        });
+
+    testWidgets('outside the call, live, opens the channel', (tester) async {
+      final clock = HomeserverClock()
+        ..readSync(_syncAt(_serverNow()), homeserver: 'example.org');
+      final list = listFor(clock);
+      camera('@alice:example.org');
+
+      await show(tester, onTap: onTap);
+      await tester.tap(find.text('Alice'));
+      await tester.pump();
+
+      expect(opened, [room]);
+      expect(find.byType(Dialog), findsNothing);
+      await done(tester, list);
+    });
+
+    testWidgets('who is not live does nothing', (tester) async {
+      final clock = HomeserverClock()
+        ..readSync(_syncAt(_serverNow()), homeserver: 'example.org');
+      final list = listFor(clock);
+      member('@carol:example.org', joinedAgo: const Duration(minutes: 5));
+
+      await show(tester, onTap: onTap);
+      await tester.tap(find.text('Carol'));
+      await tester.pump();
+
+      expect(opened, isEmpty);
+      expect(find.byType(Dialog), findsNothing);
+      // Nor is the row a dead one: it still answers the pointer.
+      expect(
+          tester
+              .widget<ButtonStyleButton>(find
+                  .ancestor(
+                      of: find.text('Carol'), matching: find.byType(TextButton))
+                  .first)
+              .enabled,
+          isTrue);
+      await done(tester, list);
+    });
+
+    testWidgets('in the call, also asks the call view for them',
+        (tester) async {
+      final manager = ClientManager();
+      clientManager = manager;
+      addTearDown(() => clientManager = null);
+      final session = _Session(room.client, [
+        _Stream('@alice:example.org', VoipStreamType.video),
+        _Stream('@carol:example.org', VoipStreamType.audio),
+      ]);
+      manager.callManager.currentSessions.add(session);
+      room.voip = _Voip();
+      final clock = HomeserverClock()
+        ..readSync(_syncAt(_serverNow()), homeserver: 'example.org');
+      final list = listFor(clock, manager: manager);
+
+      await show(tester, onTap: onTap);
+      await tester.tap(find.text('Carol'));
+      await tester.pump();
+      expect(CallFocus.takeRequest(session), isNull);
+      expect(opened, isEmpty);
+
+      await tester.tap(find.text('Alice'));
+      await tester.pump();
+      expect(CallFocus.takeRequest(session), '@alice:example.org');
+      expect(opened, [room]);
+      await done(tester, list);
+    });
+
+    testWidgets('behind "and N more" also closes that list', (tester) async {
+      final clock = HomeserverClock()
+        ..readSync(_syncAt(_serverNow()), homeserver: 'example.org');
+      final list = listFor(clock);
+      for (var i = 1; i <= 12; i++) {
+        camera('@guest$i:example.org');
+      }
+
+      await show(tester, onTap: onTap);
+      await tester.tap(find.text('and 5 more'));
+      await tester.pump();
+      await tester.pump();
+
+      await tester.tap(find.text('Guest 12'));
+      await tester.pump();
+
+      expect(opened, [room]);
+      expect(find.text('Guest 12'), findsNothing);
+      await done(tester, list);
+    });
   });
 
   for (final oldFirst in [true, false]) {

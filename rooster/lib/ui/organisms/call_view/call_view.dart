@@ -8,6 +8,7 @@ import 'package:rooster/client/room.dart';
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/ui/layout/bento.dart';
 import 'package:rooster/ui/organisms/call_view/call_control_buttons.dart';
+import 'package:rooster/ui/organisms/call_view/call_focus.dart';
 import 'package:rooster/ui/organisms/call_view/call_grid_tiles.dart';
 import 'package:rooster/ui/organisms/call_view/voip_fullscreen_stream_view.dart';
 import 'package:rooster/ui/organisms/call_view/voip_stream_view.dart';
@@ -71,6 +72,7 @@ class _CallViewState extends State<CallView> {
   bool _boothOpen = false;
   StreamSubscription? _boothSub;
   StreamSubscription? _boothPanelSub;
+  StreamSubscription? _focusSub;
   DjSession? get _dj => DjBooths.of(widget.currentSession);
 
   @override
@@ -90,6 +92,12 @@ class _CallViewState extends State<CallView> {
       DjBooths.takePanelRequest(session);
       setState(() => _boothOpen = true);
     });
+    // So does a click on someone live, who may be what opened this view.
+    takeFocusRequest();
+    _focusSub = CallFocus.onRequested.listen((session) {
+      if (!mounted || session != widget.currentSession) return;
+      setState(takeFocusRequest);
+    });
 
     room = widget.currentSession.client.getRoom(widget.currentSession.roomId)!;
     statTimer = Timer.periodic(const Duration(milliseconds: 200), timer);
@@ -104,6 +112,7 @@ class _CallViewState extends State<CallView> {
     sub?.cancel();
     _boothSub?.cancel();
     _boothPanelSub?.cancel();
+    _focusSub?.cancel();
     _soundboard?.release();
     _soundboard = null;
     super.dispose();
@@ -111,6 +120,18 @@ class _CallViewState extends State<CallView> {
 
   void timer(Timer timer) async {
     await widget.currentSession.updateStats();
+  }
+
+  /// Puts whoever the sidebar asked for in the middle, playing: nobody
+  /// clicks on someone to then be asked whether to watch them.
+  void takeFocusRequest() {
+    final session = widget.currentSession;
+    final userId = CallFocus.takeRequest(session);
+    if (userId == null) return;
+    final stream = CallFocus.streamOf(session.streams, userId);
+    if (stream == null) return;
+    mainStream = stream;
+    stream.watch();
   }
 
   @override

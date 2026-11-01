@@ -24,9 +24,9 @@ class CallMemberDrag {
   final String userId;
 }
 
-/// What can be done to someone in a voice channel from the sidebar, as in
-/// Discord: open their profile, message them, turn them down, move them to
-/// another channel or out of the call.
+/// What the right-click menu of someone in a voice channel in the sidebar
+/// offers, as in Discord: open their profile, message them, turn them down,
+/// move them to another channel or out of the call.
 abstract final class CallMemberMenu {
   static String get promptCallMemberProfile => Intl.message("Profile",
       name: "promptCallMemberProfile",

@@ -26,6 +26,7 @@ import 'package:rooster/ui/molecules/show_on_hover.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/navigation/adaptive_text_dialog.dart';
 import 'package:rooster/ui/navigation/navigation_utils.dart';
+import 'package:rooster/ui/organisms/call_view/call_focus.dart';
 import 'package:rooster/ui/organisms/channel_categories/channel_category_actions.dart';
 import 'package:rooster/ui/organisms/channel_invites/channel_invites.dart';
 import 'package:rooster/ui/organisms/dj/dj_booth_panel.dart';
@@ -33,7 +34,6 @@ import 'package:rooster/ui/organisms/dj/dj_member_ui.dart';
 import 'package:rooster/ui/organisms/dj/vinyl_disc.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_emoji_overlay.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_overlay_registry.dart';
-import 'package:rooster/ui/organisms/user_profile/user_profile.dart';
 import 'package:rooster/ui/organisms/voice_channel_members/call_member_menu.dart';
 import 'package:rooster/ui/pages/settings/room_settings_page.dart';
 import 'package:rooster/utils/common_strings.dart';
@@ -863,7 +863,7 @@ class _RoomTextButtonState extends State<RoomTextButton> {
   /// Everyone in [activity], one row each, with the rows past
   /// [RoomTextButton.maxVisibleMembers] behind "and N more".
   List<Widget> buildCallMembers(RoomActivitySession activity) {
-    Widget row(String participant) => AppearIn(
+    Widget row(String participant, {VoidCallback? onOpened}) => AppearIn(
           key: ValueKey("member_appear_$participant"),
           play: memberArrivals.isNew(participant),
           offset: const Offset(-40, 0),
@@ -871,7 +871,8 @@ class _RoomTextButtonState extends State<RoomTextButton> {
               showActivityIcons: activity.thirdparty == false,
               liveMedia: activity.liveMedia[participant] ?? const {},
               voiceState: activity.voiceState[participant] ?? const {},
-              djPlaying: activity.djPlaying[participant]),
+              djPlaying: activity.djPlaying[participant],
+              onOpened: onOpened),
         );
 
     final members = orderedMembers(activity);
@@ -889,7 +890,7 @@ class _RoomTextButtonState extends State<RoomTextButton> {
 
   /// The row that stands for [hidden], and the list of them it opens.
   Widget buildMoreMembers(RoomActivitySession activity, List<String> hidden,
-      Widget Function(String participant) row) {
+      Widget Function(String participant, {VoidCallback? onOpened}) row) {
     final colors = Theme.of(context).colorScheme;
     // Someone talking behind it still shows: the row takes their ring.
     final speaking =
@@ -945,7 +946,9 @@ class _RoomTextButtonState extends State<RoomTextButton> {
           child: ListView(
             shrinkWrap: true,
             padding: const EdgeInsets.symmetric(vertical: 4),
-            children: [for (final member in hidden) row(member)],
+            children: [
+              for (final member in hidden) row(member, onOpened: close),
+            ],
           ),
         ),
       ),
@@ -1013,11 +1016,21 @@ class _RoomTextButtonState extends State<RoomTextButton> {
     );
   }
 
+  /// Opens the channel, as a click on it does, with [userId]'s stream in the
+  /// middle if we are in the call. From outside it there is nothing to play
+  /// yet: joining stays their choice, on the channel's page.
+  void openLiveMember(String userId) {
+    final session = voiceSession;
+    if (session != null) CallFocus.show(session, userId);
+    widget.onTap?.call(widget.room);
+  }
+
   Widget buildCallMember(String identifier,
       {bool showActivityIcons = true,
       Set<LiveMedia> liveMedia = const {},
       Set<VoiceState> voiceState = const {},
-      bool? djPlaying}) {
+      bool? djPlaying,
+      VoidCallback? onOpened}) {
     var color = Theme.of(context).colorScheme.secondary;
 
     final member = widget.room.getMemberOrFallback(identifier);
@@ -1032,9 +1045,14 @@ class _RoomTextButtonState extends State<RoomTextButton> {
       child: tiamat.TextButton(
         member.displayName,
         textColor: color,
-        // As in Discord: a click on someone opens their profile.
-        onTap: () => UserProfile.show(context,
-            client: widget.room.client, userId: identifier),
+        // A click on someone live opens what they show. On anyone else it
+        // does nothing; their profile is in the right-click menu.
+        onTap: liveMedia.isEmpty
+            ? () {}
+            : () {
+                openLiveMember(identifier);
+                onOpened?.call();
+              },
         avatar: member.avatar,
         avatarPlaceholderColor: member.defaultColor,
         avatarPlaceholderText: member.displayName,
