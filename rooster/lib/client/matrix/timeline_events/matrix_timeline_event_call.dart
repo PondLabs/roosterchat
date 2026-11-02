@@ -69,6 +69,7 @@ class MatrixTimelineEventCall extends MatrixTimelineEvent
       return messageUserInviteCall(name);
     }
 
-    return event.body;
+    // The other call events have no body: the SDK's stand-in is English.
+    return MatrixTimelineEvent.messageTimelineUnknownEventType(event.type);
   }
 }

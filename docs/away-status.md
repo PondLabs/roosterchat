@@ -60,3 +60,15 @@ client rewriting its membership (hourly) turned them green.
 Outside a call, on a homeserver that shares no presence, nothing tells anyone
 we are away: the dot is grey whatever we do, and green for two minutes after
 we are seen to do something.
+
+## Choosing a status
+
+Clicking our own dot, by our name in the bottom left, picks Online, Away or
+Invisible (`UserIdleWatcher.choose`, kept in the `presence_status`
+preference). Online still turns away when idle; the other two hold however
+active we are. `UserIdleWatcher.status` is the result, and it is what our own
+dot shows, what `setStatus` sends, and what goes in our call membership.
+
+Invisible is sent as offline, and also goes in the call membership as
+`chat.commet.status: invisible`. In a call it still shows us in the channel,
+with a grey dot.

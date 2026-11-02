@@ -51,9 +51,15 @@ class DriftFileCache implements FileCache {
               (tbl) => tbl.lastAccessedTimestamp.isSmallerThanValue(timeMs)))
         .get();
 
-    var allFiles = await (db.select(db.fileCacheEntry).get());
+    // A count, not every row: this runs at every launch on the database
+    // isolate the Matrix database shares, and loading the whole table over
+    // the port held up the room list behind it.
+    final total = await (db.selectOnly(db.fileCacheEntry)
+          ..addColumns([db.fileCacheEntry.id.count()]))
+        .map((row) => row.read(db.fileCacheEntry.id.count()))
+        .getSingle();
 
-    Log.i("Found: ${removeFiles.length}/${allFiles.length} files for cleaning");
+    Log.i("Found: ${removeFiles.length}/$total files for cleaning");
 
     for (var file in removeFiles) {
       _cleanFile(file);

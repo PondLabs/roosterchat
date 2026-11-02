@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 class MatrixWidgetCapabilityString {
   final String raw;
@@ -68,6 +69,79 @@ class MatrixWidgetPermissionGroup {
     required this.icon,
   });
 
+  // Shown when a room widget (a small web app added to a room) asks for
+  // permissions: a group's name and what it lets the widget do.
+
+  static String get labelWidgetPermissionCustomEvents => Intl.message(
+      "Custom Events",
+      name: "labelWidgetPermissionCustomEvents",
+      desc:
+          "A group of permissions a room widget asks for: sending and receiving the widget's own kinds of Matrix events");
+
+  static String get labelWidgetPermissionCustomEventsDescription => Intl.message(
+      "Send and receive custom event data",
+      name: "labelWidgetPermissionCustomEventsDescription",
+      desc:
+          "What the 'Custom Events' permissions let a room widget do, in the dialog where it asks for them");
+
+  static String get labelWidgetPermissionMedia => Intl.message("Media",
+      name: "labelWidgetPermissionMedia",
+      desc:
+          "A group of permissions a room widget asks for: uploading and downloading files");
+
+  static String get labelWidgetPermissionMediaDescription => Intl.message(
+      "Upload and download files from your homeserver",
+      name: "labelWidgetPermissionMediaDescription",
+      desc:
+          "What the 'Media' permissions let a room widget do, in the dialog where it asks for them");
+
+  static String get labelWidgetPermissionReadRoom => Intl.message(
+      "Read Room Information",
+      name: "labelWidgetPermissionReadRoom",
+      desc:
+          "A group of permissions a room widget asks for: reading the room's name, members and settings");
+
+  static String get labelWidgetPermissionReadRoomDescription => Intl.message(
+      "Read information about the current room state, such as name and members",
+      name: "labelWidgetPermissionReadRoomDescription",
+      desc:
+          "What the 'Read Room Information' permissions let a room widget do, in the dialog where it asks for them");
+
+  static String get labelWidgetPermissionManageChat => Intl.message(
+      "Manage Chat",
+      name: "labelWidgetPermissionManageChat",
+      desc:
+          "A group of permissions a room widget asks for: reading, sending and deleting the room's messages");
+
+  static String get labelWidgetPermissionManageChatDescription => Intl.message(
+      "Read, send and delete messages in this room",
+      name: "labelWidgetPermissionManageChatDescription",
+      desc:
+          "What the 'Manage Chat' permissions let a room widget do, in the dialog where it asks for them");
+
+  static String get labelWidgetPermissionAdmin => Intl.message("Admin Powers",
+      name: "labelWidgetPermissionAdmin",
+      desc:
+          "A group of permissions a room widget asks for: changing who may do what in the room");
+
+  static String get labelWidgetPermissionAdminDescription => Intl.message(
+      "Change permissions and user roles / power levels.\nAdditional confirmation will be asked later, when the widget attempts to make changes",
+      name: "labelWidgetPermissionAdminDescription",
+      desc:
+          "What the 'Admin Powers' permissions let a room widget do, in the dialog where it asks for them. Two lines");
+
+  static String get labelWidgetPermissionCalls => Intl.message(
+      "Call Permissions",
+      name: "labelWidgetPermissionCalls",
+      desc:
+          "A group of permissions a room widget asks for: what a call widget needs to run a call");
+
+  static String get labelWidgetPermissionCallsDescription => Intl.message(
+      "Make, manage and join calls",
+      name: "labelWidgetPermissionCallsDescription",
+      desc:
+          "What the 'Call Permissions' let a room widget do, in the dialog where it asks for them");
+
   static List<MatrixWidgetPermissionGroup> permissionGroups() {
     return [
       adminPowers(),
@@ -95,12 +169,12 @@ class MatrixWidgetPermissionGroup {
     }
 
     groups["custom_events"] = MatrixWidgetPermissionGroup(
-        name: "Custom Events",
+        name: labelWidgetPermissionCustomEvents,
         defaultValue: true,
         permissions: List.empty(growable: true),
         icon: Icons.code,
         severity: WidgetPermissionSeverity.low,
-        description: "Send and receive custom event data");
+        description: labelWidgetPermissionCustomEventsDescription);
 
     List<MatrixWidgetCapabilityString> ungrouped = List.empty(growable: true);
 
@@ -149,8 +223,8 @@ class MatrixWidgetPermissionGroup {
 
   static MatrixWidgetPermissionGroup media() {
     return MatrixWidgetPermissionGroup(
-        name: "Media",
-        description: "Upload and download files from your homeserver",
+        name: labelWidgetPermissionMedia,
+        description: labelWidgetPermissionMediaDescription,
         severity: WidgetPermissionSeverity.low,
         defaultValue: true,
         icon: Icons.file_copy_rounded,
@@ -162,9 +236,8 @@ class MatrixWidgetPermissionGroup {
 
   static MatrixWidgetPermissionGroup readRoomInformation() {
     return MatrixWidgetPermissionGroup(
-        name: "Read Room Information",
-        description:
-            "Read information about the current room state, such as name and members",
+        name: labelWidgetPermissionReadRoom,
+        description: labelWidgetPermissionReadRoomDescription,
         severity: WidgetPermissionSeverity.low,
         defaultValue: true,
         icon: Icons.tag,
@@ -179,8 +252,8 @@ class MatrixWidgetPermissionGroup {
 
   static MatrixWidgetPermissionGroup modifyChats() {
     return MatrixWidgetPermissionGroup(
-        name: "Manage Chat",
-        description: "Read, send and delete messages in this room",
+        name: labelWidgetPermissionManageChat,
+        description: labelWidgetPermissionManageChatDescription,
         defaultValue: false,
         icon: Icons.message_rounded,
         severity: WidgetPermissionSeverity.high,
@@ -196,9 +269,8 @@ class MatrixWidgetPermissionGroup {
 
   static MatrixWidgetPermissionGroup adminPowers() {
     return MatrixWidgetPermissionGroup(
-        name: "Admin Powers",
-        description:
-            "Change permissions and user roles / power levels.\nAdditional confirmation will be asked later, when the widget attempts to make changes",
+        name: labelWidgetPermissionAdmin,
+        description: labelWidgetPermissionAdminDescription,
         defaultValue: true,
         icon: Icons.security,
         severity: WidgetPermissionSeverity.mild,
@@ -209,8 +281,8 @@ class MatrixWidgetPermissionGroup {
 
   static MatrixWidgetPermissionGroup callPermissions() {
     return MatrixWidgetPermissionGroup(
-        name: "Call Permissions",
-        description: "Make, manage and join calls",
+        name: labelWidgetPermissionCalls,
+        description: labelWidgetPermissionCallsDescription,
         icon: Icons.call_rounded,
         defaultValue: true,
         severity: WidgetPermissionSeverity.mild,

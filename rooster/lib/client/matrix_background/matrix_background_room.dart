@@ -309,6 +309,11 @@ class MatrixBackgroundRoom implements Room {
   }
 
   @override
+  Future<Timeline> loadTimeline({String? contextEventId}) {
+    throw UnimplementedError();
+  }
+
+  @override
   int get highlightedNotificationCount => throw UnimplementedError();
 
   @override
@@ -419,6 +424,14 @@ class MatrixBackgroundRoom implements Room {
   @override
   // TODO: implement isSpecialRoomType
   bool get isSpecialRoomType => false;
+
+  @override
+  RoomType get roomType => RoomType.defaultRoom;
+
+  @override
+  Future<Uri> getShareLink() {
+    throw UnimplementedError();
+  }
 
   @override
   Future<void> banUser(String id) {

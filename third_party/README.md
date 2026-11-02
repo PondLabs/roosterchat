@@ -11,6 +11,8 @@ back to their origin; we change them here.
 | `flutter_web_auth_2` | https://github.com/ThexXTURBOXx/flutter_web_auth_2 (tag `v4.1.0`) | `4.1.0` (2026) + cutover: `desktop_webview_window` dependency and `lib/src/webview.dart` deleted, `linows.dart` always uses the external-browser loopback server |
 | `flutter_inappwebview_windows_stub` | purpose-built cutover stub (no upstream) | `0.0.0-cutover.1`: keeps the `flutter_inappwebview_windows` plugin name with a no-op native registration; links no WebView2 |
 | `deep_filter` | https://github.com/Rikorose/DeepFilterNet (`libDF/`, `models/DeepFilterNet3_onnx.tar.gz`, MIT or Apache-2.0) | `d375b2d8309e0935d165700c91da9de862a99c31` (2024-10-17), trimmed to the real-time inference |
+| `flutter_vodozemac` | https://pub.dev/packages/flutter_vodozemac | `0.5.0` (2026-10) + the `windows-arm64` cargokit target |
+| `media_kit_libs_windows_video` | https://pub.dev/packages/media_kit_libs_windows_video | `1.0.11` (2026-10) + arm64 libmpv and ANGLE |
 
 `example/`, `test/`, `testfiles/`, `.github/` and git metadata were dropped
 from the copies. Local changes are marked with `// ROOSTER:` comments in Dart
@@ -102,3 +104,19 @@ plugin still builds, answers every call with "not implemented", and the app
 runs without a tray icon, instead of the build failing (the Flatpak runtime
 has no appindicator). Marked in `linux/CMakeLists.txt` and
 `linux/tray_manager_plugin.cc`.
+
+`flutter_vodozemac` builds vodozemac's Rust bindings with its own copy of
+cargokit, which (like ours in `rust/rust_builder/cargokit`, patched the same
+way) listed no `aarch64-pc-windows-msvc` target: a Windows arm64 build had
+no E2EE library. The `// ROOSTER` change in
+`cargokit/build_tool/lib/src/target.dart` adds the `windows-arm64` entry
+upstream cargokit has.
+
+`media_kit_libs_windows_video` fetches libmpv and ANGLE at configure time,
+upstream for x64 only; an arm64 process cannot load them (no video, no
+soundboard). The `// ROOSTER` change in `windows/CMakeLists.txt` takes the
+arm64 builds when `FLUTTER_TARGET_PLATFORM` is `windows-arm64`: libmpv from
+media-kit's own `libmpv-win32-video-cmake` (20241021, aarch64) and ANGLE from
+the fork behind media-kit/media-kit#1436 (Carapacik's v1.1.0, built from
+chromium/8059), both pinned by SHA-256. The x64 inputs are upstream's,
+unchanged.

@@ -5,6 +5,12 @@ on:
   push:
     branches: [main]
 
+# A newer push to the same branch supersedes the run in progress: a pull
+# request pushed to twice does not hold two runners for an hour.
+concurrency:
+  group: static-analysis-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   PROJECT_PATH: rooster
 
@@ -44,7 +50,9 @@ jobs:
             echo "flutter pub get failed (attempt $attempt of 3), retrying in 30 s"
             sleep 30
           done
-          rm -r lib/generated
+          # Generated code is not checked for style. Since gen-l10n went
+          # (docs/localization.md), pub get no longer creates lib/generated.
+          rm -rf lib/generated
           dart format -o none --show all --set-exit-if-changed .
         
       - name: Code Generation __φ(．．;)

@@ -33,7 +33,12 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
       "Warning: This image contains location metadata",
       name: "labelImageContainsLocationInfo",
       desc:
-          "Prompt text for the option to send a file in its original state, without any further processing such as removing metadata");
+          "Warning over an image about to be sent whose metadata says where it was taken");
+
+  String get promptChatAddFile => Intl.message("Add File",
+      name: "promptChatAddFile",
+      desc: "Button at the bottom of the dialog that previews a file before "
+          "it is attached to a message: attaches it");
 
   Map<String, IfdTag>? exifData;
   late IconData icon;
@@ -165,7 +170,9 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        tiamat.Text.label(promptAttachmentProcessingSendOriginal),
+        Flexible(
+          child: tiamat.Text.label(promptAttachmentProcessingSendOriginal),
+        ),
         tiamat.Switch(
           state: sendOriginalFile,
           onChanged: (value) => setState(() {
@@ -186,7 +193,7 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
 
   Widget buildConfirmButton() {
     return tiamat.Button(
-      text: "Add File",
+      text: promptChatAddFile,
       onTap: submit,
     );
   }

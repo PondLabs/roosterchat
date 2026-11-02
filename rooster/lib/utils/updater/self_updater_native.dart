@@ -6,6 +6,7 @@
 // and moved back if the new one will not go in, so a failure leaves the
 // build that was already working.
 import 'dart:async';
+import 'dart:ffi' show Abi;
 import 'dart:io';
 
 import 'package:archive/archive_io.dart';
@@ -17,6 +18,7 @@ import 'package:rooster/utils/update_checker.dart';
 import 'package:rooster/utils/windows_hidden_process.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 
 SelfUpdater createSelfUpdater() => NativeSelfUpdater();
@@ -28,12 +30,32 @@ const _managedPrefixes = ['/usr/', '/app/', '/snap/', '/nix/store/'];
 
 /// Whether a build living at [executable] is ours to replace.
 ///
+/// On macOS, not an app still on the disk image it came on (read only), nor
+/// one macOS runs from a read only copy because it was opened where it was
+/// downloaded (App Translocation): both have to be dragged to Applications
+/// first.
+///
 /// Pulled out so it can be tested without an install to point at.
 bool isSelfInstallable(String platform, String executable) {
+  if (platform == 'macos') {
+    return executable.contains('.app/Contents/MacOS/') &&
+        !executable.startsWith('/Volumes/') &&
+        !executable.contains('/AppTranslocation/');
+  }
   if (platform != 'windows' && platform != 'linux') return false;
   final path = executable.replaceAll('\\', '/');
   return !_managedPrefixes.any(path.startsWith);
 }
+
+/// The architecture a build was made for, as the release names it (`x64` or
+/// `arm64`), from the ABI the build runs as. An x64 build on an arm64
+/// Windows runs under emulation and reports x64, so it keeps updating to the
+/// x64 release it was installed from; the arm64 build is a separate
+/// install.
+String archName(Abi abi) => switch (abi) {
+      Abi.windowsArm64 || Abi.linuxArm64 || Abi.macosArm64 => 'arm64',
+      _ => 'x64',
+    };
 
 /// Unpacks [archive] into [into].
 ///
@@ -42,7 +64,16 @@ bool isSelfInstallable(String platform, String executable) {
 /// every desktop already has (Windows has shipped bsdtar, which reads zip
 /// too, since Windows 10 1803). The Dart one is kept for whatever does not
 /// have it, slow but working.
+///
+/// On macOS, ditto: the zip is ditto's (`desktop-build.yml`), and only ditto
+/// puts back the symlinks and resource data an .app needs to open.
 Future<void> unpack(File archive, Directory into) async {
+  if (Platform.isMacOS) {
+    final ditto =
+        await Process.run('ditto', ['-x', '-k', archive.path, into.path]);
+    if (ditto.exitCode != 0) throw StateError('ditto: ${ditto.stderr}');
+    return;
+  }
   try {
     final tar =
         await _runQuietly('tar', ['-xf', archive.path, '-C', into.path]);
@@ -70,7 +101,7 @@ Future<int> _runQuietly(String executable, List<String> arguments) async {
 
 /// The one directory an archive holds, which is the new install.
 ///
-/// `ci.yml` packs `rooster-<tag>-<platform>-x64-<mode>/` and nothing else.
+/// `ci.yml` packs `rooster-<tag>-<platform>-<arch>-<mode>/` and nothing else.
 /// Anything else is not an archive we made, and is refused rather than
 /// guessed at.
 Directory? singleRootOf(Directory unpacked) {
@@ -106,6 +137,13 @@ const updateDirName = '.rooster-update';
 /// What builds from before the renames staged updates in.
 const _legacyUpdateDirNames = ['.cockhouse-update', '.roscord-update'];
 
+/// What the Linux swap leaves in [workRoot] when the build it put in place
+/// for [tag] would not start and the old one went back
+/// ([linuxSwapScript]). That release is not installed again here; the next
+/// one is, and a swap that works clears the whole of [workRoot].
+String didNotStartMarker(String workRoot, String tag) =>
+    p.join(workRoot, 'did-not-start-$tag');
+
 /// The executable a release is started with, and the one an archive must
 /// hold for this build to take it.
 String executableName({required bool windows}) =>
@@ -130,6 +168,7 @@ List<String> legacyExecutableNames({required bool windows}) => windows
 ///   directory ([tempDir]): the update goes to `Programs\Rooster` in
 ///   [localAppData], with a Start menu shortcut, since the next click on the
 ///   zip would start the old build again.
+/// - A macOS app: the `.app` itself.
 /// - Otherwise the build's own directory.
 ///
 /// Reads the file system (the recovery looks for the build that was left
@@ -143,6 +182,14 @@ UpdateTarget updateTargetFor(
   String? startMenu,
 }) {
   final context = windows ? p.windows : p.posix;
+  final app =
+      RegExp(r'^(.+\.app)/Contents/MacOS/[^/]+$').firstMatch(executable);
+  if (!windows && app != null) {
+    return UpdateTarget(
+      install: app[1]!,
+      workRoot: context.join(context.dirname(app[1]!), updateDirName),
+    );
+  }
   final exeNames = {
     context.basename(executable),
     executableName(windows: windows),
@@ -193,6 +240,77 @@ UpdateTarget updateTargetFor(
 }
 
 class NativeSelfUpdater implements SelfUpdater {
+  // What the settings page shows under Version (UpdateProgress.message).
+  // The log lines and the swap scripts stay in English.
+
+  static String messageUpdateCouldNotReachGitHub(String problem) =>
+      Intl.message("Could not reach GitHub to look for updates: $problem.",
+          name: "messageUpdateCouldNotReachGitHub",
+          args: [problem],
+          desc: "Under Version in Settings when the look for a newer release "
+              "failed. The problem is a short technical reason, such as "
+              "'no answer in 20 s' or an HTTP status");
+
+  static String messageUpdateAppIsLatest(String app, String version) =>
+      Intl.message("$app $version is the latest.",
+          name: "messageUpdateAppIsLatest",
+          args: [app, version],
+          desc: "Under Version in Settings when the running version is the "
+              "newest release; app is the app's name (Rooster), version its "
+              "version, for example v1.18.0");
+
+  static String get messageUpdateCouldNotPrepare =>
+      Intl.message("The update could not be prepared.",
+          name: "messageUpdateCouldNotPrepare",
+          desc: "Under Version in Settings when something went wrong getting "
+              "an update ready");
+
+  static String messageUpdateDidNotStart(String tag, String version) =>
+      Intl.message(
+          "$tag would not start on this computer, so $version was put back. "
+          "The next release will be tried.",
+          name: "messageUpdateDidNotStart",
+          args: [tag, version],
+          desc: "Under Version in Settings when a release was installed once, "
+              "did not start, and the running version was restored; tag is "
+              "the release that failed, version the one running now");
+
+  static String get messageUpdateNoBuildForPlatform =>
+      Intl.message("That release has no build for this platform.",
+          name: "messageUpdateNoBuildForPlatform",
+          desc: "Under Version in Settings when the newer release has nothing "
+              "to install on this operating system or processor");
+
+  static String get messageUpdateNotChecksummed => Intl.message(
+      "That release is not checksummed, so it has to be installed by hand.",
+      name: "messageUpdateNotChecksummed",
+      desc: "Under Version in Settings when the newer release has no checksum "
+          "to check the download against, so the app does not install it");
+
+  static String messageUpdateReadyMoves(String tag, String app, String path) =>
+      Intl.message(
+          "$tag is ready. Restarting moves $app to $path, with a Start menu "
+          "shortcut, so it no longer runs from the zip.",
+          name: "messageUpdateReadyMoves",
+          args: [tag, app, path],
+          desc: "Under Version in Settings on Windows, when the app was "
+              "started from inside a zip: the update installs it in a lasting "
+              "folder (path) with a Start menu shortcut. Tag is the release, "
+              "app the app's name (Rooster)");
+
+  static String get messageUpdateCouldNotDownload => Intl.message(
+      "The update could not be downloaded. "
+      "You can still install it from the release page.",
+      name: "messageUpdateCouldNotDownload",
+      desc: "Under Version in Settings when downloading or unpacking the "
+          "newer release failed");
+
+  static String get messageUpdateCouldNotStart =>
+      Intl.message("The update could not be started. Nothing was changed.",
+          name: "messageUpdateCouldNotStart",
+          desc: "Under Version in Settings when restarting into the "
+              "downloaded update failed before anything was replaced");
+
   @override
   final ValueNotifier<UpdateProgress> progress =
       ValueNotifier(const UpdateProgress(UpdateStage.idle));
@@ -203,11 +321,11 @@ class NativeSelfUpdater implements SelfUpdater {
 
   /// Not a bool: a macOS build that called itself linux would pass
   /// [isSelfInstallable] and then download the Linux tarball.
-  String get _platform => Platform.isWindows
-      ? 'windows'
-      : Platform.isMacOS
-          ? 'macos'
-          : 'linux';
+  String get _platform => Platform.operatingSystem;
+
+  /// `x64` or `arm64`: the build this one is, so an arm64 install never
+  /// downloads the x64 archive, which would not start.
+  String get _arch => archName(Abi.current());
 
   late final UpdateTarget _target = updateTargetFor(
     File(Platform.resolvedExecutable).absolute.path,
@@ -230,30 +348,37 @@ class NativeSelfUpdater implements SelfUpdater {
       isSelfInstallable(_platform, Platform.resolvedExecutable);
 
   void _set(UpdateStage stage,
-          {UpdateRelease? release, double? fraction, String? message}) =>
-      progress.value = UpdateProgress(stage,
-          release: release ?? progress.value.release,
-          fraction: fraction,
-          message: message);
+      {UpdateRelease? release, double? fraction, String? message}) {
+    // Each stage once, not every chunk of the download: what the settings
+    // page says, in the log, for when it has to be asked about later.
+    if (stage != progress.value.stage) {
+      Log.i('Update: ${stage.name}${message == null ? '' : ': $message'}');
+    }
+    progress.value = UpdateProgress(stage,
+        release: release ?? progress.value.release,
+        fraction: fraction,
+        message: message);
+  }
 
   @override
-  Future<void> checkAndPrepare() async {
+  Future<void> checkAndPrepare({Duration? checkTimeout}) async {
     if (_running) return;
     _running = true;
     try {
       _set(UpdateStage.checking);
-      final release =
-          await UpdateRelease.fetchLatest(UpdateChecker.releasesApiUrl);
+      final look = await UpdateRelease.lookUp(UpdateChecker.releasesApiUrl,
+          timeout: checkTimeout ?? UpdateRelease.defaultTimeout);
+      final release = look.release;
       if (release == null) {
         _set(UpdateStage.failed,
-            message: 'Could not reach GitHub to look for updates.');
+            message: messageUpdateCouldNotReachGitHub('${look.problem}'));
         return;
       }
       if (!UpdateChecker.isNewer(release.tag, BuildConfig.VERSION_TAG)) {
         _set(UpdateStage.upToDate,
             release: release,
-            message:
-                '${BuildConfig.app} ${BuildConfig.VERSION_TAG} is the latest.');
+            message: messageUpdateAppIsLatest(
+                BuildConfig.app, BuildConfig.VERSION_TAG));
         return;
       }
       if (!canInstall) {
@@ -264,27 +389,34 @@ class NativeSelfUpdater implements SelfUpdater {
       await _prepare(release);
     } catch (e, s) {
       Log.onError(e, s, content: 'Update: could not prepare');
-      _set(UpdateStage.failed, message: 'The update could not be prepared.');
+      _set(UpdateStage.failed, message: messageUpdateCouldNotPrepare);
     } finally {
       _running = false;
     }
   }
 
   Future<void> _prepare(UpdateRelease release) async {
-    final asset = release.assetFor(_platform);
+    // Installed once already and it would not start, so the old build went
+    // back. Again would mean the same download and the same two restarts
+    // at every launch.
+    if (_didNotStartHere(release.tag)) {
+      _set(UpdateStage.failed,
+          release: release,
+          message:
+              messageUpdateDidNotStart(release.tag, BuildConfig.VERSION_TAG));
+      return;
+    }
+    final asset = release.assetFor(_platform, arch: _arch);
     if (asset == null) {
       _set(UpdateStage.available,
-          release: release,
-          message: 'That release has no build for this platform.');
+          release: release, message: messageUpdateNoBuildForPlatform);
       return;
     }
     if (asset.sha256 == null) {
       // Without a checksum there is no way to know what arrived, and this
       // unpacks over the app: the browser can have this one.
       _set(UpdateStage.available,
-          release: release,
-          message: 'That release is not checksummed, so it has to be '
-              'installed by hand.');
+          release: release, message: messageUpdateNotChecksummed);
       return;
     }
 
@@ -315,32 +447,39 @@ class NativeSelfUpdater implements SelfUpdater {
       if (root == null) {
         throw StateError('the archive does not hold one directory');
       }
-      if (!await File(p.join(root.path, _executableName)).exists()) {
+      final executable = File(p.join(root.path, _executableName));
+      if (!await executable.exists()) {
         throw StateError('no $_executableName in the archive');
+      }
+      // The Dart unpacker drops the executable bit. Swapped in, a build that
+      // cannot be started leaves nothing that opens, launcher entry included.
+      // 0x49 is 0111, execute for anyone.
+      if (!Platform.isWindows && (await executable.stat()).mode & 0x49 == 0) {
+        throw StateError('$_executableName in the archive cannot be run');
       }
       _staged = root;
       _set(UpdateStage.ready,
           release: release,
           message: _target.moves
-              ? '${release.tag} is ready. Restarting moves ${BuildConfig.app} to '
-                  '${_target.install}, with a Start menu shortcut, so it no '
-                  'longer runs from the zip.'
+              ? messageUpdateReadyMoves(
+                  release.tag, BuildConfig.app, _target.install)
               : null);
       Log.i('Update: ${release.tag} is unpacked at ${root.path}');
     } catch (e, s) {
       Log.onError(e, s, content: 'Update: could not stage ${release.tag}');
       await _delete(work);
       _set(UpdateStage.failed,
-          release: release,
-          message: 'The update could not be downloaded. '
-              'You can still install it from the release page.');
+          release: release, message: messageUpdateCouldNotDownload);
     }
   }
 
   /// The release's own name, not the one this build was started by: a build
   /// started through a legacy `cockhouse` or `commet` copy still updates to, and restarts
-  /// as, `rooster`.
-  String get _executableName => executableName(windows: Platform.isWindows);
+  /// as, `rooster`. On macOS, where the install is the `.app`, the binary in
+  /// it.
+  String get _executableName => Platform.isMacOS
+      ? 'Contents/MacOS/Rooster'
+      : executableName(windows: Platform.isWindows);
 
   /// A fresh directory for [tag] under the work root. Fresh, because the
   /// root may hold what earlier attempts left (the running build, even).
@@ -360,9 +499,18 @@ class NativeSelfUpdater implements SelfUpdater {
     try {
       return await fresh(_target.workRoot);
     } catch (_) {
-      return fresh(p.join(Directory.systemTemp.path, 'rooster-update'));
+      return fresh(_tempWorkRoot);
     }
   }
+
+  /// The work root when the one beside the install cannot be written.
+  String get _tempWorkRoot =>
+      p.join(Directory.systemTemp.path, 'rooster-update');
+
+  /// Whether the swap put [tag] in place here before and it would not
+  /// start, in whichever work root that happened.
+  bool _didNotStartHere(String tag) => [_target.workRoot, _tempWorkRoot]
+      .any((root) => File(didNotStartMarker(root, tag)).existsSync());
 
   Future<void> _download(UpdateAsset asset, File target) async {
     final client = HttpClient();
@@ -405,8 +553,7 @@ class NativeSelfUpdater implements SelfUpdater {
       return true;
     } catch (e, s) {
       Log.onError(e, s, content: 'Update: could not start the installer');
-      _set(UpdateStage.failed,
-          message: 'The update could not be started. Nothing was changed.');
+      _set(UpdateStage.failed, message: messageUpdateCouldNotStart);
       return false;
     }
   }
@@ -452,7 +599,11 @@ class NativeSelfUpdater implements SelfUpdater {
             install: install,
             exe: exe,
             work: workRoot,
-            stamp: stamp));
+            stamp: stamp,
+            restart: Platform.resolvedExecutable,
+            // The work directory is named after the release's tag.
+            didNotStart: didNotStartMarker(workRoot, p.basename(work.path)),
+            open: Platform.isMacOS));
     if (!Platform.isWindows) {
       await Process.run('chmod', ['+x', script.path]);
     }
@@ -600,6 +751,21 @@ Remove-Item -LiteralPath \$old -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath \$work -Recurse -Force -ErrorAction SilentlyContinue
 ''';
 
+/// Linux, and macOS with [open]: there [install] is the `.app`, which is
+/// started through Launch Services rather than by running [exe].
+///
+/// [restart] is the build that was running. When the swap fails it is
+/// started again, so restarting to update never leaves Rooster closed. On
+/// Linux it also says which process is ours to end: one still there after
+/// [patience], its window already gone, is stuck on the way out. What
+/// happened goes in `install-<stamp>.log` in [work], which is only cleared
+/// when the swap worked.
+///
+/// On Linux the new build is watched for [settle] once started. One that
+/// exits with an error in that time did not start (a library it needs is
+/// not on this computer, say): it is taken out, the old build is put back
+/// and started again, and [didNotStart] is created, so the same release is
+/// not installed again at every launch.
 String linuxSwapScript({
   required int waitFor,
   required String staged,
@@ -607,37 +773,123 @@ String linuxSwapScript({
   required String exe,
   required String work,
   required int stamp,
-}) =>
-    '''
-#!/bin/sh
-# Wait for Rooster to go, so the new build does not start beside the old one.
+  String? restart,
+  String? didNotStart,
+  Duration patience = const Duration(seconds: 60),
+  Duration settle = const Duration(seconds: 10),
+  bool open = false,
+}) {
+  final ticks = patience.inMilliseconds ~/ 200;
+  final settleTicks = settle.inMilliseconds ~/ 200;
+  final relaunch = restart == null
+      ? null
+      : open
+          ? 'open "\$install"'
+          : '(cd ${_sh(p.posix.dirname(restart))} && exec ${_sh(restart)}) &';
+  final start = open
+      ? '''
+open "\$install"
+# Last, and from outside it: this script lives in there.
+cd /
+rm -rf "\$old" "\$work"
+'''
+      : '''
+(cd "\$install" && exec ${_sh(exe)}) &
+started=\$!
+# Cleared now, from outside it (this script lives in there): the new build
+# may stage an update of its own in there as soon as it starts.
+cd /
+rm -rf "\$work"
+
+# A build that cannot start exits at once (127 when the loader cannot find a
+# library it needs), and swapped in it would leave nothing that opens,
+# launcher entry included. The old one stays beside it until the new one
+# has been watched for a while.
 i=0
-while [ \$i -lt 300 ] && kill -0 $waitFor 2>/dev/null; do
+while [ \$i -lt $settleTicks ] && alive \$started; do
   sleep 0.2
   i=\$((i + 1))
 done
-# Unlike Windows, a directory here can be moved out from under a running
-# program. Waiting out rather than swapping under it: two roscords sharing
-# one account is worse than an update that did not happen.
-if kill -0 $waitFor 2>/dev/null; then
-  exit 1
+if ! alive \$started; then
+  wait \$started
+  status=\$?
+  if [ \$status -ne 0 ]; then
+    mkdir -p "\$work"
+${didNotStart == null ? '' : '    : > ${_sh(didNotStart)}\n'}    if [ -e "\$old" ]; then
+      rm -rf "\$install"
+      mv "\$old" "\$install" ||
+        fail "the new build exited with \$status as it started, and the old one could not be put back"
+    fi
+    fail "the new build exited with \$status as it started; the old one is back"
+  fi
 fi
+rm -rf "\$old"
+''';
+  return '''
+#!/bin/sh
+work=${_sh(work)}
+log="\$work/install-$stamp.log"
+say() {
+  echo "\$(date '+%Y-%m-%dT%H:%M:%S') \$*" >> "\$log" 2>/dev/null
+}
 install=${_sh(install)}
 staged=${_sh(staged)}
 old=${_sh('$install.old-$stamp')}
+
+# Whether process \$1 runs. A zombie has gone already; only its parent has
+# not noticed yet.
+alive() {
+  kill -0 "\$1" 2>/dev/null || return 1
+  case "\$(sed 's/.*) //' "/proc/\$1/stat" 2>/dev/null)" in
+    Z*) return 1 ;;
+  esac
+}
+
+fail() {
+  say "\$1"
+${relaunch == null ? '' : '  $relaunch\n'}  exit 1
+}
+
+# Wait for Rooster to go, so the new build does not start beside the old one.
+say 'waiting for Rooster (process $waitFor) to close'
+i=0
+while [ \$i -lt $ticks ] && alive $waitFor; do
+  sleep 0.2
+  i=\$((i + 1))
+done
+${restart == null || open ? '' : '''# Rooster closes its window as this starts waiting, so one still here is
+# stuck on the way out, and would keep the old build in place for good. It
+# is ended, but only while it runs the build being replaced, not when
+# something else has taken its pid.
+if alive $waitFor && [ "\$(readlink /proc/$waitFor/exe 2>/dev/null)" = ${_sh(restart)} ]; then
+  say 'Rooster did not close in ${patience.inSeconds} seconds; ending it'
+  kill -KILL $waitFor 2>/dev/null
+  i=0
+  while [ \$i -lt 25 ] && alive $waitFor; do
+    sleep 0.2
+    i=\$((i + 1))
+  done
+fi
+'''}# Unlike Windows, a directory here can be moved out from under a running
+# program. Not swapping under it: two Roosters sharing one account is worse
+# than an update that did not happen.
+if alive $waitFor; then
+  fail 'Rooster is still running; nothing was changed'
+fi
+
 # The install may not be there: a recovered one can be moving out of the
 # staging directory it was run from.
 if [ -e "\$install" ]; then
-  mv "\$install" "\$old" || exit 1
+  mv "\$install" "\$old" || fail "could not move \$install aside"
 else
-  mkdir -p "\$(dirname "\$install")" || exit 1
+  mkdir -p "\$(dirname "\$install")" || fail "could not create \$install"
 fi
 if ! mv "\$staged" "\$install"; then
+  # Across filesystems mv copies, and one that stopped half way leaves part
+  # of a build there, which the old one would be moved into.
+  rm -rf "\$install"
   [ -e "\$old" ] && mv "\$old" "\$install"
-  exit 1
+  fail 'could not move the new build in; the old one is back'
 fi
-(cd "\$install" && exec ${_sh(exe)}) &
-# Last, and from outside it: this script lives in there.
-cd /
-rm -rf "\$old" ${_sh(work)}
-''';
+$start''';
+}

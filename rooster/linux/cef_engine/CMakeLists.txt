@@ -30,6 +30,12 @@ if(NOT DEFINED api_version)
   set(api_version 15200)
 endif()
 
+# CEF's CMake only knows an arm64 host by the macOS name (arm64) or the
+# MSVC architecture id; a Linux aarch64 host fell through to x86_64 and got
+# -m64, which the compiler there refuses. Said here, before its variables.
+if(NOT DEFINED PROJECT_ARCH AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+  set(PROJECT_ARCH "arm64")
+endif()
 list(APPEND CMAKE_MODULE_PATH "${CEF_ROOT}/cmake")
 find_package(CEF REQUIRED)
 add_subdirectory("${CEF_LIBCEF_DLL_WRAPPER_PATH}" libcef_dll_wrapper)

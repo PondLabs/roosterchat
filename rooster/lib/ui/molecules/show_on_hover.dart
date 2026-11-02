@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:rooster/config/layout_config.dart';
-import 'package:rooster/config/platform_utils.dart';
 import 'package:flutter/material.dart';
 
 class ShowOnHover extends StatefulWidget {
@@ -11,7 +10,7 @@ class ShowOnHover extends StatefulWidget {
   final Widget child;
 
   static bool useTouchControls(BuildContext context) =>
-      MediaQuery.of(context).mobile || PlatformUtils.isAndroid;
+      MediaQuery.sizeOf(context).touchControls;
 
   @override
   State<ShowOnHover> createState() => _ShowOnHoverState();
@@ -32,14 +31,14 @@ class _ShowOnHoverState extends State<ShowOnHover> {
   Widget build(BuildContext context) {
     return MouseRegion(
       onEnter: (event) {
-        if (MediaQuery.of(context).desktop) {
+        if (MediaQuery.sizeOf(context).desktop) {
           setState(() {
             showing = true;
           });
         }
       },
       onExit: (event) {
-        if (MediaQuery.of(context).desktop) {
+        if (MediaQuery.sizeOf(context).desktop) {
           setState(() {
             showing = false;
           });

@@ -6,15 +6,26 @@ import 'package:rooster/config/platform_utils.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/utils/links/link_utils.dart';
+import 'package:rooster/utils/updater/installable_update_check.dart';
+import 'package:rooster/utils/updater/self_updater.dart';
+import 'package:rooster/utils/window_management.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:http/http.dart' as http;
 
-/// Checks for a newer Rooster release on GitHub Releases.
+/// Checks for a newer Rooster release on GitHub Releases, once the app is up.
+///
+/// On a desktop build that installs over itself this is the second look,
+/// after the one before the app opened (StartupUpdate), and the one that
+/// recovers what that one missed: it fetches the release and offers the
+/// restart from the home screen, and when GitHub could not be reached it
+/// looks again once a sync has got through, since a launch with the session
+/// can come before the network. Everywhere else it points at the release
+/// page, which is all the app can do there.
 ///
 /// This goes through the unauthenticated GitHub API. That is rate limited to 60
-/// requests per hour per IP, which is ample for one request per launch on a
+/// requests per hour per IP, which is ample for a few requests per launch on a
 /// desktop install. Startup uses [checkForUpdatesOncePerLaunch] to preserve
 /// that cadence, while [checkForUpdates] remains available to an explicit
 /// caller that needs a fresh result later in the session.
@@ -24,6 +35,7 @@ import 'package:http/http.dart' as http;
 class UpdateChecker {
   static bool _automaticCheckStarted = false;
   static final UpdateCheckState _state = UpdateCheckState();
+  static InstallableUpdateCheck? _installable;
 
   /// The project whose releases we check.
   static const String releasesApiUrl =
@@ -44,6 +56,18 @@ class UpdateChecker {
       desc:
           "Update alert body. Keep the version value unchanged and tell the user that tapping opens the release page");
 
+  static String get labelUpdateReady => Intl.message("Update ready",
+      name: "labelUpdateReady",
+      desc:
+          "Title of the home screen alert once a newer version is downloaded and waiting for a restart");
+
+  static String descriptionUpdateReady(String version) => Intl.message(
+      "Rooster ${version} is downloaded and ready. Tap to restart into it.",
+      name: "descriptionUpdateReady",
+      args: [version],
+      desc:
+          "Update alert body once the newer version is downloaded. Keep the version value unchanged and tell the user that tapping restarts the app into it");
+
   /// Runs the automatic startup check at most once during this app launch.
   ///
   /// Home screens can be recreated, so the call site alone cannot provide the
@@ -57,8 +81,6 @@ class UpdateChecker {
   }
 
   static Future<void> checkForUpdates() async {
-    if (_state.foundUpdate) return;
-
     if (!shouldCheckForUpdates) {
       return;
     }
@@ -66,6 +88,18 @@ class UpdateChecker {
     if (preferences.checkForUpdates.value != true) {
       return;
     }
+
+    final updater = SelfUpdater.instance;
+    if (updater.canInstall) {
+      _installable ??= InstallableUpdateCheck(updater,
+          offerRestart: _offerRestart,
+          offerReleasePage: _offerReleasePage,
+          nextSync: _nextSync);
+      await _installable!.run();
+      return;
+    }
+
+    if (_state.foundUpdate) return;
 
     String? latest;
     try {
@@ -93,18 +127,39 @@ class UpdateChecker {
 
     if (latest == null || latest.isEmpty) return;
 
-    if (!_state.shouldAlertFor(latest, BuildConfig.VERSION_TAG)) {
-      Log.i("Up to date: running ${BuildConfig.VERSION_TAG}, latest $latest");
+    _offerReleasePage(latest);
+  }
+
+  /// The alert that opens the release page, for a newer [tag] this build
+  /// cannot install over itself. Once per launch.
+  static void _offerReleasePage(String tag) {
+    if (!_state.shouldAlertFor(tag, BuildConfig.VERSION_TAG)) {
+      Log.i("Up to date: running ${BuildConfig.VERSION_TAG}, latest $tag");
       return;
     }
 
-    Log.i("Found update: ${BuildConfig.VERSION_TAG} -> $latest");
+    Log.i("Found update: ${BuildConfig.VERSION_TAG} -> $tag");
 
-    clientManager!.alertManager.addAlert(Alert(AlertType.info,
-        messageGetter: () => descriptionUpdateAvailable(latest!),
+    clientManager?.alertManager.addAlert(Alert(AlertType.info,
+        messageGetter: () => descriptionUpdateAvailable(tag),
         titleGetter: () => labelUpdateAvailable,
         action: doUpdateAction));
   }
+
+  /// The alert that restarts into [tag], unpacked and waiting.
+  static void _offerRestart(String tag) {
+    Log.i("Update: $tag is ready; offering the restart");
+
+    clientManager?.alertManager.addAlert(Alert(AlertType.info,
+        messageGetter: () => descriptionUpdateReady(tag),
+        titleGetter: () => labelUpdateReady,
+        action: restartIntoUpdate));
+  }
+
+  /// The next sync to get through, which says the network is up. Without
+  /// any account there is nothing to wait for.
+  static Future<void> _nextSync() =>
+      clientManager?.onSync.stream.first ?? Future.value();
 
   /// True when [candidate] is a strictly newer version than [current].
   ///
@@ -165,15 +220,19 @@ class UpdateChecker {
     return true;
   }
 
-  /// Everything an update does today is open the release page.
-  ///
-  /// Rooster ships as archives (a zip on Windows, a tar.gz on Linux) rather
-  /// than through an installer, and two of the four Linux packages (deb,
-  /// flatpak) are owned by a package manager. Replacing the running binary is
-  /// therefore not a thing we can do correctly on every platform, so this
-  /// deliberately stops at telling the user and taking them to the download.
+  /// Where the build cannot install over itself, an update is the release
+  /// page: Android, the web, and a desktop build that belongs to a package
+  /// manager (see docs/updating.md).
   static doUpdateAction(BuildContext context) async {
     LinkUtils.open(Uri.parse(releasesPageUrl), context: context);
+  }
+
+  /// Swaps in the release the updater unpacked and closes the app, which the
+  /// swap starts again. Nothing changes when there is nothing staged.
+  static Future<void> restartIntoUpdate(BuildContext context) async {
+    if (await SelfUpdater.instance.installAndRestart()) {
+      await WindowManagement.close();
+    }
   }
 }
 

@@ -378,6 +378,28 @@ class _EmoticonCreatorState extends State<EmoticonCreator> {
       desc:
           "Prompt to confirm the creation of an Emoticon Pack, Emoji, or Sticker");
 
+  String get labelRoomEmoticonUsageSticker => Intl.message("Sticker",
+      name: "labelRoomEmoticonUsageSticker",
+      desc:
+          "Choice in the emoticon editor of a room's settings: the image is used as a sticker only");
+
+  String get labelRoomEmoticonUsageEmoji => Intl.message("Emoji",
+      name: "labelRoomEmoticonUsageEmoji",
+      desc:
+          "Choice in the emoticon editor of a room's settings: the image is used as an emoji only");
+
+  String get labelRoomEmoticonUsageFollowPack => Intl.message(
+      "Follow Pack Settings",
+      name: "labelRoomEmoticonUsageFollowPack",
+      desc:
+          "Choice in the emoticon editor of a room's settings: the image is used as its pack says (emoji, sticker or both)");
+
+  String get labelRoomEmoticonUsageEmojiAndSticker => Intl.message(
+      "Emoji & Sticker",
+      name: "labelRoomEmoticonUsageEmojiAndSticker",
+      desc:
+          "Choice in the emoticon editor of a room's settings: the image is used both as an emoji and as a sticker");
+
   @override
   void initState() {
     super.initState();
@@ -488,12 +510,22 @@ class _EmoticonCreatorState extends State<EmoticonCreator> {
                             const SizedBox(
                               width: 8,
                             ),
-                            tiamat.Text.label(switch (item) {
-                              EmoticonUsage.sticker => "Sticker",
-                              EmoticonUsage.emoji => "Emoji",
-                              EmoticonUsage.inherit => "Follow Pack Settings",
-                              EmoticonUsage.all => "Emoji & Sticker",
-                            })
+                            Flexible(
+                              child: tiamat.Text.label(
+                                switch (item) {
+                                  EmoticonUsage.sticker =>
+                                    labelRoomEmoticonUsageSticker,
+                                  EmoticonUsage.emoji =>
+                                    labelRoomEmoticonUsageEmoji,
+                                  EmoticonUsage.inherit =>
+                                    labelRoomEmoticonUsageFollowPack,
+                                  EmoticonUsage.all =>
+                                    labelRoomEmoticonUsageEmojiAndSticker,
+                                },
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            )
                           ],
                         );
                       },

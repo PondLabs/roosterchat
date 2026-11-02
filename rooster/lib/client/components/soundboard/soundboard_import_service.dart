@@ -14,6 +14,7 @@ import 'dart:typed_data';
 import 'package:rooster/client/components/soundboard/soundboard_constraints.dart';
 import 'package:rooster/client/components/soundboard/soundboard_normalizer.dart';
 import 'package:flutter/foundation.dart' show compute;
+import 'package:intl/intl.dart';
 
 /// Why a sound can't be made from what the admin picked, in words for them.
 class SoundboardImportError implements Exception {
@@ -99,18 +100,38 @@ class SoundboardImportService {
 
   static void _ignore(String _) {}
 
+  static String errorSoundboardSelectionTooLong(String length, String max) =>
+      Intl.message("Selection too long ($length s, max $max s)",
+          name: "errorSoundboardSelectionTooLong",
+          args: [length, max],
+          desc: "Why a soundboard sound could not be made: the part picked in "
+              "the trim editor is longer than a sound may be. Both values "
+              "are numbers of seconds (\"15.5\", \"15\")");
+
+  static String get errorSoundboardSelectionTooShort =>
+      Intl.message("Selection too short",
+          name: "errorSoundboardSelectionTooShort",
+          desc: "Why a soundboard sound could not be made: the part picked in "
+              "the trim editor is too short to be a sound");
+
+  static String get errorSoundboardClipTooLarge =>
+      Intl.message("Sound file too large (max 1 MB)",
+          name: "errorSoundboardClipTooLarge",
+          desc: "Why a soundboard sound could not be made: the trimmed sound, "
+              "once compressed, is bigger than a stored sound may be");
+
   /// [startMs]..[endMs] of [window] (relative to it) as a sound.
   Future<SoundboardClip> trim(SoundboardWindow window,
       {required int startMs, required int endMs}) async {
     final selected = endMs - startMs;
     if (selected > SoundboardConstraints.maxDurationMs) {
-      throw SoundboardImportError('Selection too long (${seconds(selected)} s, '
-          'max ${seconds(SoundboardConstraints.maxDurationMs)} s)');
+      throw SoundboardImportError(errorSoundboardSelectionTooLong(
+          seconds(selected), seconds(SoundboardConstraints.maxDurationMs)));
     }
     if (selected < SoundboardConstraints.minDurationMs ||
         startMs < 0 ||
         endMs > window.durationMs) {
-      throw const SoundboardImportError('Selection too short');
+      throw SoundboardImportError(errorSoundboardSelectionTooShort);
     }
 
     final pcm = faded(window.pcm.slice(startMs, endMs));
@@ -120,7 +141,7 @@ class SoundboardImportService {
     log('trim: ${window.startMs + startMs} ms + $selected ms, '
         '${bytes.length} bytes');
     if (bytes.length > SoundboardConstraints.maxFileBytes) {
-      throw const SoundboardImportError('Sound file too large (max 1 MB)');
+      throw SoundboardImportError(errorSoundboardClipTooLarge);
     }
     return SoundboardClip(
       bytes: bytes,
@@ -150,8 +171,9 @@ class SoundboardImportService {
         channels: [for (final c in pcm.channels) fadeChannel(c)]);
   }
 
+  /// [ms] in seconds, to a tenth, with the language's decimal separator.
   static String seconds(int ms) =>
-      (ms / 1000).toStringAsFixed(ms % 1000 == 0 ? 0 : 1);
+      NumberFormat(ms % 1000 == 0 ? '0' : '0.0').format(ms / 1000);
 
   /// Where a link asks playback to start: YouTube-style `t=` / `start=` in
   /// the query or fragment, as seconds (`90`, `90s`), `1m30s`, `1h2m3s` or

@@ -11,7 +11,9 @@ import 'package:rooster/client/components/soundboard/soundboard_sound.dart';
 import 'package:rooster/ui/atoms/anchored_popover.dart';
 import 'package:rooster/ui/molecules/soundboard_emoji_picker.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_favorites.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 /// One Space whose sounds can be played in the current call.
@@ -52,6 +54,10 @@ class SoundboardPopover extends StatefulWidget {
   /// "Add sound" tile shows.
   final ValueChanged<SoundboardSource>? onAddSound;
 
+  /// Whether the device is used with fingers rather than a mouse; where the
+  /// host does not say, [touchFirst] does.
+  final bool? touch;
+
   const SoundboardPopover({
     super.key,
     required this.sources,
@@ -61,10 +67,87 @@ class SoundboardPopover extends StatefulWidget {
     required this.onVolumeChanged,
     this.imageFor,
     this.onAddSound,
+    this.touch,
   });
 
   static const double width = 540;
   static const double height = 440;
+
+  static const double railWidth = 52;
+  static const double bodyPadding = 8;
+  static const double tileSpacing = 6;
+
+  /// The narrowest a tile gets before the grid drops a column: an emoji and
+  /// a dozen letters of the sound's name.
+  static const double minTileWidth = 120;
+  static const int maxColumns = 3;
+
+  /// How many tiles go side by side in a popover [width] wide. On a phone
+  /// the popover is as wide as the screen lets it be, and three columns
+  /// there left a name a few pixels: only the emoji showed.
+  static int columnsFor(double width) {
+    final body = width - railWidth - bodyPadding * 2;
+    return ((body + tileSpacing) / (minTileWidth + tileSpacing))
+        .floor()
+        .clamp(1, maxColumns);
+  }
+
+  /// A phone, a tablet or a foldable, in the app or in its browser: nothing
+  /// hovers there, and a focused text field brings the keyboard up over
+  /// half the screen.
+  static bool get touchFirst =>
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
+
+  static String get labelSoundboardFavorites => Intl.message("Favorites",
+      name: "labelSoundboardFavorites",
+      desc: "Heading of the section of a call's soundboard with the sounds "
+          "you starred, and its entry in the soundboard's side rail");
+
+  static String get messageSoundboardNoSoundsYet => Intl.message(
+      "No sounds yet. An admin can add some in Space settings.",
+      name: "messageSoundboardNoSoundsYet",
+      desc: "Shown in a call's soundboard when none of the call's spaces has "
+          "a sound yet");
+
+  static String get messageSoundboardNoSoundsFound =>
+      Intl.message("No sounds found",
+          name: "messageSoundboardNoSoundsFound",
+          desc: "Shown in a call's soundboard when no sound's name matches "
+              "the search");
+
+  static String get labelSoundboardSearchHint =>
+      Intl.message("Find the perfect sound",
+          name: "labelSoundboardSearchHint",
+          desc: "Placeholder of the search field at the top of a call's "
+              "soundboard");
+
+  static String get labelSoundboardEffectsVolume =>
+      Intl.message("Sound effects volume",
+          name: "labelSoundboardEffectsVolume",
+          desc: "Tooltip of the volume button in a call's soundboard, and the "
+              "label over the slider it opens: how loud soundboard sounds "
+              "play for you");
+
+  static String get promptSoundboardAddSound => Intl.message("Add sound",
+      name: "promptSoundboardAddSound",
+      desc: "Adds a sound to a space's soundboard: the last tile of a space's "
+          "sounds in a call's soundboard (opens the space's soundboard page), "
+          "and the button on that page that saves the new sound");
+
+  static String tooltipSoundboardAddFavorite(String sound) =>
+      Intl.message("Add $sound to favorites",
+          name: "tooltipSoundboardAddFavorite",
+          args: [sound],
+          desc: "Tooltip of the empty star on a sound in a call's soundboard, "
+              "with the sound's name");
+
+  static String tooltipSoundboardRemoveFavorite(String sound) =>
+      Intl.message("Remove $sound from favorites",
+          name: "tooltipSoundboardRemoveFavorite",
+          args: [sound],
+          desc: "Tooltip of the filled star on a favorite sound in a call's "
+              "soundboard, with the sound's name");
 
   @override
   State<SoundboardPopover> createState() => _SoundboardPopoverState();
@@ -85,11 +168,12 @@ class _Section {
 
 class _SoundboardPopoverState extends State<SoundboardPopover> {
   static const favoritesKey = 'favorites';
-  static const columns = 3;
 
   /// Collapsed sections, kept for the app session so reopening the
   /// popover looks the same.
   static final Set<String> _collapsed = {};
+
+  bool get _touch => widget.touch ?? SoundboardPopover.touchFirst;
 
   String _query = '';
   final List<StreamSubscription> _subs = [];
@@ -156,7 +240,8 @@ class _SoundboardPopoverState extends State<SoundboardPopover> {
     final showAddable = widget.onAddSound != null && query.isEmpty;
 
     return [
-      _Section(favoritesKey, 'Favorites', null, favorites),
+      _Section(favoritesKey, SoundboardPopover.labelSoundboardFavorites, null,
+          favorites),
       for (final source in widget.sources)
         _Section(source.id, source.name, source,
             source.catalog.sounds.where(matches).toList()),
@@ -197,31 +282,40 @@ class _SoundboardPopoverState extends State<SoundboardPopover> {
           side: BorderSide(color: colors.outlineVariant),
         ),
         clipBehavior: Clip.antiAlias,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _rail(sections),
-            Expanded(
-              child: Column(
-                children: [
-                  _searchBar(),
-                  Expanded(
-                    child: sections.isEmpty
-                        ? Center(
-                            child: tiamat.Text.labelLow(
-                              widget.sources
-                                      .every((s) => s.catalog.sounds.isEmpty)
-                                  ? 'No sounds yet. An admin can add some in Space settings.'
-                                  : 'No sounds found',
-                            ),
-                          )
-                        : _body(sections),
-                  ),
-                ],
+        // The width it got, not the one it asked for: a phone gives less.
+        child: LayoutBuilder(builder: (context, constraints) {
+          final columns = SoundboardPopover.columnsFor(constraints.maxWidth);
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _rail(sections),
+              Expanded(
+                child: Column(
+                  children: [
+                    _searchBar(),
+                    Expanded(
+                      child: sections.isEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: tiamat.Text.labelLow(
+                                  widget.sources.every(
+                                          (s) => s.catalog.sounds.isEmpty)
+                                      ? SoundboardPopover
+                                          .messageSoundboardNoSoundsYet
+                                      : SoundboardPopover
+                                          .messageSoundboardNoSoundsFound,
+                                ),
+                              ),
+                            )
+                          : _body(sections, columns),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          );
+        }),
       ),
     );
   }
@@ -233,20 +327,21 @@ class _SoundboardPopoverState extends State<SoundboardPopover> {
         children: [
           Expanded(
             child: TextField(
-              autofocus: true,
+              // Not where it would bring a keyboard up over the sounds.
+              autofocus: !_touch,
               onChanged: (v) => setState(() => _query = v),
-              decoration: const InputDecoration(
-                hintText: 'Find the perfect sound',
-                prefixIcon: Icon(Icons.search, size: 18),
+              decoration: InputDecoration(
+                hintText: SoundboardPopover.labelSoundboardSearchHint,
+                prefixIcon: const Icon(Icons.search, size: 18),
                 isDense: true,
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
               ),
             ),
           ),
           AnchoredPopover(
             alignment: PopoverAlignment.end,
             anchorBuilder: (context, open, toggle) => IconButton(
-              tooltip: 'Sound effects volume',
+              tooltip: SoundboardPopover.labelSoundboardEffectsVolume,
               isSelected: open,
               icon: Icon(
                   widget.volume01 <= 0 ? Icons.volume_off : Icons.volume_up),
@@ -266,7 +361,7 @@ class _SoundboardPopoverState extends State<SoundboardPopover> {
   Widget _rail(List<_Section> sections) {
     final colors = Theme.of(context).colorScheme;
     return Container(
-      width: 52,
+      width: SoundboardPopover.railWidth,
       color: colors.surfaceContainerLow,
       child: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -289,19 +384,20 @@ class _SoundboardPopoverState extends State<SoundboardPopover> {
     );
   }
 
-  Widget _body(List<_Section> sections) {
+  Widget _body(List<_Section> sections, int columns) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+      padding: const EdgeInsets.fromLTRB(SoundboardPopover.bodyPadding, 0,
+          SoundboardPopover.bodyPadding, SoundboardPopover.bodyPadding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final section in sections) _section(section),
+          for (final section in sections) _section(section, columns),
         ],
       ),
     );
   }
 
-  Widget _section(_Section section) {
+  Widget _section(_Section section, int columns) {
     final collapsed = _collapsed.contains(section.key);
     final colors = Theme.of(context).colorScheme;
     return Column(
@@ -348,13 +444,13 @@ class _SoundboardPopoverState extends State<SoundboardPopover> {
                 _query.trim().isEmpty &&
                 section.addable)
               _AddSoundTile(onTap: () => widget.onAddSound!(section.source!)),
-          ]),
+          ], columns),
       ],
     );
   }
 
-  Widget _grid(List<Widget> tiles) {
-    const spacing = 6.0;
+  Widget _grid(List<Widget> tiles, int columns) {
+    const spacing = SoundboardPopover.tileSpacing;
     return Column(
       children: [
         for (var row = 0; row < tiles.length; row += columns)
@@ -384,6 +480,7 @@ class _SoundboardPopoverState extends State<SoundboardPopover> {
       onPlay: () => widget.onPlay(sound.soundId),
       onToggleFavorite: () => widget.favorites.toggle(sound.soundId),
       imageFor: widget.imageFor,
+      touch: _touch,
     );
   }
 }
@@ -416,7 +513,7 @@ class _AddSoundTile extends StatelessWidget {
               const SizedBox(width: 4),
               Flexible(
                 child: Text(
-                  'Add sound',
+                  SoundboardPopover.promptSoundboardAddSound,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context)
                       .textTheme
@@ -459,7 +556,8 @@ class _VolumePopoverState extends State<_VolumePopover> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const tiamat.Text.labelLow('Sound effects volume'),
+              tiamat.Text.labelLow(
+                  SoundboardPopover.labelSoundboardEffectsVolume),
               Row(
                 children: [
                   Expanded(
@@ -517,12 +615,14 @@ class _SoundTile extends StatefulWidget {
   final VoidCallback onPlay;
   final VoidCallback onToggleFavorite;
   final SoundboardEmojiImageResolver? imageFor;
+  final bool touch;
 
   const _SoundTile({
     required this.sound,
     required this.favorite,
     required this.onPlay,
     required this.onToggleFavorite,
+    required this.touch,
     this.imageFor,
   });
 
@@ -567,24 +667,31 @@ class _SoundTileState extends State<_SoundTile> {
                       image: widget.imageFor?.call(sound.emoji), size: 18),
                   const SizedBox(width: 6),
                   Expanded(child: _SoundName(sound.name)),
-                  // Kept in the tree (and tappable) while hidden so touch
-                  // users can still reach it; long-press works too.
-                  Opacity(
-                    opacity: widget.favorite || _hovered ? 1 : 0,
-                    child: IconButton(
-                      tooltip: widget.favorite
-                          ? 'Remove ${sound.name} from favorites'
-                          : 'Add ${sound.name} to favorites',
-                      iconSize: 14,
-                      padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints.tightFor(width: 26, height: 26),
-                      color: widget.favorite ? colors.primary : null,
-                      icon: Icon(
-                          widget.favorite ? Icons.star : Icons.star_border),
-                      onPressed: widget.onToggleFavorite,
-                    ),
-                  ),
+                  // With a mouse it shows on hover. Where nothing hovers it
+                  // would be an empty space taken from the name, so only a
+                  // favorite has its star there, and a long press on the
+                  // tile toggles it.
+                  if (widget.favorite || !widget.touch)
+                    Opacity(
+                      opacity: widget.favorite || _hovered ? 1 : 0,
+                      child: IconButton(
+                        tooltip: widget.favorite
+                            ? SoundboardPopover.tooltipSoundboardRemoveFavorite(
+                                sound.name)
+                            : SoundboardPopover.tooltipSoundboardAddFavorite(
+                                sound.name),
+                        iconSize: 14,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints.tightFor(
+                            width: 26, height: 26),
+                        color: widget.favorite ? colors.primary : null,
+                        icon: Icon(
+                            widget.favorite ? Icons.star : Icons.star_border),
+                        onPressed: widget.onToggleFavorite,
+                      ),
+                    )
+                  else
+                    const SizedBox(width: 8),
                 ],
               ),
             ),

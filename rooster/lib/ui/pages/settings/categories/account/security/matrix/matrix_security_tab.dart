@@ -60,7 +60,7 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
       name: "labelMatrixAccountSessions");
 
   String get labelMatrixCrossSigningExplanation =>
-      Intl.message("Setup to verify and keep track of all your sessions",
+      Intl.message("Set up to verify and keep track of all your sessions",
           desc: "Explains what matrix cross signing does",
           name: "labelMatrixCrossSigningExplanation");
 
@@ -78,13 +78,59 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
       desc: "Explains what matrix message backup does",
       name: "labelMatrixMessageBackupExplanation");
 
-  String get promptSetupMatrixMessageBackup => Intl.message("Setup backup",
+  String get promptSetupMatrixMessageBackup => Intl.message("Set up backup",
       desc: "Text on the button to begin the setup process for message backup",
       name: "promptSetupMatrixMessageBackup");
 
   String get labelRestoreMatrixBackupTitle => Intl.message("Restore backup",
       desc: "Title of the popup dialog for restoring message backup",
       name: "labelRestoreMatrixBackupTitle");
+
+  String messageSettingsInactiveSessions(int howMany) => Intl.plural(howMany,
+      one: "You have 1 session which has not been used recently",
+      other: "You have $howMany sessions which have not been used recently",
+      name: "messageSettingsInactiveSessions",
+      args: [howMany],
+      desc: "Settings > Security > Sessions: warning that some of your "
+          "sessions (signed-in devices) have not been used for over two "
+          "months");
+
+  String get labelSettingsInactiveDevices => Intl.message("Inactive Devices",
+      name: "labelSettingsInactiveDevices",
+      desc: "Settings > Security > Sessions: title of the warning about "
+          "sessions not used for over two months");
+
+  String messageSettingsConfirmLogOutSessions(int howMany) =>
+      Intl.plural(howMany,
+          one: "Are you sure you want to log out of 1 session?",
+          other: "Are you sure you want to log out of $howMany sessions?",
+          name: "messageSettingsConfirmLogOutSessions",
+          args: [howMany],
+          desc: "Settings > Security > Sessions: asks before signing out every "
+              "session not used for over two months");
+
+  String get messageSettingsEncryptionDisabledByServer =>
+      Intl.message("Your homeserver has force-disabled encryption",
+          name: "messageSettingsEncryptionDisabledByServer",
+          desc: "Settings > Security: your Matrix server turned end-to-end "
+              "encryption off for everyone");
+
+  String get labelSettingsEncryptionDisabled =>
+      Intl.message("Encryption Disabled",
+          name: "labelSettingsEncryptionDisabled",
+          desc: "Settings > Security: title of the notice that your Matrix "
+              "server turned encryption off");
+
+  String get messageSettingsSessionNotVerified => Intl.message(
+      "Your current session is not verified. You will not be able to participate in encrypted chats.",
+      name: "messageSettingsSessionNotVerified",
+      desc: "Settings > Security: warning that this device has not been "
+          "verified with your other sessions");
+
+  String get labelSettingsSessionUnverified => Intl.message("Unverified",
+      name: "labelSettingsSessionUnverified",
+      desc: "Settings > Security: title of the warning that this session has "
+          "not been verified");
 
   @override
   void initState() {
@@ -193,8 +239,10 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
                                 Alert(
                                   AlertType.warning,
                                   messageGetter: () =>
-                                      "You have ${inactiveDevices.length} sessions which have not been used recently",
-                                  titleGetter: () => "Inactive Devices",
+                                      messageSettingsInactiveSessions(
+                                          inactiveDevices.length),
+                                  titleGetter: () =>
+                                      labelSettingsInactiveDevices,
                                 ),
                               ),
                             ),
@@ -251,8 +299,7 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
   void removeInactiveDevices() async {
     var confirm = await AdaptiveDialog.confirmation(context,
         dangerous: true,
-        prompt:
-            "Are you sure you want to log out of ${inactiveDevices.length} sessions?");
+        prompt: messageSettingsConfirmLogOutSessions(inactiveDevices.length));
 
     if (confirm != true) return;
 
@@ -302,8 +349,8 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
                       padding: const EdgeInsets.all(8.0),
                       child: AlertView(Alert(AlertType.info,
                           messageGetter: () =>
-                              "Your homeserver has force-disabled encryption",
-                          titleGetter: () => "Encryption Disabled")),
+                              messageSettingsEncryptionDisabledByServer,
+                          titleGetter: () => labelSettingsEncryptionDisabled)),
                     ),
                   ),
                 ),
@@ -318,8 +365,8 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
                       padding: const EdgeInsets.all(8.0),
                       child: AlertView(Alert(AlertType.warning,
                           messageGetter: () =>
-                              "Your current session is not verified. You will not be able to participate in encrypted chats.",
-                          titleGetter: () => "Unverified")),
+                              messageSettingsSessionNotVerified,
+                          titleGetter: () => labelSettingsSessionUnverified)),
                     ),
                   ),
                 ),

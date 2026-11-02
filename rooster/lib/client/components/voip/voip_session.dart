@@ -18,6 +18,21 @@ abstract class ScreenCaptureSource {
   bool get captureAudio => true;
 }
 
+/// Joining a call failed for a reason the person can be told: the join
+/// dialog shows [message], the logs get [reason].
+class CallJoinException implements Exception {
+  const CallJoinException(this.reason, this.message);
+
+  /// What went wrong, in English, for the logs.
+  final String reason;
+
+  /// What went wrong, in the person's language.
+  final String message;
+
+  @override
+  String toString() => "CallJoinException: $reason";
+}
+
 class WebrtcBrowserScreenCaptureSource implements ScreenCaptureSource {
   @override
   final bool captureAudio;
@@ -32,6 +47,12 @@ abstract class CallRoster {
   /// The user ids of everyone in the call right now, ourselves included.
   /// Empty once it has ended.
   Set<String> get connectedUserIds;
+
+  /// Whether [connectedUserIds] is everyone in the call: we have been
+  /// connected long enough to have been told about everyone in it. Someone
+  /// whose call membership says they are in the call, but who is missing
+  /// from it then, is an app that lost the call without leaving it.
+  bool get rosterComplete;
 }
 
 abstract class VoipSession {
@@ -81,6 +102,10 @@ abstract class VoipSession {
   Future<void> setMicrophoneMute(bool state);
 
   Future<void> setDeafened(bool state);
+
+  /// Plays the call through the output device the user picked
+  /// (`voipDefaultAudioOutput`), as soon as it is picked.
+  Future<void> applyAudioOutput();
 
   Future<void> updateStats();
 

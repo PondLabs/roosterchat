@@ -8,9 +8,13 @@ import 'package:intl/intl.dart';
 import 'desktop_settings_page.dart';
 
 class SettingsPage extends StatelessWidget {
-  const SettingsPage({required this.settings, this.buttons, super.key});
+  const SettingsPage(
+      {required this.settings, this.buttons, this.initialTab, super.key});
   final List<SettingsCategory> settings;
   final List<SettingsButton>? buttons;
+
+  /// The (category, tab) indexes to open on.
+  final (int, int)? initialTab;
 
   @override
   Widget build(BuildContext context) {
@@ -18,11 +22,13 @@ class SettingsPage extends StatelessWidget {
   }
 
   Widget pickChatView(BuildContext context) {
-    if (MediaQuery.of(context).desktop) {
-      return DesktopSettingsPage(settings: settings, buttons: buttons);
+    if (MediaQuery.sizeOf(context).desktop) {
+      return DesktopSettingsPage(
+          settings: settings, buttons: buttons, initialTab: initialTab);
     }
-    if (MediaQuery.of(context).mobile) {
-      return MobileSettingsPage(settings: settings, buttons: buttons);
+    if (MediaQuery.sizeOf(context).mobile) {
+      return MobileSettingsPage(
+          settings: settings, buttons: buttons, initialTab: initialTab);
     }
 
     throw Exception(

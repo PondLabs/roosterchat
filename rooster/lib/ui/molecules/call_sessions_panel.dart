@@ -1,14 +1,17 @@
 import 'dart:async';
-import 'dart:math';
 
+import 'package:rooster/client/components/voip/call_connection.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
-import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/client/room.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/anchored_popover.dart';
+import 'package:rooster/ui/atoms/noise_suppression_button.dart';
 import 'package:rooster/ui/atoms/speaking_indicator.dart';
+import 'package:rooster/ui/molecules/call_connection_status.dart';
+import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/molecules/call_session_live_panel.dart';
+import 'package:rooster/ui/molecules/screen_share_start_reporting.dart';
 import 'package:rooster/ui/molecules/screen_share_stop_reporting.dart';
 import 'package:rooster/ui/organisms/call_view/call_view.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_button.dart';
@@ -16,6 +19,7 @@ import 'package:rooster/ui/organisms/soundboard/soundboard_call_controller.dart'
 import 'package:rooster/utils/animation/ring_shaker.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:rooster/utils/voice_controls/browser_call_controls.dart';
+import 'package:rooster/utils/voice_controls/voice_controls.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -38,6 +42,12 @@ class _CallSessionsPanelState extends State<CallSessionsPanel> {
     });
 
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    sub?.cancel();
+    super.dispose();
   }
 
   @override
@@ -97,15 +107,18 @@ class _CallSessionPanelState extends State<CallSessionPanel>
       name: "tooltipStopSharingScreen",
       desc: "Tooltip on the voice panel button that stops screen sharing");
 
+  String get tooltipTurnOnCamera => Intl.message("Turn on camera",
+      name: "tooltipTurnOnCamera",
+      desc: "Tooltip on the voice panel button that turns our camera on");
+
+  String get tooltipTurnOffCamera => Intl.message("Turn off camera",
+      name: "tooltipTurnOffCamera",
+      desc: "Tooltip on the voice panel button that turns our camera off");
+
   String get tooltipSelectingScreen => Intl.message("Selecting screen",
       name: "tooltipSelectingScreen",
       desc:
           "Tooltip on the voice panel button while the screen picker is open");
-
-  String get messageCouldNotShareScreen =>
-      Intl.message("Could not share your screen.",
-          name: "messageCouldNotShareScreen",
-          desc: "Shown when starting a screen share fails");
 
   @override
   void initState() {
@@ -138,45 +151,43 @@ class _CallSessionPanelState extends State<CallSessionPanel>
     super.dispose();
   }
 
-  /// How loud we are in the call: only our own outgoing media, so the
-  /// indicator shows whether we are being heard rather than whether anyone
-  /// is talking. Screen share audio is not us talking. A legacy call carries
-  /// the microphone in a stream typed video while the camera is on, so the
-  /// camera stream counts too.
-  double get localAudioLevel => widget.session.streams
-      .where((stream) =>
-          stream.direction == VoipStreamDirection.outgoing &&
-          stream.type != VoipStreamType.screenshare &&
-          stream.type != VoipStreamType.screenshareAudio &&
-          stream.type != VoipStreamType.music)
-      .fold(0.0, (level, stream) => max(level, stream.audiolevel));
+  double get localAudioLevel => VoiceCallState.ownAudioLevel(widget.session);
 
   void openRoom() {
     EventBus.doOpenRoom(widget.session.roomId,
         clientId: widget.session.client.identifier);
   }
 
+  bool _cameraBusy = false;
+
+  Future<void> toggleCamera() async {
+    if (_cameraBusy) return;
+    setState(() => _cameraBusy = true);
+    try {
+      if (widget.session.isCameraEnabled) {
+        await stopCameraOrReportFailure(context, widget.session);
+      } else {
+        await widget.session.setCamera(null);
+      }
+    } catch (e, s) {
+      Log.onError(e, s, content: "Could not turn the camera on or off");
+      if (mounted) AdaptiveDialog.showError(context, e, s);
+    } finally {
+      if (mounted) setState(() => _cameraBusy = false);
+    }
+  }
+
   Future<void> toggleScreenShare() async {
     if (!mounted || _screenShareBusy) return;
     setState(() => _screenShareBusy = true);
 
-    final messenger = ScaffoldMessenger.maybeOf(context);
     try {
       if (widget.session.isSharingScreen) {
         await stopScreenshareOrReportFailure(context, widget.session);
         return;
       }
 
-      final source = await widget.session.pickScreenCapture(context);
-      if (source != null && mounted) {
-        await widget.session.setScreenShare(source);
-      }
-    } catch (e, s) {
-      Log.onError(e, s, content: "Could not start screen sharing");
-      if (mounted && messenger != null && messenger.mounted) {
-        messenger
-            .showSnackBar(SnackBar(content: Text(messageCouldNotShareScreen)));
-      }
+      await startScreenshareOrReportFailure(context, widget.session);
     } finally {
       if (mounted) setState(() => _screenShareBusy = false);
     }
@@ -189,6 +200,11 @@ class _CallSessionPanelState extends State<CallSessionPanel>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (widget.session case final CallConnection connection)
+            CallConnectionStatus(
+                session: widget.session,
+                connection: connection,
+                onOpenRoom: openRoom),
           buildControlsRow(context),
           // Grows the panel below the button row while sharing screen /
           // camera; renders nothing otherwise.
@@ -220,10 +236,12 @@ class _CallSessionPanelState extends State<CallSessionPanel>
                             child: buildActivityIndicator(context),
                           ),
                         )),
-                    Flexible(
-                      child: tiamat.Text(widget.session.roomName,
-                          overflow: TextOverflow.ellipsis),
-                    ),
+                    // The status row above names the room.
+                    if (widget.session is! CallConnection)
+                      Flexible(
+                        child: tiamat.Text(widget.session.roomName,
+                            overflow: TextOverflow.ellipsis),
+                      ),
                   ],
                 ),
               ),
@@ -271,6 +289,27 @@ class _CallSessionPanelState extends State<CallSessionPanel>
                             icon: widget.session.isDeafened
                                 ? Icons.headset_off_rounded
                                 : Icons.headset_rounded)),
+                  ),
+                  // Hides itself where the voice DSP cannot run.
+                  NoiseSuppressionButton(size: iconSize, extent: widget.height),
+                  SizedBox(
+                    width: widget.height,
+                    height: widget.height,
+                    child: Tooltip(
+                      message: widget.session.isCameraEnabled
+                          ? tooltipTurnOffCamera
+                          : tooltipTurnOnCamera,
+                      child: tiamat.IconButton(
+                        onPressed: _cameraBusy ? null : toggleCamera,
+                        size: iconSize,
+                        iconColor: widget.session.isCameraEnabled
+                            ? SpeakingIndicator.color
+                            : null,
+                        icon: widget.session.isCameraEnabled
+                            ? Icons.videocam_rounded
+                            : Icons.videocam_outlined,
+                      ),
+                    ),
                   ),
                   if (widget.session.supportsScreenshare)
                     SizedBox(

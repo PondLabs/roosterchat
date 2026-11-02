@@ -17,11 +17,24 @@ import 'package:rooster/client/components/soundboard/soundboard_validation.dart'
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room_permissions.dart';
 import 'package:rooster/client/matrix/matrix_space.dart';
+import 'package:intl/intl.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:uuid/uuid.dart';
 
 class MatrixSpaceSoundboardComponent
     extends SpaceSoundboardComponent<MatrixClient, MatrixSpace> {
+  static String get errorSoundboardMissingPermission =>
+      Intl.message("Missing permission to manage soundboard",
+          name: "errorSoundboardMissingPermission",
+          desc: "Why a soundboard sound could not be added, changed or "
+              "removed: you may not manage the space's soundboard");
+
+  static String get errorSoundboardSoundNotFound =>
+      Intl.message("Sound not found",
+          name: "errorSoundboardSoundNotFound",
+          desc: "Why a soundboard sound could not be changed: it is no longer "
+              "on the space's soundboard (someone removed it)");
+
   final StreamController<void> _onChanged = StreamController<void>.broadcast();
   StreamSubscription? _roomStateSub;
   List<SoundboardSound> _sounds = [];
@@ -101,7 +114,7 @@ class MatrixSpaceSoundboardComponent
     double volume = 1.0,
     String? sourceUrl,
   }) async {
-    if (!canManage) throw StateError('Missing permission to manage soundboard');
+    if (!canManage) throw StateError(errorSoundboardMissingPermission);
     final cleanName = SoundboardValidator.sanitizeName(name);
     final cleanEmoji = SoundboardValidator.sanitizeSoundEmoji(emoji);
     if (!mediaUri.startsWith('mxc://')) {
@@ -135,9 +148,9 @@ class MatrixSpaceSoundboardComponent
     SoundboardEmoji? emoji,
     double? volume,
   }) async {
-    if (!canManage) throw StateError('Missing permission to manage soundboard');
+    if (!canManage) throw StateError(errorSoundboardMissingPermission);
     final existing = getById(soundId);
-    if (existing == null) throw StateError('Sound not found');
+    if (existing == null) throw StateError(errorSoundboardSoundNotFound);
     final updated = existing.copyWith(
       name: name != null ? SoundboardValidator.sanitizeName(name) : null,
       emoji:
@@ -158,7 +171,7 @@ class MatrixSpaceSoundboardComponent
 
   @override
   Future<void> removeSound(String soundId) async {
-    if (!canManage) throw StateError('Missing permission to manage soundboard');
+    if (!canManage) throw StateError(errorSoundboardMissingPermission);
     await matrixClient.getMatrixClient().setRoomStateWithKey(
       matrixSpace.matrixRoom.id,
       SpaceSoundboardComponent.stateEventType,

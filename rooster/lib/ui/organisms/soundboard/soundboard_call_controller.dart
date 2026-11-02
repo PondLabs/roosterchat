@@ -2,8 +2,8 @@
 //
 // Resolution: the VoIP room may belong to several Spaces; every parent
 // Space with a soundboard contributes its sounds (one popover section and
-// rail entry each). If none has one, the button still renders but the
-// popover shows the empty state.
+// rail entry each). The sounds bundled with the app (default_sounds.dart)
+// come last, under the rooster, in every call.
 //
 // One controller lives per call session, shared by the call view and the
 // sidebar "voice connected" panel through [acquire]/[release], so remote
@@ -11,6 +11,7 @@
 import 'dart:async';
 
 import 'package:rooster/client/client.dart';
+import 'package:rooster/client/components/soundboard/default_sounds.dart';
 import 'package:rooster/client/components/soundboard/entrance_sound.dart';
 import 'package:rooster/client/components/soundboard/soundboard_catalog.dart';
 import 'package:rooster/client/components/soundboard/soundboard_component.dart';
@@ -24,6 +25,7 @@ import 'package:rooster/client/components/voip_room/voip_room_component.dart';
 import 'package:rooster/client/matrix/components/soundboard/livekit_soundboard_transport.dart';
 import 'package:rooster/client/matrix/components/soundboard/matrix_soundboard_emoji_image.dart';
 import 'package:rooster/client/matrix/components/soundboard/matrix_todevice_soundboard_transport.dart';
+import 'package:rooster/client/matrix/components/soundboard/soundboard_broadcast.dart';
 import 'package:rooster/client/matrix/components/soundboard/soundboard_media_download.dart';
 import 'package:rooster/client/matrix/components/soundboard/soundboard_player_factory.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
@@ -33,10 +35,29 @@ import 'package:rooster/ui/organisms/soundboard/soundboard_favorites.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_overlay_registry.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_popover.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart' show AssetImage, Color;
+import 'package:intl/intl.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 
 class SoundboardCallController extends ChangeNotifier {
   static final Map<VoipSession, SoundboardCallController> _bySession = {};
+
+  static String errorSoundboardCannotPlay(String uri) => Intl.message(
+      "Cannot play $uri",
+      name: "errorSoundboardCannotPlay",
+      args: [uri],
+      desc: "Why a soundboard sound could not be played or previewed: its "
+          "file is not somewhere the app can play it from. The value is the "
+          "file's address (mxc://…)");
+
+  static String errorSoundboardCannotCache(String uri) =>
+      Intl.message("Could not cache $uri for playback",
+          name: "errorSoundboardCannotCache",
+          args: [uri],
+          desc: "Why a soundboard sound could not be previewed: its file could "
+              "not be kept on this device to play it. The value is the file's "
+              "address (mxc://…)");
 
   /// Returns the controller for [session], creating and initializing it on
   /// first use. Every call must be paired with [release].
@@ -63,6 +84,15 @@ class SoundboardCallController extends ChangeNotifier {
   List<SoundboardSource> sources = const [];
 
   SoundboardPlayer? _player;
+  SoundboardBroadcast? _broadcast;
+
+  /// Someone's sounds were turned up or down: every call applies it to the
+  /// sounds already playing.
+  static void applySenderVolumes() {
+    for (final controller in _bySession.values) {
+      controller.soundboard?.engine.applyVolumes();
+    }
+  }
 
   /// Shared by every call so all open popovers see the same favorites.
   static final SoundboardFavorites favorites =
@@ -96,7 +126,18 @@ class SoundboardCallController extends ChangeNotifier {
       // Audio completion, not the overlay timer, ends an activation.
       onInstanceFinished: (id) => engine.onAudioCompleted(id),
     );
-    engine = SoundboardEngine(player: player);
+    engine = SoundboardEngine(
+        player: player, senderVolume: preferences.getSoundboardUserVolume);
+    // Our presses also go to the call as audio, for clients that don't play
+    // them from the press. Only over LiveKit: a 1:1 Matrix call has nowhere
+    // to put a second track.
+    final lkRoom = _livekitRoomOf(session);
+    if (lkRoom != null) {
+      engine.broadcast = _broadcast = createSoundboardBroadcast(lkRoom,
+          resolveSound: (id) => catalog.getById(id),
+          resolvePlayableUri: _resolvePlayableUri,
+          loadBytes: _loadBytes);
+    }
     // Bridge engine activations -> avatar overlays (sender-specific), for as
     // long as each one's audio plays.
     engine.addListener(_syncOverlays);
@@ -160,6 +201,15 @@ class SoundboardCallController extends ChangeNotifier {
                 catalog: _CatalogAdapter(comp),
                 canAddSounds: () => comp.canManage,
               ),
+        // Last, so the rooster sits below the Spaces in the rail.
+        SoundboardSource(
+          id: defaultSoundboardSourceId,
+          name: 'Rooster',
+          avatar: const AssetImage(
+              'assets/images/app_icon/app_icon_transparent_cropped.png'),
+          color: const Color(0xFFE8382A), // Comb, docs/brand
+          catalog: defaultSoundboardCatalog,
+        ),
       ];
       catalog = _CompositeCatalog([for (final s in sources) s.catalog]);
     } catch (e, s) {
@@ -200,19 +250,23 @@ class SoundboardCallController extends ChangeNotifier {
   /// download). media_kit cannot open mxc:// itself, so there is nothing to
   /// fall back to. The cache key is the one MxcFileProvider uses.
   static Future<String> resolvePlayableUri(
-      Client client, SoundboardSound sound) async {
+      Client? client, SoundboardSound sound) async {
     final uri = Uri.parse(sound.mediaUri);
-    if (client is! MatrixClient || uri.scheme != 'mxc') {
-      throw StateError('Cannot play ${sound.mediaUri}');
+    final bundled = uri.scheme == soundboardAssetScheme;
+    if (!bundled && (client is! MatrixClient || uri.scheme != 'mxc')) {
+      throw StateError(errorSoundboardCannotPlay(sound.mediaUri));
     }
     final key = uri.toString();
     final cached = await fileCache?.getFile(key);
     if (cached != null) return cached.toString();
 
-    final bytes = await downloadSoundboardMedia(client.getMatrixClient(), uri);
+    final bytes = bundled
+        ? await _assetBytes(uri)
+        : await downloadSoundboardMedia(
+            (client as MatrixClient).getMatrixClient(), uri);
     final stored = await fileCache?.putFile(key, bytes);
     if (stored == null) {
-      throw StateError('Could not cache ${sound.mediaUri} for playback');
+      throw StateError(errorSoundboardCannotCache(sound.mediaUri));
     }
     return stored.toString();
   }
@@ -222,13 +276,18 @@ class SoundboardCallController extends ChangeNotifier {
 
   /// Web: the browser has no file cache, so the player keeps the bytes.
   static Future<Uint8List> loadBytes(
-      Client client, SoundboardSound sound) async {
+      Client? client, SoundboardSound sound) async {
     final uri = Uri.parse(sound.mediaUri);
+    if (uri.scheme == soundboardAssetScheme) return _assetBytes(uri);
     if (client is! MatrixClient || uri.scheme != 'mxc') {
-      throw StateError('Cannot play ${sound.mediaUri}');
+      throw StateError(errorSoundboardCannotPlay(sound.mediaUri));
     }
     return downloadSoundboardMedia(client.getMatrixClient(), uri);
   }
+
+  /// A sound bundled with the app (see default_sounds.dart).
+  static Future<Uint8List> _assetBytes(Uri uri) async =>
+      (await rootBundle.load(uri.path)).buffer.asUint8List();
 
   Future<void> _preload(String soundId) async {
     // Fill the file cache (web: the player's decoded buffers) so
@@ -315,6 +374,10 @@ class SoundboardCallController extends ChangeNotifier {
     _disposed = true;
     _engineSub?.cancel();
     _sessionSub?.cancel();
+    final broadcast = _broadcast;
+    _broadcast = null;
+    broadcast?.shutdown().catchError((Object e, StackTrace s) =>
+        Log.onError(e, s, content: 'Soundboard: could not stop the track'));
     soundboard?.dispose();
     final catalog = this.catalog;
     if (catalog is _CompositeCatalog) catalog.dispose();

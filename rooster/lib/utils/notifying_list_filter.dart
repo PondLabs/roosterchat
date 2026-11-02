@@ -348,7 +348,7 @@ class NotifyingListFilter<T> implements INotifyingList<T> {
   void _onBaseItemAdded(T event) {
     if (whereFunction(event)) {
       _internalList.add(event);
-      Log.i("Adding item to filtered list: $event");
+      Log.d("Adding item to filtered list: $event");
     }
   }
 
@@ -356,7 +356,7 @@ class NotifyingListFilter<T> implements INotifyingList<T> {
   /// every update to any room in a space, and looking each room up in the
   /// list cost a 1000-room account seconds while other rooms were busy.
   void onFilterChanged(event) {
-    Log.i("Received filter change event!");
+    Log.d("Received filter change event!");
 
     _internalList.removeWhere((item) => whereFunction(item) == false);
 

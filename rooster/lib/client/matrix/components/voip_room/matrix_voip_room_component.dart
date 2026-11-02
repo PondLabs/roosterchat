@@ -172,8 +172,24 @@ class MatrixVoipRoomComponent
     return _onParticipantsChanged.stream;
   }
 
+  /// A join in progress: a second ask while one runs gets the same one.
+  /// Two views of one room (or a silent-join request racing a click) made
+  /// two LiveKit sessions whose membership writes overwrote each other.
+  Future<VoipSession?>? _joining;
+
   @override
-  Future<VoipSession?> joinCall() async {
+  Future<VoipSession?> joinCall() {
+    final joining = _joining;
+    if (joining != null) return joining;
+    final join = _joinCall();
+    _joining = join;
+    join.whenComplete(() {
+      if (identical(_joining, join)) _joining = null;
+    });
+    return join;
+  }
+
+  Future<VoipSession?> _joinCall() async {
     // Leaving is memoised, so this only waits for a hang up already running:
     // two overlapping sessions fought over the membership state (issue #48).
     await currentSession?.hangUpCall();

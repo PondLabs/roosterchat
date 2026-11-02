@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui';
+import 'package:collection/collection.dart';
 import 'package:rooster/client/components/component_registry.dart';
 import 'package:rooster/client/components/direct_messages/direct_message_component.dart';
 import 'package:rooster/client/components/emoticon/emoticon.dart';
@@ -55,6 +56,7 @@ import 'package:flutter/material.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:html_unescape/html_unescape.dart';
+import 'package:intl/intl.dart';
 import 'package:matrix/matrix_api_lite/model/stripped_state_event.dart';
 
 // ignore: implementation_imports
@@ -64,7 +66,104 @@ import '../attachment.dart';
 import '../client.dart';
 import 'package:matrix/matrix.dart' as matrix;
 
+/// The names the Matrix SDK makes up for a room that has none of its own
+/// (from its members, or "Empty chat"), in the app's language.
+class RoomNameLocalizations extends matrix.MatrixDefaultLocalizations {
+  const RoomNameLocalizations();
+
+  static String get labelRoomNameEmpty => Intl.message("Empty chat",
+      name: "labelRoomNameEmpty",
+      desc: "Name shown for a room that has no name and nobody else in it");
+
+  static String labelRoomNameGroupWith(String names) => Intl.message(
+      "Group with $names",
+      name: "labelRoomNameGroupWith",
+      args: [names],
+      desc:
+          "Name shown for a room that has no name of its own, with the names of some of its members, separated by commas");
+
+  static String labelRoomNameInvitedBy(String name) => Intl.message(
+      "Invited by $name",
+      name: "labelRoomNameInvitedBy",
+      args: [name],
+      desc:
+          "Name shown for a room we are invited to that has no name, with who invited us");
+
+  static String labelRoomNameWasDirectChat(String name) => Intl.message(
+      "Empty chat (was $name)",
+      name: "labelRoomNameWasDirectChat",
+      args: [name],
+      desc:
+          "Name shown for a direct message room everyone else left, with the name of who it was with");
+
+  static String get labelRoomNameUnknownUser => Intl.message("Unknown user",
+      name: "labelRoomNameUnknownUser",
+      desc:
+          "Stands for someone whose name is not known, in a room name made from its members");
+
+  @override
+  String get emptyChat => labelRoomNameEmpty;
+
+  @override
+  String groupWith(String displayname) => labelRoomNameGroupWith(displayname);
+
+  @override
+  String invitedBy(String senderName) => labelRoomNameInvitedBy(senderName);
+
+  @override
+  String wasDirectChatDisplayName(String oldDisplayName) =>
+      labelRoomNameWasDirectChat(oldDisplayName);
+
+  @override
+  String get unknownUser => labelRoomNameUnknownUser;
+}
+
 class MatrixRoom extends Room {
+  // Why a notification was not shown, in the notification debugger
+  // (Developer settings).
+
+  static String get messageRoomNotificationShouldNotNotify => Intl.message(
+      "shouldNotify returned false",
+      name: "messageRoomNotificationShouldNotNotify",
+      desc:
+          "Notification debugger (Developer settings): why a test notification was not shown. shouldNotify is the name of the check in the code and false its answer: keep both as they are");
+
+  static String get messageRoomNotificationEventTypeIgnored => Intl.message(
+      "Event type does not trigger notifications",
+      name: "messageRoomNotificationEventTypeIgnored",
+      desc:
+          "Notification debugger (Developer settings): why a test notification was not shown");
+
+  static String get messageRoomNotificationAndroidPush => Intl.message(
+      "Notifications should be handled by a push service on Android, but we are in the desktop notifications handler",
+      name: "messageRoomNotificationAndroidPush",
+      desc:
+          "Notification debugger (Developer settings): why a test notification was not shown on Android, where notifications come from a push service instead");
+
+  static String get messageRoomNotificationNoContent => Intl.message(
+      "Notification content was null",
+      name: "messageRoomNotificationNoContent",
+      desc:
+          "Notification debugger (Developer settings): why a test notification was not shown: nothing could be made of the message to show");
+
+  static String get messageRoomNotificationOwnMessage => Intl.message(
+      "Message came from a user logged in to this client",
+      name: "messageRoomNotificationOwnMessage",
+      desc:
+          "Notification debugger (Developer settings): why a test notification was not shown: the message was sent by one of our own accounts in the app");
+
+  static String get messageRoomNotificationTooOld => Intl.message(
+      "Message is over 10 minutes old",
+      name: "messageRoomNotificationTooOld",
+      desc:
+          "Notification debugger (Developer settings): why a test notification was not shown");
+
+  static String get messageRoomNotificationPushRules => Intl.message(
+      "Did not pass push rules",
+      name: "messageRoomNotificationPushRules",
+      desc:
+          "Notification debugger (Developer settings): why a test notification was not shown: the account's notification rules (Matrix push rules) say not to");
+
   late matrix.Room _matrixRoom;
 
   late String _displayName;
@@ -90,7 +189,11 @@ class MatrixRoom extends Room {
 
   @override
   String get displayName =>
-      _displayName.startsWith("#") ? _displayName.substring(1) : _displayName;
+      // The leading # of an alias-like name goes; a name that is only "#"
+      // stays, since an empty name broke the sidebar entry.
+      _displayName.startsWith("#") && _displayName.length > 1
+          ? _displayName.substring(1)
+          : _displayName;
 
   @override
   Stream<void> get onUpdate => _onUpdate.stream;
@@ -106,6 +209,29 @@ class MatrixRoom extends Room {
 
   @override
   int get notificationCount => _matrixRoom.notificationCount;
+
+  /// Clears this room's unread counts without waiting for the next sync.
+  ///
+  /// The homeserver owns these counts and only reports them in `/sync`. Until
+  /// that response arrives, a room the user has just read keeps its badge on
+  /// screen. Mirroring the read locally clears it now; the next sync confirms
+  /// the same value and remains authoritative.
+  void clearUnreadCountsLocally() {
+    final changed =
+        _matrixRoom.notificationCount > 0 || _matrixRoom.highlightCount > 0;
+    _matrixRoom.notificationCount = 0;
+    _matrixRoom.highlightCount = 0;
+
+    _onUpdate.add(null);
+
+    if (changed) {
+      // The DM rail, the header dot and the taskbar count filter and read
+      // from this list, not from each room's update stream.
+      client
+          .getComponent<DirectMessagesComponent>()
+          ?.notificationCountsChanged();
+    }
+  }
 
   late DateTime _lastStateEventTimestamp;
   @override
@@ -184,7 +310,7 @@ class MatrixRoom extends Room {
 
     await _matrixRoom.setPushRuleState(newRule);
     _pushRule = _matrixRoom.pushRuleState;
-    _onUpdate.add(null);
+    _notifyUpdate();
   }
 
   @override
@@ -214,7 +340,11 @@ class MatrixRoom extends Room {
   @override
   Timeline? get timeline => _timeline;
 
-  StreamSubscription? _onUpdateSubscription;
+  /// Everything this wrapper listens to on the SDK client, cancelled in
+  /// [close]: a room that sync dropped (left, kicked, upgraded) used to keep
+  /// three of these for the life of the app, converting every event and
+  /// running every notification of a room it no longer stood for.
+  final List<StreamSubscription> _subscriptions = [];
 
   MatrixRoom(
       MatrixClient client, matrix.Room room, matrix.Client matrixClient) {
@@ -239,21 +369,20 @@ class MatrixRoom extends Room {
 
     updateAvatar();
 
-    _onUpdateSubscription = _matrixRoom.client.onRoomState.stream
-        .where((event) => event.roomId == _matrixRoom.id)
-        .listen(onRoomStateUpdated);
-
-    _matrixRoom.client.onSync.stream
-        .where((i) => i.rooms?.join?.containsKey(_matrixRoom.id) == true)
-        .listen(onRoomSyncUpdate);
-
-    _matrixRoom.client.onEvent.stream
-        .where((event) => event.roomID == _matrixRoom.id)
-        .listen(onEvent);
-
-    _matrixRoom.client.onNotification.stream
-        .where((event) => event.roomId == _matrixRoom.id)
-        .listen(onNotification);
+    _subscriptions.addAll([
+      _matrixRoom.client.onRoomState.stream
+          .where((event) => event.roomId == _matrixRoom.id)
+          .listen(onRoomStateUpdated),
+      _matrixRoom.client.onSync.stream
+          .where((i) => i.rooms?.join?.containsKey(_matrixRoom.id) == true)
+          .listen(onRoomSyncUpdate),
+      _matrixRoom.client.onEvent.stream
+          .where((event) => event.roomID == _matrixRoom.id)
+          .listen(onEvent),
+      _matrixRoom.client.onNotification.stream
+          .where((event) => event.roomId == _matrixRoom.id)
+          .listen(onNotification),
+    ]);
 
     _permissions = MatrixRoomPermissions(_matrixRoom);
   }
@@ -272,7 +401,7 @@ class MatrixRoom extends Room {
       }
     }
 
-    _onUpdate.add(null);
+    _notifyUpdate();
   }
 
   void onEvent(matrix.EventUpdate eventUpdate) async {
@@ -291,10 +420,10 @@ class MatrixRoom extends Room {
       var event = convertEvent(roomEvent);
       if (lastEvent == null) {
         lastEvent = event;
-        _onUpdate.add(null);
+        _notifyUpdate();
       } else if (event.originServerTs.isAfter(lastEvent!.originServerTs)) {
         lastEvent = event;
-        _onUpdate.add(null);
+        _notifyUpdate();
       }
 
       if (event is TimelineEventMessage ||
@@ -302,10 +431,10 @@ class MatrixRoom extends Room {
           event is TimelineEventEmote) {
         if (lastMessage == null) {
           lastMessage = event;
-          _onUpdate.add(null);
+          _notifyUpdate();
         } else if (event.originServerTs.isAfter(lastMessage!.originServerTs)) {
           lastMessage = event;
-          _onUpdate.add(null);
+          _notifyUpdate();
         }
       }
     }
@@ -320,31 +449,33 @@ class MatrixRoom extends Room {
   Future<void> handleNotification(TimelineEvent event,
       {Function(String reason)? onNotificationRejected}) async {
     if (!shouldNotify(event, onNotificationRejected: onNotificationRejected)) {
-      onNotificationRejected?.call("shouldNotify returned false");
+      onNotificationRejected?.call(messageRoomNotificationShouldNotNotify);
       return;
     }
 
     if (event is MatrixTimelineEventCall ||
         event is MatrixTimelineEventUnknown) {
-      onNotificationRejected?.call("Event type does not trigger notifications");
+      onNotificationRejected?.call(messageRoomNotificationEventTypeIgnored);
       return;
     }
 
     if (event is TimelineEventMessage || event is TimelineEventSticker) {
       // let push notifications handle it
       if (BuildConfig.ANDROID) {
-        onNotificationRejected?.call(
-            "Notifications should be handled by a push service on Android, but we are in the desktop notifications handler");
+        onNotificationRejected?.call(messageRoomNotificationAndroidPush);
         return;
       }
 
       var notification =
           await MessageNotificationContent.fromEvent(event, this);
       if (notification != null) {
+        notification.mentionsMe = _matrixRoom.client.pushruleEvaluator
+            .match((event as MatrixTimelineEvent).event)
+            .highlight;
         NotificationManager.notify(notification,
             onNotificationRejected: onNotificationRejected);
       } else {
-        onNotificationRejected?.call("Notification content was null");
+        onNotificationRejected?.call(messageRoomNotificationNoContent);
       }
     }
   }
@@ -360,8 +491,7 @@ class MatrixRoom extends Room {
     if (clientManager?.clients
             .any((element) => element.self?.identifier == event.senderId) ==
         true) {
-      onNotificationRejected
-          ?.call("Message came from a user logged in to this client");
+      onNotificationRejected?.call(messageRoomNotificationOwnMessage);
       return false;
     }
 
@@ -369,7 +499,7 @@ class MatrixRoom extends Room {
 
     // dont notify if we are receiving an old message
     if (timeDiff.inMinutes > 10) {
-      onNotificationRejected?.call("Message is over 10 minutes old");
+      onNotificationRejected?.call(messageRoomNotificationTooOld);
       return false;
     }
 
@@ -377,7 +507,7 @@ class MatrixRoom extends Room {
     var match = evaluator.match((event as MatrixTimelineEvent).event);
 
     if (match.notify == false) {
-      onNotificationRejected?.call("Did not pass push rules");
+      onNotificationRejected?.call(messageRoomNotificationPushRules);
     }
 
     return match.notify;
@@ -525,6 +655,13 @@ class MatrixRoom extends Room {
         mentionsList.remove("@room");
       }
 
+      // A reply calls on whoever it answers, as the Matrix spec has it (and
+      // as Discord does): they are notified and see it highlighted.
+      if (replyingTo != null &&
+          replyingTo.senderId != _matrixRoom.client.userID) {
+        mentionsList.add(replyingTo.senderId);
+      }
+
       if (mentionsList.isNotEmpty) {
         mentions["user_ids"] = mentionsList.toList();
       }
@@ -618,7 +755,7 @@ class MatrixRoom extends Room {
   @override
   Future<void> setDisplayName(String newName) async {
     _displayName = newName;
-    _onUpdate.add(null);
+    _notifyUpdate();
     await _matrixRoom.setName(newName);
   }
 
@@ -634,13 +771,40 @@ class MatrixRoom extends Room {
     var recent = client.getComponent<RecentEmoticonComponent>();
     recent?.reactedEmoticon(this, reaction);
 
-    var id = await _matrixRoom.sendReaction(reactingTo.eventId, reaction.key);
+    // Our own txid is the local echo's event id until the server answers, so
+    // removing the reaction meanwhile can wait for the real id
+    final txid = _matrixRoom.client.generateUniqueTransactionId();
+    final send =
+        _matrixRoom.sendReaction(reactingTo.eventId, reaction.key, txid: txid);
+    _pendingReactionSends[txid] = send;
+
+    String? id;
+    try {
+      id = await send;
+    } finally {
+      _pendingReactionSends.remove(txid);
+    }
+
     if (id != null) {
       var event = await _matrixRoom.getEventById(id);
       return convertEvent(event!);
     }
 
     return null;
+  }
+
+  final Map<String, Future<String?>> _pendingReactionSends = {};
+
+  /// The server's event id for a reaction still being sent as [txid], or null
+  /// when this session isn't sending it.
+  Future<String?> reactionSentEventId(String txid) async {
+    final send = _pendingReactionSends[txid];
+    if (send == null) return null;
+    try {
+      return await send;
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
@@ -665,17 +829,37 @@ class MatrixRoom extends Room {
 
   @override
   Future<void> close() async {
+    for (final subscription in _subscriptions) {
+      await subscription.cancel();
+    }
+    _subscriptions.clear();
     await _onUpdate.close();
-    await _onUpdateSubscription?.cancel();
     await timeline?.close();
+    _timeline = null;
   }
 
   @override
   Future<Timeline> getTimeline({String? contextEventId}) async {
-    _timeline = MatrixTimeline(client as MatrixClient, this, matrixRoom);
-    await _timeline!.initTimeline(contextEventId: contextEventId);
+    final existing = _timeline;
+    if (existing != null && contextEventId == null) return existing;
+    final timeline = await _loadTimeline(contextEventId: contextEventId);
+    final previous = _timeline;
+    _timeline = timeline;
+    // The one this replaces kept its SDK subscriptions, and converted every
+    // incoming event, for as long as the app ran.
+    if (previous != null) await previous.close();
     onTimelineLoaded.add(null);
-    return _timeline!;
+    return timeline;
+  }
+
+  @override
+  Future<Timeline> loadTimeline({String? contextEventId}) =>
+      _loadTimeline(contextEventId: contextEventId);
+
+  Future<MatrixTimeline> _loadTimeline({String? contextEventId}) async {
+    final timeline = MatrixTimeline(client as MatrixClient, this, matrixRoom);
+    await timeline.initTimeline(contextEventId: contextEventId);
+    return timeline;
   }
 
   @override
@@ -798,7 +982,8 @@ class MatrixRoom extends Room {
   }
 
   void _updateDisplayName() {
-    _displayName = _matrixRoom.getLocalizedDisplayname();
+    _displayName =
+        _matrixRoom.getLocalizedDisplayname(const RoomNameLocalizations());
 
     var comp = client.getComponent<DirectMessagesComponent>();
 
@@ -829,7 +1014,7 @@ class MatrixRoom extends Room {
     if (event.state.type == "m.room.name" ||
         event.state.type == "m.room.avatar" ||
         event.state.type == "m.room.topic") {
-      _onUpdate.add(null);
+      _notifyUpdate();
     }
   }
 
@@ -887,8 +1072,39 @@ class MatrixRoom extends Room {
 
     if (update == null) return;
 
+    // Typing notices and receipts (the ephemeral part) change nothing a
+    // listener of this shows: the sidebar, the room panel, the counts. One
+    // of those used to rebuild every channel list on every keystroke of
+    // someone typing in any room.
+    if (update.timeline == null &&
+        update.state == null &&
+        update.accountData == null &&
+        update.summary == null &&
+        update.unreadNotifications == null) {
+      return;
+    }
+
+    _notifyUpdate();
+  }
+
+  /// Tells listeners the room changed; nothing after [close].
+  void _notifyUpdate() {
+    if (_onUpdate.isClosed) return;
     _onUpdate.add(null);
   }
+
+  @override
+  RoomType get roomType => switch (
+          matrixRoom.getState(matrix.EventTypes.RoomCreate)?.content['type']) {
+        'org.matrix.msc3417.call' => RoomType.voipRoom,
+        'chat.commet.photo_album' => RoomType.photoAlbum,
+        'chat.commet.calendar' => RoomType.calendar,
+        'm.space' => RoomType.space,
+        _ => RoomType.defaultRoom,
+      };
+
+  @override
+  Future<Uri> getShareLink() => _matrixRoom.matrixToInviteLink();
 
   @override
   bool get isSpecialRoomType =>
@@ -914,7 +1130,7 @@ class MatrixRoom extends Room {
         MatrixRole(50),
         if (getComponent<MatrixCalendarRoomComponent>()?.hasCalendar == true)
           MatrixRole(25,
-              nameOverride: "Calendar Moderator",
+              nameOverride: MatrixRole.labelCalendarRoleModerator,
               iconOverride: Icons.calendar_month),
         MatrixRole(0),
       ];
@@ -932,7 +1148,7 @@ class MatrixRoom extends Room {
   @override
   Future<void> setTopic(String topic) async {
     await matrixRoom.setDescription(topic);
-    _onUpdate.add(null);
+    _notifyUpdate();
   }
 
   @override
@@ -948,12 +1164,14 @@ class MatrixRoom extends Room {
 
     await matrixRoom.setAvatar(matrix.MatrixFile(bytes: bytes, name: name));
     _avatar = MemoryImage(bytes);
-    _onUpdate.add(null);
+    _notifyUpdate();
   }
 
   @override
   Future<void> markAsRead() async {
-    var tl = await matrixRoom.getTimeline();
+    // The open timeline when there is one: an SDK timeline made here held
+    // its five subscriptions for ever, once per press.
+    var tl = _timeline?.matrixTimeline ?? await matrixRoom.getTimeline();
     var readReceiptComponent = getComponent<MatrixReadReceiptComponent>();
 
     bool public = true;
@@ -967,7 +1185,28 @@ class MatrixRoom extends Room {
       public = readReceiptComponent!.usePublicReadReceiptsForRoom!;
     }
 
-    await tl.setReadMarker(public: public);
+    try {
+      var markerEventId = tl.events
+          .firstWhereOrNull((e) => e.status == matrix.EventStatus.synced)
+          ?.eventId;
+      if (markerEventId == null) return;
+
+      await tl.setReadMarker(eventId: markerEventId, public: public);
+
+      // A message that arrived while the marker was in flight is newer than
+      // what was marked read; its sync owns the counts.
+      if (tl.events
+              .firstWhereOrNull((e) => e.status == matrix.EventStatus.synced)
+              ?.eventId ==
+          markerEventId) {
+        clearUnreadCountsLocally();
+      }
+    } catch (e, s) {
+      // The server still has the messages unread, so the badge must stay.
+      Log.onError(e, s, content: "Could not set the read marker");
+    } finally {
+      if (tl != _timeline?.matrixTimeline) tl.cancelSubscriptions();
+    }
   }
 
   @override

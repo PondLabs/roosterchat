@@ -25,14 +25,45 @@ class MatrixCallMembership {
   /// this about.
   static const awayKey = 'chat.commet.away';
 
+  /// A status the member chose that Matrix presence cannot carry:
+  /// `invisible` (shown as offline). Absent when they chose neither.
+  static const statusKey = 'chat.commet.status';
+
   /// Present while the member is the DJ in the call's booth:
   ///  while music plays,  while paused. Lets the
   /// voice channel list show a DJ to people outside the call, who don't get
   /// the booth's own messages (those go over the call's data channel).
   static const djKey = 'chat.commet.dj';
 
+  /// True on a membership written while its owner had no delayed leave
+  /// armed (a homeserver without delayed events, Synapse by default) and
+  /// advertised something: streams, a mute, the DJ booth. Nothing takes those
+  /// down if that client dies, so they are only believed for
+  /// [unguardedStateLifetime] after the write.
+  static const unguardedKey = 'chat.commet.unguarded';
+
   /// How long a membership lasts from its join time, the MatrixRTC default.
+  /// Written so while a delayed leave is armed: the homeserver clears the
+  /// membership of a client that dies.
   static const lifetime = Duration(hours: 4);
+
+  /// The window of a membership written with no delayed leave armed (the
+  /// homeserver has none, as matrix.org since 2026-10-07, or arming
+  /// failed). Nothing clears it if its owner dies, so it is kept short and
+  /// written again every half minute while its owner is in the call: one
+  /// that dies drops off everyone's list within two minutes.
+  static const unguardedLifetime = Duration(minutes: 2);
+
+  /// An unguarded membership is written again once this much of its window
+  /// is left: half a minute after each write.
+  static const unguardedRefreshWhenLeft = Duration(seconds: 90);
+
+  /// How long what an unguarded membership advertises is believed after it
+  /// was written. Its owner writes it again every hour while in the call
+  /// ([refreshWhenLeft]), so one older than this, with room for a write that
+  /// had to be retried, comes from a client that is gone: its LIVE badge
+  /// would otherwise stay until the membership lapses, up to four hours on.
+  static const unguardedStateLifetime = Duration(minutes: 90);
 
   /// Its owner writes it again, pushing the expiry [lifetime] past then, once
   /// this much of it is left: an hour after each write. Pushed out only in
@@ -69,12 +100,37 @@ class MatrixCallMembership {
   /// else, a client that does not report it included, reads as present.
   static bool isAway(Map<String, Object?> content) => content[awayKey] == true;
 
+  /// The status [content] says its owner chose (see [statusKey]), or null.
+  static String? statusOf(Map<String, Object?> content) {
+    final value = content[statusKey];
+    return value is String ? value : null;
+  }
+
   /// Whether [content] says its owner is the DJ: null when not (or the
   /// client doesn't say), otherwise whether music is playing.
   static bool? djPlayingOf(Map<String, Object?> content) {
     final value = content[djKey];
     if (value is! Map) return null;
     return value['playing'] == true;
+  }
+
+  /// When what [content], sent at [sentAt], advertises (streams, voice
+  /// state, DJ) stops being believed: null for one written with a delayed
+  /// leave armed, which the homeserver clears if its owner dies, and for
+  /// stripped state, which carries no [sentAt].
+  static DateTime? publishedStateStaleAt(
+      Map<String, Object?> content, DateTime? sentAt) {
+    if (content[unguardedKey] != true || sentAt == null) return null;
+    return sentAt.add(unguardedStateLifetime);
+  }
+
+  /// Whether what [content] advertises is too old to believe at [now] (see
+  /// [publishedStateStaleAt]). Its owner still counts as in the call until
+  /// the membership itself lapses.
+  static bool publishedStateIsStale(
+      Map<String, Object?> content, DateTime? sentAt, DateTime now) {
+    final staleAt = publishedStateStaleAt(content, sentAt);
+    return staleAt != null && now.isAfter(staleAt);
   }
 
   /// When the member joined: `created_ts` once the membership has been
@@ -134,10 +190,18 @@ class MatrixCallMembership {
   /// Whether our own membership, [content] sent at [sentAt], is due to be
   /// written again at [now] to keep it from lapsing (see [refreshWhenLeft]).
   /// Also once it has lapsed: we are still in the call.
+  /// Without a delayed leave ([guarded] false) the window is kept short
+  /// ([unguardedLifetime]): written again half a minute after each write,
+  /// and right away when a long one is left from while there was one.
   static bool needsRefresh(
-      Map<String, Object?> content, DateTime? sentAt, DateTime now) {
+      Map<String, Object?> content, DateTime? sentAt, DateTime now,
+      {bool guarded = true}) {
     final expiry = expiresAt(content, sentAt);
-    return expiry != null && expiry.difference(now) <= refreshWhenLeft;
+    if (expiry == null) return false;
+    final left = expiry.difference(now);
+    if (guarded) return left <= refreshWhenLeft;
+    return left <= unguardedRefreshWhenLeft ||
+        left > unguardedLifetime + const Duration(seconds: 30);
   }
 
   /// The earliest of [expiries] still ahead of [now], when the list of who is
@@ -156,21 +220,30 @@ class MatrixCallMembership {
   /// [current] rewritten to list [media], [voiceState] and [away]. Every
   /// other key is kept, the join time is recorded in `created_ts` (without it
   /// other clients take the rewrite for a new join, re-key, and reorder the
-  /// oldest_membership focus choice), and the expiry moves [lifetime] past
-  /// [now].
+  /// oldest_membership focus choice), and the expiry moves [window] past
+  /// [now]: [lifetime], or [unguardedLifetime] with no delayed leave armed.
+  /// [unguarded] says no delayed leave backs what is listed (see
+  /// [unguardedKey]).
   static Map<String, Object?> withPublishedState(Map<String, Object?> current,
       {required Set<LiveMedia> media,
       required Set<VoiceState> voiceState,
       required DateTime joinedAt,
       required DateTime now,
       bool away = false,
-      bool? dj}) {
+      String? status,
+      bool? dj,
+      bool unguarded = false,
+      Duration window = lifetime}) {
     return {
       ...current,
       'created_ts': joinedAt.millisecondsSinceEpoch,
       'expires':
-          now.difference(joinedAt).inMilliseconds + lifetime.inMilliseconds,
+          now.difference(joinedAt).inMilliseconds + window.inMilliseconds,
       awayKey: away,
+      statusKey: status,
+      // Written either way: one carried over from [current] would have a
+      // guarded membership's badges dropped after ninety minutes.
+      unguardedKey: unguarded,
       // Written either way: a stale DJ carried over from [current] would
       // keep spinning in everyone's list.
       djKey: dj == null ? null : {'playing': dj},

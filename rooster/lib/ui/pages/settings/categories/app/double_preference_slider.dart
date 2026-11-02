@@ -1,6 +1,7 @@
 import 'package:rooster/config/preferences/double_preference.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart' show NumberFormat;
 
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -41,6 +42,11 @@ class _DoublePreferenceSliderState extends State<DoublePreferenceSlider> {
     super.initState();
   }
 
+  /// The value with the language's decimal separator ("1,5" in Portuguese).
+  String get formattedValue => NumberFormat(
+          widget.numDecimals > 0 ? "0.${"0" * widget.numDecimals}" : "0")
+      .format(value);
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -59,8 +65,7 @@ class _DoublePreferenceSliderState extends State<DoublePreferenceSlider> {
               tiamat.Text.labelLow(widget.description!),
             Row(
               children: [
-                tiamat.Text.labelLow(
-                    "${value.toStringAsFixed(widget.numDecimals)}${widget.units ?? ""}"),
+                tiamat.Text.labelLow("$formattedValue${widget.units ?? ""}"),
                 Expanded(
                   child: tiamat.Slider(
                     value: value,

@@ -4,12 +4,25 @@ import 'package:rooster/debug/log.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_background/flutter_background.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:intl/intl.dart' show Intl;
 
 class WebrtcAndroidScreencaptureSource implements ScreenCaptureSource {
   @override
   final bool captureAudio;
 
   WebrtcAndroidScreencaptureSource({this.captureAudio = true});
+
+  static String get labelVoipScreenShareNotificationTitle => Intl.message(
+      "Screen Sharing",
+      name: "labelVoipScreenShareNotificationTitle",
+      desc: "Title of the Android notification shown for as long as the app "
+          "shares the phone's screen in a call");
+
+  static String get messageVoipScreenShareNotification =>
+      Intl.message("Rooster is sharing the screen.",
+          name: "messageVoipScreenShareNotification",
+          desc: "Text of the Android notification shown for as long as the app "
+              "shares the phone's screen in a call. Rooster is the app's name");
 
   static Future<ScreenCaptureSource?> getCaptureSource(
       BuildContext context) async {
@@ -24,9 +37,9 @@ class WebrtcAndroidScreencaptureSource implements ScreenCaptureSource {
         try {
           bool hasPermissions = await FlutterBackground.hasPermissions;
 
-          const androidConfig = FlutterBackgroundAndroidConfig(
-            notificationTitle: 'Screen Sharing',
-            notificationText: 'Rooster is sharing the screen.',
+          final androidConfig = FlutterBackgroundAndroidConfig(
+            notificationTitle: labelVoipScreenShareNotificationTitle,
+            notificationText: messageVoipScreenShareNotification,
             notificationImportance: AndroidNotificationImportance.normal,
             notificationIcon:
                 AndroidResource(name: 'notification_icon', defType: 'mipmap'),

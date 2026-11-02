@@ -6,23 +6,24 @@ Type=Application
 Icon=rooster
 StartupWMClass=com.pondlabs.rooster
 Comment=Talk. Play. Hang out.
+Comment[pt]=Converse. Jogue. Curta.
 Categories=Network;InstantMessaging;Chat;
 Actions=ToggleMute;ToggleDeafen;Disconnect
 
 [Desktop Action ToggleMute]
 Name=Mute or Unmute
-Name[pt_BR]=Silenciar ou dessilenciar
+Name[pt]=Silenciar ou dessilenciar
 Icon=audio-input-microphone-symbolic
 Exec=/usr/lib/com.pondlabs.rooster/rooster --shortcut toggle_mute
 
 [Desktop Action ToggleDeafen]
 Name=Deafen or Undeafen
-Name[pt_BR]=Desativar ou reativar áudio
+Name[pt]=Desativar ou reativar áudio
 Icon=audio-headphones-symbolic
 Exec=/usr/lib/com.pondlabs.rooster/rooster --shortcut toggle_deafen
 
 [Desktop Action Disconnect]
 Name=Disconnect
-Name[pt_BR]=Desconectar
+Name[pt]=Desconectar
 Icon=call-stop-symbolic
 Exec=/usr/lib/com.pondlabs.rooster/rooster --shortcut disconnect

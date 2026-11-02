@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/main.dart';
+import 'package:rooster/ui/molecules/screen_share_start_reporting.dart';
 import 'package:rooster/ui/molecules/screen_share_stop_reporting.dart';
 import 'package:rooster/ui/organisms/call_view/call_view.dart';
 import 'package:flutter/cupertino.dart';
@@ -31,11 +32,8 @@ class _CallWidgetState extends State<CallWidget> {
     );
   }
 
-  Future<void> pickScreenShareSource() async {
-    final source = await widget.session.pickScreenCapture(context);
-    if (source != null) {
-      widget.session.setScreenShare(source);
-    }
+  Future<void> pickScreenShareSource() {
+    return startScreenshareOrReportFailure(context, widget.session);
   }
 
   Future<void> stopScreenshare() {
@@ -54,9 +52,9 @@ class _CallWidgetState extends State<CallWidget> {
 
   Future<void> setDeafened(bool isDeafened) {
     if (isDeafened) {
-      clientManager?.callManager.playMuteSound();
+      clientManager?.callManager.playDeafenSound();
     } else {
-      clientManager?.callManager.playUnmuteSound();
+      clientManager?.callManager.playUndeafenSound();
     }
 
     return widget.session.setDeafened(isDeafened);
@@ -73,7 +71,7 @@ class _CallWidgetState extends State<CallWidget> {
   }
 
   Future<void> disableCamera() {
-    return widget.session.stopCamera();
+    return stopCameraOrReportFailure(context, widget.session);
   }
 
   Future<void> declineCall() {

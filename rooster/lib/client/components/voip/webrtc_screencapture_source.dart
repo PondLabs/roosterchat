@@ -4,6 +4,7 @@ import 'package:rooster/config/platform_utils.dart';
 import 'package:rooster/ui/organisms/call_view/screen_capture_source_dialog.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:intl/intl.dart' show Intl;
 import 'package:tiamat/atoms/popup_dialog.dart';
 
 class WebrtcScreencaptureSource implements ScreenCaptureSource {
@@ -12,6 +13,12 @@ class WebrtcScreencaptureSource implements ScreenCaptureSource {
   final bool captureAudio;
 
   WebrtcScreencaptureSource(this.source, {this.captureAudio = true});
+
+  static String get labelCallShareScreenTitle =>
+      Intl.message("Share your screen",
+          name: "labelCallShareScreenTitle",
+          desc: "Title of the dialog, on a computer, that picks the screen or "
+              "window to share in a call");
 
   static Future<ScreenCaptureSource?> showSelectSourcePrompt(
       BuildContext context) async {
@@ -37,7 +44,7 @@ class WebrtcScreencaptureSource implements ScreenCaptureSource {
       var result = await PopupDialog.show<ScreenCaptureDialogResult>(context,
           content:
               ScreenCaptureSourceDialog(sources, DesktopCapturerFeed(types)),
-          title: "Share your screen");
+          title: labelCallShareScreenTitle);
 
       if (result != null) {
         return WebrtcScreencaptureSource(

@@ -1,0 +1,6 @@
+name = "rooster-proxy"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# The KLIPY key is a secret, never in this file:
+#   npx wrangler secret put KLIPY_API_KEY

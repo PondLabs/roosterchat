@@ -1,6 +1,8 @@
 // The microphone of a LiveKit voice room: how it is created and found.
 // Every microphone capture of a room goes through here, so who suppresses
 // noise on it (MicrophoneNoiseSuppression) is decided in one place.
+import 'dart:async';
+
 import 'package:collection/collection.dart';
 import 'package:rooster/client/components/voip/audio_processing/audio_processing_manager.dart';
 import 'package:rooster/client/components/voip/audio_processing/microphone_noise_suppression.dart';
@@ -9,6 +11,7 @@ import 'package:rooster/client/components/voip/audio_processing/shared_audio_pro
 import 'package:rooster/client/components/voip/microphone_health.dart';
 import 'package:rooster/client/components/voip/webrtc_microphone.dart';
 import 'package:rooster/debug/log.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleState, WidgetsBinding;
 import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
 import 'package:livekit_client/livekit_client.dart' as lk;
 
@@ -35,8 +38,17 @@ Future<lk.AudioCaptureOptions> prepareMicrophoneCaptureOptions({
   required AudioProcessingManager dsp,
   required bool noiseSuppressionPreference,
   String? deviceId,
+  Duration readyTimeout = const Duration(seconds: 8),
 }) async {
-  final ready = await dsp.ensureReady();
+  // Bounded: on the web this is a 11 MB wasm fetched and test-run, and the
+  // room was already connected (everyone saw a silent user) while the Join
+  // button waited for it on a slow link. Past the bound the call opens
+  // with the browser's own suppressor; the DSP goes on when it is ready.
+  final ready = await dsp.ensureReady().timeout(readyTimeout, onTimeout: () {
+    Log.w("Voice: the DSP was not ready in ${readyTimeout.inSeconds} s; "
+        "opening the microphone without it");
+    return false;
+  });
   final reason = dsp.unavailableReason;
   if (noiseSuppressionPreference && !ready && reason != null) {
     warnNoiseSuppressionUnavailable(reason);
@@ -46,6 +58,64 @@ Future<lk.AudioCaptureOptions> prepareMicrophoneCaptureOptions({
     noiseSuppressionPreference: noiseSuppressionPreference,
     deviceId: deviceId,
   );
+}
+
+/// What opening a room's microphone ahead of the room came to (see
+/// [openMicrophoneBeforePlayback]).
+class EarlyMicrophone {
+  const EarlyMicrophone({this.track, this.retry = true});
+
+  /// The microphone, open, for the room to publish once it is connected.
+  final lk.LocalAudioTrack? track;
+
+  /// Whether the room still has to open one itself once connected: it was
+  /// not opened ahead here, or not in time. False once one was tried and
+  /// could not be opened (no permission, no device): asking again right
+  /// away only puts a prompt the user has just closed up a second time,
+  /// and unmuting asks again whenever they want one.
+  final bool retry;
+}
+
+/// Opens a room's microphone before the room is connected, where the order
+/// matters ([needed]): in the browser of a phone, a tablet or a foldable.
+///
+/// Chrome on Android puts the phone in its call mode when a page opens the
+/// microphone, and the volume keys set the call volume from then on. What
+/// plays is another matter: an audio output keeps the volume it was opened
+/// on, and one opened before the microphone stays on the media volume for
+/// as long as it plays (Chromium's AudioManagerAndroid: MakeAudioInputStream
+/// turns the communication mode on, MakeLowLatencyOutputStream picks a
+/// stream's usage by it, once). Joining used to connect first and open the
+/// microphone after, so the people in the call were playing by then: their
+/// voices came out on the media volume while the keys moved the call
+/// volume, and nothing the user pressed made them louder or quieter. With
+/// the microphone open first, everything the call plays is opened on the
+/// volume the keys control.
+///
+/// Waits at most [limit] for it: a permission prompt nobody answers must
+/// not keep the user out of the call. One that opens after that is closed
+/// again, and the room opens its own once connected, as it always did.
+Future<EarlyMicrophone> openMicrophoneBeforePlayback({
+  required bool needed,
+  required Future<lk.AudioCaptureOptions> Function() options,
+  Duration limit = const Duration(seconds: 30),
+}) async {
+  if (!needed) return const EarlyMicrophone();
+
+  final opening = options().then(lk.LocalAudioTrack.create);
+  try {
+    return EarlyMicrophone(track: await opening.timeout(limit), retry: false);
+  } on TimeoutException {
+    Log.w("Voice: the microphone did not open in ${limit.inSeconds} s; "
+        "joining without waiting for it");
+    opening.then<void>((track) async {
+      await track.stop();
+    }, onError: (Object _) {});
+    return const EarlyMicrophone();
+  } catch (e, s) {
+    Log.onError(e, s, content: "Could not enable the microphone");
+    return const EarlyMicrophone(retry: false);
+  }
 }
 
 /// Options for `setMicrophoneEnabled` when the user mutes or unmutes.
@@ -236,6 +306,16 @@ class LivekitMicrophoneHealth {
 
   Future<void> check() => monitor.check();
 
+  /// Whether the page can be seen; one without focus (`inactive`, the
+  /// notification shade over it) can still open a capture.
+  static bool _visible() => switch (WidgetsBinding.instance.lifecycleState) {
+        AppLifecycleState.hidden ||
+        AppLifecycleState.paused ||
+        AppLifecycleState.detached =>
+          false,
+        _ => true,
+      };
+
   Future<MicrophoneVitals> _read() async {
     if (!_connected()) return MicrophoneVitals.none;
     final participant = _participant();
@@ -251,14 +331,18 @@ class LivekitMicrophoneHealth {
       return MicrophoneVitals.none;
     }
     _hadMicrophone = true;
+    // With a processor (the web's DSP) the track the sender carries is
+    // the processed one, which never ends: the capture is the original.
+    // ignore: invalid_use_of_internal_member
+    final capture = track.originalTrack ?? track.mediaStreamTrack;
+    final muted = captureMuted(capture);
+    // A page in the background cannot open a capture (Safari): nothing is
+    // judged until it is visible again, and a new capture is then made.
+    if (muted && !_visible()) return MicrophoneVitals.none;
     final counters = await readSenderCounters(track.sender);
     return MicrophoneVitals(
       sending: true,
-      // With a processor (the web's DSP) the track the sender carries is
-      // the processed one, which never ends: the capture is the original.
-      captureEnded: !track.isActive ||
-          // ignore: invalid_use_of_internal_member
-          captureEnded(track.originalTrack ?? track.mediaStreamTrack),
+      captureEnded: !track.isActive || muted || captureEnded(capture),
       capturedSeconds: counters.capturedSeconds,
       packetsSent: counters.packetsSent,
       talking: _talking?.call() ?? false,

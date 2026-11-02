@@ -45,8 +45,9 @@ class CallManager {
   }
 
   Player? player;
-  Player? muteSoundPlayer;
-  Player? unmuteSoundPlayer;
+
+  /// Mute and deafen sounds, a player per sound file.
+  final Map<String, Player> toggleSoundPlayers = {};
 
   /// Screen share and camera sounds: a player of their own, so one does not
   /// cut off someone's join sound.
@@ -259,7 +260,7 @@ class CallManager {
       session.setDeafened(true);
     }
 
-    playMuteSound();
+    playDeafenSound();
   }
 
   void undeafen() {
@@ -267,7 +268,7 @@ class CallManager {
       session.setDeafened(false);
     }
 
-    playUnmuteSound();
+    playUndeafenSound();
   }
 
   bool fakeDeafenToggle = false;
@@ -285,9 +286,9 @@ class CallManager {
 
       // just to give user feedback when not in a call
       if (fakeDeafenToggle) {
-        playMuteSound();
+        playDeafenSound();
       } else {
-        playUnmuteSound();
+        playUndeafenSound();
       }
     }
   }
@@ -322,17 +323,27 @@ class CallManager {
     }
   }
 
-  void playMuteSound() {
+  void playMuteSound() => playToggleSound("muted.ogg");
+
+  void playUnmuteSound() => playToggleSound("unmuted.ogg");
+
+  void playDeafenSound() => playToggleSound("deafened.ogg");
+
+  void playUndeafenSound() => playToggleSound("undeafened.ogg");
+
+  void playToggleSound(String sound) {
     try {
-      if (muteSoundPlayer == null) {
-        muteSoundPlayer ??= Player(configuration: PlayerConfiguration());
-        muteSoundPlayer?.open(Media("asset:///assets/sound/muted.ogg"));
-        muteSoundPlayer?.setPlaylistMode(PlaylistMode.none);
+      var player = toggleSoundPlayers[sound];
+      if (player == null) {
+        player = toggleSoundPlayers[sound] =
+            Player(configuration: PlayerConfiguration());
+        player.open(Media("asset:///assets/sound/$sound"));
+        player.setPlaylistMode(PlaylistMode.none);
       }
 
-      muteSoundPlayer!.setVolume(preferences.notificationsVolume.value);
-      muteSoundPlayer?.seek(Duration.zero);
-      muteSoundPlayer?.play();
+      player.setVolume(preferences.notificationsVolume.value);
+      player.seek(Duration.zero);
+      player.play();
     } catch (_) {
       // Ignore audio playback errors in headless/test environments
     }
@@ -347,22 +358,6 @@ class CallManager {
     }
 
     playUnmuteSound();
-  }
-
-  void playUnmuteSound() {
-    try {
-      if (unmuteSoundPlayer == null) {
-        unmuteSoundPlayer ??= Player(configuration: PlayerConfiguration());
-        unmuteSoundPlayer?.open(Media("asset:///assets/sound/unmuted.ogg"));
-        unmuteSoundPlayer?.setPlaylistMode(PlaylistMode.none);
-      }
-
-      unmuteSoundPlayer!.setVolume(preferences.notificationsVolume.value);
-      unmuteSoundPlayer?.seek(Duration.zero);
-      unmuteSoundPlayer?.play();
-    } catch (_) {
-      // Ignore audio playback errors in headless/test environments
-    }
   }
 
   /// We left a call: hung up, moved to another channel, or the app is
@@ -436,10 +431,10 @@ class CallManager {
   /// closed, which an app refresh does on every refresh.
   void dispose() {
     stopRingtone();
-    muteSoundPlayer?.dispose();
-    muteSoundPlayer = null;
-    unmuteSoundPlayer?.dispose();
-    unmuteSoundPlayer = null;
+    for (var player in toggleSoundPlayers.values) {
+      player.dispose();
+    }
+    toggleSoundPlayers.clear();
     cueSoundPlayer?.dispose();
     cueSoundPlayer = null;
     leaveSoundPlayer?.dispose();

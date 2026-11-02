@@ -110,7 +110,7 @@ class MainPageViewDesktop extends StatelessWidget {
                       caulkPadTop: true,
                       caulkClipTopRight: true,
                       caulkBorderTop: true,
-                      caulkPadRight: MediaQuery.of(context).mobile,
+                      caulkPadRight: MediaQuery.sizeOf(context).mobile,
                       child: ScaledSafeArea(
                         top: false,
                         child: CurrentSessionPanel(
@@ -124,14 +124,16 @@ class MainPageViewDesktop extends StatelessWidget {
               mainView(context),
             ],
           ),
-          if (state.currentRoom != null)
-            DragDropFileTarget(
-              // The DJ booth queues files dropped on it.
-              ignoreAt: djBoothTakesDrop,
-              onDropComplete: (details) {
-                EventBus.onFileDropped.add(details);
-              },
-            ),
+          DragDropFileTarget(
+            // The DJ booth queues files dropped on it.
+            ignoreAt: djBoothTakesDrop,
+            // A chat (or a photo album) on screen listens for drops; with
+            // none, say to open a text channel rather than drop nothing.
+            canReceive: () => EventBus.onFileDropped.hasListener,
+            onDropComplete: (details) {
+              EventBus.onFileDropped.add(details);
+            },
+          ),
           const BackgroundTaskViewContainer(),
           const OverlayWindowsSurface(),
         ],

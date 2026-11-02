@@ -91,4 +91,24 @@ void main() {
       expect(watcher.isAway.value, isTrue);
     });
   });
+
+  test('a chosen status holds however active we are', () async {
+    await watcher.choose(UserPresenceStatus.unavailable);
+    idle = Duration.zero;
+    await watcher.poll();
+
+    expect(watcher.status.value, UserPresenceStatus.unavailable);
+    expect(published, [UserPresenceStatus.unavailable]);
+  });
+
+  test('choosing online again goes back to following idleness', () async {
+    await watcher.choose(UserPresenceStatus.offline);
+    idle = const Duration(hours: 1);
+    await watcher.poll();
+    await watcher.choose(UserPresenceStatus.online);
+
+    expect(watcher.status.value, UserPresenceStatus.unavailable);
+    expect(published,
+        [UserPresenceStatus.offline, UserPresenceStatus.unavailable]);
+  });
 }

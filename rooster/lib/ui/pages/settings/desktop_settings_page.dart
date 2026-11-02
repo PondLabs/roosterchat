@@ -8,9 +8,11 @@ import 'package:tiamat/tiamat.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class DesktopSettingsPage extends StatefulWidget {
-  const DesktopSettingsPage({required this.settings, this.buttons, super.key});
+  const DesktopSettingsPage(
+      {required this.settings, this.buttons, this.initialTab, super.key});
   final List<SettingsCategory> settings;
   final List<SettingsButton>? buttons;
+  final (int, int)? initialTab;
   @override
   State<DesktopSettingsPage> createState() => DesktopSettingsPageState();
 }
@@ -26,6 +28,10 @@ class DesktopSettingsPageState extends State<DesktopSettingsPage> {
   @override
   void initState() {
     categories = widget.settings;
+    if (widget.initialTab case (final category, final tab)) {
+      selectedCategoryIndex = category;
+      selectedTabIndex = tab;
+    }
     super.initState();
   }
 

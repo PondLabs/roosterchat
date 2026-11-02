@@ -1,4 +1,5 @@
 import 'package:rooster/debug/log.dart';
+import 'package:rooster/utils/game_overlay/game_overlay.dart';
 import 'package:rooster/utils/voice_controls/browser_call_controls.dart';
 import 'package:rooster/utils/voice_controls/dock_menu.dart';
 import 'package:rooster/utils/voice_controls/launcher_quicklist.dart';
@@ -25,6 +26,12 @@ class VoiceControlSurfaces {
       BrowserCallControls.start().catchError((Object e, StackTrace s) {
         Log.onError(e, s,
             content: "Could not set up the browser call controls");
+      });
+    }
+
+    if (GameOverlay.supported) {
+      GameOverlay.instance.start().catchError((Object e, StackTrace s) {
+        Log.onError(e, s, content: "Could not set up the in-game overlay");
       });
     }
 

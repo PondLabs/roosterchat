@@ -13,7 +13,11 @@ class EmojiReaction extends StatelessWidget {
       this.highlighted = false,
       this.onTapped,
       this.onLongPressed,
+      this.tooltip,
       super.key});
+
+  /// Shown on mouse hover, e.g. who reacted.
+  final Widget? tooltip;
 
   final Function(Emoticon emote)? onTapped;
   final Function(Emoticon emote)? onLongPressed;
@@ -31,7 +35,7 @@ class EmojiReaction extends StatelessWidget {
       bgColor = material.Theme.of(context).colorScheme.surfaceContainerLow;
     }
 
-    return material.InkWell(
+    final chip = material.InkWell(
       onTap: () => onTapped?.call(emoji),
       onLongPress: () => onLongPressed?.call(emoji),
       borderRadius: borderRadius,
@@ -61,5 +65,8 @@ class EmojiReaction extends StatelessWidget {
         ),
       ),
     );
+
+    if (tooltip == null) return chip;
+    return tiamat.Tooltip(content: tooltip, child: chip);
   }
 }

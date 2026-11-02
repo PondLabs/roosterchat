@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/gif/gif_component.dart';
 import 'package:rooster/client/components/threads/thread_component.dart';
 import 'package:rooster/client/components/url_preview/url_preview_component.dart';
+import 'package:rooster/client/components/user_color/user_color_component.dart';
 import 'package:rooster/client/timeline_events/timeline_event.dart';
 import 'package:rooster/client/timeline_events/timeline_event_encrypted.dart';
 import 'package:rooster/client/timeline_events/timeline_event_feature_reactions.dart';
@@ -71,8 +74,8 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
   late String senderId;
   late Color senderColor;
 
-  late bool mentionsRoom;
-  late List<String> mentions;
+  /// The message calls on us: highlighted, as on Discord.
+  bool mentionsSelf = false;
 
   String get messageFailedToDecrypt => Intl.message("Failed to decrypt event",
       desc: "Placeholde text for when a message fails to decrypt",
@@ -105,6 +108,9 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
   ThreadsComponent? threadComponent;
   bool isHeadOfThread = false;
 
+  UserColorComponent? userColors;
+  StreamSubscription<String>? colorSubscription;
+
   bool isGif = false;
   bool isFavoriteGif = false;
 
@@ -125,6 +131,13 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
       threadComponent = client.getComponent<ThreadsComponent>();
     }
 
+    userColors = client.getComponent<UserColorComponent>();
+    colorSubscription = userColors?.onColorChanged
+        .where((id) => id == senderId)
+        .listen((_) => setState(() {
+              senderColor = room.getMemberOrFallback(senderId).defaultColor;
+            }));
+
     if (widget.timeline != null) {
       loadEventState(widget.initialIndex);
     }
@@ -133,6 +146,12 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
       loadStateFromEvent(widget.initialEvent!);
     }
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    colorSubscription?.cancel();
+    super.dispose();
   }
 
   @override
@@ -146,8 +165,7 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
       formattedContent: formattedContent,
       timestamp: timestampToString(sentTime),
       edited: edited,
-      isMentioningSelf:
-          mentionsRoom || mentions.contains(room!.client.self!.identifier),
+      isMentioningSelf: mentionsSelf,
       onDoubleTapMessage: widget.onDoubleTapMessage,
       avatarBuilder: (child) {
         var room = widget.room ?? widget.timeline?.room;
@@ -219,6 +237,17 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
   }
 
   @override
+  void didUpdateWidget(covariant TimelineEventViewMessage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Above the "New messages" line, which moves, a message names its
+    // sender.
+    if (oldWidget.overrideShowSender != widget.overrideShowSender &&
+        widget.timeline != null) {
+      showSender = shouldShowSender(index);
+    }
+  }
+
+  @override
   void update(int newIndex) {
     setState(() {
       loadEventState(newIndex);
@@ -241,8 +270,6 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
 
   void loadStateFromEvent(TimelineEvent event) {
     this.event = event;
-    mentionsRoom = event.mentionsRoom;
-    mentions = event.mentions;
     showSender = shouldShowSender(index);
     var room = widget.room ?? widget.timeline?.room;
 
@@ -263,6 +290,7 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
     senderName = sender.displayName;
     senderAvatar = sender.avatar;
     senderColor = sender.defaultColor;
+    userColors?.requestPublicColor(senderId);
 
     sentTime = event.originServerTs;
 
@@ -301,6 +329,8 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
         (event as TimelineEventFeatureRelated).relationshipType ==
             EventRelationshipType.reply;
 
+    mentionsSelf = event.mentionsSelf || isReplyToSelf(event);
+
     if (event is TimelineEventEncrypted) {
       formattedContent = tiamat.Text.error(messageFailedToDecrypt);
     }
@@ -330,6 +360,18 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
                 true
             : previewComponent?.shouldGetPreviewsInRoom(room) == true) &&
         event.getLinks(timeline: timeline)?.isEmpty == false;
+  }
+
+  /// A reply to one of our messages, which Discord highlights since it
+  /// pings whoever is replied to. Known while that message is in the
+  /// timeline; a reply that also lists us in its mentions, as Rooster's and
+  /// Element's do, is highlighted either way.
+  bool isReplyToSelf(TimelineEvent event) {
+    if (!isInResponse || event.senderId == currentUserIdentifier) return false;
+    final repliedTo = (event as TimelineEventFeatureRelated).relatedEventId;
+    if (repliedTo == null) return false;
+    return widget.timeline?.tryGetEvent(repliedTo)?.senderId ==
+        currentUserIdentifier;
   }
 
   String timestampToString(DateTime time) {

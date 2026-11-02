@@ -125,7 +125,7 @@ class _ContextMenuOverlayState extends State<ContextMenuOverlay>
     var view = WidgetsBinding.instance.platformDispatcher.views.first;
     var viewSize = view.physicalSize;
 
-    var scale = (tiamat.getAppScale?.call() ?? 1.0)  * view.devicePixelRatio;
+    var scale = (tiamat.getAppScale?.call() ?? 1.0) * view.devicePixelRatio;
 
     if (calculatedOffset == null) {
       return Container(
@@ -162,28 +162,34 @@ class _ContextMenuOverlayState extends State<ContextMenuOverlay>
   }
 
   Widget buildMenu(BuildContext context, {GlobalKey? key}) {
-    return IntrinsicWidth(
+    // As wide as the widest entry, but never wider than the screen: a long
+    // entry (a long name, a longer language) is cut short instead.
+    return ConstrainedBox(
       key: key,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: widget.items
-            .map(
-              (e) => e.build(
-                context,
-                () {
-                  e.onPressed?.call();
-                  _controller
-                      .animateTo(0)
-                      .then((value) => widget.close?.call());
-                },
-                closeMenu: () {
-                  _controller
-                      .animateTo(0)
-                      .then((value) => widget.close?.call());
-                },
-              ),
-            )
-            .toList(),
+      constraints:
+          BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width - 16),
+      child: IntrinsicWidth(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: widget.items
+              .map(
+                (e) => e.build(
+                  context,
+                  () {
+                    e.onPressed?.call();
+                    _controller
+                        .animateTo(0)
+                        .then((value) => widget.close?.call());
+                  },
+                  closeMenu: () {
+                    _controller
+                        .animateTo(0)
+                        .then((value) => widget.close?.call());
+                  },
+                ),
+              )
+              .toList(),
+        ),
       ),
     );
   }
@@ -212,11 +218,17 @@ class ContextMenu extends StatefulWidget {
       {super.key,
       required this.child,
       this.separator,
-      required this.items,
+      this.items = const [],
+      this.itemsBuilder,
       this.modal = false});
 
   final Seperator? separator;
   final List<ContextMenuItem> items;
+
+  /// The items, made when the menu opens, for a menu whose items are
+  /// costly to make and change (a message's): given this, [items] is not
+  /// read.
+  final List<ContextMenuItem> Function()? itemsBuilder;
   final Widget child;
   final bool modal;
 
@@ -253,7 +265,7 @@ class _ContextMenuState extends State<ContextMenu> {
               data: Theme.of(context),
               child: ContextMenuOverlay(
                 globalOffset: mousePosition,
-                items: widget.items,
+                items: widget.itemsBuilder?.call() ?? widget.items,
                 close: removeOverlay,
               ),
             ),
@@ -326,8 +338,13 @@ class ContextMenuItem {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   mainAxisSize: MainAxisSize.max,
                   children: [
-                    tiamat.Text(text,
-                        type: TextType.body, maxLines: 1, color: c),
+                    Flexible(
+                      child: tiamat.Text(text,
+                          type: TextType.body,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          color: c),
+                    ),
                     if (icon != null)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(20, 0, 0, 0),

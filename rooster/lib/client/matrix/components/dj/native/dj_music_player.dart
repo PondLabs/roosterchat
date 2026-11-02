@@ -4,6 +4,8 @@
 // flutter-webrtc feeds from `rooster_music_pull` (rooster_music_source.h).
 import 'dart:ffi';
 
+import 'package:intl/intl.dart';
+import 'package:rooster/client/components/dj/dj_engine.dart';
 import 'package:rooster/config/rust_library.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:ffi/ffi.dart';
@@ -140,14 +142,42 @@ class DjMusicBindings {
       .address;
 }
 
-/// Error codes of `rooster_music_open`.
+/// Error codes of `rooster_music_open`, in words for the user: they end up
+/// in the booth's notices ("Couldn't play <song>: ...").
 String describeMusicError(int code) => switch (code) {
-      -2 => "the downloaded file couldn't be opened",
-      -3 => "its audio format isn't supported",
-      -4 => "it couldn't be played from that position",
-      -5 => 'the decoder failed',
-      _ => 'error $code',
+      -2 => _MusicErrors.errorDjFileUnopenable,
+      -3 => _MusicErrors.errorDjFormatUnsupported,
+      -4 => _MusicErrors.errorDjCantPlayFromThere,
+      -5 => errorDjDecoderFailed,
+      _ => _MusicErrors.errorDjMusicCode(code),
     };
+
+class _MusicErrors {
+  static String get errorDjFileUnopenable => Intl.message(
+      "the downloaded file couldn't be opened",
+      name: "errorDjFileUnopenable",
+      desc: "Why a song in the DJ booth could not play: its file could not be "
+          "opened. Follows \"Couldn't play <song>:\"");
+
+  static String get errorDjFormatUnsupported =>
+      Intl.message("its audio format isn't supported",
+          name: "errorDjFormatUnsupported",
+          desc: "Why a song in the DJ booth could not play: the player can't "
+              "decode its kind of audio. Follows \"Couldn't play <song>:\"");
+
+  static String get errorDjCantPlayFromThere =>
+      Intl.message("it couldn't be played from that position",
+          name: "errorDjCantPlayFromThere",
+          desc: "Why a song in the DJ booth could not play or jump to a point: "
+              "the player could not start it there. Follows \"Couldn't play "
+              "<song>:\"");
+
+  static String errorDjMusicCode(int code) => Intl.message("error $code",
+      name: "errorDjMusicCode",
+      args: [code],
+      desc: "Why a song in the DJ booth could not play, when the player gave "
+          "only an error number. Follows \"Couldn't play <song>:\"");
+}
 
 /// One player instance.
 class DjMusicPlayer {

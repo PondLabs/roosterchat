@@ -10,11 +10,13 @@ import 'dart:async';
 
 import 'package:collection/collection.dart';
 import 'package:rooster/client/client.dart';
+import 'package:rooster/client/components/activities/activities_component.dart';
 import 'package:rooster/client/components/profile/profile_component.dart';
 import 'package:rooster/client/components/user_presence/user_idle_watcher.dart';
 import 'package:rooster/client/components/voip/audio_processing/audio_processing_manager.dart';
 import 'package:rooster/client/components/voip/audio_processing/audio_processing_manager_stub.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
+import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_call_membership.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_livekit_voip_session.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_voip_room_component.dart';
@@ -86,6 +88,16 @@ class _LocalParticipant implements lk.LocalParticipant {
   lk.LocalTrackPublication? getTrackPublicationBySource(
           lk.TrackSource source) =>
       publications.firstWhereOrNull((p) => p.source == source);
+
+  @override
+  Future<lk.LocalTrackPublication?> setMicrophoneEnabled(bool enabled,
+      {lk.AudioCaptureOptions? audioCaptureOptions}) async {
+    final mic = publications.firstOrNull;
+    if (mic == null) return null;
+    mic.muted = !enabled;
+    mic.track?.mediaStreamTrack.enabled = enabled;
+    return mic;
+  }
 
   @override
   Future<void> publishData(List<int> data,
@@ -175,12 +187,19 @@ class _SdkClient implements matrix.Client {
 
   /// How many of the next delayed leaves fail to be scheduled.
   int armFailures = 0;
+
+  /// Says it has delayed events, then refuses them, as matrix.org did from
+  /// 2026-10-07 to clients that read /versions before.
+  bool refusesDelayedEvents = false;
   int armAttempts = 0;
 
   /// How many of the next restarts of the delayed leave are lost, and how
   /// many were asked for.
   int restartsLost = 0;
   int restarts = 0;
+
+  /// How many delayed leaves were sent rather than left to fire.
+  int delayedLeavesSent = 0;
 
   /// Our membership as written, write by write.
   final List<Map<String, Object?>> membershipWrites = [];
@@ -216,12 +235,19 @@ class _SdkClient implements matrix.Client {
       Map<String, Object?>? query}) async {
     if (query?.containsKey('org.matrix.msc4140.delay') == true) {
       armAttempts++;
+      if (refusesDelayedEvents) {
+        throw matrix.MatrixException.fromJson({
+          'errcode': 'M_FORBIDDEN',
+          'error': 'Sending delayed events has been disallowed',
+        });
+      }
       if (armFailures > 0) {
         armFailures--;
         throw Exception('M_LIMIT_EXCEEDED');
       }
       return {'delay_id': 'delay-$armAttempts'};
     }
+    if (data is String && data.contains('"send"')) delayedLeavesSent++;
     // Restarting, sending or cancelling a delayed leave.
     if (data is String && data.contains('restart')) {
       restarts++;
@@ -353,7 +379,8 @@ void main() {
     };
   }
 
-  /// Joins, then waits for the heartbeat the join starts.
+  /// Joins, then lets the initial heartbeat and state debounce settle before
+  /// tests advance the simulated membership clocks by minutes or hours.
   Future<MatrixLivekitVoipSession> join() async {
     final joinedSession = MatrixLivekitVoipSession(room, livekit,
         // ignore: invalid_use_of_visible_for_testing_member
@@ -363,6 +390,7 @@ void main() {
     session = joinedSession;
     // ignore: invalid_use_of_visible_for_testing_member
     await joinedSession.debugHeartbeat();
+    await Future<void>.delayed(const Duration(seconds: 1));
     return joinedSession;
   }
 
@@ -378,22 +406,101 @@ void main() {
   DateTime? expiryOf(Map<String, Object?> written) =>
       MatrixCallMembership.expiresAt(written, serverTime);
 
+  /// The homeserver sends our last write back over sync.
+  void synced() {
+    room.matrixRoom
+            .states[MatrixVoipRoomComponent.callMemberStateEvent]![_ownKey] =
+        matrix.Event(
+      type: MatrixVoipRoomComponent.callMemberStateEvent,
+      content: homeserver.membershipWrites.last,
+      senderId: _me,
+      stateKey: _ownKey,
+      eventId: '\$written${homeserver.membershipWrites.length}',
+      originServerTs: serverTime,
+      room: room.matrixRoom,
+    );
+  }
+
+  /// Long enough for the publisher's debounce and the gap it keeps between
+  /// two writes (the rate limit is shared with messages).
+  Future<void> settle() => Future<void>.delayed(const Duration(seconds: 3));
+
   group('on a homeserver without delayed events', () {
-    test('our membership is pushed out an hour after it was written', () async {
+    test('deafening and undeafening publish the current voice state', () async {
+      joined(serverTime);
+      final call = await join();
+
+      await call.setDeafened(true);
+      // The join's heartbeat has just written: the publisher's rate limit.
+      await Future<void>.delayed(const Duration(milliseconds: 2100));
+
+      expect(call.isDeafened, isTrue);
+      expect(
+          MatrixCallMembership.voiceStateOf(homeserver.membershipWrites.last),
+          {VoiceState.muted, VoiceState.deafened});
+      expect(
+          homeserver.membershipWrites.last[MatrixCallMembership.unguardedKey],
+          isTrue);
+
+      await call.setDeafened(false);
+      // The second write respects the publisher's rate limit.
+      await Future<void>.delayed(const Duration(milliseconds: 2100));
+
+      expect(call.isDeafened, isFalse);
+      expect(call.isMicrophoneMuted, isFalse);
+      expect(
+          MatrixCallMembership.voiceStateOf(homeserver.membershipWrites.last),
+          isEmpty);
+    });
+
+    test('joining without a microphone publishes the initial mute', () async {
+      joined(serverTime);
+      (livekit.localParticipant! as _LocalParticipant).publications.clear();
+      final call = await join();
+
+      expect(call.isMicrophoneMuted, isTrue);
+      // No track event or user toggle follows a denied microphone.
+      expect(homeserver.membershipWrites, isNotEmpty,
+          reason: 'people outside the call must see the initial mute');
+      final write = homeserver.membershipWrites.single;
+      expect(MatrixCallMembership.voiceStateOf(write), {VoiceState.muted});
+      expect(write[MatrixCallMembership.unguardedKey], isTrue);
+    });
+
+    // Nothing clears it if we die: a window of hours kept someone whose
+    // client had died listed for hours (matrix.org, 2026-10-07).
+    test('the window the join wrote is cut to two minutes right away',
+        () async {
       final joinedAt = serverTime;
       joined(joinedAt);
       await join();
 
-      await stay(const Duration(minutes: 59));
-      expect(homeserver.membershipWrites, isEmpty,
-          reason: 'more than three hours of it are left');
-
-      await stay(const Duration(minutes: 2));
       final write = homeserver.membershipWrites.single;
       expect(write['application'], 'm.call');
       expect(write['created_ts'], joinedAt.millisecondsSinceEpoch,
           reason: 'still the same join, to everyone reading it');
-      expect(expiryOf(write), serverTime.add(MatrixCallMembership.lifetime));
+      expect(expiryOf(write),
+          serverTime.add(MatrixCallMembership.unguardedLifetime));
+    });
+
+    test('and written again half a minute after each write', () async {
+      final joinedAt = serverTime;
+      joined(joinedAt);
+      await join();
+      synced();
+      await settle();
+
+      await stay(const Duration(seconds: 25));
+      expect(homeserver.membershipWrites, hasLength(1),
+          reason: 'more than ninety seconds of it are left');
+
+      await stay(const Duration(seconds: 10));
+      await settle();
+      expect(homeserver.membershipWrites, hasLength(2));
+      final second = homeserver.membershipWrites.last;
+      expect(second['created_ts'], joinedAt.millisecondsSinceEpoch);
+      expect(expiryOf(second),
+          serverTime.add(MatrixCallMembership.unguardedLifetime));
     });
 
     // Away was only published with the delayed leave armed: here someone
@@ -401,89 +508,111 @@ void main() {
     test('going away is published all the same', () async {
       joined(serverTime);
       await join();
+      synced();
       UserIdleWatcher.instance.isAway.value = true;
       await stay(const Duration(seconds: 5));
-      await Future<void>.delayed(const Duration(seconds: 1));
+      await settle();
 
       expect(homeserver.membershipWrites.map(MatrixCallMembership.isAway),
           contains(true));
     });
 
-    test('and an hour after that again, still from the same join', () async {
-      final joinedAt = serverTime;
-      joined(joinedAt);
+    // A mute, a stream and the DJ booth were too: with no delayed events
+    // nobody outside the call ever saw who was muted or live in it.
+    test('a mute is published all the same, and says nothing guards it',
+        () async {
+      joined(serverTime);
       await join();
-      await stay(const Duration(minutes: 61));
-      // What the homeserver sends back once it has taken the write.
-      room.matrixRoom
-              .states[MatrixVoipRoomComponent.callMemberStateEvent]![_ownKey] =
-          matrix.Event(
-        type: MatrixVoipRoomComponent.callMemberStateEvent,
-        content: homeserver.membershipWrites.single,
-        senderId: _me,
-        stateKey: _ownKey,
-        eventId: r'$written',
-        originServerTs: serverTime,
-        room: room.matrixRoom,
-      );
-      // Writes are spaced out (the rate limit is shared with messages).
-      await Future<void>.delayed(const Duration(milliseconds: 2100));
+      (livekit.localParticipant! as _LocalParticipant)
+          .publications
+          .single
+          .muted = true;
+      synced();
+      // Any change to what we advertise writes all of it.
+      UserIdleWatcher.instance.isAway.value = true;
+      await stay(const Duration(seconds: 5));
+      await settle();
 
-      await stay(const Duration(minutes: 30));
-      expect(homeserver.membershipWrites, hasLength(1),
-          reason: 'three and a half hours of it are left');
+      final write = homeserver.membershipWrites.last;
+      expect(MatrixCallMembership.voiceStateOf(write), {VoiceState.muted});
+      expect(write[MatrixCallMembership.unguardedKey], isTrue,
+          reason: 'readers drop it once it stops being written');
+    });
 
-      await stay(const Duration(minutes: 31));
-      expect(homeserver.membershipWrites, hasLength(2));
-      final second = homeserver.membershipWrites.last;
-      expect(second['created_ts'], joinedAt.millisecondsSinceEpoch);
-      expect(expiryOf(second), serverTime.add(MatrixCallMembership.lifetime));
+    test('with nothing to leave behind, it is not called unguarded', () async {
+      joined(serverTime);
+      await join();
+      UserIdleWatcher.instance.isAway.value = true;
+      await stay(const Duration(seconds: 5));
+      await Future<void>.delayed(const Duration(seconds: 1));
+
+      final write = homeserver.membershipWrites.last;
+      expect(MatrixCallMembership.voiceStateOf(write), isEmpty);
+      expect(write[MatrixCallMembership.unguardedKey], isFalse);
     });
 
     test("the homeserver's time lagging behind ours does not cut it short",
         () async {
-      joined(serverTime);
-      await join();
-
       // Just woken from a sleep, before a sync has said what time it is:
       // what we know of the homeserver's time lags behind.
       localTime = serverTime.add(const Duration(minutes: 61));
-      serverTime = serverTime.add(const Duration(minutes: 1));
-      // ignore: invalid_use_of_visible_for_testing_member
-      await session!.debugHeartbeat();
-      await pumpEventQueue();
+      joined(serverTime);
+      await join();
 
       expect(expiryOf(homeserver.membershipWrites.single),
-          localTime.add(MatrixCallMembership.lifetime));
+          localTime.add(MatrixCallMembership.unguardedLifetime));
     });
 
     test("this machine's clock being set back does not hold it up", () async {
       joined(serverTime);
       await join();
-      await stay(const Duration(minutes: 61));
-      room.matrixRoom
-              .states[MatrixVoipRoomComponent.callMemberStateEvent]![_ownKey] =
-          matrix.Event(
-        type: MatrixVoipRoomComponent.callMemberStateEvent,
-        content: homeserver.membershipWrites.single,
-        senderId: _me,
-        stateKey: _ownKey,
-        eventId: r'$written',
-        originServerTs: serverTime,
-        room: room.matrixRoom,
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 2100));
+      synced();
+      await settle();
 
-      // An hour on, and someone fixed a clock that ran three hours ahead.
-      serverTime = serverTime.add(const Duration(minutes: 61));
-      localTime = localTime.subtract(const Duration(hours: 2));
+      // Someone fixed a clock that ran three hours ahead.
+      serverTime = serverTime.add(const Duration(seconds: 35));
+      localTime = localTime.subtract(const Duration(hours: 3));
       // ignore: invalid_use_of_visible_for_testing_member
       await session!.debugHeartbeat();
-      await pumpEventQueue();
+      await settle();
 
       expect(homeserver.membershipWrites, hasLength(2));
       expect(expiryOf(homeserver.membershipWrites.last),
-          serverTime.add(MatrixCallMembership.lifetime));
+          serverTime.add(MatrixCallMembership.unguardedLifetime));
+    });
+
+    test(
+        'LiveKit gone for 5 s clears our membership by hand, and it goes back '
+        'up as soon as LiveKit is back', () async {
+      joined(serverTime);
+      final call = await join();
+      synced();
+      await settle();
+      final writes = homeserver.membershipWrites.length;
+
+      livekit.connectionState = lk.ConnectionState.reconnecting;
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      localTime = localTime.add(const Duration(seconds: 5));
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      await pumpEventQueue();
+      expect(homeserver.membershipWrites, hasLength(writes + 1));
+      expect(homeserver.membershipWrites.last, isEmpty, reason: 'cleared');
+
+      // Nothing keeps it up while we are out of the call.
+      await stay(const Duration(minutes: 1));
+      expect(homeserver.membershipWrites, hasLength(writes + 1));
+
+      livekit.connectionState = lk.ConnectionState.connected;
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      await pumpEventQueue();
+      expect(homeserver.membershipWrites, hasLength(writes + 2));
+      final back = homeserver.membershipWrites.last;
+      expect(back['application'], 'm.call');
+      expect(expiryOf(back),
+          serverTime.add(MatrixCallMembership.unguardedLifetime));
     });
 
     test('nothing asks the homeserver about delayed events again and again',
@@ -496,6 +625,101 @@ void main() {
 
       expect(homeserver.versionsAsked, 1);
       expect(homeserver.armAttempts, 0);
+    });
+  });
+
+  group('delayed events advertised, then refused', () {
+    setUp(() {
+      homeserver.delayedEvents = true;
+      homeserver.refusesDelayedEvents = true;
+    });
+
+    test('is asked once, and the window is cut short as without them',
+        () async {
+      final joinedAt = serverTime;
+      joined(joinedAt);
+      final call = await join();
+      for (var i = 0; i < 12; i++) {
+        await stay(const Duration(seconds: 10));
+      }
+
+      expect(homeserver.armAttempts, 1);
+      expect(call.heartbeatDelayId, isNull);
+      expect(expiryOf(homeserver.membershipWrites.first),
+          joinedAt.add(MatrixCallMembership.unguardedLifetime));
+    });
+
+    // Regression (2026-10-07): with no delayed leave, a membership kept a
+    // window of hours, and people stayed listed for hours after their app
+    // had died. Judged here as every reader judges it (the sidebar, the
+    // channel's page, the online dot): by its `expires`.
+    test(
+        'someone in the call stays listed between writes, and is gone two '
+        'minutes after their app dies, not hours', () async {
+      joined(serverTime);
+      await join();
+      synced();
+      await settle();
+
+      for (var i = 0; i < 4; i++) {
+        final writes = homeserver.membershipWrites.length;
+        await stay(const Duration(seconds: 31));
+        await settle();
+        expect(homeserver.membershipWrites, hasLength(writes + 1),
+            reason: 'written again half a minute after the last write');
+        synced();
+        // Until the next write is due, with room for one that is late.
+        expect(
+            MatrixCallMembership.isExpired(homeserver.membershipWrites.last,
+                serverTime, serverTime.add(const Duration(seconds: 90))),
+            isFalse,
+            reason: 'still in the call: listed');
+      }
+
+      // The app dies here: what it wrote last is all anyone has.
+      final last = homeserver.membershipWrites.last;
+      final diedAt = serverTime;
+      expect(
+          MatrixCallMembership.isExpired(
+              last, diedAt, diedAt.add(const Duration(minutes: 1))),
+          isFalse);
+      expect(
+          MatrixCallMembership.isExpired(
+              last, diedAt, diedAt.add(const Duration(minutes: 2, seconds: 1))),
+          isTrue,
+          reason: 'listed for hours after it died (2026-10-07)');
+    });
+
+    // Regression (2026-10-05, 2026-10-07): an app that lost LiveKit but kept
+    // running kept its membership up, so it was listed in a call it was not
+    // in, for hours (ggflores23, then Enzo in a browser tab).
+    test(
+        'an app that lost LiveKit but keeps running takes itself off the list '
+        'within seconds, and stays off', () async {
+      joined(serverTime);
+      final call = await join();
+      synced();
+      await settle();
+      final writes = homeserver.membershipWrites.length;
+
+      livekit.connectionState = lk.ConnectionState.reconnecting;
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      localTime = localTime.add(const Duration(seconds: 5));
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      await pumpEventQueue();
+      expect(homeserver.membershipWrites, hasLength(writes + 1));
+      expect(homeserver.membershipWrites.last, isEmpty,
+          reason: 'off the list five seconds after LiveKit went');
+
+      // Minutes on with LiveKit still gone (the call is hung up after three):
+      // nothing puts the membership back.
+      for (var i = 0; i < 20; i++) {
+        await stay(const Duration(seconds: 30));
+      }
+      await settle();
+      expect(homeserver.membershipWrites.skip(writes), everyElement(isEmpty));
     });
   });
 
@@ -515,6 +739,23 @@ void main() {
 
       final write = homeserver.membershipWrites.single;
       expect(expiryOf(write), serverTime.add(MatrixCallMembership.lifetime));
+    });
+
+    test('a mute goes out guarded by the delayed leave', () async {
+      joined(serverTime);
+      await join();
+      expect(session!.heartbeatDelayId, isNotNull);
+      (livekit.localParticipant! as _LocalParticipant)
+          .publications
+          .single
+          .muted = true;
+      UserIdleWatcher.instance.isAway.value = true;
+      await stay(const Duration(seconds: 5));
+      await Future<void>.delayed(const Duration(seconds: 1));
+
+      final write = homeserver.membershipWrites.last;
+      expect(MatrixCallMembership.voiceStateOf(write), {VoiceState.muted});
+      expect(write[MatrixCallMembership.unguardedKey], isFalse);
     });
 
     test('pushing it out keeps saying we are away', () async {
@@ -592,6 +833,56 @@ void main() {
       expect(session!.heartbeatDelayId, isNotNull);
     });
 
+    test(
+        'LiveKit gone for 5 s takes our membership down, and it goes back up '
+        'as soon as LiveKit is back', () async {
+      joined(serverTime.subtract(const Duration(minutes: 1)));
+      final call = await join();
+      expect(call.heartbeatDelayId, isNotNull);
+
+      livekit.connectionState = lk.ConnectionState.reconnecting;
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      localTime = localTime.add(const Duration(seconds: 4));
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      await pumpEventQueue();
+      expect(homeserver.delayedLeavesSent, 0, reason: 'a blip');
+
+      localTime = localTime.add(const Duration(seconds: 1));
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      await pumpEventQueue();
+      expect(homeserver.delayedLeavesSent, 1);
+
+      // The homeserver cleared it; nothing keeps it up or puts it back
+      // while we are out of the call.
+      room.matrixRoom.states[MatrixVoipRoomComponent.callMemberStateEvent] = {
+        _ownKey: matrix.Event(
+          type: MatrixVoipRoomComponent.callMemberStateEvent,
+          content: const {},
+          senderId: _me,
+          stateKey: _ownKey,
+          eventId: r'$left',
+          originServerTs: serverTime,
+          room: room.matrixRoom,
+        ),
+      };
+      final restarts = homeserver.restarts;
+      final writes = homeserver.membershipWrites.length;
+      await stay(const Duration(seconds: 20));
+      expect(homeserver.restarts, restarts);
+      expect(homeserver.membershipWrites, hasLength(writes));
+
+      livekit.connectionState = lk.ConnectionState.connected;
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      await pumpEventQueue();
+      expect(homeserver.armAttempts, 2, reason: 'a new delayed leave');
+      expect(homeserver.membershipWrites, hasLength(writes + 1));
+      expect(homeserver.membershipWrites.last['application'], 'm.call');
+    });
+
     test('a homeserver that could not be asked is asked again', () async {
       homeserver.versionsFailures = 1;
       joined(serverTime);
@@ -605,6 +896,42 @@ void main() {
   });
 
   group('who is connected', () {
+    test(
+        'nobody else while reconnecting, after a blip is let pass, and '
+        'everyone again once LiveKit is back', () async {
+      livekit.remote['@bob:example.org:BOB'] =
+          _RemoteParticipant('@bob:example.org:BOB');
+      joined(serverTime);
+      final call = await join();
+      final changes = <void>[];
+      final sub = call.onStateChanged.listen(changes.add);
+      addTearDown(sub.cancel);
+
+      livekit.connectionState = lk.ConnectionState.reconnecting;
+      localTime = localTime.add(const Duration(seconds: 1));
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      expect(call.reconnecting, isFalse, reason: 'a blip');
+
+      localTime = localTime.add(MatrixLivekitVoipSession.reconnectingAfter);
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      await pumpEventQueue();
+      expect(call.reconnecting, isTrue);
+      expect(call.connectedUserIds, {_me});
+      expect(
+          call.streams
+              .where((s) => s.direction != VoipStreamDirection.outgoing),
+          isEmpty);
+      expect(changes, isNotEmpty);
+
+      livekit.connectionState = lk.ConnectionState.connected;
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      expect(call.reconnecting, isFalse);
+      expect(call.connectedUserIds, {_me, '@bob:example.org'});
+    });
+
     test('everyone in the LiveKit room, publishing or not', () async {
       livekit.remote['@bob:example.org:BOB'] =
           _RemoteParticipant('@bob:example.org:BOB');
@@ -643,6 +970,75 @@ void main() {
       call.state = VoipState.ended;
 
       expect(call.connectedUserIds, isEmpty);
+    });
+
+    test('is everyone in the call once connected for 30 s, and says so',
+        () async {
+      joined(serverTime);
+      final call = await join();
+      final changes = <void>[];
+      final sub = call.onStateChanged.listen(changes.add);
+      addTearDown(sub.cancel);
+
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      localTime = localTime.add(const Duration(seconds: 29));
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      expect(call.rosterComplete, isFalse);
+
+      localTime = localTime.add(const Duration(seconds: 1));
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      await pumpEventQueue();
+      expect(call.rosterComplete, isTrue);
+      expect(changes, hasLength(1), reason: 'the sidebar looks again');
+
+      livekit.connectionState = lk.ConnectionState.reconnecting;
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      expect(call.rosterComplete, isFalse);
+    });
+  });
+
+  group('lost connection', () {
+    test('a call LiveKit gave up on without saying so is hung up', () async {
+      joined(serverTime);
+      final call = await join();
+
+      livekit.connectionState = lk.ConnectionState.reconnecting;
+      localTime = localTime.add(const Duration(minutes: 2, seconds: 59));
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      await pumpEventQueue();
+      expect(call.state, isNot(VoipState.ended),
+          reason: 'LiveKit may still be reconnecting');
+
+      localTime = localTime.add(const Duration(seconds: 1));
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      await pumpEventQueue(times: 100);
+      expect(call.state, VoipState.ended);
+    });
+
+    test('reconnecting in time keeps the call', () async {
+      joined(serverTime);
+      final call = await join();
+
+      livekit.connectionState = lk.ConnectionState.reconnecting;
+      localTime = localTime.add(const Duration(minutes: 2));
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      livekit.connectionState = lk.ConnectionState.connected;
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      livekit.connectionState = lk.ConnectionState.reconnecting;
+      localTime = localTime.add(const Duration(minutes: 2));
+      // ignore: invalid_use_of_visible_for_testing_member
+      call.debugWatchConnection();
+      await pumpEventQueue();
+
+      expect(call.state, isNot(VoipState.ended));
     });
   });
 }

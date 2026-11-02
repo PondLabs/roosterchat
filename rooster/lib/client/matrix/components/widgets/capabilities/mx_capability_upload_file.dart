@@ -37,6 +37,7 @@ class MatrixCapabilityUploadFile implements MatrixWidgetCapability {
       return message.createResponseObject(
           data: {}, response: {"content_uri": result.toString()});
     } else {
+      // Not translated: a reply to the widget, which the app does not show.
       return message.createResponseError(message: "Invalid message");
     }
   }

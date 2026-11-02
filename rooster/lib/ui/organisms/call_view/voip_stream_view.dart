@@ -15,6 +15,7 @@ import 'package:rooster/ui/organisms/dj/dj_booth_panel.dart';
 import 'package:rooster/ui/organisms/dj/dj_member_ui.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_emoji_overlay.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_overlay_registry.dart';
+import 'package:rooster/ui/organisms/soundboard/soundboard_user_volume.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -48,6 +49,12 @@ class VoipStreamView extends StatefulWidget {
 
   @override
   State<VoipStreamView> createState() => _VoipStreamViewState();
+
+  /// The menu of someone's stream: who it is, watching it, its volumes.
+  static List<tiamat.ContextMenuItem> streamContextMenuItems(
+          VoipStream stream, Member user, {VoipStream? audioStream}) =>
+      _VoipStreamViewState.streamContextMenuItems(stream, user,
+          audioStream: audioStream);
 }
 
 class _VoipStreamViewState extends State<VoipStreamView> {
@@ -64,6 +71,11 @@ class _VoipStreamViewState extends State<VoipStreamView> {
           name: "labelUserIsSharingScreen",
           args: [user],
           desc: "Shown on a screen share tile you are not watching");
+
+  static String get labelCallSoundEffects => Intl.message("Sound effects",
+      name: "labelCallSoundEffects",
+      desc: "Over the slider, in the menu of someone's tile in a call, that "
+          "sets how loud their soundboard sounds play for you");
 
   late Member user;
 
@@ -202,9 +214,13 @@ class _VoipStreamViewState extends State<VoipStreamView> {
               Align(
                 alignment: Alignment.bottomLeft,
                 child: IgnorePointer(
-                  ignoring: !(hovering || MediaQuery.of(context).mobile),
+                  ignoring:
+                      !(hovering || MediaQuery.sizeOf(context).touchControls),
                   child: AnimatedOpacity(
-                    opacity: hovering || MediaQuery.of(context).mobile ? 1 : 0,
+                    opacity:
+                        hovering || MediaQuery.sizeOf(context).touchControls
+                            ? 1
+                            : 0,
                     duration: const Duration(milliseconds: 200),
                     child: Padding(
                       padding: const EdgeInsets.all(8),
@@ -272,7 +288,22 @@ class _VoipStreamViewState extends State<VoipStreamView> {
                 child: StreamVolumeSlider(volumeStream),
               );
             },
-          )
+          ),
+        // Their soundboard sounds, apart from their voice and the DJ's music.
+        if (stream.type == VoipStreamType.audio)
+          tiamat.ContextMenuItem(
+            text: "Sound effects volume",
+            customBuilder: (context, onClicked, {closeMenu}) => Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 0, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  tiamat.Text.labelLow(labelCallSoundEffects),
+                  SoundboardUserVolumeSlider(user.identifier),
+                ],
+              ),
+            ),
+          ),
       ]
     ];
   }
@@ -451,6 +482,11 @@ mixin _FollowsStreamVolume<T extends StatefulWidget> on State<T> {
 /// through audio elements, which stop at 100%; native WebRTC can boost.
 double get maxStreamVolume => kIsWeb ? 1.0 : 2.5;
 
+/// [volume] (1 is 100%) as a percentage, the way the user's language writes
+/// one.
+String _volumePercent(double volume) =>
+    NumberFormat.percentPattern().format(volume.clamp(0.0, maxStreamVolume));
+
 class StreamVolumeSlider extends StatefulWidget {
   const StreamVolumeSlider(this.stream, {super.key});
 
@@ -469,8 +505,7 @@ class _StreamVolumeSliderState extends State<StreamVolumeSlider>
     return Row(
       mainAxisSize: MainAxisSize.max,
       children: [
-        tiamat.Text.labelLow(
-            "${(widget.stream.volume.clamp(0.0, maxStreamVolume) * 100).round()}%"),
+        tiamat.Text.labelLow(_volumePercent(widget.stream.volume)),
         Expanded(
           child: tiamat.Slider(
             min: 0.0,
@@ -566,7 +601,7 @@ class _StreamVolumeControlState extends State<StreamVolumeControl>
               ),
             ),
             const SizedBox(width: 8),
-            Text("${(volume * 100).round()}%",
+            Text(_volumePercent(volume),
                 style: const TextStyle(color: Colors.white, fontSize: 12)),
           ],
         ),

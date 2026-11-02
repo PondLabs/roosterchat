@@ -99,6 +99,11 @@ class AudioDspReport {
   final int frames;
   final int flags;
 
+  /// The level the input gate opens above, dBFS: the slider's in manual
+  /// mode, the one automatic mode sets from the room's background noise.
+  /// Null from a DSP too old to say.
+  final double? gateThresholdDb;
+
   const AudioDspReport({
     required this.levelDb,
     required this.vad,
@@ -107,6 +112,7 @@ class AudioDspReport {
     required this.sampleRate,
     required this.frames,
     required this.flags,
+    this.gateThresholdDb,
   });
 
   bool get gateOpen => flags & flagGateOpen != 0;

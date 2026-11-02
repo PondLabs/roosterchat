@@ -1,9 +1,14 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:rooster/client/components/voip/voip_session.dart';
+import 'package:rooster/client/components/voip/webrtc_default_devices.dart';
+import 'package:rooster/main.dart';
+import 'package:rooster/ui/molecules/screen_share_start_reporting.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_button.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_call_controller.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 /// What the call's buttons do. Handed from the call view to the fullscreen
@@ -64,6 +69,56 @@ class CallControlButtons extends StatefulWidget {
   final VoidCallback? onHungUp;
   final ValueChanged<bool>? onSoundboardOpenChanged;
 
+  static String get promptCallOpenDjBooth =>
+      Intl.message("DJ booth – play music",
+          name: "promptCallOpenDjBooth",
+          desc: "Tooltip of the call's DJ booth button, and its entry in the "
+              "phone's \"more\" sheet, while the booth is closed: opens the "
+              "booth to play music for everyone in the call");
+
+  static String get promptCallCloseDjBooth => Intl.message("Close the DJ booth",
+      name: "promptCallCloseDjBooth",
+      desc: "Tooltip of the call's DJ booth button, and its entry in the "
+          "phone's \"more\" sheet, while the booth is open");
+
+  static String get promptCallShareScreen => Intl.message("Share your screen",
+      name: "promptCallShareScreen",
+      desc: "Entry in the phone's \"more\" sheet of the call buttons that "
+          "starts sharing the screen");
+
+  static String get promptCallStopSharingScreen =>
+      Intl.message("Stop sharing your screen",
+          name: "promptCallStopSharingScreen",
+          desc: "Entry in the phone's \"more\" sheet of the call buttons that "
+              "stops sharing the screen");
+
+  static String get promptCallAudioOutput => Intl.message("Audio output",
+      name: "promptCallAudioOutput",
+      desc: "Tooltip of the call's speaker button, and the title of the "
+          "list it opens: where the call's sound plays (speaker, earpiece, "
+          "headphones)");
+
+  static String get messageCallAudioOutputUnavailable => Intl.message(
+      "This device does not let Rooster choose where the sound plays. "
+      "Change it in the system's audio controls.",
+      name: "messageCallAudioOutputUnavailable",
+      desc: "Shown in the call's audio output list when the browser or "
+          "phone lists no output devices to choose from");
+
+  /// The least room left between two buttons of the compact row.
+  static const double _compactGap = 4;
+
+  /// The radius the compact row's [count] buttons get in [width]: the one
+  /// asked for where they fit, smaller where they do not. A foldable's
+  /// cover screen (280 logical pixels on the early ones) is narrower than
+  /// six touch-sized buttons, and the row ran off its edge.
+  static double compactRadius(
+      {required double asked, required double width, required int count}) {
+    if (!width.isFinite) return asked;
+    final fits = (width / count - _compactGap) / 2;
+    return min(asked, max(fits, 12));
+  }
+
   @override
   State<CallControlButtons> createState() => _CallControlButtonsState();
 }
@@ -98,17 +153,36 @@ class _CallControlButtonsState extends State<CallControlButtons> {
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.compact) return _buildButtons(context, widget.radius);
+    return LayoutBuilder(
+      builder: (context, constraints) => _buildButtons(
+          context,
+          CallControlButtons.compactRadius(
+              asked: widget.radius,
+              width: constraints.maxWidth,
+              // Mic, deafen, speaker, camera, more and hang up, and the
+              // soundboard.
+              count: widget.actions.soundboard == null ? 6 : 7)),
+    );
+  }
+
+  Widget _buildButtons(BuildContext context, double radius) {
     final session = widget.session;
     final actions = widget.actions;
-    final radius = widget.radius;
     final iconSize = radius * 1.2;
     final soundboard = actions.soundboard;
     final colors = Theme.of(context).colorScheme;
 
+    // Where the screen cannot be captured (a phone's browser, also on an
+    // unfolded foldable, which gets this full row) the button stays, greyed
+    // out, and says why when pressed: it used to look ready and do nothing.
     final shareScreen = tiamat.CircleButton(
         radius: radius,
         iconSize: iconSize,
         icon: Icons.screen_share_outlined,
+        iconColor: session.supportsScreenshare
+            ? null
+            : Theme.of(context).disabledColor,
         onPressed: actions.pickScreenshareSource);
     final stopSharing = tiamat.CircleButton(
       radius: radius,
@@ -135,6 +209,15 @@ class _CallControlButtonsState extends State<CallControlButtons> {
         await actions.setDeafened?.call(!session.isDeafened);
         if (mounted) setState(() {});
       },
+    );
+    final output = Tooltip(
+      message: CallControlButtons.promptCallAudioOutput,
+      child: tiamat.CircleButton(
+        radius: radius,
+        iconSize: iconSize,
+        icon: Icons.volume_up,
+        onPressed: () => _pickAudioOutput(context),
+      ),
     );
     final camera = tiamat.CircleButton(
       radius: radius,
@@ -164,8 +247,8 @@ class _CallControlButtonsState extends State<CallControlButtons> {
         ? null
         : Tooltip(
             message: widget.boothOpen
-                ? 'Close the DJ booth'
-                : 'DJ booth – play music',
+                ? CallControlButtons.promptCallCloseDjBooth
+                : CallControlButtons.promptCallOpenDjBooth,
             child: tiamat.CircleButton(
               radius: radius,
               iconSize: iconSize,
@@ -192,6 +275,7 @@ class _CallControlButtonsState extends State<CallControlButtons> {
         children: [
           mic,
           deafen,
+          output,
           camera,
           if (soundboardButton != null) soundboardButton,
           tiamat.CircleButton(
@@ -218,11 +302,57 @@ class _CallControlButtonsState extends State<CallControlButtons> {
         if (session.isSharingScreen) stopSharing,
         mic,
         deafen,
+        output,
         camera,
         if (soundboardButton != null) soundboardButton,
         if (booth != null) booth,
         hangUp,
       ],
+    );
+  }
+
+  /// Lists where the call can play (speaker, earpiece, headphones) and
+  /// switches to the one picked, saved as the settings' audio output.
+  Future<void> _pickAudioOutput(BuildContext context) async {
+    final devices = (await WebrtcDefaultDevices.getDevices())
+        .where((d) => d.kind == "audiooutput")
+        .toList();
+    final current = await WebrtcDefaultDevices.picked(AudioDeviceKind.output);
+    if (!context.mounted) return;
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheet) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                  title: Text(CallControlButtons.promptCallAudioOutput,
+                      style: Theme.of(sheet).textTheme.titleMedium)),
+              if (devices.isEmpty)
+                ListTile(
+                  leading: const Icon(Icons.info_outline),
+                  title: Text(
+                      CallControlButtons.messageCallAudioOutputUnavailable),
+                ),
+              for (final device in devices)
+                ListTile(
+                  leading: Icon(device.deviceId == current?.deviceId
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked),
+                  // Not translated: the name the system gives the device.
+                  title: Text(device.label),
+                  onTap: () async {
+                    Navigator.pop(sheet);
+                    await preferences.voipDefaultAudioOutput.set(device.label);
+                    await widget.session.applyAudioOutput();
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -240,7 +370,7 @@ class _CallControlButtonsState extends State<CallControlButtons> {
             if (session.isSharingScreen)
               ListTile(
                 leading: const Icon(Icons.stop_screen_share),
-                title: const Text('Stop sharing your screen'),
+                title: Text(CallControlButtons.promptCallStopSharingScreen),
                 onTap: () {
                   Navigator.pop(sheet);
                   actions.stopScreenshare?.call();
@@ -248,8 +378,15 @@ class _CallControlButtonsState extends State<CallControlButtons> {
               )
             else if (actions.pickScreenshareSource != null)
               ListTile(
+                key: const ValueKey('callControls_shareScreen'),
                 leading: const Icon(Icons.screen_share_outlined),
-                title: const Text('Share your screen'),
+                title: Text(CallControlButtons.promptCallShareScreen),
+                // A phone's browser cannot capture the screen: said here,
+                // rather than a tile that does nothing when tapped.
+                enabled: session.supportsScreenshare,
+                subtitle: session.supportsScreenshare
+                    ? null
+                    : Text(messageScreenShareUnsupported),
                 onTap: () {
                   Navigator.pop(sheet);
                   actions.pickScreenshareSource?.call();
@@ -259,8 +396,8 @@ class _CallControlButtonsState extends State<CallControlButtons> {
               ListTile(
                 leading: const Icon(Icons.album_rounded),
                 title: Text(widget.boothOpen
-                    ? 'Close the DJ booth'
-                    : 'DJ booth – play music'),
+                    ? CallControlButtons.promptCallCloseDjBooth
+                    : CallControlButtons.promptCallOpenDjBooth),
                 onTap: () {
                   Navigator.pop(sheet);
                   widget.onToggleBooth?.call();

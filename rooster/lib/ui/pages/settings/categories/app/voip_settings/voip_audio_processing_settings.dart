@@ -4,6 +4,7 @@ import 'package:rooster/client/components/voip/audio_processing/audio_dsp_settin
 import 'package:rooster/client/components/voip/audio_processing/audio_processing_manager.dart';
 import 'package:rooster/config/platform_utils.dart';
 import 'package:rooster/main.dart';
+import 'package:rooster/ui/atoms/noise_suppression_button.dart';
 import 'package:rooster/ui/pages/settings/categories/app/boolean_preference_toggle.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -32,14 +33,12 @@ class _VoipAudioProcessingSettingsState
   bool _starting = false;
   bool _startFailed = false;
 
-  String get labelVoipNoiseSuppression => Intl.message("Noise suppression",
-      name: "labelVoipNoiseSuppression",
-      desc: "Label for the toggle that enables microphone noise suppression");
+  // The call panel's button says the same.
+  String get labelVoipNoiseSuppression =>
+      NoiseSuppressionButton.labelVoipNoiseSuppression;
 
-  String get labelVoipNoiseSuppressionDescription => Intl.message(
-      "Removes background noise, keyboard clicks and clapping from your microphone before it is sent to others. Runs on your device.",
-      name: "labelVoipNoiseSuppressionDescription",
-      desc: "Describes the microphone noise suppression toggle");
+  String get labelVoipNoiseSuppressionDescription =>
+      NoiseSuppressionButton.labelVoipNoiseSuppressionDescription;
 
   String get labelVoipInputSensitivityAuto => Intl.message(
       "Automatic input sensitivity",
@@ -62,10 +61,10 @@ class _VoipAudioProcessingSettingsState
       desc: "Describes the manual microphone threshold slider and meter");
 
   String get labelVoipInputSensitivityAutoFloorDescription => Intl.message(
-      "Speech is transmitted only when it is also louder than the marker. Leave it low unless sound from your speakers gets through; then drag it between that and your voice.",
+      "Set for you a little above your room's background noise, and it follows the room as it gets louder or quieter. Turn automatic input sensitivity off to set it yourself.",
       name: "labelVoipInputSensitivityAutoFloorDescription",
       desc:
-          "Describes the microphone threshold slider while automatic input sensitivity is on, where it acts as a minimum level");
+          "Describes the microphone threshold slider while automatic input sensitivity is on: greyed out, it shows the level the app picked from the background noise");
 
   String get labelVoipSpeakerBleed => Intl.message(
       "Filter out sound from your speakers",
@@ -79,7 +78,7 @@ class _VoipAudioProcessingSettingsState
       desc: "Describes the speaker bleed filter toggle on desktop");
 
   String get labelVoipSpeakerBleedDescriptionWeb => Intl.message(
-      "If you use speakers instead of a headset, keeps other people in the call from coming back through your microphone. The browser cannot see other sound playing on your computer; if a video gets through, raise the input sensitivity marker above it.",
+      "If you use speakers instead of a headset, keeps other people in the call from coming back through your microphone. The browser cannot see other sound playing on your computer; if a video gets through, turn automatic input sensitivity off and raise the marker above it.",
       name: "labelVoipSpeakerBleedDescriptionWeb",
       desc:
           "Describes the speaker bleed filter toggle in the browser, where only call audio can be filtered");
@@ -119,10 +118,13 @@ class _VoipAudioProcessingSettingsState
       name: "labelVoipInputMeterIdle",
       desc: "Shown under the microphone level meter when nothing is captured");
 
-  String get labelVoipInputMeterInCall =>
-      Intl.message("Live from your current call.",
-          name: "labelVoipInputMeterInCall",
-          desc: "Shown under the microphone level meter during a call");
+  String labelVoipDspStatusInCall(String status) =>
+      Intl.message("Live from your current call. $status",
+          name: "labelVoipDspStatusInCall",
+          args: [status],
+          desc: "Shown under the microphone level meter during a call, "
+              "followed by the processing status line (sample rate, noise "
+              "suppression, gate state)");
 
   String get labelVoipMicTestStart => Intl.message("Test microphone",
       name: "labelVoipMicTestStart",
@@ -154,27 +156,28 @@ class _VoipAudioProcessingSettingsState
           "Diagnostic shown when the voice DSP is installed but not receiving frames");
 
   String labelVoipDspStatus(String rate, String suppression, String gate) =>
-      Intl.message(
-          "Processing $rate audio. Noise suppression $suppression. $gate",
+      Intl.message("Processing $rate audio. $suppression $gate",
           args: [rate, suppression, gate],
           name: "labelVoipDspStatus",
           desc:
-              "Diagnostic line under the level meter: sample rate, whether noise suppression is running, gate state");
+              "Diagnostic line under the level meter: the sample rate, then the noise suppression sentence and the gate sentence");
 
-  String get labelVoipDspOnDeepFilter => Intl.message("on (DeepFilterNet)",
-      name: "labelVoipDspOnDeepFilter",
+  String get labelVoipDspNoiseSuppressionDeepFilter => Intl.message(
+      "Noise suppression on (DeepFilterNet).",
+      name: "labelVoipDspNoiseSuppressionDeepFilter",
       desc:
-          "Noise suppression state in the status line when the DeepFilterNet model is running; DeepFilterNet is a name");
+          "Sentence in the status line when the DeepFilterNet model is running; DeepFilterNet is a name");
 
-  String get labelVoipDspOnBasic => Intl.message(
-      "on (RNNoise only, knocks and typing get through)",
-      name: "labelVoipDspOnBasic",
+  String get labelVoipDspNoiseSuppressionBasic => Intl.message(
+      "Noise suppression on (RNNoise only, knocks and typing get through).",
+      name: "labelVoipDspNoiseSuppressionBasic",
       desc:
-          "Noise suppression state in the status line when only the simpler RNNoise suppressor runs; RNNoise is a name");
+          "Sentence in the status line when only the simpler RNNoise suppressor runs; RNNoise is a name");
 
-  String get labelVoipDspOff => Intl.message("off",
-      name: "labelVoipDspOff",
-      desc: "Noise suppression state in the status line");
+  String get labelVoipDspNoiseSuppressionOff =>
+      Intl.message("Noise suppression off.",
+          name: "labelVoipDspNoiseSuppressionOff",
+          desc: "Sentence in the status line when noise suppression is off");
 
   String get labelVoipDspGateOpen => Intl.message("Transmitting.",
       name: "labelVoipDspGateOpen",
@@ -250,6 +253,11 @@ class _VoipAudioProcessingSettingsState
     final auto = preferences.voipInputSensitivityAuto.value;
     final active = manager.isActive;
     final report = active ? _report : null;
+    // In automatic mode the DSP picks the threshold from the room's noise:
+    // the slider shows it, greyed out, and moves with it. Unknown until the
+    // DSP has run in automatic mode.
+    final autoDb = auto ? report?.gateThresholdDb : null;
+    final shownDb = auto ? autoDb : preferences.voipInputSensitivityDb.value;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -273,32 +281,34 @@ class _VoipAudioProcessingSettingsState
             spacing: 6,
             children: [
               tiamat.Text.labelEmphasised(labelVoipInputSensitivity),
-              // A floor in automatic mode too (the VAD alone cannot tell a
-              // voice from a loudspeaker), so the marker is always shown.
               tiamat.Text.labelLow(auto
                   ? labelVoipInputSensitivityAutoFloorDescription
                   : labelVoipInputSensitivityDescription),
               InputLevelMeter(
                 report: report,
-                thresholdDb: preferences.voipInputSensitivityDb.value,
+                thresholdDb: shownDb,
               ),
               Row(
                 children: [
                   SizedBox(
                     width: 64,
-                    child: tiamat.Text.labelLow(
-                        "${preferences.voipInputSensitivityDb.value.toStringAsFixed(0)} dB"),
+                    child: tiamat.Text.labelLow(shownDb == null
+                        ? ""
+                        // Not translated: a whole number and its unit.
+                        : "${shownDb.toStringAsFixed(0)} dB"),
                   ),
                   Expanded(
                     child: tiamat.Slider(
                       min: InputLevelMeter.minDb,
                       max: InputLevelMeter.maxDb,
-                      value: preferences.voipInputSensitivityDb.value
+                      value: (shownDb ?? InputLevelMeter.minDb)
                           .clamp(InputLevelMeter.minDb, InputLevelMeter.maxDb),
-                      onChanged: (value) {
-                        preferences.voipInputSensitivityDb.set(value);
-                        setState(() {});
-                      },
+                      onChanged: auto
+                          ? null
+                          : (value) {
+                              preferences.voipInputSensitivityDb.set(value);
+                              setState(() {});
+                            },
                     ),
                   ),
                 ],
@@ -337,10 +347,10 @@ class _VoipAudioProcessingSettingsState
     final status = labelVoipDspStatus(
       rate,
       !report.noiseSuppressionActive
-          ? labelVoipDspOff
+          ? labelVoipDspNoiseSuppressionOff
           : report.deepFilterActive
-              ? labelVoipDspOnDeepFilter
-              : labelVoipDspOnBasic,
+              ? labelVoipDspNoiseSuppressionDeepFilter
+              : labelVoipDspNoiseSuppressionBasic,
       report.speakerBleed
           ? labelVoipDspSpeakerBleed
           : report.gateOpen
@@ -348,7 +358,7 @@ class _VoipAudioProcessingSettingsState
               : labelVoipDspGateClosed,
     );
     return tiamat.Text.labelLow(
-        manager.isInCall ? "$labelVoipInputMeterInCall $status" : status);
+        manager.isInCall ? labelVoipDspStatusInCall(status) : status);
   }
 
   Widget _testControls(AudioProcessingManager manager) {

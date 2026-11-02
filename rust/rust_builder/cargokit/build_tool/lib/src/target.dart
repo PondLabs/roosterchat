@@ -46,6 +46,12 @@ class Target {
       rust: 'x86_64-pc-windows-msvc',
       flutter: 'windows-x64',
     ),
+    // ROOSTER: Windows on Arm, as upstream cargokit has it. Flutter passes
+    // FLUTTER_TARGET_PLATFORM=windows-arm64 on an arm64 host.
+    Target(
+      rust: 'aarch64-pc-windows-msvc',
+      flutter: 'windows-arm64',
+    ),
     Target(
       rust: 'x86_64-unknown-linux-gnu',
       flutter: 'linux-x64',

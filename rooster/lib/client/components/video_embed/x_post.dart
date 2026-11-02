@@ -7,7 +7,8 @@ class XPost {
   final String handle;
   final Uri? avatarUrl;
 
-  /// "individual", "business" or "government" when verified, else null.
+  /// "individual", "organization" or "government" when verified, else
+  /// null.
   final String? verification;
 
   /// The post's text, with t.co links already expanded and the trailing

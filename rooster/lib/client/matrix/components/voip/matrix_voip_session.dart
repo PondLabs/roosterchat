@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:rooster/client/client.dart';
+import 'package:rooster/config/platform_utils.dart';
 import 'package:rooster/client/components/voip/android_screencapture_source.dart';
 import 'package:rooster/client/components/voip/deafen_rule.dart';
+import 'package:rooster/client/components/voip/screen_capture_support.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/client/components/voip/webrtc_default_devices.dart';
@@ -10,6 +12,7 @@ import 'package:rooster/client/components/voip/webrtc_screencapture_source.dart'
 import 'package:rooster/client/matrix/components/rtc_data_channel/matrix_rtc_data_channel_component.dart';
 import 'package:rooster/client/matrix/components/voip/matrix_voip_stream.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
+import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/main.dart';
 import 'package:flutter/src/widgets/framework.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -87,7 +90,7 @@ class MatrixVoipSession implements VoipSession {
   String? get remoteUserName => session.remoteUser?.displayName;
 
   @override
-  bool get supportsScreenshare => true;
+  bool get supportsScreenshare => canCaptureScreen;
 
   @override
   bool get isSharingScreen => session.localScreenSharingStream != null;
@@ -128,7 +131,8 @@ class MatrixVoipSession implements VoipSession {
   }
 
   @override
-  String get roomName => session.room.getLocalizedDisplayname();
+  String get roomName =>
+      session.room.getLocalizedDisplayname(const RoomNameLocalizations());
 
   @override
   Future<void> acceptCall(
@@ -175,6 +179,11 @@ class MatrixVoipSession implements VoipSession {
       return;
     }
     return session.setMicrophoneMuted(state);
+  }
+
+  @override
+  Future<void> applyAudioOutput() async {
+    await WebrtcDefaultDevices.selectOutputDevice();
   }
 
   @override
@@ -240,6 +249,15 @@ class MatrixVoipSession implements VoipSession {
   @override
   Future<void> setScreenShare(ScreenCaptureSource source) async {
     MediaStream? stream;
+
+    if (source is WebrtcBrowserScreenCaptureSource) {
+      stream = await webrtc.navigator.mediaDevices.getDisplayMedia({
+        'video': {
+          'frameRate': preferences.streamFramerate.value,
+        },
+        'audio': source.captureAudio,
+      });
+    }
 
     if (source is WebrtcAndroidScreencaptureSource) {
       stream = await webrtc.navigator.mediaDevices.getDisplayMedia({
@@ -365,6 +383,12 @@ class MatrixVoipSession implements VoipSession {
 
   @override
   Future<ScreenCaptureSource?> pickScreenCapture(BuildContext context) async {
+    // The browser picks the screen itself in getDisplayMedia; the desktop
+    // source list this asked for is not implemented there, so the button
+    // did nothing on the web.
+    if (PlatformUtils.isWeb) {
+      return WebrtcBrowserScreenCaptureSource();
+    }
     return WebrtcScreencaptureSource.showSelectSourcePrompt(context);
   }
 

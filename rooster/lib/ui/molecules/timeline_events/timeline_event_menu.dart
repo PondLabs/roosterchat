@@ -105,6 +105,32 @@ class TimelineEventMenu {
         name: "promptFavoriteGif",
       );
 
+  String get messagePollEndConfirmation =>
+      Intl.message("Are you sure you want to end the poll?",
+          name: "messagePollEndConfirmation",
+          desc: "Asked before ending a poll from its message's menu");
+
+  String get promptMessageRetryDecrypt => Intl.message("Retry Decrypt",
+      name: "promptMessageRetryDecrypt",
+      desc: "Menu entry on a message that could not be decrypted: asks for "
+          "its keys again and tries to decrypt it");
+
+  String get labelMessageSourceTitle => Intl.message("Source",
+      name: "labelMessageSourceTitle",
+      desc: "Title of the dialog that shows the raw JSON of a message "
+          "(after 'Show Source' in its menu)");
+
+  String get promptMessageShowNotification => Intl.message("Show Notification",
+      name: "promptMessageShowNotification",
+      desc: "Developer mode menu entry on a message: shows the notification "
+          "it would make");
+
+  String get promptMessageDiagnoseNotification =>
+      Intl.message("Diagnose Notification",
+          name: "promptMessageDiagnoseNotification",
+          desc: "Developer mode menu entry on a message: opens a tool that "
+              "explains whether and why it notifies");
+
   TimelineEventMenu({
     required this.timeline,
     required this.event,
@@ -203,9 +229,9 @@ class TimelineEventMenu {
     }
 
     if (canAddReaction) {
-      var recent = timeline.room.client
-          .getComponent<RecentEmoticonComponent>()
-          ?.getRecentReactionEmoticon(timeline.room);
+      // The same list as above (it sorts the recents and walks the packs
+      // each time it is asked).
+      var recent = reactions != null ? recentReactions : null;
 
       var availableEmoji = emoticons!.availableEmoji;
 
@@ -214,7 +240,7 @@ class TimelineEventMenu {
             0,
             DynamicEmoticonPack(
                 identifier: "dynamic_pack_frequently_used_reactions",
-                displayName: "Frequently Used",
+                displayName: EmojiPicker.labelChatEmojiFrequentlyUsed,
                 icon: Icons.schedule,
                 emoticons: recent,
                 usage: EmoticonUsage.all));
@@ -240,7 +266,7 @@ class TimelineEventMenu {
     }
 
     primaryActions = [
-      if (MediaQuery.of(context).mobile) ...[
+      if (MediaQuery.sizeOf(context).mobile) ...[
         if (canFavoriteGif)
           TimelineEventMenuEntry(
             name: promptFavoriteGif,
@@ -266,8 +292,7 @@ class TimelineEventMenu {
           icon: Icons.poll,
           action: (context) async {
             if (await AdaptiveDialog.confirmation(context,
-                    title: promptEndPoll,
-                    prompt: "Are you sure you want to end the poll?") ==
+                    title: promptEndPoll, prompt: messagePollEndConfirmation) ==
                 true) polls?.endPoll(timeline.room, event);
 
             onActionFinished?.call();
@@ -275,7 +300,7 @@ class TimelineEventMenu {
         ),
       if (event is TimelineEventEncrypted)
         TimelineEventMenuEntry(
-          name: "Retry Decrypt",
+          name: promptMessageRetryDecrypt,
           icon: Icons.lock_open,
           action: (context) {
             var mx = (event as MatrixTimelineEvent).event;
@@ -414,7 +439,7 @@ class TimelineEventMenu {
 
           AdaptiveDialog.show(
             context,
-            title: "Source",
+            title: labelMessageSourceTitle,
             builder: (context) {
               return SizedBox(
                 width: 1000,
@@ -430,7 +455,7 @@ class TimelineEventMenu {
       if (preferences.developerMode.value &&
           (event is TimelineEventMessage || event is TimelineEventSticker))
         TimelineEventMenuEntry(
-          name: "Show Notification",
+          name: promptMessageShowNotification,
           icon: Icons.notification_add,
           action: (BuildContext context) async {
             var room = timeline.room;
@@ -448,7 +473,7 @@ class TimelineEventMenu {
         ),
       if (preferences.developerMode.value)
         TimelineEventMenuEntry(
-          name: "Diagnose Notification",
+          name: promptMessageDiagnoseNotification,
           icon: Icons.notification_important,
           action: (BuildContext context) async {
             AdaptiveDialog.show(context,

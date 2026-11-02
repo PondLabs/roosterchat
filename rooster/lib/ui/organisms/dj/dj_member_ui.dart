@@ -6,6 +6,7 @@ import 'package:rooster/client/components/dj/dj_session.dart';
 import 'package:rooster/ui/molecules/desktop_app_notice.dart';
 import 'package:rooster/ui/organisms/dj/vinyl_disc.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 const djHandEmoji = '✋';
@@ -17,6 +18,30 @@ class DjMemberBadges extends StatelessWidget {
   final DjSession? dj;
   final String userId;
   final double size;
+
+  static String get tooltipDjBadge => Intl.message("DJ",
+      name: "tooltipDjBadge",
+      desc: "Tooltip on the record next to the name of whoever is the DJ in "
+          "a call, while nothing plays");
+
+  static String tooltipDjBadgePlaying(String title) =>
+      Intl.message("DJ · playing $title",
+          name: "tooltipDjBadgePlaying",
+          args: [title],
+          desc: "Tooltip on the record next to the DJ's name in a call; the "
+              "placeholder is the song playing");
+
+  static String tooltipDjBadgePaused(String title) => Intl.message(
+      "DJ · paused $title",
+      name: "tooltipDjBadgePaused",
+      args: [title],
+      desc: "Tooltip on the record next to the DJ's name in a call, with the "
+          "music paused; the placeholder is the song");
+
+  static String get tooltipDjAsked => Intl.message("Asked to be the DJ",
+      name: "tooltipDjAsked",
+      desc: "Tooltip on the raised hand next to the name of someone in a call "
+          "who asked to become the DJ");
 
   @override
   Widget build(BuildContext context) {
@@ -34,10 +59,12 @@ class DjMemberBadges extends StatelessWidget {
           children: [
             if (isDj)
               Tooltip(
-                message: dj.current == null
-                    ? 'DJ'
-                    : 'DJ · ${dj.isPlaying ? 'playing' : 'paused'} '
-                        '${dj.current!.title}',
+                message: switch (dj.current) {
+                  null => tooltipDjBadge,
+                  final current => dj.isPlaying
+                      ? tooltipDjBadgePlaying(current.title)
+                      : tooltipDjBadgePaused(current.title),
+                },
                 child: VinylDisc(
                   size: size,
                   spinning: dj.isPlaying && !dj.isBuffering,
@@ -45,7 +72,7 @@ class DjMemberBadges extends StatelessWidget {
               ),
             if (asked)
               Tooltip(
-                message: 'Asked to be the DJ',
+                message: tooltipDjAsked,
                 child: Text(djHandEmoji,
                     style: TextStyle(fontSize: size * 0.85, height: 1)),
               ),
@@ -74,6 +101,17 @@ class DjSidebarRow extends StatelessWidget {
   final VoidCallback? onTap;
   final double height;
 
+  static String get labelDjNothingPlaying => Intl.message("Nothing playing",
+      name: "labelDjNothingPlaying",
+      desc: "Under the DJ's name in the list of who is in a voice channel, "
+          "while the DJ plays nothing");
+
+  static String labelDjSidebarDj(String name) => Intl.message("DJ · $name",
+      name: "labelDjSidebarDj",
+      args: [name],
+      desc: "Row for the DJ booth in the list of who is in a voice channel; "
+          "the placeholder is the DJ's name");
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -86,7 +124,7 @@ class DjSidebarRow extends StatelessWidget {
         final track = dj.current;
         final color = Theme.of(context).colorScheme.secondary;
         final song = track == null
-            ? 'Nothing playing'
+            ? labelDjNothingPlaying
             : track.artist == null
                 ? track.title
                 : '${track.title} · ${track.artist}';
@@ -113,7 +151,7 @@ class DjSidebarRow extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('DJ · ${nameOf(djUserId)}',
+                          Text(labelDjSidebarDj(nameOf(djUserId)),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context)
@@ -162,14 +200,14 @@ List<tiamat.ContextMenuItem> djMemberMenuItems(
   }
   return [
     tiamat.ContextMenuItem(
-      text: 'Music volume',
+      text: labelDjMusicVolume,
       customBuilder: (context, onClicked, {closeMenu}) => Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           spacing: 6,
           children: [
-            const tiamat.Text.labelLow('Music'),
+            tiamat.Text.labelLow(labelDjMusic),
             musicVolume,
           ],
         ),
@@ -178,6 +216,101 @@ List<tiamat.ContextMenuItem> djMemberMenuItems(
     ...actions,
   ];
 }
+
+String get labelDjMusicVolume => Intl.message("Music volume",
+    name: "labelDjMusicVolume",
+    desc: "Names the DJ booth's music volume slider in the menu opened on "
+        "the DJ in a call (the slider is only for the user)");
+
+String get labelDjMusic => Intl.message("Music",
+    name: "labelDjMusic",
+    desc: "Short label before the DJ booth's music volume slider, in the "
+        "menu opened on the DJ in a call");
+
+String get promptDjStopDjing => Intl.message("Stop DJing",
+    name: "promptDjStopDjing",
+    desc: "Button and menu entry that makes the user stop being the DJ: the "
+        "music stops and the DJ booth is free for someone else");
+
+String promptDjStopHandingOver(String name) =>
+    Intl.message("Stop handing over to $name",
+        name: "promptDjStopHandingOver",
+        args: [name],
+        desc: "Menu entry on someone the DJ is passing the DJ booth to: calls "
+            "the pass off");
+
+String promptDjPassDecksTo(String name) => Intl.message(
+    "Pass the decks to $name",
+    name: "promptDjPassDecksTo",
+    args: [name],
+    desc: "Menu entry on someone in the call: makes them the DJ (hands them "
+        "\"the decks\" of the DJ booth)");
+
+String promptDjPassDecksToAsker(String name) =>
+    Intl.message("Pass the decks to $name ✋",
+        name: "promptDjPassDecksToAsker",
+        args: [name],
+        desc: "Menu entry on someone in the call who asked to become the DJ "
+            "(the raised hand): makes them the DJ");
+
+String messageDjMemberCantDj(String name) =>
+    Intl.message("$name's app can't DJ",
+        name: "messageDjMemberCantDj",
+        args: [name],
+        desc: "Note in the menu opened on someone in a call whose app cannot "
+            "play music for the call, so the DJ booth can't be passed to them");
+
+String messageDjMemberOnWeb(String name) => Intl.message(
+    "$name is on the web: only the desktop app can DJ",
+    name: "messageDjMemberOnWeb",
+    args: [name],
+    desc: "Note in the menu opened on someone in a call who uses the app in "
+        "a browser, so the DJ booth can't be passed to them");
+
+String messageDjMemberOnPlatform(String name, String platform) =>
+    Intl.message("$name is on $platform: only the desktop app can DJ",
+        name: "messageDjMemberOnPlatform",
+        args: [name, platform],
+        desc: "Note in the menu opened on someone in a call who uses the app "
+            "on a phone or a Mac (the second placeholder: Android, iOS, "
+            "macOS), so the DJ booth can't be passed to them");
+
+String get promptDjStopAsking => Intl.message("Stop asking to be the DJ",
+    name: "promptDjStopAsking",
+    desc: "Menu entry on the DJ in a call: takes back the user's request to "
+        "become the DJ");
+
+String get promptDjRequest => Intl.message("Request to become DJ",
+    name: "promptDjRequest",
+    desc: "Menu entry on the DJ in a call: asks them to pass the DJ booth "
+        "to the user");
+
+String get promptDjBecome => Intl.message("Become the DJ",
+    name: "promptDjBecome",
+    desc: "Menu entry on the user themselves in a call while nobody is the "
+        "DJ: takes the DJ booth");
+
+String get labelDjDesktopOnlyMenu =>
+    Intl.message("🎧 The decks live in the desktop app",
+        name: "labelDjDesktopOnlyMenu",
+        desc: "Note in the menus of the DJ booth in apps that can't be the DJ "
+            "(web, phones): DJing needs the desktop app");
+
+String promptDjTakeOverAway(int minutes) =>
+    Intl.message("Take the decks (DJ away $minutes min)",
+        name: "promptDjTakeOverAway",
+        args: [minutes],
+        desc: "Button and menu entry that takes the DJ booth from a DJ who has "
+            "been away; the placeholder is how many minutes away allow it");
+
+String labelDjAwayWait(String name, int minutes, int limit) => Intl.message(
+    "$name has been away $minutes min: the decks can be taken once they have "
+    "been away $limit",
+    name: "labelDjAwayWait",
+    args: [name, minutes, limit],
+    desc: "Tooltip and menu note on a DJ who is away: how many minutes they "
+        "have been away, and after how many minutes the DJ booth can be "
+        "taken from them");
 
 List<tiamat.ContextMenuItem> _actions(
   DjSession dj, {
@@ -191,7 +324,7 @@ List<tiamat.ContextMenuItem> _actions(
     if (isSelf) {
       return [
         tiamat.ContextMenuItem(
-            text: 'Stop DJing',
+            text: promptDjStopDjing,
             icon: Icons.album_outlined,
             onPressed: () => dj.stopDjing()),
       ];
@@ -200,7 +333,7 @@ List<tiamat.ContextMenuItem> _actions(
     if (candidate != null && dj.passTarget == candidate) {
       return [
         tiamat.ContextMenuItem(
-            text: 'Stop handing over to $displayName',
+            text: promptDjStopHandingOver(displayName),
             icon: Icons.close_rounded,
             onPressed: dj.cancelPass),
       ];
@@ -209,18 +342,19 @@ List<tiamat.ContextMenuItem> _actions(
       return [
         tiamat.ContextMenuItem(
             text: dj.hasRequestedUser(userId)
-                ? 'Pass the decks to $displayName $djHandEmoji'
-                : 'Pass the decks to $displayName',
+                ? promptDjPassDecksToAsker(displayName)
+                : promptDjPassDecksTo(displayName),
             icon: Icons.album_rounded,
             onPressed: () => dj.passTo(candidate)),
       ];
     }
-    final platform = dj.platformOf(userId);
     return [
-      _note(platform == null
-          ? "$displayName's app can't DJ"
-          : "$displayName is on ${_platformName(platform)}: only the "
-              'desktop app can DJ'),
+      _note(switch (dj.platformOf(userId)) {
+        null => messageDjMemberCantDj(displayName),
+        'web' => messageDjMemberOnWeb(displayName),
+        final String platform =>
+          messageDjMemberOnPlatform(displayName, _platformName(platform)),
+      }),
     ];
   }
 
@@ -238,11 +372,11 @@ List<tiamat.ContextMenuItem> _actions(
         _note(takeOverWait(displayName, away)),
       dj.hasRequested
           ? tiamat.ContextMenuItem(
-              text: 'Stop asking to be the DJ',
+              text: promptDjStopAsking,
               icon: Icons.back_hand_outlined,
               onPressed: () => dj.requestDj(false))
           : tiamat.ContextMenuItem(
-              text: 'Request to become DJ',
+              text: promptDjRequest,
               icon: Icons.back_hand_rounded,
               onPressed: () => dj.requestDj(true)),
     ];
@@ -252,7 +386,7 @@ List<tiamat.ContextMenuItem> _actions(
     if (!canDj) return [_desktopOnly()];
     return [
       tiamat.ContextMenuItem(
-          text: 'Become the DJ',
+          text: promptDjBecome,
           icon: Icons.album_rounded,
           onPressed: () => dj.becomeDj()),
     ];
@@ -262,16 +396,15 @@ List<tiamat.ContextMenuItem> _actions(
 }
 
 /// The action that takes the decks from a DJ who has been away long enough.
-final takeOverLabel = 'Take the decks (DJ away '
-    '${DjSession.takeOverAfterAway.inMinutes} min)';
+String get takeOverLabel =>
+    promptDjTakeOverAway(DjSession.takeOverAfterAway.inMinutes);
 
 /// Why the decks can't be taken yet from [name], away for [away].
-String takeOverWait(String name, Duration away) =>
-    '$name has been away ${away.inMinutes} min: the decks can be taken '
-    'once they have been away ${DjSession.takeOverAfterAway.inMinutes}';
+String takeOverWait(String name, Duration away) => labelDjAwayWait(
+    name, away.inMinutes, DjSession.takeOverAfterAway.inMinutes);
 
+/// What [platform] is called (a name, the same in every language).
 String _platformName(String platform) => switch (platform) {
-      'web' => 'the web',
       'android' => 'Android',
       'ios' => 'iOS',
       'macos' => 'macOS',
@@ -281,7 +414,7 @@ String _platformName(String platform) => switch (platform) {
 /// A menu line saying DJing needs the desktop app, with a link to download
 /// it.
 tiamat.ContextMenuItem _desktopOnly() => tiamat.ContextMenuItem(
-      text: '🎧 The decks live in the desktop app',
+      text: labelDjDesktopOnlyMenu,
       customBuilder: (context, onClicked, {closeMenu}) => Padding(
         padding: const EdgeInsets.fromLTRB(20, 10, 16, 6),
         child: ConstrainedBox(
@@ -296,9 +429,7 @@ tiamat.ContextMenuItem _desktopOnly() => tiamat.ContextMenuItem(
                 children: [
                   Icon(Icons.desktop_windows_outlined,
                       size: 18, color: Theme.of(context).colorScheme.outline),
-                  const Flexible(
-                      child: tiamat.Text.labelLow(
-                          '🎧 The decks live in the desktop app')),
+                  Flexible(child: tiamat.Text.labelLow(labelDjDesktopOnlyMenu)),
                 ],
               ),
               TextButton.icon(

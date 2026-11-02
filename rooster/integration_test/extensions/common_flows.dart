@@ -6,6 +6,7 @@ import 'package:rooster/ui/pages/login/login_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rooster/main.dart';
+import 'package:rooster/utils/window_management.dart';
 import 'package:matrix/matrix.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -64,6 +65,9 @@ extension CommonFlows on WidgetTester {
     await clearUserData();
     await initNecessary();
     await initGuiRequirements();
+    // The window opens at the loading window's size; startGui, which this
+    // skips, is what grows it.
+    await WindowManagement.openMainWindow();
     return App(clientManager: clientManager!);
   }
 

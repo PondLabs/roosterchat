@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:collection/collection.dart';
 import 'package:rooster/client/components/emoticon/emoticon.dart';
 import 'package:rooster/client/matrix/components/read_receipts/matrix_read_receipt_component.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
@@ -149,44 +150,97 @@ class MatrixTimeline extends Timeline {
     }
   }
 
+  /// The event the read marker was last sent for, so the three places that
+  /// ask on every incoming message (the view when attached, again after the
+  /// frame, and every change to the newest event) make one request between
+  /// them, and none when the server already has it.
+  String? _readMarkerSentFor;
+
   @override
   void markAsRead(TimelineEvent event) async {
     var receipts = room.getComponent<MatrixReadReceiptComponent>();
-    if (event.status == TimelineEventStatus.synced ||
-        event.status == TimelineEventStatus.sent) {
-      await _matrixTimeline?.setReadMarker(
-          public: receipts?.usePublicReadReceiptsForRoom);
+    if (event.status != TimelineEventStatus.synced &&
+        event.status != TimelineEventStatus.sent) {
+      return;
+    }
 
-      receipts?.handleEvent(event.eventId, room.client.self!.identifier);
+    if (event.eventId == _readMarkerSentFor) {
+      return;
+    }
+
+    if (event.eventId == _matrixRoom.fullyRead) {
+      // The server already has this read; only the local badge can lag
+      // behind, for example from counts loaded before a restart.
+      _room.clearUnreadCountsLocally();
+      return;
+    }
+
+    var timeline = _matrixTimeline;
+    if (timeline == null) return;
+
+    var markerEventId = timeline.events
+        .firstWhereOrNull((e) => e.status == matrix.EventStatus.synced)
+        ?.eventId;
+    if (markerEventId == null) return;
+
+    _readMarkerSentFor = event.eventId;
+    try {
+      await timeline.setReadMarker(
+          eventId: markerEventId,
+          public: receipts?.usePublicReadReceiptsForRoom);
+    } catch (e, s) {
+      // Asked again next time: the server does not have it, so the badge
+      // must stay.
+      if (_readMarkerSentFor == event.eventId) _readMarkerSentFor = null;
+      Log.onError(e, s, content: "Could not set the read marker");
+      return;
+    }
+
+    receipts?.handleEvent(event.eventId, room.client.self!.identifier);
+
+    // A message that arrived while the marker was in flight is newer than
+    // what we read; its sync owns the counts. Otherwise clear the badge now
+    // instead of waiting for the homeserver to echo the read counts.
+    if (timeline.events
+            .firstWhereOrNull((e) => e.status == matrix.EventStatus.synced)
+            ?.eventId ==
+        markerEventId) {
+      _room.clearUnreadCountsLocally();
     }
   }
 
   @override
-  Future<TimelineEvent?> fetchEventByIdInternal(String eventId) async {
-    var event = await _matrixRoom.getEventById(eventId);
-    if (event == null) return null;
-    return _room.convertEvent(event);
-  }
+  Future<TimelineEvent?> fetchEventByIdInternal(String eventId) =>
+      // The room's own fetch: it also asks for the key of an encrypted
+      // event this device cannot read yet.
+      _room.getEvent(eventId);
 
   Future<void> removeReaction(
       TimelineEvent reactingTo, Emoticon reaction) async {
-    var event = await _matrixRoom.getEventById(reactingTo.eventId);
-    if (event == null) return;
+    var timeline = _matrixTimeline;
+    if (timeline == null) return;
 
-    if (!event.hasAggregatedEvents(
-        _matrixTimeline!, matrix.RelationshipTypes.reaction)) return;
+    // Read the aggregation the reaction chips are drawn from: fetching the
+    // event again can miss it, and leaves the chip stuck on
+    var reactions = timeline.aggregatedEvents[reactingTo.eventId]
+            ?[matrix.RelationshipTypes.reaction] ??
+        const <matrix.Event>{};
 
-    var events = event
-        .aggregatedEvents(_matrixTimeline!, matrix.RelationshipTypes.reaction)
-        .where((element) => element.senderId == _matrixRoom.client.userID);
+    var ownReactions = reactions.where((e) {
+      if (e.senderId != _matrixRoom.client.userID) return false;
+      var content = e.content["m.relates_to"];
+      return content is Map && content["key"] == reaction.key;
+    }).toList();
 
-    for (var e in events) {
-      if (!e.content.containsKey("m.relates_to")) continue;
-      var content = e.content["m.relates_to"] as Map<String, Object?>;
-
-      if (content.containsKey("key") && content["key"] == reaction.key) {
+    // Remove every match: a double click can react twice with the same key
+    for (var e in ownReactions) {
+      if (e.status.isError) {
+        await e.cancelSend();
+      } else if (e.status.isSending) {
+        var eventId = await _room.reactionSentEventId(e.eventId);
+        if (eventId != null) await _matrixRoom.redactEvent(eventId);
+      } else {
         await _matrixRoom.redactEvent(e.eventId);
-        return;
       }
     }
   }

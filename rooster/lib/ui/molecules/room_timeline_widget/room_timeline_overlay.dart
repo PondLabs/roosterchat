@@ -2,6 +2,7 @@ import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/emoji_widget.dart';
 import 'package:rooster/ui/molecules/room_timeline_widget/room_timeline_overlay_button.dart';
 import 'package:rooster/ui/molecules/timeline_events/timeline_event_menu.dart';
+import 'package:rooster/utils/common_strings.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -43,10 +44,27 @@ class TimelineOverlayState extends State<TimelineOverlay> {
 
   bool isAttatchedToBottom = true;
 
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  /// Messages that came in below while reading further up.
+  int newMessageCount = 0;
+
   String get labelJumpToLatest => Intl.message("Jump to latest",
       desc:
           "Label for the button which jumps the room timeline view to the latest message",
       name: "labelJumpToLatest");
+
+  String labelNewMessagesBelow(int howMany) => Intl.plural(howMany,
+      one: "1 new message",
+      other: "$howMany new messages",
+      desc: "Button that jumps the chat down to the messages that came in "
+          "while reading further up",
+      name: "labelNewMessagesBelow",
+      args: [howMany]);
 
   @override
   Widget build(BuildContext context) {
@@ -84,7 +102,10 @@ class TimelineOverlayState extends State<TimelineOverlay> {
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeInOutCubic,
             child: RoomTimelineOverlayButton(
-              text: labelJumpToLatest,
+              text: newMessageCount > 0
+                  ? labelNewMessagesBelow(newMessageCount)
+                  : labelJumpToLatest,
+              icon: newMessageCount > 0 ? Icons.arrow_downward_rounded : null,
               onTap: widget.jumpToLatest,
             ),
           ),
@@ -185,7 +206,7 @@ class TimelineOverlayState extends State<TimelineOverlay> {
                               ? () => togglePopupMenu(e)
                               : () => e.action?.call(context)),
                     buildAction(
-                        name: "Options",
+                        name: CommonStrings.promptOptions,
                         child: Icon(m.Icons.more_vert),
                         size: size,
                         contextMenuItems: currentMenu!.secondaryActions
@@ -227,6 +248,14 @@ class TimelineOverlayState extends State<TimelineOverlay> {
       currentMenu = menu;
       selectedEntry = null;
     });
+  }
+
+  void setNewMessageCount(int value) {
+    if (value != newMessageCount) {
+      setState(() {
+        newMessageCount = value;
+      });
+    }
   }
 
   void setAttachedToBottom(bool value) {

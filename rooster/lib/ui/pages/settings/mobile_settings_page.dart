@@ -9,9 +9,13 @@ import 'package:tiamat/tiamat.dart' as tiamat;
 import '../../navigation/navigation_utils.dart';
 
 class MobileSettingsPage extends StatefulWidget {
-  const MobileSettingsPage({required this.settings, this.buttons, super.key});
+  const MobileSettingsPage(
+      {required this.settings, this.buttons, this.initialTab, super.key});
   final List<SettingsButton>? buttons;
   final List<SettingsCategory> settings;
+
+  /// The (category, tab) indexes whose page opens over the list.
+  final (int, int)? initialTab;
 
   @override
   State<MobileSettingsPage> createState() => _MobileSettingsPageState();
@@ -26,6 +30,22 @@ class _MobileSettingsPageState extends State<MobileSettingsPage> {
   void initState() {
     tabs = widget.settings;
     super.initState();
+    if (widget.initialTab case (final category, final tab)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Rebuilt under the tab already open (the layout switched): not again.
+        if (mounted && (ModalRoute.isCurrentOf(context) ?? true)) {
+          openTab(category, tab);
+        }
+      });
+    }
+  }
+
+  void openTab(int categoryIndex, int tabIndex) {
+    final tab = tabs[categoryIndex].tabs[tabIndex];
+    NavigationUtils.navigateTo(
+        context,
+        SettingsSubPage(
+            makeScrollable: tab.makeScrollable, builder: tab.pageBuilder));
   }
 
   @override
@@ -76,20 +96,8 @@ class _MobileSettingsPageState extends State<MobileSettingsPage> {
                                         .label,
                                     icon:
                                         tabs[categoryIndex].tabs[tabIndex].icon,
-                                    onTap: () {
-                                      setState(() {
-                                        NavigationUtils.navigateTo(
-                                            context,
-                                            SettingsSubPage(
-                                                makeScrollable:
-                                                    tabs[categoryIndex]
-                                                        .tabs[tabIndex]
-                                                        .makeScrollable,
-                                                builder: tabs[categoryIndex]
-                                                    .tabs[tabIndex]
-                                                    .pageBuilder));
-                                      });
-                                    },
+                                    onTap: () =>
+                                        openTab(categoryIndex, tabIndex),
                                   );
                                 },
                               )

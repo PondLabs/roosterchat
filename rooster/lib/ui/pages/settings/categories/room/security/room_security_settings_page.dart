@@ -39,6 +39,16 @@ class _RoomSecuritySettingsPageState extends State<RoomSecuritySettingsPage> {
           name: "encryptionCannotBeDisabledExplanationRoomSettings",
           desc: "Explains that encryption cannot be disabled once enabled");
 
+  String get labelRoomVisibilityHeader => Intl.message("Room Visibility",
+      name: "labelRoomVisibilityHeader",
+      desc:
+          "Header of the section in a room's (or space's) security settings that shows and changes who can find and join it");
+
+  String get labelRoomSetVisibilityTitle => Intl.message("Set Visibility",
+      name: "labelRoomSetVisibilityTitle",
+      desc:
+          "Title of the dialog that picks who can find and join a room or space (public, private, members of its spaces)");
+
   @override
   void initState() {
     isE2EEEnabled = widget.room.isE2EE;
@@ -66,15 +76,17 @@ class _RoomSecuritySettingsPageState extends State<RoomSecuritySettingsPage> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Column(
-                mainAxisAlignment: MainAxisAlignment.start,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  tiamat.Text.labelEmphasised(
-                      promptEnableEncryptionRoomSettings),
-                  tiamat.Text.labelLow(
-                      encryptionCannotBeDisabledExplanationRoomSettings)
-                ]),
+            Flexible(
+              child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    tiamat.Text.labelEmphasised(
+                        promptEnableEncryptionRoomSettings),
+                    tiamat.Text.labelLow(
+                        encryptionCannotBeDisabledExplanationRoomSettings)
+                  ]),
+            ),
             IgnorePointer(
               ignoring: isE2EEEnabled || !widget.room.permissions.canEnableE2EE,
               child: tiamat.Switch(
@@ -98,7 +110,7 @@ class _RoomSecuritySettingsPageState extends State<RoomSecuritySettingsPage> {
     return IgnorePointer(
       ignoring: !widget.room.permissions.canChangeVisibility,
       child: tiamat.Panel(
-        header: "Room Visibility",
+        header: labelRoomVisibilityHeader,
         mode: TileType.surfaceContainerLow,
         child: Material(
           color: Colors.transparent,
@@ -131,7 +143,7 @@ class _RoomSecuritySettingsPageState extends State<RoomSecuritySettingsPage> {
               ];
 
               var newVisibility = await AdaptiveDialog.pickOne(
-                title: "Set Visibility",
+                title: labelRoomSetVisibilityTitle,
                 context,
                 items: items,
                 itemBuilder: (context, item, callback) {

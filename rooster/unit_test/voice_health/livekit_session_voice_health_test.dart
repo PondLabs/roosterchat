@@ -106,6 +106,9 @@ class _RemotePublication implements lk.RemoteTrackPublication {
   final String sid;
 
   @override
+  String get name => '';
+
+  @override
   final lk.RemoteParticipant participant;
 
   int resubscribes = 0;

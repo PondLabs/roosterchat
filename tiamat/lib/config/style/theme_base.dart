@@ -5,7 +5,7 @@ import 'package:tiamat/config/style/theme_extensions.dart';
 class ThemeBase {
   static ThemeData theme(ColorScheme scheme) => ThemeData(
         brightness: scheme.brightness,
-        fontFamily: "RobotoCustom",
+        fontFamily: "Roboto",
         fontFamilyFallback: ThemeCommon.fontFamilyFallback(),
         useMaterial3: true,
         textTheme: TextTheme(

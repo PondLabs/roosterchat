@@ -1118,10 +1118,15 @@ class Engine extends Disposable with EventsEmittable<EngineEvent> {
         unawaited(handleReconnect(ClientDisconnectReason.reconnectRetry));
       } else {
         logger.fine('attemptReconnect: disconnecting...');
+        // ROOSTER: clean up first, like running out of attempts does. Emitted
+        // while a full reconnect was pending, the room took it for one that
+        // goes on and never said it was disconnected: the app stayed in a
+        // call it had left, keeping its call membership up for hours.
+        _isClosed = true;
+        await cleanUp();
         events.emit(EngineDisconnectedEvent(
           reason: DisconnectReason.disconnected,
         ));
-        await cleanUp();
       }
     } finally {
       attemptingReconnect = false;

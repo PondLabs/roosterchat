@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:rooster/client/components/photo_album_room/photo.dart';
 import 'package:rooster/client/components/photo_album_room/photo_album_timeline.dart';
 import 'package:rooster/client/matrix/components/photo_album_room/matrix_photo.dart';
@@ -13,6 +15,7 @@ import 'package:rooster/utils/notifying_list.dart';
 class MatrixPhotoAlbumTimeline implements PhotoAlbumTimeline {
   final MatrixRoom room;
   late Timeline matrixTimeline;
+  final List<StreamSubscription> _subscriptions = [];
 
   NotifyingList<Photo> _photos = NotifyingList.empty(growable: true);
 
@@ -28,14 +31,27 @@ class MatrixPhotoAlbumTimeline implements PhotoAlbumTimeline {
   Stream<Photo> get onRemoved => _photos.onRemove;
 
   Future<void> initTimeline() async {
-    matrixTimeline = await room.getTimeline();
+    // Its own timeline, closed in [dispose]: each album open used to
+    // replace the room's timeline and leak the one before.
+    matrixTimeline = await room.loadTimeline();
     for (var i = 0; i < matrixTimeline.events.length; i++) {
       handleNewEvent(matrixTimeline.events[i], i);
     }
 
-    matrixTimeline.onEventAdded.stream.listen(onEventAdded);
-    matrixTimeline.onChange.stream.listen(onEventChanged);
-    matrixTimeline.onRemove.stream.listen(onEventRemoved);
+    _subscriptions.addAll([
+      matrixTimeline.onEventAdded.stream.listen(onEventAdded),
+      matrixTimeline.onChange.stream.listen(onEventChanged),
+      matrixTimeline.onRemove.stream.listen(onEventRemoved),
+    ]);
+  }
+
+  @override
+  Future<void> dispose() async {
+    for (final subscription in _subscriptions) {
+      await subscription.cancel();
+    }
+    _subscriptions.clear();
+    await matrixTimeline.close();
   }
 
   void handleNewEvent(TimelineEvent event, int index) {

@@ -335,6 +335,14 @@ abstract class LocalTrack extends Track {
       newStream = await LocalTrack.createStream(nextOptions);
       await stop();
     }
+    // ROOSTER: a hang up while the capture was opening has disposed this
+    // track; stop() above was then a no-op, and the rest would put a live
+    // capture on a track nothing owns any more: the microphone stayed on
+    // after leaving, and the next join opened a second one.
+    if (isDisposed) {
+      await _stopStream(newStream);
+      throw TrackCreateException('the track was disposed while restarting');
+    }
     final newTrack = newStream.getTracks().first;
     currentOptions = nextOptions;
     // ROOSTER: a new capture comes enabled. Muted meanwhile (the mute
@@ -388,6 +396,23 @@ abstract class LocalTrack extends Track {
       track: this,
       options: currentOptions,
     ));
+  }
+
+  // ROOSTER: a capture that will not be used: closed like stop() closes
+  // the track's own, so the OS releases the device.
+  Future<void> _stopStream(rtc.MediaStream stream) async {
+    for (final track in stream.getTracks()) {
+      try {
+        await track.stop();
+      } catch (error) {
+        logger.warning('could not stop a capture track: $error');
+      }
+    }
+    try {
+      await stream.dispose();
+    } catch (error) {
+      logger.warning('could not dispose a capture stream: $error');
+    }
   }
 
   Future<void> setProcessor(TrackProcessor? processor) async {

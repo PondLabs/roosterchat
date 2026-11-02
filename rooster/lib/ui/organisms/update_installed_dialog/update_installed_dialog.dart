@@ -1,5 +1,5 @@
 import 'package:rooster/ui/organisms/particle_player/particle_system_confetti.dart';
-import 'package:rooster/utils/common_strings.dart';
+import 'package:rooster/config/build_config.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:starfield/renderer/particle_system_renderer.dart';
@@ -14,11 +14,16 @@ class UpdateInstalledDialog extends StatefulWidget {
 class _UpdateInstalledDialogState extends State<UpdateInstalledDialog> {
   MessageEffectConfetti? confetti;
 
-  String get updateInstalledContent => Intl.message(
-      "Thank you for updating! You are now running the latest version.",
+  String updateInstalledVersion(String version) => Intl.message(
+      "Rooster is now on version $version.",
       desc:
           "Content for the dialog which is shown when an update has been installed",
-      name: "updateInstalledContent");
+      args: [version],
+      name: "updateInstalledVersion");
+
+  String get promptUpdateInstalledOk => Intl.message("Got it",
+      desc: "Button that closes the dialog shown after an update",
+      name: "promptUpdateInstalledOk");
 
   @override
   void initState() {
@@ -50,7 +55,9 @@ class _UpdateInstalledDialogState extends State<UpdateInstalledDialog> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     spacing: 12,
                     children: [
-                      tiamat.Text.label(updateInstalledContent),
+                      tiamat.Text.label(updateInstalledVersion(BuildConfig
+                          .VERSION_TAG
+                          .replaceFirst(RegExp(r"^v"), ""))),
                       Material(
                           clipBehavior: Clip.antiAlias,
                           color: ColorScheme.of(context).surfaceContainerLow,
@@ -66,7 +73,7 @@ class _UpdateInstalledDialogState extends State<UpdateInstalledDialog> {
                                   mainAxisSize: MainAxisSize.min,
                                   spacing: 8,
                                   children: [
-                                    tiamat.Text(CommonStrings.promptPoliteNo),
+                                    tiamat.Text(promptUpdateInstalledOk),
                                   ],
                                 ),
                               ),

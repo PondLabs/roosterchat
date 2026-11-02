@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:intl/intl.dart';
 import 'package:rooster/client/components/soundboard/soundboard_import_service.dart';
 import 'package:rooster/client/components/soundboard/soundboard_normalizer.dart';
 import 'package:rooster/client/matrix/components/soundboard/soundboard_import_platform.dart';
@@ -8,6 +9,12 @@ SoundboardImportPlatform create() => _CantImport();
 
 /// The browser: plays sounds, can't add them.
 class _CantImport implements SoundboardImportPlatform {
+  static String get errorSoundboardNeedsDesktopApp =>
+      Intl.message("Adding sounds needs the desktop app",
+          name: "errorSoundboardNeedsDesktopApp",
+          desc: "Why a soundboard sound could not be added in the browser: "
+              "adding sounds is only in the desktop app");
+
   @override
   bool get canImport => false;
 
@@ -15,7 +22,7 @@ class _CantImport implements SoundboardImportPlatform {
   List<String> get fileExtensions => const [];
 
   Never _unsupported() =>
-      throw const SoundboardImportError('Adding sounds needs the desktop app');
+      throw SoundboardImportError(errorSoundboardNeedsDesktopApp);
 
   @override
   Future<SoundboardSourceFile> fromFile(String path) async => _unsupported();

@@ -9,19 +9,19 @@ import 'package:rooster/client/components/push_notification/notification_manager
 import 'package:rooster/client/components/voip/webrtc_default_devices.dart';
 import 'package:rooster/config/build_config.dart';
 import 'package:rooster/config/global_config.dart';
+import 'package:rooster/config/languages.dart';
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/config/platform_utils.dart';
 import 'package:rooster/config/preferences.dart';
 import 'package:rooster/config/subplatforms/subplatforms.dart';
-import 'package:rooster/debug/l10n_debug_lookup.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/diagnostic/diagnostics.dart';
-import 'package:rooster/generated/intl/messages_all.dart';
 import 'package:rooster/rust/frb_generated.dart';
 import 'package:rooster/single_instance.dart';
 import 'package:rooster/ui/organisms/overlay_windows/overlay_window_manager.dart';
 import 'package:rooster/ui/pages/bubble/bubble_page.dart';
 import 'package:rooster/ui/pages/fatal_error/fatal_error_page.dart';
+import 'package:rooster/ui/pages/loading/loading_page.dart';
 import 'package:rooster/ui/pages/login/login_page.dart';
 import 'package:rooster/ui/pages/main/main_page.dart';
 import 'package:rooster/ui/pages/setup/menus/check_for_updates.dart';
@@ -35,12 +35,15 @@ import 'package:rooster/utils/database/database_server.dart';
 import 'package:rooster/utils/emoji/unicode_emoji.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:rooster/utils/first_time_setup.dart';
+import 'package:rooster/utils/language/app_language.dart';
 import 'package:rooster/utils/focus_node_monitor.dart';
 import 'package:rooster/utils/scaled_app.dart';
 import 'package:rooster/utils/shortcuts_manager.dart';
 import 'package:rooster/utils/system_wide_shortcuts/system_wide_shortcuts.dart';
 import 'package:rooster/utils/text_scale_changer.dart';
 import 'package:rooster/utils/update_checker.dart';
+import 'package:rooster/utils/updater/self_updater.dart';
+import 'package:rooster/utils/updater/startup_update.dart';
 import 'package:rooster/utils/voice_controls/voice_control_surfaces.dart';
 import 'package:rooster/utils/window_management.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -48,7 +51,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:logging/logging.dart';
 import 'package:media_kit/media_kit.dart';
@@ -80,6 +82,8 @@ void unifiedPushEntry() async {
   Log.prefix = "unified-push";
   await WidgetsFlutterBinding.ensureInitialized();
   await preferences.init();
+  // The notifications this posts are in the app's language.
+  await AppLanguage.load();
   await UnifiedPushNotifier().init();
 }
 
@@ -118,11 +122,9 @@ void bubble() async {
       theme: initialTheme,
       navigatorKey: navigator,
       debugShowCheckedModeBanner: false,
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
+      locale: AppLanguage.current.value.locale,
+      supportedLocales: _supportedLocales,
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       builder: (context, child) => Provider<ClientManager>(
             create: (context) => clientManager!,
             child: child,
@@ -147,6 +149,17 @@ void main(List<String> args) async {
   runZonedGuarded(appMain, Log.onError, zoneSpecification: Log.spec);
 }
 
+// The licence page only knows Dart packages; these are Rust crates linked
+// into the voice DSP, whose licences ask to ship their notice.
+void _registerNativeLicenses() {
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks(['DeepFilterNet'],
+        await rootBundle.loadString('assets/licenses/deep_filter_MIT.txt'));
+    yield LicenseEntryWithLineBreaks(['nnnoiseless', 'RNNoise'],
+        await rootBundle.loadString('assets/licenses/nnnoiseless_BSD.txt'));
+  });
+}
+
 void appMain() async {
   Log.prefix = "main";
   try {
@@ -158,13 +171,31 @@ void appMain() async {
     }
 
     ensureBindingInit();
+    _registerNativeLicenses();
+
+    // The first thing someone who clicked Rooster sees is the loading window,
+    // so they know it opened. On Windows the runner's lock already says
+    // whether this is the first copy, so it goes up before anything that can
+    // take a while (moving old data, asking a running copy, which waits up to
+    // 3 s): with none of it on screen, a click looked like nothing happened.
+    // A second copy shows nothing; it only hands over and quits.
+    final secondary = commandLineArgs.contains(SingleInstance.secondaryFlag);
+    final loadingShown = PlatformUtils.isWindows && !secondary;
+    if (loadingShown) await _showLoadingWindow();
 
     if (PlatformUtils.isLinux || PlatformUtils.isWindows) {
       // Before anything opens the data directory, the single instance
       // socket included.
       await migrateLegacyDesktopData();
 
-      if (await SingleInstance.tryConnectToMainInstance(commandLineArgs)) {
+      // Not the first, by the Windows runner's lock: hand over and quit even
+      // when the running one does not answer. A second copy would sync the
+      // same account and show every notification twice.
+      if (await SingleInstance.tryConnectToMainInstance(commandLineArgs,
+              retryFor: secondary
+                  ? SingleInstance.secondaryRetryFor
+                  : Duration.zero) ||
+          secondary) {
         // exit() wedges this process; quit through the window manager instead.
         await WindowManagement.close();
         return;
@@ -178,6 +209,22 @@ void appMain() async {
     isHeadless = PlatformUtils.isAndroid &&
         AppLifecycleState.detached == WidgetsBinding.instance.lifecycleState;
 
+    // The browser keeps showing the splash in web/index.html until our first
+    // frame, so only native needs something drawn while we start.
+    //
+    // The update check goes to GitHub while the rest starts: preferences,
+    // the database, the accounts. It used to come first, and every launch
+    // waited for that request (a second on a good day, 20 on a bad one)
+    // before anything else began. It is waited for below, once the rest is
+    // done and only briefly (StartupUpdate).
+    StartupUpdate? update;
+    if (!isHeadless && !kIsWeb) {
+      if (!loadingShown) await _showLoadingWindow();
+      update = StartupUpdate(SelfUpdater.instance,
+          wanted: _updateWanted, close: WindowManagement.close)
+        ..begin();
+    }
+
     loading = initNecessary();
 
     if (isHeadless) {
@@ -188,12 +235,33 @@ void appMain() async {
       await loading;
     }
 
+    if (update != null && await update.finish()) return;
+
     SystemWideShortcuts.init();
 
     await startGui();
   } catch (error, stacktrace) {
     runApp(FatalErrorPage(error, stacktrace));
   }
+}
+
+/// The small window with the loading rooster, which also shows an update
+/// being fetched.
+Future<void> _showLoadingWindow() async {
+  // In the system's language: the language picked in settings is only read
+  // once the data directory may be opened.
+  await AppLanguage.load();
+  await WindowManagement.showLauncher();
+  runApp(LoadingPage(update: SelfUpdater.instance.progress));
+}
+
+/// Whether a desktop build may fetch a newer release while the loading
+/// window is up and restart into it before the app opens (see
+/// docs/updating.md). Only a no stops it: whoever installed Rooster wants
+/// the current one, and not having answered yet is not a no.
+Future<bool> _updateWanted() async {
+  await preferences.init();
+  return preferences.checkForUpdates.value != false;
 }
 
 WidgetsBinding ensureBindingInit() {
@@ -212,6 +280,8 @@ bool _rustLibReady = false;
 Future<void> initNecessary() async {
   sqfliteFfiInit();
   await preferences.init();
+  // Before anything shows a string or posts a notification.
+  await AppLanguage.load();
   await initDatabaseServer();
 
   // Integration tests call initNecessary once per test; the bridge only
@@ -258,22 +328,13 @@ Future<void> initGuiRequirements() async {
   if (kIsWeb) await BrowserContextMenu.disableContextMenu();
 
   MediaKit.ensureInitialized();
-
-  var locale = PlatformDispatcher.instance.locale;
+  AppLanguage.follow();
 
   UnicodeEmojis.load();
-  if (!preferences.debugTranslations.value) {
-    initializeMessages(locale.languageCode);
-  } else {
-    initializeMessagesDebug();
-  }
-  initializeDateFormatting(locale.languageCode);
 
   tiamat.getAppScale = () {
     return preferences.appScale.value;
   };
-
-  Intl.defaultLocale = locale.languageCode;
 }
 
 /// Initializes gui requirements and launches the gui
@@ -281,7 +342,7 @@ Future<void> startGui() async {
   String? initialRoomId;
   String? initialClientId;
 
-  initGuiRequirements();
+  await initGuiRequirements();
   AppRefresh.init();
 
   // The picked microphone and speakers, before anything plays: WebRTC only
@@ -338,6 +399,7 @@ Future<void> startGui() async {
     preferences.storeRoomsListCache(roomsListCache);
   }
 
+  await WindowManagement.openMainWindow();
   runApp(App(
     clientManager: clientManager!,
     initialTheme: initialTheme,
@@ -378,6 +440,9 @@ final Map<ShortcutActivator, Intent>? _appShortcuts = BuildConfig.WEB
             const PasteTextIntent(SelectionChangedCause.keyboard),
       };
 
+final List<Locale> _supportedLocales =
+    Languages.supported.map((language) => language.locale).toList();
+
 class App extends StatelessWidget {
   const App(
       {super.key,
@@ -410,22 +475,31 @@ class App extends StatelessWidget {
                 },
                 initialTheme: initialTheme ?? ThemeDark.theme,
                 materialAppBuilder: (context, theme) {
-                  return MaterialApp(
-                    title: BuildConfig.app,
-                    theme: theme,
-                    showPerformanceOverlay:
-                        preferences.showPerformanceOverlay.value,
-                    debugShowCheckedModeBanner: false,
-                    shortcuts: _appShortcuts,
-                    navigatorKey: navigator,
-                    builder: (context, child) => Provider<ClientManager>(
-                      create: (context) => clientManager,
-                      child: child,
-                    ),
-                    home: AppView(
-                      clientManager: clientManager,
-                      initialClientId: initialClientId,
-                      initialRoom: initialRoom,
+                  // The Material widgets' own strings (text selection, date
+                  // pickers) follow the language picked in settings.
+                  return ValueListenableBuilder<Language>(
+                    valueListenable: AppLanguage.current,
+                    builder: (context, language, _) => MaterialApp(
+                      title: BuildConfig.app,
+                      theme: theme,
+                      locale: language.locale,
+                      supportedLocales: _supportedLocales,
+                      localizationsDelegates:
+                          GlobalMaterialLocalizations.delegates,
+                      showPerformanceOverlay:
+                          preferences.showPerformanceOverlay.value,
+                      debugShowCheckedModeBanner: false,
+                      shortcuts: _appShortcuts,
+                      navigatorKey: navigator,
+                      builder: (context, child) => Provider<ClientManager>(
+                        create: (context) => clientManager,
+                        child: child,
+                      ),
+                      home: AppView(
+                        clientManager: clientManager,
+                        initialClientId: initialClientId,
+                        initialRoom: initialRoom,
+                      ),
                     ),
                   );
                 }),

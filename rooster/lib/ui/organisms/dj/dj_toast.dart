@@ -4,6 +4,7 @@
 import 'dart:async';
 
 import 'package:rooster/main.dart';
+import 'package:rooster/utils/common_strings.dart';
 import 'package:flutter/material.dart';
 
 class DjToast {
@@ -73,7 +74,7 @@ class _Toast extends StatelessWidget {
                     style: TextStyle(color: foreground, fontSize: 13)),
               ),
               IconButton(
-                tooltip: 'Dismiss',
+                tooltip: CommonStrings.promptDismiss,
                 iconSize: 16,
                 icon: Icon(Icons.close_rounded, color: foreground),
                 onPressed: onClose,

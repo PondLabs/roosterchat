@@ -36,6 +36,7 @@ class MockMatrixUrlPreviewComponent
 
     return UrlPreviewData(Uri.parse("https://example.com"),
         siteName: "Example",
+        // Not translated: made-up data for the developer tools.
         description: "Example description",
         image: AssetImage(image));
   }

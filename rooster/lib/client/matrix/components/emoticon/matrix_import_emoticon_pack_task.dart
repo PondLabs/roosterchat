@@ -6,6 +6,7 @@ import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/utils/background_tasks/background_task_manager.dart';
+import 'package:intl/intl.dart';
 import 'package:matrix/matrix_api_lite.dart';
 
 class MatrixImportEmoticonPackTask
@@ -17,7 +18,29 @@ class MatrixImportEmoticonPackTask
   int current = 0;
 
   @override
-  String label = "Uploading stickers";
+  String label = labelChatUploadingStickers;
+
+  static String get labelChatUploadingStickers =>
+      Intl.message("Uploading stickers",
+          name: "labelChatUploadingStickers",
+          desc: "Background task shown while an imported sticker pack's "
+              "images are uploaded");
+
+  static String labelChatUploadingStickersProgress(int current, int total) =>
+      Intl.message("Uploading stickers: ($current/$total)",
+          name: "labelChatUploadingStickersProgress",
+          args: [current, total],
+          desc: "Background task while an imported sticker pack's images are "
+              "uploaded, with how many are done out of how many");
+
+  static String labelChatUploadingStickersProgressFailed(
+          int current, int total, int failed) =>
+      Intl.message("Uploading stickers: ($current/$total); Failed: $failed",
+          name: "labelChatUploadingStickersProgressFailed",
+          args: [current, total, failed],
+          desc: "Background task while an imported sticker pack's images are "
+              "uploaded, with how many are done out of how many, and how "
+              "many could not be uploaded");
 
   @override
   BackgroundTaskStatus status = BackgroundTaskStatus.running;
@@ -80,9 +103,9 @@ class MatrixImportEmoticonPackTask
 
       current += 1;
       if (uri != null) Log.i("Uploaded sticker: $uri ($current/$total)");
-      var failedLabel = "";
-      if (failed != 0) failedLabel = "; Failed: $failed";
-      label = "Uploading stickers: ($current/$total)$failedLabel";
+      label = failed == 0
+          ? labelChatUploadingStickersProgress(current, total)
+          : labelChatUploadingStickersProgressFailed(current, total, failed);
       progressStream.add(current);
     }
 

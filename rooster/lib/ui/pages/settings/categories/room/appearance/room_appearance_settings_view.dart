@@ -11,6 +11,7 @@ import 'package:rooster/utils/image/lod_image.dart';
 import 'package:rooster/utils/links/link_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/config/style/theme_extensions.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -49,6 +50,16 @@ class RoomAppearanceSettingsView extends StatefulWidget {
 class _RoomAppearanceSettingsViewState
     extends State<RoomAppearanceSettingsView> {
   String? topic;
+
+  String get promptRoomSetTopicPlaceholder => Intl.message("Set a topic",
+      name: "promptRoomSetTopicPlaceholder",
+      desc:
+          "In a room's (or space's) appearance settings, shown in place of the topic while there is none; tapping it opens the topic editor");
+
+  String get labelRoomSetTopicTitle => Intl.message("Set Topic",
+      name: "labelRoomSetTopicTitle",
+      desc:
+          "Title of the dialog that edits a room's (or space's) topic, in its appearance settings");
 
   @override
   void initState() {
@@ -131,7 +142,9 @@ class _RoomAppearanceSettingsViewState
                           LinkUtils.open(Uri.parse(href), context: context);
                         }
                       },
-                      data: topic?.isNotEmpty == true ? topic! : "Set a topic"),
+                      data: topic?.isNotEmpty == true
+                          ? topic!
+                          : promptRoomSetTopicPlaceholder),
                 )),
           ),
       ],
@@ -158,7 +171,7 @@ class _RoomAppearanceSettingsViewState
 
   void editTopic() async {
     var newTopic = await AdaptiveDialog.textPrompt(context,
-        multiline: true, title: "Set Topic", initialText: topic);
+        multiline: true, title: labelRoomSetTopicTitle, initialText: topic);
 
     if (newTopic != null) {
       ErrorUtils.tryRun(context, () async {

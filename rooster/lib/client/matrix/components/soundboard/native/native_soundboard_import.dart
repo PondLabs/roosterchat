@@ -17,6 +17,7 @@ import 'package:rooster/client/matrix/components/soundboard/native/soundboard_cl
 import 'package:rooster/client/matrix/components/soundboard/soundboard_import_platform.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -27,6 +28,107 @@ class NativeSoundboardImport implements SoundboardImportPlatform {
 
   /// How long a direct download may take.
   static const downloadTimeout = Duration(minutes: 5);
+
+  static String get errorSoundboardFileGone =>
+      Intl.message("That file is no longer there",
+          name: "errorSoundboardFileGone",
+          desc: "Why an audio file picked for a new soundboard sound could "
+              "not be read: it was moved or deleted after it was picked");
+
+  static String get errorSoundboardFileTooBig =>
+      Intl.message("That file is too big (max 200 MB)",
+          name: "errorSoundboardFileTooBig",
+          desc: "Why an audio file, or the file a link points to, could not "
+              "become a soundboard sound: it is bigger than 200 MB");
+
+  static String get errorSoundboardNotALink =>
+      Intl.message("That is not a link",
+          name: "errorSoundboardNotALink",
+          desc: "Why what was pasted in the link field of a space's "
+              "soundboard page could not be loaded: it is not a web address");
+
+  static String get labelSoundboardDownloading => Intl.message("Downloading…",
+      name: "labelSoundboardDownloading",
+      desc: "Shown while the audio file a pasted link points to downloads, "
+          "to make a soundboard sound of it");
+
+  static String labelSoundboardAskingSource(String source) => Intl.message(
+      "Asking $source…",
+      name: "labelSoundboardAskingSource",
+      args: [source],
+      desc: "Shown while a source extension looks up the audio a pasted link "
+          "points to, to make a soundboard sound of it. The value is the "
+          "extension's name");
+
+  static String errorSoundboardSourceFoundNoAudio(String source) =>
+      Intl.message("$source found no audio in that link",
+          name: "errorSoundboardSourceFoundNoAudio",
+          args: [source],
+          desc: "Why a pasted link could not become a soundboard sound: the "
+              "source extension that takes it found no audio there. The "
+              "value is the extension's name");
+
+  static String labelSoundboardDownloadingWith(String source) =>
+      Intl.message("Downloading with $source…",
+          name: "labelSoundboardDownloadingWith",
+          args: [source],
+          desc: "Shown while a source extension downloads the audio a pasted "
+              "link points to, to make a soundboard sound of it. The value is "
+              "the extension's name");
+
+  static String get errorSoundboardDownloadTooBig =>
+      Intl.message("What it downloaded is too big (max 200 MB)",
+          name: "errorSoundboardDownloadTooBig",
+          desc: "Why a pasted link could not become a soundboard sound: the "
+              "audio the source extension downloaded for it is bigger than "
+              "200 MB");
+
+  static String errorSoundboardHostAnswered(String host, int status) =>
+      Intl.message("$host answered $status",
+          name: "errorSoundboardHostAnswered",
+          args: [host, status],
+          desc: "Why the audio file a pasted link points to could not be "
+              "downloaded: the site answered with an HTTP error. The values "
+              "are the site (example.com) and the error's code (404)");
+
+  static String errorSoundboardLinkIsPage(String host) => Intl.message(
+      "That link is a page, not an audio file. To take sounds from $host, "
+      "add a source extension that takes it.",
+      name: "errorSoundboardLinkIsPage",
+      args: [host],
+      desc: "Why a pasted link could not become a soundboard sound: it leads "
+          "to a web page, and no installed source extension takes links to "
+          "that site. The value is the site (example.com)");
+
+  static String errorSoundboardHostTooSlow(String host) =>
+      Intl.message("$host took too long",
+          name: "errorSoundboardHostTooSlow",
+          args: [host],
+          desc: "Why the audio file a pasted link points to could not be "
+              "downloaded: the site did not answer in time. The value is the "
+              "site (example.com)");
+
+  static String errorSoundboardDownloadFailed(String host, String reason) =>
+      Intl.message("Couldn't download from $host: $reason",
+          name: "errorSoundboardDownloadFailed",
+          args: [host, reason],
+          desc: "Why the audio file a pasted link points to could not be "
+              "downloaded. The values are the site (example.com) and the "
+              "technical error, as the system gives it");
+
+  static String errorSoundboardNoAudioFrom(String time) =>
+      Intl.message("There is no audio from $time on",
+          name: "errorSoundboardNoAudioFrom",
+          args: [time],
+          desc: "Why the audio picked for a new soundboard sound could not be "
+              "opened where asked: it ends before that point. The value is a "
+              "time (1:30)");
+
+  static String get errorSoundboardNoAudioInFile =>
+      Intl.message("There is no audio in that file",
+          name: "errorSoundboardNoAudioInFile",
+          desc: "Why a file or link picked for a new soundboard sound could "
+              "not be used: there is no sound in it");
 
   NativeSoundboardImport() {
     if (!canImport) return;
@@ -79,10 +181,10 @@ class NativeSoundboardImport implements SoundboardImportPlatform {
   Future<SoundboardSourceFile> fromFile(String path) async {
     final file = File(path);
     if (!await file.exists()) {
-      throw const SoundboardImportError('That file is no longer there');
+      throw SoundboardImportError(errorSoundboardFileGone);
     }
     if (await file.length() > SoundboardConstraints.maxSourceFileBytes) {
-      throw const SoundboardImportError('That file is too big (max 200 MB)');
+      throw SoundboardImportError(errorSoundboardFileTooBig);
     }
     final name = p.basename(path);
     return SoundboardSourceFile(
@@ -100,7 +202,7 @@ class NativeSoundboardImport implements SoundboardImportPlatform {
     if (uri == null ||
         (uri.scheme != 'https' && uri.scheme != 'http') ||
         uri.host.isEmpty) {
-      throw const SoundboardImportError('That is not a link');
+      throw SoundboardImportError(errorSoundboardNotALink);
     }
     final host = uri.host.toLowerCase();
     final extensions = DjExtensions.instance;
@@ -117,7 +219,7 @@ class NativeSoundboardImport implements SoundboardImportPlatform {
     if (extension != null) {
       return _viaExtension(extension, text, startMs, onStatus);
     }
-    onStatus?.call('Downloading…');
+    onStatus?.call(labelSoundboardDownloading);
     return _download(uri, text, startMs);
   }
 
@@ -130,15 +232,15 @@ class NativeSoundboardImport implements SoundboardImportPlatform {
       String link, int startMs, void Function(String)? onStatus) async {
     final name = extension.manifest.name;
     try {
-      onStatus?.call('Asking $name…');
+      onStatus?.call(labelSoundboardAskingSource(name));
       final tracks = await DjExtensions.resolve(extension, link, use: _use);
       final track = tracks.firstWhere((t) => t['source'] is String,
-          orElse: () =>
-              throw SoundboardImportError('$name found no audio in that link'));
+          orElse: () => throw SoundboardImportError(
+              errorSoundboardSourceFoundNoAudio(name)));
       final title = track['title'];
       final duration = track['durationMs'];
 
-      onStatus?.call('Downloading with $name…');
+      onStatus?.call(labelSoundboardDownloadingWith(name));
       final target = await _newFile('audio');
       final fetch = DjExtensions.fetch(extension, track['source'] as String,
           directory: target.parent.path,
@@ -150,8 +252,7 @@ class NativeSoundboardImport implements SoundboardImportPlatform {
       final file = File(path);
       if (await file.length() > SoundboardConstraints.maxSourceFileBytes) {
         await _delete(path);
-        throw const SoundboardImportError(
-            'What it downloaded is too big (max 200 MB)');
+        throw SoundboardImportError(errorSoundboardDownloadTooBig);
       }
       final reported = info['durationMs'] ?? duration;
       return SoundboardSourceFile(
@@ -201,7 +302,7 @@ class NativeSoundboardImport implements SoundboardImportPlatform {
           .timeout(const Duration(seconds: 30));
       if (response.statusCode != 200) {
         throw SoundboardImportError(
-            '${uri.host} answered ${response.statusCode}');
+            errorSoundboardHostAnswered(uri.host, response.statusCode));
       }
       final type = response.headers['content-type']
               ?.split(';')
@@ -212,14 +313,12 @@ class NativeSoundboardImport implements SoundboardImportPlatform {
       if (!type.startsWith('audio/') &&
           !type.startsWith('video/') &&
           !_audioTypes.contains(type)) {
-        throw SoundboardImportError(
-            "That link is a page, not an audio file. To take sounds from "
-            '${uri.host}, add a source extension that takes it.');
+        throw SoundboardImportError(errorSoundboardLinkIsPage(uri.host));
       }
       final declared = response.contentLength;
       if (declared != null &&
           declared > SoundboardConstraints.maxSourceFileBytes) {
-        throw const SoundboardImportError('That file is too big (max 200 MB)');
+        throw SoundboardImportError(errorSoundboardFileTooBig);
       }
       final fromPath = p.extension(uri.path).replaceFirst('.', '');
       target = await _newFile(_extensionsByType[type] ??
@@ -230,8 +329,7 @@ class NativeSoundboardImport implements SoundboardImportPlatform {
         await for (final chunk in response.stream.timeout(downloadTimeout)) {
           written += chunk.length;
           if (written > SoundboardConstraints.maxSourceFileBytes) {
-            throw const SoundboardImportError(
-                'That file is too big (max 200 MB)');
+            throw SoundboardImportError(errorSoundboardFileTooBig);
           }
           sink.add(chunk);
         }
@@ -251,14 +349,15 @@ class NativeSoundboardImport implements SoundboardImportPlatform {
       rethrow;
     } on TimeoutException {
       if (target != null) await _delete(target.path);
-      throw SoundboardImportError('${uri.host} took too long');
+      throw SoundboardImportError(errorSoundboardHostTooSlow(uri.host));
     } on IOException catch (e) {
       if (target != null) await _delete(target.path);
-      throw SoundboardImportError("Couldn't download from ${uri.host}: $e");
+      throw SoundboardImportError(
+          errorSoundboardDownloadFailed(uri.host, e.toString()));
     } on http.ClientException catch (e) {
       if (target != null) await _delete(target.path);
       throw SoundboardImportError(
-          "Couldn't download from ${uri.host}: ${e.message}");
+          errorSoundboardDownloadFailed(uri.host, e.message));
     } finally {
       client.close();
     }
@@ -272,9 +371,8 @@ class NativeSoundboardImport implements SoundboardImportPlatform {
           startMs: startMs, maxMs: maxMs);
       if (pcm.frames == 0) {
         throw SoundboardImportError(startMs > 0
-            ? 'There is no audio from '
-                '${SoundboardImportService.clock(startMs)} on'
-            : 'There is no audio in that file');
+            ? errorSoundboardNoAudioFrom(SoundboardImportService.clock(startMs))
+            : errorSoundboardNoAudioInFile);
       }
       return pcm;
     } on ClipCodecException catch (e) {

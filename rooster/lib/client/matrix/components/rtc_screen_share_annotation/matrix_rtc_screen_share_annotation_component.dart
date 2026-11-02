@@ -7,6 +7,7 @@ import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/client/components/voip/webrtc_screencapture_source.dart';
 import 'package:rooster/client/matrix/components/voip/matrix_voip_session.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
+import 'package:intl/intl.dart' show Intl;
 
 // import 'package:constellation_dart/constellation_dart.dart'
 //     as constellation_dart;
@@ -69,6 +70,12 @@ class MatrixRTCScreenShareAnnotationSession
 
   MatrixRTCScreenShareAnnotationSession(this.session);
 
+  static String get labelCallAnnotationUnknownUser =>
+      Intl.message("Unknown User",
+          name: "labelCallAnnotationUnknownUser",
+          desc: "Name shown next to the pointer of someone pointing at your "
+              "shared screen, when their name is not known");
+
   Future<void> create() async {
     var dataChannelComp =
         session.client.getComponent<RTCDataChannelComponent>()!;
@@ -114,7 +121,7 @@ class MatrixRTCScreenShareAnnotationSession
       final member = room?.getMemberOrFallback(userId);
 
       constellation.createCursor(
-          userId, session.remoteUserName ?? "Unknown User");
+          userId, session.remoteUserName ?? labelCallAnnotationUnknownUser);
 
       if (member != null) {
         constellation.setCursorColor(userId, member.defaultColor);

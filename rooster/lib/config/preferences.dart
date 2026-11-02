@@ -37,12 +37,30 @@ class Preferences {
       StreamController.broadcast();
   Stream get onSettingChanged => onSettingChangedController.stream;
   bool isInit = false;
+  Future<void>? _initializing;
 
-  Future<void> init() async {
+  /// Loads the preferences. Callers that overlap (the startup update check
+  /// and the rest of initialisation) share the one load rather than each
+  /// opening and rewriting the file; a later call loads again, which the
+  /// tests rely on between cases.
+  Future<void> init() {
+    final inFlight = _initializing;
+    if (inFlight != null) return inFlight;
+    final load = _init();
+    _initializing = load;
+    load.whenComplete(() {
+      if (identical(_initializing, load)) _initializing = null;
+    });
+    return load;
+  }
+
+  Future<void> _init() async {
     _preferences = await SharedPreferences.getInstance();
     // Remove the resumable donation-flow state left by older releases. The
     // flow no longer exists, so retaining this value would orphan user data.
-    await _preferences!.remove("running_donation_check_flow");
+    if (_preferences!.containsKey("running_donation_check_flow")) {
+      await _preferences!.remove("running_donation_check_flow");
+    }
     Preference.preferences = _preferences;
     isInit = true;
   }
@@ -209,6 +227,16 @@ class Preferences {
     return _preferences?.getDouble("call_user_volume:${userId}") ?? 1.0;
   }
 
+  /// How loud one member's soundboard sounds are for us (0..1), on top of
+  /// the soundboard volume, and apart from their voice and the DJ's music.
+  Future<void> setSoundboardUserVolume(String userId, double volume) async {
+    _preferences!.setDouble("call_soundboard_volume:$userId", volume);
+  }
+
+  double getSoundboardUserVolume(String userId) {
+    return _preferences?.getDouble("call_soundboard_volume:$userId") ?? 1.0;
+  }
+
   /// Volume of the system audio a member sends with their screen share, kept
   /// apart from their mic volume like Discord's stream volume.
   Future<void> setVoipScreenShareVolume(String userId, double volume) async {
@@ -373,6 +401,14 @@ class Preferences {
   BoolPreference debugTranslations =
       BoolPreference("enable_translations_debug", defaultValue: false);
 
+  BoolPreference pseudoTranslations =
+      BoolPreference("enable_pseudo_translations", defaultValue: false);
+
+  /// The code of the language picked in settings (`Languages`), or null to
+  /// follow the system's. The web splash reads it from localStorage too.
+  NullableStringPreference language =
+      NullableStringPreference("app_language", defaultValue: null);
+
   BoolPreference tenorGifSearchEnabled =
       BoolPreference("enable_tenor_gif_search", defaultValue: false);
 
@@ -395,6 +431,11 @@ class Preferences {
 
   BoolPreference showRoomsInSidebar =
       BoolPreference("show_rooms_in_sidebar", defaultValue: false);
+
+  /// The top of the Home screen's list: who is in a voice channel right
+  /// now, and the quiet channels to pull up a chair in (docs/whos-around.md).
+  BoolPreference showWhosAround =
+      BoolPreference("show_whos_around", defaultValue: true);
 
   BoolPreference usePlaceholderRoomAvatars =
       BoolPreference("use_placeholder_room_avatars", defaultValue: false);
@@ -536,6 +577,43 @@ class Preferences {
   StringPreference streamDebugInfoCorner =
       StringPreference("stream_debug_info_corner", defaultValue: "topLeft");
 
+  /// The in-game overlay on Windows: who is talking, and messages, over a
+  /// fullscreen or borderless game (docs/game-overlay.md).
+  BoolPreference gameOverlayEnabled =
+      BoolPreference("game_overlay_enabled", defaultValue: true);
+
+  /// Which corner of the game's screen lists the call: topLeft, topRight,
+  /// bottomLeft or bottomRight.
+  StringPreference gameOverlayVoiceCorner =
+      StringPreference("game_overlay_voice_corner", defaultValue: "topLeft");
+
+  /// Whether the call's list only has who is talking right now.
+  BoolPreference gameOverlayOnlyTalking =
+      BoolPreference("game_overlay_only_talking", defaultValue: false);
+
+  /// Which corner shows messages over the game, or "off".
+  StringPreference gameOverlayMessageCorner = StringPreference(
+      "game_overlay_message_corner",
+      defaultValue: "bottomRight");
+
+  /// Which messages the overlay shows; a message shows when any kind it is
+  /// is on. Direct messages.
+  BoolPreference gameOverlayMessagesDirect =
+      BoolPreference("game_overlay_messages_direct", defaultValue: true);
+
+  /// Messages that mention us or one of our keywords.
+  BoolPreference gameOverlayMessagesMentions =
+      BoolPreference("game_overlay_messages_mentions", defaultValue: true);
+
+  /// Every message in the channel of the call we are in, whether it would
+  /// notify or not.
+  BoolPreference gameOverlayMessagesCallChannel =
+      BoolPreference("game_overlay_messages_call_channel", defaultValue: true);
+
+  /// Whatever else notifies: rooms set to notify of every message.
+  BoolPreference gameOverlayMessagesOther =
+      BoolPreference("game_overlay_messages_other", defaultValue: true);
+
   DoublePreference emojiPickerHeight =
       DoublePreference("emoji_picker_height", defaultValue: 300);
 
@@ -544,7 +622,9 @@ class Preferences {
       defaultValue: 0.0);
 
   StringPreference proxyUrl =
-      StringPreference("proxy_url", defaultValue: "proxy.commet.chat");
+      // Our own Worker (proxy/ at the repo root), holding our KLIPY key.
+      StringPreference("proxy_url",
+          defaultValue: "rooster-proxy.apbiancofriber.workers.dev");
 
   StringPreference fallbackTurnServer = StringPreference("fallback_turn_server",
       defaultValue: "stun:turn.matrix.org");
@@ -599,6 +679,11 @@ class Preferences {
   BoolPreference voipAutoWatchScreenShares =
       BoolPreference("voip_auto_watch_screen_shares", defaultValue: false);
 
+  /// The status chosen from the dot by our name: a `UserPresenceStatus`
+  /// name, online (which still turns away when idle) by default.
+  StringPreference presenceStatus =
+      StringPreference("presence_status", defaultValue: "online");
+
   NullableStringPreference filterClient =
       NullableStringPreference("filter_client_id", defaultValue: null);
 
@@ -616,4 +701,9 @@ class Preferences {
 
   StringListPreference expandedSpaceGroups =
       StringListPreference("expanded_space_groups", defaultValue: []);
+
+  /// Channel categories closed in a space's sidebar, as
+  /// "<space local id>/<category id>".
+  StringListPreference collapsedChannelCategories =
+      StringListPreference("collapsed_channel_categories", defaultValue: []);
 }

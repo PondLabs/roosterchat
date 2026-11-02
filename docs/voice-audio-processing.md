@@ -4,6 +4,26 @@ Client-side noise suppression, input gate and far-end ducking for voice
 rooms. Everything runs on the user's own device before audio leaves the
 client. Browser support is a first-class target.
 
+Status (2026-10-18, last): automatic input sensitivity is more lenient. It
+cut the start of sentences, so it opens 6 dB above the background (was 10),
+asks at most -40 dBFS of a voice (was -35) and holds open 250 ms (was 150).
+The VAD's 0.5 stays: at 0.4 loud singing in music opened the gate 5 % of the
+time (`tests/background_noise.rs`, `pop_song_with_singing`), against 0 %.
+
+2026-10-10: automatic input sensitivity sets its own
+threshold. The gate tracks the room's background level (down within about
+200 ms, up at most 3 dB a second and only while nobody talks) and opens 6 dB
+above it, never below -50 dBFS nor above -40 dBFS (`gate.rs`,
+`AUTO_MARGIN_DB`, `AUTO_MIN_DB`, `AUTO_MAX_DB`). The report carries the
+threshold the gate applies (`Report::gate_threshold_db`, ABI 3, 32 bytes),
+and the settings page shows it on the slider, greyed out while automatic is
+on; the slider only sets the threshold in manual mode. The -50 dBFS floor is
+the old default: with suppression on the background is all but gone, and a
+lower threshold let through what the models leave of a beat, a piano or the
+restaurant (the background noise tests failed at -70). Noise suppression can
+also be switched from the call panel, beside mute and deafen
+(`NoiseSuppressionButton`).
+
 Status (2026-09-25, last): after the knocks, eighteen other noises were
 measured, alone and under speech, loud and quiet (see "Background noise").
 Two more things were fixed on the way: DeepFilterNet leaves everything
@@ -83,6 +103,13 @@ nothing:
 
 The level meter only moved during a call because nothing captures the
 microphone outside one; see "Microphone test" below.
+
+Joining a call on Windows turned every other app down (by 80% with the
+default "When Windows detects communications activity" setting in the Sound
+control panel), because WebRTC opens the communications device. The runner
+(`rooster/windows/runner/call_ducking.cpp`) opts the process's default audio
+session out of that ducking with `IAudioSessionControl2::SetDuckingPreference`
+on every active speaker and microphone, at start and on `WM_DEVICECHANGE`.
 
 ## Decisions
 
@@ -234,7 +261,8 @@ crate resamples). The worker hands unit-scale 480-sample blocks.
    so a model that arrives mid-stream, one switched back on and one after
    the capture restarts run 20 blocks beside RNNoise before they are heard.
 4. Gate (`gate.rs`): manual threshold, or VAD-driven with hysteresis
-   (open above 0.5, close below 0.3) *and* above the same threshold, 150 ms
+   (open above 0.5, close below 0.3) *and* above a threshold it sets from
+   the background level (see the status at the top), 250 ms
    hold, 5 ms attack, 200 ms release, closed gain -40 dB (not a hard mute).
    Held shut while step 2 says the microphone holds only bleed.
 5. Ducker: when the far-end peak (300 ms hold) is above -45 dBFS and the
@@ -326,8 +354,8 @@ What still comes through:
 - **Other people talking.** Another voice is speech to both models: it
   goes through whole, as it did with RNNoise, and nearby chatter (the
   restaurant) opens the gate a sixth of the time, half the time when loud.
-  The input sensitivity slider is the tool: above the other voices'
-  level, below the user's.
+  The input sensitivity slider, in manual mode, is the tool: above the
+  other voices' level, below the user's.
 - **Singing and instruments.** The pop song, singing included, is removed
   like any music. So would the user's own singing or playing be, with
   suppression on.
@@ -508,19 +536,25 @@ tools/voice_dsp/native_noise_loop.sh
 | The web build carries `audio_dsp.js`, the worklet and a real wasm | `check_contracts.py --web-build` | ci `voice-dsp`, build, release |
 | The browser DSP suppresses; a missing or broken wasm or worklet is caught by `probe()` and `create()` | `web_noise_loop.mjs` | ci `voice-dsp` |
 | What a room's RTCRtpSender carries in the browser is suppressed, before and after a restart; a legacy call's too; no wasm keeps the browser's suppressor | `web_noise_loop.mjs --app` | ci `voice-dsp` |
-| Inside the real WebRTC (Linux): the microphone test on the picked device, "Hear myself" off, noise ≥ 20 dB down in what is encoded, DeepFilterNet suppressing by the end (measured 2026-09-25: 61 dB) | `native_noise_loop.sh` | integration-test |
+| Inside the real WebRTC (Linux): the microphone test on the picked device, "Hear myself" off, noise ≥ 20 dB down in what is encoded, DeepFilterNet suppressing by the end (measured 2026-09-25: 61 dB) | `native_noise_loop.sh` | ci `voice-dsp-native` |
 | Screen audio and DJ music do not leave the microphone without WebRTC's processing: restored once the source is sending (not as soon as it has statistics), not for the mic itself, not while muted, desktop only | `shared_audio_processing_test.dart` | ci `test` |
-| ... and inside the real WebRTC, with the DJ's music track: restored to within 3 dB of before (the libwebrtc internal it relies on still holds) | `native_noise_loop.sh` | integration-test |
-| ... and with the DJ's own monitor running too (`DjLocalMonitor`) | `native_noise_loop.sh` | integration-test |
-| ... and music created with the microphone's options changes nothing, with nothing restored and through another negotiation | `native_noise_loop.sh` | integration-test |
-| Noise suppression turned off lets the room noise out, more than 6 dB louder than with WebRTC's suppressor | `native_noise_loop.sh` | integration-test |
-| After a mute during which a device listed before the microphone went away, the microphone is heard again, within 3 dB of before (`ReselectRecordingDevice`) | `native_noise_loop.sh` | integration-test |
+| ... and inside the real WebRTC, with the DJ's music track: restored to within 3 dB of before (the libwebrtc internal it relies on still holds) | `native_noise_loop.sh` | ci `voice-dsp-native` |
+| ... and with the DJ's own monitor running too (`DjLocalMonitor`) | `native_noise_loop.sh` | ci `voice-dsp-native` |
+| ... and music created with the microphone's options changes nothing, with nothing restored and through another negotiation | `native_noise_loop.sh` | ci `voice-dsp-native` |
+| Noise suppression turned off lets the room noise out, more than 6 dB louder than with WebRTC's suppressor | `native_noise_loop.sh` | ci `voice-dsp-native` |
+| After a mute during which a device listed before the microphone went away, the microphone is heard again, within 3 dB of before (`ReselectRecordingDevice`) | `native_noise_loop.sh` | ci `voice-dsp-native` |
+| A model that fails to load, or that is too slow for the machine, leaves RNNoise suppressing; a rebuild while the model loads in the background gets the model back; suppression holds through capture rate changes (48, 16, 32, 48 kHz) and through an input scale or gate mode out of range | `audio_dsp` unit tests | ci `test` |
+| A DSP that runs without suppressing (a rate it cannot process, or suppression given up after its state kept going bad) is given up on like one that gets no audio, and WebRTC's suppressor takes over; a DSP that suppresses, has not reported yet, or was told not to is left alone | `microphone_noise_suppression_test.dart`, `tests/non_finite.rs` (the report flag it reads) | ci `test` |
+| `audio_dsp::Params` is written the same way in Rust, Dart's FFI struct and the browser worker (fields, order, byte offsets), and every key the worker reads is one `AudioDspSettings.toMap()` sends (a renamed key reads as 0 there: suppression off) | `check_contracts.py` | ci `voice-dsp` |
 | One NaN, infinity or huge input sample leaves the voice as it was a second later (it used to silence the DSP for good); state that went bad is rebuilt | `tests/non_finite.rs` | ci `test` |
-| A capture WebRTC stopped recording from, a web DSP whose worker traps or hangs, a suspended audio context: the call repairs them or keeps the microphone going (docs/voice-call-health.md) | `native_noise_loop.sh`, `web_health_loop.mjs`, `unit_test/voice_health/` | integration-test, ci |
+| A capture WebRTC stopped recording from, a web DSP whose worker traps or hangs, a suspended audio context: the call repairs them or keeps the microphone going (docs/voice-call-health.md) | `native_noise_loop.sh`, `web_health_loop.mjs`, `unit_test/voice_health/` | ci `voice-dsp-native`, ci |
 
 `publish` in ci.yml waits for `voice-dsp`: a release does not go out with
-browser suppression broken. The Rust and Dart tests run in `test`, which
-`publish` waits for too.
+browser suppression broken. It waits for `voice-dsp-native` too, the native loop
+(`native_noise_loop.sh`, voice-dsp-native.yml), so a red native loop stops the
+release as well (before, the loop ran on its own in integration-test.yml and
+v1.7.2, v1.8.0 and v1.10.1 shipped with it red). The Rust and Dart tests run in
+`test`, which `publish` waits for too.
 
 ## What still needs a person
 
@@ -734,7 +768,7 @@ your speakers." within two seconds of the video starting.
   on a libwebrtc internal (a re-enabled sender re-applies its options), not
   on an API. `integration_test/voice_dsp/native_noise_test.dart` ("a custom
   audio source leaves the microphone's processing alone", run by
-  `tools/voice_dsp/native_noise_loop.sh` and the integration-test workflow)
+  `tools/voice_dsp/native_noise_loop.sh` and the voice-dsp-native workflow)
   measures it inside the real WebRTC in three phases and prints them:
   `before -40.7 dB, with the custom source -22.7 dB, restored -40.8 dB`
   (-28.8 in the middle while the source also wrote gain control off).

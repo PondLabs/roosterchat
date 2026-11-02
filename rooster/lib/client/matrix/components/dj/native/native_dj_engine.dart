@@ -29,6 +29,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
 // its own the same way.
 // ignore: implementation_imports
 import 'package:flutter_webrtc/src/native/media_stream_impl.dart';
+import 'package:intl/intl.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -159,11 +160,10 @@ class DjSongCache {
   static Future<DjSong> _local(String source) async {
     final path = await DjLocalFiles.instance.pathOf(source);
     if (path == null) {
-      throw const DjTrackUnavailable(
-          "it's a file on the computer of whoever queued it");
+      throw DjTrackUnavailable(_Errors.errorDjFileElsewhere);
     }
     if (!await File(path).exists()) {
-      throw const DjTrackUnavailable('the file is no longer there');
+      throw DjTrackUnavailable(_Errors.errorDjFileGone);
     }
     return DjSong(path, const {}, Future<void>.value());
   }
@@ -178,7 +178,7 @@ class DjSongCache {
       final id = end < 0 ? '' : source.substring(prefix.length, end);
       final extension = extensions.byId(id);
       if (extension == null) {
-        throw DjTrackUnavailable('it needs the "$id" source extension');
+        throw DjTrackUnavailable(_Errors.errorDjExtensionMissing(id));
       }
       return (extension, source.substring(end + 1));
     }
@@ -187,7 +187,7 @@ class DjSongCache {
     final extension = (host.isEmpty ? null : extensions.forHost(host)) ??
         extensions.serving(DjExtensionManifest.useDj).firstOrNull;
     if (extension == null) {
-      throw const DjTrackUnavailable('no source extension is installed');
+      throw DjTrackUnavailable(_Errors.errorDjNoExtension);
     }
     return (extension, source);
   }
@@ -230,7 +230,7 @@ class DjSongCache {
         uri != null &&
         (uri.scheme == 'https' || uri.scheme == 'http') &&
         (!isFetchable(given) || !await hostIsPublic(uri.host))) {
-      throw StateError("that link can't be played");
+      throw StateError(_Errors.errorDjLinkNotPlayable);
     }
 
     final fetch = DjExtensions.fetch(extension, given,
@@ -337,7 +337,7 @@ class NativeDjEngine implements DjPlaybackEngine {
 
   Future<void> _start() async {
     final participant = room.localParticipant;
-    if (participant == null) throw StateError('Not connected to the call');
+    if (participant == null) throw StateError(errorDjNotConnected);
     final player = _player = DjMusicPlayer(bindings);
 
     final response = await rtc.WebRTC.invokeMethod(
@@ -353,7 +353,7 @@ class NativeDjEngine implements DjPlaybackEngine {
               .noiseSuppression ??
           false,
     });
-    if (response == null) throw StateError('No music track');
+    if (response == null) throw StateError(_Errors.errorDjNoMusicTrack);
     // The pacing thread runs from here on: remembered before anything else
     // can fail, so shutdown always stops it before freeing the player.
     final audio = response['audioTracks'];
@@ -484,8 +484,8 @@ class NativeDjEngine implements DjPlaybackEngine {
   void load(DjTrack track, {required int positionMs, required bool paused}) {
     final song = _songs[track.id];
     final player = _player;
-    if (song == null) throw StateError('the song was not fetched');
-    if (player == null || _shutDown) throw StateError('the booth is closed');
+    if (song == null) throw StateError(errorDjSongNotFetched);
+    if (player == null || _shutDown) throw StateError(errorDjBoothClosed);
     final number = _numbers.putIfAbsent(track.id, () => _nextNumber++);
     player.setPaused(paused);
     player.open(song.path, positionMs: positionMs, trackId: number);
@@ -656,4 +656,48 @@ class DjLocalMonitor {
       }
     }
   }
+}
+
+/// Why the DJ's player couldn't get or play a song, in words for the user:
+/// they end up in the booth's notices.
+class _Errors {
+  static String get errorDjFileElsewhere =>
+      Intl.message("it's a file on the computer of whoever queued it",
+          name: "errorDjFileElsewhere",
+          desc: "Why the DJ booth skipped a song: it is a file on the computer "
+              "of the person who added it, which this computer can't play. "
+              "Follows \"Skipped <song>:\"");
+
+  static String get errorDjFileGone => Intl.message(
+      "the file is no longer there",
+      name: "errorDjFileGone",
+      desc: "Why the DJ booth skipped a song from the DJ's own computer: the "
+          "file was moved or deleted. Follows \"Skipped <song>:\"");
+
+  static String errorDjExtensionMissing(String id) => Intl.message(
+      'it needs the "$id" source extension',
+      name: "errorDjExtensionMissing",
+      args: [id],
+      desc: "Why the DJ booth skipped a song: it comes from a source "
+          "extension this computer hasn't installed; the placeholder is the "
+          "extension's id. Follows \"Skipped <song>:\"");
+
+  static String get errorDjNoExtension => Intl.message(
+      "no source extension is installed",
+      name: "errorDjNoExtension",
+      desc: "Why the DJ booth skipped a song from a link: this computer has "
+          "no source extension to play links. Follows \"Skipped <song>:\"");
+
+  static String get errorDjLinkNotPlayable => Intl.message(
+      "that link can't be played",
+      name: "errorDjLinkNotPlayable",
+      desc: "Why a song in the DJ booth could not play: its link points "
+          "somewhere the booth does not fetch from. Follows \"Couldn't play "
+          "<song>:\"");
+
+  static String get errorDjNoMusicTrack => Intl.message("No music track",
+      name: "errorDjNoMusicTrack",
+      desc: "Why the DJ booth could not start: the music track to send to "
+          "the call could not be created. Follows \"Couldn't start the DJ "
+          "booth:\"");
 }

@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:math';
 
-import 'package:collection/collection.dart';
 import 'package:rooster/client/components/message_effects/message_effect_component.dart';
 import 'package:rooster/client/components/read_receipts/read_receipt_component.dart';
 import 'package:rooster/client/timeline.dart';
@@ -10,6 +8,7 @@ import 'package:rooster/config/build_config.dart';
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
+import 'package:rooster/ui/atoms/appear_in.dart';
 import 'package:rooster/ui/molecules/room_timeline_widget/room_timeline_overlay.dart';
 import 'package:rooster/ui/molecules/timeline_events/timeline_event_layout.dart';
 import 'package:rooster/ui/molecules/timeline_events/timeline_event_menu.dart';
@@ -43,7 +42,8 @@ class RoomTimelineWidgetView extends StatefulWidget {
   State<RoomTimelineWidgetView> createState() => RoomTimelineWidgetViewState();
 }
 
-class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
+class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView>
+    with WidgetsBindingObserver {
   int numBuilds = 0;
 
   int recentItemsCount = 0;
@@ -54,6 +54,34 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
 
   late ScrollController controller;
   late List<(GlobalKey, String)> eventKeys;
+
+  /// Where an event, or an entry's key, is in [eventKeys]: built once after
+  /// the list changes, instead of a scan of it per lookup. The slivers ask
+  /// for every built child on every rebuild, and a session that has
+  /// scrolled back a few thousand events paid thousands of comparisons per
+  /// child per incoming message.
+  Map<String, int>? _indexByEventId;
+  Map<Key, int>? _indexByKey;
+
+  void _eventKeysChanged() {
+    _indexByEventId = null;
+    _indexByKey = null;
+  }
+
+  int indexOfEventId(String eventId) {
+    final index = _indexByEventId ??= {
+      for (var i = 0; i < eventKeys.length; i++) eventKeys[i].$2: i
+    };
+    return index[eventId] ?? -1;
+  }
+
+  int indexOfKey(Key key) {
+    final index = _indexByKey ??= {
+      for (var i = 0; i < eventKeys.length; i++) eventKeys[i].$1: i
+    };
+    return index[key] ?? -1;
+  }
+
   late Timeline timeline;
 
   GlobalKey firstFrameScrollViewKey = GlobalKey();
@@ -76,16 +104,60 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
   bool wasLastScrollAttachedToBottom = false;
   bool loading = false;
 
-  bool get attachedToBottom => controller.hasClients
-      ? controller.offset - controller.positions.first.minScrollExtent < 50 ||
-          animatingToBottom
-      : true;
+  /// Whether the view shows the latest messages: following them, or within
+  /// a little of the bottom.
+  bool get attachedToBottom =>
+      controller.hasClients ? following || atBottom || animatingToBottom : true;
+
+  /// Within a little of the bottom of the list, by the scroll position.
+  bool get atBottom =>
+      controller.offset - controller.positions.first.minScrollExtent < 50;
+
+  /// Whether new messages are followed: true at the latest messages, and
+  /// false once the reader scrolls away from them. Only the reader's own
+  /// scrolling changes it, not ours, nor a message growing below the view:
+  /// read from the scroll position as a message came in, a tall one (or
+  /// one arriving while we still scrolled to the last) said we had left.
+  bool following = true;
+
+  /// How many scrolls of ours are under way, which [following] ignores.
+  int ownScrolls = 0;
 
   bool isLoadingFuture = false;
   bool isLoadingHistory = false;
 
   MessageEffectComponent? effects;
+
+  /// The first message not seen yet, with the "New messages" line above it.
+  /// Set from the read marker when the room opens, and while it is open by
+  /// the first message that arrives unseen: with the window in the
+  /// background, or while reading further up.
   String? lastReadEventId;
+
+  /// The line has been seen where it is: the view was at the latest
+  /// messages with the window in front. The next message that arrives
+  /// unseen moves it there.
+  bool unreadMarkerSeen = false;
+
+  /// Messages from others that arrived below while reading further up, for
+  /// the button that jumps down to them.
+  int newMessagesBelow = 0;
+
+  /// Messages that just arrived in front of the reader, at the latest
+  /// messages: each floats up into place ([AppearIn]) the first time it is
+  /// built.
+  final Set<String> arriving = {};
+
+  /// Events reaching index 0 are new ones, not a page of the past loaded
+  /// while scrolling down a timeline opened at an old message.
+  bool get isLive => !timeline.canLoadFuture && !timeline.isLoadingFuture;
+
+  /// Whether the window is in front, so what lands on screen is seen. A
+  /// platform that never says counts as in front.
+  static bool get appInForeground {
+    final state = WidgetsBinding.instance.lifecycleState;
+    return state == null || state == AppLifecycleState.resumed;
+  }
 
   @override
   void initState() {
@@ -96,8 +168,21 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
     controller = ScrollController(initialScrollOffset: -999999);
     _jumpSubscription = EventBus.jumpToEvent.stream.listen(jumpToEvent);
     WidgetsBinding.instance.addPostFrameCallback(onAfterFirstFrame);
+    WidgetsBinding.instance.addObserver(this);
     super.initState();
   }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) acknowledgeIfLooking();
+  }
+
+  /// A timeline loaded around an event jumped to, which this view owns:
+  /// closed when the view goes back to [widget.timeline], jumps elsewhere
+  /// or is disposed. Each used to replace the room's timeline and leak the
+  /// one before.
+  Timeline? _contextTimeline;
+  int _jumpGeneration = 0;
 
   void initFromTimeline(Timeline timeline) {
     if (subscriptions != null) {
@@ -106,34 +191,41 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
       }
     }
 
+    final leaving = _contextTimeline;
+    if (leaving != null && !identical(leaving, timeline)) {
+      _contextTimeline = null;
+      leaving.close();
+    }
+
     String? targetEventId = timeline.room.lastRead;
 
     this.timeline = timeline;
     var index = timeline.events.indexWhere((i) => i.eventId == targetEventId);
 
-    if (index > 0) {
-      // Find the next message after the latest read event
+    lastReadEventId = null;
+    unreadMarkerSeen = false;
+    newMessagesBelow = 0;
 
-      int? viewIndex = null;
-      for (int i = index; i >= 1; i--) {
+    if (index > 0) {
+      // The line goes above the first message after the latest read event.
+      // (It went above the newest one: this kept looking past the first.)
+      for (int i = index - 1; i >= 0; i--) {
         var eventType =
-            TimelineViewEntryState.eventToDisplayType(timeline.events[i - 1]);
+            TimelineViewEntryState.eventToDisplayType(timeline.events[i]);
 
         if (eventType == TimelineEventWidgetDisplayType.message) {
-          lastReadEventId = timeline.events[i - 1].eventId;
-          viewIndex = i - 1;
+          lastReadEventId = timeline.events[i].eventId;
+          break;
         }
       }
 
       isLoadingFuture = false;
       isLoadingHistory = false;
-
-      recentItemsCount = max(1, viewIndex ?? index);
-    } else {
-      if (timeline.events.length > 1) {
-        recentItemsCount = 1;
-      }
     }
+
+    // Opens at the latest message, everything in the history sliver: the
+    // one anchored to the bottom of the view (see [settleAtBottom]).
+    recentItemsCount = 0;
 
     var receipts = timeline.room.getComponent<ReadReceiptComponent>();
     subscriptions = [
@@ -161,6 +253,7 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
         timeline.events
             .map((e) => (GlobalKey(debugLabel: e.eventId), e.eventId)),
         growable: true);
+    _eventKeysChanged();
   }
 
   @override
@@ -168,7 +261,11 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
     for (var element in subscriptions!) {
       element.cancel();
     }
+    _jumpGeneration++;
+    _contextTimeline?.close();
+    _contextTimeline = null;
     _jumpSubscription?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     controller.dispose();
     super.dispose();
   }
@@ -178,20 +275,60 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
       GlobalKey(debugLabel: timeline.events[index].eventId),
       timeline.events[index].eventId
     ));
+    _eventKeysChanged();
 
-    if (index == 0 || index < recentItemsCount) {
+    final event = timeline.events[index];
+    final live = index == 0 && isLive;
+    final following = attachedToBottom;
+    final mine = event.senderId == timeline.client.self?.identifier;
+    final isMessage = TimelineViewEntryState.eventToDisplayType(event) ==
+        TimelineEventWidgetDisplayType.message;
+
+    if (live && mine && isMessage && !following) {
+      // Sent while reading further up: back to the present to see it.
+      animateAndSnapToBottom(keepUnreadMarker: false);
+      return;
+    }
+
+    if (live && following) {
+      // Listed at the start of the history sliver, which is anchored to the
+      // bottom of the view: the newest message stays at the bottom however
+      // it grows when its previews load.
+      if (recentItemsCount > 0) settleAtBottom();
+    } else if (index == 0 || index < recentItemsCount) {
       recentItemsCount += 1;
+    }
+
+    if (live && isMessage && following && appInForeground) {
+      arriving.add(event.eventId);
+    }
+
+    if (live && isMessage) {
+      if (mine) {
+        // Caught up: we are talking.
+        lastReadEventId = null;
+      } else if (!following || !appInForeground) {
+        markUnseen(event);
+      }
+
+      if (!following && !mine) {
+        newMessagesBelow += 1;
+        (overlayKey.currentState as TimelineOverlayState?)
+            ?.setNewMessageCount(newMessagesBelow);
+      }
     }
 
     if (index == 0) {
       if (attachedToBottom) {
-        scrollToBottom();
+        // In front of the reader it scrolls into view; behind other
+        // windows it is simply put there.
+        appInForeground ? scrollToBottom() : stickToBottom();
 
         widget.markAsRead?.call(timeline.events[0]);
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          scrollToBottom();
+          appInForeground ? scrollToBottom() : stickToBottom();
 
           widget.markAsRead?.call(timeline.events[0]);
         });
@@ -218,11 +355,12 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
   void onEventChanged(int index, {bool cascade = true}) {
     var event = timeline.events[index];
     var existing = eventKeys[index];
-    eventKeys[index] = (existing.$1, event.eventId);
+    if (existing.$2 != event.eventId) {
+      eventKeys[index] = (existing.$1, event.eventId);
+      _eventKeysChanged();
+    }
 
-    var key = eventKeys.firstWhere(
-      (element) => element.$2 == event.eventId,
-    );
+    var key = eventKeys[index];
 
     assert(event.eventId == key.$2);
 
@@ -255,10 +393,76 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
 
   void scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      controller.animateTo(controller.position.minScrollExtent,
+      if (!mounted || !controller.hasClients) return;
+      ownScroll(() => controller.animateTo(controller.position.minScrollExtent,
           duration: const Duration(milliseconds: 500),
-          curve: Curves.easeOutExpo);
+          curve: Curves.easeOutExpo));
     });
+  }
+
+  /// Runs [move], a scroll of ours, without [following] reading it as the
+  /// reader's.
+  Future<void> ownScroll(FutureOr<void> Function() move) async {
+    ownScrolls += 1;
+    try {
+      await move();
+    } finally {
+      ownScrolls -= 1;
+    }
+  }
+
+  /// Puts the view at the very bottom, and keeps it there for the next few
+  /// frames. A list laying out children it had not built corrects the
+  /// scroll position to keep what was on screen in place, which left the
+  /// newest message just below the view after a jump to the bottom.
+  void stickToBottom({int frames = 3}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !controller.hasClients || !following) return;
+      final bottom = controller.position.minScrollExtent;
+      if (controller.offset != bottom) {
+        ownScroll(() => controller.jumpTo(bottom));
+      }
+      (overlayKey.currentState as TimelineOverlayState?)
+          ?.setAttachedToBottom(attachedToBottom);
+      if (frames > 1) stickToBottom(frames: frames - 1);
+    });
+  }
+
+  /// Moves what is below the history sliver into it, and the view to its
+  /// start. The bottom of the list is then the bottom of the view, where it
+  /// stays as new messages come in and as the newest ones grow (an image or
+  /// a link preview loading). Below the sliver it did not: a message there
+  /// grew past the bottom of the view after we had scrolled to it, the view
+  /// no longer counted as at the bottom, and from then on nothing new
+  /// scrolled into view.
+  void settleAtBottom() {
+    if (!controller.hasClients) return;
+    if (recentItemsCount == 0 && controller.offset == 0) return;
+
+    following = true;
+    setState(() => recentItemsCount = 0);
+    ownScroll(() => controller.jumpTo(0));
+    stickToBottom();
+  }
+
+  /// [event] arrived unseen: the line goes above it, unless it already
+  /// marks an earlier one nobody has seen yet.
+  void markUnseen(TimelineEvent event) {
+    final marker = lastReadEventId;
+    if (marker != null && !unreadMarkerSeen && timeline.hasEvent(marker)) {
+      return;
+    }
+    lastReadEventId = event.eventId;
+    unreadMarkerSeen = false;
+  }
+
+  /// At the latest messages with the window in front: the line has been
+  /// seen, and nothing waits below.
+  void acknowledgeIfLooking() {
+    if (!mounted || !attachedToBottom || !appInForeground) return;
+    unreadMarkerSeen = true;
+    newMessagesBelow = 0;
+    (overlayKey.currentState as TimelineOverlayState?)?.setNewMessageCount(0);
   }
 
   void onEventRemoved(int index) {
@@ -267,6 +471,7 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
     }
 
     var removed = eventKeys.removeAt(index);
+    _eventKeysChanged();
 
     assert(timeline.events[index].eventId == removed.$2);
 
@@ -302,6 +507,7 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
 
   void onScroll() {
     if (!mounted || !controller.hasClients) return;
+    if (ownScrolls == 0) following = atBottom || animatingToBottom;
     widget.onViewScrolled?.call(
         offset: controller.offset,
         maxScrollExtent: controller.position.maxScrollExtent,
@@ -315,6 +521,7 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
     }
 
     wasLastScrollAttachedToBottom = attachedToBottom;
+    acknowledgeIfLooking();
 
     double loadingThreshold = 500;
 
@@ -343,29 +550,35 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
     }
   }
 
-  void animateAndSnapToBottom() {
+  void animateAndSnapToBottom({bool keepUnreadMarker = true}) {
     controller.position.hold(() {});
 
+    final marker = lastReadEventId;
     setState(() {
       initFromTimeline(widget.timeline);
+      // The line marking what came in while reading further up stays
+      // where it is, to read on from it.
+      if (keepUnreadMarker && marker != null && timeline.hasEvent(marker)) {
+        lastReadEventId = marker;
+      }
     });
 
+    following = true;
     var overlayState = overlayKey.currentState as TimelineOverlayState?;
     overlayState?.setAttachedToBottom(attachedToBottom);
     widget.onAttachedToBottom?.call();
 
     animatingToBottom = true;
 
-    controller
-        .animateTo(controller.position.minScrollExtent,
-            duration: const Duration(milliseconds: 500),
-            curve: Curves.easeOutExpo)
-        .then((_) {
+    ownScroll(() => controller.animateTo(controller.position.minScrollExtent,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeOutExpo)).then((_) {
       if (!mounted || !controller.hasClients) return;
       setState(() {
-        controller.jumpTo(0);
+        ownScroll(() => controller.jumpTo(0));
         animatingToBottom = false;
       });
+      stickToBottom();
     });
 
     setState(() {
@@ -374,9 +587,9 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
   }
 
   void eventHovered(String eventId) {
-    var key = eventKeys.firstWhere(
-      (element) => element.$2 == eventId,
-    );
+    final index = indexOfEventId(eventId);
+    if (index == -1) return;
+    var key = eventKeys[index];
 
     assert(eventId == key.$2);
 
@@ -417,7 +630,7 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
+    final view = Material(
       color: Colors.transparent,
       child: MouseRegion(
         onExit: (_) => deselectEvent(),
@@ -473,25 +686,29 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
                                 ? Colors.blue[200 + sliverIndex % 4 * 100]!
                                     .withAlpha(30)
                                 : null,
-                            child: TimelineViewEntry(
-                                key: key.$1,
-                                timeline: timeline,
-                                onEventHovered: eventHovered,
-                                canCollapse: true,
-                                setEditingEvent: widget.setEditingEvent,
-                                setReplyingEvent: widget.setReplyingEvent,
-                                isThreadTimeline: widget.isThreadTimeline,
-                                highlightedEventId: highlightedEventId,
-                                lastReadEventId: lastReadEventId,
-                                previewMedia:
-                                    widget.timeline.room.shouldPreviewMedia,
-                                jumpToEvent: jumpToEvent,
-                                initialIndex: timelineIndex),
+                            child: AppearIn(
+                              key: ValueKey(key.$2),
+                              play: arriving.remove(key.$2),
+                              offset: const Offset(0, 40),
+                              child: TimelineViewEntry(
+                                  key: key.$1,
+                                  timeline: timeline,
+                                  onEventHovered: eventHovered,
+                                  canCollapse: true,
+                                  setEditingEvent: widget.setEditingEvent,
+                                  setReplyingEvent: widget.setReplyingEvent,
+                                  isThreadTimeline: widget.isThreadTimeline,
+                                  highlightedEventId: highlightedEventId,
+                                  lastReadEventId: lastReadEventId,
+                                  previewMedia:
+                                      widget.timeline.room.shouldPreviewMedia,
+                                  jumpToEvent: jumpToEvent,
+                                  initialIndex: timelineIndex),
+                            ),
                           );
                         },
                         findChildIndexCallback: (key) {
-                          var timelineIndex = eventKeys
-                              .indexWhere((element) => element.$1 == key);
+                          var timelineIndex = indexOfKey(key);
                           if (timelineIndex == -1) {
                             Log.w(
                                 "Failed to get timeline index for key: $timelineIndex");
@@ -527,25 +744,29 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
                                 ? Colors.red[200 + sliverIndex % 4 * 100]!
                                     .withAlpha(30)
                                 : null,
-                            child: TimelineViewEntry(
-                                key: key.$1,
-                                onEventHovered: eventHovered,
-                                timeline: timeline,
-                                canCollapse: true,
-                                setEditingEvent: widget.setEditingEvent,
-                                setReplyingEvent: widget.setReplyingEvent,
-                                isThreadTimeline: widget.isThreadTimeline,
-                                highlightedEventId: highlightedEventId,
-                                previewMedia:
-                                    widget.timeline.room.shouldPreviewMedia,
-                                lastReadEventId: lastReadEventId,
-                                jumpToEvent: jumpToEvent,
-                                initialIndex: timelineIndex),
+                            child: AppearIn(
+                              key: ValueKey(key.$2),
+                              play: arriving.remove(key.$2),
+                              offset: const Offset(0, 40),
+                              child: TimelineViewEntry(
+                                  key: key.$1,
+                                  onEventHovered: eventHovered,
+                                  timeline: timeline,
+                                  canCollapse: true,
+                                  setEditingEvent: widget.setEditingEvent,
+                                  setReplyingEvent: widget.setReplyingEvent,
+                                  isThreadTimeline: widget.isThreadTimeline,
+                                  highlightedEventId: highlightedEventId,
+                                  previewMedia:
+                                      widget.timeline.room.shouldPreviewMedia,
+                                  lastReadEventId: lastReadEventId,
+                                  jumpToEvent: jumpToEvent,
+                                  initialIndex: timelineIndex),
+                            ),
                           );
                         },
                         findChildIndexCallback: (key) {
-                          var timelineIndex = eventKeys
-                              .indexWhere((element) => element.$1 == key);
+                          var timelineIndex = indexOfKey(key);
                           if (timelineIndex == -1) {
                             Log.w(
                                 "Failed to get timeline index for key: $timelineIndex");
@@ -572,7 +793,7 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
               ),
               TimelineOverlay(
                   key: overlayKey,
-                  showMessageMenu: MediaQuery.of(context).desktop,
+                  showMessageMenu: MediaQuery.sizeOf(context).desktop,
                   jumpToLatest: animateAndSnapToBottom,
                   onScrolled: (event) {
                     controller.jumpTo(controller.offset - event.scrollDelta.dy);
@@ -606,6 +827,24 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
         ),
       ),
     );
+
+    return NotificationListener<ScrollEndNotification>(
+      onNotification: onScrollEnd,
+      child: view,
+    );
+  }
+
+  /// Scrolled down to the latest messages and stopped there: from now on
+  /// new ones show as they come in.
+  bool onScrollEnd(ScrollEndNotification notification) {
+    // The timeline's own, not a code block's or an embed's inside it.
+    if (notification.depth != 0 || notification.metrics.axis != Axis.vertical) {
+      return false;
+    }
+    if (!firstFrame && !animatingToBottom && recentItemsCount > 0 && atBottom) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => settleAtBottom());
+    }
+    return false;
   }
 
   void jumpToEvent(String eventId, {bool highlight = true}) async {
@@ -617,23 +856,39 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
 
     int index = timeline.events.indexWhere((event) => event.eventId == eventId);
     if (index == -1) {
+      final generation = ++_jumpGeneration;
       setState(() {
         loading = true;
       });
-      var newTimeline =
-          await timeline.room.getTimeline(contextEventId: eventId);
-      if (!mounted) return;
+      Timeline newTimeline;
+      try {
+        newTimeline = await timeline.room.loadTimeline(contextEventId: eventId);
+      } catch (e, s) {
+        Log.onError(e, s,
+            content: "Could not load the timeline around an event");
+        if (mounted) setState(() => loading = false);
+        return;
+      }
+      // A later jump, or the view going away, while this one loaded.
+      if (!mounted || generation != _jumpGeneration) {
+        await newTimeline.close();
+        return;
+      }
 
       index =
           newTimeline.events.indexWhere((event) => event.eventId == eventId);
 
       if (index == -1) {
-        setState(() => loading = false);
+        await newTimeline.close();
+        if (mounted) setState(() => loading = false);
         return;
       }
 
       setState(() {
+        // initFromTimeline first: it closes the context timeline being
+        // left, which is the one still in _contextTimeline.
         initFromTimeline(newTimeline);
+        _contextTimeline = newTimeline;
       });
     }
 
@@ -692,11 +947,9 @@ class RoomTimelineWidgetViewState extends State<RoomTimelineWidgetView> {
   }
 
   void onReadReceiptUpdated(String event) {
-    var key = eventKeys.firstWhereOrNull(
-      (element) => element.$2 == event,
-    );
-
-    if (key == null) return;
+    final keyIndex = indexOfEventId(event);
+    if (keyIndex == -1) return;
+    var key = eventKeys[keyIndex];
 
     assert(event == key.$2);
 

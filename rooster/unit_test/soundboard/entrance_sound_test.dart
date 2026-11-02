@@ -150,6 +150,38 @@ void main() {
 
       expect(gate.takeSilentJoinRequest('!voice:x'), isFalse);
     });
+
+    test('a join request says whether it wants the entrance sound', () {
+      // "Join call" from the rail under the spaces joins with the sound;
+      // "Join Without Entrance Sound" without it. Either is taken once.
+      final gate = EntranceSoundGate();
+      gate.requestJoin('!voice:x');
+      gate.requestSilentJoin('!quiet:x');
+
+      expect(gate.takeJoinRequest('!other:x'), isNull);
+      expect(gate.takeJoinRequest('!voice:x'), isFalse);
+      expect(gate.takeJoinRequest('!voice:x'), isNull);
+      expect(gate.takeJoinRequest('!quiet:x'), isTrue);
+      expect(gate.takeJoinRequest('!quiet:x'), isNull);
+    });
+
+    test('a join request with the sound is not a silent one', () {
+      final gate = EntranceSoundGate();
+      gate.requestJoin('!voice:x');
+
+      expect(gate.takeSilentJoinRequest('!voice:x'), isFalse);
+      expect(gate.takeJoinRequest('!voice:x'), isNull);
+    });
+
+    test('an old join request no longer joins the call', () {
+      var now = DateTime(2026, 1, 1);
+      final gate = EntranceSoundGate(now: () => now);
+      gate.requestJoin('!voice:x');
+
+      now = now.add(const Duration(minutes: 1));
+
+      expect(gate.takeJoinRequest('!voice:x'), isNull);
+    });
   });
 
   group('claimEntranceSound', () {

@@ -158,7 +158,9 @@ void main() {
   // what changes the room noise is WebRTC's own processing on the
   // microphone, measured on what its sender encodes: A before the custom
   // source, B once it is sent too, C after the microphone's options are
-  // written back.
+  // written back. Writing them back restarts WebRTC's suppressor, which
+  // takes several seconds to settle (CI read -34 dB 2 to 3 s after), so C
+  // starts 5 s after the restore, as in the DJ monitor test below.
   testWidgets("a custom audio source leaves the microphone's processing alone",
       (tester) async {
     expect(_roomNoise, isNotEmpty,
@@ -236,7 +238,7 @@ void main() {
       await until(9.0);
       final restored = restoreMicrophoneProcessing(mic);
 
-      await until(14.0);
+      await until(16.5);
       sampling = false;
       await sampler;
       noise.kill();
@@ -255,7 +257,7 @@ void main() {
         return d > 0 ? 10 * math.log(e / d) / math.ln10 : double.nan;
       }
 
-      final a = level(2.0, 4.5), b = level(6.5, 9.0), c = level(11.0, 14.0);
+      final a = level(2.0, 4.5), b = level(6.5, 9.0), c = level(14.0, 16.5);
       final summary = 'before ${a.toStringAsFixed(1)} dB, with the custom '
           'source ${b.toStringAsFixed(1)} dB, restored ${c.toStringAsFixed(1)} dB';
       await File('$_results/custom_source.txt').writeAsString('$summary\n');
@@ -287,7 +289,10 @@ void main() {
   //
   // Measured as in the test above, with our DSP transparent: A with the
   // music sent and the microphone's processing restored, as a call has it
-  // once the booth publishes; B once the monitor runs too.
+  // once the booth publishes; B once the monitor runs too. Every write of
+  // the options restarts WebRTC's suppressor, which takes several seconds
+  // to come back down (CI read -34 dB 2 to 4.5 s after one), and the
+  // monitor writes them twice, so each window starts 5 s after its change.
   testWidgets("the DJ's own monitor leaves the microphone's processing on",
       (tester) async {
     expect(_roomNoise, isNotEmpty,
@@ -365,12 +370,12 @@ void main() {
       await until(2.0);
       expect(restoreMicrophoneProcessing(mic), isTrue);
 
-      await until(6.5);
+      await until(9.5);
       // ignore: invalid_use_of_visible_for_testing_member
       final monitor = DjLocalMonitor();
       await monitor.start(music, musicTrack, 0, microphone: () => mic);
 
-      await until(11.0);
+      await until(17.5);
       sampling = false;
       await sampler;
       noise.kill();
@@ -390,14 +395,14 @@ void main() {
         return d > 0 ? 10 * math.log(e / d) / math.ln10 : double.nan;
       }
 
-      final a = level(4.0, 6.5), b = level(8.5, 11.0);
+      final a = level(7.0, 9.5), b = level(15.0, 17.5);
       final summary = 'with the music sent ${a.toStringAsFixed(1)} dB, with '
           "the DJ's monitor too ${b.toStringAsFixed(1)} dB";
       await File('$_results/dj_monitor.txt').writeAsString('$summary\n');
       // ignore: avoid_print
       print("DJ monitor: $summary");
       // One way: switched off, the room noise comes back up (about -29 dB
-      // against -40). Lower is WebRTC's suppressor still settling in A.
+      // against -40).
       expect(b, lessThan(a + 3),
           reason: "the DJ's monitor switched the microphone's echo "
               'cancellation off: $summary');
@@ -494,7 +499,9 @@ void main() {
       // ignore: invalid_use_of_visible_for_testing_member
       await dsp.debugMicTestRenegotiate();
 
-      await until(14.0);
+      // The negotiation writes the options again, restarting the suppressor:
+      // C starts 5 s after it, as in the custom source test.
+      await until(16.5);
       sampling = false;
       await sampler;
       noise.kill();
@@ -513,7 +520,7 @@ void main() {
         return d > 0 ? 10 * math.log(e / d) / math.ln10 : double.nan;
       }
 
-      final a = level(2.0, 4.5), b = level(6.5, 9.0), c = level(11.0, 14.0);
+      final a = level(2.0, 4.5), b = level(6.5, 9.0), c = level(14.0, 16.5);
       final summary = 'before ${a.toStringAsFixed(1)} dB, with the music '
           '${b.toStringAsFixed(1)} dB, after another negotiation '
           '${c.toStringAsFixed(1)} dB';

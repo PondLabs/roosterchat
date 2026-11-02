@@ -1,8 +1,13 @@
+import 'dart:async';
+
+import 'package:rooster/client/components/user_color/user_color_component.dart';
 import 'package:rooster/client/timeline.dart';
 import 'package:rooster/client/timeline_events/timeline_event.dart';
 import 'package:rooster/client/timeline_events/timeline_event_feature_related.dart';
 import 'package:rooster/diagnostic/benchmark_values.dart';
+import 'package:rooster/utils/common_strings.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 import 'package:flutter/material.dart' as material;
 
@@ -18,11 +23,20 @@ class TimelineEventViewReply extends StatefulWidget {
   final int index;
   final double avatarSize;
 
+  /// Stands in for the text of the message replied to (or being edited)
+  /// while it is not known.
+  static String get labelMessageReplyUnknownBody => Intl.message("Unknown",
+      name: "labelMessageReplyUnknownBody",
+      desc: "Stands in for the text of the message being replied to (above a "
+          "reply, or above the message box while replying or editing) when "
+          "that message's text is not known");
+
   @override
   State<TimelineEventViewReply> createState() => _TimelineEventViewReplyState();
 }
 
 class _TimelineEventViewReplyState extends State<TimelineEventViewReply> {
+  String? senderId;
   String? senderName;
   String? body;
   Color? senderColor;
@@ -30,10 +44,26 @@ class _TimelineEventViewReplyState extends State<TimelineEventViewReply> {
   bool loading = false;
   String? replyEventId;
 
+  UserColorComponent? userColors;
+  StreamSubscription<String>? colorSubscription;
+
   @override
   void initState() {
+    userColors = widget.timeline.room.client.getComponent<UserColorComponent>();
+    colorSubscription = userColors?.onColorChanged
+        .where((id) => id == senderId)
+        .listen((id) => setState(() {
+              senderColor =
+                  widget.timeline.room.getMemberOrFallback(id).defaultColor;
+            }));
     getStateFromIndex(widget.index);
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    colorSubscription?.cancel();
+    super.dispose();
   }
 
   void getStateFromIndex(int index) {
@@ -51,7 +81,10 @@ class _TimelineEventViewReplyState extends State<TimelineEventViewReply> {
 
     if (replyEvent == null) {
       loading = true;
-      widget.timeline.room.getEvent(e.relatedEventId!).then((value) {
+      // Through the timeline, which keeps what it fetched: the quote used
+      // to fetch the event again (store, then server) every time it was
+      // scrolled into view.
+      widget.timeline.fetchEventById(e.relatedEventId!).then((value) {
         if (mounted && value != null) {
           setStateFromEvent(value);
         }
@@ -65,11 +98,13 @@ class _TimelineEventViewReplyState extends State<TimelineEventViewReply> {
     setState(() {
       replyEventId = event.eventId;
       var sender = widget.timeline.room.getMemberOrFallback(event.senderId);
+      senderId = sender.identifier;
       senderName = sender.displayName;
       senderColor = sender.defaultColor;
       body = event.plainTextBody;
       loading = false;
     });
+    userColors?.requestPublicColor(senderId!);
   }
 
   @override
@@ -100,7 +135,7 @@ class _TimelineEventViewReplyState extends State<TimelineEventViewReply> {
                     maxLines: 2,
                     text: TextSpan(children: [
                       TextSpan(
-                          text: "${senderName ?? "Loading"} ",
+                          text: "${senderName ?? CommonStrings.labelLoading} ",
                           style: Theme.of(context)
                               .textTheme
                               .bodyMedium
@@ -108,7 +143,9 @@ class _TimelineEventViewReplyState extends State<TimelineEventViewReply> {
                                   color: tiamat.Text.adjustColor(
                                       context, senderColor ?? Colors.white))),
                       TextSpan(
-                          text: body ?? "Unknown",
+                          text: body ??
+                              TimelineEventViewReply
+                                  .labelMessageReplyUnknownBody,
                           style: Theme.of(context)
                               .textTheme
                               .bodySmall

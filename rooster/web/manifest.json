@@ -6,7 +6,7 @@
     "background_color": "#211614",
     "theme_color": "#211614",
     "description": "Talk. Play. Hang out.",
-    "orientation": "portrait-primary",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

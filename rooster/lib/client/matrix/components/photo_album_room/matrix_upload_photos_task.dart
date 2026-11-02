@@ -5,6 +5,7 @@ import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/utils/background_tasks/background_task_manager.dart';
 import 'package:exif/exif.dart';
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:image/image.dart' as img;
@@ -38,8 +39,13 @@ class MatrixUploadPhotosTask implements BackgroundTaskWithIntegerProgress {
   @override
   void dispose() {}
 
+  static String get labelRoomPhotoUploadTask => Intl.message("Uploading Photos",
+      name: "labelRoomPhotoUploadTask",
+      desc:
+          "Background task shown while photos picked for a photo album room are being uploaded, with a progress bar");
+
   @override
-  String get label => "Uploading Photos";
+  String get label => labelRoomPhotoUploadTask;
 
   @override
   Stream<int> get onProgress => progressStream.stream;

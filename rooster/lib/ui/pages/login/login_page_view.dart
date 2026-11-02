@@ -26,6 +26,7 @@ class LoginPageView extends StatefulWidget {
       this.doSsoLogin,
       this.doPasswordLogin,
       this.loadingServerInfo = false,
+      this.serverInfoError,
       this.isServerValid = false,
       this.hasSsoSupport = false,
       this.hasPasswordSupport = false,
@@ -36,6 +37,7 @@ class LoginPageView extends StatefulWidget {
   final double? progress;
   final List<LoginFlow>? flows;
   final bool loadingServerInfo;
+  final String? serverInfoError;
   final bool isServerValid;
   final bool hasSsoSupport;
   final bool hasPasswordSupport;
@@ -72,6 +74,26 @@ class _LoginPageViewState extends State<LoginPageView> {
   String get promptSubmitLogin => Intl.message("Login",
       name: "promptSubmitLogin",
       desc: "Prompt to submit the username and password, and attempt to login");
+
+  String get labelLoginWelcome => Intl.message("Come on in.",
+      name: "labelLoginWelcome",
+      desc: "Greeting under the app's name on the login screen: a warm "
+          "welcome in, as to a friend at the door");
+
+  String promptLoginWithSso(String provider) => Intl.message(
+      "Login with $provider",
+      name: "promptLoginWithSso",
+      args: [provider],
+      desc: "Button on the login screen that signs in through single sign-on; "
+          "the provider is a service's name (Google, GitHub) or the word for "
+          "the server itself");
+
+  String promptLoginContinueWithSso(String provider) => Intl.message(
+      "Continue with $provider",
+      name: "promptLoginContinueWithSso",
+      args: [provider],
+      desc: "Button on the login screen for each single sign-on provider the "
+          "server offers, such as Google or GitHub");
 
   @override
   void initState() {
@@ -210,9 +232,17 @@ class _LoginPageViewState extends State<LoginPageView> {
           ],
         ),
       ),
-      const tiamat.Text.labelLow("Come on in."),
+      tiamat.Text.labelLow(labelLoginWelcome),
       const SizedBox(height: 16),
       homeserverEntry(),
+      if (widget.serverInfoError != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: tiamat.Text.labelLow(widget.serverInfoError!),
+          ),
+        ),
       const SizedBox(height: 16),
       if (widget.hasPasswordSupport) usenamePasswordLoginInputs(),
       if (widget.hasSsoSupport)
@@ -244,7 +274,7 @@ class _LoginPageViewState extends State<LoginPageView> {
                 ),
               if (defaultSso != null)
                 tiamat.Button.secondary(
-                  text: "Login with " + defaultSso.name,
+                  text: promptLoginWithSso(defaultSso.name),
                   onTap: () => {widget.doSsoLogin?.call(defaultSso!)},
                 ),
               if (ssoFlows != null)
@@ -263,7 +293,7 @@ class _LoginPageViewState extends State<LoginPageView> {
                                   child: e.icon != null
                                       ? Image(image: e.icon!)
                                       : null),
-                              label: Text("Continue with ${e.name}"),
+                              label: Text(promptLoginContinueWithSso(e.name)),
                               onPressed: () => widget.doSsoLogin?.call(e),
                             ))
                         .toList(),

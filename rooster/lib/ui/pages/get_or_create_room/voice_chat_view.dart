@@ -1,3 +1,4 @@
+import 'package:rooster/ui/pages/get_or_create_room/room_creation_strings.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
@@ -32,10 +33,13 @@ class VoiceChatCreatorDescription extends StatelessWidget {
                     spacing: 12,
                     children: [
                       Icon(Icons.volume_up),
-                      Text("General",
-                          style: TextTheme.of(context)
-                              .headlineSmall
-                              ?.copyWith(fontSize: 20))
+                      Flexible(
+                        child: Text(
+                            RoomCreationStrings.labelRoomSampleNameGeneral,
+                            style: TextTheme.of(context)
+                                .headlineSmall
+                                ?.copyWith(fontSize: 20)),
+                      )
                     ],
                   ),
                 ),

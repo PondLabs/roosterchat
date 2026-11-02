@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/space_component.dart';
+import 'package:rooster/client/member.dart';
 import 'package:rooster/client/permissions.dart';
 import 'package:rooster/client/room_preview.dart';
 import 'package:rooster/client/space_child.dart';
@@ -121,6 +122,9 @@ abstract class Space {
       pushRule == PushRule.dontNotify ? 0 : highlightedNotificationCount;
 
   bool containsRoom(String identifier);
+
+  /// Everyone who has joined the space.
+  Future<List<Member>> fetchMembers();
 
   Future<List<RoomPreview>> fetchChildren();
 

@@ -49,7 +49,7 @@ class ImageSelectDialog extends StatelessWidget {
   String get removeImagePrompt => Intl.message("Remove Image",
       name: "removeImagePrompt", desc: "Button text for removing an image");
 
-  String get pickImagePrompt => Intl.message("Pick Image",
+  static String get pickImagePrompt => Intl.message("Pick Image",
       name: "pickImagePrompt", desc: "Button text for picking an image");
 
   String get confirmRemovePrompt =>
@@ -97,7 +97,7 @@ class ImageSelectDialog extends StatelessWidget {
       ],
     );
 
-    if (MediaQuery.of(context).mobile) {
+    if (MediaQuery.sizeOf(context).mobile) {
       buttons = Column(
         spacing: 8,
         crossAxisAlignment: CrossAxisAlignment.stretch,

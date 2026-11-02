@@ -11,6 +11,7 @@ import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/ui/atoms/room_panel.dart';
 import 'package:rooster/ui/atoms/room_panel_view.dart';
 import 'package:rooster/ui/atoms/scaled_safe_area.dart';
+import 'package:rooster/ui/organisms/room_quick_access_menu/room_quick_access_menu.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/image/lod_image.dart';
 import 'package:rooster/utils/links/link_utils.dart';
@@ -37,6 +38,7 @@ class SpaceSummaryView extends StatefulWidget {
       this.spaceColor,
       this.showSpaceSettingsButton = false,
       this.onInviteButtonTap,
+      this.onHistoryButtonTap,
       this.openSpaceSettings,
       this.onAddRoomButtonTap,
       this.onRoomTap,
@@ -56,6 +58,9 @@ class SpaceSummaryView extends StatefulWidget {
   final Color? spaceColor;
   final Function? openSpaceSettings;
   final Function? onInviteButtonTap;
+
+  /// Opens the space's call history; null when it has no voice channels.
+  final Function? onHistoryButtonTap;
   final Function(Room room)? onRoomSettingsButtonTap;
   final Function(Room room)? onRoomTap;
   final Function(Space space)? onSpaceTap;
@@ -96,7 +101,7 @@ class SpaceSummaryViewState extends State<SpaceSummaryView> {
       name: "labelSpaceAvailableRoomsList");
 
   String get labelSpaceVisibilityPublic => Intl.message("Public space",
-      desc: "Label to display that the space is publically available",
+      desc: "Label to display that the space is publicly available",
       name: "labelSpaceVisibilityPublic");
 
   String get labelSpaceVisibilityPrivate => Intl.message("Private space",
@@ -265,6 +270,8 @@ class SpaceSummaryViewState extends State<SpaceSummaryView> {
                       children: [
                         if (widget.onInviteButtonTap != null)
                           buildInviteButton(),
+                        if (widget.onHistoryButtonTap != null)
+                          buildHistoryButton(),
                         if (widget.showSpaceSettingsButton)
                           buildSettingsButton(),
                       ],
@@ -302,9 +309,21 @@ class SpaceSummaryViewState extends State<SpaceSummaryView> {
     );
   }
 
+  Widget buildHistoryButton() {
+    return tiamat.Tooltip(
+      text: RoomQuickAccessMenu.labelRoomCallHistory,
+      preferredDirection: AxisDirection.left,
+      child: tiamat.CircleButton(
+        icon: Icons.history,
+        radius: BuildConfig.MOBILE ? 24 : 16,
+        onPressed: () => widget.onHistoryButtonTap?.call(),
+      ),
+    );
+  }
+
   Widget buildInviteButton() {
     return tiamat.Tooltip(
-      text: "Invite",
+      text: RoomQuickAccessMenu.promptRoomInvite,
       preferredDirection: AxisDirection.left,
       child: tiamat.CircleButton(
         key: inviteButtonKey,
@@ -321,7 +340,7 @@ class SpaceSummaryViewState extends State<SpaceSummaryView> {
     return Stack(
       children: [
         Padding(
-          padding: MediaQuery.of(context).desktop
+          padding: MediaQuery.sizeOf(context).desktop
               ? EdgeInsetsGeometry.only(left: 8, right: 8)
               : EdgeInsetsGeometry.zero,
           child: DecoratedBox(
@@ -414,16 +433,18 @@ class SpaceSummaryViewState extends State<SpaceSummaryView> {
     return Row(
       children: [
         Icon(data),
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: tiamat.Text.label(text),
+        Flexible(
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: tiamat.Text.label(text),
+          ),
         )
       ],
     );
   }
 
   Widget buildChildrenList() {
-    bool showHandles = MediaQuery.of(context).desktop && canChangeOrder;
+    bool showHandles = MediaQuery.sizeOf(context).desktop && canChangeOrder;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
@@ -436,7 +457,7 @@ class SpaceSummaryViewState extends State<SpaceSummaryView> {
             var key = ValueKey(item.id);
 
             var pad = EdgeInsets.fromLTRB(0, 0, showHandles ? 50 : 0, 0);
-            if (MediaQuery.of(context).mobile) {
+            if (MediaQuery.sizeOf(context).mobile) {
               return ReorderableDelayedDragStartListener(
                   key: key,
                   enabled: canChangeOrder,

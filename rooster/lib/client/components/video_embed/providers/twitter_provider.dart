@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 
 import '../photo_post.dart';
 import '../video_capabilities.dart';
@@ -29,6 +30,13 @@ class TwitterProvider implements VideoProvider, PhotoPostProvider {
 
   @override
   String get id => 'twitter';
+
+  static String labelMediaXPostFrom(String author) =>
+      Intl.message("Post from $author",
+          name: "labelMediaXPostFrom",
+          args: [author],
+          desc: "Title of a video from an X post that has no text, with who "
+              "posted it: their name and @handle");
 
   @override
   String get name => 'X (Twitter)';
@@ -115,7 +123,7 @@ class TwitterProvider implements VideoProvider, PhotoPostProvider {
 
     return VideoEmbedInfo(
       originalUrl: uri,
-      title: text.isNotEmpty ? text : 'Post from $authorName',
+      title: text.isNotEmpty ? text : labelMediaXPostFrom(authorName),
       author: authorName,
       thumbnailUrl: thumbUrl,
       thumbnail: thumbUrl != null ? NetworkImage(thumbUrl) : null,
@@ -168,6 +176,29 @@ class TwitterProvider implements VideoProvider, PhotoPostProvider {
   static double? _aspectRatio(Object? width, Object? height) {
     if (width is! num || height is! num || height <= 0) return null;
     return width / height;
+  }
+
+  /// [media], a video or GIF of [post], as the video dialog plays it. The X
+  /// card uses it for the quoted post's videos, which [resolve] (the linked
+  /// status only) does not cover.
+  static VideoEmbedInfo videoOf(XPost post, XMedia media,
+      {ImageProvider? thumbnail}) {
+    final author = '${post.authorName} (@${post.handle})';
+    final aspectRatio = media.aspectRatio;
+    return VideoEmbedInfo(
+      originalUrl: post.url,
+      title: post.text.isNotEmpty ? post.text : labelMediaXPostFrom(author),
+      author: author,
+      thumbnailUrl: media.thumbnailUrl?.toString(),
+      thumbnail: thumbnail,
+      streamUrl: media.url,
+      playbackSource: NativeVideoSource(media.url),
+      aspectRatio: aspectRatio ?? 16.0 / 9.0,
+      duration: media.duration,
+      platformName: 'X (Twitter)',
+      isShortForm: aspectRatio != null && aspectRatio < 0.85,
+      capabilities: VideoCapabilities.native,
+    );
   }
 
   /// The status as the X card shows it. Null when it cannot be fetched.

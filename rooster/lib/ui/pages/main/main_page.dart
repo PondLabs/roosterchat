@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/client_manager.dart';
+import 'package:rooster/client/live_voice_channels.dart';
 import 'package:rooster/client/components/direct_messages/direct_message_component.dart';
 import 'package:rooster/client/components/invitation/invitation_component.dart';
 import 'package:rooster/client/components/profile/profile_component.dart';
@@ -71,6 +72,10 @@ class MainPageState extends State<MainPage> {
 
   late INotifyingList<Room> directMessages;
 
+  /// Who is in a voice channel right now, for the Home screen's list
+  /// (docs/whos-around.md).
+  late final LiveVoiceChannels liveVoice;
+
   StreamSubscription? onSpaceUpdateSubscription;
   StreamSubscription? onRoomUpdateSubscription;
   StreamSubscription? onCallStartedSubscription;
@@ -100,6 +105,37 @@ class MainPageState extends State<MainPage> {
       desc:
           "Title for the dialog which is shown when an update has been installed",
       name: "updateInstalledTitle");
+
+  String messageAppSwitchAccountForRoom(String account) => Intl.message(
+      "You tried to open a room for another account ($account), would you "
+      "like to switch?",
+      name: "messageAppSwitchAccountForRoom",
+      args: [account],
+      desc: "Asked when a link or notification opens a room of an account "
+          "other than the one on screen; account is that account's Matrix "
+          "ID, such as @ana:matrix.org");
+
+  String get labelAppSwitchAccount => Intl.message("Switch Account",
+      name: "labelAppSwitchAccount",
+      desc: "Title of the dialog that asks whether to switch to the account "
+          "a room belongs to");
+
+  String labelHomeInviteToChatPrompt(String userId) =>
+      Intl.message("Are you sure you want to invite $userId to chat?",
+          name: "labelHomeInviteToChatPrompt",
+          args: [userId],
+          desc: "Confirmation after picking someone to start a direct message "
+              "with, from the Home screen; userId is their Matrix ID");
+
+  String get labelHomeInvitationTitle => Intl.message("Invitation",
+      name: "labelHomeInvitationTitle",
+      desc: "Title of the confirmation before inviting someone to a direct "
+          "message");
+
+  String get labelHomeStartDirectMessage => Intl.message("Start Direct Message",
+      name: "labelHomeStartDirectMessage",
+      desc: "Title of the dialog, opened from the Home screen, where you "
+          "pick someone to start a direct message with");
 
   @override
   void initState() {
@@ -185,6 +221,8 @@ class MainPageState extends State<MainPage> {
       clientManager.rooms.onListUpdated
     ]);
 
+    liveVoice = LiveVoiceChannels(clientManager);
+
     ServicesBinding.instance.keyboard.addHandler(_onKeyPressed);
 
     // backgroundTaskManager.onListUpdate.listen((event) {
@@ -197,6 +235,15 @@ class MainPageState extends State<MainPage> {
     });
 
     _eventBusSubscriptions.addAll([
+      // A room sync dropped (left elsewhere, kicked, upgraded) while open:
+      // the chat of a room the client no longer has stays on screen
+      // otherwise, every message of it an error box.
+      clientManager.rooms.onRemove.listen((removed) {
+        if (!mounted || _currentRoom != removed) return;
+        setState(() {
+          _currentRoom = null;
+        });
+      }),
       EventBus.openRoom.stream.listen(onOpenRoomSignal),
       EventBus.openHomeScreen.stream.listen((_) {
         clearRoomSelection();
@@ -255,6 +302,7 @@ class MainPageState extends State<MainPage> {
     for (final sub in _eventBusSubscriptions) {
       sub.cancel();
     }
+    liveVoice.dispose();
     ServicesBinding.instance.keyboard.removeHandler(_onKeyPressed);
     super.dispose();
   }
@@ -294,7 +342,7 @@ class MainPageState extends State<MainPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (MediaQuery.of(context).mobile) {
+    if (MediaQuery.sizeOf(context).mobile) {
       return MainPageViewMobile(this);
     } else {
       return MainPageViewDesktop(this);
@@ -476,9 +524,8 @@ class MainPageState extends State<MainPage> {
   Future<void> askSwitchAccount(
       Client newClient, (String, String?) strings) async {
     var confirm = await AdaptiveDialog.confirmation(context,
-        prompt:
-            "You tried to open a room for another account (${newClient.self?.identifier}), would you like to switch?",
-        title: "Switch Account");
+        prompt: messageAppSwitchAccountForRoom("${newClient.self?.identifier}"),
+        title: labelAppSwitchAccount);
     if (confirm != true) return;
 
     EventBus.setFilterClient.add(newClient);
@@ -526,8 +573,8 @@ class MainPageState extends State<MainPage> {
               showSuggestions: false,
               onUserPicked: (userId) async {
                 final confirm = await AdaptiveDialog.confirmation(context,
-                    prompt: "Are you sure you want to invite $userId to chat?",
-                    title: "Invitation");
+                    prompt: labelHomeInviteToChatPrompt(userId),
+                    title: labelHomeInvitationTitle);
                 if (confirm != true) {
                   return;
                 }
@@ -536,7 +583,7 @@ class MainPageState extends State<MainPage> {
                 await comp?.createDirectMessage(userId);
               },
             ),
-        title: "Start Direct Message");
+        title: labelHomeStartDirectMessage);
   }
 
   bool _onKeyPressed(KeyEvent event) {

@@ -11,6 +11,7 @@ import 'package:rooster/client/components/push_notification/notifier.dart';
 import 'package:rooster/client/room.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/utils/event_bus.dart';
+import 'package:rooster/utils/language/app_language.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/service/background_service_notifications/background_service_task_notification2.dart';
 
@@ -42,6 +43,8 @@ Future<void> _firebaseMessagingBackgroundHandler(dynamic message) async {
   Log.i("Client Manager: $clientManager");
 
   await preferences.init();
+  // The notifications this isolate posts are in the app's language.
+  await AppLanguage.load();
 
   try {
     var notificationManager = BackgroundNotificationsManager2(null);
@@ -56,7 +59,7 @@ Future<void> _firebaseMessagingBackgroundHandler(dynamic message) async {
         }
 
         NotificationManager.notify(ErrorNotificationContent(
-          title: "Unknown Notification Data",
+          title: ErrorNotificationContent.labelNotificationUnknownData,
           content: jsonEncode(data),
         ));
       }
@@ -69,7 +72,7 @@ Future<void> _firebaseMessagingBackgroundHandler(dynamic message) async {
     Log.e("An error occured while processing unified push background message");
     Log.onError(e, s);
     NotificationManager.notify(ErrorNotificationContent(
-        title: "An error occurred while processing notifications",
+        title: ErrorNotificationContent.labelNotificationProcessingError,
         content: "${e} \n\n ${s}"));
   }
 }

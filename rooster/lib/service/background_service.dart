@@ -2,19 +2,40 @@ import 'dart:async';
 import 'dart:isolate';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
+import 'package:rooster/utils/language/app_language.dart';
 import 'package:rooster/service/background_service_notifications/background_service_task_notification.dart';
 import 'package:rooster/service/background_service_notifications/background_service_task_notification2.dart';
 import 'package:rooster/service/background_service_task.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:intl/intl.dart';
 
-const AndroidNotificationChannel channel = AndroidNotificationChannel(
-  "background_service",
-  "Background Updates",
-  description: 'Manages tasks in the background.',
-  importance: Importance.low,
-);
+String get labelNotificationChannelBackground =>
+    Intl.message("Background Updates",
+        name: "labelNotificationChannelBackground",
+        desc: "Name of the Android notification category for the app's work in "
+            "the background (fetching notifications), listed in the system's "
+            "notification settings for the app");
+
+String get labelNotificationChannelBackgroundDescription =>
+    Intl.message("Manages tasks in the background.",
+        name: "labelNotificationChannelBackgroundDescription",
+        desc: "Description of the Android notification category for the app's "
+            "work in the background, in the system's notification settings");
+
+String get labelNotificationUpdatingNotifications =>
+    Intl.message("Updating Notifications",
+        name: "labelNotificationUpdatingNotifications",
+        desc: "The notification Android shows while the app fetches new "
+            "messages in the background to notify about them");
+
+AndroidNotificationChannel get channel => AndroidNotificationChannel(
+      "background_service",
+      labelNotificationChannelBackground,
+      description: labelNotificationChannelBackgroundDescription,
+      importance: Importance.low,
+    );
 
 FlutterBackgroundService? _service;
 bool isReady = false;
@@ -71,8 +92,8 @@ Future<bool> initBackgroundService() async {
             isForegroundMode: true,
             autoStart: false,
             autoStartOnBoot: false,
-            initialNotificationTitle: "Updating Notifications",
-            initialNotificationContent: "Updating Notifications",
+            initialNotificationTitle: labelNotificationUpdatingNotifications,
+            initialNotificationContent: labelNotificationUpdatingNotifications,
             notificationChannelId: channel.id,
             foregroundServiceNotificationId: id));
 
@@ -110,6 +131,8 @@ void onServiceInit(Map<String, dynamic>? data) async {
   if (!preferences.isInit) {
     await preferences.init();
   }
+  // The notifications this isolate posts are in the app's language.
+  await AppLanguage.load();
 
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
@@ -118,7 +141,7 @@ void onServiceInit(Map<String, dynamic>? data) async {
     if (await (instance as AndroidServiceInstance).isForegroundService()) {
       flutterLocalNotificationsPlugin.show(
         888,
-        "Updating Notifications",
+        labelNotificationUpdatingNotifications,
         null,
         NotificationDetails(
           android: AndroidNotificationDetails(channel.id, channel.name,

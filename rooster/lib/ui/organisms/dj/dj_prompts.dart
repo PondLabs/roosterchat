@@ -8,9 +8,153 @@ import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/organisms/dj/dj_toast.dart';
+import 'package:rooster/utils/common_strings.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
+
+String get labelDjReadingExtension => Intl.message("Reading the extension",
+    name: "labelDjReadingExtension",
+    desc: "Title of the progress window while a source extension (a package "
+        "that lets the DJ booth play links) is opened to be installed");
+
+String errorDjReadExtension(String error) => Intl.message(
+    "Couldn't read that extension: $error",
+    name: "errorDjReadExtension",
+    args: [error],
+    desc: "Shown when a source extension the user opened could not be read; "
+        "the placeholder is why");
+
+String errorDjCantInstallHere(String name, String problem) =>
+    Intl.message("$name can't be installed here: $problem",
+        name: "errorDjCantInstallHere",
+        args: [name, problem],
+        desc: "Shown when a source extension can't be installed on this "
+            "computer; the placeholders are its name and why");
+
+String labelDjInstallExtensionTitle(String name, String version) =>
+    Intl.message("Install $name $version?",
+        name: "labelDjInstallExtensionTitle",
+        args: [name, version],
+        desc: "Title of the window asking whether to install a source "
+            "extension; the placeholders are its name and version");
+
+String labelDjReplaceExtensionTitle(
+        String name, String oldVersion, String newVersion) =>
+    Intl.message("Replace $name $oldVersion with $newVersion?",
+        name: "labelDjReplaceExtensionTitle",
+        args: [name, oldVersion, newVersion],
+        desc: "Title of the window asking whether to update an installed "
+            "source extension; the placeholders are its name, the installed "
+            "version and the new one");
+
+String get labelDjExtensionWarning => Intl.message(
+    "A source extension runs a program on your computer, with your "
+    "permissions. It is not made by Rooster's makers: install it only if you "
+    "trust where it came from, and use it within the terms of the sites it "
+    "plays from.",
+    name: "labelDjExtensionWarning",
+    desc: "Warning in the window asking whether to install a source "
+        "extension (a package, made by others, that lets the DJ booth and "
+        "the soundboard play links)");
+
+String labelDjExtensionDownloads(String downloads) =>
+    Intl.message("It downloads $downloads.",
+        name: "labelDjExtensionDownloads",
+        args: [downloads],
+        desc: "In the window asking whether to install a source extension: the "
+            "programs it will download, a list of names with their sizes");
+
+String get promptDjInstall => Intl.message("Install",
+    name: "promptDjInstall",
+    desc: "Button that installs a source extension, in the window asking "
+        "whether to");
+
+String labelDjInstallingExtension(String name) =>
+    Intl.message("Installing $name",
+        name: "labelDjInstallingExtension",
+        args: [name],
+        desc: "Title of the progress window while a source extension is "
+            "installed; the placeholder is its name");
+
+String messageDjExtensionInstalled(String name) =>
+    Intl.message("$name is installed",
+        name: "messageDjExtensionInstalled",
+        args: [name],
+        desc: "Shown once a source extension is installed; the placeholder is "
+            "its name");
+
+String errorDjInstallExtension(String name, String error) =>
+    Intl.message("Couldn't install $name: $error",
+        name: "errorDjInstallExtension",
+        args: [name, error],
+        desc: "Shown when installing a source extension failed; the "
+            "placeholders are its name and the error");
+
+String get labelDjChooseExtensionFile =>
+    Intl.message("Choose a source extension",
+        name: "labelDjChooseExtensionFile",
+        desc: "Title of the file chooser that opens a source extension (a .zip "
+            "file) to install");
+
+String get labelDjAddMusicSourceTitle => Intl.message("Add a music source",
+    name: "labelDjAddMusicSourceTitle",
+    desc: "Title of the window that installs a source extension, which lets "
+        "the DJ booth play songs from links");
+
+String get labelDjAddMusicSourceDescription => Intl.message(
+    "A source extension lets the DJ play songs from links. Extensions are "
+    "made by others and come as a .zip: open the file, or paste a link to "
+    "it.",
+    name: "labelDjAddMusicSourceDescription",
+    desc: "Explanation in the window that installs a source extension");
+
+String get labelDjExtensionLink => Intl.message("Link to the extension",
+    name: "labelDjExtensionLink",
+    desc: "Label of the box for a link to a source extension's .zip file");
+
+String get promptDjOpenExtensionFile => Intl.message("Open a file…",
+    name: "promptDjOpenExtensionFile",
+    desc: "Button that opens a source extension's .zip file from this "
+        "computer");
+
+String get labelDjProgressStarting => Intl.message("Starting…",
+    name: "labelDjProgressStarting",
+    desc: "In the progress window of a source extension's install, before "
+        "anything is downloaded");
+
+String labelDjProgressDownloading(String name) =>
+    Intl.message("Downloading $name…",
+        name: "labelDjProgressDownloading",
+        args: [name],
+        desc: "In the progress window of a source extension's install: what is "
+            "being downloaded (the extension, or a program it needs)");
+
+String labelDjHandingYouDecksTitle(String name) =>
+    Intl.message("$name is handing you the decks",
+        name: "labelDjHandingYouDecksTitle",
+        args: [name],
+        desc: "Title of the window asking whether to become the DJ (take \"the "
+            "decks\" of the DJ booth), when the DJ passes them to the user "
+            "unasked; the placeholder is the DJ");
+
+String get labelDjTakeOverQuestion => Intl.message(
+    "Take over as the DJ? The music keeps playing and the queue stays as it "
+    "is.",
+    name: "labelDjTakeOverQuestion",
+    desc: "In the window asking whether to become the DJ, when the DJ passes "
+        "the DJ booth to the user unasked");
+
+String get promptDjTakeDecks => Intl.message("Take the decks",
+    name: "promptDjTakeDecks",
+    desc: "Button that accepts becoming the DJ (taking \"the decks\" of the "
+        "DJ booth) when the DJ passes them");
+
+String get promptDjKeep => Intl.message("Keep",
+    name: "promptDjKeep",
+    desc: "Button that cancels removing something in the DJ booth or its "
+        "settings (the queue, a source extension): keeps it");
 
 Future<void>? _installing;
 
@@ -35,7 +179,7 @@ Future<void> _install(BuildContext context, String? link) async {
   try {
     final opened = await _withProgress<DjSourcePackage>(
         context,
-        'Reading the extension',
+        labelDjReadingExtension,
         (onProgress, cancel) => choice.file != null
             ? sources.openFile(choice.file!)
             : sources.openLink(choice.link!, cancel: cancel));
@@ -43,7 +187,7 @@ Future<void> _install(BuildContext context, String? link) async {
     package = opened;
   } catch (e, s) {
     Log.onError(e, s, content: 'DJ booth: could not read an extension');
-    DjToast.show("Couldn't read that extension: $e", isError: true);
+    DjToast.show(errorDjReadExtension('$e'), isError: true);
     return;
   }
   if (!context.mounted) return;
@@ -51,8 +195,7 @@ Future<void> _install(BuildContext context, String? link) async {
   final info = package.info;
   final problem = package.problem;
   if (problem != null) {
-    DjToast.show("${info.name} can't be installed here: $problem",
-        isError: true);
+    DjToast.show(errorDjCantInstallHere(info.name, problem), isError: true);
     return;
   }
   final downloads = package.downloads
@@ -64,32 +207,31 @@ Future<void> _install(BuildContext context, String? link) async {
   final yes = await AdaptiveDialog.confirmation(
     context,
     title: replacing == null
-        ? 'Install ${info.name} ${info.version}?'
-        : 'Replace ${info.name} ${replacing.version} with ${info.version}?',
+        ? labelDjInstallExtensionTitle(info.name, info.version)
+        : labelDjReplaceExtensionTitle(
+            info.name, replacing.version, info.version),
     prompt: [
       if (info.description != null) info.description!,
       if (info.homepage != null) info.homepage!,
-      'A source extension runs a program on your computer, with your '
-          'permissions. It is not made by Rooster\'s makers: install it only '
-          'if you trust where it came from, and use it within the terms of '
-          'the sites it plays from.',
-      if (downloads.isNotEmpty) 'It downloads $downloads.',
+      labelDjExtensionWarning,
+      if (downloads.isNotEmpty) labelDjExtensionDownloads(downloads),
     ].join('\n\n'),
-    confirmationText: 'Install',
-    cancelText: 'Cancel',
+    confirmationText: promptDjInstall,
+    cancelText: CommonStrings.promptCancel,
   );
   if (yes != true || !context.mounted) return;
 
   try {
-    final done = await _withProgress<bool>(context, 'Installing ${info.name}',
+    final done = await _withProgress<bool>(
+        context, labelDjInstallingExtension(info.name),
         (onProgress, cancel) async {
       await sources.install(package, onProgress: onProgress, cancel: cancel);
       return true;
     });
-    if (done == true) DjToast.show('${info.name} is installed');
+    if (done == true) DjToast.show(messageDjExtensionInstalled(info.name));
   } catch (e, s) {
     Log.onError(e, s, content: 'DJ booth: could not install an extension');
-    DjToast.show("Couldn't install ${info.name}: $e", isError: true);
+    DjToast.show(errorDjInstallExtension(info.name, '$e'), isError: true);
   }
 }
 
@@ -120,7 +262,7 @@ class _ChooseSourceDialogState extends State<_ChooseSourceDialog> {
 
   Future<void> _pickFile() async {
     final result = await FilePicker.platform.pickFiles(
-      dialogTitle: 'Choose a source extension',
+      dialogTitle: labelDjChooseExtensionFile,
       type: FileType.custom,
       allowedExtensions: const ['zip'],
     );
@@ -133,7 +275,7 @@ class _ChooseSourceDialogState extends State<_ChooseSourceDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Add a music source'),
+      title: Text(labelDjAddMusicSourceTitle),
       content: SizedBox(
         width: 420,
         child: Column(
@@ -141,10 +283,7 @@ class _ChooseSourceDialogState extends State<_ChooseSourceDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: 12,
           children: [
-            tiamat.Text.labelLow(
-                'A source extension lets the DJ play songs from links. '
-                'Extensions are made by others and come as a .zip: open '
-                'the file, or paste a link to it.'),
+            tiamat.Text.labelLow(labelDjAddMusicSourceDescription),
             TextField(
               controller: _link,
               autofocus: true,
@@ -155,25 +294,27 @@ class _ChooseSourceDialogState extends State<_ChooseSourceDialog> {
                       .pop(_SourceChoice(link: _link.text.trim()));
                 }
               },
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                   isDense: true,
-                  labelText: 'Link to the extension',
+                  labelText: labelDjExtensionLink,
+                  // Not translated: an example of a link, not words.
                   hintText: 'https://…/extension.zip'),
             ),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: _pickFile, child: const Text('Open a file…')),
+        TextButton(
+            onPressed: _pickFile, child: Text(promptDjOpenExtensionFile)),
         TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel')),
+            child: Text(CommonStrings.promptCancel)),
         FilledButton(
           onPressed: _linkOk
               ? () => Navigator.of(context)
                   .pop(_SourceChoice(link: _link.text.trim()))
               : null,
-          child: const Text('Next'),
+          child: Text(CommonStrings.promptNext),
         ),
       ],
     );
@@ -220,14 +361,17 @@ Future<T?> runWithProgressDialog<T>(
             crossAxisAlignment: CrossAxisAlignment.start,
             spacing: 12,
             children: [
-              tiamat.Text.labelLow(
-                  value.$1.isEmpty ? 'Starting…' : 'Downloading ${value.$1}…'),
+              tiamat.Text.labelLow(value.$1.isEmpty
+                  ? labelDjProgressStarting
+                  : labelDjProgressDownloading(value.$1)),
               LinearProgressIndicator(value: value.$2),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: cancel.cancel, child: const Text('Cancel')),
+          TextButton(
+              onPressed: cancel.cancel,
+              child: Text(CommonStrings.promptCancel)),
         ],
       );
     },
@@ -262,11 +406,10 @@ Future<bool> askToTakeDecks(String fromName) async {
   if (context == null || !context.mounted) return false;
   final answer = await AdaptiveDialog.confirmation(
     context,
-    title: '$fromName is handing you the decks',
-    prompt: 'Take over as the DJ? The music keeps playing and the queue '
-        'stays as it is.',
-    confirmationText: 'Take the decks',
-    cancelText: 'No thanks',
+    title: labelDjHandingYouDecksTitle(fromName),
+    prompt: labelDjTakeOverQuestion,
+    confirmationText: promptDjTakeDecks,
+    cancelText: CommonStrings.promptPoliteNo,
   ).timeout(const Duration(seconds: 60), onTimeout: () {
     final open = navigator.currentContext;
     if (open != null && open.mounted) Navigator.of(open).maybePop();

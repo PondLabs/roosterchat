@@ -1,5 +1,7 @@
 import 'package:rooster_calendar_widget/calendar.dart';
+import 'package:rooster_calendar_widget/calendar_strings.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -16,14 +18,24 @@ class _CalendarConvertDialogState extends State<CalendarConvertDialog> {
 
   double? progress;
 
+  String get labelCalendarConvertNeeded => Intl.message(
+      "This calendar is storing data in an older format and needs to be converted",
+      name: "labelCalendarConvertNeeded",
+      desc:
+          "Dialog shown when a calendar room still keeps its events the old way; the button under it converts them");
+
+  String get promptCalendarConvert => Intl.message("Convert",
+      name: "promptCalendarConvert",
+      desc:
+          "Button that converts a calendar's events from the older format to the current one");
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: 300,
       child: Column(
         children: [
-          tiamat.Text.body(
-              "This calendar is storing data in an older format and needs to be converted"),
+          tiamat.Text.body(labelCalendarConvertNeeded),
           if (running)
             Padding(
               padding: const EdgeInsets.all(24.0),
@@ -41,7 +53,7 @@ class _CalendarConvertDialogState extends State<CalendarConvertDialog> {
               spacing: 8,
               children: [
                 tiamat.Button(
-                  text: "Convert",
+                  text: promptCalendarConvert,
                   onTap: () {
                     setState(() {
                       running = true;
@@ -55,7 +67,7 @@ class _CalendarConvertDialogState extends State<CalendarConvertDialog> {
                   },
                 ),
                 tiamat.Button.secondary(
-                  text: "Cancel",
+                  text: CalendarStrings.promptCalendarCancel,
                   onTap: () => Navigator.of(context).pop(),
                 )
               ],

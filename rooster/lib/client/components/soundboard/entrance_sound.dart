@@ -60,40 +60,53 @@ SoundId? claimEntranceSound({
 }
 
 /// Makes the entrance sound fire at most once per call session, and carries
-/// "join without entrance sound" requests to the voice view. The call view
+/// join requests (with the entrance sound or without) to the voice view. The call view
 /// (and its soundboard controller) is rebuilt whenever the user navigates back
 /// to the room, so the controller alone can't tell a join from a revisit.
 class EntranceSoundGate {
   static final EntranceSoundGate instance = EntranceSoundGate();
 
-  /// How long a "join without entrance sound" request waits for its room's
-  /// view to open. Older requests are dropped so a later visit doesn't join.
+  /// How long a join request waits for its room's view to open. Older
+  /// requests are dropped so a later visit doesn't join.
   static const Duration silentJoinRequestTtl = Duration(seconds: 10);
 
   final DateTime Function() _now;
   final Expando<bool> _claimed = Expando('entranceSoundClaimed');
   final Set<String> _skipRooms = {};
-  final Map<String, DateTime> _silentJoinRequests = {};
-  final StreamController<String> _onSilentJoinRequested =
+
+  /// Join requests by room: when, and whether without the entrance sound.
+  final Map<String, (DateTime, bool)> _joinRequests = {};
+  final StreamController<String> _onJoinRequested =
       StreamController.broadcast();
 
   EntranceSoundGate({DateTime Function()? now}) : _now = now ?? DateTime.now;
 
-  /// Room ids with a new silent join request, for views that are already open.
-  Stream<String> get onSilentJoinRequested => _onSilentJoinRequested.stream;
+  /// Room ids with a new join request, for views that are already open.
+  Stream<String> get onJoinRequested => _onJoinRequested.stream;
+
+  /// Asks the voice view of [roomId] to join, with the entrance sound unless
+  /// [silent]: the rail under the spaces opens a channel and joins it in one
+  /// go, the way "Join Without Entrance Sound" does without the sound.
+  void requestJoin(String roomId, {bool silent = false}) {
+    _joinRequests[roomId] = (_now(), silent);
+    _onJoinRequested.add(roomId);
+  }
 
   /// Asks the voice view of [roomId] to join without the entrance sound.
-  void requestSilentJoin(String roomId) {
-    _silentJoinRequests[roomId] = _now();
-    _onSilentJoinRequested.add(roomId);
+  void requestSilentJoin(String roomId) => requestJoin(roomId, silent: true);
+
+  /// Takes the fresh join request for [roomId], once: whether it asked for
+  /// no entrance sound, or null with none.
+  bool? takeJoinRequest(String roomId) {
+    final request = _joinRequests.remove(roomId);
+    if (request == null) return null;
+    final (requestedAt, silent) = request;
+    if (_now().difference(requestedAt) > silentJoinRequestTtl) return null;
+    return silent;
   }
 
   /// True once per fresh [requestSilentJoin] for [roomId].
-  bool takeSilentJoinRequest(String roomId) {
-    final requestedAt = _silentJoinRequests.remove(roomId);
-    return requestedAt != null &&
-        _now().difference(requestedAt) <= silentJoinRequestTtl;
-  }
+  bool takeSilentJoinRequest(String roomId) => takeJoinRequest(roomId) == true;
 
   /// The next join of [roomId] plays no entrance sound.
   void skipNextJoin(String roomId) => _skipRooms.add(roomId);

@@ -24,9 +24,9 @@
 // processed. To the worklet once the DSP runs: {type: "ready"}.
 
 // Mirrors rust/audio_dsp/src/ffi.rs, like audio_dsp.js does.
-const ABI_VERSION = 2;
+const ABI_VERSION = 3;
 const PARAMS_SIZE = 24;
-const REPORT_SIZE = 28;
+const REPORT_SIZE = 32;
 const BLOCK = 480;
 const I16_SCALE = 32768;
 const REPORT_EVERY_BLOCKS = 10; // 100 ms
@@ -125,6 +125,7 @@ function postReport() {
       sampleRate: v.getInt32(16, true),
       frames: v.getUint32(20, true),
       flags: v.getUint32(24, true),
+      gateThresholdDb: v.getFloat32(28, true),
     },
   });
 }

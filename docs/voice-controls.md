@@ -35,7 +35,10 @@ The behaviour follows Discord's, read from its client code:
 | `voice_control_surfaces.dart` | Starts the surfaces for this platform |
 
 The tray (`lib/utils/voice_tray.dart`) uses the same watcher, and its menu
-has the same three controls.
+has the same three controls. Its mic is grey while we are quiet and green
+while we are heard talking (`VoiceCallWatcher.speaking`, read on the calls'
+200 ms volume tick, which only the tray turns on with `watchSpeaking`: it
+flips with every word, and the other surfaces would redraw for nothing).
 
 ## Per platform
 
@@ -92,7 +95,7 @@ has the same three controls.
   `--talk-name=com.canonical.Unity` to see a dock come up after Rooster;
   sending the signal needs no permission.
 - The tray icon files are named for the app (`rooster_tray_idle.png`,
-  `_live`, `_muted`). KDE Plasma's tray looks the file's name up in the icon
+  `_live`, `_speaking`, `_muted`). KDE Plasma's tray looks the file's name up in the icon
   theme before it reads the file, so `idle.png` and `live.png` showed the
   theme's Python IDLE and Outlook icons (MacTahoe, WhiteSur, Papirus). No
   dashes either: theme lookups fall back from `a-b` to `a`.
@@ -105,6 +108,10 @@ has the same three controls.
 - The panel is plain DOM, because Flutter cannot draw into a second document
   yet. It follows the browser's light or dark look and `forced-colors` live,
   through CSS.
+- Above its buttons it lists who is in the call, with a green ring on whoever
+  is talking: it is the browser's in-game overlay (`docs/game-overlay.md`).
+  The rows are kept from one render to the next, so the avatars (blob URLs
+  of the same circles the native overlay draws) do not reload.
 
 ## Checking by hand
 

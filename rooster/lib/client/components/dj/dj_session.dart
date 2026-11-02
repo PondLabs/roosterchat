@@ -37,6 +37,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:collection/collection.dart';
+import 'package:intl/intl.dart';
 import 'package:rooster/client/components/dj/dj_engine.dart';
 import 'package:rooster/client/components/dj/dj_links.dart';
 import 'package:rooster/client/components/dj/dj_models.dart';
@@ -109,6 +110,13 @@ class DjSession extends ChangeNotifier {
 
   /// How long a DJ has to have been away before anyone can take the decks.
   static const takeOverAfterAway = Duration(minutes: 15);
+
+  // Why a pass target turned the decks down, as `pfail` sends it: protocol
+  // values, in English, which the DJ's client says in its own language
+  // ([_passFailed]). Any other reason is the target's own words.
+  static const _whySaidNo = 'they said no';
+  static const _whyCantDj = "their app can't DJ";
+  static const _whyNotSetUp = "they aren't set up to DJ";
 
   DjSession({
     required this.transport,
@@ -421,6 +429,11 @@ class DjSession extends ChangeNotifier {
     }
   }
 
+  /// What went wrong, for a notice: the error's own words, without the
+  /// "Bad state: " a StateError puts before them.
+  static String _reason(Object error) =>
+      error.toString().replaceFirst('Bad state: ', '');
+
   Future<void> _send(Map<String, Object?> message, {List<String>? to}) {
     final sent = _outbox
         .then((_) => transport.send(message, to: to))
@@ -522,14 +535,14 @@ class DjSession extends ChangeNotifier {
         _notify();
         return;
       }
-      _notice('${_nameOf(sender)} took the decks while you were away');
+      _notice(_DjNotices.messageDjTakenWhileAway(_nameOf(sender)));
     }
     if (!_accepts(sender, snap)) {
       _answerLoser(sender, snap);
       return;
     }
     if (isDj && _snap.takenFrom == sender && snap.dj == sender) {
-      _notice('${_nameOf(sender)} is back and took the decks back');
+      _notice(_DjNotices.messageDjTakenBack(_nameOf(sender)));
     }
     if (snap.dj != _snap.dj || snap.epoch != _snap.epoch) _djAwaySince = null;
     _gotState = true;
@@ -562,7 +575,7 @@ class DjSession extends ChangeNotifier {
           't': 'pfail',
           'e': snap.epoch,
           'pid': passId,
-          'why': "their app can't DJ",
+          'why': _whyCantDj,
         }, to: [
           snap.dj!
         ]);
@@ -669,11 +682,18 @@ class DjSession extends ChangeNotifier {
     _passTimer?.cancel();
     _snap = _snap.copyWith(clearPassTo: true);
     _sendState();
-    final why = djString(message['why'], 200);
-    _notice("Couldn't hand the booth over${why != null ? ': $why' : ''}",
-        isError: true);
+    _notice(_passFailed(djString(message['why'], 200)), isError: true);
     _notify();
   }
+
+  /// The notice for a pass the target turned down for [why].
+  static String _passFailed(String? why) => switch (why) {
+        null => _DjNotices.messageDjPassFailed,
+        _whySaidNo => _DjNotices.messageDjPassDeclined,
+        _whyCantDj => _DjNotices.messageDjPassTargetCantDj,
+        _whyNotSetUp => _DjNotices.messageDjPassTargetNotSetUp,
+        final String reason => _DjNotices.messageDjPassFailedBecause(reason),
+      };
 
   void _onParticipantJoined(String identity) {
     // The newcomer asks with `sync` once it can hear us; answering here too
@@ -718,7 +738,7 @@ class DjSession extends ChangeNotifier {
     if (isDj && identity == _snap.passTo) {
       _passTimer?.cancel();
       _snap = _snap.copyWith(clearPassTo: true);
-      _notice("The booth wasn't handed over: they left the call");
+      _notice(_DjNotices.messageDjPassTargetLeft);
       changed = true;
     }
     if (changed) {
@@ -738,7 +758,7 @@ class DjSession extends ChangeNotifier {
     try {
       return await prepare();
     } catch (e) {
-      _notice("Couldn't get ready to DJ: $e", isError: true);
+      _notice(_DjNotices.errorDjPrepare(_reason(e)), isError: true);
       return false;
     }
   }
@@ -776,7 +796,7 @@ class DjSession extends ChangeNotifier {
       await engine.start();
     } catch (e) {
       if (_engine != engine) return;
-      _notice("Couldn't start the DJ booth: $e", isError: true);
+      _notice(_DjNotices.errorDjStart(_reason(e)), isError: true);
       await _release();
       return;
     }
@@ -841,9 +861,8 @@ class DjSession extends ChangeNotifier {
     Future<void> calledOff() async {
       if (agreed && !_disposed) {
         _notice(taking
-            ? '${_nameOf(from)} is back, or the booth changed: '
-                'they keep the decks'
-            : 'The handoff was called off; ${_nameOf(from)} keeps the decks');
+            ? _DjNotices.messageDjTakeOverCalledOff(_nameOf(from))
+            : _DjNotices.messageDjPassCalledOff(_nameOf(from)));
       }
       await _abandon(engine);
     }
@@ -854,13 +873,13 @@ class DjSession extends ChangeNotifier {
       final asked = taking || _snap.requests.contains(selfIdentity);
       final accept = acceptPass;
       if (!asked && accept != null && !await accept(from ?? '')) {
-        decline('they said no');
+        decline(_whySaidNo);
         return await _abandon(engine);
       }
       if (!stillOurs()) return await calledOff();
       agreed = true;
       if (!await _prepare()) {
-        decline("they aren't set up to DJ");
+        decline(_whyNotSetUp);
         return await _abandon(engine);
       }
       if (!stillOurs()) return await calledOff();
@@ -901,7 +920,7 @@ class DjSession extends ChangeNotifier {
       final position = positionMs + lead;
       if (track != null) {
         if (fetched?.id != track.id) {
-          throw StateError('the song kept changing while it downloaded');
+          throw StateError(_DjNotices.errorDjSongKeptChanging);
         }
         if (!unavailable) {
           engine.load(track, positionMs: position, paused: true);
@@ -927,8 +946,8 @@ class DjSession extends ChangeNotifier {
       _takingFrom = null;
       _becameDj();
       _notice(taking
-          ? 'You took the decks from ${_nameOf(from)}'
-          : "You're on the decks");
+          ? _DjNotices.messageDjYouTookDecks(_nameOf(from))
+          : _DjNotices.messageDjYouAreDj);
       // Counted from when the announcement is out, however many parts a
       // long queue takes: the old DJ stops when it has it.
       final announced = _sendState();
@@ -941,19 +960,19 @@ class DjSession extends ChangeNotifier {
       }
       _prefetch();
     } catch (e) {
-      failure = e.toString().replaceFirst('Bad state: ', '');
+      failure = _reason(e);
     } finally {
       keepAlive?.cancel();
     }
     if (failure != null && _engine == engine) {
       decline(failure);
-      _notice("Couldn't take over the decks: $failure", isError: true);
+      _notice(_DjNotices.errorDjTakeOver(failure), isError: true);
       await _abandon(engine);
     }
   }
 
   String _nameOf(String? identity) =>
-      identity == null ? 'the DJ' : djUserIdOf(identity);
+      identity == null ? _DjNotices.labelDjUnknownName : djUserIdOf(identity);
 
   Future<void> _abandon(DjPlaybackEngine engine) async {
     if (_engine == engine) {
@@ -1020,8 +1039,7 @@ class DjSession extends ChangeNotifier {
     }
     // The new DJ starts with the playing song, which they don't have.
     if (_snap.current?.isLocalFile ?? false) {
-      _notice("The decks can be handed over once your file has played: "
-          "it's only on your computer");
+      _notice(_DjNotices.messageDjPassLocalFile);
       return;
     }
     final passId = _newId();
@@ -1037,7 +1055,7 @@ class DjSession extends ChangeNotifier {
       if (!isDj || _snap.passId != passId) return;
       _snap = _snap.copyWith(clearPassTo: true);
       _sendState();
-      _notice("The decks weren't handed over: they didn't take them in time");
+      _notice(_DjNotices.messageDjPassTimedOut);
       _notify();
     });
   }
@@ -1064,7 +1082,7 @@ class DjSession extends ChangeNotifier {
             't': 'pfail',
             'e': _snap.epoch,
             'pid': passId,
-            'why': 'they said no'
+            'why': _whySaidNo
           }, to: [
             from
           ]);
@@ -1137,7 +1155,7 @@ class DjSession extends ChangeNotifier {
     try {
       await _engine?.seek(target);
     } catch (e) {
-      _notice("Couldn't jump there: $e", isError: true);
+      _notice(_DjNotices.errorDjSeek(_reason(e)), isError: true);
       return;
     }
     _basePos = target;
@@ -1219,8 +1237,7 @@ class DjSession extends ChangeNotifier {
     final parsed = DjLinks.parse(newLink);
     final resolver = this.resolver;
     if (parsed == null || resolver == null) {
-      _notice("That doesn't look like a link the booth can play",
-          isError: true);
+      _notice(_DjNotices.errorDjNotALink, isError: true);
       return;
     }
     final pending = DjPendingAdd(_newId(), parsed);
@@ -1230,10 +1247,9 @@ class DjSession extends ChangeNotifier {
       _pendingAdds.remove(pending);
       if (_disposed) return;
       if (tracks.isEmpty) {
-        _notice("Nothing playable in that link", isError: true);
+        _notice(errorDjNothingPlayable, isError: true);
       } else if (_locked || !_snap.queue.any((t) => t.id == id)) {
-        _notice('That song left the queue before its new link was ready',
-            isError: true);
+        _notice(_DjNotices.errorDjSongLeftQueue, isError: true);
       } else {
         // A title given with the new link wins, for a single song.
         final renamed = tracks.length == 1 &&
@@ -1247,7 +1263,7 @@ class DjSession extends ChangeNotifier {
       _notify();
     }, onError: (Object e) {
       _pendingAdds.remove(pending);
-      _notice("Couldn't use that link: $e", isError: true);
+      _notice(_DjNotices.errorDjUseLink(_reason(e)), isError: true);
       _notify();
     });
   }
@@ -1268,12 +1284,13 @@ class DjSession extends ChangeNotifier {
     if (_locked || tracks.isEmpty) return;
     final room = maxQueue - _snap.queue.length;
     if (room <= 0) {
-      _notice('The queue is full', isError: true);
+      _notice(_DjNotices.errorDjQueueFull, isError: true);
       return;
     }
     final added = tracks.take(room).toList();
     if (added.length < tracks.length) {
-      _notice('The queue is full: ${tracks.length - added.length} left out');
+      _notice(
+          _DjNotices.messageDjQueueFullLeftOut(tracks.length - added.length));
     }
     _setQueue(next ? [...added, ..._snap.queue] : [..._snap.queue, ...added]);
     // Like a jukebox: songs added to an idle booth start playing.
@@ -1297,7 +1314,8 @@ class DjSession extends ChangeNotifier {
         resolver
             .resolve(p.link, addedBy: selfUserId)
             .then<List<DjTrack>?>((tracks) => tracks, onError: (Object e) {
-          _notice("Couldn't add ${p.link.url}: $e", isError: true);
+          _notice(_DjNotices.errorDjAddLink(p.link.url, _reason(e)),
+              isError: true);
           return null;
         }),
     ];
@@ -1311,8 +1329,7 @@ class DjSession extends ChangeNotifier {
       if (_disposed) return;
       if (resolved.isNotEmpty) {
         if (_locked) {
-          _notice("The booth changed hands before those songs were added",
-              isError: true);
+          _notice(_DjNotices.errorDjBoothChangedHands, isError: true);
         } else {
           addTracks(resolved, next: next);
         }
@@ -1329,8 +1346,7 @@ class DjSession extends ChangeNotifier {
     // can ever fail to go out.
     if (queue.length > _snap.queue.length &&
         DjProtocol.split({'t': 'state', ...next.toJson()}) == null) {
-      _notice('The queue is too long to share; remove some songs first',
-          isError: true);
+      _notice(_DjNotices.errorDjQueueTooLongFirst, isError: true);
       return;
     }
     _snap = next;
@@ -1394,12 +1410,12 @@ class DjSession extends ChangeNotifier {
     } on DjTrackUnavailable catch (e) {
       if (overtaken()) return;
       _loading = false;
-      _notice('Skipped ${track.title}: ${e.message}');
+      _notice(_DjNotices.messageDjSkipped(track.title, e.message));
       _advance();
     } catch (e) {
       if (overtaken()) return;
       _loading = false;
-      _failed(track, e.toString().replaceFirst('Bad state: ', ''));
+      _failed(track, _reason(e));
     }
   }
 
@@ -1408,13 +1424,11 @@ class DjSession extends ChangeNotifier {
   void _failed(DjTrack track, String why) {
     _failuresInARow++;
     if (_failuresInARow < maxFailuresInARow) {
-      _notice("Couldn't play ${track.title}: $why", isError: true);
+      _notice(_DjNotices.errorDjPlay(track.title, why), isError: true);
       _advance();
       return;
     }
-    _notice(
-        "Stopped: $_failuresInARow songs in a row couldn't play "
-        "(last: $why)",
+    _notice(_DjNotices.errorDjStoppedFailures(_failuresInARow, why),
         isError: true);
     _paused = true;
     _engine?.unload();
@@ -1484,7 +1498,7 @@ class DjSession extends ChangeNotifier {
       case DjEngineState.ended:
         _advance();
       case DjEngineState.error:
-        _failed(_snap.current!, status.error ?? 'the decoder failed');
+        _failed(_snap.current!, status.error ?? errorDjDecoderFailed);
       case DjEngineState.buffering:
       case DjEngineState.playing:
         final buffering = state == DjEngineState.buffering;
@@ -1507,8 +1521,7 @@ class DjSession extends ChangeNotifier {
     if (to == null) _snap = _snap.copyWith(seq: _snap.seq + 1);
     final messages = DjProtocol.split({'t': 'state', ..._snap.toJson()});
     if (messages == null) {
-      _notice('The queue is too long to share; remove some songs',
-          isError: true);
+      _notice(_DjNotices.errorDjQueueTooLong, isError: true);
       return Future.value();
     }
     Future<void> last = Future.value();
@@ -1536,4 +1549,221 @@ class DjSession extends ChangeNotifier {
   /// How loud the DJ hears their own music. Listeners set theirs on the
   /// music stream instead.
   set monitorVolume(double volume) => _engine?.monitorVolume = volume;
+}
+
+/// What the booth tells the user ([DjSession.notices]), shown as a toast
+/// wherever they are. Names in them are Matrix user ids.
+class _DjNotices {
+  static String get labelDjUnknownName => Intl.message("the DJ",
+      name: "labelDjUnknownName",
+      desc: "Stands in for the DJ's name in the DJ booth's notices when it "
+          "is not known, as in \"The handoff was called off; the DJ keeps "
+          "the decks\"");
+
+  static String messageDjTakenWhileAway(String name) => Intl.message(
+      "$name took the decks while you were away",
+      name: "messageDjTakenWhileAway",
+      args: [name],
+      desc: "Notice to a DJ who was away for a while: someone else took over "
+          "the DJ booth (\"the decks\"). The placeholder is that person");
+
+  static String messageDjTakenBack(String name) =>
+      Intl.message("$name is back and took the decks back",
+          name: "messageDjTakenBack",
+          args: [name],
+          desc: "Notice to someone who took the DJ booth from an away DJ: that "
+              "DJ came back and is the DJ again");
+
+  static String get messageDjPassFailed => Intl.message(
+      "Couldn't hand the booth over",
+      name: "messageDjPassFailed",
+      desc: "Notice to the DJ: the person they were passing the DJ booth to "
+          "did not take it, with no reason given");
+
+  static String messageDjPassFailedBecause(String reason) => Intl.message(
+      "Couldn't hand the booth over: $reason",
+      name: "messageDjPassFailedBecause",
+      args: [reason],
+      desc: "Notice to the DJ: the person they were passing the DJ booth to "
+          "could not take it. The reason comes from that person's app");
+
+  static String get messageDjPassDeclined => Intl.message(
+      "Couldn't hand the booth over: they said no",
+      name: "messageDjPassDeclined",
+      desc: "Notice to the DJ: the person they were passing the DJ booth to "
+          "turned it down");
+
+  static String get messageDjPassTargetCantDj => Intl.message(
+      "Couldn't hand the booth over: their app can't DJ",
+      name: "messageDjPassTargetCantDj",
+      desc: "Notice to the DJ: the person they were passing the DJ booth to "
+          "uses an app that cannot play music for the call");
+
+  static String get messageDjPassTargetNotSetUp => Intl.message(
+      "Couldn't hand the booth over: they aren't set up to DJ",
+      name: "messageDjPassTargetNotSetUp",
+      desc: "Notice to the DJ: the person they were passing the DJ booth to "
+          "has not got what DJing needs (they declined to download it)");
+
+  static String get messageDjPassTargetLeft => Intl.message(
+      "The booth wasn't handed over: they left the call",
+      name: "messageDjPassTargetLeft",
+      desc: "Notice to the DJ: the person they were passing the DJ booth to "
+          "left the call first");
+
+  static String errorDjPrepare(String error) => Intl.message(
+      "Couldn't get ready to DJ: $error",
+      name: "errorDjPrepare",
+      args: [error],
+      desc: "Notice when getting the app ready to play music in the DJ booth "
+          "failed; the placeholder is the error");
+
+  static String errorDjStart(String error) =>
+      Intl.message("Couldn't start the DJ booth: $error",
+          name: "errorDjStart",
+          args: [error],
+          desc: "Notice when the player for the DJ booth failed to start; the "
+              "placeholder is the error");
+
+  static String messageDjTakeOverCalledOff(String name) =>
+      Intl.message("$name is back, or the booth changed: they keep the decks",
+          name: "messageDjTakeOverCalledOff",
+          args: [name],
+          desc: "Notice to someone taking the DJ booth from an away DJ: the DJ "
+              "came back (or the booth changed meanwhile), so the DJ stays");
+
+  static String messageDjPassCalledOff(String name) =>
+      Intl.message("The handoff was called off; $name keeps the decks",
+          name: "messageDjPassCalledOff",
+          args: [name],
+          desc: "Notice to someone the DJ was passing the booth to: the DJ "
+              "called it off and stays the DJ");
+
+  static String messageDjYouTookDecks(String name) => Intl.message(
+      "You took the decks from $name",
+      name: "messageDjYouTookDecks",
+      args: [name],
+      desc: "Notice after the user took the DJ booth from a DJ who was away");
+
+  static String get messageDjYouAreDj => Intl.message("You're on the decks",
+      name: "messageDjYouAreDj",
+      desc: "Notice after the DJ booth was passed to the user: they are the "
+          "DJ now, and their app plays the music for the call");
+
+  static String errorDjTakeOver(String reason) => Intl.message(
+      "Couldn't take over the decks: $reason",
+      name: "errorDjTakeOver",
+      args: [reason],
+      desc: "Notice when taking over the DJ booth failed; the placeholder is "
+          "the error");
+
+  static String get errorDjSongKeptChanging =>
+      Intl.message("the song kept changing while it downloaded",
+          name: "errorDjSongKeptChanging",
+          desc: "Why taking over the DJ booth failed: the song playing changed "
+              "every time it was downloaded. Follows \"Couldn't take over the "
+              "decks:\"");
+
+  static String get messageDjPassLocalFile => Intl.message(
+      "The decks can be handed over once your file has played: it's only on "
+      "your computer",
+      name: "messageDjPassLocalFile",
+      desc: "Notice to a DJ who tried to pass the DJ booth while a file from "
+          "their own computer plays, which nobody else has");
+
+  static String get messageDjPassTimedOut => Intl.message(
+      "The decks weren't handed over: they didn't take them in time",
+      name: "messageDjPassTimedOut",
+      desc: "Notice to the DJ: the person they were passing the DJ booth to "
+          "did not take it in time");
+
+  static String errorDjSeek(String error) => Intl.message(
+      "Couldn't jump there: $error",
+      name: "errorDjSeek",
+      args: [error],
+      desc: "Notice when moving to another point of the song playing in the "
+          "DJ booth failed; the placeholder is the error");
+
+  static String get errorDjNotALink =>
+      Intl.message("That doesn't look like a link the booth can play",
+          name: "errorDjNotALink",
+          desc: "Notice when the DJ gave a queued song a new link that the DJ "
+              "booth cannot use");
+
+  static String get errorDjSongLeftQueue => Intl.message(
+      "That song left the queue before its new link was ready",
+      name: "errorDjSongLeftQueue",
+      desc: "Notice when the DJ gave a queued song a new link, and the song "
+          "was removed from the queue before the link was looked up");
+
+  static String errorDjUseLink(String error) => Intl.message(
+      "Couldn't use that link: $error",
+      name: "errorDjUseLink",
+      args: [error],
+      desc: "Notice when the new link the DJ gave a queued song could not be "
+          "used; the placeholder is the error");
+
+  static String get errorDjQueueFull => Intl.message("The queue is full",
+      name: "errorDjQueueFull",
+      desc: "Notice when songs could not be added to the DJ booth's queue "
+          "because it holds as many as it can");
+
+  static String messageDjQueueFullLeftOut(int howMany) => Intl.plural(howMany,
+      one: "The queue is full: 1 left out",
+      other: "The queue is full: $howMany left out",
+      name: "messageDjQueueFullLeftOut",
+      args: [howMany],
+      desc: "Notice when some of the songs added to the DJ booth's queue did "
+          "not fit; the number is how many songs were not added");
+
+  static String errorDjAddLink(String link, String error) => Intl.message(
+      "Couldn't add $link: $error",
+      name: "errorDjAddLink",
+      args: [link, error],
+      desc: "Notice when a link pasted in the DJ booth could not be added to "
+          "the queue; the placeholders are the link and the error");
+
+  static String get errorDjBoothChangedHands =>
+      Intl.message("The booth changed hands before those songs were added",
+          name: "errorDjBoothChangedHands",
+          desc: "Notice when songs being added to the DJ booth's queue were "
+              "dropped because someone else became the DJ meanwhile");
+
+  static String get errorDjQueueTooLongFirst =>
+      Intl.message("The queue is too long to share; remove some songs first",
+          name: "errorDjQueueTooLongFirst",
+          desc: "Notice when songs could not be added because the DJ booth's "
+              "queue would be too big to send to everyone in the call");
+
+  static String get errorDjQueueTooLong => Intl.message(
+      "The queue is too long to share; remove some songs",
+      name: "errorDjQueueTooLong",
+      desc: "Notice when the DJ booth's queue is too big to send to everyone "
+          "in the call");
+
+  static String messageDjSkipped(String title, String reason) =>
+      Intl.message("Skipped $title: $reason",
+          name: "messageDjSkipped",
+          args: [title, reason],
+          desc: "Notice when the DJ booth skipped a song this computer cannot "
+              "play; the placeholders are the song's title and why");
+
+  static String errorDjPlay(String title, String reason) => Intl.message(
+      "Couldn't play $title: $reason",
+      name: "errorDjPlay",
+      args: [title, reason],
+      desc: "Notice when a song in the DJ booth failed to play and the booth "
+          "went on to the next one; the placeholders are the song's title and "
+          "the error");
+
+  static String errorDjStoppedFailures(int howMany, String reason) =>
+      Intl.plural(howMany,
+          one: "Stopped: 1 song couldn't play (last: $reason)",
+          other: "Stopped: $howMany songs in a row couldn't play "
+              "(last: $reason)",
+          name: "errorDjStoppedFailures",
+          args: [howMany, reason],
+          desc: "Notice when the DJ booth stopped because several songs in a "
+              "row failed to play; the placeholders are how many and the "
+              "last error");
 }

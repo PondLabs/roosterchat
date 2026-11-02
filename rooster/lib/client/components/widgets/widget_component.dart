@@ -8,6 +8,7 @@ import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/utils/image_or_icon.dart';
 import 'package:rooster/utils/notifying_list.dart';
 import 'package:flutter/widgets.dart';
+import 'package:intl/intl.dart';
 
 abstract class UserWidgetInfo {
   String get name;
@@ -94,6 +95,32 @@ abstract class WidgetComponent<T extends Client> implements Component<T> {
   static NotifyingList<WidgetRunner> currentSessions =
       NotifyingList.empty(growable: true);
 
+  static String get labelWidgetOpenConfirmTitle => Intl.message("Widget",
+      name: "labelWidgetOpenConfirmTitle",
+      desc:
+          "Title of the dialog that asks before opening a room widget for the first time (a widget is a small web app someone added to the room)");
+
+  static String promptWidgetOpenConfirm(
+          String host, String widgetName, String senderId) =>
+      Intl.message(
+          "Open `$host`?\n\n'**$widgetName**' was added by `$senderId`",
+          name: "promptWidgetOpenConfirm",
+          args: [host, widgetName, senderId],
+          desc:
+              "Asked before opening a room widget for the first time, in Markdown: the web site it loads (host), the widget's name in bold, and the Matrix ID of who added it. Keep the backticks and the asterisks");
+
+  static String get promptWidgetOpen => Intl.message("Open Widget",
+      name: "promptWidgetOpen",
+      desc:
+          "Button that confirms opening a room widget, in the dialog that asks first");
+
+  static String labelWidgetRunnerPageTitle(String widgetName) => Intl.message(
+      "Rooster Widget | $widgetName",
+      name: "labelWidgetRunnerPageTitle",
+      args: [widgetName],
+      desc:
+          "Title of the web page that hosts a room widget (seen in a browser tab when the widget is opened on another device), with the widget's name");
+
   static void runWidget(Room room, BuildContext context, UserWidgetInfo data,
       {WidgetHostType? type}) async {
     var widgetComponent = room.client.getComponent<WidgetComponent>();
@@ -103,13 +130,13 @@ abstract class WidgetComponent<T extends Client> implements Component<T> {
     }
 
     if (!preferences.getWidgetAllowed(room.client.identifier, data.namespace)) {
+      var host = Uri.parse(data.url).authority;
       var confirmed = await AdaptiveDialog.confirmationWithOptions(context,
-          title: "Widget",
+          title: labelWidgetOpenConfirmTitle,
           showRememberChoice: true,
           defaultRememberSetting: true,
-          prompt:
-              """Open `${Uri.parse(data.url).authority}`?\n\n'**${data.name}**' was added by `${data.senderId}`""",
-          confirmationText: "Open Widget");
+          prompt: promptWidgetOpenConfirm(host, data.name, data.senderId),
+          confirmationText: promptWidgetOpen);
 
       if (confirmed?.value != true) {
         return;

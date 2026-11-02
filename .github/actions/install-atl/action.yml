@@ -1,8 +1,9 @@
 name: Install ATL
 description: >-
-  Installs the Visual C++ ATL component. The Blacksmith Windows image ships VS
-  Build Tools without it, and flutter_local_notifications_windows needs
-  atlbase.h to build.
+  Installs the Visual C++ ATL component for the host's architecture when the
+  image's Visual Studio lacks it: flutter_local_notifications_windows needs
+  atlbase.h to build, and an arm64 build also needs the ARM64 ATL libraries
+  (a separate component).
 
 runs:
   using: composite
@@ -24,7 +25,20 @@ runs:
         }
 
         $msvc = Join-Path $vsPath 'VC\Tools\MSVC'
-        if (Get-ChildItem $msvc -Recurse -Filter atlbase.h -ErrorAction SilentlyContinue) {
+        # The headers are shared; the libraries are per architecture, under
+        # atlmfc\lib\<arch>. An arm64 host builds for arm64.
+        $arm64 = $env:PROCESSOR_ARCHITECTURE -eq 'ARM64'
+        $components = @('Microsoft.VisualStudio.Component.VC.ATL')
+        if ($arm64) { $components += 'Microsoft.VisualStudio.Component.VC.ATL.ARM64' }
+        function Test-Atl {
+          if (-not (Get-ChildItem $msvc -Recurse -Filter atlbase.h -ErrorAction SilentlyContinue)) {
+            return $false
+          }
+          $lib = if ($arm64) { 'arm64' } else { 'x64' }
+          return [bool](Get-ChildItem $msvc -Recurse -Filter atls.lib -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match "\\lib\\$lib\\" })
+        }
+        if (Test-Atl) {
           Write-Host "ATL is already installed in $vsPath"
           exit 0
         }
@@ -37,14 +51,11 @@ runs:
           throw "Visual Studio Installer not found in $installerRoot"
         }
 
-        Write-Host "Installing Microsoft.VisualStudio.Component.VC.ATL into $vsPath"
-        $process = Start-Process -FilePath $installer -ArgumentList @(
-          'modify',
-          '--installPath', "`"$vsPath`"",
-          '--add', 'Microsoft.VisualStudio.Component.VC.ATL',
-          '--quiet',
-          '--norestart'
-        ) -Wait -PassThru
+        Write-Host "Installing $($components -join ', ') into $vsPath"
+        $arguments = @('modify', '--installPath', "`"$vsPath`"")
+        foreach ($component in $components) { $arguments += @('--add', $component) }
+        $arguments += @('--quiet', '--norestart')
+        $process = Start-Process -FilePath $installer -ArgumentList $arguments -Wait -PassThru
 
         # 3010 is success with a pending reboot; the build can go on.
         if ($process.ExitCode -ne 0 -and $process.ExitCode -ne 3010) {
@@ -52,9 +63,9 @@ runs:
         }
 
         $deadline = (Get-Date).AddMinutes(5)
-        while (-not (Get-ChildItem $msvc -Recurse -Filter atlbase.h -ErrorAction SilentlyContinue)) {
+        while (-not (Test-Atl)) {
           if ((Get-Date) -gt $deadline) {
-            throw 'ATL install reported success but atlbase.h is still missing'
+            throw 'ATL install reported success but atlbase.h or atls.lib is still missing'
           }
           Start-Sleep -Seconds 10
         }

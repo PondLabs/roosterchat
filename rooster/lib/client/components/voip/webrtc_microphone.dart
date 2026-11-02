@@ -44,6 +44,13 @@ Future<SenderCounters> readSenderCounters(rtc.RTCRtpSender? sender) async {
 /// nothing ever again.
 bool captureEnded(rtc.MediaStreamTrack track) => captureTrackEnded(track);
 
+/// Whether the browser muted [track] on its own: Safari on iOS does when
+/// the page goes to the background, the phone locks or the system takes
+/// the audio (a phone call, the notification shade), and often leaves it
+/// muted on return. A muted capture hands over silence, so the counters
+/// look healthy; only a new capture brings the microphone back.
+bool captureMuted(rtc.MediaStreamTrack track) => captureTrackMuted(track);
+
 /// Whether this platform can restart a capture's recording by turning the
 /// track off and on ([reopenCapture]).
 bool get canReopenCapture => !kIsWeb;

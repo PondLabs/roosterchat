@@ -382,6 +382,21 @@ class Tile extends StatelessWidget {
           width: settings.caulkStrokeThickness);
     }
 
+    final surface = Container(
+      decoration: BoxDecoration(
+        color: glass != null
+            ? color.withAlpha((glassOpacity * 255.0).toInt())
+            : color,
+        borderRadius: radius,
+        border: Border(
+            top: borderTop ? border : BorderSide.none,
+            left: borderLeft ? border : BorderSide.none,
+            right: borderRight ? border : BorderSide.none,
+            bottom: borderBottom ? border : BorderSide.none),
+      ),
+      child: child,
+    );
+
     return Padding(
       padding: EdgeInsets.only(
           left: caulkPadLeft ? caulkOuterPadding : 0,
@@ -392,24 +407,16 @@ class Tile extends StatelessWidget {
           decoration:
               BoxDecoration(borderRadius: radius, boxShadow: shadows?.shadows),
           clipBehavior: Clip.antiAlias,
-          child: BackdropFilter(
-              filter: glass != null
-                  ? ImageFilter.blur(sigmaX: glassSigma, sigmaY: glassSigma)
-                  : ImageFilter.matrix(Matrix4.identity().storage),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: glass != null
-                      ? color.withAlpha((glassOpacity * 255.0).toInt())
-                      : color,
-                  borderRadius: radius,
-                  border: Border(
-                      top: borderTop ? border : BorderSide.none,
-                      left: borderLeft ? border : BorderSide.none,
-                      right: borderRight ? border : BorderSide.none,
-                      bottom: borderBottom ? border : BorderSide.none),
-                ),
-                child: child,
-              ))),
+          child: glass != null
+              // A BackdropFilter is a full readback of what is behind the
+              // tile on every frame, so only a theme that asks for glass
+              // pays for one: an identity filter costs the same as a blur
+              // and draws nothing different.
+              ? BackdropFilter(
+                  filter:
+                      ImageFilter.blur(sigmaX: glassSigma, sigmaY: glassSigma),
+                  child: surface)
+              : surface),
     );
   }
 }

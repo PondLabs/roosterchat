@@ -12,6 +12,21 @@ String get messageUserDeactivated => Intl.message(
     desc:
         "An error message displayed when the user attempts to log into an account that has been disabled");
 
+String get errorLoginEnterUsername => Intl.message("Enter a username",
+    name: "errorLoginEnterUsername",
+    desc: "In the 'Login failed' dialog when the username field was left "
+        "out");
+
+String get errorLoginEnterPassword => Intl.message("Enter a password",
+    name: "errorLoginEnterPassword",
+    desc: "In the 'Login failed' dialog when the password field was left "
+        "out");
+
+String get errorLoginUnknown => Intl.message("An unknown error occurred",
+    name: "errorLoginUnknown",
+    desc: "In the 'Login failed' dialog when signing in failed for no reason "
+        "the app could tell");
+
 class MatrixPasswordLoginFlow implements PasswordLoginFlow {
   @override
   String? password;
@@ -22,11 +37,11 @@ class MatrixPasswordLoginFlow implements PasswordLoginFlow {
   @override
   Future<LoginResult> submit(Client client) async {
     if (username == null) {
-      return LoginResultError("Enter a username");
+      return LoginResultError(errorLoginEnterUsername);
     }
 
     if (password == null) {
-      return LoginResultError("Enter a password");
+      return LoginResultError(errorLoginEnterPassword);
     }
 
     if (client is! MatrixClient) {
@@ -34,7 +49,7 @@ class MatrixPasswordLoginFlow implements PasswordLoginFlow {
     }
 
     var mx = client.getMatrixClient();
-    LoginResult result = LoginResultError("An unknown error occurred");
+    LoginResult result = LoginResultError(errorLoginUnknown);
 
     try {
       var response = await mx.login(matrix.LoginType.mLoginPassword,

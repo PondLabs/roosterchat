@@ -9,6 +9,7 @@ import 'dart:math' as math;
 
 import 'package:rooster/client/components/soundboard/soundboard_constraints.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class SoundboardTrimEditor extends StatefulWidget {
@@ -36,6 +37,30 @@ class SoundboardTrimEditor extends StatefulWidget {
   });
 
   static const double height = 64;
+
+  static String get labelSoundboardTrim => Intl.message("Trim",
+      name: "labelSoundboardTrim",
+      desc: "Heading over the waveform where a space admin picks the part of "
+          "an audio file or link that becomes a soundboard sound");
+
+  static String labelSoundboardTrimLength(String length) => Intl.message(
+      "Length $length",
+      name: "labelSoundboardTrimLength",
+      args: [length],
+      desc: "Under the soundboard trim editor: how long the selected part is, "
+          "in seconds with the unit (\"3.25 s\")");
+
+  static String labelSoundboardTrimRange(
+          String start, String end, String total, String max) =>
+      Intl.message(
+          "$start – $end of $total · drag the edges to cut the start or the "
+          "end, the middle to move it (max $max)",
+          name: "labelSoundboardTrimRange",
+          args: [start, end, total, max],
+          desc: "Under the soundboard trim editor: where the selection starts "
+              "and ends in the audio shown, how long that audio is, how to "
+              "change the selection by dragging, and the longest a sound may "
+              "be. Every value is in seconds with the unit (\"1.50 s\")");
 
   /// Selection after moving one edge to [ms], keeping it between
   /// [SoundboardConstraints.minDurationMs] and
@@ -81,7 +106,7 @@ class _SoundboardTrimEditorState extends State<SoundboardTrimEditor> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const tiamat.Text.labelLow('Trim'),
+        tiamat.Text.labelLow(SoundboardTrimEditor.labelSoundboardTrim),
         const SizedBox(height: 4),
         LayoutBuilder(builder: (context, constraints) {
           final width = constraints.maxWidth;
@@ -117,14 +142,16 @@ class _SoundboardTrimEditorState extends State<SoundboardTrimEditor> {
         const SizedBox(height: 4),
         Row(
           children: [
-            tiamat.Text.label('Length ${_seconds(length)}'),
+            tiamat.Text.label(SoundboardTrimEditor.labelSoundboardTrimLength(
+                _seconds(length))),
             const SizedBox(width: 8),
             Flexible(
-              child: tiamat.Text.labelLow('${_seconds(widget.startMs)} – '
-                  '${_seconds(widget.endMs)} of '
-                  '${_seconds(widget.durationMs)} · drag the edges to cut the '
-                  'start or the end, the middle to move it (max '
-                  '${_seconds(SoundboardConstraints.maxDurationMs)})'),
+              child: tiamat.Text.labelLow(
+                  SoundboardTrimEditor.labelSoundboardTrimRange(
+                      _seconds(widget.startMs),
+                      _seconds(widget.endMs),
+                      _seconds(widget.durationMs),
+                      _seconds(SoundboardConstraints.maxDurationMs))),
             ),
           ],
         ),
@@ -171,7 +198,9 @@ class _SoundboardTrimEditorState extends State<SoundboardTrimEditor> {
     widget.onChanged(start, end);
   }
 
-  static String _seconds(int ms) => '${(ms / 1000).toStringAsFixed(2)} s';
+  /// With the language's decimal separator ("1.50 s", "1,50 s").
+  static String _seconds(int ms) =>
+      '${NumberFormat('0.00').format(ms / 1000)} s';
 }
 
 class _WaveformPainter extends CustomPainter {

@@ -7,9 +7,12 @@ import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/component_registry.dart';
 import 'package:rooster/client/components/space_component.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
+import 'package:rooster/client/matrix/matrix_member.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
+import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/matrix/matrix_room_permissions.dart';
 import 'package:rooster/client/matrix/matrix_room_preview.dart';
+import 'package:rooster/client/member.dart';
 import 'package:rooster/client/permissions.dart';
 import 'package:rooster/client/room_preview.dart';
 import 'package:rooster/client/space_child.dart';
@@ -209,7 +212,7 @@ class MatrixSpace extends Space {
     _matrixRoom = room;
     _matrixClient = matrixClient;
     _client = client;
-    _displayName = room.getLocalizedDisplayname();
+    _displayName = room.getLocalizedDisplayname(const RoomNameLocalizations());
     _permissions = MatrixRoomPermissions(_matrixRoom);
     refresh();
 
@@ -230,7 +233,8 @@ class MatrixSpace extends Space {
   }
 
   void refresh() {
-    _displayName = _matrixRoom.getLocalizedDisplayname();
+    _displayName =
+        _matrixRoom.getLocalizedDisplayname(const RoomNameLocalizations());
 
     if (_matrixRoom.avatar != null && _matrixRoom.avatar != _avatarUrl) {
       updateAvatarFromRoomState();
@@ -370,6 +374,9 @@ class MatrixSpace extends Space {
   void _onRoomAdded(Room room) {
     _subscriptions.add(room.onUpdate.listen((event) {
       _onChildUpdated.add(room);
+      // Unread counts and last activity are computed from the rooms, and the
+      // space icon, header dot and taskbar badge follow this stream.
+      _onUpdate.add(null);
     }));
   }
 
@@ -463,6 +470,13 @@ class MatrixSpace extends Space {
   }
 
   @override
+  Future<List<Member>> fetchMembers() async {
+    final users = await _matrixRoom
+        .requestParticipants([matrix.Membership.join], true, true);
+    return users.map((user) => MatrixMember(_client, user)).toList();
+  }
+
+  @override
   T? getComponent<T extends SpaceComponent>() {
     for (var component in _components) {
       if (component is T) return component as T;
@@ -485,11 +499,14 @@ class MatrixSpace extends Space {
       }
     }
 
-    for (var id in update.keys) {
-      if (roomsWithChildren.any((i) => i.identifier == id)) {
-        _updateTopLevelStatus();
-        _onUpdate.add(null);
-      }
+    // One update for the sync, however many of this space's rooms it
+    // touched: every listener (the sidebar, the nav bar counts, the colour
+    // scheme) used to run once per room, and roomsWithChildren walks the
+    // subspaces on every call.
+    final children = roomsWithChildren;
+    if (update.keys.any((id) => children.any((i) => i.identifier == id))) {
+      _updateTopLevelStatus();
+      _onUpdate.add(null);
     }
   }
 

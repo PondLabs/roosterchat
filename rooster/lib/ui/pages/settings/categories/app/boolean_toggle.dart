@@ -1,3 +1,4 @@
+import 'package:rooster/debug/log.dart';
 import 'package:flutter/material.dart';
 
 import 'package:tiamat/tiamat.dart' as tiamat;
@@ -60,7 +61,11 @@ class _BooleanToggleState extends State<BooleanToggle> {
 
                 try {
                   await widget.setValue(value);
-                } catch (_) {}
+                } catch (e, s) {
+                  // The switch snaps back below; the reason goes in the log
+                  // instead of nowhere.
+                  Log.onError(e, s, content: "Could not change the setting");
+                }
 
                 await Future.delayed(Duration(milliseconds: 100));
 

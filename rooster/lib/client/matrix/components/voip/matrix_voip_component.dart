@@ -17,6 +17,7 @@ import 'package:rooster/main.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/pages/settings/categories/app/voip_settings/voip_turn_fallback_dialog.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart' show Intl;
 import 'package:matrix/matrix.dart' as mx;
 import 'package:webrtc_interface/src/mediadevices.dart';
 import 'package:webrtc_interface/src/rtc_peerconnection.dart';
@@ -55,6 +56,11 @@ class MatrixVoipComponent
   MatrixVoipComponent(this.client) {
     voip = mx.VoIP(client.getMatrixClient(), this);
   }
+
+  static String get labelVoipCallError => Intl.message("Call Error",
+      name: "labelVoipCallError",
+      desc: "Title of the dialog asking, as a call is placed, whether to "
+          "route it through a fallback server since the homeserver has none");
 
   @override
   List<VoipSession> getSessionsInRoom(String roomId) {
@@ -147,7 +153,7 @@ class MatrixVoipComponent
             builder: (context) =>
                 VoipTurnFallbackDialog(client.getMatrixClient().homeserver!),
             dismissible: false,
-            title: "Call Error");
+            title: labelVoipCallError);
 
         preferences.useFallbackTurnServer.set(result ?? false);
       }

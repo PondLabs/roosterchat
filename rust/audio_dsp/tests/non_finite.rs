@@ -14,7 +14,7 @@
 
 mod common;
 
-use audio_dsp::{Dsp, ModelLoad, Params, FRAME_SIZE};
+use audio_dsp::{Dsp, ModelLoad, Params, FRAME_SIZE, REPORT_FLAG_NS_ACTIVE};
 use common::*;
 
 const SECONDS: usize = RATE;
@@ -227,6 +227,9 @@ fn state_that_keeps_going_bad_gives_up_suppression_not_the_voice() {
     assert!(!dsp.has_deep_filter(), "the model is still being rebuilt");
     let input = talking(4 * SECONDS);
     let r = run(&mut dsp, &input, Feeds::default());
+    // The app watches this flag: with suppression given up, WebRTC's own
+    // suppressor has to take over (MicrophoneNoiseSuppression).
+    assert_eq!(dsp.report().flags & REPORT_FLAG_NS_ACTIVE, 0, "the report still claims suppression");
     let recoveries = dsp.recoveries();
     let (gain, open) = treatment(&input[SECONDS..], &Run {
         out: r.out[SECONDS..].to_vec(),

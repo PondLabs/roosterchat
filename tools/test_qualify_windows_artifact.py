@@ -14,11 +14,11 @@ from tools.qualify_windows_artifact import QualificationError
 from tools.test_cef_runtime import _fixture_lock
 
 
-def _payload_name(archive_name: str) -> str:
-    return qualify_windows_artifact._lock_to_payload_name(archive_name)
+def _payload_name(archive_name: str, platform: str = "windows-x64") -> str:
+    return qualify_windows_artifact._lock_to_payload_name(archive_name, platform)
 
 
-def _build_qualified_fixture(directory: Path):
+def _build_qualified_fixture(directory: Path, platform: str = "windows-x64"):
     """Stage, bundle, and metadata-generate a clean Windows fixture."""
 
     lock, archives = _fixture_lock(directory)
@@ -27,15 +27,15 @@ def _build_qualified_fixture(directory: Path):
     project.mkdir()
     (project / "cef_host.dll").write_bytes(b"client-dll-bytes")
     result = cef_runtime.stage_runtime(
-        "windows-x64",
-        archives["windows-x64"],
+        platform,
+        archives[platform],
         staged,
         lock,
         project_root=project,
     )
     metadata = directory / "metadata"
     cef_runtime.generate_metadata(
-        "windows-x64", staged, metadata, lock, project_root=project
+        platform, staged, metadata, lock, project_root=project
     )
     bundle = directory / "bundle"
     payload = bundle / "cef_host"
@@ -46,9 +46,9 @@ def _build_qualified_fixture(directory: Path):
             # the CMake install layout.
             continue
         source = staged.joinpath(
-            *PurePosixPath(cef_runtime.staged_path("windows-x64", relative)).parts
+            *PurePosixPath(cef_runtime.staged_path(platform, relative)).parts
         )
-        target = payload.joinpath(*PurePosixPath(_payload_name(relative)).parts)
+        target = payload.joinpath(*PurePosixPath(_payload_name(relative, platform)).parts)
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
     shutil.copyfile(project / "cef_host.dll", payload / "cef_host.dll")
@@ -324,6 +324,34 @@ class QualifyWindowsArtifactTests(unittest.TestCase):
                 ]
             )
             self.assertEqual(code, 2)
+
+    def test_arm64_bundle_qualifies_against_its_own_record_only(self) -> None:
+        with TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            lock, bundle, metadata = _build_qualified_fixture(directory, "windows-arm64")
+            report = qualify_windows_artifact.qualify(
+                bundle, metadata, lock, platform="windows-arm64"
+            )
+            self.assertEqual(report["platform"], "windows-arm64")
+            self.assertTrue(report["checks"]["hashes"])
+            # The metadata says arm64; checking it as the x64 build fails.
+            with self.assertRaises(QualificationError):
+                qualify_windows_artifact.qualify(bundle, metadata, lock)
+            with self.assertRaises(QualificationError):
+                qualify_windows_artifact.qualify(
+                    bundle, metadata, lock, platform="linux-arm64"
+                )
+            self.assertEqual(
+                qualify_windows_artifact.main(
+                    [
+                        "--lock", str(directory / "cef.lock.json"),
+                        "--platform", "windowsarm64",
+                        "--bundle", str(bundle),
+                        "--metadata", str(metadata),
+                    ]
+                ),
+                0,
+            )
 
 
 if __name__ == "__main__":

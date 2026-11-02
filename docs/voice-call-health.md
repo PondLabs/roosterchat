@@ -45,7 +45,14 @@ runs, in this order:
      and stops when the capture does (native: the capture thread; web: the
      audio context);
    - whether the capture track ended (on the web, the raw capture behind
-     the DSP's processed track);
+     the DSP's processed track), or the browser muted it: Safari on iOS
+     does when the page goes to the background, the phone locks or the
+     system takes the audio, and often leaves it so. A muted capture hands
+     over silence, so the counters look fine. It counts as ended once the
+     app is in front again (nothing is judged while it is not: a hidden
+     page cannot open a capture). The web DSP's audio context is resumed
+     again on the next touch or return to the page, which is all Safari
+     allows after an interruption;
    - whether the web DSP's frame counter moves;
    - `outbound-rtp` `packetsSent` while the DSP hears the user speak (with
      DTX, a quiet microphone sends next to nothing, so only then);
@@ -86,7 +93,12 @@ runs, in this order:
 Nothing is judged or repaired while the room is not connected (LiveKit
 unpublishes everything when it gives up, and nothing flows while it
 reconnects) or once the call is being left. A microphone gone for less than
-3 s is LiveKit republishing it after a reconnect, not a fault. Every step
+3 s is LiveKit republishing it after a reconnect, not a fault. A republish
+can take longer than that on a bad connection, and then both microphones
+used to stay: the call showed us once more after every reconnect, everyone
+received us that many times, and muting reached only one of them. Only one
+is kept now, the one published last (`_dropOtherMicrophones` in the
+session). Every step
 is bounded, so one platform call that hangs cannot stop the checks: reads
 5 s, statistics 2 s, the noise suppression update 5 s.
 
@@ -95,6 +107,28 @@ per call (`CaptureChanges`), which waits 15 s at most for the change before
 it; mutes never wait on it. While a microphone that went missing is being
 published again, the mute button shows what the user chose (not muted),
 not "muted".
+
+## Connection status and losing the internet
+
+The call panel's top row (`ui/molecules/call_connection_status.dart`) says
+"Voice connected", "Connecting…" or "Reconnecting…", colored by LiveKit's
+judgement of our connection (`connectionQuality`: green, amber when poor,
+red when lost). Clicking it opens the details: the ping of the last five
+minutes as a graph, the media server, average and last ping, the share of
+our audio packets the server reports lost, and whether the call is
+end-to-end encrypted. The session reads them once a second from the peer
+connection it publishes on (`CallConnectionSample.fromStats`: the selected
+candidate pair's `currentRoundTripTime`, the audio `outbound-rtp` and
+`remote-inbound-rtp` counters), in the same tick as the checks above.
+
+When LiveKit has not been connected for two seconds
+(`MatrixLivekitVoipSession.reconnectingAfter`; a resume after a blip takes
+about one and passes unnoticed) the call is reconnecting: the leave sound
+plays, and the session shows nobody else (`streams` keeps only ours,
+`connectedUserIds` only us), so nobody stays stuck talking or sharing. The
+streams are hidden, not dropped: after a resume LiveKit announces nothing
+again, so they come back as they were, with the join sound. Three minutes
+without LiveKit still hang up (`lostConnectionTimeout`).
 
 ## Fixes underneath
 

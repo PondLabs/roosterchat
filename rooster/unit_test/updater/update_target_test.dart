@@ -30,6 +30,15 @@ void main() {
         startMenu: p.join(root.path, 'start'),
       );
 
+  test('a macOS app is replaced whole, staged beside it', () {
+    final target = updateTargetFor(
+        '/Applications/Rooster.app/Contents/MacOS/Rooster',
+        windows: false,
+        tempDir: '/tmp');
+    expect(target.install, '/Applications/Rooster.app');
+    expect(target.workRoot, '/Applications/.rooster-update');
+  });
+
   test('a build is updated where it is, staged beside itself', () {
     final install = build(p.join('Downloads', 'rooster-v1', 'rooster-v1'));
     final target = targetOf(install);

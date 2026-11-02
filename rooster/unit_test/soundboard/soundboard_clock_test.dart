@@ -47,6 +47,7 @@ SoundboardSound _airhorn() => const SoundboardSound(
     );
 
 void main() {
+  _rateLimitTests();
   group('Engine with a sender whose clock is hours off', () {
     const now = 10 * _threeHours;
 
@@ -147,5 +148,35 @@ void main() {
     // Each played its own click and the other's.
     expect(playerA.started, ['airhorn', 'airhorn']);
     expect(playerB.started, ['airhorn', 'airhorn']);
+  });
+}
+
+// A sender pressing faster than anyone plays: the first few in a window
+// play, the rest are dropped, and the window moves on.
+void _rateLimitTests() {
+  test('a sender gets six presses in two seconds, then none until it passes',
+      () async {
+    var now = 1000000;
+    final player = _Player();
+    final engine = SoundboardEngine(player: player, nowMs: () => now);
+    for (var i = 0; i < 6; i++) {
+      expect(await engine.onRemoteEvent(_play('burst$i', now)), isTrue,
+          reason: '$i');
+      now += 50;
+    }
+    expect(await engine.onRemoteEvent(_play('seventh', now)), isFalse);
+    expect(player.started.length, 6);
+    // Another sender is not held back by this one.
+    expect(
+        await engine.onRemoteEvent(SoundboardEvent(
+          soundId: 'airhorn',
+          senderId: '@other:x',
+          eventId: 'other',
+          timestampMs: now,
+        )),
+        isTrue);
+    // Two seconds on, the window has moved past the burst.
+    now += SoundboardEngine.pressWindowMs;
+    expect(await engine.onRemoteEvent(_play('later', now)), isTrue);
   });
 }

@@ -67,6 +67,50 @@ class ChatState extends State<Chat> {
           "Title for the dialog that is shown when the user attempts to upload a file that is greater than the allowed size",
       name: "labelChatPageFileTooLargeTitle");
 
+  String get errorTimelineLoadFailed => Intl.message("Error loading timeline",
+      name: "errorTimelineLoadFailed",
+      desc: "Title of the error shown when a room's messages could not be "
+          "loaded");
+
+  String get errorTimelineThreadLoadFailed =>
+      Intl.message("Error loading thread timeline",
+          name: "errorTimelineThreadLoadFailed",
+          desc: "Title of the error shown when a thread's messages could not "
+              "be loaded");
+
+  String get labelChatFileFallbackName => Intl.message("File",
+      name: "labelChatFileFallbackName",
+      desc: "Title of the dialog about a file's location data when the file "
+          "has no name");
+
+  String get promptChatSendFile => Intl.message("Send File",
+      name: "promptChatSendFile",
+      desc: "Button that sends a file even though it holds location data");
+
+  String get promptChatDontSendFile => Intl.message("Don't send file",
+      name: "promptChatDontSendFile",
+      desc: "Button that keeps a file holding location data from being "
+          "sent");
+
+  String messageChatFileHasLocation(String name) => Intl.message(
+      "Location data was detected in file '$name', are you sure you want to send?",
+      name: "messageChatFileHasLocation",
+      args: [name],
+      desc: "Asked before sending a file whose metadata says where it was "
+          "taken, with the file's name");
+
+  String errorChatDropNotAttached(String files) => Intl.message(
+      "Could not attach $files: folders and unreadable files can't be uploaded.",
+      name: "errorChatDropNotAttached",
+      args: [files],
+      desc: "When files dropped on the chat could not be attached, with "
+          "their names separated by commas");
+
+  String get labelChatDropNotAttachedTitle => Intl.message("Not attached",
+      name: "labelChatDropNotAttachedTitle",
+      desc: "Title of the error shown when files dropped on the chat could "
+          "not be attached");
+
   bool processing = false;
   List<PendingFileAttachment> attachments = List.empty(growable: true);
 
@@ -132,7 +176,7 @@ class ChatState extends State<Chat> {
       setState(() {
         _timeline = t;
       });
-    }, title: "Error loading timeline");
+    }, title: errorTimelineLoadFailed);
   }
 
   Future<void> loadThreadTimeline() async {
@@ -145,7 +189,7 @@ class ChatState extends State<Chat> {
       setState(() {
         _timeline = threadTimeline;
       });
-    }, title: "Error loading thread timeline");
+    }, title: errorTimelineThreadLoadFailed);
   }
 
   @override
@@ -155,6 +199,11 @@ class ChatState extends State<Chat> {
         "Disposing room timeline for: ${widget.room.displayName} ${widget.threadId ?? ""}");
 
     onFileDroppedSubscription?.cancel();
+    onFocusMessageInput.close();
+    setMessageInputText.close();
+    // A thread timeline is this chat's own (the room keeps the main one):
+    // left open, it went on collecting replies for the life of the app.
+    if (isThread) _timeline?.close();
     _open.remove(this);
     super.dispose();
   }
@@ -199,51 +248,62 @@ class ChatState extends State<Chat> {
       processing = true;
     });
 
-    for (var file in attachments) {
-      await file.resolve();
-      var exif = await readExifFromBytes(file.data!);
+    List<ProcessedAttachment> processedAttachments;
+    var targetRoom = room;
+    var targetThread = threadsComponent;
+    try {
+      for (var file in attachments) {
+        await file.resolve();
+        // A file picked earlier that cannot be read now (moved, deleted):
+        // nothing to look at, and processAttachments skips it too.
+        var data = file.data;
+        if (data == null) continue;
+        var exif = await readExifFromBytes(data);
 
-      if (exif.keys.any((e) => e.toLowerCase().contains("gps"))) {
-        // ignore: use_build_context_synchronously
-        var confirmation = await AdaptiveDialog.confirmation(context,
-            title: file.name ?? "File",
-            confirmationText: "Send File",
-            cancelText: "Don't send file",
-            dangerous: true,
-            prompt:
-                "Location data was detected in file '${file.name}', are you sure you want to send?");
+        if (exif.keys.any((e) => e.toLowerCase().contains("gps"))) {
+          // ignore: use_build_context_synchronously
+          var fileName = file.name;
+          var confirmation = await AdaptiveDialog.confirmation(context,
+              title: fileName ?? labelChatFileFallbackName,
+              confirmationText: promptChatSendFile,
+              cancelText: promptChatDontSendFile,
+              dangerous: true,
+              prompt: messageChatFileHasLocation(
+                  fileName ?? labelChatFileFallbackName));
 
-        if (confirmation != true) {
-          setState(() {
-            processing = false;
-          });
+          if (confirmation != true) {
+            return;
+          }
+        }
+      }
+
+      if (overrideClient != null) {
+        var newRoom = overrideClient.getRoom(targetRoom.identifier);
+        if (newRoom != null) {
+          targetRoom = newRoom;
+          targetThread = targetRoom.client.getComponent<ThreadsComponent>();
+          Log.d("Overriding room for client: ${overrideClient}");
+        } else {
+          Log.e(
+              "Failed to find correct room to send event for override client. Cancelling");
+
           return;
         }
       }
-    }
 
-    var targetRoom = room;
-    var targetThread = threadsComponent;
-
-    if (overrideClient != null) {
-      var newRoom = overrideClient.getRoom(targetRoom.identifier);
-      if (newRoom != null) {
-        targetRoom = newRoom;
-        targetThread = targetRoom.client.getComponent<ThreadsComponent>();
-        Log.d("Overriding room for client: ${overrideClient}");
-      } else {
-        Log.e(
-            "Failed to find correct room to send event for override client. Cancelling");
-
-        return;
+      processedAttachments = await targetRoom.processAttachments(attachments);
+    } catch (e, s) {
+      // The composer stays usable: it was left faded and dead for the rest
+      // of the visit when anything above threw.
+      Log.onError(e, s, content: "Could not prepare the message to send");
+      return;
+    } finally {
+      if (mounted) {
+        setState(() {
+          processing = false;
+        });
       }
     }
-
-    var processedAttachments = await targetRoom.processAttachments(attachments);
-
-    setState(() {
-      processing = false;
-    });
 
     var component = targetRoom.client.getComponent<CommandComponent>();
 
@@ -441,12 +501,9 @@ class ChatState extends State<Chat> {
       skipped.add(name);
     });
     if (skipped.isNotEmpty && mounted) {
-      AdaptiveDialog.showError(
-          context,
-          "Could not attach ${skipped.join(", ")}: folders and unreadable "
-          "files can't be uploaded.",
-          StackTrace.current,
-          title: "Not attached");
+      AdaptiveDialog.showError(context,
+          errorChatDropNotAttached(skipped.join(", ")), StackTrace.current,
+          title: labelChatDropNotAttachedTitle);
     }
 
     for (final attachment in dropped) {

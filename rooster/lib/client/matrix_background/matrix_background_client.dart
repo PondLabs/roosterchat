@@ -72,6 +72,9 @@ class MatrixBackgroundClient implements Client {
   Stream<void> get onSync => Stream.empty();
 
   @override
+  Stream<void> get onOwnProfileUpdated => Stream.empty();
+
+  @override
   List<Peer> get peers => [];
 
   @override
@@ -247,6 +250,11 @@ class MatrixBackgroundClient implements Client {
 
   @override
   Future<void> setAvatar(Uint8List bytes, String mimeType) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> removeAvatar() {
     throw UnimplementedError();
   }
 

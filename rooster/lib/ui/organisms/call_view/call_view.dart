@@ -3,10 +3,12 @@ import 'package:rooster/client/components/dj/dj_session.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/matrix/components/dj/dj_booths.dart';
 import 'package:rooster/client/components/voip/voip_stream.dart';
+import 'package:rooster/ui/atoms/appear_in.dart';
 import 'package:rooster/client/room.dart';
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/ui/layout/bento.dart';
 import 'package:rooster/ui/organisms/call_view/call_control_buttons.dart';
+import 'package:rooster/ui/organisms/call_view/call_focus.dart';
 import 'package:rooster/ui/organisms/call_view/call_grid_tiles.dart';
 import 'package:rooster/ui/organisms/call_view/voip_fullscreen_stream_view.dart';
 import 'package:rooster/ui/organisms/call_view/voip_stream_view.dart';
@@ -15,6 +17,7 @@ import 'package:rooster/ui/organisms/soundboard/soundboard_call_controller.dart'
 import 'package:rooster/utils/animation/ring_shaker.dart';
 import 'package:rooster/utils/animation/ripple.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/atoms/avatar.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -36,6 +39,9 @@ class CallView extends StatefulWidget {
 
   static const Duration volumeAnimationDuration = Duration(milliseconds: 150);
 
+  static String get labelCallEnded => Intl.message("Call ended",
+      name: "labelCallEnded", desc: "Shown in place of a call that has ended");
+
   final Future<void> Function(bool)? setMicrophoneMute;
   final Future<void> Function(bool)? setDeafened;
   final Future<void> Function()? pickScreenshareSource;
@@ -55,6 +61,9 @@ class _CallViewState extends State<CallView> {
   StreamSubscription? sub;
   bool isMouseHovering = false;
   VoipStream? mainStream;
+
+  /// The grid's tiles, to pop in whoever joins while the call is on screen.
+  final Arrivals arrivals = Arrivals();
   late Room room;
   SoundboardCallController? _soundboard;
   bool _soundboardOpen = false;
@@ -63,6 +72,7 @@ class _CallViewState extends State<CallView> {
   bool _boothOpen = false;
   StreamSubscription? _boothSub;
   StreamSubscription? _boothPanelSub;
+  StreamSubscription? _focusSub;
   DjSession? get _dj => DjBooths.of(widget.currentSession);
 
   @override
@@ -82,6 +92,12 @@ class _CallViewState extends State<CallView> {
       DjBooths.takePanelRequest(session);
       setState(() => _boothOpen = true);
     });
+    // So does a click on someone live, who may be what opened this view.
+    takeFocusRequest();
+    _focusSub = CallFocus.onRequested.listen((session) {
+      if (!mounted || session != widget.currentSession) return;
+      setState(takeFocusRequest);
+    });
 
     room = widget.currentSession.client.getRoom(widget.currentSession.roomId)!;
     statTimer = Timer.periodic(const Duration(milliseconds: 200), timer);
@@ -96,6 +112,7 @@ class _CallViewState extends State<CallView> {
     sub?.cancel();
     _boothSub?.cancel();
     _boothPanelSub?.cancel();
+    _focusSub?.cancel();
     _soundboard?.release();
     _soundboard = null;
     super.dispose();
@@ -103,6 +120,18 @@ class _CallViewState extends State<CallView> {
 
   void timer(Timer timer) async {
     await widget.currentSession.updateStats();
+  }
+
+  /// Puts whoever the sidebar asked for in the middle, playing: nobody
+  /// clicks on someone to then be asked whether to watch them.
+  void takeFocusRequest() {
+    final session = widget.currentSession;
+    final userId = CallFocus.takeRequest(session);
+    if (userId == null) return;
+    final stream = CallFocus.streamOf(session.streams, userId);
+    if (stream == null) return;
+    mainStream = stream;
+    stream.watch();
   }
 
   @override
@@ -155,8 +184,11 @@ class _CallViewState extends State<CallView> {
   }
 
   Widget callButtons({bool connected = false, required Widget child}) {
-    // Mobile keeps touch-sized buttons; the desktop row only shows on hover.
-    final buttonRadius = MediaQuery.of(context).mobile ? 24.0 : 18.0;
+    // Touch keeps touch-sized buttons that are always there; with a mouse
+    // the row only shows on hover. An unfolded foldable has the desktop
+    // layout and no mouse: going by the layout hid its buttons for good.
+    final touch = MediaQuery.sizeOf(context).touchControls;
+    final buttonRadius = touch ? 24.0 : 18.0;
     final buttonIconSize = buttonRadius * 1.2;
     return MouseRegion(
       onEnter: (event) {
@@ -175,11 +207,7 @@ class _CallViewState extends State<CallView> {
           child,
           AnimatedOpacity(
             // Stay visible while the soundboard popover is anchored here.
-            opacity: MediaQuery.of(context).mobile ||
-                    isMouseHovering ||
-                    _soundboardOpen
-                ? 1
-                : 0,
+            opacity: touch || isMouseHovering || _soundboardOpen ? 1 : 0,
             duration: const Duration(milliseconds: 200),
             // Above the iPhone's home indicator: the same 24 below the
             // buttons as before where there is none.
@@ -193,7 +221,7 @@ class _CallViewState extends State<CallView> {
                         session: widget.currentSession,
                         actions: controlActions,
                         radius: buttonRadius,
-                        compact: MediaQuery.of(context).mobile,
+                        compact: MediaQuery.sizeOf(context).mobile,
                         boothOpen: _boothOpen,
                         onToggleBooth: _dj == null
                             ? null
@@ -304,6 +332,8 @@ class _CallViewState extends State<CallView> {
         ? null
         : streams.where((s) => s.streamId == focusedId).firstOrNull;
     final tiles = callGridTiles(streams);
+    // Someone who joins while the call is on screen pops into the grid.
+    arrivals.update(tiles.map((tile) => tile.stream.streamId));
     return [
       if (mainStream != null)
         Flexible(
@@ -342,22 +372,27 @@ class _CallViewState extends State<CallView> {
           child: BentoLayout(
               tiles.where((tile) => tile.stream != mainStream).map((tile) {
             final e = tile.stream;
-            return GestureDetector(
-                onTap: () {
-                  setState(() {
-                    mainStream = e;
-                  });
-                },
-                child: VoipStreamView(
-                  key: ValueKey("callView__${e.streamId}"),
-                  e,
-                  audioStream: tile.audioStream,
-                  fit: e.type == VoipStreamType.screenshare
-                      ? BoxFit.contain
-                      : BoxFit.cover,
-                  widget.currentSession,
-                  onFullscreen: () => showFullscreen(e),
-                ));
+            return AppearIn(
+              key: ValueKey("callView_appear_${e.streamId}"),
+              play: arrivals.isNew(e.streamId),
+              scale: 0.4,
+              child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      mainStream = e;
+                    });
+                  },
+                  child: VoipStreamView(
+                    key: ValueKey("callView__${e.streamId}"),
+                    e,
+                    audioStream: tile.audioStream,
+                    fit: e.type == VoipStreamType.screenshare
+                        ? BoxFit.contain
+                        : BoxFit.cover,
+                    widget.currentSession,
+                    onFullscreen: () => showFullscreen(e),
+                  )),
+            );
           }).toList()),
         ),
       )
@@ -365,7 +400,7 @@ class _CallViewState extends State<CallView> {
   }
 
   Widget callEndedView() {
-    return const Center(child: tiamat.Text.label("Call ended"));
+    return Center(child: tiamat.Text.label(CallView.labelCallEnded));
   }
 
   Widget callIncomingView() {

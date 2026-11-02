@@ -4,6 +4,7 @@ import 'package:browser_surface/browser_surface.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:intl/intl.dart' show Intl;
 
 import 'browser_input_keys.dart';
 import 'browser_runtime.dart';
@@ -457,6 +458,22 @@ class EmbeddedBrowserView extends StatefulWidget {
   final FocusNode? focusNode;
   final bool autofocus;
 
+  static String get labelBrowserClosed =>
+      Intl.message("Embedded browser closed",
+          name: "labelBrowserClosed",
+          desc: "In place of an embedded web page (a widget, a video) once its "
+              "browser closed");
+
+  static String get labelBrowserReady => Intl.message("Embedded browser ready",
+      name: "labelBrowserReady",
+      desc: "In place of an embedded web page while its browser is ready but "
+          "has not drawn the page yet");
+
+  static String get labelBrowserConnecting =>
+      Intl.message("Connecting embedded browser…",
+          name: "labelBrowserConnecting",
+          desc: "In place of an embedded web page while its browser starts");
+
   @override
   State<EmbeddedBrowserView> createState() => _EmbeddedBrowserViewState();
 }
@@ -639,7 +656,7 @@ class _EmbeddedBrowserViewState extends State<EmbeddedBrowserView> {
     final frame = _frame;
     if (_closed) {
       return widget.placeholder ??
-          const Text('Embedded browser closed',
+          Text(EmbeddedBrowserView.labelBrowserClosed,
               textDirection: TextDirection.ltr);
     }
     if (textureId != null && frame != null) {
@@ -650,6 +667,7 @@ class _EmbeddedBrowserViewState extends State<EmbeddedBrowserView> {
       // Test/placeholder composition: frame metadata proves the client-owned
       // ring is live without requiring a native texture binding.
       return Text(
+        // Not translated: frame metadata for tests, never shown with a texture.
         'Embedded browser ${frame.width}x${frame.height} '
         'seq=${frame.sequence} slot=${frame.slot}${_ready ? '' : ' (connecting)'}',
         textDirection: TextDirection.ltr,
@@ -657,7 +675,9 @@ class _EmbeddedBrowserViewState extends State<EmbeddedBrowserView> {
     }
     return widget.placeholder ??
         Text(
-          _ready ? 'Embedded browser ready' : 'Connecting embedded browser…',
+          _ready
+              ? EmbeddedBrowserView.labelBrowserReady
+              : EmbeddedBrowserView.labelBrowserConnecting,
           textDirection: TextDirection.ltr,
         );
   }

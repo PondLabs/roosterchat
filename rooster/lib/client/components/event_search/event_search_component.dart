@@ -10,6 +10,9 @@ abstract class EventSearchSession {
   bool get currentlySearching;
 
   bool get canContinueSearch;
+
+  /// Lets go of what the session holds (a timeline it loaded, for one).
+  Future<void> dispose() async {}
 }
 
 abstract class EventSearchComponent<T extends Client> implements Component<T> {

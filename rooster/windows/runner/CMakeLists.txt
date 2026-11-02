@@ -7,8 +7,11 @@ project(runner LANGUAGES CXX)
 #
 # Any new source files that you add to the application should be added here.
 add_executable(${BINARY_NAME} WIN32
+  "call_ducking.cpp"
   "flutter_window.cpp"
+  "game_overlay.cpp"
   "main.cpp"
+  "splash_window.cpp"
   "utils.cpp"
   "voice_thumb_bar.cpp"
   "win32_window.cpp"

@@ -11,6 +11,7 @@ import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/code_block.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:intl/intl.dart';
 import 'package:matrix/matrix_api_lite/matrix_api.dart' show RequestType;
 import 'package:matrix/matrix_api_lite/utils/try_get_map_extension.dart';
 
@@ -35,6 +36,13 @@ class MatrixCapabilitySendStateEvent implements MatrixWidgetCapability {
       key == null ? "$name:$eventType" : "$name:$eventType#$key";
 
   List<(String, String?)> widgetSetCallMemberships = List.empty(growable: true);
+
+  static String promptWidgetChangePowerLevels(String widgetName) => Intl.message(
+      "'$widgetName' wants to change the room power levels:",
+      name: "promptWidgetChangePowerLevels",
+      args: [widgetName],
+      desc:
+          "Confirmation when a room widget (a small web app added to a room) tries to change who may do what in the room, with the widget's name; the change itself is shown under it as JSON");
 
   @override
   String toString() {
@@ -76,8 +84,7 @@ class MatrixCapabilitySendStateEvent implements MatrixWidgetCapability {
     if (eventType == "m.room.power_levels") {
       if (await AdaptiveDialog.confirmation(
             navigator.currentContext!,
-            prompt:
-                "'${runner.info.name}' wants to change the room power levels:",
+            prompt: promptWidgetChangePowerLevels(runner.info.name),
             customBuilder: (p0) {
               return SizedBox(
                 child: Codeblock(
@@ -93,6 +100,7 @@ class MatrixCapabilitySendStateEvent implements MatrixWidgetCapability {
     }
 
     if (content == null)
+      // Not translated: a reply to the widget, which the app does not show.
       return message.createResponseError(message: "Invalid message");
 
     if (eventType == MatrixActivitiesComponent.callMemberStateEvent) {

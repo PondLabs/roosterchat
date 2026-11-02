@@ -1,0 +1,60 @@
+{
+  "code": 200,
+  "message": "OK",
+  "tweet": {
+    "url": "https://x.com/rsa/status/2115864496409633062",
+    "id": "2115864496409633062",
+    "text": "We’re so proud to work with Phoebe Bridgers at \n@TIDAL!\n\n5 live tracks from Phoebe’s Madison Square Garden show, the iconic phone-free performance from earlier this year. Purchase the digital download only Tidal (no subscription required).",
+    "author": {
+      "name": "rsa",
+      "screen_name": "rsa",
+      "avatar_url": "https://pbs.twimg.com/profile_images/1679006232252919808/PZUmdO9t_200x200.jpg",
+      "verification": {
+        "verified": true,
+        "verified_at": null,
+        "type": "individual"
+      }
+    },
+    "replies": 6,
+    "retweets": 17,
+    "likes": 97,
+    "created_at": "Thu Oct 29 17:53:01 +0000 2026",
+    "created_timestamp": 1793296381,
+    "quote": {
+      "url": "https://x.com/TIDAL/status/2115847206163107946",
+      "id": "2115847206163107946",
+      "text": "Tidal Upload Exclusive: Phoebe Bridgers Get Phoebe's Live at Madison Square Garden EP only on Tidal. No subscription needed. 0% platform fee, so more goes to the artist. https://tidal.com/phoebe \n\nPhoto: Matt Grubb",
+      "author": {
+        "name": "Tidal",
+        "screen_name": "TIDAL",
+        "avatar_url": "https://pbs.twimg.com/profile_images/1653759132397195266/7T0RN_jc_200x200.jpg",
+        "verification": {
+          "verified": true,
+          "verified_at": null,
+          "type": "organization"
+        }
+      },
+      "replies": 3,
+      "retweets": 7,
+      "likes": 98,
+      "created_at": "Thu Oct 29 16:44:19 +0000 2026",
+      "created_timestamp": 1793292259,
+      "media": {
+        "all": [
+          {
+            "type": "photo",
+            "url": "https://pbs.twimg.com/media/HVz_WWvbgAAdTJw.jpg?name=orig",
+            "width": 2000,
+            "height": 1499
+          },
+          {
+            "type": "photo",
+            "url": "https://pbs.twimg.com/media/HVz_WWta0AAMY8S.jpg?name=orig",
+            "width": 1500,
+            "height": 1500
+          }
+        ]
+      }
+    }
+  }
+}

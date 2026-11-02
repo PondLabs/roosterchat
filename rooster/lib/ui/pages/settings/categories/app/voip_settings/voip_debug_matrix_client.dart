@@ -5,6 +5,7 @@ import 'package:rooster/client/matrix/components/voip/matrix_voip_component.dart
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/ui/molecules/alert_view.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:matrix/matrix.dart' as mx;
 
 import 'package:tiamat/tiamat.dart' as tiamat;
@@ -18,6 +19,72 @@ class VoipDebugMatrixClient extends StatefulWidget {
 }
 
 class _VoipDebugMatrixClientState extends State<VoipDebugMatrixClient> {
+  String messageVoipTurnNotConfigured(String homeserver) => Intl.message(
+      "Your homeserver ($homeserver) does not have a TURN server configured",
+      name: "messageVoipTurnNotConfigured",
+      args: [homeserver],
+      desc: "Warning in the WebRTC debug menu (developer settings) when the "
+          "homeserver, whose address follows, offers no TURN server to route "
+          "calls through. TURN is a name");
+
+  String get labelVoipTurnError => Intl.message("TURN Error",
+      name: "labelVoipTurnError",
+      desc: "Title of the warning in the WebRTC debug menu (developer "
+          "settings) when the homeserver has no TURN server. TURN is a name");
+
+  String get labelVoipTurnServerHeader =>
+      Intl.message("TURN Server (Homeserver Configuration)",
+          name: "labelVoipTurnServerHeader",
+          desc: "Header of the WebRTC debug menu's panel (developer settings) "
+              "showing the TURN server the homeserver gives out. TURN is a "
+              "name");
+
+  String get promptVoipTestTurnServer => Intl.message("Test TURN Server",
+      name: "promptVoipTestTurnServer",
+      desc: "Button in the WebRTC debug menu (developer settings) that tries "
+          "a connection through the homeserver's TURN server");
+
+  String labelVoipTurnUsername(String username) =>
+      Intl.message("username: $username",
+          name: "labelVoipTurnUsername",
+          args: [username],
+          desc: "The TURN server's username in the WebRTC debug menu "
+              "(developer settings), followed by its value");
+
+  String labelVoipTurnPassword(String password) =>
+      Intl.message("password: $password",
+          name: "labelVoipTurnPassword",
+          args: [password],
+          desc: "The TURN server's password in the WebRTC debug menu "
+              "(developer settings), followed by dots hiding it");
+
+  String get labelVoipTurnConnectionTest => Intl.message("Connection Test",
+      name: "labelVoipTurnConnectionTest",
+      desc: "Header of the WebRTC debug menu's panel (developer settings) "
+          "showing the results of the TURN server test");
+
+  String get labelVoipTurnConnectingWithConfig =>
+      Intl.message("Connecting with config:",
+          name: "labelVoipTurnConnectingWithConfig",
+          desc: "Header, in the WebRTC debug menu (developer settings), over "
+              "the connection settings (JSON) the TURN server test uses");
+
+  String get labelVoipTurnCandidates => Intl.message("Candidates",
+      name: "labelVoipTurnCandidates",
+      desc: "Header, in the WebRTC debug menu (developer settings), over the "
+          "ICE candidates (network routes) the TURN server test found");
+
+  String get labelVoipTurnCandidateError => Intl.message("ERROR",
+      name: "labelVoipTurnCandidateError",
+      desc: "Shown in the WebRTC debug menu (developer settings) in place of "
+          "an ICE candidate that came without its text");
+
+  String get labelVoipTurnOffer => Intl.message("Offer",
+      name: "labelVoipTurnOffer",
+      desc: "Header, in the WebRTC debug menu (developer settings), over the "
+          "SDP offer the TURN server test made (the WebRTC session "
+          "description)");
+
   bool loading = true;
   bool homeserverHasTurnServer = false;
   mx.TurnServerCredentials? credentials;
@@ -70,12 +137,12 @@ class _VoipDebugMatrixClientState extends State<VoipDebugMatrixClient> {
       children: [
         if (homeserverHasTurnServer == false)
           AlertView(Alert(AlertType.warning,
-              messageGetter: () =>
-                  "Your homeserver (${widget.client.getMatrixClient().homeserver}) does not have a TURN server configured",
-              titleGetter: () => "TURN Error")),
+              messageGetter: () => messageVoipTurnNotConfigured(
+                  widget.client.getMatrixClient().homeserver.toString()),
+              titleGetter: () => labelVoipTurnError)),
         tiamat.Panel(
           mode: tiamat.TileType.surfaceContainerLow,
-          header: "TURN Server (Homeserver Configuration)",
+          header: labelVoipTurnServerHeader,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -95,7 +162,7 @@ class _VoipDebugMatrixClientState extends State<VoipDebugMatrixClient> {
         Padding(
           padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
           child: tiamat.Button.secondary(
-            text: "Test TURN Server",
+            text: promptVoipTestTurnServer,
             onTap: testTurn,
           ),
         ),
@@ -109,8 +176,9 @@ class _VoipDebugMatrixClientState extends State<VoipDebugMatrixClient> {
       mainAxisAlignment: MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        tiamat.Text.labelLow("username: ${credentials!.username}"),
-        tiamat.Text.labelLow("password: ${"•" * credentials!.password.length}"),
+        tiamat.Text.labelLow(labelVoipTurnUsername(credentials!.username)),
+        tiamat.Text.labelLow(
+            labelVoipTurnPassword("•" * credentials!.password.length)),
         const tiamat.Seperator(),
         for (var item in credentials!.uris) tiamat.Text.labelLow(item)
       ],
@@ -122,7 +190,7 @@ class _VoipDebugMatrixClientState extends State<VoipDebugMatrixClient> {
       children: [
         tiamat.Panel(
           mode: tiamat.TileType.surfaceContainerLow,
-          header: "Connection Test",
+          header: labelVoipTurnConnectionTest,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -131,7 +199,7 @@ class _VoipDebugMatrixClientState extends State<VoipDebugMatrixClient> {
                   padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
                   child: tiamat.Panel(
                     mode: tiamat.TileType.surfaceContainerLow,
-                    header: "Connecting with config:",
+                    header: labelVoipTurnConnectingWithConfig,
                     child: tiamat.Text.tiny(const JsonEncoder.withIndent('  ')
                         .convert(connectionConfiguration!)
                         .replaceAll(credentials?.password ?? "",
@@ -140,7 +208,7 @@ class _VoipDebugMatrixClientState extends State<VoipDebugMatrixClient> {
                 ),
               if (foundCandidates.isNotEmpty)
                 tiamat.Panel(
-                  header: "Candidates",
+                  header: labelVoipTurnCandidates,
                   mode: tiamat.TileType.surfaceContainerLowest,
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -148,8 +216,8 @@ class _VoipDebugMatrixClientState extends State<VoipDebugMatrixClient> {
                         for (var candidate in foundCandidates)
                           Padding(
                               padding: const EdgeInsets.all(8),
-                              child: tiamat.Text.label(
-                                  candidate.candidate ?? "ERROR")),
+                              child: tiamat.Text.label(candidate.candidate ??
+                                  labelVoipTurnCandidateError)),
                         if (gatheringState ==
                             webrtc.RTCIceGatheringState
                                 .RTCIceGatheringStateGathering)
@@ -163,7 +231,7 @@ class _VoipDebugMatrixClientState extends State<VoipDebugMatrixClient> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
                   child: tiamat.Panel(
-                      header: "Offer",
+                      header: labelVoipTurnOffer,
                       mode: tiamat.TileType.surfaceContainerLowest,
                       child: tiamat.Text.tiny(description!.sdp ?? "")),
                 )

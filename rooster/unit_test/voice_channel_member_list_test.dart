@@ -8,6 +8,7 @@ import 'package:rooster/client/components/component.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/client/matrix/components/room_activities/matrix_activities_component.dart';
+import 'package:rooster/client/matrix/components/voip_room/matrix_call_membership.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_voip_room_component.dart';
 import 'package:rooster/client/matrix/homeserver_clock.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
@@ -104,6 +105,9 @@ class FakeVoipSession implements VoipSession, CallRoster {
 
   @override
   Set<String> get connectedUserIds => connected;
+
+  @override
+  bool rosterComplete = false;
 
   final StreamController<void> _stateChanged =
       StreamController.broadcast(sync: true);
@@ -462,6 +466,86 @@ void main() {
     });
   });
 
+  // A client with no delayed leave (a homeserver without delayed events)
+  // publishes its streams and its mute all the same, marked as unguarded:
+  // if it dies they are only believed for as long as it would have taken to
+  // write them again.
+  group("Badges of a member without a delayed leave", () {
+    const unguarded = {"chat.commet.unguarded": true};
+
+    void setMemberships(List<matrix.StrippedStateEvent> memberships) {
+      room.matrixRoom.states[MatrixActivitiesComponent.callMemberStateEvent] = {
+        for (final m in memberships) m.stateKey!: m,
+      };
+    }
+
+    test("show to people outside the call while they are kept written", () {
+      setMemberships([
+        callMemberEvent(room, otherUserId, "DEVICEB",
+            streams: ["screen", "camera"],
+            voiceState: ["muted", "deafened"],
+            sentAt: DateTime.now().subtract(const Duration(minutes: 61)),
+            extra: unguarded),
+      ]);
+
+      final call = callSession(component);
+      expect(call.liveMedia[otherUserId], {LiveMedia.screen, LiveMedia.camera});
+      expect(call.voiceState[otherUserId],
+          {VoiceState.muted, VoiceState.deafened});
+    });
+
+    test("are dropped once nobody has written them for ninety minutes", () {
+      setMemberships([
+        callMemberEvent(room, otherUserId, "DEVICEB",
+            streams: ["screen"],
+            voiceState: ["muted"],
+            sentAt: DateTime.now().subtract(const Duration(minutes: 91)),
+            extra: {
+              ...unguarded,
+              "chat.commet.dj": {"playing": true}
+            }),
+      ]);
+
+      final call = callSession(component);
+      expect(call.participants, {otherUserId},
+          reason: "still in the call until the membership itself lapses");
+      expect(call.liveMedia[otherUserId], isNull);
+      expect(call.voiceState[otherUserId], isNull);
+      expect(call.djPlaying[otherUserId], isNull);
+    });
+
+    test("stay for one whose delayed leave guards them, however old", () {
+      setMemberships([
+        callMemberEvent(room, otherUserId, "DEVICEB",
+            streams: ["screen"],
+            sentAt: DateTime.now().subtract(const Duration(hours: 3))),
+      ]);
+
+      expect(callSession(component).liveMedia[otherUserId], {LiveMedia.screen});
+    });
+
+    test("go when they turn stale, with no event", () async {
+      setMemberships([
+        callMemberEvent(room, otherUserId, "DEVICEB",
+            streams: ["screen"],
+            sentAt: DateTime.now().subtract(
+                MatrixCallMembership.unguardedStateLifetime -
+                    const Duration(milliseconds: 50)),
+            extra: unguarded),
+      ]);
+      final changes = <void>[];
+      final sub = component.onSessionsChanged.listen(changes.add);
+      addTearDown(sub.cancel);
+
+      expect(callSession(component).liveMedia[otherUserId], {LiveMedia.screen});
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+
+      expect(changes, hasLength(1));
+      expect(callSession(component).liveMedia[otherUserId], isNull);
+      expect(callParticipants(component), {otherUserId});
+    });
+  });
+
   group("Muted and deafened icons", () {
     const thirdUserId = "@third:example.org";
 
@@ -500,6 +584,68 @@ void main() {
     test("a client that says nothing about it gets no icon", () {
       setMemberships([
         callMemberEvent(room, otherUserId, "DEVICEB", streams: ["screen"]),
+      ]);
+
+      expect(callSession(component).voiceState[otherUserId], isNull);
+    });
+
+    test('an older deafened device cannot override a later unmuted join', () {
+      final now = DateTime.now();
+      setMemberships([
+        callMemberEvent(room, otherUserId, 'CURRENT', voiceState: [], extra: {
+          'created_ts':
+              now.subtract(const Duration(minutes: 5)).millisecondsSinceEpoch,
+        }),
+        callMemberEvent(room, otherUserId, 'OLD', voiceState: [
+          'deafened'
+        ], extra: {
+          'created_ts':
+              now.subtract(const Duration(minutes: 30)).millisecondsSinceEpoch,
+        }),
+      ]);
+
+      expect(callSession(component).voiceState[otherUserId], isEmpty);
+    });
+
+    test('equal joins use the same device tie break as superseding a call', () {
+      final now = DateTime.now();
+      setMemberships([
+        callMemberEvent(room, otherUserId, 'BBB',
+            sentAt: now, voiceState: ['deafened']),
+        callMemberEvent(room, otherUserId, 'AAA', sentAt: now, voiceState: []),
+      ]);
+
+      expect(callSession(component).voiceState[otherUserId],
+          {VoiceState.muted, VoiceState.deafened});
+    });
+
+    test('an unknown state on the latest join does not inherit an old deafen',
+        () {
+      final now = DateTime.now();
+      setMemberships([
+        callMemberEvent(room, otherUserId, 'CURRENT', sentAt: now),
+        callMemberEvent(room, otherUserId, 'OLD',
+            sentAt: now.subtract(const Duration(minutes: 5)),
+            voiceState: ['deafened']),
+      ]);
+
+      expect(callSession(component).voiceState[otherUserId], isNull);
+    });
+
+    test('stale badges on the latest join do not revive an old device deafen',
+        () {
+      final now = DateTime.now();
+      setMemberships([
+        callMemberEvent(room, otherUserId, 'CURRENT',
+            sentAt: now.subtract(const Duration(minutes: 91)),
+            voiceState: [],
+            extra: {'chat.commet.unguarded': true}),
+        callMemberEvent(room, otherUserId, 'OLD', sentAt: now, voiceState: [
+          'deafened'
+        ], extra: {
+          'created_ts':
+              now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
+        }),
       ]);
 
       expect(callSession(component).voiceState[otherUserId], isNull);
@@ -657,6 +803,40 @@ void main() {
       clientManager.callManager.currentSessions.add(session);
 
       expect(callParticipants(sidebar), {selfUserId, otherUserId});
+    });
+
+    test(
+        "in our call, someone whose membership is live but who is not in it "
+        "is not listed", () {
+      // Their app lost the call without noticing, and keeps its membership
+      // up (2026-10-05: listed for hours, alone in LiveKit).
+      setMemberships([
+        callMembership(selfUserId, selfDeviceId),
+        callMemberEvent(room, otherUserId, "DEVICEB",
+            sentAt: serverNow().subtract(const Duration(minutes: 40)),
+            extra: {
+              "created_ts": serverNow()
+                  .subtract(const Duration(hours: 12))
+                  .millisecondsSinceEpoch,
+              "expires": const Duration(hours: 16).inMilliseconds,
+            }),
+        // Joined a moment ago, still connecting.
+        callMemberEvent(room, thirdUserId, "DEVICEC",
+            sentAt: serverNow().subtract(const Duration(seconds: 5))),
+      ]);
+      final session = FakeVoipSession(client, roomId, "session-1")
+        ..connected.add(selfUserId);
+      clientManager.callManager.currentSessions.add(session);
+
+      expect(callParticipants(sidebar), {selfUserId, otherUserId, thirdUserId},
+          reason: "until we have been connected a while, LiveKit may not "
+              "have told us about everyone");
+
+      session.rosterComplete = true;
+      expect(callParticipants(sidebar), {selfUserId, thirdUserId});
+
+      session.connect(otherUserId);
+      expect(callParticipants(sidebar), {selfUserId, otherUserId, thirdUserId});
     });
 
     test("in our call, the list is looked at again when someone connects",

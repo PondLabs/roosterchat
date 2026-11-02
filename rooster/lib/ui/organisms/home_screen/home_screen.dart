@@ -14,6 +14,7 @@ import 'package:rooster/ui/organisms/home_screen/home_screen_view.dart';
 import 'package:rooster/utils/update_checker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class HomeScreen extends StatefulWidget {
@@ -28,6 +29,12 @@ class HomeScreen extends StatefulWidget {
     this.onBurgerMenuTap,
     this.numRecentRooms = 5,
   });
+
+  static String get labelHomeQuickSwitcherShortcut => Intl.message("Ctrl + K",
+      name: "labelHomeQuickSwitcherShortcut",
+      desc: "Keyboard shortcut shown at the end of the search bar on the Home "
+          "screen, which opens the quick switcher. Write the key's name as "
+          "it is printed on keyboards in your language");
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -100,7 +107,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        if (MediaQuery.of(context).mobile)
+        if (MediaQuery.sizeOf(context).mobile)
           tiamat.Tile.low(
             caulkClipBottomRight: true,
             caulkClipBottomLeft: true,
@@ -112,7 +119,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: SizedBox(
                 height: 50,
                 child: HeaderView(
-                  showBurger: MediaQuery.of(context).mobile,
+                  showBurger: MediaQuery.sizeOf(context).mobile,
                   onBurgerMenuTap: widget.onBurgerMenuTap,
                   text: CommonStrings.promptHome,
                   menu: SizedBox(
@@ -126,7 +133,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-        if (MediaQuery.of(context).desktop)
+        if (MediaQuery.sizeOf(context).desktop)
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
             child: Material(
@@ -140,14 +147,23 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(spacing: 8, children: [
-                        Icon(Icons.search),
-                        tiamat.Text.labelLow(CommonStrings.promptSearch),
-                      ]),
-                      if (MediaQuery.of(context).desktop)
+                      Flexible(
+                        child: Row(spacing: 8, children: [
+                          Icon(Icons.search),
+                          Flexible(
+                            child: tiamat.Text.labelLow(
+                              CommonStrings.promptSearch,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ]),
+                      ),
+                      if (MediaQuery.sizeOf(context).desktop)
                         Padding(
                           padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
-                          child: tiamat.Text.labelLow("Ctrl + K"),
+                          child: tiamat.Text.labelLow(
+                              HomeScreen.labelHomeQuickSwitcherShortcut),
                         )
                     ],
                   ),

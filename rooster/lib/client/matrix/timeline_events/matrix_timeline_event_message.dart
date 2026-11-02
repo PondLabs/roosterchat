@@ -38,8 +38,11 @@ class MatrixTimelineEventMessage extends MatrixTimelineEvent
   @override
   bool get editable => true;
 
+  /// The SDK's text for a deleted message is the English "Redacted".
   @override
-  String? get body => event.plaintextBody;
+  String? get body => event.redacted
+      ? MatrixTimelineEvent.messageTimelineRedactedBody
+      : event.plaintextBody;
 
   String get formattedBody =>
       event.formattedText != "" ? event.formattedText : event.plaintextBody;
@@ -50,7 +53,9 @@ class MatrixTimelineEventMessage extends MatrixTimelineEvent
       "chat.commet.custom.matrix_plain";
 
   @override
-  String get plainTextBody => event.plaintextBody;
+  String get plainTextBody => event.redacted
+      ? MatrixTimelineEvent.messageTimelineRedactedBody
+      : event.plaintextBody;
 
   String _getPlaintextBody({Timeline? timeline}) {
     var e = getDisplayEvent(timeline);
@@ -101,7 +106,10 @@ class MatrixTimelineEventMessage extends MatrixTimelineEvent
 
   @override
   Widget? buildFormattedContent({Timeline? timeline}) {
-    final room = client.getRoom(event.roomId!)!;
+    // Null for a room sync just dropped (left, kicked, upgraded) while its
+    // chat was still open: the messages show as plain text rather than
+    // every one of them as an error box.
+    final room = client.getRoom(event.roomId!);
 
     var displayEvent = getDisplayEvent(timeline);
     bool isFormatted = displayEvent.content.tryGet<String>("format") != null;
@@ -112,7 +120,7 @@ class MatrixTimelineEventMessage extends MatrixTimelineEvent
       isFormatted = true;
     }
 
-    if (isFormatted) {
+    if (isFormatted && room != null) {
       bool mentionsRoom = mentions?["room"] == true &&
           MatrixRoomPermissions.canUserMentionRoom(
               displayEvent.senderId, (room as MatrixRoom).matrixRoom);

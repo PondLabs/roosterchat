@@ -19,6 +19,31 @@ class DialogResult<T> {
 }
 
 class AdaptiveDialog {
+  static String get labelAppPickAccount => Intl.message("Pick Account",
+      name: "labelAppPickAccount",
+      desc: "Title of the dialog that asks which signed-in account to use, "
+          "when there is more than one");
+
+  static String get labelAppError => Intl.message("Error",
+      name: "labelAppError",
+      desc: "Title of the dialog that shows an error, when the place it came "
+          "from gives none of its own");
+
+  static String get messageAppAreYouSure => Intl.message("Are you sure?",
+      name: "messageAppAreYouSure",
+      desc: "Question in a confirmation dialog, when the action gives no "
+          "question of its own");
+
+  static String get labelAppEnterText => Intl.message("Enter Text",
+      name: "labelAppEnterText",
+      desc: "Title of a dialog that asks for a line of text, when the place "
+          "it came from gives none of its own");
+
+  static String get labelAppRememberChoice => Intl.message("Remember choice:",
+      name: "labelAppRememberChoice",
+      desc: "Beside a switch in a confirmation dialog: keep this answer and "
+          "do not ask again");
+
   static Future<T?> pickOne<T extends Object?>(
     BuildContext context, {
     required List<T> items,
@@ -70,9 +95,6 @@ class AdaptiveDialog {
       },
     );
 
-    print("Got result:");
-    print(result);
-
     if (result != null) {
       return result.map((i) => i as T).toList();
     }
@@ -93,7 +115,7 @@ class AdaptiveDialog {
 
     return AdaptiveDialog.pickOne(
       context,
-      title: "Pick Account",
+      title: labelAppPickAccount,
       items: clientManager!.clients,
       itemBuilder: (context, item, callback) {
         return SizedBox(
@@ -112,14 +134,14 @@ class AdaptiveDialog {
 
   static Future<void> showError(
       BuildContext context, Object exception, StackTrace trace,
-      {String title = "Error"}) {
+      {String? title}) {
     return show(context, builder: (context) {
       return Column(
         children: [
           tiamat.Text.body(exception.toString()),
         ],
       );
-    }, title: title);
+    }, title: title ?? labelAppError);
   }
 
   static Future<T?> show<T extends Object?>(
@@ -131,7 +153,7 @@ class AdaptiveDialog {
     double contentPadding = 8,
     double initialHeightMobile = 0.5,
   }) async {
-    if (MediaQuery.of(context).desktop) {
+    if (MediaQuery.sizeOf(context).desktop) {
       return PopupDialog.show<T>(context,
           content: scrollable
               ? SingleChildScrollView(child: builder(context))
@@ -182,11 +204,13 @@ class AdaptiveDialog {
       name: "labelDialogConfirmation",
       desc: "label for the dialog which asks the user to confirm some action");
 
+  /// [prompt], [title], [confirmationText] and [cancelText] fall back to
+  /// "Are you sure?", "Confirmation", "Yes" and "No", translated.
   static Future<bool?> confirmation(BuildContext context,
-      {String prompt = "Are you sure?",
-      String title = "Confirmation",
-      String confirmationText = "Yes",
-      String cancelText = "No",
+      {String? prompt,
+      String? title,
+      String? confirmationText,
+      String? cancelText,
       Widget Function(BuildContext)? customBuilder,
       bool dangerous = false}) async {
     var value = await show<DialogResult<bool>?>(context, builder: (context) {
@@ -198,17 +222,17 @@ class AdaptiveDialog {
         customBuilder: customBuilder,
         dangerous: dangerous,
       );
-    }, title: title == "Confirmation" ? labelDialogConfirmation : title);
+    }, title: title ?? labelDialogConfirmation);
 
     return value?.value;
   }
 
   static Future<DialogResult<bool>?> confirmationWithOptions(
       BuildContext context,
-      {String prompt = "Are you sure?",
-      String title = "Confirmation",
-      String confirmationText = "Yes",
-      String cancelText = "No",
+      {String? prompt,
+      String? title,
+      String? confirmationText,
+      String? cancelText,
       Widget Function(BuildContext)? customBuilder,
       bool showRememberChoice = false,
       bool defaultRememberSetting = false,
@@ -224,63 +248,108 @@ class AdaptiveDialog {
         defaultRememberSetting: defaultRememberSetting,
         dangerous: dangerous,
       );
-    }, title: title == "Confirmation" ? labelDialogConfirmation : title);
+    }, title: title ?? labelDialogConfirmation);
 
     return value;
   }
 
+  /// [title] and [submitText] fall back to "Enter Text" and "Submit",
+  /// translated. [description] shows above the field. Returns the text as
+  /// it is when submitted ([initialText] if left alone), or null if closed.
   static Future<String?> textPrompt(BuildContext context,
-      {String title = "Enter Text",
-      String submitText = "Submit",
+      {String? title,
+      String? description,
+      String? submitText,
       String? hintText,
       String? initialText,
       bool multiline = false,
       bool dangerous = false}) {
     return show<String?>(context, builder: (context) {
-      String result = "";
-      TextEditingController controller =
-          TextEditingController(text: initialText);
-
-      return SizedBox(
-        width: MediaQuery.of(context).desktop ? 500 : null,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: controller,
-                maxLines: multiline ? null : 1,
-                decoration: InputDecoration(hintText: hintText),
-                onChanged: (value) => result = value,
-              ),
-              SizedBox(
-                height: 10,
-              ),
-              tiamat.Button(
-                text: submitText == "Submit"
-                    ? CommonStrings.promptSubmit
-                    : submitText,
-                onTap: () {
-                  print(result);
-                  Navigator.of(context).pop(result);
-                },
-              )
-            ],
-          ),
-        ),
+      return _TextPromptView(
+        description: description,
+        submitText: submitText,
+        hintText: hintText,
+        initialText: initialText,
+        multiline: multiline,
       );
-    }, title: title);
+    }, title: title ?? labelAppEnterText);
   }
 }
 
+class _TextPromptView extends StatefulWidget {
+  const _TextPromptView(
+      {this.description,
+      this.submitText,
+      this.hintText,
+      this.initialText,
+      this.multiline = false});
+  final String? description;
+  final String? submitText;
+  final String? hintText;
+  final String? initialText;
+  final bool multiline;
+
+  @override
+  State<_TextPromptView> createState() => _TextPromptViewState();
+}
+
+class _TextPromptViewState extends State<_TextPromptView> {
+  // Kept in the state: the bottom sheet rebuilds its content when the
+  // keyboard opens, which would otherwise reset what was typed.
+  late final controller = TextEditingController(text: widget.initialText);
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  void submit() => Navigator.of(context).pop(controller.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: MediaQuery.sizeOf(context).desktop ? 500 : null,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.description != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
+                child: tiamat.Text.labelLow(widget.description!),
+              ),
+            TextField(
+              controller: controller,
+              maxLines: widget.multiline ? null : 1,
+              decoration: InputDecoration(hintText: widget.hintText),
+              onSubmitted: widget.multiline ? null : (_) => submit(),
+            ),
+            SizedBox(
+              height: 10,
+            ),
+            tiamat.Button(
+              text: widget.submitText ?? CommonStrings.promptSubmit,
+              onTap: submit,
+            )
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// [prompt], [confirmationText] and [cancelText] fall back to "Are you
+/// sure?", "Yes" and "No", translated. [title] is the dialog's, shown by
+/// [AdaptiveDialog.show].
 class ConfirmationDialogWidget extends StatefulWidget {
-  final String prompt;
-  final String title;
-  final String confirmationText;
-  final String cancelText;
+  final String? prompt;
+  final String? title;
+  final String? confirmationText;
+  final String? cancelText;
   final Widget Function(BuildContext)? customBuilder;
   final bool showRememberChoice;
   final bool defaultRememberSetting;
@@ -288,10 +357,10 @@ class ConfirmationDialogWidget extends StatefulWidget {
 
   const ConfirmationDialogWidget({
     super.key,
-    this.prompt = "Are you sure?",
-    this.title = "Confirmation",
-    this.confirmationText = "Yes",
-    this.cancelText = "No",
+    this.prompt,
+    this.title,
+    this.confirmationText,
+    this.cancelText,
     this.customBuilder,
     this.showRememberChoice = false,
     this.defaultRememberSetting = false,
@@ -315,7 +384,7 @@ class _ConfirmationDialogWidgetState extends State<ConfirmationDialogWidget> {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: MediaQuery.of(context).desktop ? 500 : null,
+      width: MediaQuery.sizeOf(context).desktop ? 500 : null,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
         child: Column(
@@ -334,7 +403,7 @@ class _ConfirmationDialogWidgetState extends State<ConfirmationDialogWidget> {
                             fontFamily: "Code",
                             backgroundColor: ColorScheme.of(context)
                                 .surfaceContainerLowest)),
-                data: widget.prompt,
+                data: widget.prompt ?? AdaptiveDialog.messageAppAreYouSure,
               ),
             ),
             if (widget.customBuilder != null) widget.customBuilder!(context),
@@ -345,7 +414,10 @@ class _ConfirmationDialogWidgetState extends State<ConfirmationDialogWidget> {
                     child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    tiamat.Text.labelLow("Remember choice: "),
+                    Flexible(
+                      child: tiamat.Text.labelLow(
+                          AdaptiveDialog.labelAppRememberChoice),
+                    ),
                     tiamat.Switch(
                       state: rememberChoice,
                       onChanged: (value) {
@@ -361,9 +433,7 @@ class _ConfirmationDialogWidgetState extends State<ConfirmationDialogWidget> {
               height: 40,
               child: tiamat.Button(
                 type: widget.dangerous ? ButtonType.danger : ButtonType.primary,
-                text: widget.confirmationText == "Yes"
-                    ? CommonStrings.promptYes
-                    : widget.confirmationText,
+                text: widget.confirmationText ?? CommonStrings.promptYes,
                 onTap: () => Navigator.pop(
                     context, DialogResult(true, remember: rememberChoice)),
               ),
@@ -372,9 +442,7 @@ class _ConfirmationDialogWidgetState extends State<ConfirmationDialogWidget> {
               height: 5,
             ),
             tiamat.Button.secondary(
-              text: widget.cancelText == "No"
-                  ? CommonStrings.promptNo
-                  : widget.cancelText,
+              text: widget.cancelText ?? CommonStrings.promptNo,
               onTap: () => Navigator.pop(
                   context, DialogResult(false, remember: rememberChoice)),
             )
@@ -444,8 +512,6 @@ class __SelectMultipleViewState<T> extends State<_SelectMultipleView<T>> {
                                       selection.remove(i);
                                     });
                                   }
-
-                                  print(selection);
                                 }),
                             widget.itemBuilder(context, i)
                           ],

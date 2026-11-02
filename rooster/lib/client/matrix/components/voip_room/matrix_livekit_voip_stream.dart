@@ -10,6 +10,7 @@ import 'package:rooster/main.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:intl/intl.dart' show Intl;
 import 'package:livekit_client/livekit_client.dart';
 
 /// Sets the playback volume of one audio track.
@@ -313,6 +314,12 @@ class MatrixLivekitVoipStream implements VoipStream {
   static bool isMusicTrackName(String? name) =>
       name == musicTrackName || name == _renamedMusicTrackName;
 
+  /// Name our soundboard presses are published under, for clients that do
+  /// not play them from the press (soundboard_broadcast.dart). Rooster plays
+  /// them from the press, at each listener's soundboard volume, and never
+  /// subscribes to this; another client hears it as the presser's audio.
+  static const soundboardTrackName = 'commet-soundboard';
+
   /// Maps a LiveKit publication's kind and source onto the app's stream
   /// types. System audio captured with a screen share is its own type so the
   /// call grid can fold it into the screen share tile instead of drawing a
@@ -346,11 +353,24 @@ class MatrixLivekitVoipStream implements VoipStream {
   @override
   bool get isDeafened => deafened;
 
+  static String get labelStreamDebugIsEncrypted => Intl.message("is encrypted",
+      name: "labelStreamDebugIsEncrypted",
+      desc: "Label in the stream info developer mode shows over a call tile, "
+          "followed by true or false: whether the stream is end-to-end "
+          "encrypted. Lowercase, as a key of the JSON the box shows");
+
+  static String get labelStreamDebugEncryptionType => Intl.message(
+      "encryption type",
+      name: "labelStreamDebugEncryptionType",
+      desc: "Label in the stream info developer mode shows over a call tile, "
+          "followed by the encryption the stream uses (a technical name). "
+          "Lowercase, as a key of the JSON the box shows");
+
   @override
   // TODO: implement stats
   String get stats => JsonEncoder.withIndent("  ").convert({
-        "is encrypted": publication.participant.isEncrypted,
-        "encryption type": publication.encryptionType.toString(),
+        labelStreamDebugIsEncrypted: publication.participant.isEncrypted,
+        labelStreamDebugEncryptionType: publication.encryptionType.toString(),
       });
 
   @override

@@ -22,6 +22,7 @@ use std::ffi::{c_char, c_void, CStr};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
 
+use crate::board::Board;
 use crate::{clip, growing, Player, ERR_ARGS};
 
 /// Bump when `MusicStatus` or the function signatures change.
@@ -214,6 +215,100 @@ pub unsafe extern "C" fn rooster_music_pull(
         return 0;
     };
     catch_unwind(AssertUnwindSafe(|| player.pull(out, channels, sample_rate))).unwrap_or_else(
+        |_| {
+            out.fill(0);
+            0
+        },
+    )
+}
+
+// The soundboard's track (see `crate::board`). `rooster_board_pull` has
+// `rooster_music_pull`'s signature, so the WebRTC plugin feeds a track from
+// either the same way. `play` and `stop` may run concurrently with `pull`;
+// `free` only once pulls have stopped.
+
+/// Bump when the board signatures change.
+pub const BOARD_ABI_VERSION: u32 = 1;
+
+unsafe fn board<'a>(p: *mut c_void) -> Option<&'a Board> {
+    (p as *const Board).as_ref()
+}
+
+#[no_mangle]
+pub extern "C" fn rooster_board_abi_version() -> u32 {
+    BOARD_ABI_VERSION
+}
+
+#[no_mangle]
+pub extern "C" fn rooster_board_new() -> *mut c_void {
+    catch_unwind(|| Box::into_raw(Box::new(Board::new())) as *mut c_void)
+        .unwrap_or(std::ptr::null_mut())
+}
+
+/// # Safety
+/// `p` must be null or a handle from `rooster_board_new`, not freed, and
+/// no `pull` may be running or follow.
+#[no_mangle]
+pub unsafe extern "C" fn rooster_board_free(p: *mut c_void) {
+    if !p.is_null() {
+        let _ = catch_unwind(AssertUnwindSafe(|| drop(Box::from_raw(p as *mut Board))));
+    }
+}
+
+/// Plays `len` samples (48 kHz interleaved stereo, copied) under `id`.
+/// Returns 0, or -1 for bad arguments.
+///
+/// # Safety
+/// `p` null or a live handle; `samples` readable for `len` floats.
+#[no_mangle]
+pub unsafe extern "C" fn rooster_board_play(
+    p: *mut c_void,
+    id: u64,
+    samples: *const f32,
+    len: usize,
+    gain: f32,
+) -> i32 {
+    let Some(board) = board(p) else { return ERR_ARGS };
+    if samples.is_null() || len % 2 != 0 {
+        return ERR_ARGS;
+    }
+    let samples = std::slice::from_raw_parts(samples, len).to_vec();
+    catch_unwind(AssertUnwindSafe(|| board.play(id, samples, gain)))
+        .map(|_| 0)
+        .unwrap_or(ERR_ARGS)
+}
+
+/// # Safety
+/// `p` null or a live handle.
+#[no_mangle]
+pub unsafe extern "C" fn rooster_board_stop(p: *mut c_void, id: u64) {
+    if let Some(board) = board(p) {
+        let _ = catch_unwind(AssertUnwindSafe(|| board.stop(id)));
+    }
+}
+
+/// # Safety
+/// As `rooster_music_pull`.
+#[no_mangle]
+pub unsafe extern "C" fn rooster_board_pull(
+    ctx: *mut c_void,
+    out: *mut i16,
+    frames: usize,
+    channels: usize,
+    sample_rate: i32,
+) -> usize {
+    if out.is_null() {
+        return 0;
+    }
+    let Some(len) = frames.checked_mul(channels) else {
+        return 0;
+    };
+    let out = std::slice::from_raw_parts_mut(out, len);
+    let Some(board) = board(ctx) else {
+        out.fill(0);
+        return 0;
+    };
+    catch_unwind(AssertUnwindSafe(|| board.pull(out, channels, sample_rate))).unwrap_or_else(
         |_| {
             out.fill(0);
             0

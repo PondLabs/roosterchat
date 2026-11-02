@@ -133,7 +133,13 @@ class ClientManager {
       ];
 
       onClientAdded.add(_clients.length - 1);
-    } catch (error) {}
+    } catch (error, trace) {
+      // A room or space that would not add left the account half
+      // registered, with no subscriptions and no onClientAdded, and the
+      // reason nowhere.
+      Log.onError(error, trace,
+          content: "Could not register the account ${client.identifier}");
+    }
   }
 
   void _onClientConnectionStatusChanged(

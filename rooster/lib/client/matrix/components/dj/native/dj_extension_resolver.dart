@@ -2,6 +2,7 @@
 // asking the source extension that takes the link (docs/source-extensions.md).
 import 'dart:math';
 
+import 'package:intl/intl.dart';
 import 'package:rooster/client/components/dj/dj_engine.dart';
 import 'package:rooster/client/components/dj/dj_extension_manifest.dart';
 import 'package:rooster/client/components/dj/dj_links.dart';
@@ -40,14 +41,22 @@ class DjExtensionResolver implements DjResolver {
     await extensions.load();
     final extension = extensions.forHost(link.host);
     if (extension == null) {
-      throw StateError('no installed source plays links from ${link.host}');
+      throw StateError(errorDjNoSourceForLink(link.host));
     }
     final answer = await DjExtensions.resolve(extension, link.url);
     final tracks = tracksFrom(answer,
         extensionId: extension.id, addedBy: addedBy, newId: _newId);
-    if (tracks.isEmpty) throw StateError('Nothing playable in that link');
+    if (tracks.isEmpty) throw StateError(errorDjNothingPlayable);
     return tracks;
   }
+
+  static String errorDjNoSourceForLink(String host) =>
+      Intl.message("no installed source plays links from $host",
+          name: "errorDjNoSourceForLink",
+          args: [host],
+          desc: "Why a link pasted in the DJ booth could not be added: no "
+              "installed source extension takes links from that site (the "
+              "placeholder). Follows \"Couldn't add <link>:\"");
 
   /// Queue entries from a `resolve` answer's tracks, leaving out what is
   /// not a track.

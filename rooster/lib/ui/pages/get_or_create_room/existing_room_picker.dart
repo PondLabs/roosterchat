@@ -180,8 +180,10 @@ class _ExistingRoomPickerState extends State<ExistingRoomPicker> {
                           SizedBox(
                             width: 8,
                           ),
-                          Column(
-                            children: [tiamat.Text.label(displayName)],
+                          Flexible(
+                            child: Column(
+                              children: [tiamat.Text.label(displayName)],
+                            ),
                           )
                         ],
                       ),

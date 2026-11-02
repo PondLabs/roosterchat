@@ -10,6 +10,7 @@ import 'package:rooster/config/platform_utils.dart';
 import 'package:rooster/config/rust_library.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:ffi/ffi.dart';
+import 'package:intl/intl.dart';
 
 /// Mirrors `dj_audio::clip::ClipAudio`.
 final class ClipAudio extends Struct {
@@ -43,15 +44,45 @@ typedef _FreeBytesNative = Void Function(Pointer<Uint8> data, Size len);
 typedef _FreeBytes = void Function(Pointer<Uint8> data, int len);
 
 /// A clip function failed; [code] is its return value.
+///
+/// Thrown on a background isolate, which has no translations: [message] is
+/// read on the main one, where the import turns it into what it shows.
 class ClipCodecException implements Exception {
   final int code;
   const ClipCodecException(this.code);
 
+  static String get errorSoundboardCannotOpenAudio =>
+      Intl.message("That file can't be opened as audio",
+          name: "errorSoundboardCannotOpenAudio",
+          desc: "Why a file or link picked for a new soundboard sound could "
+              "not be used: it is not an audio or video file the app can "
+              "read");
+
+  static String get errorSoundboardCannotDecodeAudio =>
+      Intl.message("That audio can't be decoded",
+          name: "errorSoundboardCannotDecodeAudio",
+          desc: "Why a file or link picked for a new soundboard sound could "
+              "not be used: its audio is damaged or in a format the app "
+              "can't read");
+
+  static String get errorSoundboardCannotEncodeSound =>
+      Intl.message("The sound couldn't be encoded",
+          name: "errorSoundboardCannotEncodeSound",
+          desc: "Why a new soundboard sound could not be made: compressing "
+              "the trimmed audio into the stored file failed");
+
+  static String errorSoundboardAudioToolsMisused(int code) => Intl.message(
+      "The audio tools were called wrongly ($code)",
+      name: "errorSoundboardAudioToolsMisused",
+      args: [code],
+      desc: "Why a new soundboard sound could not be made: an internal error "
+          "in the app's audio tools. The value is the error's code (-1)");
+
   String get message => switch (code) {
-        -2 => "That file can't be opened as audio",
-        -3 => "That audio can't be decoded",
-        -4 => "The sound couldn't be encoded",
-        _ => 'The audio tools were called wrongly ($code)',
+        -2 => errorSoundboardCannotOpenAudio,
+        -3 => errorSoundboardCannotDecodeAudio,
+        -4 => errorSoundboardCannotEncodeSound,
+        _ => errorSoundboardAudioToolsMisused(code),
       };
 
   @override

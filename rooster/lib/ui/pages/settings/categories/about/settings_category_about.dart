@@ -30,6 +30,23 @@ class SettingsCategoryAbout implements SettingsCategory {
       name: "labelSettingsAppInfo",
       desc: "Label for the app info settings page");
 
+  static String get promptSettingsSourceCode => Intl.message("Source Code",
+      name: "promptSettingsSourceCode",
+      desc: "Link under the app's version (Settings > About, and the sign-in "
+          "screen) to the app's source code on GitHub");
+
+  static String get promptSettingsLicense => Intl.message("License",
+      name: "promptSettingsLicense",
+      desc: "Link under the app's version (Settings > About, and the sign-in "
+          "screen) to the app's software license");
+
+  static String get promptSettingsOpenSourceLicenses =>
+      Intl.message("Open Source Licenses",
+          name: "promptSettingsOpenSourceLicenses",
+          desc: "Link under the app's version (Settings > About, and the "
+              "sign-in screen) to the licenses of the open source software "
+              "the app uses");
+
   @override
   List<SettingsTab> get tabs => List.from([
         SettingsTab(
@@ -62,7 +79,7 @@ class SettingsCategoryAbout implements SettingsCategory {
           Text.rich(
             TextSpan(
                 style: const TextStyle(decoration: TextDecoration.underline),
-                text: "Source Code",
+                text: promptSettingsSourceCode,
                 recognizer: TapGestureRecognizer()
                   ..onTap = () => LinkUtils.open(
                       Uri.parse("https://github.com/PondLabs/roosterchat"),
@@ -72,7 +89,7 @@ class SettingsCategoryAbout implements SettingsCategory {
           Text.rich(
             TextSpan(
                 style: const TextStyle(decoration: TextDecoration.underline),
-                text: "License",
+                text: promptSettingsLicense,
                 recognizer: TapGestureRecognizer()
                   ..onTap = () => LinkUtils.open(
                       Uri.parse(
@@ -83,7 +100,7 @@ class SettingsCategoryAbout implements SettingsCategory {
           Text.rich(
             TextSpan(
                 style: const TextStyle(decoration: TextDecoration.underline),
-                text: "Open Source Licenses",
+                text: promptSettingsOpenSourceLicenses,
                 recognizer: TapGestureRecognizer()
                   ..onTap = () {
                     showLicensePage(context: context);
@@ -107,6 +124,25 @@ class _AppInfo extends StatefulWidget {
 
 class _AppInfoState extends State<_AppInfo> {
   BaseDeviceInfo? deviceInfo;
+
+  String labelSettingsBuildDate(String date) => Intl.message("Built: $date",
+      name: "labelSettingsBuildDate",
+      args: [date],
+      desc: "Settings > About, under the app's version: the date this version "
+          "of the app was built, already formatted");
+
+  String get labelDeveloperNoEncryptionLibrary =>
+      Intl.message("No encryption library found",
+          name: "labelDeveloperNoEncryptionLibrary",
+          desc: "Settings > About, in developer mode: the library that "
+              "encrypts messages could not be loaded");
+
+  String get labelDeveloperVodozemacInitialized =>
+      Intl.message("Vodozemac Initialized",
+          name: "labelDeveloperVodozemacInitialized",
+          desc: "Settings > About, in developer mode: the encryption library "
+              "(Vodozemac, a product name) is loaded and ready");
+
   @override
   void initState() {
     super.initState();
@@ -143,7 +179,8 @@ class _AppInfoState extends State<_AppInfo> {
             Flexible(
               child: Row(
                 children: [
-                  Column(
+                  Flexible(
+                      child: Column(
                     mainAxisAlignment: MainAxisAlignment.start,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -152,11 +189,11 @@ class _AppInfoState extends State<_AppInfo> {
                           BuildConfig.VERSION_TAG),
                       tiamat.Text.labelLow(
                           "${BuildConfig.GIT_HASH.substring(0, 7)} ${BuildConfig.BUILD_DETAIL}"),
-                      tiamat.Text.labelLow("Built: " +
+                      tiamat.Text.labelLow(labelSettingsBuildDate(
                           intl.DateFormat(intl.DateFormat.YEAR_MONTH_DAY)
-                              .format(BuildConfig.BUILD_DATE)),
+                              .format(BuildConfig.BUILD_DATE))),
                       if (deviceInfo != null)
-                        Row(
+                        Wrap(
                           spacing: 10,
                           children: [
                             if (deviceInfo!.data["name"] is String)
@@ -179,7 +216,7 @@ class _AppInfoState extends State<_AppInfo> {
                       if (preferences.developerMode.value)
                         tiamat.Text.labelLow(commandLineArgs.join(" "))
                     ],
-                  ),
+                  )),
                   Padding(
                     padding: const EdgeInsets.all(12.0),
                     child: tiamat.IconButton(
@@ -199,7 +236,7 @@ class _AppInfoState extends State<_AppInfo> {
 
   String getEncryptionInfo() {
     var info = getVodozemacVersion();
-    info ??= "No encryption library found";
+    info ??= labelDeveloperNoEncryptionLibrary;
     return info;
   }
 
@@ -207,7 +244,7 @@ class _AppInfoState extends State<_AppInfo> {
     try {
       var initialized = vod.isInitialized();
       if (initialized) {
-        return "Vodozemac Initialized";
+        return labelDeveloperVodozemacInitialized;
       }
 
       return null;

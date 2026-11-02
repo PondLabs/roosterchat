@@ -8,13 +8,16 @@ import 'package:rooster/client/components/activities/activities_component.dart';
 import 'package:rooster/client/components/voip/audio_processing/audio_processing_manager.dart';
 import 'package:rooster/client/components/voip/audio_processing/microphone_noise_suppression.dart';
 import 'package:rooster/client/components/voip/audio_processing/noise_suppression_notice.dart';
+import 'package:rooster/client/components/voip/call_connection.dart';
 import 'package:rooster/client/components/voip/deafen_rule.dart';
 import 'package:rooster/client/components/voip/microphone_health_notice.dart';
 import 'package:rooster/client/components/voip/remote_audio_watch.dart';
 import 'package:rooster/client/components/voip/share_cues.dart';
+import 'package:rooster/client/components/voip/screen_capture_support.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/client/components/user_presence/user_idle_watcher.dart';
+import 'package:rooster/client/components/user_presence/user_presence_component.dart';
 import 'package:rooster/client/components/voip/webrtc_default_devices.dart';
 import 'package:rooster/client/components/voip/webrtc_screencapture_source.dart';
 import 'package:rooster/client/components/voip/android_screencapture_source.dart';
@@ -76,7 +79,7 @@ lk.VideoPublishOptions buildScreenSharePublishOptions({
 }
 
 class MatrixLivekitVoipSession
-    implements VoipSession, ScreenShareWatching, CallRoster {
+    implements VoipSession, ScreenShareWatching, CallRoster, CallConnection {
   MatrixRoom room;
   lk.Room livekitRoom;
   Timer? heartbeatTimer;
@@ -97,16 +100,17 @@ class MatrixLivekitVoipSession
   final ScreenShareWatchList _watchList = ScreenShareWatchList(
       autoWatch: () => preferences.voipAutoWatchScreenShares.value);
 
-  /// The capture tracks this session published for its screen share: the
-  /// screen video and, when system audio is shared, the screen audio. The
-  /// session keeps them because LiveKit's publication map is not a handle on
-  /// the capture — a full reconnect clears it while the OS capture keeps
-  /// running — and [stopScreenshare] still has to stop it (issue #63).
+  /// The capture tracks this session published: the screen share (the screen
+  /// video and, when system audio is shared, the screen audio) and the
+  /// camera. The session keeps them because LiveKit's publication map is not
+  /// a handle on the capture — a full reconnect clears it while the OS
+  /// capture keeps running — and the stops still have to stop them
+  /// (issues #63 and #64).
   final List<lk.LocalTrack> _captureTracks = [];
 
   /// The capture tracks above that the session has stopped. A full reconnect
   /// republishes the track objects LiveKit held before it cleared its map, so
-  /// identity against these is what tells a share that was already stopped
+  /// identity against these is what tells a capture that was already stopped
   /// apart from a new one (issue #64).
   final List<lk.LocalTrack> _stoppedCaptures = [];
 
@@ -185,19 +189,27 @@ class MatrixLivekitVoipSession
     // reaches the call.
     _settingsSub =
         preferences.onSettingChanged.listen((_) => _noiseSuppression.update());
+    _lastConnectedAt = _now();
     _dspWatchdog = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (state != VoipState.ended) _watchVoice();
+      if (state == VoipState.ended) return;
+      _watchConnection();
+      _watchVoice();
+      _sampleConnection();
     });
 
-    // Being away from the machine is part of what our membership says, so
-    // the channel list shows it for someone who is sitting in the call
-    // without touching anything.
-    _idleWatcher.isAway.addListener(_publishMembershipState);
+    // Being away from the machine, or invisible, is part of what our
+    // membership says, so the channel list shows it for someone who is
+    // sitting in the call without touching anything.
+    _idleWatcher.status.addListener(_publishMembershipState);
 
     // Being the DJ, and whether the music plays, is in our membership too,
     // so people outside the call see the booth in use.
     _dj = DjBooths.open(this, livekitRoom)
       ..addListener(_publishMembershipState);
+
+    // A denied microphone never publishes a track or emits a mute event.
+    // People outside the call must still see its initial muted state.
+    _publishMembershipState();
 
     startHeartbeat().catchError((Object e, StackTrace s) {
       Log.onError(e, s, content: "Could not start the membership heartbeat");
@@ -211,6 +223,13 @@ class MatrixLivekitVoipSession
   StreamSubscription? _settingsSub;
 
   final UserIdleWatcher _idleWatcher = UserIdleWatcher.instance;
+
+  /// The chosen status our membership carries where presence cannot
+  /// (MatrixCallMembership.statusKey).
+  String? get _membershipStatus => switch (_idleWatcher.status.value) {
+        UserPresenceStatus.offline => "invisible",
+        _ => null,
+      };
 
   /// Who takes the noise out of our microphone, kept true for the call: our
   /// DSP, or WebRTC's (the browser's) own suppressor when ours is off or
@@ -294,6 +313,7 @@ class MatrixLivekitVoipSession
     for (final participant in livekitRoom.remoteParticipants.values) {
       for (final publication in participant.trackPublications.values) {
         if (publication.kind != lk.TrackType.AUDIO) continue;
+        if (_isSoundboard(publication)) continue;
         publications[publication.sid] = publication;
         final track = publication.track;
         int? packets;
@@ -326,10 +346,7 @@ class MatrixLivekitVoipSession
 
     for (final sid in _remoteAudio.check(vitals).keys) {
       final publication = publications[sid]!;
-      bool stillWanted() =>
-          state != VoipState.ended &&
-          _watchList.shouldSubscribe(
-              publication.participant.identity, publication.source);
+      bool stillWanted() => state != VoipState.ended && _wants(publication);
       unawaited(publication
           .resubscribe(stillWanted: stillWanted)
           .catchError((Object e, StackTrace s) {
@@ -366,6 +383,238 @@ class MatrixLivekitVoipSession
     }
   }
 
+  /// Longer than LiveKit's own reconnect attempts take (about 45 s of
+  /// waits, plus the attempts themselves).
+  static const lostConnectionTimeout = Duration(minutes: 3);
+
+  /// How long LiveKit has to be connected before its participants are
+  /// everyone in the call ([rosterComplete]).
+  static const rosterSettleTime = Duration(seconds: 30);
+
+  /// How long LiveKit may be gone before we stop being listed in the call.
+  /// A resume after a network blip takes a second or two.
+  static const stepOutAfter = Duration(seconds: 5);
+
+  /// How long LiveKit may be gone before we say the call is reconnecting.
+  /// A resume after a blip takes about a second, and passes unnoticed.
+  static const reconnectingAfter = Duration(seconds: 2);
+
+  bool _reconnecting = false;
+
+  @override
+  bool get reconnecting => _reconnecting;
+
+  /// The connection dropped, or came back. Like Discord, the call says so
+  /// with the leave and join sounds, and while it is gone shows nobody
+  /// else: their streams, speaking or not, froze when it dropped.
+  void _setReconnecting(bool value) {
+    _reconnecting = value;
+    if (value) {
+      Log.w("Livekit connection lost, showing the call as reconnecting");
+      _callManager?.leftCallSound();
+    } else {
+      Log.i("Livekit connection back");
+      _callManager?.joinCallSound();
+    }
+    _stateChanged.add(());
+  }
+
+  late DateTime _lastConnectedAt;
+  DateTime? _connectedSince;
+  bool _rosterComplete = false;
+
+  /// Whether we took our membership down while LiveKit is gone, and whether
+  /// that was tried in this time without LiveKit.
+  bool _steppedOut = false;
+  bool _stepOutTried = false;
+
+  /// Takes our membership down while LiveKit is gone, so everyone outside
+  /// the call stops listing us within seconds, not when we hang up: sends
+  /// the delayed leave, or, with none (matrix.org stopped allowing them on
+  /// 2026-10-07), clears the membership itself. The heartbeat keeps nothing
+  /// up while LiveKit is gone; once it is back the membership is written
+  /// again ([_comeBack]). Where the request fails (the network is what
+  /// went), a delayed leave fires on its own, and a short window
+  /// ([MatrixCallMembership.unguardedLifetime]) lapses on its own.
+  Future<void> _stepOut() async {
+    if (_leaving) return;
+    final current =
+        room.matrixRoom.states[MatrixVoipRoomComponent.callMemberStateEvent]
+            ?[_ownMembershipKey];
+    if (current != null && current.content["application"] != null) {
+      _lastMembership = Map.of(current.content);
+      _joinedAt ??= MatrixCallMembership.joinedAt(
+          current.content, current is Event ? current.originServerTs : null);
+    }
+    if (_lastMembership == null) return;
+    Log.w("Livekit has not been connected for ${stepOutAfter.inSeconds} s, "
+        "leaving the call's member list until it is back");
+    final delayId = _delayedLeaveId ?? heartbeatDelayId;
+    try {
+      if (delayId != null) {
+        await CallMembershipWrites.clearing(
+            _ownMembershipKey, _delayedLeaveAction(delayId, "send"));
+      } else {
+        await clearRoomCallState();
+      }
+    } catch (e) {
+      Log.w("Could not leave the member list, it lapses on its own: $e");
+      return;
+    }
+    if (_delayedLeaveId == delayId) _delayedLeaveId = null;
+    if (heartbeatDelayId == delayId) heartbeatDelayId = null;
+    _steppedOut = true;
+  }
+
+  /// Back in LiveKit after [_stepOut]: our membership goes up again. Our
+  /// clear has gone through by then, so this lands after it, whether or not
+  /// sync has shown it yet.
+  /// Coming back is tried from the one-second connection watch, so a
+  /// homeserver that refuses the write (rate limited, slow, the network
+  /// still flapping) is asked again after a wait that doubles from five
+  /// seconds to a minute, not once a second.
+  DateTime? _lastComeBackAttempt;
+  int _comeBackFailures = 0;
+
+  Duration get _comeBackRetryInterval {
+    final doublings = min(max(_comeBackFailures - 1, 0), 4);
+    return const Duration(seconds: 5) * (1 << doublings);
+  }
+
+  Future<void> _comeBack() async {
+    final membership = _lastMembership;
+    if (!_steppedOut || membership == null || _leaving) return;
+    if (_comeBackFailures > 0 &&
+        !_waited(_lastComeBackAttempt, _comeBackRetryInterval)) {
+      return;
+    }
+    _lastComeBackAttempt = _now();
+    final now = _membershipTime();
+    try {
+      await room.matrixRoom.client.setRoomStateWithKey(
+        room.matrixRoom.id,
+        MatrixVoipRoomComponent.callMemberStateEvent,
+        _ownMembershipKey,
+        MatrixCallMembership.withPublishedState(membership,
+            media: _localLiveMedia,
+            voiceState: _localVoiceState,
+            away: _idleWatcher.status.value == UserPresenceStatus.unavailable,
+            status: _membershipStatus,
+            dj: _localDj,
+            joinedAt: _joinedAt ?? now,
+            now: now,
+            window: _window),
+      );
+    } catch (_) {
+      _comeBackFailures += 1;
+      rethrow;
+    }
+    _comeBackFailures = 0;
+    _steppedOut = false;
+    Log.i("Livekit is back, in the call's member list again");
+  }
+
+  /// How long our membership's window is written for: long while the
+  /// homeserver holds a delayed leave that clears it if we die, short when
+  /// nothing would.
+  Duration get _window => heartbeatDelayId != null
+      ? MatrixCallMembership.lifetime
+      : MatrixCallMembership.unguardedLifetime;
+
+  @override
+  bool get rosterComplete => _rosterComplete;
+
+  /// Once a second: hangs up a call LiveKit has not been connected to for
+  /// [lostConnectionTimeout]. LiveKit could give up on reconnecting without
+  /// saying so (a disconnect it emitted while a full reconnect was pending
+  /// was dropped), and the session lived on with no call under it: the
+  /// heartbeat kept our membership up, and everyone saw us in a call we
+  /// were not in, for hours.
+  void _watchConnection() {
+    if (_leaving) return;
+    final now = _now();
+    if (_connected()) {
+      _lastConnectedAt = now;
+      _stepOutTried = false;
+      if (_reconnecting) _setReconnecting(false);
+      // Back in the call: our membership goes back up now, not at the next
+      // heartbeat.
+      if (_steppedOut) unawaited(_beat());
+      final since = _connectedSince ??= now;
+      if (!_rosterComplete && now.difference(since) >= rosterSettleTime) {
+        _rosterComplete = true;
+        _stateChanged.add(());
+      }
+      return;
+    }
+
+    _connectedSince = null;
+    _rosterComplete = false;
+    final lostFor = now.difference(_lastConnectedAt);
+    if (lostFor >= reconnectingAfter && !_reconnecting) {
+      _setReconnecting(true);
+    }
+    if (lostFor >= stepOutAfter && !_stepOutTried) {
+      _stepOutTried = true;
+      unawaited(_stepOut());
+    }
+    if (lostFor < lostConnectionTimeout) return;
+    Log.w("Livekit has not been connected for "
+        "${lostConnectionTimeout.inMinutes} minutes "
+        "(${livekitRoom.connectionState}), ending the call");
+    unawaited(hangUpCall());
+  }
+
+  final List<CallConnectionSample> _connectionHistory = [];
+  bool _sampling = false;
+
+  @override
+  List<CallConnectionSample> get connectionHistory => _connectionHistory;
+
+  @override
+  CallConnectionQuality get connectionQuality => CallConnectionQuality.values
+      .byName((livekitRoom.localParticipant?.connectionQuality ??
+              lk.ConnectionQuality.unknown)
+          .name);
+
+  @override
+  String? get serverName =>
+      livekitRoom.serverRegion ??
+      // ignore: invalid_use_of_internal_member
+      Uri.tryParse(livekitRoom.engine.url ?? "")?.host;
+
+  @override
+  bool get encrypted => keyProvider != null;
+
+  /// Once a second: the ping to the media server and how many of our
+  /// packets it lost, from the peer connection we publish on (the one we
+  /// receive on when we publish nothing).
+  Future<void> _sampleConnection() async {
+    if (_sampling || !_connected()) return;
+    _sampling = true;
+    try {
+      // ignore: invalid_use_of_internal_member
+      final engine = livekitRoom.engine;
+      // ignore: invalid_use_of_internal_member
+      final pc = (engine.publisher ?? engine.subscriber)?.pc;
+      if (pc == null) return;
+      final reports = await pc.getStats().timeout(const Duration(seconds: 2));
+      final now = _now();
+      _connectionHistory.add(CallConnectionSample.fromStats(now, reports,
+          previous: _connectionHistory.lastOrNull));
+      _connectionHistory.removeWhere(
+          (s) => now.difference(s.at) > CallConnection.historyLength);
+    } catch (_) {
+      // Nothing this second; the graph has a gap.
+    } finally {
+      _sampling = false;
+    }
+  }
+
+  /// One pass of the connection watch, for tests.
+  @visibleForTesting
+  void debugWatchConnection() => _watchConnection();
+
   lk.EventsListener<lk.RoomEvent>? _roomListener;
   Timer? _volumeTimer;
 
@@ -379,8 +628,9 @@ class MatrixLivekitVoipSession
         if (entry.value.muted && entry.value.kind == lk.TrackType.VIDEO) {
           continue;
         }
+        if (_isSoundboard(entry.value)) continue;
 
-        streams.add(
+        _streams.add(
             MatrixLivekitVoipStream(entry.value, room.client.self!.identifier));
       }
     }
@@ -402,14 +652,16 @@ class MatrixLivekitVoipSession
         // for when it unmutes.
         _syncSubscription(stream.value);
 
-        if (_hiddenWhileMuted(stream.value)) continue;
+        if (_hiddenWhileMuted(stream.value) || _isSoundboard(stream.value)) {
+          continue;
+        }
 
         String userId = entry.key;
         userId = userId.split(":").getRange(0, 2).join(":");
 
         final s = MatrixLivekitVoipStream(stream.value, userId, watching: this);
         _applyStreamVolume(s);
-        streams.add(s);
+        _streams.add(s);
       }
     }
   }
@@ -421,7 +673,7 @@ class MatrixLivekitVoipSession
   }
 
   void onTrackStreamEvent(lk.TrackStreamStateUpdatedEvent event) {
-    for (var track in streams) {
+    for (var track in _streams) {
       final t = track as MatrixLivekitVoipStream;
       if (t.publication.sid == event.publication.sid) {
         t.onStreamUpdatedEvent();
@@ -439,7 +691,7 @@ class MatrixLivekitVoipSession
       _removeStreamsWithSid(event.publication.sid);
     }
 
-    for (var track in streams) {
+    for (var track in _streams) {
       final t = track as MatrixLivekitVoipStream;
       if (t.publication.sid == event.publication.sid) {
         t.onStreamUpdatedEvent();
@@ -452,10 +704,11 @@ class MatrixLivekitVoipSession
 
   void onTrackUnmutedEvent(lk.TrackUnmutedEvent event) {
     _updateShareCues();
+    if (_isSoundboard(event.publication)) return;
     final participant =
         event.participant.identity.split(":").getRange(0, 2).join(":");
 
-    for (var track in streams) {
+    for (var track in _streams) {
       final t = track as MatrixLivekitVoipStream;
       if (t.publication.sid == event.publication.sid) {
         t.onStreamUpdatedEvent();
@@ -465,7 +718,7 @@ class MatrixLivekitVoipSession
     // A stream we already have (a microphone, a muted screen share) still
     // changed: the room list's mute icon reads it, and would otherwise keep
     // showing a remote member as muted until something else refreshed it.
-    if (streams.any((e) => e.streamId == event.publication.sid)) {
+    if (_streams.any((e) => e.streamId == event.publication.sid)) {
       _stateChanged.add(());
       _publishMembershipState();
       return;
@@ -478,7 +731,7 @@ class MatrixLivekitVoipSession
     s.deafened = remote
         ? _deafenedIdentities.contains(event.participant.identity)
         : _isDeafened;
-    streams.add(s);
+    _streams.add(s);
     _stateChanged.add(());
     _publishMembershipState();
   }
@@ -493,7 +746,8 @@ class MatrixLivekitVoipSession
     }
     _syncSubscription(event.publication);
 
-    if (!_hiddenWhileMuted(event.publication)) {
+    if (!_hiddenWhileMuted(event.publication) &&
+        !_isSoundboard(event.publication)) {
       _addRemoteStream(event.participant, event.publication);
     }
     _stateChanged.add(());
@@ -514,18 +768,18 @@ class MatrixLivekitVoipSession
     final s = MatrixLivekitVoipStream(publication, userId, watching: this);
     _applyStreamVolume(s);
     s.deafened = _deafenedIdentities.contains(participant.identity);
-    streams.add(s);
+    _streams.add(s);
     return s;
   }
 
-  Iterable<MatrixLivekitVoipStream> _streamsWithSid(String sid) => streams
+  Iterable<MatrixLivekitVoipStream> _streamsWithSid(String sid) => _streams
       .whereType<MatrixLivekitVoipStream>()
       .where((s) => s.publication.sid == sid);
 
   /// Removes the streams of a publication and releases what they hold.
   void _removeStreamsWithSid(String sid) {
     final removed = _streamsWithSid(sid).toList();
-    streams.removeWhere(removed.contains);
+    _streams.removeWhere(removed.contains);
     for (final stream in removed) {
       stream.dispose();
     }
@@ -540,8 +794,7 @@ class MatrixLivekitVoipSession
   void onTrackSubscribed(lk.TrackSubscribedEvent event) {
     // Stop watching was clicked while the subscription was still on its way:
     // unsubscribe() ignores publications without a track.
-    if (!_watchList.shouldSubscribe(
-        event.participant.identity, event.publication.source)) {
+    if (!_wants(event.publication)) {
       // Silent until it is gone: the audio element plays at full volume
       // until the unsubscribe lands, a round trip away.
       for (final stream in _streamsWithSid(event.publication.sid)) {
@@ -564,7 +817,7 @@ class MatrixLivekitVoipSession
     final outdated = _streamsWithSid(event.publication.sid)
         .where((s) => !identical(s.publication, event.publication))
         .toList();
-    streams.removeWhere(outdated.contains);
+    _streams.removeWhere(outdated.contains);
     for (final stream in outdated) {
       stream.dispose();
     }
@@ -609,16 +862,12 @@ class MatrixLivekitVoipSession
     final publication = event.participant?.getTrackPublicationBySid(sid);
     if (publication == null || publication.subscribed) return;
     // Not for a screen share the user stopped watching in the meantime.
-    if (!_watchList.shouldSubscribe(
-        publication.participant.identity, publication.source)) {
+    if (!_wants(publication)) {
       return;
     }
     try {
       await publication.resubscribe(
-          stillWanted: () =>
-              state != VoipState.ended &&
-              _watchList.shouldSubscribe(
-                  publication.participant.identity, publication.source));
+          stillWanted: () => state != VoipState.ended && _wants(publication));
     } catch (e, s) {
       Log.onError(e, s, content: "Could not subscribe to track $sid again");
     }
@@ -716,7 +965,7 @@ class MatrixLivekitVoipSession
       }
     }
 
-    final hasRemoteStreams = streams
+    final hasRemoteStreams = _streams
         .whereType<MatrixLivekitVoipStream>()
         .any((s) => s.publication is lk.RemoteTrackPublication);
     // The rebuild has not happened yet: dropping everything now would leave
@@ -727,13 +976,13 @@ class MatrixLivekitVoipSession
     }
 
     // Streams of publications that are gone or were rebuilt.
-    final outdated = streams
+    final outdated = _streams
         .whereType<MatrixLivekitVoipStream>()
         .where((s) =>
             s.publication is lk.RemoteTrackPublication &&
             !identical(current[s.publication.sid], s.publication))
         .toList();
-    streams.removeWhere(outdated.contains);
+    _streams.removeWhere(outdated.contains);
     for (final stream in outdated) {
       stream.dispose();
     }
@@ -742,13 +991,13 @@ class MatrixLivekitVoipSession
     // without announcing that the old ones are gone.
     final localPublications =
         livekitRoom.localParticipant?.trackPublications ?? const {};
-    final staleLocal = streams
+    final staleLocal = _streams
         .whereType<MatrixLivekitVoipStream>()
         .where((s) =>
             s.publication is lk.LocalTrackPublication &&
             !identical(localPublications[s.publication.sid], s.publication))
         .toList();
-    streams.removeWhere(staleLocal.contains);
+    _streams.removeWhere(staleLocal.contains);
     for (final stream in staleLocal) {
       stream.dispose();
     }
@@ -774,7 +1023,9 @@ class MatrixLivekitVoipSession
       for (final publication in participant.trackPublications.values) {
         _syncSubscription(publication);
         if (_streamsWithSid(publication.sid).isNotEmpty) continue;
-        if (_hiddenWhileMuted(publication)) continue;
+        if (_hiddenWhileMuted(publication) || _isSoundboard(publication)) {
+          continue;
+        }
         _addRemoteStream(participant, publication);
       }
     }
@@ -792,9 +1043,20 @@ class MatrixLivekitVoipSession
 
   /// Subscribes to or unsubscribes from a remote publication, as
   /// [_watchList] wants.
+  /// A soundboard track, ours or anyone's: Rooster plays soundboard presses
+  /// from the press itself, so it never subscribes to one and never makes a
+  /// stream (or a tile) of it (MatrixLivekitVoipStream.soundboardTrackName).
+  static bool _isSoundboard(lk.TrackPublication publication) =>
+      publication.name == MatrixLivekitVoipStream.soundboardTrackName;
+
+  /// Whether to be subscribed to [publication].
+  bool _wants(lk.RemoteTrackPublication publication) =>
+      !_isSoundboard(publication) &&
+      _watchList.shouldSubscribe(
+          publication.participant.identity, publication.source);
+
   Future<void> _syncSubscription(lk.RemoteTrackPublication publication) async {
-    final subscribe = _watchList.shouldSubscribe(
-        publication.participant.identity, publication.source);
+    final subscribe = _wants(publication);
     if (subscribe == publication.subscribed) return;
     try {
       if (subscribe) {
@@ -825,7 +1087,7 @@ class MatrixLivekitVoipSession
       await _syncScreenShare(participant);
     }
 
-    for (final stream in streams.whereType<MatrixLivekitVoipStream>()) {
+    for (final stream in _streams.whereType<MatrixLivekitVoipStream>()) {
       if (stream.publication.participant.identity == participantIdentity) {
         stream.onStreamUpdatedEvent();
       }
@@ -899,8 +1161,13 @@ class MatrixLivekitVoipSession
 
   void onParticipantDisconnected(lk.ParticipantDisconnectedEvent event) {
     _updateShareCues();
-    _deafenedIdentities.remove(event.participant.identity);
-    _callManager?.endCallSound();
+    // A full reconnect emits one of these for every remote participant
+    // while nobody left: no leave sound for that, and their deafened
+    // badges stay (they only broadcast again on a real join).
+    if (_connected()) {
+      _deafenedIdentities.remove(event.participant.identity);
+      _callManager?.endCallSound();
+    }
     _stateChanged.add(());
   }
 
@@ -911,8 +1178,9 @@ class MatrixLivekitVoipSession
   Set<String> get connectedUserIds => {
         if (state != VoipState.ended) ...[
           room.client.self!.identifier,
-          for (final identity in livekitRoom.remoteParticipants.keys)
-            if (_userIdOf(identity) case final String userId) userId,
+          if (!_reconnecting)
+            for (final identity in livekitRoom.remoteParticipants.keys)
+              if (_userIdOf(identity) case final String userId) userId,
         ],
       };
 
@@ -954,7 +1222,7 @@ class MatrixLivekitVoipSession
   }
 
   void _setStreamsDeafened(String identity, bool deafened) {
-    for (var stream in streams) {
+    for (var stream in _streams) {
       final s = stream as MatrixLivekitVoipStream;
       if (s.publication.participant.identity != identity) continue;
       if (s.deafened == deafened) continue;
@@ -982,11 +1250,23 @@ class MatrixLivekitVoipSession
           Iterable<lk.LocalTrack> tracks, lk.LocalTrack track) =>
       tracks.any((owned) => identical(owned, track));
 
-  /// Owns a capture track of our screen share, once. LiveKit can announce the
-  /// same track more than once: a reconnect republishes the track objects it
-  /// held before clearing its map.
+  /// The capture sources this session starts and has to stop itself: the
+  /// screen share (video and system audio) and the camera.
+  static bool _isCaptureSource(lk.TrackSource source) =>
+      ScreenShareWatchList.isScreenShareSource(source) ||
+      source == lk.TrackSource.camera;
+
+  static bool _isScreenCaptureSource(lk.TrackSource source) =>
+      ScreenShareWatchList.isScreenShareSource(source);
+
+  static bool _isCameraCaptureSource(lk.TrackSource source) =>
+      source == lk.TrackSource.camera;
+
+  /// Owning a capture track once. LiveKit can announce the same track more
+  /// than once: a reconnect republishes the track objects it held before
+  /// clearing its map.
   void _ownCaptureTrack(lk.LocalTrack track) {
-    if (!ScreenShareWatchList.isScreenShareSource(track.source)) {
+    if (!_isCaptureSource(track.source)) {
       return;
     }
     if (_containsIdentical(_captureTracks, track)) return;
@@ -1003,15 +1283,15 @@ class MatrixLivekitVoipSession
   bool _isStoppedCapture(lk.LocalTrack track) =>
       _containsIdentical(_stoppedCaptures, track);
 
-  /// Refuses a screen share LiveKit republished after a reconnect for a
-  /// capture this session already stopped, or a publication a stop left
-  /// behind. The publication is removed through LiveKit so the sender the
-  /// republish recreated is released, and no outgoing stream is added:
-  /// participants see the share end instead of a dead tile, and the panel
-  /// offers no LIVE tile for it (issues #64 and #79).
-  Future<void> _refuseRepublishedShare(
+  /// Refuses a screen share or camera LiveKit republished after a reconnect
+  /// for a capture this session already stopped, or a publication a stop
+  /// left behind. The publication is removed through LiveKit so the sender
+  /// the republish recreated is released, and no outgoing stream is kept:
+  /// participants see it end instead of a dead tile, and the panel offers no
+  /// LIVE tile for it (issues #64 and #79).
+  Future<void> _refuseStoppedCapturePublication(
       lk.LocalTrackPublication publication) async {
-    Log.w("Refusing the screen share ${publication.sid}: "
+    Log.w("Refusing the ${publication.source.name} ${publication.sid}: "
         "its capture is no longer live");
     // A republish accepted before its capture was marked stopped left an
     // outgoing stream behind, and the refusal has to take it off the panel.
@@ -1019,7 +1299,8 @@ class MatrixLivekitVoipSession
     try {
       await livekitRoom.localParticipant?.removePublishedTrack(publication.sid);
     } catch (e, s) {
-      Log.onError(e, s, content: "Could not remove a republished screen share");
+      Log.onError(e, s,
+          content: "Could not remove a republished ${publication.source.name}");
     }
   }
 
@@ -1030,7 +1311,7 @@ class MatrixLivekitVoipSession
       _ownCaptureTrack(track);
     }
 
-    // Screen-share audio or the DJ booth's music: on desktop they switch
+    // Screen-share audio, the DJ booth's music or the soundboard: on desktop they switch
     // the microphone's echo cancellation, gain control and WebRTC noise
     // suppression off unless it is put back (shared_audio_processing.dart).
     // Also for a republished share refused below: removing a source does not
@@ -1046,12 +1327,19 @@ class MatrixLivekitVoipSession
     }
 
     // A full reconnect clears LiveKit's publication map and republishes the
-    // track objects it held. A share this session stopped must not come back:
-    // the republish is refused as soon as it arrives, so one click is enough
-    // even when the republish lands after the stop returned (issue #64).
+    // track objects it held. A share or camera this session stopped must not
+    // come back: the republish is refused as soon as it arrives, so one click
+    // is enough even when the republish lands after the stop returned
+    // (issue #64).
     if (track != null && _isStoppedCapture(track)) {
-      await _refuseRepublishedShare(event.publication);
+      await _refuseStoppedCapturePublication(event.publication);
       return;
+    }
+    // Ours, playing from each press already: no stream of its own.
+    if (_isSoundboard(event.publication)) return;
+
+    if (event.publication.source == lk.TrackSource.microphone) {
+      await _dropOtherMicrophones(event.publication);
     }
 
     final participant =
@@ -1063,9 +1351,43 @@ class MatrixLivekitVoipSession
 
     final s = MatrixLivekitVoipStream(event.publication, participant);
     s.deafened = _isDeafened;
-    streams.add(s);
+    _streams.add(s);
     _stateChanged.add(());
     _publishMembershipState();
+  }
+
+  /// One microphone at a time, the one published last. A full reconnect
+  /// republishes the old microphone some seconds after clearing it, and the
+  /// microphone watch, seeing none for longer than it waits, published a new
+  /// one meanwhile. Both stayed: we were sent, and shown, twice, once more
+  /// for every reconnect, and muting reached only one of them.
+  Future<void> _dropOtherMicrophones(lk.LocalTrackPublication kept) async {
+    final local = livekitRoom.localParticipant;
+    if (local == null) return;
+    final others = local.trackPublications.values
+        .where(
+            (p) => p.source == lk.TrackSource.microphone && p.sid != kept.sid)
+        .toList();
+    for (final other in others) {
+      Log.w("Voice: a second microphone was published (${other.sid}), "
+          "keeping ${kept.sid}");
+      try {
+        await local.removePublishedTrack(other.sid);
+      } catch (e, s) {
+        Log.onError(e, s, content: "Could not remove a second microphone");
+      }
+    }
+    // Nor shown twice, removed or not, and with the stream of the one the
+    // reconnect cleared.
+    final stale = _streams
+        .whereType<MatrixLivekitVoipStream>()
+        .where((s) =>
+            s.publication is lk.LocalTrackPublication &&
+            s.publication.source == lk.TrackSource.microphone &&
+            s.publication.sid != kept.sid)
+        .map((s) => s.publication.sid)
+        .toSet();
+    stale.forEach(_removeStreamsWithSid);
   }
 
   void onLocalTrackUnpublished(lk.LocalTrackUnpublishedEvent event) {
@@ -1098,20 +1420,28 @@ class MatrixLivekitVoipSession
 
   void _publishMembershipState() {
     if (state == VoipState.ended) return;
-    // Streams and voice state only with the delayed leave armed: it is what
-    // clears the membership, and a LIVE badge with it, if this client
-    // crashes while streaming. Away goes out either way: left behind it
-    // marks nothing that is not already stale, and without it someone away
-    // on a homeserver without delayed events (Synapse by default) read as
-    // present to everyone.
+    // Streams, voice state and the DJ go out with or without the delayed
+    // leave: they used to wait for it, so on a homeserver without delayed
+    // events (Synapse by default) nobody outside the call ever saw who was
+    // live, muted or deafened in it. The delayed leave is what clears the
+    // membership, and a LIVE badge with it, if this client crashes while
+    // streaming; without one the write says so, and readers stop believing
+    // it once it has not been written again for ninety minutes
+    // (MatrixCallMembership.unguardedKey).
     final armed = heartbeatDelayId != null;
+    final media = _localLiveMedia;
+    final voice = _localVoiceState;
+    final dj = _localDj;
     _membershipPublisher.update(CallMembershipState(
-        media: armed ? _localLiveMedia : const {},
-        voice: armed ? _localVoiceState : const {},
-        away: _idleWatcher.isAway.value,
-        // Like LIVE, only with the delayed leave armed: a DJ whose client
-        // crashed would otherwise spin in the list for hours.
-        dj: armed ? _localDj : null));
+        media: media,
+        voice: voice,
+        away: _idleWatcher.status.value == UserPresenceStatus.unavailable,
+        status: _membershipStatus,
+        dj: dj,
+        // Only with something a dead client would leave behind: saying it
+        // of a membership that lists nothing would cost a write per join.
+        unguarded:
+            !armed && (media.isNotEmpty || voice.isNotEmpty || dj != null)));
   }
 
   // Named `published`, not `state`: `state` is this session's VoipState.
@@ -1134,9 +1464,12 @@ class MatrixLivekitVoipSession
           media: published.media,
           voiceState: published.voice,
           away: published.away,
+          status: published.status,
           dj: published.dj,
+          unguarded: published.unguarded,
           joinedAt: joinedAt,
-          now: _membershipTime()),
+          now: _membershipTime(),
+          window: _window),
     );
   }
 
@@ -1219,10 +1552,22 @@ class MatrixLivekitVoipSession
     });
 
     try {
+      // A microphone change still running (a restart for the noise
+      // suppression preference, a repair) opens a new capture after the
+      // room has let go of the track: waited for, briefly, so the capture
+      // it makes is one this session still stops (see restartTrack).
+      await _captureChanges
+          .run(() async {})
+          .timeout(const Duration(seconds: 3), onTimeout: () {});
       // First, so no membership write lands after the clear below: leaving
       // unpublishes our tracks, which would schedule one.
-      _idleWatcher.isAway.removeListener(_publishMembershipState);
-      await _membershipPublisher.stop();
+      _idleWatcher.status.removeListener(_publishMembershipState);
+      // Bounded like the heartbeat below it: a membership write stalled on
+      // a dead network kept the hang up (and the button) waiting on the
+      // SDK's own timeout.
+      await _membershipPublisher
+          .stop()
+          .timeout(const Duration(seconds: 5), onTimeout: () {});
       // Likewise a heartbeat that is restoring our membership.
       heartbeatTimer?.cancel();
       await _heartbeatInFlight?.timeout(const Duration(seconds: 5),
@@ -1249,14 +1594,23 @@ class MatrixLivekitVoipSession
       // Even if one of the requests above failed: a session left half open
       // kept the old LiveKit room alive, and rejoining could fail with
       // "no internet connection" until the app restarted (issue #48).
-      for (final stream in streams.whereType<MatrixLivekitVoipStream>()) {
+      for (final stream in _streams.whereType<MatrixLivekitVoipStream>()) {
         stream.dispose();
       }
-      streams.clear();
+      _streams.clear();
 
       state = VoipState.ended;
       _volumeTimer?.cancel();
       _volumeTimer = null;
+      // Also when a step above threw: left running, the watchdog ticked
+      // every second and the settings listener restarted noise suppression
+      // against a disposed room, for the life of the app.
+      heartbeatTimer?.cancel();
+      heartbeatTimer = null;
+      _settingsSub?.cancel();
+      _settingsSub = null;
+      _dspWatchdog?.cancel();
+      _dspWatchdog = null;
       _stateChanged.add(());
       _onConnectionChanged.add(state);
 
@@ -1285,7 +1639,19 @@ class MatrixLivekitVoipSession
 
   @override
   bool get isCameraEnabled =>
-      livekitRoom.localParticipant?.isCameraEnabled() ?? false;
+      _hasLiveCameraPublication || _hasActiveCameraCapture;
+
+  /// Whether any camera publication is unmuted. Not
+  /// `LocalParticipant.isCameraEnabled()`, which reads whichever camera
+  /// publication comes first: with a second one left by a reconnect, the
+  /// first could be muted while the other still sent the camera.
+  bool get _hasLiveCameraPublication {
+    final participant = livekitRoom.localParticipant;
+    return participant?.trackPublications.values.any((publication) =>
+            publication.source == lk.TrackSource.camera &&
+            !publication.muted) ??
+        false;
+  }
 
   /// The microphone's own publication decides, not LiveKit's `isMuted`,
   /// which reads whichever audio publication came first: with the DJ
@@ -1303,8 +1669,19 @@ class MatrixLivekitVoipSession
         !(_microphoneWanted && _microphoneHealth.hadMicrophone);
   }
 
-  /// Whether a screen capture this session owns is still running.
-  bool get _hasActiveCapture => _captureTracks.any((track) => track.isActive);
+  /// Whether a screen capture this session owns is still running. A republish
+  /// re-arms the wrapper of a stopped track without restarting the capture,
+  /// so a stopped one does not count.
+  bool get _hasActiveScreenCapture => _captureTracks.any((track) =>
+      _isScreenCaptureSource(track.source) &&
+      track.isActive &&
+      !_isStoppedCapture(track));
+
+  /// Whether a camera capture this session owns is still running.
+  bool get _hasActiveCameraCapture => _captureTracks.any((track) =>
+      _isCameraCaptureSource(track.source) &&
+      track.isActive &&
+      !_isStoppedCapture(track));
 
   /// Sharing follows the capture, not only LiveKit: a full reconnect empties
   /// the publication map while the capture keeps running, and the app must not
@@ -1314,7 +1691,7 @@ class MatrixLivekitVoipSession
   @override
   bool get isSharingScreen =>
       (livekitRoom.localParticipant?.isScreenShareEnabled() ?? false) ||
-      _hasActiveCapture;
+      _hasActiveScreenCapture;
 
   @override
   Stream<void> get onStateChanged => _stateChanged.stream;
@@ -1368,6 +1745,20 @@ class MatrixLivekitVoipSession
   }
 
   @override
+  Future<void> applyAudioOutput() async {
+    if (!kIsWeb) {
+      await WebrtcDefaultDevices.selectOutputDevice();
+      return;
+    }
+    // In the browser LiveKit plays each remote track in an audio element of
+    // its own, which only its setSinkId reaches.
+    final device = await WebrtcDefaultDevices.picked(AudioDeviceKind.output);
+    if (device == null) return;
+    await livekitRoom.setAudioOutputDevice(lk.MediaDevice(device.deviceId,
+        device.label, device.kind ?? 'audiooutput', device.groupId));
+  }
+
+  @override
   Future<void> setDeafened(bool state) async {
     if (state) {
       _deafen.deafen(micMuted: isMicrophoneMuted);
@@ -1386,7 +1777,7 @@ class MatrixLivekitVoipSession
     // A noise suppression change made while muted is applied now.
     if (!micMuted) unawaited(_noiseSuppression.update());
 
-    for (var stream in streams) {
+    for (var stream in _streams) {
       if (stream is MatrixLivekitVoipStream) {
         _applyStreamVolume(stream);
       }
@@ -1408,7 +1799,10 @@ class MatrixLivekitVoipSession
   @override
   Future<void> setScreenShare(ScreenCaptureSource source) async {
     if (source is WebrtcAndroidScreencaptureSource) {
-      livekitRoom.localParticipant?.setScreenShareEnabled(true);
+      // Awaited: the publication event that lets the stop own the capture
+      // follows the publish, and a failure to start has to reach the caller
+      // instead of becoming an unhandled error.
+      await livekitRoom.localParticipant?.setScreenShareEnabled(true);
       Log.i("Got android screen capture source!");
       _stateChanged.add(());
       return;
@@ -1480,15 +1874,108 @@ class MatrixLivekitVoipSession
       return;
     }
 
-    await livekitRoom.localParticipant?.setCameraEnabled(true);
+    // A camera this session stopped leaves a publication whose track cannot
+    // capture again: unmuting it would publish a black camera. Drop those so
+    // LiveKit opens a fresh capture instead.
+    await _dropStoppedCameraPublications();
+
+    final participant = livekitRoom.localParticipant;
+    final wasMuted = participant
+            ?.getTrackPublicationBySource(lk.TrackSource.camera)
+            ?.muted ??
+        false;
+
+    await participant?.setCameraEnabled(true);
+
+    // A muted publication was unmuted, which restarts its capture: that
+    // track is live again, not one a stop left behind.
+    if (wasMuted) {
+      final camera =
+          participant?.getTrackPublicationBySource(lk.TrackSource.camera);
+      final track = camera?.track;
+      if (track != null && !camera!.muted) {
+        _stoppedCaptures.removeWhere((stopped) => identical(stopped, track));
+      }
+    }
+
     _stateChanged.add(());
+  }
+
+  /// Removes camera publications whose track is gone or that belong to a
+  /// capture this session stopped: unmuting one would not open a camera.
+  Future<void> _dropStoppedCameraPublications() async {
+    final participant = livekitRoom.localParticipant;
+    if (participant == null) return;
+    final dead = participant.trackPublications.values.where((publication) {
+      if (!_isCameraCaptureSource(publication.source)) return false;
+      final track = publication.track;
+      return track == null || _isStoppedCapture(track);
+    }).toList();
+    for (final publication in dead) {
+      try {
+        await participant.removePublishedTrack(publication.sid);
+      } catch (e, s) {
+        Log.onError(e, s, content: "Could not remove a stopped camera");
+      }
+    }
   }
 
   @override
   Future<void> stopCamera() async {
-    await livekitRoom.localParticipant?.setCameraEnabled(false);
+    final participant = livekitRoom.localParticipant;
 
+    // Ask LiveKit first: on the normal path it mutes the camera publication
+    // and, with stopCameraCaptureOnMute on, stops the capture. A failure here
+    // must not skip the fallbacks below (issue #79).
+    try {
+      await participant?.setCameraEnabled(false);
+    } catch (e, s) {
+      Log.onError(e, s,
+          content: "Could not turn the camera off through livekit");
+    }
+
+    // The SDK stop reaches one camera publication. A full reconnect can
+    // leave another behind, and can leave none at all while the capture
+    // keeps running: turn off every camera publication left, then stop the
+    // captures this session owns (issues #63 and #64).
+    await _muteCameraPublications();
+
+    await _stopOwnedCaptureTracks(
+        where: (track) => _isCameraCaptureSource(track.source));
+
+    // A republish accepted while the stop was running may have re-armed a
+    // capture that is already stopped.
+    await _refuseStoppedCapturePublications();
+
+    // A camera whose capture refuses to stop must not look off.
+    _verifyCameraStopped();
+
+    // During a full reconnect LiveKit emits no mute or unpublish event for
+    // the stop, so the panel would keep the camera preview and LIVE pill.
+    _removeOutgoingStreams(_isCameraCaptureSource);
+
+    _updateShareCues();
     _stateChanged.add(());
+    _publishMembershipState();
+  }
+
+  /// Mutes every camera publication left, not only the first one LiveKit's
+  /// [LocalParticipant.setCameraEnabled] finds. Muting stops the capture with
+  /// the default options.
+  Future<void> _muteCameraPublications() async {
+    final participant = livekitRoom.localParticipant;
+    if (participant == null) return;
+    final cameras = participant.trackPublications.values
+        .where((publication) =>
+            _isCameraCaptureSource(publication.source) && !publication.muted)
+        .toList();
+    for (final publication in cameras) {
+      try {
+        await publication.mute(stopOnMute: true);
+      } catch (e, s) {
+        Log.onError(e, s, content: "Could not turn off a camera publication");
+      }
+    }
   }
 
   /// Stops every capture track this session owns. This is what releases the
@@ -1498,12 +1985,14 @@ class MatrixLivekitVoipSession
   /// to finish either way, and [stopScreenshare] surfaces them through
   /// [_verifyScreenshareStopped]. Stopping a stopped track is a no-op in the
   /// SDK.
-  Future<void> _stopOwnedCaptureTracks() async {
+  Future<void> _stopOwnedCaptureTracks(
+      {bool Function(lk.LocalTrack track)? where}) async {
     for (final track in _captureTracks) {
+      if (where != null && !where(track)) continue;
       try {
         await track.stop();
       } catch (e, s) {
-        Log.onError(e, s, content: "Could not stop a screen capture track");
+        Log.onError(e, s, content: "Could not stop a capture track");
       }
       // Only a capture that really stopped is refused when republished: a
       // stuck track still captures, and its share has to keep flowing until
@@ -1545,7 +2034,8 @@ class MatrixLivekitVoipSession
     // no-op when a full reconnect cleared its publication map, and the OS
     // capture survives that (issue #63). The stop records what actually
     // stopped, so a republish of it is refused below (issue #64).
-    await _stopOwnedCaptureTracks();
+    await _stopOwnedCaptureTracks(
+        where: (track) => _isScreenCaptureSource(track.source));
 
     // A republish that landed while the stop was still running may have been
     // accepted before its capture was marked stopped, and a publication the
@@ -1561,17 +2051,24 @@ class MatrixLivekitVoipSession
       }
     }
 
-    _stateChanged.add(());
-
     _verifyScreenshareStopped();
+
+    // A full reconnect can leave no publication to emit an unpublish event,
+    // so the panel would keep the preview and LIVE pill of a share that has
+    // ended. Drop its outgoing streams and report the stop.
+    _removeOutgoingStreams(_isScreenCaptureSource);
+    _updateShareCues();
+    _stateChanged.add(());
+    // Publish the verified stop so people outside the call lose the LIVE badge.
+    _publishMembershipState();
   }
 
-  /// Removes every screen-share publication whose capture this session has
-  /// stopped, and any that lost its track. A republish arriving while a stop
-  /// is still running reaches [onLocalTrackPublished] before the capture is
-  /// marked stopped, and a stop whose SDK-side removal failed (the H.265
-  /// codec path, issue #79) leaves the publication in the map: the stop cleans
-  /// those up itself instead of leaving a dead share to the next click
+  /// Removes every screen-share or camera publication whose capture this
+  /// session has stopped, and any that lost its track. A republish arriving
+  /// while a stop is still running reaches [onLocalTrackPublished] before the
+  /// capture is marked stopped, and a stop whose SDK-side removal failed (the
+  /// H.265 codec path, issue #79) leaves the publication in the map: the stop
+  /// cleans those up itself instead of leaving a dead share to the next click
   /// (issues #64 and #79).
   Future<void> _refuseStoppedCapturePublications() async {
     final participant = livekitRoom.localParticipant;
@@ -1579,11 +2076,11 @@ class MatrixLivekitVoipSession
 
     final refused = participant.trackPublications.values.where((publication) {
       final track = publication.track;
-      return ScreenShareWatchList.isScreenShareSource(publication.source) &&
+      return _isCaptureSource(publication.source) &&
           (track == null || _isStoppedCapture(track));
     }).toList();
     for (final publication in refused) {
-      await _refuseRepublishedShare(publication);
+      await _refuseStoppedCapturePublication(publication);
     }
   }
 
@@ -1597,18 +2094,53 @@ class MatrixLivekitVoipSession
       lk.TrackSource.screenShareVideo,
       lk.TrackSource.screenShareAudio,
     ].any((source) => participant?.getTrackPublicationBySource(source) != null);
-    final stillCapturing = _hasActiveCapture;
+    final stillCapturing = _hasActiveScreenCapture;
     if (stillPublished || stillCapturing) {
       throw StateError(
           "The screen share could not be stopped: it still looks live");
     }
   }
 
+  /// A camera stop is only over once LiveKit has no unmuted camera
+  /// publication and no camera capture this session owns still runs. Like the
+  /// screen share, reporting success while one does leaves the camera on with
+  /// nothing left to click, so this raises instead.
+  void _verifyCameraStopped() {
+    if (_hasLiveCameraPublication || _hasActiveCameraCapture) {
+      throw StateError(
+          "The camera could not be turned off: it still looks live");
+    }
+  }
+
+  /// Drops the outgoing streams of [source]. A stop during a full reconnect
+  /// gets no unpublish or mute event — LiveKit had cleared its publication
+  /// map — so the panel kept the stopped share's preview and LIVE pill.
+  void _removeOutgoingStreams(bool Function(lk.TrackSource source) source) {
+    final sids = _streams
+        .whereType<MatrixLivekitVoipStream>()
+        .where((stream) =>
+            stream.publication is lk.LocalTrackPublication &&
+            source(stream.publication.source))
+        .map((stream) => stream.streamId)
+        .toSet();
+    for (final sid in sids) {
+      _removeStreamsWithSid(sid);
+    }
+  }
+
+  final List<VoipStream> _streams = [];
+
+  /// Ours only while reconnecting: everyone else's stopped where the
+  /// connection dropped, talking or sharing, and come back with it.
   @override
-  List<VoipStream> streams = List<VoipStream>.empty(growable: true);
+  List<VoipStream> get streams => _reconnecting
+      ? _streams
+          .where((s) => s.direction == VoipStreamDirection.outgoing)
+          .toList()
+      : _streams;
 
   @override
-  bool get supportsScreenshare => true;
+  bool get supportsScreenshare => canCaptureScreen;
 
   @override
   Future<void> updateStats() async {}
@@ -1642,9 +2174,11 @@ class MatrixLivekitVoipSession
   /// How long the server waits for a heartbeat before its delayed leave
   /// clears our membership, and how often we send one. Several heartbeats
   /// fit in one window, so one slow or lost request no longer drops us from
-  /// everyone's call list while we are still in the call.
-  static const _delayedLeaveTimeout = Duration(seconds: 30);
-  static const _heartbeatInterval = Duration(seconds: 10);
+  /// everyone's call list while we are still in the call. Before changing
+  /// these, see "Tuning how fast someone drops off the list" in
+  /// docs/voice-channel-members.md.
+  static const _delayedLeaveTimeout = Duration(seconds: 15);
+  static const _heartbeatInterval = Duration(seconds: 5);
 
   /// How long a heartbeat waits for the homeserver to restart the delayed
   /// leave. One that was lost (sent down a connection that died with the
@@ -1654,7 +2188,7 @@ class MatrixLivekitVoipSession
   /// while we were still in it. Given up on before the next heartbeat is
   /// due, that heartbeat tries again in time.
   @visibleForTesting
-  static Duration restartTimeout = const Duration(seconds: 8);
+  static Duration restartTimeout = const Duration(seconds: 4);
 
   /// The delayed leave the heartbeat restarts. Unlike [heartbeatDelayId],
   /// kept while restarts fail, so the next heartbeat retries it.
@@ -1842,8 +2376,19 @@ class MatrixLivekitVoipSession
     // First: once we have joined from another device, restoring our cleared
     // membership below would put this device back in the call.
     if (leaveIfSuperseded()) return;
+    // Out of LiveKit we are not in the call: the delayed leave is left to
+    // fire, and nothing is put back until LiveKit is (see _stepOut).
+    if (!_connected()) return;
     await _keepDelayedLeave();
     if (_leaving) return;
+    if (_steppedOut) {
+      try {
+        await _comeBack();
+      } catch (e, s) {
+        Log.onError(e, s, content: "Could not put our call membership back");
+      }
+      return;
+    }
     try {
       _keepMembershipFromLapsing();
     } catch (e, s) {
@@ -1897,6 +2442,7 @@ class MatrixLivekitVoipSession
       await _armDelayedLeave();
       _armFailures = 0;
     } catch (e, s) {
+      if (_refusesDelayedEvents(e)) return;
       _armFailures++;
       Log.onError(e, s,
           content: "Could not arm our delayed leave "
@@ -1914,11 +2460,36 @@ class MatrixLivekitVoipSession
     }
   }
 
+  /// Whether [error] is the homeserver refusing delayed events while saying
+  /// it has them (matrix.org from 2026-10-07: "Sending delayed events has
+  /// been disallowed", with /versions read days before). Asking again would
+  /// only fail again: the call goes on as on a homeserver without them.
+  bool _refusesDelayedEvents(Object error) {
+    if (error is! MatrixException || error.error != MatrixError.M_FORBIDDEN) {
+      return false;
+    }
+    if (_hasDelayedEvents != false) {
+      Log.w("Homeserver refuses delayed events: ${error.errorMessage}");
+    }
+    _hasDelayedEvents = false;
+    return true;
+  }
+
   /// Keeps our delayed leave from firing while we are here: restarts it,
   /// or arms it where there is none yet.
   Future<void> _keepDelayedLeave() async {
     final delayId = _delayedLeaveId;
-    if (delayId == null) return _armDelayedLeaveWhenDue();
+    if (delayId == null) {
+      await _armDelayedLeaveWhenDue();
+      // Taken down while LiveKit was gone: _comeBack puts it up.
+      if (heartbeatDelayId == null || _steppedOut) return;
+      try {
+        await _restoreMembershipIfCleared();
+      } catch (e, s) {
+        Log.onError(e, s, content: "Could not restore our call membership");
+      }
+      return;
+    }
 
     try {
       try {
@@ -1943,8 +2514,10 @@ class MatrixLivekitVoipSession
 
       await _restoreMembershipIfCleared();
     } catch (e, s) {
-      // Stop advertising streams until a heartbeat works again: without the
-      // delayed leave, nothing would clear them if this client died.
+      // What we advertise is unguarded until a heartbeat works again:
+      // without the delayed leave, nothing would clear it if this client
+      // died.
+      if (_refusesDelayedEvents(e)) _delayedLeaveId = null;
       Log.onError(e, s, content: "Call membership heartbeat failed");
       if (heartbeatDelayId != null) {
         heartbeatDelayId = null;
@@ -1986,10 +2559,12 @@ class MatrixLivekitVoipSession
       MatrixCallMembership.withPublishedState(membership,
           media: _localLiveMedia,
           voiceState: _localVoiceState,
-          away: _idleWatcher.isAway.value,
+          away: _idleWatcher.status.value == UserPresenceStatus.unavailable,
+          status: _membershipStatus,
           dj: _localDj,
           joinedAt: _joinedAt ?? now,
-          now: now),
+          now: now,
+          window: _window),
     );
   }
 
@@ -2004,13 +2579,22 @@ class MatrixLivekitVoipSession
             ?[_ownMembershipKey];
     // Cleared: putting it back is the delayed leave's heartbeat's to do.
     if (current is! Event || current.content["application"] == null) return;
+    final now = _membershipTime();
     if (!MatrixCallMembership.needsRefresh(
-        current.content, current.originServerTs, _membershipTime())) {
+        current.content, current.originServerTs, now,
+        guarded: heartbeatDelayId != null)) {
       return;
     }
 
-    // The write only shows in the room state once it comes back over sync.
-    if (!_waited(_lastExpiryRefresh, const Duration(minutes: 5))) return;
+    // The write only shows in the room state once it comes back over sync:
+    // not again before then, a short window allowing.
+    final left =
+        MatrixCallMembership.expiresAt(current.content, current.originServerTs)!
+            .difference(now);
+    final wait = left < const Duration(minutes: 10)
+        ? const Duration(seconds: 20)
+        : const Duration(minutes: 5);
+    if (!_waited(_lastExpiryRefresh, wait)) return;
     _lastExpiryRefresh = _now();
 
     Log.i("Extending our call membership before it expires");

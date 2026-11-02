@@ -24,8 +24,9 @@ under the channel and on the channel's own page ("It's quiet in here").
 
 A membership stays open because its owner keeps writing it: each write
 moves the window's end to four hours past then. The delayed leave (MSC4140,
-30 s, restarted every 10 s) is what takes it down when a client dies; the
-window only covers homeservers without delayed events.
+15 s, restarted every 5 s) is what takes it down when a client dies, and
+a client that loses LiveKit sends it after 5 s (fix 14); the window only
+covers homeservers without delayed events.
 
 Besides who is there, a membership carries what the list shows next to
 them, in keys other clients ignore: `chat.commet.streams` (LIVE),
@@ -33,8 +34,19 @@ them, in keys other clients ignore: `chat.commet.streams` (LIVE),
 `chat.commet.dj` (`{"playing": bool}` while they are the DJ in the call's
 booth, null otherwise), which shows a record next to them for people outside
 the call, spinning while their music plays. Streams, voice state and the DJ
-are only written while the delayed leave is armed, so a client that dies
-can't leave them behind.
+are written with or without a delayed leave. Without one (a homeserver
+without delayed events) nothing takes them down if the client dies, so that
+write also says `chat.commet.unguarded: true`, and readers stop believing the
+three of them 90 minutes after it was written
+(`MatrixCallMembership.unguardedStateLifetime`): its owner writes it again
+every hour while it is alive. The member stays listed until the membership
+itself lapses.
+
+The sidebar shows up to eight rows of members under a channel
+(`RoomTextButton.maxVisibleMembers`). A fuller channel shows seven, ourselves
+and whoever is live first, and "and N more" on the eighth row opens the rest
+in a list of their own. The channel's page shows everyone, with the same
+badges on their tiles, before joining too.
 
 **One person, one device in the call.** Joining a call you are already in
 from another device takes the older device out of it: when its membership
@@ -44,6 +56,36 @@ its screen share (`MatrixCallMembership.supersededBy`,
 `MatrixLivekitVoipSession.leaveIfSuperseded`). The new device joins fresh,
 unmuted. A device that is offline stays listed until its delayed leave or
 window ends; the list shows a person once either way.
+
+## Clicking, right-clicking and dragging someone
+
+Each person under a voice channel in the sidebar
+(`room_text_button.dart`, `ui/organisms/voice_channel_members/call_member_menu.dart`):
+
+- A click on someone live (LIVE or the camera badge next to them) opens the
+  channel, as a click on the channel does. In the call, their screen goes in
+  the middle, or their camera if they share no screen, already playing: no
+  "Watch stream" to press. The other one, if they show both, stays in the grid.
+  The call view may not be on screen yet, so the request waits for it
+  (`CallFocus`). Outside the call, it stops at the channel's page: joining
+  opens the microphone, so it stays a choice.
+- A click on anyone else does nothing. Their profile is in the right-click
+  menu.
+- A right-click (a long press on touch) has their volume and sound effects
+  volume when we are in the call with them, Profile, Message, Move To…,
+  Disconnect, Copy User ID, and the member list's role, kick and ban.
+- Dragging them onto another voice channel moves them there; onto the one
+  they came from, nothing.
+
+Matrix has no way to move someone, so the mover sends the person's devices a
+`chat.commet.call.move` to-device message (`room_id`, `to_room_id`, absent to
+disconnect, `sent_at`). Their Rooster acts on it only if it is in that room's
+call, the message is under a minute old, and the sender may move them
+(`MatrixCallMovesComponent.mayMove`): themselves, or someone whose power
+level reaches the room's kick level and is above theirs. It then joins the
+other channel (which leaves the first) or hangs up. The same check decides
+who we can drag and who gets Move To… and Disconnect. Ourselves we move
+directly. Clients other than Rooster ignore the message.
 
 ## What went wrong
 
@@ -59,6 +101,12 @@ window ends; the list shows a person once either way.
 | 8 | A list is only worked out again when a membership changes. Worked out right after the app starts, before any sync has said what time it is, it stayed as the wrong clock had it for up to an hour. | `HomeserverClock.onCorrected` fires when a reading moves its time by more than 30 s; the sidebar, the channel's page and the key provider work their lists out again, and the lapse timer is set again. |
 | 9 | The sidebar asked for the member (name, avatar) of the people listed when the row was built only. Anyone who turned up later showed as their user id. | Everyone listed is asked for once, whenever they turn up (`RoomTextButton.fetchNewMembers`). |
 | 10 | A heartbeat waited for its restart of the delayed leave for as long as the HTTP client did, 35 s, and the heartbeats after it waited for that one. A restart lost to a dropped connection (a network blip, a Wi-Fi roam) therefore outlived the delayed leave's 30 s: it fired, and the member dropped out of the list of everyone outside the call while still talking, until a later heartbeat put the membership back, a minute or more on. | A restart is given up on after 8 s (`MatrixLivekitVoipSession.restartTimeout`), before the next heartbeat is due, and that one restarts it in time. |
+| 11 | Streams, voice state and the DJ were only written with the delayed leave armed. On a homeserver without delayed events nobody outside the call saw who was live, on camera, muted or deafened in it: the badges only showed once inside, from LiveKit. | Written either way, marked `chat.commet.unguarded` without a delayed leave, and dropped by readers 90 minutes after the last write (`_publishMembershipState`, `MatrixCallMembership.publishedStateIsStale`). |
+| 12 | A denied or unavailable microphone produces no publication or mute event. Without delayed events, nothing published its initial muted state, so people outside the call saw it as unmuted. | Publish the session's initial state after registering its listeners and DJ booth, even if no track event follows. |
+| 13 | A full reconnect clears LiveKit's publication map while screen capture continues. Stopping then emits no unpublish event, leaving LIVE advertised after the capture stops. | Publish the state after `stopScreenshare` verifies that the capture and its publications have stopped. |
+| 14 | Report (2026-10-05): someone listed in the channel, on its page and online for hours while nobody was in the call; in it, alone in LiveKit. Their app had lost LiveKit without noticing, and its heartbeat kept the membership up. LiveKit (vendored) emitted its disconnect from an attempt it could not recover from while a full reconnect was pending, and the room took it for part of that reconnect and never said it was disconnected. Even noticed, a client kept its membership up for as long as LiveKit tried to reconnect. | The engine cleans up before it says so, as it does after its last attempt (`// ROOSTER` in `engine.dart`). A client that has not been connected to LiveKit for 5 s sends its delayed leave (`MatrixLivekitVoipSession.stepOutAfter`): everyone outside the call stops listing it within seconds. Its heartbeat neither restarts the delayed leave nor restores the membership while LiveKit is gone; once LiveKit is back it arms a new one and writes the membership again. A call LiveKit has not been connected to for three minutes is hung up (`lostConnectionTimeout`). The delayed leave is 15 s, restarted every 5 s, each restart given up on after 4 s, so a client that dies is gone from the list in 15 s. In our call, once connected for 30 s (`CallRoster.rosterComplete`), someone whose membership is live but who joined more than 30 s ago and is not in LiveKit is not listed in the sidebar: a member on an older build is gone from our list as soon as they leave LiveKit. |
+| 15 | Report (2026-10-07): someone listed in the channel for hours, nobody in LiveKit. matrix.org stopped allowing delayed events (`/versions` no longer lists MSC4140; arming one answers 403 "Sending delayed events has been disallowed"), while clients still had the old `/versions` cached for days. With no delayed leave nothing on the homeserver clears a membership, fix 14's step out sent nothing, and a membership written with no delayed leave kept a four-hour window, rewritten hourly by a client that thought it was still in the call. | A membership written with no delayed leave armed gets a two-minute window (`MatrixCallMembership.unguardedLifetime`), written again half a minute after each write (`unguardedRefreshWhenLeft`), and a long window left from before is cut down right away: a client that dies drops off in two minutes, for readers on any build, since they all go by `expires`. With no delayed leave, stepping out (fix 14) clears the membership by hand, and it is written again as soon as LiveKit is back (`_comeBack`). A 403 to arming one counts as a homeserver without delayed events: not asked again. |
+| 16 | Several memberships of the same user were collapsed by whichever state key was read last. An older device saying unmuted could hide the current device's deafen before joining the call. | Voice state follows the latest join, with the same device-id tie break as `supersededBy`. A recent heartbeat does not turn an older join into the current one, and missing or stale state on the current join does not inherit an old device's badges. |
 
 ## What the tests guard
 
@@ -69,7 +117,13 @@ window ends; the list shows a person once either way.
 | Written again an hour after each write, from the same join, with or without delayed events, away included; a clock three hours behind, a lagging homeserver time and a clock set back all still write a full window; a delayed leave, or the question, that failed is tried again 30 s later and not before, and less often while it keeps failing; a restart that is lost does not hold up the next heartbeat; LiveKit's participants are who is connected | `unit_test/call_membership_keepalive_test.dart` |
 | When a membership is due, and the lapse timer counting by the homeserver's clock | `unit_test/matrix_call_membership_test.dart` |
 | The sidebar row itself shows everyone under the channel by name, someone in for five hours included; on a clock three hours ahead, the ones in for hours turn up, by name, as soon as a sync says what time it is | `unit_test/voice_channel_sidebar_row_test.dart` |
+| LiveKit gone for 5 s takes our membership down, nothing keeps it up or puts it back until LiveKit returns, and then it goes back up at once; a call LiveKit has not been connected to for three minutes is hung up, and one that reconnects in time is not; LiveKit's participants count as everyone once connected for 30 s; in our call, a live membership whose owner is not in LiveKit is not listed, unless they just joined or we just connected | `unit_test/call_membership_keepalive_test.dart` ("lost connection", "who is connected", "LiveKit gone for 5 s"), `unit_test/voice_channel_member_list_test.dart` |
+| On a homeserver that lists delayed events and refuses them (matrix.org, 2026-10-07): asked once; someone in the call stays listed between writes and is gone two minutes after their app dies, judged by `expires` as every reader judges it; an app that lost LiveKit but keeps running is off the list in five seconds and nothing puts it back | `unit_test/call_membership_keepalive_test.dart` ("delayed events advertised, then refused"; red with the four-hour window back, or with no step out without a delayed leave) |
 | A rewrite waits its turn, is covered by a write going out anyway, is retried when it fails, and does nothing once stopped | `unit_test/call_membership_publisher_test.dart` |
+| A mute is published without delayed events, marked unguarded, and guarded with them; unguarded badges show while they are kept written, go 90 minutes after the last write with no event, and their owner stays listed | `unit_test/call_membership_keepalive_test.dart`, `unit_test/voice_channel_member_list_test.dart` ("Badges of a member without a delayed leave"), `unit_test/matrix_call_membership_test.dart` |
+| Badges show in the sidebar row and on the channel's page before joining; a full channel lists seven and opens the rest from "and N more", whoever is live among the seven | `unit_test/voice_channel_sidebar_row_test.dart`, `unit_test/voice_channel_page_badges_test.dart` |
+| Joining without a microphone advertises muted even without delayed events or a track event; stopping a screen share during a full reconnect clears LIVE from the membership people outside the call read | `unit_test/call_membership_keepalive_test.dart`, `unit_test/screen_share_stop_test.dart` |
+| An older device cannot overwrite the current join's voice state, regardless of state-key order; deafening and undeafening are published, and a sync refreshes the open sidebar before joining | `unit_test/voice_channel_member_list_test.dart`, `unit_test/voice_channel_sidebar_row_test.dart`, `unit_test/call_membership_keepalive_test.dart` |
 
 Reverting any one of these fixes turns at least one of these tests red
 (checked by hand on 2026-09-30, twenty-two mutations).
@@ -94,6 +148,37 @@ Reverting any one of these fixes turns at least one of these tests red
   window closed. For someone still in the call, look at their log for the
   lines above.
 
+## Tuning how fast someone drops off the list
+
+Set on 2026-10-06 (fix 14) to make people who leave disappear within
+seconds. If matrix.org turns out too slow for them, these are the knobs, all
+in `MatrixLivekitVoipSession`
+(`rooster/lib/client/matrix/components/voip_room/matrix_livekit_voip_session.dart`):
+
+| Constant | Now | Was | What it sets |
+|----------|-----|-----|--------------|
+| `_delayedLeaveTimeout` | 15 s | 30 s | How long after a client dies (crash, network gone) it drops off the list. |
+| `_heartbeatInterval` | 5 s | 10 s | How often the delayed leave is restarted. One request per member in a call per interval. |
+| `restartTimeout` | 4 s | 8 s | How long one restart is waited for before the next heartbeat tries again. |
+| `stepOutAfter` | 5 s | none | How long LiveKit may be gone before a client takes its own membership down. |
+| `lostConnectionTimeout` | 3 min | none | How long LiveKit may be gone before the call is hung up. |
+| `rosterSettleTime` | 30 s | none | How long we must be connected before people missing from LiveKit are left out of the sidebar. |
+| `MatrixCallMembership.unguardedLifetime` | 2 min | 4 h | The window of a membership with no delayed leave (matrix.org since 2026-10-07): how long after a client dies it drops off the list. |
+| `MatrixCallMembership.unguardedRefreshWhenLeft` | 90 s | 3 h | When such a membership is written again: half a minute after each write. One state write per member per half minute. |
+
+Keep `restartTimeout` under `_heartbeatInterval`, and `_delayedLeaveTimeout`
+at least three heartbeats long: two heartbeats in a row can then fail
+before the delayed leave fires. Raise all three together, in proportion
+(30 s / 10 s / 8 s was the old, roomier set).
+
+Signs they are too tight: people flicker out of the list and back in while
+they are in the call, and their logs show `Our delayed leave is gone,
+arming a new one` followed by `Our call membership was cleared while we are
+in the call, restoring it`, or `Call membership heartbeat failed`. If people
+flicker out on network blips instead, raise `stepOutAfter`; their logs show
+`Livekit has not been connected for 5 s, leaving the call's member list
+until it is back`.
+
 ## Known limits
 
 - **Members on older builds.** Readers now go by the homeserver's clock,
@@ -104,5 +189,17 @@ Reverting any one of these fixes turns at least one of these tests red
 - **A homeserver that sends no `unsigned.age`.** Synapse sends it. Without
   it the clock stays this machine's; the hourly writes still leave three
   hours of room for a wrong clock.
+- **matrix.org has no delayed events** (since 2026-10-07). Fix 15 keeps
+  the list right without them, at one state write per member in a call
+  every half minute. A client that thinks it is still in LiveKit while the
+  server has dropped it (seen once, from a browser tab) keeps writing its
+  membership: people outside the call list it until that client notices,
+  or hangs up; people in the call do not (fix 11).
+- **Outside the call** Rooster does not ask LiveKit who is in it (that
+  means joining the LiveKit room, and showing up in the call for a
+  moment). It goes by memberships, which a member on a build with fix 14
+  takes down within seconds of leaving LiveKit, and their homeserver within
+  15 s of their app dying. A member on an older build who lost LiveKit
+  stays listed for people outside the call until they update or restart.
 - **The call's own grid** shows a tile per stream. Someone in the call with
   no stream at all is in the sidebar list but has no tile.

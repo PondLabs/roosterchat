@@ -8,6 +8,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:intl/intl.dart';
+import 'package:rooster/utils/common_strings.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class ScreenCaptureDialogResult {
@@ -90,6 +92,43 @@ class ScreenCaptureSourceDialog extends StatefulWidget {
 
   /// How often thumbnails are refreshed while the picker is open.
   final Duration refreshEvery;
+
+  static String labelCallScreensTab(int howMany) =>
+      Intl.message("Screens ($howMany)",
+          name: "labelCallScreensTab",
+          args: [howMany],
+          desc: "Tab of the screen share picker listing the screens (monitors) "
+              "that can be shared, with how many there are");
+
+  static String labelCallWindowsTab(int howMany) =>
+      Intl.message("Windows ($howMany)",
+          name: "labelCallWindowsTab",
+          args: [howMany],
+          desc: "Tab of the screen share picker listing the open app windows "
+              "that can be shared, with how many there are");
+
+  static String get labelCallNoScreensToShare => Intl.message(
+      "No screens to share",
+      name: "labelCallNoScreensToShare",
+      desc:
+          "Shown in the screen share picker's screens tab when there is none");
+
+  static String get labelCallNoWindowsToShare => Intl.message(
+      "No windows to share",
+      name: "labelCallNoWindowsToShare",
+      desc:
+          "Shown in the screen share picker's windows tab when there is none");
+
+  static String get labelCallShareSystemAudio =>
+      Intl.message("Share system audio",
+          name: "labelCallShareSystemAudio",
+          desc: "Switch in the screen share picker: also share the sound the "
+              "computer plays");
+
+  static String get promptCallShareSource => Intl.message("Share",
+      name: "promptCallShareSource",
+      desc: "Button of the screen share picker that starts sharing the "
+          "screen or window picked");
 
   @override
   State<ScreenCaptureSourceDialog> createState() =>
@@ -188,6 +227,70 @@ class _ScreenCaptureSourceDialogState extends State<ScreenCaptureSourceDialog>
     super.dispose();
   }
 
+  /// The system audio switch and the buttons: in one row, or, in a narrow
+  /// window, where the switch's label and the buttons would not fit side by
+  /// side in every language, the switch over the buttons.
+  Widget _footer(DesktopCapturerSource? selected, ColorScheme scheme,
+      {required bool narrow}) {
+    final audio = [
+      Switch(
+        value: _shareAudio,
+        onChanged: (value) => setState(() => _shareAudio = value),
+      ),
+      const SizedBox(width: 8),
+      Flexible(
+        child: tiamat.Text.label(
+            ScreenCaptureSourceDialog.labelCallShareSystemAudio,
+            overflow: TextOverflow.ellipsis),
+      ),
+    ];
+    final buttons = [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: Text(CommonStrings.promptCancel),
+      ),
+      const SizedBox(width: 8),
+      FilledButton.icon(
+        key: const ValueKey('screen-share-go'),
+        onPressed: selected == null ? null : _share,
+        icon: const Icon(Icons.screen_share_rounded, size: 18),
+        label: Text(ScreenCaptureSourceDialog.promptCallShareSource),
+      ),
+    ];
+
+    if (narrow) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 8,
+        children: [
+          Row(children: audio),
+          Row(mainAxisAlignment: MainAxisAlignment.end, children: buttons),
+        ],
+      );
+    }
+
+    return Row(
+      children: [
+        ...audio,
+        const Spacer(),
+        if (selected != null)
+          Flexible(
+            flex: 2,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Text(
+                selected.name,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+              ),
+            ),
+          ),
+        ...buttons,
+      ],
+    );
+  }
+
   void _share([String? id]) {
     final source = _sources[id ?? _selected];
     if (source == null) return;
@@ -226,12 +329,14 @@ class _ScreenCaptureSourceDialogState extends State<ScreenCaptureSourceDialog>
                 tabs: [
                   Tab(
                     icon: const Icon(Icons.monitor_outlined, size: 20),
-                    text: 'Screens (${screens.length})',
+                    text: ScreenCaptureSourceDialog.labelCallScreensTab(
+                        screens.length),
                     iconMargin: const EdgeInsets.only(bottom: 2),
                   ),
                   Tab(
                     icon: const Icon(Icons.web_asset_outlined, size: 20),
-                    text: 'Windows (${windows.length})',
+                    text: ScreenCaptureSourceDialog.labelCallWindowsTab(
+                        windows.length),
                     iconMargin: const EdgeInsets.only(bottom: 2),
                   ),
                 ],
@@ -242,10 +347,12 @@ class _ScreenCaptureSourceDialogState extends State<ScreenCaptureSourceDialog>
                   controller: _tabs,
                   children: [
                     _grid(screens,
-                        empty: 'No screens to share',
+                        empty:
+                            ScreenCaptureSourceDialog.labelCallNoScreensToShare,
                         icon: Icons.monitor_outlined),
                     _grid(windows,
-                        empty: 'No windows to share',
+                        empty:
+                            ScreenCaptureSourceDialog.labelCallNoWindowsToShare,
                         icon: Icons.web_asset_outlined),
                   ],
                 ),
@@ -253,45 +360,7 @@ class _ScreenCaptureSourceDialogState extends State<ScreenCaptureSourceDialog>
               const Divider(height: 1),
               Padding(
                 padding: const EdgeInsets.fromLTRB(4, 10, 4, 0),
-                child: Row(
-                  children: [
-                    Switch(
-                      value: _shareAudio,
-                      onChanged: (value) => setState(() => _shareAudio = value),
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: tiamat.Text.label('Share system audio',
-                          overflow: TextOverflow.ellipsis),
-                    ),
-                    const Spacer(),
-                    if (selected != null)
-                      Flexible(
-                        flex: 2,
-                        child: Padding(
-                          padding: const EdgeInsets.only(right: 12),
-                          child: Text(
-                            selected.name,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.end,
-                            style: TextStyle(
-                                color: scheme.onSurfaceVariant, fontSize: 12),
-                          ),
-                        ),
-                      ),
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton.icon(
-                      key: const ValueKey('screen-share-go'),
-                      onPressed: selected == null ? null : _share,
-                      icon: const Icon(Icons.screen_share_rounded, size: 18),
-                      label: const Text('Share'),
-                    ),
-                  ],
-                ),
+                child: _footer(selected, scheme, narrow: width < 560),
               ),
             ],
           ),
@@ -380,43 +449,49 @@ class _ScreenCaptureSourceCardState extends State<ScreenCaptureSourceCard> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             spacing: 6,
             children: [
-              AspectRatio(
-                aspectRatio: 16 / 9,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 120),
-                  decoration: BoxDecoration(
-                    color: Colors.black,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: border, width: 2.5),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      if (thumbnail != null && thumbnail.isNotEmpty)
-                        Image.memory(thumbnail,
-                            fit: BoxFit.contain, gaplessPlayback: true)
-                      else
-                        const Center(
-                          child: SizedBox.square(
-                              dimension: 22,
-                              child: CircularProgressIndicator(strokeWidth: 2)),
-                        ),
-                      if (widget.selected)
-                        Positioned(
-                          top: 6,
-                          right: 6,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                                color: scheme.primary, shape: BoxShape.circle),
-                            child: Padding(
-                              padding: const EdgeInsets.all(2),
-                              child: Icon(Icons.check_rounded,
-                                  size: 16, color: scheme.onPrimary),
+              // Gives way to the name under it in a small window's cells,
+              // a little short of 16:9, rather than pushing it out.
+              Flexible(
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 120),
+                    decoration: BoxDecoration(
+                      color: Colors.black,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: border, width: 2.5),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (thumbnail != null && thumbnail.isNotEmpty)
+                          Image.memory(thumbnail,
+                              fit: BoxFit.contain, gaplessPlayback: true)
+                        else
+                          const Center(
+                            child: SizedBox.square(
+                                dimension: 22,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2)),
+                          ),
+                        if (widget.selected)
+                          Positioned(
+                            top: 6,
+                            right: 6,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                  color: scheme.primary,
+                                  shape: BoxShape.circle),
+                              child: Padding(
+                                padding: const EdgeInsets.all(2),
+                                child: Icon(Icons.check_rounded,
+                                    size: 16, color: scheme.onPrimary),
+                              ),
                             ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

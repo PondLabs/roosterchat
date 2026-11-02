@@ -15,6 +15,7 @@ import 'package:rooster/debug/log.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -86,7 +87,7 @@ class DjExtensionPackage implements DjSourcePackage {
 
   @override
   String? get problem => manifest.filesFor(djExtensionPlatform) == null
-      ? "It has nothing for this computer ($djExtensionPlatform)"
+      ? _Errors.errorDjExtensionNotForPlatform(djExtensionPlatform)
       : null;
 }
 
@@ -214,7 +215,7 @@ class DjExtensions implements DjSources {
   Future<DjSourcePackage> openFile(String path) async {
     final file = File(path);
     if (await file.length() > maxPackageBytes) {
-      throw const DjExtensionException("That file is too big to be one");
+      throw DjExtensionException(_Errors.errorDjExtensionFileTooBig);
     }
     return openBytes(await file.readAsBytes());
   }
@@ -223,13 +224,13 @@ class DjExtensions implements DjSources {
   Future<DjSourcePackage> openLink(String url, {DjSourceCancel? cancel}) async {
     final uri = Uri.tryParse(url.trim());
     if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) {
-      throw const DjExtensionException('That is not an https link');
+      throw DjExtensionException(_Errors.errorDjExtensionNotHttps);
     }
     final bytes = BytesBuilder(copy: false);
     await _download(uri, (chunk) {
       bytes.add(chunk);
       if (bytes.length > maxPackageBytes) {
-        throw const DjExtensionException("That file is too big to be one");
+        throw DjExtensionException(_Errors.errorDjExtensionFileTooBig);
       }
     }, (_) {}, cancel);
     return openBytes(bytes.takeBytes(), from: uri.toString());
@@ -241,16 +242,15 @@ class DjExtensions implements DjSources {
     try {
       archive = ZipDecoder().decodeBytes(bytes);
     } catch (_) {
-      throw const DjExtensionException("That isn't a .zip file");
+      throw DjExtensionException(_Errors.errorDjExtensionNotZip);
     }
     final entry = DjExtensionManifest.fileNames
         .map((name) =>
             archive.files.firstWhereOrNull((f) => f.isFile && f.name == name))
         .firstWhereOrNull((f) => f != null);
     if (entry == null) {
-      throw const DjExtensionException(
-          "That isn't a DJ source extension: it has no "
-          "${DjExtensionManifest.fileName}");
+      throw DjExtensionException(
+          _Errors.errorDjExtensionNoManifest(DjExtensionManifest.fileName));
     }
     final manifest = DjExtensionManifest.parse(
         utf8.decode(entry.content as List<int>, allowMalformed: true));
@@ -315,8 +315,7 @@ class DjExtensions implements DjSources {
           await target.delete(recursive: true);
         } on FileSystemException {
           throw DjExtensionException(
-              "${manifest.name} is in use: try again once the booth "
-              "isn't using it");
+              _Errors.errorDjExtensionInUse(manifest.name));
         }
       }
       await staging.rename(target.path);
@@ -337,8 +336,7 @@ class DjExtensions implements DjSources {
       await extension.dir.delete(recursive: true);
     } on FileSystemException {
       throw DjExtensionException(
-          "${extension.manifest.name} is in use: try again once the booth "
-          "isn't using it");
+          _Errors.errorDjExtensionInUse(extension.manifest.name));
     }
     _loading = null;
     await load();
@@ -368,12 +366,11 @@ class DjExtensions implements DjSources {
       if (name.startsWith('/') ||
           parts.contains('..') ||
           RegExp(r'^[A-Za-z]:').hasMatch(name)) {
-        throw const DjExtensionException(
-            'The package has files that would land outside its folder');
+        throw DjExtensionException(_Errors.errorDjExtensionOutsideFolder);
       }
       total += file.size;
       if (total > maxUnpackedBytes) {
-        throw const DjExtensionException('The package unpacks too big');
+        throw DjExtensionException(_Errors.errorDjExtensionTooBigUnpacked);
       }
       final out = File(p.joinAll([into.path, ...parts]));
       await out.parent.create(recursive: true);
@@ -397,8 +394,7 @@ class DjExtensions implements DjSources {
           (await sha256.bind(download.openRead()).first).toString() !=
               file.sha256) {
         throw DjExtensionException(
-            "${p.basename(file.url)} isn't the file the extension expects "
-            "(its checksum differs)");
+            _Errors.errorDjExtensionChecksum(p.basename(file.url)));
       }
       if (file.unzip == null) {
         await download.rename(program.path);
@@ -414,8 +410,8 @@ class DjExtensions implements DjSources {
         final inside = File(p.joinAll(
             [unpacked.path, ...file.unzip!.replaceAll('\\', '/').split('/')]));
         if (!p.isWithin(unpacked.path, inside.path) || !await inside.exists()) {
-          throw DjExtensionException(
-              "${p.basename(file.url)} has no ${file.unzip} in it");
+          throw DjExtensionException(_Errors.errorDjExtensionNotInZip(
+              p.basename(file.url), file.unzip!));
         }
         await inside.rename(program.path);
       } finally {
@@ -435,8 +431,8 @@ class DjExtensions implements DjSources {
           .send(http.Request('GET', url))
           .timeout(const Duration(seconds: 30));
       if (response.statusCode != 200) {
-        throw DjExtensionException(
-            'The download failed (${response.statusCode}): $url');
+        throw DjExtensionException(_Errors.errorDjExtensionDownloadFailed(
+            response.statusCode, '$url'));
       }
       final total = response.contentLength;
       var received = 0;
@@ -450,7 +446,7 @@ class DjExtensions implements DjSources {
       }
       if (cancel?.cancelled ?? false) throw const DjSourceCancelled();
     } on TimeoutException {
-      throw const DjExtensionException('The download stalled');
+      throw DjExtensionException(_Errors.errorDjExtensionStalled);
     } catch (e) {
       // Closing the client to cancel surfaces as a connection error.
       if (cancel?.cancelled ?? false) throw const DjSourceCancelled();
@@ -510,9 +506,8 @@ class DjExtensions implements DjSources {
           ],
           workingDirectory: extension.dir.path);
     } on ProcessException catch (e) {
-      throw DjExtensionException(
-          "${extension.manifest.name} couldn't start (${e.message}): "
-          "installing it again may fix it");
+      throw DjExtensionException(_Errors.errorDjExtensionCouldNotStart(
+          extension.manifest.name, e.message));
     }
     final err = StringBuffer();
     final errDone = process.stderr
@@ -533,7 +528,8 @@ class DjExtensions implements DjSources {
       await Future.wait([outDone, errDone]).timeout(timeout);
     } on TimeoutException {
       process.kill();
-      throw DjExtensionException('${extension.manifest.name} took too long');
+      throw DjExtensionException(
+          _Errors.errorDjExtensionTimedOut(extension.manifest.name));
     }
     await process.exitCode
         .timeout(const Duration(seconds: 5), onTimeout: () => -1);
@@ -550,8 +546,8 @@ class DjExtensions implements DjSources {
       Log.w('DJ booth: ${extension.id} said on stderr: ${stderr.trim()}');
     }
     return DjExtensionException(last == null
-        ? '${extension.manifest.name} stopped without answering'
-        : '${extension.manifest.name} failed: $last');
+        ? _Errors.errorDjExtensionNoAnswer(extension.manifest.name)
+        : _Errors.errorDjExtensionFailed(extension.manifest.name, last));
   }
 
   /// The tracks [extension] finds for [url], as its answer's `tracks`.
@@ -645,4 +641,121 @@ class DjExtensions implements DjSources {
 
     return DjExtensionFetch(started.future, finished.future);
   }
+}
+
+/// What went wrong with a source extension, in words for the user: shown in
+/// the install prompt's messages, the DJ booth's notices and the soundboard's
+/// import. An extension's own error passes through as it wrote it.
+class _Errors {
+  static String errorDjExtensionNotForPlatform(String platform) =>
+      Intl.message("It has nothing for this computer ($platform)",
+          name: "errorDjExtensionNotForPlatform",
+          args: [platform],
+          desc: "Why a source extension can't be installed: it has no "
+              "programs for this kind of computer. The placeholder is the "
+              "platform, like linux-x64");
+
+  static String get errorDjExtensionFileTooBig =>
+      Intl.message("That file is too big to be one",
+          name: "errorDjExtensionFileTooBig",
+          desc: "Why a file picked or linked to as a source extension can't be "
+              "one: it is too big to be a source extension");
+
+  static String get errorDjExtensionNotHttps =>
+      Intl.message("That is not an https link",
+          name: "errorDjExtensionNotHttps",
+          desc: "Why a link to a source extension was turned down: it does not "
+              "start with https");
+
+  static String get errorDjExtensionNotZip =>
+      Intl.message("That isn't a .zip file",
+          name: "errorDjExtensionNotZip",
+          desc: "Why a file opened as a source extension was turned down: "
+              "extensions come as .zip files");
+
+  static String errorDjExtensionNoManifest(String file) => Intl.message(
+      "That isn't a DJ source extension: it has no $file",
+      name: "errorDjExtensionNoManifest",
+      args: [file],
+      desc: "Why a .zip opened as a source extension was turned down: it has "
+          "no manifest; the placeholder is the manifest's file name");
+
+  static String errorDjExtensionInUse(String name) => Intl.message(
+      "$name is in use: try again once the booth isn't using it",
+      name: "errorDjExtensionInUse",
+      args: [name],
+      desc: "Why a source extension could not be updated or removed: the DJ "
+          "booth is using it. The placeholder is the extension's name");
+
+  static String get errorDjExtensionOutsideFolder =>
+      Intl.message("The package has files that would land outside its folder",
+          name: "errorDjExtensionOutsideFolder",
+          desc: "Why a source extension was not installed: its .zip has files "
+              "whose paths point outside the extension's own folder");
+
+  static String get errorDjExtensionTooBigUnpacked =>
+      Intl.message("The package unpacks too big",
+          name: "errorDjExtensionTooBigUnpacked",
+          desc: "Why a source extension was not installed: its .zip is too big "
+              "once unpacked");
+
+  static String errorDjExtensionChecksum(String file) => Intl.message(
+      "$file isn't the file the extension expects (its checksum differs)",
+      name: "errorDjExtensionChecksum",
+      args: [file],
+      desc: "Why a source extension was not installed: a program it "
+          "downloaded is not the one it named. The placeholder is the "
+          "downloaded file's name");
+
+  static String errorDjExtensionNotInZip(String file, String path) =>
+      Intl.message("$file has no $path in it",
+          name: "errorDjExtensionNotInZip",
+          args: [file, path],
+          desc: "Why a source extension was not installed: a .zip it "
+              "downloaded (first placeholder) does not hold the file it "
+              "needs (second placeholder)");
+
+  static String errorDjExtensionDownloadFailed(int status, String link) =>
+      Intl.message("The download failed ($status): $link",
+          name: "errorDjExtensionDownloadFailed",
+          args: [status, link],
+          desc: "Why a source extension, or a program it needs, could not be "
+              "downloaded: the server answered with an HTTP error. The "
+              "placeholders are the HTTP status code and the link");
+
+  static String get errorDjExtensionStalled =>
+      Intl.message("The download stalled",
+          name: "errorDjExtensionStalled",
+          desc: "Why a source extension, or a program it needs, could not be "
+              "downloaded: the download stopped making progress");
+
+  static String errorDjExtensionCouldNotStart(String name, String reason) =>
+      Intl.message(
+          "$name couldn't start ($reason): installing it again may "
+          "fix it",
+          name: "errorDjExtensionCouldNotStart",
+          args: [name, reason],
+          desc: "When a source extension's program could not be started. The "
+              "placeholders are the extension's name and the system's error");
+
+  static String errorDjExtensionTimedOut(String name) =>
+      Intl.message("$name took too long",
+          name: "errorDjExtensionTimedOut",
+          args: [name],
+          desc: "When a source extension took too long to answer and was "
+              "stopped. The placeholder is the extension's name");
+
+  static String errorDjExtensionNoAnswer(String name) =>
+      Intl.message("$name stopped without answering",
+          name: "errorDjExtensionNoAnswer",
+          args: [name],
+          desc: "When a source extension ended without giving an answer or an "
+              "error. The placeholder is the extension's name");
+
+  static String errorDjExtensionFailed(String name, String reason) =>
+      Intl.message("$name failed: $reason",
+          name: "errorDjExtensionFailed",
+          args: [name, reason],
+          desc: "When a source extension ended without an answer; the second "
+              "placeholder is the last thing it printed, in its own words");
 }

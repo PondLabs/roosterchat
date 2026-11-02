@@ -192,7 +192,7 @@ class GetOrCreateRoom extends StatefulWidget {
           )
         : null;
 
-    if (MediaQuery.of(context).mobile) {
+    if (MediaQuery.sizeOf(context).mobile) {
       _RoomSourceOptions? source;
       if (initialRoomAddress != null) {
         source = _RoomSourceOptions.join;
@@ -308,7 +308,7 @@ class _GetOrCreateRoomState extends State<GetOrCreateRoom> {
 
   @override
   Widget build(BuildContext context) {
-    if (MediaQuery.of(context).mobile)
+    if (MediaQuery.sizeOf(context).mobile)
       return IgnorePointer(
         ignoring: dimmed,
         child: Opacity(
@@ -369,7 +369,8 @@ class _GetOrCreateRoomState extends State<GetOrCreateRoom> {
                             createEntry(widget.existing!),
                           if (widget.join != null) createEntry(widget.join!),
                           if (widget.creators.isNotEmpty)
-                            tiamat.Text.labelLow("Create Room:"),
+                            tiamat.Text.labelLow(
+                                RoomCreationStrings.labelRoomCreateRoomHeading),
                           for (var entry in widget.creators) createEntry(entry)
                         ],
                       ),
@@ -562,7 +563,7 @@ class _GetOrCreateRoomState extends State<GetOrCreateRoom> {
 
       await AdaptiveDialog.show(
         context,
-        title: "Error",
+        title: RoomCreationStrings.labelRoomCreateErrorTitle,
         builder: (context) {
           return tiamat.Text.body(e.toString());
         },

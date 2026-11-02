@@ -9,6 +9,7 @@ import 'package:rooster/ui/molecules/user_panel.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/utils/error_utils.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -38,6 +39,22 @@ class _TimelineEventViewPollState extends State<TimelineEventViewPoll>
   Map<String, Set<String>> pollResponses = {};
   TimelineEvent? event;
 
+  String labelPollVoteCount(int howMany) => Intl.plural(howMany,
+      one: "1 vote",
+      other: "$howMany votes",
+      name: "labelPollVoteCount",
+      args: [howMany],
+      desc: "Under a poll in the chat: how many votes it has");
+
+  String get labelPollResultsHiddenUntilEnd =>
+      Intl.message("Results will be visible once the poll has ended",
+          name: "labelPollResultsHiddenUntilEnd",
+          desc: "Under a closed poll in the chat, whose results stay hidden "
+              "until it ends");
+
+  String get labelPollEnded => Intl.message("This poll has ended",
+      name: "labelPollEnded", desc: "Under a poll in the chat that has ended");
+
   @override
   void initState() {
     polls = widget.timeline.client.getComponent<PollComponent>();
@@ -64,7 +81,8 @@ class _TimelineEventViewPollState extends State<TimelineEventViewPoll>
       showSender: true,
       formattedContent: ConstrainedBox(
         constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).desktop ? 500 : double.infinity),
+            maxWidth:
+                MediaQuery.sizeOf(context).desktop ? 500 : double.infinity),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -76,15 +94,19 @@ class _TimelineEventViewPollState extends State<TimelineEventViewPoll>
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                tiamat.Text.labelLow("$totalVotes votes"),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    if (!showResults)
-                      tiamat.Text.labelLow(
-                          "Results will be visible once the poll has ended"),
-                    if (isFinished) tiamat.Text.labelLow("This poll has ended")
-                  ],
+                tiamat.Text.labelLow(labelPollVoteCount(totalVotes)),
+                const SizedBox(width: 8),
+                // Wraps instead of running past the edge when the note is
+                // longer than the room beside the count.
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (!showResults)
+                        tiamat.Text.labelLow(labelPollResultsHiddenUntilEnd),
+                      if (isFinished) tiamat.Text.labelLow(labelPollEnded)
+                    ],
+                  ),
                 ),
               ],
             )

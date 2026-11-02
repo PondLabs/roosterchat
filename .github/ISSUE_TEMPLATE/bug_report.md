@@ -1,8 +1,8 @@
 ---
 name: Bug report
-about: Create a report to help us improve
-title: ''
-labels: ''
+about: Something in Rooster doesn't work the way it should
+title: '[Bug] '
+labels: 'bug, needs-triage'
 assignees: ''
 
 ---
@@ -20,10 +20,13 @@ Steps to reproduce the behavior:
 **Expected behavior**
 A clear and concise description of what you expected to happen.
 
+**How often does it happen?**
+Every time / sometimes / once.
+
 **Screenshots**
-If applicable, add screenshots to help explain your problem.
+If applicable, add screenshots or a short screen recording to help explain your problem.
 
 **Additional context**
-Add any other context about the problem here.
+Add any other context about the problem here, e.g. your homeserver, or whether it started after an update.
 
 <!---  Please paste "Device Info" below this line. You can grab device info from Rooster > Settings > About > Click the 'Copy' Icon  --->

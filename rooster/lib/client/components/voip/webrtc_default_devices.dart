@@ -69,7 +69,10 @@ class WebrtcDefaultDevices {
   }
 
   static Future<String?> getDefaultMicrophoneId() async {
-    if (PlatformUtils.isAndroid || PlatformUtils.isWeb) return null;
+    // Android has no picker. The web does, and saved the pick, but every
+    // call then captured the browser's default: the id is stable per
+    // origin once the microphone has been allowed, so the pick is used.
+    if (PlatformUtils.isAndroid) return null;
     return (await _find(AudioDeviceKind.input))?.deviceId;
   }
 
@@ -98,6 +101,10 @@ class WebrtcDefaultDevices {
     return devices.firstWhereOrNull((d) => d.label == wanted) ??
         devices.firstWhereOrNull((d) => d.deviceId == wanted);
   }
+
+  /// The device of [kind] the user picked, if it is here.
+  static Future<webrtc.MediaDeviceInfo?> picked(AudioDeviceKind kind) =>
+      _find(kind);
 
   static Future<bool> _select(
       AudioDeviceKind kind, webrtc.MediaDeviceInfo device) async {

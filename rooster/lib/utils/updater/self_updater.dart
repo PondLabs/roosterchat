@@ -13,9 +13,19 @@
 // directory on Windows, so the last step has to outlive it.
 import 'package:rooster/utils/updater/update_release.dart';
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 
 import 'self_updater_stub.dart' if (dart.library.io) 'self_updater_native.dart'
     as platform;
+
+/// What the loading window and the update button both say while a release
+/// is being unpacked.
+String labelUpdateUnpacking(String tag) => Intl.message("Unpacking $tag…",
+    name: "labelUpdateUnpacking",
+    args: [tag],
+    desc: "Shown in the loading window and under Version in Settings while a "
+        "downloaded update is unpacked; the tag is the release's version, "
+        "for example v1.18.0");
 
 /// Where an update has got to. The button reads this to know what to show.
 enum UpdateStage {
@@ -62,6 +72,9 @@ abstract class SelfUpdater {
   static SelfUpdater? _instance;
   static SelfUpdater get instance => _instance ??= platform.createSelfUpdater();
 
+  @visibleForTesting
+  static set instance(SelfUpdater? updater) => _instance = updater;
+
   /// Follows the update as it goes, for the settings page.
   ValueListenable<UpdateProgress> get progress;
 
@@ -71,7 +84,8 @@ abstract class SelfUpdater {
 
   /// Looks for a newer release and, when there is one and [canInstall],
   /// fetches and unpacks it. Safe to call again; does nothing while busy.
-  Future<void> checkAndPrepare();
+  /// [checkTimeout] bounds the look at GitHub, not the download.
+  Future<void> checkAndPrepare({Duration? checkTimeout});
 
   /// Swaps in what [checkAndPrepare] unpacked and starts it. The caller
   /// closes the app straight after: the swap only happens once this process

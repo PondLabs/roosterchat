@@ -1,0 +1,146 @@
+<!doctype html>
+<!-- A made-up kart game for Jonas to stream in the screenshots. Flat shapes,
+     drawn every frame from the time, so a screenshot at any moment looks
+     like a frame of a game. -->
+<html>
+<head>
+<meta charset="utf-8">
+<title>Kart Night</title>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #3F6E9E; }
+  svg { display: block; width: 100vw; height: 100vh; }
+  text { font-family: "Sora", "Nunito Sans", system-ui, sans-serif; font-weight: 800; }
+</style>
+</head>
+<body>
+<svg id="s" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <clipPath id="road"><path d="M700 470 H900 L1600 900 H0z"/></clipPath>
+  </defs>
+  <rect width="1600" height="900" fill="#4E86B8"/>
+  <rect y="300" width="1600" height="180" fill="#6FA0CC"/>
+  <circle cx="1270" cy="170" r="74" fill="#F8C35A"/>
+  <g id="clouds" fill="#EAF2F8"></g>
+  <path d="M0 430 Q 160 300 330 400 T 700 380 T 1060 395 T 1600 410 V 520 H0z" fill="#5E8F4E"/>
+  <path d="M0 460 Q 260 380 520 452 T 1100 440 T 1600 455 V 520 H0z" fill="#4F7F40"/>
+  <rect y="470" width="1600" height="430" fill="#467536"/>
+  <g id="trees"></g>
+  <path d="M700 470 H900 L1600 900 H0z" fill="#4A4442"/>
+  <g clip-path="url(#road)"><g id="stripes"></g></g>
+  <path d="M700 470 L0 900" stroke="#F5EBDD" stroke-width="10"/>
+  <path d="M900 470 L1600 900" stroke="#F5EBDD" stroke-width="10"/>
+  <g id="dashes" fill="#F5EBDD"></g>
+  <g id="rival">
+    <rect x="-46" y="-30" width="92" height="46" rx="14" fill="#F89B17"/>
+    <rect x="-30" y="-50" width="60" height="26" rx="9" fill="#FCF8F1"/>
+    <circle cx="0" cy="-58" r="15" fill="#5E8F4E"/>
+    <circle cx="-32" cy="18" r="13" fill="#211614"/><circle cx="32" cy="18" r="13" fill="#211614"/>
+  </g>
+  <g id="kart">
+    <rect x="-80" y="-50" width="160" height="80" rx="24" fill="#E8382A"/>
+    <rect x="-50" y="-86" width="100" height="44" rx="14" fill="#FCF8F1"/>
+    <circle cx="0" cy="-100" r="26" fill="#3F4F6E"/>
+    <rect x="-22" y="-112" width="44" height="12" rx="6" fill="#211614"/>
+    <rect x="-96" y="-8" width="28" height="56" rx="10" fill="#211614"/>
+    <rect x="68" y="-8" width="28" height="56" rx="10" fill="#211614"/>
+    <rect x="-64" y="18" width="128" height="14" rx="7" fill="#B42A1F"/>
+  </g>
+  <g id="dust" fill="#C9BDB2" opacity=".75"></g>
+  <!-- HUD -->
+  <g>
+    <rect x="40" y="36" width="250" height="92" rx="20" fill="#211614" opacity=".72"/>
+    <text x="70" y="98" font-size="52" fill="#FFF">LAP 2/3</text>
+    <rect x="40" y="144" width="250" height="56" rx="16" fill="#211614" opacity=".72"/>
+    <text id="time" x="70" y="182" font-size="30" fill="#F5EBDD">1:42.37</text>
+    <rect x="1330" y="700" width="230" height="160" rx="26" fill="#211614" opacity=".72"/>
+    <text x="1445" y="815" font-size="104" text-anchor="middle" fill="#FFF">1<tspan font-size="50" dy="-38">st</tspan></text>
+    <rect x="1350" y="36" width="210" height="150" rx="20" fill="#211614" opacity=".72"/>
+    <path d="M1390 160 C 1380 80, 1460 60, 1490 90 S 1540 160, 1500 165 S 1400 175, 1390 160z" fill="none" stroke="#F5EBDD" stroke-width="8" stroke-linejoin="round"/>
+    <circle id="me" cx="1470" cy="76" r="11" fill="#E8382A"/>
+    <circle id="rv" cx="1395" cy="120" r="9" fill="#F89B17"/>
+    <rect x="40" y="760" width="380" height="100" rx="22" fill="#211614" opacity=".72"/>
+    <text id="speed" x="70" y="833" font-size="62" fill="#FFF">87</text>
+    <text x="180" y="833" font-size="30" fill="#F5EBDD">km/h</text>
+    <rect x="316" y="790" width="80" height="44" rx="12" fill="#F89B17"/>
+    <text x="356" y="822" font-size="26" text-anchor="middle" fill="#211614">x3</text>
+  </g>
+</svg>
+<script>
+const NS = "http://www.w3.org/2000/svg";
+const el = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
+const clouds = document.getElementById("clouds");
+[[220, 140, 1], [620, 90, .8], [980, 200, 1.2], [1500, 120, .9]].forEach(([x, y, s]) => {
+  const g = el("g", { "data-x": x, "data-y": y, "data-s": s }, clouds);
+  el("ellipse", { cx: 0, cy: 0, rx: 90 * s, ry: 34 * s }, g);
+  el("ellipse", { cx: 50 * s, cy: -20 * s, rx: 60 * s, ry: 34 * s }, g);
+  el("ellipse", { cx: -50 * s, cy: -12 * s, rx: 54 * s, ry: 28 * s }, g);
+});
+const trees = document.getElementById("trees");
+const TREES = [];
+for (let i = 0; i < 12; i++) {
+  const g = el("g", {}, trees);
+  el("rect", { x: -8, y: -10, width: 16, height: 40, fill: "#6B4A33" }, g);
+  el("circle", { cx: 0, cy: -34, r: 38, fill: i % 2 ? "#3D6B30" : "#2F5A26" }, g);
+  TREES.push({ g, side: i % 2 ? 1 : -1, z: i / 12 });
+}
+const stripes = document.getElementById("stripes");
+const STRIPES = [];
+for (let i = 0; i < 10; i++) STRIPES.push(el("path", { fill: i % 2 ? "#4F4846" : "#45403E" }, stripes));
+const dashes = document.getElementById("dashes");
+const DASHES = [];
+for (let i = 0; i < 9; i++) DASHES.push(el("path", {}, dashes));
+const dust = document.getElementById("dust");
+const PUFFS = [];
+for (let i = 0; i < 8; i++) PUFFS.push(el("circle", { r: 10 }, dust));
+
+function frame(t) {
+  [...clouds.children].forEach((g, i) => {
+    const x = ((+g.dataset.x - t * 12 * (1 + i * .2)) % 1800 + 1800) % 1800 - 100;
+    g.setAttribute("transform", `translate(${x} ${g.dataset.y})`);
+  });
+  const speed = .55;
+  const z0 = (t * speed) % 1;
+  STRIPES.forEach((p, i) => {
+    const a = ((i / 10) + z0) % 1, b = a + .1;
+    const ya = 470 + a * a * 430, yb = 470 + Math.min(1, b) ** 2 * 430;
+    p.setAttribute("d", `M0 ${ya} H1600 V${yb} H0z`);
+  });
+  DASHES.forEach((d, i) => {
+    const z = ((i / 9) + z0) % 1;
+    const y = 470 + z * z * 430, w = 3 + z * 26, h = 6 + z * 70;
+    d.setAttribute("d", `M${800 - w / 2} ${y} h${w} v${h} h${-w}z`);
+  });
+  TREES.forEach((tr) => {
+    const z = (tr.z + z0) % 1;
+    const y = 470 + z * z * 430;
+    const half = 100 + z * z * 700;
+    const x = 800 + tr.side * (half + 60 + z * 260);
+    const s = .25 + z * 1.6;
+    tr.g.setAttribute("transform", `translate(${x} ${y}) scale(${s})`);
+  });
+  const sway = Math.sin(t * 1.7) * 160;
+  document.getElementById("kart").setAttribute("transform", `translate(${800 + sway} ${770 + Math.sin(t * 13) * 3}) rotate(${Math.cos(t * 1.7) * 4}) scale(1.35)`);
+  document.getElementById("rival").setAttribute("transform", `translate(${830 + Math.sin(t * 1.1 + 1) * 70} ${560}) scale(${.9})`);
+  PUFFS.forEach((c, i) => {
+    const k = ((t * 2 + i / 8) % 1);
+    c.setAttribute("cx", 800 + sway + (i % 2 ? 90 : -90) + Math.sin(i) * 10);
+    c.setAttribute("cy", 830 + k * 50);
+    c.setAttribute("r", 8 + k * 26);
+    c.setAttribute("opacity", 1 - k);
+  });
+  const lap = 102.37 + t;
+  document.getElementById("time").textContent = `${Math.floor(lap / 60)}:${(lap % 60).toFixed(2).padStart(5, "0")}`;
+  document.getElementById("speed").textContent = Math.round(84 + Math.sin(t * 2) * 6);
+  const a = t * .6;
+  document.getElementById("me").setAttribute("cx", 1465 + Math.cos(a) * 40);
+  document.getElementById("me").setAttribute("cy", 118 + Math.sin(a) * 38);
+}
+window.seek = frame;
+if (!location.hash.includes("still")) {
+  const t0 = performance.now();
+  const tick = () => { frame((performance.now() - t0) / 1000 + 3); requestAnimationFrame(tick); };
+  tick();
+} else frame(parseFloat(location.hash.split("=")[1] || "3.2"));
+</script>
+</body>
+</html>

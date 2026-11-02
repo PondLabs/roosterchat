@@ -47,8 +47,9 @@ abstract class MicrophoneCapture {
 /// enabled. [update] is called whenever something may have changed (the
 /// preference, an unmute, the microphone being published) and once a second,
 /// and catches up then. It also watches our DSP: supported, asked for, and
-/// fed no audio for [stallLimit] of live microphone, it is given up on for
-/// the rest of the call and WebRTC's suppressor goes back on.
+/// fed no audio, or running without suppressing, for [stallLimit] of live
+/// microphone, it is given up on for the rest of the call and WebRTC's
+/// suppressor goes back on.
 class MicrophoneNoiseSuppression {
   final AudioProcessingManager dsp;
   final MicrophoneCapture? Function() microphone;
@@ -113,19 +114,34 @@ class MicrophoneNoiseSuppression {
       _stalledSince = null;
       return;
     }
+    // Frames moving while the DSP, told to suppress, says it does not (a
+    // capture rate it cannot process, or suppression it gave up on after
+    // its state kept going bad): it looks alive while the room's noise goes
+    // out with no suppressor at all.
+    final processing = dsp.isProcessing;
+    final report = dsp.lastReport;
+    final notSuppressing = processing &&
+        dsp.settings.noiseSuppression &&
+        report != null &&
+        !report.noiseSuppressionActive;
     // With a microphone watch, only a capture known to flow can starve the
     // DSP: stalled, just repaired or not known yet, it is the watch's.
     final flowing = captureFlowing;
-    if (dsp.isProcessing || (flowing != null && flowing() != true)) {
+    if ((processing && !notSuppressing) ||
+        (!processing && flowing != null && flowing() != true)) {
       _stalledSince = null;
       return;
     }
     final since = _stalledSince ??= _now();
     if (_now().difference(since) < stallLimit) return;
     _dspFailed = true;
-    Log.w("Voice DSP: no microphone audio reached it in "
-        "${stallLimit.inSeconds} s of live microphone; turning WebRTC's "
-        "noise suppression back on for this call");
+    Log.w(notSuppressing
+        ? "Voice DSP: running without suppressing for "
+            "${stallLimit.inSeconds} s (flags ${report.flags}); turning "
+            "WebRTC's noise suppression back on for this call"
+        : "Voice DSP: no microphone audio reached it in "
+            "${stallLimit.inSeconds} s of live microphone; turning WebRTC's "
+            "noise suppression back on for this call");
     onDspFailed?.call();
   }
 

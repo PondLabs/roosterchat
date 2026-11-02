@@ -1,6 +1,7 @@
 // Who takes the noise out of a call's microphone: our DSP or WebRTC's (the
 // browser's) own suppressor, never both, never neither, through a preference
 // flip, mute, a late published microphone and a DSP that never gets audio.
+import 'package:rooster/client/components/voip/audio_processing/audio_dsp_settings.dart';
 import 'package:rooster/client/components/voip/audio_processing/audio_processing_manager_stub.dart';
 import 'package:rooster/client/components/voip/audio_processing/microphone_noise_suppression.dart';
 import 'package:rooster/client/matrix/components/voip_room/livekit_microphone.dart';
@@ -44,7 +45,37 @@ class _Dsp extends UnsupportedAudioProcessingManager {
 
   @override
   bool get isProcessing => processing;
+
+  /// What the DSP last said it did; suppressing unless a test says not.
+  AudioDspReport? report = _report(suppressing: true);
+
+  @override
+  AudioDspReport? get lastReport => report;
+
+  bool suppressionAsked = true;
+
+  @override
+  AudioDspSettings get settings => AudioDspSettings(
+        noiseSuppression: suppressionAsked,
+        gateAuto: true,
+        gateThresholdDb: -50,
+        farEndDucking: false,
+        speakerBleed: false,
+      );
 }
+
+AudioDspReport _report(
+        {required bool suppressing, bool unsupportedRate = false}) =>
+    AudioDspReport(
+      levelDb: -40,
+      vad: 0,
+      farLevelDb: -120,
+      gainDb: 0,
+      sampleRate: 48000,
+      frames: 100,
+      flags: (suppressing ? AudioDspReport.flagNsActive : 0) |
+          (unsupportedRate ? AudioDspReport.flagUnsupportedRate : 0),
+    );
 
 class _Mic implements MicrophoneCapture {
   @override
@@ -313,6 +344,60 @@ void main() {
 
     test('a DSP that is processing is left alone', () async {
       await liveFor(const Duration(seconds: 10));
+      expect(ns.dspFailed, isFalse);
+    });
+
+    // A rate the DSP cannot process, or suppression it gave up on after its
+    // state kept going bad: the frames keep moving, so it looked alive,
+    // while the room's noise went out with no suppressor at all.
+    test('a DSP that processes without suppressing is given up on', () async {
+      dsp.report = _report(suppressing: false);
+      await liveFor(const Duration(seconds: 3));
+      expect(ns.dspFailed, isFalse);
+      expect(mic!.restarts, isEmpty);
+
+      await liveFor(const Duration(seconds: 2));
+      expect(ns.dspFailed, isTrue);
+      expect(ns.wantWebrtcSuppressor, isTrue);
+      expect(mic!.restarts, [true]);
+      expect(failures, 1);
+    });
+
+    test('a rate the DSP cannot process is given up on', () async {
+      dsp.report = _report(suppressing: false, unsupportedRate: true);
+      await liveFor(const Duration(seconds: 5));
+      expect(ns.dspFailed, isTrue);
+      expect(mic!.restarts, [true]);
+    });
+
+    test('a DSP that suppresses is left alone', () async {
+      dsp.report = _report(suppressing: true);
+      await liveFor(const Duration(seconds: 30));
+      expect(ns.dspFailed, isFalse);
+      expect(mic!.restarts, isEmpty);
+    });
+
+    // A flip of the preference reaches the DSP's report a moment later.
+    test(
+        'a report that has not caught up with the settings yet is not a failure',
+        () async {
+      dsp.report = _report(suppressing: false);
+      await liveFor(const Duration(seconds: 2));
+      dsp.report = _report(suppressing: true);
+      await liveFor(const Duration(seconds: 30));
+      expect(ns.dspFailed, isFalse);
+    });
+
+    test('a DSP told not to suppress is not blamed for it', () async {
+      dsp.suppressionAsked = false;
+      dsp.report = _report(suppressing: false);
+      await liveFor(const Duration(seconds: 30));
+      expect(ns.dspFailed, isFalse);
+    });
+
+    test('a DSP that has not reported yet is not blamed', () async {
+      dsp.report = null;
+      await liveFor(const Duration(seconds: 30));
       expect(ns.dspFailed, isFalse);
     });
 

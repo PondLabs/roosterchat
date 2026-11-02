@@ -29,6 +29,9 @@ class _RemotePublication implements RemoteTrackPublication<RemoteTrack> {
   final String sid = 'TR_screen';
 
   @override
+  String get name => '';
+
+  @override
   RemoteTrack? get track => null;
 
   @override

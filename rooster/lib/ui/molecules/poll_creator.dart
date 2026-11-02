@@ -1,5 +1,6 @@
 import 'package:rooster/client/components/polls/poll_component.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class PollCreator extends StatefulWidget {
@@ -21,6 +22,60 @@ class _PollCreatorState extends State<PollCreator> {
 
   String? errorMessage;
 
+  String get labelPollQuestion => Intl.message("Question",
+      name: "labelPollQuestion",
+      desc: "Label of the field for the question in the poll creator");
+
+  String get labelPollOpen => Intl.message("Open Poll",
+      name: "labelPollOpen",
+      desc: "Kind of poll in the poll creator whose results show as people "
+          "vote");
+
+  String get labelPollClosed => Intl.message("Closed Poll",
+      name: "labelPollClosed",
+      desc: "Kind of poll in the poll creator whose results stay hidden "
+          "until it ends");
+
+  String get labelPollOpenDescription =>
+      Intl.message("Voters can see results as they come in",
+          name: "labelPollOpenDescription",
+          desc: "Under 'Open Poll' in the poll creator");
+
+  String get labelPollClosedDescription =>
+      Intl.message("Votes are hidden until the poll ends",
+          name: "labelPollClosedDescription",
+          desc: "Under 'Closed Poll' in the poll creator");
+
+  String labelPollOption(int number) => Intl.message("Option $number",
+      name: "labelPollOption",
+      args: [number],
+      desc: "Label of each answer field in the poll creator, with its "
+          "number: Option 1, Option 2…");
+
+  String get labelPollAllowMultipleAnswers =>
+      Intl.message("Allow multiple answers",
+          name: "labelPollAllowMultipleAnswers",
+          desc: "Checkbox in the poll creator: voters may pick more than one "
+              "answer");
+
+  String get promptPollAddOption => Intl.message("Add Option",
+      name: "promptPollAddOption",
+      desc: "Button in the poll creator that adds another answer field");
+
+  String get promptPollCreate => Intl.message("Create",
+      name: "promptPollCreate",
+      desc: "Button at the bottom of the poll creator that posts the poll");
+
+  String get errorPollNoQuestion => Intl.message("Poll must have a question",
+      name: "errorPollNoQuestion",
+      desc: "Shown in the poll creator when the question was left empty");
+
+  String get errorPollBlankOption =>
+      Intl.message("Poll cannot have a blank option",
+          name: "errorPollBlankOption",
+          desc: "Shown in the poll creator when an answer field was left "
+              "empty");
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -33,7 +88,7 @@ class _PollCreatorState extends State<PollCreator> {
             TextField(
               controller: questionController,
               decoration: InputDecoration(
-                labelText: "Question",
+                labelText: labelPollQuestion,
                 border: const OutlineInputBorder(),
               ),
             ),
@@ -51,10 +106,10 @@ class _PollCreatorState extends State<PollCreator> {
                 }
               },
               itemBuilder: (item) {
-                var msg = item ? "Open Poll" : "Closed Poll";
+                var msg = item ? labelPollOpen : labelPollClosed;
                 var descriptor = item
-                    ? "Voters can see results as they come in"
-                    : "Votes are hidden until the poll ends";
+                    ? labelPollOpenDescription
+                    : labelPollClosedDescription;
                 return Padding(
                   padding: const EdgeInsets.fromLTRB(0, 6, 0, 0),
                   child: Column(
@@ -104,7 +159,7 @@ class _PollCreatorState extends State<PollCreator> {
                                                 )
                                               : null),
                                       border: const OutlineInputBorder(),
-                                      labelText: "Option ${i + 1}"),
+                                      labelText: labelPollOption(i + 1)),
                                 ),
                               ),
                             ],
@@ -123,7 +178,7 @@ class _PollCreatorState extends State<PollCreator> {
                 Flexible(
                   child: CheckboxListTile(
                       dense: true,
-                      title: tiamat.Text("Allow multiple answers"),
+                      title: tiamat.Text(labelPollAllowMultipleAnswers),
                       value: multiAnswer,
                       controlAffinity: ListTileControlAffinity.leading,
                       onChanged: (value) {
@@ -135,7 +190,7 @@ class _PollCreatorState extends State<PollCreator> {
                       }),
                 ),
                 TextButton.icon(
-                  label: Text("Add Option"),
+                  label: Text(promptPollAddOption),
                   onPressed: () {
                     setState(() {
                       options.add(TextEditingController());
@@ -149,7 +204,7 @@ class _PollCreatorState extends State<PollCreator> {
               height: 12,
             ),
             tiamat.Button(
-                text: "Create",
+                text: promptPollCreate,
                 onTap: () async {
                   setState(() {
                     errorMessage = null;
@@ -158,7 +213,7 @@ class _PollCreatorState extends State<PollCreator> {
                   String question = questionController.text;
                   if (question.isEmpty) {
                     setState(() {
-                      errorMessage = "Poll must have a question";
+                      errorMessage = errorPollNoQuestion;
                     });
                     return;
                   }
@@ -168,7 +223,7 @@ class _PollCreatorState extends State<PollCreator> {
                   for (var controller in options) {
                     if (controller.text.trim().isEmpty) {
                       setState(() {
-                        errorMessage = "Poll cannot have a blank option";
+                        errorMessage = errorPollBlankOption;
                       });
                       return;
                     }

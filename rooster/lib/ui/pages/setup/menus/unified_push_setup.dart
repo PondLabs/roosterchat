@@ -107,7 +107,7 @@ If you already have a Unified Push compatible distributor app installed, you can
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            tiamat.Text.label(labelEnableUnifiedPush),
+            Flexible(child: tiamat.Text.label(labelEnableUnifiedPush)),
             tiamat.Switch(
               state: unifiedPushEnabled,
               onChanged: (value) {

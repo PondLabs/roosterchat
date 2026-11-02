@@ -5,6 +5,7 @@ import 'package:rooster/main.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/pages/settings/categories/room/calendar/add_calendar_dialog.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/atoms/tile.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -24,6 +25,63 @@ class _RoomCalendarSettingsPageState extends State<RoomCalendarSettingsPage> {
   StreamSubscription? sub;
 
   bool runningSync = false;
+
+  String get labelCalendarSyncedCalendars => Intl.message("Synced Calendars",
+      name: "labelCalendarSyncedCalendars",
+      desc:
+          "Header of the list of outside calendars a calendar room keeps in sync, in the room's calendar settings");
+
+  String get labelCalendarSyncSourceTitle => Intl.message(
+      "Sync Calendar Source",
+      name: "labelCalendarSyncSourceTitle",
+      desc:
+          "Title of the dialog that picks where a new synced calendar comes from, in a calendar room's settings");
+
+  String get labelCalendarSourceRoom => Intl.message("Room",
+      name: "labelCalendarSourceRoom",
+      desc:
+          "Option in the dialog that picks where a synced calendar comes from: another room's calendar");
+
+  String get promptCalendarRunSync => Intl.message("Run Sync",
+      name: "promptCalendarRunSync",
+      desc:
+          "Button in a calendar room's settings that syncs the outside calendars now");
+
+  String labelCalendarSourceRoomId(String roomId) => Intl.message(
+      "Room $roomId",
+      name: "labelCalendarSourceRoomId",
+      args: [roomId],
+      desc:
+          "In the list of synced calendars, a calendar that comes from another room, with that room's ID");
+
+  String labelCalendarSyncedAsEvents(String source) => Intl.message(
+      "$source as Events",
+      name: "labelCalendarSyncedAsEvents",
+      args: [source],
+      desc:
+          "In the list of synced calendars: where a calendar comes from (a web site's name or a room), synced as events");
+
+  String labelCalendarSyncedAsUnavailability(String source) => Intl.message(
+      "$source as Unavailability",
+      name: "labelCalendarSyncedAsUnavailability",
+      args: [source],
+      desc:
+          "In the list of synced calendars: where a calendar comes from (a web site's name or a room), synced as times people are unavailable");
+
+  String labelCalendarSyncedAsEventsWithName(String source, String eventName) =>
+      Intl.message("$source as Events with name '$eventName'",
+          name: "labelCalendarSyncedAsEventsWithName",
+          args: [source, eventName],
+          desc:
+              "In the list of synced calendars: where a calendar comes from (a web site's name or a room), synced as events that all get the given name");
+
+  String labelCalendarSyncedAsUnavailabilityWithName(
+          String source, String eventName) =>
+      Intl.message("$source as Unavailability with name '$eventName'",
+          name: "labelCalendarSyncedAsUnavailabilityWithName",
+          args: [source, eventName],
+          desc:
+              "In the list of synced calendars: where a calendar comes from (a web site's name or a room), synced as times people are unavailable, all with the given name");
 
   @override
   void initState() {
@@ -46,7 +104,7 @@ class _RoomCalendarSettingsPageState extends State<RoomCalendarSettingsPage> {
   Widget build(BuildContext context) {
     return tiamat.Panel(
       mode: TileType.surfaceContainerLow,
-      header: "Synced Calendars",
+      header: labelCalendarSyncedCalendars,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -76,10 +134,12 @@ class _RoomCalendarSettingsPageState extends State<RoomCalendarSettingsPage> {
                         },
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child:
-                          buildSyncEntry(syncedCalendarUrls[remoteCalendarId]!),
+                    Flexible(
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: buildSyncEntry(
+                            syncedCalendarUrls[remoteCalendarId]!),
+                      ),
                     ),
                   ],
                 ),
@@ -99,15 +159,16 @@ class _RoomCalendarSettingsPageState extends State<RoomCalendarSettingsPage> {
                     icon: Icons.add,
                     onPressed: () => AdaptiveDialog.pickOne(
                       context,
-                      title: "Sync Calendar Source",
+                      title: labelCalendarSyncSourceTitle,
                       items: [
                         //  CalendarSource.room,
                         CalendarSource.ical,
                       ],
                       itemBuilder: (context, item, callback) {
                         var text = switch (item) {
-                          CalendarSource.ical => "Calendar Url",
-                          CalendarSource.room => "Room",
+                          CalendarSource.ical =>
+                            AddRemoteCalendarDialog.labelCalendarUrl,
+                          CalendarSource.room => labelCalendarSourceRoom,
                         };
 
                         var icon = switch (item) {
@@ -144,7 +205,7 @@ class _RoomCalendarSettingsPageState extends State<RoomCalendarSettingsPage> {
                     child: Align(
                       alignment: AlignmentGeometry.centerRight,
                       child: tiamat.Button.secondary(
-                        text: "Run Sync",
+                        text: promptCalendarRunSync,
                         isLoading: runningSync,
                         onTap: () {
                           setState(() {
@@ -171,7 +232,7 @@ class _RoomCalendarSettingsPageState extends State<RoomCalendarSettingsPage> {
   Widget buildSyncEntry(SyncedCalendar calendar) {
     var description = switch (calendar.sourceType) {
       CalendarSource.ical => Uri.parse(calendar.source).host,
-      CalendarSource.room => "Room ${calendar.source}",
+      CalendarSource.room => labelCalendarSourceRoomId(calendar.source),
     };
 
     var entryStyle = Theme.of(context).textTheme.bodyMedium!.copyWith(
@@ -180,20 +241,35 @@ class _RoomCalendarSettingsPageState extends State<RoomCalendarSettingsPage> {
           fontSize: 12,
         );
 
+    // The whole sentence is one translated message. It is built with marks
+    // in place of the source and the event name, so those two keep the
+    // stronger style and the words around them, in any order a language
+    // puts them, take the lighter one.
+    const sourceMark = "\u0001";
+    const nameMark = "\u0002";
+    var eventName = calendar.overrideEventName;
+    var template = switch (calendar.syncType) {
+      CalendarSyncType.events => eventName == null
+          ? labelCalendarSyncedAsEvents(sourceMark)
+          : labelCalendarSyncedAsEventsWithName(sourceMark, nameMark),
+      CalendarSyncType.unavailability => eventName == null
+          ? labelCalendarSyncedAsUnavailability(sourceMark)
+          : labelCalendarSyncedAsUnavailabilityWithName(sourceMark, nameMark),
+    };
+
+    var spans = <TextSpan>[];
+    template.splitMapJoin(RegExp("[$sourceMark$nameMark]"), onMatch: (match) {
+      spans.add(TextSpan(
+          text: match[0] == sourceMark ? description : (eventName ?? "")));
+      return "";
+    }, onNonMatch: (text) {
+      if (text.isNotEmpty) spans.add(TextSpan(text: text, style: entryStyle));
+      return "";
+    });
+
     return RichText(
       text: TextSpan(children: [
-        TextSpan(text: description),
-        TextSpan(text: " as ", style: entryStyle),
-        TextSpan(
-          text: switch (calendar.syncType) {
-            CalendarSyncType.events => "Events",
-            CalendarSyncType.unavailability => "Unavailability",
-          },
-        ),
-        if (calendar.overrideEventName != null)
-          TextSpan(text: " with name ", style: entryStyle),
-        if (calendar.overrideEventName != null)
-          TextSpan(text: "'${calendar.overrideEventName!}'"),
+        ...spans,
         if (preferences.developerMode.value)
           TextSpan(text: " (${calendar.id})", style: entryStyle)
       ]),

@@ -1,17 +1,69 @@
+import 'dart:convert';
+
 import 'package:rooster/client/auth.dart';
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/config/platform_utils.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/utils/custom_uri.dart';
+import 'package:rooster/utils/language/app_language.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
+import 'package:intl/intl.dart';
 
 import 'package:universal_html/html.dart' as html;
 import 'package:matrix/matrix.dart' as matrix;
 
 class MatrixSSOLoginFlow implements SsoLoginFlow {
+  static String get errorLoginWrongClientType =>
+      Intl.message("Attempted to login with the wrong type of client",
+          name: "errorLoginWrongClientType",
+          desc: "In the 'Login failed' dialog if single sign-on was started "
+              "for an account of another kind than Matrix; should never "
+              "happen");
+
+  static String get labelLoginSsoDoneTitle => Intl.message("Signed in",
+      name: "labelLoginSsoDoneTitle",
+      desc: "Title of the page the browser shows once single sign-on is done "
+          "and the app has the login, in the system browser on desktop");
+
+  static String get labelLoginSsoDone => Intl.message(
+      "You're signed in. You can close this page and go back to Rooster.",
+      name: "labelLoginSsoDone",
+      desc: "The page the browser shows once single sign-on is done and the "
+          "app has the login, in the system browser on desktop");
+
+  /// The page the system browser shows when single sign-on hands the login
+  /// back (desktop), in the app's language.
+  static String _landingPage() {
+    const escape = HtmlEscape();
+    return '''
+<!DOCTYPE html>
+<html lang="${AppLanguage.current.value.tag}">
+<head>
+  <meta charset="utf-8">
+  <title>${escape.convert(labelLoginSsoDoneTitle)}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    html, body { margin: 0; padding: 0; }
+    main {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;
+    }
+    p { padding: 2em; text-align: center; font-size: 2rem; }
+  </style>
+</head>
+<body>
+  <main><p>${escape.convert(labelLoginSsoDone)}</p></main>
+</body>
+</html>
+''';
+  }
+
   @override
   String? id;
   String? brand;
@@ -53,8 +105,7 @@ class MatrixSSOLoginFlow implements SsoLoginFlow {
   @override
   Future<LoginResult> submit(Client client) async {
     if (client is! MatrixClient) {
-      return LoginResultError(
-          "Attemted to login with the wrong type of client");
+      return LoginResultError(errorLoginWrongClientType);
     }
 
     try {
@@ -87,6 +138,7 @@ class MatrixSSOLoginFlow implements SsoLoginFlow {
           callbackUrlScheme: callbackScheme,
           options: FlutterWebAuth2Options(
             useWebview: false,
+            landingPageHtml: _landingPage(),
           ));
 
       var token = Uri.parse(result).queryParameters['loginToken'];

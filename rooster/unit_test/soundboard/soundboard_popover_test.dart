@@ -86,8 +86,12 @@ void main() {
     expect(played, ['s2']);
   });
 
+  // With a keyboard and a mouse: the tests below this one run as the phone
+  // flutter_test pretends to be unless they say otherwise.
+  const desktop = TargetPlatformVariant({TargetPlatform.linux});
+
   testWidgets('search is focused on open and filters sounds by name',
-      (tester) async {
+      variant: desktop, (tester) async {
     await pumpPopover(tester, [
       _source('!a', 'Roscas do CCO', [
         _sound('s1', 'Airhorn'),
@@ -113,7 +117,7 @@ void main() {
   });
 
   testWidgets('starring a sound adds a Favorites section at the top',
-      (tester) async {
+      variant: desktop, (tester) async {
     await pumpPopover(tester, [
       _source('!a', 'Roscas do CCO', [
         _sound('s1', 'Airhorn'),
@@ -341,5 +345,81 @@ void main() {
     ]);
 
     expect(find.text('Add sound'), findsNothing);
+  });
+
+  // Reported from the PWA on a phone: the sounds had no titles, only their
+  // emoji. The popover asks for 540 pixels and a phone gives it some 340,
+  // where three columns left each name about 30.
+  group('on a phone', () {
+    Future<void> pumpNarrow(WidgetTester tester, double width,
+        List<SoundboardSource> sources) async {
+      await tester.pumpWidget(_testApp(SizedBox(
+        width: width,
+        child: SoundboardPopover(
+          sources: sources,
+          favorites: favorites,
+          onPlay: played.add,
+          volume01: volume,
+          onVolumeChanged: (v) => volume = v,
+        ),
+      )));
+      await tester.pumpAndSettle();
+    }
+
+    test('the grid has as many columns as leave a name room', () {
+      expect(SoundboardPopover.columnsFor(SoundboardPopover.width), 3);
+      // A 360 wide phone, less the popover's margins.
+      expect(SoundboardPopover.columnsFor(344), 2);
+      // An early foldable's cover screen.
+      expect(SoundboardPopover.columnsFor(264), 1);
+    });
+
+    testWidgets('every sound shows its title next to its emoji',
+        (tester) async {
+      const names = ['Airhorn', 'Sad trombone', 'Vine boom', 'Bruh'];
+      await pumpNarrow(tester, 344, [
+        _source('!a', 'Roscas do CCO', [
+          for (final (i, name) in names.indexed) _sound('s$i', name),
+        ]),
+      ]);
+
+      for (final name in names) {
+        // Room for a dozen letters, where there were some 30 pixels (the
+        // test font is far wider than a real one, so not by the text).
+        expect(tester.getSize(find.text(name)).width, greaterThan(80));
+      }
+      // Two to a row.
+      expect(tester.getTopLeft(find.text('Airhorn')).dy,
+          tester.getTopLeft(find.text('Sad trombone')).dy);
+      expect(tester.getTopLeft(find.text('Vine boom')).dy,
+          greaterThan(tester.getTopLeft(find.text('Airhorn')).dy));
+
+      await tester.tap(find.text('Vine boom'));
+      expect(played, ['s2']);
+    });
+
+    testWidgets('opening it does not bring the keyboard up', (tester) async {
+      await pumpNarrow(tester, 344, [
+        _source('!a', 'Roscas do CCO', [_sound('s1', 'Airhorn')]),
+      ]);
+
+      expect(
+          tester.widget<TextField>(find.byType(TextField)).autofocus, isFalse);
+    });
+
+    testWidgets('a long press stars a sound; only a favorite has a star',
+        (tester) async {
+      await pumpNarrow(tester, 344, [
+        _source('!a', 'Roscas do CCO', [_sound('s1', 'Airhorn')]),
+      ]);
+      // No hidden button taking the name's room, to be hit by accident.
+      expect(find.byTooltip('Add Airhorn to favorites'), findsNothing);
+
+      await tester.longPress(find.text('Airhorn'));
+      await tester.pumpAndSettle();
+
+      expect(favorites.ids, ['s1']);
+      expect(find.byTooltip('Remove Airhorn from favorites'), findsWidgets);
+    });
   });
 }

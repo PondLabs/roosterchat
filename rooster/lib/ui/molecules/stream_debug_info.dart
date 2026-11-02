@@ -5,12 +5,19 @@ import 'dart:async';
 
 import 'package:rooster/main.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class StreamDebugInfo extends StatefulWidget {
   const StreamDebugInfo(this.stats, {super.key});
 
   final String stats;
+
+  static String get tooltipStreamDebugInfoMove => Intl.message(
+      "Click to move it to the next corner",
+      name: "tooltipStreamDebugInfoMove",
+      desc: "Tooltip of the stream info box developer mode shows over a call "
+          "tile; clicking it moves the box to the tile's next corner");
 
   /// The corners in the order a click goes round them.
   static const corners = {
@@ -57,7 +64,7 @@ class _StreamDebugInfoState extends State<StreamDebugInfo> {
     return Align(
       alignment: StreamDebugInfo.corners[_corner]!,
       child: Tooltip(
-        message: "Click to move it to the next corner",
+        message: StreamDebugInfo.tooltipStreamDebugInfoMove,
         child: MouseRegion(
           cursor: SystemMouseCursors.click,
           child: GestureDetector(

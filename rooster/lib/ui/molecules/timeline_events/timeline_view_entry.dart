@@ -24,6 +24,7 @@ import 'package:rooster/ui/molecules/timeline_events/timeline_event_menu.dart';
 import 'package:rooster/ui/molecules/timeline_events/timeline_event_menu_dialog.dart';
 import 'package:rooster/ui/molecules/user_panel.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
+import 'package:rooster/utils/common_strings.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:tiamat/atoms/context_menu.dart';
@@ -119,6 +120,20 @@ class TimelineViewEntryState extends State<TimelineViewEntry>
   String get labelTimelineNewMessagesMarker => Intl.message("New messages",
       desc: "Text that is shown below the last read message",
       name: "labelTimelineNewMessagesMarker");
+
+  String labelTimelineCollapsedMore(int howMany, String summary) =>
+      Intl.plural(howMany,
+          one: "$summary and 1 more",
+          other: "$summary and $howMany more",
+          name: "labelTimelineCollapsedMore",
+          args: [howMany, summary],
+          desc: "A folded run of room events (joins, name changes…): the "
+              "first few, separated by commas, then how many more the run "
+              "holds");
+
+  String get labelTimelineReadReceipts => Intl.message("Read Receipts",
+      name: "labelTimelineReadReceipts",
+      desc: "Title of the dialog listing who has read up to a message");
 
   @override
   void initState() {
@@ -278,6 +293,16 @@ class TimelineViewEntryState extends State<TimelineViewEntry>
   }
 
   @override
+  void didUpdateWidget(covariant TimelineViewEntry oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The line moves while the room is open, to the first message that
+    // arrived unseen.
+    if (oldWidget.lastReadEventId != widget.lastReadEventId) {
+      showUnreadMarker = shouldEventShowUnreadMarker(index);
+    }
+  }
+
+  @override
   void update(int newIndex) {
     index = newIndex;
     setState(() {
@@ -289,6 +314,79 @@ class TimelineViewEntryState extends State<TimelineViewEntry>
     } else {
       Log.w("Failed to get state from event key");
     }
+  }
+
+  /// The right-click menu's items, made when the menu opens: the menu
+  /// walks every space the room is in and every emoticon pack three times
+  /// over, and this used to run for every built entry on every rebuild of
+  /// the timeline (every incoming message, every hover).
+  List<ContextMenuItem> _desktopMenuItems(TimelineEvent event) {
+    var menu = TimelineEventMenu(
+        timeline: widget.timeline,
+        event: event,
+        context: context,
+        setEditingEvent: widget.setEditingEvent,
+        setReplyingEvent: widget.setReplyingEvent);
+    final items = <ContextMenuItem>[
+      if (menu.addReactionAction != null)
+        ContextMenuItem(
+          text: CommonStrings.promptAddReaction,
+          customBuilder: (context, onClick, {closeMenu}) => Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                for (var i = 0; i < 3 && i < menu.recentReactions.length; i++)
+                  InkWell(
+                      onTap: () {
+                        widget.timeline.room
+                            .addReaction(event, menu.recentReactions[i]);
+                        onClick();
+                      },
+                      child: SizedBox(
+                          height: 30,
+                          width: 30,
+                          child: EmojiWidget(menu.recentReactions[i]))),
+                tiamat.IconButton(
+                  icon: Icons.add_reaction,
+                  size: 24,
+                  onPressed: () {
+                    onClick();
+
+                    AdaptiveDialog.show(
+                      context,
+                      builder: (newContext) {
+                        return SizedBox(
+                            width: 500,
+                            height: 500,
+                            child: menu.addReactionAction!.secondaryMenuBuilder!
+                                .call(
+                              newContext,
+                              () {
+                                Navigator.of(newContext).pop();
+                              },
+                            ));
+                      },
+                    );
+                    menu.addReactionAction?.action?.call(context);
+                  },
+                )
+              ],
+            ),
+          ),
+        ),
+      for (var i in menu.primaryActions)
+        ContextMenuItem(
+            text: i.name,
+            icon: i.icon,
+            onPressed: () => i.action?.call(context)),
+      for (var i in menu.secondaryActions)
+        ContextMenuItem(
+            text: i.name,
+            icon: i.icon,
+            onPressed: () => i.action?.call(context))
+    ];
+    return items;
   }
 
   @override
@@ -338,7 +436,7 @@ class TimelineViewEntryState extends State<TimelineViewEntry>
       var diff = count - bodies.length;
       var text = bodies.join(", ");
       if (diff > 0) {
-        text += " and $diff more";
+        text = labelTimelineCollapsedMore(diff, text);
       }
       return ExpansionTile(
         title: Padding(
@@ -395,14 +493,14 @@ class TimelineViewEntryState extends State<TimelineViewEntry>
       );
     }
 
-    if (MediaQuery.of(context).desktop) {
+    if (MediaQuery.sizeOf(context).desktop) {
       result = MouseRegion(
         onEnter: (_) => widget.onEventHovered?.call(eventId),
         child: result,
       );
     }
 
-    if (MediaQuery.of(context).mobile) {
+    if (MediaQuery.sizeOf(context).mobile) {
       result = InkWell(
         onLongPress: () {
           var event = widget.timeline.tryGetEvent(eventId);
@@ -433,77 +531,11 @@ class TimelineViewEntryState extends State<TimelineViewEntry>
       );
     }
 
-    if (MediaQuery.of(context).desktop) {
+    if (MediaQuery.sizeOf(context).desktop) {
       var event = widget.timeline.tryGetEvent(eventId);
       if (event != null) {
-        var menu = TimelineEventMenu(
-            timeline: widget.timeline,
-            event: event,
-            context: context,
-            setEditingEvent: widget.setEditingEvent,
-            setReplyingEvent: widget.setReplyingEvent);
-        result = AdaptiveContextMenu(items: [
-          if (menu.addReactionAction != null)
-            ContextMenuItem(
-              text: "Add Reaction",
-              customBuilder: (context, onClick, {closeMenu}) => Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    for (var i = 0;
-                        i < 3 && i < menu.recentReactions.length;
-                        i++)
-                      InkWell(
-                          onTap: () {
-                            widget.timeline.room
-                                .addReaction(event, menu.recentReactions[i]);
-                            onClick();
-                          },
-                          child: SizedBox(
-                              height: 30,
-                              width: 30,
-                              child: EmojiWidget(menu.recentReactions[i]))),
-                    tiamat.IconButton(
-                      icon: Icons.add_reaction,
-                      size: 24,
-                      onPressed: () {
-                        onClick();
-
-                        AdaptiveDialog.show(
-                          context,
-                          builder: (newContext) {
-                            return SizedBox(
-                                width: 500,
-                                height: 500,
-                                child: menu
-                                    .addReactionAction!.secondaryMenuBuilder!
-                                    .call(
-                                  newContext,
-                                  () {
-                                    Navigator.of(newContext).pop();
-                                  },
-                                ));
-                          },
-                        );
-                        menu.addReactionAction?.action?.call(context);
-                      },
-                    )
-                  ],
-                ),
-              ),
-            ),
-          for (var i in menu.primaryActions)
-            ContextMenuItem(
-                text: i.name,
-                icon: i.icon,
-                onPressed: () => i.action?.call(context)),
-          for (var i in menu.secondaryActions)
-            ContextMenuItem(
-                text: i.name,
-                icon: i.icon,
-                onPressed: () => i.action?.call(context))
-        ], child: result);
+        result = AdaptiveContextMenu(
+            itemsBuilder: () => _desktopMenuItems(event), child: result);
       }
     }
 
@@ -656,6 +688,7 @@ class TimelineViewEntryState extends State<TimelineViewEntry>
             room: widget.timeline.room,
             initialIndex: widget.initialIndex,
             key: eventKey,
+            jumpToEvent: widget.jumpToEvent,
             onReadReceiptsTapped: onReadReceiptsTapped,
             readReceipts: readReceipts,
           )
@@ -690,7 +723,8 @@ class TimelineViewEntryState extends State<TimelineViewEntry>
   }
 
   onReadReceiptsTapped() {
-    AdaptiveDialog.show(context, title: "Read Receipts", builder: (context) {
+    AdaptiveDialog.show(context, title: labelTimelineReadReceipts,
+        builder: (context) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: readReceipts

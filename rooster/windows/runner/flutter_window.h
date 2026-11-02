@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "game_overlay.h"
 #include "voice_thumb_bar.h"
 #include "win32_window.h"
 
@@ -15,6 +16,10 @@ class FlutterWindow : public Win32Window {
   // Creates a new FlutterWindow hosting a Flutter view running |project|.
   explicit FlutterWindow(const flutter::DartProject& project);
   virtual ~FlutterWindow();
+
+  // ROOSTER: the loading square shown before this window (splash_window.h),
+  // closed when this one shows. Set before Create.
+  void SetSplash(HWND splash) { splash_ = splash; }
 
  protected:
   // Win32Window:
@@ -32,6 +37,11 @@ class FlutterWindow : public Win32Window {
 
   // ROOSTER: call controls under the taskbar thumbnail (issue #146).
   std::unique_ptr<VoiceThumbBar> voice_thumb_bar_;
+
+  // ROOSTER: the in-game overlay (docs/game-overlay.md).
+  std::unique_ptr<GameOverlay> game_overlay_;
+
+  HWND splash_ = nullptr;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

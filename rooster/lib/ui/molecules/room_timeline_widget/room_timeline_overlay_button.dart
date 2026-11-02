@@ -4,13 +4,14 @@ import 'package:tiamat/tiamat.dart' as tiamat;
 
 class RoomTimelineOverlayButton extends StatelessWidget {
   const RoomTimelineOverlayButton(
-      {this.onTap, this.text = "Hello, World!", super.key});
+      {this.onTap, this.text = "Hello, World!", this.icon, super.key});
   final void Function()? onTap;
   final String text;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
-    var padding = MediaQuery.of(context).mobile
+    var padding = MediaQuery.sizeOf(context).mobile
         ? const EdgeInsets.fromLTRB(18, 12, 18, 12)
         : const EdgeInsets.fromLTRB(12, 4, 12, 4);
     return Padding(
@@ -36,9 +37,21 @@ class RoomTimelineOverlayButton extends StatelessWidget {
                 onTap: onTap,
                 child: Padding(
                   padding: padding,
-                  child: tiamat.Text.labelLow(
-                    text,
-                    color: Theme.of(context).colorScheme.onSurface,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (icon != null)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(0, 0, 4, 0),
+                          child: Icon(icon,
+                              size: 14,
+                              color: Theme.of(context).colorScheme.onSurface),
+                        ),
+                      tiamat.Text.labelLow(
+                        text,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ],
                   ),
                 ),
               ),

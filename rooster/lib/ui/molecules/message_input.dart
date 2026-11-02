@@ -18,7 +18,9 @@ import 'package:rooster/ui/atoms/rich_text_field.dart';
 import 'package:rooster/ui/molecules/attachment_icon.dart';
 import 'package:rooster/ui/molecules/overlapping_panels.dart';
 import 'package:rooster/ui/molecules/poll_creator.dart';
+import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_reply.dart';
 import 'package:rooster/ui/organisms/attachment_processor/attachment_processor.dart';
+import 'package:rooster/ui/molecules/emoji_picker.dart';
 import 'package:rooster/ui/molecules/emoticon_picker.dart';
 import 'package:rooster/ui/molecules/gif_picker.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
@@ -26,6 +28,7 @@ import 'package:rooster/ui/organisms/chat/chat.dart';
 import 'package:rooster/client/components/emoticon/emoji_pack.dart';
 import 'package:rooster/client/components/gif/gif_search_result.dart';
 import 'package:rooster/utils/autofill_utils.dart';
+import 'package:rooster/utils/clipboard/pasted_files.dart';
 import 'package:rooster/utils/debounce.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:file_picker/file_picker.dart';
@@ -185,6 +188,79 @@ class MessageInputState extends State<MessageInput> {
   String get promptCancelEnableGifSearch => Intl.message("Cancel",
       desc: "Cancels enabling gif search", name: "promptCancelEnableGifSearch");
 
+  String labelChatSendingAs(String name) => Intl.message("Sending as: $name",
+      name: "labelChatSendingAs",
+      args: [name],
+      desc: "Under the message box when the message will be sent from "
+          "another of the user's accounts (picked by typing its prefix), "
+          "with that account's display name");
+
+  String get labelChatMentionsHeader => Intl.message("MENTIONS",
+      name: "labelChatMentionsHeader",
+      desc: "Header, in capitals, of the list of people to mention that "
+          "opens above the message box while typing @");
+
+  String labelChatMentionPeopleCount(int howMany) => Intl.plural(howMany,
+      one: "1 person",
+      other: "$howMany people",
+      name: "labelChatMentionPeopleCount",
+      args: [howMany],
+      desc: "Beside the header of the mention list: how many people match "
+          "what was typed after @");
+
+  String get labelChatMentionNoMatches => Intl.message("No one found",
+      name: "labelChatMentionNoMatches",
+      desc: "In the mention list when nobody matches what was typed after @");
+
+  String get labelChatMentionNavigateHint => Intl.message("Navigate",
+      name: "labelChatMentionNavigateHint",
+      desc: "Keyboard hint at the bottom of the mention list, after the up "
+          "and down arrow keys: they move through the list");
+
+  String get labelChatKeyEnter => Intl.message("Enter",
+      name: "labelChatKeyEnter",
+      desc: "The Enter key as printed on keyboards, drawn as a key cap in the "
+          "keyboard hints at the bottom of the mention list");
+
+  String get labelChatMentionSelectHint => Intl.message("Select",
+      name: "labelChatMentionSelectHint",
+      desc: "Keyboard hint at the bottom of the mention list, after the Enter "
+          "key: it picks the highlighted person");
+
+  String get labelChatMentionEveryone =>
+      Intl.message("Mention everyone in the room",
+          name: "labelChatMentionEveryone",
+          desc: "Under @room in the mention list: picking it notifies "
+              "everyone in the room");
+
+  String get promptChatAddPoll => Intl.message("Poll",
+      name: "promptChatAddPoll",
+      desc: "Entry in the menu of the send button, while the message box is "
+          "empty, that opens the poll creator");
+
+  String get labelPollCreateTitle => Intl.message("Create Poll",
+      name: "labelPollCreateTitle",
+      desc: "Title of the dialog where a new poll is written");
+
+  String get promptChatAttachGallery => Intl.message("Gallery",
+      name: "promptChatAttachGallery",
+      desc: "Choice when adding an attachment to a message (Android): pick "
+          "photos from the phone's gallery");
+
+  String get promptChatAttachFile => Intl.message("File",
+      name: "promptChatAttachFile",
+      desc: "Choice when adding an attachment to a message: pick any file");
+
+  String get promptChatAttachMedia => Intl.message("Media",
+      name: "promptChatAttachMedia",
+      desc: "Choice when adding an attachment to a message (Android, "
+          "developer mode): pick photos and videos");
+
+  String get promptChatAttachTakePhoto => Intl.message("Take a photo",
+      name: "promptChatAttachTakePhoto",
+      desc: "Choice when adding an attachment to a message (Android): take a "
+          "photo with the camera and attach it");
+
   StreamSubscription? keyboardFocusSubscription;
   StreamSubscription? setInputTextSubscription;
   StreamSubscription? onScopePopInvoked;
@@ -226,10 +302,28 @@ class MessageInputState extends State<MessageInput> {
     setInputTextSubscription?.cancel();
     preferencesSubscription?.cancel();
     onScopePopInvoked?.cancel();
+    stopListeningForPastedFiles();
+    // Everything this made, released: the chat subtree is rebuilt on every
+    // room switch, and these kept each old composer alive.
+    controller.removeListener(controllerListener);
+    controller.dispose();
+    textFocus.removeListener(onTextFocusChanged);
+    textFocus.dispose();
+    emojiSearchFocus.dispose();
+    stickerSearchFocus.dispose();
+    gifSearchFocus.dispose();
+    gifPickerSearchFocus.dispose();
+    emojiOverlayController.dispose();
+    gifTooltipController.dispose();
+    emojiTooltipController.dispose();
+    autofillScrollController.dispose();
     super.dispose();
   }
 
   StreamSubscription? preferencesSubscription;
+
+  /// Web: a screenshot pasted while typing becomes an attachment.
+  late final void Function() stopListeningForPastedFiles;
 
   @override
   void initState() {
@@ -244,6 +338,8 @@ class MessageInputState extends State<MessageInput> {
 
     textFocus = FocusNode(onKeyEvent: onKey);
     textFocus.addListener(onTextFocusChanged);
+    stopListeningForPastedFiles = listenForPastedFiles(
+        accept: () => textFocus.hasFocus, onFiles: onFilesPasted);
 
     preferencesSubscription =
         preferences.onSettingChanged.listen((_) => setState(() {}));
@@ -258,6 +354,63 @@ class MessageInputState extends State<MessageInput> {
   }
 
   String? lastSearchText;
+
+  String? mentionCandidatesRoomId;
+
+  // Rooms lazy-load their members, so only people seen recently are known
+  // locally. Fetch the whole list once so anyone can be mentioned, then
+  // search again with what the user has typed.
+  Future<void> loadAllMentionCandidates() async {
+    final room = widget.room;
+    if (room == null ||
+        room.isMembersListComplete ||
+        mentionCandidatesRoomId == room.identifier) {
+      return;
+    }
+    mentionCandidatesRoomId = room.identifier;
+
+    try {
+      await room.fetchMembersList(cache: true);
+    } catch (_) {
+      mentionCandidatesRoomId = null;
+      return;
+    }
+
+    if (!mounted || widget.room != room || !isMentionAutofill) return;
+
+    final range = autoFillRange!;
+    final text = controller.text.substring(range.$1, range.$2);
+    final results = widget.processAutofill?.call(text);
+    setState(() {
+      autoFillResults = results;
+      if (results == null || results.isEmpty) {
+        autoFillSelection = null;
+      } else if (autoFillSelection != null) {
+        autoFillSelection = autoFillSelection!.clamp(0, results.length - 1);
+      }
+      updateAutofillScroll();
+    });
+  }
+
+  bool get isMentionAutofill {
+    final range = autoFillRange;
+    if (range == null || range.$1 < 0 || range.$2 > controller.text.length) {
+      return false;
+    }
+    return controller.text.substring(range.$1, range.$2).startsWith('@');
+  }
+
+  void moveAutoFillSelection(int delta) {
+    final results = autoFillResults;
+    if (results == null || results.isEmpty) return;
+
+    setState(() {
+      final current = autoFillSelection ?? (delta > 0 ? -1 : 0);
+      autoFillSelection = (current + delta) % results.length;
+      updateAutofillScroll();
+    });
+  }
+
   void onTextfieldUpdated(String value) {
     widget.onTextUpdated?.call(controller.text);
     var range = getAutofillTextRange();
@@ -294,13 +447,15 @@ class MessageInputState extends State<MessageInput> {
       return;
     }
 
+    if (text.startsWith('@')) loadAllMentionCandidates();
+
     var result = widget.processAutofill?.call(text);
     autoFillRange = range;
 
     setState(() {
       autoFillResults = result;
 
-      if (MediaQuery.of(context).desktop && result?.isNotEmpty == true) {
+      if (MediaQuery.sizeOf(context).desktop && result?.isNotEmpty == true) {
         autoFillSelection = 0;
       } else {
         autoFillSelection = null;
@@ -384,7 +539,7 @@ class MessageInputState extends State<MessageInput> {
     print("Keyboard open: $keyboardOpen");
 
     setState(() {
-      if (MediaQuery.of(context).mobile) {
+      if (MediaQuery.sizeOf(context).mobile) {
         if (showEmotePicker && !keyboardOpen && showGifPickerPanel != gif) {
           // Panel is already open on the other picker, just switch
           showGifPickerPanel = gif;
@@ -411,7 +566,7 @@ class MessageInputState extends State<MessageInput> {
         }
       }
 
-      if (MediaQuery.of(context).desktop) {
+      if (MediaQuery.sizeOf(context).desktop) {
         showEmotePicker = !showEmotePicker;
         emotePickerActive = showEmotePicker;
         emojiTooltipController.showTooltip(autoClose: false);
@@ -468,6 +623,14 @@ class MessageInputState extends State<MessageInput> {
     if (textFocus.hasFocus) {
       clearKeyboardOverride();
     }
+    // The mention panel only shows while the text box has focus
+    if (mounted && isMentionAutofill) {
+      setState(() {});
+      if (textFocus.hasFocus) {
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => scrollMentionSelectionIntoView());
+      }
+    }
   }
 
   void updateAutofillScroll() {
@@ -476,6 +639,13 @@ class MessageInputState extends State<MessageInput> {
     }
     if (autoFillSelection == null) {
       autofillScrollController.jumpTo(0);
+      return;
+    }
+
+    if (isMentionAutofill) {
+      // Runs after layout, so a fresh result list has its new extents
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => scrollMentionSelectionIntoView());
       return;
     }
 
@@ -507,6 +677,37 @@ class MessageInputState extends State<MessageInput> {
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeInOutExpo);
     }
+  }
+
+  void scrollMentionSelectionIntoView() {
+    final selection = autoFillSelection;
+    final count = autoFillResults?.length ?? 0;
+    if (!mounted ||
+        selection == null ||
+        count == 0 ||
+        !autofillScrollController.hasClients) {
+      return;
+    }
+
+    // Every row has the prototype's height, so the content splits evenly
+    final position = autofillScrollController.position;
+    final itemExtent =
+        (position.maxScrollExtent + position.viewportDimension) / count;
+    final itemTop = selection * itemExtent;
+    final itemBottom = itemTop + itemExtent;
+
+    double? target;
+    if (itemTop < position.pixels) {
+      target = itemTop;
+    } else if (itemBottom > position.pixels + position.viewportDimension) {
+      target = itemBottom - position.viewportDimension;
+    }
+    if (target == null) return;
+
+    autofillScrollController.animateTo(
+        target.clamp(0.0, position.maxScrollExtent),
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic);
   }
 
   bool isKnownAutofillMatch(String text) {
@@ -585,6 +786,27 @@ class MessageInputState extends State<MessageInput> {
   }
 
   KeyEventResult onKey(FocusNode node, KeyEvent event) {
+    final hasAutofillOptions =
+        autoFillResults?.isNotEmpty == true && autoFillRange != null;
+    final isKeyDown = event is KeyDownEvent || event is KeyRepeatEvent;
+
+    if (hasAutofillOptions &&
+        isKeyDown &&
+        (event.logicalKey == LogicalKeyboardKey.arrowDown ||
+            event.logicalKey == LogicalKeyboardKey.arrowUp)) {
+      moveAutoFillSelection(
+          event.logicalKey == LogicalKeyboardKey.arrowDown ? 1 : -1);
+      return KeyEventResult.handled;
+    }
+
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.enter &&
+        hasAutofillOptions &&
+        autoFillSelection != null) {
+      applyAutoFill(autoFillResults![autoFillSelection!]);
+      return KeyEventResult.handled;
+    }
+
     if (BuildConfig.MOBILE) return KeyEventResult.ignored;
 
     if (!preferences.disableTextCursorManagement.value) {
@@ -616,7 +838,8 @@ class MessageInputState extends State<MessageInput> {
 
     if (HardwareKeyboard.instance
         .isLogicalKeyPressed(LogicalKeyboardKey.keyV)) {
-      if (HardwareKeyboard.instance.isControlPressed) {
+      // On web the paste itself brings the image, see [onFilesPasted].
+      if (HardwareKeyboard.instance.isControlPressed && !BuildConfig.WEB) {
         readImageFromClipboard();
         return KeyEventResult.ignored;
       }
@@ -650,11 +873,6 @@ class MessageInputState extends State<MessageInput> {
     if (widget.disableEnterToSend != true) {
       if (HardwareKeyboard.instance
           .isLogicalKeyPressed(LogicalKeyboardKey.enter)) {
-        if (autoFillSelection != null && autoFillRange != null) {
-          applyAutoFill(autoFillResults![autoFillSelection!]);
-          return KeyEventResult.handled;
-        }
-
         if (HardwareKeyboard.instance.isShiftPressed) {
           return KeyEventResult.ignored;
         }
@@ -714,11 +932,12 @@ class MessageInputState extends State<MessageInput> {
             opacity: widget.isProcessing ? 0.5 : 1,
             child: KeyboardAdaptor(
               enabled: widget.enableKeyboardAdapter,
-              paddingContent: (MediaQuery.of(context).mobile && showEmotePicker)
-                  ? (showGifPickerPanel && canSendGifs
-                      ? buildGifPicker()
-                      : buildEmojiPicker())
-                  : Container(),
+              paddingContent:
+                  (MediaQuery.sizeOf(context).mobile && showEmotePicker)
+                      ? (showGifPickerPanel && canSendGifs
+                          ? buildGifPicker()
+                          : buildEmojiPicker())
+                      : Container(),
               shouldPushContent: () {
                 if (emojiSearchFocus.hasFocus) {
                   return true;
@@ -748,6 +967,10 @@ class MessageInputState extends State<MessageInput> {
                   if (widget.attachments != null &&
                       widget.attachments!.isNotEmpty)
                     displayAttachments(),
+                  if (isMentionAutofill &&
+                      autoFillResults != null &&
+                      textFocus.hasFocus)
+                    mentionAutofillPanel(),
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxHeight: 200),
                     child: Padding(
@@ -796,9 +1019,9 @@ class MessageInputState extends State<MessageInput> {
                             children: [
                               const SizedBox(height: 30),
                               if (senderOverride != null) senderOverrideView(),
-                              if (autoFillResults != null)
+                              if (autoFillResults != null && !isMentionAutofill)
                                 autofillResultsList(),
-                              if (autoFillResults == null)
+                              if (autoFillResults == null || isMentionAutofill)
                                 const Expanded(child: SizedBox()),
                             ]),
                       ),
@@ -822,38 +1045,237 @@ class MessageInputState extends State<MessageInput> {
       alignment: Alignment.centerLeft,
       child: SizedBox(
         height: 30,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 2, 2, 2),
-          child: Material(
-            borderRadius: BorderRadius.circular(8),
-            clipBehavior: Clip.hardEdge,
-            color: Theme.of(context).colorScheme.secondaryContainer,
-            child: InkWell(
-              onTap: () {
-                widget.onTapOverrideClient?.call(senderOverride!);
-              },
-              child: Padding(
-                padding: const EdgeInsets.all(2),
+        child: ConstrainedBox(
+          // A long name, or a longer language, is cut short rather than
+          // pushing the row past the edge.
+          constraints: const BoxConstraints(maxWidth: 300),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 2, 2, 2),
+            child: Material(
+              borderRadius: BorderRadius.circular(8),
+              clipBehavior: Clip.hardEdge,
+              color: Theme.of(context).colorScheme.secondaryContainer,
+              child: InkWell(
+                onTap: () {
+                  widget.onTapOverrideClient?.call(senderOverride!);
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 5,
+                      ),
+                      tiamat.Avatar(
+                          radius: 10,
+                          image: profile.avatar,
+                          placeholderColor: profile.defaultColor,
+                          placeholderText: profile.displayName),
+                      SizedBox(
+                        width: 10,
+                      ),
+                      Flexible(
+                        child: tiamat.Text.labelLow(
+                          labelChatSendingAs(profile.displayName),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      SizedBox(
+                        width: 5,
+                      )
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget mentionAutofillPanel() {
+    final results = autoFillResults ?? const <AutofillSearchResult>[];
+    final colors = Theme.of(context).colorScheme;
+    final visibleResults = results;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+      child: Material(
+        color: colors.surfaceContainerHigh,
+        elevation: 8,
+        shadowColor: Colors.black.withValues(alpha: 0.28),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.6)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 320),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
                 child: Row(
                   children: [
-                    SizedBox(
-                      width: 5,
+                    Expanded(
+                      child: tiamat.Text.labelLow(
+                        labelChatMentionsHeader,
+                        color: colors.onSurfaceVariant,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    tiamat.Avatar(
-                        radius: 10,
-                        image: profile.avatar,
-                        placeholderColor: profile.defaultColor,
-                        placeholderText: profile.displayName),
-                    SizedBox(
-                      width: 10,
+                    tiamat.Text.labelLow(
+                      labelChatMentionPeopleCount(results.length),
+                      color: colors.onSurfaceVariant,
                     ),
-                    tiamat.Text.labelLow("Sending as: ${profile.displayName}"),
-                    SizedBox(
-                      width: 5,
-                    )
                   ],
                 ),
               ),
+              if (visibleResults.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: tiamat.Text.labelLow(
+                    labelChatMentionNoMatches,
+                    color: colors.onSurfaceVariant,
+                  ),
+                )
+              else
+                Flexible(
+                  child: ListView.builder(
+                    controller: autofillScrollController,
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    itemCount: visibleResults.length,
+                    prototypeItem: mentionAutofillItem(0),
+                    itemBuilder: (context, index) => mentionAutofillItem(index),
+                  ),
+                ),
+              Divider(
+                height: 1,
+                color: colors.outlineVariant.withValues(alpha: 0.5),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 9, 14, 10),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.keyboard_arrow_up,
+                      size: 17,
+                      color: colors.onSurfaceVariant,
+                    ),
+                    Icon(
+                      Icons.keyboard_arrow_down,
+                      size: 17,
+                      color: colors.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 5),
+                    // Takes the room between the two hints, and gives way
+                    // first when a language's words are long.
+                    Expanded(
+                      child: tiamat.Text.labelLow(
+                        labelChatMentionNavigateHint,
+                        color: colors.onSurfaceVariant,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    _KeyboardHint(label: labelChatKeyEnter),
+                    const SizedBox(width: 5),
+                    tiamat.Text.labelLow(
+                      labelChatMentionSelectHint,
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget mentionAutofillItem(int index) {
+    final results = autoFillResults!;
+    final colors = Theme.of(context).colorScheme;
+    final result = results[index];
+    final selected = autoFillSelection == index;
+    final avatar = result is AutofillSearchResultAvatar ? result : null;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: Material(
+        color: selected
+            ? colors.secondaryContainer.withValues(
+                alpha: 0.72,
+              )
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => applyAutoFill(result),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 54),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 7,
+            ),
+            child: Row(
+              children: [
+                if (avatar != null)
+                  tiamat.Avatar(
+                    image: avatar.image,
+                    radius: 17,
+                    placeholderColor: avatar.fallbackColor,
+                    placeholderText: avatar.result,
+                  )
+                else
+                  CircleAvatar(
+                    radius: 17,
+                    backgroundColor: colors.secondaryContainer,
+                    child: Icon(
+                      Icons.alternate_email,
+                      size: 17,
+                      color: colors.onSecondaryContainer,
+                    ),
+                  ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      tiamat.Text.name(result.result),
+                      // One line each: every row takes the first row's
+                      // height (the list's prototype item).
+                      if (avatar != null)
+                        tiamat.Text.labelLow(
+                          avatar.slug,
+                          color: colors.onSurfaceVariant,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        )
+                      else
+                        tiamat.Text.labelLow(
+                          labelChatMentionEveryone,
+                          color: colors.onSurfaceVariant,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                  ),
+                ),
+                if (selected)
+                  Icon(
+                    Icons.keyboard_return_rounded,
+                    size: 18,
+                    color: colors.onSurfaceVariant,
+                  ),
+              ],
             ),
           ),
         ),
@@ -885,7 +1307,7 @@ class MessageInputState extends State<MessageInput> {
             height: 30,
             child: Listener(
               onPointerSignal: (event) {
-                if (!MediaQuery.of(context).desktop) return;
+                if (!MediaQuery.sizeOf(context).desktop) return;
                 if (event is PointerScrollEvent) {
                   final offset = event.scrollDelta.dy;
 
@@ -975,13 +1397,13 @@ class MessageInputState extends State<MessageInput> {
                       : [
                           if (pollComponent != null)
                             tiamat.ContextMenuItem(
-                              text: "Poll",
+                              text: promptChatAddPoll,
                               icon: Icons.poll,
                               onPressed: () async {
                                 var createArgs =
                                     await AdaptiveDialog.show<PollCreateArgs>(
                                         context,
-                                        title: "Create Poll",
+                                        title: labelPollCreateTitle,
                                         builder: (context) => PollCreator());
 
                                 if (createArgs != null) {
@@ -1026,12 +1448,12 @@ class MessageInputState extends State<MessageInput> {
         child: RandomEmojiButton(
             size: widget.size,
             onTap: toggleEmojiOverlay,
-            toggled: MediaQuery.of(context).mobile
+            toggled: MediaQuery.sizeOf(context).mobile
                 ? (emojiTooltipController.value == TooltipStatus.isShowing ||
                     (emotePickerActive == true && !showGifPickerPanel))
                 : false));
 
-    if (MediaQuery.of(context).mobile) return button;
+    if (MediaQuery.sizeOf(context).mobile) return button;
 
     return Padding(
         padding: const EdgeInsets.fromLTRB(0, 0, 2, 0),
@@ -1041,7 +1463,7 @@ class MessageInputState extends State<MessageInput> {
           controller: emojiTooltipController,
           backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
           onDismiss: () {
-            if (MediaQuery.of(context).desktop) {
+            if (MediaQuery.sizeOf(context).desktop) {
               textFocus.requestFocus();
             }
           },
@@ -1077,7 +1499,7 @@ class MessageInputState extends State<MessageInput> {
           ),
         );
 
-    if (MediaQuery.of(context).mobile) {
+    if (MediaQuery.sizeOf(context).mobile) {
       return buildButton(emotePickerActive && showGifPickerPanel);
     }
 
@@ -1087,7 +1509,7 @@ class MessageInputState extends State<MessageInput> {
       controller: gifTooltipController,
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
       onDismiss: () {
-        if (MediaQuery.of(context).desktop) {
+        if (MediaQuery.sizeOf(context).desktop) {
           textFocus.requestFocus();
         }
       },
@@ -1113,7 +1535,7 @@ class MessageInputState extends State<MessageInput> {
   }
 
   Future<void> onGifButtonPressed() async {
-    if (MediaQuery.of(context).desktop &&
+    if (MediaQuery.sizeOf(context).desktop &&
         gifTooltipController.value == TooltipStatus.isShowing) {
       closeGifPicker();
       return;
@@ -1132,7 +1554,7 @@ class MessageInputState extends State<MessageInput> {
       if (!mounted) return;
     }
 
-    if (MediaQuery.of(context).desktop) {
+    if (MediaQuery.sizeOf(context).desktop) {
       gifTooltipController.showTooltip(autoClose: false);
     } else {
       await toggleEmojiOverlay(gif: true);
@@ -1142,7 +1564,7 @@ class MessageInputState extends State<MessageInput> {
   void closeGifPicker() {
     if (!mounted) return;
 
-    if (MediaQuery.of(context).desktop) {
+    if (MediaQuery.sizeOf(context).desktop) {
       gifTooltipController.hideTooltip();
       // Back to typing, as when the picker is dismissed by clicking outside
       textFocus.requestFocus();
@@ -1240,7 +1662,7 @@ class MessageInputState extends State<MessageInput> {
           0,
           DynamicEmoticonPack(
               identifier: "dynamic_pack_frequently_used_typing",
-              displayName: "Frequently Used",
+              displayName: EmojiPicker.labelChatEmojiFrequentlyUsed,
               icon: Icons.schedule,
               emoticons: recent,
               usage: EmoticonUsage.all));
@@ -1320,7 +1742,7 @@ class MessageInputState extends State<MessageInput> {
       if (PlatformUtils.isAndroid)
         AttachmentPicker(
             icon: Icons.photo,
-            label: "Gallery",
+            label: promptChatAttachGallery,
             execute: () async {
               var picker = ImagePicker();
               var result = await picker.pickMultiImage();
@@ -1335,7 +1757,7 @@ class MessageInputState extends State<MessageInput> {
             }),
       AttachmentPicker(
           icon: Icons.attach_file,
-          label: "File",
+          label: promptChatAttachFile,
           execute: () async {
             FilePickerResult? result = await FilePicker.platform.pickFiles(
                 type: FileType.any, withData: true, allowMultiple: true);
@@ -1354,7 +1776,7 @@ class MessageInputState extends State<MessageInput> {
       if (PlatformUtils.isAndroid && preferences.developerMode.value)
         AttachmentPicker(
             icon: Icons.perm_media,
-            label: "Media",
+            label: promptChatAttachMedia,
             execute: () async {
               var picker = ImagePicker();
               var result = await picker.pickMultipleMedia();
@@ -1370,7 +1792,7 @@ class MessageInputState extends State<MessageInput> {
       if (PlatformUtils.isAndroid)
         AttachmentPicker(
             icon: Icons.camera_alt,
-            label: "Take a photo",
+            label: promptChatAttachTakePhoto,
             execute: () async {
               var picker = ImagePicker();
               var file = await picker.pickImage(source: ImageSource.camera);
@@ -1480,7 +1902,8 @@ class MessageInputState extends State<MessageInput> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
                 child: tiamat.Text(
-                  widget.relatedEventBody ?? "Unknown",
+                  widget.relatedEventBody ??
+                      TimelineEventViewReply.labelMessageReplyUnknownBody,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   color: Theme.of(context).colorScheme.secondary,
@@ -1496,20 +1919,46 @@ class MessageInputState extends State<MessageInput> {
   Widget displayAttachments() {
     return SizedBox(
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: widget.attachments!.map((e) {
-          return Padding(
-            padding: const EdgeInsets.all(2.0),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(5),
-              child: GestureDetector(
-                onTap: () {},
-                child: SizedBox(
-                  height: 40,
-                  width: 40,
-                  child: AttachmentIcon(
-                    e,
-                    removeAttachment: () => widget.removeAttachment?.call(e),
-                  ),
+          final name = e.name ?? e.path?.split(RegExp(r"[/\\]")).last ?? "";
+          // Its name under it, cut short to fit; the whole of it on hover.
+          return Tooltip(
+            message: name,
+            child: Padding(
+              padding: const EdgeInsets.all(2.0),
+              child: SizedBox(
+                width: 64,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(5),
+                      child: GestureDetector(
+                        onTap: () {},
+                        child: SizedBox(
+                          height: 40,
+                          width: 40,
+                          child: AttachmentIcon(
+                            e,
+                            removeAttachment: () =>
+                                widget.removeAttachment?.call(e),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (name.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
@@ -1558,12 +2007,26 @@ class MessageInputState extends State<MessageInput> {
       return;
     }
 
+    await attachPasted(PendingFileAttachment(data: image, size: image.length));
+  }
+
+  Future<void> onFilesPasted(List<PastedFile> files) async {
+    for (final file in files) {
+      if (!mounted) return;
+      await attachPasted(PendingFileAttachment(
+          data: file.data,
+          name: file.name,
+          mimeType: file.mimeType,
+          size: file.data.length));
+    }
+  }
+
+  Future<void> attachPasted(PendingFileAttachment attachment) async {
     var processedAttachment =
         await AdaptiveDialog.show<PendingFileAttachment>(context,
             scrollable: false,
             builder: (context) => AttachmentProcessor(
-                  attachment:
-                      PendingFileAttachment(data: image, size: image.length),
+                  attachment: attachment,
                 ));
 
     if (processedAttachment != null) {
@@ -1586,5 +2049,27 @@ class MessageInputState extends State<MessageInput> {
       clearKeyboardOverride(debounce: false);
       event.handled = true;
     }
+  }
+}
+
+class _KeyboardHint extends StatelessWidget {
+  const _KeyboardHint({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHighest,
+        border: Border.all(color: colors.outlineVariant),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        child: Text(label, style: Theme.of(context).textTheme.labelSmall),
+      ),
+    );
   }
 }

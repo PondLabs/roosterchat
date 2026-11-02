@@ -1,11 +1,13 @@
 // Opens the soundboard popover above a call control. Disabled while the
 // user is deafened, like Discord.
 import 'package:rooster/client/matrix/components/soundboard/matrix_soundboard_emoji_image.dart';
+import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/ui/atoms/anchored_popover.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_call_controller.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_popover.dart';
 import 'package:rooster/ui/pages/settings/categories/space/space_soundboard_settings_page.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 class SoundboardButton extends StatefulWidget {
   final SoundboardCallController controller;
@@ -24,6 +26,17 @@ class SoundboardButton extends StatefulWidget {
     this.alignment = PopoverAlignment.center,
     this.onOpenChanged,
   });
+
+  static String get tooltipSoundboardDisabledWhileDeafened =>
+      Intl.message("Sound effects are disabled while audio is disabled",
+          name: "tooltipSoundboardDisabledWhileDeafened",
+          desc: "Tooltip of the soundboard button in a call while you have "
+              "deafened yourself (turned off the call's audio): the soundboard "
+              "can't be opened then");
+
+  static String get tooltipSoundboardOpen => Intl.message("Open sound effects",
+      name: "tooltipSoundboardOpen",
+      desc: "Tooltip of the call control that opens the soundboard");
 
   @override
   State<SoundboardButton> createState() => _SoundboardButtonState();
@@ -50,8 +63,8 @@ class _SoundboardButtonState extends State<SoundboardButton> {
       onOpenChanged: widget.onOpenChanged,
       anchorBuilder: (context, open, toggle) => Tooltip(
         message: widget.deafened
-            ? 'Sound effects are disabled while audio is disabled'
-            : 'Open sound effects',
+            ? SoundboardButton.tooltipSoundboardDisabledWhileDeafened
+            : SoundboardButton.tooltipSoundboardOpen,
         child: widget.builder(context, widget.deafened ? null : toggle),
       ),
       popoverBuilder: (context, close) => ListenableBuilder(
@@ -63,6 +76,9 @@ class _SoundboardButtonState extends State<SoundboardButton> {
           volume01: ctrl.volume01,
           onVolumeChanged: ctrl.setVolume01,
           imageFor: (emoji) => soundboardEmojiImage(emoji, ctrl.session.client),
+          // Also an unfolded foldable or a tablet whose browser names
+          // itself a computer.
+          touch: MediaQuery.sizeOf(context).touchControls,
           onAddSound: (source) {
             final soundboard = ctrl.soundboardOf(source);
             if (soundboard == null) return;

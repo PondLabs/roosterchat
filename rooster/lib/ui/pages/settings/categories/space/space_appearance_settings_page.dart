@@ -7,6 +7,7 @@ import 'package:rooster/ui/molecules/image_select_dialog.dart';
 import 'package:rooster/ui/pages/settings/categories/room/appearance/room_appearance_settings_view.dart';
 import 'package:rooster/utils/picker_utils.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class SpaceAppearanceSettingsPage extends StatefulWidget {
@@ -22,6 +23,11 @@ class _SpaceAppearanceSettingsPageState
   ImageProvider? image;
   bool uploading = false;
   late StreamSubscription _sub;
+
+  String get labelSpaceSetBanner => Intl.message("Set Banner:",
+      name: "labelSpaceSetBanner",
+      desc:
+          "In a space's appearance settings, over the box that shows the space's banner image and changes it when tapped");
 
   @override
   void initState() {
@@ -63,7 +69,7 @@ class _SpaceAppearanceSettingsPageState
         SizedBox(
           height: 12,
         ),
-        if (canEditBanner) tiamat.Text.labelLow("Set Banner:"),
+        if (canEditBanner) tiamat.Text.labelLow(labelSpaceSetBanner),
         if (canEditBanner)
           ClipRRect(
             borderRadius: BorderRadiusGeometry.circular(12),

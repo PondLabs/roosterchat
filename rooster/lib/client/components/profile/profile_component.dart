@@ -89,7 +89,13 @@ abstract class UserProfileComponent<T extends Client> implements Component<T> {
 
   Future<void> setBanner(Uint8List bytes);
 
-  Future<void> setProfileColorScheme(Color color, Brightness brightness);
+  /// Without [brightness] the card follows each viewer's theme.
+  Future<void> setProfileColorScheme(Color color, Brightness? brightness);
+
+  Future<void> removeProfileColorScheme();
+
+  /// Null or blank removes them.
+  Future<void> setPronouns(String? pronouns);
 
   Future<void> setStatus(String? status);
 

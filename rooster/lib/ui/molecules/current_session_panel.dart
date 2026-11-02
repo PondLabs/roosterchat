@@ -1,16 +1,22 @@
 import 'dart:async';
 
+import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/profile/profile_component.dart';
+import 'package:rooster/client/components/user_color/user_color_component.dart';
+import 'package:rooster/client/components/user_presence/user_idle_watcher.dart';
+import 'package:rooster/client/components/user_presence/user_presence_component.dart';
 import 'package:rooster/client/components/widgets/widget_component.dart';
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/adaptive_context_menu.dart';
 import 'package:rooster/ui/molecules/call_sessions_panel.dart';
+import 'package:rooster/ui/molecules/user_panel.dart';
 import 'package:rooster/ui/molecules/user_panel_settings.dart';
 import 'package:rooster/ui/molecules/widget_sessions_panel.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -18,12 +24,33 @@ class CurrentSessionPanel extends StatefulWidget {
   const CurrentSessionPanel({this.currentUser, super.key});
   final Profile? currentUser;
 
+  static String get promptVoicePanelMixAccounts => Intl.message("Mix Accounts",
+      name: "promptVoicePanelMixAccounts",
+      desc: "Menu entry on the user panel at the bottom of the sidebar, with "
+          "more than one account signed in: shows every account's rooms "
+          "together instead of one account's");
+
+  static String get labelStatusOnline => Intl.message("Online",
+      name: "labelStatusOnline",
+      desc: "In the menu opened from the status dot on our own avatar at the "
+          "bottom of the sidebar: online, turning away by itself when idle");
+
+  static String get labelStatusAway => Intl.message("Away",
+      name: "labelStatusAway",
+      desc: "In the menu opened from the status dot on our own avatar at the "
+          "bottom of the sidebar: show as away");
+
+  static String get labelStatusInvisible => Intl.message("Invisible",
+      name: "labelStatusInvisible",
+      desc: "In the menu opened from the status dot on our own avatar at the "
+          "bottom of the sidebar: show as offline to everyone");
+
   @override
   State<CurrentSessionPanel> createState() => _CurrentSessionPanelState();
 }
 
 class _CurrentSessionPanelState extends State<CurrentSessionPanel> {
-  double get profileHeight => MediaQuery.of(context).mobile ? 60 : 50;
+  double get profileHeight => MediaQuery.sizeOf(context).mobile ? 60 : 50;
 
   Profile? currentUser;
 
@@ -39,8 +66,30 @@ class _CurrentSessionPanelState extends State<CurrentSessionPanel> {
       clientManager!.callManager.currentSessions.onListUpdated.listen((_) {
         setState(() {});
       }),
+      clientManager!.clients.onAdd.listen(followProfile),
     ];
+    clientManager!.clients.forEach(followProfile);
     super.initState();
+  }
+
+  /// Our name, picture and name color here change with the account's.
+  void followProfile(Client client) {
+    final colors = client.getComponent<UserColorComponent>();
+    void requestColor() {
+      final me = client.self?.identifier;
+      if (me != null) colors?.requestPublicColor(me);
+    }
+
+    requestColor();
+    subs.add(client.onOwnProfileUpdated.listen((_) {
+      requestColor(); // self may not have existed when the account was added
+      setState(() {});
+    }));
+    if (colors != null) {
+      subs.add(colors.onColorChanged
+          .where((id) => id == client.self?.identifier)
+          .listen((_) => setState(() {})));
+    }
   }
 
   @override
@@ -60,12 +109,66 @@ class _CurrentSessionPanelState extends State<CurrentSessionPanel> {
     super.didUpdateWidget(oldWidget);
   }
 
+  /// [avatar] with our status dot; clicking it chooses the status.
+  Widget withStatus(Widget avatar) => ValueListenableBuilder(
+        valueListenable: UserIdleWatcher.instance.status,
+        builder: (context, status, _) => MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            onTapUp: (details) => chooseStatus(details.globalPosition),
+            child: Stack(
+              alignment: Alignment.bottomRight,
+              children: [
+                avatar,
+                UserPanelView.createPresenceIcon(context, status, size: 11),
+              ],
+            ),
+          ),
+        ),
+      );
+
+  Future<void> chooseStatus(Offset at) async {
+    final choice = await showMenu<UserPresenceStatus>(
+      context: context,
+      position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx, at.dy),
+      items: [
+        for (final status in UserIdleWatcher.choices)
+          PopupMenuItem(
+            value: status,
+            child: Row(
+              spacing: 10,
+              children: [
+                UserPanelView.createPresenceIcon(context, status, size: 11),
+                Text(switch (status) {
+                  UserPresenceStatus.unavailable =>
+                    CurrentSessionPanel.labelStatusAway,
+                  UserPresenceStatus.offline =>
+                    CurrentSessionPanel.labelStatusInvisible,
+                  _ => CurrentSessionPanel.labelStatusOnline,
+                }),
+              ],
+            ),
+          ),
+      ],
+    );
+    if (choice != null) await UserIdleWatcher.instance.choose(choice);
+  }
+
   @override
   Widget build(BuildContext context) {
     Profile? current = widget.currentUser;
 
     if (clientManager!.clients.length == 1) {
       current = clientManager!.clients.first.self;
+    } else if (current != null) {
+      // The page passes the profile it had when it was built; the account's
+      // own is replaced when our name or picture changes.
+      final id = current.identifier;
+      current = clientManager!.clients
+              .where((i) => i.self?.identifier == id)
+              .firstOrNull
+              ?.self ??
+          current;
     }
 
     return Padding(
@@ -96,7 +199,7 @@ class _CurrentSessionPanelState extends State<CurrentSessionPanel> {
               items: [
                 if (clientManager!.clients.length > 1)
                   tiamat.ContextMenuItem(
-                      text: "Mix Accounts",
+                      text: CurrentSessionPanel.promptVoicePanelMixAccounts,
                       onPressed: () {
                         EventBus.setFilterClient.add(null);
                         preferences.filterClient.set(null);
@@ -106,7 +209,6 @@ class _CurrentSessionPanelState extends State<CurrentSessionPanel> {
                       .map((i) => tiamat.ContextMenuItem(
                           text: i.self!.identifier,
                           onPressed: () {
-                            print("Setting filter client");
                             EventBus.setFilterClient.add(i);
                             preferences.filterClient.set(i.identifier);
                           }))
@@ -123,12 +225,12 @@ class _CurrentSessionPanelState extends State<CurrentSessionPanel> {
                       spacing: 8,
                       children: [
                         if (current != null)
-                          tiamat.Avatar(
+                          withStatus(tiamat.Avatar(
                             radius: 12,
                             image: current.avatar,
                             placeholderColor: current.defaultColor,
                             placeholderText: current.displayName,
-                          ),
+                          )),
                         if (current != null)
                           Flexible(
                             child: Column(
@@ -175,12 +277,12 @@ class _CurrentSessionPanelState extends State<CurrentSessionPanel> {
                                     height: 24,
                                     child: AspectRatio(
                                       aspectRatio: 1.0,
-                                      child: tiamat.Avatar(
+                                      child: withStatus(tiamat.Avatar(
                                         radius: 12,
                                         placeholderColor: i.self!.defaultColor,
                                         placeholderText: i.self!.displayName,
                                         image: i.self!.avatar,
-                                      ),
+                                      )),
                                     ),
                                   )),
                       ],

@@ -11,6 +11,8 @@ import 'package:rooster/client/matrix/auth/matrix_username_password_login_flow.d
 import 'package:rooster/client/matrix/components/matrix_sync_listener.dart';
 import 'package:rooster/client/matrix/components/profile/matrix_profile_component.dart';
 import 'package:rooster/client/matrix/components/user_presence/matrix_user_presence.dart';
+import 'package:rooster/client/components/space_categories/channel_categories.dart';
+import 'package:rooster/client/matrix/components/voice_channel_status/matrix_voice_channel_status_component.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_voip_room_component.dart';
 import 'package:rooster/client/matrix/homeserver_clock.dart';
 import 'package:rooster/client/matrix/database/matrix_database.dart';
@@ -23,7 +25,6 @@ import 'package:rooster/config/global_config.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/diagnostic/diagnostics.dart';
 import 'package:rooster/main.dart';
-import 'package:rooster/utils/list_extension.dart';
 import 'package:rooster/utils/notifying_list.dart';
 import 'package:rooster/utils/notifying_list_filter.dart';
 import 'package:rooster/utils/stored_stream_controller.dart';
@@ -59,11 +60,49 @@ class MatrixClient extends Client {
   final NotifyingList<Room> _rooms = NotifyingList.empty(growable: true);
   final NotifyingList<Space> _spaces = NotifyingList.empty(growable: true);
 
+  /// The same rooms and spaces by id: getRoom and hasRoom run for every
+  /// room of every sync, and scanned the lists (an exception per miss).
+  /// The lists are public and get added to from outside (tests, fixtures),
+  /// so an index whose size no longer matches its list is rebuilt from it.
+  final Map<String, Room> _roomsById = {};
+  final Map<String, Space> _spacesById = {};
+
+  Map<String, Room> get _roomIndex {
+    if (_roomsById.length != _rooms.length) {
+      _roomsById
+        ..clear()
+        ..addEntries(_rooms.map((room) => MapEntry(room.identifier, room)));
+    }
+    return _roomsById;
+  }
+
+  Map<String, Space> get _spaceIndex {
+    if (_spacesById.length != _spaces.length) {
+      _spacesById
+        ..clear()
+        ..addEntries(_spaces.map((space) => MapEntry(space.identifier, space)));
+    }
+    return _spacesById;
+  }
+
+  void _addRoom(Room room) {
+    _roomsById[room.identifier] = room;
+    _rooms.add(room);
+  }
+
+  void _addSpace(Space space) {
+    _spacesById[space.identifier] = space;
+    _spaces.add(space);
+  }
+
   final NotifyingList<Peer> _peers = NotifyingList.empty(growable: true);
 
   final Map<String, Peer> _peersMap = {};
 
   final StreamController _onSync = StreamController.broadcast();
+
+  final StreamController<void> _onOwnProfileUpdated =
+      StreamController.broadcast();
 
   matrix.NativeImplementations get nativeImplentations => BuildConfig.WEB
       ? const matrix.NativeImplementationsDummy()
@@ -141,6 +180,9 @@ class MatrixClient extends Client {
   Stream<void> get onSync => _onSync.stream;
 
   @override
+  Stream<void> get onOwnProfileUpdated => _onOwnProfileUpdated.stream;
+
+  @override
   List<Peer> get peers => _peers;
 
   @override
@@ -179,11 +221,39 @@ class MatrixClient extends Client {
         desc: "Title of a warning about encryption",
       );
 
+  static String get labelAppAccountLoadFailed => Intl.message(
+        "Unable to load account",
+        name: "labelAppAccountLoadFailed",
+        desc: "Title of the alert on the Home screen when one of the signed-in "
+            "accounts could not be opened at startup",
+      );
+
+  static String messageAppAccountLoadFailed(String account) => Intl.message(
+        "One of the registered accounts ($account...) was unable to load "
+        "correctly, please check the logs for more details",
+        name: "messageAppAccountLoadFailed",
+        args: [account],
+        desc: "Alert on the Home screen when one of the signed-in accounts "
+            "could not be opened at startup; account is the start of its "
+            "internal id, cut short",
+      );
+
+  static String get labelLoginSsoHomeserver => Intl.message(
+        "homeserver",
+        name: "labelLoginSsoHomeserver",
+        desc: "Stands for the server's own single sign-on when it names no "
+            "provider. It goes into the login button 'Login with …' in place "
+            "of a provider's name, so translate it to read well there (with "
+            "an article if your language needs one)",
+      );
+
   static Future<void> loadFromDB(
     ClientManager manager, {
     bool isBackgroundService = false,
   }) async {
-    await _checkSystem(manager);
+    // vodozemac (on the web, a wasm fetched and compiled) loads while the
+    // databases open; only init, which brings up encryption, waits for it.
+    final system = _checkSystem(manager);
 
     await Diagnostics.general.timeAsync("loadFromDB", () async {
       var clients = preferences.getRegisteredMatrixClients();
@@ -191,8 +261,11 @@ class MatrixClient extends Client {
       List<Future> futures = List.empty(growable: true);
 
       if (clients != null) {
-        for (var clientName in clients) {
-          var client = await MatrixClient.create(clientName);
+        // Every account's database at once, not one after the other.
+        final created = await Future.wait(clients.map(MatrixClient.create));
+        await system;
+        for (var client in created) {
+          final clientName = client.identifier;
           manager.addClient(client);
           futures.add(
             Diagnostics.general.timeAsync(
@@ -214,9 +287,9 @@ class MatrixClient extends Client {
                   manager.alertManager.addAlert(
                     Alert(
                       AlertType.warning,
-                      messageGetter: () =>
-                          "One of the registered accounts (${clientName.substring(0, 8)}...) was unable to load correctly, please check the logs for more details",
-                      titleGetter: () => "Unable to load account",
+                      messageGetter: () => messageAppAccountLoadFailed(
+                          clientName.substring(0, 8)),
+                      titleGetter: () => labelAppAccountLoadFailed,
                     ),
                   );
                 }
@@ -310,6 +383,17 @@ class MatrixClient extends Client {
     _updateRoomslist();
     _updateSpacesList();
     _handleSpaceChildren(update);
+    _trimSdkLogs();
+  }
+
+  /// The SDK keeps every log event it ever made in Logs().outputEvents,
+  /// whatever the level, and only clears it on logout: a long session
+  /// grew by every sync. The newest thousand are enough for the log page.
+  static void _trimSdkLogs() {
+    final events = matrix.Logs().outputEvents;
+    if (events.length > 2000) {
+      events.removeRange(0, events.length - 1000);
+    }
   }
 
   void _handleSpaceChildren(matrix.SyncUpdate update) {
@@ -364,6 +448,9 @@ class MatrixClient extends Client {
         "page.codeberg.everypizza.room.banner",
         "chat.commet.calendar_event",
         MatrixVoipRoomComponent.callMemberStateEvent,
+        // The sidebar lists channels under these from the first frame.
+        ChannelCategories.stateEventType,
+        MatrixVoiceChannelStatusComponent.stateEventType,
       },
       supportedLoginTypes: {
         matrix.AuthenticationTypes.password,
@@ -371,7 +458,9 @@ class MatrixClient extends Client {
       },
       nativeImplementations: nativeImplementations,
       database: database,
-      logLevel: matrix.Level.verbose,
+      // No logLevel: the SDK constructor would override the level set at
+      // startup (warning, verbose only in developer mode), and every
+      // SDK message went through print on every sync.
     );
 
     client.onSyncStatus.stream.listen(onSyncStatusChanged);
@@ -403,43 +492,58 @@ class MatrixClient extends Client {
     if (id != null) {
       var data = await _matrixClient.database.getUserProfile(id);
       if (data != null) {
-        self = MatrixProfile(
-            this,
-            matrix.Profile(
-              userId: id,
-              displayName: data.displayname,
-              avatarUrl: data.avatarUrl,
-            ));
+        _setSelf(matrix.Profile(
+          userId: id,
+          displayName: data.displayname,
+          avatarUrl: data.avatarUrl,
+        ));
 
         // Update own profile, but lets not wait for it before continuing
-        _matrixClient.getProfileFromUserId(id).then((profile) {
-          self = MatrixProfile(this, profile);
-        });
+        _matrixClient.getProfileFromUserId(id).then(_setSelf);
       } else {
-        self = MatrixProfile(this,
-            await _matrixClient.getProfileFromUserId(_matrixClient.userID!));
+        _setSelf(await _matrixClient.getProfileFromUserId(id));
       }
     }
   }
 
-  /// Runs on every sync, before the UI can show what the sync brought, our
-  /// own sent messages included. So it is linear in the number of rooms:
-  /// comparing every room with every other cost a 1000-room account a third
-  /// of a second per message on web.
-  void _updateRoomslist() {
-    final joinedRooms = <String, matrix.Room>{
-      for (final room in _matrixClient.rooms)
-        if (!room.isSpace && room.membership.isJoin) room.id: room,
-    };
-    final listed = {for (final room in _rooms) room.identifier};
+  /// Reads our name and picture from the server after we changed them: the
+  /// SDK's cache still holds the old ones until a sync marks it outdated.
+  Future<void> _refreshOwnProfile() async {
+    _setSelf(await _matrixClient.getProfileFromUserId(
+      _matrixClient.userID!,
+      maxCacheAge: Duration.zero,
+    ));
+  }
 
-    for (final room in joinedRooms.values) {
-      if (listed.contains(room.id)) continue;
-      rooms.add(MatrixRoom(this, room, _matrixClient));
+  void _setSelf(matrix.Profile profile) {
+    self = MatrixProfile(this, profile);
+    _onOwnProfileUpdated.add(null);
+  }
+
+  void _updateRoomslist() {
+    var joinedRooms = _matrixClient.rooms.where(
+      (element) => !element.isSpace && element.membership.isJoin,
+    );
+
+    final joinedIds = <String>{};
+    for (var room in joinedRooms) {
+      joinedIds.add(room.id);
+      if (hasRoom(room.id)) continue;
+      _addRoom(MatrixRoom(this, room, _matrixClient));
     }
 
-    if (listed.any((id) => !joinedRooms.containsKey(id))) {
-      rooms.removeWhere((e) => !joinedRooms.containsKey(e.identifier));
+    // A room sync dropped (left, kicked, upgraded) is closed, or its wrapper
+    // keeps listening to the client for the life of the app.
+    final dropped =
+        rooms.where((e) => !joinedIds.contains(e.identifier)).toList();
+    for (final room in dropped) {
+      _roomsById.remove(room.identifier);
+      room.close().catchError((Object e, StackTrace s) {
+        Log.onError(e, s, content: "Could not close a room sync dropped");
+      });
+    }
+    if (dropped.isNotEmpty) {
+      rooms.removeWhere((e) => !joinedIds.contains(e.identifier));
     }
   }
 
@@ -452,7 +556,7 @@ class MatrixClient extends Client {
     bool didChange = false;
     for (var space in allSpaces) {
       if (hasSpace(space.id)) continue;
-      spaces.add(MatrixSpace(this, space, _matrixClient));
+      _addSpace(MatrixSpace(this, space, _matrixClient));
       didChange = true;
     }
 
@@ -478,7 +582,9 @@ class MatrixClient extends Client {
       powerLevelAdditions = {
         "events": {
           "org.matrix.msc3401.call": 0,
-          "org.matrix.msc3401.call.member": 0
+          "org.matrix.msc3401.call.member": 0,
+          // Anyone may say what the channel is up to, as on Discord.
+          MatrixVoiceChannelStatusComponent.stateEventType: 0,
         }
       };
     }
@@ -584,7 +690,7 @@ class MatrixClient extends Client {
 
     if (hasRoom(id)) return getRoom(id)!;
     var room = MatrixRoom(this, matrixRoom, _matrixClient);
-    rooms.add(room);
+    _addRoom(room);
     return room;
   }
 
@@ -604,7 +710,7 @@ class MatrixClient extends Client {
       _matrixClient.getRoomById(id)!,
       _matrixClient,
     );
-    spaces.add(space);
+    _addSpace(space);
     return space;
   }
 
@@ -623,7 +729,7 @@ class MatrixClient extends Client {
       _matrixClient.getRoomById(id)!,
       _matrixClient,
     );
-    spaces.add(space);
+    _addSpace(space);
     return space;
   }
 
@@ -639,7 +745,7 @@ class MatrixClient extends Client {
     if (hasRoom(id)) return getRoom(id)!;
 
     var room = MatrixRoom(this, _matrixClient.getRoomById(id)!, _matrixClient);
-    rooms.add(room);
+    _addRoom(room);
     return room;
   }
 
@@ -653,17 +759,21 @@ class MatrixClient extends Client {
   Future<void> setAvatar(Uint8List bytes, String mimeType) async {
     await _matrixClient.setAvatar(matrix.MatrixImageFile(
         bytes: bytes, name: "avatar", mimeType: mimeType));
+    await _refreshOwnProfile();
+  }
 
-    await _updateOwnProfile();
-    // TODO: Handle refresh avatar
-    // await (self as MatrixPeer).refreshAvatar();
+  @override
+  Future<void> removeAvatar() async {
+    await _matrixClient.setAvatar(null);
+    await _refreshOwnProfile();
   }
 
   @override
   Future<void> setDisplayName(String name) async {
-    _matrixClient.setProfileField(_matrixClient.userID!, "displayname", {
+    await _matrixClient.setProfileField(_matrixClient.userID!, "displayname", {
       "displayname": name,
     });
+    await _refreshOwnProfile();
   }
 
   @override
@@ -684,14 +794,10 @@ class MatrixClient extends Client {
   }
 
   @override
-  Room? getRoom(String identifier) {
-    return _rooms.tryFirstWhere((element) => element.identifier == identifier);
-  }
+  Room? getRoom(String identifier) => _roomIndex[identifier];
 
   @override
-  Space? getSpace(String identifier) {
-    return _spaces.tryFirstWhere((element) => element.identifier == identifier);
-  }
+  Space? getSpace(String identifier) => _spaceIndex[identifier];
 
   @override
   bool hasPeer(String identifier) {
@@ -699,14 +805,10 @@ class MatrixClient extends Client {
   }
 
   @override
-  bool hasRoom(String identifier) {
-    return _rooms.any((element) => element.identifier == identifier);
-  }
+  bool hasRoom(String identifier) => _roomIndex.containsKey(identifier);
 
   @override
-  bool hasSpace(String identifier) {
-    return _spaces.any((element) => element.identifier == identifier);
-  }
+  bool hasSpace(String identifier) => _spaceIndex.containsKey(identifier);
 
   (String, List<String>?)? parseAddressToIdAndVia(String address) {
     String id = address;
@@ -863,7 +965,7 @@ class MatrixClient extends Client {
     );
 
     if (result.isEmpty) {
-      result.add(MatrixSSOLoginFlow(name: "homeserver", id: null));
+      result.add(MatrixSSOLoginFlow(name: labelLoginSsoHomeserver, id: null));
     }
 
     return result;

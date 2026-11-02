@@ -1,4 +1,6 @@
+import 'package:rooster/client/matrix/components/voip_room/matrix_call_moves_component.dart';
 import 'package:rooster/client/components/component.dart';
+import 'package:rooster/client/components/voip/media_capture_support.dart';
 import 'package:rooster/client/components/room_component.dart';
 import 'package:rooster/client/components/space_component.dart';
 import 'package:rooster/client/matrix/components/account_switch_prefix/matrix_account_switch_prefix.dart';
@@ -24,10 +26,12 @@ import 'package:rooster/client/matrix/components/room_activities/matrix_activiti
 import 'package:rooster/client/matrix/components/sidebar_entries/matrix_sidebar_entries_component.dart';
 import 'package:rooster/client/matrix/components/soundboard/matrix_space_soundboard_component.dart';
 import 'package:rooster/client/matrix/components/space_banner/matrix_space_banner_component.dart';
+import 'package:rooster/client/matrix/components/space_categories/matrix_space_categories_component.dart';
 import 'package:rooster/client/matrix/components/space_color_scheme/matrix_space_color_scheme_component.dart';
 import 'package:rooster/client/matrix/components/user_color/matrix_user_color_component.dart';
 import 'package:rooster/client/matrix/components/petname/matrix_petname_component.dart';
 import 'package:rooster/client/matrix/components/user_presence/matrix_user_presence.dart';
+import 'package:rooster/client/matrix/components/voice_channel_status/matrix_voice_channel_status_component.dart';
 import 'package:rooster/client/matrix/components/voip/matrix_voip_component.dart';
 import 'package:rooster/client/matrix/components/read_receipts/matrix_read_receipt_component.dart';
 import 'package:rooster/client/matrix/components/threads/matrix_threads_component.dart';
@@ -51,7 +55,11 @@ class ComponentRegistry {
       MatrixPushNotificationComponent(client),
       MatrixCommandComponent(client),
 
-      MatrixVoipComponent(client),
+      // A browser on an insecure (http) origin has no navigator.mediaDevices,
+      // and the SDK's VoIP sets ondevicechange on it in its constructor: the
+      // app died at startup on such a page (text login still works).
+      if (supportsMediaCapture) MatrixVoipComponent(client),
+      MatrixCallMovesComponent(client),
       // MatrixRTCDataChannelComponent(client),
       // MatrixRtcScreenShareAnnotationComponent(client),
       MatrixUrlPreviewComponent(client),
@@ -83,8 +91,14 @@ class ComponentRegistry {
       MatrixReadReceiptComponent(client, room),
       MatrixTypingIndicatorsComponent(client, room),
       MatrixPinnedMessagesComponent(client, room),
+      // On every origin: the room's icon, its view and who is in the call
+      // come from this; joining is what needs a capture, and the view says
+      // so where there is none.
       if (MatrixVoipRoomComponent.isVoipRoom(room))
         MatrixVoipRoomComponent(client, room),
+      // Shown in the sidebar on every platform, joinable here or not.
+      if (MatrixVoipRoomComponent.isVoipRoom(room))
+        MatrixVoiceChannelStatusComponent(client, room),
       if (MatrixPhotoAlbumRoomComponent.isPhotoAlbumRoom(room))
         MatrixPhotoAlbumRoomComponent(client, room),
       MatrixCalendarRoomComponent(client, room),
@@ -99,6 +113,7 @@ class ComponentRegistry {
       MatrixSpaceColorSchemeComponent(client, space),
       MatrixSpaceBannerComponent(client, space),
       MatrixSpaceSoundboardComponent(client, space),
+      MatrixSpaceCategoriesComponent(client, space),
     ];
   }
 }

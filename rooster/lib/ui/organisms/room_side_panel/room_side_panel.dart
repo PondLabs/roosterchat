@@ -95,7 +95,7 @@ class _RoomSidePanelState extends State<RoomSidePanel> {
 
   Widget buildPanelContent(BuildContext context) {
     var s = state;
-    if (s == SidePanelState.nothing && MediaQuery.of(context).mobile) {
+    if (s == SidePanelState.nothing && MediaQuery.sizeOf(context).mobile) {
       s = SidePanelState.defaultView;
     }
 
@@ -142,7 +142,7 @@ class _RoomSidePanelState extends State<RoomSidePanel> {
   Widget buildDefaultView() {
     return Column(
       children: [
-        if (MediaQuery.of(context).mobile)
+        if (MediaQuery.sizeOf(context).mobile)
           RoomQuickAccessMenuViewMobile(
             room: widget.state.currentRoom!,
             key: ValueKey(
@@ -196,7 +196,7 @@ class _RoomSidePanelState extends State<RoomSidePanel> {
 
   Widget buildSearch() {
     return SizedBox(
-        width: MediaQuery.of(context).desktop ? 300 : null,
+        width: MediaQuery.sizeOf(context).desktop ? 300 : null,
         child: RoomEventSearchWidget(
           room: widget.state.currentRoom!,
           onEventClicked: (eventId) {
@@ -241,10 +241,10 @@ class _RoomSidePanelState extends State<RoomSidePanel> {
 
   Widget buildPinnedMessages() {
     return SizedBox(
-        width: MediaQuery.of(context).desktop ? 300 : null,
+        width: MediaQuery.sizeOf(context).desktop ? 300 : null,
         child: Column(
           children: [
-            if (MediaQuery.of(context).mobile)
+            if (MediaQuery.sizeOf(context).mobile)
               RoomQuickAccessMenuViewMobile(
                 room: widget.state.currentRoom!,
                 key: ValueKey(
@@ -274,13 +274,13 @@ class _RoomSidePanelState extends State<RoomSidePanel> {
     return tiamat.Tile.low(
       child: Column(
         children: [
-          if (MediaQuery.of(context).mobile)
+          if (MediaQuery.sizeOf(context).mobile)
             RoomQuickAccessMenuViewMobile(
               room: widget.state.currentRoom!,
               key: ValueKey(
                   "quick_access_menu_${widget.state.currentRoom!.localId}"),
             ),
-          if (MediaQuery.of(context).mobile)
+          if (MediaQuery.sizeOf(context).mobile)
             Divider(
               height: 2,
             ),
@@ -302,7 +302,7 @@ class _RoomSidePanelState extends State<RoomSidePanel> {
                         child: CalendarWidgetView(
                             calendar: calendar!.calendar!,
                             watermark: false,
-                            useMobileLayout: MediaQuery.of(context).mobile,
+                            useMobileLayout: MediaQuery.sizeOf(context).mobile,
                             autoDisposeCalendar: false))),
               ),
             );
@@ -314,10 +314,10 @@ class _RoomSidePanelState extends State<RoomSidePanel> {
 
   Widget buildWidgets() {
     return SizedBox(
-        width: MediaQuery.of(context).desktop ? 250 : null,
+        width: MediaQuery.sizeOf(context).desktop ? 250 : null,
         child: Column(
           children: [
-            if (MediaQuery.of(context).mobile)
+            if (MediaQuery.sizeOf(context).mobile)
               RoomQuickAccessMenuViewMobile(
                 room: widget.state.currentRoom!,
                 key: ValueKey(

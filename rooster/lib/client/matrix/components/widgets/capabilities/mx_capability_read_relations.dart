@@ -42,6 +42,7 @@ class MatrixCapabilityReadEventRelations implements MatrixWidgetCapability {
 
     var event = await runner.room!.matrixRoom.getEventById(eventId);
     if (event == null) {
+      // Not translated: a reply to the widget, which the app does not show.
       return message.createResponseError(message: "Invalid request");
     }
 
@@ -50,6 +51,7 @@ class MatrixCapabilityReadEventRelations implements MatrixWidgetCapability {
     if (capabilities.canWidgetReadEvent(event) == false) {
       return message.createResponseError(
           message:
+              // Not translated: a reply to the widget, which the app does not show.
               "Rejected: Cannot read type of requested event: ${event.eventId} (${event.type})");
     }
 

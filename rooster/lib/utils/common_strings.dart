@@ -119,6 +119,49 @@ class CommonStrings {
       desc: "Generic prompt to remove something, usually shown on a button",
       name: "promptRemove");
 
+  static String get promptSave => Intl.message("Save",
+      desc: "Generic prompt to save changes, usually shown on a button",
+      name: "promptSave");
+
+  static String get promptClose => Intl.message("Close",
+      desc: "Generic prompt to close a dialog, panel or window",
+      name: "promptClose");
+
+  static String get promptRetry => Intl.message("Try again",
+      desc: "Generic prompt to try something that failed once more",
+      name: "promptRetry");
+
+  static String get promptOpen => Intl.message("Open",
+      desc: "Generic prompt to open something, such as a file or a link",
+      name: "promptOpen");
+
+  static String get promptAdd => Intl.message("Add",
+      desc: "Generic prompt to add something, usually shown on a button",
+      name: "promptAdd");
+
+  static String get promptRename => Intl.message("Rename",
+      desc: "Generic prompt to rename something", name: "promptRename");
+
+  static String get promptClear => Intl.message("Clear",
+      desc: "Generic prompt to clear a field, a list or a selection",
+      name: "promptClear");
+
+  static String get promptStop => Intl.message("Stop",
+      desc: "Generic prompt to stop something that is running or playing",
+      name: "promptStop");
+
+  static String get promptPlay => Intl.message("Play",
+      desc: "Generic prompt to play a sound, song or video",
+      name: "promptPlay");
+
+  static String get promptPause => Intl.message("Pause",
+      desc: "Generic prompt to pause a sound, song or video",
+      name: "promptPause");
+
+  static String get labelLoading => Intl.message("Loading…",
+      desc: "Generic label shown while something is loading",
+      name: "labelLoading");
+
   static String get labelPublic =>
       Intl.message("Public", desc: "Label for public", name: "labelPublic");
 

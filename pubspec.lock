@@ -786,12 +786,11 @@ packages:
     source: hosted
     version: "5.1.0"
   flutter_vodozemac:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: flutter_vodozemac
-      sha256: ef4c3580a7f2fe8eebb7602c6cba593a42b4a5e5466c372a022f77ccc14914a5
-      url: "https://pub.dev"
-    source: hosted
+      path: "third_party/flutter_vodozemac"
+      relative: true
+    source: path
     version: "0.5.0"
   flutter_web_auth_2:
     dependency: "direct overridden"
@@ -1338,12 +1337,11 @@ packages:
     source: hosted
     version: "1.0.7"
   media_kit_libs_windows_video:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: media_kit_libs_windows_video
-      sha256: dff76da2778729ab650229e6b4ec6ec111eb5151431002cbd7ea304ff1f112ab
-      url: "https://pub.dev"
-    source: hosted
+      path: "third_party/media_kit_libs_windows_video"
+      relative: true
+    source: path
     version: "1.0.11"
   media_kit_video:
     dependency: transitive

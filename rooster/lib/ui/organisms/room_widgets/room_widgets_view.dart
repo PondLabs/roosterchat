@@ -3,6 +3,7 @@ import 'package:rooster/client/room.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/adaptive_context_menu.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -17,6 +18,32 @@ class RoomWidgetsView extends StatefulWidget {
 class _RoomWidgetsViewState extends State<RoomWidgetsView> {
   late List<UserWidgetInfo> widgets;
   late List<WidgetHostType> additionalHostTypes;
+
+  String get promptWidgetOpenEmbedded => Intl.message("Open embedded",
+      name: "promptWidgetOpenEmbedded",
+      desc:
+          "Entry in a room widget's menu (a widget is a small web app added to a room): open it inside the app's window");
+
+  String get promptWidgetOpenNewWindow => Intl.message("Open in new window",
+      name: "promptWidgetOpenNewWindow",
+      desc:
+          "Entry in a room widget's menu (a widget is a small web app added to a room): open it in a window of its own");
+
+  String get promptWidgetOpenOtherDevice => Intl.message(
+      "Open on another device",
+      name: "promptWidgetOpenOtherDevice",
+      desc:
+          "Entry in a room widget's menu (a widget is a small web app added to a room): show a QR code and link to open it on another device");
+
+  String get promptWidgetOpenNewActivity => Intl.message("Open in new activity",
+      name: "promptWidgetOpenNewActivity",
+      desc:
+          "Entry in a room widget's menu on Android (a widget is a small web app added to a room): open it in a separate screen (an Android activity)");
+
+  String get promptWidgetClearPermissions => Intl.message("Clear Permissions",
+      name: "promptWidgetClearPermissions",
+      desc:
+          "Entry in a room widget's menu: forget the permissions given to the widget, so it asks again next time");
 
   @override
   void initState() {
@@ -34,10 +61,10 @@ class _RoomWidgetsViewState extends State<RoomWidgetsView> {
 
   String hostTypeToLabel(WidgetHostType type) {
     return switch (type) {
-      WidgetHostType.embedded => "Open embedded",
-      WidgetHostType.standalone => "Open in new window",
-      WidgetHostType.remoteHttpClient => "Open on another device",
-      WidgetHostType.androidActivity => "Open in new activity",
+      WidgetHostType.embedded => promptWidgetOpenEmbedded,
+      WidgetHostType.standalone => promptWidgetOpenNewWindow,
+      WidgetHostType.remoteHttpClient => promptWidgetOpenOtherDevice,
+      WidgetHostType.androidActivity => promptWidgetOpenNewActivity,
     };
   }
 
@@ -80,7 +107,7 @@ class _RoomWidgetsViewState extends State<RoomWidgetsView> {
                               },
                             ),
                           tiamat.ContextMenuItem(
-                            text: "Clear Permissions",
+                            text: promptWidgetClearPermissions,
                             icon: Icons.delete,
                             color: ColorScheme.of(context).error,
                             onPressed: () {

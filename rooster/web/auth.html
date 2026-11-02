@@ -1,7 +1,35 @@
 <!DOCTYPE html>
+<html lang="en">
 <title>Authentication complete</title>
-<p>Authentication is complete. If this does not happen automatically, please close the window.</p>
+<p id="text">Authentication is complete. If this does not happen automatically, please close the window.</p>
 <script>
+    // In the app's language (docs/localization.md): the one picked in
+    // settings, which shared_preferences keeps in localStorage, else the
+    // browser's first that Rooster has, else English.
+    (function () {
+        var texts = {
+            en: null,
+            pt: {
+                tag: "pt-BR",
+                title: "Autenticação concluída",
+                text: "A autenticação foi concluída. Se esta janela não fechar sozinha, pode fechá-la."
+            }
+        };
+        var code;
+        try {
+            code = JSON.parse(localStorage.getItem("flutter.app_language"));
+        } catch (e) {}
+        var preferred = navigator.languages || [navigator.language];
+        for (var i = 0; !(code in texts) && i < preferred.length; i++) {
+            code = String(preferred[i] || "").toLowerCase().split("-")[0];
+        }
+        var shown = texts[code];
+        if (!shown) return;
+        document.documentElement.lang = shown.tag;
+        document.title = shown.title;
+        document.getElementById("text").textContent = shown.text;
+    })();
+
     if (window.opener) {
         window.opener.postMessage({
             'flutter-web-auth-2': window.location.href

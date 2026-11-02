@@ -1,5 +1,6 @@
 import 'package:calendar_view/calendar_view.dart';
 import 'package:rooster_calendar_widget/calendar.dart';
+import 'package:rooster_calendar_widget/calendar_strings.dart';
 import 'package:rooster_calendar_widget/calendar_view_header.dart';
 import 'package:rooster_calendar_widget/event_view.dart';
 import 'package:rooster_calendar_widget/main.dart';
@@ -69,7 +70,7 @@ class _CalendarViewMonthState extends State<CalendarViewMonth> {
                     height: 30,
                     child: Center(
                       child: Text(
-                        "MTWTFSS".characters.elementAt(day).toString(),
+                        CalendarStrings.narrowWeekday(day),
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
