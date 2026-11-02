@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:rooster/client/components/url_preview/direct_image_link.dart';
 import 'package:rooster/client/components/url_preview/url_preview_component.dart';
 import 'package:rooster/client/matrix/components/url_preview/matrix_url_preview_component.dart';
@@ -63,6 +65,19 @@ class _BrokenImageProvider extends ImageProvider<_BrokenImageProvider> {
     return OneFrameImageStreamCompleter(
       Future<ImageInfo>.error(Exception('403 Forbidden')),
     );
+  }
+}
+
+/// An image still downloading.
+class _LoadingImageProvider extends ImageProvider<_LoadingImageProvider> {
+  @override
+  Future<_LoadingImageProvider> obtainKey(ImageConfiguration configuration) =>
+      SynchronousFuture<_LoadingImageProvider>(this);
+
+  @override
+  ImageStreamCompleter loadImage(
+      _LoadingImageProvider key, ImageDecoderCallback decode) {
+    return OneFrameImageStreamCompleter(Completer<ImageInfo>().future);
   }
 }
 
@@ -173,6 +188,37 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.byType(Lightbox), findsOneWidget);
+    });
+
+    testWidgets('holds a box while the image downloads', (tester) async {
+      // The preview shows as soon as it is known, before the image has a size.
+      await tester.pumpWidget(_testApp(UrlPreviewWidget(UrlPreviewData(
+        _hornetUri,
+        type: UrlDestinationType.image,
+        image: _LoadingImageProvider(),
+      ))));
+      await tester.pump();
+
+      expect(
+          tester
+              .getSize(find.byKey(const ValueKey('url-preview-image-loading'))),
+          const Size(480, 270));
+    });
+
+    testWidgets('holds a box of the image\'s shape when the preview knows it',
+        (tester) async {
+      await tester.pumpWidget(_testApp(UrlPreviewWidget(UrlPreviewData(
+        _hornetUri,
+        type: UrlDestinationType.image,
+        image: _LoadingImageProvider(),
+        imageAspectRatio: 1,
+      ))));
+      await tester.pump();
+
+      expect(
+          tester
+              .getSize(find.byKey(const ValueKey('url-preview-image-loading'))),
+          const Size(480, 480));
     });
 
     testWidgets('leaves nothing on screen when the link is not an image',

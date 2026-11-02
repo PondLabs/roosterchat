@@ -4,7 +4,9 @@ import 'package:rooster/client/components/url_preview/direct_image_link.dart';
 import 'package:rooster/client/components/url_preview/url_preview_component.dart';
 import 'package:rooster/client/components/video_embed/composite_video_provider.dart';
 import 'package:rooster/client/components/video_embed/photo_post.dart';
+import 'package:rooster/client/components/video_embed/providers/generic_video_provider.dart';
 import 'package:rooster/client/components/video_embed/providers/twitter_provider.dart';
+import 'package:rooster/client/components/video_embed/providers/youtube_provider.dart';
 import 'package:rooster/client/components/video_embed/video_embed_info.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
@@ -20,15 +22,30 @@ import 'package:flutter/widgets.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:matrix/matrix_api_lite.dart';
 
+/// Link previews. The client makes them itself where it can (image links,
+/// X, YouTube, video files) and asks the homeserver only for pages it cannot
+/// read. See docs/link-previews.md.
 class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
   @override
   MatrixClient client;
 
-  MatrixUrlPreviewComponent(this.client);
+  MatrixUrlPreviewComponent(this.client, {CompositeVideoProvider? providers})
+      : providers = providers ?? CompositeVideoProvider.instance;
 
+  /// Resolves video and post links (YouTube, X, Instagram, video files).
+  final CompositeVideoProvider providers;
+
+  /// Finished previews by link. A link that got none maps to
+  /// [UrlPreviewComponent.invalidPreviewData] so it isn't fetched again.
   Map<String, UrlPreviewData> cache = {};
 
+  /// Previews being fetched, by link. The composer's prefetch, the timeline
+  /// and notifications all wait on the same request.
+  final Map<String, Future<UrlPreviewData?>> _pending = {};
+
   bool? serverSupportsUrlPreview;
+
+  String? _requestPath;
 
   @override
   Future<UrlPreviewData?> getPreview(
@@ -37,40 +54,19 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
       return null;
     }
 
-    final room = timeline.room;
+    final uri = event.getLinks(timeline: timeline)?.firstOrNull;
+    if (uri == null) return null;
 
-    var uri = event.getLinks(timeline: timeline)!.first;
+    return _load(timeline.room, uri);
+  }
 
-    if (cache.containsKey(uri.toString())) {
-      return cache[uri.toString()];
+  @override
+  Future<UrlPreviewData?> getPreviewForUrl(Room room, Uri uri) async {
+    if (uri.authority == "matrix.to") {
+      return null;
     }
 
-    UrlPreviewData? data = DirectImageLink.matches(uri)
-        ? DirectImageLink.preview(uri)
-        : await _xPostPreview(uri);
-
-    if (data != null) {
-      // A direct image link or an X card: no homeserver needed.
-    } else if (shouldGetPreviewsInRoom(room)) {
-      try {
-        data =
-            await fetchPreviewData((room as MatrixRoom).matrixRoom.client, uri);
-      } catch (_) {
-        data = null;
-      }
-    } else {
-      Log.i("Not asking the homeserver for a url preview in this chat");
-    }
-
-    data ??= await _fallbackVideoEmbed(uri);
-
-    if (data != null) {
-      cache[uri.toString()] = data;
-    } else {
-      cache[uri.toString()] = UrlPreviewComponent.invalidPreviewData;
-    }
-
-    return data;
+    return _load(room, uri);
   }
 
   @override
@@ -85,11 +81,7 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
       return null;
     }
 
-    if (cache.containsKey(uri.toString())) {
-      return cache[uri.toString()];
-    }
-
-    return null;
+    return cache[uri.toString()];
   }
 
   @override
@@ -106,75 +98,102 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
   }
 
   @override
+  bool shouldGetPreviewForLink(Room room, Uri link) {
+    if (link.authority == "matrix.to") return false;
+    if (shouldGetPreviewsInRoom(room)) return true;
+
+    // Without the homeserver, only links the client can preview by itself.
+    return DirectImageLink.matches(link) || providers.canHandle(link);
+  }
+
+  @override
   bool shouldGetPreviewDataForTimelineEvent(
       Timeline timeline, TimelineEvent event) {
     if (event is! TimelineEventMessage) {
       return false;
     }
 
-    final room = timeline.room;
-
     final links = event.getLinks(timeline: timeline);
     if (links?.isNotEmpty != true) return false;
 
-    if (!shouldGetPreviewsInRoom(room)) {
-      // Allow fallback if client can directly handle the link. getPreview
-      // only previews the first one.
-      final link = links!.first;
-      return DirectImageLink.matches(link) ||
-          CompositeVideoProvider.instance.canHandle(link);
+    // getPreview only previews the first one.
+    return shouldGetPreviewForLink(timeline.room, links!.first);
+  }
+
+  /// [uri]'s preview from the cache, the fetch already under way, or a new
+  /// fetch. Null when the link has no preview.
+  Future<UrlPreviewData?> _load(Room room, Uri uri) {
+    final key = uri.toString();
+    final cached = cache[key];
+    if (cached != null) {
+      return Future.value(
+          cached == UrlPreviewComponent.invalidPreviewData ? null : cached);
     }
 
-    return true;
+    return _pending[key] ??= _fetch(room, uri).then((data) {
+      cache[key] = data ?? UrlPreviewComponent.invalidPreviewData;
+      return data;
+    }, onError: (Object error, StackTrace stack) {
+      Log.onError(error, stack, content: 'Failed to get url preview');
+      cache[key] = UrlPreviewComponent.invalidPreviewData;
+      return null;
+    }).whenComplete(() {
+      // Not `=> remove(key)`: that returns this very future, and
+      // whenComplete would wait for it, forever.
+      _pending.remove(key);
+    });
+  }
+
+  Future<UrlPreviewData?> _fetch(Room room, Uri uri) async {
+    if (DirectImageLink.matches(uri)) return DirectImageLink.preview(uri);
+
+    final provider = providers.findProvider(uri);
+
+    if (provider is TwitterProvider) {
+      final card = await _xPostPreview(provider, uri);
+      if (card != null) return card;
+    }
+
+    // YouTube's oEmbed answers in a few hundred milliseconds and a video
+    // file needs no request at all, while the homeserver would download the
+    // whole watch page (or the video) and the thumbnail before answering.
+    final clientOnly =
+        provider is YouTubeProvider || provider is GenericVideoProvider;
+
+    if (clientOnly || !shouldGetPreviewsInRoom(room)) {
+      if (!clientOnly) {
+        Log.i("Not asking the homeserver for a url preview in this chat");
+      }
+      return _fallbackVideoEmbed(uri);
+    }
+
+    return fetchPreviewData(room, uri);
   }
 
   Future<String> getRequestPath() async {
-    if (await client.getMatrixClient().authenticatedMediaSupported()) {
-      return '/client/v1/media/preview_url';
-    } else {
-      return '/media/v3/preview_url';
-    }
+    return _requestPath ??=
+        await client.getMatrixClient().authenticatedMediaSupported()
+            ? '/client/v1/media/preview_url'
+            : '/media/v3/preview_url';
   }
 
-  @override
-  Future<UrlPreviewData?> getPreviewForUrl(Room room, Uri uri) async {
-    if (uri.authority == "matrix.to") {
-      return null;
-    }
-
-    if (cache.containsKey(uri.toString())) {
-      return cache[uri.toString()];
-    }
-
-    UrlPreviewData? data = await _xPostPreview(uri);
-
-    if (data == null &&
-        shouldGetPreviewsInRoom(room) != false &&
-        serverSupportsUrlPreview != false) {
-      try {
-        data =
-            await fetchPreviewData((room as MatrixRoom).matrixRoom.client, uri);
-      } catch (_) {
-        data = null;
-      }
-    }
-
-    data ??= await _fallbackVideoEmbed(uri);
-
-    if (data != null) {
-      cache[uri.toString()] = data;
-    }
-
-    return data;
+  /// The homeserver's og: data for [url].
+  @visibleForTesting
+  Future<Map<String, Object?>> requestHomeserverPreview(
+      Room room, Uri url) async {
+    return (room as MatrixRoom).matrixRoom.client.request(
+        matrix.RequestType.GET, await getRequestPath(),
+        query: {"url": url.toString()});
   }
 
-  Future<UrlPreviewData?> fetchPreviewData(
-      matrix.Client client, Uri url) async {
+  Future<UrlPreviewData?> fetchPreviewData(Room room, Uri url) async {
+    // A provider that knows the link is asked at the same time as the
+    // homeserver, not after it.
+    final providerVideo = _resolveVideo(url);
+
     late Map<String, Object?> response;
     try {
-      response = await client.request(
-          matrix.RequestType.GET, await getRequestPath(),
-          query: {"url": url.toString()});
+      response = await requestHomeserverPreview(room, url);
     } catch (e, s) {
       if (e is MatrixException) {
         if (e.error == MatrixError.M_UNRECOGNIZED) {
@@ -184,7 +203,7 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
 
       Log.onError(e, s);
 
-      return await _fallbackVideoEmbed(url);
+      return await _fallbackVideoEmbed(url, video: providerVideo);
     }
 
     serverSupportsUrlPreview = true;
@@ -194,7 +213,7 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
     var description = response['og:description'] as String?;
 
     if (title == null && imageUrl == null) {
-      final fallback = await _fallbackVideoEmbed(url);
+      final fallback = await _fallbackVideoEmbed(url, video: providerVideo);
       if (fallback != null) return fallback;
     }
 
@@ -202,15 +221,10 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
         (response['og:video:secure_url'] ?? response["og:video"]) as String?;
     var videoType = response['og:video:type'] as String?;
 
-    int? videoWidth;
-    int? videoHeight;
-
-    var videoWidthStr = response['og:video:width'] as String?;
-    var videoHeightStr = response['og:video:height'] as String?;
-
-    if (videoHeightStr != null && videoWidthStr != null) {
-      videoWidth = int.tryParse(videoWidthStr);
-      videoHeight = int.tryParse(videoHeightStr);
+    var videoWidth = _dimension(response['og:video:width']);
+    var videoHeight = _dimension(response['og:video:height']);
+    if (videoWidth == null || videoHeight == null) {
+      videoWidth = videoHeight = null;
     }
 
     var type = response["og:image:type"] as String?;
@@ -221,11 +235,19 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
     }
 
     ImageProvider? image;
+    double? imageAspectRatio;
     if (imageUrl != null) {
       var imageUri = Uri.parse(imageUrl);
       if (imageUri.scheme == "mxc") {
         try {
-          image = MatrixMxcImage(imageUri, client, doThumbnail: false);
+          image = MatrixMxcImage(
+              imageUri, (room as MatrixRoom).matrixRoom.client,
+              doThumbnail: false);
+          final width = _dimension(response['og:image:width']);
+          final height = _dimension(response['og:image:height']);
+          if (width != null && height != null && width > 0 && height > 0) {
+            imageAspectRatio = width / height;
+          }
         } catch (exception, stack) {
           Log.onError(exception, stack);
           Log.w("Failed to get mxc image");
@@ -238,9 +260,9 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
     VideoEmbedInfo? videoEmbedInfo;
     var images = const <UrlPreviewImage>[];
 
-    if (CompositeVideoProvider.instance.canHandle(url)) {
+    if (providers.canHandle(url)) {
       try {
-        videoEmbedInfo = await CompositeVideoProvider.instance.resolve(url);
+        videoEmbedInfo = await providerVideo;
         // A provider knowing the link doesn't make it a video: an X or
         // Instagram post may be text or photos only, and then it previews as
         // a page. Prefer the post's own author/text over the scraped og:
@@ -250,7 +272,10 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
           final post = await _resolvePost(url);
           if (post != null) {
             images = _toPreviewImages(post.photos);
-            if (images.isNotEmpty) image = images.first.image;
+            if (images.isNotEmpty) {
+              image = images.first.image;
+              imageAspectRatio = images.first.aspectRatio;
+            }
             title = post.title ?? title;
             if (post.text.isNotEmpty) description = post.text;
           }
@@ -301,6 +326,7 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
       siteName: siteName,
       title: title,
       image: image,
+      imageAspectRatio: imageAspectRatio,
       video: videoAttachment,
       videoEmbedInfo: videoEmbedInfo,
       type: destinationType,
@@ -309,10 +335,26 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
     );
   }
 
-  Future<UrlPreviewData?> _fallbackVideoEmbed(Uri uri) async {
-    if (!CompositeVideoProvider.instance.canHandle(uri)) return null;
+  /// og: sizes arrive as numbers from Synapse's own image download and as
+  /// strings when copied from the page's meta tags.
+  static int? _dimension(Object? value) => switch (value) {
+        final num n => n.toInt(),
+        final String s => int.tryParse(s),
+        _ => null,
+      };
+
+  /// The video provider's answer for [uri], or null. It never fails, so it
+  /// can be started before the homeserver is asked and awaited afterwards.
+  Future<VideoEmbedInfo?> _resolveVideo(Uri uri) {
+    if (!providers.canHandle(uri)) return Future.value(null);
+    return providers.resolve(uri).then((info) => info, onError: (_) => null);
+  }
+
+  Future<UrlPreviewData?> _fallbackVideoEmbed(Uri uri,
+      {Future<VideoEmbedInfo?>? video}) async {
+    if (!providers.canHandle(uri)) return null;
     try {
-      final videoInfo = await CompositeVideoProvider.instance.resolve(uri);
+      final videoInfo = await (video ?? _resolveVideo(uri));
       if (videoInfo != null) {
         VideoAttachment? videoAttachment;
         if (videoInfo.streamUrl != null) {
@@ -347,10 +389,11 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
       if (post != null && photos.isNotEmpty) {
         return UrlPreviewData(
           uri,
-          siteName: CompositeVideoProvider.instance.findProvider(uri)?.name,
+          siteName: providers.findProvider(uri)?.name,
           title: post.title,
           description: post.text.isNotEmpty ? post.text : null,
           image: photos.first.image,
+          imageAspectRatio: photos.first.aspectRatio,
           images: photos,
           type: UrlDestinationType.image,
         );
@@ -362,9 +405,8 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
   /// An X status previews as an X card from fxtwitter rather than from the
   /// homeserver, whose og: card for X has no avatar, quote or counts. Null
   /// (so the plain preview is used) when the status cannot be fetched.
-  Future<UrlPreviewData?> _xPostPreview(Uri uri) async {
-    final provider = CompositeVideoProvider.instance.findProvider(uri);
-    if (provider is! TwitterProvider) return null;
+  Future<UrlPreviewData?> _xPostPreview(
+      TwitterProvider provider, Uri uri) async {
     try {
       final post = await provider.resolveXPost(uri);
       if (post == null) return null;
@@ -380,6 +422,7 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
         title: '${post.authorName} (@${post.handle})',
         description: post.text.isEmpty ? null : post.text,
         image: images.firstOrNull?.image ?? video?.thumbnail,
+        imageAspectRatio: images.firstOrNull?.aspectRatio,
         images: images,
         videoEmbedInfo: video,
         type: video != null
@@ -395,7 +438,7 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
   }
 
   Future<PhotoPost?> _resolvePost(Uri uri) async {
-    final provider = CompositeVideoProvider.instance.findProvider(uri);
+    final provider = providers.findProvider(uri);
     if (provider case final PhotoPostProvider posts) {
       return posts.resolvePost(uri);
     }

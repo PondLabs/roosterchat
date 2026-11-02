@@ -310,6 +310,8 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
                   image: widget.data!.image!,
                   filterQuality: FilterQuality.medium,
                   fit: BoxFit.cover,
+                  frameBuilder: _fadeIn,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                 ),
               )
             else
@@ -439,6 +441,19 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 
+  /// The card is shown as soon as its text is known, before its images have
+  /// downloaded. Each image fades in over the space kept for it.
+  static Widget _fadeIn(BuildContext context, Widget child, int? frame,
+      bool wasSynchronouslyLoaded) {
+    if (wasSynchronouslyLoaded) return child;
+    return AnimatedOpacity(
+      opacity: frame == null ? 0 : 1,
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOut,
+      child: child,
+    );
+  }
+
   Widget buildLoadingDisplay() {
     final color = Theme.of(context).colorScheme.surfaceContainerLowest;
     return Shimmer(
@@ -514,13 +529,17 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
           image: widget.data!.image!,
           filterQuality: FilterQuality.medium,
           fit: BoxFit.cover,
+          frameBuilder: _fadeIn,
+          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
         ),
       ),
     );
 
     // Post media knows its dimensions up front, so reserve the space instead
     // of letting the card jump when the photo loads.
-    final aspectRatio = photos.isEmpty ? null : photos.first.aspectRatio;
+    final aspectRatio = photos.isEmpty
+        ? widget.data!.imageAspectRatio
+        : photos.first.aspectRatio;
     if (aspectRatio == null || aspectRatio <= 0) return picture;
     return AspectRatio(aspectRatio: aspectRatio, child: picture);
   }
@@ -540,6 +559,20 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
               image: widget.data!.image!,
               filterQuality: FilterQuality.medium,
               fit: BoxFit.contain,
+              frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                if (frame != null || wasSynchronouslyLoaded) return child;
+                // The card is shown before the image has downloaded, and an
+                // image has no size until it has. Hold a box of its shape
+                // (16:9 when the link doesn't say) meanwhile.
+                return AspectRatio(
+                  key: const ValueKey('url-preview-image-loading'),
+                  aspectRatio: widget.data!.imageAspectRatio ?? 16 / 9,
+                  child: ColoredBox(
+                    color:
+                        Theme.of(context).colorScheme.surfaceContainerHighest,
+                  ),
+                );
+              },
               // The link led somewhere that isn't an image after all (a 403
               // page, a dead link): show nothing rather than a broken image.
               errorBuilder: (_, __, ___) => const SizedBox.shrink(),
@@ -563,6 +596,8 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
             image: widget.data!.image!,
             filterQuality: FilterQuality.medium,
             fit: BoxFit.cover,
+            frameBuilder: _fadeIn,
+            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
           ),
         ),
       ),
@@ -654,6 +689,8 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
             image: photo.image,
             filterQuality: FilterQuality.medium,
             fit: BoxFit.cover,
+            frameBuilder: _fadeIn,
+            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
           ),
         ),
       ),

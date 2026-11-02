@@ -22,6 +22,7 @@ import 'package:rooster/ui/organisms/attachment_processor/attachment_processor.d
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/organisms/chat/chat_view.dart';
 import 'package:rooster/ui/organisms/chat/dropped_files.dart';
+import 'package:rooster/ui/organisms/chat/url_preview_prefetcher.dart';
 import 'package:rooster/utils/debounce.dart';
 import 'package:rooster/utils/error_utils.dart';
 import 'package:rooster/utils/event_bus.dart';
@@ -84,6 +85,8 @@ class ChatState extends State<Chat> {
 
   Debouncer typingStatusDebouncer =
       Debouncer(delay: const Duration(seconds: 5));
+
+  final UrlPreviewPrefetcher previewPrefetcher = UrlPreviewPrefetcher();
   DateTime lastSetTyping = DateTime.fromMicrosecondsSinceEpoch(0);
 
   bool get isThread => widget.threadId != null;
@@ -147,6 +150,7 @@ class ChatState extends State<Chat> {
 
   @override
   void dispose() {
+    previewPrefetcher.dispose();
     Log.i(
         "Disposing room timeline for: ${widget.room.displayName} ${widget.threadId ?? ""}");
 
@@ -187,6 +191,10 @@ class ChatState extends State<Chat> {
   }
 
   void sendMessage(String message, {Client? overrideClient}) async {
+    // Whatever the composer hasn't fetched yet starts now, before the message
+    // is processed, encrypted and sent.
+    previewPrefetcher.prefetch(context, room, message);
+
     setState(() {
       processing = true;
     });
@@ -371,6 +379,8 @@ class ChatState extends State<Chat> {
   }
 
   void onInputTextUpdated(String currentText) {
+    previewPrefetcher.onTextChanged(context, room, currentText);
+
     if (isThread) {
       return;
     }

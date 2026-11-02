@@ -12,8 +12,16 @@ abstract class UrlPreviewComponent<T extends Client> implements Component<T> {
 
   bool shouldGetPreviewsInRoom(Room room);
 
+  /// Whether [link] gets a preview in [room]: the homeserver's preview, or
+  /// one the client makes itself (an image link, a video provider's link)
+  /// where the homeserver may not be asked.
+  bool shouldGetPreviewForLink(Room room, Uri link);
+
   Future<UrlPreviewData?> getPreview(Timeline timeline, TimelineEvent event);
 
+  /// The preview of [url], from the cache or fetched. Asking again while it
+  /// is being fetched joins that fetch, so the composer can start it before
+  /// the message is sent and the timeline picks it up.
   Future<UrlPreviewData?> getPreviewForUrl(Room room, Uri url);
 
   UrlPreviewData? getCachedPreview(Timeline timeline, TimelineEvent event);
@@ -47,6 +55,11 @@ class UrlPreviewData {
   final String? title;
   final String? description;
   final ImageProvider? image;
+
+  /// [image]'s width over height when known before it loads (the
+  /// homeserver's og:image:width and og:image:height), so the card keeps
+  /// its size while the image downloads.
+  final double? imageAspectRatio;
   final VideoAttachment? video;
   final UrlDestinationType? type;
   final VideoEmbedInfo? videoEmbedInfo;
@@ -66,6 +79,7 @@ class UrlPreviewData {
     this.description,
     this.type,
     this.image,
+    this.imageAspectRatio,
     this.video,
     this.videoEmbedInfo,
     this.images = const [],

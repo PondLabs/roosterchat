@@ -60,4 +60,9 @@ class MockMatrixUrlPreviewComponent
   bool shouldGetPreviewsInRoom(Room room) {
     return true;
   }
+
+  @override
+  bool shouldGetPreviewForLink(Room room, Uri link) {
+    return true;
+  }
 }
