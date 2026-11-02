@@ -352,19 +352,17 @@ class NotifyingListFilter<T> implements INotifyingList<T> {
     }
   }
 
+  /// Linear in the list, through a set: the room list's filters run this on
+  /// every update to any room in a space, and looking each room up in the
+  /// list cost a 1000-room account seconds while other rooms were busy.
   void onFilterChanged(event) {
-    var items = _internalList.toList();
-
     Log.i("Received filter change event!");
 
-    for (var item in items) {
-      if (whereFunction(item) == false) {
-        _internalList.remove(item);
-      }
-    }
+    _internalList.removeWhere((item) => whereFunction(item) == false);
 
+    final listed = _internalList.toSet();
     for (var item in _baseList) {
-      if (whereFunction(item) && _internalList.contains(item) == false) {
+      if (whereFunction(item) && listed.add(item)) {
         _internalList.add(item);
       }
     }
