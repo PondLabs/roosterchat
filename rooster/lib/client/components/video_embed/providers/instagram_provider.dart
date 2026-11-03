@@ -218,6 +218,13 @@ class InstagramProvider implements VideoProvider, PhotoPostProvider {
 
   final http.Client? _defaultHttpClient;
 
+  /// The embed page's post by shortcode, so the preview's check for a video
+  /// and its check for photos share one request. Its video and photo URLs
+  /// are signed and expire within days, so it is only kept for minutes; a
+  /// failed fetch is dropped at once so it is retried.
+  final Map<String, (DateTime, Future<InstagramMedia?>)> _media = {};
+  static const Duration _mediaLifetime = Duration(minutes: 5);
+
   /// Whether the embed page can be read here. A browser cannot: instagram.com
   /// sends no CORS headers, so the web build keeps the official embed.
   final bool _canFetchEmbedData;
@@ -289,8 +296,7 @@ class InstagramProvider implements VideoProvider, PhotoPostProvider {
     final info = extractPostInfo(uri);
     if (info == null) return null;
 
-    final media =
-        _canFetchEmbedData ? await _fetchEmbedMedia(info, client) : null;
+    final media = _canFetchEmbedData ? await _embedMedia(info, client) : null;
     if (media != null) {
       if (!media.isVideo || media.videoUrl == null) return null;
       return _nativeInfo(uri, info, media, fetchPlayback: fetchPlayback);
@@ -327,7 +333,7 @@ class InstagramProvider implements VideoProvider, PhotoPostProvider {
     final info = extractPostInfo(uri);
     if (info == null || !_canFetchEmbedData) return null;
 
-    final media = await _fetchEmbedMedia(info, client);
+    final media = await _embedMedia(info, client);
     if (media == null || media.photos.isEmpty) return null;
 
     final username = media.username;
@@ -373,6 +379,26 @@ class InstagramProvider implements VideoProvider, PhotoPostProvider {
       isShortForm: isReel || aspectRatio < 0.85,
       capabilities: VideoCapabilities.native,
     );
+  }
+
+  Future<InstagramMedia?> _embedMedia(
+      InstagramPostInfo info, http.Client? client) {
+    final now = DateTime.now();
+    _media.removeWhere((_, entry) => now.difference(entry.$1) > _mediaLifetime);
+
+    final key = '${info.isReel ? 'reel' : 'p'}/${info.shortcode}';
+    final cached = _media[key];
+    if (cached != null) return cached.$2;
+
+    late final Future<InstagramMedia?> media;
+    media = _fetchEmbedMedia(info, client).then((result) {
+      if (result == null && identical(_media[key]?.$2, media)) {
+        _media.remove(key);
+      }
+      return result;
+    });
+    _media[key] = (now, media);
+    return media;
   }
 
   Future<InstagramMedia?> _fetchEmbedMedia(

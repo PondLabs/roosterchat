@@ -8,6 +8,7 @@ import 'package:rooster/client/timeline_events/timeline_event_message.dart';
 import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_url_previews.dart';
 import 'package:rooster/ui/molecules/timeline_events/timeline_event_layout.dart';
 import 'package:rooster/ui/molecules/url_preview_widget.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tiamat/config/style/theme_extensions.dart';
@@ -82,6 +83,18 @@ class _FakeComponent implements UrlPreviewComponent {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// An image whose download never finishes.
+class _LoadingImage extends ImageProvider<_LoadingImage> {
+  @override
+  Future<_LoadingImage> obtainKey(ImageConfiguration configuration) =>
+      SynchronousFuture<_LoadingImage>(this);
+
+  @override
+  ImageStreamCompleter loadImage(
+          _LoadingImage key, ImageDecoderCallback decode) =>
+      OneFrameImageStreamCompleter(Completer<ImageInfo>().future);
+}
+
 Widget _testApp(Widget child) => MaterialApp(
       theme: ThemeData.light().copyWith(
         extensions: const [ThemeSettings()],
@@ -109,16 +122,18 @@ void main() {
         component: component,
       );
 
-  testWidgets('does not fetch while the event is still sending',
+  testWidgets('fetches from the local echo, while the event is still sending',
       (tester) async {
+    // The link is known before the homeserver has the message, so the
+    // preview doesn't wait for the send (and its encryption) and the sync.
     await tester.pumpWidget(_testApp(preview()));
     await tester.pumpAndSettle();
 
-    expect(component.getPreviewCalls, 0);
-    expect(find.text('Resolved title'), findsNothing);
+    expect(component.getPreviewCalls, 1);
+    expect(find.text('Resolved title'), findsOneWidget);
   });
 
-  testWidgets('fetches once the parent rebuilds with the event synced',
+  testWidgets('does not fetch again when the sent message syncs',
       (tester) async {
     late StateSetter rebuildParent;
     await tester.pumpWidget(_testApp(StatefulBuilder(builder: (_, setState) {
@@ -129,7 +144,29 @@ void main() {
 
     // TimelineEventViewMessage.update calls setState, rebuilding the preview
     // with the same key once the event's status has changed.
+    event.status = TimelineEventStatus.sent;
+    rebuildParent(() {});
+    await tester.pumpAndSettle();
     event.status = TimelineEventStatus.synced;
+    (previewKey.currentState as TimelineEventViewWidget).update(0);
+    await tester.pumpAndSettle();
+
+    expect(component.getPreviewCalls, 1);
+    expect(find.text('Resolved title'), findsOneWidget);
+  });
+
+  testWidgets('a message that failed to send is fetched once sent again',
+      (tester) async {
+    event.status = TimelineEventStatus.error;
+    late StateSetter rebuildParent;
+    await tester.pumpWidget(_testApp(StatefulBuilder(builder: (_, setState) {
+      rebuildParent = setState;
+      return preview();
+    })));
+    await tester.pumpAndSettle();
+    expect(component.getPreviewCalls, 0);
+
+    event.status = TimelineEventStatus.sending;
     rebuildParent(() {});
     await tester.pumpAndSettle();
 
@@ -137,16 +174,19 @@ void main() {
     expect(find.text('Resolved title'), findsOneWidget);
   });
 
-  testWidgets('fetches when update is called with the event synced',
-      (tester) async {
+  testWidgets('shows the card before its image has loaded', (tester) async {
+    // An image that is still downloading, as a fresh preview's is.
+    component.result = UrlPreviewData(
+      Uri.parse('https://example.com/page'),
+      title: 'Resolved title',
+      type: UrlDestinationType.page,
+      image: _LoadingImage(),
+    );
+
     await tester.pumpWidget(_testApp(preview()));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump();
 
-    event.status = TimelineEventStatus.synced;
-    (previewKey.currentState as TimelineEventViewWidget).update(0);
-    await tester.pumpAndSettle();
-
-    expect(component.getPreviewCalls, 1);
     expect(find.text('Resolved title'), findsOneWidget);
   });
 
@@ -175,6 +215,7 @@ void main() {
       rebuildParent = setState;
       return preview();
     })));
+    await tester.pump();
 
     event.status = TimelineEventStatus.synced;
     rebuildParent(() {});
@@ -205,8 +246,7 @@ void main() {
     rebuildParent(() {});
     await tester.pumpAndSettle();
 
-    expect(component.requested, isNot(contains(r'$newer')));
-    expect(find.text('Resolved title'), findsNothing);
+    expect(component.requested, [r'$event']);
   });
 
   Future<StateSetter> pumpSynced(WidgetTester tester) async {

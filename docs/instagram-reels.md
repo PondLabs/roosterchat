@@ -15,7 +15,7 @@ Instagram's embed page, `https://www.instagram.com/reel/<code>/embed/captioned/`
 
 Instagram only renders that page for a navigation. The request must carry `Sec-Fetch-Mode: navigate`, as an iframe load would. Without it, the reply is the app shell (`"pageID":"httpErrorPage"`) with no post in it. No cookies, login or particular User-Agent are needed; Dart's default UA works.
 
-The MP4 plays without cookies or a Referer. It answers range requests and sends `access-control-allow-origin: *`. Its URL is signed (`oe=` is the expiry, about two days out). For that reason the preview keeps only metadata, and opening the dialog fetches a fresh URL.
+The MP4 plays without cookies or a Referer. It answers range requests and sends `access-control-allow-origin: *`. Its URL is signed (`oe=` is the expiry, about two days out). For that reason the preview keeps only metadata. Opening the dialog reads the page again, unless the preview read it in the last five minutes. The preview's check for a video and its check for photos share one read of the page.
 
 Outcomes:
 

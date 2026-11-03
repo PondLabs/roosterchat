@@ -90,6 +90,40 @@ void main() {
         startsWith('https://scontent-gru1-1.cdninstagram.com/'));
   });
 
+  test('a photo post\'s embed page is read once for its preview', () async {
+    // The preview first asks for a video, then for the photos.
+    final page = File('unit_test/fixtures/instagram_photo_embed.html')
+        .readAsStringSync();
+    var requests = 0;
+    final provider = InstagramProvider(
+      canFetchEmbedData: true,
+      httpClient: MockClient((_) async {
+        requests++;
+        return http.Response(page, 200,
+            headers: {'content-type': 'text/html; charset=utf-8'});
+      }),
+    );
+
+    expect(await provider.resolve(_eggUri), isNull);
+    expect((await provider.resolvePost(_eggUri))?.photos, hasLength(1));
+    expect(requests, 1);
+  });
+
+  test('a failed embed page is read again', () async {
+    var requests = 0;
+    final provider = InstagramProvider(
+      canFetchEmbedData: true,
+      httpClient: MockClient((_) async {
+        requests++;
+        return http.Response('', 429);
+      }),
+    );
+
+    await provider.resolvePost(_eggUri);
+    await provider.resolvePost(_eggUri);
+    expect(requests, 2);
+  });
+
   testWidgets('a carousel preview opens every photo in the lightbox',
       (tester) async {
     final photos = [

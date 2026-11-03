@@ -83,8 +83,7 @@ class _TimelineEventViewUrlPreviewsState
   @override
   void didUpdateWidget(covariant TimelineEventViewUrlPreviews oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // A message we just sent is first built while still sending, so the fetch
-    // was skipped. The message view rebuilds us once the event has synced.
+    // Picks up a message that failed to send once it is sent again.
     load(widget.event);
   }
 
@@ -103,7 +102,10 @@ class _TimelineEventViewUrlPreviewsState
       return;
     }
 
-    if (event.status == TimelineEventStatus.synced) {
+    // Our own message is fetched from its local echo, while it is still being
+    // sent (and encrypted), not after the homeserver echoes it back: the link
+    // is already known. Usually the composer has fetched it already.
+    if (event.status != TimelineEventStatus.error) {
       fetchPreview(event);
     }
   }
@@ -123,16 +125,9 @@ class _TimelineEventViewUrlPreviewsState
           value = await widget.component.getPreviewForUrl(widget.room, link);
         }
       }
-      if (mounted) {
-        final photos = value?.images ?? const <UrlPreviewImage>[];
-        for (final photo in photos) {
-          await precacheImage(photo.image, context);
-        }
-        final image = value?.image;
-        if (image != null && photos.isEmpty) {
-          await precacheImage(image, context);
-        }
-      }
+      // The card shows as soon as its text is known. Its images keep their
+      // space and fade in as they load (UrlPreviewWidget), rather than the
+      // whole card waiting for every photo to download.
     } catch (e, s) {
       Log.onError(e, s, content: 'Failed to get url preview');
       value = null;

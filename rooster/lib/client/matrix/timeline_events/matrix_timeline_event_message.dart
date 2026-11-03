@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:matrix/matrix.dart' as matrix;
 
 import 'package:html/parser.dart' as html_parser;
+import 'package:html_unescape/html_unescape.dart';
 
 class MatrixTimelineEventMessage extends MatrixTimelineEvent
     with MatrixTimelineEventRelated, MatrixTimelineEventReactions
@@ -225,7 +226,9 @@ class MatrixTimelineEventMessage extends MatrixTimelineEvent
       text = text.replaceRange(start, end, "");
     }
 
-    var foundLinks = TextUtils.findUrls(text);
+    // The formatted body is HTML, where a link's "&" is "&amp;". Unescaped,
+    // the link is the one the sender typed, the one the composer prefetched.
+    var foundLinks = TextUtils.findUrls(HtmlUnescape().convert(text));
 
     foundLinks?.removeWhere((element) => element.authority == "matrix.to");
     if (foundLinks?.isEmpty == true) {

@@ -33,6 +33,10 @@ class MatrixSpace extends Space {
 
   final StreamController<void> _onUpdate = StreamController.broadcast();
   final NotifyingList<Room> _rooms = NotifyingList.empty(growable: true);
+
+  /// The ids in [_rooms], kept with it, so [containsRoom] needn't search the
+  /// list. The sidebar asks it for every room on every room update.
+  final Set<String> _roomIds = {};
   final NotifyingList<RoomPreview> _previews =
       NotifyingList.empty(growable: true);
 
@@ -216,7 +220,7 @@ class MatrixSpace extends Space {
     _components = ComponentRegistry.getMatrixSpaceComponents(client, this);
 
     _subscriptions = List.from([
-      client.onRoomAdded.listen((_) => updateRoomsList()),
+      client.onRoomAdded.listen(_onClientRoomAdded),
       client.onRoomRemoved.listen(onClientRoomRemoved),
       client.matrixClient.onSync.stream.listen(onMatrixSync),
       client.matrixClient.onRoomState.stream
@@ -276,9 +280,20 @@ class MatrixSpace extends Space {
     _avatar = avatar;
   }
 
+  /// A room the client joined or loaded. Only one of our children changes
+  /// our list: the client adds every room it has, one by one, at startup.
+  void _onClientRoomAdded(Room room) {
+    if (_matrixRoom.getState(matrix.EventTypes.SpaceChild, room.identifier) !=
+        null) {
+      updateRoomsList();
+    }
+  }
+
   void onClientRoomRemoved(Room leftRoom) {
     if (containsRoom(leftRoom.identifier)) {
-      _rooms.remove(leftRoom);
+      // The set first: the list tells its listeners synchronously.
+      _roomIds.remove(leftRoom.identifier);
+      _rooms.removeWhere((e) => e.identifier == leftRoom.identifier);
       _onUpdate.add(null);
 
       // Update preview list
@@ -325,12 +340,14 @@ class MatrixSpace extends Space {
         var room = client.getRoom(child.roomId!);
 
         if (room == null) {
+          _roomIds.remove(child.roomId);
           _rooms.removeWhere((e) => e.identifier == child.roomId);
         }
 
         if (room != null) {
           if (!containsRoom(room.identifier) &&
               !client.hasSpace(room.identifier)) {
+            _roomIds.add(room.identifier);
             _rooms.add(room);
             _previews
                 .removeWhere((element) => element.roomId == room.identifier);
@@ -449,7 +466,7 @@ class MatrixSpace extends Space {
 
   @override
   bool containsRoom(String identifier) {
-    return _rooms.any((element) => element.identifier == identifier);
+    return _roomIds.contains(identifier);
   }
 
   @override
