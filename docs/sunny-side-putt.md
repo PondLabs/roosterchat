@@ -4,6 +4,19 @@ The first call activity: a minigolf whose balls are EGGS and whose
 holes are NESTS, on a farm, with power-ups. Inspired by Discord's Putt
 Party — the numbers follow it; the identity is the Rooster's own.
 
+![the egg on the tee](images/sunny-side-putt/01-the-egg-on-the-tee.png)
+![aiming, the arrow on the turf](images/sunny-side-putt/02-aiming-the-putt.png)
+
+In play:
+
+![in the nest](images/sunny-side-putt/05-in-the-nest.png)
+![hole end](images/sunny-side-putt/06-hole-end.png)
+
+A short gameplay clip (aim, roll, the Rabbit Hole trick, the
+scoreboard):
+
+[putt-sunny-side-putt-3d.mp4](images/sunny-side-putt/putt-sunny-side-putt-3d.mp4)
+
 ## The game
 
 - A course is 6 holes; a match seats 1-8 players (the ninth onward
