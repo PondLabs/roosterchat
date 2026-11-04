@@ -7,6 +7,8 @@ library;
 import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:three_js_core/three_js_core.dart' as tjs;
+import 'package:three_js_math/three_js_math.dart' as tjs;
 import 'package:rooster/client/components/sunny_side_putt/core/hole.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/rules.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
@@ -45,6 +47,24 @@ void main() {
   PuttCameraCue resting(Vec2 egg) => PuttCameraCue(
       hole: hole, phase: PuttPhase.holePlay, myEgg: egg, myEggResting: true);
 
+  /// Where a ground point lands on the 1280x800 screen through the rig.
+  ui.Offset pixelOf(Vec2 point) {
+    final camera = tjs.PerspectiveCamera(PuttCameraRig.fovDeg, 1280 / 800);
+    rig.applyTo(camera);
+    camera.updateMatrixWorld(true);
+    final ndc = tjs.Vector3(point.x, 0, point.y).project(camera);
+    return ui.Offset((ndc.x + 1) / 2 * 1280, (1 - ndc.y) / 2 * 800);
+  }
+
+  /// Whether a ground point shows in the part of the screen the HUD's
+  /// bars leave free.
+  void expectInFreeView(Vec2 point) {
+    final pixel = pixelOf(point);
+    expect(pixel.dx, inInclusiveRange(20, 1260), reason: '$point at $pixel');
+    expect(pixel.dy, inInclusiveRange(96, 800 - 150),
+        reason: '$point at $pixel');
+  }
+
   test('the hole opens with a sweep from over the nest to the whole green', () {
     director.update(1 / 60, resting(hole.tee));
     // The entrance starts low and turned, looking across the nest at the
@@ -60,8 +80,8 @@ void main() {
 
   test('at rest, the egg and the nest are framed together', () {
     run(PuttCameraDirector.openingSeconds + 3, resting(hole.tee));
-    final middle = hole.tee.lerp(hole.nest.position, 0.5);
-    expect(rig.target.distanceTo(middle), lessThan(0.5));
+    expectInFreeView(hole.tee);
+    expectInFreeView(hole.nest.position);
     expect(rig.distance, lessThanOrEqualTo(rig.overviewDistance + 1e-6));
     expect(rig.distance, greaterThan(rig.overviewDistance * 0.42 - 1e-6));
   });
@@ -117,8 +137,8 @@ void main() {
         otherEggs: const [Vec2(10, 20)],
       ),
     );
-    final middle = const Vec2(10, 20).lerp(hole.nest.position, 0.5);
-    expect(rig.target.distanceTo(middle), lessThan(1.5));
+    expectInFreeView(const Vec2(10, 20));
+    expectInFreeView(hole.nest.position);
   });
 
   test('between holes the whole green shows again', () {

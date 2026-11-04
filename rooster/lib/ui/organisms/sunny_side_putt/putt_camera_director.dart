@@ -223,7 +223,8 @@ class PuttCameraDirector {
     if (_userCamera) {
       rig.glideTo(target: Vec2((minX + maxX) / 2, (minY + maxY) / 2));
     } else {
-      rig.glideToFrame(Vec2(minX, minY), Vec2(maxX, maxY), margin: 4);
+      rig.glideToFrame(Vec2(minX, minY), Vec2(maxX, maxY),
+          margin: 4, box: true);
     }
   }
 }
