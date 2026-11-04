@@ -642,7 +642,8 @@ class SunnySidePuttGame extends FlameGame {
   /// yet this match or a long idle.
   PuttCoachCue? coachForFrame() {
     if (_readyFor <= 0) return null;
-    if (director.holeClock < PuttCameraDirector.openingSeconds + 0.4) {
+    // Once the camera has come out of the opening sweep and settled.
+    if (director.holeClock < PuttCameraDirector.openingSeconds + 1.0) {
       return null;
     }
     if (_coachRetired && _readyFor < coachIdleSeconds) return null;
@@ -653,6 +654,14 @@ class SunnySidePuttGame extends FlameGame {
     final at = match.myEggRenderPosition;
     if (at == null || !world3d.inFrontOfCamera(at)) return null;
     final egg = world3d.projectToWorld(at);
+    // Only over an egg the player can see, clear of the HUD's bars.
+    final view = world3d.rig.viewport;
+    if (egg.dx < 40 ||
+        egg.dx > view.width - 40 ||
+        egg.dy < 90 ||
+        egg.dy > view.height - 110) {
+      return null;
+    }
     final nest = world3d.projectToWorld(hole.nest.position);
     final way = nest - egg;
     final toward = way.distance < 1 ? const Offset(0, -1) : way / way.distance;

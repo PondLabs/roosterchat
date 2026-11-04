@@ -211,7 +211,7 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
       _myShot = 0;
       _drag = null;
       // The first hole waits for the coach to show the gesture once.
-      _myNextAt = _firstHole ? 4.6 : 3.2;
+      _myNextAt = _firstHole ? 5.6 : 3.2;
       _firstHole = false;
       _botShots.clear();
       _botNextAt.clear();
