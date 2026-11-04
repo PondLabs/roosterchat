@@ -22,6 +22,7 @@ class PuttDemoApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const MaterialApp(
+      // Not translated: the game's title never translates.
       title: 'Sunny Side Putt',
       debugShowCheckedModeBanner: false,
       home: PuttDemoPage(),
