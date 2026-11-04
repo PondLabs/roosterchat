@@ -73,7 +73,8 @@ class CallControlButtons extends StatefulWidget {
   final VoidCallback? onHungUp;
   final ValueChanged<bool>? onSoundboardOpenChanged;
 
-  static String get promptCallOpenDjBooth =>      Intl.message("DJ booth – play music",
+  static String get promptCallOpenDjBooth =>
+      Intl.message("DJ booth – play music",
           name: "promptCallOpenDjBooth",
           desc: "Tooltip of the call's DJ booth button, and its entry in the "
               "phone's \"more\" sheet, while the booth is closed: opens the "

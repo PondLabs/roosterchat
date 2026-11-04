@@ -26,8 +26,8 @@ class LivekitCallActivityTransport implements CallActivityTransport {
         if (e.topic != CallActivityProtocol.topic) return;
         final sender = e.participant?.identity;
         if (sender == null) return;
-        final message = CallActivityProtocol.decodePacket(
-            Uint8List.fromList(e.data));
+        final message =
+            CallActivityProtocol.decodePacket(Uint8List.fromList(e.data));
         if (message == null) return;
         _incoming.add(CallActivityIncoming(sender, message));
       })
@@ -53,8 +53,8 @@ class LivekitCallActivityTransport implements CallActivityTransport {
         destinationIdentities: to,
       );
     } catch (e, s) {
-      Log.onError(
-          e, s, content: 'call activity: could not send ${message['t']}');
+      Log.onError(e, s,
+          content: 'call activity: could not send ${message['t']}');
       rethrow;
     }
   }
@@ -73,8 +73,7 @@ class LivekitCallActivityTransport implements CallActivityTransport {
 
   @override
   bool isPresent(String identity) =>
-      identity == selfIdentity ||
-      room.remoteParticipants.containsKey(identity);
+      identity == selfIdentity || room.remoteParticipants.containsKey(identity);
 
   @override
   Future<void> dispose() async {

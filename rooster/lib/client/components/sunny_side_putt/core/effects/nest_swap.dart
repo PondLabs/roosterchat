@@ -2,7 +2,6 @@
 
 import "./../powerups.dart";
 
-
 /// Swaps the caster's egg with the targeted player's egg.
 class NestSwapEffect extends PowerUpEffect {
   const NestSwapEffect();

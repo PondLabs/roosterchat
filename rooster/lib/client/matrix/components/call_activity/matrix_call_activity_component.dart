@@ -62,8 +62,8 @@ class MatrixCallActivityComponent
     required String hostUserId,
     required int createdAtMs,
   }) async {
-    await room.matrixRoom.client.setRoomStateWithKey(
-        room.identifier, stateEventType, sessionId, {
+    await room.matrixRoom.client
+        .setRoomStateWithKey(room.identifier, stateEventType, sessionId, {
       'activity': activityId,
       'host': hostUserId,
       'created': createdAtMs,
@@ -94,12 +94,13 @@ class MatrixCallActivityComponent
         final int ms => ms,
         // This fork's events carry their server time as a DateTime.
         _ => entry.value is matrix.Event
-            ? (entry.value as matrix.Event).originServerTs.millisecondsSinceEpoch
+            ? (entry.value as matrix.Event)
+                .originServerTs
+                .millisecondsSinceEpoch
             : 0,
       };
       final windowJson = entry.value.content['expires'];
-      final window =
-          windowJson is int ? windowJson : expires.inMilliseconds;
+      final window = windowJson is int ? windowJson : expires.inMilliseconds;
       if (nowMs - created > window) continue;
       result.add((
         sessionId: entry.key,
@@ -247,8 +248,7 @@ class MatrixCallActivityComponent
       if (!_isOurCall(session)) return;
       _followState();
     }));
-    _callManagerSubs
-        .add(callManager.currentSessions.onRemove.listen((session) {
+    _callManagerSubs.add(callManager.currentSessions.onRemove.listen((session) {
       if (!_isOurCall(session)) return;
       _followState();
     }));

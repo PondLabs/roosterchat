@@ -38,7 +38,10 @@ class CallActivitySnapshot {
     if (id is! String || activity is! String) return null;
     if (host is! String || seq is! int) return null;
     Set<String> read(Object? field) => switch (field) {
-          final List list => {for (final e in list) if (e is String) e},
+          final List list => {
+              for (final e in list)
+                if (e is String) e
+            },
           _ => const {},
         };
     return CallActivitySnapshot(
@@ -135,7 +138,7 @@ class CallActivitySession extends ChangeNotifier {
     required this.activity,
     required String selfUserId,
     this.now = DateTime.now,
-  })  : _selfUserId = selfUserId {
+  }) : _selfUserId = selfUserId {
     _subs.add(transport.incoming.listen((i) => _onIncoming(i)));
     _subs.add(transport.participantJoined.listen(_onParticipantJoined));
     _subs.add(transport.participantLeft.listen(_onParticipantLeft));
@@ -189,7 +192,8 @@ class CallActivitySession extends ChangeNotifier {
   CallActivityRole get role {
     if (_hosting) return CallActivityRole.host;
     if (!hasSession) return CallActivityRole.spectator;
-    if (_snapshot.players.contains(selfIdentity)) return CallActivityRole.player;
+    if (_snapshot.players.contains(selfIdentity))
+      return CallActivityRole.player;
     return CallActivityRole.spectator;
   }
 
@@ -221,8 +225,8 @@ class CallActivitySession extends ChangeNotifier {
     Map<String, Object?> message, [
     List<String>? to,
   ]) {
-    final sent = _outbox.then((_) => transport.send(message, to: to),
-        onError: (_) {});
+    final sent =
+        _outbox.then((_) => transport.send(message, to: to), onError: (_) {});
     _outbox = sent.catchError((_) {});
     return sent;
   }
@@ -291,9 +295,9 @@ class CallActivitySession extends ChangeNotifier {
   /// Tells the host what [input] the player made (a shot, a power-up
   /// order, in the activity's own language). Only the host acts on it, so
   /// only the host receives it; the answer rides the next [sendState].
-  Future<void> sendInput(Map<String, Object?> input) async =>
-      _send({'t': CallActivityMessageType.input, ...input},
-          _host.isNotEmpty ? [_host] : null);
+  Future<void> sendInput(Map<String, Object?> input) async => _send(
+      {'t': CallActivityMessageType.input, ...input},
+      _host.isNotEmpty ? [_host] : null);
 
   /// Learns of a session from its room state (a client entering the call
   /// after the launch starts here): the ids and the host, so [join] knows
@@ -419,7 +423,9 @@ class CallActivitySession extends ChangeNotifier {
           'u': selfUserId,
           'acts': [activity.id],
           'host': true,
-        }, [sender]);
+        }, [
+          sender
+        ]);
         if (hasSession || _hosting) {
           _send(
             {
@@ -463,8 +469,8 @@ class CallActivitySession extends ChangeNotifier {
         // game state rides in the last snapshot. A target that knows the
         // activity accepts; one that can host but does not know it still
         // accepts (it follows snapshots), like a joining spectator.
-        _send({'t': CallActivityMessageType.handoffAck, 'to': sender},
-            [sender]);
+        _send(
+            {'t': CallActivityMessageType.handoffAck, 'to': sender}, [sender]);
         notifyListeners();
       case CallActivityMessageType.handoffAck:
         if (!_hosting) return;
@@ -575,10 +581,14 @@ class CallActivitySession extends ChangeNotifier {
       players.remove(sender);
       spectators.add(sender);
     }
-    _snapshot =
-        _snapshot.copyWith(players: players, spectators: spectators);
-    _send({'t': CallActivityMessageType.joined, 'id': sender, 'as':
-message['as']}, [sender]);
+    _snapshot = _snapshot.copyWith(players: players, spectators: spectators);
+    _send({
+      't': CallActivityMessageType.joined,
+      'id': sender,
+      'as': message['as']
+    }, [
+      sender
+    ]);
     sendState();
   }
 
@@ -600,8 +610,7 @@ message['as']}, [sender]);
     }
     final players = {..._snapshot.players}..remove(identity);
     final spectators = {..._snapshot.spectators}..remove(identity);
-    _snapshot =
-        _snapshot.copyWith(players: players, spectators: spectators);
+    _snapshot = _snapshot.copyWith(players: players, spectators: spectators);
     if (players.isEmpty && spectators.isEmpty) {
       _endHosting(bye: true);
     }

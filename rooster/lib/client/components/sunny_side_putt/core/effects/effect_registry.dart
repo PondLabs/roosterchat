@@ -45,8 +45,7 @@ final List<PowerUpEffect> builtinEffects = [
 ];
 
 /// The ids of [builtinEffects], for grant-table assertions.
-final Set<String> builtinEffectIds =
-    builtinEffects.map((e) => e.id).toSet();
+final Set<String> builtinEffectIds = builtinEffects.map((e) => e.id).toSet();
 
 /// Registers every launch power-up into [registry].
 void registerBuiltinEffects(PowerUpRegistry registry) {

@@ -4,7 +4,6 @@
 
 import "./../powerups.dart";
 
-
 /// Push speed delivered to each egg caught in the gust.
 const double kGustPush = 6;
 

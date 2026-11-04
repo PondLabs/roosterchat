@@ -2,7 +2,6 @@
 
 import "./../powerups.dart";
 
-
 /// Furthest single hop, in world units.
 const double kRabbitHoleMaxDistance = 6;
 

@@ -19,8 +19,7 @@ CallActivity get _descriptor => CallActivity(
     );
 
 void main() {
-  test('the host launches, the guest adopts, a guest shot lands twice',
-      () {
+  test('the host launches, the guest adopts, a guest shot lands twice', () {
     fakeAsync((async) {
       final call = InMemoryActivityCall();
       final hostSession = CallActivitySession(

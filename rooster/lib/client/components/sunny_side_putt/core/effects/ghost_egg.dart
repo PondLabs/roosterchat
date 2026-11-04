@@ -23,7 +23,6 @@ class GhostEggEffect extends PowerUpEffect {
   @override
   void apply(PowerUpContext context) {
     final duration = (kGhostEggSeconds / context.tickSeconds).round();
-    context.setBallFlagFor(
-        context.casterId, PowerUpFlag.ghost, duration);
+    context.setBallFlagFor(context.casterId, PowerUpFlag.ghost, duration);
   }
 }

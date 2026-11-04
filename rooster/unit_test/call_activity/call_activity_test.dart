@@ -3,7 +3,6 @@
 // launch, join, capacity, leave, host election, handoff, and the input
 // lane.
 
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rooster/client/components/call_activity/call_activity_component.dart';
 import 'package:rooster/client/components/call_activity/call_activity_protocol.dart';
@@ -59,7 +58,8 @@ void main() {
     test('launch announces the session and sends the first state', () async {
       final call = InMemoryActivityCall();
       final host = CallActivitySession(
-          activity: _activity(), selfUserId: '@alice:example.org',
+          activity: _activity(),
+          selfUserId: '@alice:example.org',
           transport: call.join('alice'));
 
       await host.launch();
@@ -83,13 +83,15 @@ void main() {
     test('a joiner seeded from room state becomes a player', () async {
       final call = InMemoryActivityCall();
       final host = CallActivitySession(
-          activity: _activity(), selfUserId: '@alice:example.org',
+          activity: _activity(),
+          selfUserId: '@alice:example.org',
           transport: call.join('alice'));
       await host.launch();
       await _settle();
 
       final bob = CallActivitySession(
-          activity: _activity(), selfUserId: '@bob:example.org',
+          activity: _activity(),
+          selfUserId: '@bob:example.org',
           transport: call.join('bob'));
       // The room state told him there is a session and who hosts it.
       bob.seedFromRoom(
@@ -102,9 +104,9 @@ void main() {
 
       expect(bob.role, CallActivityRole.player);
       expect(bob.snapshot.players, {'alice', 'bob'});
-      final joined =
-          call.log.lastWhere((m) => m.$1 == 'alice' && m.$2['t'] == 'joined',
-              orElse: () => ('', {}, <String>[]));
+      final joined = call.log.lastWhere(
+          (m) => m.$1 == 'alice' && m.$2['t'] == 'joined',
+          orElse: () => ('', {}, <String>[]));
       expect(joined.$2['as'], 'player');
       await call.close();
     });
@@ -112,7 +114,8 @@ void main() {
     test('the player past capacity becomes a spectator', () async {
       final call = InMemoryActivityCall();
       final host = CallActivitySession(
-          activity: _activity(maxPlayers: 2), selfUserId: '@a:example.org',
+          activity: _activity(maxPlayers: 2),
+          selfUserId: '@a:example.org',
           transport: call.join('a'));
       await host.launch();
       await _settle();
@@ -137,10 +140,12 @@ void main() {
     test('the last one out ends the session with a bye', () async {
       final call = InMemoryActivityCall();
       final witness = CallActivitySession(
-          activity: _activity(), selfUserId: '@mallory:example.org',
+          activity: _activity(),
+          selfUserId: '@mallory:example.org',
           transport: call.join('mallory'));
       final host = CallActivitySession(
-          activity: _activity(), selfUserId: '@alice:example.org',
+          activity: _activity(),
+          selfUserId: '@alice:example.org',
           transport: call.join('alice'));
       await host.launch();
       await _settle();
@@ -158,17 +163,19 @@ void main() {
       await call.close();
     });
 
-    test('the host vanishing elects the lowest present identity',
-        () async {
+    test('the host vanishing elects the lowest present identity', () async {
       final call = InMemoryActivityCall();
       final carol = CallActivitySession(
-          activity: _activity(), selfUserId: '@carol:example.org',
+          activity: _activity(),
+          selfUserId: '@carol:example.org',
           transport: call.join('carol'));
       final alice = CallActivitySession(
-          activity: _activity(), selfUserId: '@alice:example.org',
+          activity: _activity(),
+          selfUserId: '@alice:example.org',
           transport: call.join('alice'));
       final bob = CallActivitySession(
-          activity: _activity(), selfUserId: '@bob:example.org',
+          activity: _activity(),
+          selfUserId: '@bob:example.org',
           transport: call.join('bob'));
       await alice.launch();
       await _settle();
@@ -187,14 +194,15 @@ void main() {
       await call.close();
     });
 
-    test('handoff moves the seat only when the target acknowledges',
-        () async {
+    test('handoff moves the seat only when the target acknowledges', () async {
       final call = InMemoryActivityCall();
       final alice = CallActivitySession(
-          activity: _activity(), selfUserId: '@alice:example.org',
+          activity: _activity(),
+          selfUserId: '@alice:example.org',
           transport: call.join('alice'));
       final bob = CallActivitySession(
-          activity: _activity(), selfUserId: '@bob:example.org',
+          activity: _activity(),
+          selfUserId: '@bob:example.org',
           transport: call.join('bob'));
       await alice.launch();
       await _settle();
@@ -222,10 +230,12 @@ void main() {
     test('player input reaches the host and nobody else', () async {
       final call = InMemoryActivityCall();
       final host = CallActivitySession(
-          activity: _activity(), selfUserId: '@alice:example.org',
+          activity: _activity(),
+          selfUserId: '@alice:example.org',
           transport: call.join('alice'));
       final bob = CallActivitySession(
-          activity: _activity(), selfUserId: '@bob:example.org',
+          activity: _activity(),
+          selfUserId: '@bob:example.org',
           transport: call.join('bob'));
       await host.launch();
       await _settle();
@@ -236,10 +246,7 @@ void main() {
       host.inputs.listen(inputs.add);
       final others = <Map<String, Object?>>[];
       // A third ear hears nothing of the input lane.
-      call
-          .join('mallory')
-          .incoming
-          .listen((i) => others.add(i.message));
+      call.join('mallory').incoming.listen((i) => others.add(i.message));
 
       await bob.sendInput({
         'kind': 'shot',

@@ -92,17 +92,16 @@ class PuttSessionController extends ChangeNotifier {
     final catalog = {
       for (final course in sunnySidePuttCourses)
         course.id: CourseDef(
-            id: course.id,
-            holes: [for (final hole in course.holes) hole.hole]),
+            id: course.id, holes: [for (final hole in course.holes) hole.hole]),
     };
     final draw = options.mode == GameMode.tournament
-        ? sunnySidePuttCourses
-            .where((c) => c.availability.contains(CourseAvailability.tournament))
+        ? sunnySidePuttCourses.where(
+            (c) => c.availability.contains(CourseAvailability.tournament))
         : options.mode == GameMode.barnyardChaos
-            ? sunnySidePuttCourses.where(
-                (c) => c.availability.contains(CourseAvailability.barnyardChaos))
-            : sunnySidePuttCourses
-                .where((c) => c.availability.contains(CourseAvailability.casual));
+            ? sunnySidePuttCourses.where((c) =>
+                c.availability.contains(CourseAvailability.barnyardChaos))
+            : sunnySidePuttCourses.where(
+                (c) => c.availability.contains(CourseAvailability.casual));
     final pool = draw.toList();
     final random = math.Random();
     final count = options.mode == GameMode.tournament
@@ -167,7 +166,8 @@ class PuttSessionController extends ChangeNotifier {
     final match = this.match;
     if (match == null || !session.isHost) return;
     _relayJournal();
-    final awake = match.engine.world?.balls.any((ball) => !ball.asleep) ?? false;
+    final awake =
+        match.engine.world?.balls.any((ball) => !ball.asleep) ?? false;
     if (awake || ++_beats >= _idleBeatsPerState) {
       _beats = 0;
       _publish();
@@ -198,8 +198,7 @@ class PuttSessionController extends ChangeNotifier {
     final catalog = {
       for (final course in sunnySidePuttCourses)
         course.id: CourseDef(
-            id: course.id,
-            holes: [for (final hole in course.holes) hole.hole]),
+            id: course.id, holes: [for (final hole in course.holes) hole.hole]),
     };
     final config = PuttConfig(
       mode: mode,
@@ -322,8 +321,7 @@ class PuttSessionController extends ChangeNotifier {
     final game = session.snapshot.game;
     final rawEngine = game['engine'];
     if (rawEngine is! Map) return;
-    match!.engine
-        .restoreFrom(Map<String, Object?>.from(rawEngine));
+    match!.engine.restoreFrom(Map<String, Object?>.from(rawEngine));
     _journalSeq = match!.engine.lastSeq;
     match!.notifyListeners();
   }

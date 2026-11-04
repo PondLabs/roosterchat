@@ -182,8 +182,8 @@ class CallPartAssembler {
       // receiver asked again) go, oldest first, so a receiver holds at
       // most a few per sender.
       final mine = _pending.keys.where((k) => k.startsWith('$sender\\n'));
-      for (final key in mine
-          .take(max(0, _pending.length + 1 - CallActivityProtocol.maxPendingPerSender))) {
+      for (final key in mine.take(max(
+          0, _pending.length + 1 - CallActivityProtocol.maxPendingPerSender))) {
         _pending.remove(key);
       }
       pending = _pending[key] = _PendingPart(count, now);

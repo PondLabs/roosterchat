@@ -1089,8 +1089,8 @@ class PuttEngine {
       throw ArgumentError('snapshot was made with a different config');
     }
     final playedCourses = <CourseDef>[];
-    for (final id in ((json['playedCourses'] as List?) ?? const [])
-        .cast<String>()) {
+    for (final id
+        in ((json['playedCourses'] as List?) ?? const []).cast<String>()) {
       final course = config.courseById(id);
       if (course == null) {
         throw ArgumentError('snapshot references unknown course $id');
@@ -1136,8 +1136,7 @@ class PuttEngine {
     final strokes = json['strokesThisHole'] as Map? ?? {};
     _strokesThisHole.clear();
     for (final entry in strokes.entries) {
-      _strokesThisHole[entry.key as String] =
-          (entry.value as num).toInt();
+      _strokesThisHole[entry.key as String] = (entry.value as num).toInt();
     }
     _holedThisHole
       ..clear()

@@ -132,8 +132,7 @@ class InMemoryActivityTransport implements CallActivityTransport {
   }
 
   @override
-  bool isPresent(String identity) =>
-      !_disposed && _call.isPresent(identity);
+  bool isPresent(String identity) => !_disposed && _call.isPresent(identity);
 
   @override
   Future<void> dispose() async {

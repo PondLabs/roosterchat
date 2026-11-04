@@ -260,13 +260,11 @@ class _CallViewState extends State<CallView> {
           for (final tile in tiles)
             if (tile.stream.streamId != focusedId)
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(10),
                   child: VoipStreamView(
-                    key:
-                        ValueKey("callView_stripView_${tile.stream.streamId}"),
+                    key: ValueKey("callView_stripView_${tile.stream.streamId}"),
                     tile.stream,
                     widget.currentSession,
                     audioStream: tile.audioStream,
