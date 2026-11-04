@@ -104,14 +104,15 @@ its own hour, read off the hole's id (`world3d/theme.dart`):
 
 | Course | Hour | Rails | Around it |
 |---|---|---|---|
-| The Coop | clear morning | timber | the hen house and its hens, the barn, the windmill |
-| Corn Maze | noon | corn hedges | a corn field with a scarecrow |
-| The Pond | soft afternoon | dry stone | a lake with a dock, reeds and ducks |
-| Farm Road | golden hour | striped road barriers | the dirt road, a red tractor, telephone poles, wheat fields |
-| The Barn | dusk | red barn boards | the big barn, haystacks, lanterns, fireflies |
+| The Coop | clear morning | timber | the hen house and its hens, the barn |
+| Corn Maze | noon | corn hedges | a corn field (plants on ploughed rows) with a scarecrow |
+| The Pond | soft afternoon | dry stone | a lake with a dock, reeds and ducks, the windmill |
+| Farm Road | golden hour | striped road barriers | the dirt road, a red tractor, a water tower, telephone poles, wheat fields, the windmill |
+| The Barn | dusk | red barn boards | the big barn, haystacks, lanterns, fireflies; its round obstacles are hay bales stood on end |
 
 The host - a big white rooster with his headphones on - stands by every
-green and bobs his head now and then. Ground the walls close off from
+green, follows the egg in play with his head, bobs it now and then and
+cheers when an egg drops in. Ground the walls close off from
 the tee (a flood fill stopped by walls, carried through rabbit holes) is
 planted as the theme's garden beds instead of turf, so a hole shaped
 with walls reads as its shape.
