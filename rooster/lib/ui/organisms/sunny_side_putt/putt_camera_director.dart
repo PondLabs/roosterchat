@@ -86,7 +86,8 @@ class PuttCameraDirector {
   void toggleOverview() {
     _overview = !_overview;
     if (_overview) {
-      rig.glideTo(distance: rig.overviewDistance);
+      rig.glideTo(
+          distance: rig.overviewDistance, yaw: PuttCameraRig.defaultYaw);
     } else {
       _framedRest = false;
     }
@@ -113,6 +114,20 @@ class PuttCameraDirector {
       ..snap();
   }
 
+  /// The orbit that turns the camera partway behind [from], looking down
+  /// the line to [to]: half the turn from the hole's own view, never more
+  /// than about 45 degrees, so the shot's direction reads while the hole
+  /// keeps the orientation everyone shares.
+  double _yawToward(Vec2 from, Vec2 to) {
+    final line = to - from;
+    if (line.length < 1e-3) return PuttCameraRig.defaultYaw;
+    // The camera's away axis is (sin yaw, cos yaw) in x/z.
+    final along = math.atan2(line.x, line.y);
+    var turn = along - PuttCameraRig.defaultYaw;
+    turn = math.atan2(math.sin(turn), math.cos(turn)); // into (-pi, pi]
+    return PuttCameraRig.defaultYaw + (turn * 0.5).clamp(-0.8, 0.8);
+  }
+
   void update(double dt, PuttCameraCue cue) {
     final hole = cue.hole;
     if (hole == null) {
@@ -136,7 +151,8 @@ class PuttCameraDirector {
       _follow = center;
       if (!_showingBetween) {
         _showingBetween = true;
-        rig.glideTo(distance: rig.overviewDistance);
+        rig.glideTo(
+            distance: rig.overviewDistance, yaw: PuttCameraRig.defaultYaw);
       }
       return;
     }
@@ -177,7 +193,8 @@ class PuttCameraDirector {
         if (_userCamera) {
           rig.glideTo(target: egg.lerp(hole.nest.position, 0.35));
         } else {
-          rig.glideToFrame(egg, hole.nest.position);
+          rig.glideToFrame(egg, hole.nest.position,
+              yaw: _yawToward(egg, hole.nest.position));
         }
       }
       return;

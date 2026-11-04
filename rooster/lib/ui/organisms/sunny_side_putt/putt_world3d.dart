@@ -324,9 +324,10 @@ class PuttCameraRig {
   /// distance that fits both on screen, never closer than [closest] of the
   /// overview's nor farther than the overview itself.
   void glideToFrame(Vec2 a, Vec2 b,
-      {double margin = 5, double closest = 0.42}) {
-    final c = math.cos(yaw).abs();
-    final s = math.sin(yaw).abs();
+      {double margin = 5, double closest = 0.42, double? yaw}) {
+    if (yaw != null) _yawTarget = yaw;
+    final c = math.cos(_yawTarget).abs();
+    final s = math.sin(_yawTarget).abs();
     final pitchRad = _pitchTarget * math.pi / 180;
     final sp = math.sin(pitchRad);
     final width = (a.x - b.x).abs() + margin * 2;
@@ -379,6 +380,9 @@ class PuttCameraRig {
 
   /// The zoom the rig is easing toward.
   double get distanceTarget => _distanceTarget;
+
+  /// The orbit angle the rig is easing toward.
+  double get yawTarget => _yawTarget;
 
   /// Writes targets directly: the test seam (and any scripted camera
   /// move) for pointing the rig without gestures. [snap] (or an [update])
