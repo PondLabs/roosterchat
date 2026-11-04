@@ -26,6 +26,7 @@ Hard fork of Commet (a Flutter Matrix client) by PondLabs, shipped as **Rooster*
 - Link previews in the chat: the client makes them itself where it can (image links, X, YouTube, video files) and asks the homeserver only for other pages; the composer fetches a link before the message is sent, so its card appears with the message. See `docs/link-previews.md`.
 - X posts in the chat: an iframely-style X card (author, text, media, quote, counts) from fxtwitter's CORS-open JSON API on every platform, with the plain preview as the fallback. See `docs/x-posts.md`.
 - `proxy/` our Cloudflare Worker (`rooster-proxy`), the app's default `proxyUrl`: KLIPY GIF search with our key (secret `KLIPY_API_KEY`), KLIPY media, and Signal sticker pack import. Deploy with `npx wrangler deploy` from `proxy/`.
+- Call activities: games in a voice channel. A host launches from the rocket button, everyone joins with one tap, the session lives only while the call does; the host's client runs the game and publishes states (journal + snapshots), hosts hand off when they leave. The games register in the typed registry. Sunny Side Putt is the first (minigolf with eggs and nests, 5 courses, 12 power-ups, 3 modes). See `docs/call-activities.md` and `docs/sunny-side-putt.md`.
 - `third_party/` vendored packages we modify in place. See `third_party/README.md`.
 
 ## Rules
