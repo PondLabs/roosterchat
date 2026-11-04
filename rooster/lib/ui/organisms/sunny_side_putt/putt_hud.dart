@@ -337,7 +337,9 @@ class _PuttMiddle extends StatelessWidget {
     }
     final headline = match.headline;
     if (headline == null) return const SizedBox.shrink();
-    return IgnorePointer(child: PuttHeadline(headline));
+    return IgnorePointer(
+      child: PuttHeadline(headline, key: ValueKey(match.headlineSerial)),
+    );
   }
 }
 
@@ -351,9 +353,45 @@ class PuttHeadline extends StatefulWidget {
   State<PuttHeadline> createState() => _PuttHeadlineState();
 }
 
-class _PuttHeadlineState extends State<PuttHeadline> {
+class _PuttHeadlineState extends State<PuttHeadline>
+    with SingleTickerProviderStateMixin {
+  /// In, hold, out: the banner pops, stays a breath, then goes.
+  static const _life = Duration(milliseconds: 2600);
+
+  late final AnimationController _clock =
+      AnimationController(vsync: this, duration: _life)..forward();
+
+  @override
+  void dispose() {
+    _clock.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    return AnimatedBuilder(
+      animation: _clock,
+      builder: (context, child) {
+        final t = _clock.value;
+        // 0-8%: in; 85-100%: out.
+        final appear = (t / 0.08).clamp(0.0, 1.0);
+        final leave = ((t - 0.85) / 0.15).clamp(0.0, 1.0);
+        final opacity = (appear * (1 - leave)).clamp(0.0, 1.0);
+        final scale = reduceMotion
+            ? 1.0
+            : 0.92 + 0.08 * Curves.easeOutCubic.transform(appear);
+        return Opacity(
+          opacity: opacity,
+          child: Transform.scale(scale: scale, child: child),
+        );
+      },
+      child: _banner(),
+    );
+  }
+
+  Widget _banner() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       constraints: const BoxConstraints(maxWidth: 480),

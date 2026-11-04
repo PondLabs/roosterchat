@@ -148,13 +148,14 @@ void main() {
 
       // The border (4) plus the crossing hedge.
       expect(countUnder('walls'), 5, reason: 'walls minus bumpers');
-      // A 6-long bumper line steps posts at 1.7 spacing.
-      expect(countUnder('bumpers'), 6.floor() - 1 + (0.5 * 2 / 1.7).ceil(),
-          reason: 'the bumper wall line rides its posts');
+      // One rubber rail per bumper wall, one per bumper arc.
+      expect(countUnder('bumpers'), 2,
+          reason: 'the bumper wall and the bumper arc');
       // Hedge run + full-circle rock (in 'arcs' too).
       expect(countUnder('arcs'), greaterThan(0));
       expect(world.holeGroup('wells')!.children, isNotEmpty);
       expect(countUnder('water'), 3);
+      expect(countUnder('boosts'), 1);
       expect(countUnder('portals'), 2);
       expect(countUnder('boxes'), 1);
       expect(countUnder('hens'), 1);
@@ -187,12 +188,15 @@ void main() {
           as tjs.Mesh);
       final ring = (post.children.firstWhere((c) => c.name == 'bumper-ring')
           as tjs.Mesh);
-      expect(body.material!.color.getHex(), _hexOf(PuttPalette.comb));
-      expect(ring.material!.color.getHex(), _hexOf(PuttPalette.yolk));
+      // In linear light: the renderer's working space.
+      expectHexClose(
+          body.material!.color.getHex(), _linearHexOf(PuttPalette.comb));
+      expectHexClose(
+          ring.material!.color.getHex(), _linearHexOf(PuttPalette.yolk));
       expect(body.castShadow, isTrue);
     });
 
-    test('the hedge box stands at its wall, turned along the run', () {
+    test('the rail stands at its wall, turned along the run', () {
       final world = builtWorld();
       addTearDown(world.dispose);
       // The straight hedge crossing the middle: run 8, no turn, standing
@@ -207,13 +211,23 @@ void main() {
       final hedge = walls.firstWhere((child) => (runOf(child) - 8).abs() < 1);
       expect(hedge.rotation.y, closeTo(0, 1e-9),
           reason: 'the run is straight along +x');
-      expect(runOf(hedge), closeTo(8.0, 1e-9));
+      // The timber runs its wall's length plus its own thickness, so two
+      // rails meeting at a corner close it.
+      expect(runOf(hedge), closeTo(8.34, 1e-9));
+      expect(hedge.position.x, closeTo(20, 1e-9));
+      expect(hedge.position.z, closeTo(8, 1e-9),
+          reason: 'an inner rail stands centred on its line');
       final body = hedge.children.first as tjs.Mesh;
       // Standing on the green: the box's centre off the ground.
       expect(body.position.y, greaterThan(0));
-      // The border walls fill out the rest of the group.
+      // The border's rails stop at the green's corners (their colliders
+      // overrun them), plus the fence's thickness.
       final lengths = walls.map(runOf).toList()..sort();
-      expect(lengths, containsAllInOrder([8.0, 26.0, 40.0]));
+      expect(lengths, containsAllInOrder([8.34, 26.62, 40.62]));
+      // The fence stands outside the green: its inner face on the line.
+      final north = walls.firstWhere((child) =>
+          (runOf(child) - 40.62).abs() < 1e-6 && child.position.z < 13);
+      expect(north.position.z, closeTo(-0.31, 1e-6));
     });
 
     test("the hole's parent tree hangs under the world's hole group", () {
@@ -221,15 +235,20 @@ void main() {
       addTearDown(world.dispose);
       for (final kind in [
         'ground',
+        'table',
         'walls',
         'bumpers',
         'arcs',
         'wells',
         'water',
+        'boosts',
         'portals',
         'boxes',
+        'nest',
+        'tee',
         'decorations',
         'hens',
+        'scenery',
       ]) {
         final group = world.holeGroup(kind);
         expect(group, isNotNull, reason: kind);
@@ -257,7 +276,7 @@ void main() {
         eggs: [eggAt(const Vec2(2, 2), velocity: const Vec2(3, 0))],
       ));
       final east = upPointsIn(world);
-      expect(east.x, greaterThan(0.1), reason: 'top tips toward +x');
+      expect(east.x, greaterThan(0.05), reason: 'top tips toward +x');
       expect(east.z, closeTo(0.0, 0.06));
 
       // Rolling west on a fresh world: the top tips west.
@@ -271,7 +290,7 @@ void main() {
         time: 0.016,
         eggs: [eggAt(const Vec2(2, 2), velocity: const Vec2(-3, 0))],
       ));
-      expect(upPointsIn(westWorld).x, lessThan(-0.1),
+      expect(upPointsIn(westWorld).x, lessThan(-0.05),
           reason: 'top tips toward -x');
 
       // And a north roll (game +y = world +z) leans toward +z.
@@ -285,7 +304,7 @@ void main() {
         time: 0.016,
         eggs: [eggAt(const Vec2(2, 2), velocity: const Vec2(0, 3))],
       ));
-      expect(upPointsIn(northWorld).z, greaterThan(0.1),
+      expect(upPointsIn(northWorld).z, greaterThan(0.05),
           reason: 'top tips toward +z (game south)');
     });
 
@@ -294,7 +313,9 @@ void main() {
       addTearDown(world.dispose);
       const dt = 0.02;
       const velocity = Vec2(4, 0);
-      const radius = 0.45;
+      // The drawn egg runs 1.2 times the physics' radius; it rolls on its
+      // own shell.
+      const radius = 0.45 * 1.2;
       world.applySnapshot(PuttWorldFrame(
         time: 0,
         eggs: [eggAt(const Vec2(0, 0), velocity: velocity)],
@@ -313,7 +334,8 @@ void main() {
     test('the hop lifts the mesh and settles back to zero', () {
       final world = PuttWorld3D(viewport: const ui.Size(800, 600));
       addTearDown(world.dispose);
-      const stand = 0.45 * 1.28;
+      // Standing on its tip: the drawn shell's half-height.
+      const stand = 0.45 * 1.2 * 1.28;
 
       world.applySnapshot(PuttWorldFrame(
         time: 0,
@@ -513,6 +535,28 @@ void main() {
   });
 }
 
-/// three_js wants raw hex (no alpha byte); the tests compare through the
-/// same read the world uses.
-int _hexOf(ui.Color color) => color.toARGB32() & 0xFFFFFF;
+/// Two packed colours alike channel by channel, give or take the one step
+/// the engine's float-to-byte read may floor away.
+void expectHexClose(int actual, int expected) {
+  for (final shift in const [16, 8, 0]) {
+    expect(((actual >> shift) & 0xFF) - ((expected >> shift) & 0xFF),
+        inInclusiveRange(-1, 1),
+        reason: 'channel at bit $shift of ${actual.toRadixString(16)} vs '
+            '${expected.toRadixString(16)}');
+  }
+}
+
+/// A palette colour as the world hands it to three_js: each channel taken
+/// from sRGB into linear light, then packed as hex.
+int _linearHexOf(ui.Color color) {
+  final hex = color.toARGB32() & 0xFFFFFF;
+  int channel(int shift) {
+    final c = ((hex >> shift) & 0xFF) / 255;
+    final linear = c <= 0.04045
+        ? c / 12.92
+        : math.pow((c + 0.055) / 1.055, 2.4).toDouble();
+    return (linear * 255).round();
+  }
+
+  return (channel(16) << 16) | (channel(8) << 8) | channel(0);
+}

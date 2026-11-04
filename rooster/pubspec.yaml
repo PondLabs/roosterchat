@@ -55,6 +55,9 @@ dependencies:
   three_js_math: ^0.3.0
   three_js_angle_renderer: ^0.0.1
   three_js_geometry: ^0.3.0
+  # The GL bridge under three_js: the game's surface resizes its texture
+  # through it when the call's stage changes size.
+  flutter_angle: ^0.4.2
   test: ^1.24.3
   unifiedpush: ^5.0.1
   universal_html: ^2.2.4

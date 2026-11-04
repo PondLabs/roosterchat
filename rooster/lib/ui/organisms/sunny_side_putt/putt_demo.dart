@@ -1,14 +1,33 @@
-// The demo entry: the game plays itself, for screenshots and recordings
-// (built with --dart-define=PUTT_DEMO=true, which main() branches off
-// before anything the app would otherwise boot). The puts are aimed at
-// the nest with a small, fixed jitter so the runs are deterministic:
-// the same seed + the same script = the same frames every capture.
+// The demo entry: the game plays itself on the real courses, for
+// screenshots and recordings (built with --dart-define=PUTT_DEMO=true,
+// which main() branches off before anything the app would otherwise boot).
+//
+// The local egg plays the hole's own reference solution - aimed with the
+// real drag, so the arrow, its power ring and the roll guide show - with a
+// small, fixed jitter; the other players (Maya, Jonas, Lou and friends, the
+// brand's demo crew) putt toward the nest with seeded jitter and hop in
+// with a Rabbit Hole when a rail stands in their way. The hole's overview
+// opens it, the camera comes in close, the scoreboard moves on by itself.
+//
+// On the web the page's query picks what to show:
+//   ?course=the_pond&hole=3&bots=3
+// course: a catalog id (the_coop, the_corn_maze, the_pond, the_farm_road,
+// the_barn; default the_coop), hole: 1-6 (the course starts there), bots:
+// 0-7 other players (default 3). For close looks at the art, cam= holds the
+// camera: nest (the nest and its flag), host (the rooster by the green),
+// wide (the farm around the course), tee (the eggs on the tee).
+library;
+
 import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:rooster/client/components/sunny_side_putt/core/hole.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/powerups.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/rules.dart';
+import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
+import 'package:rooster/client/components/sunny_side_putt/courses/course_kit.dart';
+import 'package:rooster/client/components/sunny_side_putt/courses/sunny_side_putt_courses.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_match.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/sunny_side_putt_game.dart';
 
@@ -37,78 +56,256 @@ class PuttDemoPage extends StatefulWidget {
   State<PuttDemoPage> createState() => _PuttDemoPageState();
 }
 
+/// The demo crew, in seat order after the viewer.
+const _crew = [
+  // Not translated: the demo crew's names are names.
+  ('peer-maya', 'Maya'),
+  ('peer-jonas', 'Jonas'),
+  ('peer-lou', 'Lou'),
+  ('peer-ana', 'Ana'),
+  ('peer-theo', 'Theo'),
+  ('peer-iris', 'Iris'),
+  ('peer-bento', 'Bento'),
+];
+
 class _PuttDemoPageState extends State<PuttDemoPage> {
   late final PuttMatch match;
+  late final List<SunnySidePuttHole> _holes;
+  SunnySidePuttGame? _game;
 
-  static const _beat = Duration(milliseconds: 2300);
+  Timer? _ticker;
+  final math.Random _random = math.Random(7);
 
-  static const _jitters = [
-    -0.06,
-    0.09,
-    -0.04,
-    0.12,
-    -0.02,
-    0.05,
-    -0.14,
-    0.03,
-  ];
-  static const _powers = [
-    0.68,
-    0.74,
-    0.58,
-    0.71,
-    0.8,
-    0.63,
-    0.77,
-    0.66,
-  ];
-  int _scriptIndex = 0;
+  /// Seconds since the current hole came up, and which hole that is.
+  double _holeTime = 0;
+  String? _holeId;
 
-  Timer? _beatTimer;
+  /// My reference shots taken this hole, and the aim in flight.
+  int _myShot = 0;
+  _DemoDrag? _drag;
+  double _myNextAt = 3.2;
+
+  /// Per bot: shots taken this hole and when the next may go.
+  final Map<String, int> _botShots = {};
+  final Map<String, double> _botNextAt = {};
+
+  double _phaseTime = 0;
+
+  /// The held camera, when the query asks for one.
+  String? _cam;
+
+  static const _step = Duration(milliseconds: 33);
 
   @override
   void initState() {
     super.initState();
-    match = PuttMatch.solo();
-    match.boot();
-    _beatTimer = Timer.periodic(_beat, (_) => _onBeat());
+    final query = Uri.base.queryParameters;
+    final courseId = query['course'] ?? 'the_coop';
+    final course = sunnySidePuttCourses.firstWhere(
+      (c) => c.id == courseId,
+      orElse: () => sunnySidePuttCourses.first,
+    );
+    final start =
+        (int.tryParse(query['hole'] ?? '') ?? 1).clamp(1, course.holes.length);
+    // The course starts at the asked hole (the rest follow, then wrap).
+    _holes = [
+      ...course.holes.sublist(start - 1),
+      ...course.holes.sublist(0, start - 1),
+    ];
+    _cam = query['cam'];
+    final bots = (int.tryParse(query['bots'] ?? '') ?? 3).clamp(0, 7);
+    final seated = [for (final (id, _) in _crew.take(bots)) id];
+    final played =
+        CourseDef(id: course.id, holes: [for (final hole in _holes) hole.hole]);
+    match = PuttMatch(
+      config: PuttConfig(
+        mode: GameMode.casual,
+        courses: [played],
+        catalog: {played.id: played},
+        seed: 4242,
+      ),
+      // Not translated: the viewer's own name in the demo.
+      displayNames: {
+        'me': 'Gabriel',
+        for (final (id, name) in _crew) id: name,
+      },
+      seatedPlayerIds: seated,
+    )..boot();
+    _ticker = Timer.periodic(_step, (_) => _tick());
   }
 
   @override
   void dispose() {
-    _beatTimer?.cancel();
+    _ticker?.cancel();
     super.dispose();
   }
 
-  void _onBeat() {
+  SunnySidePuttHole? get _currentHole {
+    final id = match.hole?.id;
+    for (final hole in _holes) {
+      if (hole.hole.id == id) return hole;
+    }
+    return null;
+  }
+
+  void _tick() {
+    const dt = 0.033;
     switch (match.phase) {
       case PuttPhase.holePlay:
         break;
       case PuttPhase.holeScoreboard:
+        _phaseTime += dt;
+        if (_phaseTime > 4.5) {
+          _phaseTime = 0;
+          match.advance();
+        }
+        return;
       case PuttPhase.lobby:
         match.advance();
         return;
       case PuttPhase.awaitingNextCourse:
       case PuttPhase.matchOver:
-        match.startCourse(match.config.courses.first.id);
+        _phaseTime += dt;
+        if (_phaseTime > 3) {
+          _phaseTime = 0;
+          match.startCourse(match.config.courses.first.id);
+        }
         return;
     }
+    _phaseTime = 0;
+    final hole = match.hole;
+    if (hole == null) return;
+    if (hole.id != _holeId) {
+      _holeId = hole.id;
+      _holeTime = 0;
+      _myShot = 0;
+      _drag = null;
+      _myNextAt = 3.2;
+      _botShots.clear();
+      _botNextAt.clear();
+    }
+    _holeTime += dt;
+    _holdCamera(hole);
+    _driveMe(hole);
+    _driveBots(hole);
+  }
 
+  /// The query's held camera, re-asked every beat so the game's own
+  /// choreography never takes it back.
+  void _holdCamera(HoleDef hole) {
+    final game = _game;
+    final cam = _cam;
+    if (game == null || cam == null) return;
+    final rig = game.world3d.rig;
+    final bounds = hole.bounds;
+    switch (cam) {
+      case 'nest':
+        game.followOverride = hole.nest.position;
+        rig.glideTo(distance: 10, pitchDeg: 32);
+      case 'host':
+        game.followOverride = Vec2(bounds.min.x - 6, bounds.min.y - 2);
+        rig.glideTo(distance: 17, pitchDeg: 22);
+      case 'wide':
+        game.followOverride = bounds.center;
+        rig.glideTo(distance: rig.overviewDistance * 1.5, pitchDeg: 27);
+      case 'tee':
+        game.followOverride = hole.tee;
+        rig.glideTo(distance: 9, pitchDeg: 30);
+    }
+  }
+
+  /// My egg: the reference line, aimed by a real drag on the game.
+  void _driveMe(HoleDef hole) {
+    final game = _game;
     final ball = match.myBall;
-    final nest = match.hole?.nest.position;
-    if (ball == null || nest == null || !ball.asleep) return;
-
-    if (_scriptIndex % 5 == 4) {
-      match.usePowerUp('rabbit_hole', PowerUpTarget.point(nest));
-      _scriptIndex++;
+    if (game == null || ball == null || ball.holed) return;
+    final drag = _drag;
+    if (drag != null) {
+      drag.elapsed += 0.033;
+      final pullIn = (drag.elapsed / 0.9).clamp(0.0, 1.0);
+      final eased = 1 - math.pow(1 - pullIn, 3).toDouble();
+      final at = drag.from + drag.pull * eased;
+      if (drag.elapsed < 2.1) {
+        game.moveAim(at);
+      } else {
+        game.endAim(drag.from + drag.pull);
+        _drag = null;
+        _myShot++;
+        _myNextAt = _holeTime + 1.2;
+      }
       return;
     }
+    if (_holeTime < _myNextAt || !match.myShotReady) return;
+    final reference = _currentHole?.solution.shots ?? const <ReferenceShot>[];
+    double angle;
+    double power;
+    if (_myShot < reference.length) {
+      final shot = reference[_myShot];
+      angle = shot.angle + (_myShot == 0 ? 0.004 : -0.003);
+      power = shot.power;
+    } else {
+      // Off the script: a hop with the Rabbit Hole when the nest is near,
+      // else a plain putt at it.
+      final toNest = hole.nest.position - ball.position;
+      if (toNest.length < 6) {
+        _rabbitHop('me', hole.nest.position);
+        _myNextAt = _holeTime + 1.5;
+        return;
+      }
+      final shot = putt(ball.position, hole.nest.position, arrival: 1.2);
+      angle = shot.angle;
+      power = shot.power;
+    }
+    // The pull that gives this power, back along the shot.
+    final length =
+        game.aim.maxDragLength * math.pow(power, 1 / game.aim.powerExponent);
+    final pull = Vec2(-math.cos(angle), -math.sin(angle)) * length.toDouble();
+    game.beginAim(ball.position);
+    _drag = _DemoDrag(from: ball.position, pull: pull);
+  }
 
-    final toNest =
-        math.atan2(nest.y - ball.position.y, nest.x - ball.position.x);
-    match.submitShot(toNest + _jitters[_scriptIndex % _jitters.length],
-        _powers[_scriptIndex % _powers.length]);
-    _scriptIndex++;
+  /// The crew: straight putts at the nest with a jitter that tightens
+  /// stroke by stroke, and a Rabbit Hole hop when one stalls near it.
+  void _driveBots(HoleDef hole) {
+    final world = match.engine.world;
+    if (world == null) return;
+    var order = 0;
+    for (final ball in world.balls) {
+      if (ball.playerId == match.localPlayerId) continue;
+      order++;
+      if (ball.holed || !ball.asleep) continue;
+      final nextAt = _botNextAt[ball.playerId] ?? (3.6 + order * 0.55);
+      if (_holeTime < nextAt) continue;
+      final shots = _botShots[ball.playerId] ?? 0;
+      final toNest = hole.nest.position - ball.position;
+      if (shots >= 2 && toNest.length < 6) {
+        _rabbitHop(ball.playerId, hole.nest.position);
+      } else {
+        final shot = putt(ball.position, hole.nest.position, arrival: 1.4);
+        final spread = 0.16 / (shots + 1);
+        final angle = shot.angle + (_random.nextDouble() * 2 - 1) * spread;
+        final power = (shot.power * (0.9 + _random.nextDouble() * 0.22))
+            .clamp(0.05, 1.0)
+            .toDouble();
+        match.engine.submitShot(ball.playerId, angle, power);
+      }
+      _botShots[ball.playerId] = shots + 1;
+      _botNextAt[ball.playerId] = _holeTime + 2.2 + order * 0.4;
+    }
+  }
+
+  /// A Rabbit Hole hop toward [target] (the demo hands the power-up over
+  /// first; a real player earns it at a crate).
+  void _rabbitHop(String playerId, Vec2 target) {
+    final player = match.engine.player(playerId);
+    if (player == null) return;
+    player.inventory.add('rabbit_hole');
+    if (playerId == match.localPlayerId) {
+      match.usePowerUp('rabbit_hole', PowerUpTarget.point(target));
+    } else {
+      match.engine
+          .usePowerUp(playerId, 'rabbit_hole', PowerUpTarget.point(target));
+    }
   }
 
   @override
@@ -116,10 +313,20 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
     return Scaffold(
       body: ColoredBox(
         color: const Color(0xFF211614),
-        child: Center(
-          child: SunnySidePuttView(match: match),
+        child: SunnySidePuttView(
+          match: match,
+          onGame: (game) => _game = game,
         ),
       ),
     );
   }
+}
+
+/// A scripted drag in flight: where it began and the full pull.
+class _DemoDrag {
+  final Vec2 from;
+  final Vec2 pull;
+  double elapsed = 0;
+
+  _DemoDrag({required this.from, required this.pull});
 }

@@ -97,6 +97,33 @@ void main() {
     expect(find.text("You're watching from the fence"), findsOneWidget);
   });
 
+  testWidgets('the aim: a press away from the egg anchors the pull there',
+      (tester) async {
+    final match = PuttMatch.solo();
+    final game = SunnySidePuttGame(match: match, onSfx: (_) {});
+    await tester.pumpWidget(MaterialApp(home: GameWidget(game: game)));
+    await tester.pump(const Duration(milliseconds: 50));
+
+    // Pressed far from the egg: the aim begins at the egg, with no pull
+    // yet - the drag is measured from where the press landed.
+    final far = match.hole!.nest.position;
+    game.beginAim(far);
+    expect(game.aim.isActive, isTrue);
+    expect(game.aim.origin, match.myBall!.position);
+    expect(game.aim.dragLength, closeTo(0, 1e-9));
+    // Released where it pressed: a tap, no stroke.
+    game.endAim(far);
+    expect(match.myStrokesThisHole, 0);
+
+    // Pressed far again and dragged 3 units west: the shot fires east.
+    game.beginAim(far);
+    game.moveAim(far - const Vec2(3, 0));
+    expect(game.aim.state!.angle, closeTo(0, 1e-9));
+    expect(game.aim.dragLength, closeTo(3, 1e-9));
+    game.endAim(far - const Vec2(3, 0));
+    expect(match.myStrokesThisHole, 1);
+  });
+
   testWidgets('the aim: starts near my settled egg, submits on release',
       (tester) async {
     final match = PuttMatch.solo();
@@ -105,11 +132,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(game.aim.isActive, isFalse);
-
-    // Far from the egg: nothing begins.
-    game.beginAim(match.hole!.nest.position);
-    expect(game.aim.isActive, isFalse);
-    expect(match.myStrokesThisHole, 0);
 
     // Near it, pulled 3 units west of the egg: the shot fires east on
     // release.

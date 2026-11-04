@@ -301,6 +301,18 @@ class PuttMatch extends ChangeNotifier {
   /// Par of the running hole, 0 between holes.
   int get par => hole?.par ?? 0;
 
+  /// The running hole's place in its course (1-based) - the number its
+  /// flag flies - or 0 between holes.
+  int get holeInCourse {
+    final course = engine.currentCourse;
+    final current = hole;
+    if (course == null || current == null) return 0;
+    return course.holes.indexOf(current) + 1;
+  }
+
+  /// How many holes the running course has, 0 between courses.
+  int get courseHoleCount => engine.currentCourse?.holes.length ?? 0;
+
   double get secondsRemaining => engine.secondsRemaining;
 
   int get timerSeconds => config.holeTimeLimitSeconds;
@@ -341,7 +353,18 @@ class PuttMatch extends ChangeNotifier {
 
   /// The newest banner line, or null when nothing is up (the widget fades
   /// headlines out after a while on its own).
-  String? headline;
+  String? get headline => _headline;
+  String? _headline;
+
+  set headline(String? value) {
+    _headline = value;
+    _headlineSerial++;
+  }
+
+  /// Counts banner lines as they are set: the same words twice in a row
+  /// still pop a fresh banner.
+  int get headlineSerial => _headlineSerial;
+  int _headlineSerial = 0;
 
   /// The notices drained since the last call: HUD banner material and the
   /// audio service's cue list.
