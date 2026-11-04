@@ -302,8 +302,8 @@ tjs.DataTexture _eggTextureFor(int tint) =>
 /// player's colour round the waist and a ring of dots above and below.
 /// u runs around the egg, v from the base (0) to the crown (1).
 tjs.DataTexture _eggTexture(int tint) {
-  const width = 128;
-  const height = 64;
+  const width = 256;
+  const height = 128;
   final bitmap = _Bitmap(width, height);
   final rand = _Rand(tint);
   const shell = 0xFFF8EE;
@@ -323,19 +323,40 @@ tjs.DataTexture _eggTexture(int tint) {
       } else if ((v - bottom).abs() < 0.025 || (v - top).abs() < 0.025) {
         color = deep;
       }
+      // The face sits at u = 0 (the side that looks at the camera on the
+      // tee): around it, no dots.
+      final faceU = math.min(u, 1 - u); // distance round from the face
       // Dots above and below the band, a ring of seven each.
       for (final (row, size) in const [(0.75, 0.05), (0.27, 0.055)]) {
+        if (row > 0.5 && faceU < 0.17) continue;
         const count = 7;
-        final cell = (u * count) % 1.0 - 0.5;
+        final cell = ((u + 0.5 / count) * count) % 1.0 - 0.5;
         final du = cell / count * 3.2; // around the egg, in its height's units
         final dv = v - row;
         if (du * du + dv * dv < size * size) color = tint;
+      }
+      // The face: two ink eyes with a glint, and a little yolk beak. In
+      // surface units u runs about 6.3 radii around, v about 3.6 up.
+      final su = u < 0.5 ? u : u - 1; // signed, the face at 0
+      for (final side in const [-1.0, 1.0]) {
+        final ex = (su - side * 0.05) * 6.3;
+        final ey = (v - 0.725) * 3.6;
+        if (ex * ex + ey * ey < 0.125 * 0.125) {
+          color = 0x211614;
+          final gx = ex - 0.045;
+          final gy = ey - 0.045;
+          if (gx * gx + gy * gy < 0.045 * 0.045) color = 0xFFFFFF;
+        }
+      }
+      final beak = (v - 0.632) / 0.05; // 0 at the tip, 1 at its top
+      if (beak >= 0 && beak <= 1 && su.abs() * 6.3 < 0.11 * beak) {
+        color = 0xF89B17;
       }
       bitmap.set(x, y, color);
     }
   }
   // Speckles on the shell.
-  for (var i = 0; i < 110; i++) {
+  for (var i = 0; i < 260; i++) {
     final x = rand.below(width);
     final y = rand.below(height);
     bitmap.blend(x, y, 0xC9B79E, 0.35);
