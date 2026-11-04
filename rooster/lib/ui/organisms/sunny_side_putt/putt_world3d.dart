@@ -863,6 +863,7 @@ class PuttWorld3D {
             animated: _animated,
             theme: _theme,
             cheerUntil: () => _cheerUntil,
+            watch: () => _watch,
             shape: kit.shape)
         .build());
 
@@ -900,6 +901,7 @@ class PuttWorld3D {
     _sinking.clear();
     _disposeChildren(_holeRoot);
     _ground.hole = null;
+    _watch = null;
     _henViews.clear();
     _crateViews.clear();
     _animated.clear();
@@ -944,6 +946,18 @@ class PuttWorld3D {
   }
 
   void _syncEggs(PuttWorldFrame frame, double dt) {
+    // What the host watches: the quickest egg on the move, else mine.
+    Vec2? quickest;
+    var pace = 0.8;
+    for (final egg in frame.eggs) {
+      if (egg.speed > pace) {
+        pace = egg.speed;
+        quickest = egg.position;
+      } else if (quickest == null && egg.mine) {
+        _watch = egg.position;
+      }
+    }
+    if (quickest != null) _watch = quickest;
     final seen = <String>{};
     for (final egg in frame.eggs) {
       seen.add(egg.playerId);
@@ -1023,6 +1037,9 @@ class PuttWorld3D {
 
   /// Until when (the frame clock) the host cheers.
   double _cheerUntil = 0;
+
+  /// The egg the host's head follows.
+  Vec2? _watch;
 
   void _dropEgg(_EggView3D view) {
     _actorsRoot.remove(view.group);

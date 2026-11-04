@@ -174,8 +174,14 @@ class _Scenery {
       {required this.animated,
       required this.theme,
       required this.cheerUntil,
-      required this.shape})
-      : _rand = _Rand(_seedOf('${hole.id}/farm'));
+      required this.shape,
+      Vec2? Function()? watch})
+      : watch = watch ?? (() => null),
+        _rand = _Rand(_seedOf('${hole.id}/farm'));
+
+  /// The egg the host keeps his eye on (the one rolling, else the
+  /// viewer's), or null.
+  final Vec2? Function() watch;
 
   /// The table's shape: the meadow fills what the walls carved away.
   final _TableShape shape;
@@ -230,15 +236,22 @@ class _Scenery {
       _ => Vec2(_b.center.x + _span * 0.38, _b.min.y - 30),
     };
     final barnScale = kind == _ThemeKind.barn ? 1.35 : 1.0;
+    // Each corner of the farm has its own landmarks: the barn by the Coop
+    // and as the Barn itself, a water tower over Farm Road, the windmill
+    // by the Pond and the Road; the maze sees nothing but corn.
+    final hasBarn = kind == _ThemeKind.coop || kind == _ThemeKind.barn;
+    final hasMill = kind == _ThemeKind.pond || kind == _ThemeKind.road;
+    final towerAt = Vec2(_b.center.x + _span * 0.38, _b.min.y - 30);
     final millAt = Vec2(_b.min.x - 30, _b.min.y - 22);
     final lakeAt = Vec2(_b.center.x - 2, _b.min.y - 30);
     const lakeRadius = 22.0;
     final henHouseAt = Vec2(_b.max.x + 10, _b.min.y - 7);
     final roadZ = _b.min.y - 13.0;
     final keepOut = <(Vec2, double)>[
-      (barnAt, 14.0 * barnScale),
-      (Vec2(barnAt.x + 11 * barnScale, barnAt.y - 2), 5.0),
-      (millAt, 7.0),
+      if (hasBarn) (barnAt, 14.0 * barnScale),
+      if (hasBarn) (Vec2(barnAt.x + 11 * barnScale, barnAt.y - 2), 5.0),
+      if (kind == _ThemeKind.road) (towerAt, 7.5),
+      if (hasMill) (millAt, 7.0),
       (hostAt, 6.5),
       if (kind == _ThemeKind.pond) (lakeAt, lakeRadius + 3),
       if (kind == _ThemeKind.coop) (henHouseAt, 6.5),
@@ -259,7 +272,7 @@ class _Scenery {
     _fence(props);
     _hay(props, blocked);
     _flowers(small, blocked);
-    _barn(props, barnAt, scale: barnScale);
+    if (hasBarn) _barn(props, barnAt, scale: barnScale);
     switch (kind) {
       case _ThemeKind.coop:
         _henHouse(props, henHouseAt);
@@ -276,6 +289,7 @@ class _Scenery {
       case _ThemeKind.road:
         _road(small, roadZ);
         _tractor(props, Vec2(_b.center.x + 9, roadZ - 0.2));
+        _waterTower(props, towerAt);
         _poles(group, props, roadZ - 3.4);
         _fields(group, roadZ);
       case _ThemeKind.barn:
@@ -291,9 +305,7 @@ class _Scenery {
     if (propsMesh != null) group.add(propsMesh);
     final smallMesh = small.mesh('farm-small', castShadow: false);
     if (smallMesh != null) group.add(smallMesh);
-    if (kind != _ThemeKind.maze && kind != _ThemeKind.barn) {
-      group.add(_windmill(millAt));
-    }
+    if (hasMill) group.add(_windmill(millAt));
     group.add(_host(hostAt));
     if (kind != _ThemeKind.barn) group.add(_butterflies());
     group.add(_birds());
@@ -1119,7 +1131,24 @@ class _Scenery {
     }
     head.add(face.mesh('host-face', flat: false, roughness: 0.7)!);
     group.add(head);
+    const turn = -2.35;
+    var headYaw = 0.0;
     animated.add(_AnimatedBy((time, dt) {
+      // He follows the egg in play with his head (as far as a rooster's
+      // neck turns).
+      final watched = watch();
+      var wantYaw = 0.0;
+      if (watched != null) {
+        final hx = at.x + 2.5 * math.cos(turn);
+        final hz = at.y - 2.5 * math.sin(turn);
+        final wx = watched.x - hx;
+        final wz = watched.y - hz;
+        final lx = wx * math.cos(turn) - wz * math.sin(turn);
+        final lz = wx * math.sin(turn) + wz * math.cos(turn);
+        wantYaw = math.atan2(-lz, lx).clamp(-0.85, 0.85).toDouble();
+      }
+      headYaw += (wantYaw - headYaw) * math.min(1.0, dt * 5);
+      head.rotation.y = headYaw;
       final cheering = time < cheerUntil();
       if (cheering) {
         // An egg in the nest: he hops, flaps and crows, beak to the sky.
@@ -1147,6 +1176,69 @@ class _Scenery {
   }
 
   // ---- the Coop: the hen house and its hens ----------------------------------------
+
+  /// Farm Road's landmark: a water tower on four splayed legs, braced
+  /// twice, its tank banded in red under a cone roof, a catwalk round it
+  /// and a ladder up one leg.
+  void _waterTower(_Merged into, Vec2 at) {
+    final base = _ground;
+    const legHeight = 14.0;
+    const tankRadius = 3.6;
+    const tankHeight = 5.0;
+    for (final (sx, sz) in const [
+      (1.0, 1.0),
+      (-1.0, 1.0),
+      (1.0, -1.0),
+      (-1.0, -1.0)
+    ]) {
+      into.add(
+          tjg.CylinderGeometry(0.22, 0.3, legHeight + 0.6, 6),
+          _place(at.x + sx * 2.5, base + legHeight / 2, at.y + sz * 2.5,
+              tilt: -sz * 0.07, roll: sx * 0.07),
+          0x8C8F94,
+          baseShade: 0.7);
+    }
+    for (final y in const [4.8, 9.6]) {
+      final half = 2.5 - y * 0.07 * 0.5;
+      for (final (dx, dz, yaw) in [
+        (0.0, half, 0.0),
+        (0.0, -half, 0.0),
+        (half, 0.0, math.pi / 2),
+        (-half, 0.0, math.pi / 2),
+      ]) {
+        into.add(tjs.BoxGeometry(half * 2 + 0.3, 0.18, 0.18),
+            _place(at.x + dx, base + y, at.y + dz, yaw: yaw), 0x7D8086);
+      }
+    }
+    final tankBase = base + legHeight;
+    into
+      ..add(
+          tjg.CylinderGeometry(tankRadius * 1.06, tankRadius * 1.06, 0.25, 28),
+          _place(at.x, tankBase + 0.1, at.y),
+          0x6E7176)
+      ..add(tjg.CylinderGeometry(tankRadius, tankRadius, tankHeight, 28),
+          _place(at.x, tankBase + tankHeight / 2 + 0.2, at.y), 0xDCE2E6,
+          baseShade: 0.82)
+      ..add(tjg.CylinderGeometry(tankRadius + 0.04, tankRadius + 0.04, 0.9, 28),
+          _place(at.x, tankBase + tankHeight * 0.55 + 0.2, at.y), 0xC8453A)
+      ..add(tjg.ConeGeometry(tankRadius + 0.35, 2.2, 28),
+          _place(at.x, tankBase + tankHeight + 1.3, at.y), 0x9AA4AC)
+      ..add(tjs.SphereGeometry(0.3, 10, 8),
+          _place(at.x, tankBase + tankHeight + 2.5, at.y), 0x9AA4AC)
+      ..add(tjg.TorusGeometry(tankRadius + 0.55, 0.07, 4, 32),
+          _place(at.x, tankBase + 1.1, at.y, tilt: math.pi / 2), 0x7D8086);
+    // The ladder up the camera-side leg.
+    for (final side in const [-0.25, 0.25]) {
+      into.add(
+          tjs.BoxGeometry(0.06, legHeight, 0.06),
+          _place(at.x + 2.5 + side, base + legHeight / 2, at.y + 2.75),
+          0x6E7176);
+    }
+    for (var rung = 1.0; rung < legHeight; rung += 0.7) {
+      into.add(tjs.BoxGeometry(0.5, 0.05, 0.05),
+          _place(at.x + 2.5, base + rung, at.y + 2.75), 0x6E7176);
+    }
+  }
 
   /// The hen house: cream boards under a red roof, a little door with its
   /// ramp, the nesting boxes along one side.
@@ -1296,32 +1388,55 @@ class _Scenery {
     }
   }
 
-  /// One corn plant: stalk, leaves arching out, a cob, the tassel.
+  /// One corn plant on its strip of ploughed soil: a stalk, broad leaves
+  /// arching out and drooping all the way up (each a quarter turn round
+  /// from the last, the way corn grows), a cob in its husk, and the
+  /// tassel's spikes on top. Each plant gets its own green.
   void _cornPlant(_Merged into, Vec2 at, double scale) {
-    final height = 2.5 * scale;
+    final height = 2.6 * scale;
     final base = _ground;
-    into.add(tjg.CylinderGeometry(0.05, 0.08, height, 5),
-        _place(at.x, base + height / 2, at.y), 0x6E9F3A,
-        baseShade: 0.7);
+    final tone = _rand.range(0.86, 1.1);
+    int green(int hex) => _shade(hex, tone);
+    into.add(
+        tjs.BoxGeometry(1.95, 0.05, 1.5),
+        _place(at.x, base + 0.02, at.y, yaw: _rand.range(-0.05, 0.05)),
+        _shade(0x6B5A34, _rand.range(0.9, 1.08)));
+    into.add(tjg.CylinderGeometry(0.06, 0.1, height, 5),
+        _place(at.x, base + height / 2, at.y), green(0x6E9F3A),
+        baseShade: 0.62);
     final yaw0 = _rand.range(0, math.pi * 2);
-    for (var leaf = 0; leaf < 4; leaf++) {
-      final yaw = yaw0 + leaf * math.pi / 2 + _rand.range(-0.3, 0.3);
-      final h = base + height * (0.3 + leaf * 0.16);
+    const leaves = 7;
+    for (var leaf = 0; leaf < leaves; leaf++) {
+      final yaw = yaw0 + leaf * 2.2 + _rand.range(-0.25, 0.25);
+      final k = leaf / (leaves - 1);
+      final h = base + height * (0.16 + k * 0.72);
+      final length = (1.35 - k * 0.55) * scale;
       into.add(
-        tjs.BoxGeometry(1.0 * scale, 0.03, 0.16),
-        _place(at.x + math.cos(yaw) * 0.42, h, at.y - math.sin(yaw) * 0.42,
-            yaw: yaw, roll: -0.55),
-        leaf.isEven ? 0x5E9A35 : 0x79B145,
+        tjs.BoxGeometry(length, 0.03, 0.26 - k * 0.08),
+        _place(at.x + math.cos(yaw) * length * 0.42, h,
+            at.y - math.sin(yaw) * length * 0.42,
+            yaw: yaw, roll: -0.35 - (1 - k) * 0.45),
+        green(leaf.isEven ? 0x4F8F2E : 0x6FAE3E),
       );
     }
-    if (_rand.chance(0.7)) {
+    if (_rand.chance(0.75)) {
       into.add(
-          tjg.CylinderGeometry(0.1, 0.13, 0.5, 6),
-          _place(at.x + 0.12, base + height * 0.55, at.y, roll: 0.35),
-          0xF2C845);
+          tjg.CylinderGeometry(0.11, 0.14, 0.55, 6),
+          _place(at.x + 0.13, base + height * 0.52, at.y, roll: 0.35),
+          0xA9C25A);
+      into.add(
+          tjg.ConeGeometry(0.1, 0.22, 6),
+          _place(at.x + 0.24, base + height * 0.52 + 0.32, at.y, roll: 0.35),
+          0xE9C866);
     }
-    into.add(tjg.ConeGeometry(0.16, 0.5, 4),
-        _place(at.x, base + height + 0.2, at.y), 0xD9B76A);
+    for (var spike = 0; spike < 3; spike++) {
+      final lean = (spike - 1) * 0.35;
+      into.add(
+          tjg.ConeGeometry(0.05, 0.55, 4),
+          _place(at.x + lean * 0.25, base + height + 0.22, at.y,
+              roll: lean, yaw: yaw0),
+          spike == 1 ? 0xE2C27A : 0xC9A45C);
+    }
   }
 
   /// The scarecrow: a cross of poles, a plaid shirt, a straw hat, a sack

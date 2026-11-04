@@ -578,7 +578,12 @@ class _CourseKit {
     if (arc.bumper) {
       return full ? _mushroomBumper(arc.center, arc.radius) : _bumperArc(arc);
     }
-    if (full) return _boulder(arc.center, arc.radius);
+    if (full) {
+      // In the Barn, the round obstacles are hay bales stood on end.
+      return theme.kind == _ThemeKind.barn
+          ? _standingBale(arc.center, arc.radius)
+          : _boulder(arc.center, arc.radius);
+    }
     final group = tjs.Group()..name = 'arc';
     final steps = (arc.sweep * arc.radius / 1.0).ceil().clamp(2, 64).toInt();
     for (var i = 0; i < steps; i++) {
@@ -1603,6 +1608,45 @@ class _CourseKit {
         // Unknown tags rest as a pebble, so nothing smuggles in unseen.
         return _boulder(decoration.at, 0.25);
     }
+  }
+
+  /// A round bale stood on its end where the Barn puts an obstacle: the
+  /// circle the egg bounces off is its footprint. The rolled hay spirals
+  /// on its top, twine bands ring its side, and loose straw lies round
+  /// its foot.
+  tjs.Mesh _standingBale(Vec2 at, double radius) {
+    final rand = _Rand(_seedOf('${hole.id}/bale/${at.x}/${at.y}'));
+    final height = math.max(0.9, radius * 1.15);
+    final merged = _Merged()
+      ..add(tjg.CylinderGeometry(radius, radius * 1.02, height, 28, 4),
+          _place(0, height / 2, 0), _Farm.hay,
+          baseShade: 0.72);
+    // The roll's spiral on the top: rings of darker and lighter hay.
+    final rings = math.max(3, (radius / 0.22).round());
+    for (var i = 1; i <= rings; i++) {
+      final r = radius * i / (rings + 0.6);
+      merged.add(
+          tjg.TorusGeometry(r, 0.035, 4, 28),
+          _place(0, height + 0.005, 0, tilt: math.pi / 2),
+          i.isEven ? _Farm.hayDark : _Farm.strawLight);
+    }
+    for (final band in [0.3, 0.7]) {
+      merged.add(tjg.TorusGeometry(radius * 1.012 + 0.01, 0.04, 5, 32),
+          _place(0, height * band, 0, tilt: math.pi / 2), _Farm.strawDark);
+    }
+    // Loose straw at the foot.
+    for (var i = 0; i < 10; i++) {
+      final angle = rand.range(0, math.pi * 2);
+      final out = radius + rand.range(0.05, 0.4);
+      merged.add(
+          tjs.BoxGeometry(rand.range(0.35, 0.6), 0.03, 0.05),
+          _place(math.cos(angle) * out, 0.02, math.sin(angle) * out,
+              yaw: rand.range(0, math.pi)),
+          rand.chance(0.5) ? _Farm.straw : _Farm.strawLight);
+    }
+    return merged.mesh('bale', flat: false, roughness: 0.95)!
+      ..name = 'rock'
+      ..position.setValues(at.x, 0, at.y);
   }
 
   /// A round hay bale lying on the turf, twine bands around it.
