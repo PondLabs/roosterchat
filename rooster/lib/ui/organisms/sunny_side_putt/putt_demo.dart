@@ -185,7 +185,7 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
         break;
       case PuttPhase.holeScoreboard:
         _phaseTime += dt;
-        if (_phaseTime > 4.5) {
+        if (_phaseTime > 6.0) {
           _phaseTime = 0;
           match.advance();
         }

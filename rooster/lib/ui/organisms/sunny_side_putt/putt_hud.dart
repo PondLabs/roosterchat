@@ -857,13 +857,15 @@ class _PuttMiddle extends StatefulWidget {
 
 class _PuttMiddleState extends State<_PuttMiddle>
     with SingleTickerProviderStateMixin {
+  // The card waits for the last sink's celebration (the egg hatching in
+  // the nest) before it rises over the green.
   late final AnimationController _clock = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1100),
+    duration: const Duration(milliseconds: 2700),
   );
 
   /// The results card fades in over the clock's last fifth (about 240 ms).
-  static const _reveal = Interval(0.78, 1, curve: Curves.easeOutCubic);
+  static const _reveal = Interval(0.8, 1, curve: Curves.easeOutCubic);
 
   bool _reduceMotion = false;
 

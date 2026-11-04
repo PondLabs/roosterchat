@@ -176,8 +176,9 @@ void main() {
         home: Scaffold(body: PuttHud(match: match, onOpenMenu: () {})),
       ));
       await tester.pump();
-      // A beat for the banner, then the card rises in.
-      await tester.pump(const Duration(milliseconds: 1200));
+      // A beat for the banner (and the last sink's hatch), then the card
+      // rises in.
+      await tester.pump(const Duration(milliseconds: 2800));
       expect(
           tester
               .widget<Text>(find.byKey(const Key('putt-results-subtitle')))

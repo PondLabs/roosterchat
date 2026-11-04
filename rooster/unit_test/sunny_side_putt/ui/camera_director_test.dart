@@ -142,8 +142,9 @@ void main() {
 
   test('once in the nest, the eggs still out are framed with the nest', () {
     run(PuttCameraDirector.openingSeconds + 1, resting(hole.tee));
+    // Past the close-up on the nest that celebrates the sink.
     run(
-      3,
+      PuttCameraDirector.celebrateSeconds + 3,
       PuttCameraCue(
         hole: hole,
         phase: PuttPhase.holePlay,
@@ -152,6 +153,23 @@ void main() {
         otherEggs: const [Vec2(10, 20)],
       ),
     );
+    expectInFreeView(const Vec2(10, 20));
+    expectInFreeView(hole.nest.position);
+  });
+
+  test('my own egg dropping in brings the camera in on the nest', () {
+    run(PuttCameraDirector.openingSeconds + 2, resting(const Vec2(38, 12)));
+    final holed = PuttCameraCue(
+      hole: hole,
+      phase: PuttPhase.holePlay,
+      myEgg: hole.nest.position,
+      myEggHoled: true,
+      otherEggs: const [Vec2(10, 20)],
+    );
+    run(1.2, holed);
+    expect(rig.target.distanceTo(hole.nest.position), lessThan(1));
+    expect(rig.distanceTarget, lessThan(rig.overviewDistance * 0.5));
+    run(PuttCameraDirector.celebrateSeconds + 1.5, holed);
     expectInFreeView(const Vec2(10, 20));
     expectInFreeView(hole.nest.position);
   });

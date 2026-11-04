@@ -56,6 +56,13 @@ class PuttCameraDirector {
   /// opening sweep, the camera goes straight to the hole's play framing.
   bool reduceMotion = false;
 
+  /// How long the camera stays in on the nest after the viewer's own egg
+  /// drops in: the sink, the hatch, the chick's hops.
+  static const double celebrateSeconds = 2.7;
+
+  bool _wasHoled = false;
+  double _celebrateUntil = 0;
+
   /// Whether someone else drives the camera (the demo's held close-ups):
   /// the director then keeps its clock but moves nothing.
   bool held = false;
@@ -158,6 +165,8 @@ class PuttCameraDirector {
       _wasRolling = false;
       _sinceFieldFrame = 0;
       _showingBetween = false;
+      _wasHoled = false;
+      _celebrateUntil = 0;
     }
     _holeClock += dt;
     if (held) {
@@ -165,6 +174,28 @@ class PuttCameraDirector {
       return;
     }
     final center = hole.bounds.center;
+
+    // My egg just dropped in: the camera comes in on the nest for the
+    // hatch (unless the player took the camera), then frames the rest.
+    if (cue.myEggHoled && !_wasHoled && !_userCamera) {
+      _celebrateUntil = _holeClock + celebrateSeconds;
+      rig.glideTo(
+        target: hole.nest.position,
+        distance: math.max(rig.overviewDistance * 0.34, 9.0),
+        pitchDeg: 36,
+      );
+    }
+    _wasHoled = cue.myEggHoled;
+    if (_holeClock < _celebrateUntil) {
+      _follow = hole.nest.position;
+      return;
+    }
+    if (_celebrateUntil > 0) {
+      _celebrateUntil = 0;
+      _sinceFieldFrame = 0;
+      rig.glideTo(
+          pitchDeg: PuttCameraRig.pitchDefault, yaw: PuttCameraRig.defaultYaw);
+    }
 
     // Between holes, and while the hole opens: the whole green.
     if (cue.phase != PuttPhase.holePlay) {
@@ -230,21 +261,15 @@ class PuttCameraDirector {
       rig.glideTo(target: hole.nest.position);
       return;
     }
-    var minX = hole.nest.position.x;
-    var minY = hole.nest.position.y;
-    var maxX = minX;
-    var maxY = minY;
-    for (final p in others) {
-      minX = math.min(minX, p.x);
-      minY = math.min(minY, p.y);
-      maxX = math.max(maxX, p.x);
-      maxY = math.max(maxY, p.y);
-    }
+    final points = [hole.nest.position, ...others];
     if (_userCamera) {
-      rig.glideTo(target: Vec2((minX + maxX) / 2, (minY + maxY) / 2));
+      var sum = Vec2.zero;
+      for (final p in points) {
+        sum += p;
+      }
+      rig.glideTo(target: sum / points.length.toDouble());
     } else {
-      rig.glideToFrame(Vec2(minX, minY), Vec2(maxX, maxY),
-          margin: 4, box: true);
+      rig.glideToFramePoints(points, margin: 4);
     }
   }
 }

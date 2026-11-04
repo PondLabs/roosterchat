@@ -332,8 +332,16 @@ class PuttCameraRig {
       double closest = 0.42,
       double? yaw,
       bool box = false}) {
+    glideToFramePoints(box ? [a, b, Vec2(a.x, b.y), Vec2(b.x, a.y)] : [a, b],
+        margin: margin, closest: closest, yaw: yaw);
+  }
+
+  /// [glideToFrame] for any number of points (the eggs still out and the
+  /// nest).
+  void glideToFramePoints(List<Vec2> points,
+      {double margin = 5, double closest = 0.42, double? yaw}) {
+    if (points.isEmpty) return;
     if (yaw != null) _yawTarget = yaw;
-    final points = box ? [a, b, Vec2(a.x, b.y), Vec2(b.x, a.y)] : [a, b];
     final low = math.max(_overviewDistance * closest, _distanceMin);
     final high = math.max(low, math.min(_overviewDistance, _distanceMax));
     final pad = 40 + margin * 6;
