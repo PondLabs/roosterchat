@@ -91,6 +91,10 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
   _DemoDrag? _drag;
   double _myNextAt = 3.2;
 
+  /// Whether the demo's first hole is still ahead: on it the viewer waits
+  /// a beat longer, so the aim coach shows over the egg first.
+  bool _firstHole = true;
+
   /// Per bot: shots taken this hole and when the next may go.
   final Map<String, int> _botShots = {};
   final Map<String, double> _botNextAt = {};
@@ -203,7 +207,9 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
       _holeTime = 0;
       _myShot = 0;
       _drag = null;
-      _myNextAt = 3.2;
+      // The first hole waits for the coach to show the gesture once.
+      _myNextAt = _firstHole ? 4.6 : 3.2;
+      _firstHole = false;
       _botShots.clear();
       _botNextAt.clear();
       _route = _routeOf(hole);

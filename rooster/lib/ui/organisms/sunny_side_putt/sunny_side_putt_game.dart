@@ -52,6 +52,7 @@ import 'putt_camera_director.dart';
 import 'putt_hud.dart';
 import 'putt_match.dart';
 import 'putt_menus.dart';
+import 'putt_coach.dart';
 import 'putt_name_tags.dart';
 import 'putt_reticle.dart';
 import 'putt_targeting.dart';
@@ -94,6 +95,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
 
   /// The name tags' positions, refreshed after every rendered frame.
   final PuttTagBoard _tags = PuttTagBoard();
+  final ValueNotifier<PuttCoachCue?> _coach = ValueNotifier(null);
 
   /// Where Esc lands: the view holds the focus while the game does. The
   /// GameWidget keeps its own node under it (autofocus off), so the two
@@ -130,6 +132,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     _keyFocus.dispose();
     _gameFocus.dispose();
     _tags.dispose();
+    _coach.dispose();
     game.targeting.dispose();
     super.dispose();
   }
@@ -347,9 +350,11 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     return game.screenToWorld(Vector2(at.dx, at.dy));
   }
 
-  /// After every rendered frame: the tags follow the eggs on screen.
+  /// After every rendered frame: the tags follow the eggs on screen, the
+  /// coach follows mine.
   void _afterFrame() {
     _tags.update(game.tagsForFrame());
+    _coach.value = game.coachForFrame();
   }
 
   @override
@@ -400,6 +405,8 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
               ),
               // Who is who: names over the other players' eggs.
               IgnorePointer(child: PuttNameTags(board: _tags)),
+              // The putt's gesture, shown over my egg until I have it.
+              PuttCoach(cue: _coach),
               // Where an armed power-up would land, and what it reaches.
               ListenableBuilder(
                 listenable: Listenable.merge([match, game.targeting]),
@@ -594,6 +601,62 @@ class SunnySidePuttGame extends FlameGame {
     _directCamera(dt);
     _spendNotices();
     _spendFxSpots();
+    _trackReadiness(dt);
+  }
+
+  // ---- the aim coach ------------------------------------------------------------------
+
+  /// How long my egg has sat ready for a putt (resting, my hole in play,
+  /// no aim or power-up pick under way).
+  double _readyFor = 0;
+
+  /// Set once I have putted in this match: the coach then only comes back
+  /// after a long idle.
+  bool _coachRetired = false;
+
+  /// Seconds of idle (egg ready, no aim) before the coach shows again
+  /// once I have putted.
+  static const double coachIdleSeconds = 14;
+
+  void _trackReadiness(double dt) {
+    final mine = match.myBall;
+    final ready = match.phase == PuttPhase.holePlay &&
+        !match.isSpectator &&
+        mine != null &&
+        mine.asleep &&
+        !mine.holed &&
+        !aim.isActive &&
+        !targeting.isActive;
+    _readyFor = ready ? _readyFor + dt : 0;
+    if (!_coachRetired) {
+      final me = match.localPlayerId;
+      if (match.engine.strokesInHole(me) > 0 ||
+          match.engine.holeStrokes(me).any((strokes) => strokes != null)) {
+        _coachRetired = true;
+      }
+    }
+  }
+
+  /// The coach's place this frame, or null when it should not show: my
+  /// egg ready after the hole's opening sweep, and either no putt of mine
+  /// yet this match or a long idle.
+  PuttCoachCue? coachForFrame() {
+    if (_readyFor <= 0) return null;
+    if (director.holeClock < PuttCameraDirector.openingSeconds + 0.4) {
+      return null;
+    }
+    if (_coachRetired && _readyFor < coachIdleSeconds) return null;
+    if (!_coachRetired && _readyFor < 0.5) return null;
+    final hole = match.hole;
+    final mine = match.myBall;
+    if (hole == null || mine == null) return null;
+    final at = match.myEggRenderPosition;
+    if (at == null || !world3d.inFrontOfCamera(at)) return null;
+    final egg = world3d.projectToWorld(at);
+    final nest = world3d.projectToWorld(hole.nest.position);
+    final way = nest - egg;
+    final toward = way.distance < 1 ? const Offset(0, -1) : way / way.distance;
+    return PuttCoachCue(egg: egg, toward: toward);
   }
 
   /// The frame the 3D world moves to this render: the engine's

@@ -5477,6 +5477,12 @@
       "spaceName": {}
     }
   },
+  "labelPuttCoachPull": "Pull back, then let go",
+  "@labelPuttCoachPull": {
+    "description": "Under the player's egg while a hand shows the putt gesture on their first hole: press, drag back away from the nest, release",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelPuttModeCasual": "Casual",
   "@labelPuttModeCasual": {
     "description": "The casual mode: one course, then the group votes the next",
