@@ -188,15 +188,27 @@ class _PuttAimView3D {
 
   /// Shows the aim for this frame, or hides the group. The fill arc's
   /// geometry rebuilds only when the power moved enough to see.
-  void sync(PuttWorldAim? aim, double time) {
+  void sync(PuttWorldAim? aim, double time, [_Ground? ground]) {
     if (aim == null) {
       group.visible = false;
       return;
     }
     group.visible = true;
-    group.position.setValues(aim.origin.x, 0.01, aim.origin.y);
-    // The game's y-down angle reads a negative world turn about y.
-    _turned.rotation.y = -aim.angle;
+    final terrain = ground ?? _Ground();
+    final floor = terrain.at(aim.origin);
+    group.position.setValues(aim.origin.x, floor + 0.01, aim.origin.y);
+    // The game's y-down angle reads a negative world turn about y; on a
+    // slope the arrow also pitches with the ground along the shot.
+    final slope = terrain.slopeAt(aim.origin);
+    final along = slope.x * math.cos(aim.angle) + slope.y * math.sin(aim.angle);
+    if (along.abs() < 1e-6) {
+      _turned.rotation.set(0, -aim.angle, 0);
+    } else {
+      _turned.quaternion.setFrom(tjs.Quaternion()
+          .setFromAxisAngle(tjs.Vector3(0, 1, 0), -aim.angle)
+          .multiply(tjs.Quaternion()
+              .setFromAxisAngle(tjs.Vector3(0, 0, 1), math.atan(along))));
+    }
 
     final scale = aim.eggRadius / _eggRadius;
     final length = (1.4 + aim.power * 5.2) * scale;
@@ -255,8 +267,8 @@ class _PuttAimView3D {
     if (bounce != null) {
       _bounceMark
         ..visible = true
-        ..position
-            .setValues(bounce.x - aim.origin.x, 0, bounce.y - aim.origin.y);
+        ..position.setValues(bounce.x - aim.origin.x,
+            terrain.at(bounce) - floor, bounce.y - aim.origin.y);
     }
     if (points.length >= 2) {
       const spacing = 0.62;
@@ -274,7 +286,8 @@ class _PuttAimView3D {
           if (p.distanceTo(aim.origin) < tip) continue;
           final dot = _dots[shown];
           dot.visible = true;
-          dot.position.setValues(p.x - aim.origin.x, 0.05, p.y - aim.origin.y);
+          dot.position.setValues(p.x - aim.origin.x,
+              terrain.at(p) - floor + 0.05, p.y - aim.origin.y);
           final fade = 1 - shown / _dotCount;
           dot.children[0].material?.opacity = 0.12 + 0.33 * fade;
           dot.children[1].material?.opacity = 0.25 + 0.7 * fade;
@@ -390,7 +403,7 @@ class _PuttFxPool {
   }
 
   /// Places this frame's fx onto the pooled sprites; the rest hide.
-  void apply(PuttWorldFrame frame, {double scale = 1}) {
+  void apply(PuttWorldFrame frame, {double scale = 1, _Ground? ground}) {
     var active = 0;
     var paper = 0;
     var rings = 0;
@@ -403,7 +416,8 @@ class _PuttFxPool {
         ring.visible = true;
         final radius = fx.size * (0.3 + progress * 1.4);
         ring.scale.setValues(radius, radius, 1);
-        ring.position.setValues(fx.at.x, 0.08, fx.at.y);
+        ring.position
+            .setValues(fx.at.x, (ground?.at(fx.at) ?? 0) + 0.08, fx.at.y);
         ring.material?.color = _linOf(color);
         ring.material?.opacity = (1 - progress) * 0.85;
         continue;
@@ -461,7 +475,7 @@ class _PuttFxPool {
       if (fx.height != null && fx.kind != PuttWorldFxKind.confetti) {
         lift = fx.height!;
       }
-      sprite.position.setValues(at.x, lift, at.y);
+      sprite.position.setValues(at.x, (ground?.at(at) ?? 0) + lift, at.y);
       final grow = (fx.kind == PuttWorldFxKind.confetti ||
               fx.kind == PuttWorldFxKind.sparkle)
           ? scale

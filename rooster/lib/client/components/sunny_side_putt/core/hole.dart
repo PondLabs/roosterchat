@@ -212,6 +212,71 @@ class GravityWell {
   }
 }
 
+/// A hill on the green: the ground rises (or, with a negative [height],
+/// sinks) around the spine from [a] to [b] - one point for a mound or a
+/// dip, a line for a ridge or a trough - and an egg on its slopes feels a
+/// pull downhill ([PhysicsConfig.slopeGravity] times the grade).
+///
+/// The ground is flat at [height] for [top] units around the spine (a
+/// plateau; 0 makes a rounded crest), then falls to the green's level over
+/// [skirt] units along the profile `height * (1 - u^2)^2`, `u` running 0
+/// to 1 across the skirt: level at both edges, so no kink anywhere, and
+/// steepest at `u = 1/sqrt(3)`, where the grade is about
+/// `1.54 * height / skirt`. Only + - * / and a square root go into the
+/// pull, so every platform computes the same roll.
+///
+/// The physics knows no height, only the pull: a hill's reach must stay
+/// clear of walls, water, the tee and the nest's rim, unless its plateau
+/// carries the nest (the cup then sits on the flat top).
+class Hill {
+  final Vec2 a;
+  final Vec2 b;
+  final double height;
+  final double top;
+  final double skirt;
+
+  const Hill(this.a, this.b,
+      {required this.height, this.top = 0, required this.skirt});
+
+  /// A round hill (or, with a negative [height], a dip) centered at [at].
+  const Hill.mound(Vec2 at,
+      {required double height, double top = 0, required double skirt})
+      : this(at, at, height: height, top: top, skirt: skirt);
+
+  /// How far from its spine the hill reaches.
+  double get reach => top + skirt;
+
+  Vec2 _spinePoint(Vec2 point) {
+    final ab = b - a;
+    final lengthSq = ab.dot(ab);
+    if (lengthSq < Vec2.epsilon) return a;
+    final t = ((point - a).dot(ab) / lengthSq).clamp(0.0, 1.0);
+    return a + ab * t;
+  }
+
+  /// The ground's height at [point] (0 off the hill).
+  double heightAt(Vec2 point) {
+    final s = point.distanceTo(_spinePoint(point));
+    if (s >= top + skirt) return 0;
+    if (s <= top) return height;
+    final u = (s - top) / skirt;
+    final k = 1 - u * u;
+    return height * k * k;
+  }
+
+  /// The ground's gradient at [point]: the rise per unit, pointing
+  /// uphill (away from the spine on a dip). Zero on the plateau and off
+  /// the hill.
+  Vec2 gradientAt(Vec2 point) {
+    final offset = point - _spinePoint(point);
+    final s = offset.length;
+    if (s <= top || s >= top + skirt || s < Vec2.epsilon) return Vec2.zero;
+    final u = (s - top) / skirt;
+    final rise = -4 * height * u * (1 - u * u) / skirt;
+    return offset * (rise / s);
+  }
+}
+
 /// A "?" egg-carton block: an egg reaching it picks up a power-up. The box
 /// disappears for the rest of the hole once collected.
 class QuestionBox {
@@ -259,6 +324,10 @@ class HoleDef {
   final List<QuestionBox> boxes;
   final List<Decoration> decorations;
 
+  /// The ground's relief: mounds, ridges, dips and plateaus. Empty is a
+  /// dead-flat green.
+  final List<Hill> hills;
+
   /// Rolling deceleration override for this hole's surface (units/s^2);
   /// null uses [PhysicsConfig.frictionDeceleration].
   final double? friction;
@@ -278,8 +347,28 @@ class HoleDef {
     this.wells = const [],
     this.boxes = const [],
     this.decorations = const [],
+    this.hills = const [],
     this.friction,
   });
+
+  /// The ground's height at [point]: the hills summed (0 on flat green).
+  double groundHeightAt(Vec2 point) {
+    var height = 0.0;
+    for (final hill in hills) {
+      height += hill.heightAt(point);
+    }
+    return height;
+  }
+
+  /// The ground's gradient at [point] (rise per unit, pointing uphill):
+  /// the hills summed. An egg feels the pull against it.
+  Vec2 groundGradientAt(Vec2 point) {
+    var gradient = Vec2.zero;
+    for (final hill in hills) {
+      gradient += hill.gradientAt(point);
+    }
+    return gradient;
+  }
 }
 
 /// One planned stroke of a [ReferenceSolution]: aim [angle] (radians, the

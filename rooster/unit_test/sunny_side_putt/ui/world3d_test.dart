@@ -460,6 +460,83 @@ void main() {
     });
   });
 
+  group('hills', () {
+    HoleDef hilly() => HoleDef(
+          id: 'hilly',
+          par: 3,
+          tee: const Vec2(3, 10),
+          nest: Nest(const Vec2(26, 10), 0.9),
+          bounds: Rect(Vec2.zero, Vec2(30, 20)),
+          walls: [
+            WallSegment(Vec2.zero, Vec2(30, 0)),
+            WallSegment(Vec2(30, 0), Vec2(30, 20)),
+            WallSegment(Vec2(30, 20), Vec2(0, 20)),
+            WallSegment(Vec2(0, 20), Vec2.zero),
+          ],
+          hills: const [
+            Hill.mound(Vec2(14, 10), height: 1.2, top: 0.6, skirt: 3),
+            // The nest's plateau.
+            Hill.mound(Vec2(26, 10), height: 0.8, top: 2, skirt: 1.5),
+          ],
+        );
+
+    test('the turf rises over them, lit along its slopes', () {
+      final world = PuttWorld3D(viewport: const ui.Size(800, 600));
+      addTearDown(world.dispose);
+      world.buildHole(hilly(), eggRadius: 0.45);
+      final lawn = world.holeGroup('ground')!.children.single as tjs.Mesh;
+      final position = lawn.geometry!.attributes['position'];
+      final normal = lawn.geometry!.attributes['normal'];
+      var highest = 0.0;
+      var tilted = 0;
+      for (var i = 0; i < position.count; i++) {
+        highest = math.max(highest, position.getY(i)!.toDouble());
+        if (normal.getY(i)! < 0.98) tilted++;
+      }
+      expect(highest, closeTo(1.2, 1e-6));
+      expect(tilted, greaterThan(100));
+      // The nest stands on its plateau.
+      final nest = world.holeGroup('nest')!.children.single;
+      expect(nest.position.y, closeTo(0.8, 1e-6));
+    });
+
+    test('an egg stands on the ground under it', () {
+      final world = PuttWorld3D(viewport: const ui.Size(800, 600));
+      addTearDown(world.dispose);
+      world.buildHole(hilly(), eggRadius: 0.45);
+      const stand = 0.45 * 1.2 * 1.28;
+      world.applySnapshot(PuttWorldFrame(
+        time: 0,
+        eggs: [eggAt(const Vec2(14, 10))],
+      ));
+      expect(world.eggOf('me')!.position.y, closeTo(1.2 + stand, 1e-6));
+      world.applySnapshot(PuttWorldFrame(
+        time: 0.016,
+        eggs: [eggAt(const Vec2(5, 10))],
+      ));
+      expect(world.eggOf('me')!.position.y, closeTo(stand, 1e-6));
+    });
+
+    test('a pixel over a slope lands back on the slope', () {
+      final world = PuttWorld3D(viewport: const ui.Size(800, 600));
+      addTearDown(world.dispose);
+      final hole = hilly();
+      world.buildHole(hole, eggRadius: 0.45);
+      world.applySnapshot(PuttWorldFrame(time: 0));
+      for (final point in const [
+        Vec2(14, 10),
+        Vec2(12.2, 9.1),
+        Vec2(15.5, 11.8),
+        Vec2(26, 10),
+      ]) {
+        final pixel = world.projectToWorld(point);
+        final back = world.screenToWorld(pixel);
+        expect(back, isNotNull);
+        expect(back!.distanceTo(point), lessThan(0.02), reason: '$point');
+      }
+    });
+  });
+
   group('the camera rig', () {
     test('the target sits dead-centre under any yaw', () {
       final world = builtWorld();

@@ -87,7 +87,7 @@ class _CourseKit {
     // The turf follows the table's shape: no green where the walls have
     // carved the course away.
     return tjs.Mesh(
-      shape.top(turf: true),
+      shape.top(turf: true, relief: hole),
       tjs.MeshStandardMaterial({
         tjs.MaterialProperty.map: _lawnTexture(),
         tjs.MaterialProperty.normalMap: blades,
@@ -269,6 +269,53 @@ class _CourseKit {
             final d = worldAt(col, row).distanceTo(end);
             final k = _softBand(d, pair.radius * 1.35, 0.18);
             if (k > 0) bitmap.blend(col, row, 0x8A6239, k * 0.85);
+          }
+        }
+      }
+    }
+
+    // Hills: the slopes facing the sun lighter, the far ones darker (the
+    // relief reads even where the light is flat), mown rings following
+    // the contours, and a crease of shade where a slope meets the level.
+    if (hole.hills.isNotEmpty) {
+      final (sx, sy, sz) = theme.sunFrom;
+      final sunLength = math.sqrt(sx * sx + sy * sy + sz * sz);
+      final lx = sx / sunLength, ly = sy / sunLength, lz = sz / sunLength;
+      for (final hill in hole.hills) {
+        final reach = hill.reach;
+        final c0 =
+            colOf(math.min(hill.a.x, hill.b.x) - reach).clamp(0, width - 1);
+        final c1 =
+            colOf(math.max(hill.a.x, hill.b.x) + reach).clamp(0, width - 1);
+        final r0 =
+            rowOf(math.max(hill.a.y, hill.b.y) + reach).clamp(0, height - 1);
+        final r1 =
+            rowOf(math.min(hill.a.y, hill.b.y) - reach).clamp(0, height - 1);
+        final rise = hill.height.abs();
+        for (var row = r0; row <= r1; row++) {
+          for (var col = c0; col <= c1; col++) {
+            final point = worldAt(col, row);
+            final s = _segmentDistance(point, hill.a, hill.b);
+            if (s >= reach || !_reach.reachableAt(point)) continue;
+            final g = hole.groundGradientAt(point);
+            final n = math.sqrt(g.x * g.x + 1 + g.y * g.y);
+            final lit = (-g.x * lx + ly - g.y * lz) / n;
+            final relative = (lit / ly - 1).clamp(-0.45, 0.35);
+            final base = bitmap.get(col, row);
+            var color = _shade(base, 1 + relative * 0.75);
+            // Contour rings: the mower followed the slope.
+            final level = hill.heightAt(point).abs();
+            if (level > 0.02 && level < rise - 0.02) {
+              final ring = ((level / rise) * 5).floor().isEven;
+              color = _shade(color, ring ? 1.035 : 0.965);
+            }
+            // The crease at the foot (or round the rim, on a dip).
+            final u = ((s - hill.top) / hill.skirt).clamp(0.0, 1.0);
+            final crease = hill.height > 0
+                ? _softBand(1 - u, 0.12, 0.1)
+                : _softBand(u, 0.12, 0.1);
+            if (crease > 0) color = _mix(color, _Farm.turfShade, crease * 0.22);
+            bitmap.set(col, row, color);
           }
         }
       }

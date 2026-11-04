@@ -80,6 +80,11 @@ class PhysicsConfig {
   /// Pull strength (units/s^2) of the magnet flag inside [magnetRange].
   final double magnetStrength;
 
+  /// How hard a hill pulls (units/s^2 per unit of grade): an egg on a
+  /// slope of grade g feels `slopeGravity * g` downhill. Over
+  /// [frictionDeceleration] it rolls back down; under it, it can rest.
+  final double slopeGravity;
+
   const PhysicsConfig({
     this.dt = 1 / 120,
     this.ballRadius = 0.45,
@@ -95,6 +100,7 @@ class PhysicsConfig {
     this.portalCooldownTicks = 24,
     this.magnetRange = 3.5,
     this.magnetStrength = 26,
+    this.slopeGravity = 24,
   });
 }
 
@@ -425,9 +431,11 @@ class PhysicsWorld {
       if (ball.portalCooldown > 0) ball.portalCooldown--;
 
       if (ball.asleep) {
-        final accel = _accelOn(ball);
-        // Static friction: a pull the surface can hold never wakes the egg.
-        if (accel.length > frictionDeceleration) ball.asleep = false;
+        // Static friction: a pull the surface (or a rail the egg leans
+        // on) can hold never wakes the egg.
+        if (_restingPull(ball).length > frictionDeceleration) {
+          ball.asleep = false;
+        }
       }
       if (!ball.asleep) {
         var velocity = ball.velocity + _accelOn(ball) * config.dt;
@@ -459,10 +467,11 @@ class PhysicsWorld {
         // a resting egg that another body pushed there this tick.
         if (!_handleBounds(ball)) _handleWater(ball);
       } else if (ball.velocity.length < config.sleepSpeed &&
-          _accelOn(ball).length <= frictionDeceleration) {
+          _restingPull(ball).length <= frictionDeceleration) {
         // True static equilibrium: slow AND nothing pushing it onward.
-        // A ball on a gravity well's slope (pull > friction) keeps
-        // creeping instead of settling, exactly like physics says.
+        // A ball on a gravity well's or a hill's slope (pull > friction)
+        // keeps creeping instead of settling, exactly like physics says;
+        // one pressed against a rail by the pull settles there.
         if (!_handleBounds(ball) && !_handleWater(ball)) ball.settle();
       }
     }
@@ -484,12 +493,15 @@ class PhysicsWorld {
     return v * (config.maxSpeed / speed);
   }
 
-  /// Acceleration from gravity wells and the magnet flag.
+  /// Acceleration from gravity wells, hills and the magnet flag.
   Vec2 _accelOn(BallBody ball) {
     var accel = Vec2.zero;
     for (final well in hole.wells) {
       final pull = well.pullOn(ball.position);
       if (pull != null) accel += pull;
+    }
+    if (hole.hills.isNotEmpty) {
+      accel -= hole.groundGradientAt(ball.position) * config.slopeGravity;
     }
     if (ball.flagActive(PowerUpFlag.magnet, _tick)) {
       final offset = hole.nest.position - ball.position;
@@ -504,6 +516,42 @@ class PhysicsWorld {
           }
         }
       }
+    }
+    return accel;
+  }
+
+  /// The pull an egg at rest would have to resist: [_accelOn] minus the
+  /// part a wall or rock it touches pushes back (an egg rolled down a
+  /// slope into a rail rests against it instead of rattling there).
+  Vec2 _restingPull(BallBody ball) {
+    var accel = _accelOn(ball);
+    if (accel == Vec2.zero) return accel;
+    if (ball.flagActive(PowerUpFlag.ghost, _tick)) return accel;
+    final reach = config.ballRadius + 0.02;
+    void lean(Vec2 normal) {
+      final into = accel.dot(normal);
+      if (into < 0) accel -= normal * into;
+    }
+
+    for (final wall in hole.walls) {
+      final closest = _closestPointOnSegment(ball.position, wall.a, wall.b);
+      final offset = ball.position - closest;
+      final distance = offset.length;
+      if (distance < reach && distance > Vec2.epsilon) {
+        lean(offset * (1 / distance));
+      }
+    }
+    for (final arc in hole.arcs) {
+      final offset = ball.position - arc.center;
+      final distance = offset.length;
+      if (distance < Vec2.epsilon) continue;
+      if ((distance - arc.radius).abs() >= reach) continue;
+      final span = arcSpan(arc);
+      if (!_angleInSpan(math.atan2(offset.y, offset.x), span.$1, span.$2)) {
+        continue;
+      }
+      final outward = offset * (1 / distance);
+      lean(distance >= arc.radius ? outward : outward * -1);
     }
     return accel;
   }

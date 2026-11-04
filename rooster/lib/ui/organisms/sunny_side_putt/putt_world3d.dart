@@ -578,6 +578,9 @@ class PuttWorld3D {
   /// column, rail puffs).
   final _Bursts _bursts = _Bursts();
 
+  /// The current hole's relief, shared with everything standing on it.
+  final _Ground _ground = _Ground();
+
   /// Until when (the frame clock) the flag shakes: an egg just dropped in.
   double _flagShakeUntil = 0;
 
@@ -685,6 +688,7 @@ class PuttWorld3D {
     if (_hole?.id == hole.id) return;
     _clearHole();
     _hole = hole;
+    _ground.hole = hole;
     _eggRadius = eggRadius;
     _theme = _Theme.of(hole.id);
     _applyTheme();
@@ -738,22 +742,28 @@ class PuttWorld3D {
     }
     final boxes = makeKind('boxes');
     for (final box in hole.boxes) {
-      final crate = _CrateView3D(box, kit.crateTexture());
+      final crate = _CrateView3D(box, kit.crateTexture(),
+          floor: _ground.at(box.position));
       boxes.add(crate.group);
       _crateViews.add(crate);
     }
     final garden = kit.garden();
     if (garden != null) makeKind('garden').add(garden);
-    makeKind('nest').add(kit.nest(label: label));
-    makeKind('tee').add(kit.tee());
+    // The nest, the tee and the props stand on the ground (a plateau
+    // lifts the nest with it).
+    makeKind('nest').add(
+        kit.nest(label: label)..position.y += _ground.at(hole.nest.position));
+    makeKind('tee').add(kit.tee()..position.y += _ground.at(hole.tee));
     final decorations = makeKind('decorations');
     for (final decoration in hole.decorations) {
       final built = kit.decoration(decoration);
-      if (built != null) decorations.add(built);
+      if (built != null) {
+        decorations.add(built..position.y += _ground.at(decoration.at));
+      }
     }
     final hens = makeKind('hens');
     for (final obstacle in hole.obstacles) {
-      final hen = _HenView3D(obstacle);
+      final hen = _HenView3D(obstacle, _ground);
       hens.add(hen.group);
       _henViews.add(hen);
     }
@@ -794,6 +804,7 @@ class PuttWorld3D {
     }
     _sinking.clear();
     _disposeChildren(_holeRoot);
+    _ground.hole = null;
     _henViews.clear();
     _crateViews.clear();
     _animated.clear();
@@ -818,10 +829,10 @@ class PuttWorld3D {
     _syncEggs(frame, dt);
     _syncHens(frame, dt);
     _syncCrates(frame);
-    _aim.sync(frame.aim, frame.time);
+    _aim.sync(frame.aim, frame.time, _ground);
     // Confetti and sparkles grow with the camera's distance, so the party
     // reads from the overview too.
-    _fx.apply(frame, scale: math.max(1.0, rig.distance / 24));
+    _fx.apply(frame, scale: math.max(1.0, rig.distance / 24), ground: _ground);
     _bursts.update(dt, frame.time);
     for (final piece in _animated) {
       piece.tick(frame.time, dt);
@@ -843,8 +854,9 @@ class PuttWorld3D {
           egg.radius * _eggVisualScale,
           egg.tint,
           trailHex: _mix(_theme.turfFringe, 0x4A3A22, 0.4),
+          terrain: _ground,
           onBounce: (at, strength, mine) {
-            _bursts.puff(at, strength);
+            _bursts.puff(at, strength, floor: _ground.at(at));
             if (mine && strength > 0.45) rig.shake(0.08 + strength * 0.12);
           },
         );
@@ -869,9 +881,10 @@ class PuttWorld3D {
         // and the camera's punch.
         _cheerUntil = frame.time + 2.2;
         _flagShakeUntil = frame.time + 1.4;
-        _bursts.straw(nest.position, nest.radius);
+        final floor = _ground.at(nest.position);
+        _bursts.straw(nest.position, nest.radius, floor: floor);
         if (view.everMine) {
-          _bursts.confettiColumn(nest.position);
+          _bursts.confettiColumn(nest.position, floor: floor);
           rig.punch();
         }
       } else {
@@ -891,7 +904,10 @@ class PuttWorld3D {
       );
       final scale = 1 - eased * 0.75;
       view.group
-        ..position.setValues(at.x, view.restHeight * scale - eased * 0.9, at.y)
+        ..position.setValues(
+            at.x,
+            _ground.at(sinking.nest) + view.restHeight * scale - eased * 0.9,
+            at.y)
         ..scale.setValues(scale, scale, scale);
       view.ground.visible = false;
       if (t >= 1) {
@@ -947,9 +963,19 @@ class PuttWorld3D {
     if (dir.y.abs() < 1e-9) return null; // parallel to the green
     final t = -camera.position.y / dir.y;
     if (t <= 0) return null; // the ray rises: sky, not ground
-    dir.scale(t);
-    final hit = camera.position.clone().add(dir);
-    return Vec2(hit.x, hit.z);
+    var hit =
+        Vec2(camera.position.x + dir.x * t, camera.position.z + dir.z * t);
+    // Over hills: walk the ray onto the ground's own height (a few steps
+    // converge for any slope the green allows).
+    if (!_ground.flat) {
+      for (var i = 0; i < 6; i++) {
+        final s = (_ground.at(hit) - camera.position.y) / dir.y;
+        if (s <= 0) break;
+        hit =
+            Vec2(camera.position.x + dir.x * s, camera.position.z + dir.z * s);
+      }
+    }
+    return hit;
   }
 
   /// The surface pixel a ground point projects to, through the same ray
@@ -961,7 +987,8 @@ class PuttWorld3D {
       return ui.Offset.zero;
     }
     camera.updateMatrixWorld(true);
-    final point = tjs.Vector3(world.x, height, world.y).project(camera);
+    final point = tjs.Vector3(world.x, height + _ground.at(world), world.y)
+        .project(camera);
     return ui.Offset(
       (point.x + 1) / 2 * rig.viewport.width,
       (1 - point.y) / 2 * rig.viewport.height,
@@ -972,7 +999,8 @@ class PuttWorld3D {
   /// camera - the name tags hide when their egg is behind the lens.
   bool inFrontOfCamera(Vec2 world, {double height = 0}) {
     if (_disposed) return false;
-    final point = tjs.Vector3(world.x, height, world.y).project(camera);
+    final point = tjs.Vector3(world.x, height + _ground.at(world), world.y)
+        .project(camera);
     return point.z < 1 && point.z > -1;
   }
 

@@ -81,6 +81,21 @@ Maze (rabbit holes as speed-preserving portals), the Pond (water
 returns the egg, stroke charged), Farm Road (speed strips) and the
 Barn (hay bales, the silo's pull).
 
+### Hills
+
+A hole can carry hills (`Hill` in `core/hole.dart`): mounds, ridges,
+dips and troughs, round a point or along a line, with a flat top for a
+plateau. The profile is `height * (1 - u^2)^2` across the slope, level
+at both edges, so there is never a kink. The physics stays planar: an
+egg feels `slopeGravity` (24) times the grade downhill. A pull stronger
+than the rolling friction (7) rolls an under-hit egg back down; a
+ridge has to be putted over with pace; a dip gathers eggs toward its
+bottom. An egg pressed into a rail by a slope settles there instead of
+rattling. Since there is no height in the physics, a hill's reach must
+stay clear of walls, water, the tee and the nest's rim, unless its
+plateau carries the nest. The aim's guide runs the same physics, so it
+bends with the slope.
+
 ## How it looks
 
 The green is a minigolf course on a raised wooden table in a farm
@@ -100,6 +115,13 @@ green and bobs his head now and then. Ground the walls close off from
 the tee (a flood fill stopped by walls, carried through rabbit holes) is
 planted as the theme's garden beds instead of turf, so a hole shaped
 with walls reads as its shape.
+
+The turf rides the hills: its vertices sit at the ground's height and
+take their normals from its gradient. The lawn texture lightens the
+slopes facing the sun and darkens the far ones, mows rings along the
+contours and shades the crease at the foot. Eggs, their shadows (tilted
+along the slope), the aim, the crates, the hens, the nest and every
+burst stand on the ground's height, and the pointer's ray walks onto it.
 
 On the green: mown turf with stripes and contact shade along the rails,
 rubber bumpers (rails and pinball mushrooms), faceted boulders, ponds

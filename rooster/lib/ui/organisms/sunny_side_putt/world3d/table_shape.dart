@@ -247,17 +247,28 @@ class _TableShape {
 
   /// The top: the turf inside the bounds (UVs over the bounds, for the
   /// lawn's texture), or the timber lip outside them.
-  tjs.BufferGeometry top({required bool turf}) {
+  tjs.BufferGeometry top({required bool turf, HoleDef? relief}) {
     final flat = _fill(
         (col, row) => _keptCell(col, row) && (_insideCell(col, row) == turf));
     final positions = <double>[];
     final normals = <double>[];
     final uvs = <double>[];
+    // The turf rides the hole's hills: each vertex at the ground's height,
+    // its normal from the ground's gradient.
+    final hilly = relief != null && relief.hills.isNotEmpty;
     for (var i = 0; i < flat.length; i += 2) {
       final x = flat[i];
       final z = flat[i + 1];
-      positions.addAll([x, 0, z]);
-      normals.addAll([0, 1, 0]);
+      if (hilly) {
+        final point = Vec2(x, z);
+        final g = relief.groundGradientAt(point);
+        final n = math.sqrt(g.x * g.x + 1 + g.y * g.y);
+        positions.addAll([x, relief.groundHeightAt(point), z]);
+        normals.addAll([-g.x / n, 1 / n, -g.y / n]);
+      } else {
+        positions.addAll([x, 0, z]);
+        normals.addAll([0, 1, 0]);
+      }
       if (turf) {
         uvs.addAll([
           (x - bounds.min.x) / bounds.width,

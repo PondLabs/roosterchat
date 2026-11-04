@@ -23,6 +23,7 @@ class _BurstParticle {
     this.gravity = 9,
     this.drag = 1.2,
     this.fade = true,
+    this.floor = 0,
   });
 
   double x, y, z, vx, vy, vz;
@@ -33,6 +34,9 @@ class _BurstParticle {
   final double gravity;
   final double drag;
   final bool fade;
+
+  /// The ground's height where it lands.
+  final double floor;
   double age = 0;
 }
 
@@ -71,13 +75,13 @@ class _Bursts {
   }
 
   /// Straw flying off the nest's rim as an egg drops in.
-  void straw(Vec2 at, double radius) {
+  void straw(Vec2 at, double radius, {double floor = 0}) {
     for (var i = 0; i < 26; i++) {
       final angle = _rand.range(0, math.pi * 2);
       final speed = _rand.range(1.5, 4.5);
       _live.add(_BurstParticle(
         x: at.x + math.cos(angle) * radius,
-        y: 0.3,
+        y: floor + 0.3,
         z: at.y + math.sin(angle) * radius,
         vx: math.cos(angle) * speed,
         vy: _rand.range(4, 8),
@@ -88,13 +92,14 @@ class _Bursts {
         paper: true,
         gravity: 14,
         drag: 0.8,
+        floor: floor,
       ));
     }
   }
 
   /// The viewer's own sink: a column of confetti shooting up out of the
   /// nest, big enough to read from the camera's height.
-  void confettiColumn(Vec2 at) {
+  void confettiColumn(Vec2 at, {double floor = 0}) {
     const colors = [
       0xE8382A, // comb
       0xF89B17, // yolk
@@ -108,7 +113,7 @@ class _Bursts {
       final spread = _rand.range(0.4, 3.2);
       _live.add(_BurstParticle(
         x: at.x,
-        y: 0.4,
+        y: floor + 0.4,
         z: at.y,
         vx: math.cos(angle) * spread,
         vy: _rand.range(9, 16),
@@ -120,19 +125,20 @@ class _Bursts {
         gravity: 9,
         drag: 1.6,
         fade: false,
+        floor: floor,
       ));
     }
   }
 
   /// A rail hit: a little cloud of turf and dust where the egg met it.
-  void puff(Vec2 at, double strength) {
+  void puff(Vec2 at, double strength, {double floor = 0}) {
     final count = (4 + strength * 6).round().clamp(4, 10);
     for (var i = 0; i < count; i++) {
       final angle = _rand.range(0, math.pi * 2);
       final speed = _rand.range(0.5, 1.6) * (0.6 + strength);
       _live.add(_BurstParticle(
         x: at.x,
-        y: 0.25,
+        y: floor + 0.25,
         z: at.y,
         vx: math.cos(angle) * speed,
         vy: _rand.range(0.6, 1.8),
@@ -143,6 +149,7 @@ class _Bursts {
         paper: false,
         gravity: 2,
         drag: 2.4,
+        floor: floor,
       ));
     }
   }
@@ -159,8 +166,8 @@ class _Bursts {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.z += p.vz * dt;
-      if (p.y < 0.05) {
-        p.y = 0.05;
+      if (p.y < p.floor + 0.05) {
+        p.y = p.floor + 0.05;
         p.vx = 0;
         p.vz = 0;
         p.vy = 0;

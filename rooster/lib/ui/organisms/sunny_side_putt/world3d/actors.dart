@@ -29,7 +29,8 @@ class _SinkingEgg {
 /// viewer's marker; [trail] holds the puffs a fast egg leaves behind.
 class _EggView3D {
   _EggView3D(this._radius, ui.Color tint,
-      {required int trailHex, required this.onBounce}) {
+      {required int trailHex, required this.onBounce, _Ground? terrain})
+      : terrain = terrain ?? _Ground() {
     group = tjs.Group()..name = 'egg';
     _tintHex = _hexOf(tint);
     _texture = _eggTextureFor(_tintHex);
@@ -126,6 +127,9 @@ class _EggView3D {
   /// Told when the egg slams into something (a rail, a bumper, another
   /// egg): where, how hard (0..1), and whether it is the viewer's.
   final void Function(Vec2 at, double strength, bool mine) onBounce;
+
+  /// The ground the egg stands on (its hills).
+  final _Ground terrain;
 
   /// Whether this egg has ever been the viewer's own (the frame marks it
   /// only while its shot is ready).
@@ -255,14 +259,17 @@ class _EggView3D {
     final h = _radius * _eggAspect;
     final support = math
         .sqrt(a * a * up.x * up.x + h * h * up.y * up.y + a * a * up.z * up.z);
-    group.position
-        .setValues(egg.position.x, support + egg.height, egg.position.y);
+    final floor = terrain.at(egg.position);
+    group.position.setValues(
+        egg.position.x, floor + support + egg.height, egg.position.y);
 
     lastPosition = egg.position;
     _syncTrail(egg, dt);
 
-    // The ground pieces: the shadow shrinks and fades as a hop lifts.
-    ground.position.setValues(egg.position.x, 0, egg.position.y);
+    // The ground pieces: the shadow shrinks and fades as a hop lifts; on
+    // a slope they lie along it.
+    ground.position.setValues(egg.position.x, floor, egg.position.y);
+    if (!terrain.flat) ground.quaternion.setFrom(terrain.tiltAt(egg.position));
     final lift = (egg.height / (_radius * 3)).clamp(0.0, 1.0);
     final shadowScale = 1 - lift * 0.45;
     _shadow.scale.setValues(shadowScale, shadowScale, 1);
@@ -306,7 +313,7 @@ class _EggView3D {
       final (at, age) = _trailSpots[i];
       final fade = 1 - age / life;
       puff.visible = true;
-      puff.position.setValues(at.x, _radius * 0.35, at.y);
+      puff.position.setValues(at.x, terrain.at(at) + _radius * 0.35, at.y);
       final size = _radius * (0.7 + 0.8 * fade);
       puff.scale.setValues(size, size, 1);
       puff.material?.opacity = 0.55 * fade;
@@ -443,7 +450,8 @@ tjs.DataTexture _eggTexture(int tint) {
 /// The hen: a plump white body, a cream-tipped tail, wings, a head with
 /// the red comb and wattle, a yolk beak and legs that walk her path.
 class _HenView3D {
-  _HenView3D(MovingObstacle obstacle) {
+  _HenView3D(MovingObstacle obstacle, [_Ground? terrain])
+      : _terrain = terrain ?? _Ground() {
     final r = obstacle.radius;
     group = tjs.Group()..name = 'hen/${obstacle.id}';
     const white = 0xFCF8F1;
@@ -547,18 +555,21 @@ class _HenView3D {
     // Pecking now and then while she stands.
     final peck = walking ? 0.0 : math.max(0.0, math.sin(time * 2.2)) * 0.5;
     _head.rotation.x = peck;
-    group.position.setValues(hen.position.x, 0, hen.position.y);
+    group.position
+        .setValues(hen.position.x, _terrain.at(hen.position), hen.position.y);
   }
+
+  final _Ground _terrain;
 }
 
 /// The "?" crate: a yolk carton floating over its glow, turning slowly,
 /// until its id lands in the frame's collected set.
 class _CrateView3D {
-  _CrateView3D(this.box, tjs.DataTexture texture) {
+  _CrateView3D(this.box, tjs.DataTexture texture, {double floor = 0}) {
     final size = box.radius * 1.35;
     group = tjs.Group()
       ..name = 'crate/${box.id}'
-      ..position.setValues(box.position.x, 0, box.position.y);
+      ..position.setValues(box.position.x, floor, box.position.y);
     _spin = tjs.Group()..name = 'crate-spin';
     final body = tjs.Mesh(
       tjs.BoxGeometry(size, size, size),

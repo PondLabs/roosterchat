@@ -356,6 +356,33 @@ tjs.MeshBasicMaterial _unlit(
 // ---- procedural textures ------------------------------------------------------------
 
 /// An RGBA canvas of bytes the texture stamps draw into.
+/// The green's relief as the actors stand on it: the current hole's hills
+/// (flat when it has none). Shared by the world and everything it moves.
+class _Ground {
+  HoleDef? _hole;
+
+  set hole(HoleDef? hole) => _hole = hole;
+
+  bool get flat => _hole == null || _hole!.hills.isEmpty;
+
+  /// The ground's height under [point].
+  double at(Vec2 point) => flat ? 0 : _hole!.groundHeightAt(point);
+
+  /// The ground's gradient under [point] (rise per unit, uphill).
+  Vec2 slopeAt(Vec2 point) => flat ? Vec2.zero : _hole!.groundGradientAt(point);
+
+  /// The turn that stands a flat piece (a shadow, a ring) on the ground
+  /// under [point]: world up onto the surface normal.
+  tjs.Quaternion tiltAt(Vec2 point) {
+    final tilt = tjs.Quaternion();
+    if (flat) return tilt;
+    final g = _hole!.groundGradientAt(point);
+    if (g == Vec2.zero) return tilt;
+    final normal = tjs.Vector3(-g.x, 1, -g.y)..normalize();
+    return tilt..setFromUnitVectors(tjs.Vector3(0, 1, 0), normal);
+  }
+}
+
 class _Bitmap {
   _Bitmap(this.width, this.height) : data = Uint8List(width * height * 4);
 
@@ -369,6 +396,12 @@ class _Bitmap {
     data[i + 1] = _g(hex);
     data[i + 2] = _b(hex);
     data[i + 3] = alpha;
+  }
+
+  /// The texel's colour (alpha dropped).
+  int get(int x, int y) {
+    final i = (y * width + x) * 4;
+    return (data[i] << 16) | (data[i + 1] << 8) | data[i + 2];
   }
 
   /// Blends [hex] over the texel by [t] (alpha kept).

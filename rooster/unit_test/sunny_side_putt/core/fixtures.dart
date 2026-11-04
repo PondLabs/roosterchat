@@ -30,6 +30,7 @@ HoleDef boxHole({
   List<GravityWell> wells = const [],
   List<QuestionBox> boxes = const [],
   List<MovingObstacle> obstacles = const [],
+  List<Hill> hills = const [],
 }) {
   return HoleDef(
     id: id,
@@ -51,6 +52,7 @@ HoleDef boxHole({
     portals: portals,
     wells: wells,
     boxes: boxes,
+    hills: hills,
     friction: friction,
   );
 }
