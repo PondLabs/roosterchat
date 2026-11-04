@@ -155,10 +155,13 @@ world builds those with `_gridPlane`.
   egg ready), a coach shows the gesture over the egg: a hand presses,
   pulls back away from the nest and lets go while a ghost arrow grows
   (`putt_coach.dart`).
-- The camera opens on the whole hole, then frames the egg and the nest
-  inside the part of the screen the HUD leaves free (the points are
-  projected through the camera the glide ends at) and follows the egg; C toggles the whole-hole view, a right drag orbits, the wheel
-  or a pinch zooms.
+- The camera opens with a low sweep over the nest, then frames the egg
+  and the nest inside the part of the screen the HUD leaves free (the
+  points are projected through the camera the glide ends at) and
+  follows the egg; C toggles the whole-hole view, a right drag orbits,
+  the wheel or a pinch zooms.
+- With the system's reduced motion on, the hole opens on its play
+  framing without the sweep, and the camera never shakes nor punches in.
 
 ## The layers
 
