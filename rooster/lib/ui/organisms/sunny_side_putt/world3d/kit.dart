@@ -460,6 +460,61 @@ tjs.DataTexture _woodGrainTexture() {
   return bitmap.texture(repeat: true);
 }
 
+/// Grass up close: a tiling normal map of fine blades leaning every which
+/// way, so the turf keeps a texture when the camera comes in (the lawn's
+/// colour map is only ten texels a unit). Seamless: its noise wraps.
+tjs.DataTexture _grassNormalTexture() {
+  const size = 128;
+  const period = 32; // lattice cells across the tile
+  double lattice(int x, int y, int seed) =>
+      _hash2(x % period, y % period, seed);
+  double noise(double x, double y, int seed) {
+    final x0 = x.floor();
+    final y0 = y.floor();
+    final fx = x - x0;
+    final fy = y - y0;
+    double smooth(double t) => t * t * (3 - 2 * t);
+    final a = lattice(x0, y0, seed);
+    final b = lattice(x0 + 1, y0, seed);
+    final c = lattice(x0, y0 + 1, seed);
+    final d = lattice(x0 + 1, y0 + 1, seed);
+    final sx = smooth(fx);
+    final sy = smooth(fy);
+    return (a + (b - a) * sx) + ((c + (d - c) * sx) - (a + (b - a) * sx)) * sy;
+  }
+
+  // Heights: blades (fine, stretched along a slant) over soft clumps.
+  final heights = Float64List(size * size);
+  for (var y = 0; y < size; y++) {
+    for (var x = 0; x < size; x++) {
+      final u = x / size * period;
+      final v = y / size * period;
+      // Every argument spans whole lattice periods across the tile, so
+      // the shear and the scales wrap without a seam.
+      final blades = noise(u * 2 + v, v, 3);
+      final clumps = noise(u, v, 9);
+      heights[y * size + x] = blades * 0.7 + clumps * 0.3;
+    }
+  }
+  final bitmap = _Bitmap(size, size);
+  const strength = 2.2;
+  for (var y = 0; y < size; y++) {
+    for (var x = 0; x < size; x++) {
+      double h(int dx, int dy) =>
+          heights[((y + dy) % size) * size + ((x + dx) % size)];
+      final gx = (h(1, 0) - h(size - 1, 0)) * strength;
+      final gy = (h(0, 1) - h(0, size - 1)) * strength;
+      final length = math.sqrt(gx * gx + gy * gy + 1);
+      int encode(double n) => ((n / length * 0.5 + 0.5) * 255).round();
+      final r = encode(-gx);
+      final g = encode(-gy);
+      final b = encode(1);
+      bitmap.set(x, y, (r << 16) | (g << 8) | b);
+    }
+  }
+  return bitmap.texture(repeat: true, srgb: false);
+}
+
 /// The soft round blob the particles and the eggs' contact shadows use,
 /// white so tinting does the colour.
 tjs.DataTexture _discTexture({int size = 64, double hardness = 2}) {

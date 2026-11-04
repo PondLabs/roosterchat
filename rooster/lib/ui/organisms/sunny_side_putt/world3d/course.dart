@@ -76,10 +76,15 @@ class _CourseKit {
   /// The green: one plane carrying the procedural lawn.
   tjs.Mesh lawn() {
     final bounds = hole.bounds;
+    // Up close the blades show: a tiling normal map, a tile every 1.6 units.
+    final blades = _grassNormalTexture()
+      ..repeat.setValues(bounds.width / 1.6, bounds.height / 1.6);
     return tjs.Mesh(
       tjs.PlaneGeometry(bounds.width, bounds.height, 1, 1),
       tjs.MeshStandardMaterial({
         tjs.MaterialProperty.map: _lawnTexture(),
+        tjs.MaterialProperty.normalMap: blades,
+        tjs.MaterialProperty.normalScale: tjs.Vector2(0.55, 0.55),
         tjs.MaterialProperty.roughness: 0.96,
         tjs.MaterialProperty.metalness: 0.0,
       }),
