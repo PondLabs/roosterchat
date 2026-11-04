@@ -1,21 +1,28 @@
 // The game view of Sunny Side Putt: a Flame-rendered, top-down cartoon
-// farm green with slingshot aim, an animated crowd of eggs, nest suction,
-// splashes and sparkle bursts, wrapped by the Flutter HUD and menus.
+// farm green under an orbiting 3D camera - a miniature-farm diorama - with
+// slingshot aim, an animated crowd of eggs, nest suction, splashes and
+// sparkle bursts, wrapped by the Flutter HUD and menus.
 //
 // Split of work:
 //   * [SunnySidePuttView] - the Flutter shell: the GameWidget, pointer
-//     plumbing, Esc-to-pause, the HUD, the menus and the spectator strip
-//     (their own files), and the audio service's cue tap.
-//   * [SunnySidePuttGame] - the FlameGame: the camera fitted to the hole,
-//     the fixed-tick simulation driven through `PuttMatch.update`, and the
-//     paintable layers.
+//     plumbing (the main button putts, a secondary-button drag and the
+//     wheel/pinch orbit and zoom the camera), Esc-to-pause, the HUD, the
+//     menus and the spectator strip (their own files), and the audio
+//     service's cue tap.
+//   * [SunnySidePuttGame] - the FlameGame: the orbit camera fitted to the
+//     hole, the fixed-tick simulation driven through `PuttMatch.update`,
+//     and the paintable layers.
+//   * [PuttSceneLayer] - the one Flame layer, which collects the frame's
+//     scene and hands it to the perspective renderer.
 //
-// Art is code-drawn in `putt_art.dart` from the Rooster palette - ink
-// outlines, Cream fairway planks, Spruce hedges, Yolk accents - and the
-// rooster host (comb worn as a crown) stands at the green's edge as the
-// round's emcee. Nothing here touches the network: the match is the local
-// harness over the rules engine (`putt_match.dart`); the session wires the
-// authoritative host under the same seams later.
+// Art is code-drawn: the volumes and ground in `putt_render3d.dart`
+// (projected through `putt_camera.dart`), the eggs, the hen and the
+// rooster host in `putt_art.dart` from the Rooster palette - ink outlines,
+// Cream lawn, Spruce hedges, Yolk accents - the host (comb worn as a
+// crown) standing at the green's edge as the round's emcee. Nothing here
+// touches the network: the match is the local harness over the rules
+// engine (`putt_match.dart`); the session wires the authoritative host
+// under the same seams later.
 library;
 
 import 'dart:math' as math;
@@ -23,10 +30,13 @@ import 'dart:ui' as ui;
 
 import 'package:flame/components.dart';
 import 'package:flame/game.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/hole.dart'
     as hole;
+import 'package:rooster/client/components/sunny_side_putt/core/physics.dart';
+import 'package:rooster/client/components/sunny_side_putt/core/powerups.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/rules.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/vec.dart'
     as core;
@@ -34,9 +44,11 @@ import 'package:rooster/client/components/sunny_side_putt/core/vec.dart'
 import 'aim_controller.dart';
 import 'putt_art.dart';
 import 'putt_audio.dart';
+import 'putt_camera.dart';
 import 'putt_hud.dart';
 import 'putt_match.dart';
 import 'putt_menus.dart';
+import 'putt_render3d.dart';
 import 'spectator_strip.dart';
 
 /// The whole putter experience on the call's stage: game, HUD, menus.
@@ -134,16 +146,124 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     return KeyEventResult.ignored;
   }
 
-  void _pointerDown(Offset at, Size size) => game?.beginAim(_toWorld(at, size));
+  // ---- pointer plumbing ----------------------------------------------------------------
 
-  void _pointerMove(Offset at, Size size) => game?.moveAim(_toWorld(at, size));
+  /// The pointers currently on the surface, and where they sit, so the
+  /// pinch can measure the span between two fingers.
+  final Set<int> _downPointers = {};
+  final Map<int, Offset> _pointerAt = {};
 
-  void _pointerUp(Offset at, Size size) => game?.endAim(_toWorld(at, size));
+  /// The pointer dragging the camera's orbit (secondary button), and its
+  /// last position for the drag delta.
+  int? _orbitPointer;
+  Offset? _orbitLastPosition;
 
-  core.Vec2 _toWorld(Offset at, Size size) {
+  /// The pinch in progress: the span at its start and the camera
+  /// distance it began from.
+  double? _pinchSpan;
+  double? _pinchDistance;
+
+  void _pointerDown(PointerDownEvent event, Size size) {
     final game = this.game;
-    if (game == null) return core.Vec2.zero;
-    return game.screenToWorld(Vector2(at.dx, at.dy), size);
+    if (game == null) return;
+    _downPointers.add(event.pointer);
+    _pointerAt[event.pointer] = event.localPosition;
+    // A secondary-button drag orbits; only the main button putts.
+    if (event.buttons == kSecondaryMouseButton) {
+      _orbitPointer = event.pointer;
+      _orbitLastPosition = event.localPosition;
+      return;
+    }
+    // A second finger: pinch zoom takes over, the aim lets go.
+    if (_downPointers.length >= 2) {
+      game.cancelAim();
+      _pinchSpan = _pointerSpan();
+      _pinchDistance = game.view3d.distance;
+      return;
+    }
+    final world = _toWorld(event.localPosition);
+    if (world != null) game.beginAim(world);
+  }
+
+  void _pointerMove(PointerEvent event, Size size) {
+    final game = this.game;
+    if (game == null) return;
+    _pointerAt[event.pointer] = event.localPosition;
+    // The orbit drag: turn the yaw, tilt the pitch.
+    if (_orbitPointer == event.pointer) {
+      final last = _orbitLastPosition;
+      if (last != null) {
+        game.view3d.orbitBy(
+          event.localPosition.dx - last.dx,
+          event.localPosition.dy - last.dy,
+        );
+      }
+      _orbitLastPosition = event.localPosition;
+      return;
+    }
+    // The pinch: closing fingers move the camera nearer.
+    if (_pinchSpan != null && _downPointers.length >= 2) {
+      final span = _pointerSpan();
+      if (span > 8) {
+        game.view3d
+            .pinch(span / _pinchSpan!, distanceAtGestureStart: _pinchDistance!);
+      }
+      return;
+    }
+    final world = _toWorld(event.localPosition);
+    if (world != null) game.moveAim(world);
+  }
+
+  void _pointerUp(PointerEvent event, Size size) {
+    _downPointers.remove(event.pointer);
+    _pointerAt.remove(event.pointer);
+    final orbiting = _orbitPointer == event.pointer;
+    if (orbiting) {
+      _orbitPointer = null;
+      _orbitLastPosition = null;
+    }
+    if (_downPointers.length < 2) _pinchSpan = null;
+    final game = this.game;
+    if (game == null || orbiting || _pinchSpan != null) return;
+    final world = _toWorld(event.localPosition);
+    if (world != null) game.endAim(world);
+  }
+
+  void _pointerCancel(PointerEvent event, Size size) {
+    _downPointers.remove(event.pointer);
+    _pointerAt.remove(event.pointer);
+    if (_orbitPointer == event.pointer) {
+      _orbitPointer = null;
+      _orbitLastPosition = null;
+    }
+    if (_downPointers.length < 2) _pinchSpan = null;
+    game?.cancelAim();
+  }
+
+  void _pointerSignal(PointerSignalEvent event) {
+    if (event is PointerScrollEvent) {
+      game?.view3d.zoomByWheel(event.scrollDelta.dy);
+    }
+  }
+
+  /// The distance between the first two pointers on the surface, 0 when
+  /// fewer than two report positions.
+  double _pointerSpan() {
+    final known = _downPointers
+        .map((pointer) => _pointerAt[pointer])
+        .whereType<Offset>()
+        .toList(growable: false);
+    if (known.length < 2) return 0;
+    return (known[0] - known[1]).distance;
+  }
+
+  /// Screen (widget-local) coordinates into the ground plane, through
+  /// the 3D camera; null when the pixel misses the ground (the sky over
+  /// the horizon), and the caller does nothing.
+  core.Vec2? _toWorld(Offset at) {
+    final game = this.game;
+    if (game == null) return null;
+    return game.screenToWorld(Vector2(at.dx, at.dy));
   }
 
   @override
@@ -163,12 +283,11 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
               // The green, with the pointer plumbing into world space.
               Listener(
                 behavior: HitTestBehavior.opaque,
-                onPointerDown: (event) =>
-                    _pointerDown(event.localPosition, size),
-                onPointerMove: (event) =>
-                    _pointerMove(event.localPosition, size),
-                onPointerUp: (event) => _pointerUp(event.localPosition, size),
-                onPointerCancel: (event) => game?.cancelAim(),
+                onPointerDown: (event) => _pointerDown(event, size),
+                onPointerMove: (event) => _pointerMove(event, size),
+                onPointerUp: (event) => _pointerUp(event, size),
+                onPointerCancel: (event) => _pointerCancel(event, size),
+                onPointerSignal: _pointerSignal,
                 child: GameWidget(
                   game: game ??= _createGame(),
                   focusNode: _gameFocus,
@@ -233,6 +352,11 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
 
 // ---- the Flame game -----------------------------------------------------------------
 
+/// The game itself: the match ticking through its fixed steps, the orbit
+/// camera fitted to the hole and eased one frame at a time, and the one
+/// scene layer painting the diorama (`putt_render3d.dart`). The aim, the
+/// sounds and the HUD keep their own seams (`AimController`, `onSfx`,
+/// `PuttHud`).
 class SunnySidePuttGame extends FlameGame {
   final PuttMatch match;
 
@@ -241,25 +365,35 @@ class SunnySidePuttGame extends FlameGame {
 
   final AimController aim = AimController();
 
+  /// The board's own 3D camera (not Flame's flat one): orbit, tilt and
+  /// zoom over the green.
+  final PuttCamera view3d = PuttCamera();
+
   /// Seconds since the game booted, for art that breathes.
   double clock = 0;
 
-  late final PuttBoardLayer board;
-  late final PuttFxLayer fx;
-  late final PuttActorsLayer actors;
+  /// The one Flame layer painting the frame.
+  late final PuttSceneLayer scene;
+
+  /// The aim's clock, for the arrow's sway.
   late final PuttAimLayer aimLayer;
+
+  late final PuttFxLayer fx;
+
+  /// The hop rides, per player: the cosmetic arc of a Chicken Hop, keyed
+  /// off the engine's own flag and sized by the egg's launch speed.
+  final Map<String, _HopRide> _hopRides = {};
+
+  String? _fittedHole;
 
   SunnySidePuttGame({required this.match, required this.onSfx});
 
   @override
   Future<void> onLoad() async {
-    board = PuttBoardLayer(this);
-    fx = PuttFxLayer(this);
-    actors = PuttActorsLayer(this);
+    scene = PuttSceneLayer(this);
     aimLayer = PuttAimLayer(this);
-    for (final layer in [board, fx, actors, aimLayer]) {
-      await world.add(layer);
-    }
+    fx = PuttFxLayer();
+    await world.add(scene);
     _fitCamera();
   }
 
@@ -269,21 +403,14 @@ class SunnySidePuttGame extends FlameGame {
     _fitCamera();
   }
 
-  String? _fittedHole;
-
+  /// Frames the current hole: viewport pixels first, then the bounds.
+  /// A hole change refits; the same hole re-fits only on resize.
   void _fitCamera() {
     final hole = match.hole;
     if (hole == null || size.x == 0 || size.y == 0) return;
-    const margin = 2.5;
-    final bounds = hole.bounds;
-    final width = bounds.width + margin * 2;
-    final height = bounds.height + margin * 2 + 2.2; // room for the host
-    final zoom =
-        math.min(size.x / width, size.y / height).clamp(0.05, 40.0).toDouble();
-    camera.viewfinder.zoom = zoom;
-    camera.viewfinder.anchor = Anchor.center;
-    camera.viewfinder.position = Vector2(
-        (bounds.min.x + bounds.max.x) / 2, (bounds.min.y + bounds.max.y) / 2);
+    view3d
+      ..setViewport(ui.Size(size.x, size.y))
+      ..fitToHole(hole.bounds);
     _fittedHole = hole.id;
   }
 
@@ -293,14 +420,71 @@ class SunnySidePuttGame extends FlameGame {
     super.update(dt);
     match.update(dt);
     aim.noWobble = match.myNextShotSteady;
+    aimLayer.update(dt);
+    fx.update(dt);
+    _updateHopRides();
     final holeId = match.hole?.id;
     if (holeId != null && holeId != _fittedHole) {
       _fitCamera();
       aim.cancel();
     }
     if (match.phase != PuttPhase.holePlay) aim.cancel();
+    view3d.update(dt, followPoint: _cameraFollowPoint());
     _spendNotices();
     _spendFxSpots();
+  }
+
+  /// The point the camera's target glides toward: my egg while the hole
+  /// plays (a spectator drifts to whoever is out there); held while
+  /// aiming, so a moving frame never slides out from under a drag.
+  core.Vec2? _cameraFollowPoint() {
+    if (aim.isActive || match.phase != PuttPhase.holePlay) return null;
+    final egg = match.myEggRenderPosition;
+    if (egg != null) return egg;
+    for (final player in match.engine.players) {
+      if (player.spectator) continue;
+      if (match.currentPositions.containsKey(player.id)) {
+        return match.renderPositionOf(player.id);
+      }
+    }
+    return null;
+  }
+
+  /// The cosmetic lift of a hopping egg: 0 when the ride is over, a
+  /// parabola over the roll's progress (read off the speed decay) while
+  /// the hop flag is up. The engine stays planar; only the drawing lifts.
+  double eggHeightOf(BallBody ball) {
+    final ride = _hopRides[ball.playerId];
+    if (ride == null) return 0;
+    final t = (1 - ball.speed / ride.launchSpeed).clamp(0.0, 1.0);
+    final maxLift = match.config.physics.ballRadius * 2.6;
+    return 4 * maxLift * t * (1 - t);
+  }
+
+  /// Keeps [_hopRides] honest: a ride starts at the first moving frame
+  /// with the hop flag, dies when the egg settles (the flag's own rule).
+  void _updateHopRides() {
+    final world = match.engine.world;
+    if (world == null) {
+      _hopRides.clear();
+      return;
+    }
+    _hopRides.removeWhere((playerId, _) {
+      final ball = world.ball(playerId);
+      return ball == null ||
+          ball.asleep ||
+          ball.holed ||
+          !ball.flagActive(PowerUpFlag.hop, world.tick);
+    });
+    for (final ball in world.balls) {
+      if (ball.asleep || ball.holed) continue;
+      if (!ball.flagActive(PowerUpFlag.hop, world.tick)) continue;
+      if (ball.speed < 1.0) continue;
+      _hopRides.putIfAbsent(
+        ball.playerId,
+        () => _HopRide(launchSpeed: math.max(ball.speed, 1.0)),
+      );
+    }
   }
 
   /// Plays this batch's sounds once and drops them (the match refills the
@@ -339,15 +523,11 @@ class SunnySidePuttGame extends FlameGame {
 
   // ---- pointer plumbing ---------------------------------------------------------------
 
-  /// Screen (widget-local) coordinates into the world, computed by hand:
-  /// the viewport is the whole widget and the finder sits at its middle.
-  core.Vec2 screenToWorld(Vector2 screen, ui.Size widgetSize) {
-    final zoom = camera.viewfinder.zoom;
-    final center = camera.viewfinder.position;
-    return core.Vec2(
-      (screen.x - widgetSize.width / 2) / zoom + center.x,
-      (screen.y - widgetSize.height / 2) / zoom + center.y,
-    );
+  /// Screen (widget-local) coordinates into the ground plane, through
+  /// the camera. Null when the pixel misses the green entirely (the sky
+  /// above the horizon), and the caller does nothing.
+  core.Vec2? screenToWorld(Vector2 screen) {
+    return view3d.screenToWorld(ui.Offset(screen.x, screen.y));
   }
 
   /// Aims only when my egg is on the green and settled, and only from near
@@ -394,204 +574,94 @@ class SunnySidePuttGame extends FlameGame {
   ui.Color backgroundColor() => PuttPalette.apron;
 }
 
+/// One egg's hop: how fast it left, so the drawn arc knows its length.
+class _HopRide {
+  final double launchSpeed;
+
+  const _HopRide({required this.launchSpeed});
+}
+
 // ---- layers ---------------------------------------------------------------------------
 
-/// Everything the green is made of: apron, plank fairway, tee, water,
-/// boosts, portals, silos, decorations, hedges, the "?" cartons, the nest,
-/// and the rooster host standing off-green.
-class PuttBoardLayer extends Component {
+/// The one Flame layer on the board: collects the frame's scene from the
+/// match and hands it to the perspective renderer (`putt_render3d.dart`),
+/// which sorts and paints it.
+class PuttSceneLayer extends Component {
   final SunnySidePuttGame game;
 
-  PuttBoardLayer(this.game);
+  PuttSceneLayer(this.game);
 
   @override
   void render(ui.Canvas canvas) {
     final hole = game.match.hole;
-    if (hole == null) return;
-    final bounds = hole.bounds;
-    drawApron(
-        canvas,
-        ui.Rect.fromLTRB(bounds.min.x - 3, bounds.min.y - 3, bounds.max.x + 3,
-            bounds.max.y + 3));
-    drawFairway(
-        canvas,
-        ui.Rect.fromLTRB(
-            bounds.min.x, bounds.min.y, bounds.max.x, bounds.max.y));
-    drawTeeMarker(
-        canvas, ui.Offset(hole.tee.x, hole.tee.y), game.eggRadius * 1.6);
-    for (final shape in hole.water) {
-      _drawWaterShape(canvas, shape);
-    }
-    for (final strip in hole.boosts) {
-      drawBoostStrip(canvas, ui.Offset(strip.from.x, strip.from.y),
-          ui.Offset(strip.to.x, strip.to.y), strip.width);
-    }
-    for (final pair in hole.portals) {
-      drawPortal(canvas, ui.Offset(pair.a.x, pair.a.y), pair.radius,
-          time: game.clock);
-      drawPortal(canvas, ui.Offset(pair.b.x, pair.b.y), pair.radius,
-          time: game.clock + 1.6);
-    }
-    for (final well in hole.wells) {
-      _drawSilo(canvas, well);
-    }
-    for (final decoration in hole.decorations) {
-      _drawDecoration(canvas, decoration);
-    }
-    for (final box in hole.boxes) {
-      drawQuestionBox(canvas, ui.Offset(box.position.x, box.position.y),
-          box.radius, game.clock);
-    }
-    for (final arc in hole.arcs) {
-      drawWallArc(canvas, ui.Offset(arc.center.x, arc.center.y), arc.radius,
-          arc.startAngle, arc.sweep, _hedgeWidth,
-          bumper: arc.bumper);
-    }
-    for (final wall in hole.walls) {
-      drawWallSegment(
-        canvas,
-        ui.Offset(wall.a.x, wall.a.y),
-        ui.Offset(wall.b.x, wall.b.y),
-        _hedgeWidth,
-        bumper: wall.bumper,
-      );
-    }
-    drawNest(canvas, ui.Offset(hole.nest.position.x, hole.nest.position.y),
-        hole.nest.radius,
-        time: game.clock);
-    _drawHost(canvas, bounds);
-  }
-
-  /// The hedge crown width in world units.
-  static const double _hedgeWidth = 1.0;
-
-  void _drawWaterShape(ui.Canvas canvas, hole.WaterShape shape) {
-    switch (shape) {
-      case hole.WaterCircle():
-        drawWaterCircle(canvas, ui.Offset(shape.center.x, shape.center.y),
-            shape.radius, game.clock);
-      case hole.WaterRect():
-        final rect = shape.rect;
-        final area =
-            ui.Rect.fromLTRB(rect.min.x, rect.min.y, rect.max.x, rect.max.y);
-        _drawWaterArea(canvas, area);
-      case hole.WaterPolygon():
-        final path = ui.Path();
-        var first = true;
-        for (final point in shape.points) {
-          if (first) {
-            path.moveTo(point.x, point.y);
-            first = false;
-          } else {
-            path.lineTo(point.x, point.y);
-          }
+    final world = game.match.engine.world;
+    final eggs = <PuttEggView>[];
+    final hens = <PuttHenView>[];
+    PuttAimView? aimView;
+    var fxViews = const <PuttFxView>[];
+    if (hole != null) {
+      if (world != null) {
+        for (final ball in world.balls) {
+          if (ball.holed) continue; // in the nest; the suction told the story
+          eggs.add(PuttEggView(
+            position: game.match.renderPositionOf(ball.playerId),
+            height: game.eggHeightOf(ball),
+            velocity: ball.velocity,
+            tint: game.tintFor(ball.playerId),
+            radius: game.eggRadius,
+          ));
         }
-        path.close();
-        _drawWaterPath(canvas, path);
+        for (final obstacle in hole.obstacles) {
+          final tickSeconds = game.match.config.physics.dt;
+          final now = henPositionAt(obstacle, world.tick, tickSeconds);
+          final then = henPositionAt(obstacle, world.tick + 1, tickSeconds);
+          final at = ui.Offset.lerp(
+            ui.Offset(now.x, now.y),
+            ui.Offset(then.x, then.y),
+            game.match.alpha,
+          );
+          hens.add(PuttHenView(
+            position: core.Vec2(at?.dx ?? now.x, at?.dy ?? now.y),
+            radius: obstacle.radius,
+            phase: (world.tick + game.match.alpha) * 0.6,
+          ));
+        }
+      }
+      final aim = game.aim;
+      final state = aim.state;
+      if (aim.isActive && state != null) {
+        aimView = PuttAimView(
+          origin: aim.origin!,
+          angle: state.angle + aim.visualWobble(game.aimLayer.holdSeconds),
+          power: state.power,
+          dragLength: state.dragLength,
+          eggRadius: game.eggRadius,
+        );
+      }
+      fxViews = [
+        for (final particle in game.fx.particles) particle.view(),
+      ];
     }
-  }
-
-  void _drawWaterArea(ui.Canvas canvas, ui.Rect area) {
-    canvas.drawRect(area, solidPaint(PuttPalette.water));
-    canvas.drawRect(area, strokePaint(PuttPalette.waterDeep, 0.2));
-  }
-
-  void _drawWaterPath(ui.Canvas canvas, ui.Path path) {
-    canvas.drawPath(path, solidPaint(PuttPalette.water));
-    canvas.drawPath(path, strokePaint(PuttPalette.waterDeep, 0.2));
-  }
-
-  /// The silo: a shadowed pull, a stone ring, a spruce mouth, drifting
-  /// dust.
-  void _drawSilo(ui.Canvas canvas, hole.GravityWell well) {
-    final center = ui.Offset(well.position.x, well.position.y);
-    canvas.drawCircle(
-        center, well.radius, solidPaint(const ui.Color(0x14150E08)));
-    final ring = ui.Rect.fromCircle(center: center, radius: well.radius * 0.6);
-    canvas.drawOval(ring, solidPaint(PuttPalette.stone));
-    canvas.drawOval(ring, strokePaint(PuttPalette.ink, 0.2));
-    final mouth =
-        ui.Rect.fromCircle(center: center, radius: well.radius * 0.34);
-    canvas.drawOval(mouth, solidPaint(const ui.Color(0xFF1D1512)));
-    canvas.drawOval(mouth, strokePaint(PuttPalette.ink, 0.14));
-    final dust = strokePaint(const ui.Color(0x590F0808), 0.1);
-    for (var i = 0; i < 3; i++) {
-      final start = game.clock * 2 + i * 2 * math.pi / 3;
-      canvas.drawArc(ring, start, math.pi * 0.5, false, dust);
-    }
-  }
-
-  void _drawDecoration(ui.Canvas canvas, hole.Decoration decoration) {
-    final at = ui.Offset(decoration.at.x, decoration.at.y);
-    switch (decoration.kind) {
-      case 'hay':
-        drawHay(canvas, at, decoration.numbers['size'] ?? 1.2);
-      case 'fence':
-        drawFence(canvas, at, (decoration.numbers['posts'] ?? 5).round(),
-            decoration.numbers['length'] ?? 1.4);
-      case 'tee_marker':
-        drawTeeMarker(canvas, at, 0.8);
-      default:
-        // Unknown tags rest as a pebble, so nothing smuggles in unseen.
-        canvas.drawCircle(at, 0.25, solidPaint(PuttPalette.stone));
-    }
-  }
-
-  /// The rooster host, planted just off the green's far corner, bobbing.
-  void _drawHost(ui.Canvas canvas, core.Rect bounds) {
-    final base = ui.Offset(bounds.max.x + 0.8, bounds.min.y - 0.6);
-    drawRoosterHead(canvas, base, 1.5,
-        facing: -0.3, bob: math.sin(game.clock * 2) * 0.12);
+    renderPuttScene(
+      canvas,
+      game.view3d,
+      PuttSceneInput(
+        time: game.clock,
+        hole: hole,
+        eggRadius: game.eggRadius,
+        eggs: eggs,
+        hens: hens,
+        aim: aimView,
+        fxs: fxViews,
+      ),
+    );
   }
 }
 
-/// The moving things: the hen (or any obstacle) and the eggs.
-class PuttActorsLayer extends Component {
-  final SunnySidePuttGame game;
-
-  PuttActorsLayer(this.game);
-
-  @override
-  void render(ui.Canvas canvas) {
-    final w = game.match.engine.world;
-    final hole = game.match.hole;
-    if (w == null || hole == null) return;
-    for (final obstacle in hole.obstacles) {
-      final dt = game.match.config.physics.dt;
-      final now = henPositionAt(obstacle, w.tick, dt);
-      final then = henPositionAt(obstacle, w.tick + 1, dt);
-      final at = ui.Offset.lerp(
-        ui.Offset(now.x, now.y),
-        ui.Offset(then.x, then.y),
-        game.match.alpha,
-      );
-      drawHen(canvas, at ?? ui.Offset(now.x, now.y), obstacle.radius,
-          phase: (w.tick + game.match.alpha) * 0.6);
-    }
-    for (final ball in w.balls) {
-      if (ball.holed) continue; // in the nest; the suction told the story
-      final position = game.match.renderPositionOf(ball.playerId);
-      final speed = ball.velocity.length;
-      final squash = (speed / 28).clamp(0.0, 0.25).toDouble();
-      final look = speed > 0.5
-          ? ui.Offset(ball.velocity.x / speed, ball.velocity.y / speed)
-          : ui.Offset.zero;
-      drawEgg(
-        canvas,
-        ui.Offset(position.x, position.y),
-        game.eggRadius,
-        tint: game.tintFor(ball.playerId),
-        squash: squash,
-        look: look,
-      );
-    }
-  }
-}
-
-/// The aim arrow: from the egg, out the way the shot will fly, long by
-/// power, swaying by the wobble the engine may apply (gone under Hawk
-/// Eye), with a power ring around the egg that fills with the pull.
-class PuttAimLayer extends Component {
+/// The aim's clock: how long the current drag has held, which drives the
+/// arrow's sway (the aim's own math lives in `aim_controller.dart`, the
+/// ground-plane drawing in `putt_render3d.dart`).
+class PuttAimLayer {
   final SunnySidePuttGame game;
 
   /// Seconds the aim has been held, for the sway's clock.
@@ -599,68 +669,20 @@ class PuttAimLayer extends Component {
 
   PuttAimLayer(this.game);
 
-  @override
   void update(double dt) {
     holdSeconds = game.aim.isActive ? holdSeconds + dt : 0;
-  }
-
-  @override
-  void render(ui.Canvas canvas) {
-    final aim = game.aim;
-    final state = aim.state;
-    if (!aim.isActive || state == null) return;
-    final origin = aim.origin!;
-    final center = ui.Offset(origin.x, origin.y);
-    final angle = state.angle + aim.visualWobble(holdSeconds);
-    final direction = ui.Offset(math.cos(angle), math.sin(angle));
-    final length = 1.5 + state.power * 4.5;
-    final tip = center + direction * length;
-
-    // The pull's ghost: a soft tail back behind the egg toward the
-    // pointer's side.
-    final ghost = strokePaint(const ui.Color(0x598FB4DA), 0.14);
-    final pull = center - direction * math.min(state.dragLength, length);
-    canvas.drawLine(center, pull, ghost);
-
-    // The shaft: ink underlay, comb red on top - it must read on planks
-    // and on the apron both.
-    final shaft = strokePaint(PuttPalette.ink, 0.62)
-      ..strokeCap = ui.StrokeCap.round;
-    canvas.drawLine(center, tip, shaft);
-    final shaftRed = strokePaint(PuttPalette.comb, 0.4)
-      ..strokeCap = ui.StrokeCap.round;
-    canvas.drawLine(center, tip, shaftRed);
-
-    // The head.
-    final head = ui.Path()
-      ..moveTo(tip.dx + direction.dx * 0.7, tip.dy + direction.dy * 0.7)
-      ..lineTo(tip.dx - direction.dy * 0.42, tip.dy + direction.dx * 0.42)
-      ..lineTo(tip.dx + direction.dy * 0.42, tip.dy - direction.dx * 0.42)
-      ..close();
-    canvas.drawPath(head, solidPaint(PuttPalette.ink));
-
-    // The power ring: a yolk arc filling clockwise from the top; a full
-    // ring is a full stroke. The estimate beats a number nobody reads
-    // mid-flick.
-    final ringRadius = game.eggRadius * 1.9;
-    final ringBox = ui.Rect.fromCircle(center: center, radius: ringRadius);
-    if (state.power < 0.98) {
-      canvas.drawArc(ringBox, -math.pi / 2, 2 * math.pi, false,
-          strokePaint(const ui.Color(0x40211514), 0.22));
-    }
-    canvas.drawArc(ringBox, -math.pi / 2, 2 * math.pi * state.power, false,
-        strokePaint(PuttPalette.yolk, 0.24));
   }
 }
 
 /// The bursts: splash droplets, suction rings, poofs, pickup sparkles.
-/// Each lives about half a second, on plain velocity math, no shaders.
-class PuttFxLayer extends Component {
-  final SunnySidePuttGame game;
-
-  PuttFxLayer(this.game);
-
+/// Each lives about half a second, on plain velocity math, no shaders. A
+/// plain pool now: the game ticks it every frame, the scene layer paints
+/// from it through the renderer.
+class PuttFxLayer {
   final List<_FxParticle> _particles = [];
+
+  /// The live particles, for the scene layer's paintables.
+  List<_FxParticle> get particles => _particles;
 
   void splash(core.Vec2 at) {
     for (var i = 0; i < 14; i++) {
@@ -721,46 +743,12 @@ class PuttFxLayer extends Component {
 
   bool get isEmpty => _particles.isEmpty;
 
-  @override
   void update(double dt) {
     for (final particle in _particles) {
       particle.age += dt;
       particle.advance(dt);
     }
     _particles.removeWhere((particle) => particle.age >= particle.life);
-  }
-
-  @override
-  void render(ui.Canvas canvas) {
-    for (final particle in _particles) {
-      final progress = (particle.age / particle.life).clamp(0.0, 1.0);
-      final at = ui.Offset(particle.position.x, particle.position.y);
-      switch (particle.kind) {
-        case _FxKind.droplet:
-          drawDroplet(canvas, at, particle.size, progress);
-        case _FxKind.sparkle:
-          drawSparkle(canvas, at, particle.size, progress,
-              particle.color ?? PuttPalette.yolk);
-        case _FxKind.suction:
-          final target =
-              ui.Offset(particle.toward!.x + 0.2, particle.toward!.y + 0.2);
-          final drawn = ui.Offset.lerp(at, target, progress * progress) ?? at;
-          _drawRing(canvas, drawn, particle.size * (1 - progress),
-              particle.color ?? PuttPalette.yolk, 1 - progress);
-        case _FxKind.poof:
-          _drawRing(canvas, at, particle.size * (1 + progress),
-              particle.color ?? PuttPalette.stone, 1 - progress);
-      }
-    }
-  }
-
-  void _drawRing(ui.Canvas canvas, ui.Offset at, double radius, ui.Color color,
-      double alpha) {
-    canvas.drawCircle(
-        at,
-        radius,
-        solidPaint(
-            color.withValues(alpha: (alpha * 0.7).clamp(0.0, 1.0).toDouble())));
   }
 }
 
@@ -796,6 +784,24 @@ class _FxParticle {
   void advance(double dt) {
     position = position + velocity * dt;
     velocity = velocity + velocity * (-2.2 * dt);
+  }
+
+  /// The renderer's view of this particle this frame.
+  PuttFxView view() {
+    final kind = switch (this.kind) {
+      _FxKind.droplet => PuttFxKind.droplet,
+      _FxKind.sparkle => PuttFxKind.sparkle,
+      _FxKind.suction => PuttFxKind.suction,
+      _FxKind.poof => PuttFxKind.poof,
+    };
+    return PuttFxView(
+      kind: kind,
+      at: position,
+      toward: toward,
+      progress: (age / life).clamp(0.0, 1.0),
+      size: size,
+      color: color,
+    );
   }
 }
 
