@@ -63,15 +63,12 @@ class MatrixLivekitBackend {
     }
     final base = client.homeserver;
     if (base == null) {
-      throw CallJoinException(
-          "Could not discover the homeserver's well-known",
+      throw CallJoinException("Could not discover the homeserver's well-known",
           errorCallNoLivekitService);
     }
     final uri =
         base.replace(path: "/.well-known/matrix/client").normalizePath();
-    final response = await http
-        .get(uri)
-        .timeout(const Duration(seconds: 10));
+    final response = await http.get(uri).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       throw CallJoinException(
           "The homeserver's well-known answered HTTP ${response.statusCode}",
