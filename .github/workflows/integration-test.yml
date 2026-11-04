@@ -13,6 +13,11 @@ concurrency:
 
 env:
   HOMESERVER: localhost
+  # Local LiveKit for voice e2e (issue #225), started by the Start LiveKit
+  # step below and announced to the app through the homeserver's well-known
+  # rtc_foci by scripts/integration-prepare-homeserver.sh. Tests that need it
+  # skip gracefully when it is unreachable, so runs without Docker still work.
+  LIVEKIT_URL: livekit://localhost:7880
   USER1_NAME: alice
   USER1_PW: AliceInWonderLand
   USER2_NAME: bob
@@ -52,6 +57,13 @@ jobs:
         run: |
           cd $PROJECT_PATH
           scripts/integration-server-synapse.sh
+
+      # Local LiveKit for voice e2e (issue #225); must be up before the
+      # homeserver is configured so its focus lands in the well-known.
+      - name: Start LiveKit
+        run: |
+          cd $PROJECT_PATH
+          scripts/integration-server-livekit.sh
 
       - name: Configure Synapse  ╰[ ⁰﹏⁰ ]╯
         run: |
