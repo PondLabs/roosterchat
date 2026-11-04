@@ -32,14 +32,7 @@ class _EggView3D {
     group = tjs.Group()..name = 'egg';
     _tintHex = _hexOf(tint);
     _texture = _eggTextureFor(_tintHex);
-    final material = tjs.MeshStandardMaterial({
-      tjs.MaterialProperty.map: _texture,
-      tjs.MaterialProperty.roughness: 0.36,
-      tjs.MaterialProperty.metalness: 0.0,
-    });
-    // A whisper of light so eggs never sit muddy in the shade.
-    material.emissive = _lin(0x2A2622);
-    body = tjs.Mesh(_eggGeometry(_radius), material)
+    body = tjs.Mesh(_eggGeometry(_radius), _shellMaterial(_texture))
       ..name = 'egg-shell'
       ..castShadow = true;
     group.add(body);
@@ -138,13 +131,27 @@ class _EggView3D {
     final hex = _hexOf(tint);
     if (hex == _tintHex) return;
     _tintHex = hex;
-    // The shared texture for that colour: no texture is made or freed in
-    // the middle of play (the renderer's texture cache has misbound a
-    // freshly churned texture before).
+    // The shared texture for that colour, on a fresh material: no texture
+    // is made or freed mid-play, and no compiled material has its map
+    // swapped under it (the renderer once drew such an egg not at all).
     _texture = _eggTextureFor(hex);
-    body.material?.map = _texture;
-    body.material?.needsUpdate = true;
+    final old = body.material;
+    body.material = _shellMaterial(_texture);
+    old?.map = null;
+    old?.dispose();
     _marker.material?.color = _lin(hex);
+  }
+
+  /// The shell: the colour's paint, a soft sheen, and a whisper of light
+  /// so eggs never sit muddy in the shade.
+  static tjs.MeshStandardMaterial _shellMaterial(tjs.DataTexture paint) {
+    final material = tjs.MeshStandardMaterial({
+      tjs.MaterialProperty.map: paint,
+      tjs.MaterialProperty.roughness: 0.36,
+      tjs.MaterialProperty.metalness: 0.0,
+    });
+    material.emissive = _lin(0x2A2622);
+    return material;
   }
 
   /// The stand (ground spot plus the hop's lift), then the roll: world

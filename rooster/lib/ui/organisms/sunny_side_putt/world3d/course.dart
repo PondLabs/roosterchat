@@ -427,12 +427,9 @@ class _CourseKit {
       ..position.y = _railHeight / 2
       ..castShadow = true
       ..receiveShadow = true;
-    final cap = tjs.Mesh(
-      _woodBox(long + 0.08, 0.1, thickness + 0.12),
-      _capMaterial,
-    )
+    final cap = tjs.Mesh(_railCap(long + 0.08, thickness), _capMaterial)
       ..name = 'wall-cap'
-      ..position.y = _railHeight + 0.05
+      ..position.y = _railHeight
       ..castShadow = true
       ..receiveShadow = true;
     group
@@ -547,12 +544,35 @@ class _CourseKit {
         ..castShadow = true
         ..receiveShadow = true)
       ..add(tjs.Mesh(
-          _woodBox(length + _innerThickness, 0.1, _innerThickness + 0.12),
-          _capMaterial)
+          _railCap(length + _innerThickness, _innerThickness), _capMaterial)
         ..name = 'wall-cap'
-        ..position.y = _railHeight + 0.05
+        ..position.y = _railHeight
         ..castShadow = true);
     return group;
+  }
+
+  /// The rail's top: a rounded nosing a touch wider than the rail (flat
+  /// trim on the barn's boards), its grain running along the rail.
+  tjs.BufferGeometry _railCap(double length, double thickness) {
+    if (theme.rails == _RailStyle.barnBoard) {
+      return _woodBox(length, 0.12, thickness + 0.12)..translate(0, 0.06, 0);
+    }
+    final radius = thickness / 2 + 0.06;
+    // A half-round along x: a cylinder laid on its side, squashed, its
+    // lower half hidden in the rail.
+    final geometry = tjg.CylinderGeometry(radius, radius, length, 14, 1)
+      ..rotateZ(math.pi / 2)
+      ..scale(1, 0.62, 1);
+    final position = geometry.attributes['position'] as tjs.BufferAttribute;
+    final uv = geometry.attributes['uv'] as tjs.BufferAttribute;
+    for (var i = 0; i < uv.count; i++) {
+      final x = position.getX(i)!.toDouble();
+      final y = position.getY(i)!.toDouble();
+      final z = position.getZ(i)!.toDouble();
+      uv.setXY(i, x / 2.4, (math.atan2(y, z) / math.pi) * 0.8);
+    }
+    uv.needsUpdate = true;
+    return geometry;
   }
 
   // ---- bumpers ----------------------------------------------------------------------------

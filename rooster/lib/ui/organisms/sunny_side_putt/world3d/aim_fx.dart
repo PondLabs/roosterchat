@@ -236,10 +236,14 @@ class _PuttAimView3D {
 /// The bursts as pooled sprites over a soft disc, tinted and faded per
 /// frame, plus a few rings for the nest's shockwave.
 class _PuttFxPool {
-  static const int poolSize = 120;
+  /// Soft sprites (over the disc) and paper ones (confetti, hard-edged):
+  /// two pools, so no sprite ever has its texture swapped while in play.
+  static const int poolSize = 96;
+  static const int paperSize = 72;
   static const int ringCount = 4;
 
   final List<tjs.Sprite> _sprites = [];
+  final List<tjs.Sprite> _paper = [];
   final List<tjs.Mesh> _rings = [];
   tjs.DataTexture? _disc;
 
@@ -248,13 +252,29 @@ class _PuttFxPool {
   tjs.DataTexture get texture => _disc ??= _discTexture(size: 32, hardness: 2);
 
   void reset(tjs.Group parent) {
-    for (final sprite in [..._sprites]) {
+    for (final sprite in [..._sprites, ..._paper]) {
       parent.remove(sprite);
       sprite.material?.map = null;
       sprite.material?.dispose();
       sprite.dispose();
     }
     _sprites.clear();
+    _paper.clear();
+    for (var i = 0; i < paperSize; i++) {
+      final sprite = tjs.Sprite(
+        tjs.SpriteMaterial({
+          tjs.MaterialProperty.color: 0xFFFFFF,
+          tjs.MaterialProperty.transparent: true,
+          tjs.MaterialProperty.opacity: 0.0,
+          tjs.MaterialProperty.depthWrite: false,
+        }),
+      )
+        ..name = 'fx-paper'
+        ..visible = false
+        ..renderOrder = 8;
+      parent.add(sprite);
+      _paper.add(sprite);
+    }
     for (final ring in [..._rings]) {
       parent.remove(ring);
       ring.dispose();
@@ -294,6 +314,7 @@ class _PuttFxPool {
   /// Places this frame's fx onto the pooled sprites; the rest hide.
   void apply(PuttWorldFrame frame) {
     var active = 0;
+    var paper = 0;
     var rings = 0;
     for (final fx in frame.fxs) {
       final progress = fx.progress.clamp(0.0, 1.0);
@@ -309,8 +330,14 @@ class _PuttFxPool {
         ring.material?.opacity = (1 - progress) * 0.85;
         continue;
       }
-      if (active >= _sprites.length) continue;
-      final sprite = _sprites[active++];
+      final tjs.Sprite sprite;
+      if (fx.kind == PuttWorldFxKind.confetti) {
+        if (paper >= _paper.length) continue;
+        sprite = _paper[paper++];
+      } else {
+        if (active >= _sprites.length) continue;
+        sprite = _sprites[active++];
+      }
       sprite.visible = true;
 
       Vec2 at = fx.at;
@@ -363,16 +390,15 @@ class _PuttFxPool {
         material.color = _linOf(color);
         material.opacity = opacity.clamp(0.0, 1.0);
         material.rotation = rotation;
-        // Confetti is paper (hard edges): no soft disc for it.
-        final wantsDisc = fx.kind != PuttWorldFxKind.confetti;
-        if ((material.map != null) != wantsDisc) {
-          material.map = wantsDisc ? texture : null;
-          material.needsUpdate = true;
-        }
       }
     }
     for (var i = active; i < _sprites.length; i++) {
       _sprites[i]
+        ..visible = false
+        ..scale.setValues(0.001, 0.001, 1);
+    }
+    for (var i = paper; i < _paper.length; i++) {
+      _paper[i]
         ..visible = false
         ..scale.setValues(0.001, 0.001, 1);
     }
