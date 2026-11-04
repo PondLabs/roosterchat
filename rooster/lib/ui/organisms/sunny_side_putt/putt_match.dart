@@ -89,17 +89,28 @@ class PuttMatch extends ChangeNotifier {
   /// A display name per player id; unknown ids render as themselves.
   final Map<String, String> displayNames;
 
+  /// Set when this match plays on a session's wire and this client is not
+  /// its host: every move of ours is told to the handler (the session
+  /// takes it to the host), and the flow moves - advancing, votes,
+  /// leaving - go ONLY to the handler, the host's word coming back as the
+  /// next state or relayed move.
+  final ValueChanged<EngineInput>? remoteMove;
+
   PuttMatch({
     required this.config,
+    PuttEngine? engine,
+    this.remoteMove,
     this.localPlayerId = 'me',
     this.displayNames = const {},
     List<String> seatedPlayerIds = const [],
-  }) : engine = PuttEngine(config) {
-    for (final id in seatedPlayerIds) {
-      engine.join(id);
+  }) : engine = engine ?? PuttEngine(config) {
+    if (engine == null) {
+      for (final id in seatedPlayerIds) {
+        this.engine.join(id);
+      }
+      this.engine.join(localPlayerId);
+      drainEvents();
     }
-    engine.join(localPlayerId);
-    drainEvents();
   }
 
   /// A match to boot and play right now: one stub course, this client as
@@ -341,6 +352,7 @@ class PuttMatch extends ChangeNotifier {
   /// STRIKE. The engine applies its own wobble to the REAL angle; the view
   /// only showed the arrow swaying as a warning.
   bool submitShot(double angle, double power) {
+    remoteMove?.call(ShotInput(playerId: localPlayerId, angle: angle, power: power));
     final accepted = engine.submitShot(localPlayerId, angle, power);
     if (accepted) _afterInput();
     return accepted;
@@ -351,6 +363,7 @@ class PuttMatch extends ChangeNotifier {
   /// engine consumes even effects it does not know, so the inventory stays
   /// honest either way.
   bool usePowerUp(String effectId, [PowerUpTarget? target]) {
+    remoteMove?.call(PowerUpInput(playerId: localPlayerId, effectId: effectId, target: target));
     final accepted = engine.usePowerUp(localPlayerId, effectId, target);
     if (accepted) _afterInput();
     return accepted;
@@ -358,6 +371,10 @@ class PuttMatch extends ChangeNotifier {
 
   /// The scoreboard's Continue: next hole (or however the phase moves on).
   bool advance() {
+    if (remoteMove != null) {
+      remoteMove!(const AdvanceInput());
+      return true;
+    }
     if (!engine.advance()) return false;
     _afterInput();
     return true;
@@ -365,6 +382,10 @@ class PuttMatch extends ChangeNotifier {
 
   /// Casual/barnyard vote settled: this course next.
   bool startCourse(String courseId) {
+    if (remoteMove != null) {
+      remoteMove!(StartCourseInput(courseId: courseId));
+      return true;
+    }
     if (!engine.startCourse(courseId)) return false;
     _afterInput();
     return true;
@@ -372,6 +393,11 @@ class PuttMatch extends ChangeNotifier {
 
   /// Leaving mid-match cleans my egg off the green.
   bool leave() {
+    if (remoteMove != null) {
+      remoteMove!(LeaveInput(playerId: localPlayerId));
+      _afterInput();
+      return true;
+    }
     final accepted = engine.leave(localPlayerId);
     if (accepted) _afterInput();
     return accepted;

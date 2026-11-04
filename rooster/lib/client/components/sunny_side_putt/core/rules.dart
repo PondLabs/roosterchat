@@ -616,6 +616,10 @@ class PuttEngine {
 
   bool endMatch() => _accept(const EndMatchInput());
 
+  /// One input, from the wire (a relayed journal entry the host made or a
+  /// guest's own move). Same gate as every typed helper. Whether it took.
+  bool apply(EngineInput input) => _accept(input);
+
   /// Advances exactly one physics tick. Only [PuttPhase.holePlay]
   /// simulates and runs its timer, but the tick count advances in every
   /// phase so the input journal stays aligned.
@@ -1069,76 +1073,92 @@ class PuttEngine {
   /// rides in code, state rides in the snapshot.
   factory PuttEngine.fromJson(Map<String, Object?> json,
       {required PuttConfig config}) {
+    final engine = PuttEngine(config);
+    engine.restoreFrom(json);
+    return engine;
+  }
+
+  /// Replaces this engine's state with [json]'s, the snapshot
+  /// [toJson] made. [config] must be the one the snapshot came from (same
+  /// mode, seed and course ids) - the fingerprint decides. Guests resnapshot
+  /// with this so their local simulation never drifts far from the host's
+  /// truth; [PuttEngine.fromJson] lands on the same loader.
+  void restoreFrom(Map<String, Object?> json) {
     final fingerprint = json['fingerprint'];
     if (fingerprint != null && fingerprint != config.fingerprint) {
       throw ArgumentError('snapshot was made with a different config');
     }
-    final engine = PuttEngine(config);
     final playedCourses = <CourseDef>[];
-    for (final id in (json['playedCourses'] as List).cast<String>()) {
+    for (final id in ((json['playedCourses'] as List?) ?? const [])
+        .cast<String>()) {
       final course = config.courseById(id);
       if (course == null) {
         throw ArgumentError('snapshot references unknown course $id');
       }
       playedCourses.add(course);
     }
-    engine
-      .._rng = GameRng.fromList((json['rng'] as List).cast<num>().toList())
-      .._phase = PuttPhase.values.byName(json['phase'] as String)
-      .._tick = (json['tick'] as num).toInt()
-      .._courseIndex = (json['courseIndex'] as num).toInt()
-      .._holeIndex = (json['holeIndex'] as num).toInt()
-      .._holesCompleted = (json['holesCompleted'] as num).toInt()
-      .._timerTicks = (json['timerTicks'] as num).toInt()
-      .._seq = (json['seq'] as num).toInt();
-    engine._playedCourses
+    _rng = GameRng.fromList((json['rng'] as List).cast<num>().toList());
+    _phase = PuttPhase.values.byName(json['phase'] as String);
+    _tick = (json['tick'] as num).toInt();
+    _courseIndex = (json['courseIndex'] as num).toInt();
+    _holeIndex = (json['holeIndex'] as num).toInt();
+    _holesCompleted = (json['holesCompleted'] as num).toInt();
+    _timerTicks = (json['timerTicks'] as num).toInt();
+    _seq = (json['seq'] as num).toInt();
+    _playedCourses
       ..clear()
       ..addAll(playedCourses);
+    _players.clear();
     for (final raw in (json['players'] as List?) ?? const []) {
       final player = PuttPlayer.fromJson((raw as Map).cast<String, Object?>());
-      engine._players[player.id] = player;
+      _players[player.id] = player;
     }
-    engine._spectatorQueue
+    _spectatorQueue
       ..clear()
       ..addAll(((json['spectatorQueue'] as List?) ?? const []).cast<String>());
-    engine._holePars
+    _holePars
       ..clear()
       ..addAll([
         for (final par in (json['holePars'] as List?) ?? const [])
           (par as num).toInt(),
       ]);
     final holeScores = json['holeScores'] as Map? ?? {};
+    _holeScores.clear();
     for (final entry in holeScores.entries) {
-      engine._holeScores[entry.key as String] = [
+      _holeScores[entry.key as String] = [
         for (final value in (entry.value as List))
           value == null ? null : (value as num).toInt(),
       ];
     }
-    engine._participants
+    _participants
       ..clear()
       ..addAll(((json['participants'] as List?) ?? const []).cast<String>());
     final strokes = json['strokesThisHole'] as Map? ?? {};
+    _strokesThisHole.clear();
     for (final entry in strokes.entries) {
-      engine._strokesThisHole[entry.key as String] =
+      _strokesThisHole[entry.key as String] =
           (entry.value as num).toInt();
     }
-    engine._holedThisHole
+    _holedThisHole
       ..clear()
       ..addAll(((json['holedThisHole'] as List?) ?? const []).cast<String>());
-    engine._cuesFired
+    _cuesFired
       ..clear()
       ..addAll([
         for (final mark in (json['cuesFired'] as List?) ?? const [])
           (mark as num).toInt(),
       ]);
+    _events.clear();
+    _journal.clear();
     final worldJson = json['world'];
     if (worldJson != null) {
-      engine._world = PhysicsWorld.restore(
-          hole: engine.currentHole!,
+      _world = PhysicsWorld.restore(
+          hole: currentHole!,
           config: config.physics,
           state: (worldJson as Map).cast<String, Object?>());
+    } else {
+      _world = null;
     }
-    return engine;
   }
 
   /// Host handoff determinism: rebuild from [snapshot], replay the journal

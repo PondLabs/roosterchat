@@ -46,6 +46,7 @@ class CallControlButtons extends StatefulWidget {
     this.compact = false,
     this.boothOpen = false,
     this.onToggleBooth,
+    this.onActivitiesPressed,
     this.onHungUp,
     this.onSoundboardOpenChanged,
     super.key,
@@ -66,11 +67,13 @@ class CallControlButtons extends StatefulWidget {
   /// Null hides the DJ booth button.
   final VoidCallback? onToggleBooth;
 
+  /// Opens the call's activity shelf. Null hides the button.
+  final VoidCallback? onActivitiesPressed;
+
   final VoidCallback? onHungUp;
   final ValueChanged<bool>? onSoundboardOpenChanged;
 
-  static String get promptCallOpenDjBooth =>
-      Intl.message("DJ booth – play music",
+  static String get promptCallOpenDjBooth =>      Intl.message("DJ booth – play music",
           name: "promptCallOpenDjBooth",
           desc: "Tooltip of the call's DJ booth button, and its entry in the "
               "phone's \"more\" sheet, while the booth is closed: opens the "
@@ -80,6 +83,11 @@ class CallControlButtons extends StatefulWidget {
       name: "promptCallCloseDjBooth",
       desc: "Tooltip of the call's DJ booth button, and its entry in the "
           "phone's \"more\" sheet, while the booth is open");
+
+  static String get promptCallOpenActivities => Intl.message("Activities",
+      name: "promptCallOpenActivities",
+      desc: "Tooltip of the call's activities button (the rocket): opens "
+          "the shelf of games the call can play together");
 
   static String get promptCallShareScreen => Intl.message("Share your screen",
       name: "promptCallShareScreen",
@@ -306,6 +314,16 @@ class _CallControlButtonsState extends State<CallControlButtons> {
         camera,
         if (soundboardButton != null) soundboardButton,
         if (booth != null) booth,
+        if (widget.onActivitiesPressed != null)
+          Tooltip(
+            message: CallControlButtons.promptCallOpenActivities,
+            child: tiamat.CircleButton(
+              radius: radius,
+              iconSize: iconSize,
+              icon: Icons.rocket_launch,
+              onPressed: widget.onActivitiesPressed,
+            ),
+          ),
         hangUp,
       ],
     );

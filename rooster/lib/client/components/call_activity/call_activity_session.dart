@@ -165,6 +165,8 @@ class CallActivitySession extends ChangeNotifier {
   final List<StreamSubscription> _subs = [];
   final StreamController<Map<String, Object?>> _inputs =
       StreamController.broadcast();
+  final StreamController<Map<String, Object?>> _relayed =
+      StreamController.broadcast();
   final Map<String, CallActivityCaps> _caps = {};
   final assembler = CallPartAssembler();
 
@@ -227,6 +229,30 @@ class CallActivitySession extends ChangeNotifier {
 
   Future<void> sendState({List<String>? to}) async {
     if (!_hosting) return;
+    _sendStateNow(to);
+  }
+
+  /// How the host's fast lane arrives at everyone else: the opaque
+  /// messages [hostAnnounce] sent. The activity's own layer listens here.
+  Stream<Map<String, Object?>> get relayed => _relayed.stream;
+
+  /// The host's fast lane: an opaque message to everyone in the call. The
+  /// session moves it unopened (it stays under the packet limit); a
+  /// non-host's call is dropped.
+  Future<void> hostAnnounce(Map<String, Object?> message) async {
+    if (!_hosting) return;
+    await _send({'t': CallActivityMessageType.relay, 'm': message});
+  }
+
+  /// The host publishes what the activity's own state [payload] is; the
+  /// snapshot now carries it, and the next [sendState] delivers it. Only
+  /// the host's word counts: everyone else's call is a no-op.
+  void hostGamePayload(Map<String, Object?> payload) {
+    if (!_hosting) return;
+    _snapshot = _snapshot.copyWith(game: payload);
+  }
+
+  Future<void> _sendStateNow(List<String>? to) async {
     final next = _snapshot.copyWith(seq: ++_seq);
     _snapshot = next;
     final json = {'t': CallActivityMessageType.state, ...next.toJson()};
@@ -298,10 +324,25 @@ class CallActivitySession extends ChangeNotifier {
     });
   }
 
-  /// Tell the room we are out.
+  /// Tell the room we are out. A host leaving with people still in the
+  /// call hands the seat over (the followers re-elect, as if it had
+  /// vanished); the last one out ends the session.
   Future<void> leave() async {
     await _send({'t': CallActivityMessageType.leave});
-    if (_hosting) await _endHosting(bye: true);
+    if (_hosting) {
+      final remaining = [
+        ..._snapshot.players,
+        ..._snapshot.spectators,
+      ].where((id) => id != selfIdentity && transport.isPresent(id));
+      if (remaining.isNotEmpty) {
+        _hosting = false;
+        _host = '';
+        _hosts.clear();
+        notifyListeners();
+        return;
+      }
+      await _endHosting(bye: true);
+    }
     _leaveLocally(selfIdentity);
     notifyListeners();
   }
@@ -407,6 +448,9 @@ class CallActivitySession extends ChangeNotifier {
         _onState(sender, message);
       case CallActivityMessageType.join:
         _onJoin(sender, message);
+        // The snapshot moved (a seat taken): whoever watches the session
+        // (the activity's own bridge) hears it now, like every other move.
+        notifyListeners();
       case CallActivityMessageType.leave:
         _leave(sender);
         notifyListeners();
@@ -455,8 +499,12 @@ class CallActivitySession extends ChangeNotifier {
       case CallActivityMessageType.inputLease:
         if (message['to'] == selfIdentity) notifyListeners();
       case CallActivityMessageType.input:
-        if (!_hosting && !isHost) return;
+        if (!isHost) return;
         _inputs.add(message);
+      case CallActivityMessageType.relay:
+        if (sender != _host && _host.isNotEmpty) return;
+        final payload = message['m'];
+        if (payload is Map<String, Object?>) _relayed.add(payload);
     }
   }
 
@@ -539,6 +587,15 @@ message['as']}, [sender]);
   void _leave(String identity) {
     if (!_hosting) {
       _leaveLocally(identity);
+      if (identity == _host && _host.isNotEmpty) {
+        // Our host left politely: re-elect among the present, like when a
+        // host vanishes without a word.
+        _host = '';
+        _hosts.clear();
+        _electHostAfterLoss();
+        return;
+      }
+      notifyListeners();
       return;
     }
     final players = {..._snapshot.players}..remove(identity);
@@ -665,6 +722,7 @@ message['as']}, [sender]);
       sub.cancel();
     }
     _inputs.close();
+    _relayed.close();
     super.dispose();
   }
 

@@ -66,6 +66,11 @@ abstract final class CallActivityMessageType {
   /// A player's move in the activity's own language: a shot, a power-up
   /// order. Only the host acts on it; the answer rides the next state.
   static const input = 'input';
+
+  /// The host's fast lane: an opaque message to everyone (the activity's
+  /// own relayings, like the accepted-move journal it streams between
+  /// snapshots). Only the host's messages count.
+  static const relay = 'relay';
 }
 
 /// The wire format itself. The packet limit, the part sizes and the

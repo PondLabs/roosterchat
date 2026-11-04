@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'package:rooster/client/components/call_activity/call_activity_component.dart';
+import 'package:rooster/client/components/call_activity/call_activity_session.dart';
 import 'package:rooster/client/components/dj/dj_session.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
+import 'package:rooster/client/matrix/components/call_activity/matrix_call_activity_component.dart';
 import 'package:rooster/client/matrix/components/dj/dj_booths.dart';
 import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/ui/atoms/appear_in.dart';
@@ -12,8 +15,15 @@ import 'package:rooster/ui/organisms/call_view/call_focus.dart';
 import 'package:rooster/ui/organisms/call_view/call_grid_tiles.dart';
 import 'package:rooster/ui/organisms/call_view/voip_fullscreen_stream_view.dart';
 import 'package:rooster/ui/organisms/call_view/voip_stream_view.dart';
+import 'package:rooster/ui/organisms/call_activity/activity_join_pill.dart';
+import 'package:rooster/ui/organisms/call_activity/activity_picker_panel.dart';
+import 'package:rooster/ui/organisms/call_activity/activity_stage.dart';
 import 'package:rooster/ui/organisms/dj/dj_booth_panel.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_call_controller.dart';
+import 'package:rooster/ui/organisms/sunny_side_putt/putt_audio.dart';
+import 'package:rooster/ui/organisms/sunny_side_putt/putt_launch_options.dart';
+import 'package:rooster/ui/organisms/sunny_side_putt/putt_session.dart';
+import 'package:rooster/ui/organisms/sunny_side_putt/sunny_side_putt_game.dart';
 import 'package:rooster/utils/animation/ring_shaker.dart';
 import 'package:rooster/utils/animation/ripple.dart';
 import 'package:flutter/material.dart';
@@ -70,6 +80,12 @@ class _CallViewState extends State<CallView> {
 
   /// The DJ booth panel is open next to the call.
   bool _boothOpen = false;
+
+  /// The live call activity this call is playing (the game on the stage),
+  /// the one the pill invites us into, and the sound they make.
+  PuttSessionController? _activity;
+  PuttAudio? _puttAudio;
+  StreamSubscription? _activityStreamsSub;
   StreamSubscription? _boothSub;
   StreamSubscription? _boothPanelSub;
   StreamSubscription? _focusSub;
@@ -104,6 +120,166 @@ class _CallViewState extends State<CallView> {
 
     // Soundboard: preload catalog audio on call join for instant click->play.
     _soundboard = SoundboardCallController.acquire(widget.currentSession);
+
+    registerSunnySidePutt();
+    // Activities: the call's stage follows a session's whole life
+    // (started, joined, ended) through the room component's own stream.
+    _activityStreamsSub = _activityComponent?.onChanged.listen((_) {
+      if (mounted) setState(() {});
+    });
+    _adoptExistingActivity();
+  }
+
+  MatrixCallActivityComponent? get _activityComponent =>
+      room.getComponent<MatrixCallActivityComponent>();
+
+  String _memberNameOf(String identity) {
+    // A livekit identity is a matrix user id with (at most) a device
+    // suffix; the member list knows the plain user id.
+    final userId = identity.split(':').take(2).join(':');
+    return room.getMemberOrFallback(userId).displayName;
+  }
+
+  /// Rejoining (or a view rebuilt): if we are already in a live session
+  /// of this call, its stage comes back.
+  void _adoptExistingActivity() {
+    if (_activity != null) return;
+    final component = _activityComponent;
+    if (component == null) return;
+    for (final entry in component.visibleSessions()) {
+      final session = component.sessionOf(entry.sessionId);
+      final mine = session != null &&
+          (session.snapshot.players.contains(session.selfIdentity) ||
+              session.snapshot.spectators.contains(session.selfIdentity));
+      if (!mine) continue;
+      _activity = PuttSessionController(
+        session: session,
+        nameOf: _memberNameOf,
+        onEnded: () => _exitActivity(),
+      );
+      return;
+    }
+  }
+
+  /// The live session of this call there is a seat in (the pill's
+  /// subject), when we have not joined it yet.
+  CallActivitySession? _joinableSession() {
+    final activity = _activity;
+    if (activity != null) return null;
+    final component = _activityComponent;
+    if (component == null) return null;
+    for (final entry in component.visibleSessions()) {
+      final session = component.sessionOf(entry.sessionId);
+      if (session == null) continue;
+      final seats = [
+        ...session.snapshot.players,
+        ...session.snapshot.spectators,
+      ];
+      if (seats.contains(session.selfIdentity)) continue;
+      return session;
+    }
+    return null;
+  }
+
+  Future<void> _joinSession(CallActivitySession session) async {
+    if (_activity != null) return;
+    setState(() {
+      _activity = PuttSessionController(
+        session: session,
+        nameOf: _memberNameOf,
+        onEnded: () => _exitActivity(),
+      );
+    });
+    await session.join();
+  }
+
+  Future<void> _launchActivity(CallActivity activity) async {
+    final options = await showPuttLaunchOptions(context);
+    if (!mounted || options == null) return;
+    final component = _activityComponent;
+    if (component == null) return;
+    final session = await component.launch(activity);
+    if (session == null || !mounted) return;
+    final controller = PuttSessionController(
+      session: session,
+      nameOf: _memberNameOf,
+      onEnded: () => _exitActivity(),
+    );
+    await controller.hostStart(PuttSessionController.buildConfig(options));
+    setState(() => _activity = controller);
+  }
+
+  /// Out of the activity: back to the plain call (the session goes on
+  /// without us — the host hands the seat over if we held it).
+  Future<void> _exitActivity() async {
+    final controller = _activity;
+    if (controller == null) return;
+    await controller.leave();
+    controller.dispose();
+    if (mounted) setState(() => _activity = null);
+  }
+
+  /// The activity shelf, over the call: what this app can play in the
+  /// call, and the sessions already running in it.
+  Future<void> _openActivityPicker() async {
+    final component = _activityComponent;
+    if (component == null) return;
+    await showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: ActivityPickerPanel(
+          activities: CallActivityRegistry.all,
+          liveSessions: component.visibleSessions(),
+          nameOf: _memberNameOf,
+          onLaunch: (activity) {
+            Navigator.of(context).pop();
+            _launchActivity(activity);
+          },
+          onJoin: (entry) {
+            Navigator.of(context).pop();
+            final session = component.sessionOf(entry.sessionId);
+            if (session != null) _joinSession(session);
+          },
+        ),
+      ),
+    );
+  }
+
+  /// The call's videos as the stage's strip: the same views the grid
+  /// builds, smaller, one row.
+  Widget _activityStrip() {
+    final streams = widget.currentSession.streams;
+    final focusedId = mainStream?.streamId;
+    final tiles = callGridTiles(streams);
+    return SizedBox(
+      height: 118,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        children: [
+          for (final tile in tiles)
+            if (tile.stream.streamId != focusedId)
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: VoipStreamView(
+                    key:
+                        ValueKey("callView_stripView_${tile.stream.streamId}"),
+                    tile.stream,
+                    widget.currentSession,
+                    audioStream: tile.audioStream,
+                    fit: tile.stream.type == VoipStreamType.screenshare
+                        ? BoxFit.contain
+                        : BoxFit.cover,
+                    onFullscreen: () => showFullscreen(tile.stream),
+                  ),
+                ),
+              ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -113,6 +289,9 @@ class _CallViewState extends State<CallView> {
     _boothSub?.cancel();
     _boothPanelSub?.cancel();
     _focusSub?.cancel();
+    _activityStreamsSub?.cancel();
+    _activity?.dispose();
+    _puttAudio?.dispose();
     _soundboard?.release();
     _soundboard = null;
     super.dispose();
@@ -226,6 +405,7 @@ class _CallViewState extends State<CallView> {
                         onToggleBooth: _dj == null
                             ? null
                             : () => setState(() => _boothOpen = !_boothOpen),
+                        onActivitiesPressed: _openActivityPicker,
                         onHungUp: () {
                           if (mounted) setState(() {});
                         },
@@ -252,7 +432,34 @@ class _CallViewState extends State<CallView> {
   }
 
   Widget callConnectedView() {
+    // The activity owns the stage while we are in it; the call's controls
+    // float on top of it, like over the tiles of a plain call.
+    final activity = _activity;
+    if (activity != null) {
+      return ListenableBuilder(
+        listenable: activity,
+        builder: (context, _) => Stack(
+          children: [
+            Positioned.fill(
+              child: ActivityStage(
+                activityName: 'Sunny Side Putt',
+                gameSlot: activity.match == null
+                    ? null
+                    : SunnySidePuttView(
+                        match: activity.match!,
+                        audio: _puttAudio ??= (PuttAudio()..preload()),
+                        onLeave: () => _exitActivity(),
+                      ),
+                participantsStrip: _activityStrip(),
+                onExit: () => _exitActivity(),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     final dj = _dj;
+    final joinable = _joinableSession();
     final call = callButtons(
         connected: true,
         // The now playing pill has a strip of its own above the tiles: over
@@ -264,6 +471,15 @@ class _CallViewState extends State<CallView> {
                     dj: dj,
                     padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
                     onTap: () => setState(() => _boothOpen = true))
+                : const SizedBox.shrink(),
+            joinable != null
+                ? Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: ActivityJoinPill(
+                      activityName: 'Sunny Side Putt',
+                      hostName: _memberNameOf(joinable.snapshot.hostUserId),
+                      onJoin: () => _joinSession(joinable),
+                    ))
                 : const SizedBox.shrink(),
             Expanded(
               child: LayoutBuilder(
