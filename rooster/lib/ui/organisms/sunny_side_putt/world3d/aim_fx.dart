@@ -10,7 +10,8 @@ part of '../putt_world3d.dart';
 /// orange, red flat out (no muddy olive between green and yolk).
 int _powerHex(double power) {
   const stops = [
-    (0.0, 0x5FD86A),
+    // Cream, not green, at the soft end: it has to stand off the turf.
+    (0.0, 0xFFF4CC),
     (0.42, 0xFFD43B),
     (0.72, 0xFF8A2A),
     (1.0, 0xFF3D30),
@@ -128,7 +129,7 @@ class _PuttAimView3D {
   static final tjs.BufferGeometry _dotGeometry =
       tjg.CircleGeometry(radius: 0.12, segments: 12);
   static final tjs.BufferGeometry _dotRingGeometry =
-      tjg.CircleGeometry(radius: 0.18, segments: 12);
+      tjg.CircleGeometry(radius: 0.2, segments: 12);
 
   late final tjs.Group group;
   late final tjs.Group _turned;
@@ -263,9 +264,9 @@ class _PuttAimView3D {
           dot.position.setValues(p.x - aim.origin.x,
               terrain.at(p) - floor + 0.05, p.y - aim.origin.y);
           final fade = 1 - shown / _dotCount;
-          dot.children[0].material?.opacity = 0.12 + 0.33 * fade;
-          dot.children[1].material?.opacity = 0.25 + 0.7 * fade;
-          final s = 0.75 + 0.35 * fade;
+          dot.children[0].material?.opacity = 0.3 + 0.4 * fade;
+          dot.children[1].material?.opacity = 0.45 + 0.55 * fade;
+          final s = 0.9 + 0.4 * fade;
           dot.scale.setValues(s, 1, s);
           shown++;
         }

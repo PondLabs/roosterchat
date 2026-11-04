@@ -1,7 +1,8 @@
 // The aim coach: until the viewer's first putt of the match, and again
 // whenever they sit a while with their egg ready, a hand over the egg
 // shows the gesture - press, pull back away from the nest, let go - while
-// a ghost arrow grows toward the nest, and a pill under the egg says it.
+// a ghost arrow grows toward the nest (the HUD's hint line says it in
+// words, out of the way of the eggs).
 // The game hands it the egg's pixel and the way to the nest on screen
 // after every rendered frame ([PuttCoachCue]); null hides it.
 library;
@@ -10,7 +11,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import 'putt_art.dart';
 
@@ -107,14 +107,6 @@ class _PuttCoachState extends State<PuttCoach>
     final back = -cue.toward;
     final press = cue.egg + back * 26;
     final hand = press + back * (110 * g.pull);
-    // The pill: over the egg, unless the arrow climbs straight up through
-    // there; kept off the HUD's bars.
-    final above = cue.toward.dy > -0.6;
-    final pillY = (above ? cue.egg.dy - 96 : cue.egg.dy + 34)
-        .clamp(104.0, math.max(104.0, size.height - 190))
-        .toDouble();
-    final pillX =
-        cue.egg.dx.clamp(130.0, math.max(130.0, size.width - 130)).toDouble();
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -149,33 +141,6 @@ class _PuttCoachState extends State<PuttCoach>
                       blurRadius: 1,
                       offset: Offset(1, 2)),
                 ],
-              ),
-            ),
-          ),
-        ),
-        // The pill under the egg, steady while the hand loops.
-        Positioned(
-          left: pillX,
-          top: pillY,
-          child: FractionalTranslation(
-            translation: const Offset(-0.5, 0),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-              decoration: BoxDecoration(
-                color: PuttPalette.ink.withValues(alpha: 0.86),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: PuttPalette.yolk, width: 1.5),
-              ),
-              child: Text(
-                labelPuttCoachPull(),
-                maxLines: 1,
-                style: const TextStyle(
-                  color: PuttPalette.cream,
-                  fontFamily: 'NunitoSans',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  height: 1.2,
-                ),
               ),
             ),
           ),
@@ -303,7 +268,7 @@ class _CoachPainter extends CustomPainter {
       ..lineTo(start.dx - side.dx * 5, start.dy - side.dy * 5)
       ..close();
     final power = Color.lerp(
-        const Color(0xFF5FD86A), const Color(0xFFFFD43B), pose.pull)!;
+        const Color(0xFFFFF4CC), const Color(0xFFFFD43B), pose.pull)!;
     canvas
       ..drawPath(
           path,
@@ -324,8 +289,3 @@ class _CoachPainter extends CustomPainter {
       oldDelegate.pose.arrowAlpha != pose.arrowAlpha ||
       oldDelegate.pose.ripple != pose.ripple;
 }
-
-String labelPuttCoachPull() => Intl.message("Pull back, then let go",
-    name: "labelPuttCoachPull",
-    desc: "Under the player's egg while a hand shows the putt gesture on "
-        "their first hole: press, drag back away from the nest, release");

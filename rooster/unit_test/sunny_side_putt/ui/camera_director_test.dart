@@ -167,7 +167,8 @@ void main() {
       otherEggs: const [Vec2(10, 20)],
     );
     run(1.2, holed);
-    expect(rig.target.distanceTo(hole.nest.position), lessThan(1));
+    // Just past the nest, so it sits below the middle, under the banner.
+    expect(rig.target.distanceTo(hole.nest.position), lessThan(1.8));
     expect(rig.distanceTarget, lessThan(rig.overviewDistance * 0.5));
     run(PuttCameraDirector.celebrateSeconds + 1.5, holed);
     expectInFreeView(const Vec2(10, 20));

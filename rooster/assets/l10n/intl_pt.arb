@@ -1790,6 +1790,5 @@
   "labelTrayQuit": "Sair",
   "tooltipTrayInCall": "Num canal de voz",
   "tooltipTrayMuted": "Silenciado",
-  "tooltipVoiceTrayStatus": "{app}: {status}",
-  "labelPuttCoachPull": "Puxe para trás e solte"
+  "tooltipVoiceTrayStatus": "{app}: {status}"
 }

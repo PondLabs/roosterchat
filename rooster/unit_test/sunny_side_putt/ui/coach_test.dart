@@ -15,18 +15,15 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: Stack(children: [PuttCoach(cue: cue)]),
     ));
-    expect(find.text(labelPuttCoachPull()), findsNothing);
     expect(find.byIcon(Icons.touch_app_rounded), findsNothing);
 
     cue.value = const PuttCoachCue(egg: Offset(300, 240), toward: Offset(1, 0));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 900));
-    expect(find.text(labelPuttCoachPull()), findsOneWidget);
     expect(find.byIcon(Icons.touch_app_rounded), findsOneWidget);
 
     cue.value = null;
     await tester.pump();
-    expect(find.text(labelPuttCoachPull()), findsNothing);
     expect(find.byIcon(Icons.touch_app_rounded), findsNothing);
   });
 

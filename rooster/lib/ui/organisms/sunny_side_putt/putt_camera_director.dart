@@ -62,6 +62,7 @@ class PuttCameraDirector {
 
   bool _wasHoled = false;
   double _celebrateUntil = 0;
+  Vec2? _celebrateAt;
 
   /// Whether someone else drives the camera (the demo's held close-ups):
   /// the director then keeps its clock but moves nothing.
@@ -179,15 +180,19 @@ class PuttCameraDirector {
     // hatch (unless the player took the camera), then frames the rest.
     if (cue.myEggHoled && !_wasHoled && !_userCamera) {
       _celebrateUntil = _holeClock + celebrateSeconds;
+      // From higher up (less of what stands between the camera and the
+      // nest), the nest a little below the middle, under the banner.
+      final away = Vec2(math.sin(rig.yawTarget), math.cos(rig.yawTarget));
+      _celebrateAt = hole.nest.position + away * 1.4;
       rig.glideTo(
-        target: hole.nest.position,
+        target: _celebrateAt,
         distance: math.max(rig.overviewDistance * 0.34, 9.0),
-        pitchDeg: 36,
+        pitchDeg: 50,
       );
     }
     _wasHoled = cue.myEggHoled;
     if (_holeClock < _celebrateUntil) {
-      _follow = hole.nest.position;
+      _follow = _celebrateAt ?? hole.nest.position;
       return;
     }
     if (_celebrateUntil > 0) {

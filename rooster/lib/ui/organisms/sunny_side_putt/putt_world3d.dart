@@ -655,7 +655,7 @@ class PuttWorld3D {
   late final _PuttAimView3D _aim;
 
   final Map<String, _EggView3D> _eggViews = {};
-  final List<_HenView3D> _henViews = [];
+  final List<_Walker> _henViews = [];
   final List<_CrateView3D> _crateViews = [];
 
   final _PuttFxPool _fx = _PuttFxPool();
@@ -869,7 +869,12 @@ class PuttWorld3D {
     }
     final hens = makeKind('hens');
     for (final obstacle in hole.obstacles) {
-      final hen = _HenView3D(obstacle, _ground);
+      // Ducks paddle the Pond's water; hens walk everything else.
+      final swims = obstacle.id.contains('duck') ||
+          obstacle.stops
+              .any((stop) => hole.water.any((pond) => pond.contains(stop.at)));
+      final _Walker hen =
+          swims ? _DuckView3D(obstacle) : _HenView3D(obstacle, _ground);
       hens.add(hen.group);
       _henViews.add(hen);
     }

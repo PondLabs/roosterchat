@@ -1798,7 +1798,9 @@ class _PuttHintLineState extends State<PuttHintLine>
         } else if (notice != null && _notice.isAnimating) {
           line =
               _HintPill(key: ValueKey('notice-$_noticeSerial'), text: notice);
-        } else if (match.myShotReady && !match.hasPutted) {
+        } else if (match.myShotReady &&
+            !match.hasPutted &&
+            targeting.picking == null) {
           line = _HintPill(
             key: const ValueKey('aim'),
             icon: Icons.touch_app_rounded,

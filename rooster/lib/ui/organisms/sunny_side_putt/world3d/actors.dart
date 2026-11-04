@@ -461,7 +461,95 @@ tjs.DataTexture _eggTexture(int tint) {
 
 /// The hen: a plump white body, a cream-tipped tail, wings, a head with
 /// the red comb and wattle, a yolk beak and legs that walk her path.
-class _HenView3D {
+/// Something that walks (or swims) a moving obstacle's path.
+abstract class _Walker {
+  tjs.Group get group;
+  void sync(PuttWorldHen hen, double time);
+}
+
+/// A duck where the obstacle paddles over water (the Pond's ducks): a
+/// mallard sitting low in the water - brown body, green head over a white
+/// collar, a yolk bill, a blue patch on the wing - bobbing as it goes, a
+/// wake round it.
+class _DuckView3D implements _Walker {
+  _DuckView3D(MovingObstacle obstacle) {
+    final r = obstacle.radius;
+    group = tjs.Group()..name = 'duck/${obstacle.id}';
+    _body = tjs.Group()..name = 'duck-body';
+    final ink = _hexOf(PuttPalette.ink);
+    final yolk = _hexOf(PuttPalette.yolk);
+    final shape = _Merged()
+      ..add(
+          tjs.SphereGeometry(1, 20, 14),
+          _place(0, r * 0.32, -r * 0.05,
+              sx: r * 0.66, sy: r * 0.42, sz: r * 1.0),
+          0x8A6A4A,
+          baseShade: 0.7)
+      ..add(
+          tjs.SphereGeometry(1, 16, 12),
+          _place(0, r * 0.3, r * 0.42, sx: r * 0.5, sy: r * 0.36, sz: r * 0.42),
+          0xC9B79A)
+      ..add(tjg.ConeGeometry(r * 0.3, r * 0.55, 8),
+          _place(0, r * 0.42, -r * 1.0, tilt: -math.pi / 2 - 0.35), 0x5E4630);
+    for (final side in [-1.0, 1.0]) {
+      shape
+        ..add(
+            tjs.SphereGeometry(1, 12, 8),
+            _place(side * r * 0.5, r * 0.42, -r * 0.12,
+                sx: r * 0.2, sy: r * 0.24, sz: r * 0.7),
+            0x6E5236)
+        ..add(tjs.BoxGeometry(r * 0.05, r * 0.12, r * 0.3),
+            _place(side * r * 0.69, r * 0.44, -r * 0.3), 0x3B5BDB);
+    }
+    shape
+      ..add(tjg.TorusGeometry(r * 0.27, r * 0.05, 6, 20),
+          _place(0, r * 0.72, r * 0.5, tilt: math.pi / 2 - 0.3), 0xFCF8F1)
+      ..add(tjs.SphereGeometry(r * 0.34, 16, 12), _place(0, r * 0.98, r * 0.62),
+          0x2E6B3C)
+      ..add(tjs.BoxGeometry(r * 0.26, r * 0.08, r * 0.36),
+          _place(0, r * 0.9, r * 1.02), yolk);
+    for (final side in [-1.0, 1.0]) {
+      shape.add(tjs.SphereGeometry(r * 0.055, 8, 6),
+          _place(side * r * 0.24, r * 1.06, r * 0.82), ink);
+    }
+    _body.add(shape.mesh('duck-shape', flat: false, roughness: 0.6)!);
+    group.add(_body);
+    _wake = tjs.Mesh(
+      tjg.RingGeometry(r * 1.05, r * 1.3, 32, 1),
+      _unlit(0xFFFFFF, opacity: 0.35, depthWrite: false),
+    )
+      ..name = 'duck-wake'
+      ..rotation.x = -math.pi / 2
+      ..position.y = 0.06
+      ..renderOrder = 3;
+    group.add(_wake);
+    group.traverse((object) {
+      if (object.name != 'duck-wake') object.castShadow = true;
+    });
+  }
+
+  @override
+  late final tjs.Group group;
+  late final tjs.Group _body;
+  late final tjs.Mesh _wake;
+  Vec2 _heading = const Vec2(0, 1);
+
+  @override
+  void sync(PuttWorldHen hen, double time) {
+    if (hen.heading.length > 1e-4) {
+      _heading = hen.heading.normalized(_heading);
+    }
+    group.rotation.y = math.atan2(_heading.x, _heading.y);
+    // Sitting low in the water, bobbing, rocking a little as it paddles.
+    _body.position.y = -0.12 + math.sin(time * 2.2 + hen.position.x) * 0.05;
+    _body.rotation.z = math.sin(time * 3.1) * 0.05;
+    final swell = 1 + math.sin(time * 2.6) * 0.06;
+    _wake.scale.setValues(swell, swell, 1);
+    group.position.setValues(hen.position.x, 0, hen.position.y);
+  }
+}
+
+class _HenView3D implements _Walker {
   _HenView3D(MovingObstacle obstacle, [_Ground? terrain])
       : _terrain = terrain ?? _Ground() {
     final r = obstacle.radius;
@@ -541,6 +629,7 @@ class _HenView3D {
     });
   }
 
+  @override
   late final tjs.Group group;
   late final tjs.Group _body;
   late final tjs.Group _head;
@@ -550,6 +639,7 @@ class _HenView3D {
 
   /// The stand and the facing (the last non-stop direction she had), the
   /// legs swinging while she walks and the head bobbing with her steps.
+  @override
   void sync(PuttWorldHen hen, double time) {
     if (hen.heading.length > 1e-4) {
       _heading = hen.heading.normalized(_heading);
