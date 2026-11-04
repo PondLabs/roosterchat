@@ -74,6 +74,7 @@ part 'world3d/actors.dart';
 part 'world3d/aim_fx.dart';
 part 'world3d/theme.dart';
 part 'world3d/bursts.dart';
+part 'world3d/hatch.dart';
 part 'world3d/table_shape.dart';
 
 /// The void behind everything before the sky dome draws: the horizon's
@@ -319,33 +320,98 @@ class PuttCameraRig {
   /// The distance that frames the whole hole (the last fit's).
   double get overviewDistance => _overviewDistance;
 
-  /// Glides to frame [a] and [b] together (the egg and the nest), with
-  /// [margin] world units around them: the target between them, the
-  /// distance that fits both on screen, never closer than [closest] of the
-  /// overview's nor farther than the overview itself.
+  /// Glides to frame [a] and [b] together (the egg and the nest), or the
+  /// box they span when [box]: the target and the distance that land every
+  /// point inside the part of the screen the HUD leaves free (with room
+  /// for an egg's tag and a flag), found by projecting the points through
+  /// the camera the glide will end at. Never closer than [closest] of the
+  /// overview's distance nor farther than the overview itself. [margin]
+  /// (world units) widens the padding around the points.
   void glideToFrame(Vec2 a, Vec2 b,
-      {double margin = 5, double closest = 0.42, double? yaw}) {
+      {double margin = 5,
+      double closest = 0.42,
+      double? yaw,
+      bool box = false}) {
     if (yaw != null) _yawTarget = yaw;
-    final c = math.cos(_yawTarget).abs();
-    final s = math.sin(_yawTarget).abs();
-    final pitchRad = _pitchTarget * math.pi / 180;
-    final sp = math.sin(pitchRad);
-    final width = (a.x - b.x).abs() + margin * 2;
-    final depth = (a.y - b.y).abs() + margin * 2;
-    final spanRight = width * c + depth * s;
-    final spanAway = width * s + depth * c;
-    final usableWidth = math.max(1.0, viewport.width - 24);
-    final usableHeight = math.max(1.0, viewport.height - 150);
-    final focal = viewport.height * 1.2;
-    final wanted = math.max(
-      focal * spanRight / usableWidth,
-      focal * (spanAway * sp + 1.5) / usableHeight,
-    );
-    _distanceTarget = wanted
-        .clamp(_overviewDistance * closest, _overviewDistance)
-        .clamp(_distanceMin, _distanceMax)
-        .toDouble();
-    _targetTarget = Vec2((a.x + b.x) / 2, (a.y + b.y) / 2);
+    final points = box ? [a, b, Vec2(a.x, b.y), Vec2(b.x, a.y)] : [a, b];
+    final low = math.max(_overviewDistance * closest, _distanceMin);
+    final high = math.max(low, math.min(_overviewDistance, _distanceMax));
+    final pad = 40 + margin * 6;
+    // The smallest distance (in range) whose centred frame fits.
+    var lo = low, hi = high;
+    if (!_frameFits(points, lo, pad).fits) {
+      for (var i = 0; i < 22; i++) {
+        final mid = (lo + hi) / 2;
+        if (_frameFits(points, mid, pad).fits) {
+          hi = mid;
+        } else {
+          lo = mid;
+        }
+      }
+      lo = hi;
+    }
+    _distanceTarget = lo;
+    _targetTarget = _frameFits(points, lo, pad).target;
+  }
+
+  /// The target that centres [points] in the HUD-free part of the screen
+  /// from [distance] (at the glide's yaw and pitch), and whether they all
+  /// fit there with [pad] pixels to spare.
+  ({Vec2 target, bool fits}) _frameFits(
+      List<Vec2> points, double distance, double pad) {
+    final width = math.max(1.0, viewport.width);
+    final height = math.max(1.0, viewport.height);
+    final aspect = width / height;
+    final t = math.tan(fovDeg * math.pi / 360);
+    final pitch = _pitchTarget * math.pi / 180;
+    final cp = math.max(math.cos(pitch), 0.15);
+    final sp = math.sin(pitch);
+    final away = Vec2(math.sin(_yawTarget), math.cos(_yawTarget));
+    final right = Vec2(-away.y, away.x);
+    // The free box in NDC: the HUD's bars at the top and the bottom.
+    final left = -1 + 2 * pad / width;
+    final rightEdge = 1 - 2 * pad / width;
+    final top = 1 - 2 * (96 + pad) / height;
+    final bottom = -1 + 2 * (150 + pad) / height;
+    var target = Vec2.zero;
+    for (final p in points) {
+      target += p;
+    }
+    target = target / points.length.toDouble();
+    var fits = false;
+    for (var iteration = 0; iteration < 8; iteration++) {
+      var minX = double.infinity, maxX = -double.infinity;
+      var minY = double.infinity, maxY = -double.infinity;
+      var depth = 0.0;
+      var behind = false;
+      for (final p in points) {
+        final d = p - target;
+        final f = d.dot(away);
+        final zc = distance + f * cp;
+        if (zc < 0.5) {
+          behind = true;
+          continue;
+        }
+        depth += zc;
+        final x = d.dot(right) / (zc * t * aspect);
+        final y = f * sp / (zc * t);
+        minX = math.min(minX, x);
+        maxX = math.max(maxX, x);
+        minY = math.min(minY, y);
+        maxY = math.max(maxY, y);
+      }
+      if (behind || depth == 0) return (target: target, fits: false);
+      depth /= points.length;
+      fits = maxX - minX <= rightEdge - left && maxY - minY <= top - bottom;
+      final ex = (minX + maxX) / 2 - (left + rightEdge) / 2;
+      final ey = (minY + maxY) / 2 - (top + bottom) / 2;
+      if (ex.abs() < 1e-4 && ey.abs() < 1e-4) break;
+      // Shift the target so the points' box moves onto the free box's
+      // centre (screen offsets back to ground offsets, near enough).
+      target += right * (ex * depth * t * aspect) +
+          away * (ey * depth * t / math.max(sp, 0.2));
+    }
+    return (target: target, fits: fits);
   }
 
   /// Orbit: [dxPixels] of horizontal drag turn the yaw, [dyPixels] tilt
@@ -521,7 +587,13 @@ class PuttWorld3D {
       ..add(_actorsRoot = tjs.Group()..name = 'actors')
       ..add(_aimRoot = tjs.Group()..name = 'aim')
       ..add(_fxRoot = tjs.Group()..name = 'fx')
-      ..add(_bursts.group);
+      ..add(_bursts.group)
+      ..add(_hatchRoot);
+    for (var i = 0; i < 3; i++) {
+      final hatchling = _Hatchling();
+      _hatchlings.add(hatchling);
+      _hatchRoot.add(hatchling.group);
+    }
     _aim = _PuttAimView3D(eggRadius: _eggRadius);
     _aimRoot.add(_aim.group);
   }
@@ -580,6 +652,26 @@ class PuttWorld3D {
 
   /// The current hole's relief, shared with everything standing on it.
   final _Ground _ground = _Ground();
+
+  /// The chicks that hatch in the nest when an egg drops in.
+  final tjs.Group _hatchRoot = tjs.Group()..name = 'hatchlings';
+  final List<_Hatchling> _hatchlings = [];
+
+  /// Hatches [view]'s egg in the nest at [nest]: a free chick, or the one
+  /// furthest along when all three are out.
+  void _hatch(_EggView3D view, Vec2 nest) {
+    if (_hatchlings.isEmpty) return;
+    var pick = _hatchlings.first;
+    for (final hatchling in _hatchlings) {
+      if (!hatchling.busy) {
+        pick = hatchling;
+        break;
+      }
+      if (hatchling._age > pick._age) pick = hatchling;
+    }
+    pick.hatch(nest, view._tintHex,
+        floor: _ground.at(nest), big: view.everMine);
+  }
 
   /// Until when (the frame clock) the flag shakes: an egg just dropped in.
   double _flagShakeUntil = 0;
@@ -799,6 +891,9 @@ class PuttWorld3D {
   /// Disposes the whole hole subtree and forgets every per-hole view.
   void _clearHole() {
     _bursts.clear();
+    for (final hatchling in _hatchlings) {
+      hatchling.hide();
+    }
     for (final sinking in _sinking) {
       _dropEgg(sinking.view);
     }
@@ -834,6 +929,9 @@ class PuttWorld3D {
     // reads from the overview too.
     _fx.apply(frame, scale: math.max(1.0, rig.distance / 24), ground: _ground);
     _bursts.update(dt, frame.time);
+    for (final hatchling in _hatchlings) {
+      hatchling.update(dt, camera.position);
+    }
     for (final piece in _animated) {
       piece.tick(frame.time, dt);
     }
@@ -911,6 +1009,8 @@ class PuttWorld3D {
         ..scale.setValues(scale, scale, scale);
       view.ground.visible = false;
       if (t >= 1) {
+        // In: the egg hatches.
+        _hatch(view, sinking.nest);
         _dropEgg(view);
         return true;
       }

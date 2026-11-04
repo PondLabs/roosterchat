@@ -432,6 +432,33 @@ void main() {
           reason: "the hop's cosmetic arc comes back down");
     });
 
+    test('an egg that drops into the nest hatches a chick', () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      final hatchlings =
+          world.scene.children.firstWhere((c) => c.name == 'hatchlings');
+      List<tjs.Object3D> out() =>
+          hatchlings.children.where((c) => c.visible).toList();
+      world.applySnapshot(PuttWorldFrame(
+        time: 0,
+        eggs: [eggAt(dressing.nest.position)],
+      ));
+      expect(out(), isEmpty);
+      // Gone at the nest: it sinks for a moment, then hatches.
+      var time = 0.016;
+      while (time < 0.9) {
+        world.applySnapshot(PuttWorldFrame(time: time));
+        time += 0.016;
+      }
+      expect(out(), hasLength(1));
+      expect(out().single.position.x, closeTo(dressing.nest.position.x, 1e-9));
+      while (time < 3.2) {
+        world.applySnapshot(PuttWorldFrame(time: time));
+        time += 0.016;
+      }
+      expect(out(), isEmpty, reason: 'the chick drops back into the nest');
+    });
+
     test('the collected crates stand down and stay down', () {
       final world = builtWorld();
       addTearDown(world.dispose);
