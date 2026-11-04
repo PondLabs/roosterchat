@@ -446,7 +446,13 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
         final shot = putt(ball.position, target, arrival: last ? 1.4 : 0.7);
         final spread = 0.16 / (shots + 1);
         final angle = shot.angle + (_random.nextDouble() * 2 - 1) * spread;
-        final power = (shot.power * (0.9 + _random.nextDouble() * 0.22))
+        // Hills and silos bend and stop a roll the flat math cannot see:
+        // there the bot reads the green by running the engine ahead.
+        final reads = hole.hills.isNotEmpty || hole.wells.isNotEmpty;
+        final base = reads
+            ? _readPower(hole, ball.playerId, angle, target, shot.power)
+            : shot.power;
+        final power = (base * (0.93 + _random.nextDouble() * 0.14))
             .clamp(0.05, 1.0)
             .toDouble();
         match.engine.submitShot(ball.playerId, angle, power);
@@ -454,6 +460,49 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
       _botShots[ball.playerId] = shots + 1;
       _botNextAt[ball.playerId] = _holeTime + 2.2 + order * 0.4;
     }
+  }
+
+  /// The power that leaves [playerId]'s egg nearest [target] along
+  /// [angle] on this hole's ground: the engine run ahead on a copy of the
+  /// world, a coarse sweep of powers then a finer one round the best.
+  double _readPower(
+      HoleDef hole, String playerId, double angle, Vec2 target, double guess) {
+    final world = match.engine.world;
+    if (world == null) return guess;
+    final state = world.toJson();
+    double miss(double power) {
+      final copy = PhysicsWorld.restore(
+          hole: hole, config: match.config.physics, state: state);
+      final ball = copy.ball(playerId);
+      if (ball == null) return double.infinity;
+      copy.applyShot(playerId, angle, power);
+      for (var i = 0; i < 1500 && !ball.holed && !ball.asleep; i++) {
+        copy.stepTick();
+      }
+      return ball.holed ? -1 : ball.position.distanceTo(target);
+    }
+
+    var best = guess.clamp(0.05, 1.0).toDouble();
+    var bestMiss = miss(best);
+    for (var k = 1; k <= 8; k++) {
+      final power = k / 8;
+      final m = miss(power);
+      if (m < bestMiss) {
+        best = power;
+        bestMiss = m;
+      }
+    }
+    for (var step = 1 / 16; step > 0.006; step /= 2) {
+      for (final power in [best - step, best + step]) {
+        if (power < 0.05 || power > 1) continue;
+        final m = miss(power);
+        if (m < bestMiss) {
+          best = power;
+          bestMiss = m;
+        }
+      }
+    }
+    return best;
   }
 
   /// A Rabbit Hole hop toward [target] (the demo hands the power-up over
