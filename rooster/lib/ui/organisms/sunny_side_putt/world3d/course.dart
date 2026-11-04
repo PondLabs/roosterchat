@@ -299,8 +299,11 @@ class _CourseKit {
             if (s >= reach || !_reach.reachableAt(point)) continue;
             final g = hole.groundGradientAt(point);
             final n = math.sqrt(g.x * g.x + 1 + g.y * g.y);
+            // The light the slope gets beyond what level turf gets: an
+            // absolute difference, so a low sun (the Barn's dusk) does not
+            // blow the far slopes to black on top of the real lighting.
             final lit = (-g.x * lx + ly - g.y * lz) / n;
-            final relative = (lit / ly - 1).clamp(-0.45, 0.35);
+            final relative = ((lit - ly) * 1.6).clamp(-0.3, 0.3);
             final base = bitmap.get(col, row);
             var color = _shade(base, 1 + relative * 0.75);
             // Contour rings: the mower followed the slope.
