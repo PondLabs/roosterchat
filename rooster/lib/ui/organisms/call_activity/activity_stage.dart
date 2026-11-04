@@ -181,16 +181,16 @@ class _ActivityStageState extends State<ActivityStage> {
 /// Strings of the stage host, for the tests to find by name.
 abstract final class ActivityStageStrings {
   static String loading(String activity) => Intl.message("Loading $activity",
-      name: "labelCallActivityLoading",
+      name: "ActivityStageStrings_loading",
       args: [activity],
       desc: "Placeholder where the activity's view goes while it loads");
 
   static String get toggleFullscreen => Intl.message("Fullscreen",
-      name: "labelCallActivityToggleFullscreen",
+      name: "ActivityStageStrings_toggleFullscreen",
       desc: "Toggle that fills the app window with the stage");
 
   static String get leave => Intl.message("Exit",
-      name: "labelCallActivityLeave",
+      name: "ActivityStageStrings_leave",
       desc: "Button that leaves the stage and returns to the call's videos");
 
   /// Whether the window a fullscreen would fill is one we can fill (a

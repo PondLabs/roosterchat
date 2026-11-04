@@ -35,31 +35,29 @@ class _PuttLaunchSheetState extends State<_PuttLaunchSheet> {
   GameMode _mode = GameMode.casual;
   int _tournamentCount = 3;
 
-  static String get _title => Intl.message("Sunny Side Putt",
+  static String get labelPuttLaunchTitle => Intl.message("Sunny Side Putt",
       name: "labelPuttLaunchTitle",
       desc: "The launch options sheet's title: the game's name as the "
           "thing about to be set up");
 
-  static String get _casual => Intl.message("Casual",
+  static String get labelPuttModeCasual => Intl.message("Casual",
       name: "labelPuttModeCasual",
-      desc: "A Sunny Side Putt match mode: one course, and the group votes "
-          "the next one when it ends");
+      desc: "The casual mode: one course, then the group votes the next");
 
-  static String get _tournament => Intl.message("Tournament",
+  static String get labelPuttModeTournament => Intl.message("Tournament",
       name: "labelPuttModeTournament",
-      desc: "A Sunny Side Putt match mode: several courses drawn, scores "
-          "added up across them");
+      desc: "The tournament mode: drawn courses, accumulated score");
 
-  static String get _chaos => Intl.message("Barnyard Chaos",
+  static String get labelPuttModeChaos => Intl.message("Barnyard Chaos",
       name: "labelPuttModeChaos",
-      desc: "A Sunny Side Putt match mode: everyone starts with power-ups "
-          "in hand and double the mystery boxes");
+      desc: "The chaos mode: everyone starts with two power-ups and double "
+          "\"?\" boxes");
 
-  static String get _coursesCount => Intl.message("Courses",
+  static String get labelPuttCoursesCount => Intl.message("Courses",
       name: "labelPuttCoursesCount",
       desc: "A tournament's course-count row in the launch options");
 
-  static String get _start => Intl.message("Start",
+  static String get labelPuttStartMatch => Intl.message("Start",
       name: "labelPuttStartMatch",
       desc: "Starts the Sunny Side Putt match from the launch options "
           "sheet");
@@ -73,24 +71,25 @@ class _PuttLaunchSheetState extends State<_PuttLaunchSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(_title, style: Theme.of(context).textTheme.titleMedium),
+            Text(labelPuttLaunchTitle,
+                style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
               children: [
                 ChoiceChip(
-                  label: Text(_casual),
+                  label: Text(labelPuttModeCasual),
                   selected: _mode == GameMode.casual,
                   onSelected: (_) => setState(() => _mode = GameMode.casual),
                 ),
                 ChoiceChip(
-                  label: Text(_tournament),
+                  label: Text(labelPuttModeTournament),
                   selected: _mode == GameMode.tournament,
                   onSelected: (_) =>
                       setState(() => _mode = GameMode.tournament),
                 ),
                 ChoiceChip(
-                  label: Text(_chaos),
+                  label: Text(labelPuttModeChaos),
                   selected: _mode == GameMode.barnyardChaos,
                   onSelected: (_) =>
                       setState(() => _mode = GameMode.barnyardChaos),
@@ -103,7 +102,7 @@ class _PuttLaunchSheetState extends State<_PuttLaunchSheet> {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 spacing: 8,
                 children: [
-                  Text(_coursesCount),
+                  Text(labelPuttCoursesCount),
                   for (final count in [3, 6, 9])
                     ChoiceChip(
                       label: Text('$count'),
@@ -121,7 +120,7 @@ class _PuttLaunchSheetState extends State<_PuttLaunchSheet> {
                 tournamentCount:
                     _mode == GameMode.tournament ? _tournamentCount : null,
               )),
-              child: Text(_start),
+              child: Text(labelPuttStartMatch),
             ),
           ],
         ),

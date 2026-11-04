@@ -352,7 +352,8 @@ class PuttMatch extends ChangeNotifier {
   /// STRIKE. The engine applies its own wobble to the REAL angle; the view
   /// only showed the arrow swaying as a warning.
   bool submitShot(double angle, double power) {
-    remoteMove?.call(ShotInput(playerId: localPlayerId, angle: angle, power: power));
+    remoteMove
+        ?.call(ShotInput(playerId: localPlayerId, angle: angle, power: power));
     final accepted = engine.submitShot(localPlayerId, angle, power);
     if (accepted) _afterInput();
     return accepted;
@@ -363,7 +364,8 @@ class PuttMatch extends ChangeNotifier {
   /// engine consumes even effects it does not know, so the inventory stays
   /// honest either way.
   bool usePowerUp(String effectId, [PowerUpTarget? target]) {
-    remoteMove?.call(PowerUpInput(playerId: localPlayerId, effectId: effectId, target: target));
+    remoteMove?.call(PowerUpInput(
+        playerId: localPlayerId, effectId: effectId, target: target));
     final accepted = engine.usePowerUp(localPlayerId, effectId, target);
     if (accepted) _afterInput();
     return accepted;
@@ -529,37 +531,54 @@ String labelPuttMatchOver() => Intl.message("Match over",
     name: "labelPuttMatchOver",
     desc: "HUD banner when the last hole of the match is scored");
 
+String labelPuttTermHoleInOne() => Intl.message("Hole in one!",
+    name: "labelPuttTermHoleInOne", desc: "One stroke on a hole of any par");
+
+String labelPuttTermAlbatross() => Intl.message("Albatross!",
+    name: "labelPuttTermAlbatross", desc: "Three strokes under par");
+
+String labelPuttTermEagle() => Intl.message("Eagle!",
+    name: "labelPuttTermEagle", desc: "Two strokes under par");
+
+String labelPuttTermBirdie() => Intl.message("Birdie!",
+    name: "labelPuttTermBirdie", desc: "One stroke under par");
+
+String labelPuttTermPar() => Intl.message("Par",
+    name: "labelPuttTermPar", desc: "Exactly the hole's par");
+
+String labelPuttTermBogey() => Intl.message("Bogey",
+    name: "labelPuttTermBogey", desc: "One stroke over par");
+
+String labelPuttTermDoubleBogey() => Intl.message("Double bogey",
+    name: "labelPuttTermDoubleBogey", desc: "Two strokes over par");
+
+String labelPuttTermTripleBogey() => Intl.message("Triple bogey",
+    name: "labelPuttTermTripleBogey", desc: "Three strokes over par");
+
+String labelPuttTermMore() => Intl.message("In the nest",
+    name: "labelPuttTermMore",
+    desc: "Four or more strokes over par: holed, but no golf term "
+        "left to call it");
+
 String scoreTermText(ScoreTerm term) {
   switch (term) {
     case ScoreTerm.holeInOne:
-      return Intl.message("Hole in one!",
-          name: "labelPuttTermHoleInOne",
-          desc: "One stroke on a hole of any par");
+      return labelPuttTermHoleInOne();
     case ScoreTerm.albatross:
-      return Intl.message("Albatross!",
-          name: "labelPuttTermAlbatross", desc: "Three strokes under par");
+      return labelPuttTermAlbatross();
     case ScoreTerm.eagle:
-      return Intl.message("Eagle!",
-          name: "labelPuttTermEagle", desc: "Two strokes under par");
+      return labelPuttTermEagle();
     case ScoreTerm.birdie:
-      return Intl.message("Birdie!",
-          name: "labelPuttTermBirdie", desc: "One stroke under par");
+      return labelPuttTermBirdie();
     case ScoreTerm.par:
-      return Intl.message("Par",
-          name: "labelPuttTermPar", desc: "Exactly the hole's par");
+      return labelPuttTermPar();
     case ScoreTerm.bogey:
-      return Intl.message("Bogey",
-          name: "labelPuttTermBogey", desc: "One stroke over par");
+      return labelPuttTermBogey();
     case ScoreTerm.doubleBogey:
-      return Intl.message("Double bogey",
-          name: "labelPuttTermDoubleBogey", desc: "Two strokes over par");
+      return labelPuttTermDoubleBogey();
     case ScoreTerm.tripleBogey:
-      return Intl.message("Triple bogey",
-          name: "labelPuttTermTripleBogey", desc: "Three strokes over par");
+      return labelPuttTermTripleBogey();
     case ScoreTerm.more:
-      return Intl.message("In the nest",
-          name: "labelPuttTermMore",
-          desc: "Four or more strokes over par: holed, but no golf term "
-              "left to call it");
+      return labelPuttTermMore();
   }
 }

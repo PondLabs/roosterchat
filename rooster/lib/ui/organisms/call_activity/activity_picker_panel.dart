@@ -48,7 +48,7 @@ class ActivityPickerPanel extends StatelessWidget {
   final VoidCallback? onClose;
 
   static String get labelActivities => Intl.message("Activities",
-      name: "labelCallActivities",
+      name: "ActivityPickerPanel_labelActivities",
       desc: "Title of a call's activities panel: the games a call can play");
 
   /// Someone has started [activity], and everyone in the call may join it.
@@ -57,12 +57,12 @@ class ActivityPickerPanel extends StatelessWidget {
           name: "labelActivityStartedBy",
           args: [host, activity],
           desc: "A call's activities panel, when one of its activities is "
-              "already running: $host is the display name of the person who "
-              "started it, $activity the activity's display name");
+              "already running: host is the display name of the person who "
+              "started it, activity the activity's display name");
 
   static String get _labelNothingToPlay =>
       Intl.message("No activities to play yet.",
-          name: "messageActivitiesNone",
+          name: "ActivityPickerPanel__labelNothingToPlay",
           desc: "A call's activities panel when none of its activities has a "
               "session running");
 
@@ -174,6 +174,6 @@ class ActivityPickerPanel extends StatelessWidget {
 /// Strings the rest of the activities UI shares with the shelf.
 abstract final class ActivityPickerStrings {
   static String get launch => Intl.message("Launch",
-      name: "promptLaunchActivities",
+      name: "ActivityPickerStrings_launch",
       desc: "Button that starts an activity in a call");
 }

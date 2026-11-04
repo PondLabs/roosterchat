@@ -1037,6 +1037,36 @@
     "type": "text",
     "placeholders": {}
   },
+  "courseTheCoopName": "The Coop",
+  "@courseTheCoopName": {
+    "description": "Display name of the Sunny Side Putt coop course.",
+    "type": "text",
+    "placeholders": {}
+  },
+  "courseCornMazeName": "Corn Maze",
+  "@courseCornMazeName": {
+    "description": "Display name of the Sunny Side Putt corn maze course.",
+    "type": "text",
+    "placeholders": {}
+  },
+  "courseThePondName": "The Pond",
+  "@courseThePondName": {
+    "description": "Display name of the Sunny Side Putt pond course.",
+    "type": "text",
+    "placeholders": {}
+  },
+  "courseFarmRoadName": "Farm Road",
+  "@courseFarmRoadName": {
+    "description": "Display name of the Sunny Side Putt farm road course.",
+    "type": "text",
+    "placeholders": {}
+  },
+  "courseTheBarnName": "The Barn",
+  "@courseTheBarnName": {
+    "description": "Display name of the Sunny Side Putt barn course.",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelMediaVideo": "Video",
   "@labelMediaVideo": {
     "description": "Name and title of a video from a plain link to a video file, on its preview card and in the video player",
@@ -3852,6 +3882,68 @@
     "type": "text",
     "placeholders": {}
   },
+  "ActivityJoinPill_text": "{host} started {activity}",
+  "@ActivityJoinPill_text": {
+    "description": "A pill over a voice call's tiles when someone started a call activity: host is the display name of the person who started it and activity is the activity's name; tapping the pill's button joins it",
+    "type": "text",
+    "placeholders": {
+      "host": {},
+      "activity": {}
+    }
+  },
+  "ActivityJoinPill_join": "Join",
+  "@ActivityJoinPill_join": {
+    "description": "The button on the pill that invites a call's member into an activity already running",
+    "type": "text",
+    "placeholders": {}
+  },
+  "ActivityPickerPanel_labelActivities": "Activities",
+  "@ActivityPickerPanel_labelActivities": {
+    "description": "Title of a call's activities panel: the games a call can play",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelActivityStartedBy": "{host} started {activity}",
+  "@labelActivityStartedBy": {
+    "description": "A call's activities panel, when one of its activities is already running: host is the display name of the person who started it, activity the activity's display name",
+    "type": "text",
+    "placeholders": {
+      "host": {},
+      "activity": {}
+    }
+  },
+  "ActivityPickerPanel__labelNothingToPlay": "No activities to play yet.",
+  "@ActivityPickerPanel__labelNothingToPlay": {
+    "description": "A call's activities panel when none of its activities has a session running",
+    "type": "text",
+    "placeholders": {}
+  },
+  "ActivityPickerStrings_launch": "Launch",
+  "@ActivityPickerStrings_launch": {
+    "description": "Button that starts an activity in a call",
+    "type": "text",
+    "placeholders": {}
+  },
+  "ActivityStageStrings_loading": "Loading {activity}",
+  "@ActivityStageStrings_loading": {
+    "description": "Placeholder where the activity's view goes while it loads",
+    "type": "text",
+    "placeholders": {
+      "activity": {}
+    }
+  },
+  "ActivityStageStrings_toggleFullscreen": "Fullscreen",
+  "@ActivityStageStrings_toggleFullscreen": {
+    "description": "Toggle that fills the app window with the stage",
+    "type": "text",
+    "placeholders": {}
+  },
+  "ActivityStageStrings_leave": "Exit",
+  "@ActivityStageStrings_leave": {
+    "description": "Button that leaves the stage and returns to the call's videos",
+    "type": "text",
+    "placeholders": {}
+  },
   "promptCallOpenDjBooth": "DJ booth – play music",
   "@promptCallOpenDjBooth": {
     "description": "Tooltip of the call's DJ booth button, and its entry in the phone's \"more\" sheet, while the booth is closed: opens the booth to play music for everyone in the call",
@@ -3861,6 +3953,12 @@
   "promptCallCloseDjBooth": "Close the DJ booth",
   "@promptCallCloseDjBooth": {
     "description": "Tooltip of the call's DJ booth button, and its entry in the phone's \"more\" sheet, while the booth is open",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptCallOpenActivities": "Activities",
+  "@promptCallOpenActivities": {
+    "description": "Tooltip of the call's activities button (the rocket): opens the shelf of games the call can play together",
     "type": "text",
     "placeholders": {}
   },
@@ -5377,6 +5475,433 @@
     "type": "text",
     "placeholders": {
       "spaceName": {}
+    }
+  },
+  "labelPuttModeCasual": "Casual",
+  "@labelPuttModeCasual": {
+    "description": "The casual mode: one course, then the group votes the next",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttModeTournament": "Tournament",
+  "@labelPuttModeTournament": {
+    "description": "The tournament mode: drawn courses, accumulated score",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttModeBarnyardChaos": "Barnyard Chaos",
+  "@labelPuttModeBarnyardChaos": {
+    "description": "The chaos mode: everyone starts with two power-ups and double \"?\" boxes",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPowerHawkEye": "Hawk Eye",
+  "@labelPuttPowerHawkEye": {
+    "description": "Power-up: the next shot is perfectly straight, no wobble",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPowerNestMagnet": "Nest Magnet",
+  "@labelPuttPowerNestMagnet": {
+    "description": "Power-up: the egg turns magnetic when it passes near the nest",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPowerGhostEgg": "Ghost Egg",
+  "@labelPuttPowerGhostEgg": {
+    "description": "Power-up: the egg passes through fences and obstacles for a few seconds",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPowerChickenHop": "Chicken Hop",
+  "@labelPuttPowerChickenHop": {
+    "description": "Power-up: the next shot flies over obstacles",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPowerRabbitHole": "Rabbit Hole",
+  "@labelPuttPowerRabbitHole": {
+    "description": "Power-up: teleport your egg a limited distance, no stroke spent",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPowerGust": "Gust",
+  "@labelPuttPowerGust": {
+    "description": "Power-up: wind pushes every egg but your own",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPowerThickShell": "Thick Shell",
+  "@labelPuttPowerThickShell": {
+    "description": "Power-up: blocks the next power-up aimed at you",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPowerStrongCoffee": "Strong Coffee",
+  "@labelPuttPowerStrongCoffee": {
+    "description": "Power-up: the next shot is thirty percent stronger",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPowerNestSwap": "Nest Swap",
+  "@labelPuttPowerNestSwap": {
+    "description": "Power-up: swap your egg's position with a chosen player's",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPowerSprinkler": "Sprinkler",
+  "@labelPuttPowerSprinkler": {
+    "description": "Power-up: mark a point; eggs near it are pushed away",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPowerCornRain": "Corn Rain",
+  "@labelPuttPowerCornRain": {
+    "description": "Power-up: corn kernels nudge every egg but your own",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPowerThievingCrow": "Thieving Crow",
+  "@labelPuttPowerThievingCrow": {
+    "description": "Power-up: steal a power-up from a chosen player",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttOpenMenu": "Pause",
+  "@labelPuttOpenMenu": {
+    "description": "Tooltip of the HUD's pause button",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttHoleOf": "Hole {hole} of {count}",
+  "@labelPuttHoleOf": {
+    "description": "Which hole of the course is on the green, e.g. Hole 2 of 6",
+    "type": "text",
+    "placeholders": {
+      "hole": {},
+      "count": {}
+    }
+  },
+  "labelPuttHole": "Hole {hole}",
+  "@labelPuttHole": {
+    "description": "Which hole is on the green, without a course total to lean on (casual, where the group votes more courses in)",
+    "type": "text",
+    "placeholders": {
+      "hole": {}
+    }
+  },
+  "labelPuttCourseDone": "Course done",
+  "@labelPuttCourseDone": {
+    "description": "Shown instead of a hole number while the group votes the next course",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPar": "Par {par}",
+  "@labelPuttPar": {
+    "description": "The hole's par - the strokes it should take",
+    "type": "text",
+    "placeholders": {
+      "par": {}
+    }
+  },
+  "labelPuttScores": "Scores",
+  "@labelPuttScores": {
+    "description": "Title of the score list shown between holes",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttContinue": "Continue",
+  "@labelPuttContinue": {
+    "description": "Button that moves the match on after a hole's results",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttWinner": "{name} wins!",
+  "@labelPuttWinner": {
+    "description": "The match-over card's title; the placeholder is the winner's name",
+    "type": "text",
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "labelPuttRelativeEven": "Even",
+  "@labelPuttRelativeEven": {
+    "description": "A match total level with the pars played - neither over nor under",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttRelative": "{signed}",
+  "@labelPuttRelative": {
+    "description": "A match total's strokes over (+) or under (-) the pars played; nothing but the signed number, e.g. +3 or -1, sign included",
+    "type": "text",
+    "placeholders": {
+      "signed": {}
+    }
+  },
+  "labelPuttTotal": "{total} strokes",
+  "@labelPuttTotal": {
+    "description": "A player's stroke total across the match; the placeholder is the count",
+    "type": "text",
+    "placeholders": {
+      "total": {}
+    }
+  },
+  "labelPuttHoleStrokes": "{strokes,plural, =1{{strokes} stroke here}other{{strokes} strokes here}}",
+  "@labelPuttHoleStrokes": {
+    "description": "Strokes a player has taken in the running hole, or took in the one just finished",
+    "type": "text",
+    "placeholders": {
+      "strokes": {}
+    }
+  },
+  "labelPuttWatching": "Watching",
+  "@labelPuttWatching": {
+    "description": "Under a spectator's name in the scorecard: they are not playing",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttYouName": "{name} (you)",
+  "@labelPuttYouName": {
+    "description": "The scorecard chip marks the local player; the placeholder is their name",
+    "type": "text",
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "labelPuttChipCounts": "{total} total · {thisHole} here",
+  "@labelPuttChipCounts": {
+    "description": "The scorecard chip's counts: total strokes, then strokes in the current hole",
+    "type": "text",
+    "placeholders": {
+      "total": {},
+      "thisHole": {}
+    }
+  },
+  "labelPuttEmptySlot": "Empty slot",
+  "@labelPuttEmptySlot": {
+    "description": "Tooltip of an empty power-up inventory slot",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttLeaveGreen": "Leave the green",
+  "@labelPuttLeaveGreen": {
+    "description": "Button that ends the match for this player and leaves the game",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttLaunchTitle": "Sunny Side Putt",
+  "@labelPuttLaunchTitle": {
+    "description": "The launch options sheet's title: the game's name as the thing about to be set up",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttModeChaos": "Barnyard Chaos",
+  "@labelPuttModeChaos": {
+    "description": "The chaos mode: everyone starts with two power-ups and double \"?\" boxes",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttCoursesCount": "Courses",
+  "@labelPuttCoursesCount": {
+    "description": "A tournament's course-count row in the launch options",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttStartMatch": "Start",
+  "@labelPuttStartMatch": {
+    "description": "Starts the Sunny Side Putt match from the launch options sheet",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttHoleStart": "Hole {hole} - Par {par}",
+  "@labelPuttHoleStart": {
+    "description": "HUD banner when a hole starts; the placeholders are the hole's number in the match and its par",
+    "type": "text",
+    "placeholders": {
+      "hole": {},
+      "par": {}
+    }
+  },
+  "labelPuttCourseStart": "Now playing: {course}",
+  "@labelPuttCourseStart": {
+    "description": "HUD banner when a course starts or a voted course comes on; the placeholder is the course's name",
+    "type": "text",
+    "placeholders": {
+      "course": {}
+    }
+  },
+  "labelPuttHoleCleared": "Hole cleared!",
+  "@labelPuttHoleCleared": {
+    "description": "HUD banner when every egg is in the nest before the timer runs out",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttHoleTimedOut": "Time's up!",
+  "@labelPuttHoleTimedOut": {
+    "description": "HUD banner when the hole's timer expires with eggs still on the green",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttMatchOver": "Match over",
+  "@labelPuttMatchOver": {
+    "description": "HUD banner when the last hole of the match is scored",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttTermHoleInOne": "Hole in one!",
+  "@labelPuttTermHoleInOne": {
+    "description": "One stroke on a hole of any par",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttTermAlbatross": "Albatross!",
+  "@labelPuttTermAlbatross": {
+    "description": "Three strokes under par",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttTermEagle": "Eagle!",
+  "@labelPuttTermEagle": {
+    "description": "Two strokes under par",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttTermBirdie": "Birdie!",
+  "@labelPuttTermBirdie": {
+    "description": "One stroke under par",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttTermPar": "Par",
+  "@labelPuttTermPar": {
+    "description": "Exactly the hole's par",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttTermBogey": "Bogey",
+  "@labelPuttTermBogey": {
+    "description": "One stroke over par",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttTermDoubleBogey": "Double bogey",
+  "@labelPuttTermDoubleBogey": {
+    "description": "Two strokes over par",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttTermTripleBogey": "Triple bogey",
+  "@labelPuttTermTripleBogey": {
+    "description": "Three strokes over par",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttTermMore": "In the nest",
+  "@labelPuttTermMore": {
+    "description": "Four or more strokes over par: holed, but no golf term left to call it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPaused": "Paused",
+  "@labelPuttPaused": {
+    "description": "Title of the pause menu",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttResume": "Back to the green",
+  "@labelPuttResume": {
+    "description": "Button that unpauses the game",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttSettings": "Settings",
+  "@labelPuttSettings": {
+    "description": "Button that opens the game's settings (the volume sliders)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttLeave": "Leave game",
+  "@labelPuttLeave": {
+    "description": "Button that leaves the match; the round keeps going without the player",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttLeaveTitle": "Leave the game?",
+  "@labelPuttLeaveTitle": {
+    "description": "Title of the confirmation before leaving",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptPuttLeaveDetail": "The round keeps going without you. The hole scores you the strokes you took, at least par plus two.",
+  "@promptPuttLeaveDetail": {
+    "description": "What leaving does, in the confirmation: the unfinished hole scores max(strokes taken, par + 2)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttStay": "Stay",
+  "@labelPuttStay": {
+    "description": "Button that declines leaving and returns to the game",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttGameSettings": "Game settings",
+  "@labelPuttGameSettings": {
+    "description": "Title of the settings sheet",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttMusicVolume": "Music volume",
+  "@labelPuttMusicVolume": {
+    "description": "Slider: how loud the game's music plays",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttSfxVolume": "SFX volume",
+  "@labelPuttSfxVolume": {
+    "description": "Slider: how loud the game's sound effects play",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttDone": "Done",
+  "@labelPuttDone": {
+    "description": "Button that closes the settings sheet",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttChooseNextCourse": "Choose the next course",
+  "@labelPuttChooseNextCourse": {
+    "description": "Title of the vote sheet after a casual course ends",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttCourseCard": "{holes} holes · par {par}",
+  "@labelPuttCourseCard": {
+    "description": "A course card's facts in the vote sheet; the placeholders are the hole count and the pars added up",
+    "type": "text",
+    "placeholders": {
+      "holes": {},
+      "par": {}
+    }
+  },
+  "labelPuttPlayCourse": "Play",
+  "@labelPuttPlayCourse": {
+    "description": "Button on a course card that starts that course",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttSpectatorTitle": "You're watching from the fence",
+  "@labelPuttSpectatorTitle": {
+    "description": "The spectator strip's title, shown when the round is full; the next free seat starts the spectator at the next hole's tee",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttSpectatorDetail": "{playing} on the green · {watching} watching with you",
+  "@labelPuttSpectatorDetail": {
+    "description": "The spectator strip's counts; the placeholders are how many players are in the hole and how many others are watching",
+    "type": "text",
+    "placeholders": {
+      "playing": {},
+      "watching": {}
     }
   },
   "labelUpdateVersion": "Version",

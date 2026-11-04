@@ -167,21 +167,27 @@ class PuttModeChip extends StatelessWidget {
   }
 }
 
+String labelPuttModeCasual() => Intl.message("Casual",
+    name: "labelPuttModeCasual",
+    desc: "The casual mode: one course, then the group votes the next");
+
+String labelPuttModeTournament() => Intl.message("Tournament",
+    name: "labelPuttModeTournament",
+    desc: "The tournament mode: drawn courses, accumulated score");
+
+String labelPuttModeBarnyardChaos() => Intl.message("Barnyard Chaos",
+    name: "labelPuttModeBarnyardChaos",
+    desc: "The chaos mode: everyone starts with two power-ups and double "
+        "\"?\" boxes");
+
 String modeName(GameMode mode) {
   switch (mode) {
     case GameMode.casual:
-      return Intl.message("Casual",
-          name: "labelPuttModeCasual",
-          desc: "The casual mode: one course, then the group votes the next");
+      return labelPuttModeCasual();
     case GameMode.tournament:
-      return Intl.message("Tournament",
-          name: "labelPuttModeTournament",
-          desc: "The tournament mode: drawn courses, accumulated score");
+      return labelPuttModeTournament();
     case GameMode.barnyardChaos:
-      return Intl.message("Barnyard Chaos",
-          name: "labelPuttModeBarnyardChaos",
-          desc: "The chaos mode: everyone starts with two power-ups and "
-              "double \"?\" boxes");
+      return labelPuttModeBarnyardChaos();
   }
 }
 
@@ -877,8 +883,9 @@ String labelPuttTotal(int total) => Intl.message("$total strokes",
     desc: "A player's stroke total across the match; the placeholder is "
         "the count");
 
-String labelPuttHoleStrokes(int strokes) => Intl.message(
-    strokes == 1 ? "$strokes stroke here" : "$strokes strokes here",
+String labelPuttHoleStrokes(int strokes) => Intl.plural(strokes,
+    one: "$strokes stroke here",
+    other: "$strokes strokes here",
     name: "labelPuttHoleStrokes",
     args: [strokes],
     desc: "Strokes a player has taken in the running hole, or took in the "

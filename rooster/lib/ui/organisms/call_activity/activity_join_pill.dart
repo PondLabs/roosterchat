@@ -21,17 +21,17 @@ class ActivityJoinPill extends StatelessWidget {
 
   final VoidCallback onJoin;
 
-  static String text(String host, String activity) => Intl.message(
-      "$host started $activity",
-      name: "labelActivityJoinPill",
-      args: [host, activity],
-      desc: "A pill over a voice call's tiles when someone started a call "
-          "activity: $host is the display name of the person who started "
-          "it and $activity is the activity's name; tapping the pill's "
-          "button joins it");
+  static String text(String host, String activity) =>
+      Intl.message("$host started $activity",
+          name: "ActivityJoinPill_text",
+          args: [host, activity],
+          desc: "A pill over a voice call's tiles when someone started a call "
+              "activity: host is the display name of the person who started "
+              "it and activity is the activity's name; tapping the pill's "
+              "button joins it");
 
   static String get join => Intl.message("Join",
-      name: "labelActivityJoin",
+      name: "ActivityJoinPill_join",
       desc: "The button on the pill that invites a call's member into an "
           "activity already running");
 
