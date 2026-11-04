@@ -61,6 +61,18 @@ spares their egg, the sprinkler waters around it.
 | Corn Rain | kernels bounce around, nudging every egg but yours |
 | Thieving Crow | steal a power-up from a chosen player |
 
+Using one: a tap on its slot casts the ones that need nothing. One that
+acts on a spot (Rabbit Hole, Gust, Sprinkler) waits for it: the slot
+glows, the green shows what it would reach (the hop's range and landing,
+the spray and the eggs it soaks, the pull on every other egg), and the
+next press on the green casts it there; Esc, a right click, pausing or
+the slot tapped again puts it away. One that acts on a player (Nest
+Swap, Thieving Crow) opens a list of the players it can reach, and says
+so when nobody can be picked. Nothing is spent on a cancel, or on a cast
+that could do nothing (no other egg to push, my egg already in the
+nest). The targeting lives in `putt_targeting.dart`, the reticle in
+`putt_reticle.dart`.
+
 ### Courses
 
 Five launch courses, six holes each, themselves teaching their
@@ -82,10 +94,13 @@ Barn (hay bales, the silo's pull).
 - `ui/organisms/sunny_side_putt/` - the Flame view: 3D perspective
   camera (orbit/drag, zoom), the farm rendered in layers (ground,
   fences, obstacles, actors with ground shadows), the aim arrow on the
-  turf, HUD (scorecard, timer ring pulsing on the last seconds,
-  power-up hand), pause/settings/vote menus, spectator strip, and the
-  audio (synthesized SFX and a looping tune; volume per bus in the
-  settings).
+  turf, the HUD (`putt_hud.dart`: the hole bar - hole, par, my strokes,
+  the clock turning comb red through the last fifteen seconds - with
+  the course's holes as dots under it, the course chip, the camera and
+  pause buttons, banners by kind, the scorecard, the hint line, the
+  power-up carton and its targeting, and the results and match-over
+  cards), pause/settings/vote menus, spectator strip, and the audio
+  (synthesized SFX and a looping tune; volume per bus in the settings).
 - `putt_session.dart` - the live-session bridge: the host's engine is
   the truth; guests feed their own engine with the accepted-move
   journal and resnapshot, so play is smooth without a game server.

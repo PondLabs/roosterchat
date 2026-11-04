@@ -17,6 +17,8 @@ import 'package:flutter/foundation.dart';
 import 'package:rooster/client/components/call_activity/call_activity_component.dart';
 import 'package:rooster/client/components/call_activity/call_activity_session.dart';
 import 'package:rooster/client/components/sunny_side_putt/courses/sunny_side_putt_courses.dart';
+import 'package:rooster/client/components/sunny_side_putt/core/effects/effect_registry.dart';
+import 'package:rooster/client/components/sunny_side_putt/core/powerups.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/rules.dart';
 
 import 'putt_launch_options.dart';
@@ -121,6 +123,7 @@ class PuttSessionController extends ChangeNotifier {
       ],
       catalog: catalog,
       seed: random.nextInt(1 << 31),
+      powerUps: puttLaunchPowerUps(),
     );
   }
 
@@ -130,7 +133,7 @@ class PuttSessionController extends ChangeNotifier {
   Future<void> hostStart(PuttConfig config) async {
     await session.launch();
     match?.dispose();
-    match = PuttMatch(config: config, localPlayerId: selfId);
+    match = PuttMatch(config: config, localPlayerId: selfId, nameOf: nameOf);
     match!.boot();
     _startTicker();
     _publish();
@@ -204,6 +207,7 @@ class PuttSessionController extends ChangeNotifier {
       mode: mode,
       seed: seed,
       catalog: catalog,
+      powerUps: puttLaunchPowerUps(),
       courses: [
         for (final id in courseIds)
           catalog[id] ??
@@ -222,6 +226,7 @@ class PuttSessionController extends ChangeNotifier {
       displayNames: {
         for (final p in engine.players) p.id: nameOf(p.id),
       },
+      nameOf: nameOf,
     );
     _journalSeq = engine.lastSeq;
     _startTicker();
@@ -356,4 +361,13 @@ class PuttSessionController extends ChangeNotifier {
     match = null;
     super.dispose();
   }
+}
+
+/// The twelve launch power-ups, in a registry of their own for each match:
+/// the host and every guest build the same one, so the "?" boxes grant
+/// (and the seeded draws run) alike everywhere.
+PowerUpRegistry puttLaunchPowerUps() {
+  final registry = PowerUpRegistry();
+  registerBuiltinEffects(registry);
+  return registry;
 }

@@ -5567,48 +5567,175 @@
     "type": "text",
     "placeholders": {}
   },
-  "labelPuttOpenMenu": "Pause",
+  "labelPuttPowerHawkEyeDetail": "Your next shot goes dead straight, no wobble.",
+  "@labelPuttPowerHawkEyeDetail": {
+    "description": "Tooltip line under the Hawk Eye power-up's name: what it does",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPowerNestMagnetDetail": "Your next shot is pulled into the nest when it rolls close.",
+  "@labelPuttPowerNestMagnetDetail": {
+    "description": "Tooltip line under the Nest Magnet power-up's name: what it does",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPowerGhostEggDetail": "Your egg rolls through fences and hens for a few seconds.",
+  "@labelPuttPowerGhostEggDetail": {
+    "description": "Tooltip line under the Ghost Egg power-up's name: what it does",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPowerChickenHopDetail": "Your next shot hops over whatever is in the way.",
+  "@labelPuttPowerChickenHopDetail": {
+    "description": "Tooltip line under the Chicken Hop power-up's name: what it does",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPowerRabbitHoleDetail": "Pop your egg up at a spot nearby, no stroke spent.",
+  "@labelPuttPowerRabbitHoleDetail": {
+    "description": "Tooltip line under the Rabbit Hole power-up's name: what it does (the player picks the spot, a few steps away at most)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPowerGustDetail": "The wind blows every other egg toward a spot you pick.",
+  "@labelPuttPowerGustDetail": {
+    "description": "Tooltip line under the Gust power-up's name: what it does",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPowerThickShellDetail": "Your egg shrugs off the next push another player sends.",
+  "@labelPuttPowerThickShellDetail": {
+    "description": "Tooltip line under the Thick Shell power-up's name: it blocks the next Gust, Sprinkler or Corn Rain that would hit the player's egg",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPowerStrongCoffeeDetail": "Your next shot leaves 30% harder.",
+  "@labelPuttPowerStrongCoffeeDetail": {
+    "description": "Tooltip line under the Strong Coffee power-up's name: what it does",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPowerNestSwapDetail": "Trade places with another player's egg.",
+  "@labelPuttPowerNestSwapDetail": {
+    "description": "Tooltip line under the Nest Swap power-up's name: what it does",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPowerSprinklerDetail": "Soak a spot: the eggs around it get pushed away.",
+  "@labelPuttPowerSprinklerDetail": {
+    "description": "Tooltip line under the Sprinkler power-up's name: what it does",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPowerCornRainDetail": "Corn kernels rain down and nudge every egg but yours.",
+  "@labelPuttPowerCornRainDetail": {
+    "description": "Tooltip line under the Corn Rain power-up's name: what it does",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPowerThievingCrowDetail": "Steal a power-up from another player.",
+  "@labelPuttPowerThievingCrowDetail": {
+    "description": "Tooltip line under the Thieving Crow power-up's name: what it does (it takes the other player's first one)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttOpenMenu": "Pause (Esc)",
   "@labelPuttOpenMenu": {
-    "description": "Tooltip of the HUD's pause button",
+    "description": "Tooltip of the HUD's pause button; Esc is the key that pauses too",
+    "type": "text",
+    "placeholders": {}
+  },
+  "tooltipPuttCameraWhole": "See the whole hole (C)",
+  "@tooltipPuttCameraWhole": {
+    "description": "Tooltip of the HUD's camera button while the camera is in close: it pulls back to show the whole hole; C is the key that does the same",
+    "type": "text",
+    "placeholders": {}
+  },
+  "tooltipPuttCameraClose": "Back in close (C)",
+  "@tooltipPuttCameraClose": {
+    "description": "Tooltip of the HUD's camera button while it shows the whole hole: it goes back to the close view of the player's egg; C is the key that does the same",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttBarHole": "Hole",
+  "@labelPuttBarHole": {
+    "description": "Small label in the bar at the top of the game, over the hole's number in its course (e.g. 3/6)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttBarPar": "Par",
+  "@labelPuttBarPar": {
+    "description": "Small label in the bar at the top of the game, over the hole's par (the strokes it should take)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttBarStrokes": "Strokes",
+  "@labelPuttBarStrokes": {
+    "description": "Small label in the bar at the top of the game, over the strokes the player has taken on this hole",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttBarTime": "Time",
+  "@labelPuttBarTime": {
+    "description": "Small label in the bar at the top of the game, over the time left on the hole's clock",
     "type": "text",
     "placeholders": {}
   },
   "labelPuttHoleOf": "Hole {hole} of {count}",
   "@labelPuttHoleOf": {
-    "description": "Which hole of the course is on the green, e.g. Hole 2 of 6",
+    "description": "Read out for the row of dots under the top bar, one per hole of the course: which hole is on the green, e.g. Hole 2 of 6",
     "type": "text",
     "placeholders": {
       "hole": {},
       "count": {}
     }
   },
-  "labelPuttHole": "Hole {hole}",
-  "@labelPuttHole": {
-    "description": "Which hole is on the green, without a course total to lean on (casual, where the group votes more courses in)",
-    "type": "text",
-    "placeholders": {
-      "hole": {}
-    }
-  },
   "labelPuttCourseDone": "Course done",
   "@labelPuttCourseDone": {
-    "description": "Shown instead of a hole number while the group votes the next course",
+    "description": "Under the course's name while the group votes the next course",
     "type": "text",
     "placeholders": {}
   },
-  "labelPuttPar": "Par {par}",
-  "@labelPuttPar": {
-    "description": "The hole's par - the strokes it should take",
+  "labelPuttAimHint": "Drag anywhere to aim · let go to putt",
+  "@labelPuttAimHint": {
+    "description": "Hint line at the bottom of the game until the player's first putt: dragging anywhere pulls the slingshot, releasing it strikes the egg",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttScorecard": "Scorecard",
+  "@labelPuttScorecard": {
+    "description": "Title of the score panel in the bottom left corner of the game",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttScorecardMore": "{count,plural, =1{+{count} more player}other{+{count} more players}}",
+  "@labelPuttScorecardMore": {
+    "description": "The score panel's last line on a short screen, when not every player fits: how many more are in the match",
     "type": "text",
     "placeholders": {
-      "par": {}
+      "count": {}
     }
   },
-  "labelPuttScores": "Scores",
-  "@labelPuttScores": {
-    "description": "Title of the score list shown between holes",
+  "labelPuttScorecardHole": "Hole",
+  "@labelPuttScorecardHole": {
+    "description": "Column header in the score panel: the strokes each player has taken on this hole",
     "type": "text",
     "placeholders": {}
+  },
+  "labelPuttScorecardTotal": "Total",
+  "@labelPuttScorecardTotal": {
+    "description": "Column header in the score panel and the score cards: each player's strokes over (+) or under (-) the pars played",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttResultsTitle": "Hole {hole} · Par {par}",
+  "@labelPuttResultsTitle": {
+    "description": "Title of the results card between holes; the placeholders are the hole's number in its course and its par",
+    "type": "text",
+    "placeholders": {
+      "hole": {},
+      "par": {}
+    }
   },
   "labelPuttContinue": "Continue",
   "@labelPuttContinue": {
@@ -5624,9 +5751,15 @@
       "name": {}
     }
   },
-  "labelPuttRelativeEven": "Even",
-  "@labelPuttRelativeEven": {
-    "description": "A match total level with the pars played - neither over nor under",
+  "labelPuttTie": "It's a tie!",
+  "@labelPuttTie": {
+    "description": "The match-over card's title when two or more players share the lowest total",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttEvenShort": "E",
+  "@labelPuttEvenShort": {
+    "description": "A total level with the pars played, in the narrow score columns: golf's E for even (neither over nor under par)",
     "type": "text",
     "placeholders": {}
   },
@@ -5638,17 +5771,17 @@
       "signed": {}
     }
   },
-  "labelPuttTotal": "{total} strokes",
+  "labelPuttTotal": "{total,plural, =1{{total} stroke}other{{total} strokes}}",
   "@labelPuttTotal": {
-    "description": "A player's stroke total across the match; the placeholder is the count",
+    "description": "A player's stroke total across the match, on the match-over card; the placeholder is the count",
     "type": "text",
     "placeholders": {
       "total": {}
     }
   },
-  "labelPuttHoleStrokes": "{strokes,plural, =1{{strokes} stroke here}other{{strokes} strokes here}}",
+  "labelPuttHoleStrokes": "{strokes,plural, =1{{strokes} stroke}other{{strokes} strokes}}",
   "@labelPuttHoleStrokes": {
-    "description": "Strokes a player has taken in the running hole, or took in the one just finished",
+    "description": "The strokes a player took on the hole just finished, on the results card between holes",
     "type": "text",
     "placeholders": {
       "strokes": {}
@@ -5656,25 +5789,16 @@
   },
   "labelPuttWatching": "Watching",
   "@labelPuttWatching": {
-    "description": "Under a spectator's name in the scorecard: they are not playing",
+    "description": "In place of a spectator's scores: they are not playing",
     "type": "text",
     "placeholders": {}
   },
   "labelPuttYouName": "{name} (you)",
   "@labelPuttYouName": {
-    "description": "The scorecard chip marks the local player; the placeholder is their name",
+    "description": "The scorecard marks the local player; the placeholder is their name",
     "type": "text",
     "placeholders": {
       "name": {}
-    }
-  },
-  "labelPuttChipCounts": "{total} total · {thisHole} here",
-  "@labelPuttChipCounts": {
-    "description": "The scorecard chip's counts: total strokes, then strokes in the current hole",
-    "type": "text",
-    "placeholders": {
-      "total": {},
-      "thisHole": {}
     }
   },
   "labelPuttEmptySlot": "Empty slot",
@@ -5686,6 +5810,66 @@
   "labelPuttLeaveGreen": "Leave the green",
   "@labelPuttLeaveGreen": {
     "description": "Button that ends the match for this player and leaves the game",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttBadgeHoleInOne": "Hole in one",
+  "@labelPuttBadgeHoleInOne": {
+    "description": "Badge on the results card: the hole took one stroke",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttBadgeAlbatross": "Albatross",
+  "@labelPuttBadgeAlbatross": {
+    "description": "Badge on the results card: three strokes under par",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttBadgeEagle": "Eagle",
+  "@labelPuttBadgeEagle": {
+    "description": "Badge on the results card: two strokes under par",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttBadgeBirdie": "Birdie",
+  "@labelPuttBadgeBirdie": {
+    "description": "Badge on the results card: one stroke under par",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttBadgePar": "Par",
+  "@labelPuttBadgePar": {
+    "description": "Badge on the results card: exactly the hole's par",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttBadgeBogey": "Bogey",
+  "@labelPuttBadgeBogey": {
+    "description": "Badge on the results card: one stroke over par",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttBadgeDoubleBogey": "Double bogey",
+  "@labelPuttBadgeDoubleBogey": {
+    "description": "Badge on the results card: two strokes over par",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttBadgeTripleBogey": "Triple bogey",
+  "@labelPuttBadgeTripleBogey": {
+    "description": "Badge on the results card: three strokes over par",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttBadgeMore": "In the nest",
+  "@labelPuttBadgeMore": {
+    "description": "Badge on the results card: four or more strokes over par, holed but with no golf term left to call it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttBadgeOutOfTime": "Out of time",
+  "@labelPuttBadgeOutOfTime": {
+    "description": "Badge on the results card for an egg the clock stopped before it reached the nest (it scores par plus two, or its strokes if more)",
     "type": "text",
     "placeholders": {}
   },
@@ -5713,13 +5897,29 @@
     "type": "text",
     "placeholders": {}
   },
-  "labelPuttHoleStart": "Hole {hole} - Par {par}",
-  "@labelPuttHoleStart": {
-    "description": "HUD banner when a hole starts; the placeholders are the hole's number in the match and its par",
+  "labelPuttHole": "Hole {hole}",
+  "@labelPuttHole": {
+    "description": "The big line of the banner a hole starts with; the placeholder is the number of the hole in its course",
     "type": "text",
     "placeholders": {
-      "hole": {},
+      "hole": {}
+    }
+  },
+  "labelPuttPar": "Par {par}",
+  "@labelPuttPar": {
+    "description": "The hole's par - the strokes it should take - under a hole start's banner when the course has no name to add",
+    "type": "text",
+    "placeholders": {
       "par": {}
+    }
+  },
+  "labelPuttHoleStartDetail": "Par {par} · {course}",
+  "@labelPuttHoleStartDetail": {
+    "description": "The second line of the banner a hole starts with, under its number: the hole's par, then the course's name",
+    "type": "text",
+    "placeholders": {
+      "par": {},
+      "course": {}
     }
   },
   "labelPuttCourseStart": "Now playing: {course}",
@@ -5886,6 +6086,72 @@
   "labelPuttPlayCourse": "Play",
   "@labelPuttPlayCourse": {
     "description": "Button on a course card that starts that course",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttTargetRabbitHole": "Tap a spot to hop your egg there",
+  "@labelPuttTargetRabbitHole": {
+    "description": "Hint line while the Rabbit Hole power-up waits for the spot on the green the player's egg pops up at (a few steps away at most)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttTargetGust": "Tap a spot: the wind blows the other eggs toward it",
+  "@labelPuttTargetGust": {
+    "description": "Hint line while the Gust power-up waits for its spot on the green; every other player's egg is pushed toward it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttTargetSprinkler": "Tap a spot: the sprinkler soaks the eggs around it",
+  "@labelPuttTargetSprinkler": {
+    "description": "Hint line while the Sprinkler power-up waits for its spot on the green; the other eggs near it are pushed away",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttTargetSpot": "Pick a spot on the green",
+  "@labelPuttTargetSpot": {
+    "description": "Hint line while a power-up waits for the spot on the green it acts on",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttTargetCancel": "Tap the power-up again to cancel",
+  "@labelPuttTargetCancel": {
+    "description": "Under the targeting hint: tapping the glowing power-up slot a second time puts it away unused",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messagePuttEggInNest": "Your egg is already in the nest",
+  "@messagePuttEggInNest": {
+    "description": "Why a power-up that moves the player's own egg cannot be used: the egg already finished the hole",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messagePuttNoEggsToPush": "No other eggs on the green to push",
+  "@messagePuttNoEggsToPush": {
+    "description": "Why the Gust or Sprinkler power-up cannot be used: every other egg is already in the nest",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messagePuttNobodyToSwap": "Nobody on the green to swap with",
+  "@messagePuttNobodyToSwap": {
+    "description": "The Nest Swap picker when no other player's egg is still on the green; the power-up is kept",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messagePuttNobodyToRob": "Nobody has a power-up to steal",
+  "@messagePuttNobodyToRob": {
+    "description": "The Thieving Crow picker when no other player holds a power-up; the crow is kept",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPickSwap": "Swap places with…",
+  "@labelPuttPickSwap": {
+    "description": "Title of the Nest Swap picker, over the list of players whose egg the player's own egg can trade places with",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPickSteal": "Steal a power-up from…",
+  "@labelPuttPickSteal": {
+    "description": "Title of the Thieving Crow picker, over the list of players holding a power-up the crow can take",
     "type": "text",
     "placeholders": {}
   },

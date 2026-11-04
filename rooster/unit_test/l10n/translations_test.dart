@@ -47,12 +47,19 @@ const _sameAsEnglish = <String, Set<String>>{
     'labelSoundboardDefaultBonk',
     'labelSoundboardDefaultVineBoom',
     // Sunny Side Putt: the game's title is never translated, and golf's
-    // "casual", "birdie", "par" and "bogey" are the words Brazilians use.
+    // "casual", "birdie", "par" and "bogey" are the words Brazilians use
+    // ("total" is the same word too).
     'labelPuttLaunchTitle',
     'labelPuttModeCasual',
     'labelPuttTermBirdie',
     'labelPuttTermPar',
     'labelPuttTermBogey',
+    'labelPuttBadgeBirdie',
+    'labelPuttBadgePar',
+    'labelPuttBadgeBogey',
+    'labelPuttBarPar',
+    'labelPuttHoleStartDetail',
+    'labelPuttScorecardTotal',
   },
 };
 

@@ -7,11 +7,11 @@
 //
 // Split of work:
 //   * [SunnySidePuttView] - the Flutter shell: the GPU surface (the three_js
-//     view), pointer plumbing (the main button putts, a secondary-button
-//     drag and the wheel/pinch orbit and zoom the camera), Esc-to-pause,
-//     the HUD (rebuilt as the match moves), the name tags, the menus and
-//     the spectator strip (their own files), and the audio service's cue
-//     tap.
+//     view), pointer plumbing (the main button putts - or casts an armed
+//     power-up where it lands - a secondary-button drag and the
+//     wheel/pinch orbit and zoom the camera), Esc-to-pause, the HUD
+//     (rebuilt as the match moves), the targeting reticle, the name tags
+//     and the menus (their own files), and the audio service's cue tap.
 //   * [SunnySidePuttGame] - the match's ticker and the world's frame
 //     builder: the orbit rig fitted to the hole (the overview first, then
 //     in close to the egg), the fixed-tick simulation driven through
@@ -36,6 +36,7 @@ import 'package:flame/game.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:rooster/client/components/sunny_side_putt/core/effects/effect_registry.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/hole.dart'
     as hole;
 import 'package:rooster/client/components/sunny_side_putt/core/physics.dart';
@@ -51,8 +52,9 @@ import 'putt_hud.dart';
 import 'putt_match.dart';
 import 'putt_menus.dart';
 import 'putt_name_tags.dart';
+import 'putt_reticle.dart';
+import 'putt_targeting.dart';
 import 'putt_world3d.dart';
-import 'spectator_strip.dart';
 
 /// The whole putter experience on the call's stage: game, HUD, menus.
 class SunnySidePuttView extends StatefulWidget {
@@ -127,15 +129,24 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     _keyFocus.dispose();
     _gameFocus.dispose();
     _tags.dispose();
+    game.targeting.dispose();
     super.dispose();
   }
 
   void _togglePause() {
+    // A power-up waiting for a spot or a pick goes back in the carton.
+    game.targeting.cancel();
     setState(() {
       menuOpen = !menuOpen;
       settingsOpen = false;
       match.paused = menuOpen;
     });
+    widget.audio?.play(PuttSfx.click);
+  }
+
+  /// The whole hole, or back in close: the C key and the HUD's button.
+  void _toggleCamera() {
+    setState(game.toggleOverview);
     widget.audio?.play(PuttSfx.click);
   }
 
@@ -153,6 +164,11 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (event is KeyDownEvent &&
         event.logicalKey == LogicalKeyboardKey.escape) {
+      // An armed power-up or an open picker goes away first, unspent.
+      if (game.targeting.isActive) {
+        game.targeting.cancel();
+        return KeyEventResult.handled;
+      }
       if (settingsOpen) {
         setState(() => settingsOpen = false);
         return KeyEventResult.handled;
@@ -164,7 +180,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     }
     if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.keyC) {
       // C swaps between the close view and the whole hole.
-      game.toggleOverview();
+      _toggleCamera();
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -187,9 +203,32 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   double? _pinchSpan;
   double? _pinchDistance;
 
+  /// The press that casts the armed power-up where it lets go (the
+  /// reticle follows it until then, so a finger can settle on the spot).
+  int? _castPointer;
+
   void _pointerDown(PointerDownEvent event, Size size) {
     _downPointers.add(event.pointer);
     _pointerAt[event.pointer] = event.localPosition;
+    final targeting = game.targeting;
+    if (targeting.isActive) {
+      // While a power-up waits for a spot or a pick, presses on the green
+      // belong to it: a right click (or a press beside an open picker)
+      // puts it away, the main button casts the armed one.
+      if (targeting.armed == null || event.buttons == kSecondaryMouseButton) {
+        targeting.cancel();
+        _castPointer = null;
+        return;
+      }
+      if (event.buttons != kMiddleMouseButton && _downPointers.length == 1) {
+        game.cancelAim();
+        _castPointer = event.pointer;
+        targeting.hover = _toWorld(event.localPosition);
+        return;
+      }
+      // A second finger: the pinch takes over, nothing is cast.
+      _castPointer = null;
+    }
     // A secondary-button drag orbits; only the main button putts.
     if (event.buttons == kSecondaryMouseButton ||
         event.buttons == kMiddleMouseButton) {
@@ -210,6 +249,10 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
 
   void _pointerMove(PointerEvent event, Size size) {
     _pointerAt[event.pointer] = event.localPosition;
+    if (_castPointer == event.pointer) {
+      game.targeting.hover = _toWorld(event.localPosition);
+      return;
+    }
     // The orbit drag: turn the yaw, tilt the pitch.
     if (_orbitPointer == event.pointer) {
       final last = _orbitLastPosition;
@@ -238,6 +281,13 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   void _pointerUp(PointerEvent event, Size size) {
     _downPointers.remove(event.pointer);
     _pointerAt.remove(event.pointer);
+    if (_castPointer == event.pointer) {
+      _castPointer = null;
+      final world = _toWorld(event.localPosition);
+      // Let go over the sky: still armed, nothing spent.
+      if (world != null) game.castArmedAt(world);
+      return;
+    }
     final orbiting = _orbitPointer == event.pointer;
     if (orbiting) {
       _orbitPointer = null;
@@ -252,12 +302,21 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   void _pointerCancel(PointerEvent event, Size size) {
     _downPointers.remove(event.pointer);
     _pointerAt.remove(event.pointer);
+    if (_castPointer == event.pointer) _castPointer = null;
     if (_orbitPointer == event.pointer) {
       _orbitPointer = null;
       _orbitLastPosition = null;
     }
     if (_downPointers.length < 2) _pinchSpan = null;
     game.cancelAim();
+  }
+
+  /// A mouse over the green while a power-up is armed: the reticle
+  /// follows it.
+  void _pointerHover(PointerHoverEvent event) {
+    final targeting = game.targeting;
+    if (targeting.armed == null) return;
+    targeting.hover = _toWorld(event.localPosition);
   }
 
   void _pointerSignal(PointerSignalEvent event) {
@@ -317,15 +376,35 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
                 onPointerMove: (event) => _pointerMove(event, size),
                 onPointerUp: (event) => _pointerUp(event, size),
                 onPointerCancel: (event) => _pointerCancel(event, size),
+                onPointerHover: _pointerHover,
                 onPointerSignal: _pointerSignal,
-                child: GameWidget(
-                  game: game,
-                  focusNode: _gameFocus,
-                  autofocus: false,
+                // A crosshair while a power-up waits for its spot.
+                child: ListenableBuilder(
+                  listenable: game.targeting,
+                  builder: (context, child) => MouseRegion(
+                    cursor: game.targeting.armed != null
+                        ? SystemMouseCursors.precise
+                        : MouseCursor.defer,
+                    child: child,
+                  ),
+                  child: GameWidget(
+                    game: game,
+                    focusNode: _gameFocus,
+                    autofocus: false,
+                  ),
                 ),
               ),
               // Who is who: names over the other players' eggs.
               IgnorePointer(child: PuttNameTags(board: _tags)),
+              // Where an armed power-up would land, and what it reaches.
+              ListenableBuilder(
+                listenable: Listenable.merge([match, game.targeting]),
+                builder: (context, _) => PuttReticle(
+                  match: match,
+                  targeting: game.targeting,
+                  project: game.world3d.projectToWorld,
+                ),
+              ),
               // HUD, menus and sheets: rebuilt as the match moves.
               ListenableBuilder(
                 listenable: match,
@@ -343,20 +422,17 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // HUD, with only its buttons eating pointers.
+        // HUD, with only its buttons and slots eating pointers (the
+        // spectator note rides its hint line).
         PuttHud(
           match: match,
+          targeting: game.targeting,
           onSfx: (sfx) => widget.audio?.play(sfx),
           onOpenMenu: _togglePause,
+          onToggleCamera: _toggleCamera,
+          cameraOverview: game.overview,
+          onLeave: _leave,
         ),
-        // The fence-side strip while watching.
-        if (match.isSpectator)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 112,
-            child: IgnorePointer(child: SpectatorStrip(match: match)),
-          ),
         if (showVote)
           Center(
             child: PuttVoteSheet(
@@ -436,8 +512,14 @@ class SunnySidePuttGame extends FlameGame {
   /// measured from there, the arrow still drawn from the egg.
   core.Vec2? _dragAnchor;
 
+  /// The power-up targeting the HUD shows and the view's presses feed: a
+  /// slot armed for a spot on the green, or a player picker open.
+  final PuttTargeting targeting = PuttTargeting();
+
   SunnySidePuttGame({required this.match, required this.onSfx})
-      : aimLayer = PuttAimLayer();
+      : aimLayer = PuttAimLayer() {
+    targeting.onCast = _castFx;
+  }
 
   /// A session's rebuilt match: the same world and camera carry on.
   void swapMatch(PuttMatch next) {
@@ -446,9 +528,14 @@ class SunnySidePuttGame extends FlameGame {
     _fittedHole = null;
     _hopRides.clear();
     aim.cancel();
+    targeting.cancel();
     _dragAnchor = null;
     _previewKey = null;
   }
+
+  /// Whether the camera shows the whole hole (the player's pick), rather
+  /// than the close view of the egg.
+  bool get overview => _overview;
 
   @override
   void onGameResize(Vector2 size) {
@@ -504,6 +591,7 @@ class SunnySidePuttGame extends FlameGame {
     clock += dt;
     super.update(dt);
     match.update(dt);
+    targeting.validate(match);
     aim.noWobble = match.myNextShotSteady;
     aimLayer.update(this, dt);
     fx.update(dt);
@@ -823,17 +911,47 @@ class SunnySidePuttGame extends FlameGame {
     _dragAnchor = null;
   }
 
+  /// The armed power-up, cast at [point] on the green: true when it went
+  /// (and the burst plays there); false - nothing spent - when no slot is
+  /// armed or the cast could do nothing now.
+  bool castArmedAt(core.Vec2 point) {
+    cancelAim();
+    return targeting.castAt(match, point);
+  }
+
+  /// A cast's burst: the spray where a Sprinkler lands, a ring where the
+  /// Gust blows to, a poof and a sparkle for a Rabbit Hole's hop, a little
+  /// sparkle at my egg for the rest.
+  void _castFx(String effectId, PowerUpTarget? target, core.Vec2? myEggBefore) {
+    final point = target?.point;
+    final mine = match.myBall?.position;
+    switch (effectId) {
+      case 'sprinkler':
+        if (point == null) return;
+        fx.splash(point);
+        fx.ring(point, PuttPalette.water, size: kSprinklerRadius);
+      case 'gust':
+        if (point == null) return;
+        fx.ring(point, PuttPalette.shell, size: 3.2);
+        fx.poof(point);
+      case 'rabbit_hole':
+        if (myEggBefore != null) fx.poof(myEggBefore);
+        if (mine != null) {
+          fx.sparkles(mine);
+          fx.ring(mine, PuttPalette.yolk, size: 1.8);
+        }
+      default:
+        if (mine != null && !(match.myBall?.holed ?? true)) {
+          fx.sparkles(mine);
+        }
+    }
+  }
+
   // ---- attached facts the layers read ---------------------------------------------------
 
-  /// Egg ring colours, stable per player in id order.
-  ui.Color tintFor(String playerId) {
-    final ids = match.currentPositions.keys.toList()..sort();
-    var index = ids.indexOf(playerId);
-    if (index < 0) {
-      index = match.engine.players.indexWhere((p) => p.id == playerId);
-    }
-    return PuttPalette.tintForIndex(index.clamp(0, 7));
-  }
+  /// Egg ring colours, stable per player in id order: the same tint the
+  /// HUD's scorecard dots and the name tags wear ([puttTintOf]).
+  ui.Color tintFor(String playerId) => puttTintOf(match, playerId);
 
   double get eggRadius => match.config.physics.ballRadius;
 

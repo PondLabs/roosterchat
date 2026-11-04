@@ -6,6 +6,7 @@ import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/rules.dart';
+import 'package:rooster/client/components/sunny_side_putt/courses/course_kit.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_match.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/stub_courses.dart';
 
@@ -171,6 +172,87 @@ void main() {
       expect(match.myInventory, ['strong_coffee']);
       expect(match.myNextShotSteady, isFalse,
           reason: 'with no effects ticket, nothing sets the modifier yet');
+    });
+  });
+
+  group('headlines', () {
+    test('a hole starts with its number big, its par and course under it', () {
+      final course = CourseDef(id: 'the_coop', holes: [
+        stubHole(id: 'c0', par: 3),
+        stubHole(id: 'c1', par: 2),
+      ]);
+      final match = PuttMatch(
+        config: PuttConfig(mode: GameMode.casual, courses: [course], seed: 2),
+      )..boot();
+      expect(match.headlineKind, PuttHeadlineKind.holeStart);
+      expect(match.headline, 'Hole 1');
+      // The catalog's name, not the id.
+      expect(match.headlineDetail, 'Par 3 · The Coop');
+      expect(match.courseName, 'The Coop');
+    });
+
+    test('course ids read as their names; unknown ones as themselves', () {
+      expect(puttCourseName('the_corn_maze'), 'Corn Maze');
+      expect(puttCourseName('the_barn'), 'The Barn');
+      expect(puttCourseName('stubs'), 'stubs');
+    });
+
+    test('my last stroke keeps its term when the hole ends with it', () {
+      final course = CourseDef(id: 'ace', holes: [stubHole(id: 'a0', par: 3)]);
+      final match = PuttMatch(
+        config: PuttConfig(
+            mode: GameMode.casual,
+            courses: [course],
+            seed: 4,
+            wobbleMaxRadians: 0),
+      )..boot();
+      expect(match.hasPutted, isFalse);
+      final shot =
+          putt(match.myBall!.position, match.hole!.nest.position, arrival: 0.6);
+      expect(match.submitShot(shot.angle, shot.power), isTrue);
+      expect(match.hasPutted, isTrue);
+      for (var frame = 0; frame < 600; frame++) {
+        match.update(1 / 60);
+        if (match.phase != PuttPhase.holePlay) break;
+      }
+      expect(match.phase, PuttPhase.holeScoreboard);
+      // Alone on the green: the nest takes the egg and the hole ends on
+      // the same tick, and the ace is what the banner calls.
+      expect(match.headlineKind, PuttHeadlineKind.scoreTerm);
+      expect(match.headlineTerm, ScoreTerm.holeInOne);
+      expect(match.headline, 'Hole in one!');
+      expect(match.holeEndLine, 'Hole cleared!');
+    });
+
+    test('a hole that times out says so', () {
+      final course = CourseDef(id: 'slow', holes: [stubHole(id: 's0')]);
+      final match = PuttMatch(
+        config: PuttConfig(
+            mode: GameMode.casual,
+            courses: [course],
+            seed: 6,
+            holeTimeLimitSeconds: 2),
+      )..boot();
+      for (var frame = 0; frame < 40; frame++) {
+        match.update(0.3);
+      }
+      expect(match.headlineKind, PuttHeadlineKind.holeEnd);
+      expect(match.headline, "Time's up!");
+      expect(match.holeEndLine, "Time's up!");
+    });
+
+    test('names come from the map, then the roster lookup', () {
+      final match = PuttMatch(
+        config: PuttConfig(
+            mode: GameMode.casual,
+            courses: [stubCourse(holeCount: 1)],
+            seed: 1),
+        displayNames: const {'me': 'Rooster'},
+        nameOf: (id) => id == 'p2' ? 'Hen' : id.toUpperCase(),
+      );
+      expect(displayNameOf(match, 'me'), 'Rooster');
+      expect(displayNameOf(match, 'p2'), 'Hen');
+      expect(displayNameOf(match, 'p3'), 'P3');
     });
   });
 
