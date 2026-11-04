@@ -13,9 +13,20 @@ const double _eggAspect = 1.28;
 /// from the camera's height; at a rail the overlap stays a sliver.
 const double _eggVisualScale = 1.2;
 
+/// An egg the nest just took: it slides to the cup's middle and sinks.
+class _SinkingEgg {
+  _SinkingEgg(this.view, this.nest);
+
+  static const double life = 0.42;
+
+  final _EggView3D view;
+  final Vec2 nest;
+  double age = 0;
+}
+
 /// One egg on the green. Its [group] carries the roll (position and
 /// quaternion); [ground] stays level under it with the shadow and the
-/// viewer's marker.
+/// viewer's marker; [trail] holds the puffs a fast egg leaves behind.
 class _EggView3D {
   _EggView3D(this._radius, ui.Color tint) {
     group = tjs.Group()..name = 'egg';
@@ -70,7 +81,39 @@ class _EggView3D {
       ..add(_shadow)
       ..add(_marker)
       ..add(_arrow);
+    trail = tjs.Group()..name = 'egg-trail';
+    final trailColor = _lin(_mix(_tintHex, 0xFFFFFF, 0.55));
+    for (var i = 0; i < _trailLength; i++) {
+      final puff = tjs.Sprite(
+        tjs.SpriteMaterial({
+          tjs.MaterialProperty.map: _shadowTexture,
+          tjs.MaterialProperty.color: trailColor,
+          tjs.MaterialProperty.transparent: true,
+          tjs.MaterialProperty.opacity: 0.0,
+          tjs.MaterialProperty.depthWrite: false,
+        }),
+      )
+        ..name = 'egg-trail-puff'
+        ..visible = false
+        ..renderOrder = 3;
+      _puffs.add(puff);
+      trail.add(puff);
+    }
   }
+
+  static const int _trailLength = 12;
+
+  late final tjs.Group trail;
+  final List<tjs.Sprite> _puffs = [];
+
+  /// The trail's recent spots and their ages, newest last.
+  final List<(Vec2, double)> _trailSpots = [];
+  double _sinceSpot = 0;
+
+  /// Where the egg stood last frame, and how high its centre rode at rest
+  /// (the sink starts from both).
+  Vec2 lastPosition = Vec2.zero;
+  double get restHeight => _radius * _eggAspect;
 
   late final tjs.Group group;
   late final tjs.Group ground;
@@ -140,6 +183,9 @@ class _EggView3D {
     group.position
         .setValues(egg.position.x, support + egg.height, egg.position.y);
 
+    lastPosition = egg.position;
+    _syncTrail(egg, dt);
+
     // The ground pieces: the shadow shrinks and fades as a hop lifts.
     ground.position.setValues(egg.position.x, 0, egg.position.y);
     final lift = (egg.height / (_radius * 3)).clamp(0.0, 1.0);
@@ -158,6 +204,37 @@ class _EggView3D {
       _marker.material?.opacity = 0.65 + 0.3 * pulse;
       _arrow.position.y = h * 2 + 0.55 + math.sin(time * 3.2).abs() * 0.35;
       _arrow.rotation.y = time * 1.6;
+    }
+  }
+
+  /// The trail: a fast egg drops a soft puff every few hundredths of a
+  /// second; the puffs fade and shrink over half a second.
+  void _syncTrail(PuttWorldEgg egg, double dt) {
+    const life = 0.45;
+    for (var i = 0; i < _trailSpots.length; i++) {
+      final (at, age) = _trailSpots[i];
+      _trailSpots[i] = (at, age + dt);
+    }
+    _trailSpots.removeWhere((spot) => spot.$2 >= life);
+    _sinceSpot += dt;
+    if (egg.speed > 3.2 && _sinceSpot > 0.035) {
+      _sinceSpot = 0;
+      _trailSpots.add((egg.position, 0));
+      if (_trailSpots.length > _trailLength) _trailSpots.removeAt(0);
+    }
+    for (var i = 0; i < _puffs.length; i++) {
+      final puff = _puffs[i];
+      if (i >= _trailSpots.length) {
+        puff.visible = false;
+        continue;
+      }
+      final (at, age) = _trailSpots[i];
+      final fade = 1 - age / life;
+      puff.visible = true;
+      puff.position.setValues(at.x, _radius * 0.7, at.y);
+      final size = _radius * (1.1 + 0.9 * fade);
+      puff.scale.setValues(size, size, 1);
+      puff.material?.opacity = 0.42 * fade;
     }
   }
 
@@ -188,6 +265,11 @@ class _EggView3D {
     _shadow.material?.map = null;
     _shadow.material?.dispose();
     ground.dispose();
+    for (final puff in _puffs) {
+      puff.material?.map = null;
+      puff.material?.dispose();
+    }
+    trail.dispose();
   }
 }
 
@@ -424,9 +506,32 @@ class _CrateView3D {
 
   String get id => box.id;
 
+  /// Seconds since the crate was taken (the pop plays), or null while it
+  /// stands.
+  double? _poppedAt;
+
   void sync({required bool visible, required double time}) {
-    group.visible = visible;
-    if (!visible) return;
+    if (!visible) {
+      // Taken: a quick swell and spin, then gone.
+      final start = _poppedAt ??= time;
+      final t = ((time - start) / 0.28).clamp(0.0, 1.0);
+      group.visible = t < 1;
+      if (t < 1) {
+        final swell = 1 + t * 0.7;
+        _spin
+          ..scale.setValues(
+              swell * (1 - t), swell * (1 - t) + 0.001, swell * (1 - t))
+          ..rotation.y += 0.35
+          ..position.y = _hover + t * 1.2;
+        _glow.material?.opacity = 0.6 * (1 - t);
+      }
+      return;
+    }
+    if (_poppedAt != null) {
+      _poppedAt = null;
+      _spin.scale.setValues(1, 1, 1);
+    }
+    group.visible = true;
     final breathe = math.sin(time * 2.4 + bobPhase);
     _spin.position.y = _hover + breathe * 0.14;
     _spin.rotation.y = time * 0.9 + bobPhase;

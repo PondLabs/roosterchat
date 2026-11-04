@@ -257,6 +257,40 @@ void main() {
     });
   });
 
+  group('the garden', () {
+    test('a corner the walls close off is planted, not turfed', () {
+      // A box of walls in the north-east corner: the egg can never get in.
+      final hole = HoleDef(
+        id: 'garden-check',
+        par: 2,
+        tee: const Vec2(3, 13),
+        nest: Nest(const Vec2(20, 18), 0.9),
+        bounds: Rect(Vec2.zero, Vec2(40, 26)),
+        walls: [
+          WallSegment(Vec2.zero, Vec2(40, 0)),
+          WallSegment(Vec2(40, 0), Vec2(40, 26)),
+          WallSegment(Vec2(40, 26), Vec2(0, 26)),
+          WallSegment(Vec2(0, 26), Vec2.zero),
+          WallSegment(Vec2(28, -1), Vec2(28, 10.2)),
+          WallSegment(Vec2(27.8, 10), Vec2(41, 10)),
+        ],
+      );
+      final world = PuttWorld3D(viewport: const ui.Size(800, 600));
+      addTearDown(world.dispose);
+      world.buildHole(hole, eggRadius: 0.45);
+      final garden = world.holeGroup('garden');
+      expect(garden, isNotNull, reason: 'the closed corner gets beds');
+      expect(walk(garden!).where((o) => o.name == 'garden-plants'), isNotEmpty);
+    });
+
+    test('an open green has no garden', () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      expect(world.holeGroup('garden'), isNull,
+          reason: 'every corner of the dressing hole is in play');
+    });
+  });
+
   group('eggs roll and lift', () {
     test("the roll's axis follows the velocity's sign", () {
       final world = PuttWorld3D(viewport: const ui.Size(800, 600));
@@ -365,6 +399,11 @@ void main() {
       expect(crate.visible, isTrue);
       world.applySnapshot(PuttWorldFrame(
         time: 1,
+        collectedBoxes: {'carton-1'},
+      ));
+      // Taken: the carton pops (a swell over a quarter second), then goes.
+      world.applySnapshot(PuttWorldFrame(
+        time: 1.4,
         collectedBoxes: {'carton-1'},
       ));
       expect(crate.visible, isFalse);

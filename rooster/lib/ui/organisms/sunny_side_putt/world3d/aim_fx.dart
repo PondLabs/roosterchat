@@ -70,14 +70,27 @@ class _PuttAimView3D {
       ..add(head);
 
     for (var i = 0; i < _dotCount; i++) {
-      final dot = tjs.Mesh(
-        _dotGeometry,
-        _unlit(0xFFFFFF, opacity: 0.9, depthWrite: false),
-      )
+      // Each dot: cream over a soft ink ring, so it reads on light and dark
+      // turf stripes alike.
+      final dot = tjs.Group()
         ..name = 'aim-dot'
-        ..rotation.x = -math.pi / 2
-        ..renderOrder = 6
         ..visible = false;
+      dot
+        ..add(tjs.Mesh(
+          _dotRingGeometry,
+          _unlit(_hexOf(PuttPalette.ink), opacity: 0.45, depthWrite: false),
+        )
+          ..name = 'aim-dot-ring'
+          ..rotation.x = -math.pi / 2
+          ..renderOrder = 5)
+        ..add(tjs.Mesh(
+          _dotGeometry,
+          _unlit(0xFFF8EE, opacity: 0.95, depthWrite: false),
+        )
+          ..name = 'aim-dot-fill'
+          ..rotation.x = -math.pi / 2
+          ..position.y = 0.004
+          ..renderOrder = 6);
       _dots.add(dot);
       group.add(dot);
     }
@@ -85,7 +98,9 @@ class _PuttAimView3D {
 
   static const int _dotCount = 44;
   static final tjs.BufferGeometry _dotGeometry =
-      tjg.CircleGeometry(radius: 0.11, segments: 10);
+      tjg.CircleGeometry(radius: 0.12, segments: 12);
+  static final tjs.BufferGeometry _dotRingGeometry =
+      tjg.CircleGeometry(radius: 0.18, segments: 12);
 
   late final tjs.Group group;
   late final tjs.Group _turned;
@@ -97,7 +112,7 @@ class _PuttAimView3D {
   late final tjs.Mesh _headOutline;
   late final tjs.MeshBasicMaterial _arrowMaterial;
   late final tjs.MeshBasicMaterial _outlineMaterial;
-  final List<tjs.Mesh> _dots = [];
+  final List<tjs.Group> _dots = [];
 
   tjs.Mesh? _fill;
   double _fillPower = -1;
@@ -193,9 +208,10 @@ class _PuttAimView3D {
           dot.visible = true;
           dot.position.setValues(p.x - aim.origin.x, 0.05, p.y - aim.origin.y);
           final fade = 1 - shown / _dotCount;
-          dot.material?.opacity = 0.2 + 0.75 * fade;
+          dot.children[0].material?.opacity = 0.12 + 0.33 * fade;
+          dot.children[1].material?.opacity = 0.25 + 0.7 * fade;
           final s = 0.75 + 0.35 * fade;
-          dot.scale.setValues(s, s, 1);
+          dot.scale.setValues(s, 1, s);
           shown++;
           t += spacing;
         }

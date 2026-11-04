@@ -72,6 +72,7 @@ part 'world3d/course.dart';
 part 'world3d/scenery.dart';
 part 'world3d/actors.dart';
 part 'world3d/aim_fx.dart';
+part 'world3d/theme.dart';
 
 /// The void behind everything before the sky dome draws: the horizon's
 /// warm haze, so a frame that misses the dome still reads as sky.
@@ -493,6 +494,13 @@ class PuttWorld3D {
   HoleDef? _hole;
   double _eggRadius = 0.45;
 
+  /// The course's corner of the farm and its hour: sky, sun, rails.
+  _Theme _theme = _Theme.coop;
+
+  /// The tone mapper's exposure for the current hole's light; the
+  /// surface hands it to the renderer every frame.
+  double get exposure => _theme.exposure;
+
   late final _PuttAimView3D _aim;
 
   final Map<String, _EggView3D> _eggViews = {};
@@ -572,9 +580,10 @@ class PuttWorld3D {
     if (sun == null) return;
     final center = tjs.Vector3(hole.bounds.center.x, 0, hole.bounds.center.y);
     sun.target!.position.setFrom(center);
-    // From the left and in front (the camera's side): lit faces toward the
-    // player, shadows falling away across the green.
-    sun.position.setFrom(center).add(tjs.Vector3(-26, 42, 20));
+    // The theme's sun: by default from the left and in front (the
+    // camera's side), lit faces toward the player, shadows falling away.
+    final (sx, sy, sz) = _theme.sunFrom;
+    sun.position.setFrom(center).add(tjs.Vector3(sx, sy, sz));
     final span = math.max(hole.bounds.width, hole.bounds.height);
     final half = span * 0.62 + 12;
     final shadowCam = sun.shadow!.camera;
@@ -590,7 +599,7 @@ class PuttWorld3D {
     }
     // Depth: the far meadow dissolving gently into the warm horizon.
     final fog = tjs.Fog(0xFFFFFF, span * 1.5 + 30, span * 5 + 160);
-    fog.color = _lin(_Farm.horizon);
+    fog.color = _lin(_theme.horizon);
     scene.fog = fog;
   }
 
@@ -605,6 +614,8 @@ class PuttWorld3D {
     _clearHole();
     _hole = hole;
     _eggRadius = eggRadius;
+    _theme = _Theme.of(hole.id);
+    _applyTheme();
 
     tjs.Group makeKind(String name) {
       final group = tjs.Group()..name = name;
@@ -613,8 +624,8 @@ class PuttWorld3D {
       return group;
     }
 
-    final kit =
-        _CourseKit(hole, eggRadius: eggRadius, animated: _animated, rig: rig);
+    final kit = _CourseKit(hole,
+        eggRadius: eggRadius, animated: _animated, rig: rig, theme: _theme);
     makeKind('ground').add(kit.lawn());
     makeKind('table').add(kit.table());
     final walls = makeKind('walls');
@@ -655,6 +666,8 @@ class PuttWorld3D {
       boxes.add(crate.group);
       _crateViews.add(crate);
     }
+    final garden = kit.garden();
+    if (garden != null) makeKind('garden').add(garden);
     makeKind('nest').add(kit.nest(label: label));
     makeKind('tee').add(kit.tee());
     final decorations = makeKind('decorations');
@@ -668,15 +681,37 @@ class PuttWorld3D {
       hens.add(hen.group);
       _henViews.add(hen);
     }
-    makeKind('scenery').add(_Scenery(hole, animated: _animated).build());
+    makeKind('scenery')
+        .add(_Scenery(hole, animated: _animated, theme: _theme).build());
 
     _fx.reset(_fxRoot);
     _firstFrame = true;
     fitCamera();
   }
 
+  /// The theme's light and sky: the dome's colours, the sun's colour and
+  /// strength, the fill's (the sun's place and the haze follow in
+  /// [_aimSun], with the hole's span).
+  void _applyTheme() {
+    _sky.recolor(_theme);
+    _ambient
+      ..color = _lin(_theme.hemiSky)
+      ..groundColor = _lin(_theme.hemiGround)
+      ..intensity = _theme.hemiIntensity;
+    final sun = _sun;
+    if (sun != null) {
+      sun
+        ..color = _lin(_theme.sun)
+        ..intensity = _theme.sunIntensity;
+    }
+  }
+
   /// Disposes the whole hole subtree and forgets every per-hole view.
   void _clearHole() {
+    for (final sinking in _sinking) {
+      _dropEgg(sinking.view);
+    }
+    _sinking.clear();
     _disposeChildren(_holeRoot);
     _henViews.clear();
     _crateViews.clear();
@@ -723,6 +758,7 @@ class PuttWorld3D {
         final created = _EggView3D(egg.radius * _eggVisualScale, egg.tint);
         _actorsRoot.add(created.group);
         _actorsRoot.add(created.ground);
+        _actorsRoot.add(created.trail);
         return created;
       });
       view.retint(egg.tint);
@@ -730,11 +766,48 @@ class PuttWorld3D {
     }
     _eggViews.removeWhere((playerId, view) {
       if (seen.contains(playerId)) return false;
-      _actorsRoot.remove(view.group);
-      _actorsRoot.remove(view.ground);
-      view.dispose();
+      // Gone at the nest: it drops in (a short sink and shrink); gone
+      // anywhere else (a player leaving): it just goes.
+      final nest = _hole?.nest;
+      if (nest != null &&
+          view.lastPosition.distanceTo(nest.position) < nest.radius * 1.8) {
+        _sinking.add(_SinkingEgg(view, nest.position));
+      } else {
+        _dropEgg(view);
+      }
       return true;
     });
+    _sinking.removeWhere((sinking) {
+      sinking.age += dt;
+      final t = (sinking.age / _SinkingEgg.life).clamp(0.0, 1.0);
+      final eased = t * t;
+      final view = sinking.view;
+      final from = view.lastPosition;
+      final at = Vec2(
+        from.x + (sinking.nest.x - from.x) * math.min(1, t * 2.2),
+        from.y + (sinking.nest.y - from.y) * math.min(1, t * 2.2),
+      );
+      final scale = 1 - eased * 0.75;
+      view.group
+        ..position.setValues(at.x, view.restHeight * scale - eased * 0.9, at.y)
+        ..scale.setValues(scale, scale, scale);
+      view.ground.visible = false;
+      if (t >= 1) {
+        _dropEgg(view);
+        return true;
+      }
+      return false;
+    });
+  }
+
+  /// Eggs dropping into the nest, finishing their sink.
+  final List<_SinkingEgg> _sinking = [];
+
+  void _dropEgg(_EggView3D view) {
+    _actorsRoot.remove(view.group);
+    _actorsRoot.remove(view.ground);
+    _actorsRoot.remove(view.trail);
+    view.dispose();
   }
 
   void _syncHens(PuttWorldFrame frame, double dt) {
@@ -924,6 +997,7 @@ class _PuttThreeSurfaceState extends State<PuttThreeSurface> {
           // truth, then the view draws it.
           owner.rendererUpdate = () {
             widget.world.applySnapshot(widget.buildFrame());
+            owner.renderer?.toneMappingExposure = widget.world.exposure;
             widget.onFrame?.call();
           };
         },

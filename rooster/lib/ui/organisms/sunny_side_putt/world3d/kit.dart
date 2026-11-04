@@ -48,9 +48,6 @@ int _shade(int hex, double factor) {
 /// on the trim, ink only where things go dark.
 abstract final class _Farm {
   // The course.
-  static const turfLight = 0x86CF4E;
-  static const turfDark = 0x72C043;
-  static const turfFringe = 0x5BA737;
   static const turfShade = 0x3E7F2A;
   static const woodTop = 0xE9AE6C;
   static const wood = 0xC27C42;
@@ -60,10 +57,6 @@ abstract final class _Farm {
   static const shore = 0xD9BE82;
 
   // Around the course.
-  static const meadow = 0x86C24A;
-  static const meadowDeep = 0x67AB3D;
-  static const meadowDry = 0xAECB5A;
-  static const hillFar = 0x9DC872;
   static const path = 0xE2C48E;
   static const leafA = 0x4FA33F;
   static const leafB = 0x6DBB46;
@@ -74,10 +67,7 @@ abstract final class _Farm {
   static const rockDark = 0x7F776E;
   static const moss = 0x7FAE45;
 
-  // The sky.
-  static const skyTop = 0x4E9FE3;
-  static const skyMid = 0x8CC6F0;
-  static const horizon = 0xFCE7C4;
+  // The sky's clouds (the dome's colours come with each course's theme).
   static const cloud = 0xFFFFFF;
 
   // Water.

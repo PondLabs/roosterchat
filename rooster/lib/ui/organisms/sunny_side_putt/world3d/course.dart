@@ -23,8 +23,14 @@ const double _railHeight = 0.78;
 /// with [animated].
 class _CourseKit {
   _CourseKit(this.hole,
-      {required this.eggRadius, required this.animated, required this.rig})
+      {required this.eggRadius,
+      required this.animated,
+      required this.rig,
+      required this.theme})
       : _rand = _Rand(_seedOf(hole.id));
+
+  /// The course's look: the rails' style, the turf's greens.
+  final _Theme theme;
 
   final HoleDef hole;
   final double eggRadius;
@@ -34,23 +40,36 @@ class _CourseKit {
   final PuttCameraRig rig;
   final _Rand _rand;
 
-  /// One timber material for every rail of the hole (and one for the caps),
-  /// sharing the grain texture.
-  late final tjs.DataTexture _grain = _woodGrainTexture();
-  late final tjs.MeshStandardMaterial _railMaterial = tjs.MeshStandardMaterial({
+  /// One material for every rail body of the hole and one for the caps,
+  /// in the theme's style (timber, corn hedge, stone, barrier, boards).
+  late final (tjs.MeshStandardMaterial, tjs.MeshStandardMaterial) _rails =
+      _railMaterials(theme.rails);
+  tjs.MeshStandardMaterial get _railMaterial => _rails.$1;
+  tjs.MeshStandardMaterial get _capMaterial => _rails.$2;
+
+  /// The belt frames keep timber whatever the rails are.
+  late final tjs.MeshStandardMaterial _timber = tjs.MeshStandardMaterial({
     tjs.MaterialProperty.color: _lin(_Farm.wood),
-    tjs.MaterialProperty.map: _grain,
+    tjs.MaterialProperty.map: _woodGrainTexture(),
     tjs.MaterialProperty.roughness: 0.78,
-    tjs.MaterialProperty.metalness: 0.0,
-  });
-  late final tjs.MeshStandardMaterial _capMaterial = tjs.MeshStandardMaterial({
-    tjs.MaterialProperty.color: _lin(_Farm.woodTop),
-    tjs.MaterialProperty.map: _grain,
-    tjs.MaterialProperty.roughness: 0.7,
     tjs.MaterialProperty.metalness: 0.0,
   });
 
   tjs.DataTexture? _crateFace;
+
+  /// Where the egg can roll from the tee; the rest of the bounds (corners
+  /// the walls close off) is garden, not turf.
+  late final _ReachGrid _reach = _ReachGrid.of(hole);
+
+  /// The garden beds' ground per theme: mulch, dark earth, moss, gravel,
+  /// straw.
+  int get _gardenGround => switch (theme.kind) {
+        _ThemeKind.coop => 0x7A5233,
+        _ThemeKind.maze => 0x6A4A2C,
+        _ThemeKind.pond => 0x5C8A3C,
+        _ThemeKind.road => 0xB9A27E,
+        _ThemeKind.barn => 0xC9A55A,
+      };
 
   // ---- the turf ---------------------------------------------------------------------
 
@@ -150,11 +169,19 @@ class _CourseKit {
         // Mown stripes across the line of play.
         final along = (point - hole.tee).dot(axis);
         final band = (along / stripe).floor().isEven;
-        var color = band ? _Farm.turfLight : _Farm.turfDark;
+        var color = band ? theme.turfLight : theme.turfDark;
         // The turf's grain: patches and blades.
         final patch = _fbm(point.x * 0.35, point.y * 0.35, seed);
         final blade = _hash2(col, row, seed);
         color = _shade(color, 0.94 + patch * 0.1 + (blade - 0.5) * 0.05);
+
+        // Garden: ground the egg can never reach (walled-off corners).
+        if (!_reach.reachableAt(point)) {
+          final soil = _shade(_gardenGround,
+              0.86 + _fbm(point.x * 0.9, point.y * 0.9, seed + 2) * 0.24);
+          bitmap.set(col, row, soil);
+          continue;
+        }
 
         // The fringe at the green's edge.
         final edge = math.min(
@@ -162,7 +189,7 @@ class _CourseKit {
           math.min(point.y - bounds.min.y, bounds.max.y - point.y),
         );
         final fringe = _softBand(edge, 0.55, 0.3);
-        if (fringe > 0) color = _mix(color, _Farm.turfFringe, fringe * 0.7);
+        if (fringe > 0) color = _mix(color, theme.turfFringe, fringe * 0.7);
 
         // Contact shade along rails and rocks.
         final contact = nearest[row * width + col];
@@ -895,7 +922,7 @@ class _CourseKit {
       ..position.setValues(mid.x, 0, mid.y);
     final frame = tjs.Mesh(
       tjs.BoxGeometry(length + 0.3, 0.06, strip.width + 0.3),
-      _railMaterial,
+      _timber,
     )
       ..name = 'boost-frame'
       ..position.y = 0.03
@@ -932,8 +959,8 @@ class _CourseKit {
       for (var x = 0; x < 64; x++) {
         final v = (y - 31.5).abs() / 32; // 0 at the middle line
         final u = x / 64;
-        // A chevron: x offset grows with |v|.
-        final shape = ((u - v * 0.45) % 1.0 + 1) % 1.0;
+        // A chevron pointing +u: its arms trail back as |v| grows.
+        final shape = ((u + v * 0.45) % 1.0 + 1) % 1.0;
         final inside = shape > 0.22 && shape < 0.52;
         final edge = (shape - 0.22).abs() < 0.03 || (shape - 0.52).abs() < 0.03;
         var color = 0x3B3530;
@@ -1219,6 +1246,141 @@ class _CourseKit {
     return group;
   }
 
+  // ---- garden beds -------------------------------------------------------------------------------
+
+  /// The walled-off ground planted in the theme's way: flower beds by the
+  /// coop, corn in the maze, reeds by the pond, wheat along the road,
+  /// straw at the barn. Plants keep clear of the rails. Null when the whole
+  /// green is in play.
+  tjs.Object3D? garden() {
+    if (_reach.unreachableCount == 0) return null;
+    final merged = _Merged();
+    final rand = _Rand(_seedOf('${hole.id}/garden'));
+    final walls = [
+      for (final wall in hole.walls) (wall.a, wall.b),
+    ];
+    bool nearRail(Vec2 p) {
+      for (final (a, b) in walls) {
+        if (_segmentDistance(p, a, b) < 0.75) return true;
+      }
+      for (final arc in hole.arcs) {
+        if (_arcDistance(p, arc) < 0.75) return true;
+      }
+      return false;
+    }
+
+    final bounds = hole.bounds;
+    const step = 1.15;
+    for (var y = bounds.min.y + 0.6; y < bounds.max.y - 0.4; y += step) {
+      for (var x = bounds.min.x + 0.6; x < bounds.max.x - 0.4; x += step) {
+        final p = Vec2(x + rand.range(-0.4, 0.4), y + rand.range(-0.4, 0.4));
+        if (_reach.reachableAt(p) || nearRail(p)) continue;
+        _gardenPlant(merged, p, rand);
+      }
+    }
+    final mesh = merged.mesh('garden-plants', flat: true);
+    if (mesh == null) return null;
+    return tjs.Group()
+      ..name = 'garden'
+      ..add(mesh);
+  }
+
+  void _gardenPlant(_Merged into, Vec2 p, _Rand rand) {
+    switch (theme.kind) {
+      case _ThemeKind.maze:
+        final h = rand.range(1.0, 1.5);
+        into.add(tjg.CylinderGeometry(0.04, 0.06, h, 5),
+            _place(p.x, h / 2, p.y), 0x6E9F3A,
+            baseShade: 0.7);
+        for (var leaf = 0; leaf < 3; leaf++) {
+          final yaw = rand.range(0, math.pi * 2);
+          into.add(
+              tjs.BoxGeometry(0.7, 0.03, 0.13),
+              _place(p.x + math.cos(yaw) * 0.3, h * (0.35 + leaf * 0.2),
+                  p.y - math.sin(yaw) * 0.3,
+                  yaw: yaw, roll: -0.5),
+              leaf.isEven ? 0x5E9A35 : 0x79B145);
+        }
+        if (rand.chance(0.6)) {
+          into.add(tjg.CylinderGeometry(0.08, 0.1, 0.36, 6),
+              _place(p.x + 0.1, h * 0.6, p.y, roll: 0.35), 0xF2C845);
+        }
+        into.add(tjg.ConeGeometry(0.12, 0.36, 4), _place(p.x, h + 0.15, p.y),
+            0xD9B76A);
+      case _ThemeKind.pond:
+        if (rand.chance(0.55)) {
+          for (var reed = 0; reed < 4; reed++) {
+            final h = rand.range(0.7, 1.3);
+            final x = p.x + rand.range(-0.3, 0.3);
+            final z = p.y + rand.range(-0.3, 0.3);
+            into.add(tjg.CylinderGeometry(0.03, 0.045, h, 4),
+                _place(x, h / 2, z, tilt: rand.range(-0.15, 0.15)), 0x4F8A33);
+            if (rand.chance(0.4)) {
+              into.add(tjg.CylinderGeometry(0.07, 0.07, 0.3, 6),
+                  _place(x, h - 0.05, z), 0x6B4428);
+            }
+          }
+        } else {
+          into.add(tjg.IcosahedronGeometry(1, 1),
+              _place(p.x, 0.3, p.y, sx: 0.55, sy: 0.42, sz: 0.55), 0x4E9C3A,
+              baseShade: 0.6, rand: rand, variation: 0.1);
+        }
+      case _ThemeKind.road:
+        for (var tuft = 0; tuft < 5; tuft++) {
+          final h = rand.range(0.5, 0.85);
+          into.add(
+              tjg.ConeGeometry(0.07, h, 3),
+              _place(p.x + rand.range(-0.35, 0.35), h / 2,
+                  p.y + rand.range(-0.35, 0.35),
+                  tilt: rand.range(-0.25, 0.25)),
+              rand.chance(0.6) ? 0xE2BE5A : 0xC99B45,
+              baseShade: 0.75);
+        }
+      case _ThemeKind.barn:
+        if (rand.chance(0.3)) {
+          into.add(tjs.BoxGeometry(0.9, 0.5, 0.6),
+              _place(p.x, 0.25, p.y, yaw: rand.range(0, math.pi)), _Farm.hay,
+              baseShade: 0.75);
+        } else {
+          for (var tuft = 0; tuft < 4; tuft++) {
+            into.add(
+                tjs.BoxGeometry(0.5, 0.03, 0.06),
+                _place(p.x + rand.range(-0.4, 0.4), 0.05,
+                    p.y + rand.range(-0.4, 0.4),
+                    yaw: rand.range(0, math.pi * 2)),
+                rand.chance(0.5) ? _Farm.strawLight : _Farm.straw);
+          }
+        }
+      case _ThemeKind.coop:
+        if (rand.chance(0.45)) {
+          into.add(
+              tjg.IcosahedronGeometry(1, 1),
+              _place(p.x, 0.32, p.y, sx: 0.5, sy: 0.42, sz: 0.5),
+              rand.chance(0.5) ? _Farm.leafB : _Farm.leafA,
+              baseShade: 0.6,
+              rand: rand,
+              variation: 0.1);
+        } else {
+          const heads = [
+            _Farm.flowerRed,
+            _Farm.flowerYolk,
+            _Farm.flowerCream,
+            _Farm.flowerPink,
+          ];
+          final head = heads[rand.below(heads.length)];
+          for (var f = 0; f < 4; f++) {
+            final x = p.x + rand.range(-0.35, 0.35);
+            final z = p.y + rand.range(-0.35, 0.35);
+            final h = rand.range(0.25, 0.42);
+            into.add(tjs.BoxGeometry(0.035, h, 0.035), _place(x, h / 2, z),
+                _Farm.leafC);
+            into.add(tjg.IcosahedronGeometry(rand.range(0.09, 0.13), 0),
+                _place(x, h, z, sy: 0.6), head);
+          }
+        }
+    }
+  }
+
   // ---- decorations -------------------------------------------------------------------------------
 
   tjs.Object3D? decoration(Decoration decoration) {
@@ -1393,4 +1555,129 @@ Vec2 _centroid(List<Vec2> points) {
     y += point.y;
   }
   return Vec2(x / points.length, y / points.length);
+}
+
+// ---- reachability ----------------------------------------------------------------------------
+
+/// Where an egg can roll from the tee: a flood fill over a half-unit grid
+/// of the bounds, stopped wherever a wall (straight, or a partial arc as
+/// its chords) crosses the step between two cells, and carried through the
+/// rabbit holes (an egg reaching one end comes out of the other). Water
+/// does not stop it - an island is still turf - and neither do rocks or
+/// bumpers standing free.
+class _ReachGrid {
+  _ReachGrid._(this.bounds, this.cols, this.rows, this._reachable);
+
+  static const double cell = 0.5;
+
+  final Rect bounds;
+  final int cols;
+  final int rows;
+  final Uint8List _reachable;
+
+  /// How many cells the flood never reached.
+  int get unreachableCount =>
+      _reachable.length - _reachable.fold<int>(0, (sum, v) => sum + v);
+
+  bool reachableAt(Vec2 p) {
+    final col = ((p.x - bounds.min.x) / cell).floor().clamp(0, cols - 1);
+    final row = ((p.y - bounds.min.y) / cell).floor().clamp(0, rows - 1);
+    return _reachable[row * cols + col] == 1;
+  }
+
+  static _ReachGrid of(HoleDef hole) {
+    final bounds = hole.bounds;
+    final cols = math.max(1, (bounds.width / cell).ceil());
+    final rows = math.max(1, (bounds.height / cell).ceil());
+    final reachable = Uint8List(cols * rows);
+    final segments = <(Vec2, Vec2)>[
+      for (final wall in hole.walls) (wall.a, wall.b),
+    ];
+    for (final arc in hole.arcs) {
+      if (arc.sweep >= 2 * math.pi - 0.01) continue; // a free-standing rock
+      final steps = (arc.sweep * arc.radius / 0.5).ceil().clamp(2, 128).toInt();
+      for (var i = 0; i < steps; i++) {
+        final a0 = arc.startAngle + i / steps * arc.sweep;
+        final a1 = arc.startAngle + (i + 1) / steps * arc.sweep;
+        segments.add((
+          Vec2(arc.center.x + math.cos(a0) * arc.radius,
+              arc.center.y + math.sin(a0) * arc.radius),
+          Vec2(arc.center.x + math.cos(a1) * arc.radius,
+              arc.center.y + math.sin(a1) * arc.radius),
+        ));
+      }
+    }
+    Vec2 centerOf(int col, int row) => Vec2(
+        bounds.min.x + (col + 0.5) * cell, bounds.min.y + (row + 0.5) * cell);
+    int? cellOf(Vec2 p) {
+      final col = ((p.x - bounds.min.x) / cell).floor();
+      final row = ((p.y - bounds.min.y) / cell).floor();
+      if (col < 0 || row < 0 || col >= cols || row >= rows) return null;
+      return row * cols + col;
+    }
+
+    bool crossesWall(Vec2 a, Vec2 b) {
+      for (final (p, q) in segments) {
+        if (_segmentsCross(a, b, p, q)) return true;
+      }
+      return false;
+    }
+
+    final queue = <int>[];
+    void seed(Vec2 p) {
+      final index = cellOf(p);
+      if (index == null || reachable[index] == 1) return;
+      reachable[index] = 1;
+      queue.add(index);
+    }
+
+    seed(hole.tee);
+    var head = 0;
+    while (head < queue.length) {
+      final index = queue[head++];
+      final col = index % cols;
+      final row = index ~/ cols;
+      final here = centerOf(col, row);
+      // Through a rabbit hole: reaching one end opens the other.
+      for (final pair in hole.portals) {
+        if (here.distanceTo(pair.a) <= pair.radius) seed(pair.b);
+        if (here.distanceTo(pair.b) <= pair.radius) seed(pair.a);
+      }
+      for (final (dc, dr) in const [(1, 0), (-1, 0), (0, 1), (0, -1)]) {
+        final nc = col + dc;
+        final nr = row + dr;
+        if (nc < 0 || nr < 0 || nc >= cols || nr >= rows) continue;
+        final next = nr * cols + nc;
+        if (reachable[next] == 1) continue;
+        if (crossesWall(here, centerOf(nc, nr))) continue;
+        reachable[next] = 1;
+        queue.add(next);
+      }
+    }
+    return _ReachGrid._(bounds, cols, rows, reachable);
+  }
+}
+
+/// Whether segments [a]-[b] and [p]-[q] touch or cross.
+bool _segmentsCross(Vec2 a, Vec2 b, Vec2 p, Vec2 q) {
+  double orient(Vec2 o, Vec2 u, Vec2 v) =>
+      (u.x - o.x) * (v.y - o.y) - (u.y - o.y) * (v.x - o.x);
+  bool onSegment(Vec2 o, Vec2 u, Vec2 v) =>
+      math.min(o.x, u.x) - 1e-9 <= v.x &&
+      v.x <= math.max(o.x, u.x) + 1e-9 &&
+      math.min(o.y, u.y) - 1e-9 <= v.y &&
+      v.y <= math.max(o.y, u.y) + 1e-9;
+  final d1 = orient(p, q, a);
+  final d2 = orient(p, q, b);
+  final d3 = orient(a, b, p);
+  final d4 = orient(a, b, q);
+  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+      ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) {
+    return true;
+  }
+  if (d1.abs() < 1e-12 && onSegment(p, q, a)) return true;
+  if (d2.abs() < 1e-12 && onSegment(p, q, b)) return true;
+  if (d3.abs() < 1e-12 && onSegment(a, b, p)) return true;
+  if (d4.abs() < 1e-12 && onSegment(a, b, q)) return true;
+  return false;
 }
