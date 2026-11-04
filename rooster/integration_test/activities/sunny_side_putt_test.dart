@@ -338,6 +338,13 @@ void main() {
           'miss (see the issue).');
     }
 
+    // The voice call goes down before the app's own shutdown: a process
+    // that tears down with the WebRTC stack still up dies after the run's
+    // summary prints (exit 1 with every test green), which reads as a
+    // failure. The pending tearDown helper runs too late - the client
+    // manager's close has already taken the transports down by then.
+    await app.clientManager.callManager.disconnect();
+
     await app.clientManager.close();
     await tester.clean();
   });
