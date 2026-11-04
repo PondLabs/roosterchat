@@ -5,6 +5,8 @@
 // shell. The viewer's own egg has none: the bobbing arrow marks it.
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'putt_art.dart';
@@ -34,9 +36,46 @@ class PuttTagBoard extends ChangeNotifier {
 
   void update(List<PuttTag> tags) {
     if (tags.isEmpty && _tags.isEmpty) return;
-    _tags = tags;
+    _tags = declutterTags(tags);
     notifyListeners();
   }
+}
+
+/// The tags lifted clear of each other: eggs bunched on the tee would
+/// stack their pills on top of one another, so each tag (from the lowest
+/// on screen up) rises above any it would overlap. A pill's size is read
+/// off its name, near enough for the layout.
+List<PuttTag> declutterTags(List<PuttTag> tags) {
+  if (tags.length < 2) return tags;
+  Rect pill(PuttTag tag, Offset at) {
+    final width = 30.0 + tag.name.length * 7.2;
+    return Rect.fromLTWH(at.dx - width / 2, at.dy - 26, width, 26);
+  }
+
+  final order = [...tags]..sort((a, b) => b.at.dy.compareTo(a.at.dy));
+  final placed = <Rect>[];
+  final moved = <String, Offset>{};
+  for (final tag in order) {
+    var at = tag.at;
+    for (var pass = 0; pass < tags.length; pass++) {
+      final box = pill(tag, at);
+      final hit = placed.where((other) => other.overlaps(box)).toList();
+      if (hit.isEmpty) break;
+      final top = hit.map((other) => other.top).reduce(math.min);
+      at = Offset(at.dx, top - 2);
+    }
+    placed.add(pill(tag, at));
+    moved[tag.playerId] = at;
+  }
+  return [
+    for (final tag in tags)
+      PuttTag(
+        playerId: tag.playerId,
+        name: tag.name,
+        color: tag.color,
+        at: moved[tag.playerId] ?? tag.at,
+      ),
+  ];
 }
 
 /// The tag layer: a pill per tag, laid at its pixel.
