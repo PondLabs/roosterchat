@@ -258,8 +258,9 @@ void main() {
   });
 
   group('the garden', () {
-    test('a corner the walls close off is planted, not turfed', () {
-      // A box of walls in the north-east corner: the egg can never get in.
+    test('a corner the walls close off is carved away from the table', () {
+      // A box of walls in the north-east corner: the egg can never get in,
+      // and it reaches the table's edge, so the table takes it off.
       final hole = HoleDef(
         id: 'garden-check',
         par: 2,
@@ -278,8 +279,48 @@ void main() {
       final world = PuttWorld3D(viewport: const ui.Size(800, 600));
       addTearDown(world.dispose);
       world.buildHole(hole, eggRadius: 0.45);
+      expect(world.holeGroup('garden'), isNull,
+          reason: 'carved, not planted on the table');
+      // No turf over the carved corner, but for the ledge under its rails.
+      final lawn = world.holeGroup('ground')!.children.single as tjs.Mesh;
+      final position = lawn.geometry!.attributes['position'] as dynamic;
+      var inCorner = 0;
+      for (var i = 0; i < position.count; i++) {
+        final x = (position.getX(i) as num).toDouble();
+        final z = (position.getZ(i) as num).toDouble();
+        if (x > 29.5 && z < 8.5) inCorner++;
+      }
+      expect(inCorner, 0);
+      // The fences split where they pass over the carved corner.
+      final pieces = walk(world.holeGroup('walls')!)
+          .where((object) => object.name == 'wall-piece');
+      expect(pieces, isNotEmpty, reason: 'fences stop at the carved corner');
+    });
+
+    test('ground walled off in the middle of the green is a garden bed', () {
+      final hole = HoleDef(
+        id: 'island-check',
+        par: 2,
+        tee: const Vec2(3, 13),
+        nest: Nest(const Vec2(37, 13), 0.9),
+        bounds: Rect(Vec2.zero, Vec2(40, 26)),
+        walls: [
+          WallSegment(Vec2.zero, Vec2(40, 0)),
+          WallSegment(Vec2(40, 0), Vec2(40, 26)),
+          WallSegment(Vec2(40, 26), Vec2(0, 26)),
+          WallSegment(Vec2(0, 26), Vec2.zero),
+          // A closed box in the middle: the henhouse.
+          WallSegment(Vec2(16, 9), Vec2(24, 9)),
+          WallSegment(Vec2(24, 9), Vec2(24, 17)),
+          WallSegment(Vec2(24, 17), Vec2(16, 17)),
+          WallSegment(Vec2(16, 17), Vec2(16, 9)),
+        ],
+      );
+      final world = PuttWorld3D(viewport: const ui.Size(800, 600));
+      addTearDown(world.dispose);
+      world.buildHole(hole, eggRadius: 0.45);
       final garden = world.holeGroup('garden');
-      expect(garden, isNotNull, reason: 'the closed corner gets beds');
+      expect(garden, isNotNull, reason: 'the island gets beds');
       expect(walk(garden!).where((o) => o.name == 'garden-plants'), isNotEmpty);
     });
 

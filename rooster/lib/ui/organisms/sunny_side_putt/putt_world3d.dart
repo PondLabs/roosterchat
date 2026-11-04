@@ -74,6 +74,7 @@ part 'world3d/actors.dart';
 part 'world3d/aim_fx.dart';
 part 'world3d/theme.dart';
 part 'world3d/bursts.dart';
+part 'world3d/table_shape.dart';
 
 /// The void behind everything before the sky dome draws: the horizon's
 /// warm haze, so a frame that misses the dome still reads as sky.
@@ -753,9 +754,11 @@ class PuttWorld3D {
       _henViews.add(hen);
     }
     makeKind('scenery').add(_Scenery(hole,
-        animated: _animated,
-        theme: _theme,
-        cheerUntil: () => _cheerUntil).build());
+            animated: _animated,
+            theme: _theme,
+            cheerUntil: () => _cheerUntil,
+            shape: kit.shape)
+        .build());
 
     _fx.reset(_fxRoot);
     _firstFrame = true;

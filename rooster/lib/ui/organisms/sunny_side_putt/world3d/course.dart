@@ -61,9 +61,10 @@ class _CourseKit {
 
   tjs.DataTexture? _crateFace;
 
-  /// Where the egg can roll from the tee; the rest of the bounds (corners
-  /// the walls close off) is garden, not turf.
-  late final _ReachGrid _reach = _ReachGrid.of(hole);
+  /// The table's shape: where the egg can roll, the garden islands, the
+  /// carved-away stretches (see `table_shape.dart`).
+  late final _TableShape shape = _TableShape.of(hole);
+  _TableShape get _reach => shape;
 
   /// The garden beds' ground per theme: mulch, dark earth, moss, gravel,
   /// straw.
@@ -83,8 +84,10 @@ class _CourseKit {
     // Up close the blades show: a tiling normal map, a tile every 1.6 units.
     final blades = _grassNormalTexture()
       ..repeat.setValues(bounds.width / 1.6, bounds.height / 1.6);
+    // The turf follows the table's shape: no green where the walls have
+    // carved the course away.
     return tjs.Mesh(
-      tjs.PlaneGeometry(bounds.width, bounds.height, 1, 1),
+      shape.top(turf: true),
       tjs.MeshStandardMaterial({
         tjs.MaterialProperty.map: _lawnTexture(),
         tjs.MaterialProperty.normalMap: blades,
@@ -94,9 +97,6 @@ class _CourseKit {
       }),
     )
       ..name = 'lawn'
-      // The plane's +z normal tips up to +y.
-      ..rotation.x = -math.pi / 2
-      ..position.setValues(bounds.center.x, 0, bounds.center.y)
       ..receiveShadow = true;
   }
 
@@ -294,17 +294,27 @@ class _CourseKit {
 
   // ---- the table ----------------------------------------------------------------------
 
-  /// The wooden table the green sits on: a timber rim around the turf and
-  /// a planked skirt down to the meadow.
+  /// The wooden table the green sits on, in the hole's own shape: a
+  /// timber lip past the green's edge and a planked skirt following the
+  /// outline down to the meadow.
   tjs.Group table() {
     final bounds = hole.bounds;
     final group = tjs.Group()..name = 'table';
-    const lip = _fenceThickness + 0.5;
-    final w = bounds.width + lip * 2;
-    final d = bounds.height + lip * 2;
-    final skirtGrain = _woodGrainTexture()..repeat.setValues((w + d) / 16, 1);
+    final rim = tjs.Mesh(
+      shape.top(turf: false),
+      tjs.MeshStandardMaterial({
+        tjs.MaterialProperty.color: _lin(_Farm.woodTop),
+        tjs.MaterialProperty.map: _woodGrainTexture(),
+        tjs.MaterialProperty.roughness: 0.8,
+        tjs.MaterialProperty.metalness: 0.0,
+      }),
+    )
+      ..name = 'table-rim'
+      ..position.y = -0.005
+      ..receiveShadow = true;
+    final skirtGrain = _woodGrainTexture()..repeat.setValues(1, 1);
     final skirt = tjs.Mesh(
-      tjs.BoxGeometry(w, _tableHeight, d),
+      shape.skirt(_tableHeight),
       tjs.MeshStandardMaterial({
         tjs.MaterialProperty.color: _lin(_Farm.tableSide),
         tjs.MaterialProperty.map: skirtGrain,
@@ -313,22 +323,11 @@ class _CourseKit {
       }),
     )
       ..name = 'table-skirt'
-      ..position
-          .setValues(bounds.center.x, -_tableHeight / 2 - 0.01, bounds.center.y)
-      ..castShadow = true
-      ..receiveShadow = true;
-    final base = tjs.Mesh(
-      tjs.BoxGeometry(w + 0.5, 0.35, d + 0.5),
-      _matte(_Farm.tableBase, roughness: 0.9),
-    )
-      ..name = 'table-base'
-      ..position
-          .setValues(bounds.center.x, -_tableHeight + 0.17, bounds.center.y)
       ..castShadow = true
       ..receiveShadow = true;
     group
-      ..add(skirt)
-      ..add(base);
+      ..add(rim)
+      ..add(skirt);
     // White posts at the corners and along the long sides: the course's
     // fence line, painted.
     final posts = _Merged();
@@ -351,6 +350,10 @@ class _CourseKit {
     }
     final center = bounds.center;
     for (final spot in spots) {
+      // A post only where the table runs under it.
+      if (!shape.keptAt(spot + (center - spot).normalized(Vec2.zero) * 0.6)) {
+        continue;
+      }
       final away = (spot - center);
       final push = Vec2(
         away.x.sign *
@@ -395,16 +398,30 @@ class _CourseKit {
   tjs.Group rail(Vec2 a, Vec2 b) {
     final wall = WallSegment(a, b);
     final perimeter = _isPerimeter(wall);
-    final thickness = perimeter ? _fenceThickness : _innerThickness;
     if (perimeter) {
-      // The fence's colliders overrun the corners (so no egg slips past a
-      // rounding); the timber stops at the green's edge.
       final bounds = hole.bounds;
       Vec2 clip(Vec2 p) => Vec2(p.x.clamp(bounds.min.x, bounds.max.x),
           p.y.clamp(bounds.min.y, bounds.max.y));
       a = clip(a);
       b = clip(b);
     }
+    // Only where the table runs under it: over carved-away ground a rail
+    // would float.
+    final runs = shape.keptRuns(a, b);
+    if (runs.length == 1 &&
+        runs.single.$1.distanceTo(a) < 1e-6 &&
+        runs.single.$2.distanceTo(b) < 1e-6) {
+      return _railPiece(a, b, perimeter);
+    }
+    final group = tjs.Group()..name = 'wall';
+    for (final (from, to) in runs) {
+      group.add(_railPiece(from, to, perimeter)..name = 'wall-piece');
+    }
+    return group;
+  }
+
+  tjs.Group _railPiece(Vec2 a, Vec2 b, bool perimeter) {
+    final thickness = perimeter ? _fenceThickness : _innerThickness;
     final run = b - a;
     final length = run.length;
     final direction = run.normalized(const Vec2(1, 0));
@@ -1394,7 +1411,7 @@ class _CourseKit {
   /// straw at the barn. Plants keep clear of the rails. Null when the whole
   /// green is in play.
   tjs.Object3D? garden() {
-    if (_reach.unreachableCount == 0) return null;
+    if (_reach._reach.unreachableCount == 0) return null;
     final merged = _Merged();
     final rand = _Rand(_seedOf('${hole.id}/garden'));
     final walls = [
@@ -1415,7 +1432,8 @@ class _CourseKit {
     for (var y = bounds.min.y + 0.6; y < bounds.max.y - 0.4; y += step) {
       for (var x = bounds.min.x + 0.6; x < bounds.max.x - 0.4; x += step) {
         final p = Vec2(x + rand.range(-0.4, 0.4), y + rand.range(-0.4, 0.4));
-        if (_reach.reachableAt(p) || nearRail(p)) continue;
+        // Islands only: carved-away ground is the meadow's.
+        if (_reach.reachableAt(p) || !shape.keptAt(p) || nearRail(p)) continue;
         _gardenPlant(merged, p, rand);
       }
     }
@@ -1740,9 +1758,10 @@ Vec2 _centroid(List<Vec2> points) {
 /// does not stop it - an island is still turf - and neither do rocks or
 /// bumpers standing free.
 class _ReachGrid {
-  _ReachGrid._(this.bounds, this.cols, this.rows, this._reachable);
+  _ReachGrid._(this.bounds, this.cell, this.cols, this.rows, this._reachable);
 
-  static const double cell = 0.5;
+  /// The grid's step, world units.
+  final double cell;
 
   final Rect bounds;
   final int cols;
@@ -1759,7 +1778,7 @@ class _ReachGrid {
     return _reachable[row * cols + col] == 1;
   }
 
-  static _ReachGrid of(HoleDef hole) {
+  static _ReachGrid of(HoleDef hole, {double cell = 0.5}) {
     final bounds = hole.bounds;
     final cols = math.max(1, (bounds.width / cell).ceil());
     final rows = math.max(1, (bounds.height / cell).ceil());
@@ -1790,8 +1809,21 @@ class _ReachGrid {
       return row * cols + col;
     }
 
+    // Each wall's box, so a step far from it skips the crossing test.
+    final boxes = [
+      for (final (p, q) in segments)
+        (
+          math.min(p.x, q.x) - cell,
+          math.min(p.y, q.y) - cell,
+          math.max(p.x, q.x) + cell,
+          math.max(p.y, q.y) + cell,
+        ),
+    ];
     bool crossesWall(Vec2 a, Vec2 b) {
-      for (final (p, q) in segments) {
+      for (var i = 0; i < segments.length; i++) {
+        final (x0, y0, x1, y1) = boxes[i];
+        if (a.x < x0 || a.x > x1 || a.y < y0 || a.y > y1) continue;
+        final (p, q) = segments[i];
         if (_segmentsCross(a, b, p, q)) return true;
       }
       return false;
@@ -1828,7 +1860,7 @@ class _ReachGrid {
         queue.add(next);
       }
     }
-    return _ReachGrid._(bounds, cols, rows, reachable);
+    return _ReachGrid._(bounds, cell, cols, rows, reachable);
   }
 }
 

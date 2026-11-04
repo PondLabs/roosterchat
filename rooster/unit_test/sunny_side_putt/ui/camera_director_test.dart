@@ -49,10 +49,9 @@ void main() {
     director.update(1 / 60, resting(hole.tee));
     // The entrance starts low and turned, looking across the nest at the
     // farm and the sky.
-    expect(rig.pitchDeg, closeTo(16, 1));
+    expect(rig.pitchDeg, closeTo(15, 1));
     expect(rig.target.distanceTo(hole.nest.position), lessThan(1));
     run(PuttCameraDirector.openingSeconds - 0.2, resting(hole.tee));
-    expect(director.followPoint, hole.bounds.center);
     expect(rig.target.distanceTo(hole.bounds.center), lessThan(0.5));
     expect(rig.pitchDeg, closeTo(PuttCameraRig.pitchDefault, 0.5));
     expect(rig.yaw, closeTo(PuttCameraRig.defaultYaw, 0.02));

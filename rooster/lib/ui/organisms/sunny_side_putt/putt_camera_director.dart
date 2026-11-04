@@ -92,26 +92,25 @@ class PuttCameraDirector {
     }
   }
 
-  /// The hole's entrance: the camera starts high over the nest, turned a
-  /// little, and sweeps down and round to the whole green.
-  void _sweepIn(HoleDef hole) {
+  /// The hole's entrance, driven frame by frame over [openingSeconds]: the
+  /// camera starts low over the nest, turned a little, looking across it at
+  /// the farm and the sky (the hour shows), holds there a breath, then
+  /// rises and turns onto the whole green.
+  void _sweep(HoleDef hole) {
+    final t = (_holeClock / (openingSeconds - 0.3)).clamp(0.0, 1.0);
+    // A held beat, then an ease-in-out climb.
+    final k = t < 0.25 ? 0.0 : (t - 0.25) / 0.75;
+    final eased = k * k * (3 - 2 * k);
+    double lerp(double a, double b) => a + (b - a) * eased;
     final overviewDistance = rig.overviewDistance;
-    // Low over the green, looking across the nest at the farm and the sky
-    // (the hour shows), then up and round onto the whole hole.
     rig
       ..aimAt(
-        yaw: PuttCameraRig.defaultYaw + 0.55,
-        pitchDeg: 16,
-        distance: overviewDistance * 0.9,
-        target: hole.nest.position,
+        yaw: lerp(PuttCameraRig.defaultYaw + 0.55, PuttCameraRig.defaultYaw),
+        pitchDeg: lerp(15, PuttCameraRig.pitchDefault),
+        distance: lerp(overviewDistance * 0.92, overviewDistance),
+        target: hole.nest.position.lerp(hole.bounds.center, eased),
       )
-      ..snap()
-      ..glideTo(
-        yaw: PuttCameraRig.defaultYaw,
-        pitchDeg: PuttCameraRig.pitchDefault,
-        distance: overviewDistance,
-        target: hole.bounds.center,
-      );
+      ..snap();
   }
 
   void update(double dt, PuttCameraCue cue) {
@@ -128,7 +127,6 @@ class PuttCameraDirector {
       _wasRolling = false;
       _sinceFieldFrame = 0;
       _showingBetween = false;
-      _sweepIn(hole);
     }
     _holeClock += dt;
     final center = hole.bounds.center;
@@ -143,7 +141,12 @@ class PuttCameraDirector {
       return;
     }
     _showingBetween = false;
-    if (_holeClock < openingSeconds || _overview) {
+    if (_holeClock < openingSeconds) {
+      _sweep(hole);
+      _follow = null;
+      return;
+    }
+    if (_overview) {
       _follow = center;
       return;
     }

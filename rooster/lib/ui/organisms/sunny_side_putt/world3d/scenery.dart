@@ -171,8 +171,14 @@ class _SkyDome {
 /// under the hole's 'scenery' kind.
 class _Scenery {
   _Scenery(this.hole,
-      {required this.animated, required this.theme, required this.cheerUntil})
+      {required this.animated,
+      required this.theme,
+      required this.cheerUntil,
+      required this.shape})
       : _rand = _Rand(_seedOf('${hole.id}/farm'));
+
+  /// The table's shape: the meadow fills what the walls carved away.
+  final _TableShape shape;
 
   /// Until when (the frame clock) the host is cheering: an egg just
   /// dropped into the nest.
@@ -246,6 +252,7 @@ class _Scenery {
       return false;
     }
 
+    _carvedMeadow(props, small);
     _trees(props, blocked);
     _bushes(props, blocked);
     _stones(props, blocked);
@@ -472,6 +479,72 @@ class _Scenery {
       ..name = 'meadow'
       ..position.setValues(center.x, _ground, center.y)
       ..receiveShadow = true;
+  }
+
+  /// The ground the walls carved off the table, down at the meadow's
+  /// level: bushes, flowers and tufts grow there, clear of the skirt.
+  void _carvedMeadow(_Merged props, _Merged small) {
+    if (!shape.carved) return;
+    final rand = _Rand(_seedOf('${hole.id}/carved'));
+    const step = 1.4;
+    for (var z = _b.min.y + 0.7; z < _b.max.y; z += step) {
+      for (var x = _b.min.x + 0.7; x < _b.max.x; x += step) {
+        final p = Vec2(x + rand.range(-0.5, 0.5), z + rand.range(-0.5, 0.5));
+        if (!shape.carvedAt(p)) continue;
+        // Clear of the table's skirt all round.
+        var clear = true;
+        for (final (dx, dz) in const [
+          (1.0, 0.0),
+          (-1.0, 0.0),
+          (0.0, 1.0),
+          (0.0, -1.0),
+        ]) {
+          if (shape.keptAt(p + Vec2(dx, dz))) clear = false;
+        }
+        if (!clear) continue;
+        final roll = rand.next();
+        if (roll < 0.25) {
+          final r = rand.range(0.5, 0.9);
+          props.add(
+            tjg.IcosahedronGeometry(1, 1),
+            _place(p.x, _ground + r * 0.7, p.y, sx: r, sy: r * 0.82, sz: r),
+            rand.chance(0.5) ? _Farm.leafB : _Farm.leafA,
+            baseShade: 0.6,
+            rand: rand,
+            variation: 0.1,
+          );
+        } else if (roll < 0.7) {
+          const heads = [
+            _Farm.flowerRed,
+            _Farm.flowerYolk,
+            _Farm.flowerCream,
+            _Farm.flowerPink,
+          ];
+          final head = heads[rand.below(heads.length)];
+          for (var f = 0; f < 5; f++) {
+            final fx = p.x + rand.range(-0.5, 0.5);
+            final fz = p.y + rand.range(-0.5, 0.5);
+            final h = rand.range(0.28, 0.48);
+            small.add(tjs.BoxGeometry(0.04, h, 0.04),
+                _place(fx, _ground + h / 2, fz), _Farm.leafC);
+            small.add(tjg.IcosahedronGeometry(rand.range(0.1, 0.15), 0),
+                _place(fx, _ground + h, fz, sy: 0.6), head);
+          }
+        } else {
+          for (var blade = 0; blade < 3; blade++) {
+            final h = rand.range(0.35, 0.65);
+            small.add(
+              tjg.ConeGeometry(0.07, h, 3),
+              _place(p.x + rand.range(-0.15, 0.15), _ground + h / 2,
+                  p.y + rand.range(-0.15, 0.15),
+                  tilt: rand.range(-0.3, 0.3)),
+              _Farm.leafA,
+              baseShade: 0.7,
+            );
+          }
+        }
+      }
+    }
   }
 
   // ---- trees and bushes ----------------------------------------------------------------

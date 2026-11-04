@@ -52,7 +52,6 @@ abstract final class _Farm {
   static const woodTop = 0xE9AE6C;
   static const wood = 0xC27C42;
   static const tableSide = 0xB97440;
-  static const tableBase = 0x7E4C2A;
   static const post = 0xF4E6D2;
   static const shore = 0xD9BE82;
 
