@@ -1,5 +1,10 @@
-// Farm Road - the speed course: tractor-track boost strips, long lanes and
-// scattered stones. Six holes, all with verified solutions.
+// Farm Road - the speed course: tractor-track speed strips that throw the
+// egg on at their own pace, long lanes, hairpins and a roundabout. The
+// outside of every bend is built from straight rails, so an egg riding it
+// bounces along like off any fence. Six holes, all with verified
+// solutions.
+
+import 'dart:math' as math;
 
 import '../core/hole.dart';
 import '../core/vec.dart';
@@ -7,18 +12,38 @@ import 'course_kit.dart';
 
 final List<SunnySidePuttHole> theFarmRoadHoles = [
   SunnySidePuttHole(hole: _frontStretch(), solution: _frontStretchSolution()),
-  SunnySidePuttHole(hole: _combineCorner(), solution: _combineCornerSolution()),
-  SunnySidePuttHole(hole: _siloBend(), solution: _siloBendSolution()),
-  SunnySidePuttHole(hole: _tumbleweed(), solution: _tumbleweedSolution()),
-  SunnySidePuttHole(hole: _hayDevilRun(), solution: _hayDevilRunSolution()),
+  SunnySidePuttHole(hole: _theHairpin(), solution: _theHairpinSolution()),
+  SunnySidePuttHole(
+      hole: _chickenCrossing(), solution: _chickenCrossingSolution()),
+  SunnySidePuttHole(hole: _cattleGrid(), solution: _cattleGridSolution()),
+  SunnySidePuttHole(hole: _roundabout(), solution: _roundaboutSolution()),
   SunnySidePuttHole(hole: _homeStretch(), solution: _homeStretchSolution()),
 ];
 
-// -- hole 1: Front Stretch ----------------------------------------------------
-// Straight runway with the boost strip parked below the lane.
+/// The outside rail of a U-turn: a half circle round [center] with
+/// [radius] from straight above it to straight below, by the east - or by
+/// the west when [east] is false.
+List<WallSegment> _uTurnRail(Vec2 center, double radius,
+    {bool east = true, int pieces = 12}) {
+  return polyline(bendPoints(center, radius,
+      startAngle: -math.pi / 2,
+      endAngle: east ? math.pi / 2 : -3 * math.pi / 2,
+      pieces: pieces));
+}
 
-const Vec2 _road1Tee = Vec2(6, 11);
-const Vec2 _road1Nest = Vec2(46, 11);
+/// The rounded nose of a divider: the half circle the egg rolls round.
+WallArc _nose(Vec2 center, double radius, {bool east = true}) =>
+    WallArc(center, radius,
+        startAngle: east ? -math.pi / 2 : math.pi / 2, sweep: math.pi);
+
+// -- hole 1: Front Stretch ----------------------------------------------------
+// A straight farm road and one speed strip halfway down it. The strip
+// throws every egg on at its own pace, so the stroke is all line: past it,
+// a corner board turns the road up into the nest's lay-by.
+
+const Vec2 _road1Tee = Vec2(5, 13);
+const Vec2 _road1Nest = Vec2(50, 4.5);
+const Rect _road1Bounds = Rect(Vec2.zero, Vec2(54, 26));
 
 HoleDef _frontStretch() {
   return HoleDef(
@@ -26,153 +51,316 @@ HoleDef _frontStretch() {
     par: 2,
     tee: _road1Tee,
     nest: Nest(_road1Nest, 1.7),
-    bounds: Rect(Vec2.zero, Vec2(52, 22)),
-    walls: [...fenceAround(Rect(Vec2.zero, Vec2(52, 22)))],
-    boosts: [BoostStrip(Vec2(18, 15), Vec2(26, 15), width: 1.2, speed: 18)],
-    boxes: [QuestionBox('road_1_box', Vec2(30, 6))],
+    bounds: _road1Bounds,
+    walls: [
+      ...fenceAround(_road1Bounds),
+      ...polyline(
+          [Vec2(0, 6), Vec2(9, 6), Vec2(13, 9), Vec2(46, 9), Vec2(46, 0)]),
+      ...polyline([Vec2(0, 20), Vec2(9, 20), Vec2(13, 17), Vec2(54, 17)]),
+      // the corner board up into the lay-by
+      WallSegment(Vec2(48, 17), Vec2(54, 11)),
+    ],
+    boosts: [BoostStrip(Vec2(20, 13), Vec2(28, 13), width: 1.2, speed: 22)],
+    boxes: [QuestionBox('road_1_box', Vec2(24, 15.3))],
   );
 }
 
-ReferenceSolution _frontStretchSolution() =>
-    ReferenceSolution([putt(_road1Tee, _road1Nest, arrival: 2.6)]);
+// Found by a sweep, and it holds for nearby aims: off the road's north
+// side into the strip, which throws the egg on to the corner board and up
+// into the lay-by; then the short putt in.
+ReferenceSolution _frontStretchSolution() {
+  const inTheLayBy = Vec2(50.96, 7.39);
+  return ReferenceSolution([
+    const ReferenceShot(-0.370, 0.955),
+    putt(inTheLayBy, _road1Nest, arrival: 2.2),
+  ]);
+}
 
-// -- hole 2: Combine Corner ---------------------------------------------------
-// A wall drops from the north; the belt line bends around its foot.
+// -- hole 2: The Hairpin ------------------------------------------------------
+// Out along the bottom lane, round a hairpin, back along the top one.
+// Take the first speed strip along the outside edge and the egg rides the
+// bend's rail round, a strip on the far side keeping it going; the last
+// one throws it on home.
 
-const Vec2 _road2Tee = Vec2(6, 6);
-final Vec2 _road2Layup = Vec2(18, 14);
-const Vec2 _road2Nest = Vec2(44, 17);
+const Vec2 _road2Tee = Vec2(6, 23);
+const Vec2 _road2Nest = Vec2(12, 2.4);
+const Rect _road2Bounds = Rect(Vec2.zero, Vec2(54, 28));
+const Vec2 _road2Turn = Vec2(40, 14);
 
-HoleDef _combineCorner() {
+HoleDef _theHairpin() {
   return HoleDef(
     id: 'road_2',
     par: 3,
     tee: _road2Tee,
     nest: Nest(_road2Nest, 1.7),
-    bounds: Rect(Vec2.zero, Vec2(52, 22)),
+    bounds: _road2Bounds,
     walls: [
-      ...fenceAround(Rect(Vec2.zero, Vec2(52, 22))),
-      const WallSegment(Vec2(26, 0), Vec2(26, 9)),
+      ...fenceAround(_road2Bounds),
+      // the verge between the lanes
+      WallSegment(Vec2(0, 10), Vec2(40, 10)),
+      WallSegment(Vec2(0, 18), Vec2(40, 18)),
+      ..._uTurnRail(_road2Turn, 14),
     ],
-    boosts: [BoostStrip(Vec2(30, 13), Vec2(38, 13), width: 1.2, speed: 18)],
-    boxes: [QuestionBox('road_2_box', Vec2(16, 19))],
+    arcs: [_nose(_road2Turn, 4)],
+    boosts: [
+      // along the outside edge, so the egg meets the bend's rail tangent
+      BoostStrip(Vec2(24, 26), Vec2(34, 26), width: 2.4, speed: 26),
+      // on the bend's far side, keeping a riding egg going round
+      BoostStrip(Vec2(52, 18), Vec2(52, 10), width: 2.4, speed: 16),
+      BoostStrip(Vec2(40, 2.5), Vec2(32, 2.5), width: 3, speed: 20),
+    ],
+    boxes: [QuestionBox('road_2_box', Vec2(47, 14))],
   );
 }
 
-ReferenceSolution _combineCornerSolution() => ReferenceSolution([
-      putt(_road2Tee, _road2Layup),
-      putt(_road2Layup, _road2Nest, arrival: 2.2),
+// Found by a sweep, both shots holding for nearby aims: a firm one that
+// banks up off the verge and rides into the top of the bend; then a soft
+// one into the last strip, which throws the egg home. (Riding the whole
+// bend from the outside edge is the ace.)
+ReferenceSolution _theHairpinSolution() => const ReferenceSolution([
+      ReferenceShot(-0.594, 0.793),
+      ReferenceShot(-3.148, 0.242),
     ]);
 
-// -- hole 3: Silo Bend --------------------------------------------------------
-// Short boost strip on the way in, wall rising from the south, nest NE.
+// -- hole 3: Chicken Crossing -------------------------------------------------
+// Why did the chicken cross the road? To be in your way. Two hens cross
+// on their own clocks, a round hay bale sits mid-road, and a speed strip
+// down its north side gets you past the far hen in a hurry.
 
-const Vec2 _road3Tee = Vec2(6, 16);
-final Vec2 _road3Layup = Vec2(24, 16);
-const Vec2 _road3Nest = Vec2(46, 6);
+const Vec2 _road3Tee = Vec2(6, 13);
+const Vec2 _road3Nest = Vec2(48, 13);
+const Rect _road3Bounds = Rect(Vec2.zero, Vec2(54, 26));
 
-HoleDef _siloBend() {
+HoleDef _chickenCrossing() {
   return HoleDef(
     id: 'road_3',
-    par: 3,
+    par: 2,
     tee: _road3Tee,
     nest: Nest(_road3Nest, 1.7),
-    bounds: Rect(Vec2.zero, Vec2(52, 22)),
+    bounds: _road3Bounds,
     walls: [
-      ...fenceAround(Rect(Vec2.zero, Vec2(52, 22))),
-      const WallSegment(Vec2(28, 0), Vec2(28, 12)),
+      ...fenceAround(_road3Bounds),
+      WallSegment(Vec2(0, 5), Vec2(5, 0)),
+      WallSegment(Vec2(5, 26), Vec2(0, 21)),
+      WallSegment(Vec2(48, 0), Vec2(54, 6)),
+      WallSegment(Vec2(54, 20), Vec2(48, 26)),
     ],
-    boosts: [BoostStrip(Vec2(14, 11), Vec2(20, 11), width: 1.2, speed: 18)],
-    boxes: [QuestionBox('road_3_box', Vec2(38, 18))],
+    arcs: [rock(const Vec2(27, 13), 2.4)],
+    boosts: [BoostStrip(Vec2(24, 7.5), Vec2(32, 7.5), width: 1.2, speed: 15)],
+    obstacles: const [
+      MovingObstacle(
+        id: 'road_3_hen_near',
+        radius: 1.5,
+        stops: [
+          ObstacleStop(Vec2(17, 4), dwellSeconds: 1, travelSecondsToNext: 3.2),
+          ObstacleStop(Vec2(17, 22), dwellSeconds: 1, travelSecondsToNext: 3.2),
+        ],
+      ),
+      MovingObstacle(
+        id: 'road_3_hen_far',
+        radius: 1.5,
+        stops: [
+          ObstacleStop(Vec2(39, 22),
+              dwellSeconds: 0.6, travelSecondsToNext: 2.6),
+          ObstacleStop(Vec2(39, 4),
+              dwellSeconds: 0.6, travelSecondsToNext: 2.6),
+        ],
+      ),
+    ],
+    boxes: [QuestionBox('road_3_box', Vec2(27, 19.5))],
   );
 }
 
-ReferenceSolution _siloBendSolution() => ReferenceSolution([
-      putt(_road3Tee, _road3Layup),
-      putt(_road3Layup, _road3Nest, arrival: 2.2),
-    ]);
+ReferenceSolution _chickenCrossingSolution() {
+  const north = Vec2(22, 7.5);
+  return ReferenceSolution([
+    putt(_road3Tee, north),
+    putt(landAt(_road3Tee, north), _road3Nest, arrival: 2.2),
+  ]);
+}
 
-// -- hole 4: Tumbleweed -------------------------------------------------------
-// Two stones to dodge and a strip waiting by the fence line.
+// -- hole 4: Cattle Grid ------------------------------------------------------
+// Two cattle grids, each a narrow gate in a fence across the road, and a
+// conveyor before each pushing the egg sideways - south, then north. Aim
+// off to come in straight.
 
-const Vec2 _road4Tee = Vec2(6, 6);
-final Vec2 _road4First = Vec2(16, 6);
-final Vec2 _road4Mid = Vec2(38, 12);
-const Vec2 _road4Nest = Vec2(46, 18);
+const Vec2 _road4Tee = Vec2(6, 13);
+const Vec2 _road4Nest = Vec2(48, 13);
+const Rect _road4Bounds = Rect(Vec2.zero, Vec2(54, 26));
 
-HoleDef _tumbleweed() {
+HoleDef _cattleGrid() {
   return HoleDef(
     id: 'road_4',
-    par: 4,
+    par: 3,
     tee: _road4Tee,
     nest: Nest(_road4Nest, 1.7),
-    bounds: Rect(Vec2.zero, Vec2(52, 22)),
-    walls: [...fenceAround(Rect(Vec2.zero, Vec2(52, 22)))],
-    arcs: [rock(Vec2(20, 10), 1.6), rock(Vec2(34, 14), 1.6)],
-    boosts: [BoostStrip(Vec2(24, 18), Vec2(32, 18), width: 1.2, speed: 18)],
-    boxes: [QuestionBox('road_4_box', Vec2(28, 4))],
+    bounds: _road4Bounds,
+    walls: [
+      ...fenceAround(_road4Bounds),
+      WallSegment(Vec2(0, 5), Vec2(5, 0)),
+      WallSegment(Vec2(5, 26), Vec2(0, 21)),
+      WallSegment(Vec2(48, 0), Vec2(54, 6)),
+      WallSegment(Vec2(54, 20), Vec2(48, 26)),
+      // the two fences, each with its grid
+      WallSegment(Vec2(21, 0), Vec2(21, 11)),
+      WallSegment(Vec2(21, 15), Vec2(21, 26)),
+      WallSegment(Vec2(36, 0), Vec2(36, 11)),
+      WallSegment(Vec2(36, 15), Vec2(36, 26)),
+    ],
+    boosts: [
+      BoostStrip(Vec2(15, 3), Vec2(15, 23), width: 1.6, speed: 6),
+      BoostStrip(Vec2(30, 23), Vec2(30, 3), width: 1.6, speed: 6),
+    ],
+    boxes: [QuestionBox('road_4_box', Vec2(28.5, 20))],
   );
 }
 
-ReferenceSolution _tumbleweedSolution() => ReferenceSolution([
-      putt(_road4Tee, _road4First),
-      putt(_road4First, _road4Mid, arrival: 1.0),
-      putt(_road4Mid, _road4Nest, arrival: 2.2),
-    ]);
+// Found by a sweep, each shot holding for nearby aims: aimed north of the
+// first grid so its conveyor brings the egg in, then a long one through
+// the second grid on the other conveyor's push; then a putt in.
+ReferenceSolution _cattleGridSolution() {
+  const pastTheGrids = Vec2(47.36, 4.38);
+  return ReferenceSolution([
+    const ReferenceShot(-0.530, 0.668),
+    const ReferenceShot(-0.090, 0.918),
+    putt(pastTheGrids, _road4Nest, arrival: 2.2),
+  ]);
+}
 
-// -- hole 5: Hay Devil Run ----------------------------------------------------
-// Diagonal green; stones stagger the crest while strips sit wide of the lane.
+// -- hole 5: Roundabout -------------------------------------------------------
+// A roundabout round a flower bed: the road in from the west, the nest
+// down the road out to the east, and a lay-by north and south. Speed
+// strips on the ring keep a well-hit egg going round - all the way round
+// and down the east road, for the perfect one.
 
-const Vec2 _road5Tee = Vec2(6, 11);
-final Vec2 _road5Layup = Vec2(20, 6);
-final Vec2 _road5Mid = Vec2(34, 12);
-const Vec2 _road5Nest = Vec2(46, 16);
+const Vec2 _road5Tee = Vec2(5, 14);
+const Vec2 _road5Nest = Vec2(48, 14);
+const Rect _road5Bounds = Rect(Vec2.zero, Vec2(54, 28));
+const Vec2 _road5Hub = Vec2(27, 14);
+const double _road5Ring = 11;
 
-HoleDef _hayDevilRun() {
+/// The ring's outer rail between two of its roads: from angle [from] to
+/// [to] (radians, screen convention), in straight pieces.
+List<WallSegment> _road5Arc(double from, double to) {
+  final pieces = ((to - from).abs() / 0.26).ceil();
+  return polyline(bendPoints(_road5Hub, _road5Ring,
+      startAngle: from, endAngle: to, pieces: pieces));
+}
+
+HoleDef _roundabout() {
+  // Where the roads meet the ring: half widths 5 (west), 4 (the rest).
+  final west = math.asin(5 / _road5Ring);
+  final other = math.asin(4 / _road5Ring);
+  final westX = _road5Hub.x - math.sqrt(_road5Ring * _road5Ring - 25);
+  final eastX = _road5Hub.x + math.sqrt(_road5Ring * _road5Ring - 16);
+  final northY = _road5Hub.y - math.sqrt(_road5Ring * _road5Ring - 16);
+  final southY = _road5Hub.y + math.sqrt(_road5Ring * _road5Ring - 16);
   return HoleDef(
     id: 'road_5',
-    par: 4,
+    par: 3,
     tee: _road5Tee,
     nest: Nest(_road5Nest, 1.7),
-    bounds: Rect(Vec2.zero, Vec2(52, 22)),
-    walls: [...fenceAround(Rect(Vec2.zero, Vec2(52, 22)))],
-    arcs: [rock(Vec2(26, 14), 1.5), rock(Vec2(36, 8), 1.5)],
-    boosts: [BoostStrip(Vec2(26, 18), Vec2(34, 18), width: 1.2, speed: 18)],
-    boxes: [QuestionBox('road_5_box', Vec2(12, 18))],
+    bounds: _road5Bounds,
+    walls: [
+      ...fenceAround(_road5Bounds),
+      // the roads in and out
+      WallSegment(Vec2(0, 9), Vec2(westX, 9)),
+      WallSegment(Vec2(0, 19), Vec2(westX, 19)),
+      WallSegment(Vec2(eastX, 10), Vec2(54, 10)),
+      WallSegment(Vec2(eastX, 18), Vec2(54, 18)),
+      WallSegment(Vec2(23, 0), Vec2(23, northY)),
+      WallSegment(Vec2(31, 0), Vec2(31, northY)),
+      WallSegment(Vec2(23, 28), Vec2(23, southY)),
+      WallSegment(Vec2(31, 28), Vec2(31, southY)),
+      // the ring's outer rail, in four arcs between the roads
+      ..._road5Arc(-math.pi + west, -math.pi / 2 - other),
+      ..._road5Arc(-math.pi / 2 + other, -other),
+      ..._road5Arc(other, math.pi / 2 - other),
+      ..._road5Arc(math.pi / 2 + other, math.pi - west),
+    ],
+    arcs: [rock(_road5Hub, 4.5)],
+    boosts: [
+      BoostStrip(Vec2(24, 6.25), Vec2(30, 6.25), width: 1.2, speed: 18),
+      BoostStrip(Vec2(24, 21.75), Vec2(30, 21.75), width: 1.2, speed: 18),
+    ],
+    boxes: [QuestionBox('road_5_box', Vec2(27, 1.8))],
   );
 }
 
-ReferenceSolution _hayDevilRunSolution() => ReferenceSolution([
-      putt(_road5Tee, _road5Layup),
-      putt(_road5Layup, _road5Mid),
-      putt(_road5Mid, _road5Nest, arrival: 2.2),
-    ]);
+// Found by a sweep, each shot holding for nearby aims: onto the ring off
+// its north-west rail; a firm one that rides the rail round past the
+// north strip and out down the east road; then a putt in.
+ReferenceSolution _roundaboutSolution() {
+  const downTheEastRoad = Vec2(43.42, 13.57);
+  return ReferenceSolution([
+    const ReferenceShot(-0.402, 0.893),
+    const ReferenceShot(-1.918, 0.968),
+    putt(downTheEastRoad, _road5Nest, arrival: 2.2),
+  ]);
+}
 
 // -- hole 6: Home Stretch -----------------------------------------------------
-// Gate boards pinch mid-green; the last stripes sit wide south of the lane.
+// The finale: the whole road home. Out along the bottom, round the first
+// hairpin, back past a hen, round the second, and a last speed strip
+// down the top lane to the nest at the farm gate.
 
-const Vec2 _road6Tee = Vec2(6, 11);
-final Vec2 _road6Gate = Vec2(26, 11);
-const Vec2 _road6Nest = Vec2(46, 11);
+const Vec2 _road6Tee = Vec2(6, 27.25);
+const Vec2 _road6Nest = Vec2(51, 4.5);
+const Rect _road6Bounds = Rect(Vec2.zero, Vec2(56, 32));
+const Vec2 _road6TurnOne = Vec2(42, 21.5);
+const Vec2 _road6TurnTwo = Vec2(14, 9.75);
 
 HoleDef _homeStretch() {
   return HoleDef(
     id: 'road_6',
-    par: 3,
+    par: 4,
     tee: _road6Tee,
     nest: Nest(_road6Nest, 1.7),
-    bounds: Rect(Vec2.zero, Vec2(52, 22)),
+    bounds: _road6Bounds,
     walls: [
-      ...fenceAround(Rect(Vec2.zero, Vec2(52, 22))),
-      const WallSegment(Vec2(20, 0), Vec2(20, 8)),
-      const WallSegment(Vec2(20, 14), Vec2(20, 22)),
+      ...fenceAround(_road6Bounds),
+      // the low verge, nosed at its east end
+      WallSegment(Vec2(0, 19.5), Vec2(42, 19.5)),
+      WallSegment(Vec2(0, 22.5), Vec2(42, 22.5)),
+      // the high verge, nosed at its west end
+      WallSegment(Vec2(14, 9), Vec2(56, 9)),
+      WallSegment(Vec2(14, 11), Vec2(56, 11)),
+      // the hairpins' outer rails
+      ..._uTurnRail(_road6TurnOne, 10.5),
+      ..._uTurnRail(_road6TurnTwo, 9.75, east: false),
     ],
-    boosts: [BoostStrip(Vec2(30, 15), Vec2(38, 15), width: 1.2, speed: 18)],
-    boxes: [QuestionBox('road_6_box', Vec2(36, 6))],
+    arcs: [
+      _nose(const Vec2(42, 21), 1.5),
+      _nose(const Vec2(14, 10), 1, east: false),
+    ],
+    boosts: [
+      BoostStrip(Vec2(24, 27.25), Vec2(34, 27.25), width: 1.2, speed: 27),
+      BoostStrip(Vec2(32, 15.25), Vec2(22, 15.25), width: 1.2, speed: 27),
+      BoostStrip(Vec2(22, 4.5), Vec2(30, 4.5), width: 1.2, speed: 18),
+    ],
+    obstacles: const [
+      MovingObstacle(
+        id: 'road_6_hen',
+        radius: 1.3,
+        stops: [
+          ObstacleStop(Vec2(20, 13.3),
+              dwellSeconds: 1.2, travelSecondsToNext: 1.6),
+          ObstacleStop(Vec2(20, 17.2),
+              dwellSeconds: 1.2, travelSecondsToNext: 1.6),
+        ],
+      ),
+    ],
+    boxes: [QuestionBox('road_6_box', Vec2(49, 15))],
   );
 }
 
-ReferenceSolution _homeStretchSolution() => ReferenceSolution([
-      putt(_road6Tee, _road6Gate),
-      putt(_road6Gate, _road6Nest, arrival: 2.2),
+// Found by a sweep, each shot holding for nearby aims: off the verge into
+// the first strip, which carries the egg round the first hairpin; down
+// the middle lane; round the second hairpin into the top lane; then off
+// the verge into the last strip and home.
+ReferenceSolution _homeStretchSolution() => const ReferenceSolution([
+      ReferenceShot(-0.546, 0.843),
+      ReferenceShot(-2.332, 0.943),
+      ReferenceShot(-3.148, 0.643),
+      ReferenceShot(-0.568, 0.993),
     ]);

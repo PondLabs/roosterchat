@@ -1,232 +1,356 @@
-// Corn Maze - the hedge course: staggered hedge gates, false paths and
-// speed-preserving rabbit holes. Six holes, all with verified solutions.
+// Corn Maze - the maze course: corridors cut through the corn, dead ends,
+// and rabbit holes that keep the egg's speed and heading. Each hole is a
+// plan drawn in 2.5-unit squares ('#' corn, the rest open; letters mark
+// the tee, the nest, the rabbit holes and the "?" box). Six holes, all
+// with verified solutions.
 
 import '../core/hole.dart';
 import '../core/vec.dart';
 import 'course_kit.dart';
 
 final List<SunnySidePuttHole> theCornMazeHoles = [
+  SunnySidePuttHole(hole: _firstFurrow(), solution: _firstFurrowSolution()),
+  SunnySidePuttHole(hole: _crossroads(), solution: _crossroadsSolution()),
   SunnySidePuttHole(hole: _hedgeHop(), solution: _hedgeHopSolution()),
-  SunnySidePuttHole(hole: _rabbitRun(), solution: _rabbitRunSolution()),
-  SunnySidePuttHole(hole: _theClimb(), solution: _theClimbSolution()),
-  SunnySidePuttHole(hole: _combRun(), solution: _combRunSolution()),
   SunnySidePuttHole(hole: _theBurrow(), solution: _theBurrowSolution()),
+  SunnySidePuttHole(hole: _deadEnds(), solution: _deadEndsSolution()),
   SunnySidePuttHole(hole: _grandMaze(), solution: _grandMazeSolution()),
 ];
 
-// -- hole 1: Hedge Hop --------------------------------------------------------
-// Two staggered hedge gates; the straight lane threads both of them.
+const double _cell = 2.5;
 
-const Vec2 _maze1Tee = Vec2(6, 13);
-const Vec2 _maze1Nest = Vec2(40, 11);
+Vec2 _spot(List<String> plan, String mark) => planSpot(plan, mark, cell: _cell);
 
-HoleDef _hedgeHop() {
+Rect _boundsOf(List<String> plan) =>
+    Rect(Vec2.zero, Vec2(plan.first.length * _cell, plan.length * _cell));
+
+// -- hole 1: First Furrow -----------------------------------------------------
+// The furrow runs the long way round; a rabbit hole at the end of the
+// short spur pops out on the nest's row, still rolling the same way.
+
+const List<String> _maze1 = [
+  '................',
+  '................',
+  '..############..',
+  'TTTT##########..',
+  'TTTT......a?##..',
+  'TTTT......a.##..',
+  'TTTT##########..',
+  '##############..',
+  '####b...NN......',
+  '####b...NN......',
+];
+
+HoleDef _firstFurrow() {
+  final bounds = _boundsOf(_maze1);
   return HoleDef(
     id: 'maze_1',
     par: 2,
-    tee: _maze1Tee,
-    nest: Nest(_maze1Nest, 1.7),
-    bounds: Rect(Vec2.zero, Vec2(46, 26)),
-    walls: [
-      ...fenceAround(Rect(Vec2.zero, Vec2(46, 26))),
-      // gate 1: lane y 10..16 at x=16
-      const WallSegment(Vec2(16, 0), Vec2(16, 10)),
-      const WallSegment(Vec2(16, 16), Vec2(16, 26)),
-      // gate 2: lane y 8..14 at x=32
-      const WallSegment(Vec2(32, 0), Vec2(32, 8)),
-      const WallSegment(Vec2(32, 14), Vec2(32, 26)),
-    ],
-    boxes: [QuestionBox('maze_1_box', Vec2(24, 20))],
-  );
-}
-
-ReferenceSolution _hedgeHopSolution() => ReferenceSolution([
-      putt(_maze1Tee, _maze1Nest, arrival: 2.2),
-    ]);
-
-// -- hole 2: Rabbit Run -------------------------------------------------------
-// A hedge bars the middle with only thin top/bottom squeezes; the rabbit
-// hole is the honest route. Enter slow: the exit keeps the crossing speed.
-
-const Vec2 _maze2Tee = Vec2(6, 13);
-const Vec2 _maze2PortalA = Vec2(14, 13);
-const Vec2 _maze2PortalB = Vec2(34, 13);
-const Vec2 _maze2Nest = Vec2(40, 13);
-
-HoleDef _rabbitRun() {
-  return HoleDef(
-    id: 'maze_2',
-    par: 2,
-    tee: _maze2Tee,
-    nest: Nest(_maze2Nest, 1.7),
-    bounds: Rect(Vec2.zero, Vec2(46, 26)),
-    walls: [
-      ...fenceAround(Rect(Vec2.zero, Vec2(46, 26))),
-      const WallSegment(Vec2(24, 4), Vec2(24, 22)),
-    ],
+    tee: _spot(_maze1, 'T'),
+    nest: Nest(_spot(_maze1, 'N'), 1.7),
+    bounds: bounds,
+    walls: [...fenceAround(bounds), ...plannedWalls(_maze1, cell: _cell)],
     portals: [
-      PortalPair('maze_2_burrow', _maze2PortalA, _maze2PortalB, radius: 1.0)
+      PortalPair('maze_1_burrow', _spot(_maze1, 'a'), _spot(_maze1, 'b'),
+          radius: 1.0),
     ],
-    boxes: [QuestionBox('maze_2_box', Vec2(20, 3))],
+    boxes: [QuestionBox('maze_1_box', _spot(_maze1, '?'))],
   );
 }
 
-ReferenceSolution _rabbitRunSolution() {
-  final intoA = putt(_maze2Tee, _maze2PortalA, arrival: 5.0);
-  final exitStop = portalLandAim(
-      entryFrom: _maze2Tee,
-      triggerAt: _maze2PortalA,
-      exitsAt: _maze2PortalB,
-      arrival: 5.0,
-      triggerRadius: 1.0);
+ReferenceSolution _firstFurrowSolution() {
+  final tee = _spot(_maze1, 'T');
+  final rabbitHole = _spot(_maze1, 'a');
+  final exit = _spot(_maze1, 'b');
+  final nest = _spot(_maze1, 'N');
+  // Into the rabbit hole fast enough to coast up to the nest after it:
+  // the ace. The putt after it is for an egg that stops short.
+  final arrival = entrySpeedFor(exit.distanceTo(nest) - 1.0, arrivalEnd: 1.4);
   return ReferenceSolution([
-    intoA,
-    putt(exitStop, _maze2Nest, arrival: 2.2),
+    putt(tee, rabbitHole, arrival: arrival),
+    putt(
+        portalLandAim(
+            entryFrom: tee,
+            triggerAt: rabbitHole,
+            exitsAt: exit,
+            arrival: arrival,
+            triggerRadius: 1.0),
+        nest,
+        arrival: 2.2),
   ]);
 }
 
-// -- hole 3: The Climb --------------------------------------------------------
-// Hedge teeth stagger top/bottom/top; the way snakes north before turning.
+// -- hole 2: Crossroads -------------------------------------------------------
+// Four ways meet in a clearing. Straight on is a dead end (with a "?" for
+// the trouble), north is the long walk, and the rabbit hole at the
+// bottom of the south road comes up in the nest's garden.
 
-const Vec2 _maze3Tee = Vec2(6, 21);
-final Vec2 _maze3Low = Vec2(18, 21);
-final Vec2 _maze3Climb = Vec2(21, 4);
-final Vec2 _maze3Shelf = Vec2(28, 3);
-const Vec2 _maze3Nest = Vec2(40, 13);
+const List<String> _maze2 = [
+  '#########...........',
+  '#########...........',
+  '#########..#####....',
+  '#########..#####.dd.',
+  'TTTT####....####....',
+  'TTTT..........?#....',
+  'TTTT...........#....',
+  'TTTT####....####....',
+  '#########..#####....',
+  '#########..#####.NN.',
+  '#########..#####.NN.',
+  '#########cc#####....',
+];
 
-HoleDef _theClimb() {
+HoleDef _crossroads() {
+  final bounds = _boundsOf(_maze2);
+  return HoleDef(
+    id: 'maze_2',
+    par: 3,
+    tee: _spot(_maze2, 'T'),
+    nest: Nest(_spot(_maze2, 'N'), 1.7),
+    bounds: bounds,
+    walls: [...fenceAround(bounds), ...plannedWalls(_maze2, cell: _cell)],
+    portals: [
+      PortalPair('maze_2_burrow', _spot(_maze2, 'c'), _spot(_maze2, 'd'),
+          radius: 1.0),
+    ],
+    boxes: [QuestionBox('maze_2_box', _spot(_maze2, '?'))],
+  );
+}
+
+ReferenceSolution _crossroadsSolution() {
+  final tee = _spot(_maze2, 'T');
+  const clearing = Vec2(25, 15);
+  final rabbitHole = _spot(_maze2, 'c');
+  final exit = _spot(_maze2, 'd');
+  final nest = _spot(_maze2, 'N');
+  final arrival = entrySpeedFor(exit.distanceTo(nest) - 1.0, arrivalEnd: 1.4);
+  final stop = landAt(tee, clearing);
+  return ReferenceSolution([
+    putt(tee, clearing),
+    putt(stop, rabbitHole, arrival: arrival),
+    putt(
+        portalLandAim(
+            entryFrom: stop,
+            triggerAt: rabbitHole,
+            exitsAt: exit,
+            arrival: arrival,
+            triggerRadius: 1.0),
+        nest,
+        arrival: 2.2),
+  ]);
+}
+
+// -- hole 3: Hedge Hop --------------------------------------------------------
+// A staircase through the corn, every outer corner boarded at an angle: a
+// putt that meets a board just right climbs a whole step.
+
+const List<String> _maze3 = [
+  '############........',
+  '############......NN',
+  '############......NN',
+  '######.........#####',
+  '######.........#####',
+  '######.........#####',
+  '######...###########',
+  '######...###########',
+  '.........###########',
+  'TTTT.....###########',
+  'TTTT.....###########',
+  '.........###########',
+];
+
+HoleDef _hedgeHop() {
+  final bounds = _boundsOf(_maze3);
   return HoleDef(
     id: 'maze_3',
-    par: 5,
-    tee: _maze3Tee,
-    nest: Nest(_maze3Nest, 1.7),
-    bounds: Rect(Vec2.zero, Vec2(46, 26)),
+    par: 3,
+    tee: _spot(_maze3, 'T'),
+    nest: Nest(_spot(_maze3, 'N'), 1.7),
+    bounds: bounds,
     walls: [
-      ...fenceAround(Rect(Vec2.zero, Vec2(46, 26))),
-      const WallSegment(Vec2(14, 0), Vec2(14, 14)), // top tooth
-      const WallSegment(Vec2(22, 10), Vec2(22, 26)), // bottom tooth
-      const WallSegment(Vec2(30, 8), Vec2(30, 26)), // low tooth
+      ...fenceAround(bounds),
+      ...plannedWalls(_maze3, cell: _cell),
+      // the corner boards
+      WallSegment(Vec2(18, 30), Vec2(22.5, 25.5)),
+      WallSegment(Vec2(15, 12), Vec2(19.5, 7.5)),
+      WallSegment(Vec2(33, 15), Vec2(37.5, 10.5)),
+      WallSegment(Vec2(30, 4.5), Vec2(34.5, 0)),
     ],
-    boxes: [QuestionBox('maze_3_box', Vec2(9, 8))],
+    boxes: [QuestionBox('maze_3_box', Vec2(26, 8.6))],
   );
 }
 
-ReferenceSolution _theClimbSolution() => ReferenceSolution([
-      putt(_maze3Tee, _maze3Low),
-      putt(_maze3Low, _maze3Climb),
-      putt(_maze3Climb, _maze3Shelf),
-      putt(_maze3Shelf, _maze3Nest, arrival: 2.2),
-    ]);
-
-// -- hole 4: Comb Run ---------------------------------------------------------
-// Comb teeth top and bottom; the reference weaves between them and the
-// final tooth's gap.
-
-const Vec2 _maze4Tee = Vec2(6, 21);
-final Vec2 _maze4First = Vec2(20, 20);
-final Vec2 _maze4Gutter = Vec2(24, 5);
-final Vec2 _maze4Straight = Vec2(36, 6);
-const Vec2 _maze4Nest = Vec2(42, 13);
-
-HoleDef _combRun() {
-  return HoleDef(
-    id: 'maze_4',
-    par: 4,
-    tee: _maze4Tee,
-    nest: Nest(_maze4Nest, 1.7),
-    bounds: Rect(Vec2.zero, Vec2(46, 26)),
-    walls: [
-      ...fenceAround(Rect(Vec2.zero, Vec2(46, 26))),
-      const WallSegment(Vec2(14, 0), Vec2(14, 15)),
-      const WallSegment(Vec2(30, 0), Vec2(30, 3)),
-      const WallSegment(Vec2(38, 11), Vec2(38, 26)),
-    ],
-    boxes: [QuestionBox('maze_4_box', Vec2(26, 22))],
-  );
+ReferenceSolution _hedgeHopSolution() {
+  final nest = _spot(_maze3, 'N');
+  // Found by a sweep: off the first board and up the first step, then off
+  // the third board and up the second; both hold for nearby aims.
+  const upTop = Vec2(44.47, 2.72);
+  return ReferenceSolution([
+    const ReferenceShot(0.052, 0.87),
+    const ReferenceShot(-0.368, 0.72),
+    putt(upTop, nest, arrival: 2.2),
+  ]);
 }
 
-ReferenceSolution _combRunSolution() => ReferenceSolution([
-      putt(_maze4Tee, _maze4First),
-      putt(_maze4First, _maze4Gutter),
-      putt(_maze4Gutter, _maze4Straight),
-      putt(_maze4Straight, _maze4Nest, arrival: 2.2),
-    ]);
+// -- hole 4: The Burrow -------------------------------------------------------
+// The nest is just across the corn, a long walk round. Look behind you:
+// the rabbit hole at your back comes up at the far end of the nest's
+// row, still heading the way you hit it.
 
-// -- hole 5: The Burrow -------------------------------------------------------
-// A full hedge wall seals the green; the rabbit hole is the only way in,
-// and the exit lane threads a second gate before the nest.
-
-const Vec2 _maze5Tee = Vec2(6, 13);
-const Vec2 _maze5PortalA = Vec2(12, 13);
-const Vec2 _maze5PortalB = Vec2(28, 13);
-const Vec2 _maze5Nest = Vec2(42, 13);
+const List<String> _maze4 = [
+  '......................',
+  '..NN..........b.......',
+  '..NN..........b.......',
+  '##################....',
+  '##################....',
+  '##################....',
+  '##################....',
+  '##################....',
+  '....TTTT..............',
+  '.a..TTTT..............',
+  '.a..TTTT..............',
+  '....TTTT..............',
+];
 
 HoleDef _theBurrow() {
+  final bounds = _boundsOf(_maze4);
   return HoleDef(
-    id: 'maze_5',
+    id: 'maze_4',
     par: 3,
-    tee: _maze5Tee,
-    nest: Nest(_maze5Nest, 1.7),
-    bounds: Rect(Vec2.zero, Vec2(46, 26)),
-    walls: [
-      ...fenceAround(Rect(Vec2.zero, Vec2(46, 26))),
-      const WallSegment(Vec2(22, 0), Vec2(22, 26)),
-      // exit lane gate: y 11..15 at x=32
-      const WallSegment(Vec2(32, 0), Vec2(32, 11)),
-      const WallSegment(Vec2(32, 15), Vec2(32, 26)),
-    ],
+    tee: _spot(_maze4, 'T'),
+    nest: Nest(_spot(_maze4, 'N'), 1.7),
+    bounds: bounds,
+    walls: [...fenceAround(bounds), ...plannedWalls(_maze4, cell: _cell)],
     portals: [
-      PortalPair('maze_5_burrow', _maze5PortalA, _maze5PortalB, radius: 1.0)
+      PortalPair('maze_4_burrow', _spot(_maze4, 'a'), _spot(_maze4, 'b'),
+          radius: 1.0),
     ],
-    boxes: [QuestionBox('maze_5_box', Vec2(9, 20))],
+    boxes: [QuestionBox('maze_4_box', Vec2(51, 15))],
   );
 }
 
 ReferenceSolution _theBurrowSolution() {
-  final intoA = putt(_maze5Tee, _maze5PortalA, arrival: 5.0);
-  final exitStop = portalLandAim(
-      entryFrom: _maze5Tee,
-      triggerAt: _maze5PortalA,
-      exitsAt: _maze5PortalB,
-      arrival: 5.0,
+  final tee = _spot(_maze4, 'T');
+  final rabbitHole = _spot(_maze4, 'a');
+  final exit = _spot(_maze4, 'b');
+  final nest = _spot(_maze4, 'N');
+  final shelf = nest + const Vec2(4, 0);
+  final arrival = entrySpeedFor(exit.distanceTo(shelf), arrivalEnd: 0.6);
+  final out = portalLandAim(
+      entryFrom: tee,
+      triggerAt: rabbitHole,
+      exitsAt: exit,
+      arrival: arrival,
       triggerRadius: 1.0);
   return ReferenceSolution([
-    intoA,
-    putt(exitStop, _maze5Nest, arrival: 2.2),
+    putt(tee, rabbitHole, arrival: arrival),
+    putt(out, nest, arrival: 2.2),
+  ]);
+}
+
+// -- hole 5: Dead Ends --------------------------------------------------------
+// A true maze: three ways out of the clearing and only one goes through.
+// The others end in corn - one with a "?" waiting at the bottom.
+
+const List<String> _maze5 = [
+  '....................',
+  '....................',
+  '..################..',
+  '..............#NN...',
+  '.TTT..........#NN...',
+  '.TTT.####..####..###',
+  '.TTT....#...........',
+  '........#...........',
+  '######..##########..',
+  '######......?.####..',
+  '######......?.####..',
+];
+
+// High in the clearing, so the first putt has a clean line east.
+const Vec2 _maze5Tee = Vec2(6.25, 12.2);
+
+HoleDef _deadEnds() {
+  final bounds = _boundsOf(_maze5);
+  return HoleDef(
+    id: 'maze_5',
+    par: 3,
+    tee: _maze5Tee,
+    nest: Nest(_spot(_maze5, 'N'), 1.7),
+    bounds: bounds,
+    walls: [...fenceAround(bounds), ...plannedWalls(_maze5, cell: _cell)],
+    boxes: [QuestionBox('maze_5_box', _spot(_maze5, '?'))],
+  );
+}
+
+// Found by a sweep, both shots holding for nearby aims: off the walls up
+// to the first turn; a bank down through it and along the low corridor;
+// then a putt up into the nest's room.
+ReferenceSolution _deadEndsSolution() {
+  final nest = _spot(_maze5, 'N');
+  const belowTheRoom = Vec2(37.89, 19.37);
+  return ReferenceSolution([
+    const ReferenceShot(-0.916, 0.868),
+    const ReferenceShot(1.046, 0.868),
+    putt(belowTheRoom, nest, arrival: 2.2),
   ]);
 }
 
 // -- hole 6: Grand Maze -------------------------------------------------------
-// Three staggered hedge teeth; the reference keeps to the north gutter the
-// whole way and drops into the nest from the top shelf.
+// The finale: two long roads through the whole field, north and south,
+// and between them a straight run from the clearing's low side to a
+// rabbit hole that comes up in the nest's garden - line it up first.
 
-const Vec2 _maze6Tee = Vec2(6, 21);
-final Vec2 _maze6First = Vec2(18, 22);
-final Vec2 _maze6Gutter = Vec2(26, 2);
-const Vec2 _maze6Nest = Vec2(40, 13);
+const List<String> _maze6 = [
+  '....................',
+  '....................',
+  '###..##########..###',
+  '.....#######.####...',
+  '.TTT.#######.####.NN',
+  '.TTT.####..#.####.NN',
+  '.TTT........a.#b....',
+  '............a.#b....',
+  '###..#############..',
+  '?...................',
+  '?...................',
+];
 
 HoleDef _grandMaze() {
+  final bounds = _boundsOf(_maze6);
   return HoleDef(
     id: 'maze_6',
     par: 4,
-    tee: _maze6Tee,
-    nest: Nest(_maze6Nest, 1.7),
-    bounds: Rect(Vec2.zero, Vec2(46, 26)),
-    walls: [
-      ...fenceAround(Rect(Vec2.zero, Vec2(46, 26))),
-      // top tooth at x=14: reference passes it high (y>14)
-      const WallSegment(Vec2(14, 0), Vec2(14, 14)),
-      // bottom tooth at x=24: reference passes it high (y<10)
-      const WallSegment(Vec2(24, 10), Vec2(24, 26)),
-      // low tooth at x=36: reference keeps y<14 before the nest
-      const WallSegment(Vec2(36, 14), Vec2(36, 26)),
+    tee: _spot(_maze6, 'T'),
+    nest: Nest(_spot(_maze6, 'N'), 1.7),
+    bounds: bounds,
+    walls: [...fenceAround(bounds), ...plannedWalls(_maze6, cell: _cell)],
+    portals: [
+      PortalPair('maze_6_burrow', _spot(_maze6, 'a'), _spot(_maze6, 'b'),
+          radius: 1.0),
     ],
-    boxes: [QuestionBox('maze_6_box', Vec2(9, 8))],
+    boxes: [QuestionBox('maze_6_box', _spot(_maze6, '?'))],
   );
 }
 
-ReferenceSolution _grandMazeSolution() => ReferenceSolution([
-      putt(_maze6Tee, _maze6First),
-      putt(_maze6First, _maze6Gutter),
-      putt(_maze6Gutter, _maze6Nest, arrival: 2.2),
-    ]);
+ReferenceSolution _grandMazeSolution() {
+  final tee = _spot(_maze6, 'T');
+  final rabbitHole = _spot(_maze6, 'a');
+  final exit = _spot(_maze6, 'b');
+  final nest = _spot(_maze6, 'N');
+  // Down to the clearing's low side, in line with the run.
+  final lineUp = Vec2(6.25, rabbitHole.y);
+  final arrival = entrySpeedFor(exit.distanceTo(nest) - 1.0, arrivalEnd: 1.4);
+  final stop = landAt(tee, lineUp);
+  return ReferenceSolution([
+    putt(tee, lineUp),
+    putt(stop, rabbitHole, arrival: arrival),
+    putt(
+        portalLandAim(
+            entryFrom: stop,
+            triggerAt: rabbitHole,
+            exitsAt: exit,
+            arrival: arrival,
+            triggerRadius: 1.0),
+        nest,
+        arrival: 2.2),
+  ]);
+}
