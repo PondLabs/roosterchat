@@ -15,7 +15,10 @@
 // the_barn; default the_coop), hole: 1-6 (the match opens there), bots:
 // 0-7 other players (default 3). For close looks at the art, cam= holds the
 // camera: nest (the nest and its flag), host (the rooster by the green),
-// wide (the farm around the course), tee (the eggs on the tee).
+// wide (the farm around the course), tee (the eggs on the tee). To show the
+// power-ups: powerups=rabbit_hole,gust fills the viewer's carton, and
+// arm=sprinkler (with armAt=3, seconds into the hole) arms that one's
+// targeting over the green - the scripted putts wait while it is up.
 library;
 
 import 'dart:async';
@@ -101,6 +104,12 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
   /// The held camera, when the query asks for one.
   String? _cam;
 
+  /// The carton the query asks for, and the power-up to arm (and when).
+  List<String> _powerUps = const [];
+  String? _arm;
+  double _armAt = 3;
+  bool _armed = false;
+
   static const _step = Duration(milliseconds: 33);
 
   @override
@@ -116,6 +125,13 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
         (int.tryParse(query['hole'] ?? '') ?? 1).clamp(1, course.holes.length);
     _holes = course.holes;
     _cam = query['cam'];
+    _powerUps = (query['powerups'] ?? '')
+        .split(',')
+        .where((id) => id.isNotEmpty)
+        .take(3)
+        .toList();
+    _arm = query['arm'];
+    _armAt = double.tryParse(query['armAt'] ?? '') ?? 3;
     final bots = (int.tryParse(query['bots'] ?? '') ?? 3).clamp(0, 7);
     final seated = [for (final (id, _) in _crew.take(bots)) id];
     final played =
@@ -191,11 +207,45 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
       _botShots.clear();
       _botNextAt.clear();
       _route = _routeOf(hole);
+      _armed = false;
+      final me = match.localPlayer;
+      if (me != null) {
+        for (final id in _powerUps) {
+          if (!me.inventory.contains(id)) me.inventory.add(id);
+        }
+      }
     }
     _holeTime += dt;
     _holdCamera(hole);
-    _driveMe(hole);
+    _armPowerUp(hole);
+    if (!(_game?.targeting.isActive ?? false)) _driveMe(hole);
     _driveBots(hole);
+  }
+
+  /// The query's power-up, armed over the green at its moment, its reticle
+  /// resting where it would do the most.
+  void _armPowerUp(HoleDef hole) {
+    final game = _game;
+    final effect = _arm;
+    if (game == null || effect == null || _armed || _holeTime < _armAt) return;
+    final slot = match.myInventory.indexOf(effect);
+    if (slot < 0 || !match.myShotReady) return;
+    _armed = true;
+    game.targeting.tapSlot(match, slot, effect);
+    final mine = match.myBall?.position ?? hole.tee;
+    final others = [
+      for (final ball in match.engine.world?.balls ?? const <BallBody>[])
+        if (ball.playerId != match.localPlayerId && !ball.holed) ball.position,
+    ];
+    final crowd = others.isEmpty
+        ? hole.nest.position
+        : others.reduce((a, b) => a + b) * (1 / others.length);
+    game.targeting.hover = switch (effect) {
+      'rabbit_hole' =>
+        mine + (hole.nest.position - mine).normalized(const Vec2(1, 0)) * 5,
+      'sprinkler' => crowd,
+      _ => hole.nest.position,
+    };
   }
 
   /// The query's held camera, re-asked every beat so the game's own
