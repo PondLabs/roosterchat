@@ -266,6 +266,11 @@ class PhysicsWorld {
   final Set<String> _collectedBoxes = {};
   final List<PhysicsEvent> _events = [];
 
+  /// The ids of this hole's "?" boxes already picked up. Rendering reads it
+  /// to stand the collected crates down; the truth stays here (it rides the
+  /// snapshots, so mid-joins see it too).
+  Set<String> get collectedBoxes => _collectedBoxes;
+
   /// Per egg: boost strip indexes the egg was inside last tick (the edge
   /// trigger). Recomputed silently on restore and teleports.
   final Map<String, Set<int>> _insideBoosts = {};

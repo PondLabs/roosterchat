@@ -1,34 +1,35 @@
-// The game view of Sunny Side Putt: a Flame-rendered, top-down cartoon
-// farm green under an orbiting 3D camera - a miniature-farm diorama - with
-// slingshot aim, an animated crowd of eggs, nest suction, splashes and
-// sparkle bursts, wrapped by the Flutter HUD and menus.
+// The game view of Sunny Side Putt: a real-3D farm green (the three_js
+// engine - perspective camera, sun with soft shadows, walls and water and
+// a low-poly hen, see `putt_world3d.dart`) slung under the Flutter HUD,
+// with slingshot aim, an animated crowd of eggs, nest suction, splashes
+// and sparkle bursts, wrapped by the HUD and menus.
 //
 // Split of work:
-//   * [SunnySidePuttView] - the Flutter shell: the GameWidget, pointer
-//     plumbing (the main button putts, a secondary-button drag and the
-//     wheel/pinch orbit and zoom the camera), Esc-to-pause, the HUD, the
-//     menus and the spectator strip (their own files), and the audio
-//     service's cue tap.
-//   * [SunnySidePuttGame] - the FlameGame: the orbit camera fitted to the
-//     hole, the fixed-tick simulation driven through `PuttMatch.update`,
-//     and the paintable layers.
-//   * [PuttSceneLayer] - the one Flame layer, which collects the frame's
-//     scene and hands it to the perspective renderer.
+//   * [SunnySidePuttView] - the Flutter shell: the GPU surface (the three_js
+//     view), pointer plumbing (the main button putts, a secondary-button
+//     drag and the wheel/pinch orbit and zoom the camera), Esc-to-pause,
+//     the HUD, the menus and the spectator strip (their own files), and
+//     the audio service's cue tap.
+//   * [SunnySidePuttGame] - the match's ticker and the world's frame
+//     builder: the orbit rig fitted to the hole, the fixed-tick simulation
+//     driven through `PuttMatch.update`, the aim's clock, the hop rides
+//     and the particle pool, all handed to the 3D world as a frame each
+//     render.
+//   * [PuttWorld3D] - the whole scene graph (putt_world3d.dart), moving to
+//     the engine's truth every rendered frame.
 //
-// Art is code-drawn: the volumes and ground in `putt_render3d.dart`
-// (projected through `putt_camera.dart`), the eggs, the hen and the
-// rooster host in `putt_art.dart` from the Rooster palette - ink outlines,
-// Cream lawn, Spruce hedges, Yolk accents - the host (comb worn as a
-// crown) standing at the green's edge as the round's emcee. Nothing here
-// touches the network: the match is the local harness over the rules
-// engine (`putt_match.dart`); the session wires the authoritative host
-// under the same seams later.
+// The game's core (physics, rules, power-ups) stays pure Dart and planar
+// (`client/components/sunny_side_putt/core/`): the 3D world draws it, the
+// engine never bends to the drawing. Art follows the Rooster palette from
+// `putt_art.dart` - the eggs white with the players' tint rings, the hen
+// walking her path through the volumes. Nothing here touches the network:
+// the match is the local harness over the rules engine (`putt_match.dart`);
+// the session wires the authoritative host under the same seams.
 library;
 
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:flame/components.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -44,11 +45,10 @@ import 'package:rooster/client/components/sunny_side_putt/core/vec.dart'
 import 'aim_controller.dart';
 import 'putt_art.dart';
 import 'putt_audio.dart';
-import 'putt_camera.dart';
 import 'putt_hud.dart';
 import 'putt_match.dart';
 import 'putt_menus.dart';
-import 'putt_render3d.dart';
+import 'putt_world3d.dart';
 import 'spectator_strip.dart';
 
 /// The whole putter experience on the call's stage: game, HUD, menus.
@@ -78,7 +78,7 @@ class SunnySidePuttView extends StatefulWidget {
 
 class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   late PuttMatch match;
-  SunnySidePuttGame? game;
+  late SunnySidePuttGame game;
   bool menuOpen = false;
   bool settingsOpen = false;
 
@@ -93,6 +93,10 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   void initState() {
     super.initState();
     match = widget.match ?? PuttMatch.solo();
+    game = SunnySidePuttGame(
+      match: match,
+      onSfx: (sfx) => widget.audio?.play(sfx),
+    );
   }
 
   @override
@@ -100,14 +104,6 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     _keyFocus.dispose();
     _gameFocus.dispose();
     super.dispose();
-  }
-
-  SunnySidePuttGame _createGame() {
-    final created = SunnySidePuttGame(
-      match: match,
-      onSfx: (sfx) => widget.audio?.play(sfx),
-    );
-    return created;
   }
 
   void _togglePause() {
@@ -164,8 +160,6 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   double? _pinchDistance;
 
   void _pointerDown(PointerDownEvent event, Size size) {
-    final game = this.game;
-    if (game == null) return;
     _downPointers.add(event.pointer);
     _pointerAt[event.pointer] = event.localPosition;
     // A secondary-button drag orbits; only the main button putts.
@@ -178,7 +172,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     if (_downPointers.length >= 2) {
       game.cancelAim();
       _pinchSpan = _pointerSpan();
-      _pinchDistance = game.view3d.distance;
+      _pinchDistance = game.world3d.rig.distance;
       return;
     }
     final world = _toWorld(event.localPosition);
@@ -186,14 +180,12 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   }
 
   void _pointerMove(PointerEvent event, Size size) {
-    final game = this.game;
-    if (game == null) return;
     _pointerAt[event.pointer] = event.localPosition;
     // The orbit drag: turn the yaw, tilt the pitch.
     if (_orbitPointer == event.pointer) {
       final last = _orbitLastPosition;
       if (last != null) {
-        game.view3d.orbitBy(
+        game.world3d.rig.orbitBy(
           event.localPosition.dx - last.dx,
           event.localPosition.dy - last.dy,
         );
@@ -205,7 +197,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     if (_pinchSpan != null && _downPointers.length >= 2) {
       final span = _pointerSpan();
       if (span > 8) {
-        game.view3d
+        game.world3d.rig
             .pinch(span / _pinchSpan!, distanceAtGestureStart: _pinchDistance!);
       }
       return;
@@ -223,8 +215,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
       _orbitLastPosition = null;
     }
     if (_downPointers.length < 2) _pinchSpan = null;
-    final game = this.game;
-    if (game == null || orbiting || _pinchSpan != null) return;
+    if (orbiting || _pinchSpan != null) return;
     final world = _toWorld(event.localPosition);
     if (world != null) game.endAim(world);
   }
@@ -237,12 +228,12 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
       _orbitLastPosition = null;
     }
     if (_downPointers.length < 2) _pinchSpan = null;
-    game?.cancelAim();
+    game.cancelAim();
   }
 
   void _pointerSignal(PointerSignalEvent event) {
     if (event is PointerScrollEvent) {
-      game?.view3d.zoomByWheel(event.scrollDelta.dy);
+      game.world3d.rig.zoomByWheel(event.scrollDelta.dy);
     }
   }
 
@@ -261,8 +252,6 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   /// the 3D camera; null when the pixel misses the ground (the sky over
   /// the horizon), and the caller does nothing.
   core.Vec2? _toWorld(Offset at) {
-    final game = this.game;
-    if (game == null) return null;
     return game.screenToWorld(Vector2(at.dx, at.dy));
   }
 
@@ -280,7 +269,14 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
           return Stack(
             fit: StackFit.expand,
             children: [
-              // The green, with the pointer plumbing into world space.
+              // The green, its 3D world behind the match's ticker.
+              PuttThreeSurface(
+                world: game.world3d,
+                buildFrame: game.buildWorldFrame,
+              ),
+              // The ticker and the aim gestures, transparent over the
+              // world; the pointer plumbing lands world-side through the
+              // rig's ray.
               Listener(
                 behavior: HitTestBehavior.opaque,
                 onPointerDown: (event) => _pointerDown(event, size),
@@ -289,7 +285,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
                 onPointerCancel: (event) => _pointerCancel(event, size),
                 onPointerSignal: _pointerSignal,
                 child: GameWidget(
-                  game: game ??= _createGame(),
+                  game: game,
                   focusNode: _gameFocus,
                   autofocus: false,
                 ),
@@ -350,13 +346,14 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   }
 }
 
-// ---- the Flame game -----------------------------------------------------------------
+// ---- the game ---------------------------------------------------------------------------------
 
-/// The game itself: the match ticking through its fixed steps, the orbit
-/// camera fitted to the hole and eased one frame at a time, and the one
-/// scene layer painting the diorama (`putt_render3d.dart`). The aim, the
-/// sounds and the HUD keep their own seams (`AimController`, `onSfx`,
-/// `PuttHud`).
+/// The game itself: the match ticking through its fixed steps, the 3D
+/// world's hole built and refit on hole changes, and the per-frame world
+/// snapshot (positions, rolls, hops, aim, bursts, camera follow) the GPU
+/// surface's render hook applies. The aim, the sounds and the HUD keep
+/// their own seams (`AimController`, `onSfx`, `PuttHud`); the engine's
+/// planar truth stays untouched.
 class SunnySidePuttGame extends FlameGame {
   final PuttMatch match;
 
@@ -365,20 +362,17 @@ class SunnySidePuttGame extends FlameGame {
 
   final AimController aim = AimController();
 
-  /// The board's own 3D camera (not Flame's flat one): orbit, tilt and
-  /// zoom over the green.
-  final PuttCamera view3d = PuttCamera();
+  /// The real-3D world (`putt_world3d.dart`), built headlessly and drawn
+  /// by the surface's three_js renderer; the camera rig lives in it.
+  final PuttWorld3D world3d = PuttWorld3D();
 
   /// Seconds since the game booted, for art that breathes.
   double clock = 0;
 
-  /// The one Flame layer painting the frame.
-  late final PuttSceneLayer scene;
-
   /// The aim's clock, for the arrow's sway.
-  late final PuttAimLayer aimLayer;
+  final PuttAimLayer aimLayer;
 
-  late final PuttFxLayer fx;
+  final PuttFxLayer fx = PuttFxLayer();
 
   /// The hop rides, per player: the cosmetic arc of a Chicken Hop, keyed
   /// off the engine's own flag and sized by the egg's launch speed.
@@ -386,31 +380,26 @@ class SunnySidePuttGame extends FlameGame {
 
   String? _fittedHole;
 
-  SunnySidePuttGame({required this.match, required this.onSfx});
-
-  @override
-  Future<void> onLoad() async {
-    scene = PuttSceneLayer(this);
-    aimLayer = PuttAimLayer(this);
-    fx = PuttFxLayer();
-    await world.add(scene);
-    _fitCamera();
-  }
+  SunnySidePuttGame({required this.match, required this.onSfx})
+      : aimLayer = PuttAimLayer();
 
   @override
   void onGameResize(Vector2 size) {
     super.onGameResize(size);
-    _fitCamera();
+    _fitCamera(size);
   }
 
   /// Frames the current hole: viewport pixels first, then the bounds.
-  /// A hole change refits; the same hole re-fits only on resize.
-  void _fitCamera() {
+  /// A hole change rebuilds (and refits); the same hole re-fits only on
+  /// resize.
+  void _fitCamera(Vector2 size) {
     final hole = match.hole;
     if (hole == null || size.x == 0 || size.y == 0) return;
-    view3d
-      ..setViewport(ui.Size(size.x, size.y))
-      ..fitToHole(hole.bounds);
+    if (hole.id != _fittedHole) {
+      world3d.buildHole(hole, eggRadius: eggRadius);
+    }
+    world3d.setViewport(ui.Size(size.x, size.y));
+    world3d.fitCamera();
     _fittedHole = hole.id;
   }
 
@@ -420,18 +409,88 @@ class SunnySidePuttGame extends FlameGame {
     super.update(dt);
     match.update(dt);
     aim.noWobble = match.myNextShotSteady;
-    aimLayer.update(dt);
+    aimLayer.update(this, dt);
     fx.update(dt);
     _updateHopRides();
     final holeId = match.hole?.id;
     if (holeId != null && holeId != _fittedHole) {
-      _fitCamera();
+      _fitCamera(size);
       aim.cancel();
     }
     if (match.phase != PuttPhase.holePlay) aim.cancel();
-    view3d.update(dt, followPoint: _cameraFollowPoint());
     _spendNotices();
     _spendFxSpots();
+  }
+
+  /// The frame the 3D world moves to this render: the engine's
+  /// interpolated truth, the aim's drawn angle (wobble added), the
+  /// particles, the camera's follow point and the collected "?" boxes.
+  PuttWorldFrame buildWorldFrame() {
+    final hole = match.hole;
+    final engineWorld = match.engine.world;
+    final eggs = <PuttWorldEgg>[];
+    final hens = <PuttWorldHen>[];
+    PuttWorldAim? aimView;
+    var fxViews = const <PuttWorldFx>[];
+    var collected = const <String>{};
+    if (hole != null) {
+      if (engineWorld != null) {
+        collected = engineWorld.collectedBoxes;
+        for (final ball in engineWorld.balls) {
+          if (ball.holed) continue; // in the nest; the suction told the story
+          eggs.add(PuttWorldEgg(
+            playerId: ball.playerId,
+            position: match.renderPositionOf(ball.playerId),
+            height: eggHeightOf(ball),
+            velocity: ball.velocity,
+            tint: tintFor(ball.playerId),
+            radius: eggRadius,
+          ));
+        }
+        final tickSeconds = match.config.physics.dt;
+        for (final obstacle in hole.obstacles) {
+          final now = henPositionAt(obstacle, engineWorld.tick, tickSeconds);
+          final then =
+              henPositionAt(obstacle, engineWorld.tick + 1, tickSeconds);
+          final at = ui.Offset.lerp(
+            ui.Offset(now.x, now.y),
+            ui.Offset(then.x, then.y),
+            match.alpha,
+          );
+          final dx = then.x - now.x;
+          final dy = then.y - now.y;
+          hens.add(PuttWorldHen(
+            position: core.Vec2(at?.dx ?? now.x, at?.dy ?? now.y),
+            radius: obstacle.radius,
+            phase: (engineWorld.tick + match.alpha) * 0.6,
+            heading:
+                dx * dx + dy * dy > 1e-12 ? core.Vec2(dx, dy) : core.Vec2.zero,
+          ));
+        }
+      }
+      final aimState = aim.state;
+      if (aim.isActive && aimState != null) {
+        aimView = PuttWorldAim(
+          origin: aim.origin!,
+          angle: aimState.angle + aim.visualWobble(aimLayer.holdSeconds),
+          power: aimState.power,
+          dragLength: aimState.dragLength,
+          eggRadius: eggRadius,
+        );
+      }
+      fxViews = [
+        for (final particle in fx.particles) particle.worldView(),
+      ];
+    }
+    return PuttWorldFrame(
+      time: clock,
+      eggs: eggs,
+      hens: hens,
+      aim: aimView,
+      fxs: fxViews,
+      followPoint: _cameraFollowPoint(),
+      collectedBoxes: collected,
+    );
   }
 
   /// The point the camera's target glides toward: my egg while the hole
@@ -527,8 +586,13 @@ class SunnySidePuttGame extends FlameGame {
   /// the camera. Null when the pixel misses the green entirely (the sky
   /// above the horizon), and the caller does nothing.
   core.Vec2? screenToWorld(Vector2 screen) {
-    return view3d.screenToWorld(ui.Offset(screen.x, screen.y));
+    return world3d.screenToWorld(ui.Offset(screen.x, screen.y));
   }
+
+  /// The camera read the e2e drives its drags through (the seam the flat
+  /// `view3d` was): world points to surface pixels, on the world's own
+  /// perspective.
+  PuttCameraSeam get view3d => PuttCameraSeam(world3d);
 
   /// Aims only when my egg is on the green and settled, and only from near
   /// it (a full-screen thrash must not strike).
@@ -571,7 +635,7 @@ class SunnySidePuttGame extends FlameGame {
   double get eggRadius => match.config.physics.ballRadius;
 
   @override
-  ui.Color backgroundColor() => PuttPalette.apron;
+  ui.Color backgroundColor() => const ui.Color(0x00000000);
 }
 
 /// One egg's hop: how fast it left, so the drawn arc knows its length.
@@ -581,103 +645,26 @@ class _HopRide {
   const _HopRide({required this.launchSpeed});
 }
 
-// ---- layers ---------------------------------------------------------------------------
-
-/// The one Flame layer on the board: collects the frame's scene from the
-/// match and hands it to the perspective renderer (`putt_render3d.dart`),
-/// which sorts and paints it.
-class PuttSceneLayer extends Component {
-  final SunnySidePuttGame game;
-
-  PuttSceneLayer(this.game);
-
-  @override
-  void render(ui.Canvas canvas) {
-    final hole = game.match.hole;
-    final world = game.match.engine.world;
-    final eggs = <PuttEggView>[];
-    final hens = <PuttHenView>[];
-    PuttAimView? aimView;
-    var fxViews = const <PuttFxView>[];
-    if (hole != null) {
-      if (world != null) {
-        for (final ball in world.balls) {
-          if (ball.holed) continue; // in the nest; the suction told the story
-          eggs.add(PuttEggView(
-            position: game.match.renderPositionOf(ball.playerId),
-            height: game.eggHeightOf(ball),
-            velocity: ball.velocity,
-            tint: game.tintFor(ball.playerId),
-            radius: game.eggRadius,
-          ));
-        }
-        for (final obstacle in hole.obstacles) {
-          final tickSeconds = game.match.config.physics.dt;
-          final now = henPositionAt(obstacle, world.tick, tickSeconds);
-          final then = henPositionAt(obstacle, world.tick + 1, tickSeconds);
-          final at = ui.Offset.lerp(
-            ui.Offset(now.x, now.y),
-            ui.Offset(then.x, then.y),
-            game.match.alpha,
-          );
-          hens.add(PuttHenView(
-            position: core.Vec2(at?.dx ?? now.x, at?.dy ?? now.y),
-            radius: obstacle.radius,
-            phase: (world.tick + game.match.alpha) * 0.6,
-          ));
-        }
-      }
-      final aim = game.aim;
-      final state = aim.state;
-      if (aim.isActive && state != null) {
-        aimView = PuttAimView(
-          origin: aim.origin!,
-          angle: state.angle + aim.visualWobble(game.aimLayer.holdSeconds),
-          power: state.power,
-          dragLength: state.dragLength,
-          eggRadius: game.eggRadius,
-        );
-      }
-      fxViews = [
-        for (final particle in game.fx.particles) particle.view(),
-      ];
-    }
-    renderPuttScene(
-      canvas,
-      game.view3d,
-      PuttSceneInput(
-        time: game.clock,
-        hole: hole,
-        eggRadius: game.eggRadius,
-        eggs: eggs,
-        hens: hens,
-        aim: aimView,
-        fxs: fxViews,
-      ),
-    );
-  }
-}
+// ---- the layers that feed the world ---------------------------------------------------
 
 /// The aim's clock: how long the current drag has held, which drives the
-/// arrow's sway (the aim's own math lives in `aim_controller.dart`, the
-/// ground-plane drawing in `putt_render3d.dart`).
+/// arrow's sway (the aim's own math lives in `aim_controller.dart`; the
+/// sway lands on the 3D aim mark through [SunnySidePuttGame.buildWorldFrame]).
 class PuttAimLayer {
-  final SunnySidePuttGame game;
-
   /// Seconds the aim has been held, for the sway's clock.
   double holdSeconds = 0;
 
-  PuttAimLayer(this.game);
+  PuttAimLayer();
 
-  void update(double dt) {
+  void update(SunnySidePuttGame game, double dt) {
     holdSeconds = game.aim.isActive ? holdSeconds + dt : 0;
   }
 }
 
 /// The bursts: splash droplets, suction rings, poofs, pickup sparkles.
 /// Each lives about half a second, on plain velocity math, no shaders. A
-/// plain pool now: the game ticks it every frame, the scene layer paints
-/// from it through the renderer.
+/// plain pool: the game ticks it every frame; `buildWorldFrame` hands the
+/// particles to the 3D world, which draws them as tinted sprites.
 class PuttFxLayer {
   final List<_FxParticle> _particles = [];
 
@@ -787,14 +774,14 @@ class _FxParticle {
   }
 
   /// The renderer's view of this particle this frame.
-  PuttFxView view() {
+  PuttWorldFx worldView() {
     final kind = switch (this.kind) {
-      _FxKind.droplet => PuttFxKind.droplet,
-      _FxKind.sparkle => PuttFxKind.sparkle,
-      _FxKind.suction => PuttFxKind.suction,
-      _FxKind.poof => PuttFxKind.poof,
+      _FxKind.droplet => PuttWorldFxKind.droplet,
+      _FxKind.sparkle => PuttWorldFxKind.sparkle,
+      _FxKind.suction => PuttWorldFxKind.suction,
+      _FxKind.poof => PuttWorldFxKind.poof,
     };
-    return PuttFxView(
+    return PuttWorldFx(
       kind: kind,
       at: position,
       toward: toward,

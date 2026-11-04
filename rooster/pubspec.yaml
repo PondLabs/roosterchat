@@ -46,6 +46,15 @@ dependencies:
   shared_preferences: ^2.5.2
   sqflite: ^2.3.0
   sqflite_common_ffi: ^2.3.0+4
+  # Sunny Side Putt's real-3D renderer: three_js (MIT, the Dart three.js).
+  # The `three_js` facade entry pulls three_js_advanced_loaders too, which
+  # forces archive ^4.0.7 against the workspace's archive ^3.6.1, so the
+  # parts the game needs go in directly - the same engine, same author,
+  # same versions, minus the loaders the game never uses.
+  three_js_core: ^0.3.0
+  three_js_math: ^0.3.0
+  three_js_angle_renderer: ^0.0.1
+  three_js_geometry: ^0.3.0
   test: ^1.24.3
   unifiedpush: ^5.0.1
   universal_html: ^2.2.4

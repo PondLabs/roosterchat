@@ -8,6 +8,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   desktop_drop
   dynamic_color
   file_selector_linux
+  flutter_angle
   flutter_timezone
   flutter_webrtc
   hotkey_manager_linux

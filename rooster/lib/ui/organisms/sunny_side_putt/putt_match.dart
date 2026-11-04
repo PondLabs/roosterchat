@@ -476,6 +476,10 @@ class PuttMatch extends ChangeNotifier {
           title: headline,
         );
       case PowerUpPicked():
+        // The pickup's sparkle pops at whoever grabbed the "?" box (the
+        // caster or a Barnyard Chaos grain); the sound stays the local
+        // player's only.
+        fxSpots.add(PuttFxSpot(PuttFxSpotKind.pick, who: event.playerId));
         if (event.playerId != localPlayerId) return null;
         return const PuttNotice(PuttSfx.powerUpPicked);
       case PowerUpUsed():

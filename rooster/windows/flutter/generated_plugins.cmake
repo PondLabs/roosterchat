@@ -10,6 +10,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   desktop_drop
   dynamic_color
   file_selector_windows
+  flutter_angle
   flutter_inappwebview_windows
   flutter_timezone
   flutter_webrtc
