@@ -138,6 +138,8 @@ abstract class PowerUpContext {
 
 /// One of the twelve (or any future) effects.
 abstract class PowerUpEffect {
+  const PowerUpEffect();
+
   String get id;
 
   PowerUpTiming get timing;
