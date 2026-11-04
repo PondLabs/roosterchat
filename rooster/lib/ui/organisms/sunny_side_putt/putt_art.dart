@@ -44,17 +44,19 @@ abstract final class PuttPalette {
 
   static const waterDeep = ui.Color(0xFF6E97BD);
 
-  /// Player ring tints, cycled by player index: recognisable on cream and
-  /// on the apron, none of them comb red (that is the bumper's colour).
+  /// Player tints, cycled by player index: the band on each egg, the dot
+  /// on each name tag and scorecard row. Vivid and far apart in hue, so
+  /// eight eggs on one green never read alike; none of them comb red (that
+  /// is the bumpers' colour).
   static const playerTints = [
     yolk,
-    ui.Color(0xFF8FB4DA), // water blue
-    ui.Color(0xFFB48F9D), // a dusty rose
-    ui.Color(0xFF9DB48F), // a moss green
-    ui.Color(0xFFB4A48F), // a tan
-    ui.Color(0xFF9F8FB4), // a lavender
-    ui.Color(0xFF8FB4B4), // a teal
-    ui.Color(0xFFB4B48F), // an olive
+    ui.Color(0xFF2F9BE8), // sky blue
+    ui.Color(0xFFE8508F), // berry pink
+    ui.Color(0xFF18B3A4), // teal
+    ui.Color(0xFFF2784A), // coral
+    ui.Color(0xFF3B5BDB), // deep blue
+    ui.Color(0xFF8CCB2E), // lime
+    ui.Color(0xFF8A5A3B), // chestnut
   ];
 
   static ui.Color tintForIndex(int index) =>

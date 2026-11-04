@@ -69,6 +69,54 @@ Maze (rabbit holes as speed-preserving portals), the Pond (water
 returns the egg, stroke charged), Farm Road (speed strips) and the
 Barn (hay bales, the silo's pull).
 
+## How it looks
+
+The green is a minigolf course on a raised wooden table in a farm
+meadow, under a sky dome. Every course is its own corner of the farm at
+its own hour, read off the hole's id (`world3d/theme.dart`):
+
+| Course | Hour | Rails | Around it |
+|---|---|---|---|
+| The Coop | clear morning | timber | the hen house and its hens, the barn, the windmill |
+| Corn Maze | noon | corn hedges | a corn field with a scarecrow |
+| The Pond | soft afternoon | dry stone | a lake with a dock, reeds and ducks |
+| Farm Road | golden hour | striped road barriers | the dirt road, a red tractor, telephone poles, wheat fields |
+| The Barn | dusk | red barn boards | the big barn, haystacks, lanterns, fireflies |
+
+The host - a big white rooster with his headphones on - stands by every
+green and bobs his head now and then. Ground the walls close off from
+the tee (a flood fill stopped by walls, carried through rabbit holes) is
+planted as the theme's garden beds instead of turf, so a hole shaped
+with walls reads as its shape.
+
+On the green: mown turf with stripes and contact shade along the rails,
+rubber bumpers (rails and pinball mushrooms), faceted boulders, ponds
+that ripple, speed belts whose chevrons run, rabbit holes glowing their
+pair's colour, the silo over its spiral pull, floating "?" crates, the
+straw nest with a flag flying the hole's number, the tee mat. Eggs are
+true egg profiles with an Easter band in the player's colour; they roll
+by their velocity, leave a trail when fast, settle on their side, and
+slide into the nest when they sink. The viewer's egg wears a marker ring
+and a bobbing arrow; the others carry name tags.
+
+Colour is linear-correct: three_js takes hex values as linear, so every
+designer's hex goes through `_lin` first; the lights are tuned for the
+engine's legacy units (intensities scaled by pi), with ACES tone mapping
+and a per-course exposure. three_js's own `PlaneGeometry` tears grids
+that are not square (it swaps its segment counts when indexing), so the
+world builds those with `_gridPlane`.
+
+### Playing it
+
+- Aim from anywhere: press on the green, drag back, let go. The arrow's
+  length and colour say the power (green, yolk, comb red), a ring fills
+  around the egg, and a dotted guide shows the first stretch of the roll
+  - the engine's own physics run ahead on a copy of the world, cut a
+  short way after the first rail.
+- The camera opens on the whole hole, then comes in close and follows
+  the egg; C toggles the whole-hole view, a right drag orbits, the wheel
+  or a pinch zooms.
+
 ## The layers
 
 - `core/` (pure Dart, headless-testable): deterministic physics with
@@ -79,13 +127,14 @@ Barn (hay bales, the silo's pull).
 - `courses/` - the five launch courses, each hole shipped with a
   reference solution that a test replays, so an unfinishable hole
   cannot land.
-- `ui/organisms/sunny_side_putt/` - the Flame view: 3D perspective
-  camera (orbit/drag, zoom), the farm rendered in layers (ground,
-  fences, obstacles, actors with ground shadows), the aim arrow on the
-  turf, HUD (scorecard, timer ring pulsing on the last seconds,
-  power-up hand), pause/settings/vote menus, spectator strip, and the
-  audio (synthesized SFX and a looping tune; volume per bus in the
-  settings).
+- `ui/organisms/sunny_side_putt/` - the view: a real 3D scene on
+  `three_js` (`putt_world3d.dart`, its builders under `world3d/`) under
+  the Flutter HUD, menus, name tags and spectator strip, with the audio
+  (synthesized SFX and a looping tune; volume per bus in the settings).
+  The world only reads the engine's snapshots; the physics stays planar.
+- `putt_demo.dart` - the demo mode (`--dart-define=PUTT_DEMO=true`): the
+  game plays itself on the real courses for captures; on the web the query
+  picks the course, the hole, the crew and a held camera (see its header).
 - `putt_session.dart` - the live-session bridge: the host's engine is
   the truth; guests feed their own engine with the accepted-move
   journal and resnapshot, so play is smooth without a game server.
