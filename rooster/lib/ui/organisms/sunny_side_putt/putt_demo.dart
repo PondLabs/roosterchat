@@ -283,13 +283,14 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
         game.followOverride = hole.nest.position;
         rig.glideTo(distance: 10, pitchDeg: 32);
       case 'host':
-        // Where he stands: beyond the far rail, level with the nest.
+        // Where he stands: beyond the side rail by the nest.
+        final right = hole.nest.position.x >= bounds.center.x;
         game.followOverride = Vec2(
-            hole.nest.position.x
-                .clamp(bounds.min.x + 4, bounds.max.x - 4)
-                .toDouble(),
-            bounds.min.y - 4.5);
-        rig.glideTo(distance: 25, pitchDeg: 13);
+            right ? bounds.max.x + 3.5 : bounds.min.x - 3.5,
+            hole.nest.position.y
+                .clamp(bounds.min.y + 2.5, bounds.center.y)
+                .toDouble());
+        rig.glideTo(distance: 22, pitchDeg: 13);
       case 'wide':
         game.followOverride = bounds.center;
         rig.glideTo(distance: rig.overviewDistance * 1.5, pitchDeg: 27);

@@ -199,10 +199,26 @@ class _Scenery {
   double get _span => math.max(_b.width, _b.height);
   static const double _ground = -_tableHeight;
 
-  /// Where the host stands: beyond the far rail, level with the nest.
-  Vec2 get _hostAt => Vec2(
-      hole.nest.position.x.clamp(_b.min.x + 4, _b.max.x - 4).toDouble(),
-      _b.min.y - 6.2);
+  /// Where the host stands: beyond the side rail on the nest's side, in
+  /// the far half of the green - in the play view that is the upper half
+  /// of the screen, clear of the HUD's top bar.
+  Vec2 get _hostAt {
+    final nest = hole.nest.position;
+    final right = nest.x >= _b.center.x;
+    return Vec2(
+      right ? _b.max.x + 5.5 : _b.min.x - 5.5,
+      nest.y.clamp(_b.min.y + 2.5, _b.center.y).toDouble(),
+    );
+  }
+
+  /// His turn about the vertical: facing the green, a little toward the
+  /// camera's side (local +x is where he looks).
+  double get _hostTurn {
+    final at = _hostAt;
+    final toward = (_b.center - at).normalized(const Vec2(1, 0));
+    final facing = Vec2(toward.x, toward.y + 0.75);
+    return math.atan2(-facing.y, facing.x);
+  }
 
   /// How far [x], [z] stands from the table's edge (0 on or inside it).
   double _clearance(double x, double z) {
@@ -1035,14 +1051,13 @@ class _Scenery {
   /// crown, headphones on (he is always in the call), bobbing his head
   /// once in a while to the beat.
   tjs.Group _host(Vec2 at) {
-    // He stands beyond the far rail by the nest's end, three-quarters to
-    // the camera, looking back down the green at the players.
+    // He stands beyond the side rail by the nest, facing the green and a
+    // little the camera, looking at the players.
+    final turn = _hostTurn;
     final group = tjs.Group()
       ..name = 'host'
       ..position.setValues(at.x, _ground, at.y)
-      // Three-quarters to the camera, looking back down the green toward
-      // the tee.
-      ..rotation.y = -2.35;
+      ..rotation.y = turn;
     const white = 0xFCF8F1;
     const shade = 0xEDE3D3;
     final comb = _hexOf(PuttPalette.comb);
@@ -1136,7 +1151,6 @@ class _Scenery {
     }
     head.add(face.mesh('host-face', flat: false, roughness: 0.7)!);
     group.add(head);
-    const turn = -2.35;
     var headYaw = 0.0;
     animated.add(_AnimatedBy((time, dt) {
       // He follows the egg in play with his head (as far as a rooster's
