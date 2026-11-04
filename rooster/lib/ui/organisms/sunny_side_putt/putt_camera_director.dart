@@ -85,6 +85,26 @@ class PuttCameraDirector {
     }
   }
 
+  /// The hole's entrance: the camera starts high over the nest, turned a
+  /// little, and sweeps down and round to the whole green.
+  void _sweepIn(HoleDef hole) {
+    final overviewDistance = rig.overviewDistance;
+    rig
+      ..aimAt(
+        yaw: PuttCameraRig.defaultYaw + 0.75,
+        pitchDeg: PuttCameraRig.pitchMax,
+        distance: overviewDistance * 1.35,
+        target: hole.nest.position,
+      )
+      ..snap()
+      ..glideTo(
+        yaw: PuttCameraRig.defaultYaw,
+        pitchDeg: PuttCameraRig.pitchDefault,
+        distance: overviewDistance,
+        target: hole.bounds.center,
+      );
+  }
+
   void update(double dt, PuttCameraCue cue) {
     final hole = cue.hole;
     if (hole == null) {
@@ -99,6 +119,7 @@ class PuttCameraDirector {
       _wasRolling = false;
       _sinceFieldFrame = 0;
       _showingBetween = false;
+      _sweepIn(hole);
     }
     _holeClock += dt;
     final center = hole.bounds.center;

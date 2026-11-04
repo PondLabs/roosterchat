@@ -45,10 +45,17 @@ void main() {
   PuttCameraCue resting(Vec2 egg) => PuttCameraCue(
       hole: hole, phase: PuttPhase.holePlay, myEgg: egg, myEggResting: true);
 
-  test('the hole opens on the whole green', () {
-    run(1, resting(hole.tee));
+  test('the hole opens with a sweep from over the nest to the whole green', () {
+    director.update(1 / 60, resting(hole.tee));
+    // The entrance starts high and turned, over the nest.
+    expect(rig.pitchDeg, closeTo(PuttCameraRig.pitchMax, 1));
+    expect(rig.target.distanceTo(hole.nest.position), lessThan(1));
+    run(PuttCameraDirector.openingSeconds - 0.2, resting(hole.tee));
     expect(director.followPoint, hole.bounds.center);
-    expect(rig.distance, closeTo(rig.overviewDistance, 1e-6));
+    expect(rig.target.distanceTo(hole.bounds.center), lessThan(0.5));
+    expect(rig.pitchDeg, closeTo(PuttCameraRig.pitchDefault, 0.5));
+    expect(rig.yaw, closeTo(PuttCameraRig.defaultYaw, 0.02));
+    expect(rig.distance, closeTo(rig.overviewDistance, 1.5));
   });
 
   test('at rest, the egg and the nest are framed together', () {
