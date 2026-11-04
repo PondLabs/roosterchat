@@ -1,11 +1,13 @@
-// The HUD's states: while the hole plays (calm timer, chips, inventory),
-// in the last fifteen seconds (the pulse), between holes (the results
-// card), at match over (the verdict card).
+// The HUD's states: while the hole plays (the hole bar and its calm
+// timer, the scorecard, the inventory and its targeting), in the last
+// fifteen seconds (the pulse), between holes (the results card), at match
+// over (the verdict card).
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/rules.dart';
+import 'package:rooster/client/components/sunny_side_putt/courses/course_kit.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_hud.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_match.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/spectator_strip.dart';
@@ -28,8 +30,8 @@ void main() {
       expect(find.byKey(const Key('putt-timer-ring')), findsOneWidget);
       expect(find.byKey(const Key('putt-timer-pulse')), findsNothing,
           reason: 'far from the bell, the ring does not pulse');
-      // The seconds are on the face.
-      expect(find.text('120'), findsOneWidget);
+      // The clock reads minutes and seconds.
+      expect(find.text('2:00'), findsOneWidget);
     });
 
     testWidgets('pulses through the last fifteen seconds', (tester) async {
@@ -43,8 +45,8 @@ void main() {
       ));
       await tester.pump();
       expect(find.byKey(const Key('putt-timer-pulse')), findsOneWidget);
-      // The count shows ceiling, so 10.0 reads as 10.
-      expect(find.text('10'), findsOneWidget);
+      // The count shows ceiling, so 10.0 reads as 0:10.
+      expect(find.text('0:10'), findsOneWidget);
     });
 
     testWidgets('stops pulsing once the ring is empty', (tester) async {
@@ -62,8 +64,8 @@ void main() {
     });
   });
 
-  group('the scorecard strip', () {
-    testWidgets('one chip per player, me marked', (tester) async {
+  group('the scorecard', () {
+    testWidgets('one row per player, me marked', (tester) async {
       final course = CourseDef(id: 'duo', holes: [stubHole(id: 'd0')]);
       final match = PuttMatch(
         config: PuttConfig(mode: GameMode.casual, courses: [course], seed: 3),
@@ -76,10 +78,42 @@ void main() {
       ));
       await tester.pump();
 
+      final card = find.byKey(const Key('putt-scorecard'));
+      expect(find.descendant(of: card, matching: find.text('Rooster (you)')),
+          findsOneWidget);
+      expect(find.descendant(of: card, matching: find.text('Hen')),
+          findsOneWidget);
+      // No strokes yet on the hole, level with par so far.
+      expect(find.descendant(of: card, matching: find.text('0')),
+          findsNWidgets(2));
+      expect(find.descendant(of: card, matching: find.text('E')),
+          findsNWidgets(2));
+    });
+  });
+
+  group('the scorecard on a short screen', () {
+    testWidgets('the leaders and me, then how many more', (tester) async {
+      final course = CourseDef(id: 'crowd', holes: [stubHole(id: 'k0')]);
+      // Ids that sort before mine: I am last at a tie.
+      final match = PuttMatch(
+        config: PuttConfig(mode: GameMode.casual, courses: [course], seed: 9),
+        localPlayerId: 'zz-me',
+        displayNames: const {'zz-me': 'Rooster'},
+        seatedPlayerIds: [for (var i = 0; i < 7; i++) 'a$i'],
+      )..boot();
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomLeft,
+            child: PuttScorecard(match: match, maxRows: 4),
+          ),
+        ),
+      ));
+      expect(find.text('a0'), findsOneWidget);
+      expect(find.text('a1'), findsOneWidget);
+      expect(find.text('a2'), findsNothing);
       expect(find.text('Rooster (you)'), findsOneWidget);
-      expect(find.text('Hen'), findsOneWidget);
-      // Total chip counts read "0 total · 0 here".
-      expect(find.text('0 total · 0 here'), findsNWidgets(2));
+      expect(find.text('+5 more players'), findsOneWidget);
     });
   });
 
@@ -94,8 +128,8 @@ void main() {
       await tester.pump();
 
       expect(find.byKey(const Key('putt-inventory')), findsOneWidget);
-      // The filled slot and its tooltip label.
-      expect(find.text('HE'), findsOneWidget);
+      // The filled slot shows the power-up's glyph.
+      expect(find.text('🦅'), findsOneWidget);
       // And the two empty slots are right where the cap says.
       expect(find.byKey(const Key('putt-slot-1')), findsOneWidget);
       expect(find.byKey(const Key('putt-slot-2')), findsOneWidget);
@@ -142,9 +176,17 @@ void main() {
         home: Scaffold(body: PuttHud(match: match, onOpenMenu: () {})),
       ));
       await tester.pump();
-      expect(find.text("Time's up!"), findsOneWidget);
-      // The penalty scoring reads out: one weak stroke scores par + 2.
+      // A beat for the banner, then the card rises in.
+      await tester.pump(const Duration(milliseconds: 1200));
+      expect(
+          tester
+              .widget<Text>(find.byKey(const Key('putt-results-subtitle')))
+              .data,
+          "TIME'S UP!");
+      // The penalty scoring reads out: one weak stroke scores par + 2,
+      // and the egg that never reached the nest says so.
       expect(find.text('4 strokes'), findsOneWidget);
+      expect(find.text('OUT OF TIME'), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('putt-continue')));
       await tester.pump();
@@ -153,6 +195,23 @@ void main() {
   });
 
   group('match over', () {
+    testWidgets('level at the top is a tie', (tester) async {
+      final course = CourseDef(id: 'duo', holes: [stubHole(id: 'd0')]);
+      final match = PuttMatch(
+        config: PuttConfig(mode: GameMode.casual, courses: [course], seed: 3),
+        displayNames: const {'me': 'Rooster', 'p2': 'Hen'},
+        seatedPlayerIds: const ['p2'],
+      )..boot();
+      match.engine.endMatch();
+      match.drainEvents();
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: PuttHud(match: match, onOpenMenu: () {})),
+      ));
+      await tester.pump();
+      expect(find.text("It's a tie!"), findsOneWidget);
+      expect(find.text('0 strokes'), findsNWidgets(2));
+    });
+
     testWidgets('the verdict card names the winner and offers the exit',
         (tester) async {
       final match = PuttMatch.solo(localPlayerName: 'Tester');
@@ -172,6 +231,109 @@ void main() {
       expect(find.text('Tester wins!'), findsOneWidget);
       await tester.tap(find.byKey(const Key('putt-leave-green')));
       expect(left, isTrue);
+    });
+  });
+
+  group('the hole bar', () {
+    testWidgets('hole of the course, par, my strokes, the clock, the dots',
+        (tester) async {
+      final course = CourseDef(id: 'the_pond', holes: [
+        stubHole(id: 'p0', par: 4),
+        stubHole(id: 'p1', par: 2),
+        stubHole(id: 'p2', par: 3),
+      ]);
+      final match = PuttMatch(
+        config:
+            PuttConfig(mode: GameMode.tournament, courses: [course], seed: 8),
+      )..boot();
+      match.submitShot(0, 0.3);
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: PuttHud(match: match, onOpenMenu: () {})),
+      ));
+      await tester.pump();
+
+      final bar = find.byType(PuttHoleBar);
+      expect(find.descendant(of: bar, matching: find.text('HOLE')),
+          findsOneWidget);
+      expect(
+          find.descendant(of: bar, matching: find.text('1/3')), findsOneWidget);
+      expect(
+          find.descendant(of: bar, matching: find.text('PAR')), findsOneWidget);
+      expect(
+          find.descendant(of: bar, matching: find.text('4')), findsOneWidget);
+      expect(find.descendant(of: bar, matching: find.text('STROKES')),
+          findsOneWidget);
+      expect(
+          find.descendant(of: bar, matching: find.text('1')), findsOneWidget);
+      expect(find.descendant(of: bar, matching: find.text('2:00')),
+          findsOneWidget);
+      // One dot per hole of the course.
+      for (var hole = 1; hole <= 3; hole++) {
+        expect(find.byKey(Key('putt-hole-dot-$hole')), findsOneWidget);
+      }
+      // And the course chip names the course and the mode.
+      expect(find.text('The Pond'), findsOneWidget);
+      expect(find.text('TOURNAMENT'), findsOneWidget);
+    });
+
+    testWidgets('the camera button offers the other view', (tester) async {
+      final match = PuttMatch.solo();
+      var toggles = 0;
+      Widget hud(bool overview) => MaterialApp(
+            home: Scaffold(
+              body: PuttHud(
+                match: match,
+                onOpenMenu: () {},
+                onToggleCamera: () => toggles++,
+                cameraOverview: overview,
+              ),
+            ),
+          );
+      await tester.pumpWidget(hud(false));
+      expect(find.byTooltip('See the whole hole (C)'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('putt-camera')));
+      expect(toggles, 1);
+
+      await tester.pumpWidget(hud(true));
+      expect(find.byTooltip('Back in close (C)'), findsOneWidget);
+      expect(find.byTooltip('Pause (Esc)'), findsOneWidget);
+    });
+  });
+
+  group('the results card', () {
+    testWidgets('an ace: one stroke, its badge, under par', (tester) async {
+      final course = CourseDef(id: 'ace', holes: [stubHole(id: 'a0', par: 3)]);
+      final match = PuttMatch(
+        config: PuttConfig(
+            mode: GameMode.casual,
+            courses: [course],
+            seed: 4,
+            wobbleMaxRadians: 0),
+        displayNames: const {'me': 'Rooster'},
+      )..boot();
+      final shot =
+          putt(match.myBall!.position, match.hole!.nest.position, arrival: 0.6);
+      match.submitShot(shot.angle, shot.power);
+      for (var frame = 0; frame < 600; frame++) {
+        match.update(1 / 60);
+        if (match.phase != PuttPhase.holePlay) break;
+      }
+      expect(match.phase, PuttPhase.holeScoreboard);
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: PuttHud(match: match, onOpenMenu: () {})),
+      ));
+      await tester.pump();
+      // First the ace's own banner...
+      expect(find.text('Hole in one!'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 1200));
+      // ...then the card: the hole and its par, the stroke (singular),
+      // the badge, two under.
+      expect(find.text('Hole 1 · Par 3'), findsOneWidget);
+      expect(find.text('1 stroke'), findsOneWidget);
+      expect(find.text('HOLE IN ONE'), findsOneWidget);
+      expect(find.text('−2'), findsOneWidget);
+      expect(find.text('Rooster (you)'), findsOneWidget);
     });
   });
 
@@ -198,21 +360,17 @@ void main() {
       )..boot();
       expect(match.isSpectator, isTrue);
 
+      // The HUD carries the strip on its hint line.
       await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-            body: Stack(children: [
-          PuttHud(match: match, onOpenMenu: () {}),
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: SpectatorStrip(match: match),
-          ),
-        ])),
+        home: Scaffold(body: PuttHud(match: match, onOpenMenu: () {})),
       ));
       await tester.pump();
       expect(find.text("You're watching from the fence"), findsOneWidget);
       expect(find.text('8 on the green · 0 watching with you'), findsOneWidget);
-      // And no aim is offered to a spectator.
+      expect(find.byType(SpectatorStrip), findsOneWidget);
+      // And no aim is offered to a spectator, nor a carton to tap.
       expect(match.myShotReady, isFalse);
+      expect(find.byKey(const Key('putt-inventory')), findsNothing);
     });
   });
 }

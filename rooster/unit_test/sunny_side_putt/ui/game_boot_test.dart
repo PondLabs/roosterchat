@@ -62,7 +62,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: SunnySidePuttView(match: match)));
     await tester.pump(const Duration(milliseconds: 50));
 
-    await tester.tap(find.byIcon(Icons.pause));
+    await tester.tap(find.byKey(const Key('putt-pause')));
     await tester.pump();
     expect(match.paused, isTrue,
         reason: 'opening the pause menu freezes the match');

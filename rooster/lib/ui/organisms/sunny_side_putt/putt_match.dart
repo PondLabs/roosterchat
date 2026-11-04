@@ -12,6 +12,7 @@
 library;
 
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
@@ -20,7 +21,9 @@ import 'package:rooster/client/components/sunny_side_putt/core/physics.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/powerups.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/rules.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
+import 'package:rooster/client/components/sunny_side_putt/courses/sunny_side_putt_courses.dart';
 
+import 'putt_art.dart';
 import 'stub_courses.dart';
 
 /// Sounds the view's audio service knows. The harness picks one per engine
@@ -59,6 +62,11 @@ class PuttNotice {
   String toString() => 'PuttNotice($sfx, $title)';
 }
 
+/// What a headline announces, so the HUD can dress each kind its own way:
+/// a hole's number big over its par and course, a score term in its
+/// colour, the hole's or the match's end.
+enum PuttHeadlineKind { holeStart, scoreTerm, holeEnd, course, matchOver }
+
 /// Where a burst of particles goes: the events that carry a spot on the
 /// green. Filled next to [PuttNotice]s, read by the game's FX layer.
 enum PuttFxSpotKind { splash, out, holed, pick }
@@ -86,8 +94,13 @@ class PuttMatch extends ChangeNotifier {
 
   final PuttEngine engine;
 
-  /// A display name per player id; unknown ids render as themselves.
+  /// A display name per player id; unknown ids go to [nameOf], then
+  /// render as themselves.
   final Map<String, String> displayNames;
+
+  /// Names for the ids [displayNames] does not hold - players who joined
+  /// after the match was built: the session's roster lookup.
+  final String Function(String playerId)? nameOf;
 
   /// Set when this match plays on a session's wire and this client is not
   /// its host: every move of ours is told to the handler (the session
@@ -102,6 +115,7 @@ class PuttMatch extends ChangeNotifier {
     this.remoteMove,
     this.localPlayerId = 'me',
     this.displayNames = const {},
+    this.nameOf,
     List<String> seatedPlayerIds = const [],
   }) : engine = engine ?? PuttEngine(config) {
     if (engine == null) {
@@ -351,20 +365,71 @@ class PuttMatch extends ChangeNotifier {
   /// Strokes I have taken in the running hole.
   int get myStrokesThisHole => engine.strokesInHole(localPlayerId);
 
+  /// The display name of the course on the green (the catalog's localized
+  /// name), or null before the match has one.
+  String? get courseName {
+    final course = engine.currentCourse;
+    return course == null ? null : puttCourseName(course.id);
+  }
+
+  /// Whether this client has putted at all this match: the HUD's "drag to
+  /// aim" hint stays up until the first stroke.
+  bool get hasPutted => _hasPutted;
+  bool _hasPutted = false;
+
   /// The newest banner line, or null when nothing is up (the widget fades
   /// headlines out after a while on its own).
   String? get headline => _headline;
   String? _headline;
 
-  set headline(String? value) {
-    _headline = value;
-    _headlineSerial++;
-  }
+  /// The banner's second line, when its kind has one: a hole start's par
+  /// and course.
+  String? get headlineDetail => _headlineDetail;
+  String? _headlineDetail;
+
+  /// What the banner announces, null before the first one.
+  PuttHeadlineKind? get headlineKind => _headlineKind;
+  PuttHeadlineKind? _headlineKind;
+
+  /// The term a [PuttHeadlineKind.scoreTerm] banner calls, null otherwise.
+  ScoreTerm? get headlineTerm => _headlineTerm;
+  ScoreTerm? _headlineTerm;
+
+  /// The engine tick the banner went up at.
+  int _headlineTick = 0;
+
+  /// How the last hole ended ("Hole cleared!", "Time's up!"): the results
+  /// card's subtitle, kept apart from the banner so a score term called on
+  /// the hole's last stroke keeps its own moment.
+  String? get holeEndLine => _holeEndLine;
+  String? _holeEndLine;
 
   /// Counts banner lines as they are set: the same words twice in a row
   /// still pop a fresh banner.
   int get headlineSerial => _headlineSerial;
   int _headlineSerial = 0;
+
+  void _announce(
+    PuttHeadlineKind kind,
+    String text, {
+    String? detail,
+    ScoreTerm? term,
+  }) {
+    _headline = text;
+    _headlineDetail = detail;
+    _headlineKind = kind;
+    _headlineTerm = term;
+    _headlineTick = engine.tick;
+    _headlineSerial++;
+  }
+
+  /// Whether the banner up now is my score term, called within the last
+  /// second and a half: the hole's end then leaves it standing.
+  bool get _myTermIsFresh {
+    if (_headlineKind != PuttHeadlineKind.scoreTerm) return false;
+    final ticks = (1.5 / config.physics.dt).round();
+    return engine.tick - _headlineTick <= ticks;
+  }
 
   /// The notices drained since the last call: HUD banner material and the
   /// audio service's cue list.
@@ -378,14 +443,18 @@ class PuttMatch extends ChangeNotifier {
     remoteMove
         ?.call(ShotInput(playerId: localPlayerId, angle: angle, power: power));
     final accepted = engine.submitShot(localPlayerId, angle, power);
-    if (accepted) _afterInput();
+    if (accepted) {
+      _hasPutted = true;
+      _afterInput();
+    }
     return accepted;
   }
 
-  /// Uses a held power-up. Targeted effects (Nest Swap, Thieving Crow, the
-  /// point-targeted ones) arrive when the effects ticket lands its UI; the
-  /// engine consumes even effects it does not know, so the inventory stays
-  /// honest either way.
+  /// Uses a held power-up. The targeted effects need their [target]: a
+  /// spot on the green (Rabbit Hole, Gust, Sprinkler) or another player
+  /// (Nest Swap, Thieving Crow); the HUD's targeting asks for it first
+  /// (`putt_targeting.dart`). The engine consumes even an effect that
+  /// finds nothing to do, so the inventory stays honest either way.
   bool usePowerUp(String effectId, [PowerUpTarget? target]) {
     remoteMove?.call(PowerUpInput(
         playerId: localPlayerId, effectId: effectId, target: target));
@@ -469,22 +538,38 @@ class PuttMatch extends ChangeNotifier {
         currentPositions.clear();
         previousAsleep.clear();
         currentAsleep.clear();
-        headline = labelPuttHoleStart(event.globalIndex + 1, event.par);
+        _holeEndLine = null;
+        // The number its flag flies (the hole bar's), the match-wide one
+        // when the course does not know it.
+        final inCourse = holeInCourse;
+        final number = inCourse > 0 ? inCourse : event.globalIndex + 1;
+        final course = courseName;
+        _announce(
+          PuttHeadlineKind.holeStart,
+          labelPuttHole(number),
+          detail: course == null
+              ? labelPuttPar(event.par)
+              : labelPuttHoleStartDetail(event.par, course),
+        );
         return PuttNotice(PuttSfx.putt, title: headline);
       case MatchStarted():
-        headline = labelPuttCourseStart(_courseName(event.courseId));
+        _announce(PuttHeadlineKind.course,
+            labelPuttCourseStart(puttCourseName(event.courseId)));
         return PuttNotice(PuttSfx.click, title: headline);
       case CourseStarted():
-        headline = labelPuttCourseStart(_courseName(event.courseId));
+        _announce(PuttHeadlineKind.course,
+            labelPuttCourseStart(puttCourseName(event.courseId)));
         return PuttNotice(PuttSfx.click, title: headline);
       case ShotApplied():
         if (event.playerId != localPlayerId) return null;
+        _hasPutted = true;
         return const PuttNotice(PuttSfx.putt);
       case PlayerHoled():
         fxSpots.add(PuttFxSpot(PuttFxSpotKind.holed, who: event.playerId));
         if (event.playerId == localPlayerId) {
           final term = ScoreTerm.of(event.strokes, par);
-          headline = scoreTermText(term);
+          _announce(PuttHeadlineKind.scoreTerm, scoreTermText(term),
+              term: term);
         }
         return PuttNotice(PuttSfx.holed);
       case TimerCue():
@@ -492,11 +577,16 @@ class PuttMatch extends ChangeNotifier {
       case TimerTick():
         return PuttNotice(PuttSfx.timerTick);
       case HoleEnded():
-        headline =
+        _holeEndLine =
             event.completed ? labelPuttHoleCleared() : labelPuttHoleTimedOut();
+        // My last stroke's term keeps the banner when it only just went
+        // up; the results card says how the hole ended either way.
+        if (!_myTermIsFresh) {
+          _announce(PuttHeadlineKind.holeEnd, _holeEndLine!);
+        }
         return PuttNotice(
           event.completed ? PuttSfx.holeEnd : PuttSfx.timerCue,
-          title: headline,
+          title: _holeEndLine,
         );
       case PowerUpPicked():
         // The pickup's sparkle pops at whoever grabbed the "?" box (the
@@ -509,14 +599,12 @@ class PuttMatch extends ChangeNotifier {
         if (event.playerId != localPlayerId) return null;
         return const PuttNotice(PuttSfx.powerUpUsed);
       case MatchEnded():
-        headline = labelPuttMatchOver();
+        _announce(PuttHeadlineKind.matchOver, labelPuttMatchOver());
         return PuttNotice(PuttSfx.victory, title: headline);
       default:
         return null;
     }
   }
-
-  String _courseName(String courseId) => courseId;
 
   /// Physics noise the egg makes by rolling: many per tick are collapsed
   /// to the loudest (the noise trimmer keeps at most one of each kind).
@@ -524,18 +612,52 @@ class PuttMatch extends ChangeNotifier {
       sfx == PuttSfx.bounce || sfx == PuttSfx.bumper;
 }
 
-/// The display name of a player id: the match's map, then the id itself.
+/// The display name of a player id: the match's map, its roster lookup,
+/// then the id itself.
 String displayNameOf(PuttMatch match, String playerId) =>
-    match.displayNames[playerId] ?? playerId;
+    match.displayNames[playerId] ?? match.nameOf?.call(playerId) ?? playerId;
 
-// ---- strings (inline Intl.message; the arb sync is not this ticket) ----------
+/// The display name of a course id: the catalog's localized name, or the
+/// id itself for a course outside the catalog (the stubs tests play).
+String puttCourseName(String courseId) {
+  for (final course in sunnySidePuttCourses) {
+    if (course.id == courseId) return course.displayName();
+  }
+  return courseId;
+}
 
-String labelPuttHoleStart(int hole, int par) =>
-    Intl.message("Hole $hole - Par $par",
-        name: "labelPuttHoleStart",
-        args: [hole, par],
-        desc: "HUD banner when a hole starts; the placeholders are the hole's "
-            "number in the match and its par");
+/// A player's egg tint, the colour their egg, name tag and scorecard dot
+/// share: the player's place among the eggs on the green (in id order),
+/// else among the engine's players.
+ui.Color puttTintOf(PuttMatch match, String playerId) {
+  final ids = match.currentPositions.keys.toList()..sort();
+  var index = ids.indexOf(playerId);
+  if (index < 0) {
+    index = match.engine.players.indexWhere((p) => p.id == playerId);
+  }
+  return PuttPalette.tintForIndex(index.clamp(0, 7));
+}
+
+// ---- strings -------------------------------------------------------------------
+
+String labelPuttHole(int hole) => Intl.message("Hole $hole",
+    name: "labelPuttHole",
+    args: [hole],
+    desc: "The big line of the banner a hole starts with; the placeholder "
+        "is the number of the hole in its course");
+
+String labelPuttPar(int par) => Intl.message("Par $par",
+    name: "labelPuttPar",
+    args: [par],
+    desc: "The hole's par - the strokes it should take - under a hole "
+        "start's banner when the course has no name to add");
+
+String labelPuttHoleStartDetail(int par, String course) =>
+    Intl.message("Par $par · $course",
+        name: "labelPuttHoleStartDetail",
+        args: [par, course],
+        desc: "The second line of the banner a hole starts with, under its "
+            "number: the hole's par, then the course's name");
 
 String labelPuttCourseStart(String course) =>
     Intl.message("Now playing: $course",

@@ -61,6 +61,18 @@ spares their egg, the sprinkler waters around it.
 | Corn Rain | kernels bounce around, nudging every egg but yours |
 | Thieving Crow | steal a power-up from a chosen player |
 
+Using one: a tap on its slot casts the ones that need nothing. One that
+acts on a spot (Rabbit Hole, Gust, Sprinkler) waits for it: the slot
+glows, the green shows what it would reach (the hop's range and landing,
+the spray and the eggs it soaks, the pull on every other egg), and the
+next press on the green casts it there; Esc, a right click, pausing or
+the slot tapped again puts it away. One that acts on a player (Nest
+Swap, Thieving Crow) opens a list of the players it can reach, and says
+so when nobody can be picked. Nothing is spent on a cancel, or on a cast
+that could do nothing (no other egg to push, my egg already in the
+nest). The targeting lives in `putt_targeting.dart`, the reticle in
+`putt_reticle.dart`.
+
 ### Courses
 
 Five launch courses, six holes each, themselves teaching their
@@ -129,9 +141,15 @@ world builds those with `_gridPlane`.
   cannot land.
 - `ui/organisms/sunny_side_putt/` - the view: a real 3D scene on
   `three_js` (`putt_world3d.dart`, its builders under `world3d/`) under
-  the Flutter HUD, menus, name tags and spectator strip, with the audio
-  (synthesized SFX and a looping tune; volume per bus in the settings).
-  The world only reads the engine's snapshots; the physics stays planar.
+  the Flutter HUD (`putt_hud.dart`: the hole bar - hole, par, my strokes,
+  the clock turning comb red through the last fifteen seconds - with the
+  course's holes as dots under it, the course chip, the camera and pause
+  buttons, banners by kind, the scorecard, the hint line, the power-up
+  carton and its targeting, and the results and match-over cards), the
+  name tags, pause/settings/vote menus, the spectator strip, and the
+  audio (synthesized SFX and a looping tune; volume per bus in the
+  settings). The world only reads the engine's snapshots; the physics
+  stays planar.
 - `putt_demo.dart` - the demo mode (`--dart-define=PUTT_DEMO=true`): the
   game plays itself on the real courses for captures; on the web the query
   picks the course, the hole, the crew and a held camera (see its header).

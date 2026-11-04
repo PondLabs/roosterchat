@@ -1,13 +1,18 @@
-// The HUD of Sunny Side Putt: the mode-and-hole banner, the hole timer
-// ring (pulsing through the last fifteen seconds), the scorecard strip,
-// the power-up inventory with its three slots, and the between-hole
-// results card. Pure Flutter (the game renders under it), fed by the
-// [PuttMatch] and, where a human must be able to tap back, callbacks.
+// The HUD of Sunny Side Putt, over the 3D farm: the course chip (top
+// left), the hole bar (hole, par, my strokes and the timer, with the
+// course's progress dots under it), the camera and pause buttons (top
+// right), the headline banners, the scorecard (bottom left), the hint line
+// (bottom centre), the power-up carton with its targeting (bottom right),
+// and the between-hole and match-over cards. Pure Flutter (the game
+// renders under it), fed by the [PuttMatch] and, where a human taps back,
+// callbacks and the [PuttTargeting] flow.
 //
-// Everything readable goes through `Intl.message` inline (the arb sync is
-// a separate step); colors come from the brand palette in `putt_art.dart`.
-// Non-interactive regions ignore pointers, so aim drags pass through to
-// the game under the HUD.
+// Ink panels over the bright green, cream type, yolk for the numbers and
+// comb red for the one urgent thing (the last fifteen seconds); Sora for
+// numbers and banners, Nunito Sans for labels (docs/brand/README.md).
+// Nothing sits over the middle of the green while a hole plays, and every
+// panel that only shows ignores pointers, so aim drags reach the game
+// under the HUD.
 library;
 
 import 'dart:math' as math;
@@ -16,21 +21,36 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/powerups.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/rules.dart';
+import 'package:rooster/utils/common_strings.dart';
 
 import 'putt_art.dart';
 import 'putt_match.dart';
+import 'putt_targeting.dart';
+import 'spectator_strip.dart';
 
-/// The assembled HUD: a thin strip layout over the game.
-class PuttHud extends StatelessWidget {
+/// The assembled HUD over the game.
+class PuttHud extends StatefulWidget {
   final PuttMatch match;
 
-  /// The audio tap (menu buttons click).
+  /// The audio tap (buttons and slots click).
   final void Function(PuttSfx sfx)? onSfx;
 
   final VoidCallback onOpenMenu;
 
-  /// The match-over card's leave button; default pops through the match.
+  /// The match-over card's leave button; default leaves through the match.
   final VoidCallback? onLeave;
+
+  /// The camera button: the whole hole or back in close. No button when
+  /// left out.
+  final VoidCallback? onToggleCamera;
+
+  /// Whether the camera shows the whole hole right now: the camera
+  /// button's icon and tooltip offer the other view.
+  final bool cameraOverview;
+
+  /// The power-up targeting the view's pointer plumbing shares; the HUD
+  /// keeps its own when left out (a HUD alone still casts and picks).
+  final PuttTargeting? targeting;
 
   const PuttHud({
     super.key,
@@ -38,132 +58,412 @@ class PuttHud extends StatelessWidget {
     required this.onOpenMenu,
     this.onSfx,
     this.onLeave,
+    this.onToggleCamera,
+    this.cameraOverview = false,
+    this.targeting,
+  });
+
+  @override
+  State<PuttHud> createState() => _PuttHudState();
+}
+
+class _PuttHudState extends State<PuttHud> {
+  PuttTargeting? _own;
+
+  PuttTargeting get _targeting =>
+      widget.targeting ?? (_own ??= PuttTargeting());
+
+  @override
+  void dispose() {
+    _own?.dispose();
+    super.dispose();
+  }
+
+  void _tapSlot(int slot, String effectId) {
+    // A cast says so with its own sound; arming and picking click.
+    if (puttPowerAimOf(effectId) != PuttPowerAim.none) {
+      widget.onSfx?.call(PuttSfx.click);
+    }
+    _targeting.tapSlot(widget.match, slot, effectId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final targeting = _targeting;
+    return ListenableBuilder(
+      listenable: targeting,
+      builder: (context, _) {
+        final match = widget.match;
+        final inPlay = match.phase == PuttPhase.holePlay;
+        final picking = inPlay && targeting.picking != null;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: LayoutBuilder(builder: (context, constraints) {
+              final scorecardWidth =
+                  math.min(240.0, constraints.maxWidth * 0.34);
+              // The scorecard keeps to about a third of the height: on a
+              // short screen the leaders and me, then how many more.
+              final scorecardRows = ((constraints.maxHeight * 0.34 - 44) / 22)
+                  .floor()
+                  .clamp(3, 8);
+              return Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(
+                        height: _topRowHeight,
+                        child: _PuttTopRow(
+                          match: match,
+                          onOpenMenu: widget.onOpenMenu,
+                          onToggleCamera: widget.onToggleCamera,
+                          cameraOverview: widget.cameraOverview,
+                        ),
+                      ),
+                      Expanded(
+                        child:
+                            _PuttMiddle(match: match, onLeave: widget.onLeave),
+                      ),
+                      if (inPlay)
+                        _PuttBottomRow(
+                          match: match,
+                          targeting: targeting,
+                          scorecardWidth: scorecardWidth,
+                          scorecardRows: scorecardRows,
+                          onTapSlot: _tapSlot,
+                        ),
+                    ],
+                  ),
+                  if (picking)
+                    Positioned(
+                      right: 0,
+                      bottom: _slotSize + 12,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: math.max(
+                            140.0,
+                            constraints.maxHeight -
+                                _topRowHeight -
+                                _slotSize -
+                                24,
+                          ),
+                        ),
+                        child: PuttPlayerPicker(
+                          match: match,
+                          targeting: targeting,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            }),
+          ),
+        );
+      },
+    );
+  }
+}
+
+const double _topRowHeight = 88;
+const double _slotSize = 56;
+
+// ---- type, colour and panels -----------------------------------------------------------
+
+/// The HUD's type: Sora for numbers and banners, Nunito Sans for labels.
+/// Both are variable fonts, so the weight rides the axis as well.
+abstract final class _Type {
+  static FontWeight _weightOf(double weight) =>
+      FontWeight.values[((weight / 100).round() - 1).clamp(0, 8)];
+
+  /// Numbers and banners: Sora, tabular figures so a ticking clock does
+  /// not jiggle.
+  static TextStyle display(
+    double size, {
+    Color color = PuttPalette.cream,
+    double weight = 800,
+    double height = 1.1,
+  }) =>
+      TextStyle(
+        fontFamily: 'Sora',
+        fontSize: size,
+        height: height,
+        color: color,
+        fontWeight: _weightOf(weight),
+        fontVariations: [FontVariation.weight(weight)],
+        fontFeatures: const [FontFeature.tabularFigures()],
+      );
+
+  /// The small capitals over the numbers: Nunito Sans 800, spaced out.
+  static TextStyle label(
+    double size, {
+    Color? color,
+    double spacing = 1.1,
+  }) =>
+      TextStyle(
+        fontFamily: 'NunitoSans',
+        fontSize: size,
+        height: 1.2,
+        letterSpacing: spacing,
+        color: color ?? PuttPalette.cream.withValues(alpha: 0.7),
+        fontWeight: FontWeight.w800,
+        fontVariations: const [FontVariation.weight(800)],
+      );
+
+  /// Names and sentences: Nunito Sans.
+  static TextStyle body(
+    double size, {
+    Color color = PuttPalette.cream,
+    double weight = 700,
+    FontStyle? style,
+  }) =>
+      TextStyle(
+        fontFamily: 'NunitoSans',
+        fontSize: size,
+        height: 1.25,
+        color: color,
+        fontStyle: style,
+        fontWeight: _weightOf(weight),
+        fontVariations: [FontVariation.weight(weight)],
+      );
+
+  /// A Twemoji glyph from the bundled font.
+  static TextStyle emoji(double size) => TextStyle(
+        fontFamily: 'EmojiFont',
+        fontSize: size,
+        height: 1.0,
+        color: PuttPalette.shell,
+      );
+}
+
+/// The birdie's green: the one status colour the brand keeps besides its
+/// own (green is what "under par, nicely done" reads as).
+const Color _birdieGreen = Color(0xFF7BD35A);
+
+/// The colour a score term is called in: gold for the rare ones, green
+/// for a birdie, cream for par, stone and comb as it goes over.
+Color puttTermColor(ScoreTerm term) => switch (term) {
+      ScoreTerm.holeInOne ||
+      ScoreTerm.albatross ||
+      ScoreTerm.eagle =>
+        PuttPalette.yolk,
+      ScoreTerm.birdie => _birdieGreen,
+      ScoreTerm.par => PuttPalette.cream,
+      ScoreTerm.bogey => PuttPalette.stone,
+      ScoreTerm.doubleBogey ||
+      ScoreTerm.tripleBogey ||
+      ScoreTerm.more =>
+        PuttPalette.comb,
+    };
+
+/// A HUD panel: ink over the green, a hairline edge and a soft shadow so
+/// it reads over grass and sky alike.
+BoxDecoration _panel({
+  double alpha = 0.86,
+  double radius = 16,
+  Color? edge,
+  bool shadow = true,
+}) =>
+    BoxDecoration(
+      color: PuttPalette.ink.withValues(alpha: alpha),
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(
+        color: edge ?? PuttPalette.cream.withValues(alpha: 0.08),
+        width: edge == null ? 1 : 2,
+      ),
+      boxShadow: shadow ? _shadow : null,
+    );
+
+const List<BoxShadow> _shadow = [
+  BoxShadow(color: Color(0x47000000), blurRadius: 14, offset: Offset(0, 4)),
+];
+
+/// A player's colour dot: their egg's tint.
+class _TintDot extends StatelessWidget {
+  final Color color;
+  final double size;
+
+  const _TintDot(this.color, {this.size = 10});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        border: Border.all(color: PuttPalette.shell.withValues(alpha: 0.85)),
+      ),
+    );
+  }
+}
+
+// ---- the top row: course chip, hole bar, buttons --------------------------------------
+
+class _PuttTopRow extends StatelessWidget {
+  final PuttMatch match;
+  final VoidCallback onOpenMenu;
+  final VoidCallback? onToggleCamera;
+  final bool cameraOverview;
+
+  const _PuttTopRow({
+    required this.match,
+    required this.onOpenMenu,
+    required this.onToggleCamera,
+    required this.cameraOverview,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: IgnorePointer(
-        ignoring: false,
-        child: Column(
-          children: [
-            _PuttTopBar(match: match, onOpenMenu: onOpenMenu),
-            Expanded(
-              child: Center(
-                child: _PuttMiddle(
-                  match: match,
-                  onLeave: onLeave,
-                ),
-              ),
-            ),
-            _PuttBottomBar(match: match),
-          ],
+    final toggle = onToggleCamera;
+    return CustomMultiChildLayout(
+      delegate: _TopRowLayout(),
+      children: [
+        LayoutId(
+          id: _TopRowLayout.chip,
+          child: IgnorePointer(child: PuttCourseChip(match: match)),
         ),
-      ),
+        if (match.hole != null)
+          LayoutId(
+            id: _TopRowLayout.bar,
+            child: IgnorePointer(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.topCenter,
+                child: PuttHoleBar(match: match),
+              ),
+            ),
+          ),
+        LayoutId(
+          id: _TopRowLayout.buttons,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (toggle != null) ...[
+                PuttRoundButton(
+                  key: const Key('putt-camera'),
+                  icon: cameraOverview
+                      ? Icons.zoom_in_map_rounded
+                      : Icons.zoom_out_map_rounded,
+                  tooltip: cameraOverview
+                      ? tooltipPuttCameraClose()
+                      : tooltipPuttCameraWhole(),
+                  onPressed: toggle,
+                ),
+                const SizedBox(width: 8),
+              ],
+              PuttRoundButton(
+                key: const Key('putt-pause'),
+                icon: Icons.pause_rounded,
+                tooltip: labelPuttOpenMenu(),
+                onPressed: onOpenMenu,
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
 
-// ---- top bar: mode chip, hole facts, timer, menu button -------------------------------
+/// The top row's layout: the hole bar keeps the middle, the buttons the
+/// right edge, and the course chip gets what is left of the left half.
+/// The bar shrinks (its [FittedBox]) before it would run into a side.
+class _TopRowLayout extends MultiChildLayoutDelegate {
+  static const chip = 'chip';
+  static const bar = 'bar';
+  static const buttons = 'buttons';
+  static const gap = 10.0;
 
-class _PuttTopBar extends StatelessWidget {
+  @override
+  void performLayout(Size size) {
+    var buttonsSize = Size.zero;
+    if (hasChild(buttons)) {
+      buttonsSize = layoutChild(buttons, BoxConstraints.loose(size));
+      positionChild(buttons, Offset(size.width - buttonsSize.width, 0));
+    }
+    var barWidth = 0.0;
+    if (hasChild(bar)) {
+      final room = math.max(0.0, size.width - 2 * (buttonsSize.width + gap));
+      barWidth = layoutChild(bar, BoxConstraints(maxWidth: room)).width;
+      positionChild(bar, Offset((size.width - barWidth) / 2, 0));
+    }
+    if (hasChild(chip)) {
+      final room = barWidth > 0
+          ? (size.width - barWidth) / 2 - gap
+          : size.width - buttonsSize.width - gap;
+      layoutChild(chip, BoxConstraints(maxWidth: math.max(0.0, room)));
+      positionChild(chip, Offset.zero);
+    }
+  }
+
+  @override
+  bool shouldRelayout(_TopRowLayout oldDelegate) => false;
+}
+
+/// Which course, which mode: the chip in the top left.
+class PuttCourseChip extends StatelessWidget {
   final PuttMatch match;
-  final VoidCallback onOpenMenu;
 
-  const _PuttTopBar({required this.match, required this.onOpenMenu});
+  const PuttCourseChip({super.key, required this.match});
 
   @override
   Widget build(BuildContext context) {
-    final hole = match.hole;
-    return Padding(
-      padding: const EdgeInsets.all(8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          IgnorePointer(child: PuttModeChip(match: match)),
-          const Spacer(),
-          if (hole != null) ...[
-            const SizedBox(width: 8),
-            IgnorePointer(
-              child: PuttTimerRing(
-                secondsRemaining: match.secondsRemaining,
-                totalSeconds: match.timerSeconds.toDouble(),
+    final name = match.courseName;
+    if (name == null) return const SizedBox.shrink();
+    final second = match.phase == PuttPhase.awaitingNextCourse
+        ? labelPuttCourseDone()
+        : modeName(match.config.mode);
+    return LayoutBuilder(builder: (context, constraints) {
+      // Too narrow for a name worth reading: the bar says the rest.
+      if (constraints.maxWidth < 96) return const SizedBox.shrink();
+      return Container(
+        constraints:
+            BoxConstraints(maxWidth: math.min(constraints.maxWidth, 260)),
+        padding: const EdgeInsets.fromLTRB(8, 8, 14, 8),
+        decoration: _panel(radius: 18),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                color: PuttPalette.yolk.withValues(alpha: 0.16),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.flag_rounded,
+                  size: 17, color: PuttPalette.yolk),
+            ),
+            const SizedBox(width: 9),
+            Flexible(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _Type.display(14.5, weight: 700, height: 1.2),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    second.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _Type.label(10,
+                        color: PuttPalette.cream.withValues(alpha: 0.62)),
+                  ),
+                ],
               ),
             ),
           ],
-          IconButton(
-            tooltip: labelPuttOpenMenu(),
-            icon: const Icon(Icons.pause, color: PuttPalette.shell),
-            onPressed: onOpenMenu,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The mode chip: which game, which hole, which par. Long text in other
-/// languages has room: the chip wraps to two lines before it gives up.
-class PuttModeChip extends StatelessWidget {
-  final PuttMatch match;
-
-  const PuttModeChip({super.key, required this.match});
-
-  @override
-  Widget build(BuildContext context) {
-    final hole = match.hole;
-    if (match.phase == PuttPhase.awaitingNextCourse) {
-      return _chip(
-        Text(
-          labelPuttCourseDone(),
-          style: const TextStyle(
-              color: PuttPalette.cream, fontWeight: FontWeight.w600),
         ),
       );
-    }
-    final text = [
-      modeName(match.config.mode),
-      if (hole != null)
-        (match.config.mode == GameMode.tournament
-            ? labelPuttHoleOf(match.holeNumber, _holeCount())
-            : labelPuttHole(match.holeNumber)),
-    ].join(' · ');
-    final par = hole == null ? null : labelPuttPar(hole.par);
-    return _chip(
-      Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            text,
-            style: const TextStyle(
-                color: PuttPalette.cream, fontWeight: FontWeight.w600),
-          ),
-          if (par != null)
-            Text(
-              par,
-              style: const TextStyle(color: PuttPalette.yolk, fontSize: 12),
-            ),
-        ],
-      ),
-    );
-  }
-
-  /// Tournament's course list is fixed, so the "of N" is known; casual
-  /// grows by vote and shows only the hole number.
-  int _holeCount() =>
-      match.config.courses.fold(0, (sum, course) => sum + course.holes.length);
-
-  Widget _chip(Widget child) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      constraints: const BoxConstraints(maxWidth: 320),
-      decoration: BoxDecoration(
-        color: PuttPalette.ink.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: child,
-    );
+    });
   }
 }
 
@@ -191,26 +491,229 @@ String modeName(GameMode mode) {
   }
 }
 
-// ---- the timer ring ---------------------------------------------------------------------
+/// A round ink button with a cream icon: the camera and the pause.
+class PuttRoundButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
 
-/// The hole timer: a ring that empties clockwise with the seconds in the
-/// middle, calm until fifteen seconds remain - then it pulses in comb red,
-/// the color the ears have already heard ticking.
+  const PuttRoundButton({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration:
+          const BoxDecoration(shape: BoxShape.circle, boxShadow: _shadow),
+      child: IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        icon: Icon(icon),
+        iconSize: 22,
+        style: IconButton.styleFrom(
+          backgroundColor: PuttPalette.ink.withValues(alpha: 0.86),
+          foregroundColor: PuttPalette.cream,
+          hoverColor: PuttPalette.cream.withValues(alpha: 0.1),
+          fixedSize: const Size(44, 44),
+          minimumSize: const Size(44, 44),
+          padding: EdgeInsets.zero,
+          side: BorderSide(color: PuttPalette.cream.withValues(alpha: 0.08)),
+        ),
+      ),
+    );
+  }
+}
+
+// ---- the hole bar ---------------------------------------------------------------------------
+
+/// The strip across the top: HOLE 3/6, PAR 3, STROKES 2 (mine, this hole)
+/// and the clock, with the course's holes as dots under it.
+class PuttHoleBar extends StatelessWidget {
+  final PuttMatch match;
+
+  const PuttHoleBar({super.key, required this.match});
+
+  @override
+  Widget build(BuildContext context) {
+    final hole = match.hole;
+    if (hole == null) return const SizedBox.shrink();
+    final inCourse = match.holeInCourse;
+    final count = match.courseHoleCount;
+    // Not translated: the hole's number over the course's count, digits.
+    final holeText =
+        inCourse > 0 && count > 0 ? '$inCourse/$count' : '${match.holeNumber}';
+    final holed = match.myBall?.holed ?? false;
+    final segments = <Widget>[
+      _BarSegment(
+        label: labelPuttBarHole(),
+        child: Text(holeText, style: _barNumber()),
+      ),
+      _BarSegment(
+        label: labelPuttBarPar(),
+        child: Text('${hole.par}', style: _barNumber()),
+      ),
+      if (!match.isSpectator)
+        _BarSegment(
+          label: labelPuttBarStrokes(),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('${match.myStrokesThisHole}', style: _barNumber()),
+              if (holed) ...[
+                const SizedBox(width: 3),
+                const Icon(Icons.check_rounded, size: 18, color: _birdieGreen),
+              ],
+            ],
+          ),
+        ),
+      _BarSegment(
+        label: labelPuttBarTime(),
+        child: PuttTimerRing(
+          secondsRemaining: match.secondsRemaining,
+          totalSeconds: match.timerSeconds.toDouble(),
+          running: match.phase == PuttPhase.holePlay,
+        ),
+      ),
+    ];
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+          decoration: _panel(radius: 20),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < segments.length; i++) ...[
+                if (i > 0)
+                  Container(
+                    width: 1,
+                    height: 30,
+                    color: PuttPalette.cream.withValues(alpha: 0.12),
+                  ),
+                segments[i],
+              ],
+            ],
+          ),
+        ),
+        if (inCourse > 0 && count > 1) ...[
+          const SizedBox(height: 6),
+          PuttHoleDots(current: inCourse, count: count),
+        ],
+      ],
+    );
+  }
+
+  static TextStyle _barNumber() =>
+      _Type.display(22, color: PuttPalette.yolk, height: 1.05);
+}
+
+class _BarSegment extends StatelessWidget {
+  final String label;
+  final Widget child;
+
+  const _BarSegment({required this.label, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 52),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 11),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label.toUpperCase(), maxLines: 1, style: _Type.label(10)),
+            const SizedBox(height: 2),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The course's holes as dots: played filled cream, the current one yolk
+/// and larger, the rest outlined.
+class PuttHoleDots extends StatelessWidget {
+  /// The hole on the green, 1-based.
+  final int current;
+  final int count;
+
+  const PuttHoleDots({super.key, required this.current, required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: labelPuttHoleOf(current, count),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+        decoration: _panel(alpha: 0.62, radius: 10, shadow: false),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var hole = 1; hole <= count; hole++) _dot(hole),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _dot(int hole) {
+    final now = hole == current;
+    final played = hole < current;
+    final size = now ? 10.0 : 7.0;
+    return Container(
+      key: Key('putt-hole-dot-$hole'),
+      width: size,
+      height: size,
+      margin: const EdgeInsets.symmetric(horizontal: 3),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: now
+            ? PuttPalette.yolk
+            : played
+                ? PuttPalette.cream
+                : null,
+        border: now || played
+            ? null
+            : Border.all(
+                color: PuttPalette.cream.withValues(alpha: 0.55), width: 1.4),
+      ),
+    );
+  }
+}
+
+// ---- the timer ----------------------------------------------------------------------------
+
+/// The hole's clock: a small ring that empties clockwise beside the time
+/// left (m:ss), calm until fifteen seconds remain - then the pair turns
+/// comb red and pulses, the colour the ears have already heard ticking.
 class PuttTimerRing extends StatefulWidget {
   final double secondsRemaining;
   final double totalSeconds;
+
+  /// Whether the clock is running: a hole over (cleared inside its last
+  /// fifteen seconds) stops the pulse with it.
+  final bool running;
 
   const PuttTimerRing({
     super.key,
     required this.secondsRemaining,
     required this.totalSeconds,
+    this.running = true,
   });
 
   @override
   State<PuttTimerRing> createState() => PuttTimerRingState();
 
-  /// True while the ring should pulse: the hole's last fifteen seconds.
-  bool get isPulsing => secondsRemaining > 0 && secondsRemaining <= 15;
+  /// True while the clock should pulse: the hole's last fifteen seconds.
+  bool get isPulsing =>
+      running && secondsRemaining > 0 && secondsRemaining <= 15;
 }
 
 class PuttTimerRingState extends State<PuttTimerRing>
@@ -220,9 +723,12 @@ class PuttTimerRingState extends State<PuttTimerRing>
     duration: const Duration(milliseconds: 520),
   );
 
+  bool _reduceMotion = false;
+
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     _syncPulse();
   }
 
@@ -233,9 +739,11 @@ class PuttTimerRingState extends State<PuttTimerRing>
   }
 
   void _syncPulse() {
-    if (widget.isPulsing && pulse.status != AnimationStatus.forward) {
-      pulse.repeat(reverse: true);
-    } else if (!widget.isPulsing && pulse.status != AnimationStatus.dismissed) {
+    if (widget.isPulsing && !_reduceMotion) {
+      // Started once: the HUD rebuilds every frame, and restarting the
+      // repeat each time would pin the pulse at its peak.
+      if (!pulse.isAnimating) pulse.repeat(reverse: true);
+    } else if (pulse.isAnimating || pulse.value != 0) {
       pulse.stop();
       pulse.value = 0;
     }
@@ -249,105 +757,252 @@ class PuttTimerRingState extends State<PuttTimerRing>
 
   @override
   Widget build(BuildContext context) {
+    final seconds = widget.secondsRemaining.ceil().clamp(0, 5999);
+    final urgent = widget.isPulsing;
+    final colour = urgent ? PuttPalette.comb : PuttPalette.yolk;
+    final progress = widget.totalSeconds <= 0
+        ? 0.0
+        : (widget.secondsRemaining / widget.totalSeconds).clamp(0.0, 1.0);
     return AnimatedBuilder(
       animation: pulse,
       builder: (context, child) {
-        final scale = 1 + 0.12 * pulse.value;
-        final seconds = widget.secondsRemaining.ceil();
-        final urgent = widget.isPulsing;
-        return Transform.scale(
-          scale: scale,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              if (urgent) Container(key: const Key('putt-timer-pulse')),
-              SizedBox(
-                key: const Key('putt-timer-ring'),
-                width: 52,
-                height: 52,
-                child: CustomPaint(
-                  painter: _TimerRingPainter(
-                    progress: (seconds / widget.totalSeconds).clamp(0.0, 1.0),
-                    urgent: urgent,
-                  ),
-                  child: Center(
-                    child: Text(
-                      '$seconds',
-                      style: TextStyle(
-                        color: urgent ? PuttPalette.comb : PuttPalette.cream,
-                        fontWeight: FontWeight.w700,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
+        final scale = 1 + 0.08 * Curves.easeInOut.transform(pulse.value);
+        return Transform.scale(scale: scale, child: child);
       },
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (urgent) const SizedBox.shrink(key: Key('putt-timer-pulse')),
+          SizedBox(
+            key: const Key('putt-timer-ring'),
+            width: 19,
+            height: 19,
+            child: CustomPaint(
+              painter: _TimerRingPainter(progress: progress, colour: colour),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            puttClock(seconds),
+            style: _Type.display(22, color: colour, height: 1.05),
+          ),
+        ],
+      ),
     );
   }
 }
 
+/// The clock's face: minutes, a colon, two-digit seconds.
+String puttClock(int seconds) {
+  final minutes = seconds ~/ 60;
+  final rest = (seconds % 60).toString().padLeft(2, '0');
+  // Not translated: a clock readout (minutes:seconds), read the same way
+  // in every language the game speaks.
+  return '$minutes:$rest';
+}
+
+/// The clock's dial: a faint disc with the time left as a wedge that
+/// drains clockwise from twelve, ringed so it never reads as a letter.
 class _TimerRingPainter extends CustomPainter {
   final double progress;
-  final bool urgent;
+  final Color colour;
 
-  _TimerRingPainter({required this.progress, required this.urgent});
+  _TimerRingPainter({required this.progress, required this.colour});
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = size.center(Offset.zero);
-    final radius = size.shortestSide / 2 - 3;
-    final track = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4
-      ..color = PuttPalette.ink.withValues(alpha: 0.55);
-    canvas.drawCircle(center, radius, track);
-    final ring = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round
-      ..color = urgent ? PuttPalette.comb : PuttPalette.yolk;
-    canvas.drawArc(Rect.fromCircle(center: center, radius: radius),
-        -math.pi / 2, 2 * math.pi * progress, false, ring);
+    final radius = size.shortestSide / 2;
+    canvas.drawCircle(center, radius,
+        Paint()..color = PuttPalette.cream.withValues(alpha: 0.16));
+    if (progress > 0) {
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius - 2.5),
+        -math.pi / 2,
+        2 * math.pi * progress,
+        true,
+        Paint()..color = colour,
+      );
+    }
+    canvas.drawCircle(
+      center,
+      radius - 0.75,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..color = colour,
+    );
   }
 
   @override
   bool shouldRepaint(_TimerRingPainter old) =>
-      old.progress != progress || old.urgent != urgent;
+      old.progress != progress || old.colour != colour;
 }
 
 // ---- the middle: headline banner, between-hole cards ----------------------------------
 
-class _PuttMiddle extends StatelessWidget {
+/// The middle of the screen: the newest headline, high up; between holes
+/// a beat for it (my score term, or how the hole ended), then the results
+/// card rising in; at match over the verdict card. Reduced motion shows the
+/// card at once.
+class _PuttMiddle extends StatefulWidget {
   final PuttMatch match;
   final VoidCallback? onLeave;
 
   const _PuttMiddle({required this.match, required this.onLeave});
 
   @override
+  State<_PuttMiddle> createState() => _PuttMiddleState();
+}
+
+class _PuttMiddleState extends State<_PuttMiddle>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _clock = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  );
+
+  /// The results card fades in over the clock's last fifth (about 240 ms).
+  static const _reveal = Interval(0.78, 1, curve: Curves.easeOutCubic);
+
+  bool _reduceMotion = false;
+
+  /// The phase and hole the clock last started for.
+  String? _seen;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    _syncPhase();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PuttMiddle oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncPhase();
+  }
+
+  void _syncPhase() {
+    final match = widget.match;
+    final seen = '${match.phase.name}-${match.holeNumber}';
+    if (seen == _seen) return;
+    _seen = seen;
+    if (match.phase != PuttPhase.holeScoreboard) {
+      _clock.value = 0;
+    } else if (_reduceMotion) {
+      _clock.value = 1;
+    } else {
+      _clock.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _clock.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (match.phase == PuttPhase.matchOver) {
-      return PuttMatchOverCard(match: match, onLeave: onLeave);
-    }
-    if (match.phase == PuttPhase.holeScoreboard) {
-      return PuttHoleResultsCard(match: match);
-    }
+    final match = widget.match;
+    return AnimatedBuilder(
+      animation: _clock,
+      builder: (context, _) {
+        final phase = match.phase;
+        final reveal = phase == PuttPhase.holeScoreboard
+            ? _reveal.transform(_clock.value)
+            : phase == PuttPhase.matchOver
+                ? 1.0
+                : 0.0;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            // The banner keeps its place in the tree through the phases,
+            // so one that is up when the hole ends plays on rather than
+            // popping a second time.
+            Opacity(
+              opacity: 1 - reveal,
+              child: _banner() ?? const SizedBox.shrink(),
+            ),
+            if (phase == PuttPhase.matchOver)
+              LayoutBuilder(
+                builder: (context, constraints) => Center(
+                  child: PuttMatchOverCard(
+                    match: match,
+                    onLeave: widget.onLeave,
+                    maxHeight: constraints.maxHeight,
+                  ),
+                ),
+              )
+            else if (phase == PuttPhase.holeScoreboard)
+              IgnorePointer(
+                ignoring: reveal < 1,
+                child: Opacity(
+                  opacity: reveal,
+                  child: Transform.translate(
+                    offset: Offset(0, 14 * (1 - reveal)),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) => Center(
+                        child: PuttHoleResultsCard(
+                          match: match,
+                          maxHeight: constraints.maxHeight,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// The newest headline, high in the middle: under the hole bar, clear
+  /// of the green's centre.
+  Widget? _banner() {
+    final match = widget.match;
     final headline = match.headline;
-    if (headline == null) return const SizedBox.shrink();
+    if (headline == null) return null;
     return IgnorePointer(
-      child: PuttHeadline(headline, key: ValueKey(match.headlineSerial)),
+      child: Align(
+        alignment: const Alignment(0, -0.62),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: PuttHeadline(
+            headline,
+            key: ValueKey(match.headlineSerial),
+            detail: match.headlineDetail,
+            kind: match.headlineKind,
+            term: match.headlineTerm,
+          ),
+        ),
+      ),
     );
   }
 }
 
-/// The banner that pops when a hole starts, someone holes, time runs out.
+/// The banner that pops when a hole starts, I hole, time runs out.
 class PuttHeadline extends StatefulWidget {
   final String text;
 
-  const PuttHeadline(this.text, {super.key});
+  /// A second, smaller line (a hole start's par and course).
+  final String? detail;
+
+  final PuttHeadlineKind? kind;
+
+  /// The score term a [PuttHeadlineKind.scoreTerm] banner calls: its
+  /// colour.
+  final ScoreTerm? term;
+
+  const PuttHeadline(
+    this.text, {
+    super.key,
+    this.detail,
+    this.kind,
+    this.term,
+  });
 
   @override
   State<PuttHeadline> createState() => _PuttHeadlineState();
@@ -392,138 +1047,1193 @@ class _PuttHeadlineState extends State<PuttHeadline>
   }
 
   Widget _banner() {
+    final kind = widget.kind;
+    final term = widget.term;
+    final big = kind == PuttHeadlineKind.holeStart ||
+        kind == PuttHeadlineKind.scoreTerm;
+    final colour = term == null ? PuttPalette.cream : puttTermColor(term);
+    final detail = widget.detail;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      constraints: const BoxConstraints(maxWidth: 480),
-      decoration: BoxDecoration(
-        color: PuttPalette.ink.withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: PuttPalette.yolk, width: 2),
+      padding: EdgeInsets.fromLTRB(30, big ? 12 : 11, 30, big ? 15 : 13),
+      constraints: const BoxConstraints(maxWidth: 560),
+      decoration: _panel(
+        alpha: 0.88,
+        radius: 24,
+        edge: term == null ? null : colour.withValues(alpha: 0.75),
       ),
-      child: Text(
-        widget.text,
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-          color: PuttPalette.cream,
-          fontSize: 18,
-          fontWeight: FontWeight.w700,
-        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            widget.text,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            style: _Type.display(big ? 44 : 30, color: colour, height: 1.08),
+          ),
+          if (detail != null) ...[
+            const SizedBox(height: 5),
+            Text(
+              detail.toUpperCase(),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              style: _Type.label(14, color: PuttPalette.yolk, spacing: 1.4),
+            ),
+          ],
+        ],
       ),
     );
   }
 }
 
-/// Between holes: the hole's results, per-par, ranked, with the Continue
-/// the match's host input hangs on.
+// ---- the cards -------------------------------------------------------------------------------
+
+/// The scoreboard rows of players still in the match, in the engine's
+/// order (rising total, then id).
+List<ScoreRow> _presentRows(PuttMatch match) => [
+      for (final row in match.scoreboard)
+        if (match.engine.player(row.playerId) != null) row,
+    ];
+
+/// Golf ranks: ties share a place, the next one skips ahead (1, 1, 3).
+List<int> _ranks(List<ScoreRow> rows) {
+  final ranks = <int>[];
+  for (var i = 0; i < rows.length; i++) {
+    ranks.add(
+        i > 0 && rows[i].total == rows[i - 1].total ? ranks[i - 1] : i + 1);
+  }
+  return ranks;
+}
+
+/// Between holes: the hole and its par, how it ended, and one row per
+/// player ranked by total - their strokes here, the term they earned and
+/// where they stand against par - with the Continue the host moves on.
 class PuttHoleResultsCard extends StatelessWidget {
   final PuttMatch match;
+  final double? maxHeight;
 
-  const PuttHoleResultsCard({super.key, required this.match});
+  const PuttHoleResultsCard({super.key, required this.match, this.maxHeight});
 
   @override
   Widget build(BuildContext context) {
-    final rows = match.scoreboard;
-    return _card(
-      title: match.headline ?? labelPuttScores(),
-      children: [
-        for (final row in rows)
-          _scoreRow(
-            name: displayNameOf(match, row.playerId),
-            detail: labelPuttHoleStrokes(_lastHoleStrokes(row)),
-            total: labelPuttTotal(row.total),
-            mine: row.playerId == match.localPlayerId,
-          ),
-        const SizedBox(height: 8),
-        // Only the host's own card continues; in a local match that is me.
-        FilledButton(
-          key: const Key('putt-continue'),
-          style: FilledButton.styleFrom(
-              backgroundColor: PuttPalette.comb,
-              foregroundColor: PuttPalette.shell),
-          onPressed: match.advance,
-          child: Text(labelPuttContinue()),
-        ),
-      ],
-    );
-  }
-
-  int _lastHoleStrokes(ScoreRow row) {
-    final strokes = List<int?>.of(row.holeStrokes);
-    while (strokes.isNotEmpty && strokes.last == null) {
-      strokes.removeLast();
+    final par = match.par;
+    final number =
+        match.holeInCourse > 0 ? match.holeInCourse : match.holeNumber;
+    final index = match.holeNumber - 1;
+    final world = match.engine.world;
+    final played = <ScoreRow>[];
+    final watching = <ScoreRow>[];
+    for (final row in _presentRows(match)) {
+      final strokes = index >= 0 && index < row.holeStrokes.length
+          ? row.holeStrokes[index]
+          : null;
+      (strokes == null ? watching : played).add(row);
     }
-    return strokes.isEmpty ? 0 : strokes.last!;
+    final ranks = _ranks(played);
+    final subtitle = match.holeEndLine ?? match.headline;
+    return _PuttCard(
+      maxHeight: maxHeight,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            labelPuttResultsTitle(number, par),
+            textAlign: TextAlign.center,
+            style: _Type.display(24),
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              subtitle.toUpperCase(),
+              key: const Key('putt-results-subtitle'),
+              textAlign: TextAlign.center,
+              style: _Type.label(12, color: PuttPalette.yolk, spacing: 1.4),
+            ),
+          ],
+          const SizedBox(height: 12),
+          const _TotalHeader(),
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < played.length; i++)
+                    _CardRow(
+                      rank: ranks[i],
+                      tint: puttTintOf(match, played[i].playerId),
+                      name: displayNameOf(match, played[i].playerId),
+                      mine: played[i].playerId == match.localPlayerId,
+                      detail: labelPuttHoleStrokes(
+                          played[i].holeStrokes[index] ?? 0),
+                      badge: _TermBadge(
+                        term: ScoreTerm.of(
+                            played[i].holeStrokes[index] ?? 0, par),
+                        holed: world?.ball(played[i].playerId)?.holed ?? true,
+                      ),
+                      relative: played[i].relative,
+                    ),
+                  for (final row in watching)
+                    _CardRow(
+                      tint: puttTintOf(match, row.playerId),
+                      name: displayNameOf(match, row.playerId),
+                      mine: row.playerId == match.localPlayerId,
+                      watching: true,
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          // Only the host's own card continues; in a local match that is me.
+          FilledButton(
+            key: const Key('putt-continue'),
+            style: _cardButton(PuttPalette.comb),
+            onPressed: match.advance,
+            child: Text(labelPuttContinue()),
+          ),
+        ],
+      ),
+    );
   }
 }
 
-/// Match over: the totals, ranked, and the way out.
+/// Match over: the winner, the totals ranked, and the way out.
 class PuttMatchOverCard extends StatelessWidget {
   final PuttMatch match;
   final VoidCallback? onLeave;
+  final double? maxHeight;
 
-  const PuttMatchOverCard({super.key, required this.match, this.onLeave});
+  const PuttMatchOverCard(
+      {super.key, required this.match, this.onLeave, this.maxHeight});
 
   @override
   Widget build(BuildContext context) {
-    final rows = match.scoreboard;
+    final rows = [
+      for (final row in _presentRows(match))
+        if (!match.engine.isSpectator(row.playerId)) row,
+    ];
+    final ranks = _ranks(rows);
     final winner = rows.isEmpty ? null : rows.first;
-    return _card(
-      title: winner == null
-          ? labelPuttMatchOver()
-          : labelPuttWinner(displayNameOf(match, winner.playerId)),
-      children: [
-        for (final row in rows)
-          _scoreRow(
-            name: displayNameOf(match, row.playerId),
-            detail: row.relative == 0
-                ? labelPuttRelativeEven()
-                : relativeText(row.relative),
-            total: labelPuttTotal(row.total),
-            mine: row.playerId == match.localPlayerId,
+    final tie = rows.length > 1 && rows[1].total == rows[0].total;
+    final title = winner == null
+        ? labelPuttMatchOver()
+        : tie
+            ? labelPuttTie()
+            : labelPuttWinner(displayNameOf(match, winner.playerId));
+    return _PuttCard(
+      maxHeight: maxHeight,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Not translated: an emoji glyph, not a word.
+          Text('🏆', textAlign: TextAlign.center, style: _Type.emoji(40)),
+          const SizedBox(height: 6),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: _Type.display(28, color: PuttPalette.yolk),
           ),
-        const SizedBox(height: 8),
-        FilledButton(
-          key: const Key('putt-leave-green'),
-          style: FilledButton.styleFrom(
-              backgroundColor: PuttPalette.combDeep,
-              foregroundColor: PuttPalette.shell),
-          onPressed: onLeave ?? match.leave,
-          child: Text(labelPuttLeaveGreen()),
-        ),
-      ],
+          if (winner != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              labelPuttMatchOver().toUpperCase(),
+              textAlign: TextAlign.center,
+              style: _Type.label(12),
+            ),
+          ],
+          const SizedBox(height: 12),
+          if (rows.isNotEmpty) const _TotalHeader(),
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < rows.length; i++)
+                    _CardRow(
+                      rank: ranks[i],
+                      tint: puttTintOf(match, rows[i].playerId),
+                      name: displayNameOf(match, rows[i].playerId),
+                      mine: rows[i].playerId == match.localPlayerId,
+                      detail: labelPuttTotal(rows[i].total),
+                      relative: rows[i].relative,
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          FilledButton(
+            key: const Key('putt-leave-green'),
+            style: _cardButton(PuttPalette.combDeep),
+            onPressed: onLeave ?? match.leave,
+            child: Text(labelPuttLeaveGreen()),
+          ),
+        ],
+      ),
     );
   }
 }
 
-// ---- the bottom bar: scorecard strip and inventory ------------------------------------
+ButtonStyle _cardButton(Color colour) => FilledButton.styleFrom(
+      backgroundColor: colour,
+      foregroundColor: PuttPalette.shell,
+      minimumSize: const Size(0, 44),
+      textStyle: _Type.body(15, weight: 800),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    );
 
-class _PuttBottomBar extends StatelessWidget {
-  final PuttMatch match;
+/// The cards' frame: a dark panel, big enough for eight players.
+class _PuttCard extends StatelessWidget {
+  final Widget child;
+  final double? maxHeight;
 
-  const _PuttBottomBar({required this.match});
+  const _PuttCard({required this.child, this.maxHeight});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.all(6),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+      constraints: BoxConstraints(
+        maxWidth: 470,
+        maxHeight: math.max(0.0, (maxHeight ?? double.infinity) - 12),
+      ),
+      decoration: _panel(alpha: 0.94, radius: 22),
+      child: child,
+    );
+  }
+}
+
+/// "TOTAL" over the cards' last column.
+class _TotalHeader extends StatelessWidget {
+  const _TotalHeader();
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(8),
-      child: SizedBox(
-        height: 64,
-        child: Row(
-          children: [
-            Expanded(
-              child: IgnorePointer(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: PuttScorecardStrip(match: match),
-                ),
+      padding: const EdgeInsets.only(right: 10, bottom: 2),
+      child: Text(
+        labelPuttScorecardTotal().toUpperCase(),
+        textAlign: TextAlign.end,
+        style:
+            _Type.label(9.5, color: PuttPalette.cream.withValues(alpha: 0.5)),
+      ),
+    );
+  }
+}
+
+/// A card row: rank, colour dot, name, what they did (strokes), the term
+/// badge, and the total against par.
+class _CardRow extends StatelessWidget {
+  final int? rank;
+  final Color tint;
+  final String name;
+  final bool mine;
+  final bool watching;
+  final String? detail;
+  final Widget? badge;
+  final int relative;
+
+  const _CardRow({
+    this.rank,
+    required this.tint,
+    required this.name,
+    required this.mine,
+    this.watching = false,
+    this.detail,
+    this.badge,
+    this.relative = 0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final detail = this.detail;
+    final badge = this.badge;
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: mine
+          ? BoxDecoration(
+              color: PuttPalette.yolk.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(10),
+            )
+          : null,
+      child: Row(
+        children: [
+          SizedBox(
+            width: 24,
+            child: Text(
+              rank == null ? '' : '$rank',
+              style: _Type.display(14,
+                  color: rank == 1
+                      ? PuttPalette.yolk
+                      : PuttPalette.cream.withValues(alpha: 0.5)),
+            ),
+          ),
+          _TintDot(tint),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              mine ? labelPuttYouName(name) : name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: _Type.body(14,
+                  weight: mine ? 800 : 700,
+                  color: watching ? PuttPalette.stone : PuttPalette.cream),
+            ),
+          ),
+          if (watching)
+            Text(
+              labelPuttWatching(),
+              style: _Type.body(12,
+                  color: PuttPalette.stone, style: FontStyle.italic),
+            )
+          else ...[
+            if (detail != null) ...[
+              const SizedBox(width: 8),
+              Text(
+                detail,
+                style: _Type.body(12,
+                    color: PuttPalette.cream.withValues(alpha: 0.72)),
+              ),
+            ],
+            if (badge != null) ...[const SizedBox(width: 8), badge],
+            SizedBox(
+              width: 44,
+              child: Text(
+                relativeText(relative),
+                textAlign: TextAlign.end,
+                style: _Type.display(16, color: _relativeColour(relative)),
               ),
             ),
-            const SizedBox(width: 8),
-            PuttInventory(
-              slots: match.myInventory,
-              onUse: (effectId) => match.usePowerUp(effectId),
-              enabled: match.myShotReady || match.phase == PuttPhase.holePlay,
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+Color _relativeColour(int relative) => relative < 0
+    ? PuttPalette.yolk
+    : relative == 0
+        ? PuttPalette.cream
+        : PuttPalette.cream.withValues(alpha: 0.75);
+
+/// The term a hole earned, as a pill in its colour; an egg that never
+/// reached the nest says so instead.
+class _TermBadge extends StatelessWidget {
+  final ScoreTerm term;
+  final bool holed;
+
+  const _TermBadge({required this.term, required this.holed});
+
+  @override
+  Widget build(BuildContext context) {
+    final colour = holed ? puttTermColor(term) : PuttPalette.stone;
+    // Stone is too quiet for small type on ink: lift it toward cream.
+    final ink = colour == PuttPalette.stone
+        ? Color.lerp(PuttPalette.stone, PuttPalette.cream, 0.35)!
+        : colour;
+    return Container(
+      constraints: const BoxConstraints(minWidth: 62),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: colour.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: colour.withValues(alpha: 0.5)),
+      ),
+      child: Text(
+        (holed ? puttBadgeText(term) : labelPuttBadgeOutOfTime()).toUpperCase(),
+        maxLines: 1,
+        textAlign: TextAlign.center,
+        style: _Type.label(9.5, color: ink, spacing: 0.8),
+      ),
+    );
+  }
+}
+
+/// The badge's word for a term (the banners call them with more cheer).
+String puttBadgeText(ScoreTerm term) {
+  switch (term) {
+    case ScoreTerm.holeInOne:
+      return labelPuttBadgeHoleInOne();
+    case ScoreTerm.albatross:
+      return labelPuttBadgeAlbatross();
+    case ScoreTerm.eagle:
+      return labelPuttBadgeEagle();
+    case ScoreTerm.birdie:
+      return labelPuttBadgeBirdie();
+    case ScoreTerm.par:
+      return labelPuttBadgePar();
+    case ScoreTerm.bogey:
+      return labelPuttBadgeBogey();
+    case ScoreTerm.doubleBogey:
+      return labelPuttBadgeDoubleBogey();
+    case ScoreTerm.tripleBogey:
+      return labelPuttBadgeTripleBogey();
+    case ScoreTerm.more:
+      return labelPuttBadgeMore();
+  }
+}
+
+// ---- the bottom row: scorecard, hint, inventory ---------------------------------------
+
+class _PuttBottomRow extends StatelessWidget {
+  final PuttMatch match;
+  final PuttTargeting targeting;
+  final double scorecardWidth;
+  final int scorecardRows;
+  final void Function(int slot, String effectId) onTapSlot;
+
+  const _PuttBottomRow({
+    required this.match,
+    required this.targeting,
+    required this.scorecardWidth,
+    required this.scorecardRows,
+    required this.onTapSlot,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final spectator = match.isSpectator;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        IgnorePointer(
+          child: PuttScorecard(
+            match: match,
+            width: scorecardWidth,
+            maxRows: scorecardRows,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: IgnorePointer(
+            child: PuttHintLine(match: match, targeting: targeting),
+          ),
+        ),
+        if (!spectator) ...[
+          const SizedBox(width: 12),
+          PuttInventory(
+            slots: match.myInventory,
+            enabled: PuttTargeting.canUseNow(match),
+            activeSlot: targeting.armedSlot ?? targeting.pickingSlot,
+            onTap: onTapSlot,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// The scorecard: every player by total - colour dot, name, strokes on
+/// this hole (a check once in the nest), and the total against par - with
+/// whoever is watching from the fence last. Past [maxRows] it shows the
+/// leaders and me, then how many more.
+class PuttScorecard extends StatelessWidget {
+  final PuttMatch match;
+  final double width;
+  final int maxRows;
+
+  const PuttScorecard({
+    super.key,
+    required this.match,
+    this.width = 240,
+    this.maxRows = 8,
+  });
+
+  static const double _holeColumn = 40;
+  static const double _totalColumn = 42;
+
+  @override
+  Widget build(BuildContext context) {
+    final engine = match.engine;
+    final world = engine.world;
+    final rows = _presentRows(match);
+    // Players by total, then whoever watches.
+    final all = [
+      for (final row in rows)
+        if (!engine.isSpectator(row.playerId)) row,
+      for (final row in rows)
+        if (engine.isSpectator(row.playerId)) row,
+    ];
+    var shown = all;
+    if (all.length > maxRows) {
+      // One line goes to the count of the rest; my own row always stays.
+      final keep = math.max(1, maxRows - 1);
+      final mine = all.indexWhere((row) => row.playerId == match.localPlayerId);
+      shown = mine >= keep
+          ? [...all.take(keep - 1), all[mine]]
+          : all.take(keep).toList();
+    }
+    final hidden = all.length - shown.length;
+    final header = _Type.label(9.5,
+        color: PuttPalette.cream.withValues(alpha: 0.55), spacing: 0.9);
+    return Container(
+      key: const Key('putt-scorecard'),
+      width: width,
+      padding: const EdgeInsets.fromLTRB(8, 9, 8, 8),
+      decoration: _panel(radius: 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    labelPuttScorecard().toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _Type.label(10.5),
+                  ),
+                ),
+                for (final (label, width) in [
+                  (labelPuttScorecardHole(), _holeColumn),
+                  (labelPuttScorecardTotal(), _totalColumn),
+                ])
+                  SizedBox(
+                    width: width,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Text(label.toUpperCase(), style: header),
+                    ),
+                  ),
+              ],
             ),
+          ),
+          const SizedBox(height: 5),
+          for (final row in shown)
+            engine.isSpectator(row.playerId)
+                ? _ScorecardRow(
+                    name: displayNameOf(match, row.playerId),
+                    tint: puttTintOf(match, row.playerId),
+                    mine: row.playerId == match.localPlayerId,
+                    watching: true,
+                  )
+                : _ScorecardRow(
+                    name: displayNameOf(match, row.playerId),
+                    tint: puttTintOf(match, row.playerId),
+                    mine: row.playerId == match.localPlayerId,
+                    strokes: engine.strokesInHole(row.playerId),
+                    holed: world?.ball(row.playerId)?.holed ?? false,
+                    relative: row.relative,
+                  ),
+          if (hidden > 0)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 3, 6, 1),
+              child: Text(
+                labelPuttScorecardMore(hidden),
+                style: _Type.body(11.5,
+                    color: PuttPalette.cream.withValues(alpha: 0.6)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ScorecardRow extends StatelessWidget {
+  final String name;
+  final Color tint;
+  final bool mine;
+  final bool watching;
+  final int strokes;
+  final bool holed;
+  final int relative;
+
+  const _ScorecardRow({
+    required this.name,
+    required this.tint,
+    required this.mine,
+    this.watching = false,
+    this.strokes = 0,
+    this.holed = false,
+    this.relative = 0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final number = _Type.display(14,
+        color: strokes == 0 && !holed
+            ? PuttPalette.cream.withValues(alpha: 0.45)
+            : PuttPalette.cream);
+    return Container(
+      margin: const EdgeInsets.only(top: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: mine
+          ? BoxDecoration(
+              color: PuttPalette.yolk.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+            )
+          : null,
+      child: Row(
+        children: [
+          _TintDot(tint, size: 9),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              mine ? labelPuttYouName(name) : name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: _Type.body(12.5,
+                  weight: mine ? 800 : 700,
+                  color: watching ? PuttPalette.stone : PuttPalette.cream),
+            ),
+          ),
+          if (watching)
+            Text(
+              labelPuttWatching(),
+              style: _Type.body(11,
+                  color: PuttPalette.stone, style: FontStyle.italic),
+            )
+          else ...[
+            SizedBox(
+              width: PuttScorecard._holeColumn,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  if (holed)
+                    const Padding(
+                      padding: EdgeInsets.only(right: 2),
+                      child: Icon(Icons.check_rounded,
+                          size: 14, color: _birdieGreen),
+                    ),
+                  Text('$strokes', style: number),
+                ],
+              ),
+            ),
+            SizedBox(
+              width: PuttScorecard._totalColumn,
+              child: Text(
+                relativeText(relative),
+                textAlign: TextAlign.end,
+                style: _Type.display(14, color: _relativeColour(relative)),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The line at the bottom centre: what to do right now. The targeting
+/// prompt while a slot is armed, a short "not now" when a tap could not
+/// arm, "drag anywhere to aim" until the first putt, the spectator note
+/// while watching.
+class PuttHintLine extends StatefulWidget {
+  final PuttMatch match;
+  final PuttTargeting targeting;
+
+  const PuttHintLine({super.key, required this.match, required this.targeting});
+
+  @override
+  State<PuttHintLine> createState() => _PuttHintLineState();
+}
+
+class _PuttHintLineState extends State<PuttHintLine>
+    with SingleTickerProviderStateMixin {
+  /// How long a "not now" line stays up.
+  late final AnimationController _notice;
+
+  late int _noticeSerial;
+
+  @override
+  void initState() {
+    super.initState();
+    _notice = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2600),
+    );
+    _noticeSerial = widget.targeting.noticeSerial;
+  }
+
+  @override
+  void didUpdateWidget(covariant PuttHintLine oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final serial = widget.targeting.noticeSerial;
+    if (serial != _noticeSerial) {
+      _noticeSerial = serial;
+      if (widget.targeting.notice != null) _notice.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _notice.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final match = widget.match;
+    if (match.isSpectator) return SpectatorStrip(match: match);
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    return AnimatedBuilder(
+      animation: _notice,
+      builder: (context, _) {
+        final targeting = widget.targeting;
+        final armed = targeting.armed;
+        final notice = targeting.notice;
+        Widget? line;
+        if (armed != null) {
+          line = _HintPill(
+            key: ValueKey('armed-$armed'),
+            glyph: puttPowerUpGlyph(armed),
+            text: labelPuttTargetPrompt(armed),
+            detail: labelPuttTargetCancel(),
+            accent: true,
+          );
+        } else if (notice != null && _notice.isAnimating) {
+          line =
+              _HintPill(key: ValueKey('notice-$_noticeSerial'), text: notice);
+        } else if (match.myShotReady && !match.hasPutted) {
+          line = _HintPill(
+            key: const ValueKey('aim'),
+            icon: Icons.touch_app_rounded,
+            text: labelPuttAimHint(),
+          );
+        }
+        return Align(
+          alignment: Alignment.bottomCenter,
+          child: AnimatedSwitcher(
+            duration: reduceMotion
+                ? Duration.zero
+                : const Duration(milliseconds: 220),
+            child: line ?? const SizedBox.shrink(key: ValueKey('none')),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _HintPill extends StatelessWidget {
+  final String text;
+  final String? detail;
+  final String? glyph;
+  final IconData? icon;
+  final bool accent;
+
+  const _HintPill({
+    super.key,
+    required this.text,
+    this.detail,
+    this.glyph,
+    this.icon,
+    this.accent = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final glyph = this.glyph;
+    final icon = this.icon;
+    final detail = this.detail;
+    return Container(
+      key: const Key('putt-hint'),
+      constraints: const BoxConstraints(maxWidth: 460),
+      padding: const EdgeInsets.fromLTRB(12, 8, 16, 8),
+      decoration: _panel(
+        alpha: 0.82,
+        radius: 16,
+        edge: accent ? PuttPalette.yolk.withValues(alpha: 0.7) : null,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (glyph != null) ...[
+            Text(glyph, style: _Type.emoji(20)),
+            const SizedBox(width: 10),
+          ] else if (icon != null) ...[
+            Icon(icon, size: 18, color: PuttPalette.yolk),
+            const SizedBox(width: 8),
+          ],
+          Flexible(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  text,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: _Type.body(13.5, weight: 800),
+                ),
+                if (detail != null)
+                  Text(
+                    detail,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _Type.body(11.5,
+                        color: PuttPalette.cream.withValues(alpha: 0.65)),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---- the power-up carton ------------------------------------------------------------------
+
+/// The power-up inventory: three slots filled left to right, each power-up
+/// its glyph on ink with the name and what it does in the tooltip; empty
+/// slots a dashed outline. The slot whose power-up waits for a spot or a
+/// player glows.
+class PuttInventory extends StatelessWidget {
+  final List<String> slots;
+  final void Function(int slot, String effectId)? onTap;
+  final bool enabled;
+
+  /// The slot that is armed or picking, if any.
+  final int? activeSlot;
+
+  const PuttInventory({
+    super.key,
+    required this.slots,
+    this.onTap,
+    this.enabled = true,
+    this.activeSlot,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      key: const Key('putt-inventory'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < PowerUpInventory.cap; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          _PowerSlot(
+            index: i,
+            effectId: i < slots.length ? slots[i] : null,
+            enabled: enabled,
+            active: activeSlot == i,
+            onTap: onTap,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _PowerSlot extends StatefulWidget {
+  final int index;
+  final String? effectId;
+  final bool enabled;
+  final bool active;
+  final void Function(int slot, String effectId)? onTap;
+
+  const _PowerSlot({
+    required this.index,
+    required this.effectId,
+    required this.enabled,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  State<_PowerSlot> createState() => _PowerSlotState();
+}
+
+class _PowerSlotState extends State<_PowerSlot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _glow = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
+
+  bool _reduceMotion = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    _syncGlow();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PowerSlot oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncGlow();
+  }
+
+  void _syncGlow() {
+    if (widget.active && !_reduceMotion) {
+      if (!_glow.isAnimating) _glow.repeat(reverse: true);
+    } else if (_glow.isAnimating) {
+      _glow.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _glow.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final effectId = widget.effectId;
+    final key = Key('putt-slot-${widget.index}');
+    if (effectId == null) {
+      return Tooltip(
+        message: labelPuttEmptySlot(),
+        child: SizedBox(
+          key: key,
+          width: _slotSize,
+          height: _slotSize,
+          child: const CustomPaint(painter: _EmptySlotPainter()),
+        ),
+      );
+    }
+    final enabled = widget.enabled && widget.onTap != null;
+    final active = widget.active;
+    final name = puttPowerUpName(effectId);
+    final slot = AnimatedBuilder(
+      animation: _glow,
+      builder: (context, child) {
+        final glow = !active
+            ? 0.0
+            : _reduceMotion
+                ? 1.0
+                : 0.55 + 0.45 * Curves.easeInOut.transform(_glow.value);
+        return Container(
+          width: _slotSize,
+          height: _slotSize,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: active
+                ? Color.lerp(PuttPalette.ink, PuttPalette.yolk, 0.28)
+                : PuttPalette.ink.withValues(alpha: 0.86),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: PuttPalette.yolk,
+              width: active ? 3 : 2,
+            ),
+            boxShadow: [
+              ..._shadow,
+              if (active)
+                BoxShadow(
+                  color: PuttPalette.yolk.withValues(alpha: 0.6 * glow),
+                  blurRadius: 6 + 14 * glow,
+                  spreadRadius: 1 + 2 * glow,
+                ),
+            ],
+          ),
+          child: child,
+        );
+      },
+      child: Text(puttPowerUpGlyph(effectId), style: _Type.emoji(28)),
+    );
+    return Tooltip(
+      preferBelow: false,
+      waitDuration: const Duration(milliseconds: 250),
+      decoration: BoxDecoration(
+        color: PuttPalette.ink.withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      richMessage: TextSpan(
+        style: _Type.body(12.5, weight: 600),
+        children: [
+          TextSpan(text: name, style: _Type.body(13.5, weight: 800)),
+          TextSpan(text: '\n${puttPowerUpDetail(effectId)}'),
+        ],
+      ),
+      child: Semantics(
+        button: true,
+        enabled: enabled,
+        label: name,
+        child: MouseRegion(
+          cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+          child: GestureDetector(
+            key: key,
+            behavior: HitTestBehavior.opaque,
+            onTap: enabled ? () => widget.onTap!(widget.index, effectId) : null,
+            child: Opacity(opacity: widget.enabled ? 1 : 0.5, child: slot),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// An empty slot: the carton's dashed outline over a faint ink fill.
+class _EmptySlotPainter extends CustomPainter {
+  const _EmptySlotPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rrect = RRect.fromRectAndRadius(
+        (Offset.zero & size).deflate(1.5), const Radius.circular(16));
+    canvas.drawRRect(
+        rrect, Paint()..color = PuttPalette.ink.withValues(alpha: 0.55));
+    final dash = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round
+      ..color = PuttPalette.cream.withValues(alpha: 0.7);
+    final path = Path()..addRRect(rrect);
+    for (final metric in path.computeMetrics()) {
+      for (var at = 0.0; at < metric.length; at += 10) {
+        canvas.drawPath(metric.extractPath(at, at + 5), dash);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_EmptySlotPainter oldDelegate) => false;
+}
+
+/// The picker a player power-up opens over the carton: the players it can
+/// go to (a colour dot, the name, and for the crow what it would take),
+/// or why there is nobody - and nothing is spent until a pick.
+class PuttPlayerPicker extends StatelessWidget {
+  final PuttMatch match;
+  final PuttTargeting targeting;
+
+  const PuttPlayerPicker({
+    super.key,
+    required this.match,
+    required this.targeting,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final effectId = targeting.picking;
+    if (effectId == null) return const SizedBox.shrink();
+    final candidates = PuttTargeting.candidates(match, effectId);
+    final crow = effectId == 'thieving_crow';
+    return Material(
+      type: MaterialType.transparency,
+      child: Container(
+        key: const Key('putt-picker'),
+        width: 268,
+        padding: const EdgeInsets.fromLTRB(14, 12, 10, 6),
+        decoration: _panel(
+          alpha: 0.95,
+          radius: 18,
+          edge: PuttPalette.yolk.withValues(alpha: 0.6),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Text(puttPowerUpGlyph(effectId), style: _Type.emoji(20)),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    crow ? labelPuttPickSteal() : labelPuttPickSwap(),
+                    maxLines: 2,
+                    style: _Type.display(15, weight: 700, height: 1.2),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (candidates.isEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(2, 2, 4, 6),
+                child: Text(
+                  PuttTargeting.nobodyToPick(match, effectId),
+                  style: _Type.body(13,
+                      color: PuttPalette.cream.withValues(alpha: 0.75)),
+                ),
+              )
+            else
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final id in candidates)
+                        _PickRow(
+                          key: Key('putt-pick-$id'),
+                          name: displayNameOf(match, id),
+                          tint: puttTintOf(match, id),
+                          glyph: crow ? _firstSlotGlyph(id) : null,
+                          onTap: () => targeting.castOn(match, id),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                key: const Key('putt-pick-cancel'),
+                onPressed: targeting.cancel,
+                style: TextButton.styleFrom(
+                  foregroundColor: PuttPalette.cream,
+                  textStyle: _Type.body(13, weight: 800),
+                ),
+                child: Text(CommonStrings.promptCancel),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// What the crow would take from [playerId]: their first slot.
+  String? _firstSlotGlyph(String playerId) {
+    final inventory = match.engine.player(playerId)?.inventory.toList();
+    if (inventory == null || inventory.isEmpty) return null;
+    return puttPowerUpGlyph(inventory.first);
+  }
+}
+
+class _PickRow extends StatelessWidget {
+  final String name;
+  final Color tint;
+  final String? glyph;
+  final VoidCallback onTap;
+
+  const _PickRow({
+    super.key,
+    required this.name,
+    required this.tint,
+    required this.glyph,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final glyph = this.glyph;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      hoverColor: PuttPalette.yolk.withValues(alpha: 0.12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+        child: Row(
+          children: [
+            _TintDot(tint, size: 11),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: _Type.body(14, weight: 800),
+              ),
+            ),
+            if (glyph != null) Text(glyph, style: _Type.emoji(18)),
           ],
         ),
       ),
@@ -531,246 +2241,27 @@ class _PuttBottomBar extends StatelessWidget {
   }
 }
 
-/// The scorecard: one chip per player - name, total strokes, and what the
-/// running hole has cost them so far. Me first, then by total, then id.
-class PuttScorecardStrip extends StatelessWidget {
-  final PuttMatch match;
+// ---- power-up names, glyphs and lines ------------------------------------------------------
 
-  const PuttScorecardStrip({super.key, required this.match});
-
-  @override
-  Widget build(BuildContext context) {
-    final rows = match.scoreboard;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (final row in rows)
-          _PlayerChip(
-            name: displayNameOf(match, row.playerId),
-            total: row.total,
-            thisHole: match.engine.strokesInHole(row.playerId),
-            isMe: row.playerId == match.localPlayerId,
-            isWatching: match.engine.isSpectator(row.playerId),
-          ),
-      ],
-    );
-  }
+/// The twelve effects' glyphs, drawn by the bundled Twemoji font.
+String puttPowerUpGlyph(String effectId) {
+  // Not translated: an emoji glyph, not a word (every line below).
+  return switch (effectId) {
+    'hawk_eye' => '🦅',
+    'nest_magnet' => '🧲',
+    'ghost_egg' => '👻',
+    'chicken_hop' => '🐔',
+    'rabbit_hole' => '🐇',
+    'gust' => '💨',
+    'thick_shell' => '🛡️',
+    'strong_coffee' => '☕',
+    'nest_swap' => '🔄',
+    'sprinkler' => '💦',
+    'corn_rain' => '🌽',
+    'thieving_crow' => '🐦',
+    _ => '❔',
+  };
 }
-
-class _PlayerChip extends StatelessWidget {
-  final String name;
-  final int total;
-  final int thisHole;
-  final bool isMe;
-  final bool isWatching;
-
-  const _PlayerChip({
-    required this.name,
-    required this.total,
-    required this.thisHole,
-    required this.isMe,
-    required this.isWatching,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: isMe
-            ? PuttPalette.yolk.withValues(alpha: 0.92)
-            : PuttPalette.ink.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: isMe ? PuttPalette.ink : PuttPalette.spruce,
-          width: isMe ? 2 : 1,
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            isMe ? labelPuttYouName(name) : name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: isMe ? PuttPalette.ink : PuttPalette.cream,
-            ),
-          ),
-          Text(
-            isWatching
-                ? labelPuttWatching()
-                : labelPuttChipCounts(total, thisHole),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 11,
-              color: isMe
-                  ? PuttPalette.ink.withValues(alpha: 0.8)
-                  : PuttPalette.stone,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The power-up inventory: three fixed slots, filled left to right, each
-/// tap spends the effect (its target-shaped UIs come with the effects
-/// ticket). Empty slots show the carton's dotted outline.
-class PuttInventory extends StatelessWidget {
-  final List<String> slots;
-  final void Function(String effectId)? onUse;
-  final bool enabled;
-
-  const PuttInventory({
-    super.key,
-    required this.slots,
-    this.onUse,
-    this.enabled = true,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      key: const Key('putt-inventory'),
-      children: [
-        for (var i = 0; i < PowerUpInventory.cap; i++)
-          _slot(i, i < slots.length ? slots[i] : null),
-      ],
-    );
-  }
-
-  Widget _slot(int index, String? effectId) {
-    final filled = effectId != null;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 3),
-      child: Tooltip(
-        message: filled ? puttPowerUpName(effectId) : labelPuttEmptySlot(),
-        child: InkWell(
-          key: Key('putt-slot-$index'),
-          onTap: filled && enabled ? () => onUse?.call(effectId) : null,
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
-            width: 44,
-            height: 52,
-            decoration: BoxDecoration(
-              color: filled
-                  ? PuttPalette.comb.withValues(alpha: 0.9)
-                  : PuttPalette.ink.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: filled ? PuttPalette.yolk : PuttPalette.stone,
-                width: filled ? 2 : 1,
-              ),
-            ),
-            child: Center(
-              child: filled
-                  ? Text(
-                      _monogram(effectId),
-                      style: const TextStyle(
-                        color: PuttPalette.shell,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 15,
-                      ),
-                    )
-                  : Icon(
-                      Icons.help_outline,
-                      size: 18,
-                      color: PuttPalette.stone.withValues(alpha: 0.7),
-                    ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// One or two letters standing in for the effect, before the effects
-  /// ticket lands its icons.
-  String _monogram(String effectId) {
-    final name = puttPowerUpName(effectId);
-    final words = name.split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
-    if (words.isEmpty) return name.substring(0, 1).toUpperCase();
-    return words
-        .take(2)
-        .map((word) => word.substring(0, 1).toUpperCase())
-        .join();
-  }
-}
-
-// ---- shared card furniture ---------------------------------------------------------------
-
-Widget _card({required String title, required List<Widget> children}) {
-  return Container(
-    margin: const EdgeInsets.all(12),
-    padding: const EdgeInsets.all(16),
-    constraints: const BoxConstraints(maxWidth: 420, maxHeight: 420),
-    decoration: BoxDecoration(
-      color: PuttPalette.cream,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: PuttPalette.ink, width: 3),
-    ),
-    child: SingleChildScrollView(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: PuttPalette.ink,
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 10),
-          ...children,
-        ],
-      ),
-    ),
-  );
-}
-
-Widget _scoreRow({
-  required String name,
-  required String detail,
-  required String total,
-  required bool mine,
-}) {
-  return Container(
-    margin: const EdgeInsets.symmetric(vertical: 3),
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-    decoration: BoxDecoration(
-      color: mine ? PuttPalette.yolk.withValues(alpha: 0.25) : null,
-      borderRadius: BorderRadius.circular(8),
-    ),
-    child: DefaultTextStyle(
-      style: const TextStyle(color: PuttPalette.ink, fontSize: 14),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w700)),
-          ),
-          Text(detail),
-          const SizedBox(width: 12),
-          Text(total, style: const TextStyle(fontWeight: FontWeight.w800)),
-        ],
-      ),
-    ),
-  );
-}
-
-// ---- power-up names ------------------------------------------------------------------------
 
 /// The twelve effects' display names, by id (the ids the engine's registry
 /// carries; unknown ids fall back to themselves so nothing renders blank).
@@ -802,6 +2293,38 @@ String puttPowerUpName(String effectId) {
       return labelPuttPowerThievingCrow();
     default:
       return effectId;
+  }
+}
+
+/// What each effect does, in one line, for the slot's tooltip.
+String puttPowerUpDetail(String effectId) {
+  switch (effectId) {
+    case 'hawk_eye':
+      return labelPuttPowerHawkEyeDetail();
+    case 'nest_magnet':
+      return labelPuttPowerNestMagnetDetail();
+    case 'ghost_egg':
+      return labelPuttPowerGhostEggDetail();
+    case 'chicken_hop':
+      return labelPuttPowerChickenHopDetail();
+    case 'rabbit_hole':
+      return labelPuttPowerRabbitHoleDetail();
+    case 'gust':
+      return labelPuttPowerGustDetail();
+    case 'thick_shell':
+      return labelPuttPowerThickShellDetail();
+    case 'strong_coffee':
+      return labelPuttPowerStrongCoffeeDetail();
+    case 'nest_swap':
+      return labelPuttPowerNestSwapDetail();
+    case 'sprinkler':
+      return labelPuttPowerSprinklerDetail();
+    case 'corn_rain':
+      return labelPuttPowerCornRainDetail();
+    case 'thieving_crow':
+      return labelPuttPowerThievingCrowDetail();
+    default:
+      return puttPowerUpName(effectId);
   }
 }
 
@@ -855,36 +2378,163 @@ String labelPuttPowerThievingCrow() => Intl.message("Thieving Crow",
     name: "labelPuttPowerThievingCrow",
     desc: "Power-up: steal a power-up from a chosen player");
 
+String labelPuttPowerHawkEyeDetail() =>
+    Intl.message("Your next shot goes dead straight, no wobble.",
+        name: "labelPuttPowerHawkEyeDetail",
+        desc: "Tooltip line under the Hawk Eye power-up's name: what it "
+            "does");
+
+String labelPuttPowerNestMagnetDetail() =>
+    Intl.message("Your next shot is pulled into the nest when it rolls close.",
+        name: "labelPuttPowerNestMagnetDetail",
+        desc: "Tooltip line under the Nest Magnet power-up's name: what it "
+            "does");
+
+String labelPuttPowerGhostEggDetail() =>
+    Intl.message("Your egg rolls through fences and hens for a few seconds.",
+        name: "labelPuttPowerGhostEggDetail",
+        desc: "Tooltip line under the Ghost Egg power-up's name: what it "
+            "does");
+
+String labelPuttPowerChickenHopDetail() =>
+    Intl.message("Your next shot hops over whatever is in the way.",
+        name: "labelPuttPowerChickenHopDetail",
+        desc: "Tooltip line under the Chicken Hop power-up's name: what it "
+            "does");
+
+String labelPuttPowerRabbitHoleDetail() =>
+    Intl.message("Pop your egg up at a spot nearby, no stroke spent.",
+        name: "labelPuttPowerRabbitHoleDetail",
+        desc: "Tooltip line under the Rabbit Hole power-up's name: what it "
+            "does (the player picks the spot, a few steps away at most)");
+
+String labelPuttPowerGustDetail() =>
+    Intl.message("The wind blows every other egg toward a spot you pick.",
+        name: "labelPuttPowerGustDetail",
+        desc: "Tooltip line under the Gust power-up's name: what it does");
+
+String labelPuttPowerThickShellDetail() =>
+    Intl.message("Your egg shrugs off the next push another player sends.",
+        name: "labelPuttPowerThickShellDetail",
+        desc: "Tooltip line under the Thick Shell power-up's name: it "
+            "blocks the next Gust, Sprinkler or Corn Rain that would hit "
+            "the player's egg");
+
+String labelPuttPowerStrongCoffeeDetail() =>
+    Intl.message("Your next shot leaves 30% harder.",
+        name: "labelPuttPowerStrongCoffeeDetail",
+        desc: "Tooltip line under the Strong Coffee power-up's name: what it "
+            "does");
+
+String labelPuttPowerNestSwapDetail() =>
+    Intl.message("Trade places with another player's egg.",
+        name: "labelPuttPowerNestSwapDetail",
+        desc: "Tooltip line under the Nest Swap power-up's name: what it "
+            "does");
+
+String labelPuttPowerSprinklerDetail() =>
+    Intl.message("Soak a spot: the eggs around it get pushed away.",
+        name: "labelPuttPowerSprinklerDetail",
+        desc: "Tooltip line under the Sprinkler power-up's name: what it "
+            "does");
+
+String labelPuttPowerCornRainDetail() =>
+    Intl.message("Corn kernels rain down and nudge every egg but yours.",
+        name: "labelPuttPowerCornRainDetail",
+        desc: "Tooltip line under the Corn Rain power-up's name: what it "
+            "does");
+
+String labelPuttPowerThievingCrowDetail() =>
+    Intl.message("Steal a power-up from another player.",
+        name: "labelPuttPowerThievingCrowDetail",
+        desc: "Tooltip line under the Thieving Crow power-up's name: what it "
+            "does (it takes the other player's first one)");
+
 // ---- strings ---------------------------------------------------------------------------------
 
-String labelPuttOpenMenu() => Intl.message("Pause",
-    name: "labelPuttOpenMenu", desc: "Tooltip of the HUD's pause button");
+String labelPuttOpenMenu() => Intl.message("Pause (Esc)",
+    name: "labelPuttOpenMenu",
+    desc: "Tooltip of the HUD's pause button; Esc is the key that pauses "
+        "too");
+
+String tooltipPuttCameraWhole() => Intl.message("See the whole hole (C)",
+    name: "tooltipPuttCameraWhole",
+    desc: "Tooltip of the HUD's camera button while the camera is in close: "
+        "it pulls back to show the whole hole; C is the key that does the "
+        "same");
+
+String tooltipPuttCameraClose() => Intl.message("Back in close (C)",
+    name: "tooltipPuttCameraClose",
+    desc: "Tooltip of the HUD's camera button while it shows the whole "
+        "hole: it goes back to the close view of the player's egg; C is the "
+        "key that does the same");
+
+String labelPuttBarHole() => Intl.message("Hole",
+    name: "labelPuttBarHole",
+    desc: "Small label in the bar at the top of the game, over the hole's "
+        "number in its course (e.g. 3/6)");
+
+String labelPuttBarPar() => Intl.message("Par",
+    name: "labelPuttBarPar",
+    desc: "Small label in the bar at the top of the game, over the hole's "
+        "par (the strokes it should take)");
+
+String labelPuttBarStrokes() => Intl.message("Strokes",
+    name: "labelPuttBarStrokes",
+    desc: "Small label in the bar at the top of the game, over the strokes "
+        "the player has taken on this hole");
+
+String labelPuttBarTime() => Intl.message("Time",
+    name: "labelPuttBarTime",
+    desc: "Small label in the bar at the top of the game, over the time "
+        "left on the hole's clock");
 
 String labelPuttHoleOf(int hole, int count) =>
     Intl.message("Hole $hole of $count",
         name: "labelPuttHoleOf",
         args: [hole, count],
-        desc: "Which hole of the course is on the green, e.g. Hole 2 of 6");
-
-String labelPuttHole(int hole) => Intl.message("Hole $hole",
-    name: "labelPuttHole",
-    args: [hole],
-    desc: "Which hole is on the green, without a course total to lean on "
-        "(casual, where the group votes more courses in)");
+        desc: "Read out for the row of dots under the top bar, one per hole "
+            "of the course: which hole is on the green, e.g. Hole 2 of 6");
 
 String labelPuttCourseDone() => Intl.message("Course done",
     name: "labelPuttCourseDone",
-    desc: "Shown instead of a hole number while the group votes the next "
-        "course");
+    desc: "Under the course's name while the group votes the next course");
 
-String labelPuttPar(int par) => Intl.message("Par $par",
-    name: "labelPuttPar",
-    args: [par],
-    desc: "The hole's par - the strokes it should take");
+String labelPuttAimHint() =>
+    Intl.message("Drag anywhere to aim · let go to putt",
+        name: "labelPuttAimHint",
+        desc: "Hint line at the bottom of the game until the player's first "
+            "putt: dragging anywhere pulls the slingshot, releasing it "
+            "strikes the egg");
 
-String labelPuttScores() => Intl.message("Scores",
-    name: "labelPuttScores",
-    desc: "Title of the score list shown between holes");
+String labelPuttScorecard() => Intl.message("Scorecard",
+    name: "labelPuttScorecard",
+    desc: "Title of the score panel in the bottom left corner of the game");
+
+String labelPuttScorecardMore(int count) => Intl.plural(count,
+    one: "+$count more player",
+    other: "+$count more players",
+    name: "labelPuttScorecardMore",
+    args: [count],
+    desc: "The score panel's last line on a short screen, when not every "
+        "player fits: how many more are in the match");
+
+String labelPuttScorecardHole() => Intl.message("Hole",
+    name: "labelPuttScorecardHole",
+    desc: "Column header in the score panel: the strokes each player has "
+        "taken on this hole");
+
+String labelPuttScorecardTotal() => Intl.message("Total",
+    name: "labelPuttScorecardTotal",
+    desc: "Column header in the score panel and the score cards: each "
+        "player's strokes over (+) or under (-) the pars played");
+
+String labelPuttResultsTitle(int hole, int par) =>
+    Intl.message("Hole $hole · Par $par",
+        name: "labelPuttResultsTitle",
+        args: [hole, par],
+        desc: "Title of the results card between holes; the placeholders are "
+            "the hole's number in its course and its par");
 
 String labelPuttContinue() => Intl.message("Continue",
     name: "labelPuttContinue",
@@ -897,16 +2547,22 @@ String labelPuttWinner(String name) => Intl.message("$name wins!",
     desc: "The match-over card's title; the placeholder is the winner's "
         "name");
 
-String labelPuttRelativeEven() => Intl.message("Even",
-    name: "labelPuttRelativeEven",
-    desc: "A match total level with the pars played - neither over nor "
-        "under");
+String labelPuttTie() => Intl.message("It's a tie!",
+    name: "labelPuttTie",
+    desc: "The match-over card's title when two or more players share the "
+        "lowest total");
 
-/// The signed difference next to a total: +3 over, -1 under.
+String labelPuttEvenShort() => Intl.message("E",
+    name: "labelPuttEvenShort",
+    desc: "A total level with the pars played, in the narrow score columns: "
+        "golf's E for even (neither over nor under par)");
+
+/// The signed difference against par: +3 over, −1 under, E level.
 String relativeText(int relative) {
-  // Not translated: the arithmetic sign that prefixes the number.
-  final sign = relative > 0 ? '+' : '';
-  return labelPuttRelative('$sign$relative');
+  if (relative == 0) return labelPuttEvenShort();
+  // Not translated: the arithmetic signs (a true minus) before the number.
+  final signed = relative > 0 ? '+$relative' : '−${-relative}';
+  return labelPuttRelative(signed);
 }
 
 String labelPuttRelative(String signed) => Intl.message("$signed",
@@ -915,37 +2571,31 @@ String labelPuttRelative(String signed) => Intl.message("$signed",
     desc: "A match total's strokes over (+) or under (-) the pars played; "
         "nothing but the signed number, e.g. +3 or -1, sign included");
 
-String labelPuttTotal(int total) => Intl.message("$total strokes",
+String labelPuttTotal(int total) => Intl.plural(total,
+    one: "$total stroke",
+    other: "$total strokes",
     name: "labelPuttTotal",
     args: [total],
-    desc: "A player's stroke total across the match; the placeholder is "
-        "the count");
+    desc: "A player's stroke total across the match, on the match-over "
+        "card; the placeholder is the count");
 
 String labelPuttHoleStrokes(int strokes) => Intl.plural(strokes,
-    one: "$strokes stroke here",
-    other: "$strokes strokes here",
+    one: "$strokes stroke",
+    other: "$strokes strokes",
     name: "labelPuttHoleStrokes",
     args: [strokes],
-    desc: "Strokes a player has taken in the running hole, or took in the "
-        "one just finished");
+    desc: "The strokes a player took on the hole just finished, on the "
+        "results card between holes");
 
 String labelPuttWatching() => Intl.message("Watching",
     name: "labelPuttWatching",
-    desc: "Under a spectator's name in the scorecard: they are not "
-        "playing");
+    desc: "In place of a spectator's scores: they are not playing");
 
 String labelPuttYouName(String name) => Intl.message("$name (you)",
     name: "labelPuttYouName",
     args: [name],
-    desc: "The scorecard chip marks the local player; the placeholder is "
-        "their name");
-
-String labelPuttChipCounts(int total, int thisHole) =>
-    Intl.message("$total total · $thisHole here",
-        name: "labelPuttChipCounts",
-        args: [total, thisHole],
-        desc: "The scorecard chip's counts: total strokes, then strokes in "
-            "the current hole");
+    desc: "The scorecard marks the local player; the placeholder is their "
+        "name");
 
 String labelPuttEmptySlot() => Intl.message("Empty slot",
     name: "labelPuttEmptySlot",
@@ -954,3 +2604,45 @@ String labelPuttEmptySlot() => Intl.message("Empty slot",
 String labelPuttLeaveGreen() => Intl.message("Leave the green",
     name: "labelPuttLeaveGreen",
     desc: "Button that ends the match for this player and leaves the game");
+
+String labelPuttBadgeHoleInOne() => Intl.message("Hole in one",
+    name: "labelPuttBadgeHoleInOne",
+    desc: "Badge on the results card: the hole took one stroke");
+
+String labelPuttBadgeAlbatross() => Intl.message("Albatross",
+    name: "labelPuttBadgeAlbatross",
+    desc: "Badge on the results card: three strokes under par");
+
+String labelPuttBadgeEagle() => Intl.message("Eagle",
+    name: "labelPuttBadgeEagle",
+    desc: "Badge on the results card: two strokes under par");
+
+String labelPuttBadgeBirdie() => Intl.message("Birdie",
+    name: "labelPuttBadgeBirdie",
+    desc: "Badge on the results card: one stroke under par");
+
+String labelPuttBadgePar() => Intl.message("Par",
+    name: "labelPuttBadgePar",
+    desc: "Badge on the results card: exactly the hole's par");
+
+String labelPuttBadgeBogey() => Intl.message("Bogey",
+    name: "labelPuttBadgeBogey",
+    desc: "Badge on the results card: one stroke over par");
+
+String labelPuttBadgeDoubleBogey() => Intl.message("Double bogey",
+    name: "labelPuttBadgeDoubleBogey",
+    desc: "Badge on the results card: two strokes over par");
+
+String labelPuttBadgeTripleBogey() => Intl.message("Triple bogey",
+    name: "labelPuttBadgeTripleBogey",
+    desc: "Badge on the results card: three strokes over par");
+
+String labelPuttBadgeMore() => Intl.message("In the nest",
+    name: "labelPuttBadgeMore",
+    desc: "Badge on the results card: four or more strokes over par, holed "
+        "but with no golf term left to call it");
+
+String labelPuttBadgeOutOfTime() => Intl.message("Out of time",
+    name: "labelPuttBadgeOutOfTime",
+    desc: "Badge on the results card for an egg the clock stopped before it "
+        "reached the nest (it scores par plus two, or its strokes if more)");
