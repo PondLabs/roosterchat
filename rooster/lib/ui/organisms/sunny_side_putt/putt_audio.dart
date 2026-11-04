@@ -1,0 +1,201 @@
+// The sound of Sunny Side Putt: one looping music track and a small pool
+// of SFX players, on two buses whose levels the settings sliders persist
+// (and whose levels this service re-applies live). Runs on audioplayers,
+// so it sounds on desktop, mobile and web alike - the assets are plain
+// WAV files synthesized by `tools/gen_game_audio.dart` and committed.
+//
+// The buses are the seam: the sliders set `buses.musicVolume` /
+// `buses.sfxVolume` live while dragging, and commit the same levels to
+// the `putt_music_volume` / `putt_sfx_volume` preferences on release,
+// which the buses read back when the service starts.
+library;
+
+import 'dart:async';
+
+import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart';
+import 'package:rooster/config/preferences/double_preference.dart';
+
+import 'putt_match.dart';
+
+// The two persisted levels. Local-only, like the DJ booth's and the
+// soundboard's volumes: what your speakers do is your business.
+final puttMusicVolume =
+    DoublePreference('putt_music_volume', defaultValue: 0.55);
+final puttSfxVolume = DoublePreference('putt_sfx_volume', defaultValue: 1.0);
+
+/// The volume controls the settings sliders drive.
+abstract class PuttBuses {
+  double get musicVolume;
+  set musicVolume(double value);
+
+  double get sfxVolume;
+  set sfxVolume(double value);
+}
+
+/// The buses when there is no audio to push (tests, silent launches):
+/// levels reproduce what they were told, persistence is the settings
+/// sheet's business, nothing else happens.
+class PuttSilentBuses implements PuttBuses {
+  double _music = puttMusicVolume.value;
+  double _sfx = puttSfxVolume.value;
+
+  @override
+  double get musicVolume => _music;
+  @override
+  set musicVolume(double value) => _music = value.clamp(0.0, 1.0);
+
+  @override
+  double get sfxVolume => _sfx;
+  @override
+  set sfxVolume(double value) => _sfx = value.clamp(0.0, 1.0);
+}
+
+/// The live buses of a built [PuttAudio]: every level lands on the
+/// players as it is set.
+class _AudioBuses implements PuttBuses {
+  final PuttAudio owner;
+
+  _AudioBuses(this.owner);
+
+  @override
+  double get musicVolume => owner._musicVolume;
+  @override
+  set musicVolume(double value) {
+    owner._musicVolume = value.clamp(0.0, 1.0);
+    unawaited(owner._music?.setVolume(owner._musicVolume));
+  }
+
+  @override
+  double get sfxVolume => owner._sfxVolume;
+  @override
+  set sfxVolume(double value) {
+    owner._sfxVolume = value.clamp(0.0, 1.0);
+    for (final player in owner._sfxPlayers) {
+      unawaited(player.setVolume(owner._sfxVolume));
+    }
+  }
+}
+
+/// The playback service. Build it once per game view
+/// (`SunnySidePuttView.solo()` does), `preload()` it, pass it in; the
+/// view routes [PuttSfx]s to [play], and its [buses] are what sliders
+/// drive.
+class PuttAudio {
+  /// How many SFX players share the round-robin: a busy green bounces a
+  /// lot, and eight keeps overlaps from cutting each other off.
+  static const int sfxPoolSize = 8;
+
+  AudioPlayer? _music;
+  final List<AudioPlayer> _sfxPlayers = [];
+  final Map<PuttSfx, AssetSource> _sources = {};
+
+  double _musicVolume = 0;
+  double _sfxVolume = 0;
+
+  PuttAudio() {
+    // The levels start where the settings left them (the sliders persist
+    // on release).
+    _musicVolume = puttMusicVolume.value.clamp(0.0, 1.0);
+    _sfxVolume = puttSfxVolume.value.clamp(0.0, 1.0);
+  }
+
+  late final PuttBuses buses = _AudioBuses(this);
+
+  int _nextPlayer = 0;
+  bool _loaded = false;
+
+  /// The asset file an effect plays, laid out under the game's directory.
+  static String assetPathOf(PuttSfx sfx) {
+    switch (sfx) {
+      case PuttSfx.putt:
+        return 'putt.wav';
+      case PuttSfx.bounce:
+        return 'bounce.wav';
+      case PuttSfx.bumper:
+        return 'bumper.wav';
+      case PuttSfx.water:
+        return 'splash.wav';
+      case PuttSfx.swallow:
+        return 'swallow.wav';
+      case PuttSfx.out:
+        return 'out.wav';
+      case PuttSfx.holed:
+        return 'holed.wav';
+      case PuttSfx.boost:
+        return 'boost.wav';
+      case PuttSfx.portal:
+        return 'portal.wav';
+      case PuttSfx.powerUpPicked:
+        return 'pick.wav';
+      case PuttSfx.powerUpUsed:
+        return 'use.wav';
+      case PuttSfx.timerCue:
+        return 'cue.wav';
+      case PuttSfx.timerTick:
+        return 'tick.wav';
+      case PuttSfx.holeEnd:
+        return 'holed.wav';
+      case PuttSfx.victory:
+        return 'victory.wav';
+      case PuttSfx.click:
+        return 'click.wav';
+    }
+  }
+
+  /// Loads the sources and starts the music loop. Failures land in the
+  /// debug log, never in the game's face: a read-only asset cannot wake
+  /// the match.
+  Future<void> preload() async {
+    if (_loaded) return;
+    try {
+      for (final sfx in PuttSfx.values) {
+        _sources[sfx] = AssetSource('sunny_side_putt/${assetPathOf(sfx)}');
+      }
+      _music = AudioPlayer(playerId: 'putt-music')
+        ..setReleaseMode(ReleaseMode.loop)
+        ..setVolume(_musicVolume);
+      for (var i = 0; i < sfxPoolSize; i++) {
+        _sfxPlayers.add(AudioPlayer(playerId: 'putt-sfx-$i')
+          ..setReleaseMode(ReleaseMode.release)
+          ..setVolume(_sfxVolume));
+      }
+      await _music!.play(AssetSource('sunny_side_putt/music.wav'));
+      _loaded = true;
+    } catch (error) {
+      debugPrint('sunny side putt: audio preload failed: $error');
+    }
+  }
+
+  /// Fires one effect on the next pool player. Volume rides the bus;
+  /// nothing here blocks the game or throws into it.
+  void play(PuttSfx sfx) {
+    if (!_loaded || _sfxPlayers.isEmpty) return;
+    final source = _sources[sfx];
+    final player = _sfxPlayers[_nextPlayer];
+    _nextPlayer = (_nextPlayer + 1) % _sfxPlayers.length;
+    unawaited(() async {
+      try {
+        await player.stop();
+        await player.setVolume(_sfxVolume);
+        await player.play(source!);
+      } catch (error) {
+        debugPrint('sunny side putt: sfx $sfx failed: $error');
+      }
+    }());
+  }
+
+  /// The whole service down; the session's plumbing calls it when the
+  /// view leaves.
+  Future<void> dispose() async {
+    final players = [..._sfxPlayers, if (_music != null) _music!];
+    _sfxPlayers.clear();
+    _music = null;
+    _loaded = false;
+    for (final player in players) {
+      try {
+        await player.dispose();
+      } catch (_) {}
+    }
+  }
+}

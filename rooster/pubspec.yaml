@@ -8,6 +8,7 @@ resolution: workspace
 
 dependencies: 
   build: any
+  audioplayers: ^6.7.1 # Sunny Side Putt's SFX and music buses.
   build_config: ^1.1.1
   rooster_calendar_widget:
     path: ../widgets/calendar
@@ -18,6 +19,7 @@ dependencies:
   desktop_drop: ^0.4.1
   desktop_notifications: ^0.6.3
   device_info_plus: ^12.2.0
+  flame: ^1.38.2
   ffi: ^2.1.0
   flutter_background_service: ^5.0.5
   flutter_blurhash: ^0.8.2
@@ -256,6 +258,7 @@ flutter:
     - assets/js/package/
     - assets/vodozemac/
     - assets/data/
+    - assets/sunny_side_putt/
     - assets/licenses/
   shaders: 
     - assets/shader/texture_coordinate.frag
