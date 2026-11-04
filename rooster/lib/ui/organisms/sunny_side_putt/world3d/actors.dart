@@ -31,7 +31,7 @@ class _EggView3D {
   _EggView3D(this._radius, ui.Color tint) {
     group = tjs.Group()..name = 'egg';
     _tintHex = _hexOf(tint);
-    _texture = _eggTexture(_tintHex);
+    _texture = _eggTextureFor(_tintHex);
     final material = tjs.MeshStandardMaterial({
       tjs.MaterialProperty.map: _texture,
       tjs.MaterialProperty.roughness: 0.36,
@@ -138,11 +138,12 @@ class _EggView3D {
     final hex = _hexOf(tint);
     if (hex == _tintHex) return;
     _tintHex = hex;
-    final old = _texture;
-    _texture = _eggTexture(hex);
+    // The shared texture for that colour: no texture is made or freed in
+    // the middle of play (the renderer's texture cache has misbound a
+    // freshly churned texture before).
+    _texture = _eggTextureFor(hex);
     body.material?.map = _texture;
     body.material?.needsUpdate = true;
-    old.dispose();
     _marker.material?.color = _lin(hex);
   }
 
@@ -254,8 +255,9 @@ class _EggView3D {
 
   void dispose() {
     body.geometry?.dispose();
+    // The shell's paint is shared by colour and outlives the egg.
+    body.material?.map = null;
     body.material?.dispose();
-    _texture.dispose();
     group.dispose();
     _marker.geometry?.dispose();
     _marker.material?.dispose();
@@ -288,6 +290,13 @@ tjs.BufferGeometry _eggGeometry(double radius) {
   }
   return tjg.LatheGeometry(points, segments: 28);
 }
+
+/// The shells' paints, one per player colour, made once and shared by
+/// every egg of every world (eight at most).
+final Map<int, tjs.DataTexture> _eggTextures = {};
+
+tjs.DataTexture _eggTextureFor(int tint) =>
+    _eggTextures.putIfAbsent(tint, () => _eggTexture(tint));
 
 /// The shell's paint: cream with fine speckles, a zig-zag band in the
 /// player's colour round the waist and a ring of dots above and below.

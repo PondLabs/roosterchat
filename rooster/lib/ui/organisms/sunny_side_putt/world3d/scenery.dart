@@ -80,6 +80,27 @@ class _SkyDome {
       ..renderOrder = -9
       ..frustumCulled = false;
     group.add(_clouds);
+
+    tjs.Sprite glow(String name, double size, double opacity) => tjs.Sprite(
+          tjs.SpriteMaterial({
+            tjs.MaterialProperty.map: _EggView3D._shadowTexture,
+            tjs.MaterialProperty.color: 0xFFFFFF,
+            tjs.MaterialProperty.transparent: true,
+            tjs.MaterialProperty.opacity: opacity,
+            tjs.MaterialProperty.depthWrite: false,
+            tjs.MaterialProperty.blending: tjs.AdditiveBlending,
+            tjs.MaterialProperty.fog: false,
+          }),
+        )
+          ..name = name
+          ..scale.setValues(size, size, 1)
+          ..renderOrder = -8
+          ..frustumCulled = false;
+    _sunHalo = glow('sky-sun-halo', 520, 0.32);
+    _sunDisc = glow('sky-sun', 120, 1.0);
+    group
+      ..add(_sunHalo)
+      ..add(_sunDisc);
   }
 
   late final tjs.Group group;
@@ -93,8 +114,18 @@ class _SkyDome {
     _clouds.rotation.y = time * 0.006;
   }
 
+  /// The sun's disc and its halo, hung on the dome toward the theme's sun.
+  late final tjs.Sprite _sunDisc;
+  late final tjs.Sprite _sunHalo;
+
   /// Paints the dome for [theme]'s hour: horizon, middle, top.
   void recolor(_Theme theme) {
+    final (sx, sy, sz) = theme.sunFrom;
+    final direction = tjs.Vector3(sx, sy, sz).normalize();
+    _sunDisc.position.setFrom(direction.clone().scale(820));
+    _sunHalo.position.setFrom(direction.clone().scale(830));
+    _sunDisc.material?.color = _lin(_mix(theme.sun, 0xFFFFFF, 0.55));
+    _sunHalo.material?.color = _lin(theme.sun);
     final horizon = _lin(theme.horizon);
     final mid = _lin(theme.skyMid);
     final top = _lin(theme.skyTop);
@@ -139,8 +170,13 @@ class _SkyDome {
 /// Builds one hole's surroundings; the result is one group the world hangs
 /// under the hole's 'scenery' kind.
 class _Scenery {
-  _Scenery(this.hole, {required this.animated, required this.theme})
+  _Scenery(this.hole,
+      {required this.animated, required this.theme, required this.cheerUntil})
       : _rand = _Rand(_seedOf('${hole.id}/farm'));
+
+  /// Until when (the frame clock) the host is cheering: an egg just
+  /// dropped into the nest.
+  final double Function() cheerUntil;
 
   final HoleDef hole;
   final List<_Animated> animated;
@@ -931,12 +967,23 @@ class _Scenery {
         baseShade: 0.82);
     body.add(tjs.SphereGeometry(1, 20, 14),
         _place(1.5, 4.7, 0, sx: 1.7, sy: 1.8, sz: 1.6), white);
+    // The wings hang from the shoulders on their own pivots: they flap
+    // when he cheers.
+    final wings = <(tjs.Group, double)>[];
     for (final side in [-1.0, 1.0]) {
-      body.add(
-          tjs.SphereGeometry(1, 18, 12),
-          _place(-0.3, 4.5, side * 1.75,
-              tilt: side * 0.2, sx: 1.9, sy: 1.2, sz: 0.45),
-          shade);
+      final shoulder = tjs.Group()
+        ..name = 'host-wing'
+        ..position.setValues(0.4, 5.25, side * 1.55);
+      final wing = _Merged()
+        ..add(
+            tjs.SphereGeometry(1, 18, 12),
+            _place(-0.7, -0.75, side * 0.2,
+                tilt: side * 0.2, sx: 1.9, sy: 1.2, sz: 0.45),
+            shade);
+      shoulder
+          .add(wing.mesh('host-wing-feathers', flat: false, roughness: 0.75)!);
+      group.add(shoulder);
+      wings.add((shoulder, side));
     }
     // The tail: dark sickle feathers with a spruce sheen.
     for (var f = 0; f < 5; f++) {
@@ -992,6 +1039,23 @@ class _Scenery {
     head.add(face.mesh('host-face', flat: false, roughness: 0.7)!);
     group.add(head);
     animated.add(_AnimatedBy((time, dt) {
+      final cheering = time < cheerUntil();
+      if (cheering) {
+        // An egg in the nest: he hops, flaps and crows, beak to the sky.
+        final hop = math.sin(time * 9).abs();
+        group.position.y = _ground + hop * 0.9;
+        for (final (shoulder, side) in wings) {
+          shoulder.rotation.x =
+              side * (0.35 + 0.55 * math.sin(time * 18).abs());
+        }
+        head.rotation.z = 0.32 + math.sin(time * 6) * 0.06;
+        head.position.y = 7.55;
+        return;
+      }
+      group.position.y = _ground;
+      for (final (shoulder, _) in wings) {
+        shoulder.rotation.x = 0;
+      }
       // A bar of nodding every few seconds, still in between.
       final phase = time % 6.0;
       final nod = phase < 2.4 ? math.sin(phase * math.pi * 2.5).abs() : 0.0;

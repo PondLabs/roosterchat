@@ -433,7 +433,41 @@ class _CourseKit {
     group
       ..add(body)
       ..add(cap);
+    if (theme.rails == _RailStyle.hedge) group.add(_cornTop(long, thickness));
     return group;
+  }
+
+  /// The corn hedge's top: tassels standing up along it, leaves arching
+  /// out of its sides, a cob here and there (in the rail's own frame).
+  tjs.Mesh _cornTop(double length, double thickness) {
+    final merged = _Merged();
+    final rand = _Rand(_seedOf('${hole.id}/corn/$length'));
+    for (var x = -length / 2 + 0.3; x < length / 2 - 0.2; x += 0.62) {
+      final h = rand.range(0.22, 0.4);
+      merged.add(
+          tjg.ConeGeometry(0.07, h, 4),
+          _place(x + rand.range(-0.1, 0.1), _railHeight + 0.1 + h / 2,
+              rand.range(-0.08, 0.08)),
+          rand.chance(0.5) ? 0xD9B76A : 0xE8CC80);
+      for (final side in [-1.0, 1.0]) {
+        if (!rand.chance(0.55)) continue;
+        merged.add(
+            tjs.BoxGeometry(0.5, 0.025, 0.11),
+            _place(x, _railHeight * rand.range(0.55, 0.95),
+                side * (thickness / 2 + 0.12),
+                yaw: side * math.pi / 2 + rand.range(-0.4, 0.4), roll: -0.45),
+            rand.chance(0.5) ? 0x5E9A35 : 0x79B145);
+      }
+      if (rand.chance(0.16)) {
+        merged.add(
+            tjg.CylinderGeometry(0.07, 0.09, 0.32, 6),
+            _place(x, _railHeight * 0.72,
+                (rand.chance(0.5) ? 1 : -1) * (thickness / 2 + 0.05),
+                tilt: 0.3),
+            0xF2C845);
+      }
+    }
+    return merged.mesh('wall-corn', flat: true)!;
   }
 
   /// A box whose UVs follow the timber: grain along its length at a fixed
@@ -863,6 +897,43 @@ class _CourseKit {
       }
       position.needsUpdate = true;
       geometry.computeVertexNormals();
+    }));
+
+    // Sun glints: soft white twinkles coming and going on the water.
+    final glints = <(tjs.Sprite, double, double)>[];
+    final box0 = _waterBox(shape);
+    final glintCount =
+        ((box0.width * box0.height) / 7).round().clamp(3, 16).toInt();
+    for (var attempt = 0;
+        attempt < glintCount * 4 && glints.length < glintCount;
+        attempt++) {
+      final spot = Vec2(_rand.range(box0.min.x, box0.max.x),
+          _rand.range(box0.min.y, box0.max.y));
+      if (-_waterSignedDistance(shape, spot) < 0.5) continue;
+      final glint = tjs.Sprite(
+        tjs.SpriteMaterial({
+          tjs.MaterialProperty.map: _EggView3D._shadowTexture,
+          tjs.MaterialProperty.color: 0xFFFFFF,
+          tjs.MaterialProperty.transparent: true,
+          tjs.MaterialProperty.opacity: 0.0,
+          tjs.MaterialProperty.depthWrite: false,
+          tjs.MaterialProperty.blending: tjs.AdditiveBlending,
+        }),
+      )
+        ..name = 'water-glint'
+        ..position.setValues(spot.x, 0.12, spot.y)
+        ..renderOrder = 4;
+      group.add(glint);
+      glints.add((glint, _rand.range(0, 6.28), _rand.range(1.6, 3.2)));
+    }
+    animated.add(_AnimatedBy((time, dt) {
+      for (final (glint, phase, speed) in glints) {
+        final wave = math.max(0.0, math.sin(time * speed + phase));
+        final flash = math.pow(wave, 10).toDouble();
+        glint.material?.opacity = flash * 0.9;
+        final size = 0.25 + flash * 0.5;
+        glint.scale.setValues(size, size, 1);
+      }
     }));
 
     // Lily pads on the bigger ponds.

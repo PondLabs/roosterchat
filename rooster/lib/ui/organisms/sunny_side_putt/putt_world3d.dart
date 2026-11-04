@@ -709,8 +709,10 @@ class PuttWorld3D {
       hens.add(hen.group);
       _henViews.add(hen);
     }
-    makeKind('scenery')
-        .add(_Scenery(hole, animated: _animated, theme: _theme).build());
+    makeKind('scenery').add(_Scenery(hole,
+        animated: _animated,
+        theme: _theme,
+        cheerUntil: () => _cheerUntil).build());
 
     _fx.reset(_fxRoot);
     _firstFrame = true;
@@ -800,6 +802,8 @@ class PuttWorld3D {
       if (nest != null &&
           view.lastPosition.distanceTo(nest.position) < nest.radius * 1.8) {
         _sinking.add(_SinkingEgg(view, nest.position));
+        // The host celebrates every egg that drops in.
+        _cheerUntil = frame.time + 2.2;
       } else {
         _dropEgg(view);
       }
@@ -830,6 +834,9 @@ class PuttWorld3D {
 
   /// Eggs dropping into the nest, finishing their sink.
   final List<_SinkingEgg> _sinking = [];
+
+  /// Until when (the frame clock) the host cheers.
+  double _cheerUntil = 0;
 
   void _dropEgg(_EggView3D view) {
     _actorsRoot.remove(view.group);
@@ -921,8 +928,25 @@ class PuttWorld3D {
     // Removed before disposed: three_js disposes a child's parent too.
     for (final child in [...parent.children]) {
       parent.remove(child);
+      _keepSharedTextures(child);
       child.dispose();
     }
+  }
+
+  /// The textures every hole shares (the soft disc of shadows, glows and
+  /// glints, the eggs' paints) live as long as the program: a hole that
+  /// goes takes its materials, not those.
+  static void _keepSharedTextures(tjs.Object3D root) {
+    root.traverse((object) {
+      final material = object.material;
+      if (material == null) return;
+      final map = material.map;
+      if (map != null &&
+          (identical(map, _EggView3D._shadowTexture) ||
+              _eggTextures.containsValue(map))) {
+        material.map = null;
+      }
+    });
   }
 }
 
