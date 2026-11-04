@@ -44,23 +44,10 @@ class UrlPreviewPrefetcher {
     _last = link;
     component.getPreviewForUrl(room, link).then((data) {
       if (data == null || !context.mounted) return;
-      for (final image in _images(data)) {
+      for (final image in UrlPreviewComponent.cardImages(data)) {
         precacheImage(image, context, onError: (_, __) {});
       }
     }, onError: (_) {});
-  }
-
-  /// What the card draws first: up to four photos (the grid), or the one
-  /// image or video thumbnail, and an X author's avatar.
-  static Iterable<ImageProvider> _images(UrlPreviewData data) sync* {
-    if (data.images.isNotEmpty) {
-      yield* data.images.take(4).map((photo) => photo.image);
-    } else if (data.image != null) {
-      yield data.image!;
-    }
-
-    final avatar = data.xPost?.avatarUrl;
-    if (avatar != null) yield NetworkImage(avatar.toString());
   }
 
   void dispose() => _timer?.cancel();

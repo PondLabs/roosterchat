@@ -26,6 +26,13 @@ import 'package:matrix/matrix_api_lite.dart';
 /// Link previews. The client makes them itself where it can (image links,
 /// X, YouTube, video files) and asks the homeserver only for pages it cannot
 /// read. See docs/link-previews.md.
+
+// The homeserver throttled one of a page of preview bursts. Not a verdict
+// on the link: the fetch is left out of the cache so the next ask retries.
+class _RateLimitedPreview implements Exception {
+  const _RateLimitedPreview();
+}
+
 class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
   @override
   MatrixClient client;
@@ -35,6 +42,10 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
 
   /// Resolves video and post links (YouTube, X, Instagram, video files).
   final CompositeVideoProvider providers;
+
+  /// Where a settled card's images are warmed, for tests. Null in the app:
+  /// the images download against the shared image cache.
+  void Function(UrlPreviewData? data)? imageWarmer;
 
   static String labelMediaVideoBy(String author) => Intl.message("by $author",
       name: "labelMediaVideoBy",
@@ -49,6 +60,43 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
   /// Previews being fetched, by link. The composer's prefetch, the timeline
   /// and notifications all wait on the same request.
   final Map<String, Future<UrlPreviewData?>> _pending = {};
+
+  /// The pages of history waiting to be warmed, in arrival order, and how
+  /// many of their previews are being fetched right now. Warm-ups and
+  /// messages scrolled into view share every request; the cap only spaces
+  /// the requests a page of links makes, so a burst of history does not
+  /// open a dozen homeserver previews at once and get throttled.
+  final List<({Timeline timeline, TimelineEvent event})> _warming = [];
+  int _warmingInFlight = 0;
+
+  static const maxWarmedPreviewsInFlight = 4;
+
+  @override
+  void warmUpPreviews(Timeline timeline, Iterable<TimelineEvent> events) {
+    for (final event in events) {
+      if (event.status == TimelineEventStatus.error) continue;
+      if (!shouldGetPreviewDataForTimelineEvent(timeline, event)) continue;
+      _warming.add((timeline: timeline, event: event));
+    }
+    _warmNext();
+  }
+
+  void _warmNext() {
+    while (
+        _warmingInFlight < maxWarmedPreviewsInFlight && _warming.isNotEmpty) {
+      final task = _warming.removeAt(0);
+      _warmingInFlight += 1;
+      getPreview(task.timeline, task.event)
+          .then((data) => (imageWarmer ?? UrlPreviewComponent.warmImages)(data),
+              onError: (Object error, StackTrace stack) {
+        Log.onError(error, stack, content: 'Failed to warm a url preview');
+        return null;
+      }).whenComplete(() {
+        _warmingInFlight -= 1;
+        _warmNext();
+      });
+    }
+  }
 
   bool? serverSupportsUrlPreview;
 
@@ -142,7 +190,10 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
       return data;
     }, onError: (Object error, StackTrace stack) {
       Log.onError(error, stack, content: 'Failed to get url preview');
-      cache[key] = UrlPreviewComponent.invalidPreviewData;
+      // A rate-limited fetch stays unfetched: the next ask retries it.
+      if (error is! _RateLimitedPreview) {
+        cache[key] = UrlPreviewComponent.invalidPreviewData;
+      }
       return null;
     }).whenComplete(() {
       // Not `=> remove(key)`: that returns this very future, and
@@ -210,7 +261,18 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
 
       Log.onError(e, s);
 
-      return await _fallbackVideoEmbed(url, video: providerVideo);
+      final fallback = await _fallbackVideoEmbed(url, video: providerVideo);
+      if (fallback != null) return fallback;
+
+      if (e is MatrixException && e.error == MatrixError.M_LIMIT_EXCEEDED) {
+        // A page of history lands on this endpoint as a burst. The rate
+        // limit says "later", not "never": leave the link unfetched, so
+        // the next ask (its message scrolled into view) retries it,
+        // instead of remembering the link as one without a preview.
+        throw const _RateLimitedPreview();
+      }
+
+      return null;
     }
 
     serverSupportsUrlPreview = true;

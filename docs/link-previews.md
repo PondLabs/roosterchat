@@ -49,13 +49,30 @@ previewed, because those requests never go through the homeserver.
    preview as soon as the message appears, while it is still being sent. It
    does not wait for the homeserver to echo the message back. A message that
    failed to send is not fetched until it is sent again.
+4. **As any page of the timeline arrives.** `MatrixTimeline` warms the
+   previews of every message a page adds — the room's first page, history
+   as you scroll up, and messages arriving live — through the component's
+   `warmUpPreviews`, before anyone asks for them. Threads do the same for
+   their pages. So a message scrolling into view shows its card from the
+   cache instead of asking then and waiting. That is what keeps old
+   messages' cards as fast as new ones: without it, each card waited the
+   full round trip only after its message scrolled in. At most four warm
+   fetches run at once, so a page of links does not burst onto the
+   homeserver.
 
-All three ask the same component, and the component makes one request per
+All four ask the same component, and the component makes one request per
 link. Asking while a request is under way waits for that request. A finished
 preview is kept for the session, keyed by the link. A link that got no
 preview is kept as `UrlPreviewComponent.invalidPreviewData` and is not asked
-for again. A pinned message, a search result or a notification with the same
-link reuses the same preview.
+for again — except one the homeserver answered with `M_LIMIT_EXCEEDED`,
+which says "later", not "never": that link stays unfetched and the next ask
+retries it. A pinned message, a search result or a notification with the
+same link reuses the same preview.
+
+A warm-up (and every other ask) ends by loading the card's images into the
+image cache through `UrlPreviewComponent.warmImages`, which needs no widget:
+the message's build then finds them loaded. It does not hold the streams
+open; each stops listening once its image has arrived (or failed).
 
 The timeline takes the link from the sent event's formatted body. In that
 HTML an `&` is written `&amp;`, so `MatrixTimelineEventMessage.getLinks`
