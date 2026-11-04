@@ -2069,7 +2069,8 @@ class _PowerSlotState extends State<_PowerSlot>
   }
 }
 
-/// An empty slot: the carton's dashed outline over a faint ink fill.
+/// An empty slot: the carton's dashed outline over a faint ink fill, an
+/// empty egg cup (a faint egg's outline) in the middle.
 class _EmptySlotPainter extends CustomPainter {
   const _EmptySlotPainter();
 
@@ -2079,6 +2080,27 @@ class _EmptySlotPainter extends CustomPainter {
         (Offset.zero & size).deflate(1.5), const Radius.circular(16));
     canvas.drawRRect(
         rrect, Paint()..color = PuttPalette.ink.withValues(alpha: 0.55));
+    // The cup: an egg's outline, broad at the base, narrower at the top.
+    final w = size.width * 0.17;
+    final h = size.height * 0.22;
+    final c = size.center(Offset.zero);
+    final egg = Path()
+      ..moveTo(c.dx, c.dy - h)
+      ..cubicTo(c.dx + w * 0.8, c.dy - h, c.dx + w * 1.12, c.dy + h * 0.1,
+          c.dx + w, c.dy + h * 0.38)
+      ..cubicTo(c.dx + w * 0.8, c.dy + h * 0.95, c.dx - w * 0.8,
+          c.dy + h * 0.95, c.dx - w, c.dy + h * 0.38)
+      ..cubicTo(c.dx - w * 1.12, c.dy + h * 0.1, c.dx - w * 0.8, c.dy - h, c.dx,
+          c.dy - h)
+      ..close();
+    canvas
+      ..drawPath(egg, Paint()..color = PuttPalette.cream.withValues(alpha: 0.1))
+      ..drawPath(
+          egg,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.6
+            ..color = PuttPalette.cream.withValues(alpha: 0.4));
     final dash = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
