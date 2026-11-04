@@ -216,6 +216,12 @@ dependency_overrides:
   media_kit_libs_windows_video:
     path: ../third_party/media_kit_libs_windows_video
 
+  # Sunny Side Putt's 3D renderer: setProgram compared every tone-mapped
+  # material against no tone mapping (a self-assignment), so each draw
+  # rebuilt its program parameters every frame; the copy fixes it.
+  three_js_angle_renderer:
+    path: ../third_party/three_js_angle_renderer
+
 dev_dependencies:
   drift_dev: ^2.28.0
   build_runner: ^2.4.11

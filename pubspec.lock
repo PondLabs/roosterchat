@@ -2240,12 +2240,11 @@ packages:
     source: hosted
     version: "0.6.16"
   three_js_angle_renderer:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: three_js_angle_renderer
-      sha256: "2f2334f2289c939888db7229eb8698a3e3c307493413735de11703dd97dce3f3"
-      url: "https://pub.dev"
-    source: hosted
+      path: "third_party/three_js_angle_renderer"
+      relative: true
+    source: path
     version: "0.0.1"
   three_js_core:
     dependency: transitive
