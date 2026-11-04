@@ -153,7 +153,15 @@ class MatrixLivekitBackend {
         room.matrixRoom.client.userID!,
         {}).timeout(const Duration(seconds: 15));
 
-    if (selectedFocus.scheme != "https") {
+    // A remote service must be HTTPS: the OpenID-backed requests leave
+    // this device. A loopback service (a developer's local stack, and the
+    // integration one) is trusted by its address.
+    final focusLoopback =
+        selectedFocus.host == "localhost" ||
+            selectedFocus.host.startsWith("127.") ||
+            selectedFocus.host == "::1" ||
+            selectedFocus.host == "[::1]";
+    if (selectedFocus.scheme != "https" && !focusLoopback) {
       throw CallJoinException(
           "Selected focus JWT does not use HTTPS", errorCallFocusNotHttps);
     }

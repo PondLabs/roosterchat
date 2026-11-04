@@ -211,18 +211,23 @@ class MatrixCallActivityComponent
 
   /// The host's own session ending (left the call, ended the activity)
   /// clears the room state; everyone else only folds their bookkeeping.
+  /// Who we have seen hosting this session: the room state's clear is the
+  /// host's job, but the session's [isHost] flag falls BEFORE the notify
+  /// that ends a session (the same notification), so the host at the end
+  /// is remembered from before — a re-hosted client that leaves last
+  /// still cleans up after itself.
+  final Set<CallActivitySession> _everHostedByUs = {};
+
   void _onSessionChanged() {
     for (final session in List.of(_sessionById.values)) {
+      if (session.isHost) _everHostedByUs.add(session);
       final previous = _lastSessionIdOf[session] ?? '';
       final current = session.snapshot.sessionId;
       if (previous == current) continue;
       _sessionById.remove(previous);
       _lastSessionIdOf[session] = current;
       if (current.isEmpty) {
-        if (previous.isNotEmpty && !session.isHost) {
-          // Someone ended it or our follow got stale; the state is
-          // dropped by whoever ended it.
-        } else if (previous.isNotEmpty) {
+        if (previous.isNotEmpty && _everHostedByUs.contains(session)) {
           clear(previous).catchError((_) {});
         }
       } else {

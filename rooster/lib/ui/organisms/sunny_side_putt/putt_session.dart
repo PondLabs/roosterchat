@@ -335,11 +335,11 @@ class PuttSessionController extends ChangeNotifier {
   }
 
   /// Test seams: the adopt and roster paths, driven by hand (production
-  /// calls them from the session's own notifications).
-  @visibleForTesting
+  /// calls them from the session's own notifications). Deliberately not
+  /// @visibleForTesting: this repo's tests live in `unit_test/`, which the
+  /// lint does not recognize as a test location.
   void adoptForTest() => _adoptFromSnapshot();
 
-  @visibleForTesting
   void adoptRosterForTest() => _adoptRoster();
 
   void _stopTicker() {

@@ -17,7 +17,7 @@ env:
   # step below and announced to the app through the homeserver's well-known
   # rtc_foci by scripts/integration-prepare-homeserver.sh. Tests that need it
   # skip gracefully when it is unreachable, so runs without Docker still work.
-  LIVEKIT_URL: livekit://localhost:7880
+  LIVEKIT_URL: http://localhost:8180
   USER1_NAME: alice
   USER1_PW: AliceInWonderLand
   USER2_NAME: bob

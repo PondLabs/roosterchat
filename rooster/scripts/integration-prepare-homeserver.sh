@@ -40,7 +40,7 @@ echo "Homeserver is up."
 # container so it loads the config, then restore the pristine file (Synapse
 # only reads the config at startup) to keep the checkout clean. Idempotent: a
 # stale block left by an interrupted run is dropped first.
-LIVEKIT_URL="${LIVEKIT_URL:-livekit://localhost:7880}"
+LIVEKIT_URL="${LIVEKIT_URL:-http://localhost:8180}"
 SYNAPSE_CONTAINER="${SYNAPSE_CONTAINER:-synapse}"
 HOMESERVER_YAML="$(pwd)/integration_test/synapse/data/homeserver.yaml"
 WELLKNOWN_MARKER="# rooster-integration-livekit-wellknown"
