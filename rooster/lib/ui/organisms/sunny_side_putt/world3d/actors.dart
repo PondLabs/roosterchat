@@ -87,8 +87,10 @@ class _EggView3D {
       ..position.y = 0.03
       ..renderOrder = 3
       ..visible = false;
+    // The viewer's pin over the egg: a round yolk cone, tip down, inside an
+    // ink outline (its back faces, a size up), so it reads from any angle.
     _arrow = tjs.Mesh(
-      tjg.ConeGeometry(_radius * 0.62, _radius * 1.15, 4),
+      tjg.ConeGeometry(_radius * 0.6, _radius * 1.3, 24),
       _matte(_hexOf(PuttPalette.yolk), roughness: 0.45),
     )
       ..name = 'egg-arrow'
@@ -96,6 +98,15 @@ class _EggView3D {
       ..rotation.x = math.pi
       ..castShadow = false
       ..visible = false;
+    _arrow.add(tjs.Mesh(
+      tjg.ConeGeometry(_radius * 0.6, _radius * 1.3, 24),
+      tjs.MeshBasicMaterial({
+        tjs.MaterialProperty.color: _lin(_hexOf(PuttPalette.ink)),
+        tjs.MaterialProperty.side: tjs.BackSide,
+      }),
+    )
+      ..name = 'egg-arrow-outline'
+      ..scale.setValues(1.22, 1.14, 1.22));
     ground
       ..add(_shadow)
       ..add(_tintDisc)
@@ -284,8 +295,7 @@ class _EggView3D {
       final s = 1 + pulse * 0.08;
       _marker.scale.setValues(s, s, 1);
       _marker.material?.opacity = 0.65 + 0.3 * pulse;
-      _arrow.position.y = h * 2 + 0.55 + math.sin(time * 3.2).abs() * 0.35;
-      _arrow.rotation.y = time * 1.6;
+      _arrow.position.y = h * 2 + 0.6 + math.sin(time * 3.2).abs() * 0.35;
     }
   }
 
@@ -344,8 +354,10 @@ class _EggView3D {
     _marker.material?.dispose();
     _tintDisc.geometry?.dispose();
     _tintDisc.material?.dispose();
-    _arrow.geometry?.dispose();
-    _arrow.material?.dispose();
+    for (final piece in [_arrow, ..._arrow.children.whereType<tjs.Mesh>()]) {
+      piece.geometry?.dispose();
+      piece.material?.dispose();
+    }
     _shadow.geometry?.dispose();
     _shadow.material?.map = null;
     _shadow.material?.dispose();
