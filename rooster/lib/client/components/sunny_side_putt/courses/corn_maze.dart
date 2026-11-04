@@ -26,7 +26,9 @@ Rect _boundsOf(List<String> plan) =>
 
 // -- hole 1: First Furrow -----------------------------------------------------
 // The furrow runs the long way round; a rabbit hole at the end of the
-// short spur pops out on the nest's row, still rolling the same way.
+// short spur pops out on the nest's row, still rolling the same way. The
+// spur is dug like a furrow too: a trough down its middle that steers a
+// straight putt back to its line, into the rabbit hole.
 
 const List<String> _maze1 = [
   '................',
@@ -55,6 +57,11 @@ HoleDef _firstFurrow() {
           radius: 1.0),
     ],
     boxes: [QuestionBox('maze_1_box', _spot(_maze1, '?'))],
+    // the trough down the spur, from its mouth to short of the rabbit hole
+    hills: const [
+      Hill(Vec2(10.5, 12.5), Vec2(22.5, 12.5),
+          height: -0.6, top: 0.1, skirt: 2),
+    ],
   );
 }
 
@@ -83,7 +90,9 @@ ReferenceSolution _firstFurrowSolution() {
 // -- hole 2: Crossroads -------------------------------------------------------
 // Four ways meet in a clearing. Straight on is a dead end (with a "?" for
 // the trouble), north is the long walk, and the rabbit hole at the
-// bottom of the south road comes up in the nest's garden.
+// bottom of the south road comes up in the nest's garden, which dips
+// gently round the nest: an egg out of the rabbit hole that is a little
+// short or a little long is gathered back towards it.
 
 const List<String> _maze2 = [
   '#########...........',
@@ -114,6 +123,10 @@ HoleDef _crossroads() {
           radius: 1.0),
     ],
     boxes: [QuestionBox('maze_2_box', _spot(_maze2, '?'))],
+    // the garden's dip, the nest on its flat bottom
+    hills: [
+      Hill.mound(_spot(_maze2, 'N'), height: -0.5, top: 2.4, skirt: 2.2),
+    ],
   );
 }
 
@@ -123,20 +136,12 @@ ReferenceSolution _crossroadsSolution() {
   final rabbitHole = _spot(_maze2, 'c');
   final exit = _spot(_maze2, 'd');
   final nest = _spot(_maze2, 'N');
+  // Into the rabbit hole with the pace to coast down the garden, whose
+  // dip gathers the egg into the nest.
   final arrival = entrySpeedFor(exit.distanceTo(nest) - 1.0, arrivalEnd: 1.4);
-  final stop = landAt(tee, clearing);
   return ReferenceSolution([
     putt(tee, clearing),
-    putt(stop, rabbitHole, arrival: arrival),
-    putt(
-        portalLandAim(
-            entryFrom: stop,
-            triggerAt: rabbitHole,
-            exitsAt: exit,
-            arrival: arrival,
-            triggerRadius: 1.0),
-        nest,
-        arrival: 2.2),
+    putt(landAt(tee, clearing), rabbitHole, arrival: arrival),
   ]);
 }
 

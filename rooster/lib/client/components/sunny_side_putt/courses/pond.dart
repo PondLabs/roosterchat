@@ -68,7 +68,8 @@ ReferenceSolution _lilyPadLaneSolution() => ReferenceSolution([
 // -- hole 2: The Weir ---------------------------------------------------------
 // A stream cuts the green in two. The weir crosses it in line with the
 // tee and the nest, narrow and bare - the bold putt; downstream a railed
-// footbridge crosses it safely, a stroke the long way round.
+// footbridge crosses it safely, a stroke the long way round. The far bank
+// dishes gently down to the nest and gathers a putt that is nearly right.
 
 const Vec2 _pond2Tee = Vec2(7, 8.75);
 const Vec2 _pond2Nest = Vec2(41, 8.75);
@@ -95,6 +96,10 @@ HoleDef _theWeir() {
       WaterRect(Rect(Vec2(19, 24), Vec2(29, 28))),
     ],
     boxes: [QuestionBox('pond_2_box', Vec2(24, 21.5))],
+    // the dish round the nest, the nest on its flat bottom
+    hills: const [
+      Hill.mound(_pond2Nest, height: -0.5, top: 2.4, skirt: 2.6),
+    ],
   );
 }
 
@@ -197,13 +202,18 @@ ReferenceSolution _boardwalkSolution() => const ReferenceSolution([
 
 // -- hole 5: Duck Walk --------------------------------------------------------
 // One long causeway over the pond, and two ducks paddling across it on
-// their own rounds. Mind the ducks: they don't mind you. The "?" is a
+// their own rounds. Mind the ducks: they don't mind you. The far bank
+// rises to a green with the nest on top: a putt that comes up short rolls
+// back down to its foot, one too firm runs off the far side. The "?" is a
 // detour on the far bank.
 
 const Vec2 _pond5Tee = Vec2(6, 13);
 const Vec2 _pond5Nest = Vec2(44, 13);
 const Rect _pond5Bounds = Rect(Vec2.zero, Vec2(50, 26));
 const Rect _pond5Pond = Rect(Vec2(12, 0), Vec2(38, 26));
+
+/// How high the raised green stands.
+const double _pond5Rise = 0.8;
 
 HoleDef _duckWalk() {
   return HoleDef(
@@ -238,11 +248,15 @@ HoleDef _duckWalk() {
       ),
     ],
     boxes: [QuestionBox('pond_5_box', Vec2(45, 21))],
+    // the raised green, the nest in the middle of its flat top
+    hills: const [
+      Hill.mound(_pond5Nest, height: _pond5Rise, top: 2.4, skirt: 2.6),
+    ],
   );
 }
 
 ReferenceSolution _duckWalkSolution() {
-  final shot = putt(_pond5Tee, _pond5Nest, arrival: 2.2);
+  final shot = putt(_pond5Tee, _pond5Nest, arrival: 2.2, rise: _pond5Rise);
   return ReferenceSolution(
       [ReferenceShot(shot.angle, shot.power, waitSeconds: 1)]);
 }
@@ -250,13 +264,18 @@ ReferenceSolution _duckWalkSolution() {
 // -- hole 6: Frog Pond --------------------------------------------------------
 // The finale: a meadow pocked with frog ponds to weave through, then a
 // causeway out to the island green - and a duck paddling round its moat,
-// who crosses the causeway once a lap.
+// who crosses the causeway once a lap. The island rises to the nest: a
+// putt up off the causeway that comes up short rolls back down it, one
+// too firm runs off the far side into the moat.
 
 const Vec2 _pond6Tee = Vec2(6, 15);
 const Vec2 _pond6Island = Vec2(46, 15);
 const Rect _pond6Bounds = Rect(Vec2.zero, Vec2(56, 30));
 const Rect _pond6Lake = Rect(Vec2(33, 0), Vec2(56, 30));
 const double _pond6Radius = 5;
+
+/// How high the island's crown stands.
+const double _pond6Rise = 0.5;
 
 List<Vec2> _pond6Causeway() {
   final reach = math.sqrt(_pond6Radius * _pond6Radius - 1.8 * 1.8);
@@ -296,6 +315,10 @@ HoleDef _frogPond() {
       ),
     ],
     boxes: [QuestionBox('pond_6_box', Vec2(25, 3))],
+    // the island's crown, the nest in the middle of its flat top
+    hills: const [
+      Hill.mound(_pond6Island, height: _pond6Rise, top: 2.4, skirt: 2),
+    ],
   );
 }
 
@@ -308,6 +331,6 @@ ReferenceSolution _frogPondSolution() {
     ...puttPath([_pond6Tee, gap]),
     putt(landAt(_pond6Tee, gap), north),
     putt(onShore, shore),
-    putt(landAt(onShore, shore), _pond6Island, arrival: 2.2),
+    putt(landAt(onShore, shore), _pond6Island, arrival: 2.2, rise: _pond6Rise),
   ]);
 }

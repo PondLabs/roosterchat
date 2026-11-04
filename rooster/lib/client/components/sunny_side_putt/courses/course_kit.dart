@@ -22,11 +22,18 @@ class SunnySidePuttHole {
 
 /// The baseline hit: launches from [from] toward [to] and arrives at `to`
 /// moving [arrival] units/s (under [PhysicsConfig.captureSpeed] this gets
-/// captured by a nest centered on `to`).
-ReferenceShot putt(Vec2 from, Vec2 to, {double arrival = 0.6}) {
+/// captured by a nest centered on `to`). [rise] is how much higher `to`
+/// stands than [from] - a nest up on a plateau, or below in a dip with a
+/// negative rise: the stroke carries the climb's pace too, for a putt
+/// straight up (or down) the slope.
+ReferenceShot putt(Vec2 from, Vec2 to,
+    {double arrival = 0.6, double rise = 0}) {
   final distance = from.distanceTo(to);
-  final v0 = math
-      .sqrt(arrival * arrival + 2 * _kitConfig.frictionDeceleration * distance);
+  final v0 = math.sqrt(math.max(
+      0,
+      arrival * arrival +
+          2 * _kitConfig.frictionDeceleration * distance +
+          2 * _kitConfig.slopeGravity * rise));
   return ReferenceShot(
     (to - from).angle,
     (v0 / _kitConfig.maxShotSpeed).clamp(0.05, 1.0).toDouble(),

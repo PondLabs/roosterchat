@@ -60,8 +60,9 @@ ReferenceSolution _siloSideSolution() {
 
 // -- hole 2: Hay Bale Pinball -------------------------------------------------
 // The barn floor is stacked with round bales in staggered rows - a giant
-// pinball table - and two rubber bumpers flank the way to the nest. Find
-// the alley through, or bank round the lot.
+// pinball table - and two rubber bumpers flank the way to the nest, with
+// a ridge across the floor between them: an egg that reaches it short of
+// pace rolls back. Find the alley through, or bank round the lot.
 
 const Vec2 _barn2Tee = Vec2(6, 14);
 const Vec2 _barn2Nest = Vec2(43, 14);
@@ -96,6 +97,10 @@ HoleDef _hayBalePinball() {
       rock(const Vec2(39, 19.5), 1.4, bumper: true),
     ],
     boxes: [QuestionBox('barn_2_box', Vec2(24, 3))],
+    // the ridge between the bumpers
+    hills: const [
+      Hill(Vec2(38.4, 12.6), Vec2(38.4, 15.4), height: 0.8, skirt: 2.2),
+    ],
   );
 }
 
@@ -234,13 +239,17 @@ ReferenceSolution _slingshotSolution() {
 
 // -- hole 6: Threshing Floor --------------------------------------------------
 // The finale, the whole barn: two silos pulling at the road along the
-// floor, bales to bank off, kickers in the corners, and the nest walled
-// into the far corner by rubber, its only gate on the south side behind
-// a bale.
+// floor, bales to bank off, kickers in the corners, and the nest up in
+// the hayloft, a raised floor in the far corner walled in by rubber, its
+// only gate on the south side behind a bale. A putt up to the loft that
+// comes up short rolls back down towards the gate.
 
 const Vec2 _barn6Tee = Vec2(7, 25);
 const Vec2 _barn6Nest = Vec2(48, 7);
 const Rect _barn6Bounds = Rect(Vec2.zero, Vec2(56, 32));
+
+/// How high the hayloft stands.
+const double _barn6Loft = 1;
 
 HoleDef _threshingFloor() {
   return HoleDef(
@@ -268,17 +277,21 @@ HoleDef _threshingFloor() {
       GravityWell(Vec2(36, 21), radius: 6, strength: 26, captureRadius: 1.4),
     ],
     boxes: [QuestionBox('barn_6_box', Vec2(28, 13))],
+    // the hayloft, the nest in the middle of its floor
+    hills: const [
+      Hill.mound(_barn6Nest, height: _barn6Loft, top: 2.4, skirt: 2.6),
+    ],
   );
 }
 
 // Found by a sweep, both shots holding for nearby aims: along the floor
-// between the silos to the bale before the gate; up through the gate;
-// then a putt in.
+// between the silos to the bale before the gate; up through the gate to
+// the loft's foot; then a putt up to the loft and in.
 ReferenceSolution _threshingFloorSolution() {
   const inTheCorner = Vec2(43.99, 10.40);
   return ReferenceSolution([
     const ReferenceShot(-0.046, 0.918),
     const ReferenceShot(-1.708, 0.418),
-    putt(inTheCorner, _barn6Nest, arrival: 2.2),
+    putt(inTheCorner, _barn6Nest, arrival: 2.2, rise: _barn6Loft),
   ]);
 }

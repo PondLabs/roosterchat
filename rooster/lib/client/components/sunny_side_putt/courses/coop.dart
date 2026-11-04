@@ -72,7 +72,9 @@ ReferenceSolution _firstLightSolution() {
 // -- hole 2: Pop Hole ---------------------------------------------------------
 // A dogleg around the henhouse; the hens' own pop hole tunnels straight
 // through it - the bold line, with a "?" inside - and a corner board
-// turns the safe road up the far lane.
+// turns the safe road up the far lane, where a hump of packed earth
+// guards the nest: the putt up from the elbow needs the pace to top it,
+// or it rolls back down. The tunnel's line passes north of the hump.
 
 const Vec2 _coop2Tee = Vec2(6, 23);
 const Vec2 _coop2Nest = Vec2(40, 7);
@@ -102,6 +104,10 @@ HoleDef _popHole() {
       WallSegment(Vec2(42, 0), Vec2(46, 4)),
     ],
     boxes: [QuestionBox('coop_2_box', Vec2(25.3, 13.9))],
+    // the hump across the far lane, short of the nest
+    hills: const [
+      Hill(Vec2(37, 12.2), Vec2(43, 12.2), height: 1, skirt: 2.5),
+    ],
     decorations: const [
       Decoration('hay', Vec2(8, 8), numbers: {'size': 1.2}),
       Decoration('hay', Vec2(28, 5), numbers: {'size': 0.9}),
@@ -116,8 +122,10 @@ ReferenceSolution _popHoleSolution() => ReferenceSolution([
 
 // -- hole 3: Pinball Parlor ---------------------------------------------------
 // A pinball table: the nest sits in a crown of five mushroom bumpers, the
-// gaps between them the only ways in. Lay up by a gap, or bank off a rail
-// and let the bumpers decide.
+// gaps between them the only ways in, and a dust-bath mound sits on the
+// straight line from the tee: a putt that rides over it is thrown off its
+// line. Lay up by a gap past the mound, or bank off a rail and let the
+// bumpers decide.
 
 const Vec2 _coop3Tee = Vec2(8, 14);
 const Vec2 _coop3Nest = Vec2(33, 14);
@@ -151,6 +159,11 @@ HoleDef _pinballParlor() {
             bumper: true),
     ],
     boxes: [QuestionBox('coop_3_box', Vec2(33, 3))],
+    // the dust bath, on the straight line from the tee to the crown and
+    // clear of the line to the lay-up
+    hills: const [
+      Hill.mound(Vec2(18.5, 14.6), height: 0.8, top: 0.4, skirt: 2),
+    ],
   );
 }
 

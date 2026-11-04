@@ -231,7 +231,9 @@ ReferenceSolution _cattleGridSolution() {
 // A roundabout round a flower bed: the road in from the west, the nest
 // down the road out to the east, and a lay-by north and south. Speed
 // strips on the ring keep a well-hit egg going round - all the way round
-// and down the east road, for the perfect one.
+// and down the east road, for the perfect one. A speed bump on the road
+// out guards the nest: an egg that leaves the ring short of pace rolls
+// back off it.
 
 const Vec2 _road5Tee = Vec2(5, 14);
 const Vec2 _road5Nest = Vec2(48, 14);
@@ -284,25 +286,32 @@ HoleDef _roundabout() {
       BoostStrip(Vec2(24, 21.75), Vec2(30, 21.75), width: 1.2, speed: 18),
     ],
     boxes: [QuestionBox('road_5_box', Vec2(27, 1.8))],
+    // the speed bump across the road out
+    hills: const [
+      Hill(Vec2(42.5, 12.6), Vec2(42.5, 15.4), height: 0.7, skirt: 2.2),
+    ],
   );
 }
 
 // Found by a sweep, each shot holding for nearby aims: onto the ring off
 // its north-west rail; a firm one that rides the rail round past the
-// north strip and out down the east road; then a putt in.
+// north strip and out down the east road, where the speed bump turns it
+// back; then a putt over the bump and in.
 ReferenceSolution _roundaboutSolution() {
-  const downTheEastRoad = Vec2(43.42, 13.57);
+  const shortOfTheBump = Vec2(39.90, 13.24);
   return ReferenceSolution([
     const ReferenceShot(-0.402, 0.893),
     const ReferenceShot(-1.918, 0.968),
-    putt(downTheEastRoad, _road5Nest, arrival: 2.2),
+    putt(shortOfTheBump, _road5Nest, arrival: 2.2),
   ]);
 }
 
 // -- hole 6: Home Stretch -----------------------------------------------------
 // The finale: the whole road home. Out along the bottom, round the first
 // hairpin, back past a hen, round the second, and a last speed strip
-// down the top lane to the nest at the farm gate.
+// down the top lane to the nest at the farm gate, past two speed bumps:
+// the strip's pace carries an egg over them, a putt that comes up short
+// of the gate has to top them.
 
 const Vec2 _road6Tee = Vec2(6, 27.25);
 const Vec2 _road6Nest = Vec2(51, 4.5);
@@ -351,16 +360,21 @@ HoleDef _homeStretch() {
       ),
     ],
     boxes: [QuestionBox('road_6_box', Vec2(49, 15))],
+    // the speed bumps across the top lane, before the gate
+    hills: const [
+      Hill(Vec2(38, 2.4), Vec2(38, 6.6), height: 0.6, skirt: 2),
+      Hill(Vec2(44.5, 2.4), Vec2(44.5, 6.6), height: 0.6, skirt: 2),
+    ],
   );
 }
 
 // Found by a sweep, each shot holding for nearby aims: off the verge into
 // the first strip, which carries the egg round the first hairpin; down
 // the middle lane; round the second hairpin into the top lane; then off
-// the verge into the last strip and home.
+// the verge into the last strip, over the bumps and home.
 ReferenceSolution _homeStretchSolution() => const ReferenceSolution([
       ReferenceShot(-0.546, 0.843),
       ReferenceShot(-2.332, 0.943),
       ReferenceShot(-3.148, 0.643),
-      ReferenceShot(-0.568, 0.993),
+      ReferenceShot(-0.560, 0.986),
     ]);

@@ -81,6 +81,25 @@ Maze (rabbit holes as speed-preserving portals), the Pond (water
 returns the egg, stroke charged), Farm Road (speed strips) and the
 Barn (hay bales, the silo's pull).
 
+Hills (see below) shape eleven of the thirty holes:
+
+- **The Coop**: a hump of packed earth across Pop Hole's far lane
+  guards the nest from the safe road (the tunnel's line passes it by),
+  and a dust-bath mound on Pinball Parlor's straight line throws a putt
+  aimed at the crown off its line.
+- **Corn Maze**: First Furrow's spur is dug into a trough that steers a
+  straight putt into the rabbit hole, and Crossroads' garden dips round
+  the nest, gathering an egg out of the rabbit hole that is a little
+  short or long.
+- **The Pond**: the Weir's far bank dishes gently down to the nest, Duck
+  Walk's nest sits on a green raised at the end of the causeway, and
+  Frog Pond's island rises to its nest.
+- **Farm Road**: a speed bump on the Roundabout's road out turns back an
+  egg that leaves the ring short of pace, and two more stand in Home
+  Stretch's top lane before the farm gate.
+- **The Barn**: a ridge crosses Hay Bale Pinball's floor between the
+  rubber bumpers, and Threshing Floor's nest sits up in the hayloft.
+
 ### Hills
 
 A hole can carry hills (`Hill` in `core/hole.dart`): mounds, ridges,
@@ -93,7 +112,12 @@ ridge has to be putted over with pace; a dip gathers eggs toward its
 bottom. An egg pressed into a rail by a slope settles there instead of
 rattling. Since there is no height in the physics, a hill's reach must
 stay clear of walls, water, the tee and the nest's rim, unless its
-plateau carries the nest. The aim's guide runs the same physics, so it
+plateau carries the nest. The course test checks every hill for this:
+0.3 units off every rail, rock, pond, speed strip, rabbit hole, "?"
+box, silo and spawn spot, and the nest either half a unit past the
+skirt or on the plateau with 0.6 units of flat round its rim. A
+reference putt up to a raised nest passes the climb to the course
+kit's `putt` as `rise`. The aim's guide runs the same physics, so it
 bends with the slope.
 
 ## How it looks
