@@ -161,9 +161,10 @@ class BoostStrip {
 }
 
 /// A pair of rabbit holes (portals): an egg entering end [a] appears at [b]
-/// (and the other way), keeping its velocity exactly - same speed, same
-/// direction. A short cooldown per egg prevents instant re-entry when the
-/// exit overlaps a trigger.
+/// (and the other way), keeping its velocity - same direction, same speed,
+/// except that a slow egg pops out at [PhysicsConfig.portalExitSpeed] so it
+/// rolls clear. A per-egg cooldown, counted only once the egg is clear of
+/// every hole, prevents instant re-entry.
 class PortalPair {
   final String id;
   final Vec2 a;

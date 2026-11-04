@@ -70,9 +70,15 @@ class PhysicsConfig {
   /// Reflections one egg may chain within a single tick (tight corners).
   final int maxBouncesPerTick;
 
-  /// Ticks an egg ignores portals right after teleporting, so an exit that
-  /// overlaps a trigger cannot bounce it back and forth.
+  /// Ticks an egg ignores portals after teleporting, counted once it is
+  /// clear of every rabbit hole, so an exit that overlaps a trigger (or a
+  /// slow egg still over the exit) cannot bounce it back and forth.
   final int portalCooldownTicks;
+
+  /// The least speed an egg leaves a rabbit hole with: a slower one pops
+  /// out at this pace (its heading kept), enough to roll clear of the
+  /// hole instead of stopping in it.
+  final double portalExitSpeed;
 
   /// Range (units) at which a magnetized egg feels the nest.
   final double magnetRange;
@@ -98,6 +104,7 @@ class PhysicsConfig {
     this.sleepSpeed = 0.05,
     this.maxBouncesPerTick = 8,
     this.portalCooldownTicks = 24,
+    this.portalExitSpeed = 3.8,
     this.magnetRange = 3.5,
     this.magnetStrength = 26,
     this.slopeGravity = 24,
@@ -428,7 +435,11 @@ class PhysicsWorld {
     for (final id in _order) {
       final ball = _balls[id]!;
       if (ball.holed) continue;
-      if (ball.portalCooldown > 0) ball.portalCooldown--;
+      // The cooldown only runs once the egg is clear of every rabbit
+      // hole: a slow egg still over the exit cannot drop straight back in.
+      if (ball.portalCooldown > 0 && !_overAnyPortal(ball.position)) {
+        ball.portalCooldown--;
+      }
 
       if (ball.asleep) {
         // Static friction: a pull the surface (or a rail the egg leans
@@ -830,11 +841,26 @@ class PhysicsWorld {
       final exit = atA ? pair.b : pair.a;
       ball.position = exit;
       ball.portalCooldown = config.portalCooldownTicks;
+      // A slow egg pops out with pace enough to roll clear of the hole.
+      final speed = ball.velocity.length;
+      if (speed > Vec2.epsilon && speed < config.portalExitSpeed) {
+        ball.velocity = ball.velocity * (config.portalExitSpeed / speed);
+      }
       ball.asleep = false;
       _insideBoosts[ball.playerId] = _boostsInside(exit).toSet();
       _events.add(BallTeleported(playerId: ball.playerId, portalId: pair.id));
       return;
     }
+  }
+
+  bool _overAnyPortal(Vec2 point) {
+    for (final pair in hole.portals) {
+      if (point.distanceTo(pair.a) <= pair.radius ||
+          point.distanceTo(pair.b) <= pair.radius) {
+        return true;
+      }
+    }
+    return false;
   }
 
   void _handleBoxes(BallBody ball) {
@@ -1159,10 +1185,19 @@ Vec2 _closestPointOnSegment(Vec2 p, Vec2 a, Vec2 b) {
   for (final target in targets) {
     final b = 2 * e.dot(d);
     final c0 = e.dot(e) - target * target;
-    if (c0 <= 0) continue; // starts inside that ring - swept out elsewhere
     final disc = b * b - 4 * a * c0;
     if (disc < 0) continue;
-    final t = (-b - math.sqrt(disc)) / (2 * a);
+    final double t;
+    if (c0 > 0) {
+      // Outside the ring, closing in: the first crossing.
+      t = (-b - math.sqrt(disc)) / (2 * a);
+    } else if (target < arc.radius) {
+      // Inside the inner ring, heading out: the inside face, met where
+      // the egg would leave that ring.
+      t = (-b + math.sqrt(disc)) / (2 * a);
+    } else {
+      continue; // inside the outer ring: the inner one decides
+    }
     if (t <= 1e-9 || t > 1) continue;
     final q = p + d * t;
     final offset = q - c;

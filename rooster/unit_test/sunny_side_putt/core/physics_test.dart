@@ -213,6 +213,60 @@ void main() {
       expect(world.ball('a')!.position.x, greaterThan(12.3));
     });
 
+    test('a slow egg pops out of a rabbit hole and stays out', () {
+      final hole = boxHole(
+        tee: const Vec2(2, 5),
+        nest: const Nest(Vec2(2.5, 8.5), 0.8),
+        portals: [
+          PortalPair('burrow', const Vec2(5, 5), const Vec2(12, 2),
+              radius: 0.9),
+        ],
+      );
+      final world =
+          PhysicsWorld(hole: hole, config: testPhysics, playerIds: const ['a']);
+      // Arrives at the hole at about 1.5 units/s.
+      world.applyShot('a', 0,
+          puttStopPower(hole, hole.tee, const Vec2(4.3, 5), arrivalSpeed: 1.5));
+      runUntilSettled(world);
+      final teleports =
+          world.drainEvents().whereType<BallTeleported>().toList();
+      expect(teleports, hasLength(1), reason: 'no ping-pong between ends');
+      final ball = world.ball('a')!;
+      expect(ball.asleep, isTrue);
+      expect(ball.position.distanceTo(const Vec2(12, 2)), greaterThan(0.9),
+          reason: 'it rolled clear of the exit');
+    });
+
+    test('an egg inside a ring of wall bounces off its inside face', () {
+      final hole = boxHole(
+        width: 30,
+        height: 20,
+        tee: const Vec2(15, 10),
+        nest: const Nest(Vec2(15, 13), 0.8),
+        arcs: [
+          WallArc.custom(const Vec2(15, 10), 6,
+              startAngle: 0, sweep: 2 * math.pi),
+        ],
+      );
+      final world =
+          PhysicsWorld(hole: hole, config: testPhysics, playerIds: const ['a']);
+      world.applyShot('a', 0, 0.7); // 18.2 u/s toward the ring's east side
+      var bounced = false;
+      for (var i = 0; i < 600 && !bounced; i++) {
+        world.stepTick();
+        bounced = world
+            .drainEvents()
+            .whereType<BallBounced>()
+            .any((e) => e.kind == BounceKind.arc);
+      }
+      expect(bounced, isTrue);
+      final ball = world.ball('a')!;
+      expect(ball.velocity.x, lessThan(-5), reason: 'it came back with pace');
+      runUntilSettled(world);
+      expect(world.ball('a')!.position.distanceTo(const Vec2(15, 10)),
+          lessThan(6 - 0.45 + 1e-6));
+    });
+
     test('the silo pulls resting eggs toward it (pure attractor)', () {
       final hole = boxHole(
         nest: const Nest(Vec2(2.5, 8.5), 0.8),
