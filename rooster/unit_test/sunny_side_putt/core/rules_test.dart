@@ -341,6 +341,24 @@ void main() {
   });
 
   group('modes', () {
+    test('a match can open mid-course (the demo, practice)', () {
+      final base = rulesConfig();
+      final engine = PuttEngine(PuttConfig(
+        mode: base.mode,
+        courses: base.courses,
+        seed: base.seed,
+        startHoleIndex: 2,
+      ));
+      engine.join('p1');
+      engine.start();
+      expect(engine.phase, PuttPhase.holePlay);
+      expect(engine.currentHole!.id, 'h2', reason: 'the third hole first');
+      playHoleOut(engine);
+      expect(engine.advance(), isTrue);
+      expect(engine.phase, PuttPhase.awaitingNextCourse,
+          reason: 'the course ends after its last hole as usual');
+    });
+
     test('casual: scoreboard then a vote for the next course', () {
       final engine = PuttEngine(rulesConfig(holeTimeLimitSeconds: 30));
       engine.join('p1');

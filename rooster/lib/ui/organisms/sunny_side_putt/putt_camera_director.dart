@@ -75,6 +75,13 @@ class PuttCameraDirector {
   /// rest of this hole.
   void noteUserCamera() => _userCamera = true;
 
+  /// After a refit (a resize): the next rest frames the shot again, and
+  /// between holes the whole green is asked for again.
+  void reframe() {
+    _framedRest = false;
+    _showingBetween = false;
+  }
+
   /// The whole hole, or back to the director's own framing.
   void toggleOverview() {
     _overview = !_overview;

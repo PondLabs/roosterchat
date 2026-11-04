@@ -12,7 +12,7 @@
 // On the web the page's query picks what to show:
 //   ?course=the_pond&hole=3&bots=3
 // course: a catalog id (the_coop, the_corn_maze, the_pond, the_farm_road,
-// the_barn; default the_coop), hole: 1-6 (the course starts there), bots:
+// the_barn; default the_coop), hole: 1-6 (the match opens there), bots:
 // 0-7 other players (default 3). For close looks at the art, cam= holds the
 // camera: nest (the nest and its flag), host (the rooster by the green),
 // wide (the farm around the course), tee (the eggs on the tee).
@@ -30,6 +30,8 @@ import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
 import 'package:rooster/client/components/sunny_side_putt/courses/course_kit.dart';
 import 'package:rooster/client/components/sunny_side_putt/courses/sunny_side_putt_courses.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_match.dart';
+import 'package:rooster/ui/organisms/sunny_side_putt/putt_session.dart'
+    show puttLaunchPowerUps;
 import 'package:rooster/ui/organisms/sunny_side_putt/sunny_side_putt_game.dart';
 
 Future<void> runPuttDemo() async {
@@ -112,11 +114,7 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
     );
     final start =
         (int.tryParse(query['hole'] ?? '') ?? 1).clamp(1, course.holes.length);
-    // The course starts at the asked hole (the rest follow, then wrap).
-    _holes = [
-      ...course.holes.sublist(start - 1),
-      ...course.holes.sublist(0, start - 1),
-    ];
+    _holes = course.holes;
     _cam = query['cam'];
     final bots = (int.tryParse(query['bots'] ?? '') ?? 3).clamp(0, 7);
     final seated = [for (final (id, _) in _crew.take(bots)) id];
@@ -128,6 +126,10 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
         courses: [played],
         catalog: {played.id: played},
         seed: 4242,
+        // The match opens on the asked hole, numbered as in its course.
+        startHoleIndex: start - 1,
+        // The real effects, as a session registers them.
+        powerUps: puttLaunchPowerUps(),
       ),
       // Not translated: the viewer's own name in the demo.
       displayNames: {

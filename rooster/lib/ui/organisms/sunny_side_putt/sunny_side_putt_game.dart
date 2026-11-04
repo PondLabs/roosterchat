@@ -48,6 +48,7 @@ import 'package:rooster/client/components/sunny_side_putt/core/vec.dart'
 import 'aim_controller.dart';
 import 'putt_art.dart';
 import 'putt_audio.dart';
+import 'putt_camera_director.dart';
 import 'putt_hud.dart';
 import 'putt_match.dart';
 import 'putt_menus.dart';
@@ -257,6 +258,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     if (_orbitPointer == event.pointer) {
       final last = _orbitLastPosition;
       if (last != null) {
+        game.director.noteUserCamera();
         game.world3d.rig.orbitBy(
           event.localPosition.dx - last.dx,
           event.localPosition.dy - last.dy,
@@ -269,6 +271,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     if (_pinchSpan != null && _downPointers.length >= 2) {
       final span = _pointerSpan();
       if (span > 8) {
+        game.director.noteUserCamera();
         game.world3d.rig
             .pinch(span / _pinchSpan!, distanceAtGestureStart: _pinchDistance!);
       }
@@ -321,6 +324,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
 
   void _pointerSignal(PointerSignalEvent event) {
     if (event is PointerScrollEvent) {
+      game.director.noteUserCamera();
       game.world3d.rig.zoomByWheel(event.scrollDelta.dy);
     }
   }
@@ -500,13 +504,9 @@ class SunnySidePuttGame extends FlameGame {
 
   String? _fittedHole;
 
-  /// Seconds the current hole has been up: the overview holds first.
-  double _holeClock = 0;
-
-  /// Whether the camera has come in close for this hole yet, and whether
-  /// the player asked for the whole-hole view.
-  bool _closeIn = false;
-  bool _overview = false;
+  /// The camera's choreography: the hole's opening sweep, the egg and the
+  /// nest framed at rest, the egg followed while it rolls.
+  late final PuttCameraDirector director = PuttCameraDirector(world3d.rig);
 
   /// Where a drag anchored when it began away from the egg: the pull is
   /// measured from there, the arrow still drawn from the egg.
@@ -535,7 +535,7 @@ class SunnySidePuttGame extends FlameGame {
 
   /// Whether the camera shows the whole hole (the player's pick), rather
   /// than the close view of the egg.
-  bool get overview => _overview;
+  bool get overview => director.overview;
 
   @override
   void onGameResize(Vector2 size) {
@@ -556,31 +556,16 @@ class SunnySidePuttGame extends FlameGame {
         eggRadius: eggRadius,
         label: number > 0 ? '$number' : null,
       );
-      _holeClock = 0;
-      _closeIn = false;
     }
     world3d.setViewport(ui.Size(size.x, size.y));
     world3d.fitCamera();
-    if (_closeIn && !_overview) _glideClose();
+    // A resize refits the whole hole; the director frames the shot again.
+    director.reframe();
     _fittedHole = current.id;
   }
 
   /// The whole hole, or back in close (the C key, the HUD's camera button).
-  void toggleOverview() {
-    _overview = !_overview;
-    if (_overview) {
-      world3d.fitCamera();
-    } else {
-      _glideClose();
-    }
-  }
-
-  /// In close: near enough that the egg reads, far enough that the nest
-  /// usually stays in view.
-  void _glideClose() {
-    final rig = world3d.rig;
-    rig.glideTo(distance: rig.overviewDistance * 0.78);
-  }
+  void toggleOverview() => director.toggleOverview();
 
   /// A scripted camera (the demo's captures, a spectator's pick): while
   /// set, the camera's target rides this point instead of the egg.
@@ -602,20 +587,11 @@ class SunnySidePuttGame extends FlameGame {
       aim.cancel();
       _dragAnchor = null;
     }
-    _holeClock += dt;
-    if (!_closeIn && _holeClock > 2.4 && match.phase == PuttPhase.holePlay) {
-      _closeIn = true;
-      if (!_overview) _glideClose();
-    }
     if (match.phase != PuttPhase.holePlay) {
       aim.cancel();
       _dragAnchor = null;
-      // Between holes the whole green shows again under the cards.
-      if (_closeIn) {
-        _closeIn = false;
-        world3d.fitCamera();
-      }
     }
+    _directCamera(dt);
     _spendNotices();
     _spendFxSpots();
   }
@@ -750,26 +726,30 @@ class SunnySidePuttGame extends FlameGame {
   /// plays (leaning toward the nest while it rests, so the way ahead
   /// shows; a spectator drifts to whoever is out there); held while
   /// aiming, so a moving frame never slides out from under a drag.
-  core.Vec2? _cameraFollowPoint() {
-    final override = followOverride;
-    if (override != null) return override;
-    if (aim.isActive) return null;
-    if (match.phase != PuttPhase.holePlay) return match.hole?.bounds.center;
-    if (_holeClock < 2.4 || _overview) return match.hole?.bounds.center;
-    final egg = match.myEggRenderPosition;
-    final nest = match.hole?.nest.position;
-    if (egg != null && !(match.myBall?.holed ?? true)) {
-      final resting = match.myBall?.asleep ?? true;
-      if (resting && nest != null) return egg.lerp(nest, 0.42);
-      return egg;
-    }
-    for (final player in match.engine.players) {
-      if (player.spectator) continue;
-      final ball = match.engine.world?.ball(player.id);
-      if (ball == null || ball.holed) continue;
-      return match.renderPositionOf(player.id);
-    }
-    return match.hole?.bounds.center;
+  core.Vec2? _cameraFollowPoint() => followOverride ?? director.followPoint;
+
+  /// Tells the director what the green is doing this frame.
+  void _directCamera(double dt) {
+    final world = match.engine.world;
+    final mine = match.myBall;
+    director.update(
+      dt,
+      PuttCameraCue(
+        hole: match.hole,
+        phase: match.phase,
+        myEgg: mine == null ? null : match.myEggRenderPosition,
+        myEggResting: mine?.asleep ?? true,
+        myEggHoled: mine?.holed ?? false,
+        otherEggs: [
+          if (world != null)
+            for (final ball in world.balls)
+              if (ball.playerId != match.localPlayerId && !ball.holed)
+                match.renderPositionOf(ball.playerId),
+        ],
+        // Aiming, or picking a spot for a power-up: the frame holds still.
+        aiming: aim.isActive || targeting.isActive,
+      ),
+    );
   }
 
   /// The cosmetic lift of a hopping egg: 0 when the ride is over, a

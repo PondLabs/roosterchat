@@ -112,6 +112,10 @@ class PuttConfig {
   /// Players above this number join as spectators (the spec's 1-8).
   final int maxPlayers;
 
+  /// The first course's hole the match opens on (0 = its first): the demo
+  /// and practice start mid-course; a session always starts at 0.
+  final int startHoleIndex;
+
   // Not const: the default [powerUps] registry must be a fresh instance
   // per config, never the canonicalized const one (registering into a
   // const instance would leak across configs).
@@ -125,6 +129,7 @@ class PuttConfig {
     this.holeTimeLimitSeconds = 120,
     this.wobbleMaxRadians = 0.055,
     this.maxPlayers = 8,
+    this.startHoleIndex = 0,
   })  : physics = physics ?? const PhysicsConfig(),
         powerUps = powerUps ?? PowerUpRegistry();
 
@@ -715,6 +720,9 @@ class PuttEngine {
         MatchStarted(mode: config.mode, courseId: _playedCourses.first.id));
     _holePars.clear();
     _appendCoursePars(_playedCourses.first);
+    _holeIndex = config.startHoleIndex
+        .clamp(0, _playedCourses.first.holes.length - 1)
+        .toInt();
     if (config.mode == GameMode.barnyardChaos) {
       for (final player in players) {
         if (player.spectator) continue;
