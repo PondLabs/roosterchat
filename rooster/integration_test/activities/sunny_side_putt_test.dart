@@ -141,6 +141,10 @@ void main() {
       name: 'Putt channel ${RandomUtils.getRandomString(8)}',
       roomType: RoomType.voipRoom,
       visibility: RoomVisibilityPublic(),
+      // Voice over the integration Stack goes without the room's e2ee: the
+      // LiveKit path here is the plain one (the app's encrypt flow is a
+      // separate test surface).
+      enableE2EE: false,
     ));
     expect(voiceChannel.roomType, RoomType.voipRoom);
 
