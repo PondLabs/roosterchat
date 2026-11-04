@@ -221,7 +221,10 @@ class _Scenery {
   tjs.Group build() {
     final group = tjs.Group()..name = 'farm';
     group.add(_meadow());
-    final props = _Merged();
+    // What stands beyond the sun's shadow box casts no shadow (see
+    // `_aimSun`: the box reaches span * 0.62 + 12 round the green).
+    final props =
+        _Merged(shadowCenter: _b.center, shadowReach: _span * 0.62 + 16);
     final small = _Merged();
     final kind = theme.kind;
     // The far side (the game's north, -z) carries the farm's landmarks;
@@ -303,6 +306,8 @@ class _Scenery {
 
     final propsMesh = props.mesh('farm-props');
     if (propsMesh != null) group.add(propsMesh);
+    final farMesh = props.farMesh('farm-props-far');
+    if (farMesh != null) group.add(farMesh);
     final smallMesh = small.mesh('farm-small', castShadow: false);
     if (smallMesh != null) group.add(smallMesh);
     if (hasMill) group.add(_windmill(millAt));

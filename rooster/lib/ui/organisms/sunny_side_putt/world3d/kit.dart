@@ -164,9 +164,19 @@ double _fbm(double x, double y, int seed) =>
 /// each piece still carrying its own colour and a soft darkening toward
 /// its base (the cheap ambient occlusion that grounds things).
 class _Merged {
+  /// A builder whose pieces placed beyond [shadowReach] of [shadowCenter]
+  /// pour into a second mesh ([farMesh]) that casts no shadow: they stand
+  /// outside the sun's shadow box anyway, and the shadow pass is spared
+  /// their vertices.
+  _Merged({this.shadowCenter, this.shadowReach = double.infinity});
+
+  final Vec2? shadowCenter;
+  final double shadowReach;
+
   final List<double> _positions = [];
   final List<double> _normals = [];
   final List<double> _colors = [];
+  _Merged? _farPart;
 
   bool get isEmpty => _positions.isEmpty;
 
@@ -182,6 +192,16 @@ class _Merged {
     _Rand? rand,
     double variation = 0,
   }) {
+    final center = shadowCenter;
+    if (center != null) {
+      final dx = matrix.storage[12] - center.x;
+      final dz = matrix.storage[14] - center.y;
+      if (dx * dx + dz * dz > shadowReach * shadowReach) {
+        (_farPart ??= _Merged()).add(geometry, matrix, hex,
+            baseShade: baseShade, rand: rand, variation: variation);
+        return;
+      }
+    }
     // Moved first, while still indexed: the primitive's own smooth normals
     // ride the move (the flat-shaded materials facet in the shader).
     if (geometry.attributes['normal'] == null) geometry.computeVertexNormals();
@@ -237,6 +257,11 @@ class _Merged {
       ..setAttributeFromString(
           'color', tjs.Float32BufferAttribute.fromList(_colors, 3, false));
   }
+
+  /// The pieces poured beyond the shadow's reach, as one mesh that casts
+  /// no shadow (but still takes them); null when there are none.
+  tjs.Mesh? farMesh(String name, {bool flat = true, double roughness = 0.92}) =>
+      _farPart?.mesh(name, castShadow: false, flat: flat, roughness: roughness);
 
   /// One mesh of everything poured, in a matte vertex-coloured material.
   tjs.Mesh? mesh(String name,
