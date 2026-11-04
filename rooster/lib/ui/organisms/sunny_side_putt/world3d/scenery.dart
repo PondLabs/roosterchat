@@ -187,6 +187,11 @@ class _Scenery {
   double get _span => math.max(_b.width, _b.height);
   static const double _ground = -_tableHeight;
 
+  /// Where the host stands: beyond the far rail, level with the nest.
+  Vec2 get _hostAt => Vec2(
+      hole.nest.position.x.clamp(_b.min.x + 4, _b.max.x - 4).toDouble(),
+      _b.min.y - 6.2);
+
   /// How far [x], [z] stands from the table's edge (0 on or inside it).
   double _clearance(double x, double z) {
     const lip = _fenceThickness + 0.5;
@@ -209,7 +214,9 @@ class _Scenery {
     final kind = theme.kind;
     // The far side (the game's north, -z) carries the farm's landmarks;
     // where they stand depends on the course's corner of the farm.
-    final hostAt = Vec2(_b.min.x - 7.5, _b.min.y - 3.5);
+    // The host watches from the far side, by the nest's end of the green,
+    // where the close camera keeps him in frame.
+    final hostAt = _hostAt;
     final barnAt = switch (kind) {
       _ThemeKind.barn => Vec2(_b.center.x + 4, _b.min.y - 19),
       _ThemeKind.maze => Vec2(_b.center.x + _span * 0.42, _b.min.y - 52),
@@ -938,13 +945,14 @@ class _Scenery {
   /// crown, headphones on (he is always in the call), bobbing his head
   /// once in a while to the beat.
   tjs.Group _host(Vec2 at) {
-    // He stands on the green's far left looking across it, turned a touch
-    // toward the camera: on screen his beak points right, the way the
-    // mark faces.
+    // He stands beyond the far rail by the nest's end, three-quarters to
+    // the camera, looking back down the green at the players.
     final group = tjs.Group()
       ..name = 'host'
       ..position.setValues(at.x, _ground, at.y)
-      ..rotation.y = -0.45;
+      // Three-quarters to the camera, looking back down the green toward
+      // the tee.
+      ..rotation.y = -2.35;
     const white = 0xFCF8F1;
     const shade = 0xEDE3D3;
     final comb = _hexOf(PuttPalette.comb);
@@ -1190,7 +1198,7 @@ class _Scenery {
             3.2) {
           continue; // the scarecrow's clearing
         }
-        if (Vec2(px, pz).distanceTo(Vec2(_b.min.x - 7.5, _b.min.y - 3.5)) < 6) {
+        if (Vec2(px, pz).distanceTo(_hostAt) < 6.5) {
           continue; // the host's spot
         }
         _cornPlant(into, Vec2(px, pz), _rand.range(0.85, 1.2));
@@ -1615,7 +1623,7 @@ class _Scenery {
         ..position.setValues(spot.x, _ground + 3.55, spot.y);
       group.add(bulb);
       glow.add(bulb);
-      final light = tjs.PointLight(0xFFFFFF, 2.2, 22, 1.6)
+      final light = tjs.PointLight(0xFFFFFF, 3.2, 26, 1.4)
         ..name = 'lantern-light'
         ..position.setValues(spot.x, _ground + 3.4, spot.y);
       light.color = _lin(0xFFB766);
@@ -1627,7 +1635,7 @@ class _Scenery {
             0.12 * math.sin(time * 7.3 + i * 1.7) * math.sin(time * 3.1 + i);
         final material = glow[i].material;
         if (material is tjs.MeshStandardMaterial) {
-          material.emissiveIntensity = flicker * 1.4;
+          material.emissiveIntensity = flicker * 2.6;
         }
       }
     }));

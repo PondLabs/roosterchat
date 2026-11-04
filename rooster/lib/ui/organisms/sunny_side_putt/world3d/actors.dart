@@ -28,7 +28,8 @@ class _SinkingEgg {
 /// quaternion); [ground] stays level under it with the shadow and the
 /// viewer's marker; [trail] holds the puffs a fast egg leaves behind.
 class _EggView3D {
-  _EggView3D(this._radius, ui.Color tint) {
+  _EggView3D(this._radius, ui.Color tint,
+      {required int trailHex, required this.onBounce}) {
     group = tjs.Group()..name = 'egg';
     _tintHex = _hexOf(tint);
     _texture = _eggTextureFor(_tintHex);
@@ -52,6 +53,16 @@ class _EggView3D {
       ..rotation.x = -math.pi / 2
       ..position.y = 0.02
       ..renderOrder = 2;
+    // Every egg sits on a soft disc of its player's colour: who is who
+    // reads from the ground even when the band faces away.
+    _tintDisc = tjs.Mesh(
+      tjg.RingGeometry(_radius * 0.95, _radius * 1.4, 32, 1),
+      _unlit(_tintHex, opacity: 0.6, depthWrite: false),
+    )
+      ..name = 'egg-tint-disc'
+      ..rotation.x = -math.pi / 2
+      ..position.y = 0.025
+      ..renderOrder = 2;
     _marker = tjs.Mesh(
       tjg.RingGeometry(_radius * 1.55, _radius * 1.85, 36, 1),
       _unlit(_tintHex, opacity: 0.9, depthWrite: false),
@@ -72,10 +83,12 @@ class _EggView3D {
       ..visible = false;
     ground
       ..add(_shadow)
+      ..add(_tintDisc)
       ..add(_marker)
       ..add(_arrow);
     trail = tjs.Group()..name = 'egg-trail';
-    final trailColor = _lin(_mix(_tintHex, 0xFFFFFF, 0.55));
+    // Turf flecks kicked up behind it, darker than the grass.
+    final trailColor = _lin(trailHex);
     for (var i = 0; i < _trailLength; i++) {
       final puff = tjs.Sprite(
         tjs.SpriteMaterial({
@@ -94,7 +107,19 @@ class _EggView3D {
     }
   }
 
-  static const int _trailLength = 12;
+  static const int _trailLength = 18;
+
+  /// Told when the egg slams into something (a rail, a bumper, another
+  /// egg): where, how hard (0..1), and whether it is the viewer's.
+  final void Function(Vec2 at, double strength, bool mine) onBounce;
+
+  /// Whether this egg has ever been the viewer's own (the frame marks it
+  /// only while its shot is ready).
+  bool everMine = false;
+
+  late final tjs.Mesh _tintDisc;
+  Vec2? _lastVelocity;
+  double _squash = 0;
 
   late final tjs.Group trail;
   final List<tjs.Sprite> _puffs = [];
@@ -140,6 +165,7 @@ class _EggView3D {
     old?.map = null;
     old?.dispose();
     _marker.material?.color = _lin(hex);
+    _tintDisc.material?.color = _lin(hex);
   }
 
   /// The shell: the colour's paint, a soft sheen, and a whisper of light
@@ -160,6 +186,31 @@ class _EggView3D {
   /// goes. Still, it eases onto its side, the way an egg rests.
   void sync(PuttWorldEgg egg, double dt, double time) {
     final speed = egg.speed;
+    if (egg.mine) everMine = true;
+    // A bounce: the heading swings hard in one frame while it is quick.
+    final last = _lastVelocity;
+    if (last != null && dt > 0) {
+      final before = last.length;
+      if (before > 2.2 && speed > 0.5) {
+        final turn = last.dot(egg.velocity) / (before * speed);
+        if (turn < 0.82) {
+          final strength = ((before - 2.2) / 10).clamp(0.0, 1.0);
+          _squash = 0.6 + strength * 0.4;
+          onBounce(egg.position, strength, everMine);
+        }
+      } else if (before < 0.3 && speed > 4) {
+        // The putt itself: a stretch as it leaves.
+        _squash = 0.5;
+      }
+    }
+    _lastVelocity = egg.velocity;
+    if (_squash > 0) {
+      _squash = math.max(0, _squash - dt / 0.16);
+      final k = math.sin(_squash * math.pi) * 0.16;
+      body.scale.setValues(1 + k, 1 - k, 1 + k);
+    } else {
+      body.scale.setValues(1, 1, 1);
+    }
     if (speed > 1e-4 && dt > 0 && egg.radius > 0) {
       final axis = tjs.Vector3(egg.velocity.x, 0, egg.velocity.y);
       if (axis.length > 1e-6) {
@@ -218,14 +269,14 @@ class _EggView3D {
   /// The trail: a fast egg drops a soft puff every few hundredths of a
   /// second; the puffs fade and shrink over half a second.
   void _syncTrail(PuttWorldEgg egg, double dt) {
-    const life = 0.45;
+    const life = 0.6;
     for (var i = 0; i < _trailSpots.length; i++) {
       final (at, age) = _trailSpots[i];
       _trailSpots[i] = (at, age + dt);
     }
     _trailSpots.removeWhere((spot) => spot.$2 >= life);
     _sinceSpot += dt;
-    if (egg.speed > 3.2 && _sinceSpot > 0.035) {
+    if (egg.speed > 2.6 && _sinceSpot > 0.03) {
       _sinceSpot = 0;
       _trailSpots.add((egg.position, 0));
       if (_trailSpots.length > _trailLength) _trailSpots.removeAt(0);
@@ -239,10 +290,10 @@ class _EggView3D {
       final (at, age) = _trailSpots[i];
       final fade = 1 - age / life;
       puff.visible = true;
-      puff.position.setValues(at.x, _radius * 0.7, at.y);
-      final size = _radius * (1.1 + 0.9 * fade);
+      puff.position.setValues(at.x, _radius * 0.35, at.y);
+      final size = _radius * (0.7 + 0.8 * fade);
       puff.scale.setValues(size, size, 1);
-      puff.material?.opacity = 0.42 * fade;
+      puff.material?.opacity = 0.55 * fade;
     }
   }
 
@@ -268,6 +319,8 @@ class _EggView3D {
     group.dispose();
     _marker.geometry?.dispose();
     _marker.material?.dispose();
+    _tintDisc.geometry?.dispose();
+    _tintDisc.material?.dispose();
     _arrow.geometry?.dispose();
     _arrow.material?.dispose();
     _shadow.geometry?.dispose();

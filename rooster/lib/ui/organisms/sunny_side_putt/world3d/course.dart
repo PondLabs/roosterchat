@@ -26,8 +26,12 @@ class _CourseKit {
       {required this.eggRadius,
       required this.animated,
       required this.rig,
-      required this.theme})
+      required this.theme,
+      required this.flagShakeUntil})
       : _rand = _Rand(_seedOf(hole.id));
+
+  /// Until when (the frame clock) the flag shakes: an egg just dropped in.
+  final double Function() flagShakeUntil;
 
   /// The course's look: the rails' style, the turf's greens.
   final _Theme theme;
@@ -758,6 +762,27 @@ class _CourseKit {
       ..rotation.x = -math.pi / 2
       ..position.y = 0.025;
     group.add(reach);
+    // The pull, drawn: two dashed rings turning in toward the silo,
+    // opposite ways, the inner one quicker.
+    final swirls = <(tjs.Mesh, double)>[];
+    for (final (fraction, speed) in const [(0.82, 0.5), (0.6, -0.8)]) {
+      final radius = well.radius * fraction;
+      final swirl = tjs.Mesh(
+        _dashedRing(radius - 0.14, radius + 0.14, 10, 0.55),
+        _unlit(_Farm.trim, opacity: 0.55, depthWrite: false),
+      )
+        ..name = 'well-swirl'
+        ..rotation.x = -math.pi / 2
+        ..position.y = 0.03
+        ..renderOrder = 2;
+      group.add(swirl);
+      swirls.add((swirl, speed));
+    }
+    animated.add(_AnimatedBy((time, dt) {
+      for (final (swirl, speed) in swirls) {
+        swirl.rotation.z = time * speed;
+      }
+    }));
 
     final intake = tjs.Mesh(
       tjg.CylinderGeometry(tankRadius + 0.18, tankRadius + 0.26, 0.34, 40),
@@ -1174,23 +1199,18 @@ class _CourseKit {
       ..name = 'nest'
       ..position.setValues(nest.position.x, 0, nest.position.y);
     final r = nest.radius;
+    // The cup: a lit inner wall falling away to the dark at its bottom -
+    // a radial gradient that reads as depth.
     final cup = tjs.Mesh(
-      tjg.CircleGeometry(radius: r * 0.8, segments: 40),
-      _unlit(_Farm.cup),
+      tjg.CircleGeometry(radius: r * 0.8, segments: 48),
+      tjs.MeshBasicMaterial({
+        tjs.MaterialProperty.map: _cupTexture(),
+      }),
     )
       ..name = 'nest-cup'
       ..rotation.x = -math.pi / 2
       ..position.y = 0.012;
-    final rim = tjs.Mesh(
-      tjg.RingGeometry(r * 0.5, r * 0.8, 40, 1),
-      _unlit(0x3A2A1C),
-    )
-      ..name = 'nest-rim'
-      ..rotation.x = -math.pi / 2
-      ..position.y = 0.016;
-    group
-      ..add(cup)
-      ..add(rim);
+    group.add(cup);
 
     // The straw: a lumpy torus in mixed straw tones, and strands poking
     // out of it every which way.
@@ -1300,7 +1320,11 @@ class _CourseKit {
         final x = rest[i * 3];
         final y = rest[i * 3 + 1];
         final reach = ((x - 0.06) / flagWidth).clamp(0.0, 1.0);
-        final wave = math.sin(x * 3.2 - time * 5.2 + y * 0.6) * 0.16 * reach;
+        final excited =
+            ((flagShakeUntil() - time) / 1.4).clamp(0.0, 1.0).toDouble();
+        final wave = math.sin(x * 3.2 - time * (5.2 + excited * 9) + y * 0.6) *
+            (0.16 + excited * 0.3) *
+            reach;
         clothPosition.setXYZ(
             i, x - reach * reach * 0.05, y - reach * 0.06, wave);
       }
@@ -1308,6 +1332,27 @@ class _CourseKit {
       cloth.computeVertexNormals();
     }));
     return group;
+  }
+
+  /// The cup's paint: earth lit on the far wall, shading to black at the
+  /// bottom, a hint of the sun's side.
+  tjs.DataTexture _cupTexture() {
+    const size = 128;
+    final bitmap = _Bitmap(size, size);
+    for (var y = 0; y < size; y++) {
+      for (var x = 0; x < size; x++) {
+        final dx = (x + 0.5) / size * 2 - 1;
+        final dy = (y + 0.5) / size * 2 - 1;
+        final d = math.sqrt(dx * dx + dy * dy).clamp(0.0, 1.0);
+        // The wall lit toward the sun's side (texture v up is the far
+        // side), the floor dark.
+        final lit = (0.5 + 0.5 * (dy * 0.7 - dx * 0.3)).clamp(0.0, 1.0);
+        final wall = math.pow(d, 2.2).toDouble();
+        final hex = _mix(0x0B0806, _mix(0x4A2F1A, 0x7A5432, lit), wall);
+        bitmap.set(x, y, hex);
+      }
+    }
+    return bitmap.texture();
   }
 
   // ---- the tee ----------------------------------------------------------------------------------
@@ -1550,6 +1595,39 @@ class _CourseKit {
 }
 
 // ---- shape helpers -------------------------------------------------------------------------
+
+/// A ring of [dashes] arcs between [inner] and [outer], each filling
+/// [fill] of its share of the circle, as one flat geometry (in its own XY
+/// plane, like the ring geometries).
+tjs.BufferGeometry _dashedRing(
+    double inner, double outer, int dashes, double fill) {
+  final positions = <double>[];
+  final normals = <double>[];
+  const steps = 8;
+  for (var d = 0; d < dashes; d++) {
+    final start = d / dashes * math.pi * 2;
+    final sweep = fill / dashes * math.pi * 2;
+    for (var i = 0; i < steps; i++) {
+      final a0 = start + i / steps * sweep;
+      final a1 = start + (i + 1) / steps * sweep;
+      final p = [
+        (math.cos(a0) * inner, math.sin(a0) * inner),
+        (math.cos(a0) * outer, math.sin(a0) * outer),
+        (math.cos(a1) * outer, math.sin(a1) * outer),
+        (math.cos(a1) * inner, math.sin(a1) * inner),
+      ];
+      for (final index in const [0, 1, 2, 0, 2, 3]) {
+        positions.addAll([p[index].$1, p[index].$2, 0]);
+        normals.addAll([0, 0, 1]);
+      }
+    }
+  }
+  return tjs.BufferGeometry()
+    ..setAttributeFromString(
+        'position', tjs.Float32BufferAttribute.fromList(positions, 3, false))
+    ..setAttributeFromString(
+        'normal', tjs.Float32BufferAttribute.fromList(normals, 3, false));
+}
 
 /// The distance from [p] to a partial arc's curve (its ends included).
 double _arcDistance(Vec2 p, WallArc arc) {

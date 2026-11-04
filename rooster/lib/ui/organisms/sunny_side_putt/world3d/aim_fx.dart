@@ -6,15 +6,22 @@
 // suction, poofs, dust, confetti) and a few expanding rings.
 part of '../putt_world3d.dart';
 
-/// The power's colour: green for a tap, yolk midway, comb red flat out.
+/// The power's colour, bright all the way: green for a tap, sunflower,
+/// orange, red flat out (no muddy olive between green and yolk).
 int _powerHex(double power) {
-  const soft = 0x7BD35A;
-  final mid = _hexOf(PuttPalette.yolk);
-  final hard = _hexOf(PuttPalette.comb);
+  const stops = [
+    (0.0, 0x5FD86A),
+    (0.42, 0xFFD43B),
+    (0.72, 0xFF8A2A),
+    (1.0, 0xFF3D30),
+  ];
   final p = power.clamp(0.0, 1.0);
-  return p < 0.55
-      ? _mix(soft, mid, p / 0.55)
-      : _mix(mid, hard, (p - 0.55) / 0.45);
+  for (var i = 1; i < stops.length; i++) {
+    final (at, hex) = stops[i];
+    final (from, fromHex) = stops[i - 1];
+    if (p <= at) return _mix(fromHex, hex, (p - from) / (at - from));
+  }
+  return stops.last.$2;
 }
 
 class _PuttAimView3D {
@@ -25,14 +32,24 @@ class _PuttAimView3D {
     _turned = tjs.Group()..name = 'aim-turned';
     group.add(_turned);
 
+    // The slingshot's band behind the egg: cream over an ink edge.
     ghost = tjs.Mesh(
-      tjs.BoxGeometry(1, 0.012, 0.08),
-      _unlit(_Farm.trim, opacity: 0.55, depthWrite: false),
+      tjs.BoxGeometry(1, 0.012, 0.16),
+      _unlit(_Farm.trim, opacity: 0.8, depthWrite: false),
     )
       ..name = 'aim-ghost'
+      ..position.y = 0.045
+      ..renderOrder = 5;
+    _ghostEdge = tjs.Mesh(
+      tjs.BoxGeometry(1, 0.01, 0.26),
+      _unlit(_hexOf(PuttPalette.ink), opacity: 0.4, depthWrite: false),
+    )
+      ..name = 'aim-ghost-edge'
       ..position.y = 0.04
       ..renderOrder = 4;
-    _turned.add(ghost);
+    _turned
+      ..add(_ghostEdge)
+      ..add(ghost);
 
     ring = tjs.Mesh(
       tjg.RingGeometry(eggRadius * 2.0, eggRadius * 2.3, 48, 1),
@@ -47,27 +64,57 @@ class _PuttAimView3D {
     _arrowMaterial = _unlit(_powerHex(0.5), opacity: 0.95, depthWrite: false);
     _outlineMaterial =
         _unlit(_hexOf(PuttPalette.ink), opacity: 0.55, depthWrite: false);
-    shaft = tjs.Mesh(tjs.BoxGeometry(1, 0.02, 0.34), _arrowMaterial)
+    shaft = tjs.Mesh(tjs.BoxGeometry(1, 0.02, 0.46), _arrowMaterial)
       ..name = 'aim-shaft'
-      ..position.y = 0.06
+      ..position.y = 0.08
       ..renderOrder = 6;
-    _shaftOutline = tjs.Mesh(tjs.BoxGeometry(1, 0.015, 0.5), _outlineMaterial)
+    _shaftOutline = tjs.Mesh(tjs.BoxGeometry(1, 0.015, 0.66), _outlineMaterial)
       ..name = 'aim-shaft-outline'
-      ..position.y = 0.05
+      ..position.y = 0.07
       ..renderOrder = 5;
-    head = tjs.Mesh(_triangle(0.95, 1.0), _arrowMaterial)
+    // A white core down the shaft: the arrow reads on any turf.
+    _core = tjs.Mesh(
+      tjs.BoxGeometry(1, 0.02, 0.12),
+      _unlit(0xFFFFFF, opacity: 0.85, depthWrite: false),
+    )
+      ..name = 'aim-core'
+      ..position.y = 0.09
+      ..renderOrder = 7;
+    head = tjs.Mesh(_triangle(1.15, 1.25), _arrowMaterial)
       ..name = 'aim-head'
-      ..position.y = 0.062
+      ..position.y = 0.082
       ..renderOrder = 6;
-    _headOutline = tjs.Mesh(_triangle(1.25, 1.3), _outlineMaterial)
+    _headOutline = tjs.Mesh(_triangle(1.5, 1.6), _outlineMaterial)
       ..name = 'aim-head-outline'
-      ..position.y = 0.052
+      ..position.y = 0.072
       ..renderOrder = 5;
     _turned
       ..add(_shaftOutline)
       ..add(_headOutline)
       ..add(shaft)
+      ..add(_core)
       ..add(head);
+
+    // Where the guide meets its first rail: a small ring on the turf.
+    _bounceMark = tjs.Group()
+      ..name = 'aim-bounce'
+      ..visible = false;
+    _bounceMark
+      ..add(tjs.Mesh(
+        tjg.RingGeometry(0.22, 0.38, 24, 1),
+        _unlit(0xFFF8EE, opacity: 0.95, depthWrite: false),
+      )
+        ..rotation.x = -math.pi / 2
+        ..position.y = 0.06
+        ..renderOrder = 7)
+      ..add(tjs.Mesh(
+        tjg.RingGeometry(0.16, 0.46, 24, 1),
+        _unlit(_hexOf(PuttPalette.ink), opacity: 0.4, depthWrite: false),
+      )
+        ..rotation.x = -math.pi / 2
+        ..position.y = 0.055
+        ..renderOrder = 6);
+    group.add(_bounceMark);
 
     for (var i = 0; i < _dotCount; i++) {
       // Each dot: cream over a soft ink ring, so it reads on light and dark
@@ -110,6 +157,9 @@ class _PuttAimView3D {
   late final tjs.Mesh head;
   late final tjs.Mesh _shaftOutline;
   late final tjs.Mesh _headOutline;
+  late final tjs.Mesh _ghostEdge;
+  late final tjs.Mesh _core;
+  late final tjs.Group _bounceMark;
   late final tjs.MeshBasicMaterial _arrowMaterial;
   late final tjs.MeshBasicMaterial _outlineMaterial;
   final List<tjs.Group> _dots = [];
@@ -153,15 +203,21 @@ class _PuttAimView3D {
     final start = aim.eggRadius * 2.35;
     shaft.scale.x = length;
     shaft.position.x = start + length / 2;
+    _core.scale.x = math.max(length - 0.3, 0.05);
+    _core.position.x = start + length / 2 - 0.1;
     _shaftOutline.scale.x = length + 0.14;
     _shaftOutline.position.x = start + length / 2 - 0.05;
     head.position.x = start + length;
-    _headOutline.position.x = start + length - 0.12;
+    _headOutline.position.x = start + length - 0.16;
     _arrowMaterial.color = _lin(_powerHex(aim.power));
+    // The guide takes over where the arrow's head ends.
+    final tip = start + length + 1.15;
 
     final pull = math.min(aim.dragLength, 7.0) * scale;
     ghost.scale.x = math.max(pull, 0.001);
     ghost.position.x = -pull / 2;
+    _ghostEdge.scale.x = math.max(pull + 0.1, 0.001);
+    _ghostEdge.position.x = -pull / 2;
 
     if ((aim.power - _fillPower).abs() > 0.015) {
       _fillPower = aim.power;
@@ -190,9 +246,18 @@ class _PuttAimView3D {
       _fill = fill;
     }
 
-    // The dotted guide along the predicted roll, fading toward its end.
+    // The dotted guide along the predicted roll, from the arrow's tip on,
+    // fading toward its end; a ring where it first meets a rail.
     final points = aim.preview;
     var shown = 0;
+    _bounceMark.visible = false;
+    final bounce = _firstBounce(points);
+    if (bounce != null) {
+      _bounceMark
+        ..visible = true
+        ..position
+            .setValues(bounce.x - aim.origin.x, 0, bounce.y - aim.origin.y);
+    }
     if (points.length >= 2) {
       const spacing = 0.62;
       var carried = spacing * 0.6;
@@ -204,6 +269,9 @@ class _PuttAimView3D {
         var t = carried;
         while (t <= segment && shown < _dotCount) {
           final p = a + (b - a) * (t / segment);
+          t += spacing;
+          // Under the arrow the guide would only clutter it.
+          if (p.distanceTo(aim.origin) < tip) continue;
           final dot = _dots[shown];
           dot.visible = true;
           dot.position.setValues(p.x - aim.origin.x, 0.05, p.y - aim.origin.y);
@@ -213,7 +281,6 @@ class _PuttAimView3D {
           final s = 0.75 + 0.35 * fade;
           dot.scale.setValues(s, 1, s);
           shown++;
-          t += spacing;
         }
         carried = t - segment;
       }
@@ -221,6 +288,17 @@ class _PuttAimView3D {
     for (var i = shown; i < _dots.length; i++) {
       _dots[i].visible = false;
     }
+  }
+
+  /// The guide's first sharp turn (a rail's bounce), if it has one.
+  static Vec2? _firstBounce(List<Vec2> points) {
+    for (var i = 1; i + 1 < points.length; i++) {
+      final a = points[i] - points[i - 1];
+      final b = points[i + 1] - points[i];
+      if (a.length < 1e-6 || b.length < 1e-6) continue;
+      if (a.dot(b) / (a.length * b.length) < 0.96) return points[i];
+    }
+    return null;
   }
 
   /// Frees the fill's geometry (the shared material belongs to the world).
@@ -312,7 +390,7 @@ class _PuttFxPool {
   }
 
   /// Places this frame's fx onto the pooled sprites; the rest hide.
-  void apply(PuttWorldFrame frame) {
+  void apply(PuttWorldFrame frame, {double scale = 1}) {
     var active = 0;
     var paper = 0;
     var rings = 0;
@@ -384,7 +462,11 @@ class _PuttFxPool {
         lift = fx.height!;
       }
       sprite.position.setValues(at.x, lift, at.y);
-      sprite.scale.setValues(width, height, 1);
+      final grow = (fx.kind == PuttWorldFxKind.confetti ||
+              fx.kind == PuttWorldFxKind.sparkle)
+          ? scale
+          : 1.0;
+      sprite.scale.setValues(width * grow, height * grow, 1);
       final material = sprite.material;
       if (material is tjs.SpriteMaterial) {
         material.color = _linOf(color);

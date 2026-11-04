@@ -87,7 +87,6 @@ abstract final class _Farm {
   static const straw = 0xEDBE58;
   static const strawDark = 0xB98232;
   static const strawLight = 0xF8DB8A;
-  static const cup = 0x1E1611;
   static const metalDark = 0xA7AFB7;
   static const silo = 0xDCD3C6;
   static const siloRoof = 0xB9C2CB;

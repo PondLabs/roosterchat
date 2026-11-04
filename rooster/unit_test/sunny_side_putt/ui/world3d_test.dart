@@ -481,10 +481,12 @@ void main() {
         ..orbitBy(0, 100000)
         ..snap();
       expect(world.rig.pitchDeg, PuttCameraRig.pitchMax);
+      // The player's orbit stops at its own floor; only scripted moves go
+      // lower, to show the horizon.
       world.rig
         ..orbitBy(0, -100000)
         ..snap();
-      expect(world.rig.pitchDeg, PuttCameraRig.pitchMin);
+      expect(world.rig.pitchDeg, PuttCameraRig.orbitPitchMin);
     });
 
     test('the follow point glides the target toward it', () {

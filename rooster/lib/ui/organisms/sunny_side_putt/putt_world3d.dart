@@ -73,6 +73,7 @@ part 'world3d/scenery.dart';
 part 'world3d/actors.dart';
 part 'world3d/aim_fx.dart';
 part 'world3d/theme.dart';
+part 'world3d/bursts.dart';
 
 /// The void behind everything before the sky dome draws: the horizon's
 /// warm haze, so a frame that misses the dome still reads as sky.
@@ -229,7 +230,10 @@ class PuttWorldFrame {
 class PuttCameraRig {
   PuttCameraRig({this.viewport = const ui.Size(800, 600)});
 
-  static const double pitchMin = 26;
+  /// Scripted moves (the hole's opening sweep) may drop this low to show
+  /// the horizon; the player's own orbit stops at [orbitPitchMin].
+  static const double pitchMin = 14;
+  static const double orbitPitchMin = 26;
   static const double pitchMax = 72;
   static const double pitchDefault = 42;
 
@@ -346,7 +350,8 @@ class PuttCameraRig {
   /// the pitch (clamped). Dragging down looks from higher above.
   void orbitBy(double dxPixels, double dyPixels) {
     _yawTarget += dxPixels * 0.006;
-    _pitchTarget = (_pitchTarget + dyPixels * 0.11).clamp(pitchMin, pitchMax);
+    _pitchTarget =
+        (_pitchTarget + dyPixels * 0.11).clamp(orbitPitchMin, pitchMax);
   }
 
   /// Zoom by a mouse-wheel tick; positive scroll (down) moves out.
@@ -415,6 +420,8 @@ class PuttCameraRig {
   /// Ease one frame. [followPoint] glides the target toward the active
   /// egg; null holds the target where it is.
   void update(double dt, {Vec2? followPoint}) {
+    _clock += dt;
+    _shake = math.max(0, _shake - dt * 1.4);
     if (followPoint != null) _targetTarget = followPoint;
     if (_snapNext) snap();
     const yawSpeed = 7.0;
@@ -433,6 +440,22 @@ class PuttCameraRig {
       target.y + (_targetTarget.y - target.y) * targetK,
     );
   }
+
+  /// The camera's punch for the viewer's own sink: in a step, and a shake.
+  void punch() {
+    _distanceTarget =
+        (_distanceTarget * 0.9).clamp(_distanceMin, _distanceMax).toDouble();
+    shake(0.25);
+  }
+
+  /// A short shake of [strength] world units, fading over a fifth of a
+  /// second.
+  void shake(double strength) {
+    _shake = math.max(_shake, strength);
+  }
+
+  double _shake = 0;
+  double _clock = 0;
 
   /// Copy every target into the live state at once (also the boot snap).
   void snap() {
@@ -463,7 +486,15 @@ class PuttCameraRig {
   /// Lands the rig on the three_js camera: position, then the look at the
   /// (ground-level) target.
   void applyTo(tjs.PerspectiveCamera camera) {
-    camera.position.setFrom(cameraPositionOf(target));
+    final at = cameraPositionOf(target);
+    if (_shake > 0) {
+      // A jitter that never repeats the same way: two detuned sines a
+      // side.
+      at.x += math.sin(_clock * 61) * _shake;
+      at.y += math.sin(_clock * 47 + 1.3) * _shake * 0.6;
+      at.z += math.sin(_clock * 53 + 2.1) * _shake;
+    }
+    camera.position.setFrom(at);
     camera.lookAt(tjs.Vector3(target.x, 0, target.y));
   }
 }
@@ -484,7 +515,8 @@ class PuttWorld3D {
       ..add(_holeRoot = tjs.Group()..name = 'hole')
       ..add(_actorsRoot = tjs.Group()..name = 'actors')
       ..add(_aimRoot = tjs.Group()..name = 'aim')
-      ..add(_fxRoot = tjs.Group()..name = 'fx');
+      ..add(_fxRoot = tjs.Group()..name = 'fx')
+      ..add(_bursts.group);
     _aim = _PuttAimView3D(eggRadius: _eggRadius);
     _aimRoot.add(_aim.group);
   }
@@ -536,6 +568,13 @@ class PuttWorld3D {
   final List<_CrateView3D> _crateViews = [];
 
   final _PuttFxPool _fx = _PuttFxPool();
+
+  /// The bursts the world sees for itself (straw, the viewer's confetti
+  /// column, rail puffs).
+  final _Bursts _bursts = _Bursts();
+
+  /// Until when (the frame clock) the flag shakes: an egg just dropped in.
+  double _flagShakeUntil = 0;
 
   double _lastTime = 0;
   bool _firstFrame = true;
@@ -653,7 +692,11 @@ class PuttWorld3D {
     }
 
     final kit = _CourseKit(hole,
-        eggRadius: eggRadius, animated: _animated, rig: rig, theme: _theme);
+        eggRadius: eggRadius,
+        animated: _animated,
+        rig: rig,
+        theme: _theme,
+        flagShakeUntil: () => _flagShakeUntil);
     makeKind('ground').add(kit.lawn());
     makeKind('table').add(kit.table());
     final walls = makeKind('walls');
@@ -738,6 +781,7 @@ class PuttWorld3D {
 
   /// Disposes the whole hole subtree and forgets every per-hole view.
   void _clearHole() {
+    _bursts.clear();
     for (final sinking in _sinking) {
       _dropEgg(sinking.view);
     }
@@ -768,7 +812,10 @@ class PuttWorld3D {
     _syncHens(frame, dt);
     _syncCrates(frame);
     _aim.sync(frame.aim, frame.time);
-    _fx.apply(frame);
+    // Confetti and sparkles grow with the camera's distance, so the party
+    // reads from the overview too.
+    _fx.apply(frame, scale: math.max(1.0, rig.distance / 24));
+    _bursts.update(dt, frame.time);
     for (final piece in _animated) {
       piece.tick(frame.time, dt);
     }
@@ -785,7 +832,15 @@ class PuttWorld3D {
     for (final egg in frame.eggs) {
       seen.add(egg.playerId);
       final view = _eggViews.putIfAbsent(egg.playerId, () {
-        final created = _EggView3D(egg.radius * _eggVisualScale, egg.tint);
+        final created = _EggView3D(
+          egg.radius * _eggVisualScale,
+          egg.tint,
+          trailHex: _mix(_theme.turfFringe, 0x4A3A22, 0.4),
+          onBounce: (at, strength, mine) {
+            _bursts.puff(at, strength);
+            if (mine && strength > 0.45) rig.shake(0.08 + strength * 0.12);
+          },
+        );
         _actorsRoot.add(created.group);
         _actorsRoot.add(created.ground);
         _actorsRoot.add(created.trail);
@@ -802,8 +857,16 @@ class PuttWorld3D {
       if (nest != null &&
           view.lastPosition.distanceTo(nest.position) < nest.radius * 1.8) {
         _sinking.add(_SinkingEgg(view, nest.position));
-        // The host celebrates every egg that drops in.
+        // The host celebrates every egg that drops in, the straw flies and
+        // the flag shakes; the viewer's own sink gets the confetti column
+        // and the camera's punch.
         _cheerUntil = frame.time + 2.2;
+        _flagShakeUntil = frame.time + 1.4;
+        _bursts.straw(nest.position, nest.radius);
+        if (view.everMine) {
+          _bursts.confettiColumn(nest.position);
+          rig.punch();
+        }
       } else {
         _dropEgg(view);
       }

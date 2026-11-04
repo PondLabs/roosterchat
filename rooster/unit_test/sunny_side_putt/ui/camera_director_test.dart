@@ -47,8 +47,9 @@ void main() {
 
   test('the hole opens with a sweep from over the nest to the whole green', () {
     director.update(1 / 60, resting(hole.tee));
-    // The entrance starts high and turned, over the nest.
-    expect(rig.pitchDeg, closeTo(PuttCameraRig.pitchMax, 1));
+    // The entrance starts low and turned, looking across the nest at the
+    // farm and the sky.
+    expect(rig.pitchDeg, closeTo(16, 1));
     expect(rig.target.distanceTo(hole.nest.position), lessThan(1));
     run(PuttCameraDirector.openingSeconds - 0.2, resting(hole.tee));
     expect(director.followPoint, hole.bounds.center);

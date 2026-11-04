@@ -89,11 +89,13 @@ class PuttCameraDirector {
   /// little, and sweeps down and round to the whole green.
   void _sweepIn(HoleDef hole) {
     final overviewDistance = rig.overviewDistance;
+    // Low over the green, looking across the nest at the farm and the sky
+    // (the hour shows), then up and round onto the whole hole.
     rig
       ..aimAt(
-        yaw: PuttCameraRig.defaultYaw + 0.75,
-        pitchDeg: PuttCameraRig.pitchMax,
-        distance: overviewDistance * 1.35,
+        yaw: PuttCameraRig.defaultYaw + 0.55,
+        pitchDeg: 16,
+        distance: overviewDistance * 0.9,
         target: hole.nest.position,
       )
       ..snap()
