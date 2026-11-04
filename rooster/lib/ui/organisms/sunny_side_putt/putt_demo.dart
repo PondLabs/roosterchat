@@ -150,6 +150,9 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
         startHoleIndex: start - 1,
         // The real effects, as a session registers them.
         powerUps: puttLaunchPowerUps(),
+        // The demo plays the reference lines as written: a wobbled shot
+        // would leave every later one of the hole off its mark.
+        wobbleMaxRadians: 0,
       ),
       // Not translated: the viewer's own name in the demo.
       displayNames: {
