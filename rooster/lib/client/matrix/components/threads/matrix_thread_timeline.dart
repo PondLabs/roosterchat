@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/threads/thread_component.dart';
+import 'package:rooster/client/components/url_preview/url_preview_component.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/matrix/matrix_timeline.dart';
@@ -193,6 +194,12 @@ class MatrixThreadTimeline implements Timeline {
       events.add(event);
       onEventAdded.add(events.length - 1);
     }
+
+    // A thread's older messages warm their previews as their page arrives,
+    // the way the room's timeline does.
+    client
+        .getComponent<UrlPreviewComponent>()
+        ?.warmUpPreviews(this, nextEvents);
 
     isLoadingHistory = false;
   }

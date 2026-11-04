@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:rooster/client/components/emoticon/emoticon.dart';
+import 'package:rooster/client/components/url_preview/url_preview_component.dart';
 import 'package:rooster/client/matrix/components/read_receipts/matrix_read_receipt_component.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
@@ -73,11 +74,19 @@ class MatrixTimeline extends Timeline {
       var converted = _room.convertEvent(_matrixTimeline!.events[i]);
       insertEvent(i, converted);
     }
+
+    // The room's first page of messages warms its previews as it is
+    // loaded, cards ready before the first scroll.
+    warmUpPreviews(events);
   }
 
   void onEventInserted(index) {
     if (_matrixTimeline == null) return;
     insertEvent(index, _room.convertEvent(_matrixTimeline!.events[index]));
+    // The message's preview starts with the page it arrived in — history,
+    // a live arrival, or our own local echo — not when it later scrolls
+    // into view. A message asking again joins the same fetch.
+    warmUpPreviews([events[index]]);
   }
 
   void onEventChanged(index) {
@@ -90,6 +99,12 @@ class MatrixTimeline extends Timeline {
 
       notifyChanged(index);
     }
+  }
+
+  /// Asks the room's preview component to warm [events]' previews, when
+  /// the room has one. See docs/link-previews.md.
+  void warmUpPreviews(Iterable<TimelineEvent> events) {
+    client.getComponent<UrlPreviewComponent>()?.warmUpPreviews(this, events);
   }
 
   void onEventRemoved(index) {

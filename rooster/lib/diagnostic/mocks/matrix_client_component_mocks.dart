@@ -66,4 +66,9 @@ class MockMatrixUrlPreviewComponent
   bool shouldGetPreviewForLink(Room room, Uri link) {
     return true;
   }
+
+  @override
+  void warmUpPreviews(Timeline timeline, Iterable<TimelineEvent> events) {
+    // The developer tools' mock is asked by the messages as they build.
+  }
 }

@@ -26,6 +26,44 @@ abstract class UrlPreviewComponent<T extends Client> implements Component<T> {
 
   UrlPreviewData? getCachedPreview(Timeline timeline, TimelineEvent event);
 
+  /// Starts fetching the previews of [events] as the timeline receives
+  /// them, so a message shows its card the moment it scrolls into view,
+  /// instead of asking then and waiting for the answer. Fetches only what
+  /// [shouldGetPreviewDataForTimelineEvent] allows, joins the fetch of any
+  /// other asker, never re-asks a cached link, and warms the settled
+  /// cards' images. See docs/link-previews.md.
+  void warmUpPreviews(Timeline timeline, Iterable<TimelineEvent> events) {}
+
+  /// What the card draws first: up to four photos (the grid), or the one
+  /// image or video thumbnail, and an X author's avatar.
+  static Iterable<ImageProvider> cardImages(UrlPreviewData data) sync* {
+    if (data.images.isNotEmpty) {
+      yield* data.images.take(4).map((photo) => photo.image);
+    } else if (data.image != null) {
+      yield data.image!;
+    }
+
+    final avatar = data.xPost?.avatarUrl;
+    if (avatar != null) yield NetworkImage(avatar.toString());
+  }
+
+  /// Starts the card's images downloading, so a message scrolling in shows
+  /// them without their own wait. No widget is needed: the fetch runs
+  /// against the image cache, which the message's widget then finds.
+  static void warmImages(UrlPreviewData? data) {
+    if (data == null) return;
+    for (final image in cardImages(data)) {
+      final stream = image.resolve(const ImageConfiguration());
+      late final ImageStreamListener listener;
+      listener = ImageStreamListener((_, __) {
+        stream.removeListener(listener);
+      }, onError: (_, __) {
+        stream.removeListener(listener);
+      });
+      stream.addListener(listener);
+    }
+  }
+
   // This is a dummy value that we can store in the cache when we fail to get the url preview.
   // Instead of storing null, which is a bit confusing as if the cache returns null, does that mean we have
   // nothing cached, or the result was invalid? maybe this is dumb but it was the simplest way
