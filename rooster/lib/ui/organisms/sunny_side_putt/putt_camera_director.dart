@@ -52,6 +52,18 @@ class PuttCameraDirector {
   /// How long the hole's overview holds before the camera comes in.
   static const double openingSeconds = 2.4;
 
+  /// Whether the player asked their system for reduced motion: no
+  /// opening sweep, the camera goes straight to the hole's play framing.
+  bool reduceMotion = false;
+
+  /// Whether the hole's opening sweep is still on.
+  bool get opening => !reduceMotion && _holeClock < openingSeconds;
+
+  /// Seconds since the camera settled on the hole after its opening (a
+  /// second's glide after the sweep; at once with reduced motion).
+  double get settledFor =>
+      _holeClock - (reduceMotion ? 0.3 : openingSeconds + 1.0);
+
   /// Whether the player asked for the whole hole (C, the HUD's button).
   bool get overview => _overview;
   bool _overview = false;
@@ -157,7 +169,7 @@ class PuttCameraDirector {
       return;
     }
     _showingBetween = false;
-    if (_holeClock < openingSeconds) {
+    if (opening) {
       _sweep(hole);
       _follow = null;
       return;

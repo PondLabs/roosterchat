@@ -359,6 +359,10 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
 
   @override
   Widget build(BuildContext context) {
+    // The system's reduced motion: no sweep, no shakes, no punch-in.
+    final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    game.director.reduceMotion = still;
+    game.world3d.rig.reduceMotion = still;
     return Focus(
       focusNode: _keyFocus,
       onKeyEvent: _onKey,
@@ -643,9 +647,7 @@ class SunnySidePuttGame extends FlameGame {
   PuttCoachCue? coachForFrame() {
     if (_readyFor <= 0) return null;
     // Once the camera has come out of the opening sweep and settled.
-    if (director.holeClock < PuttCameraDirector.openingSeconds + 1.0) {
-      return null;
-    }
+    if (director.settledFor < 0) return null;
     if (_coachRetired && _readyFor < coachIdleSeconds) return null;
     if (!_coachRetired && _readyFor < 0.5) return null;
     final hole = match.hole;

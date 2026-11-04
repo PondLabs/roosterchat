@@ -512,8 +512,13 @@ class PuttCameraRig {
     );
   }
 
+  /// Whether the player asked their system for reduced motion: the
+  /// camera then never shakes nor punches in.
+  bool reduceMotion = false;
+
   /// The camera's punch for the viewer's own sink: in a step, and a shake.
   void punch() {
+    if (reduceMotion) return;
     _distanceTarget =
         (_distanceTarget * 0.9).clamp(_distanceMin, _distanceMax).toDouble();
     shake(0.25);
@@ -522,6 +527,7 @@ class PuttCameraRig {
   /// A short shake of [strength] world units, fading over a fifth of a
   /// second.
   void shake(double strength) {
+    if (reduceMotion) return;
     _shake = math.max(_shake, strength);
   }
 

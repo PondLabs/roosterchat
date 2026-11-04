@@ -78,6 +78,21 @@ void main() {
     expect(rig.distance, closeTo(rig.overviewDistance, 1.5));
   });
 
+  test('with reduced motion there is no sweep and no shake', () {
+    director.reduceMotion = true;
+    rig.reduceMotion = true;
+    director.update(1 / 60, resting(hole.tee));
+    expect(rig.pitchDeg, closeTo(PuttCameraRig.pitchDefault, 0.5));
+    expect(director.opening, isFalse);
+    run(1.2, resting(hole.tee));
+    expect(director.settledFor, greaterThan(0));
+    expectInFreeView(hole.tee);
+    expectInFreeView(hole.nest.position);
+    final before = rig.distanceTarget;
+    rig.punch();
+    expect(rig.distanceTarget, before);
+  });
+
   test('at rest, the egg and the nest are framed together', () {
     run(PuttCameraDirector.openingSeconds + 3, resting(hole.tee));
     expectInFreeView(hole.tee);
