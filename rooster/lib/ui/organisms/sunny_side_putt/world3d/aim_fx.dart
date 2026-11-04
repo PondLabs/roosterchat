@@ -32,41 +32,6 @@ class _PuttAimView3D {
     _turned = tjs.Group()..name = 'aim-turned';
     group.add(_turned);
 
-    // The slingshot's band behind the egg, cream over an ink edge, and the
-    // pouch at its end: the pull, short and plain.
-    ghost = tjs.Mesh(
-      tjs.BoxGeometry(1, 0.012, 0.24),
-      _unlit(_Farm.trim, opacity: 0.85, depthWrite: false),
-    )
-      ..name = 'aim-ghost'
-      ..position.y = 0.045
-      ..renderOrder = 5;
-    _ghostEdge = tjs.Mesh(
-      tjs.BoxGeometry(1, 0.01, 0.38),
-      _unlit(_hexOf(PuttPalette.ink), opacity: 0.45, depthWrite: false),
-    )
-      ..name = 'aim-ghost-edge'
-      ..position.y = 0.04
-      ..renderOrder = 4;
-    _ghostKnob = tjs.Mesh(
-      tjg.CircleGeometry(radius: 0.3, segments: 24),
-      _unlit(_Farm.trim, opacity: 0.95, depthWrite: false),
-    )
-      ..name = 'aim-ghost-knob'
-      ..rotation.x = -math.pi / 2
-      ..position.y = 0.05
-      ..renderOrder = 6;
-    _ghostKnob.add(tjs.Mesh(
-      tjg.RingGeometry(0.3, 0.42, 24, 1),
-      _unlit(_hexOf(PuttPalette.ink), opacity: 0.55, depthWrite: false),
-    )
-      ..name = 'aim-ghost-knob-edge'
-      ..renderOrder = 5);
-    _turned
-      ..add(_ghostEdge)
-      ..add(ghost)
-      ..add(_ghostKnob);
-
     ring = tjs.Mesh(
       tjg.RingGeometry(eggRadius * 2.0, eggRadius * 2.3, 48, 1),
       _unlit(_hexOf(PuttPalette.ink), opacity: 0.28, depthWrite: false),
@@ -167,14 +132,12 @@ class _PuttAimView3D {
 
   late final tjs.Group group;
   late final tjs.Group _turned;
-  late final tjs.Mesh ghost;
   late final tjs.Mesh ring;
   late final tjs.Mesh shaft;
   late final tjs.Mesh head;
   late final tjs.Mesh _shaftOutline;
   late final tjs.Mesh _headOutline;
-  late final tjs.Mesh _ghostEdge;
-  late final tjs.Mesh _ghostKnob;
+
   late final tjs.Mesh _core;
   late final tjs.Group _bounceMark;
   late final tjs.MeshBasicMaterial _arrowMaterial;
@@ -241,15 +204,6 @@ class _PuttAimView3D {
     _arrowMaterial.color = _lin(_powerHex(aim.power));
     // The guide takes over where the arrow's head ends.
     final tip = start + length + 1.15;
-
-    // Half the drag, at most three units: enough to read the pull without
-    // a band running off across the green.
-    final pull = math.min(aim.dragLength * 0.5, 3.0) * scale;
-    ghost.scale.x = math.max(pull, 0.001);
-    ghost.position.x = -pull / 2;
-    _ghostEdge.scale.x = math.max(pull + 0.1, 0.001);
-    _ghostEdge.position.x = -pull / 2;
-    _ghostKnob.position.x = -pull;
 
     if ((aim.power - _fillPower).abs() > 0.015) {
       _fillPower = aim.power;
