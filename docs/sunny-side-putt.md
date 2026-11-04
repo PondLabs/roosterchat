@@ -130,7 +130,10 @@ pair's colour, the silo over its spiral pull, floating "?" crates, the
 straw nest with a flag flying the hole's number, the tee mat. Eggs are
 true egg profiles with an Easter band in the player's colour; they roll
 by their velocity, leave a trail when fast, settle on their side, and
-slide into the nest when they sink. The viewer's egg wears a marker ring
+slide into the nest when they sink. There the egg hatches
+(`world3d/hatch.dart`): the shell's cap pops off in the player's colour
+and a chick rises out of the cup in the other half, hops twice flapping
+at the camera and drops back in. The viewer's egg wears a marker ring
 and a bobbing arrow; the others carry name tags.
 
 Colour is linear-correct: three_js takes hex values as linear, so every
@@ -147,8 +150,13 @@ world builds those with `_gridPlane`.
   around the egg, and a dotted guide shows the first stretch of the roll
   - the engine's own physics run ahead on a copy of the world, cut a
   short way after the first rail.
-- The camera opens on the whole hole, then comes in close and follows
-  the egg; C toggles the whole-hole view, a right drag orbits, the wheel
+- Until the first putt of the match (and after 14 seconds idle with the
+  egg ready), a coach shows the gesture over the egg: a hand presses,
+  pulls back away from the nest and lets go while a ghost arrow grows
+  (`putt_coach.dart`).
+- The camera opens on the whole hole, then frames the egg and the nest
+  inside the part of the screen the HUD leaves free (the points are
+  projected through the camera the glide ends at) and follows the egg; C toggles the whole-hole view, a right drag orbits, the wheel
   or a pinch zooms.
 
 ## The layers
