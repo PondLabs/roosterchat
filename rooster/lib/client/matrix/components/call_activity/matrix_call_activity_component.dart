@@ -110,6 +110,11 @@ class MatrixCallActivityComponent
     return result;
   }
 
+  /// Fires when the set of live sessions (or who is in them) changes:
+  /// the call's view mounts its stage off it.
+  Stream<void> get onChanged => _changes.stream;
+  final StreamController<void> _changes = StreamController.broadcast();
+
   // --------------------------------------------------------- live sessions
 
   /// The session this client follows (or hosts) by room-state id, if any.
@@ -191,11 +196,13 @@ class MatrixCallActivityComponent
     _lastSessionIdOf[session] = session.snapshot.sessionId;
     _listenersOf[session] = _onSessionChanged;
     session.addListener(_onSessionChanged);
+    _changes.add(null);
   }
 
   Future<void> _untrack(CallActivitySession session) async {
     final listener = _listenersOf.remove(session);
     if (listener != null) session.removeListener(listener);
+    _changes.add(null);
     _sessionById.remove(_lastSessionIdOf[session]);
     _lastSessionIdOf.remove(session);
     final transport = _transportOf.remove(session);
