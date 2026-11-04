@@ -1021,6 +1021,9 @@ class _PuttThreeSurfaceState extends State<PuttThreeSurface> {
     try {
       final three = _three = tjr.ThreeJS(
         size: size,
+        // Until the GL surface is up: the horizon's haze, not a white flash.
+        loadingWidget:
+            const ColoredBox(color: ui.Color(_clearHex | 0xFF000000)),
         onSetupComplete: () {
           _ready = true;
           if (mounted) setState(() {});
