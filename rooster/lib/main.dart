@@ -19,6 +19,7 @@ import 'package:rooster/diagnostic/diagnostics.dart';
 import 'package:rooster/rust/frb_generated.dart';
 import 'package:rooster/single_instance.dart';
 import 'package:rooster/ui/organisms/overlay_windows/overlay_window_manager.dart';
+import 'package:rooster/ui/organisms/sunny_side_putt/putt_demo.dart';
 import 'package:rooster/ui/pages/bubble/bubble_page.dart';
 import 'package:rooster/ui/pages/fatal_error/fatal_error_page.dart';
 import 'package:rooster/ui/pages/loading/loading_page.dart';
@@ -137,6 +138,10 @@ void bubble() async {
 }
 
 void main(List<String> args) async {
+  if (const bool.fromEnvironment('PUTT_DEMO')) {
+    await runPuttDemo();
+    return;
+  }
   commandLineArgs = args;
   print(args);
 
