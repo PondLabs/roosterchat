@@ -245,6 +245,129 @@ class _Scenery {
       group.add(_windmill(millAt));
     }
     group.add(_host(hostAt));
+    if (kind != _ThemeKind.barn) group.add(_butterflies());
+    group.add(_birds());
+    return group;
+  }
+
+  /// Butterflies fluttering over the meadow by the table (the dusk keeps
+  /// fireflies instead).
+  tjs.Group _butterflies() {
+    final group = tjs.Group()..name = 'butterflies';
+    const colors = [
+      _Farm.flowerYolk,
+      _Farm.flowerCream,
+      _Farm.flowerPink,
+      0x7FC6F2,
+      _Farm.flowerYolk,
+      0xFFFFFF,
+    ];
+    final flyers = <(tjs.Group, tjs.Mesh, tjs.Mesh, Vec2, double, double)>[];
+    for (var i = 0; i < 9; i++) {
+      final home = _spotAround(minClear: 0.6, maxClear: 9) ?? _b.center;
+      final hex = colors[i % colors.length];
+      final butterfly = tjs.Group()..name = 'butterfly';
+      tjs.Mesh wing(double side) {
+        // Built flat (in x/z), off to its side of the body.
+        final mesh = tjs.Mesh(
+          tjg.CircleGeometry(radius: 0.18, segments: 8)
+            ..rotateX(-math.pi / 2)
+            ..translate(side * 0.16, 0, 0),
+          tjs.MeshStandardMaterial({
+            tjs.MaterialProperty.color: _lin(hex),
+            tjs.MaterialProperty.roughness: 0.7,
+            tjs.MaterialProperty.metalness: 0.0,
+            tjs.MaterialProperty.side: tjs.DoubleSide,
+          }),
+        )..name = 'butterfly-wing';
+        return mesh;
+      }
+
+      final left = wing(-1);
+      final right = wing(1);
+      butterfly
+        ..add(left)
+        ..add(right)
+        ..add(tjs.Mesh(
+          tjg.CylinderGeometry(0.025, 0.025, 0.22, 5),
+          _matte(0x3A2A20),
+        )..rotation.x = math.pi / 2);
+      group.add(butterfly);
+      flyers.add((
+        butterfly,
+        left,
+        right,
+        home,
+        _rand.range(0, 6.28),
+        _rand.range(0.7, 1.3)
+      ));
+    }
+    animated.add(_AnimatedBy((time, dt) {
+      for (final (body, left, right, home, phase, speed) in flyers) {
+        final t = time * speed + phase;
+        final x = home.x + math.sin(t * 0.7) * 2.6 + math.sin(t * 1.9) * 0.6;
+        final z = home.y + math.cos(t * 0.53) * 2.2;
+        final y = _ground + 1.1 + math.sin(t * 2.3).abs() * 0.7 + 0.3;
+        body.position.setValues(x, y, z);
+        body.rotation.y = -t * 0.7;
+        // The wings fold up about the body's long axis.
+        final flap = math.sin(time * 18 + phase) * 1.1;
+        left.rotation.z = -flap;
+        right.rotation.z = flap;
+      }
+    }));
+    return group;
+  }
+
+  /// Birds gliding in wide circles high over the farm, a lazy flap now
+  /// and then.
+  tjs.Group _birds() {
+    final group = tjs.Group()..name = 'birds';
+    final birds = <(tjs.Group, tjs.Mesh, tjs.Mesh, double, double, double)>[];
+    final dark = theme.kind == _ThemeKind.barn ? 0x2A2228 : 0x3A3A44;
+    for (var i = 0; i < 5; i++) {
+      final bird = tjs.Group()..name = 'bird';
+      final body = tjs.Mesh(
+        tjg.ConeGeometry(0.22, 1.0, 5)..rotateX(math.pi / 2),
+        _matte(dark),
+      );
+      tjs.Mesh wing(double side) => tjs.Mesh(
+            tjs.BoxGeometry(1.5, 0.04, 0.45)..translate(side * 0.75, 0, 0),
+            _matte(dark),
+          );
+      final left = wing(-1);
+      final right = wing(1);
+      bird
+        ..add(body)
+        ..add(left)
+        ..add(right);
+      group.add(bird);
+      birds.add((
+        bird,
+        left,
+        right,
+        _rand.range(0, 6.28),
+        _rand.range(18, 34),
+        _rand.range(16, 26)
+      ));
+    }
+    final center = _b.center;
+    animated.add(_AnimatedBy((time, dt) {
+      for (final (bird, left, right, phase, radius, height) in birds) {
+        final angle = phase + time * 0.11;
+        bird.position.setValues(
+          center.x + math.cos(angle) * radius,
+          height + math.sin(time * 0.4 + phase) * 1.5,
+          center.y - 18 + math.sin(angle) * radius * 0.6,
+        );
+        // Facing along the circle (counter-clockwise seen from above).
+        bird.rotation.y = -angle;
+        final beat = math.sin(time * 6 + phase);
+        final flap = (math.sin(time * 0.7 + phase) > 0.3 ? beat * 0.5 : 0.08);
+        left.rotation.z = flap;
+        right.rotation.z = -flap;
+      }
+    }));
     return group;
   }
 

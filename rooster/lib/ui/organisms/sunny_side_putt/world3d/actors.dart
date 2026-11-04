@@ -69,7 +69,7 @@ class _EggView3D {
       ..renderOrder = 3
       ..visible = false;
     _arrow = tjs.Mesh(
-      tjg.ConeGeometry(_radius * 0.42, _radius * 0.8, 4),
+      tjg.ConeGeometry(_radius * 0.62, _radius * 1.15, 4),
       _matte(_hexOf(PuttPalette.yolk), roughness: 0.45),
     )
       ..name = 'egg-arrow'

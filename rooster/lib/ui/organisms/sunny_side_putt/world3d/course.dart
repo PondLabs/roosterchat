@@ -293,7 +293,7 @@ class _CourseKit {
     const lip = _fenceThickness + 0.5;
     final w = bounds.width + lip * 2;
     final d = bounds.height + lip * 2;
-    final skirtGrain = _woodGrainTexture()..repeat.setValues((w + d) / 6, 1);
+    final skirtGrain = _woodGrainTexture()..repeat.setValues((w + d) / 16, 1);
     final skirt = tjs.Mesh(
       tjs.BoxGeometry(w, _tableHeight, d),
       tjs.MeshStandardMaterial({

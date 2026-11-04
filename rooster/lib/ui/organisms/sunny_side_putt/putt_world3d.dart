@@ -314,6 +314,34 @@ class PuttCameraRig {
   /// The distance that frames the whole hole (the last fit's).
   double get overviewDistance => _overviewDistance;
 
+  /// Glides to frame [a] and [b] together (the egg and the nest), with
+  /// [margin] world units around them: the target between them, the
+  /// distance that fits both on screen, never closer than [closest] of the
+  /// overview's nor farther than the overview itself.
+  void glideToFrame(Vec2 a, Vec2 b,
+      {double margin = 5, double closest = 0.42}) {
+    final c = math.cos(yaw).abs();
+    final s = math.sin(yaw).abs();
+    final pitchRad = _pitchTarget * math.pi / 180;
+    final sp = math.sin(pitchRad);
+    final width = (a.x - b.x).abs() + margin * 2;
+    final depth = (a.y - b.y).abs() + margin * 2;
+    final spanRight = width * c + depth * s;
+    final spanAway = width * s + depth * c;
+    final usableWidth = math.max(1.0, viewport.width - 24);
+    final usableHeight = math.max(1.0, viewport.height - 150);
+    final focal = viewport.height * 1.2;
+    final wanted = math.max(
+      focal * spanRight / usableWidth,
+      focal * (spanAway * sp + 1.5) / usableHeight,
+    );
+    _distanceTarget = wanted
+        .clamp(_overviewDistance * closest, _overviewDistance)
+        .clamp(_distanceMin, _distanceMax)
+        .toDouble();
+    _targetTarget = Vec2((a.x + b.x) / 2, (a.y + b.y) / 2);
+  }
+
   /// Orbit: [dxPixels] of horizontal drag turn the yaw, [dyPixels] tilt
   /// the pitch (clamped). Dragging down looks from higher above.
   void orbitBy(double dxPixels, double dyPixels) {
