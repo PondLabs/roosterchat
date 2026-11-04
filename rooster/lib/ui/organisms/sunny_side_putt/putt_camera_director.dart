@@ -56,6 +56,10 @@ class PuttCameraDirector {
   /// opening sweep, the camera goes straight to the hole's play framing.
   bool reduceMotion = false;
 
+  /// Whether someone else drives the camera (the demo's held close-ups):
+  /// the director then keeps its clock but moves nothing.
+  bool held = false;
+
   /// Whether the hole's opening sweep is still on.
   bool get opening => !reduceMotion && _holeClock < openingSeconds;
 
@@ -156,6 +160,10 @@ class PuttCameraDirector {
       _showingBetween = false;
     }
     _holeClock += dt;
+    if (held) {
+      _follow = null;
+      return;
+    }
     final center = hole.bounds.center;
 
     // Between holes, and while the hole opens: the whole green.

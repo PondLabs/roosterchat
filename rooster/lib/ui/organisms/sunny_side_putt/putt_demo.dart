@@ -240,6 +240,18 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
     final slot = match.myInventory.indexOf(effect);
     if (slot < 0 || !match.myShotReady) return;
     _armed = true;
+    if (effect == 'thieving_crow') {
+      // Someone to rob: the crew picked up a crate or two on the way.
+      for (final (id, grab) in const [
+        ('peer-maya', 'gust'),
+        ('peer-lou', 'nest_magnet')
+      ]) {
+        final player = match.engine.player(id);
+        if (player != null && player.inventory.isEmpty) {
+          player.inventory.add(grab);
+        }
+      }
+    }
     game.targeting.tapSlot(match, slot, effect);
     final mine = match.myBall?.position ?? hole.tee;
     final others = [
@@ -265,13 +277,19 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
     if (game == null || cam == null) return;
     final rig = game.world3d.rig;
     final bounds = hole.bounds;
+    game.director.held = true;
     switch (cam) {
       case 'nest':
         game.followOverride = hole.nest.position;
         rig.glideTo(distance: 10, pitchDeg: 32);
       case 'host':
-        game.followOverride = Vec2(bounds.min.x - 6, bounds.min.y - 2);
-        rig.glideTo(distance: 17, pitchDeg: 22);
+        // Where he stands: beyond the far rail, level with the nest.
+        game.followOverride = Vec2(
+            hole.nest.position.x
+                .clamp(bounds.min.x + 4, bounds.max.x - 4)
+                .toDouble(),
+            bounds.min.y - 4.5);
+        rig.glideTo(distance: 25, pitchDeg: 13);
       case 'wide':
         game.followOverride = bounds.center;
         rig.glideTo(distance: rig.overviewDistance * 1.5, pitchDeg: 27);
