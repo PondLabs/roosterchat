@@ -23,6 +23,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/hole.dart';
+import 'package:rooster/client/components/sunny_side_putt/core/physics.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/powerups.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/rules.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
@@ -88,6 +89,10 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
   /// Per bot: shots taken this hole and when the next may go.
   final Map<String, int> _botShots = {};
   final Map<String, double> _botNextAt = {};
+
+  /// The hole's intended route: the tee, where each reference shot comes
+  /// to rest, the nest. The crew putts along it.
+  List<Vec2> _route = const [];
 
   double _phaseTime = 0;
 
@@ -183,6 +188,7 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
       _myNextAt = 3.2;
       _botShots.clear();
       _botNextAt.clear();
+      _route = _routeOf(hole);
     }
     _holeTime += dt;
     _holdCamera(hole);
@@ -264,8 +270,101 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
     _drag = _DemoDrag(from: ball.position, pull: pull);
   }
 
-  /// The crew: straight putts at the nest with a jitter that tightens
-  /// stroke by stroke, and a Rabbit Hole hop when one stalls near it.
+  /// The intended route: the reference solution replayed headless, its
+  /// resting spots between the tee and the nest.
+  List<Vec2> _routeOf(HoleDef hole) {
+    final reference = _currentHole?.solution;
+    final points = <Vec2>[hole.tee];
+    if (reference != null) {
+      final world = PhysicsWorld(
+          hole: hole, config: match.config.physics, playerIds: const ['route']);
+      final ball = world.ball('route')!;
+      for (final shot in reference.shots) {
+        for (var i = 0;
+            i < (shot.waitSeconds / match.config.physics.dt).round();
+            i++) {
+          world.stepTick();
+        }
+        world.applyShot('route', shot.angle, shot.power);
+        var guard = 0;
+        while (!ball.holed && !ball.asleep && guard++ < 6000) {
+          world.stepTick();
+        }
+        if (ball.holed) break;
+        points.add(ball.position);
+      }
+    }
+    points.add(hole.nest.position);
+    return points;
+  }
+
+  /// Whether an egg can roll the straight line [a]-[b] without meeting a
+  /// wall of [hole]: the centre line and both of the egg's edges clear.
+  bool _clearLine(HoleDef hole, Vec2 a, Vec2 b) {
+    final along = (b - a).normalized(const Vec2(1, 0));
+    final side = Vec2(-along.y, along.x) * 0.5;
+    final lanes = [(a, b), (a + side, b + side), (a - side, b - side)];
+    final walls = <(Vec2, Vec2)>[
+      for (final wall in hole.walls) (wall.a, wall.b),
+      // Arcs as their chords.
+      for (final arc in hole.arcs)
+        for (var i = 0; i < 16; i++)
+          (
+            Vec2(
+                arc.center.x +
+                    math.cos(arc.startAngle + i / 16 * arc.sweep) * arc.radius,
+                arc.center.y +
+                    math.sin(arc.startAngle + i / 16 * arc.sweep) * arc.radius),
+            Vec2(
+                arc.center.x +
+                    math.cos(arc.startAngle + (i + 1) / 16 * arc.sweep) *
+                        arc.radius,
+                arc.center.y +
+                    math.sin(arc.startAngle + (i + 1) / 16 * arc.sweep) *
+                        arc.radius),
+          ),
+    ];
+    for (final (p, q) in walls) {
+      for (final (from, to) in lanes) {
+        if (_crosses(from, to, p, q)) return false;
+      }
+    }
+    return true;
+  }
+
+  /// Whether segments [a]-[b] and [p]-[q] properly cross.
+  bool _crosses(Vec2 a, Vec2 b, Vec2 p, Vec2 q) {
+    double cross(Vec2 o, Vec2 u, Vec2 v) =>
+        (u.x - o.x) * (v.y - o.y) - (u.y - o.y) * (v.x - o.x);
+    final d1 = cross(p, q, a);
+    final d2 = cross(p, q, b);
+    final d3 = cross(a, b, p);
+    final d4 = cross(a, b, q);
+    return (d1 > 0) != (d2 > 0) && (d3 > 0) != (d4 > 0);
+  }
+
+  /// The furthest point of the route a bot at [from] can putt to in a
+  /// straight line (the nest when it can see it), or the nearest route
+  /// point ahead when none is clear.
+  Vec2 _nextTarget(HoleDef hole, Vec2 from) {
+    for (var i = _route.length - 1; i >= 1; i--) {
+      if (_clearLine(hole, from, _route[i])) return _route[i];
+    }
+    var best = _route.length > 1 ? _route[1] : hole.nest.position;
+    var bestDistance = double.infinity;
+    for (final point in _route.skip(1)) {
+      final d = from.distanceTo(point);
+      if (d < bestDistance) {
+        bestDistance = d;
+        best = point;
+      }
+    }
+    return best;
+  }
+
+  /// The crew: putts along the hole's route (the furthest point of it in
+  /// a clear line) with a jitter that tightens stroke by stroke, and a
+  /// Rabbit Hole hop when one stalls near the nest.
   void _driveBots(HoleDef hole) {
     final world = match.engine.world;
     if (world == null) return;
@@ -278,10 +377,12 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
       if (_holeTime < nextAt) continue;
       final shots = _botShots[ball.playerId] ?? 0;
       final toNest = hole.nest.position - ball.position;
-      if (shots >= 2 && toNest.length < 6) {
+      if (shots >= 3 && toNest.length < 6) {
         _rabbitHop(ball.playerId, hole.nest.position);
       } else {
-        final shot = putt(ball.position, hole.nest.position, arrival: 1.4);
+        final target = _nextTarget(hole, ball.position);
+        final last = target == hole.nest.position;
+        final shot = putt(ball.position, target, arrival: last ? 1.4 : 0.7);
         final spread = 0.16 / (shots + 1);
         final angle = shot.angle + (_random.nextDouble() * 2 - 1) * spread;
         final power = (shot.power * (0.9 + _random.nextDouble() * 0.22))
