@@ -37,6 +37,20 @@ class _EggView3D {
       ..name = 'egg-shell'
       ..castShadow = true;
     group.add(body);
+    // The egg's silhouette through whatever hides it (a rail, the silo, a
+    // hay bale): drawn only where something nearer already stands.
+    final xrayMaterial = tjs.MeshBasicMaterial({
+      tjs.MaterialProperty.color: _lin(_mix(_tintHex, 0xFFFFFF, 0.25)),
+      tjs.MaterialProperty.transparent: true,
+      tjs.MaterialProperty.opacity: 0.5,
+      tjs.MaterialProperty.depthWrite: false,
+      tjs.MaterialProperty.fog: false,
+    })
+      ..depthFunc = tjs.GreaterDepth;
+    _xray = tjs.Mesh(body.geometry, xrayMaterial)
+      ..name = 'egg-xray'
+      ..renderOrder = 20;
+    body.add(_xray);
 
     ground = tjs.Group()..name = 'egg-ground';
     _shadow = tjs.Mesh(
@@ -118,6 +132,7 @@ class _EggView3D {
   bool everMine = false;
 
   late final tjs.Mesh _tintDisc;
+  late final tjs.Mesh _xray;
   Vec2? _lastVelocity;
   double _squash = 0;
 
@@ -166,6 +181,7 @@ class _EggView3D {
     old?.dispose();
     _marker.material?.color = _lin(hex);
     _tintDisc.material?.color = _lin(hex);
+    _xray.material?.color = _lin(_mix(hex, 0xFFFFFF, 0.25));
   }
 
   /// The shell: the colour's paint, a soft sheen, and a whisper of light
