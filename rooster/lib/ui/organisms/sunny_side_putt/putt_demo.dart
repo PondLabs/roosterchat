@@ -42,10 +42,24 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
   static const _beat = Duration(milliseconds: 2300);
 
   static const _jitters = [
-    -0.06, 0.09, -0.04, 0.12, -0.02, 0.05, -0.14, 0.03,
+    -0.06,
+    0.09,
+    -0.04,
+    0.12,
+    -0.02,
+    0.05,
+    -0.14,
+    0.03,
   ];
   static const _powers = [
-    0.68, 0.74, 0.58, 0.71, 0.8, 0.63, 0.77, 0.66,
+    0.68,
+    0.74,
+    0.58,
+    0.71,
+    0.8,
+    0.63,
+    0.77,
+    0.66,
   ];
   int _scriptIndex = 0;
 
