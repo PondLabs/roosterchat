@@ -128,6 +128,9 @@ void main() {
     double height = 0,
     String playerId = 'me',
     double radius = 0.45,
+    bool shielded = false,
+    double ghostSeconds = 0,
+    bool magnet = false,
   }) {
     return PuttWorldEgg(
       playerId: playerId,
@@ -136,6 +139,9 @@ void main() {
       tint: PuttPalette.tintForIndex(0),
       radius: radius,
       height: height,
+      shielded: shielded,
+      ghostSeconds: ghostSeconds,
+      magnet: magnet,
     );
   }
 
@@ -817,6 +823,233 @@ void main() {
           reason: 'no follow point holds the target');
       expect(world.rig.target.y, closeTo(y, 1e-9),
           reason: 'no follow point holds the target');
+    });
+  });
+
+  group("the casts' scenes", () {
+    /// A plain second hole, to move the world on to.
+    final otherHole = HoleDef(
+      id: 'other',
+      par: 2,
+      tee: const Vec2(3, 5),
+      nest: Nest(const Vec2(17, 5), 0.9),
+      bounds: Rect(Vec2.zero, Vec2(20, 10)),
+      walls: [
+        WallSegment(Vec2.zero, Vec2(20, 0)),
+        WallSegment(Vec2(20, 0), Vec2(20, 10)),
+        WallSegment(Vec2(20, 10), Vec2(0, 10)),
+        WallSegment(Vec2(0, 10), Vec2.zero),
+      ],
+    );
+
+    test('a crow flies its arc with its loot; a new hole grounds it', () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      final casts = world.scene.children.firstWhere((c) => c.name == 'casts');
+      List<tjs.Object3D> crows() =>
+          casts.children.where((c) => c.name == 'cast-crow').toList();
+      final loot = walk(casts)
+          .where((o) => o.name.startsWith('crow-loot/'))
+          .toList(growable: false);
+      expect(crows(), hasLength(2), reason: 'two pooled, built once');
+      expect(loot, hasLength(24), reason: "every power-up's icon, per crow");
+      expect(crows().every((c) => !c.visible), isTrue);
+
+      const from = Vec2(6, 13);
+      const to = Vec2(20, 13);
+      void fly(double progress, double time) =>
+          world.applySnapshot(PuttWorldFrame(time: time, crows: [
+            PuttWorldCrow(
+                from: from, to: to, progress: progress, effectId: 'gust'),
+          ]));
+      fly(0.5, 0);
+      final crow = crows().firstWhere((c) => c.visible);
+      expect(crow.position.x, inExclusiveRange(from.x, to.x));
+      expect(crow.position.y, greaterThan(3), reason: 'high on its arc');
+      // Facing its way: its forward (+z) turned onto the flight (+x).
+      expect(crow.rotation.y, closeTo(math.pi / 2, 1e-6));
+      final carried = loot.where((o) => o.visible).toList();
+      expect(carried.map((o) => o.name), ['crow-loot/gust']);
+      expect(carried.single.position.distanceTo(crow.position), lessThan(3));
+      // Its outline: inked like the other characters.
+      expect(walk(crow).where((o) => o.name.endsWith('-outline')), hasLength(3),
+          reason: 'the body and both wings');
+
+      final along = crow.position.x;
+      fly(0.7, 0.016);
+      expect(crow.position.x, greaterThan(along));
+      world.applySnapshot(PuttWorldFrame(time: 0.032));
+      expect(crows().every((c) => !c.visible), isTrue);
+      expect(loot.every((o) => !o.visible), isTrue);
+
+      fly(0.4, 0.048);
+      expect(crows().where((c) => c.visible), hasLength(1));
+      world.buildHole(otherHole, eggRadius: 0.45);
+      expect(crows().every((c) => !c.visible), isTrue,
+          reason: 'a new hole starts clear of the last one\'s casts');
+      expect(loot.every((o) => !o.visible), isTrue);
+    });
+
+    test('a shielded egg wears a bubble until the shield is spent', () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      var time = 0.0;
+      void frame({required bool shielded}) {
+        world.applySnapshot(PuttWorldFrame(
+            time: time, eggs: [eggAt(const Vec2(5, 9), shielded: shielded)]));
+        time += 0.016;
+      }
+
+      frame(shielded: false);
+      final bubble =
+          walk(world.scene).firstWhere((o) => o.name == 'egg-bubble');
+      expect(bubble.visible, isFalse);
+      for (var i = 0; i < 30; i++) {
+        frame(shielded: true);
+      }
+      expect(bubble.visible, isTrue);
+      expect(bubble.position.x, closeTo(5, 1e-9));
+      expect(bubble.position.z, closeTo(9, 1e-9));
+      expect(bubble.position.y, greaterThan(0.3),
+          reason: "round the egg's middle");
+      expect(bubble.scale.x, greaterThan(0.45 * 1.2 * 3),
+          reason: 'blown up round the whole egg');
+      expect(bubble.material!.map, isNotNull);
+      frame(shielded: false);
+      expect(bubble.visible, isFalse, reason: 'popped: the shield is spent');
+    });
+
+    test('a ghost egg fades by its opacity alone, then comes back solid', () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      var time = 0.0;
+      void frame(double ghostSeconds) {
+        world.applySnapshot(PuttWorldFrame(
+            time: time,
+            eggs: [eggAt(const Vec2(5, 9), ghostSeconds: ghostSeconds)]));
+        time += 0.016;
+      }
+
+      frame(0);
+      final egg = world.eggOf('me')!;
+      final shell = walk(egg).firstWhere((o) => o.name == 'egg-shell');
+      final outline = walk(egg).firstWhere((o) => o.name == 'egg-outline');
+      final shellMaterial = shell.material!;
+      final outlineMaterial = outline.material!;
+      // Transparent from the start: a fade moves a uniform, no program
+      // recompiles.
+      expect(shellMaterial.transparent, isTrue);
+      expect(outlineMaterial.transparent, isTrue);
+      expect(shellMaterial.opacity, closeTo(1, 1e-9));
+
+      final seen = <double>{};
+      for (var i = 0; i < 40; i++) {
+        frame(2.5);
+        seen.add(shellMaterial.opacity);
+      }
+      expect(identical(shell.material, shellMaterial), isTrue,
+          reason: 'never a material swapped in play');
+      expect(seen.every((opacity) => opacity < 0.6), isTrue,
+          reason: 'see-through the whole time');
+      expect(seen.length, greaterThan(10), reason: 'and flickering');
+      expect(outlineMaterial.opacity, lessThan(0.6));
+
+      frame(0);
+      expect(shellMaterial.opacity, closeTo(1, 1e-9));
+      expect(outlineMaterial.opacity, closeTo(1, 1e-9));
+    });
+
+    test('the nest shimmers while an egg carries a magnet', () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      final shimmer =
+          walk(world.scene).firstWhere((o) => o.name == 'cast-magnet');
+      var time = 0.0;
+      void frame({required bool magnet}) {
+        world.applySnapshot(PuttWorldFrame(
+            time: time, eggs: [eggAt(const Vec2(5, 9), magnet: magnet)]));
+        time += 0.016;
+      }
+
+      frame(magnet: false);
+      expect(shimmer.visible, isFalse);
+      for (var i = 0; i < 20; i++) {
+        frame(magnet: true);
+      }
+      expect(shimmer.visible, isTrue);
+      expect(shimmer.position.x, closeTo(dressing.nest.position.x, 1e-9));
+      expect(shimmer.position.z, closeTo(dressing.nest.position.y, 1e-9));
+      final ring = shimmer.children.firstWhere((c) => c.name == 'magnet-ring');
+      expect(ring.material!.opacity, greaterThan(0.3));
+      for (var i = 0; i < 80; i++) {
+        frame(magnet: false);
+      }
+      expect(shimmer.visible, isFalse,
+          reason: 'it fades once the pull is over');
+    });
+
+    test("the casts' particles draw from their own pools", () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      final root = world.scene.children.firstWhere((c) => c.name == 'fx');
+      int shown(String name) =>
+          root.children.where((c) => c.name == name && c.visible).length;
+      const at = Vec2(10, 10);
+      world.applySnapshot(const PuttWorldFrame(time: 0, fxs: [
+        PuttWorldFx(
+            kind: PuttWorldFxKind.kernel,
+            at: at,
+            progress: 0.3,
+            size: 0.5,
+            height: 2),
+        PuttWorldFx(
+            kind: PuttWorldFxKind.streak,
+            at: at,
+            toward: Vec2(10, 12),
+            progress: 0.5,
+            size: 0.6),
+        PuttWorldFx(
+            kind: PuttWorldFxKind.steam, at: at, progress: 0.4, size: 0.4),
+        PuttWorldFx(
+            kind: PuttWorldFxKind.swirl, at: at, progress: 0.2, size: 0.3),
+        PuttWorldFx(
+            kind: PuttWorldFxKind.glint, at: at, progress: 0.5, size: 0.4),
+        PuttWorldFx(
+            kind: PuttWorldFxKind.shard,
+            at: at,
+            progress: 0.2,
+            size: 0.25,
+            height: 0.8),
+        PuttWorldFx(
+            kind: PuttWorldFxKind.feather,
+            at: at,
+            progress: 0.3,
+            size: 0.45,
+            height: 1.2),
+      ]));
+      expect(shown('fx-kernel'), 1, reason: 'kernels: their own drawing');
+      expect(shown('fx-paper'), 2, reason: 'shards and feathers: paper');
+      expect(shown('fx-streak'), 1, reason: 'the wind: its own line');
+      expect(shown('fx'), 3, reason: 'steam, swirl, glint: soft');
+      final kernel =
+          root.children.firstWhere((c) => c.name == 'fx-kernel' && c.visible);
+      expect(kernel.position.y, closeTo(2, 1e-9), reason: 'up in the air');
+      final soft = root.children.firstWhere((c) => c.name == 'fx');
+      expect(kernel.material!.map, isNotNull);
+      expect(kernel.material!.map, isNot(same(soft.material!.map)),
+          reason: 'no sprite ever changes its map: each pool keeps its own');
+      final streak =
+          root.children.firstWhere((c) => c.name == 'fx-streak' && c.visible);
+      expect(streak.scale.x, greaterThan(streak.scale.y * 6),
+          reason: 'the wind: long and thin');
+
+      world.applySnapshot(const PuttWorldFrame(time: 0.016));
+      expect(
+          shown('fx-kernel') +
+              shown('fx-paper') +
+              shown('fx-streak') +
+              shown('fx'),
+          0);
     });
   });
 

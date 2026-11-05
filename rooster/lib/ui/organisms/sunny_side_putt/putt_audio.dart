@@ -138,6 +138,10 @@ class PuttAudio {
         PuttSfx.holeEnd => 'hole_end.mp3',
         PuttSfx.victory => 'victory.mp3',
         PuttSfx.click => 'click.wav',
+        PuttSfx.crowCaw => 'crow_caw.wav',
+        PuttSfx.shieldPop => 'shield.wav',
+        PuttSfx.cornRain => 'corn.wav',
+        PuttSfx.gust => 'gust.wav',
       };
 
   /// Loads the sources and starts the music loop. Failures land in the

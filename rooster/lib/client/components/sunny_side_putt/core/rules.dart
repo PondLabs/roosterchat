@@ -237,12 +237,25 @@ class ShotApplied extends PuttEvent {
   /// Strokes the player has taken in this hole so far, this shot included.
   final int strokes;
 
+  /// The next-shot power-ups that rode this shot (and were spent on it):
+  /// Hawk Eye held it straight, Strong Coffee multiplied its power (1 is
+  /// none), Chicken Hop lifts it, Nest Magnet pulls it home. The view
+  /// draws each for everyone.
+  final bool steady;
+  final double powerMultiplier;
+  final bool hop;
+  final bool magnet;
+
   const ShotApplied({
     required this.playerId,
     required this.aimedAngle,
     required this.actualAngle,
     required this.power,
     required this.strokes,
+    this.steady = false,
+    this.powerMultiplier = 1,
+    this.hop = false,
+    this.magnet = false,
   });
 }
 
@@ -314,13 +327,27 @@ class PowerUpDropped extends PuttEvent {
   const PowerUpDropped({required this.playerId});
 }
 
+/// A player cast a power-up. Comes first among a cast's events: then any
+/// [ShieldBlocked] and [PowerUpStolen] as the effect runs, and its
+/// [PowerUpHit] last.
 class PowerUpUsed extends PuttEvent {
   final String playerId;
   final String effectId;
 
-  const PowerUpUsed({required this.playerId, required this.effectId});
+  /// What the caster aimed at (a spot, a player), for the effects that
+  /// take a target.
+  final PowerUpTarget? target;
+
+  /// Where the caster's egg stood as it cast (null with no egg out on the
+  /// green): a Rabbit Hole leaves from here.
+  final Vec2? at;
+
+  const PowerUpUsed(
+      {required this.playerId, required this.effectId, this.target, this.at});
 }
 
+/// A shielded egg (Thick Shell) shrugged off a harmful cast; the shield is
+/// spent.
 class ShieldBlocked extends PuttEvent {
   final String playerId;
   final String effectId;
@@ -328,6 +355,32 @@ class ShieldBlocked extends PuttEvent {
 
   const ShieldBlocked(
       {required this.playerId, required this.effectId, required this.casterId});
+}
+
+/// A cast took a power-up out of another player's hand (Thieving Crow);
+/// the thief's own [PowerUpPicked] (or [PowerUpDropped]) follows.
+class PowerUpStolen extends PuttEvent {
+  final String thiefId;
+  final String victimId;
+  final String effectId;
+
+  const PowerUpStolen(
+      {required this.thiefId, required this.victimId, required this.effectId});
+}
+
+/// A cast's last word: the eggs it moved or changed, in player-id order
+/// (the eggs Corn Rain nudged, the Gust and the Sprinkler pushed, both
+/// eggs of a Nest Swap, the caster's own for a Rabbit Hole or a Ghost
+/// Egg); empty when it touched no egg.
+class PowerUpHit extends PuttEvent {
+  final String casterId;
+  final String effectId;
+  final List<String> playerIds;
+
+  const PowerUpHit(
+      {required this.casterId,
+      required this.effectId,
+      required this.playerIds});
 }
 
 class AwaitingNextCourse extends PuttEvent {
@@ -857,6 +910,11 @@ class PuttEngine {
     if (mods.magnet) {
       world.setBallFlagUntilRest(input.playerId, PowerUpFlag.magnet);
     }
+    // What rode the shot, for the event (the view shows it to everyone).
+    final steady = mods.noWobble;
+    final multiplier = mods.powerMultiplier;
+    final hop = mods.hop;
+    final magnet = mods.magnet;
     mods.clear();
     world.applyShot(input.playerId, angle, power);
     _strokesThisHole[input.playerId] =
@@ -866,7 +924,11 @@ class PuttEngine {
         aimedAngle: input.angle,
         actualAngle: angle,
         power: power,
-        strokes: _strokesThisHole[input.playerId]!));
+        strokes: _strokesThisHole[input.playerId]!,
+        steady: steady,
+        powerMultiplier: multiplier,
+        hop: hop,
+        magnet: magnet));
   }
 
   bool _usePowerUp(PowerUpInput input) {
@@ -874,15 +936,24 @@ class PuttEngine {
     final player = _players[input.playerId];
     if (player == null || player.spectator) return false;
     if (!player.inventory.removeById(input.effectId)) return false;
-    _events
-        .add(PowerUpUsed(playerId: input.playerId, effectId: input.effectId));
+    final egg = _world?.ball(input.playerId);
+    _events.add(PowerUpUsed(
+        playerId: input.playerId,
+        effectId: input.effectId,
+        target: input.target,
+        at: egg == null || egg.holed ? null : egg.position));
     final effect = config.powerUps.byId(input.effectId);
     if (effect == null) return true; // consumed even when unknown upstream
     final context = _PowerUpContext(this, input);
     effect.apply(context);
-    for (final id in context.touched.toList()..sort()) {
+    final touched = context.touched.toList()..sort();
+    for (final id in touched) {
       _world?.evaluatePlacement(id);
     }
+    _events.add(PowerUpHit(
+        casterId: input.playerId,
+        effectId: input.effectId,
+        playerIds: touched));
     return true;
   }
 
@@ -1423,8 +1494,14 @@ class _PowerUpContext implements PowerUpContext {
   }
 
   @override
-  String? takePowerUp(String playerId) =>
-      _engine._players[playerId]?.inventory.takeFirst();
+  String? takePowerUp(String playerId) {
+    final taken = _engine._players[playerId]?.inventory.takeFirst();
+    if (taken != null && playerId != casterId) {
+      _engine._events.add(PowerUpStolen(
+          thiefId: casterId, victimId: playerId, effectId: taken));
+    }
+    return taken;
+  }
 
   @override
   void removePowerUp(String playerId, String effectId) {

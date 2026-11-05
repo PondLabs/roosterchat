@@ -39,18 +39,10 @@ PuttPowerAim puttPowerAimOf(String effectId) => switch (effectId) {
       _ => PuttPowerAim.none,
     };
 
-/// A cast that went through: the effect, its target (null for the ones
-/// that take none) and where my egg was before it (a Rabbit Hole moves it).
-typedef PuttCast = void Function(
-    String effectId, PowerUpTarget? target, Vec2? myEggBefore);
-
 /// The targeting state the HUD shows and the view's pointer plumbing
 /// reads. A [ChangeNotifier]: the HUD rebuilds when a slot arms, a picker
 /// opens or either goes away.
 class PuttTargeting extends ChangeNotifier {
-  /// Told after every cast that went through, for the game's bursts.
-  PuttCast? onCast;
-
   String? _armed;
   int? _armedSlot;
   String? _picking;
@@ -155,12 +147,10 @@ class PuttTargeting extends ChangeNotifier {
     return _cast(match, effectId, PowerUpTarget.player(playerId));
   }
 
-  bool _cast(PuttMatch match, String effectId, PowerUpTarget? target) {
-    final before = match.myBall?.position;
-    final cast = match.usePowerUp(effectId, target);
-    if (cast) onCast?.call(effectId, target, before);
-    return cast;
-  }
+  /// The cast itself; the match tells everyone (its scene and its call in
+  /// the feed come from the engine's events, like anyone else's).
+  bool _cast(PuttMatch match, String effectId, PowerUpTarget? target) =>
+      match.usePowerUp(effectId, target);
 
   /// Drops the armed slot or the open picker, spending nothing.
   void cancel() {

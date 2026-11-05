@@ -20,7 +20,17 @@
 // arm=sprinkler (with armAt=3, seconds into the hole) arms that one's
 // targeting over the green - the scripted putts wait while it is up.
 // soft=0.25 makes the viewer's first putt a soft one at that power,
-// straight at the nest (the guide's resting-spot mark).
+// straight at the nest (the guide's resting-spot mark). To show the casts
+// everyone sees, script= has the crew (and the viewer) cast at set moments
+// of each hole: who.power@seconds, comma separated, who being me or a crew
+// member's first name, e.g.
+//   script=me.thick_shell@3,maya.corn_rain@5,lou.thieving_crow@7.5
+// (the caster is handed the power-up; a crow robs the viewer when they
+// hold one, a swap trades with the viewer, a gust blows the others back
+// toward the tee, a sprinkler soaks the crowd). Each hole logs
+// `putt-demo: hole open <id>` to the console when the camera starts on it
+// (its first drawn frame), and the script's seconds count from there, so a
+// capture can time its shots from the hole's start, not the page's load.
 library;
 
 import 'dart:async';
@@ -38,6 +48,8 @@ import 'package:rooster/client/components/sunny_side_putt/courses/sunny_side_put
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_match.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_session.dart'
     show puttLaunchPowerUps;
+import 'package:rooster/ui/organisms/sunny_side_putt/putt_targeting.dart'
+    show PuttPowerAim, puttPowerAimOf;
 import 'package:rooster/ui/organisms/sunny_side_putt/sunny_side_putt_game.dart';
 
 Future<void> runPuttDemo() async {
@@ -59,7 +71,10 @@ class PuttDemoApp extends StatelessWidget {
 }
 
 class PuttDemoPage extends StatefulWidget {
-  const PuttDemoPage();
+  /// The page's query (the web page's own when left out).
+  final Map<String, String>? query;
+
+  const PuttDemoPage({this.query});
 
   @override
   State<PuttDemoPage> createState() => _PuttDemoPageState();
@@ -121,6 +136,11 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
   /// The viewer's first putt soft, at this power (the `soft` query).
   double? _soft;
 
+  /// The query's casts: (hole seconds, player id, power-up), each played
+  /// once a hole, and which of them went this hole.
+  List<(double, String, String)> _script = const [];
+  final Set<int> _scriptDone = {};
+
   /// The query's staged splash: the first bot's first putt of the hole
   /// goes into the nearest pond (for a look at the splash and the return).
   bool _splash = false;
@@ -132,7 +152,7 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
   @override
   void initState() {
     super.initState();
-    final query = Uri.base.queryParameters;
+    final query = widget.query ?? Uri.base.queryParameters;
     final courseId = query['course'] ?? 'the_coop';
     final course = sunnySidePuttCourses.firstWhere(
       (c) => c.id == courseId,
@@ -151,6 +171,10 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
     _armAt = double.tryParse(query['armAt'] ?? '') ?? 3;
     _splash = query['splash'] == '1';
     _soft = double.tryParse(query['soft'] ?? '');
+    _script = [
+      for (final entry in (query['script'] ?? '').split(','))
+        if (_parseCast(entry) case final cast?) cast,
+    ];
     final bots = (int.tryParse(query['bots'] ?? '') ?? 3).clamp(0, 7);
     final seated = [for (final (id, _) in _crew.take(bots)) id];
     final played =
@@ -278,6 +302,7 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
       _botNextAt.clear();
       _route = _routeOf(hole);
       _armed = false;
+      _scriptDone.clear();
       final me = match.localPlayer;
       if (me != null) {
         for (final id in _powerUps) {
@@ -293,7 +318,7 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
         return;
       }
       _holeClock.start();
-      // The capture tool times its shots from this line.
+      // Not translated: a log line the capture tool times its shots from.
       debugPrint('putt-demo: hole open ${hole.id}');
     }
     _holeTime = _holeClock.elapsedMicroseconds / Duration.microsecondsPerSecond;
@@ -301,7 +326,95 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
     _armPowerUp(hole);
     if (!(_game?.targeting.isActive ?? false)) _driveMe(hole);
     _driveBots(hole);
+    _driveScript(hole);
     _driveReactions();
+  }
+
+  /// One `who.power@seconds` of the query's script, or null when it does
+  /// not read as one.
+  static (double, String, String)? _parseCast(String entry) {
+    final at = entry.split('@');
+    if (at.length != 2) return null;
+    final seconds = double.tryParse(at[1]);
+    final who = at[0].split('.');
+    if (seconds == null || who.length != 2 || who[1].isEmpty) return null;
+    final id = who[0] == 'me' ? 'me' : 'peer-${who[0].toLowerCase()}';
+    return (seconds, id, who[1]);
+  }
+
+  /// The query's casts at their moments: the caster is handed the
+  /// power-up and casts it at the target a player would pick.
+  void _driveScript(HoleDef hole) {
+    for (var i = 0; i < _script.length; i++) {
+      final (at, who, effect) = _script[i];
+      if (_scriptDone.contains(i) || _holeTime < at) continue;
+      _scriptDone.add(i);
+      final player = match.engine.player(who);
+      final egg = match.engine.world?.ball(who);
+      if (player == null) continue;
+      if (!player.inventory.contains(effect)) {
+        if (player.inventory.isFull) player.inventory.takeFirst();
+        player.inventory.add(effect);
+      }
+      final target = _scriptTarget(hole, who, effect, egg);
+      if (target == null && puttPowerAimOf(effect) != PuttPowerAim.none) {
+        continue;
+      }
+      if (who == match.localPlayerId) {
+        match.usePowerUp(effect, target);
+      } else {
+        match.engine.usePowerUp(who, effect, target);
+      }
+    }
+  }
+
+  /// Where a scripted cast aims: a crow robs the viewer when they hold a
+  /// power-up (else whoever does), a swap trades with the viewer, a gust
+  /// blows the others back toward the tee, a sprinkler soaks the crowd, a
+  /// rabbit hole hops toward the nest.
+  PowerUpTarget? _scriptTarget(
+      HoleDef hole, String who, String effect, BallBody? egg) {
+    final others = [
+      for (final ball in match.engine.world?.balls ?? const <BallBody>[])
+        if (ball.playerId != who && !ball.holed) ball,
+    ];
+    switch (effect) {
+      case 'thieving_crow':
+        final victims = [
+          for (final player in match.engine.players)
+            if (player.id != who &&
+                !player.spectator &&
+                !player.inventory.isEmpty)
+              player.id,
+        ];
+        if (victims.isEmpty) {
+          // Something to steal: the viewer picked up a crate on the way.
+          match.engine.player(match.localPlayerId)?.inventory.add('gust');
+          return PowerUpTarget.player(match.localPlayerId);
+        }
+        return PowerUpTarget.player(victims.contains(match.localPlayerId)
+            ? match.localPlayerId
+            : victims.first);
+      case 'nest_swap':
+        if (others.isEmpty) return null;
+        final mine = others.where((b) => b.playerId == match.localPlayerId);
+        return PowerUpTarget.player(
+            (mine.isNotEmpty ? mine.first : others.first).playerId);
+      case 'gust':
+        return PowerUpTarget.point(hole.tee);
+      case 'sprinkler':
+        if (others.isEmpty) return null;
+        final crowd = others.map((b) => b.position).reduce((a, b) => a + b) *
+            (1 / others.length);
+        return PowerUpTarget.point(crowd);
+      case 'rabbit_hole':
+        if (egg == null || egg.holed) return null;
+        return PowerUpTarget.point(egg.position +
+            (hole.nest.position - egg.position).normalized(const Vec2(1, 0)) *
+                5);
+      default:
+        return null;
+    }
   }
 
   /// The query's power-up, armed over the green at its moment, its reticle

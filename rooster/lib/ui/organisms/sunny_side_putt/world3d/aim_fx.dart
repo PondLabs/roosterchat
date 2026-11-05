@@ -353,21 +353,29 @@ class _PuttAimView3D {
 // ---- fx -------------------------------------------------------------------------------------
 
 /// The bursts as pooled sprites over a soft disc, tinted and faded per
-/// frame, plus a few rings for the nest's shockwave.
+/// frame, plus a few rings for the nest's shockwave and the casts.
 class _PuttFxPool {
-  /// Soft sprites (over the disc) and paper ones (confetti, hard-edged):
-  /// two pools, so no sprite ever has its texture swapped while in play.
-  static const int poolSize = 96;
-  static const int paperSize = 72;
+  /// Soft sprites (over the disc), paper ones (confetti, shards, feathers:
+  /// hard-edged), water drops (a crisp disc), corn kernels and wind streaks
+  /// (their own drawings): five pools, so no sprite ever has its texture
+  /// swapped while in play.
+  static const int poolSize = 150;
+  static const int paperSize = 110;
   static const int dropSize = 56;
-  static const int ringCount = 4;
+  static const int kernelSize = 120;
+  static const int streakSize = 70;
+  static const int ringCount = 8;
 
   final List<_Billboard> _sprites = [];
   final List<_Billboard> _paper = [];
   final List<_Billboard> _drops = [];
+  final List<_Billboard> _kernels = [];
+  final List<_Billboard> _streaks = [];
   final List<tjs.Mesh> _rings = [];
   tjs.DataTexture? _disc;
   tjs.DataTexture? _drop;
+  tjs.DataTexture? _kernel;
+  tjs.DataTexture? _streak;
 
   /// The pool's soft disc (world-owned): the world's dispose kills it via
   /// its owned list; a fresh pool stamps a new disc.
@@ -377,8 +385,19 @@ class _PuttFxPool {
   /// drops from the overview too (world-owned like [texture]).
   tjs.DataTexture get dropTexture => _drop ??= _crispDiscTexture(size: 32);
 
+  /// The corn kernel's drawing and the wind's line, world-owned like the
+  /// disc.
+  tjs.DataTexture get kernelTexture => _kernel ??= _kernelTexture();
+  tjs.DataTexture get streakTexture => _streak ??= _streakTexture();
+
   void reset(tjs.Group parent) {
-    for (final sprite in [..._sprites, ..._paper, ..._drops]) {
+    for (final sprite in [
+      ..._sprites,
+      ..._paper,
+      ..._drops,
+      ..._kernels,
+      ..._streaks,
+    ]) {
       parent.remove(sprite);
       sprite.material?.map = null;
       sprite.material?.dispose();
@@ -396,6 +415,17 @@ class _PuttFxPool {
       parent.add(sprite);
       _drops.add(sprite);
     }
+    _kernels.clear();
+    _streaks.clear();
+    final streak = streakTexture;
+    for (var i = 0; i < streakSize; i++) {
+      final sprite = _Billboard(map: streak)
+        ..name = 'fx-streak'
+        ..visible = false
+        ..renderOrder = 8;
+      parent.add(sprite);
+      _streaks.add(sprite);
+    }
     for (var i = 0; i < paperSize; i++) {
       final sprite = _Billboard(map: _paperTexture)
         ..name = 'fx-paper'
@@ -403,6 +433,15 @@ class _PuttFxPool {
         ..renderOrder = 8;
       parent.add(sprite);
       _paper.add(sprite);
+    }
+    final kernel = kernelTexture;
+    for (var i = 0; i < kernelSize; i++) {
+      final sprite = _Billboard(map: kernel)
+        ..name = 'fx-kernel'
+        ..visible = false
+        ..renderOrder = 8;
+      parent.add(sprite);
+      _kernels.add(sprite);
     }
     for (final ring in [..._rings]) {
       parent.remove(ring);
@@ -432,11 +471,16 @@ class _PuttFxPool {
     }
   }
 
-  /// Places this frame's fx onto the pooled sprites; the rest hide.
-  void apply(PuttWorldFrame frame, {double scale = 1, _Ground? ground}) {
+  /// Places this frame's fx onto the pooled sprites; the rest hide. The
+  /// [camera] (last frame's) turns the wind's streaks along their run on
+  /// screen.
+  void apply(PuttWorldFrame frame,
+      {double scale = 1, _Ground? ground, tjs.PerspectiveCamera? camera}) {
     var active = 0;
     var paper = 0;
     var drops = 0;
+    var kernels = 0;
+    var streaks = 0;
     var rings = 0;
     for (final fx in frame.fxs) {
       final progress = fx.progress.clamp(0.0, 1.0);
@@ -454,12 +498,20 @@ class _PuttFxPool {
         continue;
       }
       final _Billboard sprite;
-      if (fx.kind == PuttWorldFxKind.confetti) {
+      if (fx.kind == PuttWorldFxKind.confetti ||
+          fx.kind == PuttWorldFxKind.shard ||
+          fx.kind == PuttWorldFxKind.feather) {
         if (paper >= _paper.length) continue;
         sprite = _paper[paper++];
       } else if (fx.kind == PuttWorldFxKind.droplet) {
         if (drops >= _drops.length) continue;
         sprite = _drops[drops++];
+      } else if (fx.kind == PuttWorldFxKind.kernel) {
+        if (kernels >= _kernels.length) continue;
+        sprite = _kernels[kernels++];
+      } else if (fx.kind == PuttWorldFxKind.streak) {
+        if (streaks >= _streaks.length) continue;
+        sprite = _streaks[streaks++];
       } else {
         if (active >= _sprites.length) continue;
         sprite = _sprites[active++];
@@ -507,18 +559,72 @@ class _PuttFxPool {
         case PuttWorldFxKind.ring:
           lift = 0; // handled above
           width = height = 0;
+        case PuttWorldFxKind.kernel:
+          // A kernel tumbling down and bouncing (its height rides in).
+          lift = fx.height ?? 0.1;
+          width = fx.size * 0.85;
+          height = fx.size;
+          rotation = progress * 11 + fx.at.x * 3;
+          opacity = progress < 0.8 ? 1 : (1 - progress) * 5;
+        case PuttWorldFxKind.streak:
+          // The wind: a long thin wisp, swelling in and thinning out,
+          // turned along its run on screen.
+          lift = fx.height ?? 0.55;
+          final swell = math.sin(progress * math.pi);
+          width = fx.size * (3.2 + 2.4 * swell);
+          height = fx.size * (0.18 + 0.08 * swell);
+          opacity = math.min(1.0, swell * 1.4) * 0.8;
+          final toward = fx.toward;
+          if (camera != null && toward != null) {
+            final y = (ground?.at(at) ?? 0) + lift;
+            final a = tjs.Vector3(at.x, y, at.y).project(camera);
+            final b = tjs.Vector3(toward.x, y, toward.y).project(camera);
+            rotation = math.atan2(b.y - a.y, (b.x - a.x) * camera.aspect);
+          }
+        case PuttWorldFxKind.steam:
+          lift = (fx.height ?? 0.6) + progress * 1.2;
+          width = height = math.max(fx.size * (0.55 + progress * 1.5), 0.02);
+          opacity = math.sin(progress * math.pi) * 0.6;
+        case PuttWorldFxKind.swirl:
+          lift = fx.height ?? (0.25 + progress * 1.3);
+          width = height = math.max(fx.size * (1 - 0.55 * progress), 0.02);
+          opacity = (1 - progress) * 0.95;
+        case PuttWorldFxKind.shard:
+          // A bit of popped shell, glinting as it turns.
+          lift = fx.height ?? 0.3;
+          final turn = math.sin(progress * 19 + fx.at.y * 5).abs();
+          width = fx.size;
+          height = fx.size * (0.3 + 0.7 * turn);
+          rotation = progress * 13 + fx.at.x;
+          opacity = progress < 0.7 ? 0.95 : (1 - progress) / 0.3 * 0.95;
+        case PuttWorldFxKind.feather:
+          // A feather rocking as it drifts down.
+          lift = fx.height ?? 0.6;
+          width = fx.size * 0.42;
+          height = fx.size;
+          rotation = math.sin(progress * 8 + fx.at.x * 2) * 0.9;
+          opacity = progress < 0.75 ? 1 : (1 - progress) * 4;
+        case PuttWorldFxKind.glint:
+          lift = fx.height ?? 0.22;
+          final pulse = math.sin(progress * math.pi);
+          width = height = math.max(fx.size * (0.5 + 0.9 * pulse), 0.02);
+          opacity = pulse;
       }
-      if (fx.height != null && fx.kind != PuttWorldFxKind.confetti) {
+      if (fx.height != null &&
+          fx.kind != PuttWorldFxKind.confetti &&
+          fx.kind != PuttWorldFxKind.steam &&
+          fx.kind != PuttWorldFxKind.streak) {
         lift = fx.height!;
       }
       sprite.position.setValues(at.x, (ground?.at(at) ?? 0) + lift, at.y);
       // What must read from the play camera's distance grows with it.
-      final grow = (fx.kind == PuttWorldFxKind.confetti ||
-              fx.kind == PuttWorldFxKind.sparkle ||
-              fx.kind == PuttWorldFxKind.droplet ||
-              fx.kind == PuttWorldFxKind.poof)
-          ? scale
-          : 1.0;
+      final grow = switch (fx.kind) {
+        PuttWorldFxKind.suction ||
+        PuttWorldFxKind.dust ||
+        PuttWorldFxKind.ring =>
+          1.0,
+        _ => scale,
+      };
       sprite.scale.setValues(width * grow, height * grow, 1);
       sprite.look
         ..color = _linOf(color)
@@ -537,6 +643,16 @@ class _PuttFxPool {
     }
     for (var i = drops; i < _drops.length; i++) {
       _drops[i]
+        ..visible = false
+        ..scale.setValues(0.001, 0.001, 1);
+    }
+    for (var i = kernels; i < _kernels.length; i++) {
+      _kernels[i]
+        ..visible = false
+        ..scale.setValues(0.001, 0.001, 1);
+    }
+    for (var i = streaks; i < _streaks.length; i++) {
+      _streaks[i]
         ..visible = false
         ..scale.setValues(0.001, 0.001, 1);
     }

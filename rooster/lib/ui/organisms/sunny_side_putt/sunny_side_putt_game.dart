@@ -49,6 +49,7 @@ import 'aim_controller.dart';
 import 'putt_art.dart';
 import 'putt_audio.dart';
 import 'putt_camera_director.dart';
+import 'putt_cast_feed.dart';
 import 'putt_hud.dart';
 import 'putt_match.dart';
 import 'putt_menus.dart';
@@ -491,6 +492,25 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
           cameraOverview: game.overview,
           onLeave: _leave,
         ),
+        // Every power-up anyone casts, told to everyone: under the top
+        // bar, clear of the green's middle (kept while the menu is up, so
+        // its queue carries on after).
+        if (match.phase == PuttPhase.holePlay)
+          Positioned(
+            top: 100,
+            left: 64,
+            right: 64,
+            child: SafeArea(
+              bottom: false,
+              child: Center(
+                child: Visibility(
+                  visible: !menuOpen,
+                  maintainState: true,
+                  child: PuttCastFeed(match: match),
+                ),
+              ),
+            ),
+          ),
         // The quick reactions, under the top-right buttons, while a hole
         // plays or its results are up.
         if (!menuOpen &&
@@ -582,9 +602,7 @@ class SunnySidePuttGame extends FlameGame {
   final PuttTargeting targeting = PuttTargeting();
 
   SunnySidePuttGame({required this.match, required this.onSfx})
-      : aimLayer = PuttAimLayer() {
-    targeting.onCast = _castFx;
-  }
+      : aimLayer = PuttAimLayer();
 
   /// A session's rebuilt match: the same world and camera carry on.
   void swapMatch(PuttMatch next) {
@@ -592,6 +610,7 @@ class SunnySidePuttGame extends FlameGame {
     match = next;
     _fittedHole = null;
     _hopRides.clear();
+    _clearCastScenes();
     aim.cancel();
     targeting.cancel();
     _dragAnchor = null;
@@ -655,6 +674,7 @@ class SunnySidePuttGame extends FlameGame {
     final holeId = match.hole?.id;
     if (holeId != null && holeId != _fittedHole) {
       _fitCamera(size);
+      _clearCastScenes();
       aim.cancel();
       _dragAnchor = null;
     }
@@ -665,6 +685,7 @@ class SunnySidePuttGame extends FlameGame {
     _directCamera(dt);
     _spendNotices();
     _spendFxSpots();
+    _updateCastScenes(dt);
     _trackReadiness(dt);
   }
 
@@ -745,8 +766,14 @@ class SunnySidePuttGame extends FlameGame {
     if (current != null) {
       if (engineWorld != null) {
         collected = engineWorld.collectedBoxes;
+        final tick = engineWorld.tick;
+        final tickSeconds = match.config.physics.dt;
         for (final ball in engineWorld.balls) {
           if (ball.holed) continue; // in the nest; the suction told the story
+          // The power-ups on this egg, as everyone sees them: the shell's
+          // bubble, the ghost's fade, the magnet's pull on the nest.
+          final player = match.engine.player(ball.playerId);
+          final ghostUntil = ball.timedUntil[PowerUpFlag.ghost];
           eggs.add(PuttWorldEgg(
             playerId: ball.playerId,
             position: match.renderPositionOf(ball.playerId),
@@ -755,9 +782,14 @@ class SunnySidePuttGame extends FlameGame {
             tint: tintFor(ball.playerId),
             radius: eggRadius,
             mine: ball.playerId == match.localPlayerId && match.myShotReady,
+            shielded: (player?.shields ?? 0) > 0,
+            ghostSeconds: ghostUntil == null || ghostUntil <= tick
+                ? 0
+                : (ghostUntil - tick - match.alpha) * tickSeconds,
+            magnet: (player?.nextShot.magnet ?? false) ||
+                ball.flagActive(PowerUpFlag.magnet, tick),
           ));
         }
-        final tickSeconds = match.config.physics.dt;
         for (final obstacle in current.obstacles) {
           final now = henPositionAt(obstacle, engineWorld.tick, tickSeconds);
           final then =
@@ -801,7 +833,9 @@ class SunnySidePuttGame extends FlameGame {
         );
       }
       fxViews = [
-        for (final particle in fx.particles) particle.worldView(),
+        for (final particle in fx.particles)
+          // A staggered particle shows once its beat comes.
+          if (particle.age >= 0) particle.worldView(),
       ];
     }
     return PuttWorldFrame(
@@ -812,6 +846,7 @@ class SunnySidePuttGame extends FlameGame {
       fxs: fxViews,
       followPoint: _cameraFollowPoint(),
       collectedBoxes: collected,
+      crows: current == null ? const [] : _crowsForFrame(),
     );
   }
 
@@ -1058,9 +1093,265 @@ class SunnySidePuttGame extends FlameGame {
             fx.sparkles(at);
             fx.ring(at, PuttPalette.yolk, size: 1.8);
           }
+        case PuttFxSpotKind.cast:
+          _castScene(spot);
+        case PuttFxSpotKind.hit:
+          _hitScene(spot);
+        case PuttFxSpotKind.steal:
+          _launchCrow(spot);
+        case PuttFxSpotKind.shieldPop:
+          // The bubble bursts: a ring, the film's shards, a flash.
+          final at = spot.at ?? _eggNow(spot.who);
+          if (at != null) {
+            fx.ring(at, _shellBlue, size: 2.8);
+            fx.ring(at, PuttPalette.shell, size: 1.6);
+            fx.shards(at);
+            fx.sparkles(at);
+          }
+        case PuttFxSpotKind.shot:
+          _shotScene(spot);
       }
     }
     match.fxSpots.clear();
+  }
+
+  // ---- the casts' scenes ------------------------------------------------------------
+
+  /// The Thick Shell's pale sky blue.
+  static const ui.Color _shellBlue = ui.Color(0xFFBFEAFF);
+
+  /// The crows in the air, oldest first.
+  final List<_CrowFlight> _crows = [];
+
+  /// Steam trailing a Strong Coffee's putt, per player: seconds left.
+  final Map<String, double> _steamRides = {};
+
+  /// Per egg, seconds to its next puff of steam and of the ghost's wisp.
+  final Map<String, double> _steamClock = {};
+  final Map<String, double> _wispClock = {};
+
+  /// The spot each caster's last cast aimed at: its hits' scenes run
+  /// toward it (the gust's wind).
+  final Map<String, core.Vec2> _castSpots = {};
+
+  /// A crow's whole flight, seconds.
+  static const double crowFlightSeconds = 1.9;
+
+  /// Where the crow lets go of its loot, as a share of its flight.
+  static const double _crowDrop = 0.86;
+
+  void _clearCastScenes() {
+    _crows.clear();
+    _steamRides.clear();
+    _steamClock.clear();
+    _wispClock.clear();
+    _castSpots.clear();
+  }
+
+  /// Where [playerId]'s egg is drawn now, when it is out on the green.
+  core.Vec2? _eggNow(String? playerId) {
+    if (playerId == null) return null;
+    final ball = match.engine.world?.ball(playerId);
+    if (ball == null || ball.holed) return null;
+    return match.renderPositionOf(playerId);
+  }
+
+  /// A cast, as everyone sees it: a burst in the power-up's colour at the
+  /// caster's egg, and the scene's start where the cast aimed.
+  void _castScene(PuttFxSpot spot) {
+    final effect = spot.effectId ?? '';
+    final caster = spot.who;
+    final at = spot.at ?? _eggNow(caster);
+    final point = spot.toward;
+    if (caster != null && point != null) _castSpots[caster] = point;
+    if (at != null) {
+      fx.sparkles(at);
+      fx.ring(at, puttPowerUpAccent(effect), size: 2.2);
+    }
+    switch (effect) {
+      case 'sprinkler':
+        if (point == null) return;
+        fx.splash(point);
+        fx.ring(point, PuttPalette.water, size: kSprinklerRadius);
+        fx.ring(point, PuttPalette.shell, size: kSprinklerRadius * 0.55);
+      case 'gust':
+        if (point == null) return;
+        fx.ring(point, PuttPalette.shell, size: 3.2);
+        fx.poof(point);
+        fx.windAround(point);
+      case 'rabbit_hole':
+        // Down the hole: a puff of dirt where the egg was.
+        if (at == null) return;
+        fx.poof(at);
+        fx.dirt(at);
+      case 'ghost_egg':
+        if (at != null) fx.wisps(at, count: 8);
+      case 'strong_coffee':
+        if (at != null) fx.steam(at, count: 5);
+      case 'chicken_hop':
+        if (at != null) fx.feathers(at, count: 6);
+      case 'thick_shell':
+        if (at != null) fx.ring(at, _shellBlue, size: 1.5);
+      case 'nest_magnet':
+        final nest = match.hole?.nest.position;
+        if (nest != null) {
+          fx.ring(nest, puttPowerUpAccent(effect), size: 3.6);
+          fx.sparkles(nest);
+        }
+      case 'nest_swap':
+        // The trade: a dotted line between the two eggs' new spots.
+        final mine = _eggNow(caster);
+        final theirs = _eggNow(spot.other);
+        if (mine != null && theirs != null) {
+          fx.link(mine, theirs, puttPowerUpAccent(effect));
+        }
+    }
+  }
+
+  /// A cast reaching an egg: the kernels raining round it, the wind behind
+  /// it, the spray on it, a swap's swirl, a hop's landing.
+  void _hitScene(PuttFxSpot spot) {
+    final who = spot.who;
+    final at = spot.at ?? _eggNow(who);
+    if (who == null || at == null) return;
+    switch (spot.effectId) {
+      case 'corn_rain':
+        fx.kernels(at);
+      case 'gust':
+        final toward = _castSpots[spot.other];
+        if (toward != null) fx.windBehind(at, toward);
+      case 'sprinkler':
+        fx.soak(at);
+      case 'nest_swap':
+        fx.poof(at);
+        fx.swirl(at, tintFor(who));
+        fx.ring(at, puttPowerUpAccent('nest_swap'), size: 2.2);
+      case 'rabbit_hole':
+        // Up out of the hole at the new spot.
+        fx.dirt(at);
+        fx.sparkles(at);
+        fx.ring(at, PuttPalette.yolk, size: 1.8);
+    }
+  }
+
+  /// A shot leaving with a next-shot power-up on it: a hawk's straight
+  /// line glinting ahead, a coffee's steam trailing, a hop's feathers, the
+  /// magnet's ring.
+  void _shotScene(PuttFxSpot spot) {
+    final who = spot.who;
+    final at = spot.at;
+    if (who == null || at == null) return;
+    switch (spot.effectId) {
+      case 'hawk_eye':
+        final toward = spot.toward;
+        if (toward != null) fx.sightLine(at, toward - at);
+      case 'strong_coffee':
+        _steamRides[who] = 1.3;
+        fx.steam(at, count: 4);
+      case 'chicken_hop':
+        fx.feathers(at, count: 9);
+      case 'nest_magnet':
+        fx.ring(at, puttPowerUpAccent('nest_magnet'), size: 1.6);
+    }
+  }
+
+  /// A Thieving Crow takes off from the robbed egg (or the nest, when that
+  /// egg is in) for the thief's.
+  void _launchCrow(PuttFxSpot spot) {
+    final thief = spot.who;
+    final victim = spot.other;
+    final effect = spot.effectId;
+    if (thief == null || victim == null || effect == null) return;
+    final from = spot.at ?? _eggNow(victim) ?? match.hole?.nest.position;
+    if (from == null) return;
+    // Two at a time at most: a third sends the oldest off at once.
+    if (_crows.length >= 2) _crows.removeAt(0);
+    _crows.add(_CrowFlight(
+      thiefId: thief,
+      effectId: effect,
+      from: from,
+      startedAt: clock,
+    ));
+  }
+
+  List<PuttWorldCrow> _crowsForFrame() => [
+        for (final crow in _crows)
+          PuttWorldCrow(
+            from: crow.from,
+            to: _eggNow(crow.thiefId) ?? match.hole?.nest.position ?? crow.from,
+            progress: ((clock - crow.startedAt) / crowFlightSeconds)
+                .clamp(0.0, 1.0)
+                .toDouble(),
+            effectId: crow.effectId,
+          ),
+      ];
+
+  /// Once a frame: the crows land their loot and go; strong coffee steams
+  /// (a wisp now and then while it waits, a trail behind its putt); a
+  /// ghost leaves wisps.
+  void _updateCastScenes(double dt) {
+    for (final crow in _crows) {
+      if (crow.landed) continue;
+      if ((clock - crow.startedAt) / crowFlightSeconds < _crowDrop) continue;
+      crow.landed = true;
+      final at = _eggNow(crow.thiefId) ?? match.hole?.nest.position;
+      if (at != null) {
+        fx.sparkles(at);
+        fx.ring(at, PuttPalette.yolk, size: 1.8);
+      }
+      // In the thief's hand now: my own carton chimes.
+      if (crow.thiefId == match.localPlayerId) {
+        onSfx(PuttSfx.powerUpPicked, 1);
+      }
+    }
+    _crows.removeWhere((crow) => clock - crow.startedAt >= crowFlightSeconds);
+    final world = match.engine.world;
+    if (world == null || match.phase != PuttPhase.holePlay) {
+      _steamRides.clear();
+      return;
+    }
+    for (final ball in world.balls) {
+      final id = ball.playerId;
+      if (ball.holed) {
+        _steamRides.remove(id);
+        continue;
+      }
+      final at = match.renderPositionOf(id);
+      // Strong Coffee: a trail of puffs behind the boosted putt, a wisp
+      // now and then off a cup still waiting.
+      final ride = _steamRides[id];
+      var steamEvery = 0.0;
+      if (ride != null) {
+        final left = ride - dt;
+        if (left <= 0) {
+          _steamRides.remove(id);
+        } else {
+          _steamRides[id] = left;
+        }
+        if (ball.speed > 0.8) steamEvery = 0.045;
+      } else if ((match.engine.player(id)?.nextShot.powerMultiplier ?? 1) > 1) {
+        steamEvery = 0.42;
+      }
+      if (steamEvery > 0) {
+        final next = (_steamClock[id] ?? 0) - dt;
+        if (next <= 0) {
+          fx.steam(at, count: 1, trailing: ride != null);
+          _steamClock[id] = steamEvery;
+        } else {
+          _steamClock[id] = next;
+        }
+      }
+      // Ghost Egg: pale wisps off it while it lasts.
+      if (ball.flagActive(PowerUpFlag.ghost, world.tick)) {
+        final next = (_wispClock[id] ?? 0) - dt;
+        if (next <= 0) {
+          fx.wisps(at, count: 1);
+          _wispClock[id] = ball.speed > 0.8 ? 0.06 : 0.22;
+        } else {
+          _wispClock[id] = next;
+        }
+      }
+    }
   }
 
   // ---- pointer plumbing ---------------------------------------------------------------
@@ -1133,34 +1424,6 @@ class SunnySidePuttGame extends FlameGame {
     return targeting.castAt(match, point);
   }
 
-  /// A cast's burst: the spray where a Sprinkler lands, a ring where the
-  /// Gust blows to, a poof and a sparkle for a Rabbit Hole's hop, a little
-  /// sparkle at my egg for the rest.
-  void _castFx(String effectId, PowerUpTarget? target, core.Vec2? myEggBefore) {
-    final point = target?.point;
-    final mine = match.myBall?.position;
-    switch (effectId) {
-      case 'sprinkler':
-        if (point == null) return;
-        fx.splash(point);
-        fx.ring(point, PuttPalette.water, size: kSprinklerRadius);
-      case 'gust':
-        if (point == null) return;
-        fx.ring(point, PuttPalette.shell, size: 3.2);
-        fx.poof(point);
-      case 'rabbit_hole':
-        if (myEggBefore != null) fx.poof(myEggBefore);
-        if (mine != null) {
-          fx.sparkles(mine);
-          fx.ring(mine, PuttPalette.yolk, size: 1.8);
-        }
-      default:
-        if (mine != null && !(match.myBall?.holed ?? true)) {
-          fx.sparkles(mine);
-        }
-    }
-  }
-
   // ---- attached facts the layers read ---------------------------------------------------
 
   /// Egg ring colours, stable per player in id order: the same tint the
@@ -1179,6 +1442,42 @@ class _HopRide {
 
   const _HopRide({required this.launchSpeed});
 }
+
+/// A Thieving Crow's flight: whose egg it heads for, what it carries, the
+/// spot it took the loot from, and when it left (the game's clock).
+class _CrowFlight {
+  final String thiefId;
+  final String effectId;
+  final core.Vec2 from;
+  final double startedAt;
+
+  /// Whether the loot is in the thief's hand yet.
+  bool landed = false;
+
+  _CrowFlight({
+    required this.thiefId,
+    required this.effectId,
+    required this.from,
+    required this.startedAt,
+  });
+}
+
+/// Each power-up's colour on the green: the ring its cast sends out.
+ui.Color puttPowerUpAccent(String effectId) => switch (effectId) {
+      'hawk_eye' => PuttPalette.yolk,
+      'nest_magnet' => PuttPalette.comb,
+      'ghost_egg' => const ui.Color(0xFFD9CCFF),
+      'chicken_hop' => PuttPalette.shell,
+      'rabbit_hole' => const ui.Color(0xFFC08A55),
+      'gust' => const ui.Color(0xFFE2F4FF),
+      'thick_shell' => const ui.Color(0xFFBFEAFF),
+      'strong_coffee' => const ui.Color(0xFFB07A52),
+      'nest_swap' => const ui.Color(0xFFC3A2FF),
+      'sprinkler' => PuttPalette.water,
+      'corn_rain' => const ui.Color(0xFFFFC61A),
+      'thieving_crow' => const ui.Color(0xFF5A5470),
+      _ => PuttPalette.yolk,
+    };
 
 // ---- the roll guide -----------------------------------------------------------------------
 
@@ -1434,6 +1733,238 @@ class PuttFxLayer {
     }
   }
 
+  // ---- the casts' particles ----------------------------------------------------------
+
+  /// Corn Rain round an egg at [at]: kernels dropping out of the sky on
+  /// staggered beats, bouncing twice and lying a moment.
+  void kernels(core.Vec2 at, {int count = 10}) {
+    for (var i = 0; i < count; i++) {
+      final angle = _random.nextDouble() * 2 * math.pi;
+      final reach = 0.35 + _random.nextDouble() * 1.4;
+      final scatter = _random.nextDouble() * 2 * math.pi;
+      _particles.add(_FxParticle(
+        at: at + core.Vec2(math.cos(angle), math.sin(angle)) * reach,
+        velocity: core.Vec2.zero,
+        life: 1.8 + _random.nextDouble() * 0.5,
+        kind: _FxKind.kernel,
+        size: 0.44 + _random.nextDouble() * 0.12,
+        // White: the kernel's own drawing shows.
+        color: const ui.Color(0xFFFFFFFF),
+        height: 5.5 + _random.nextDouble() * 3,
+        climb: -1 - _random.nextDouble() * 2,
+        kick: core.Vec2(math.cos(scatter), math.sin(scatter)) *
+            (0.9 + _random.nextDouble() * 1.4),
+        delay: _random.nextDouble() * 0.5,
+      ));
+    }
+  }
+
+  /// A Gust's wind converging on its spot from all round.
+  void windAround(core.Vec2 spot, {int count = 14}) {
+    for (var i = 0; i < count; i++) {
+      final angle = i / count * 2 * math.pi + _random.nextDouble() * 0.3;
+      final reach = 6 + _random.nextDouble() * 5;
+      final from = spot + core.Vec2(math.cos(angle), math.sin(angle)) * reach;
+      _streak(from, spot, delay: _random.nextDouble() * 0.35);
+    }
+  }
+
+  /// The wind behind a pushed egg at [at], running on toward [spot].
+  void windBehind(core.Vec2 at, core.Vec2 spot, {int count = 10}) {
+    final way = (spot - at).normalized(const core.Vec2(1, 0));
+    final side = core.Vec2(-way.y, way.x);
+    for (var i = 0; i < count; i++) {
+      final back = 1.5 + _random.nextDouble() * 3.5;
+      final off = (_random.nextDouble() * 2 - 1) * 1.1;
+      final from = at - way * back + side * off;
+      _streak(from, from + way * (back + 4), delay: i * 0.05);
+    }
+  }
+
+  void _streak(core.Vec2 from, core.Vec2 to, {double delay = 0}) {
+    final way = to - from;
+    final speed = 11 + _random.nextDouble() * 5;
+    final life = (way.length / speed).clamp(0.35, 0.85).toDouble();
+    _particles.add(_FxParticle(
+      at: from,
+      velocity: way.normalized(const core.Vec2(1, 0)) * speed,
+      life: life,
+      kind: _FxKind.streak,
+      size: 0.5 + _random.nextDouble() * 0.25,
+      color: const ui.Color(0xFFFFFFFF),
+      height: 0.3 + _random.nextDouble() * 0.9,
+      delay: delay,
+    ));
+  }
+
+  /// A Rabbit Hole's dirt, thrown up round the hole at [at].
+  void dirt(core.Vec2 at) {
+    for (var i = 0; i < 10; i++) {
+      final angle = i / 10 * 2 * math.pi + _random.nextDouble() * 0.4;
+      _particles.add(_FxParticle(
+        at: at,
+        velocity: core.Vec2(math.cos(angle), math.sin(angle)) *
+            (1.2 + _random.nextDouble() * 1.6),
+        life: 0.6,
+        kind: _FxKind.dust,
+        size: 0.4,
+        color:
+            i.isEven ? const ui.Color(0xFF8A623F) : const ui.Color(0xFFB98A5E),
+      ));
+    }
+  }
+
+  /// A Ghost Egg's pale wisps rising off the egg at [at].
+  void wisps(core.Vec2 at, {int count = 1}) {
+    for (var i = 0; i < count; i++) {
+      final angle = _random.nextDouble() * 2 * math.pi;
+      _particles.add(_FxParticle(
+        at: at + core.Vec2(math.cos(angle), math.sin(angle)) * 0.25,
+        velocity: core.Vec2(math.cos(angle), math.sin(angle)) *
+            (0.2 + _random.nextDouble() * 0.5),
+        life: 0.8 + _random.nextDouble() * 0.4,
+        kind: _FxKind.steam,
+        size: 0.32 + _random.nextDouble() * 0.12,
+        color: const ui.Color(0xFFE6DEFF),
+        height: 0.5,
+      ));
+    }
+  }
+
+  /// Strong Coffee's steam off the egg at [at]: a soft wisp, or with
+  /// [trailing] the bigger puffs a boosted putt leaves behind it.
+  void steam(core.Vec2 at, {int count = 1, bool trailing = false}) {
+    for (var i = 0; i < count; i++) {
+      final angle = _random.nextDouble() * 2 * math.pi;
+      _particles.add(_FxParticle(
+        at: at + core.Vec2(math.cos(angle), math.sin(angle)) * 0.15,
+        velocity: core.Vec2(math.cos(angle), math.sin(angle)) *
+            (0.15 + _random.nextDouble() * 0.35),
+        life: (trailing ? 0.8 : 1.1) + _random.nextDouble() * 0.4,
+        kind: _FxKind.steam,
+        size: (trailing ? 0.55 : 0.4) + _random.nextDouble() * 0.15,
+        color:
+            i.isEven ? const ui.Color(0xFFFFFFFF) : const ui.Color(0xFFF3E9DD),
+        height: trailing ? 0.45 : 0.8,
+      ));
+    }
+  }
+
+  /// A Chicken Hop's feathers, puffed off the egg at [at] to drift down.
+  void feathers(core.Vec2 at, {int count = 8}) {
+    for (var i = 0; i < count; i++) {
+      final angle = i / count * 2 * math.pi + _random.nextDouble() * 0.5;
+      _particles.add(_FxParticle(
+        at: at,
+        velocity: core.Vec2(math.cos(angle), math.sin(angle)) *
+            (0.8 + _random.nextDouble() * 1.2),
+        life: 1.4 + _random.nextDouble() * 0.5,
+        kind: _FxKind.feather,
+        size: 0.42 + _random.nextDouble() * 0.12,
+        color: i % 3 == 2 ? PuttPalette.cream : PuttPalette.shell,
+        height: 0.7,
+        climb: 1.8 + _random.nextDouble() * 1.2,
+      ));
+    }
+  }
+
+  /// A popped Thick Shell: the bubble's film flying out in shards.
+  void shards(core.Vec2 at) {
+    const colors = [
+      ui.Color(0xFFBFEAFF),
+      ui.Color(0xFFFFFFFF),
+      ui.Color(0xFF8FD0FF),
+    ];
+    for (var i = 0; i < 16; i++) {
+      final angle = i / 16 * 2 * math.pi + _random.nextDouble() * 0.3;
+      _particles.add(_FxParticle(
+        at: at,
+        velocity: core.Vec2(math.cos(angle), math.sin(angle)) *
+            (2.2 + _random.nextDouble() * 2.4),
+        life: 0.85 + _random.nextDouble() * 0.35,
+        kind: _FxKind.shard,
+        size: 0.22 + _random.nextDouble() * 0.12,
+        color: colors[i % colors.length],
+        height: 0.6 + _random.nextDouble() * 0.4,
+        climb: 2.5 + _random.nextDouble() * 3.5,
+        kick: core.Vec2.zero,
+      ));
+    }
+  }
+
+  /// A Sprinkler's spray landing on a soaked egg at [at].
+  void soak(core.Vec2 at) {
+    for (var i = 0; i < 10; i++) {
+      final angle = i * 2.39996;
+      _particles.add(_FxParticle(
+        at: at,
+        velocity:
+            core.Vec2(math.cos(angle), math.sin(angle)) * (1 + (i % 4) * 0.6),
+        life: 0.6,
+        kind: _FxKind.droplet,
+        size: i.isEven ? 0.34 : 0.26,
+        color: i % 3 == 2
+            ? const ui.Color(0xFF8FD0FF)
+            : const ui.Color(0xFFFFFFFF),
+      ));
+    }
+  }
+
+  /// A Nest Swap's swirl round the egg at [at], in the player's [tint]
+  /// and the swap's violet.
+  void swirl(core.Vec2 at, ui.Color tint) {
+    for (var i = 0; i < 14; i++) {
+      _particles.add(_FxParticle(
+        at: at,
+        velocity: core.Vec2.zero,
+        life: 1.05,
+        kind: _FxKind.swirl,
+        size: 0.55,
+        color: i.isEven ? tint : const ui.Color(0xFFC3A2FF),
+        orbit: at,
+        orbitRadius: 0.9 + (i % 3) * 0.22,
+        orbitAngle: i / 14 * 2 * math.pi,
+        orbitSpeed: 7.5,
+      ));
+    }
+  }
+
+  /// A dotted line of glints from [from] to [to], lighting up one after
+  /// another: a Nest Swap's trade.
+  void link(core.Vec2 from, core.Vec2 to, ui.Color color) {
+    final way = to - from;
+    final steps = (way.length / 0.8).ceil().clamp(2, 30);
+    for (var i = 0; i <= steps; i++) {
+      _particles.add(_FxParticle(
+        at: from + way * (i / steps),
+        velocity: core.Vec2.zero,
+        life: 0.8,
+        kind: _FxKind.glint,
+        size: 0.5,
+        color: i.isEven ? color : PuttPalette.shell,
+        delay: i * 0.02,
+      ));
+    }
+  }
+
+  /// Hawk Eye's straight line: glints along the shot's [heading] from
+  /// [at], lighting up one after another ahead of the egg.
+  void sightLine(core.Vec2 at, core.Vec2 heading) {
+    final way = heading.normalized(const core.Vec2(1, 0));
+    for (var i = 1; i <= 18; i++) {
+      final along = i * 0.7;
+      _particles.add(_FxParticle(
+        at: at + way * along,
+        velocity: core.Vec2.zero,
+        life: 0.8,
+        kind: _FxKind.glint,
+        size: 0.6,
+        color: i.isEven ? PuttPalette.yolk : PuttPalette.shell,
+        delay: i * 0.03,
+      ));
+    }
+  }
+
   /// A shockwave ring spreading over the turf.
   void ring(core.Vec2 at, ui.Color color, {double size = 2.5}) {
     _particles.add(_FxParticle(
@@ -1451,6 +1982,8 @@ class PuttFxLayer {
   void update(double dt) {
     for (final particle in _particles) {
       particle.age += dt;
+      // Still waiting for its beat (a staggered rain, a wind's gusts).
+      if (particle.age < 0) continue;
       particle.advance(dt);
     }
     _particles.removeWhere((particle) => particle.age >= particle.life);
@@ -1459,7 +1992,22 @@ class PuttFxLayer {
 
 // ---- particles -------------------------------------------------------------------------
 
-enum _FxKind { droplet, sparkle, suction, poof, dust, confetti, ring }
+enum _FxKind {
+  droplet,
+  sparkle,
+  suction,
+  poof,
+  dust,
+  confetti,
+  ring,
+  kernel,
+  streak,
+  steam,
+  swirl,
+  shard,
+  feather,
+  glint,
+}
 
 class _FxParticle {
   core.Vec2 position;
@@ -1468,7 +2016,9 @@ class _FxParticle {
   /// Where a suction particle flies home to.
   final core.Vec2? toward;
 
-  double age = 0;
+  /// Seconds lived; it starts below zero by a staggered particle's delay,
+  /// and the particle shows from 0.
+  double age;
   final double life;
   final _FxKind kind;
   final double size;
@@ -1477,9 +2027,20 @@ class _FxParticle {
   final ui.Color? color;
 
   /// Height over the green and its rate, for the particles that fly (the
-  /// confetti falls under gravity and settles on the turf).
+  /// confetti falls under gravity and settles on the turf; kernels and
+  /// shards bounce).
   double? height;
   double climb;
+
+  /// What a kernel's first bounce throws it along the turf.
+  final core.Vec2 kick;
+  int _bounces = 0;
+
+  /// A swirl's centre, radius, angle and turn rate.
+  final core.Vec2? orbit;
+  final double orbitRadius;
+  double orbitAngle;
+  final double orbitSpeed;
 
   _FxParticle({
     required core.Vec2 at,
@@ -1491,9 +2052,44 @@ class _FxParticle {
     this.color,
     this.height,
     this.climb = 0,
-  }) : position = at;
+    this.kick = core.Vec2.zero,
+    this.orbit,
+    this.orbitRadius = 0,
+    this.orbitAngle = 0,
+    this.orbitSpeed = 0,
+    double delay = 0,
+  })  : position = at,
+        age = -delay;
 
   void advance(double dt) {
+    switch (kind) {
+      case _FxKind.kernel:
+      case _FxKind.shard:
+        _fallAndBounce(dt, gravity: kind == _FxKind.kernel ? 24 : 16);
+        return;
+      case _FxKind.feather:
+        // Up with the puff, then a slow rocking drift down.
+        position = position + velocity * dt;
+        velocity = velocity + velocity * (-1.6 * dt);
+        climb = math.max(climb - 6 * dt, -0.75);
+        height = math.max(0.06, (height ?? 0) + climb * dt);
+        return;
+      case _FxKind.swirl:
+        final centre = orbit ?? position;
+        orbitAngle += orbitSpeed * dt;
+        final shrink = 1 - 0.35 * (age / life).clamp(0.0, 1.0);
+        position = centre +
+            core.Vec2(math.cos(orbitAngle), math.sin(orbitAngle)) *
+                (orbitRadius * shrink);
+        return;
+      case _FxKind.streak:
+        position = position + velocity * dt;
+        return;
+      case _FxKind.glint:
+        return;
+      default:
+        break;
+    }
     position = position + velocity * dt;
     if (kind == _FxKind.confetti) {
       // Paper: light air drag, gravity, a gentle landing.
@@ -1520,6 +2116,29 @@ class _FxParticle {
     velocity = velocity + velocity * (-2.2 * dt);
   }
 
+  /// A kernel or a shard under gravity: down onto the turf, a bounce or
+  /// two (a kernel's first one throws it along its [kick]), then still.
+  void _fallAndBounce(double dt, {required double gravity}) {
+    position = position + velocity * dt;
+    velocity = velocity + velocity * (-1.4 * dt);
+    climb -= gravity * dt;
+    var h = (height ?? 0) + climb * dt;
+    if (h <= 0.08) {
+      h = 0.08;
+      final bounces = kind == _FxKind.kernel ? 2 : 1;
+      if (_bounces < bounces && climb < -1.2) {
+        climb = -climb * 0.42;
+        if (_bounces == 0 && kind == _FxKind.kernel) velocity = kick;
+        velocity = velocity * 0.6;
+        _bounces++;
+      } else {
+        climb = 0;
+        velocity = core.Vec2.zero;
+      }
+    }
+    height = h;
+  }
+
   /// The renderer's view of this particle this frame.
   PuttWorldFx worldView() {
     final kind = switch (this.kind) {
@@ -1530,11 +2149,21 @@ class _FxParticle {
       _FxKind.dust => PuttWorldFxKind.dust,
       _FxKind.confetti => PuttWorldFxKind.confetti,
       _FxKind.ring => PuttWorldFxKind.ring,
+      _FxKind.kernel => PuttWorldFxKind.kernel,
+      _FxKind.streak => PuttWorldFxKind.streak,
+      _FxKind.steam => PuttWorldFxKind.steam,
+      _FxKind.swirl => PuttWorldFxKind.swirl,
+      _FxKind.shard => PuttWorldFxKind.shard,
+      _FxKind.feather => PuttWorldFxKind.feather,
+      _FxKind.glint => PuttWorldFxKind.glint,
     };
     return PuttWorldFx(
       kind: kind,
       at: position,
-      toward: toward,
+      // A streak turns along its run.
+      toward: this.kind == _FxKind.streak
+          ? position + velocity.normalized(const core.Vec2(1, 0))
+          : toward,
       progress: (age / life).clamp(0.0, 1.0),
       size: size,
       color: color,

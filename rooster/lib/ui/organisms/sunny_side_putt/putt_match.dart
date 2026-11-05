@@ -65,6 +65,18 @@ enum PuttSfx {
   holeEnd,
   victory,
   click,
+
+  /// The Thieving Crow's caw as it takes a power-up.
+  crowCaw,
+
+  /// A Thick Shell holding against a cast.
+  shieldPop,
+
+  /// Corn Rain's patter of kernels.
+  cornRain,
+
+  /// A Gust's wind.
+  gust,
 }
 
 /// A headline for the HUD's banner strip: the big, low-frequency things a
@@ -93,7 +105,35 @@ enum PuttHeadlineKind { holeStart, scoreTerm, holeEnd, course, matchOver }
 
 /// Where a burst of particles goes: the events that carry a spot on the
 /// green. Filled next to [PuttNotice]s, read by the game's FX layer.
-enum PuttFxSpotKind { splash, out, back, holed, pick }
+enum PuttFxSpotKind {
+  splash,
+  out,
+  back,
+  holed,
+  pick,
+
+  /// Anyone cast a power-up ([PuttFxSpot.effectId]): the burst at the
+  /// caster's egg ([PuttFxSpot.at], where it stood as it cast) and the
+  /// scene's start at its spot ([PuttFxSpot.toward], the cast's target).
+  cast,
+
+  /// A cast reached an egg ([PuttFxSpot.who], cast by
+  /// [PuttFxSpot.other]): the effect's scene on it (kernels round it, the
+  /// wind behind it, a soak, a swap's swirl).
+  hit,
+
+  /// A Thieving Crow took [PuttFxSpot.effectId] from [PuttFxSpot.other]
+  /// for [PuttFxSpot.who]: the crow flies from one egg to the other.
+  steal,
+
+  /// The Thick Shell round [PuttFxSpot.who]'s egg held and popped.
+  shieldPop,
+
+  /// A shot left with a next-shot power-up on it ([PuttFxSpot.effectId]:
+  /// Hawk Eye, Strong Coffee, Chicken Hop, Nest Magnet), from
+  /// [PuttFxSpot.at] toward [PuttFxSpot.toward].
+  shot,
+}
 
 class PuttFxSpot {
   final PuttFxSpotKind kind;
@@ -104,7 +144,87 @@ class PuttFxSpot {
   /// The player it happened to, when it did.
   final String? who;
 
-  const PuttFxSpot(this.kind, {this.at, this.who});
+  /// The power-up behind it, for the cast kinds.
+  final String? effectId;
+
+  /// The other player in it: who cast what hit [who], whom the crow robbed.
+  final String? other;
+
+  /// Where it points: a cast's spot on the green, a shot's heading.
+  final Vec2? toward;
+
+  const PuttFxSpot(this.kind,
+      {this.at, this.who, this.effectId, this.other, this.toward});
+
+  @override
+  String toString() => 'PuttFxSpot($kind, $who, $effectId)';
+}
+
+/// What a [PuttCastCall] announces.
+enum PuttCastCallKind {
+  /// Someone cast a power-up.
+  cast,
+
+  /// A Thieving Crow took a power-up from someone.
+  steal,
+
+  /// A Nest Swap traded places with the viewer.
+  swap,
+
+  /// A Thick Shell held against a cast.
+  blocked,
+}
+
+/// One cast as everyone hears of it: a line in the cast feed under the
+/// top bar (`putt_cast_feed.dart` words it), led by who did it and the
+/// power-up's icon. Calls queue, so casts in a row read one after another.
+@immutable
+class PuttCastCall {
+  /// Counts calls as they are made: the feed takes in the ones it has not
+  /// seen.
+  final int serial;
+
+  final PuttCastCallKind kind;
+
+  /// Who cast (the thief of a steal, the swapper, the caster a shell held
+  /// against).
+  final String casterId;
+
+  /// The power-up cast.
+  final String effectId;
+
+  /// The other player in it: the one robbed, the one swapped with, the
+  /// one whose shell held.
+  final String? otherId;
+
+  /// What the crow took, for a steal.
+  final String? stolenId;
+
+  const PuttCastCall({
+    required this.serial,
+    required this.kind,
+    required this.casterId,
+    required this.effectId,
+    this.otherId,
+    this.stolenId,
+  });
+
+  /// The player whose picture (or colour) leads the call: the shielded
+  /// one for a block, the caster otherwise.
+  String get leadId =>
+      kind == PuttCastCallKind.blocked ? otherId ?? casterId : casterId;
+
+  /// The power-up whose icon the call wears: what the crow took, the
+  /// shell that held, else the one cast.
+  String get iconId => switch (kind) {
+        PuttCastCallKind.steal => stolenId ?? effectId,
+        PuttCastCallKind.blocked => 'thick_shell',
+        _ => effectId,
+      };
+
+  @override
+  String toString() =>
+      'PuttCastCall($serial, $kind, $casterId, $effectId, $otherId)';
 }
 
 /// The view's handle on a locally simulated match. A [ChangeNotifier], so
@@ -252,11 +372,10 @@ class PuttMatch extends ChangeNotifier {
       steps++;
     }
     if (steps > 0) {
-      final drained = drainEvents();
-      notices
-        ..clear()
-        ..addAll([...drained, ...derived, ..._worldNotices()]);
+      drainEvents();
+      notices.addAll([...derived, ..._worldNotices()]);
       fxSpots.addAll(derivedSpots);
+      _trimBatches();
       notifyListeners();
     }
   }
@@ -512,8 +631,10 @@ class PuttMatch extends ChangeNotifier {
     return engine.tick - _headlineTick <= ticks;
   }
 
-  /// The notices drained since the last call: HUD banner material and the
-  /// audio service's cue list.
+  /// The notices drained and not yet spent: HUD banner material and the
+  /// audio service's cue list. Every drain adds to them; the game plays
+  /// and clears them once a frame, so a batch drained between frames (my
+  /// own putt or cast, from a press) is never lost to the next tick's.
   final List<PuttNotice> notices = [];
 
   // ---- player intent ----------------------------------------------------------
@@ -607,21 +728,91 @@ class PuttMatch extends ChangeNotifier {
 
   // ---- events --------------------------------------------------------------------
 
-  /// Empties the engine's event queue into [notices], [fxSpots], banner
-  /// lines and the per-hole bookkeeping the HUD reads.
+  /// Empties the engine's event queue into [notices], [fxSpots], the cast
+  /// calls, banner lines and the per-hole bookkeeping the HUD reads, and
+  /// returns this batch's notices. A bounce storm collapses to two roll
+  /// noises; everything else passes through.
   List<PuttNotice> drainEvents() {
-    fxSpots.clear();
-    final result = [
-      for (final event in engine.drainEvents()) ..._noticesFor(event),
-    ];
-    notices
-      ..clear()
-      ..addAll(result);
+    final result = <PuttNotice>[];
+    final rollNoises = <PuttNotice>[];
+    _castCall = null;
+    _stolenPick = null;
+    for (final event in engine.drainEvents()) {
+      for (final notice in _noticesFor(event)) {
+        if (_isRollNoise(notice.sfx)) {
+          rollNoises.add(notice);
+        } else {
+          result.add(notice);
+        }
+      }
+      result.addAll(_extraNotices);
+      _extraNotices.clear();
+    }
+    result.addAll(rollNoises.take(2));
+    notices.addAll(result);
+    _trimBatches();
     return result;
   }
 
-  /// Burst anchors from the ticks this [drainEvents] covered.
+  /// Burst anchors drained and not yet spent (the game spawns and clears
+  /// them once a frame, like [notices]).
   final List<PuttFxSpot> fxSpots = [];
+
+  /// A second sound an event makes (a cast's scene over the cast's chime).
+  final List<PuttNotice> _extraNotices = [];
+
+  /// With nobody spending them (a match with no view), the batches stop
+  /// growing at a few seconds' worth.
+  void _trimBatches() {
+    if (notices.length > 96) notices.removeRange(0, notices.length - 96);
+    if (fxSpots.length > 192) fxSpots.removeRange(0, fxSpots.length - 192);
+  }
+
+  // ---- the casts everyone sees ---------------------------------------------------
+
+  /// The casts called so far, oldest first (the last few dozen): the cast
+  /// feed under the top bar takes in the ones past its last serial.
+  final List<PuttCastCall> castCalls = [];
+  int _castSerial = 0;
+
+  /// The serial of the call a cast made while its events drain: a steal
+  /// or a swap rewrites it.
+  int? _castCall;
+
+  /// The thief and the power-up of a steal in this drain: its pickup is
+  /// the crow's to show when it lands, not the box sparkle's.
+  (String, String)? _stolenPick;
+
+  void _call(PuttCastCall Function(int serial) make) {
+    final call = make(++_castSerial);
+    castCalls.add(call);
+    if (castCalls.length > 24) castCalls.removeRange(0, castCalls.length - 24);
+  }
+
+  /// Rewrites the call [_castCall] names, if it is still there.
+  void _recall(PuttCastCall Function(PuttCastCall call) make) {
+    final serial = _castCall;
+    if (serial == null) return;
+    final index = castCalls.lastIndexWhere((call) => call.serial == serial);
+    if (index < 0) return;
+    castCalls[index] = make(castCalls[index]);
+  }
+
+  /// Where [playerId]'s egg is now, when it is out on the green.
+  Vec2? _eggOf(String playerId) {
+    final ball = engine.world?.ball(playerId);
+    if (ball == null || ball.holed) return null;
+    return ball.position;
+  }
+
+  /// The sound a cast's scene makes over the cast's chime, if it has one.
+  static PuttSfx? _sceneSound(String effectId) => switch (effectId) {
+        'corn_rain' => PuttSfx.cornRain,
+        'gust' => PuttSfx.gust,
+        'sprinkler' => PuttSfx.water,
+        'nest_swap' || 'rabbit_hole' => PuttSfx.portal,
+        _ => null,
+      };
 
   List<PuttNotice> _noticesFor(PuttEvent event) {
     switch (event) {
@@ -654,6 +845,25 @@ class PuttMatch extends ChangeNotifier {
             labelPuttCourseStart(puttCourseName(event.courseId)));
         return [PuttNotice(PuttSfx.click, title: headline)];
       case ShotApplied():
+        // The next-shot power-ups on it show on the green for everyone.
+        final from = _eggOf(event.playerId);
+        if (from != null) {
+          final heading =
+              Vec2(math.cos(event.actualAngle), math.sin(event.actualAngle));
+          for (final (rode, effectId) in [
+            (event.steady, 'hawk_eye'),
+            (event.powerMultiplier > 1, 'strong_coffee'),
+            (event.hop, 'chicken_hop'),
+            (event.magnet, 'nest_magnet'),
+          ]) {
+            if (!rode) continue;
+            fxSpots.add(PuttFxSpot(PuttFxSpotKind.shot,
+                who: event.playerId,
+                effectId: effectId,
+                at: from,
+                toward: from + heading));
+          }
+        }
         if (event.playerId != localPlayerId) return const [];
         _hasPutted = true;
         return [PuttNotice(puttSfxFor(event.power))];
@@ -692,6 +902,15 @@ class PuttMatch extends ChangeNotifier {
           ),
         ];
       case PowerUpPicked():
+        // What a crow just took lands in the thief's hand when the crow
+        // gets there: the flight shows it (and the thief hears it then).
+        final stolen = _stolenPick;
+        if (stolen != null &&
+            stolen.$1 == event.playerId &&
+            stolen.$2 == event.effectId) {
+          _stolenPick = null;
+          return const [];
+        }
         // The pickup's sparkle pops at whoever grabbed the "?" box (the
         // caster or a Barnyard Chaos grain); the sound stays the local
         // player's only.
@@ -699,8 +918,78 @@ class PuttMatch extends ChangeNotifier {
         if (event.playerId != localPlayerId) return const [];
         return const [PuttNotice(PuttSfx.powerUpPicked)];
       case PowerUpUsed():
-        if (event.playerId != localPlayerId) return const [];
+        // Everyone's cast is everyone's: the call in the feed, the burst
+        // at the caster's egg, the chime and the scene's own sound.
+        fxSpots.add(PuttFxSpot(PuttFxSpotKind.cast,
+            who: event.playerId,
+            effectId: event.effectId,
+            at: event.at,
+            toward: event.target?.point,
+            other: event.target?.playerId));
+        _call((serial) => PuttCastCall(
+              serial: serial,
+              kind: PuttCastCallKind.cast,
+              casterId: event.playerId,
+              effectId: event.effectId,
+              otherId: event.target?.playerId,
+            ));
+        _castCall = _castSerial;
+        final scene = _sceneSound(event.effectId);
+        if (scene != null) _extraNotices.add(PuttNotice(scene));
         return const [PuttNotice(PuttSfx.powerUpUsed)];
+      case PowerUpStolen():
+        // The crow's cast becomes the theft: who took what from whom.
+        _recall((call) => PuttCastCall(
+              serial: call.serial,
+              kind: PuttCastCallKind.steal,
+              casterId: event.thiefId,
+              effectId: call.effectId,
+              otherId: event.victimId,
+              stolenId: event.effectId,
+            ));
+        _stolenPick = (event.thiefId, event.effectId);
+        fxSpots.add(PuttFxSpot(PuttFxSpotKind.steal,
+            who: event.thiefId,
+            other: event.victimId,
+            effectId: event.effectId,
+            at: _eggOf(event.victimId)));
+        return const [PuttNotice(PuttSfx.crowCaw)];
+      case ShieldBlocked():
+        _call((serial) => PuttCastCall(
+              serial: serial,
+              kind: PuttCastCallKind.blocked,
+              casterId: event.casterId,
+              effectId: event.effectId,
+              otherId: event.playerId,
+            ));
+        fxSpots.add(PuttFxSpot(PuttFxSpotKind.shieldPop,
+            who: event.playerId,
+            effectId: event.effectId,
+            other: event.casterId,
+            at: _eggOf(event.playerId)));
+        return const [PuttNotice(PuttSfx.shieldPop)];
+      case PowerUpHit():
+        for (final id in event.playerIds) {
+          fxSpots.add(PuttFxSpot(PuttFxSpotKind.hit,
+              who: id,
+              other: event.casterId,
+              effectId: event.effectId,
+              at: _eggOf(id)));
+        }
+        // A swap that moved my egg is a swap with me: the call says so.
+        if (event.effectId == 'nest_swap' &&
+            event.casterId != localPlayerId &&
+            event.playerIds.contains(localPlayerId)) {
+          _recall((call) => PuttCastCall(
+                serial: call.serial,
+                kind: PuttCastCallKind.swap,
+                casterId: call.casterId,
+                effectId: call.effectId,
+                otherId: localPlayerId,
+              ));
+        }
+        _castCall = null;
+        return const [];
       case MatchEnded():
         _announce(PuttHeadlineKind.matchOver, labelPuttMatchOver());
         return [PuttNotice(PuttSfx.victory, title: headline)];
@@ -714,6 +1003,11 @@ class PuttMatch extends ChangeNotifier {
         return const [];
     }
   }
+
+  /// Physics noise the egg makes by rolling: many per tick are collapsed
+  /// to the loudest (the noise trimmer keeps at most one of each kind).
+  bool _isRollNoise(PuttSfx sfx) =>
+      sfx == PuttSfx.bounce || sfx == PuttSfx.bumper;
 
   // ---- the world's echoes ---------------------------------------------------------
 

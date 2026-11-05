@@ -683,19 +683,25 @@ tjs.DataTexture _discTexture({int size = 64, double hardness = 2}) {
 /// number, in the brand's display face. It starts as [background] and
 /// fills in once the picture is read back (one frame later); in the test
 /// runner the read may never land, and the texture just stays plain.
+/// [transparent] starts it clear instead and paints on clear (an icon
+/// whose silhouette is its shape).
 tjs.DataTexture _paintedTexture(
   int width,
   int height,
   int background,
-  void Function(ui.Canvas canvas, ui.Size size) paint,
-) {
-  final bitmap = _Bitmap(width, height)..fill(background);
+  void Function(ui.Canvas canvas, ui.Size size) paint, {
+  bool transparent = false,
+}) {
+  final bitmap = _Bitmap(width, height)
+    ..fill(background, transparent ? 0 : 255);
   final texture = bitmap.texture();
   unawaited(() async {
     try {
       final recorder = ui.PictureRecorder();
       final canvas = ui.Canvas(recorder);
-      canvas.drawColor(ui.Color(0xFF000000 | background), ui.BlendMode.src);
+      if (!transparent) {
+        canvas.drawColor(ui.Color(0xFF000000 | background), ui.BlendMode.src);
+      }
       paint(canvas, ui.Size(width.toDouble(), height.toDouble()));
       final picture = recorder.endRecording();
       final image = await picture.toImage(width, height);

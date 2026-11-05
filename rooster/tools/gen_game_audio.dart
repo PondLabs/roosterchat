@@ -71,6 +71,11 @@ final _sounds = [
   _Sound('hole_end', _Format.mp3, -13, 33, holeEndSting),
   _Sound('victory', _Format.mp3, -13, 34, victoryFanfare),
   _Sound('click', _Format.wav, -23, 35, menuClick),
+  // The power-ups' scenes.
+  _Sound('crow_caw', _Format.wav, -15, 36, crowCaw),
+  _Sound('shield', _Format.wav, -15, 37, shellPop),
+  _Sound('corn', _Format.wav, -17, 38, cornPatter),
+  _Sound('gust', _Format.wav, -16, 39, gustWind),
 ];
 
 /// The music's MP3 quality (LAME's VBR scale: 0 best, 9 smallest).

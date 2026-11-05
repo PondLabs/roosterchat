@@ -43,22 +43,28 @@ class PuttPowerUpIcon extends StatelessWidget {
   }
 }
 
+/// Paints [effectId]'s icon into [size] on [canvas], centred: the
+/// painter's own work, for whoever needs the icon outside a widget (the 3D
+/// world paints the crow's loot into a texture with it).
+void paintPuttPowerUpIcon(Canvas canvas, Size size, String effectId) {
+  final scale = size.shortestSide / _box;
+  canvas
+    ..save()
+    ..translate(
+        (size.width - _box * scale) / 2, (size.height - _box * scale) / 2)
+    ..scale(scale);
+  _glyphOf(effectId).paint(canvas);
+  canvas.restore();
+}
+
 class _PowerUpIconPainter extends CustomPainter {
   final String effectId;
 
   const _PowerUpIconPainter(this.effectId);
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final scale = size.shortestSide / _box;
-    canvas
-      ..save()
-      ..translate(
-          (size.width - _box * scale) / 2, (size.height - _box * scale) / 2)
-      ..scale(scale);
-    _glyphOf(effectId).paint(canvas);
-    canvas.restore();
-  }
+  void paint(Canvas canvas, Size size) =>
+      paintPuttPowerUpIcon(canvas, size, effectId);
 
   @override
   bool shouldRepaint(_PowerUpIconPainter oldDelegate) =>

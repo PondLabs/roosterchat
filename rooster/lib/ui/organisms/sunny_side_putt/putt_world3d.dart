@@ -66,6 +66,7 @@ import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
 import 'flutter_env_io.dart'
     if (dart.library.js_interop) 'flutter_env_stub.dart' as flutter_env;
 import 'putt_art.dart';
+import 'putt_powerup_icons.dart' show paintPuttPowerUpIcon;
 
 part 'world3d/kit.dart';
 part 'world3d/course.dart';
@@ -76,6 +77,7 @@ part 'world3d/theme.dart';
 part 'world3d/bursts.dart';
 part 'world3d/hatch.dart';
 part 'world3d/table_shape.dart';
+part 'world3d/casts.dart';
 
 /// The void behind everything before the sky dome draws: the horizon's
 /// warm haze, so a frame that misses the dome still reads as sky.
@@ -100,6 +102,18 @@ class PuttWorldEgg {
   /// The viewer's own egg: it wears the marker ring on the turf.
   final bool mine;
 
+  /// A Thick Shell holds round this egg: a bubble wraps it until a cast
+  /// pops it.
+  final bool shielded;
+
+  /// Seconds of Ghost Egg left on this egg (0: solid): the shell goes
+  /// see-through and flickers, faster as it runs out.
+  final double ghostSeconds;
+
+  /// A Nest Magnet waits on this egg's next shot or pulls it now: the nest
+  /// shimmers in its colour.
+  final bool magnet;
+
   const PuttWorldEgg({
     required this.playerId,
     required this.position,
@@ -108,6 +122,9 @@ class PuttWorldEgg {
     required this.radius,
     this.height = 0,
     this.mine = false,
+    this.shielded = false,
+    this.ghostSeconds = 0,
+    this.magnet = false,
   });
 
   double get speed => velocity.length;
@@ -162,14 +179,33 @@ class PuttWorldAim {
   });
 }
 
-/// One particle of the bursts.
-enum PuttWorldFxKind { droplet, sparkle, suction, poof, confetti, dust, ring }
+/// One particle of the bursts. The power-ups' scenes add their own:
+/// corn kernels that fall and bounce, wind streaks that run along the
+/// green toward their [PuttWorldFx.toward], steam rising off a strong
+/// coffee, a swap's swirl, a popped shell's shards, a hop's feathers, the
+/// glints of a hawk's straight line.
+enum PuttWorldFxKind {
+  droplet,
+  sparkle,
+  suction,
+  poof,
+  confetti,
+  dust,
+  ring,
+  kernel,
+  streak,
+  steam,
+  swirl,
+  shard,
+  feather,
+  glint,
+}
 
 class PuttWorldFx {
   final PuttWorldFxKind kind;
   final Vec2 at;
 
-  /// Where a suction particle flies home to.
+  /// Where a suction particle flies home to; where a streak runs.
   final Vec2? toward;
 
   /// Age over life, 0..1.
@@ -189,6 +225,23 @@ class PuttWorldFx {
     this.toward,
     this.color,
     this.height,
+  });
+}
+
+/// A Thieving Crow on its way with its loot: from the robbed egg [from]
+/// to the thief's [to], [progress] through the flight (0..1), carrying
+/// [effectId]'s icon in its beak.
+class PuttWorldCrow {
+  final Vec2 from;
+  final Vec2 to;
+  final double progress;
+  final String effectId;
+
+  const PuttWorldCrow({
+    required this.from,
+    required this.to,
+    required this.progress,
+    required this.effectId,
   });
 }
 
@@ -212,6 +265,9 @@ class PuttWorldFrame {
   /// snapshots and mid-joins alike.
   final Set<String> collectedBoxes;
 
+  /// The Thieving Crows in the air.
+  final List<PuttWorldCrow> crows;
+
   const PuttWorldFrame({
     required this.time,
     this.eggs = const [],
@@ -220,6 +276,7 @@ class PuttWorldFrame {
     this.fxs = const [],
     this.followPoint,
     this.collectedBoxes = const {},
+    this.crows = const [],
   });
 }
 
@@ -607,6 +664,7 @@ class PuttWorld3D {
       ..add(_aimRoot = tjs.Group()..name = 'aim')
       ..add(_fxRoot = tjs.Group()..name = 'fx')
       ..add(_bursts.group)
+      ..add(_casts.group)
       ..add(_hatchRoot);
     for (var i = 0; i < 3; i++) {
       final hatchling = _Hatchling();
@@ -668,6 +726,10 @@ class PuttWorld3D {
   /// The bursts the world sees for itself (straw, the viewer's confetti
   /// column, rail puffs).
   final _Bursts _bursts = _Bursts();
+
+  /// The power-ups' standing pieces: the crows and their loot, the nest's
+  /// magnet shimmer (the casts' particles ride the fx pool).
+  final _CastScenes _casts = _CastScenes();
 
   /// The current hole's relief, shared with everything standing on it.
   final _Ground _ground = _Ground();
@@ -933,6 +995,7 @@ class PuttWorld3D {
   /// Disposes the whole hole subtree and forgets every per-hole view.
   void _clearHole() {
     _bursts.clear();
+    _casts.clear();
     for (final hatchling in _hatchlings) {
       hatchling.hide();
     }
@@ -971,8 +1034,11 @@ class PuttWorld3D {
     _aim.sync(frame.aim, frame.time, _ground);
     // Confetti and sparkles grow with the camera's distance, so the party
     // reads from the overview too.
-    _fx.apply(frame, scale: math.max(1.0, rig.distance / 24), ground: _ground);
+    final grow = math.max(1.0, rig.distance / 24);
+    _fx.apply(frame, scale: grow, ground: _ground, camera: camera);
     _bursts.update(dt, frame.time);
+    _casts.sync(frame,
+        hole: _hole, ground: _ground, grow: math.sqrt(grow), dt: dt);
     for (final hatchling in _hatchlings) {
       hatchling.update(dt, camera.position);
     }
@@ -1234,9 +1300,12 @@ class PuttWorld3D {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    // The fx sprites' discs, the drops' and the kernel die with the world.
     _owned
-      ..add(_fx.texture) // the fx sprites' discs die with the world
-      ..add(_fx.dropTexture);
+      ..add(_fx.texture)
+      ..add(_fx.dropTexture)
+      ..add(_fx.kernelTexture)
+      ..add(_fx.streakTexture);
     scene.dispose(); // walks the children, then marks the scene itself
     camera.dispose();
     for (final texture in _owned) {

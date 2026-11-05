@@ -64,6 +64,9 @@ class _EggView3D {
       tjs.MeshBasicMaterial({
         tjs.MaterialProperty.color: _lin(_hexOf(PuttPalette.ink)),
         tjs.MaterialProperty.side: tjs.BackSide,
+        // Transparent from the start, like the shell: a Ghost Egg fades
+        // them by their opacity alone, and no program ever recompiles.
+        tjs.MaterialProperty.transparent: true,
       }),
     )..name = 'egg-outline';
     body.add(_outline);
@@ -139,7 +142,30 @@ class _EggView3D {
       _puffs.add(puff);
       trail.add(puff);
     }
+    // The Thick Shell's bubble, facing the camera round the egg (it rides
+    // the unturned trail group, the shell's roll would turn it away).
+    _bubble = _Billboard(map: _bubbleMap, color: _lin(_bubbleHexOf(_tintHex)))
+      ..name = 'egg-bubble'
+      ..visible = false
+      ..renderOrder = 11;
+    trail.add(_bubble);
   }
+
+  /// The bubble's colour for an egg of [tint]: a pale sky with a touch of
+  /// the player's own.
+  static int _bubbleHexOf(int tint) => _mix(0xFFFFFF, tint, 0.18);
+
+  /// The soap-film disc every egg's bubble wears (shared, like the
+  /// shadow's disc).
+  static final tjs.DataTexture _bubbleMap = _bubbleTexture();
+
+  late final _Billboard _bubble;
+
+  /// How long the bubble has been up (it blows up when the shell comes).
+  double _bubbleAge = 0;
+
+  /// The shell's opacity now: 1 solid, lower while a Ghost Egg lasts.
+  double _ghostOpacity = 1;
 
   static const int _trailLength = 18;
 
@@ -226,6 +252,8 @@ class _EggView3D {
     _marker.material?.color = _lin(hex);
     _tintDisc.material?.color = _lin(hex);
     _xray.material?.color = _lin(_mix(hex, 0xFFFFFF, 0.25));
+    _bubble.look.color = _lin(_bubbleHexOf(hex));
+    _ghostOpacity = -1; // the fresh shell takes the fade on the next frame
   }
 
   /// The shell: the colour's paint, a soft sheen, and a whisper of light
@@ -239,6 +267,9 @@ class _EggView3D {
       tjs.MaterialProperty.emissiveMap: paint,
       tjs.MaterialProperty.roughness: 0.36,
       tjs.MaterialProperty.metalness: 0.0,
+      // Transparent from the start (opacity 1, depth still written): a
+      // Ghost Egg only moves the opacity, so no program recompiles mid-play.
+      tjs.MaterialProperty.transparent: true,
     });
     material.emissive = _lin(glow);
     return material;
@@ -322,7 +353,12 @@ class _EggView3D {
     final lift = ((egg.height + drawn - floor) / (_radius * 3)).clamp(0.0, 1.0);
     final shadowScale = 1 - lift * 0.45;
     _shadow.scale.setValues(shadowScale, shadowScale, 1);
-    _shadow.material?.opacity = 0.55 * (1 - lift * 0.6);
+    // A ghost's shadow thins with it.
+    _shadow.material?.opacity =
+        0.55 * (1 - lift * 0.6) * (0.35 + 0.65 * _ghostOpacity.clamp(0.0, 1.0));
+
+    _syncBubble(egg, dt, time, drawn + support + egg.height);
+    _syncGhost(egg, time, lift);
 
     final resting = speed < 0.05;
     final showMarker = egg.mine && resting;
@@ -335,6 +371,52 @@ class _EggView3D {
       _marker.material?.opacity = 0.65 + 0.3 * pulse;
       _arrow.position.y = h * 2 + 0.6 + math.sin(time * 3.2).abs() * 0.35;
     }
+  }
+
+  /// The Thick Shell's bubble: blown up round the egg when the shield
+  /// comes, wobbling like a soap film while it holds; gone the frame the
+  /// shield is spent (the game pops it in shards).
+  void _syncBubble(PuttWorldEgg egg, double dt, double time, double centre) {
+    if (!egg.shielded) {
+      _bubbleAge = 0;
+      _bubble.visible = false;
+      return;
+    }
+    _bubbleAge += dt;
+    final blow = (_bubbleAge / 0.3).clamp(0.0, 1.0);
+    // Out with a little overshoot, then the film's slow wobble.
+    final grow = blow < 1 ? 1.15 * math.sin(blow * math.pi * 0.62) : 1.0;
+    final wobble = math.sin(time * 3.4) * 0.035;
+    final size = _radius * 4.4 * grow;
+    _bubble
+      ..visible = true
+      ..position.setValues(egg.position.x, centre, egg.position.y)
+      ..scale.setValues(size * (1 + wobble), size * (1 - wobble), 1);
+    _bubble.look.opacity = 0.95;
+  }
+
+  /// A Ghost Egg: the shell and its ink go see-through and flicker while
+  /// it lasts, blinking back toward solid as it runs out; its shadow
+  /// thins. Opacity only - every material was made transparent at build.
+  void _syncGhost(PuttWorldEgg egg, double time, double lift) {
+    var target = 1.0;
+    final left = egg.ghostSeconds;
+    if (left > 0) {
+      final wave = 0.5 + 0.5 * math.sin(time * 7.3) * math.sin(time * 2.9 + 1);
+      target = 0.26 + 0.22 * wave;
+      if (left < 0.9) {
+        // The last beat: it blinks back toward solid.
+        final blink = math.sin(time * 26) > 0 ? 1.0 : 0.0;
+        target += (0.95 - target) * blink * (1 - left / 0.9);
+      }
+    }
+    if ((target - _ghostOpacity).abs() < 1e-3) return;
+    _ghostOpacity = target;
+    body.material?.opacity = target;
+    _outline.material?.opacity = target >= 1 ? 1 : target * 0.7;
+    _xray.material?.opacity = 0.5 * target;
+    _tintDisc.material?.opacity = 0.6 * (0.45 + 0.55 * target);
+    body.castShadow = target > 0.9;
   }
 
   /// Where the drawn egg stands, given the [ground] under it: on rising
@@ -440,7 +522,7 @@ class _EggView3D {
     _shadow.material?.map = null;
     _shadow.material?.dispose();
     ground.dispose();
-    for (final puff in _puffs) {
+    for (final puff in [..._puffs, _bubble]) {
       puff.material?.map = null;
       puff.material?.dispose();
     }

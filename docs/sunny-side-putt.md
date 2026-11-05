@@ -88,6 +88,58 @@ that could do nothing (no other egg to push, my egg already in the
 nest). The targeting lives in `putt_targeting.dart`, the reticle in
 `putt_reticle.dart`.
 
+#### What everyone sees
+
+Every cast is everyone's, so an egg never jolts and a power-up never
+vanishes without its cause on screen:
+
+- **The call.** A toast under the top bar (`putt_cast_feed.dart`), clear
+  of the green's middle: the caster's picture (or colour dot), the
+  power-up's icon and a short line - "Lou: Corn Rain", "You: Gust",
+  "Maya stole your Gust!", "You stole Maya's Gust!", "Maya swapped places
+  with you!", "Jonas's shell blocked it", "Your shell blocked it!". Its
+  edge says how it sits with the viewer: comb red when they were robbed
+  or swapped, yolk for their own, the caster's colour otherwise. Calls
+  queue: a run of casts reads one after another, a toast hurrying on
+  once read when others wait (a cast and the shells that held against it
+  come in that order).
+- **The sound.** The cast's chime for everyone, plus the scene's own: the
+  corn's patter, the gust's wind, the sprinkler's splash, the swap's and
+  the rabbit hole's zap, the crow's caw on a theft, a pop and a ting when
+  a shell holds (`tools/gen_game_audio.dart` synthesizes them all).
+- **The burst.** Sparkles and a ring in the power-up's colour at the
+  caster's egg, where it stood as it cast.
+- **The scene,** on the green, for everyone:
+
+| Power-up | Everyone sees |
+|---|---|
+| Hawk Eye | on the putt, glints light up one after another along its dead-straight line, ahead of the egg |
+| Nest Magnet | a ring breathing round the nest in the egg's colour, rings drawn in toward it and glints running round, while the magnet waits or pulls |
+| Ghost Egg | the egg goes see-through and flickers while it lasts, blinking back to solid at the end, pale wisps rising off it; its shadow thins |
+| Chicken Hop | feathers puff off the egg as it takes off, then the hop lifts it over what stands in the way |
+| Rabbit Hole | a puff and dirt where the egg goes down, dirt, sparkles and a ring where it comes up |
+| Gust | wind streaks converging on the chosen spot, and streaks running behind every egg it pushes |
+| Thick Shell | a soap bubble round the egg while the shield holds; a cast it stops pops it in a ring and shards |
+| Strong Coffee | wisps of steam off the egg while the coffee waits, a trail of steam behind its boosted putt |
+| Nest Swap | a poof, a violet ring and a swirl on both eggs as they trade places, and a dotted line lighting up between their spots |
+| Sprinkler | the splash and its rings at the spot, spray on every egg it soaks |
+| Corn Rain | kernels falling out of the sky round every egg it nudges, bouncing twice and lying a moment |
+| Thieving Crow | a black crow swoops onto the robbed egg, flies an arc to the thief's with the stolen power-up's icon in its beak, and drops it in |
+
+The engine says what each cast did: `PowerUpUsed` carries the target and
+the caster's spot, `PowerUpStolen` the theft, `ShieldBlocked` a shell
+that held, `PowerUpHit` the eggs it moved, and `ShotApplied` the
+next-shot power-ups riding the putt (`core/rules.dart`); the shell, the
+ghost and the magnet are read off the engine every frame. The match turns
+the events into calls, sounds and fx spots (`putt_match.dart`); the game
+into particles and the crows' flights (`sunny_side_putt_game.dart`); the
+world draws them (`world3d/casts.dart` for the crow and the magnet, the
+eggs for the bubble and the ghost, the fx pool for the particles). The
+crows and the shimmer are built once and pooled, every particle rides a
+pool of its own texture (no material ever changes its map), the eggs'
+materials are transparent from the start so a ghost only moves an
+opacity, and a new hole clears it all.
+
 ### Courses
 
 Five launch courses, six holes each, themselves teaching their
@@ -338,12 +390,15 @@ From `rooster/`, with `ffmpeg` (libmp3lame) on the PATH:
   course's holes as dots under it, the course chip, the camera and pause
   buttons, banners by kind, the scorecard, the hint line, the power-up
   carton and its targeting, and the results and match-over cards), the
+  cast feed under the top bar (`putt_cast_feed.dart`), the
   name tags, pause/settings/vote menus, the spectator strip, and the
   audio (see Sound; volume per bus in the settings). The world only reads the engine's snapshots; the physics
   stays planar.
 - `putt_demo.dart` - the demo mode (`--dart-define=PUTT_DEMO=true`): the
   game plays itself on the real courses for captures; on the web the query
-  picks the course, the hole, the crew and a held camera (see its header).
+  picks the course, the hole, the crew, a held camera and a script of
+  casts (`script=me.thick_shell@3,maya.corn_rain@5,lou.thieving_crow@7.5`;
+  see its header).
 - `putt_session.dart` - the live-session bridge: the host's engine is
   the truth; guests feed their own engine with the accepted-move
   journal and resnapshot, so play is smooth without a game server.

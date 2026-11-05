@@ -212,6 +212,79 @@ Float64List holeInOneCrow(Rng rng) {
   return dry;
 }
 
+// ---- the power-ups' scenes --------------------------------------------------------------
+
+/// The Thieving Crow takes its loot: two raspy caws, the second lower.
+Float64List crowCaw(Rng rng) {
+  const aa = (1050.0, 1650.0, 2700.0);
+  final out = syllables([
+    const Syllable(0.0, 0.2, 520, 600, 430, peakAt: 0.3, vowel: aa),
+    const Syllable(0.27, 0.22, 470, 540, 380,
+        peakAt: 0.3, level: 0.9, vowel: aa),
+  ], rng,
+      rasp: 0.8,
+      jitter: 0.05,
+      breath: 0.15,
+      drive: 3.0,
+      attack: 0.008,
+      release: 0.04);
+  filterOnce(out, [Biquad.lowpass(5000)]);
+  return out;
+}
+
+/// A Thick Shell holds against a cast: a bubble's pop and a glassy ting.
+Float64List shellPop(Rng rng) {
+  final pop = Float64List(samplesFor(0.08));
+  var phase = 0.0;
+  for (var i = 0; i < pop.length; i++) {
+    final t = i / sampleRate;
+    final hz = 300 + 1500 * (1 - math.exp(-t / 0.012));
+    phase += hz / sampleRate;
+    if (phase >= 1) phase -= 1;
+    pop[i] =
+        math.sin(twoPi * phase) * math.min(1, t / 0.0006) * math.exp(-t / 0.02);
+  }
+  return arrange([
+    (0, pop, 1.0),
+    (0.012, chime(2093.0, rng, decay: 0.16), 0.5),
+    (0.02, chime(3135.96, rng, decay: 0.1), 0.25),
+  ]);
+}
+
+/// Corn Rain: a patter of kernels landing, a scatter of tiny woody ticks.
+Float64List cornPatter(Rng rng) {
+  final parts = <(double, Float64List, double)>[];
+  for (var i = 0; i < 18; i++) {
+    final at = rng.range(0, 0.62);
+    final hz = rng.range(1700, 2800);
+    parts.add((
+      at,
+      strike([(hz, 1, 0.012), (hz * 2.3, 0.4, 0.006)], rng,
+          length: 0.05, click: 0.3, clickHz: 4000, clickDecay: 0.0008),
+      rng.range(0.35, 0.8),
+    ));
+  }
+  return arrange(parts, length: 0.75);
+}
+
+/// A Gust: wind swelling across the green and dying away.
+Float64List gustWind(Rng rng) {
+  const length = 0.8;
+  final out = Float64List(samplesFor(length));
+  final low = Svf();
+  final high = Svf();
+  for (var i = 0; i < out.length; i++) {
+    final t = i / sampleRate;
+    final noise = rng.bipolar();
+    final sweep = 500 + 900 * math.sin(math.pi * math.min(1, t / length));
+    low.tick(noise, sweep, 0.9);
+    high.tick(noise, sweep * 2.6, 1.4);
+    final env = smoothstep(t / 0.25) * smoothstep((length - t) / 0.35);
+    out[i] = (low.bandUnity * 1.2 + high.bandUnity * 0.4) * env;
+  }
+  return out;
+}
+
 /// A hen bumps an egg and says so.
 Float64List henBump(Rng rng) => henCluck(rng, big: true);
 
