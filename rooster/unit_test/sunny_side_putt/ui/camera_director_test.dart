@@ -121,6 +121,24 @@ void main() {
     expect(director.followPoint, rolling);
   });
 
+  test('rolling fast, the camera looks ahead of the egg', () {
+    run(PuttCameraDirector.openingSeconds + 1, resting(hole.tee));
+    const rolling = Vec2(20, 14);
+    director.update(
+      1 / 60,
+      PuttCameraCue(
+        hole: hole,
+        phase: PuttPhase.holePlay,
+        myEgg: rolling,
+        myEggResting: false,
+        myEggVelocity: const Vec2(20, 0),
+      ),
+    );
+    final follow = director.followPoint!;
+    expect(follow.x, greaterThan(rolling.x + 3));
+    expect(follow.distanceTo(rolling), lessThanOrEqualTo(4 + 1e-9));
+  });
+
   test('a player who zoomed keeps their zoom at the next rest', () {
     run(PuttCameraDirector.openingSeconds + 3, resting(hole.tee));
     rig.setDistance(rig.overviewDistance * 0.9);

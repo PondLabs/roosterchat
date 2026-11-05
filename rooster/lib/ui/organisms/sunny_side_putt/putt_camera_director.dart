@@ -33,6 +33,9 @@ class PuttCameraCue {
   /// Whether the viewer is dragging an aim (the frame must hold still).
   final bool aiming;
 
+  /// The viewer's egg's velocity (the follow leads along it).
+  final Vec2 myEggVelocity;
+
   const PuttCameraCue({
     required this.hole,
     required this.phase,
@@ -41,6 +44,7 @@ class PuttCameraCue {
     this.myEggHoled = false,
     this.otherEggs = const [],
     this.aiming = false,
+    this.myEggVelocity = Vec2.zero,
   });
 }
 
@@ -241,7 +245,11 @@ class PuttCameraDirector {
         }
         _wasRolling = true;
         _framedRest = false;
-        _follow = egg;
+        // A lead along the roll (at most four units), so the way ahead
+        // shows more than the way behind.
+        final lead = cue.myEggVelocity * 0.28;
+        _follow =
+            egg + (lead.length > 4 ? lead.normalized(Vec2.zero) * 4.0 : lead);
         return;
       }
       _wasRolling = false;
