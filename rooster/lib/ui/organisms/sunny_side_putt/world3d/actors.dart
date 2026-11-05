@@ -156,6 +156,7 @@ class _EggView3D {
     trail = tjs.Group()..name = 'egg-trail';
     // Turf flecks kicked up behind it, darker than the grass.
     final trailColor = _lin(trailHex);
+    _turfColor = trailColor;
     for (var i = 0; i < _trailLength; i++) {
       final puff = _Billboard(map: _shadowTexture, color: trailColor)
         ..name = 'egg-trail-puff'
@@ -231,7 +232,14 @@ class _EggView3D {
   final List<_Billboard> _puffs = [];
 
   /// The trail's recent spots and their ages, newest last.
-  final List<(Vec2, double)> _trailSpots = [];
+  /// The trail's spots: where, how old, and for a flight the height it
+  /// was drawn at (null: a turf fleck on the ground).
+  final List<(Vec2, double, double?)> _trailSpots = [];
+
+  /// The turf flecks' colour, and the flight's puffs' (a cream wisp of
+  /// air behind the egg).
+  late final tjs.Color _turfColor;
+  static final tjs.Color _airColor = _lin(0xFFF8EE);
   double _sinceSpot = 0;
 
   /// Where the egg stood last frame, and how high its centre rode at rest
@@ -407,7 +415,10 @@ class _EggView3D {
     // The ground pieces: the shadow shrinks and fades as a hop, a fall or
     // a flight lifts the egg off it (it stays on the ground below); on a
     // slope they lie along it.
-    ground.position.setValues(egg.position.x, floor, egg.position.y);
+    // Over a pond (a flight across it) the shadow lies on the water's
+    // sheet, not on the bed under it, where the sheet hid it.
+    final onWater = terrain.overWater(egg.position) ? _overWater : 0.0;
+    ground.position.setValues(egg.position.x, floor + onWater, egg.position.y);
     if (!terrain.flat) ground.quaternion.setFrom(terrain.tiltAt(egg.position));
     final lift = ((egg.height + drawn - floor) / (_radius * 3)).clamp(0.0, 1.0);
     // Up in the air (a flight, a hop, a fall) the soft spot right under the
@@ -495,6 +506,10 @@ class _EggView3D {
 
   /// Off the ground this frame (its sun shadow out, the spot under it on).
   bool _aloft = false;
+
+  /// How far over the ground a pond's sheet stands, and a little more: the
+  /// ground pieces lie on it over water.
+  static const double _overWater = 0.05;
 
   /// Another player's egg that has not putted on the hole, this frame.
   bool _waiting = false;
@@ -592,30 +607,44 @@ class _EggView3D {
   void _syncTrail(PuttWorldEgg egg, double dt) {
     const life = 0.6;
     for (var i = 0; i < _trailSpots.length; i++) {
-      final (at, age) = _trailSpots[i];
-      _trailSpots[i] = (at, age + dt);
+      final (at, age, y) = _trailSpots[i];
+      _trailSpots[i] = (at, age + dt, y);
     }
     _trailSpots.removeWhere((spot) => spot.$2 >= life);
     _sinceSpot += dt;
-    // In the air it kicks up no turf.
     if (egg.air == null && egg.speed > 2.6 && _sinceSpot > 0.03) {
+      // Rolling fast: turf flecks kicked up behind it.
       _sinceSpot = 0;
-      _trailSpots.add((egg.position, 0));
-      if (_trailSpots.length > _trailLength) _trailSpots.removeAt(0);
+      _trailSpots.add((egg.position, 0, null));
+    } else if (egg.air != null && egg.speed > 1.5 && _sinceSpot > 0.035) {
+      // In the air it kicks up no turf: a wisp of air at its own height,
+      // so a flight reads as one in a still.
+      _sinceSpot = 0;
+      _trailSpots.add((egg.position, 0, group.position.y));
     }
+    if (_trailSpots.length > _trailLength) _trailSpots.removeAt(0);
     for (var i = 0; i < _puffs.length; i++) {
       final puff = _puffs[i];
       if (i >= _trailSpots.length) {
         puff.visible = false;
         continue;
       }
-      final (at, age) = _trailSpots[i];
+      final (at, age, y) = _trailSpots[i];
       final fade = 1 - age / life;
       puff.visible = true;
-      puff.position.setValues(at.x, terrain.at(at) + _radius * 0.35, at.y);
-      final size = _radius * (0.7 + 0.8 * fade);
-      puff.scale.setValues(size, size, 1);
-      puff.material?.opacity = 0.55 * fade;
+      if (y == null) {
+        puff.position.setValues(at.x, terrain.at(at) + _radius * 0.35, at.y);
+        final size = _radius * (0.7 + 0.8 * fade);
+        puff.scale.setValues(size, size, 1);
+        puff.material?.color = _turfColor;
+        puff.material?.opacity = 0.55 * fade;
+      } else {
+        puff.position.setValues(at.x, y, at.y);
+        final size = _radius * (0.8 + 0.9 * fade);
+        puff.scale.setValues(size, size, 1);
+        puff.material?.color = _airColor;
+        puff.material?.opacity = 0.85 * fade;
+      }
     }
   }
 

@@ -1305,6 +1305,55 @@ void main() {
       expect(ring.visible, isFalse);
     });
 
+    test('a flying egg leaves a wisp of air behind it, at its height', () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      var time = 0.0;
+      // Across the green in the air: up a unit and a half, moving fast.
+      for (var i = 0; i < 12; i++) {
+        world.applySnapshot(PuttWorldFrame(time: time, eggs: [
+          PuttWorldEgg(
+            playerId: 'me',
+            position: Vec2(14 + i * 0.12, 12),
+            velocity: const Vec2(7, 0),
+            tint: PuttPalette.tintForIndex(0),
+            radius: 0.45,
+            air: 1.5,
+          ),
+        ]));
+        time += 1 / 60;
+      }
+      world.scene.updateMatrixWorld(true);
+      final puffs = walk(world.scene)
+          .where((o) => o.name == 'egg-trail-puff' && o.visible)
+          .toList();
+      expect(puffs, isNotEmpty, reason: 'the flight reads as one');
+      for (final puff in puffs) {
+        expect(puff.localToWorld(tjs.Vector3(0, 0, 0)).y, greaterThan(1),
+            reason: 'up in the air with the egg, not on the turf');
+      }
+    });
+
+    test("an egg flying over a pond casts its shadow on the water's sheet", () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      // Over the round pond at (12, 20), a unit and a half up.
+      world.applySnapshot(PuttWorldFrame(time: 0, eggs: [
+        eggAt(const Vec2(12, 20), height: 1.5),
+      ]));
+      world.scene.updateMatrixWorld(true);
+      double worldY(tjs.Object3D object) =>
+          object.localToWorld(tjs.Vector3(0, 0, 0)).y;
+      final shadow =
+          walk(world.scene).firstWhere((o) => o.name == 'egg-shadow');
+      final sheets =
+          walk(world.scene).where((o) => o.name == 'water-sheet').toList();
+      expect(sheets, isNotEmpty);
+      final highest = sheets.map(worldY).reduce(math.max);
+      expect(worldY(shadow), greaterThan(highest),
+          reason: 'over the sheet, not under it on the bed');
+    });
+
     test("an egg passing through the viewer's fades aside at once", () {
       final world = builtWorld();
       addTearDown(world.dispose);

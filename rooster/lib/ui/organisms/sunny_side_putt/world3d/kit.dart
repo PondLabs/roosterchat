@@ -578,6 +578,11 @@ class _Ground {
       ? 0
       : _hole!.groundHeightAt(point) + _hole!.kickerDeckHeightAt(point);
 
+  /// Whether [point] lies over one of the hole's ponds (whose sheet stands
+  /// a little over the ground).
+  bool overWater(Vec2 point) =>
+      _hole?.water.any((shape) => shape.contains(point)) ?? false;
+
   /// The ground's gradient under [point] (rise per unit, uphill), a
   /// kicker's deck included.
   Vec2 slopeAt(Vec2 point) => flat
