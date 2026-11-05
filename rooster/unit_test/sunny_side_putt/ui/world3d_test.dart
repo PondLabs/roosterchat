@@ -1888,6 +1888,18 @@ void main() {
             props: (farm.userData['props'] as List)
                 .cast<(String, Vec2, double)>()
                 .toList(),
+            plants: (farm.userData['plants'] as List)
+                .cast<(String, Vec2, double)>()
+                .toList(),
+            bedPlants: (farm.userData['bed plants'] as List)
+                .cast<(String, Vec2, double)>()
+                .toList(),
+            plantVertices: farm.userData['plant vertices'] as int,
+            meshes: [
+              for (final object in walk(farm))
+                if (object is tjs.Mesh && object.name.startsWith('farm-'))
+                  object.name,
+            ],
             signAt:
                 sign == null ? null : Vec2(sign.position.x, sign.position.z),
             signNumber: sign?.userData['number'],
@@ -1942,6 +1954,169 @@ void main() {
               reason: '${entry.hole.id}: the $name on the table');
         }
       }
+    });
+
+    // The plants each course grows: on every hole, and somewhere on the
+    // course.
+    const everyHole = {
+      'the_coop': {'boxwood', 'hydrangea'},
+      'the_corn_maze': {'cabbage'},
+      'the_pond': {'reeds', 'cattails'},
+      'the_farm_road': {'hawthorn hedge'},
+      'the_barn': {'autumn shrub', 'fountain grass'},
+    };
+    const onTheCourse = {
+      'the_coop': {'boxwood', 'hydrangea', 'topiary'},
+      'the_corn_maze': {'cabbage'},
+      'the_pond': {'reeds', 'cattails'},
+      'the_farm_road': {'hawthorn hedge', 'hawthorn'},
+      'the_barn': {'autumn shrub', 'fountain grass'},
+    };
+
+    test('every course grows plants of its own, and none of another', () {
+      for (final entry in built) {
+        final kinds = {
+          for (final (kind, _, _) in [...entry.plants, ...entry.bedPlants])
+            kind,
+        };
+        expect(kinds, containsAll(everyHole[entry.course]!),
+            reason: entry.hole.id);
+        expect(kinds.difference(onTheCourse[entry.course]!), isEmpty,
+            reason: '${entry.hole.id}: $kinds');
+        // The old round bushes are gone.
+        expect(kinds, isNot(contains('bush')), reason: entry.hole.id);
+      }
+      for (final MapEntry(key: course, value: wanted) in onTheCourse.entries) {
+        final grown = {
+          for (final entry in built.where((entry) => entry.course == course))
+            for (final (kind, _, _) in entry.plants) kind,
+        };
+        expect(grown, containsAll(wanted), reason: course);
+      }
+      // A hedgerow is a row, not a bush or two.
+      for (final entry in built.where((e) => e.course == 'the_farm_road')) {
+        expect(entry.plants.where((plant) => plant.$1 == 'hawthorn hedge'),
+            hasLength(greaterThan(15)),
+            reason: entry.hole.id);
+      }
+    });
+
+    test('no plant stands on the table, the fence line or a prop', () {
+      // The picket fence stands on a rectangle 3.6 out from the table's
+      // edge and a rail's thickness (0.62) beyond.
+      const fenceOut = 3.6 + 0.62;
+      for (final entry in built) {
+        final bounds = entry.hole.bounds;
+        for (final (kind, at, radius) in entry.plants) {
+          final dx =
+              math.max(math.max(bounds.min.x - at.x, at.x - bounds.max.x), 0.0);
+          final dz =
+              math.max(math.max(bounds.min.y - at.y, at.y - bounds.max.y), 0.0);
+          expect(math.sqrt(dx * dx + dz * dz), greaterThan(radius + 1),
+              reason: '${entry.hole.id}: the $kind at $at on the table');
+          final minX = bounds.min.x - fenceOut;
+          final maxX = bounds.max.x + fenceOut;
+          final minZ = bounds.min.y - fenceOut;
+          final maxZ = bounds.max.y + fenceOut;
+          final inside =
+              at.x > minX && at.x < maxX && at.y > minZ && at.y < maxZ;
+          final fx = math.max(math.max(minX - at.x, at.x - maxX), 0.0);
+          final fz = math.max(math.max(minZ - at.y, at.y - maxZ), 0.0);
+          final fromFence = inside
+              ? math.min(math.min(at.x - minX, maxX - at.x),
+                  math.min(at.y - minZ, maxZ - at.y))
+              : math.sqrt(fx * fx + fz * fz);
+          expect(fromFence, greaterThan(radius),
+              reason: '${entry.hole.id}: the $kind at $at on the fence');
+          for (final (prop, spot, footprint) in entry.props) {
+            expect(at.distanceTo(spot), greaterThanOrEqualTo(footprint),
+                reason: '${entry.hole.id}: the $kind at $at in the $prop');
+          }
+        }
+        // The beds' plants grow on the carved ground inside the table's
+        // bounds, never out on the meadow.
+        for (final (kind, at, _) in entry.bedPlants) {
+          expect(bounds.contains(at), isTrue,
+              reason: '${entry.hole.id}: the bed $kind at $at');
+        }
+      }
+    });
+
+    test('the plants cost no more vertices than the round bushes did', () {
+      // What the round bushes cost (the meadow's and the garden beds'),
+      // counted on the same holes before the plants took their place: the
+      // dearest hole, and each course's six together.
+      const dearestHole = 37260;
+      const perCourse = {
+        'the_coop': 149520,
+        'the_corn_maze': 107880,
+        'the_pond': 117840,
+        'the_farm_road': 160380,
+        'the_barn': 115140,
+      };
+      for (final entry in built) {
+        expect(entry.plantVertices, lessThanOrEqualTo(dearestHole),
+            reason: entry.hole.id);
+      }
+      for (final MapEntry(key: course, value: budget) in perCourse.entries) {
+        final spent = built
+            .where((entry) => entry.course == course)
+            .fold(0, (sum, entry) => sum + entry.plantVertices);
+        expect(spent, lessThanOrEqualTo(budget), reason: course);
+      }
+    });
+
+    test(
+        'the plants and stones draw smooth-shaded, the far ones out of the '
+        'shadow pass', () {
+      for (final entry in built) {
+        expect(entry.meshes.where((name) => name == 'farm-soft'), hasLength(1),
+            reason: entry.hole.id);
+        expect(entry.meshes.where((name) => name.startsWith('farm-soft')),
+            hasLength(lessThanOrEqualTo(2)),
+            reason: entry.hole.id);
+      }
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      final farm = walk(world.holeGroup('scenery')!);
+      final soft =
+          farm.firstWhere((object) => object.name == 'farm-soft') as tjs.Mesh;
+      expect((soft.material as tjs.MeshStandardMaterial).flatShading, isFalse);
+      expect(soft.castShadow, isTrue);
+      final far = farm.firstWhere((object) => object.name == 'farm-soft-far')
+          as tjs.Mesh;
+      expect((far.material as tjs.MeshStandardMaterial).flatShading, isFalse);
+      expect(far.castShadow, isFalse);
+    });
+
+    test('a boulder is a rounded stone of many faces, smooth-shaded', () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      final rock = walk(world.holeGroup('arcs')!)
+          .firstWhere((object) => object.name == 'rock') as tjs.Mesh;
+      expect((rock.material as tjs.MeshStandardMaterial).flatShading, isFalse);
+      final position =
+          rock.geometry!.attributes['position'] as tjs.BufferAttribute;
+      // An icosahedron split twice or more: 180 faces at least.
+      expect(position.count, greaterThanOrEqualTo(540));
+      // Irregular: its corners stand at different distances from its
+      // middle.
+      final normal = rock.geometry!.attributes['normal'] as tjs.BufferAttribute;
+      var near = double.infinity;
+      var far = 0.0;
+      for (var i = 0; i < position.count; i++) {
+        final x = position.getX(i)!.toDouble() / 1.02;
+        final y = position.getY(i)!.toDouble() / 0.72;
+        final z = position.getZ(i)!.toDouble() / 1.02;
+        final d = math.sqrt(x * x + y * y + z * z);
+        near = math.min(near, d);
+        far = math.max(far, d);
+        final length = math.sqrt(math.pow(normal.getX(i)!, 2) +
+            math.pow(normal.getY(i)!, 2) +
+            math.pow(normal.getZ(i)!, 2));
+        expect(length, closeTo(1, 1e-3));
+      }
+      expect(far - near, greaterThan(0.05 * 2.5));
     });
 
     test("every hole's tee sign shows that hole's number", () {
@@ -2094,6 +2269,10 @@ class _BuiltHole {
     required this.hole,
     required this.number,
     required this.props,
+    required this.plants,
+    required this.bedPlants,
+    required this.plantVertices,
+    required this.meshes,
     required this.signAt,
     required this.signNumber,
     required this.signPainted,
@@ -2105,6 +2284,15 @@ class _BuiltHole {
   /// The number the hole was built with (its place in the course).
   final String number;
   final List<(String, Vec2, double)> props;
+
+  /// The plants grown round the table (and on the lake's shore), and in
+  /// its garden beds: kind, spot, footprint.
+  final List<(String, Vec2, double)> plants;
+  final List<(String, Vec2, double)> bedPlants;
+  final int plantVertices;
+
+  /// The names of the farm's merged meshes.
+  final List<String> meshes;
   final Vec2? signAt;
   final Object? signNumber;
   final bool signPainted;

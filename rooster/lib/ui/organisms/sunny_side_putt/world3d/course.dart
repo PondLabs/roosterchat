@@ -1266,22 +1266,12 @@ class _CourseKit {
 
   // ---- boulders ---------------------------------------------------------------------------
 
-  /// A boulder: a faceted stone sunk into the turf, moss on its crown.
+  /// A boulder: a rounded, lumpy stone sunk into the turf, moss on its
+  /// crown, smooth-shaded like the eggs that roll by it.
   tjs.Mesh _boulder(Vec2 at, double radius) {
     final rand = _Rand(_seedOf('${hole.id}/${at.x}/${at.y}'));
-    final geometry = tjg.IcosahedronGeometry(1, 1);
-    final position = geometry.attributes['position'] as tjs.BufferAttribute;
-    // Jitter shared vertices identically: key them by their rounded spot.
-    final offsets = <String, double>{};
-    for (var i = 0; i < position.count; i++) {
-      final x = position.getX(i)!.toDouble();
-      final y = position.getY(i)!.toDouble();
-      final z = position.getZ(i)!.toDouble();
-      final key =
-          '${(x * 1000).round()},${(y * 1000).round()},${(z * 1000).round()}';
-      final k = offsets.putIfAbsent(key, () => rand.range(0.86, 1.1));
-      position.setXYZ(i, x * k, y * k, z * k);
-    }
+    final geometry =
+        _lumpyStone(rand, detail: radius > 1.2 ? 3 : 2, lumps: 0.1);
     final merged = _Merged()
       ..add(
         geometry,
@@ -1290,7 +1280,7 @@ class _CourseKit {
         _Farm.rock,
         baseShade: 0.62,
       );
-    final mesh = merged.mesh('rock', flat: true)!;
+    final mesh = merged.mesh('rock', flat: false)!;
     // Moss on the crown: lift the upward-facing faces toward green.
     final colors = mesh.geometry!.attributes['color'] as tjs.BufferAttribute;
     final normals = mesh.geometry!.attributes['normal'] as tjs.BufferAttribute;

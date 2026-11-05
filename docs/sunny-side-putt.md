@@ -411,13 +411,33 @@ Each course's own props stand at set spots round the table - mostly on
 the far side and the tee's side, where the overview and the wide shots
 see them - nudged clear of the table, the picket fence, the landmarks,
 the host and one another, never on the camera's side (`_Scenery._settle`);
-the scatter of trees, bushes and flowers keeps off them, and there are
-fewer generic bushes and groves than before. They are merged geometry
+the scatter of trees, plants and flowers keeps off them, and there are
+fewer groves than before. They are merged geometry
 poured into the farm's own meshes, so they cost no draw call of their
 own; the Barn's bulbs are one emissive mesh with one cloud of soft halos
 (no lights: the corners' four lanterns stay the yard's only lamps). The
 road signs carry pictures only, never words. The farm group lists what
 it stood in `userData['props']` (name, spot, footprint) for the tests.
+
+Each course also grows plants of its own round the table and in the
+garden beds the walls carve off it (`world3d/plants.dart`), in place of
+the round bushes every course once shared: clipped boxwood balls, potted
+topiary and mophead hydrangeas in pink and blue at the Coop; rows of
+cabbages with curled outer leaves on beds of dark soil along the maze's
+edges, and in rows in its garden beds; clumps of reeds and brown-headed
+cattails round the table and on the lake's shore at the Pond; a hawthorn
+hedgerow in white blossom along Farm Road's far verge, field gates in its
+gaps, and a few hawthorns in blossom on the meadow; shrubs turned orange,
+rust and gold and plumes of fountain grass at the Barn. They keep off the
+table, the fence line, the landmarks, the host, the props and one
+another, and the tall ones grow short on the camera's side. They and the
+meadow's stones pour into one smooth-shaded mesh (`farm-soft`) built of
+few-faced shapes whose normals round them off, and the ones past the
+sun's shadow box into a second one that casts no shadow
+(`farm-soft-far`): two draw calls a hole, at no more vertices than the
+bushes cost (the tests hold each course to the bushes' count). The farm group lists them in
+`userData['plants']` and `userData['bed plants']` (kind, spot,
+footprint).
 
 Beside every tee a painted wooden sign shows the hole's number, lettered
 like the flag's, in the course's colours (cream and comb red at the Coop,
@@ -508,7 +528,7 @@ along the slope), the aim, the crates, the hens, the nest and every
 burst stand on the ground's height, and the pointer's ray walks onto it.
 
 On the green: mown turf with stripes and contact shade along the rails,
-rubber bumpers (rails and pinball mushrooms), faceted boulders, ponds
+rubber bumpers (rails and pinball mushrooms), rounded smooth-shaded boulders, ponds
 that ripple, speed belts whose chevrons run, rabbit holes glowing their
 pair's colour, the silo over its spiral pull, floating "?" crates, the
 straw nest with a flag flying the hole's number, the tee mat. The characters - the eggs, the

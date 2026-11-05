@@ -76,6 +76,7 @@ import 'putt_powerup_icons.dart' show paintPuttPowerUpIcon;
 part 'world3d/kit.dart';
 part 'world3d/course.dart';
 part 'world3d/scenery.dart';
+part 'world3d/plants.dart';
 part 'world3d/actors.dart';
 part 'world3d/birds.dart';
 part 'world3d/aim_fx.dart';
