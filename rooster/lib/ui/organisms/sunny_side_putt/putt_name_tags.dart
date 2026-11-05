@@ -25,6 +25,10 @@ class PuttTag {
   /// The player's picture, when they have one (else the colour dot).
   final ImageProvider? avatar;
 
+  /// Just the picture (or the dot), no name: the camera is far and the
+  /// names would cover the eggs.
+  final bool compact;
+
   const PuttTag({
     required this.playerId,
     required this.name,
@@ -32,6 +36,7 @@ class PuttTag {
     required this.at,
     this.dim = false,
     this.avatar,
+    this.compact = false,
   });
 }
 
@@ -42,9 +47,11 @@ class PuttTagBoard extends ChangeNotifier {
 
   List<PuttTag> get tags => _tags;
 
-  void update(List<PuttTag> tags) {
+  /// The tags for this frame, laid clear of each other and of [avoid]
+  /// (my own egg, which wears no tag but must not vanish under one).
+  void update(List<PuttTag> tags, {List<Rect> avoid = const []}) {
     if (tags.isEmpty && _tags.isEmpty) return;
-    _tags = declutterTags(tags);
+    _tags = declutterTags(tags, avoid: avoid);
     notifyListeners();
   }
 }
@@ -53,15 +60,15 @@ class PuttTagBoard extends ChangeNotifier {
 /// stack their pills on top of one another, so each tag (from the lowest
 /// on screen up) rises above any it would overlap. A pill's size is read
 /// off its name, near enough for the layout.
-List<PuttTag> declutterTags(List<PuttTag> tags) {
-  if (tags.length < 2) return tags;
+List<PuttTag> declutterTags(List<PuttTag> tags, {List<Rect> avoid = const []}) {
+  if (tags.isEmpty || (tags.length < 2 && avoid.isEmpty)) return tags;
   Rect pill(PuttTag tag, Offset at) {
-    final width = 30.0 + tag.name.length * 7.2;
+    final width = tag.compact ? 26.0 : 30.0 + tag.name.length * 7.2;
     return Rect.fromLTWH(at.dx - width / 2, at.dy - 26, width, 26);
   }
 
   final order = [...tags]..sort((a, b) => b.at.dy.compareTo(a.at.dy));
-  final placed = <Rect>[];
+  final placed = <Rect>[...avoid];
   final moved = <String, Offset>{};
   for (final tag in order) {
     var at = tag.at;
@@ -84,6 +91,7 @@ List<PuttTag> declutterTags(List<PuttTag> tags) {
         at: moved[tag.playerId] ?? tag.at,
         dim: tag.dim,
         avatar: tag.avatar,
+        compact: tag.compact,
       ),
   ];
 }
@@ -131,7 +139,9 @@ class _TagPill extends StatelessWidget {
       children: [
         Container(
           constraints: const BoxConstraints(maxWidth: 150),
-          padding: const EdgeInsets.fromLTRB(7, 3, 9, 3),
+          padding: tag.compact
+              ? const EdgeInsets.all(3)
+              : const EdgeInsets.fromLTRB(7, 3, 9, 3),
           decoration: BoxDecoration(
             color: PuttPalette.ink.withValues(alpha: 0.82),
             borderRadius: BorderRadius.circular(10),
@@ -164,21 +174,22 @@ class _TagPill extends StatelessWidget {
                   decoration:
                       BoxDecoration(color: tag.color, shape: BoxShape.circle),
                 ),
-              const SizedBox(width: 5),
-              Flexible(
-                child: Text(
-                  tag.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: PuttPalette.cream,
-                    fontFamily: 'NunitoSans',
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    height: 1.2,
+              if (!tag.compact) const SizedBox(width: 5),
+              if (!tag.compact)
+                Flexible(
+                  child: Text(
+                    tag.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: PuttPalette.cream,
+                      fontFamily: 'NunitoSans',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      height: 1.2,
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
         ),

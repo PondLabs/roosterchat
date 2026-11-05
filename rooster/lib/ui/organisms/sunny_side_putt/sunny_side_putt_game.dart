@@ -357,7 +357,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   /// After every rendered frame: the tags follow the eggs on screen, the
   /// coach follows mine.
   void _afterFrame() {
-    _tags.update(game.tagsForFrame());
+    _tags.update(game.tagsForFrame(), avoid: game.tagObstacles());
     _coach.value = game.coachForFrame();
     final mine = game.match.myBall;
     _busy.value =
@@ -782,9 +782,23 @@ class SunnySidePuttGame extends FlameGame {
         at: world3d.projectToWorld(at, height: lift),
         dim: aim.isActive,
         avatar: match.avatarOf?.call(ball.playerId),
+        // From far off, the names would cover the eggs: pictures only.
+        compact: world3d.rig.distance > 44,
       ));
     }
     return tags;
+  }
+
+  /// What the tags must leave clear: my own egg (with its pin above it).
+  List<Rect> tagObstacles() {
+    final mine = match.myBall;
+    if (mine == null || mine.holed || match.hole == null) return const [];
+    final at = match.renderPositionOf(match.localPlayerId);
+    if (!world3d.inFrontOfCamera(at)) return const [];
+    final foot = world3d.projectToWorld(at);
+    final top = world3d.projectToWorld(at, height: eggRadius * 4.2);
+    final half = math.max(14.0, (foot.dy - top.dy) * 0.45);
+    return [Rect.fromLTRB(foot.dx - half, top.dy, foot.dx + half, foot.dy)];
   }
 
   // ---- the roll guide ---------------------------------------------------------------

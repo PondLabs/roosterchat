@@ -53,4 +53,19 @@ void main() {
     expect(
         placed.firstWhere((t) => t.playerId == 'c').at, const Offset(600, 300));
   });
+
+  test('tags rise clear of my own egg', () {
+    const tags = [
+      PuttTag(
+          playerId: 'a',
+          name: 'Maya',
+          color: Colors.teal,
+          at: Offset(300, 300)),
+    ];
+    const mine = Rect.fromLTRB(280, 270, 320, 310);
+    final placed = declutterTags(tags, avoid: [mine]);
+    final at = placed.single.at;
+    // The pill (26 tall, ending at its anchor) sits above my egg's box.
+    expect(at.dy, lessThanOrEqualTo(mine.top - 2 + 1e-9));
+  });
 }
