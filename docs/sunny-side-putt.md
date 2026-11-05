@@ -50,9 +50,12 @@ results):
   the others pass through it and it through them, so nobody's first putt
   (nor a cast's push) knocks a waiting egg off the tee. Two that met
   while one was a ghost go on passing through until they part, rather
-  than spring apart when it putts; both states ride the world's snapshot.
-  An egg at rest that another rolls into hears who did it in the cast
-  feed ("Jonas knocked your egg!", or "You knocked Lou's egg").
+  than spring apart when it putts; two at rest inside each other roll
+  just clear (a putted egg out of a waiting one, which stays put; two
+  waiting ones half each; never into water, and a pair at most four times
+  a hole). All of it rides the world's snapshot. An egg at rest that
+  another rolls into hears who did it in the cast feed ("Jonas knocked
+  your egg!", or "You knocked Lou's egg").
 
 ### Modes
 
@@ -66,7 +69,9 @@ results):
 
 Earned at the "?" boxes (a maximum of 3 in hand; extras discarded), and
 **the one who casts never suffers their own bad effects** - the wind
-spares their egg, the sprinkler waters around it.
+spares their egg, the sprinkler waters around it. A power-up that lands
+in the carton says its name above its slot for a couple of seconds (the
+tooltip, on hover, says what it does).
 
 | Power-up | Does |
 |---|---|
@@ -436,10 +441,17 @@ and a chick rises out of the cup in the other half onto the nest's lip,
 hops three times flapping at the camera and drops back in (the viewer's
 own a size up, the camera in on it for 3 s). The viewer's egg wears a
 marker ring and a bobbing pin drawn over everything; the others carry
-name tags, which keep clear of every egg and of the pin, and are not
-drawn under the HUD's widgets. An egg standing in front of the viewer's
-resting egg on the screen fades to a third of itself until the viewer
-putts (the close camera behind a fresh egg looks along the tee's ring).
+name tags, which keep clear of every egg and of the pin, are not drawn
+under the HUD's widgets, and show the player's picture alone while their
+egg draws under 26 pixels tall (the opening's wide shot, the whole-hole
+view). An egg standing in front of the viewer's resting egg on the
+screen fades to a third of itself until the viewer putts (the close
+camera behind a fresh egg looks along the tee's ring). The nest's cup
+falls from a lit wall to a deep brown floor with straw lying on it; the
+confetti crown of the viewer's own sink keeps near the nest, and paper
+that lands fades away. The power-ups' marks on the green - the
+targeting rings and push arrows, the wind's streaks, the swap's violet -
+wear ink or depth enough to read on light turf.
 
 When frames run slow (an integrated GPU on a high-density screen) the
 surface draws fewer pixels: after three seconds under 42 fps it steps
