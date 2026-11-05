@@ -31,6 +31,10 @@ results):
   degrees either side) and the putt goes exactly where the arrow points
   at release, so the timing of the release is the skill; the engine adds
   no hidden error. The Hawk Eye power-up holds the arrow still.
+- After each hole the results card stays up for 8 seconds in a live
+  session (a band sweeps across Continue as they run out), then the match
+  moves on by itself; the host's Continue moves on at once. The pause
+  rides the engine's snapshot, so a host handoff keeps it.
 - Mid-join: entering now puts you on the current hole's tee; the holes
   you missed score par.
 

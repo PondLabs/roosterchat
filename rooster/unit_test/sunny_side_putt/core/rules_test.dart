@@ -22,6 +22,7 @@ PuttConfig rulesConfig({
   double wobbleMaxRadians = 0,
   PowerUpRegistry? powerUps,
   List<CourseDef>? courses,
+  int scoreboardSeconds = 0,
 }) {
   final course = courses ??
       [
@@ -81,6 +82,7 @@ PuttConfig rulesConfig({
             ]),
           }
         : const {},
+    scoreboardSeconds: scoreboardSeconds,
   );
 }
 
@@ -264,6 +266,56 @@ void main() {
       expect(second.actualAngle, first.actualAngle);
       // The sway is the view's, drawn on the arrow and in the angle sent.
       expect(first.actualAngle, first.aimedAngle);
+    });
+  });
+
+  group('the results pause', () {
+    PuttEngine endedHole({int scoreboardSeconds = 3}) {
+      final engine = PuttEngine(rulesConfig(
+          holeTimeLimitSeconds: 2, scoreboardSeconds: scoreboardSeconds));
+      engine.join('p1');
+      engine.start();
+      engine.advanceSeconds(2.1); // the clock runs out
+      expect(engine.phase, PuttPhase.holeScoreboard);
+      return engine;
+    }
+
+    test('moves on by itself when the config says so', () {
+      final engine = endedHole();
+      // The hole ended a tenth of a second before the clock stopped.
+      expect(engine.scoreboardSecondsLeft, inInclusiveRange(2.85, 3.0));
+      engine.advanceSeconds(2.4);
+      expect(engine.phase, PuttPhase.holeScoreboard);
+      engine.advanceSeconds(0.6);
+      expect(engine.phase, PuttPhase.holePlay);
+      expect(engine.currentHole!.id, 'h1');
+    });
+
+    test('a Continue first moves on at once, and only once', () {
+      final engine = endedHole();
+      expect(engine.advance(), isTrue);
+      expect(engine.currentHole!.id, 'h1');
+      // Past where the pause would have run out, within h1's own clock.
+      engine.advanceSeconds(1.5);
+      expect(engine.phase, PuttPhase.holePlay);
+      expect(engine.currentHole!.id, 'h1');
+    });
+
+    test('waits for a Continue by default', () {
+      final engine = endedHole(scoreboardSeconds: 0);
+      engine.advanceSeconds(30);
+      expect(engine.phase, PuttPhase.holeScoreboard);
+      expect(engine.scoreboardSecondsLeft, 0);
+    });
+
+    test('its countdown rides a snapshot', () {
+      final engine = endedHole();
+      engine.advanceSeconds(1);
+      final copy = PuttEngine.fromJson(engine.toJson(), config: engine.config);
+      expect(copy.scoreboardSecondsLeft,
+          closeTo(engine.scoreboardSecondsLeft, 1e-9));
+      copy.advanceSeconds(2.1);
+      expect(copy.phase, PuttPhase.holePlay);
     });
   });
 

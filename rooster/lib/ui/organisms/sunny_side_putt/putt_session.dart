@@ -124,6 +124,7 @@ class PuttSessionController extends ChangeNotifier {
       catalog: catalog,
       seed: random.nextInt(1 << 31),
       powerUps: puttLaunchPowerUps(),
+      scoreboardSeconds: puttScoreboardSeconds,
     );
   }
 
@@ -208,6 +209,7 @@ class PuttSessionController extends ChangeNotifier {
       seed: seed,
       catalog: catalog,
       powerUps: puttLaunchPowerUps(),
+      scoreboardSeconds: puttScoreboardSeconds,
       courses: [
         for (final id in courseIds)
           catalog[id] ??

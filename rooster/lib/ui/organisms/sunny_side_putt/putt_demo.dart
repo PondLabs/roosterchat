@@ -150,9 +150,11 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
         startHoleIndex: start - 1,
         // The real effects, as a session registers them.
         powerUps: puttLaunchPowerUps(),
-        // The demo plays the reference lines as written: a wobbled shot
-        // would leave every later one of the hole off its mark.
+        // The demo plays the reference lines as written: a swaying arrow
+        // would leave every later shot of the hole off its mark.
         wobbleMaxRadians: 0,
+        // The results move on by themselves, as in a live session.
+        scoreboardSeconds: puttScoreboardSeconds,
       ),
       // Not translated: the viewer's own name in the demo.
       displayNames: {
@@ -184,11 +186,7 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
       case PuttPhase.holePlay:
         break;
       case PuttPhase.holeScoreboard:
-        _phaseTime += dt;
-        if (_phaseTime > 6.0) {
-          _phaseTime = 0;
-          match.advance();
-        }
+        // The engine moves on by itself after the results' pause.
         return;
       case PuttPhase.lobby:
         match.advance();

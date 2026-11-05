@@ -118,6 +118,11 @@ class PuttConfig {
   /// and practice start mid-course; a session always starts at 0.
   final int startHoleIndex;
 
+  /// How long a hole's results stay up before the match moves on by
+  /// itself (whole seconds); 0 waits for a Continue. A live session uses
+  /// [puttScoreboardSeconds], so nobody stalls the call by looking away.
+  final int scoreboardSeconds;
+
   // Not const: the default [powerUps] registry must be a fresh instance
   // per config, never the canonicalized const one (registering into a
   // const instance would leak across configs).
@@ -132,6 +137,7 @@ class PuttConfig {
     this.wobbleMaxRadians = 0.055,
     this.maxPlayers = 8,
     this.startHoleIndex = 0,
+    this.scoreboardSeconds = 0,
   })  : physics = physics ?? const PhysicsConfig(),
         powerUps = powerUps ?? PowerUpRegistry();
 
@@ -141,6 +147,10 @@ class PuttConfig {
   String get fingerprint =>
       '${mode.name}|$seed|${courses.map((c) => c.id).join(',')}';
 }
+
+/// The results' pause in a live session: long enough to read the card and
+/// see the last egg hatch, short enough to keep the call playing.
+const int puttScoreboardSeconds = 8;
 
 /// A player (or queued spectator) and their transient state.
 class PuttPlayer {
@@ -507,6 +517,15 @@ class PuttEngine {
   int _holeIndex = 0;
   int _holesCompleted = 0;
   int _timerTicks = 0;
+
+  /// Ticks left in the results' pause (0: none running).
+  int _scoreboardTicks = 0;
+
+  /// Seconds left before the results move on by themselves; 0 when they
+  /// wait for a Continue (or are not up).
+  double get scoreboardSecondsLeft => _phase == PuttPhase.holeScoreboard
+      ? _scoreboardTicks * config.physics.dt
+      : 0;
   int _seq = 0;
 
   final List<CourseDef> _playedCourses;
@@ -632,6 +651,13 @@ class PuttEngine {
   /// phase so the input journal stays aligned.
   void tickForward() {
     _tick++;
+    if (_phase == PuttPhase.holeScoreboard && _scoreboardTicks > 0) {
+      // The results' pause runs out: the match moves on by itself, at the
+      // same tick on every engine that plays the journal.
+      _scoreboardTicks--;
+      if (_scoreboardTicks == 0) _advance();
+      return;
+    }
     if (_phase != PuttPhase.holePlay) return;
     final world = _world;
     if (world == null) return;
@@ -859,6 +885,7 @@ class PuttEngine {
       case PuttPhase.holeScoreboard:
         final course = currentCourse;
         if (course == null) return false;
+        _scoreboardTicks = 0;
         _holeIndex++;
         if (_holeIndex < course.holes.length) {
           _startHole();
@@ -979,6 +1006,7 @@ class PuttEngine {
     }
     _holesCompleted++;
     _phase = PuttPhase.holeScoreboard;
+    _scoreboardTicks = (config.scoreboardSeconds / config.physics.dt).round();
     _events
         .add(HoleEnded(completed: completed, strokes: strokes, terms: terms));
   }
@@ -1057,6 +1085,7 @@ class PuttEngine {
         'holeIndex': _holeIndex,
         'holesCompleted': _holesCompleted,
         'timerTicks': _timerTicks,
+        'scoreboardTicks': _scoreboardTicks,
         'seq': _seq,
         'rng': _rng.toList(),
         'playedCourses': [for (final course in _playedCourses) course.id],
@@ -1113,6 +1142,7 @@ class PuttEngine {
     _holeIndex = (json['holeIndex'] as num).toInt();
     _holesCompleted = (json['holesCompleted'] as num).toInt();
     _timerTicks = (json['timerTicks'] as num).toInt();
+    _scoreboardTicks = (json['scoreboardTicks'] as num?)?.toInt() ?? 0;
     _seq = (json['seq'] as num).toInt();
     _playedCourses
       ..clear()

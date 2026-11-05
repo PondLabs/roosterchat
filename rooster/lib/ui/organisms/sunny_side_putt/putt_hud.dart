@@ -1187,13 +1187,87 @@ class PuttHoleResultsCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           // Only the host's own card continues; in a local match that is me.
-          FilledButton(
-            key: const Key('putt-continue'),
-            style: _cardButton(PuttPalette.comb),
-            onPressed: match.advance,
-            child: Text(labelPuttContinue()),
-          ),
+          // In a live session the card moves on by itself: the button
+          // fills as its seconds run out.
+          _ContinueButton(match: match),
         ],
+      ),
+    );
+  }
+}
+
+/// The results' Continue: tapping moves on at once; when the match moves
+/// on by itself (a live session), a lighter band sweeps across the button
+/// as the seconds run out.
+class _ContinueButton extends StatefulWidget {
+  final PuttMatch match;
+
+  const _ContinueButton({required this.match});
+
+  @override
+  State<_ContinueButton> createState() => _ContinueButtonState();
+}
+
+class _ContinueButtonState extends State<_ContinueButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _frames = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 1),
+  )..repeat();
+
+  /// The pause's full length, read when it first shows.
+  double? _total;
+
+  @override
+  void dispose() {
+    _frames.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final match = widget.match;
+    return AnimatedBuilder(
+      animation: _frames,
+      builder: (context, child) {
+        final left = match.engine.scoreboardSecondsLeft;
+        if (left > 0) _total ??= left;
+        final total = _total;
+        final done = total == null || total <= 0
+            ? 0.0
+            : (1 - left / total).clamp(0.0, 1.0).toDouble();
+        return Stack(
+          children: [
+            child!,
+            if (done > 0)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: FractionallySizedBox(
+                        widthFactor: done,
+                        heightFactor: 1,
+                        child: ColoredBox(
+                          color: PuttPalette.cream.withValues(alpha: 0.22),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+      child: SizedBox(
+        width: double.infinity,
+        child: FilledButton(
+          key: const Key('putt-continue'),
+          style: _cardButton(PuttPalette.comb),
+          onPressed: match.advance,
+          child: Text(labelPuttContinue()),
+        ),
       ),
     );
   }
