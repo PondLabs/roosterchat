@@ -11,9 +11,10 @@ part of '../putt_world3d.dart';
 /// sunflower, orange, red flat out (no muddy olive between).
 int _powerHex(double power) {
   const stops = [
-    // A pale yolk, not green or cream, at the soft end: it has to stand
-    // off light and dark turf alike (with the ink outline round it).
-    (0.0, 0xFFE07A),
+    // A yolk, not green or cream, at the soft end: it has to stand off
+    // light and dark turf alike (with the ink outline round it); paler, it
+    // washed into the Pond's bright lawn.
+    (0.0, 0xFFD24A),
     (0.42, 0xFFCC2E),
     (0.72, 0xFF8A2A),
     (1.0, 0xFF3D30),
@@ -48,8 +49,10 @@ class _PuttAimView3D {
     // The aim draws over the other eggs (no depth test, after them): an
     // egg in the way never hides where the putt goes. The viewer's own egg
     // draws after it, so the arrow comes out from under the egg.
+    // Transparent like its outline, so it draws after it (renderOrder sorts
+    // within a pass; opaque, the outline drew over it, black).
     _arrowMaterial = _unlit(_powerHex(0.5),
-        opacity: 0.95, depthWrite: false, depthTest: false);
+        opacity: 0.97, depthWrite: false, depthTest: false);
     // A solid ink line round the arrow: it reads on light and dark turf.
     _outlineMaterial = _unlit(_hexOf(PuttPalette.ink),
         opacity: 0.9, depthWrite: false, depthTest: false);
@@ -57,7 +60,7 @@ class _PuttAimView3D {
       ..name = 'aim-shaft'
       ..position.y = 0.08
       ..renderOrder = 6;
-    _shaftOutline = tjs.Mesh(tjs.BoxGeometry(1, 0.015, 0.74), _outlineMaterial)
+    _shaftOutline = tjs.Mesh(tjs.BoxGeometry(1, 0.015, 0.84), _outlineMaterial)
       ..name = 'aim-shaft-outline'
       ..position.y = 0.07
       ..renderOrder = 5;
@@ -73,7 +76,7 @@ class _PuttAimView3D {
       ..name = 'aim-head'
       ..position.y = 0.082
       ..renderOrder = 6;
-    _headOutline = tjs.Mesh(_triangle(1.6, 1.75), _outlineMaterial)
+    _headOutline = tjs.Mesh(_triangle(1.72, 1.88), _outlineMaterial)
       ..name = 'aim-head-outline'
       ..position.y = 0.072
       ..renderOrder = 5;
@@ -341,10 +344,10 @@ class _PuttAimView3D {
     shaft.position.x = start + length / 2;
     _core.scale.x = math.max(length - 0.3, 0.05);
     _core.position.x = start + length / 2 - 0.1;
-    _shaftOutline.scale.x = length + 0.14;
+    _shaftOutline.scale.x = length + 0.18;
     _shaftOutline.position.x = start + length / 2 - 0.05;
     head.position.x = start + length;
-    _headOutline.position.x = start + length - 0.16;
+    _headOutline.position.x = start + length - 0.2;
     _arrowMaterial.color = _lin(_powerHex(aim.power));
     // The guide takes over where the arrow's head ends.
     final tip = start + length + 1.15;

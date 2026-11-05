@@ -1146,6 +1146,8 @@ void main() {
       for (final piece in aim) {
         expect(piece.material!.depthTest, isFalse,
             reason: 'no egg in the way hides where the putt goes');
+        expect(piece.material!.transparent, isTrue,
+            reason: 'in the pass its ink outline is in, drawn after it');
         expect(piece.renderOrder, greaterThan(orderOf('other')));
         expect(piece.renderOrder, lessThan(orderOf('me')),
             reason: 'the arrow comes out from under my own egg');
