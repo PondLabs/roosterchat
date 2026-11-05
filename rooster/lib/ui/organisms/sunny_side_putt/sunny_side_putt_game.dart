@@ -967,6 +967,20 @@ class SunnySidePuttGame extends FlameGame {
       final at = match.renderPositionOf(ball.playerId);
       final lift = eggRadius * 2.9 + liftOf(ball);
       if (!world3d.inFrontOfCamera(at, height: lift)) continue;
+      // An egg drawn small (the opening's wide shot, the whole-hole view)
+      // wears its picture only: a name three eggs wide covered the green.
+      // Some slack between the two, so a tag does not flicker at the line.
+      final ground = liftOf(ball);
+      final tall = world3d.projectToWorld(at, height: ground).dy -
+          world3d.projectToWorld(at, height: ground + eggRadius * 2.56).dy;
+      final wasCompact = _compactTags.contains(ball.playerId);
+      final compact = world3d.rig.distance > 44 ||
+          (wasCompact ? tall < _fullTagEgg : tall < _compactTagEgg);
+      if (compact) {
+        _compactTags.add(ball.playerId);
+      } else {
+        _compactTags.remove(ball.playerId);
+      }
       tags.add(PuttTag(
         playerId: ball.playerId,
         name: displayNameOf(match, ball.playerId),
@@ -974,12 +988,18 @@ class SunnySidePuttGame extends FlameGame {
         at: world3d.projectToWorld(at, height: lift),
         dim: aim.isActive,
         avatar: match.avatarOf?.call(ball.playerId),
-        // From far off, the names would cover the eggs: pictures only.
-        compact: world3d.rig.distance > 44,
+        compact: compact,
       ));
     }
     return tags;
   }
+
+  /// The players whose tags show their picture only (their eggs drawn
+  /// small), and the egg heights, in pixels, under which a tag goes
+  /// compact and over which it comes back.
+  final Set<String> _compactTags = {};
+  static const double _compactTagEgg = 26;
+  static const double _fullTagEgg = 32;
 
   /// The reactions' bubbles this frame: over the egg of whoever sent each
   /// (over the nest once their egg is in; anyone without an egg on the
