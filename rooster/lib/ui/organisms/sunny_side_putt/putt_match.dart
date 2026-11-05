@@ -1117,6 +1117,9 @@ class PuttMatch extends ChangeNotifier {
         }
         _castCall = null;
         return const [];
+      case CourseAwardsShown():
+        // The host's crow for the podium.
+        return const [PuttNotice(PuttSfx.crow)];
       case MatchEnded():
         _announce(PuttHeadlineKind.matchOver, labelPuttMatchOver());
         return [PuttNotice(PuttSfx.victory, title: headline)];

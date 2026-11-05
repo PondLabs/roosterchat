@@ -262,6 +262,22 @@ void main() {
 
       await tester.tap(find.byKey(const Key('putt-continue')));
       await tester.pump();
+      // The course's only hole: its awards come next, then the vote.
+      expect(match.engine.courseAwardsUp, isTrue);
+      // The game rebuilds its overlay as the match moves.
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: ListenableBuilder(
+            listenable: match,
+            builder: (context, _) => PuttHud(match: match, onOpenMenu: () {}),
+          ),
+        ),
+      ));
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.byType(PuttCourseAwardsCard), findsOneWidget);
+      expect(find.byType(PuttHoleResultsCard), findsNothing);
+      await tester.tap(find.byKey(const Key('putt-continue')));
+      await tester.pump();
       expect(match.phase, PuttPhase.awaitingNextCourse);
     });
   });

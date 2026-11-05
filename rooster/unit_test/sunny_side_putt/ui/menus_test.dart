@@ -162,6 +162,7 @@ void main() {
       for (var frame = 0; frame < 40; frame++) {
         match.update(0.3);
       }
+      expect(match.advance(), isTrue); // the course's awards
       expect(match.advance(), isTrue);
       expect(match.phase, PuttPhase.awaitingNextCourse);
 

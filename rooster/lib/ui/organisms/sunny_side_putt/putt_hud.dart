@@ -3,7 +3,8 @@
 // course's progress dots under it), the camera and pause buttons (top
 // right), the headline banners, the scorecard (bottom left), the hint line
 // (bottom centre), the power-up carton with its targeting (bottom right),
-// and the between-hole and match-over cards. Pure Flutter (the game
+// and the between-hole, course-awards (putt_awards_card.dart) and
+// match-over cards. Pure Flutter (the game
 // renders under it), fed by the [PuttMatch] and, where a human taps back,
 // callbacks and the [PuttTargeting] flow.
 //
@@ -30,6 +31,8 @@ import 'putt_match.dart';
 import 'putt_powerup_icons.dart';
 import 'putt_targeting.dart';
 import 'spectator_strip.dart';
+
+part 'putt_awards_card.dart';
 
 /// The assembled HUD over the game.
 class PuttHud extends StatefulWidget {
@@ -920,13 +923,18 @@ class _PuttMiddleState extends State<_PuttMiddle>
 
   void _syncPhase() {
     final match = widget.match;
-    final seen = '${match.phase.name}-${match.holeNumber}';
+    final awards = match.engine.courseAwardsUp;
+    final seen =
+        '${match.phase.name}-${match.holeNumber}${awards ? '-awards' : ''}';
     if (seen == _seen) return;
     _seen = seen;
     if (match.phase != PuttPhase.holeScoreboard) {
       _clock.value = 0;
     } else if (_reduceMotion) {
       _clock.value = 1;
+    } else if (awards) {
+      // The awards follow the results card at once: only its rise.
+      _clock.forward(from: _reveal.begin);
     } else {
       _clock.forward(from: 0);
     }
@@ -984,10 +992,15 @@ class _PuttMiddleState extends State<_PuttMiddle>
                     offset: Offset(0, 14 * (1 - reveal)),
                     child: LayoutBuilder(
                       builder: (context, constraints) => Center(
-                        child: PuttHoleResultsCard(
-                          match: match,
-                          maxHeight: constraints.maxHeight,
-                        ),
+                        child: match.engine.courseAwardsUp
+                            ? PuttCourseAwardsCard(
+                                match: match,
+                                maxHeight: constraints.maxHeight,
+                              )
+                            : PuttHoleResultsCard(
+                                match: match,
+                                maxHeight: constraints.maxHeight,
+                              ),
                       ),
                     ),
                   ),

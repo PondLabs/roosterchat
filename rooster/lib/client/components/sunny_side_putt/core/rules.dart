@@ -16,6 +16,9 @@
 //          anyone still on the green scores max(strokes, par + 2)
 //      -> holeScoreboard -> next hole, next course (tournament), or a vote
 //         for the next course (casual/barnyard); scores accumulate
+//      -> after a course's last hole the results give way to the course's
+//         awards (still holeScoreboard, [courseAwardsUp]): the podium and
+//         who did the most of what (awards.dart), then the match moves on
 //   -> matchOver (tournament) or until the host ends it (casual)
 //
 // A player's look (their egg's band pattern, their chick's hat; see
@@ -40,6 +43,7 @@ library;
 
 import 'dart:math' as math;
 
+import 'awards.dart';
 import 'hole.dart';
 import 'look.dart';
 import 'physics.dart';
@@ -47,6 +51,7 @@ import 'powerups.dart';
 import 'rng.dart';
 import 'vec.dart';
 
+export 'awards.dart';
 export 'look.dart';
 
 enum GameMode { casual, tournament, barnyardChaos }
@@ -409,6 +414,12 @@ class PowerUpHit extends PuttEvent {
       required this.playerIds});
 }
 
+/// A course's last hole's results gave way to the course's awards
+/// ([PuttEngine.courseAwardsUp]).
+class CourseAwardsShown extends PuttEvent {
+  const CourseAwardsShown();
+}
+
 class AwaitingNextCourse extends PuttEvent {
   const AwaitingNextCourse();
 }
@@ -656,6 +667,14 @@ class PuttEngine {
   double get scoreboardSecondsLeft => _phase == PuttPhase.holeScoreboard
       ? _scoreboardTicks * config.physics.dt
       : 0;
+
+  /// Whether the results up are the course's awards (after its last
+  /// hole's own results).
+  bool _awardsUp = false;
+
+  /// What everyone did over the course on the green, for its awards.
+  final PuttCourseTally _tally = PuttCourseTally();
+
   int _seq = 0;
 
   final List<CourseDef> _playedCourses;
@@ -751,6 +770,14 @@ class PuttEngine {
   /// Total strokes per player, lowest wins.
   Map<String, int> get totals =>
       {for (final row in scoreboard()) row.playerId: row.total};
+
+  /// The course is over and its awards are up: the last hole's results
+  /// were seen, the next Continue (or the pause running out) moves on.
+  bool get courseAwardsUp => _phase == PuttPhase.holeScoreboard && _awardsUp;
+
+  /// What everyone did over the running course (since its first hole),
+  /// for its awards card.
+  PuttCourseTally get courseTally => _tally;
 
   // ---- inputs ----------------------------------------------------------------
 
@@ -934,6 +961,7 @@ class PuttEngine {
     if (_players.values.where((p) => !p.spectator).isEmpty) return false;
     _events.add(
         MatchStarted(mode: config.mode, courseId: _playedCourses.first.id));
+    _tally.clear();
     _holePars.clear();
     _appendCoursePars(_playedCourses.first);
     _holeIndex = config.startHoleIndex
@@ -1093,6 +1121,16 @@ class PuttEngine {
       case PuttPhase.holeScoreboard:
         final course = currentCourse;
         if (course == null) return false;
+        if (!_awardsUp && _holeIndex + 1 >= course.holes.length) {
+          // The course's last hole: its awards before whatever is next,
+          // with a pause of their own.
+          _awardsUp = true;
+          _scoreboardTicks =
+              (config.scoreboardSeconds / config.physics.dt).round();
+          _events.add(const CourseAwardsShown());
+          return true;
+        }
+        _awardsUp = false;
         _scoreboardTicks = 0;
         _holeIndex++;
         if (_holeIndex < course.holes.length) {
@@ -1104,6 +1142,7 @@ class PuttEngine {
             _courseIndex++;
             _holeIndex = 0;
             _appendCoursePars(_playedCourses[_courseIndex]);
+            _tally.clear();
             _startHole();
             return true;
           }
@@ -1126,6 +1165,7 @@ class PuttEngine {
     _courseIndex = _playedCourses.length - 1;
     _holeIndex = 0;
     _appendCoursePars(course);
+    _tally.clear();
     _events.add(CourseStarted(courseId: course.id, courseIndex: _courseIndex));
     _startHole();
     return true;
@@ -1139,6 +1179,7 @@ class PuttEngine {
 
   void _finishMatch() {
     _phase = PuttPhase.matchOver;
+    _awardsUp = false;
     _events.add(MatchEnded(totals: totals));
   }
 
@@ -1192,6 +1233,7 @@ class PuttEngine {
     }
     _timerTicks = (config.holeTimeLimitSeconds / config.physics.dt).round();
     _cuesFired.clear();
+    _tally.newHole();
     _events.add(HoleStarted(
         holeId: hole.id, par: hole.par, globalIndex: _holesCompleted));
   }
@@ -1266,9 +1308,11 @@ class PuttEngine {
     if (world == null) return;
     for (final event in world.drainEvents()) {
       _worldEchoes.add(event);
+      _tally.seeWorld(event);
       switch (event) {
         case BallCaptured():
           _holedThisHole.add(event.playerId);
+          _tally.holed(event.playerId, _strokesThisHole[event.playerId] ?? 0);
           _events.add(PlayerHoled(
               playerId: event.playerId,
               strokes: _strokesThisHole[event.playerId] ?? 0));
@@ -1298,6 +1342,8 @@ class PuttEngine {
         'holesCompleted': _holesCompleted,
         'timerTicks': _timerTicks,
         'scoreboardTicks': _scoreboardTicks,
+        if (_awardsUp) 'awardsUp': true,
+        'tally': _tally.toJson(),
         'seq': _seq,
         'rng': _rng.toList(),
         'playedCourses': [for (final course in _playedCourses) course.id],
@@ -1355,6 +1401,8 @@ class PuttEngine {
     _holesCompleted = (json['holesCompleted'] as num).toInt();
     _timerTicks = (json['timerTicks'] as num).toInt();
     _scoreboardTicks = (json['scoreboardTicks'] as num?)?.toInt() ?? 0;
+    _awardsUp = json['awardsUp'] == true;
+    _tally.restore(json['tally']);
     _seq = (json['seq'] as num).toInt();
     _playedCourses
       ..clear()
@@ -1485,6 +1533,7 @@ class _PowerUpContext implements PowerUpContext {
       if (ball == null || ball.holed) continue;
       if (harmful && player.shields > 0) {
         player.shields--;
+        _engine._tally.blocked(player.id);
         _engine._events.add(ShieldBlocked(
             playerId: player.id,
             effectId: _input.effectId,
@@ -1569,6 +1618,7 @@ class _PowerUpContext implements PowerUpContext {
   String? takePowerUp(String playerId) {
     final taken = _engine._players[playerId]?.inventory.takeFirst();
     if (taken != null && playerId != casterId) {
+      _engine._tally.stole(casterId);
       _engine._events.add(PowerUpStolen(
           thiefId: casterId, victimId: playerId, effectId: taken));
     }
@@ -1598,6 +1648,7 @@ class _PowerUpContext implements PowerUpContext {
     final player = _engine._players[playerId];
     if (player == null || player.shields <= 0) return false;
     player.shields--;
+    _engine._tally.blocked(playerId);
     _engine._events.add(ShieldBlocked(
         playerId: playerId, effectId: _input.effectId, casterId: casterId));
     return true;
