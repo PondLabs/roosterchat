@@ -96,6 +96,15 @@ void main() {
       return;
     }
 
+    // The game runs in real time, as in the app: under the binding's
+    // default policy the engine's frames are skipped between pumps, so
+    // Flame's loop - the match's ticks - stood still while the test waited
+    // (an egg putted never came to rest).
+    final binding = IntegrationTestWidgetsFlutterBinding.instance;
+    final framePolicy = binding.framePolicy;
+    binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
+    addTearDown(() => binding.framePolicy = framePolicy);
+
     await tester.clearUserData();
     final app = await tester.setupApp();
 
