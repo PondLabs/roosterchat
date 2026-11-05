@@ -65,13 +65,30 @@ void main() {
         reason: '$point at $pixel');
   }
 
-  test('the hole opens with a sweep from over the nest to the whole green', () {
-    director.update(1 / 60, resting(hole.tee));
-    // The entrance starts low and turned, looking across the nest at the
-    // farm and the sky.
+  test('the hole opens with a sweep from low beside it to the whole green', () {
+    // The host stands beyond the far rail, by the nest.
+    const host = Vec2(44, -6);
+    PuttCameraCue opening() => PuttCameraCue(
+        hole: hole,
+        phase: PuttPhase.holePlay,
+        myEgg: hole.tee,
+        myEggResting: true,
+        host: host);
+    director.update(1 / 60, opening());
+    // The entrance starts low and turned, looking across the green at the
+    // farm and the sky - the whole table, its tee and the host in the frame.
     expect(rig.pitchDeg, closeTo(15, 1));
-    expect(rig.target.distanceTo(hole.nest.position), lessThan(1));
-    run(PuttCameraDirector.openingSeconds - 0.2, resting(hole.tee));
+    expectInFreeView(hole.tee);
+    expectInFreeView(host);
+    for (final corner in [
+      hole.bounds.min,
+      hole.bounds.max,
+      Vec2(hole.bounds.min.x, hole.bounds.max.y),
+      Vec2(hole.bounds.max.x, hole.bounds.min.y),
+    ]) {
+      expectInFreeView(corner);
+    }
+    run(PuttCameraDirector.openingSeconds - 0.2, opening());
     expect(rig.target.distanceTo(hole.bounds.center), lessThan(0.5));
     expect(rig.pitchDeg, closeTo(PuttCameraRig.pitchDefault, 0.5));
     expect(rig.yaw, closeTo(PuttCameraRig.defaultYaw, 0.02));

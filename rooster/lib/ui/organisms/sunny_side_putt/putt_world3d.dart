@@ -490,6 +490,30 @@ class PuttCameraRig {
     _targetTarget = _frameFits(points, distance, pad, tall).target;
   }
 
+  /// The target and distance that land [points] inside the HUD-free part of
+  /// the screen seen from [yaw] and [pitchDeg] - the nearest such distance
+  /// up to [farthest] times the overview's - leaving the rig's own glide as
+  /// it was (the opening's first pose, which the director drives itself).
+  ({Vec2 target, double distance}) frameAt(List<Vec2> points,
+      {required double yaw,
+      required double pitchDeg,
+      double margin = 2,
+      double nearest = 0.5,
+      double farthest = 1.6,
+      List<double>? tall}) {
+    final savedYaw = _yawTarget;
+    final savedPitch = _pitchTarget;
+    _yawTarget = yaw;
+    _pitchTarget = pitchDeg.clamp(pitchMin, pitchMax);
+    final pad = 40 + margin * 6;
+    final distance = _nearestFitting(points, pad, _overviewDistance * nearest,
+        _overviewDistance * farthest, tall);
+    final target = _frameFits(points, distance, pad, tall).target;
+    _yawTarget = savedYaw;
+    _pitchTarget = savedPitch;
+    return (target: target, distance: distance);
+  }
+
   /// The distance [glideToFramePoints] would come to for [points] from
   /// [yaw] (the glide's own when left out), without moving the camera.
   double fitDistance(List<Vec2> points,
@@ -510,19 +534,42 @@ class PuttCameraRig {
       List<Vec2> points, double pad, double closest, List<double>? tall) {
     final low = math.max(_overviewDistance * closest, _distanceMin);
     final high = math.max(low, math.min(_overviewDistance, _distanceMax));
-    var lo = low, hi = high;
-    if (!_frameFits(points, lo, pad, tall).fits) {
-      for (var i = 0; i < 22; i++) {
-        final mid = (lo + hi) / 2;
-        if (_frameFits(points, mid, pad, tall).fits) {
-          hi = mid;
-        } else {
-          lo = mid;
-        }
+    return _nearestFitting(points, pad, low, high, tall);
+  }
+
+  /// The nearest distance in [low]..[high] from which [points] fit with
+  /// every distance out to [high] fitting too, scanned in from [high]: up
+  /// close the fit is not monotonic (a point near the lens throws the
+  /// recentring off, and a pocket of false fits opens - with the host's
+  /// height in the opening's frame, at half the distance it needs), so a
+  /// bisection could land in one. [high] when even that does not fit.
+  double _nearestFitting(List<Vec2> points, double pad, double low, double high,
+      List<double>? tall) {
+    if (high <= low || !_frameFits(points, high, pad, tall).fits) return high;
+    const steps = 40;
+    final step = (high - low) / steps;
+    var good = high;
+    var bad = low - 1;
+    for (var i = 1; i <= steps; i++) {
+      final d = high - step * i;
+      if (!_frameFits(points, d, pad, tall).fits) {
+        bad = d;
+        break;
       }
-      lo = hi;
+      good = d;
     }
-    return lo;
+    if (bad < low) return good;
+    // Between the last fit and the first miss, finer.
+    var lo = bad, hi = good;
+    for (var i = 0; i < 24; i++) {
+      final mid = (lo + hi) / 2;
+      if (_frameFits(points, mid, pad, tall).fits) {
+        hi = mid;
+      } else {
+        lo = mid;
+      }
+    }
+    return hi;
   }
 
   /// The distance from which something standing [height] world units tall
@@ -555,27 +602,36 @@ class PuttCameraRig {
     final rightEdge = 1 - 2 * pad / width;
     final top = 1 - 2 * (96 + pad) / height;
     final bottom = -1 + 2 * (150 + pad) / height;
-    var target = Vec2.zero;
-    for (final p in points) {
-      target += p;
-    }
-    target = target / points.length.toDouble();
-    var fits = false;
-    for (var iteration = 0; iteration < 8; iteration++) {
+    // The points' box on the screen from [target]: its extent, how far up
+    // the tallest thing on them reaches (NDC), their mean depth, and
+    // whether one stands behind the lens.
+    ({
+      double minX,
+      double maxX,
+      double minY,
+      double maxY,
+      double high,
+      double depth,
+      bool behind
+    }) boxFrom(Vec2 target) {
       var minX = double.infinity, maxX = -double.infinity;
       var minY = double.infinity, maxY = -double.infinity;
+      var high = -double.infinity;
       var depth = 0.0;
-      var behind = false;
-      // How far up the screen the tallest thing on the points reaches over
-      // the box's top (NDC).
-      var over = -double.infinity;
       for (var i = 0; i < points.length; i++) {
         final d = points[i] - target;
         final f = d.dot(away);
         final zc = distance + f * cp;
         if (zc < 0.5) {
-          behind = true;
-          continue;
+          return (
+            minX: 0,
+            maxX: 0,
+            minY: 0,
+            maxY: 0,
+            high: 0,
+            depth: 0,
+            behind: true
+          );
         }
         depth += zc;
         final x = d.dot(right) / (zc * t * aspect);
@@ -584,28 +640,52 @@ class PuttCameraRig {
         maxX = math.max(maxX, x);
         minY = math.min(minY, y);
         maxY = math.max(maxY, y);
-        if (tall != null && i < tall.length && tall[i] > 0) {
-          over = math.max(over, y + tall[i] * cp / (zc * t));
-        }
+        final lift = tall == null || i >= tall.length ? 0.0 : tall[i];
+        high = math.max(high, y + lift * cp / (zc * t));
       }
-      if (behind || depth == 0) return (target: target, fits: false);
-      depth /= points.length;
-      fits = maxX - minX <= rightEdge - left && maxY - minY <= top - bottom;
-      // With tall things on the points (the nest's flag), their tops are
-      // what must clear the HUD's top band, by a small pad of their own.
-      final roof = tall == null ? top : 1 - 2 * (_hudTopFree + 36) / height;
-      final high = tall == null ? maxY : math.max(maxY, over);
-      fits = fits && high - minY <= roof - bottom;
-      final ex = (minX + maxX) / 2 - (left + rightEdge) / 2;
-      final ey = tall == null
-          ? (minY + maxY) / 2 - (top + bottom) / 2
-          : (minY + high) / 2 - (roof + bottom) / 2;
-      if (ex.abs() < 1e-4 && ey.abs() < 1e-4) break;
-      // Shift the target so the points' box moves onto the free box's
-      // centre (screen offsets back to ground offsets, near enough).
-      target += right * (ex * depth * t * aspect) +
-          away * (ey * depth * t / math.max(sp, 0.2));
+      return (
+        minX: minX,
+        maxX: maxX,
+        minY: minY,
+        maxY: maxY,
+        high: high,
+        depth: depth / points.length,
+        behind: false
+      );
     }
+
+    // With tall things on the points (the nest's flag, the host), their
+    // tops are what must clear the HUD's top band, by a small pad of their
+    // own.
+    final roof = tall == null ? top : 1 - 2 * (_hudTopFree + 36) / height;
+    var target = Vec2.zero;
+    for (final p in points) {
+      target += p;
+    }
+    target = target / points.length.toDouble();
+    // Move the target until the box sits in the middle of the free box,
+    // in damped steps (screen offsets back to ground offsets, near enough;
+    // low and from the side, a full step overshot and the frame swung back
+    // and forth, never settling).
+    for (var iteration = 0; iteration < 24; iteration++) {
+      final box = boxFrom(target);
+      if (box.behind) return (target: target, fits: false);
+      final ex = (box.minX + box.maxX) / 2 - (left + rightEdge) / 2;
+      final upper = tall == null ? box.maxY : math.max(box.maxY, box.high);
+      final ey = (box.minY + upper) / 2 - (roof + bottom) / 2;
+      if (ex.abs() < 1e-4 && ey.abs() < 1e-4) break;
+      target += right * (ex * box.depth * t * aspect * 0.7) +
+          away * (ey * box.depth * t / math.max(sp, 0.2) * 0.7);
+    }
+    // It fits when the box, where it settled, lies inside the free box.
+    final box = boxFrom(target);
+    if (box.behind) return (target: target, fits: false);
+    const slack = 1e-3;
+    final fits = box.minX >= left - slack &&
+        box.maxX <= rightEdge + slack &&
+        box.minY >= bottom - slack &&
+        box.maxY <= top + slack &&
+        (tall == null || box.high <= roof + slack);
     return (target: target, fits: fits);
   }
 
@@ -915,6 +995,14 @@ class PuttWorld3D {
   bool _disposed = false;
 
   HoleDef? get hole => _hole;
+
+  /// Where the host stands on the ground, when the hole built is
+  /// [holeId] (null with no host, or another hole still built).
+  Vec2? hostSpotOn(String holeId) {
+    final figure = _hostFade?.figure;
+    if (figure == null || _hole?.id != holeId) return null;
+    return Vec2(figure.position.x, figure.position.z);
+  }
 
   /// The named sub-group of the hole root holding everything of that kind
   /// ('ground', 'walls', 'bumpers', ...); null when the hole lacks it.

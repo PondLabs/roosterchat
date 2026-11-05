@@ -1432,6 +1432,7 @@ class SunnySidePuttGame extends FlameGame {
         ],
         // Aiming, or picking a spot for a power-up: the frame holds still.
         aiming: aim.isActive || targeting.isActive,
+        host: match.hole == null ? null : world3d.hostSpotOn(match.hole!.id),
       ),
     );
   }

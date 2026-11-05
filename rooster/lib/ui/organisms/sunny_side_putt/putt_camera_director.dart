@@ -36,6 +36,10 @@ class PuttCameraCue {
   /// The viewer's egg's velocity (the follow leads along it).
   final Vec2 myEggVelocity;
 
+  /// Where the host stands beside this hole (the opening's shot keeps him
+  /// in the frame); null when he is not built yet.
+  final Vec2? host;
+
   const PuttCameraCue({
     required this.hole,
     required this.phase,
@@ -45,6 +49,7 @@ class PuttCameraCue {
     this.otherEggs = const [],
     this.aiming = false,
     this.myEggVelocity = Vec2.zero,
+    this.host,
   });
 }
 
@@ -158,22 +163,57 @@ class PuttCameraDirector {
   /// camera starts low over the nest, turned a little, looking across it at
   /// the farm and the sky (the hour shows), holds there a breath, then
   /// rises and turns onto the whole green.
-  void _sweep(HoleDef hole) {
+  void _sweep(HoleDef hole, Vec2? host) {
     final t = (_holeClock / (openingSeconds - 0.3)).clamp(0.0, 1.0);
     // A held beat, then an ease-in-out climb.
     final k = t < 0.25 ? 0.0 : (t - 0.25) / 0.75;
     final eased = k * k * (3 - 2 * k);
     double lerp(double a, double b) => a + (b - a) * eased;
     final overviewDistance = rig.overviewDistance;
+    // The first pose takes in the whole table, its tee and the host beside
+    // it, low from the side: aimed at the nest from a set distance, the
+    // tee's eggs or the host stood cut at a frame's edge on some holes.
+    final table = [
+      hole.bounds.min,
+      hole.bounds.max,
+      Vec2(hole.bounds.min.x, hole.bounds.max.y),
+      Vec2(hole.bounds.max.x, hole.bounds.min.y),
+      hole.tee,
+      hole.nest.position,
+    ];
+    // The host whole: his footprint, and as tall as he stands.
+    final around = [
+      if (host != null)
+        for (final (dx, dy) in const [(-1, -1), (1, -1), (1, 1), (-1, 1)])
+          host + Vec2(dx * _hostReach, dy * _hostReach),
+    ];
+    final start = rig.frameAt(
+      [...table, ...around],
+      yaw: _openingYaw,
+      pitchDeg: _openingPitch,
+      tall: [
+        for (final _ in table) 0.0,
+        for (final _ in around) _hostHeight,
+      ],
+    );
     rig
       ..aimAt(
-        yaw: lerp(PuttCameraRig.defaultYaw + 0.55, PuttCameraRig.defaultYaw),
-        pitchDeg: lerp(15, PuttCameraRig.pitchDefault),
-        distance: lerp(overviewDistance * 0.92, overviewDistance),
-        target: hole.nest.position.lerp(hole.bounds.center, eased),
+        yaw: lerp(_openingYaw, PuttCameraRig.defaultYaw),
+        pitchDeg: lerp(_openingPitch, PuttCameraRig.pitchDefault),
+        distance: lerp(start.distance, overviewDistance),
+        target: start.target.lerp(hole.bounds.center, eased),
       )
       ..snap();
   }
+
+  /// The opening's first pose: turned a little off the default, low.
+  static const double _openingYaw = PuttCameraRig.defaultYaw + 0.55;
+  static const double _openingPitch = 15;
+
+  /// How far the host reaches round the spot he stands on (his body, his
+  /// tail), and how tall he stands to his comb (world units).
+  static const double _hostReach = 2.6;
+  static const double _hostHeight = 5.6;
 
   void update(double dt, PuttCameraCue cue) {
     final hole = cue.hole;
@@ -245,7 +285,7 @@ class PuttCameraDirector {
     }
     _showingBetween = false;
     if (opening) {
-      _sweep(hole);
+      _sweep(hole, cue.host);
       _follow = null;
       return;
     }
