@@ -802,7 +802,9 @@ class _RoomTextButtonState extends State<RoomTextButton> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (activity.thirdparty)
+                // COCKHOUSE: anything but the call itself is titled, so an
+                // in-call activity doesn't read as a second call.
+                if (!activity.isCall)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(10, 4, 0, 4),
                     child: Row(
@@ -816,13 +818,13 @@ class _RoomTextButtonState extends State<RoomTextButton> {
                       ],
                     ),
                   ),
-                if (activity.thirdparty)
+                if (!activity.isCall)
                   tiamat.Seperator(
                     padding: 2,
                   ),
                 ...buildCallMembers(activity),
-                if (!activity.thirdparty) buildDj(),
-                if (!activity.thirdparty) buildInviteToVoice(),
+                if (activity.isCall) buildDj(),
+                if (activity.isCall) buildInviteToVoice(),
               ],
             ),
           ),

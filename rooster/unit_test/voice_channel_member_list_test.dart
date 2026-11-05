@@ -4,7 +4,10 @@ import 'package:rooster/client/client.dart';
 import 'package:rooster/client/client_manager.dart';
 import 'package:rooster/client/components/profile/profile_component.dart';
 import 'package:rooster/client/components/activities/activities_component.dart';
+import 'package:rooster/client/components/call_activity/call_activity_component.dart';
+import 'package:rooster/client/matrix/components/call_activity/matrix_call_activity_component.dart';
 import 'package:rooster/client/components/component.dart';
+import 'package:rooster/client/components/room_component.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/client/matrix/components/room_activities/matrix_activities_component.dart';
@@ -82,6 +85,13 @@ class FakeMatrixRoom implements MatrixRoom {
 
   @override
   matrix.Room get matrixRoom => _sdk;
+
+  /// The room's call activities, when a test gives it some.
+  MatrixCallActivityComponent? callActivity;
+
+  @override
+  T? getComponent<T extends RoomComponent>() =>
+      callActivity is T ? callActivity as T : null;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -934,6 +944,44 @@ void main() {
 
       expect(changes, hasLength(1));
       expect(justStarted.getCurrentParticipants(), [otherUserId]);
+    });
+  });
+
+  group("Call activities", () {
+    setUp(() {
+      CallActivityRegistry.register(CallActivity(
+          id: "test.game", displayName: () => "Test game", icon: null));
+      room.callActivity = MatrixCallActivityComponent(client, room,
+          callManager: clientManager.callManager);
+    });
+
+    void hostedBy(String host) {
+      room.matrixRoom.states[MatrixCallActivityComponent.stateEventType] = {
+        "_$host": matrix.StrippedStateEvent(
+          type: MatrixCallActivityComponent.stateEventType,
+          senderId: host,
+          stateKey: "_$host",
+          content: {
+            "activity": "test.game",
+            "host": host,
+            "created": HomeserverClock.instance.now().millisecondsSinceEpoch,
+          },
+        ),
+      };
+    }
+
+    test("an activity whose host is in the call is listed", () {
+      hostedBy(otherUserId);
+      final game = component
+          .getSessions()
+          .singleWhere((s) => s.application == "test.game");
+      expect(game.participants, {otherUserId});
+      expect(game.isCall, isFalse);
+    });
+
+    test("an activity whose host left the call is not listed", () {
+      hostedBy("@gone:example.org");
+      expect(component.getSessions().map((s) => s.application), ["m.call"]);
     });
   });
 }

@@ -250,33 +250,30 @@ class MatrixActivitiesComponent
     // holds them is alive. Their state lags the call (a client wrote it,
     // nothing keeps it beating), so the call is the truth and the state
     // only names which activity and who launched it.
-    final activityStates =
-        room.matrixRoom.states[MatrixCallActivityComponent.stateEventType] ??
-            const {};
-    final callAlive = activities
-        .any((a) => a.application == "m.call" && a.participants.isNotEmpty);
-    if (callAlive) {
-      for (var entry in activityStates.entries) {
-        if (entry.value.content.isEmpty) continue;
-        final activityId = entry.value.content.tryGet<String>("activity");
-        if (activityId == null) continue;
-        final descriptor = CallActivityRegistry.byId(activityId);
-        if (descriptor == null) continue;
-        if (activities.any((a) => a.application == activityId)) continue;
-        final icon = descriptor.icon?.call();
-        activities.add(RoomActivitySession(
-          participants: {
-            if (entry.value.content.tryGet<String>("host") != null)
-              entry.value.content.tryGet<String>("host")!,
-          },
-          application: activityId,
-          appName: descriptor.displayName(),
-          icon: icon is ImageOrIcon
-              ? icon
-              : ImageOrIcon(icon: Icons.sports_esports),
-          thirdparty: false,
-        ));
+    // COCKHOUSE: expired state is dropped (visibleSessions), and so is an
+    // activity whose host is no longer in the call: its state outlives a
+    // host that left without clearing it, and was listed as a second call.
+    final call = activities.firstWhereOrNull((a) => a.application == "m.call");
+    final visible =
+        room.getComponent<MatrixCallActivityComponent>()?.visibleSessions() ??
+            const [];
+    for (final entry in visible) {
+      if (call == null || !call.participants.contains(entry.hostUserId)) {
+        continue;
       }
+      final descriptor = CallActivityRegistry.byId(entry.activityId);
+      if (descriptor == null) continue;
+      if (activities.any((a) => a.application == entry.activityId)) continue;
+      final icon = descriptor.icon?.call();
+      activities.add(RoomActivitySession(
+        participants: {entry.hostUserId},
+        application: entry.activityId,
+        appName: descriptor.displayName(),
+        icon: icon is ImageOrIcon
+            ? icon
+            : ImageOrIcon(icon: Icons.sports_esports),
+        thirdparty: false,
+      ));
     }
 
     // Nothing arrives over sync when a membership lapses, so look again then:

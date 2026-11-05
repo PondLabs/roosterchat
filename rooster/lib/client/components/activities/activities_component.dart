@@ -33,6 +33,9 @@ class RoomActivitySession {
 
   bool thirdparty;
 
+  /// The voice call itself, not an activity running in or beside it.
+  bool get isCall => application == "m.call";
+
   ImageOrIcon icon;
 
   String? knownName;
