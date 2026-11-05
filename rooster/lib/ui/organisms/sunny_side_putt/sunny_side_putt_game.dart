@@ -387,6 +387,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   /// After every rendered frame: the tags follow the eggs on screen, the
   /// coach follows mine.
   void _afterFrame() {
+    game.worldDrew();
     _tags.update(game.tagsForFrame(), avoid: game.tagObstacles());
     _coach.value = game.coachForFrame();
     _bubbles.update(game.bubblesForFrame());
@@ -417,6 +418,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
                 world: game.world3d,
                 buildFrame: game.buildWorldFrame,
                 onFrame: _afterFrame,
+                onFailed: game.worldDrew,
               ),
               // The ticker and the aim gestures, transparent over the
               // world; the pointer plumbing lands world-side through the
@@ -936,12 +938,21 @@ class SunnySidePuttGame extends FlameGame {
   /// aiming, so a moving frame never slides out from under a drag.
   core.Vec2? _cameraFollowPoint() => followOverride ?? director.followPoint;
 
+  /// Whether the 3D world has drawn a frame yet (or never will: no GPU
+  /// surface here, as under the test runner, or it failed). The camera's
+  /// clock waits for it, so a slow boot does not play the hole's opening
+  /// to a blank surface.
+  bool _worldDrawn = !PuttThreeSurface.gpuSupported;
+
+  /// The surface drew a frame (or gave up): the camera's clock may run.
+  void worldDrew() => _worldDrawn = true;
+
   /// Tells the director what the green is doing this frame.
   void _directCamera(double dt) {
     final world = match.engine.world;
     final mine = match.myBall;
     director.update(
-      dt,
+      _worldDrawn ? dt : 0,
       PuttCameraCue(
         hole: match.hole,
         phase: match.phase,

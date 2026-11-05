@@ -84,6 +84,11 @@ class PuttCameraDirector {
   bool get overview => _overview;
   bool _overview = false;
 
+  /// The hole the camera is directing, and for how long it has (seconds
+  /// of frames, from the hole's first): the demo keeps its script on it.
+  String? get holeId => _holeId;
+  double get holeSeconds => _holeClock;
+
   String? _holeId;
   double _holeClock = 0;
   bool _userCamera = false;

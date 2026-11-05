@@ -260,12 +260,12 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
     if (hole == null) return;
     if (hole.id != _holeId) {
       _holeId = hole.id;
-      // The capture tool times its shots from this line.
-      debugPrint('putt-demo: hole open ${hole.id}');
       _holeTime = 0;
+      // The script's clock starts with the camera's (below), once the
+      // green is up and drawing.
       _holeClock
-        ..reset()
-        ..start();
+        ..stop()
+        ..reset();
       _myShot = 0;
       _drag = null;
       // The first hole waits for the coach to show the gesture once.
@@ -284,6 +284,17 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
           if (!me.inventory.contains(id)) me.inventory.add(id);
         }
       }
+    }
+    if (!_holeClock.isRunning) {
+      final director = _game?.director;
+      if (director == null ||
+          director.holeId != hole.id ||
+          director.holeSeconds <= 0) {
+        return;
+      }
+      _holeClock.start();
+      // The capture tool times its shots from this line.
+      debugPrint('putt-demo: hole open ${hole.id}');
     }
     _holeTime = _holeClock.elapsedMicroseconds / Duration.microsecondsPerSecond;
     _holdCamera(hole);
@@ -349,12 +360,12 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
         // level with the green's middle.
         final right = hole.nest.position.x >= bounds.center.x;
         game.followOverride = Vec2(
-            right ? bounds.max.x + 3.5 : bounds.min.x - 3.5,
+            right ? bounds.max.x + 2.5 : bounds.min.x - 2.5,
             hole.nest.position.y
                 .clamp(bounds.center.y - bounds.height * 0.2,
                     bounds.center.y + bounds.height * 0.05)
                 .toDouble());
-        rig.glideTo(distance: 22, pitchDeg: 13);
+        rig.glideTo(distance: 16, pitchDeg: 13);
       case 'wide':
         game.followOverride = bounds.center;
         rig.glideTo(distance: rig.overviewDistance * 1.5, pitchDeg: 27);

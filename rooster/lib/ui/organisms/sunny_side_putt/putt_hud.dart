@@ -1654,7 +1654,8 @@ class _PuttBottomRow extends StatelessWidget {
         const SizedBox(width: 12),
         Expanded(
           child: IgnorePointer(
-            child: PuttHintLine(match: match, targeting: targeting),
+            child:
+                PuttHintLine(match: match, targeting: targeting, aiming: busy),
           ),
         ),
         if (!spectator) ...[
@@ -1905,13 +1906,18 @@ class _ScorecardRow extends StatelessWidget {
 
 /// The line at the bottom centre: what to do right now. The targeting
 /// prompt while a slot is armed, a short "not now" when a tap could not
-/// arm, "drag anywhere to aim" until the first putt, the spectator note
-/// while watching.
+/// arm, "drag anywhere to aim" until the first putt and "let go to putt"
+/// while that first pull is on, the spectator note while watching.
 class PuttHintLine extends StatefulWidget {
   final PuttMatch match;
   final PuttTargeting targeting;
 
-  const PuttHintLine({super.key, required this.match, required this.targeting});
+  /// True while I aim or my egg rolls (the game's busy flag): with my egg
+  /// at rest, a pull is on.
+  final ValueListenable<bool>? aiming;
+
+  const PuttHintLine(
+      {super.key, required this.match, required this.targeting, this.aiming});
 
   @override
   State<PuttHintLine> createState() => _PuttHintLineState();
@@ -1956,12 +1962,18 @@ class _PuttHintLineState extends State<PuttHintLine>
     if (match.isSpectator) return SpectatorStrip(match: match);
     final reduceMotion =
         MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final aiming = widget.aiming;
     return AnimatedBuilder(
-      animation: _notice,
+      animation: aiming == null ? _notice : Listenable.merge([_notice, aiming]),
       builder: (context, _) {
         final targeting = widget.targeting;
         final armed = targeting.armed;
         final notice = targeting.notice;
+        final mine = match.myBall;
+        final pulling = (aiming?.value ?? false) &&
+            mine != null &&
+            mine.asleep &&
+            !mine.holed;
         Widget? line;
         if (armed != null) {
           line = _HintPill(
@@ -1977,11 +1989,17 @@ class _PuttHintLineState extends State<PuttHintLine>
         } else if (match.myShotReady &&
             !match.hasPutted &&
             targeting.picking == null) {
-          line = _HintPill(
-            key: const ValueKey('aim'),
-            icon: Icons.touch_app_rounded,
-            text: labelPuttAimHint(),
-          );
+          line = pulling
+              ? _HintPill(
+                  key: const ValueKey('release'),
+                  icon: Icons.sports_golf_rounded,
+                  text: labelPuttReleaseHint(),
+                )
+              : _HintPill(
+                  key: const ValueKey('aim'),
+                  icon: Icons.touch_app_rounded,
+                  text: labelPuttAimHint(),
+                );
         }
         return Align(
           alignment: Alignment.bottomCenter,
@@ -2698,6 +2716,13 @@ String labelPuttAimHint() =>
         desc: "Hint line at the bottom of the game until the player's first "
             "putt: dragging anywhere pulls the slingshot, releasing it "
             "strikes the egg");
+
+String labelPuttReleaseHint() =>
+    Intl.message("Let go to putt · pull further for more power",
+        name: "labelPuttReleaseHint",
+        desc: "Hint line at the bottom of the game while the player pulls "
+            "the slingshot for their first putt: releasing strikes the egg, "
+            "a longer pull hits it harder");
 
 String labelPuttScorecard() => Intl.message("Scorecard",
     name: "labelPuttScorecard",

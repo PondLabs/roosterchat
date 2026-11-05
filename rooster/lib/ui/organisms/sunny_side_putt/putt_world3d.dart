@@ -1141,7 +1141,8 @@ class PuttWorld3D {
     final size = rig.viewport;
     if (fade == null || size.width <= 0 || size.height <= 0) return;
     final at = fade.figure.position;
-    final head = tjs.Vector3(at.x, at.y + 8.2, at.z).project(camera);
+    final head = tjs.Vector3(at.x, at.y + 8.2 * fade.figure.scale.y, at.z)
+        .project(camera);
     final headY = (1 - head.y) / 2 * size.height;
     final headX = (head.x + 1) / 2 * size.width;
     final dx = camera.position.x - at.x;

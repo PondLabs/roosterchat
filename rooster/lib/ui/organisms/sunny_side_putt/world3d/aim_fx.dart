@@ -6,13 +6,14 @@
 // suction, poofs, dust, confetti) and a few expanding rings.
 part of '../putt_world3d.dart';
 
-/// The power's colour, bright all the way: green for a tap, sunflower,
-/// orange, red flat out (no muddy olive between green and yolk).
+/// The power's colour, bright all the way: a pale yolk for a tap,
+/// sunflower, orange, red flat out (no muddy olive between).
 int _powerHex(double power) {
   const stops = [
-    // Cream, not green, at the soft end: it has to stand off the turf.
-    (0.0, 0xFFF4CC),
-    (0.42, 0xFFD43B),
+    // A pale yolk, not green or cream, at the soft end: it has to stand
+    // off light and dark turf alike (with the ink outline round it).
+    (0.0, 0xFFE07A),
+    (0.42, 0xFFCC2E),
     (0.72, 0xFF8A2A),
     (1.0, 0xFF3D30),
   ];
@@ -44,13 +45,14 @@ class _PuttAimView3D {
     group.add(ring);
 
     _arrowMaterial = _unlit(_powerHex(0.5), opacity: 0.95, depthWrite: false);
+    // A solid ink line round the arrow: it reads on light and dark turf.
     _outlineMaterial =
-        _unlit(_hexOf(PuttPalette.ink), opacity: 0.55, depthWrite: false);
+        _unlit(_hexOf(PuttPalette.ink), opacity: 0.9, depthWrite: false);
     shaft = tjs.Mesh(tjs.BoxGeometry(1, 0.02, 0.46), _arrowMaterial)
       ..name = 'aim-shaft'
       ..position.y = 0.08
       ..renderOrder = 6;
-    _shaftOutline = tjs.Mesh(tjs.BoxGeometry(1, 0.015, 0.66), _outlineMaterial)
+    _shaftOutline = tjs.Mesh(tjs.BoxGeometry(1, 0.015, 0.74), _outlineMaterial)
       ..name = 'aim-shaft-outline'
       ..position.y = 0.07
       ..renderOrder = 5;
@@ -66,7 +68,7 @@ class _PuttAimView3D {
       ..name = 'aim-head'
       ..position.y = 0.082
       ..renderOrder = 6;
-    _headOutline = tjs.Mesh(_triangle(1.5, 1.6), _outlineMaterial)
+    _headOutline = tjs.Mesh(_triangle(1.6, 1.75), _outlineMaterial)
       ..name = 'aim-head-outline'
       ..position.y = 0.072
       ..renderOrder = 5;
@@ -155,9 +157,9 @@ class _PuttAimView3D {
 
   static const int _dotCount = 44;
   static final tjs.BufferGeometry _dotGeometry =
-      tjg.CircleGeometry(radius: 0.12, segments: 12);
+      tjg.CircleGeometry(radius: 0.15, segments: 12);
   static final tjs.BufferGeometry _dotRingGeometry =
-      tjg.CircleGeometry(radius: 0.2, segments: 12);
+      tjg.CircleGeometry(radius: 0.25, segments: 12);
 
   late final tjs.Group group;
   late final tjs.Group _turned;
@@ -306,7 +308,7 @@ class _PuttAimView3D {
           dot.position.setValues(p.x - aim.origin.x,
               terrain.at(p) - floor + 0.05, p.y - aim.origin.y);
           final fade = 1 - shown / _dotCount;
-          dot.children[0].material?.opacity = 0.3 + 0.4 * fade;
+          dot.children[0].material?.opacity = 0.45 + 0.4 * fade;
           dot.children[1].material?.opacity = 0.45 + 0.55 * fade;
           final s = 0.9 + 0.4 * fade;
           dot.scale.setValues(s, 1, s);

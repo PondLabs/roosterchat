@@ -200,12 +200,13 @@ its own hour, read off the hole's id (`world3d/theme.dart`):
 | Farm Road | golden hour | striped road barriers | the dirt road, a red tractor, a water tower, telephone poles, wheat fields, the windmill |
 | The Barn | dusk | red barn boards | the big barn, haystacks, lanterns, fireflies; its round obstacles are hay bales stood on end |
 
-The host - a big white rooster with his headphones on - stands beyond
-the side rail on the nest's side, about level with the green's middle,
+The host - a white rooster with his headphones on, a few eggs tall -
+stands beyond the side rail on the nest's side, about level with the
+green's middle,
 follows the egg in play with his head, bobs it now and then and cheers
 when an egg drops in. Whenever his head would stand under the HUD's top
-bar or corner buttons, or right in front of the camera, he steps back to
-a ghost of himself. Ground the walls close off from
+bar or corner buttons he fades away, and right in front of the camera he
+steps back to a ghost of himself. Ground the walls close off from
 the tee (a flood fill stopped by walls, carried through rabbit holes) is
 planted as the theme's garden beds instead of turf, so a hole shaped
 with walls reads as its shape.

@@ -201,7 +201,7 @@ class _Scenery {
     final nest = hole.nest.position;
     final right = nest.x >= _b.center.x;
     return Vec2(
-      right ? _b.max.x + 5.5 : _b.min.x - 5.5,
+      right ? _b.max.x + 4.0 : _b.min.x - 4.0,
       nest.y
           .clamp(_b.center.y - _b.height * 0.2, _b.center.y + _b.height * 0.05)
           .toDouble(),
@@ -268,7 +268,7 @@ class _Scenery {
       if (hasBarn) (Vec2(barnAt.x + 11 * barnScale, barnAt.y - 2), 5.0),
       if (kind == _ThemeKind.road) (towerAt, 7.5),
       if (hasMill) (millAt, 7.0),
-      (hostAt, 6.5),
+      (hostAt, 4.5),
       if (kind == _ThemeKind.pond) (lakeAt, lakeRadius + 3),
       if (kind == _ThemeKind.coop) (henHouseAt, 6.5),
     ];
@@ -1044,7 +1044,11 @@ class _Scenery {
 
   // ---- the host -------------------------------------------------------------------------
 
-  /// The host: a big white rooster in profile beside the green, comb like a
+  /// The host's size against the build below (a rooster a few eggs tall
+  /// beside the rail, not a giant over the green).
+  static const double _hostScale = 0.65;
+
+  /// The host: a white rooster in profile beside the green, comb like a
   /// crown, headphones on (he is always in the call), bobbing his head
   /// once in a while to the beat.
   tjs.Group _host(Vec2 at) {
@@ -1054,7 +1058,8 @@ class _Scenery {
     final group = tjs.Group()
       ..name = 'host'
       ..position.setValues(at.x, _ground, at.y)
-      ..rotation.y = turn;
+      ..rotation.y = turn
+      ..scale.setValues(_hostScale, _hostScale, _hostScale);
     const white = 0xFCF8F1;
     const shade = 0xEDE3D3;
     final comb = _hexOf(PuttPalette.comb);
@@ -1159,8 +1164,8 @@ class _Scenery {
       final watched = watch();
       var wantYaw = 0.0;
       if (watched != null) {
-        final hx = at.x + 2.5 * math.cos(turn);
-        final hz = at.y - 2.5 * math.sin(turn);
+        final hx = at.x + 2.5 * _hostScale * math.cos(turn);
+        final hz = at.y - 2.5 * _hostScale * math.sin(turn);
         final wx = watched.x - hx;
         final wz = watched.y - hz;
         final lx = wx * math.cos(turn) - wz * math.sin(turn);
@@ -1173,7 +1178,7 @@ class _Scenery {
       if (cheering) {
         // An egg in the nest: he hops, flaps and crows, beak to the sky.
         final hop = math.sin(time * 9).abs();
-        group.position.y = _ground + hop * 0.9;
+        group.position.y = _ground + hop * 0.9 * _hostScale;
         for (final (shoulder, side) in wings) {
           shoulder.rotation.x =
               side * (0.35 + 0.55 * math.sin(time * 18).abs());
@@ -1383,7 +1388,7 @@ class _Scenery {
             3.2) {
           continue; // the scarecrow's clearing
         }
-        if (Vec2(px, pz).distanceTo(_hostAt) < 6.5) {
+        if (Vec2(px, pz).distanceTo(_hostAt) < 4.5) {
           continue; // the host's spot
         }
         _cornPlant(into, Vec2(px, pz), _rand.range(0.85, 1.2),

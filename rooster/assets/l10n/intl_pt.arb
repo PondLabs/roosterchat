@@ -867,6 +867,7 @@
   "labelPuttHoleOf": "Buraco {hole} de {count}",
   "labelPuttCourseDone": "Percurso concluído",
   "labelPuttAimHint": "Arraste em qualquer lugar para mirar · solte para dar a tacada",
+  "labelPuttReleaseHint": "Solte para dar a tacada · puxe mais para mais força",
   "labelPuttScorecard": "Placar",
   "labelPuttScorecardMore": "{count,plural, =1{+{count} jogador}other{+{count} jogadores}}",
   "labelPuttScorecardHole": "Buraco",

@@ -224,6 +224,34 @@ void main() {
       expect(match.myInventory, ['sprinkler']);
     });
 
+    testWidgets('the hint follows the first pull', (tester) async {
+      final match = effectsMatch(others: const ['p2']);
+      final aiming = ValueNotifier(false);
+      addTearDown(aiming.dispose);
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: PuttHud(match: match, onOpenMenu: () {}, busy: aiming),
+        ),
+      ));
+      expect(
+          find.text('Drag anywhere to aim · let go to putt'), findsOneWidget);
+
+      aiming.value = true; // the pull is on, my egg at rest
+      await tester.pump(); // the new line comes in
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(); // the old one has left the switcher
+      expect(find.text('Let go to putt · pull further for more power'),
+          findsOneWidget);
+      expect(find.text('Drag anywhere to aim · let go to putt'), findsNothing);
+
+      aiming.value = false; // let go without a putt
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
+      expect(
+          find.text('Drag anywhere to aim · let go to putt'), findsOneWidget);
+    });
+
     testWidgets('the picker lists the others and casts on the one picked',
         (tester) async {
       final semantics = tester.ensureSemantics();

@@ -5702,6 +5702,12 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelPuttReleaseHint": "Let go to putt · pull further for more power",
+  "@labelPuttReleaseHint": {
+    "description": "Hint line at the bottom of the game while the player pulls the slingshot for their first putt: releasing strikes the egg, a longer pull hits it harder",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelPuttScorecard": "Scorecard",
   "@labelPuttScorecard": {
     "description": "Title of the score panel in the bottom left corner of the game",
