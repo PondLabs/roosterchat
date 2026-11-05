@@ -534,7 +534,9 @@ class _DuckView3D implements _Walker {
       shape.add(tjs.SphereGeometry(r * 0.055, 8, 6),
           _place(side * r * 0.24, r * 1.06, r * 0.82), ink);
     }
-    _body.add(shape.mesh('duck-shape', flat: false, roughness: 0.6)!);
+    final duckShape = shape.mesh('duck-shape', flat: false, roughness: 0.6)!;
+    _inkOutline(duckShape, r * 0.05);
+    _body.add(duckShape);
     group.add(_body);
     _wake = tjs.Mesh(
       tjg.RingGeometry(r * 1.05, r * 1.3, 32, 1),
@@ -546,7 +548,9 @@ class _DuckView3D implements _Walker {
       ..renderOrder = 3;
     group.add(_wake);
     group.traverse((object) {
-      if (object.name != 'duck-wake') object.castShadow = true;
+      if (object.name != 'duck-wake' && !object.name.endsWith('-outline')) {
+        object.castShadow = true;
+      }
     });
   }
 
@@ -608,7 +612,9 @@ class _HenView3D implements _Walker {
         f == 1 ? cream : white,
       );
     }
-    _body.add(shape.mesh('hen-shape', flat: false, roughness: 0.8)!);
+    final henShape = shape.mesh('hen-shape', flat: false, roughness: 0.8)!;
+    _inkOutline(henShape, r * 0.05);
+    _body.add(henShape);
     _head = tjs.Group()
       ..name = 'hen-head'
       ..position.setValues(0, r * 1.85, r * 0.85);
@@ -630,7 +636,9 @@ class _HenView3D implements _Walker {
       face.add(tjs.SphereGeometry(r * 0.065, 8, 6),
           _place(side * r * 0.3, r * 0.08, r * 0.24), ink);
     }
-    _head.add(face.mesh('hen-face', flat: false, roughness: 0.7)!);
+    final henFace = face.mesh('hen-face', flat: false, roughness: 0.7)!;
+    _inkOutline(henFace, r * 0.05);
+    _head.add(henFace);
     _body.add(_head);
     group.add(_body);
     for (final side in [-1.0, 1.0]) {
@@ -647,7 +655,7 @@ class _HenView3D implements _Walker {
       group.add(hip);
     }
     group.traverse((object) {
-      object.castShadow = true;
+      if (!object.name.endsWith('-outline')) object.castShadow = true;
     });
   }
 

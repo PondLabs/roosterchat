@@ -158,7 +158,10 @@ On the green: mown turf with stripes and contact shade along the rails,
 rubber bumpers (rails and pinball mushrooms), faceted boulders, ponds
 that ripple, speed belts whose chevrons run, rabbit holes glowing their
 pair's colour, the silo over its spiral pull, floating "?" crates, the
-straw nest with a flag flying the hole's number, the tee mat. Eggs are
+straw nest with a flag flying the hole's number, the tee mat. The characters - the eggs, the
+hens, the ducks and the host - are drawn with a line of ink round them
+(their back faces pushed out along their normals; the eggs' line weighs
+more as the camera pulls back), so they pop from the softer farm. Eggs are
 true egg profiles with an Easter band in the player's colour; they roll
 by their velocity, leave a trail when fast, settle on their side, and
 slide into the nest when they sink. There the egg hatches

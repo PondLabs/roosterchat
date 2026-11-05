@@ -1106,7 +1106,9 @@ class _Scenery {
     // The neck.
     body.add(tjg.CylinderGeometry(0.85, 1.25, 2.4, 14),
         _place(1.9, 6.3, 0, roll: -0.35), white);
-    group.add(body.mesh('host-body', flat: false, roughness: 0.75)!);
+    final hostBody = body.mesh('host-body', flat: false, roughness: 0.75)!;
+    _inkOutline(hostBody, 0.09);
+    group.add(hostBody);
 
     // The head, which bobs: comb, beak, wattle, eyes and the headphones.
     final head = tjs.Group()
@@ -1144,7 +1146,9 @@ class _Scenery {
       face.add(tjg.TorusGeometry(0.42, 0.08, 6, 20),
           _place(-0.2, 0.02, side * 1.55), comb);
     }
-    head.add(face.mesh('host-face', flat: false, roughness: 0.7)!);
+    final hostFace = face.mesh('host-face', flat: false, roughness: 0.7)!;
+    _inkOutline(hostFace, 0.07);
+    head.add(hostFace);
     group.add(head);
     var headYaw = 0.0;
     animated.add(_AnimatedBy((time, dt) {

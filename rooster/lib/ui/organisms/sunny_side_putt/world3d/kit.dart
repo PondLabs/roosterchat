@@ -417,6 +417,39 @@ class _Billboard extends tjs.Mesh {
   tjs.MeshBasicMaterial get look => material as tjs.MeshBasicMaterial;
 }
 
+/// An ink outline for a character's [mesh]: its geometry pushed out along
+/// its normals by [thickness], drawn from the back faces in ink - a line
+/// round the silhouette that follows every part. Added to [mesh] itself,
+/// so it moves with it.
+tjs.Mesh _inkOutline(tjs.Mesh mesh, double thickness) {
+  final source = mesh.geometry!;
+  final position = source.attributes['position'] as tjs.BufferAttribute;
+  final normal = source.attributes['normal'] as tjs.BufferAttribute;
+  final pushed = Float32List(position.count * 3);
+  for (var i = 0; i < position.count; i++) {
+    pushed[i * 3] =
+        position.getX(i)!.toDouble() + normal.getX(i)!.toDouble() * thickness;
+    pushed[i * 3 + 1] =
+        position.getY(i)!.toDouble() + normal.getY(i)!.toDouble() * thickness;
+    pushed[i * 3 + 2] =
+        position.getZ(i)!.toDouble() + normal.getZ(i)!.toDouble() * thickness;
+  }
+  final geometry = tjs.BufferGeometry()
+    ..setAttributeFromString(
+        'position', tjs.Float32BufferAttribute.fromList(pushed, 3, false));
+  final index = source.index;
+  if (index != null) geometry.setIndex(index);
+  final outline = tjs.Mesh(
+    geometry,
+    tjs.MeshBasicMaterial({
+      tjs.MaterialProperty.color: _lin(_hexOf(PuttPalette.ink)),
+      tjs.MaterialProperty.side: tjs.BackSide,
+    }),
+  )..name = '${mesh.name}-outline';
+  mesh.add(outline);
+  return outline;
+}
+
 /// Solid white, for the billboards that are flat squares of colour
 /// (confetti, straw). Shared, like the soft disc, and never disposed with
 /// a hole.
