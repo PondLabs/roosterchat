@@ -98,14 +98,12 @@ class _PuttLaunchSheetState extends State<_PuttLaunchSheet> {
                 ChoiceChip(
                   label: Text(labelPuttModeTournament),
                   selected: _mode == GameMode.tournament,
-                  onSelected: (_) =>
-                      _setMode(GameMode.tournament),
+                  onSelected: (_) => _setMode(GameMode.tournament),
                 ),
                 ChoiceChip(
                   label: Text(labelPuttModeChaos),
                   selected: _mode == GameMode.barnyardChaos,
-                  onSelected: (_) =>
-                      _setMode(GameMode.barnyardChaos),
+                  onSelected: (_) => _setMode(GameMode.barnyardChaos),
                 ),
               ],
             ),
