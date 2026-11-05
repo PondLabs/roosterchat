@@ -46,7 +46,9 @@ class DjMemberBadges extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dj = this.dj;
-    if (dj == null) return const SizedBox.shrink();
+    // A call going down disposes its DJ session a frame before the rows
+    // that show it go: listening to it then threw (a disposed notifier).
+    if (dj == null || dj.isDisposed) return const SizedBox.shrink();
     return ListenableBuilder(
       listenable: dj,
       builder: (context, _) {

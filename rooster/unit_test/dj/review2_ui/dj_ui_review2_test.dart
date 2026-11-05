@@ -156,6 +156,27 @@ void main() {
         reason: 'requestDj(false) returns early when the booth has no DJ');
   });
 
+  testWidgets("a call's badges built after its DJ session goes show nothing",
+      (tester) async {
+    // The call going down disposes the session a frame before the rows that
+    // show its badges go; building them then threw (a disposed notifier).
+    final call = FakeCall();
+    final web = DjSession(
+      transport: call.join('@w:x:W1'),
+      caps: const DjCaps(canDj: false, platform: 'web'),
+      selfUserId: '@w:x',
+    )..start();
+    await tester.pump();
+    // All the way down, the notifier too (its own awaits on real time).
+    await tester.runAsync(web.dispose);
+    expect(web.isDisposed, isTrue);
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: DjMemberBadges(dj: web, userId: '@a:x'))));
+    expect(tester.takeException(), isNull);
+    expect(find.byType(DjMemberBadges), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   test(
       'a target who says "Not now" to the setup prompt during a pass is not '
       'shown an error written about someone else', () async {
