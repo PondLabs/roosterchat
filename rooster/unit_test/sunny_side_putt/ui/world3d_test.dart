@@ -1550,6 +1550,31 @@ void main() {
       }
     });
 
+    test('the host stays gone while the camera wavers at the line', () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      final host = hostOf(world);
+      final spot = Vec2(host.position.x, host.position.z);
+      var time = 0.0;
+      // Looking down at him from [pitchDeg]: the camera stands cos(pitch)
+      // of its distance off him, along the ground.
+      void hold(double pitchDeg) {
+        // Far enough back that his head stands well clear of the HUD.
+        world.rig.aimAt(target: spot, pitchDeg: pitchDeg, distance: 30);
+        for (var i = 0; i < 20; i++) {
+          world.applySnapshot(PuttWorldFrame(time: time));
+          time += 1 / 60;
+        }
+      }
+
+      hold(72);
+      expect(host.visible, isFalse, reason: 'right over him');
+      hold(54.5);
+      expect(host.visible, isFalse, reason: 'just past the line: still gone');
+      hold(40);
+      expect(host.visible, isTrue, reason: 'well clear: back');
+    });
+
     test("the hen's legs step with her walk, the planted foot on the ground",
         () {
       final world = builtWorld();

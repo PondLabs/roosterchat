@@ -1440,10 +1440,13 @@ class PuttWorld3D {
     final headX = (head.x + 1) / 2 * size.width;
     final dx = camera.position.x - at.x;
     final dz = camera.position.z - at.z;
-    final near =
-        math.sqrt(dx * dx + dz * dz) / math.max(rig.distance, 1e-6) < 0.55;
+    // Some slack once he is gone, as with the hens: a camera on the move
+    // crossing the line back and forth left him half there, a ghost.
+    final gone = fade._fade < 0.5;
+    final near = math.sqrt(dx * dx + dz * dz) / math.max(rig.distance, 1e-6) <
+        (gone ? 0.62 : 0.55);
     final underHud = head.z < 1 &&
-        headY < _hudTopBand &&
+        headY < _hudTopBand + (gone ? 28 : 0) &&
         headX > -40 &&
         headX < size.width + 40;
     fade.fadeToward(underHud || near ? 0.0 : 1.0, dt);
