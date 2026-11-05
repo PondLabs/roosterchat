@@ -57,6 +57,30 @@ PuttNestPointer? puttNestPointer(Offset target, Rect view,
   );
 }
 
+/// The marker for this frame, or null: none while the nest projects
+/// ([nest], screen pixels) onto the screen ([view]) clear of the [hud]'s
+/// widgets, and none that would stand beside the nest itself. [free] is
+/// the part of the screen the marker keeps to.
+PuttNestPointer? puttNestMarkerFor(Offset nest,
+    {required bool behind,
+    required Size view,
+    required Rect free,
+    required List<Rect> hud,
+    required String number}) {
+  if (!behind &&
+      (Offset.zero & view).deflate(8).contains(nest) &&
+      !hud.any((rect) => rect.contains(nest))) {
+    return null;
+  }
+  final pointer = puttNestPointer(nest, free, behind: behind, number: number);
+  if (pointer == null) return null;
+  // Under the HUD's edge, the marker would stand on the nest's rim.
+  if (!behind && (pointer.at - nest).distance < puttNestMarkerRadius * 2.5) {
+    return null;
+  }
+  return pointer;
+}
+
 /// The marker layer.
 class PuttNestMarker extends StatelessWidget {
   final ValueListenable<PuttNestPointer?> pointer;

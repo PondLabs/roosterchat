@@ -962,28 +962,35 @@ class SunnySidePuttGame extends FlameGame {
     }
     final view = world3d.rig.viewport;
     if (view.width <= 0 || view.height <= 0) return null;
-    final free = Rect.fromLTRB(16, 104, view.width - 16, view.height - 160);
     final nest = hole.nest.position;
     final inCourse = match.holeInCourse;
-    return puttNestPointer(
+    return puttNestMarkerFor(
       world3d.projectToWorld(nest, height: 0.6),
-      free,
       behind: !world3d.inFrontOfCamera(nest, height: 0.6),
+      view: view,
+      free: Rect.fromLTRB(16, 104, view.width - 16, view.height - 160),
+      hud: hudOverGreen(),
       number: '${inCourse > 0 ? inCourse : match.holeNumber}',
     );
   }
 
   /// Where the HUD stands over the green, in screen pixels: the strip at
   /// the top with the hole's dots under it, the course's chip at the top
-  /// left, the corner buttons at the top right (the reactions under them).
+  /// left, the corner buttons at the top right (the reactions under them),
+  /// and at the bottom the scorecard (folded, as it is while one aims), the
+  /// hint line and the carton.
   List<Rect> hudOverGreen() {
     final view = world3d.rig.viewport;
     if (view.width <= 0 || view.height <= 0) return const [];
     final w = view.width;
+    final h = view.height;
     return [
       Rect.fromLTRB(w / 2 - 166, 0, w / 2 + 166, 98),
       const Rect.fromLTRB(0, 0, 164, 66),
       Rect.fromLTRB(w - 118, 0, w, 110),
+      Rect.fromLTRB(0, h - 58, 260, h),
+      Rect.fromLTRB(w / 2 - 180, h - 52, w / 2 + 180, h),
+      Rect.fromLTRB(w - 200, h - 74, w, h),
     ];
   }
 

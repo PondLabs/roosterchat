@@ -45,4 +45,42 @@ void main() {
     expect(marker.at.dy, closeTo(inner.bottom, 1e-6));
     expect(marker.angle, closeTo(math.pi / 2, 1e-9));
   });
+
+  group('the marker shows only for a nest out of sight', () {
+    const screen = Size(1280, 800);
+    const strip = Rect.fromLTRB(474, 0, 806, 98);
+    const card = Rect.fromLTRB(0, 742, 260, 800);
+    PuttNestPointer? markerFor(Offset nest, {bool behind = false}) =>
+        puttNestMarkerFor(nest,
+            behind: behind,
+            view: screen,
+            free: view,
+            hud: const [strip, card],
+            number: '4');
+
+    test('a nest on screen, above or below the free part, has none', () {
+      // Round 4 put markers beside nests in plain sight: in the top band
+      // clear of the strip, and in the bottom one clear of the card.
+      expect(markerFor(const Offset(300, 60)), isNull);
+      expect(markerFor(const Offset(640, 720)), isNull);
+      expect(markerFor(const Offset(640, 300)), isNull);
+    });
+
+    test('a nest under a HUD widget is pointed at', () {
+      final marker = markerFor(const Offset(640, 40))!;
+      expect(marker.angle, lessThan(0), reason: 'up, toward the strip');
+      expect(markerFor(const Offset(120, 780)), isNotNull,
+          reason: 'under the scorecard');
+    });
+
+    test('never on the rim of the nest it points at', () {
+      // Just under the strip's lower edge: the marker would stand on it.
+      expect(markerFor(const Offset(640, 96)), isNull);
+    });
+
+    test('off the screen, or behind the camera, it shows', () {
+      expect(markerFor(const Offset(2400, 400)), isNotNull);
+      expect(markerFor(const Offset(640, 300), behind: true), isNotNull);
+    });
+  });
 }
