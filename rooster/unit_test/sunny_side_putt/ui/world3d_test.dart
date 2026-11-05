@@ -501,7 +501,15 @@ void main() {
       }
       expect(out(), hasLength(1));
       expect(out().single.position.x, closeTo(dressing.nest.position.x, 1e-9));
-      while (time < 3.2) {
+      // Up on the nest's lip for its hops, over the dark cup.
+      while (time < 1.6) {
+        world.applySnapshot(PuttWorldFrame(time: time));
+        time += 0.016;
+      }
+      final rise =
+          walk(out().single).firstWhere((o) => o.name == 'hatchling-rise');
+      expect(rise.position.y, greaterThan(0.25));
+      while (time < 3.8) {
         world.applySnapshot(PuttWorldFrame(time: time));
         time += 0.016;
       }

@@ -68,7 +68,7 @@ class PuttCameraDirector {
 
   /// How long the camera stays in on the nest after the viewer's own egg
   /// drops in: the sink, the hatch, the chick's hops.
-  static const double celebrateSeconds = 2.7;
+  static const double celebrateSeconds = 3.0;
 
   bool _wasHoled = false;
   double _celebrateUntil = 0;

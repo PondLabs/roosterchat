@@ -1,9 +1,9 @@
 // The payoff of a sink: the egg hatches in the nest. The shell's cap pops
 // off and tumbles away, and a chick rises out of the cup standing in the
 // bottom half of its shell (in the player's colour), turns to the camera,
-// hops twice flapping its wings and drops back in. Three are pooled, built
-// once; a hatch only moves them and recolours the shell (a colour, never
-// a texture, so no material recompiles in play).
+// hops three times on the lip flapping its wings and drops back in. Three
+// are pooled, built once; a hatch only moves them and recolours the shell
+// (a colour, never a texture, so no material recompiles in play).
 part of '../putt_world3d.dart';
 
 class _Hatchling {
@@ -80,7 +80,14 @@ class _Hatchling {
 
   static const double _shellRadius = 0.5;
   static const double _shellHeight = _shellRadius * _eggAspect;
-  static const double life = 1.9;
+  static const double life = 2.5;
+
+  /// Where the chick stands while it hops: a touch above the nest's lip,
+  /// so it reads over the dark cup, not down in it.
+  static const double _stand = 0.3;
+
+  /// When the hops end and it drops back in.
+  static const double _hopsEnd = 2.0;
 
   late final tjs.Group group;
   late final tjs.Group _rise;
@@ -131,7 +138,7 @@ class _Hatchling {
       {double floor = 0, bool big = false, double rim = 1.2}) {
     _age = 0;
     _at = at;
-    _scale = big ? 1.35 : 1.0;
+    _scale = big ? 1.6 : 1.0;
     // Where the cap lands: on the straw, in the hatchling's own units.
     _rim = rim / _scale;
     _shellMaterial.color = _lin(_mix(tint, 0xFFF8EE, 0.3));
@@ -158,28 +165,29 @@ class _Hatchling {
       return;
     }
     final t = _age;
-    // Rise out of the cup with an overshoot, hop twice, drop back in.
+    // Rise out of the cup with an overshoot onto the lip, hop three times,
+    // drop back in.
     double y;
     double s;
     if (t < 0.42) {
       final k = t / 0.42;
       const c = 1.9;
       final back = 1 + (c + 1) * math.pow(k - 1, 3) + c * math.pow(k - 1, 2);
-      y = -1.4 + 1.4 * back;
+      y = -1.4 + (1.4 + _stand) * back;
       s = 0.55 + 0.45 * k;
-    } else if (t < 1.45) {
-      final k = (t - 0.42) / 1.03;
-      y = math.sin(k * math.pi * 2).abs() * 0.42;
+    } else if (t < _hopsEnd) {
+      final k = (t - 0.42) / (_hopsEnd - 0.42);
+      y = _stand + math.sin(k * math.pi * 3).abs() * 0.55;
       s = 1;
     } else {
-      final k = (t - 1.45) / (life - 1.45);
-      y = -1.5 * k * k;
+      final k = (t - _hopsEnd) / (life - _hopsEnd);
+      y = _stand - (_stand + 1.5) * k * k;
       s = 1 - 0.35 * k;
     }
     _rise
       ..position.y = y
       ..scale.setValues(s, s, s);
-    final hopping = t > 0.3 && t < 1.5;
+    final hopping = t > 0.3 && t < _hopsEnd + 0.05;
     final flap = hopping ? math.sin(t * 34) * 0.85 + 0.45 : 0.1;
     _wings[0].rotation.z = -flap;
     _wings[1].rotation.z = flap;
