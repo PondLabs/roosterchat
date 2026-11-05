@@ -397,11 +397,15 @@ class _EggView3D {
     ground.position.setValues(egg.position.x, floor, egg.position.y);
     if (!terrain.flat) ground.quaternion.setFrom(terrain.tiltAt(egg.position));
     final lift = ((egg.height + drawn - floor) / (_radius * 3)).clamp(0.0, 1.0);
-    final shadowScale = 1 - lift * 0.45;
+    // Up in the air (a flight, a hop, a fall) the soft spot right under the
+    // egg is its shadow: dark enough to read where it will come down, and
+    // the sun's own (off to one side, far from a high egg) is put out.
+    _aloft = lift > 0.12;
+    final shadowScale = 1 - lift * 0.3;
     _shadow.scale.setValues(shadowScale, shadowScale, 1);
     // A ghost's shadow thins with it.
     _shadow.material?.opacity =
-        0.55 * (1 - lift * 0.6) * (0.35 + 0.65 * _ghostOpacity.clamp(0.0, 1.0));
+        0.55 * (1 - lift * 0.2) * (0.35 + 0.65 * _ghostOpacity.clamp(0.0, 1.0));
 
     _syncBubble(egg, dt, time, drawn + support + egg.height);
     _syncGhost(egg, time, dt);
@@ -461,14 +465,18 @@ class _EggView3D {
     // faded).
     _screened = (_screened + (screening ? dt : -dt) * 10).clamp(0.0, 1.0);
     target *= 1 - 0.66 * _screened;
+    body.castShadow = target > 0.9 && !_aloft;
     if ((target - _ghostOpacity).abs() < 1e-3) return;
     _ghostOpacity = target;
     body.material?.opacity = target;
     _outline.material?.opacity = target >= 1 ? 1 : target * 0.7;
     _xray.material?.opacity = 0.5 * target;
     _tintDisc.material?.opacity = _tintDiscOpacity * (0.45 + 0.55 * target);
-    body.castShadow = target > 0.9;
+    body.castShadow = target > 0.9 && !_aloft;
   }
+
+  /// Off the ground this frame (its sun shadow out, the spot under it on).
+  bool _aloft = false;
 
   /// The colour disc's opacity under a solid egg.
   static const double _tintDiscOpacity = 0.78;

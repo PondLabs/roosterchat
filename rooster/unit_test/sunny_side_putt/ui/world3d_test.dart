@@ -1201,6 +1201,33 @@ void main() {
       expect(opacityOf('front'), closeTo(1, 1e-9));
     });
 
+    test('in the air the spot under the egg is its shadow, the sun\'s is out',
+        () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      var time = 0.0;
+      void frame(double height) {
+        for (var i = 0; i < 3; i++) {
+          world.applySnapshot(PuttWorldFrame(
+              time: time, eggs: [eggAt(const Vec2(10, 10), height: height)]));
+          time += 0.016;
+        }
+      }
+
+      frame(0);
+      final egg = world.eggOf('me')!;
+      final shell = walk(egg).firstWhere((o) => o.name == 'egg-shell');
+      final spot = walk(world.scene).firstWhere((o) => o.name == 'egg-shadow');
+      expect(shell.castShadow, isTrue, reason: 'on the ground, the sun casts');
+      frame(2.5);
+      expect(shell.castShadow, isFalse,
+          reason: 'aloft, its sun shadow lands far off: out');
+      expect(spot.material!.opacity, greaterThan(0.4),
+          reason: 'the spot below reads where it will come down');
+      frame(0);
+      expect(shell.castShadow, isTrue);
+    });
+
     test("an egg passing through the viewer's fades aside at once", () {
       final world = builtWorld();
       addTearDown(world.dispose);
