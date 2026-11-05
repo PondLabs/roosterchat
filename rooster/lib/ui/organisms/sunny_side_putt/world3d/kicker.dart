@@ -74,7 +74,58 @@ extension _KickerKit on _CourseKit {
         _roadKicker(group, kicker, rand);
     }
     group.add(_kickerChevrons(kicker));
+    group.add(_kickerPad(kicker));
     return group;
+  }
+
+  /// The kicker's pad painted on the turf round its footprint: a frame in
+  /// the course's accent, ink-edged - the kicker reads from across the
+  /// green as the bold line it is (a small ramp in the lawn's own colours
+  /// went unseen in stills).
+  tjs.Mesh _kickerPad(Kicker kicker) {
+    final fill = switch (theme.kind) {
+      _ThemeKind.pond => 0xFFF6EA,
+      _ => _hexOf(PuttPalette.yolk),
+    };
+    final half = kicker.width / 2;
+    final foot = hole.groundHeightAt(kicker.from);
+    final way = kicker.direction;
+    final across = Vec2(-way.y, way.x);
+    double groundAt(double x, double z) =>
+        hole.groundHeightAt(kicker.from + way * x + across * z) - foot;
+    final merged = _Merged();
+    // The frame, its band [band] wide, [gap] out from the deck's edges.
+    void frame(double gap, double band, double lift, int hex) {
+      final x0 = -gap - 0.35, x1 = kicker.length + gap;
+      final z1 = half + gap;
+      final sink = _SolidSink();
+      void bar(double ax, double az, double bx, double bz) {
+        sink.quad([
+          for (final (x, z) in [(ax, az), (bx, az), (bx, bz), (ax, bz)])
+            (x, groundAt(x, z) + lift, z),
+        ], (
+          0,
+          1,
+          0
+        ), const [
+          (0, 0),
+          (1, 0),
+          (1, 1),
+          (0, 1),
+        ]);
+      }
+
+      bar(x0, -z1, x1, -z1 + band); // one side
+      bar(x0, z1 - band, x1, z1); // the other
+      bar(x0, -z1 + band, x0 + band, z1 - band); // behind the foot
+      bar(x1 - band, -z1 + band, x1, z1 - band); // past the lip
+      merged.add(sink.build(), tjs.Matrix4.identity(), hex);
+    }
+
+    frame(0.42, 0.34, 0.02, _hexOf(PuttPalette.ink));
+    frame(0.36, 0.22, 0.03, fill);
+    return merged.mesh('kicker-pad', castShadow: false, flat: true)!
+      ..receiveShadow = true;
   }
 
   /// The Coop's: timber planks laid across a dark frame, a sliver of the
@@ -360,15 +411,16 @@ extension _KickerKit on _CourseKit {
     };
     final length = kicker.length;
     final half = kicker.width / 2;
-    final size = math.min(half * 0.62, length * 0.3);
+    // Bold: most of the deck's width, read from across the green.
+    final size = math.min(half * 0.78, length * 0.36);
     final merged = _Merged();
     for (final at in [0.42, 0.82]) {
       final tip = length * at;
       merged.add(
-          _chevron(kicker, tip + 0.05, size + 0.06, size * 0.3 + 0.1, 0.014),
+          _chevron(kicker, tip + 0.06, size + 0.08, size * 0.36 + 0.12, 0.014),
           tjs.Matrix4.identity(),
           _hexOf(PuttPalette.ink));
-      merged.add(_chevron(kicker, tip, size, size * 0.3, 0.024),
+      merged.add(_chevron(kicker, tip, size, size * 0.36, 0.024),
           tjs.Matrix4.identity(), fill);
     }
     return merged.mesh('kicker-chevrons', castShadow: false, flat: true)!;

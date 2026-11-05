@@ -139,26 +139,41 @@ class _PuttAimView3D {
         ..renderOrder = 9);
     group.add(_restMark);
 
-    // Where a flight off a kicker comes down: a yolk ring in an ink one,
-    // a size up on the rail's, so the landing reads as the place to aim.
+    // Where a flight off a kicker comes down: a yolk ring in an ink one in
+    // a soft cream halo, a size up on the rail's, drawn over everything (a
+    // crate, a tag or an egg on the spot buried it): the landing reads as
+    // the place to aim.
     _landMark = tjs.Group()
       ..name = 'aim-landing'
       ..visible = false;
     _landMark
       ..add(tjs.Mesh(
-        tjg.RingGeometry(0.34, 0.62, 28, 1),
-        _unlit(_hexOf(PuttPalette.ink), opacity: 0.45, depthWrite: false),
+        tjg.RingGeometry(0.62, 0.9, 32, 1),
+        _unlit(0xFFF6EA, opacity: 0.45, depthWrite: false, depthTest: false),
       )
+        ..name = 'aim-landing-halo'
+        ..rotation.x = -math.pi / 2
+        ..position.y = 0.05
+        ..renderOrder = 15)
+      ..add(tjs.Mesh(
+        tjg.RingGeometry(0.32, 0.66, 32, 1),
+        _unlit(_hexOf(PuttPalette.ink),
+            opacity: 0.9, depthWrite: false, depthTest: false),
+      )
+        ..name = 'aim-landing-ink'
         ..rotation.x = -math.pi / 2
         ..position.y = 0.055
-        ..renderOrder = 6)
+        ..renderOrder = 16)
       ..add(tjs.Mesh(
-        tjg.RingGeometry(0.4, 0.54, 28, 1),
-        _unlit(_hexOf(PuttPalette.yolk), opacity: 0.95, depthWrite: false),
+        tjg.RingGeometry(0.4, 0.56, 32, 1),
+        _unlit(_hexOf(PuttPalette.yolk),
+            opacity: 1, depthWrite: false, depthTest: false)
+          ..transparent = true,
       )
+        ..name = 'aim-landing-ring'
         ..rotation.x = -math.pi / 2
         ..position.y = 0.06
-        ..renderOrder = 7);
+        ..renderOrder = 17);
     group.add(_landMark);
 
     for (var i = 0; i < _dotCount; i++) {
