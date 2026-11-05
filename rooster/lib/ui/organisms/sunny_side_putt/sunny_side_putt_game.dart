@@ -1239,16 +1239,20 @@ class SunnySidePuttGame extends FlameGame {
     if (who == null || at == null) return;
     switch (spot.effectId) {
       case 'corn_rain':
-        fx.kernels(at);
+        fx.kernels(at, count: 16);
       case 'gust':
         final toward = _castSpots[spot.other];
         if (toward != null) fx.windBehind(at, toward);
       case 'sprinkler':
         fx.soak(at);
       case 'nest_swap':
+        // A bold trade: a poof, the swirl, two rings (violet and the
+        // player's), sparkles.
         fx.poof(at);
         fx.swirl(at, tintFor(who));
-        fx.ring(at, puttPowerUpAccent('nest_swap'), size: 2.2);
+        fx.ring(at, puttPowerUpAccent('nest_swap'), size: 2.8);
+        fx.ring(at, tintFor(who), size: 1.8);
+        fx.sparkles(at);
       case 'rabbit_hole':
         // Up out of the hole at the new spot.
         fx.dirt(at);
@@ -1940,17 +1944,17 @@ class PuttFxLayer {
   /// A Nest Swap's swirl round the egg at [at], in the player's [tint]
   /// and the swap's violet.
   void swirl(core.Vec2 at, ui.Color tint) {
-    for (var i = 0; i < 14; i++) {
+    for (var i = 0; i < 18; i++) {
       _particles.add(_FxParticle(
         at: at,
         velocity: core.Vec2.zero,
-        life: 1.05,
+        life: 1.2,
         kind: _FxKind.swirl,
-        size: 0.55,
+        size: 0.7,
         color: i.isEven ? tint : const ui.Color(0xFFC3A2FF),
         orbit: at,
         orbitRadius: 0.9 + (i % 3) * 0.22,
-        orbitAngle: i / 14 * 2 * math.pi,
+        orbitAngle: i / 18 * 2 * math.pi,
         orbitSpeed: 7.5,
       ));
     }
