@@ -1104,7 +1104,22 @@ class PuttWorld3D {
 
   void _syncHens(PuttWorldFrame frame, double dt) {
     for (var i = 0; i < _henViews.length && i < frame.hens.length; i++) {
-      _henViews[i].sync(frame.hens[i], frame.time);
+      final view = _henViews[i];
+      view.sync(frame.hens[i], frame.time);
+      if (view is _HenView3D) {
+        // A hen right in front of the camera (a close-up's foreground)
+        // steps back to a ghost of herself.
+        final at = frame.hens[i].position;
+        final dx = camera.position.x - at.x;
+        final dy = camera.position.y - _ground.at(at);
+        final dz = camera.position.z - at.y;
+        final near = math.sqrt(dx * dx + dy * dy + dz * dz) /
+            math.max(rig.distance, 1e-6);
+        final target = near < 0.5
+            ? 0.25
+            : (near < 0.7 ? 0.25 + (near - 0.5) / 0.2 * 0.75 : 1.0);
+        view.fadeToward(target, dt);
+      }
     }
   }
 

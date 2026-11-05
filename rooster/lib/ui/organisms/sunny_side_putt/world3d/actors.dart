@@ -540,6 +540,33 @@ abstract class _Walker {
   void sync(PuttWorldHen hen, double time);
 }
 
+/// Fades a walker that comes right up to the camera (a hen filling the
+/// foreground of a close-up): its materials are made transparent once, at
+/// build, so a fade only moves a uniform and never recompiles a program.
+mixin _Fadable {
+  final List<tjs.Material> _fadeMaterials = [];
+  double _fade = 1;
+
+  void _prepareFade(tjs.Object3D root) {
+    root.traverse((object) {
+      final material = object.material;
+      if (material == null || _fadeMaterials.contains(material)) return;
+      material.transparent = true;
+      _fadeMaterials.add(material);
+    });
+  }
+
+  /// Eases toward [target] opacity (1 = solid).
+  void fadeToward(double target, double dt) {
+    final next = _fade + (target - _fade) * math.min(1.0, dt * 6);
+    if ((next - _fade).abs() < 1e-3 && (next - target).abs() < 1e-3) return;
+    _fade = next;
+    for (final material in _fadeMaterials) {
+      material.opacity = _fade;
+    }
+  }
+}
+
 /// A duck where the obstacle paddles over water (the Pond's ducks): a
 /// mallard sitting low in the water - brown body, green head over a white
 /// collar, a yolk bill, a blue patch on the wing - bobbing as it goes, a
@@ -626,7 +653,7 @@ class _DuckView3D implements _Walker {
   }
 }
 
-class _HenView3D implements _Walker {
+class _HenView3D with _Fadable implements _Walker {
   _HenView3D(MovingObstacle obstacle, [_Ground? terrain])
       : _terrain = terrain ?? _Ground() {
     final r = obstacle.radius;
@@ -708,6 +735,7 @@ class _HenView3D implements _Walker {
     group.traverse((object) {
       if (!object.name.endsWith('-outline')) object.castShadow = true;
     });
+    _prepareFade(group);
   }
 
   @override
