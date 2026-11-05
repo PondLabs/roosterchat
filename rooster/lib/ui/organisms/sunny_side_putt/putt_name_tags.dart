@@ -39,6 +39,11 @@ class PuttTag {
   /// middle: a tag stepped aside of its egg still points down at it.
   final double tail;
 
+  /// How wide its egg draws, in pixels (0: unknown): a tag steps aside of
+  /// it by at most one and a half of that, else it shrinks to its chip -
+  /// farther, it read as naming someone else's egg.
+  final double eggWidth;
+
   const PuttTag({
     required this.playerId,
     required this.name,
@@ -49,6 +54,7 @@ class PuttTag {
     this.look = PuttLook.standard,
     this.compact = false,
     this.tail = 0,
+    this.eggWidth = 0,
   });
 
   PuttTag _laidAt(Offset to,
@@ -63,6 +69,7 @@ class PuttTag {
         look: look,
         compact: compact,
         tail: tail,
+        eggWidth: eggWidth,
       );
 }
 
@@ -196,6 +203,9 @@ PuttTag? _layTag(PuttTag tag, bool compact, List<Rect> laidPills,
       !laidPills.any(box.overlaps) &&
       !eggs.any(box.overlaps) &&
       !soft.any(box.overlaps);
+  // How far aside of its egg it may stand.
+  final aside =
+      tag.eggWidth > 0 ? math.max(tag.eggWidth * 1.5, 18.0) : double.infinity;
   var y = base.dy;
   for (var row = 0; row <= rows; row++) {
     for (final dx in [
@@ -205,6 +215,7 @@ PuttTag? _layTag(PuttTag tag, bool compact, List<Rect> laidPills,
       -width * 1.15,
       width * 1.15,
     ]) {
+      if (dx.abs() > aside) continue;
       final at = Offset(base.dx + dx, y);
       if (clear(puttTagPill(shape, at))) {
         return tag._laidAt(at,

@@ -1030,6 +1030,8 @@ class SunnySidePuttGame extends FlameGame {
         dim: aim.isActive,
         avatar: match.avatarOf?.call(ball.playerId),
         compact: compact,
+        // An egg is about four fifths as wide as it is tall.
+        eggWidth: tall * 0.78,
       ));
     }
     return tags;

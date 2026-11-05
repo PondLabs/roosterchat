@@ -117,6 +117,24 @@ void main() {
         reason: 'under the strip: gone; below it or beside it: drawn');
   });
 
+  test('a tag stays within one and a half egg widths, else goes to its chip',
+      () {
+    // Lou's spot is taken by another egg's box; the nearest clear spot for
+    // her full tag is far off to the side, past what her egg's width allows.
+    const lou = PuttTag(
+        playerId: 'lou',
+        name: 'Lou',
+        color: Colors.pink,
+        at: Offset(400, 300),
+        eggWidth: 30);
+    const blocked = Rect.fromLTRB(345, 250, 455, 305);
+    final placed = declutterTags(const [lou], soft: [blocked]).single;
+    expect((placed.at.dx - 400).abs(), lessThanOrEqualTo(45),
+        reason: 'by her egg');
+    expect(placed.compact || placed.dim, isTrue,
+        reason: 'a chip, or faded where it stands, not a name far off');
+  });
+
   test("tags keep inside the screen's margin, and go with their egg", () {
     final board = PuttTagBoard();
     addTearDown(board.dispose);
