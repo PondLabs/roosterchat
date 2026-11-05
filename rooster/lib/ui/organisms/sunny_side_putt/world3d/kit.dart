@@ -2,7 +2,8 @@
 // a seeded random for the scenery, merged vertex-coloured geometry (so a
 // meadow of flowers is one draw call), and the procedural textures - all
 // drawn straight into RGBA bytes, nothing platform-bound - plus the
-// painted ones (text on the flag) that come from Flutter's own rasterizer.
+// painted ones (the hole's number on the flag and on the tee's sign) that
+// come from Flutter's own rasterizer.
 part of '../putt_world3d.dart';
 
 // ---- colour ----------------------------------------------------------------------
@@ -729,6 +730,34 @@ tjs.DataTexture _paintedTexture(
     }
   }());
   return texture;
+}
+
+/// Paints [label] - the hole's number - in the brand's display face,
+/// centred in [box]: the nest's flag and the tee's sign letter it alike.
+void _paintHoleNumber(
+  ui.Canvas canvas,
+  ui.Rect box,
+  String label, {
+  required ui.Color color,
+  required double fontSize,
+}) {
+  final builder = ui.ParagraphBuilder(ui.ParagraphStyle(
+    textAlign: ui.TextAlign.center,
+    fontFamily: 'Sora',
+    fontSize: fontSize,
+    fontWeight: ui.FontWeight.w800,
+  ))
+    ..pushStyle(ui.TextStyle(
+      color: color,
+      fontFamily: 'Sora',
+      fontWeight: ui.FontWeight.w800,
+    ))
+    // Not translated: the hole's number, digits only.
+    ..addText(label);
+  final paragraph = builder.build()
+    ..layout(ui.ParagraphConstraints(width: box.width));
+  canvas.drawParagraph(paragraph,
+      ui.Offset(box.left, box.top + (box.height - paragraph.height) / 2));
 }
 
 // ---- the animated pieces --------------------------------------------------------------

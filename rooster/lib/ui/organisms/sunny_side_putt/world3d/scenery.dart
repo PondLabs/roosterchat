@@ -4,6 +4,10 @@
 // stones, hay bales, a picket fence around the table, the red barn with
 // its silo, a windmill turning on the hill, and the host himself - a big
 // white rooster with his headphones on, bobbing his head by the green.
+// Each course has props of its own besides: sunflowers and a feeding
+// trough by the Coop, pumpkins and a corn crib in the maze, a rowboat and
+// lily pads on the Pond, road signs and milk churns along Farm Road,
+// strings of bulbs and a hay wagon in the Barn's yard.
 //
 // Everything is placed by a random seeded from the hole's id: the same
 // hole always stands in the same farm. Tall things keep off the camera's
@@ -162,6 +166,26 @@ class _SkyDome {
 
 // ---- the farm -------------------------------------------------------------------------
 
+/// Where the host stands: beyond the side rail on the nest's side, about
+/// level with the green's middle - in the play view the side of the
+/// screen, clear of the HUD's top bar and its corner buttons.
+Vec2 _hostSpotOf(HoleDef hole) {
+  final b = hole.bounds;
+  final nest = hole.nest.position;
+  final right = nest.x >= b.center.x;
+  return Vec2(
+    right ? b.max.x + 4.0 : b.min.x - 4.0,
+    nest.y
+        .clamp(b.center.y - b.height * 0.2, b.center.y + b.height * 0.05)
+        .toDouble(),
+  );
+}
+
+/// Settles a prop [radius] across at the free spot nearest [want] and
+/// keeps the scatter off it (see [_Scenery._settle]); null when nothing
+/// near is free. [cornOk] lets it stand in the corn's ground.
+typedef _Settle = Vec2? Function(Vec2 want, double radius, {bool cornOk});
+
 /// Builds one hole's surroundings; the result is one group the world hangs
 /// under the hole's 'scenery' kind.
 class _Scenery {
@@ -170,9 +194,11 @@ class _Scenery {
       required this.theme,
       required this.cheerUntil,
       required this.shape,
+      this.signAt,
       Vec2? Function()? watch})
       : watch = watch ?? (() => null),
-        _rand = _Rand(_seedOf('${hole.id}/farm'));
+        _rand = _Rand(_seedOf('${hole.id}/farm')),
+        _propRand = _Rand(_seedOf('${hole.id}/props'));
 
   /// The egg the host keeps his eye on (the one rolling, else the
   /// viewer's), or null.
@@ -180,6 +206,10 @@ class _Scenery {
 
   /// The table's shape: the meadow fills what the walls carved away.
   final _TableShape shape;
+
+  /// Where the tee's sign stands (the course kit builds it), so nothing
+  /// grows through its post; null when the hole has none.
+  final Vec2? signAt;
 
   /// Until when (the frame clock) the host is cheering: an egg just
   /// dropped into the nest.
@@ -190,23 +220,30 @@ class _Scenery {
   final _Theme theme;
   final _Rand _rand;
 
+  /// The course's own props draw from their own random, so they never
+  /// shift the scatter's.
+  final _Rand _propRand;
+
+  /// Ground the corn leaves clear: the scarecrow's, the crib's.
+  final List<(Vec2, double)> _clearings = [];
+
+  /// The course's own props as they stood: name, spot, footprint. The farm
+  /// group carries them in its `userData['props']` (the tests read them).
+  final List<(String, Vec2, double)> _stood = [];
+
   Rect get _b => hole.bounds;
   double get _span => math.max(_b.width, _b.height);
   static const double _ground = -_tableHeight;
 
-  /// Where the host stands: beyond the side rail on the nest's side, about
-  /// level with the green's middle - in the play view the side of the
-  /// screen, clear of the HUD's top bar and its corner buttons.
-  Vec2 get _hostAt {
-    final nest = hole.nest.position;
-    final right = nest.x >= _b.center.x;
-    return Vec2(
-      right ? _b.max.x + 4.0 : _b.min.x - 4.0,
-      nest.y
-          .clamp(_b.center.y - _b.height * 0.2, _b.center.y + _b.height * 0.05)
-          .toDouble(),
-    );
-  }
+  /// The picket fence's distance out from the table's edge.
+  static const double _fenceGap = 3.6;
+
+  /// The fence line as [_clearance] measures it: the fence stands the gap
+  /// and a rail's thickness out, the clearance counts from the rail and
+  /// half a unit.
+  static const double _fenceClearance = _fenceGap - 0.5;
+
+  Vec2 get _hostAt => _hostSpotOf(hole);
 
   /// His turn about the vertical: facing the green, a little toward the
   /// camera's side (local +x is where he looks).
@@ -230,6 +267,23 @@ class _Scenery {
   /// the player and the play.
   bool _cameraSide(double z, {double reach = 46}) =>
       z > _b.max.y && z < _b.max.y + reach;
+
+  /// A piece of a prop standing at [at] on the meadow, turned [yaw]:
+  /// placed at ([lx], [ly], [lz]) in the prop's own frame (x along it, y
+  /// up from the meadow, z across it), then turned, tilted, rolled and
+  /// scaled there.
+  tjs.Matrix4 _inFrame(Vec2 at, double yaw, double lx, double ly, double lz,
+      {double turn = 0,
+      double tilt = 0,
+      double roll = 0,
+      double sx = 1,
+      double sy = 1,
+      double sz = 1}) {
+    final c = math.cos(yaw);
+    final s = math.sin(yaw);
+    return _place(at.x + lx * c + lz * s, _ground + ly, at.y - lx * s + lz * c,
+        yaw: yaw + turn, tilt: tilt, roll: roll, sx: sx, sy: sy, sz: sz);
+  }
 
   tjs.Group build() {
     final group = tjs.Group()..name = 'farm';
@@ -271,6 +325,7 @@ class _Scenery {
       (hostAt, 4.5),
       if (kind == _ThemeKind.pond) (lakeAt, lakeRadius + 3),
       if (kind == _ThemeKind.coop) (henHouseAt, 6.5),
+      if (signAt case final sign?) (sign, 1.6),
     ];
     bool blocked(double x, double z) {
       if (kind == _ThemeKind.road && (z - roadZ).abs() < 4.5) return true;
@@ -279,6 +334,30 @@ class _Scenery {
         if (Vec2(x, z).distanceTo(spot) < radius) return true;
       }
       return false;
+    }
+
+    // Each course's own props, at set spots round the table nudged clear
+    // of the landmarks and of one another; the scatter below keeps off
+    // them.
+    Vec2? settle(Vec2 want, double radius, {bool cornOk = false}) {
+      final spot = _settle(want, radius, keepOut,
+          road: kind == _ThemeKind.road ? roadZ : null,
+          corn: kind == _ThemeKind.maze && !cornOk);
+      if (spot != null) keepOut.add((spot, radius));
+      return spot;
+    }
+
+    switch (kind) {
+      case _ThemeKind.coop:
+        _coopProps(props, settle);
+      case _ThemeKind.maze:
+        _mazeProps(props, settle);
+      case _ThemeKind.pond:
+        _pondProps(props, small, lakeAt, lakeRadius);
+      case _ThemeKind.road:
+        _roadProps(props, settle, roadZ);
+      case _ThemeKind.barn:
+        _barnProps(group, props, small, settle, barnAt, barnScale);
     }
 
     _carvedMeadow(props, small);
@@ -296,7 +375,7 @@ class _Scenery {
         _path(small, from: Vec2(barnAt.x - 1, barnAt.y + 6), to: hostAt);
       case _ThemeKind.maze:
         _cornField(props);
-        _scarecrow(props, Vec2(_b.center.x - 14, _b.min.y - 9));
+        _scarecrow(props, _scarecrowAt);
       case _ThemeKind.pond:
         group.add(_lake(lakeAt, lakeRadius));
         _reeds(props, lakeAt, lakeRadius);
@@ -327,6 +406,7 @@ class _Scenery {
     group.add(_host(hostAt));
     if (kind != _ThemeKind.barn) group.add(_butterflies());
     group.add(_birds());
+    group.userData['props'] = List<(String, Vec2, double)>.unmodifiable(_stood);
     return group;
   }
 
@@ -532,6 +612,7 @@ class _Scenery {
           if (shape.keptAt(p + Vec2(dx, dz))) clear = false;
         }
         if (!clear) continue;
+        if (signAt case final sign? when p.distanceTo(sign) < 1.6) continue;
         final roll = rand.next();
         if (roll < 0.25) {
           final r = rand.range(0.5, 0.9);
@@ -582,7 +663,7 @@ class _Scenery {
   void _trees(_Merged into, bool Function(double, double) blocked) {
     // Groves: a few clusters, and singles scattered between them.
     final spots = <Vec2>[];
-    final groves = 7;
+    final groves = 6;
     for (var g = 0; g < groves; g++) {
       final center = _spotAround(minClear: 14, maxClear: 70, tall: true);
       if (center == null) continue;
@@ -620,6 +701,33 @@ class _Scenery {
       if (clear < minClear || clear > maxClear) continue;
       if (tall && _cameraSide(z)) continue;
       return Vec2(x, z);
+    }
+    return null;
+  }
+
+  /// The free spot nearest [want] for a prop [radius] across: off the
+  /// table and clear of the picket fence, never reaching the camera's side,
+  /// clear of everything in [taken] (the landmarks, the host, the props
+  /// placed before it), off the road along [road] and out of the corn
+  /// when [corn]. Null when nothing near is free.
+  Vec2? _settle(Vec2 want, double radius, List<(Vec2, double)> taken,
+      {double? road, bool corn = false}) {
+    for (var ring = 0; ring < 12; ring++) {
+      final steps = ring == 0 ? 1 : 8 * ring;
+      for (var k = 0; k < steps; k++) {
+        final angle = k / steps * math.pi * 2;
+        final p = want + Vec2(math.cos(angle), math.sin(angle)) * (ring * 0.9);
+        final clear = _clearance(p.x, p.y);
+        if (clear < radius + 0.5) continue;
+        if ((clear - _fenceClearance).abs() < radius + 0.3) continue;
+        if (p.y + radius > _b.max.y) continue;
+        if (road != null && (p.y - road).abs() < 3.4 + radius) continue;
+        if (corn && clear + radius > 7.5 && p.y - radius < _b.max.y - 2) {
+          continue;
+        }
+        if (taken.any((t) => p.distanceTo(t.$1) < t.$2 + radius)) continue;
+        return p;
+      }
     }
     return null;
   }
@@ -683,7 +791,9 @@ class _Scenery {
   }
 
   void _bushes(_Merged into, bool Function(double, double) blocked) {
-    for (var i = 0; i < 46; i++) {
+    // Fewer than the meadow could take: each course's own props stand
+    // where more would grow.
+    for (var i = 0; i < 32; i++) {
       final at = _spotAround(minClear: 1.6, maxClear: 22);
       if (at == null || blocked(at.x, at.y)) continue;
       final r = _rand.range(0.55, 1.05);
@@ -739,7 +849,7 @@ class _Scenery {
   /// A white picket fence around the table at a stroll's distance, open on
   /// the camera's side where the path comes in.
   void _fence(_Merged into) {
-    const gap = 3.6;
+    const gap = _fenceGap;
     final minX = _b.min.x - gap - _fenceThickness;
     final maxX = _b.max.x + gap + _fenceThickness;
     final minZ = _b.min.y - gap - _fenceThickness;
@@ -1362,7 +1472,201 @@ class _Scenery {
     }
   }
 
+  /// The Coop's own corner: a patch of sunflowers beyond the far fence on
+  /// the tee's half, their heads turned to the morning sun, and out west a
+  /// feeding trough with the feed sacks stacked by it and hens at their
+  /// breakfast.
+  void _coopProps(_Merged into, _Settle settle) {
+    final rand = _propRand;
+    // To the sun, and enough to the camera's side that the faces read.
+    final (sunX, _, sunZ) = theme.sunFrom;
+    final facing =
+        (Vec2(sunX, sunZ).normalized(const Vec2(0, 1)) + const Vec2(0, 0.9))
+            .normalized(const Vec2(0, 1));
+    const count = 17;
+    for (var i = 0; i < count; i++) {
+      final want = Vec2(
+        _b.min.x + _b.width * (0.02 + 0.4 * i / (count - 1)),
+        _b.min.y - 6.4 - (i % 3) * 1.25,
+      );
+      final at = settle(
+          want + Vec2(rand.range(-0.3, 0.3), rand.range(-0.3, 0.3)), 0.6);
+      if (at != null) _sunflower(into, at, rand.range(2.9, 4.0), facing, rand);
+    }
+    final troughAt =
+        settle(Vec2(_b.min.x - 7.6, _b.min.y + _b.height * 0.32), 1.7);
+    if (troughAt == null) return;
+    // Along the table's side, so its length shows.
+    const yaw = math.pi / 2 + 0.12;
+    _trough(into, troughAt, yaw);
+    final c = math.cos(yaw);
+    final s = math.sin(yaw);
+    for (final (lx, side) in const [(-0.7, 1.0), (0.55, -1.0), (0.9, 1.0)]) {
+      // A hen at each side, facing the feed.
+      final lz = side * 0.95;
+      final at = troughAt + Vec2(lx * c + lz * s, -lx * s + lz * c);
+      _henFigure(into, at, yaw + (side > 0 ? math.pi : 0), 0.5);
+    }
+    final sacksAt = settle(troughAt + const Vec2(0.4, -2.9), 1.0);
+    if (sacksAt != null) _feedSacks(into, sacksAt, rand.range(-0.5, 0.5));
+  }
+
+  /// A sunflower: a tall stem with broad leaves, and the big head - a
+  /// brown disc in two rings of yellow petals, green behind - nodding
+  /// toward [facing] (on the ground) and lifted to the sky.
+  void _sunflower(
+      _Merged into, Vec2 at, double height, Vec2 facing, _Rand rand) {
+    _stood.add(('sunflower', at, 0.6));
+    const stem = 0x4E8A2E;
+    final f = facing.rotated(rand.range(-0.25, 0.25));
+    final turn = math.atan2(f.x, f.y);
+    final lift = rand.range(0.3, 0.5);
+    into.add(tjg.CylinderGeometry(0.06, 0.09, height, 6),
+        _place(at.x, _ground + height / 2, at.y), stem,
+        baseShade: 0.7);
+    for (var leaf = 0; leaf < 3; leaf++) {
+      final a = rand.range(0, math.pi * 2);
+      into.add(
+        tjg.IcosahedronGeometry(1, 0),
+        _place(at.x + math.cos(a) * 0.36,
+            _ground + height * (0.28 + leaf * 0.18), at.y - math.sin(a) * 0.36,
+            yaw: a, roll: -0.4, sx: 0.45, sy: 0.05, sz: 0.26),
+        leaf.isEven ? _Farm.leafC : _Farm.leafA,
+      );
+    }
+    // The neck bends over toward the sun; the head hangs off its end.
+    into.add(
+        tjg.CylinderGeometry(0.05, 0.06, 0.4, 5),
+        _place(at.x + f.x * 0.12, _ground + height - 0.02, at.y + f.y * 0.12,
+            yaw: turn, tilt: 0.85),
+        stem);
+    final head = at + f * 0.28;
+    final headY = _ground + height + 0.1;
+    // A piece in the head's own frame: its face looks down +z.
+    tjs.Matrix4 onHead(double px, double py, double pz,
+        {double tilt = 0, double roll = 0, double sy = 1, double sz = 1}) {
+      final y1 = py * math.cos(lift) + pz * math.sin(lift);
+      final z1 = -py * math.sin(lift) + pz * math.cos(lift);
+      return _place(
+        head.x + px * math.cos(turn) + z1 * math.sin(turn),
+        headY + y1,
+        head.y - px * math.sin(turn) + z1 * math.cos(turn),
+        yaw: turn,
+        tilt: tilt - lift,
+        roll: roll,
+        sy: sy,
+        sz: sz,
+      );
+    }
+
+    const disc = 0.36;
+    into.add(tjg.ConeGeometry(disc + 0.16, 0.3, 10),
+        onHead(0, 0, -0.13, tilt: -math.pi / 2), 0x5A8F32);
+    for (var ring = 0; ring < 2; ring++) {
+      const petals = 13;
+      for (var i = 0; i < petals; i++) {
+        final phi = (i + ring * 0.5) / petals * math.pi * 2;
+        final reach = disc + 0.24 - ring * 0.04;
+        into.add(
+          tjg.ConeGeometry(0.12, 0.52, 4),
+          onHead(
+              math.cos(phi) * reach, math.sin(phi) * reach, -0.02 - ring * 0.03,
+              roll: phi - math.pi / 2, sz: 0.28),
+          ring == 0 ? 0xFFC928 : 0xF5A51C,
+        );
+      }
+    }
+    into.add(tjg.CylinderGeometry(disc, disc, 0.1, 14),
+        onHead(0, 0, 0.01, tilt: math.pi / 2), 0x4A2C16);
+    into.add(
+        tjs.SphereGeometry(disc * 0.9, 12, 4, 0, math.pi * 2, 0, math.pi / 2),
+        onHead(0, 0, 0.05, tilt: math.pi / 2, sy: 0.35),
+        0x6B3E1E);
+  }
+
+  /// A feeding trough: a long V of boards on trestles, full of golden
+  /// feed.
+  void _trough(_Merged into, Vec2 at, double yaw) {
+    _stood.add(('trough', at, 1.5));
+    const length = 2.8;
+    for (final end in [-1.0, 1.0]) {
+      for (final lean in [-0.5, 0.5]) {
+        into.add(
+            tjs.BoxGeometry(0.1, 0.78, 0.1),
+            _inFrame(at, yaw, end * (length / 2 - 0.25), 0.36, 0, tilt: lean),
+            _Farm.trunk,
+            baseShade: 0.7);
+      }
+    }
+    for (final side in [-1.0, 1.0]) {
+      into.add(
+          tjs.BoxGeometry(length, 0.07, 0.46),
+          _inFrame(at, yaw, 0, 0.74, side * 0.19, tilt: -side * 0.62),
+          _Farm.wood,
+          baseShade: 0.85);
+    }
+    for (final end in [-1.0, 1.0]) {
+      into.add(tjs.BoxGeometry(0.07, 0.36, 0.72),
+          _inFrame(at, yaw, end * length / 2, 0.76, 0), _Farm.woodTop);
+    }
+    into.add(tjs.BoxGeometry(length - 0.12, 0.08, 0.5),
+        _inFrame(at, yaw, 0, 0.82, 0), 0xE9C46A);
+    // Feed spilt round its feet.
+    for (var i = 0; i < 9; i++) {
+      into.add(
+          tjs.BoxGeometry(0.07, 0.03, 0.07),
+          _inFrame(at, yaw, _propRand.range(-1.4, 1.4), 0.015,
+              _propRand.range(-0.8, 0.8),
+              turn: _propRand.range(0, 3)),
+          0xE9C46A);
+    }
+  }
+
+  /// Feed sacks in a little stack: burlap tied at the neck, a coloured
+  /// band round each; two standing and one lying across their feet.
+  void _feedSacks(_Merged into, Vec2 at, double yaw) {
+    _stood.add(('feed sacks', at, 1.0));
+    const burlap = 0xC9A46A;
+    const twine = 0x8A6A40;
+    // A sack's pieces at [u] along its own axis (up it when standing; a
+    // lying sack lies along the stack's x, its neck to -x), squashed by
+    // [squash] along it and turned end over end by [flip].
+    void sack(double lx, double lz, double turn, int band,
+        {bool lying = false}) {
+      tjs.Matrix4 piece(double u, {double squash = 1, double flip = 0}) {
+        if (!lying) {
+          return _inFrame(at, yaw, lx, u, lz,
+              turn: turn, tilt: flip, sy: squash, sz: 0.64);
+        }
+        final c = math.cos(turn);
+        final s = math.sin(turn);
+        return _inFrame(at, yaw, lx - u * c, 0.27, lz + u * s,
+            turn: turn, roll: math.pi / 2 + flip, sx: 0.66, sy: squash);
+      }
+
+      final base = lying ? -0.36 : 0.0;
+      into.add(
+          tjg.CylinderGeometry(0.36, 0.4, 0.72, 10), piece(base + 0.36), burlap,
+          baseShade: lying ? 0.85 : 0.7);
+      into.add(
+          tjg.CylinderGeometry(0.39, 0.41, 0.14, 10), piece(base + 0.4), band);
+      into.add(tjs.SphereGeometry(0.36, 10, 5, 0, math.pi * 2, 0, math.pi / 2),
+          piece(base + 0.72, squash: 0.6), burlap);
+      into.add(
+          tjg.CylinderGeometry(0.07, 0.1, 0.14, 7), piece(base + 0.98), twine);
+      into.add(tjg.ConeGeometry(0.15, 0.2, 7), piece(base + 1.1, flip: math.pi),
+          burlap);
+    }
+
+    sack(-0.42, 0, 0.15, 0xC63A2C);
+    sack(0.44, -0.08, -0.2, 0x3E73B5);
+    sack(0.1, 0.78, 1.45, 0x4F9A3A, lying: true);
+  }
+
   // ---- the Corn Maze: the field and its scarecrow -------------------------------------
+
+  /// Where the scarecrow keeps watch, in his clearing in the corn.
+  Vec2 get _scarecrowAt => Vec2(_b.center.x - 14, _b.min.y - 9);
 
   /// The corn stands beyond the fence on three sides, leaving the camera's
   /// side open.
@@ -1384,9 +1688,10 @@ class _Scenery {
         final px = x + _rand.range(-0.35, 0.35);
         final pz = z + _rand.range(-0.3, 0.3);
         if (!_inCornField(px, pz)) continue;
-        if (Vec2(px, pz).distanceTo(Vec2(_b.center.x - 14, _b.min.y - 9)) <
-            3.2) {
-          continue; // the scarecrow's clearing
+        // The scarecrow's clearing, the crib's.
+        if (_clearings.any(
+            (clearing) => Vec2(px, pz).distanceTo(clearing.$1) < clearing.$2)) {
+          continue;
         }
         if (Vec2(px, pz).distanceTo(_hostAt) < 4.5) {
           continue; // the host's spot
@@ -1503,6 +1808,134 @@ class _Scenery {
     }
   }
 
+  /// The Corn Maze's own: a pumpkin patch along the corn's edge on the far
+  /// side and at the scarecrow's feet, and out west a corn crib on stilts,
+  /// gold showing between its slats.
+  void _mazeProps(_Merged into, _Settle settle) {
+    final rand = _propRand;
+    final scarecrow = _scarecrowAt;
+    _clearings.add((scarecrow, 3.6));
+    for (final (dx, dz, r) in const [
+      (-1.5, 1.3, 0.55),
+      (1.3, 1.6, 0.42),
+      (1.9, 0.2, 0.32),
+    ]) {
+      _pumpkin(into, scarecrow + Vec2(dx, dz), r, rand);
+    }
+    for (var i = 0; i < 11; i++) {
+      final r = rand.range(0.4, 0.78);
+      final want = Vec2(
+        _b.min.x + _b.width * (0.05 + 0.9 * i / 10) + rand.range(-1, 1),
+        _b.min.y - 5.9 + rand.range(-0.5, 0.5),
+      );
+      final at = settle(want, r + 0.2);
+      if (at != null) _pumpkin(into, at, r, rand);
+    }
+    final cribAt = settle(Vec2(_b.min.x - 8.4, _b.min.y + _b.height * 0.3), 2.3,
+        cornOk: true);
+    if (cribAt == null) return;
+    _clearings.add((cribAt, 3.6));
+    _cornCrib(into, cribAt, math.pi / 2 + rand.range(-0.12, 0.12));
+    for (final (dx, dz, r) in const [(2.0, 2.4, 0.6), (2.6, 1.3, 0.4)]) {
+      final at = settle(cribAt + Vec2(dx, dz), r + 0.1, cornOk: true);
+      if (at != null) _pumpkin(into, at, r, rand);
+    }
+  }
+
+  /// A pumpkin: a squat orange ball pressed into eight lobes, dimpled on
+  /// top, a stub of stem and a curl of vine; [r] its radius.
+  void _pumpkin(_Merged into, Vec2 at, double r, _Rand rand) {
+    _stood.add(('pumpkin', at, r));
+    final body = tjs.SphereGeometry(1, 16, 9);
+    final position = body.attributes['position'] as tjs.BufferAttribute;
+    for (var i = 0; i < position.count; i++) {
+      final x = position.getX(i)!.toDouble();
+      final y = position.getY(i)!.toDouble();
+      final z = position.getZ(i)!.toDouble();
+      final rib = 1 - 0.13 * (1 - math.cos(4 * math.atan2(z, x)).abs());
+      final dimple = 1 - 0.25 * math.max(0.0, y.abs() - 0.85) / 0.15;
+      position.setXYZ(i, x * rib, y * dimple, z * rib);
+    }
+    body.computeVertexNormals();
+    into.add(
+      body,
+      _place(at.x, _ground + r * 0.68, at.y,
+          yaw: rand.range(0, math.pi * 2), sx: r, sy: r * 0.72, sz: r),
+      rand.chance(0.5) ? 0xF08A24 : 0xE7781C,
+      baseShade: 0.62,
+    );
+    final lean = rand.range(-0.3, 0.3);
+    into.add(tjg.CylinderGeometry(r * 0.07, r * 0.11, r * 0.42, 6),
+        _place(at.x, _ground + r * 1.36, at.y, roll: lean), 0x6B7A2E);
+    into.add(
+        tjg.TorusGeometry(r * 0.15, r * 0.025, 4, 10, math.pi * 1.6),
+        _place(at.x + r * 0.17, _ground + r * 1.32, at.y,
+            yaw: rand.range(0, math.pi * 2), tilt: 0.4),
+        0x5E8F2E);
+    // A leaf of its vine on the ground.
+    final a = rand.range(0, math.pi * 2);
+    into.add(
+        tjg.IcosahedronGeometry(1, 0),
+        _place(at.x + math.cos(a) * r * 1.1, _ground + 0.05,
+            at.y - math.sin(a) * r * 1.1,
+            yaw: a, sx: r * 0.7, sy: 0.05, sz: r * 0.55),
+        _Farm.leafC);
+  }
+
+  /// A corn crib: a narrow crib of slats on short stilts under a red tin
+  /// roof, the cobs showing gold between the slats.
+  void _cornCrib(_Merged into, Vec2 at, double yaw) {
+    _stood.add(('corn crib', at, 2.2));
+    const length = 3.6;
+    const width = 1.6;
+    const floor = 0.6;
+    const wall = 2.5;
+    const timber = 0x8A5A34;
+    const slat = 0xC08A55;
+    for (final lx in [-length / 2 + 0.15, 0.0, length / 2 - 0.15]) {
+      for (final lz in [-width / 2 + 0.12, width / 2 - 0.12]) {
+        into.add(tjs.BoxGeometry(0.2, floor, 0.2),
+            _inFrame(at, yaw, lx, floor / 2, lz), timber,
+            baseShade: 0.6);
+      }
+    }
+    into.add(tjs.BoxGeometry(length + 0.24, 0.12, width + 0.24),
+        _inFrame(at, yaw, 0, floor, 0), timber);
+    // The corn: a crib full of cobs, gold behind the slats.
+    into.add(tjs.BoxGeometry(length - 0.16, wall - 0.1, width - 0.16),
+        _inFrame(at, yaw, 0, floor + wall / 2, 0), 0xF2BE3A,
+        baseShade: 0.8);
+    for (final lx in [-length / 2, length / 2]) {
+      for (final lz in [-width / 2, width / 2]) {
+        into.add(tjs.BoxGeometry(0.16, wall + 0.1, 0.16),
+            _inFrame(at, yaw, lx, floor + wall / 2, lz), timber);
+      }
+    }
+    const rows = 7;
+    for (var row = 0; row < rows; row++) {
+      final y = floor + 0.2 + row * (wall - 0.35) / (rows - 1);
+      for (final side in [-1.0, 1.0]) {
+        into.add(tjs.BoxGeometry(length + 0.04, 0.15, 0.05),
+            _inFrame(at, yaw, 0, y, side * (width / 2 + 0.03)), slat);
+        into.add(tjs.BoxGeometry(0.05, 0.15, width + 0.04),
+            _inFrame(at, yaw, side * (length / 2 + 0.03), y, 0), slat);
+      }
+    }
+    // The roof: a gable along the crib, red tin over the rafters.
+    final top = floor + wall + 0.02;
+    into.add(_prism(width + 0.4, 0.75, length + 0.3),
+        _inFrame(at, yaw, 0, top, 0, turn: math.pi / 2), timber);
+    final slope = math.atan2(0.75, width / 2 + 0.2);
+    final slab = math.sqrt(math.pow(width / 2 + 0.2, 2) + 0.75 * 0.75) + 0.2;
+    for (final side in [-1.0, 1.0]) {
+      into.add(
+          tjs.BoxGeometry(length + 0.7, 0.08, slab),
+          _inFrame(at, yaw, 0, top + 0.43, side * (width / 4 + 0.1),
+              tilt: side * slope),
+          0xA8432F);
+    }
+  }
+
   // ---- the Pond: the lake, its reeds, the dock, the ducks -----------------------------
 
   tjs.Group _lake(Vec2 at, double radius) {
@@ -1576,9 +2009,13 @@ class _Scenery {
     }
   }
 
+  /// Where the dock leaves the shore: the shore nearest the green.
+  Vec2 _dockStart(Vec2 lake, double radius) =>
+      Vec2(lake.x + radius * 0.35, lake.y + radius * 0.94);
+
   void _dock(_Merged into, Vec2 at, double radius) {
     // From the shore nearest the green out over the water.
-    final start = Vec2(at.x + radius * 0.35, at.y + radius * 0.94);
+    final start = _dockStart(at, radius);
     const length = 9.0;
     for (var plank = 0; plank < 14; plank++) {
       final z = start.y - plank * (length / 14);
@@ -1594,6 +2031,149 @@ class _Scenery {
             _place(start.x + side, _ground + 0.3, start.y - post * 3),
             _Farm.trunk);
       }
+    }
+  }
+
+  /// The Pond's own: a rowboat tied up beside the dock, and lily pads laid
+  /// like stepping stones along the lake's shallow edge.
+  void _pondProps(_Merged into, _Merged small, Vec2 lake, double radius) {
+    final dock = _dockStart(lake, radius);
+    // Moored off the dock's side, its line to the dock's third post.
+    _rowboat(into, Vec2(dock.x + 2.05, dock.y - 5.4), math.pi / 2 + 0.06,
+        tiedTo: Vec2(dock.x + 1.1, dock.y - 6));
+    _lilyPads(small, lake, radius);
+  }
+
+  /// A rowboat: a cream hull with a red rim, flared sides closing to a
+  /// pointed bow, a plank floor, two seats and the oars shipped inside;
+  /// its line made fast to [tiedTo] (a post's top).
+  void _rowboat(_Merged into, Vec2 at, double yaw, {Vec2? tiedTo}) {
+    _stood.add(('rowboat', at, 2.0));
+    const hull = 0xF4EEE3;
+    const rim = 0xC63A2C;
+    const depth = 0.5;
+    // The floor, above the water so the lake never shows inside.
+    into.add(tjs.BoxGeometry(2.5, 0.08, 0.98),
+        _inFrame(at, yaw, -0.25, 0.16, 0), _Farm.wood);
+    into.add(tjs.BoxGeometry(2.5, 0.12, 0.8), _inFrame(at, yaw, -0.25, 0.04, 0),
+        hull);
+    for (final side in [-1.0, 1.0]) {
+      // The side, flared out, its rim on top.
+      into.add(
+          tjs.BoxGeometry(2.5, depth, 0.08),
+          _inFrame(at, yaw, -0.25, depth / 2 + 0.02, side * 0.56,
+              tilt: side * 0.26),
+          hull,
+          baseShade: 0.8);
+      into.add(tjs.BoxGeometry(2.56, 0.07, 0.12),
+          _inFrame(at, yaw, -0.25, depth + 0.04, side * 0.62), rim);
+      // The bow's planks close in to the stem.
+      into.add(
+          tjs.BoxGeometry(1.2, depth, 0.08),
+          _inFrame(at, yaw, 1.5, depth / 2 + 0.02, side * 0.3,
+              turn: side * 0.48, tilt: side * 0.18),
+          hull,
+          baseShade: 0.8);
+      into.add(
+          tjs.BoxGeometry(1.22, 0.07, 0.12),
+          _inFrame(at, yaw, 1.52, depth + 0.04, side * 0.33, turn: side * 0.48),
+          rim);
+    }
+    // The transom across the stern, the floor at the bow.
+    into.add(tjs.BoxGeometry(0.08, depth, 1.24),
+        _inFrame(at, yaw, -1.5, depth / 2 + 0.02, 0), hull);
+    into.add(tjs.BoxGeometry(0.7, 0.08, 0.5), _inFrame(at, yaw, 1.3, 0.16, 0),
+        _Farm.wood);
+    // Two seats and the oars along them.
+    for (final lx in [-0.85, 0.45]) {
+      into.add(tjs.BoxGeometry(0.28, 0.06, 1.1), _inFrame(at, yaw, lx, 0.38, 0),
+          _Farm.woodTop);
+    }
+    for (final side in [-1.0, 1.0]) {
+      into.add(
+          tjg.CylinderGeometry(0.035, 0.035, 2.3, 6),
+          _inFrame(at, yaw, -0.2, 0.46, side * 0.28,
+              turn: side * 0.08, roll: math.pi / 2),
+          _Farm.woodTop);
+      into.add(
+          tjs.BoxGeometry(0.6, 0.03, 0.16),
+          _inFrame(at, yaw, -1.2, 0.46, side * 0.33, turn: side * 0.08),
+          _Farm.wood);
+    }
+    final post = tiedTo;
+    if (post == null) return;
+    // The line from the bow's ring to the post, sagging.
+    final c = math.cos(yaw);
+    final s = math.sin(yaw);
+    final bow = Vec2(at.x + 1.9 * c, at.y - 1.9 * s);
+    final from = tjs.Vector3(bow.x, _ground + depth + 0.05, bow.y);
+    final to = tjs.Vector3(post.x, _ground + 0.95, post.y);
+    final sag = tjs.Vector3(
+        (from.x + to.x) / 2, (from.y + to.y) / 2 - 0.3, (from.z + to.z) / 2);
+    _rope(into, from, sag, 0xD9C08A);
+    _rope(into, sag, to, 0xD9C08A);
+  }
+
+  /// A straight run of rope (or wire) from [from] to [to].
+  void _rope(_Merged into, tjs.Vector3 from, tjs.Vector3 to, int hex,
+      {double thickness = 0.04}) {
+    final dx = to.x - from.x;
+    final dy = to.y - from.y;
+    final dz = to.z - from.z;
+    final run = math.sqrt(dx * dx + dz * dz);
+    final length = math.sqrt(run * run + dy * dy);
+    into.add(
+      tjs.BoxGeometry(length + thickness, thickness, thickness),
+      _place((from.x + to.x) / 2, (from.y + to.y) / 2, (from.z + to.z) / 2,
+          yaw: -math.atan2(dz, dx), roll: math.atan2(dy, run)),
+      hex,
+    );
+  }
+
+  /// Lily pads laid like stepping stones along the lake's shallow edge,
+  /// west of the dock, from two flat stones on the shore: notched discs in
+  /// two greens, a pink or white flower open on a few.
+  void _lilyPads(_Merged into, Vec2 lake, double radius) {
+    final rand = _propRand;
+    for (final (degrees, out) in const [(98.0, 1.4), (100.0, 0.2)]) {
+      final angle = degrees * math.pi / 180;
+      final at = lake + Vec2(math.cos(angle), math.sin(angle)) * (radius + out);
+      into.add(
+          tjg.DodecahedronGeometry(1, 0),
+          _place(at.x, _ground + 0.08, at.y,
+              yaw: rand.range(0, 6.28), sx: 0.75, sy: 0.16, sz: 0.6),
+          _Farm.rock,
+          baseShade: 0.75);
+    }
+    const pads = 9;
+    for (var i = 0; i < pads; i++) {
+      final angle = (103 + i * 5.4) * math.pi / 180;
+      final reach = radius - 1.8 - (i.isOdd ? 0.7 : 0) - i * 0.12;
+      final at = lake + Vec2(math.cos(angle), math.sin(angle)) * reach;
+      final r = rand.range(0.62, 0.88);
+      _stood.add(('lily pad', at, r));
+      const notch = 0.6;
+      into.add(
+          tjg.CylinderGeometry(r, r, 0.05, 16, 1, false,
+              rand.range(0, math.pi * 2), math.pi * 2 - notch),
+          _place(at.x, _ground + 0.13, at.y),
+          i.isEven ? _Farm.lily : 0x6AAE45);
+      if (i % 3 != 1) continue;
+      // A flower open on the pad.
+      final petal = i == 4 ? 0xFFF5F8 : 0xF6A9C4;
+      final fx = at.x + r * 0.25;
+      final fz = at.y - r * 0.2;
+      for (var p = 0; p < 7; p++) {
+        final a = p / 7 * math.pi * 2;
+        into.add(
+            tjg.ConeGeometry(0.07, 0.26, 4),
+            _place(fx + math.cos(a) * 0.09, _ground + 0.24,
+                fz - math.sin(a) * 0.09,
+                yaw: a, roll: -1.0, sz: 0.5),
+            petal);
+      }
+      into.add(tjs.SphereGeometry(0.06, 8, 6), _place(fx, _ground + 0.24, fz),
+          _Farm.flowerYolk);
     }
   }
 
@@ -1785,6 +2365,131 @@ class _Scenery {
     return bitmap.texture(repeat: true);
   }
 
+  /// Farm Road's own, on the near verge: a warning sign for eggs crossing,
+  /// a chevron sign, and the milk churns waiting on their stand for the
+  /// morning's pick-up. Pictures only, never words.
+  void _roadProps(_Merged into, _Settle settle, double roadZ) {
+    final rand = _propRand;
+    final verge = roadZ + 4.3;
+    final standAt = settle(Vec2(_b.min.x + 1.2, verge + 1.0), 1.5);
+    if (standAt != null) _milkStand(into, standAt, rand.range(-0.08, 0.08));
+    // Turned a little toward the camera's side, where the views come from.
+    final eggSignAt = settle(Vec2(_b.min.x + _b.width * 0.3, verge), 0.6);
+    if (eggSignAt != null) _eggCrossingSign(into, eggSignAt, 0.25);
+    final chevronAt = settle(Vec2(_b.min.x + _b.width * 0.8, verge), 1.0);
+    if (chevronAt != null) _chevronSign(into, chevronAt, 0.2);
+  }
+
+  /// A road sign's black.
+  static const int _signBlack = 0x1E1A18;
+
+  /// A road sign's yellow.
+  static const int _signYellow = 0xF5C21B;
+
+  /// The warning sign for eggs crossing: a yellow diamond edged in black on
+  /// a grey post, a black egg striding across it on two little legs.
+  void _eggCrossingSign(_Merged into, Vec2 at, double yaw) {
+    _stood.add(('egg crossing sign', at, 0.6));
+    into.add(tjg.CylinderGeometry(0.06, 0.06, 2.6, 8),
+        _inFrame(at, yaw, 0, 1.3, -0.07), 0x8C8F94,
+        baseShade: 0.7);
+    const y = 2.6;
+    into.add(tjs.BoxGeometry(1.3, 1.3, 0.05),
+        _inFrame(at, yaw, 0, y, 0, roll: math.pi / 4), _signBlack);
+    into.add(tjs.BoxGeometry(1.14, 1.14, 0.05),
+        _inFrame(at, yaw, 0, y, 0.02, roll: math.pi / 4), _signYellow);
+    into.add(
+        tjs.SphereGeometry(1, 14, 10),
+        _inFrame(at, yaw, 0.02, y + 0.08, 0.05, sx: 0.2, sy: 0.27, sz: 0.02),
+        _signBlack);
+    for (final (lx, lean) in const [(-0.07, 0.4), (0.08, -0.35)]) {
+      into.add(tjs.BoxGeometry(0.045, 0.22, 0.02),
+          _inFrame(at, yaw, lx, y - 0.26, 0.05, roll: lean), _signBlack);
+      into.add(
+          tjs.BoxGeometry(0.11, 0.04, 0.02),
+          _inFrame(at, yaw, lx - lean * 0.12 + 0.03, y - 0.37, 0.05),
+          _signBlack);
+    }
+  }
+
+  /// A chevron sign: a yellow board edged in black on two posts, three
+  /// black chevrons pointing along the road.
+  void _chevronSign(_Merged into, Vec2 at, double yaw) {
+    _stood.add(('chevron sign', at, 1.0));
+    for (final lx in [-0.62, 0.62]) {
+      into.add(tjg.CylinderGeometry(0.05, 0.05, 2.0, 8),
+          _inFrame(at, yaw, lx, 1.0, -0.07), 0x8C8F94,
+          baseShade: 0.7);
+    }
+    const y = 1.85;
+    into.add(tjs.BoxGeometry(1.9, 0.9, 0.05), _inFrame(at, yaw, 0, y, 0),
+        _signBlack);
+    into.add(tjs.BoxGeometry(1.78, 0.78, 0.05), _inFrame(at, yaw, 0, y, 0.02),
+        _signYellow);
+    for (var chevron = 0; chevron < 3; chevron++) {
+      final lx = -0.5 + chevron * 0.48;
+      for (final side in [-1.0, 1.0]) {
+        into.add(
+            tjs.BoxGeometry(0.4, 0.12, 0.02),
+            _inFrame(at, yaw, lx, y + side * 0.13, 0.05, roll: -side * 0.62),
+            _signBlack);
+      }
+    }
+  }
+
+  /// A milk stand by the road: a plank platform at a truck bed's height on
+  /// four legs, three churns on it and one waiting on the ground.
+  void _milkStand(_Merged into, Vec2 at, double yaw) {
+    _stood.add(('milk stand', at, 1.5));
+    const width = 2.6;
+    const depth = 1.1;
+    const height = 1.0;
+    for (final lx in [-width / 2 + 0.12, width / 2 - 0.12]) {
+      for (final lz in [-depth / 2 + 0.1, depth / 2 - 0.1]) {
+        into.add(tjs.BoxGeometry(0.14, height, 0.14),
+            _inFrame(at, yaw, lx, height / 2, lz), _Farm.trunk,
+            baseShade: 0.65);
+      }
+    }
+    for (final lz in [-depth / 2 + 0.1, depth / 2 - 0.1]) {
+      into.add(tjs.BoxGeometry(width - 0.2, 0.08, 0.06),
+          _inFrame(at, yaw, 0, 0.36, lz), _Farm.trunk);
+    }
+    for (var plank = 0; plank < 3; plank++) {
+      into.add(
+          tjs.BoxGeometry(width, 0.1, depth / 3 - 0.03),
+          _inFrame(at, yaw, 0, height, (plank - 1) * depth / 3),
+          plank.isEven ? _Farm.wood : _Farm.woodTop);
+    }
+    for (final lx in [-0.82, 0.0, 0.82]) {
+      _churn(into, at, yaw, lx, height + 0.05, 0);
+    }
+    _churn(into, at, yaw, width / 2 + 0.5, 0, 0.25);
+  }
+
+  /// A milk churn: a steel can, banded, its shoulders narrowing to a lidded
+  /// neck, a handle each side; at ([lx], [ly], [lz]) in its stand's frame.
+  void _churn(
+      _Merged into, Vec2 at, double yaw, double lx, double ly, double lz) {
+    const steel = 0xCBD2D8;
+    const band = 0x9AA3AB;
+    tjs.Matrix4 piece(double y, {double roll = 0, double dx = 0}) =>
+        _inFrame(at, yaw, lx + dx, ly + y, lz, roll: roll);
+    into.add(tjg.CylinderGeometry(0.25, 0.27, 0.56, 14), piece(0.28), steel,
+        baseShade: 0.75);
+    for (final y in [0.08, 0.5]) {
+      into.add(tjg.CylinderGeometry(0.278, 0.278, 0.05, 14), piece(y), band);
+    }
+    into.add(tjg.CylinderGeometry(0.14, 0.25, 0.2, 14), piece(0.66), steel);
+    into.add(tjg.CylinderGeometry(0.13, 0.14, 0.12, 12), piece(0.82), steel);
+    into.add(tjg.CylinderGeometry(0.16, 0.16, 0.06, 12), piece(0.9), band);
+    into.add(tjs.SphereGeometry(0.05, 8, 6), piece(0.95), band);
+    for (final side in [-1.0, 1.0]) {
+      into.add(tjg.TorusGeometry(0.08, 0.022, 4, 8, math.pi),
+          piece(0.6, roll: -side * math.pi / 2, dx: side * 0.22), band);
+    }
+  }
+
   // ---- the Barn at dusk: haystacks, lanterns, fireflies -------------------------------
 
   void _haystacks(_Merged into, Vec2 barnAt) {
@@ -1857,6 +2562,181 @@ class _Scenery {
         }
       }
     }));
+  }
+
+  /// The Barn's own: strings of warm bulbs over the yard, and a hay wagon
+  /// loaded high out west.
+  void _barnProps(tjs.Group group, _Merged into, _Merged small, _Settle settle,
+      Vec2 barnAt, double barnScale) {
+    _festoon(group, into, small, settle, barnAt, barnScale);
+    final wagonAt = settle(Vec2(_b.min.x + 1.5, _b.min.y - 9.5), 2.6);
+    if (wagonAt != null) _hayWagon(into, wagonAt, 0.35);
+  }
+
+  /// Strings of warm bulbs over the yard: from a post on each side of it
+  /// to the barn's eaves, along the eaves, and swooping across the yard
+  /// between the posts. The bulbs glow by their own light (one emissive
+  /// mesh for them all, a soft halo on each), no lamps of their own.
+  void _festoon(tjs.Group group, _Merged into, _Merged small, _Settle settle,
+      Vec2 barnAt, double barnScale) {
+    const postHeight = 5.2;
+    const wire = 0x2A2228;
+    final posts = [
+      settle(Vec2(barnAt.x - 14.5, _b.min.y - 5.5), 0.5),
+      settle(Vec2(barnAt.x + 14.2, _b.min.y - 5.5), 0.5),
+    ];
+    final left = posts[0];
+    final right = posts[1];
+    if (left == null || right == null) return;
+    for (final post in [left, right]) {
+      _stood.add(('lantern post', post, 0.5));
+      into.add(tjg.CylinderGeometry(0.12, 0.17, postHeight, 7),
+          _place(post.x, _ground + postHeight / 2, post.y), 0x3A2E28,
+          baseShade: 0.7);
+      into.add(tjs.BoxGeometry(0.9, 0.12, 0.12),
+          _place(post.x, _ground + postHeight - 0.2, post.y), 0x3A2E28);
+    }
+    // The barn's front corners under the eaves.
+    final halfWidth = 13.0 * barnScale / 2;
+    final front = barnAt.y + 10.0 * barnScale / 2 + 0.25;
+    final eave = _ground + 6.4 * barnScale - 0.35;
+    tjs.Vector3 top(Vec2 post) =>
+        tjs.Vector3(post.x, _ground + postHeight - 0.15, post.y);
+    final eaveLeft = tjs.Vector3(barnAt.x - halfWidth + 0.3, eave, front);
+    final eaveRight = tjs.Vector3(barnAt.x + halfWidth - 0.3, eave, front);
+    final strings = [
+      (top(left), eaveLeft, 0.9),
+      (eaveLeft, eaveRight, 0.7),
+      (eaveRight, top(right), 0.9),
+      (top(left), top(right), 2.0),
+    ];
+    final bulbs = _Merged();
+    final glows = <double>[];
+    for (final (from, to, sag) in strings) {
+      tjs.Vector3 along(double t) => tjs.Vector3(
+            from.x + (to.x - from.x) * t,
+            from.y + (to.y - from.y) * t - 4 * sag * t * (1 - t),
+            from.z + (to.z - from.z) * t,
+          );
+      final length = from.distanceTo(to);
+      final count = math.max(4, (length / 0.95).round());
+      for (var i = 0; i < count; i++) {
+        _rope(small, along(i / count), along((i + 1) / count), wire,
+            thickness: 0.05);
+        final at = along((i + 0.5) / count);
+        small.add(tjg.CylinderGeometry(0.05, 0.05, 0.12, 6),
+            _place(at.x, at.y - 0.06, at.z), wire);
+        bulbs.add(
+            tjg.IcosahedronGeometry(0.13, 1),
+            _place(at.x, at.y - 0.2, at.z, sy: 1.2),
+            i.isEven ? 0xFFE9B8 : 0xFFC978);
+        glows.addAll([at.x, at.y - 0.2, at.z]);
+      }
+    }
+    group.add(tjs.Mesh(
+      bulbs.build(),
+      tjs.MeshStandardMaterial({
+        tjs.MaterialProperty.vertexColors: true,
+        tjs.MaterialProperty.emissive: _lin(0xFFB451),
+        tjs.MaterialProperty.roughness: 0.4,
+        tjs.MaterialProperty.metalness: 0.0,
+      })
+        ..emissiveIntensity = 1.6,
+    )..name = 'festoon-bulbs');
+    group.add(tjs.Points(
+      tjs.BufferGeometry()
+        ..setAttributeFromString(
+            'position', tjs.Float32BufferAttribute.fromList(glows, 3, false)),
+      tjs.PointsMaterial({
+        tjs.MaterialProperty.color: _lin(0xFFC46B),
+        tjs.MaterialProperty.map: _EggView3D._shadowTexture,
+        tjs.MaterialProperty.transparent: true,
+        tjs.MaterialProperty.opacity: 0.55,
+        tjs.MaterialProperty.depthWrite: false,
+        tjs.MaterialProperty.blending: tjs.AdditiveBlending,
+      })
+        ..size = 1.2
+        ..sizeAttenuation = true,
+    )..name = 'festoon-glow');
+  }
+
+  /// A hay wagon: a plank bed with red sides on four spoked wheels (the
+  /// back pair the bigger), its tongue down on the grass, loaded high with
+  /// hay.
+  void _hayWagon(_Merged into, Vec2 at, double yaw) {
+    _stood.add(('hay wagon', at, 2.6));
+    const length = 4.2;
+    const width = 1.9;
+    const bed = 1.05;
+    const iron = 0x4A3426;
+    into.add(tjs.BoxGeometry(length, 0.14, width), _inFrame(at, yaw, 0, bed, 0),
+        _Farm.wood,
+        baseShade: 0.8);
+    for (final lz in [-0.6, 0.6]) {
+      into.add(tjs.BoxGeometry(length - 0.3, 0.16, 0.14),
+          _inFrame(at, yaw, 0, bed - 0.15, lz), _Farm.trunk);
+    }
+    for (final side in [-1.0, 1.0]) {
+      into.add(
+          tjs.BoxGeometry(length, 0.36, 0.08),
+          _inFrame(at, yaw, 0, bed + 0.25, side * (width / 2 - 0.02)),
+          _Farm.barnRedDark);
+      for (final lx in [-length / 2 + 0.1, 0.0, length / 2 - 0.1]) {
+        into.add(
+            tjs.BoxGeometry(0.1, 0.62, 0.1),
+            _inFrame(at, yaw, lx, bed + 0.32, side * (width / 2 + 0.03)),
+            _Farm.trunk);
+      }
+    }
+    for (final end in [-1.0, 1.0]) {
+      into.add(
+          tjs.BoxGeometry(0.08, 0.36, width),
+          _inFrame(at, yaw, end * (length / 2 - 0.02), bed + 0.25, 0),
+          _Farm.barnRedDark);
+    }
+    for (final (lx, r) in const [(-1.35, 0.78), (1.4, 0.62)]) {
+      into.add(tjg.CylinderGeometry(0.06, 0.06, width + 0.5, 6),
+          _inFrame(at, yaw, lx, r, 0, tilt: math.pi / 2), iron);
+      for (final side in [-1.0, 1.0]) {
+        final lz = side * (width / 2 + 0.2);
+        into.add(tjg.TorusGeometry(r, 0.07, 5, 20),
+            _inFrame(at, yaw, lx, r, lz), iron);
+        for (var spoke = 0; spoke < 6; spoke++) {
+          into.add(
+              tjs.BoxGeometry(0.06, r * 2 - 0.1, 0.05),
+              _inFrame(at, yaw, lx, r, lz, roll: spoke * math.pi / 6),
+              _Farm.woodTop);
+        }
+        into.add(tjg.CylinderGeometry(0.13, 0.13, 0.2, 8),
+            _inFrame(at, yaw, lx, r, lz, tilt: math.pi / 2), iron);
+      }
+    }
+    // The tongue, down on the grass in front.
+    into.add(tjs.BoxGeometry(2.0, 0.09, 0.09),
+        _inFrame(at, yaw, length / 2 + 0.8, 0.45, 0, roll: -0.36), _Farm.trunk);
+    into.add(tjs.BoxGeometry(0.09, 0.09, 0.8),
+        _inFrame(at, yaw, length / 2 + 1.72, 0.1, 0), _Farm.trunk);
+    // The load, heaped over the sides, straws poking out.
+    for (final (lx, ly, lz, sx, sy, sz, hex) in const [
+      (0.0, 1.8, 0.0, 2.2, 0.7, 1.14, _Farm.hay),
+      (-0.85, 2.3, 0.2, 1.25, 0.58, 0.86, _Farm.strawLight),
+      (0.8, 2.25, -0.18, 1.2, 0.55, 0.82, _Farm.straw),
+      (-0.1, 2.65, 0.0, 1.05, 0.48, 0.72, _Farm.hay),
+      (1.45, 1.95, 0.32, 0.85, 0.48, 0.7, _Farm.strawLight),
+    ]) {
+      into.add(tjg.IcosahedronGeometry(1, 1),
+          _inFrame(at, yaw, lx, ly, lz, sx: sx, sy: sy, sz: sz), hex,
+          baseShade: 0.72, rand: _propRand, variation: 0.06);
+    }
+    for (var i = 0; i < 14; i++) {
+      final a = _propRand.range(0, math.pi * 2);
+      into.add(
+          tjs.BoxGeometry(0.5, 0.03, 0.05),
+          _inFrame(at, yaw, math.cos(a) * 1.9, 1.6 + _propRand.range(0, 0.5),
+              -math.sin(a) * 1.0,
+              turn: a, roll: _propRand.range(-0.5, 0.5)),
+          i.isEven ? _Farm.strawLight : _Farm.hayDark);
+    }
   }
 
   /// Fireflies drifting over the meadow at dusk.

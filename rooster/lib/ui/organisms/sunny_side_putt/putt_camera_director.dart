@@ -156,20 +156,6 @@ class PuttCameraDirector {
       ..snap();
   }
 
-  /// The orbit that turns the camera partway behind [from], looking down
-  /// the line to [to]: half the turn from the hole's own view, never more
-  /// than about 45 degrees, so the shot's direction reads while the hole
-  /// keeps the orientation everyone shares.
-  double _yawToward(Vec2 from, Vec2 to) {
-    final line = to - from;
-    if (line.length < 1e-3) return PuttCameraRig.defaultYaw;
-    // The camera's away axis is (sin yaw, cos yaw) in x/z.
-    final along = math.atan2(line.x, line.y);
-    var turn = along - PuttCameraRig.defaultYaw;
-    turn = math.atan2(math.sin(turn), math.cos(turn)); // into (-pi, pi]
-    return PuttCameraRig.defaultYaw + (turn * 0.5).clamp(-0.8, 0.8);
-  }
-
   void update(double dt, PuttCameraCue cue) {
     final hole = cue.hole;
     if (hole == null) {
@@ -278,7 +264,7 @@ class PuttCameraDirector {
           // enough to aim at (aimEggPixels tall). A nest too far for that
           // gives way to the stretch toward it, the egg low in the frame;
           // the HUD points at the nest, and C still shows the whole hole.
-          final yaw = _yawToward(egg, hole.nest.position);
+          final yaw = PuttCameraRig.yawToward(egg, hole.nest.position);
           final crowd = [
             egg,
             for (final other in cue.otherEggs)

@@ -19,6 +19,7 @@ import 'package:three_js_math/three_js_math.dart' as tjs;
 
 import 'package:rooster/client/components/sunny_side_putt/core/hole.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
+import 'package:rooster/client/components/sunny_side_putt/courses/sunny_side_putt_courses.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_art.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_world3d.dart';
 
@@ -1273,6 +1274,161 @@ void main() {
     });
   });
 
+  group("the courses' props and the tees' signs", () {
+    // Every hole of every course, built once with its number, read and let
+    // go: the props its farm stood, and the sign beside its tee.
+    final built = <_BuiltHole>[];
+    setUpAll(() {
+      for (final course in sunnySidePuttCourses) {
+        for (var i = 0; i < course.holes.length; i++) {
+          final hole = course.holes[i].hole;
+          final world = PuttWorld3D(viewport: const ui.Size(800, 600));
+          world.buildHole(hole, eggRadius: 0.45, label: '${i + 1}');
+          final farm = walk(world.holeGroup('scenery')!)
+              .firstWhere((object) => object.name == 'farm');
+          final signs = walk(world.holeGroup('tee')!)
+              .where((object) => object.name == 'tee-sign')
+              .toList();
+          final sign = signs.isEmpty ? null : signs.single;
+          final face = sign?.children
+              .where((object) => object.name == 'tee-sign-face')
+              .firstOrNull;
+          built.add(_BuiltHole(
+            course: course.id,
+            hole: hole,
+            number: '${i + 1}',
+            props: (farm.userData['props'] as List)
+                .cast<(String, Vec2, double)>()
+                .toList(),
+            signAt:
+                sign == null ? null : Vec2(sign.position.x, sign.position.z),
+            signNumber: sign?.userData['number'],
+            signPainted: face?.material?.map != null,
+          ));
+          world.dispose();
+        }
+      }
+    });
+
+    const expected = {
+      'the_coop': {'sunflower': 10, 'trough': 1, 'feed sacks': 1},
+      'the_corn_maze': {'pumpkin': 8, 'corn crib': 1},
+      'the_pond': {'rowboat': 1, 'lily pad': 6},
+      'the_farm_road': {
+        'egg crossing sign': 1,
+        'chevron sign': 1,
+        'milk stand': 1,
+      },
+      'the_barn': {'lantern post': 2, 'hay wagon': 1},
+    };
+
+    test('every course stands its own props, and none of another course', () {
+      expect(built, hasLength(30));
+      for (final entry in built) {
+        final wanted = expected[entry.course]!;
+        for (final MapEntry(key: name, value: least) in wanted.entries) {
+          expect(entry.props.where((prop) => prop.$1 == name).length,
+              greaterThanOrEqualTo(least),
+              reason: '${entry.hole.id}: $name');
+        }
+        final others = {
+          for (final other in expected.entries)
+            if (other.key != entry.course) ...other.value.keys,
+        };
+        expect(entry.props.where((prop) => others.contains(prop.$1)), isEmpty,
+            reason: entry.hole.id);
+      }
+    });
+
+    test('the props stand off the table, never on the camera side', () {
+      for (final entry in built) {
+        final bounds = entry.hole.bounds;
+        for (final (name, at, radius) in entry.props) {
+          expect(at.y + radius, lessThanOrEqualTo(bounds.max.y + 1e-9),
+              reason: '${entry.hole.id}: the $name on the camera side');
+          final dx =
+              math.max(math.max(bounds.min.x - at.x, at.x - bounds.max.x), 0.0);
+          final dz =
+              math.max(math.max(bounds.min.y - at.y, at.y - bounds.max.y), 0.0);
+          expect(math.sqrt(dx * dx + dz * dz), greaterThan(radius + 1),
+              reason: '${entry.hole.id}: the $name on the table');
+        }
+      }
+    });
+
+    test("every hole's tee sign shows that hole's number", () {
+      for (final entry in built) {
+        expect(entry.signAt, isNotNull, reason: entry.hole.id);
+        expect(entry.signNumber, entry.number, reason: entry.hole.id);
+        expect(entry.signPainted, isTrue,
+            reason: '${entry.hole.id}: the number is painted');
+      }
+    });
+
+    test("the sign stands beside the tee, off the egg's path", () {
+      for (final entry in built) {
+        final hole = entry.hole;
+        final at = entry.signAt!;
+        expect(at.distanceTo(hole.tee), lessThan(15),
+            reason: '${hole.id}: beside the tee');
+        expect(at.y, lessThan(hole.bounds.max.y),
+            reason: '${hole.id}: on the camera side');
+        // Not where the close camera at the tee looks from.
+        final yaw = PuttCameraRig.yawToward(hole.tee, hole.nest.position);
+        final toCamera = Vec2(-math.sin(yaw), -math.cos(yaw));
+        expect((at - hole.tee).normalized().dot(toCamera), lessThan(0.35),
+            reason: '${hole.id}: between the camera and the egg');
+        // Off the table: out past the border, or past a rail.
+        expect(!hole.bounds.contains(at) || crossesRail(hole, hole.tee, at),
+            isTrue,
+            reason: '${hole.id}: on the green at $at');
+      }
+    });
+
+    test("the Barn's bulbs glow by their own light, no lamp added", () {
+      final hole = sunnySidePuttCourses
+          .firstWhere((course) => course.id == 'the_barn')
+          .holes
+          .first
+          .hole;
+      final world = PuttWorld3D(viewport: const ui.Size(800, 600));
+      addTearDown(world.dispose);
+      world.buildHole(hole, eggRadius: 0.45);
+      final scenery = world.holeGroup('scenery')!;
+      final bulbs = walk(scenery)
+          .firstWhere((object) => object.name == 'festoon-bulbs') as tjs.Mesh;
+      final material = bulbs.material as tjs.MeshStandardMaterial;
+      expect(material.emissiveIntensity, greaterThan(1));
+      expect(bulbs.castShadow, isFalse);
+      expect(walk(scenery).where((object) => object.name == 'festoon-glow'),
+          hasLength(1));
+      // The corners' four lanterns light the yard, as before.
+      expect(walk(scenery).whereType<tjs.PointLight>(), hasLength(4));
+    });
+
+    test('no number, no sign', () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      expect(
+          walk(world.holeGroup('tee')!)
+              .where((object) => object.name == 'tee-sign'),
+          isEmpty);
+    });
+
+    test("the sign's paint goes with the hole", () {
+      final world = PuttWorld3D(viewport: const ui.Size(800, 600));
+      world.buildHole(dressing, eggRadius: 0.45, label: '7');
+      final face = walk(world.holeGroup('tee')!)
+          .firstWhere((object) => object.name == 'tee-sign-face');
+      var disposed = false;
+      face.material!.map!.addEventListener('dispose', (tjs.Event event) {
+        disposed = true;
+      });
+      world.dispose();
+      expect(disposed, isTrue);
+    });
+  });
+
   group('the world disposes cleanly', () {
     test('every object and geometry is dead; the gpu resources fire dispose',
         () {
@@ -1335,6 +1491,53 @@ void main() {
       expect(world.eggOf('me'), isNull);
     });
   });
+}
+
+/// One catalog hole as the world built it: the props its farm stood and
+/// the sign beside its tee.
+class _BuiltHole {
+  const _BuiltHole({
+    required this.course,
+    required this.hole,
+    required this.number,
+    required this.props,
+    required this.signAt,
+    required this.signNumber,
+    required this.signPainted,
+  });
+
+  final String course;
+  final HoleDef hole;
+
+  /// The number the hole was built with (its place in the course).
+  final String number;
+  final List<(String, Vec2, double)> props;
+  final Vec2? signAt;
+  final Object? signNumber;
+  final bool signPainted;
+}
+
+/// Whether the straight run from [from] to [to] crosses one of [hole]'s
+/// rails (straight or arced).
+bool crossesRail(HoleDef hole, Vec2 from, Vec2 to) {
+  double side(Vec2 a, Vec2 b, Vec2 p) => (b - a).cross(p - a);
+  bool crosses(Vec2 a, Vec2 b) =>
+      (side(a, b, from) > 0) != (side(a, b, to) > 0) &&
+      (side(from, to, a) > 0) != (side(from, to, b) > 0);
+  for (final wall in hole.walls) {
+    if (crosses(wall.a, wall.b)) return true;
+  }
+  for (final arc in hole.arcs) {
+    Vec2 at(double t) {
+      final angle = arc.startAngle + arc.sweep * t;
+      return arc.center + Vec2(math.cos(angle), math.sin(angle)) * arc.radius;
+    }
+
+    for (var k = 0; k < 24; k++) {
+      if (crosses(at(k / 24), at((k + 1) / 24))) return true;
+    }
+  }
+  return false;
 }
 
 /// Two packed colours alike channel by channel, give or take the one step

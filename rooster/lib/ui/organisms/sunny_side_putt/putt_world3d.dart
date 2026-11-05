@@ -326,6 +326,21 @@ class PuttCameraRig {
 
   static const double defaultYaw = math.pi;
 
+  /// The orbit that turns the camera partway behind [from], looking down
+  /// the line to [to]: half the turn from the hole's own view, never more
+  /// than about 45 degrees, so the shot's direction reads while the hole
+  /// keeps the orientation everyone shares. The close camera at the egg
+  /// takes it; the tee's sign stands out of its way.
+  static double yawToward(Vec2 from, Vec2 to) {
+    final line = to - from;
+    if (line.length < 1e-3) return defaultYaw;
+    // The camera's away axis is (sin yaw, cos yaw) in x/z.
+    final along = math.atan2(line.x, line.y);
+    var turn = along - defaultYaw;
+    turn = math.atan2(math.sin(turn), math.cos(turn)); // into (-pi, pi]
+    return defaultYaw + (turn * 0.5).clamp(-0.8, 0.8);
+  }
+
   /// The tilt from the ground plane, degrees, in [pitchMin, pitchMax].
   double pitchDeg = pitchDefault;
 
@@ -986,7 +1001,12 @@ class PuttWorld3D {
     // lifts the nest with it).
     makeKind('nest').add(
         kit.nest(label: label)..position.y += _ground.at(hole.nest.position));
-    makeKind('tee').add(kit.tee()..position.y += _ground.at(hole.tee));
+    final tee = makeKind('tee')
+      ..add(kit.tee()..position.y += _ground.at(hole.tee));
+    // The hole's number on a sign beside the tee (off the table: it stands
+    // on the meadow, whatever the green's relief).
+    final sign = kit.teeSign(label: label);
+    if (sign != null) tee.add(sign);
     final decorations = makeKind('decorations');
     for (final decoration in hole.decorations) {
       final built = kit.decoration(decoration);
@@ -1010,7 +1030,8 @@ class PuttWorld3D {
             theme: _theme,
             cheerUntil: () => _cheerUntil,
             watch: () => _watch,
-            shape: kit.shape)
+            shape: kit.shape,
+            signAt: sign == null ? null : kit.teeSignSpot?.$1)
         .build();
     makeKind('scenery').add(scenery);
     final host = scenery.getObjectByName('host');

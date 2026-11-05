@@ -270,11 +270,35 @@ its own hour, read off the hole's id (`world3d/theme.dart`):
 
 | Course | Hour | Rails | Around it |
 |---|---|---|---|
-| The Coop | clear morning | timber | the hen house and its hens, the barn |
-| Corn Maze | noon | corn hedges | a corn field (plants on ploughed rows) with a scarecrow |
-| The Pond | soft afternoon | dry stone | a lake with a dock, reeds and ducks, the windmill |
-| Farm Road | golden hour | striped road barriers | the dirt road, a red tractor, a water tower, telephone poles, wheat fields, the windmill |
-| The Barn | dusk | red barn boards | the big barn, haystacks, lanterns, fireflies; its round obstacles are hay bales stood on end |
+| The Coop | clear morning | timber | the hen house and its hens, the barn, a patch of sunflowers turned to the sun, a feeding trough with its feed sacks and hens at breakfast |
+| Corn Maze | noon | corn hedges | a corn field (plants on ploughed rows) with a scarecrow, a pumpkin patch along the corn and at the scarecrow's feet, a corn crib on stilts |
+| The Pond | soft afternoon | dry stone | a lake with a dock, reeds and ducks, a rowboat tied at the dock, lily pads laid like stepping stones along the shallows, the windmill |
+| Farm Road | golden hour | striped road barriers | the dirt road, a red tractor, an eggs-crossing sign and a chevron sign, milk churns on their stand, a water tower, telephone poles, wheat fields, the windmill |
+| The Barn | dusk | red barn boards | the big barn, haystacks, lanterns, strings of glowing bulbs over the yard, a hay wagon, fireflies; its round obstacles are hay bales stood on end |
+
+Each course's own props stand at set spots round the table - mostly on
+the far side and the tee's side, where the overview and the wide shots
+see them - nudged clear of the table, the picket fence, the landmarks,
+the host and one another, never on the camera's side (`_Scenery._settle`);
+the scatter of trees, bushes and flowers keeps off them, and there are
+fewer generic bushes and groves than before. They are merged geometry
+poured into the farm's own meshes, so they cost no draw call of their
+own; the Barn's bulbs are one emissive mesh with one cloud of soft halos
+(no lights: the corners' four lanterns stay the yard's only lamps). The
+road signs carry pictures only, never words. The farm group lists what
+it stood in `userData['props']` (name, spot, footprint) for the tests.
+
+Beside every tee a painted wooden sign shows the hole's number, lettered
+like the flag's, in the course's colours (cream and comb red at the Coop,
+corn yellow and green in the maze, pond blue and white, road-sign yellow
+and black, barn red and cream; a little of its own light, more at dusk).
+It stands on the meadow just off the table, as near the tee as the table
+allows, its board leaning back and turned between the close camera and
+the overview: never on the camera's side, never within 70 degrees of
+where the close camera at the tee looks from (`PuttCameraRig.yawToward`),
+clear of the host and the corners' lanterns (`_CourseKit.teeSignSpot`).
+Off the table, no egg ever rolls through it; it is decoration only. A
+hole with no number has no sign.
 
 The host - a white rooster with his headphones on, a few eggs tall -
 stands beyond the side rail on the nest's side, about level with the
