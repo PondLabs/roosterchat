@@ -5477,6 +5477,104 @@
       "spaceName": {}
     }
   },
+  "labelPuttAwardsTitle": "And the awards go to…",
+  "@labelPuttAwardsTitle": {
+    "description": "Title of the card at the end of a minigolf course, with a podium of the top three players and a few playful awards",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttAwardsCourse": "{course} is done",
+  "@labelPuttAwardsCourse": {
+    "description": "The line under the awards card's title; the placeholder is the name of the minigolf course that just ended",
+    "type": "text",
+    "placeholders": {
+      "course": {}
+    }
+  },
+  "labelPuttAwardAce": "Ace",
+  "@labelPuttAwardAce": {
+    "description": "Name of the minigolf course award for the most holes in one",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttAwardBowlingBall": "Bowling ball",
+  "@labelPuttAwardBowlingBall": {
+    "description": "Name of the minigolf course award for knocking the most other players' eggs (balls) at rest",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttAwardHighFlyer": "High flyer",
+  "@labelPuttAwardHighFlyer": {
+    "description": "Name of the minigolf course award for the longest flight off a ramp (kicker)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttAwardStickyFingers": "Sticky fingers",
+  "@labelPuttAwardStickyFingers": {
+    "description": "Name of the minigolf course award for stealing the most power-ups from other players",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttAwardHardBoiled": "Hard-boiled",
+  "@labelPuttAwardHardBoiled": {
+    "description": "Name of the minigolf course award for the egg whose shield stopped the most attacks (a pun on a tough egg)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttAwardMakingASplash": "Making a splash",
+  "@labelPuttAwardMakingASplash": {
+    "description": "Name of the minigolf course's joke award for the egg that fell in the water (or off the course) the most",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttAwardAceFigure": "{count,plural, =1{{count} hole in one}other{{count} holes in one}}",
+  "@labelPuttAwardAceFigure": {
+    "description": "What the Ace award was for; the placeholder is how many holes the player sank with their first stroke",
+    "type": "text",
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "labelPuttAwardKnocksFigure": "{count,plural, =1{{count} egg knocked}other{{count} eggs knocked}}",
+  "@labelPuttAwardKnocksFigure": {
+    "description": "What the Bowling ball award was for; the placeholder is how many resting eggs the player's egg rolled into",
+    "type": "text",
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "labelPuttAwardFlightFigure": "{eggs,plural, =1{{eggs} egg long}other{{eggs} eggs long}}",
+  "@labelPuttAwardFlightFigure": {
+    "description": "How far the High flyer award's flight went, measured in egg lengths (the game has no metres); the placeholder is the count",
+    "type": "text",
+    "placeholders": {
+      "eggs": {}
+    }
+  },
+  "labelPuttAwardStealsFigure": "{count,plural, =1{{count} power-up pinched}other{{count} power-ups pinched}}",
+  "@labelPuttAwardStealsFigure": {
+    "description": "What the Sticky fingers award was for; the placeholder is how many power-ups the player stole",
+    "type": "text",
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "labelPuttAwardBlocksFigure": "{count,plural, =1{{count} attack shrugged off}other{{count} attacks shrugged off}}",
+  "@labelPuttAwardBlocksFigure": {
+    "description": "What the Hard-boiled award was for; the placeholder is how many attacks the player's shield stopped",
+    "type": "text",
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "labelPuttAwardDunksFigure": "{count,plural, =1{{count} dunk}other{{count} dunks}}",
+  "@labelPuttAwardDunksFigure": {
+    "description": "What the Making a splash award was for; the placeholder is how many times the player's egg fell in the water or off the course",
+    "type": "text",
+    "placeholders": {
+      "count": {}
+    }
+  },
   "labelPuttCastBy": "{name}: {power}",
   "@labelPuttCastBy": {
     "description": "The toast under the top bar when another player casts a power-up; the placeholders are the player's name and the power-up's name, e.g. Lou: Corn Rain",

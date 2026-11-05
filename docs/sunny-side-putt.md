@@ -57,6 +57,37 @@ results):
   another rolls into hears who did it in the cast feed ("Jonas knocked
   your egg!", or "You knocked Lou's egg").
 
+### Course awards
+
+When a course's last hole is played, its results card gives way to the
+course's awards before the match moves on (to the next course, the vote,
+or the totals at match over); the same Continue, or the same 8-second
+pause in a live session, moves on from them.
+
+- A podium of the top three by the match's totals so far: second on the
+  left, first in the middle on the tallest step, third on the right, each
+  chick in its half shell and its player's hat, with the player's name
+  under it in their colour. Golf ranks, so a tie shares a step and the
+  next place skips ahead (1, 1, 3); spectators stand on no step. A solo
+  match is a podium of one.
+- Up to four awards, one line each with an icon, its name, the figure
+  and the winner's little egg and name, in this order: **Ace** (most
+  holes in one), **Bowling ball** (most resting eggs knocked by your
+  rolling one), **High flyer** (the longest kicker flight, takeoff to the
+  first touchdown, in egg lengths: the world has no metres, an egg is two
+  ball radii long), **Sticky fingers** (most Thieving Crow thefts),
+  **Hard-boiled** (most harmful casts a Thick Shell stopped) and **Making
+  a splash** (most dunks: water, the silo, out of bounds). Only awards
+  someone earned show; a tie goes to the better card.
+- The figures are the engine's own tally (`core/awards.dart`), fed by the
+  events it already raises (`BallKnocked`, `BallLaunched`/`BallLanded`,
+  `BallCaptured` on the first stroke, `PowerUpStolen`, `ShieldBlocked`,
+  the splashes), cleared when a course starts and kept in the snapshot
+  (an egg still in the air included), so every client shows the same card
+  and a host handoff keeps it. The awards stage is
+  `PuttEngine.courseAwardsUp`: still the `holeScoreboard` phase, after
+  the last hole's results; the card is `putt_awards_card.dart`.
+
 ### Modes
 
 - **Casual** - one course, then the group votes the next.

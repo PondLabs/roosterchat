@@ -189,6 +189,8 @@ void main() {
       for (var frame = 0; frame < 40; frame++) {
         match.update(0.3); // run the hole out, frame by frame
       }
+      expect(match.advance(), isTrue); // the course's awards
+      expect(match.engine.courseAwardsUp, isTrue);
       expect(match.advance(), isTrue);
       expect(match.phase, PuttPhase.awaitingNextCourse);
       expect(match.startCourse('other'), isTrue);

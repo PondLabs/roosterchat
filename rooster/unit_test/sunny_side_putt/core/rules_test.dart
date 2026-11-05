@@ -440,6 +440,9 @@ void main() {
       expect(engine.currentHole!.id, 'h2', reason: 'the third hole first');
       playHoleOut(engine);
       expect(engine.advance(), isTrue);
+      expect(engine.courseAwardsUp, isTrue,
+          reason: 'its last hole: the course\'s awards');
+      expect(engine.advance(), isTrue);
       expect(engine.phase, PuttPhase.awaitingNextCourse,
           reason: 'the course ends after its last hole as usual');
     });
@@ -453,7 +456,11 @@ void main() {
       playHoleOut(engine); // hole 1
       expect(engine.advance(), isTrue); // hole 2
       playHoleOut(engine); // hole 2
-      expect(engine.advance(), isTrue); // course over
+      expect(engine.advance(), isTrue); // course over: its awards
+      expect(engine.phase, PuttPhase.holeScoreboard);
+      expect(engine.courseAwardsUp, isTrue);
+      expect(engine.advance(), isTrue); // the vote
+      expect(engine.courseAwardsUp, isFalse);
       expect(engine.phase, PuttPhase.awaitingNextCourse);
       engine.player('p1')!.inventory.add('test/coffee'); // carried over
       expect(engine.startCourse('meadow'), isTrue);
@@ -497,9 +504,13 @@ void main() {
       engine.join('p1');
       engine.start();
       playHoleOut(engine);
+      expect(engine.advance(), isTrue); // the course's awards
+      expect(engine.courseAwardsUp, isTrue);
       expect(engine.advance(), isTrue); // next COURSE, not awaiting votes
       expect(engine.currentCourse!.id, 'c1');
       playHoleOut(engine);
+      engine.advance(); // the awards
+      expect(engine.phase, PuttPhase.holeScoreboard);
       engine.advance();
       expect(engine.phase, PuttPhase.matchOver);
       expect(engine.totals['p1'], 2); // a hole-in-one on each course
