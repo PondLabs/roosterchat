@@ -596,6 +596,11 @@ class SunnySidePuttGame extends FlameGame {
     super.update(dt);
     match.update(dt);
     targeting.validate(match);
+    // A slot armed (or a picker opened) takes the green from the aim.
+    if (targeting.isActive && aim.isActive) {
+      aim.cancel();
+      _dragAnchor = null;
+    }
     aim.noWobble = match.myNextShotSteady;
     aim.wobbleAmplitude = match.config.wobbleMaxRadians;
     aimLayer.update(this, dt);
@@ -775,6 +780,7 @@ class SunnySidePuttGame extends FlameGame {
         name: displayNameOf(match, ball.playerId),
         color: tintFor(ball.playerId),
         at: world3d.projectToWorld(at, height: lift),
+        dim: aim.isActive,
       ));
     }
     return tags;

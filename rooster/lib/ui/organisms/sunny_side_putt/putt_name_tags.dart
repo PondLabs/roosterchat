@@ -19,11 +19,15 @@ class PuttTag {
   final Color color;
   final Offset at;
 
+  /// Faded back (while I aim, the green ahead matters more).
+  final bool dim;
+
   const PuttTag({
     required this.playerId,
     required this.name,
     required this.color,
     required this.at,
+    this.dim = false,
   });
 }
 
@@ -74,6 +78,7 @@ List<PuttTag> declutterTags(List<PuttTag> tags) {
         name: tag.name,
         color: tag.color,
         at: moved[tag.playerId] ?? tag.at,
+        dim: tag.dim,
       ),
   ];
 }
@@ -97,7 +102,10 @@ class PuttNameTags extends StatelessWidget {
               top: tag.at.dy,
               child: FractionalTranslation(
                 translation: const Offset(-0.5, -1),
-                child: _TagPill(tag: tag),
+                child: Opacity(
+                  opacity: tag.dim ? 0.35 : 1,
+                  child: _TagPill(tag: tag),
+                ),
               ),
             ),
         ],

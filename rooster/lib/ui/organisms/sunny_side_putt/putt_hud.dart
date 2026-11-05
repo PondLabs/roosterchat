@@ -1019,11 +1019,14 @@ class PuttHeadline extends StatefulWidget {
 
 class _PuttHeadlineState extends State<PuttHeadline>
     with SingleTickerProviderStateMixin {
-  /// In, hold, out: the banner pops, stays a breath, then goes.
-  static const _life = Duration(milliseconds: 2600);
-
-  late final AnimationController _clock =
-      AnimationController(vsync: this, duration: _life)..forward();
+  /// In, hold, out: the banner pops, stays a breath, then goes. The hole's
+  /// own card goes with the camera's opening sweep, before the play view.
+  late final AnimationController _clock = AnimationController(
+    vsync: this,
+    duration: widget.kind == PuttHeadlineKind.holeStart
+        ? const Duration(milliseconds: 2000)
+        : const Duration(milliseconds: 2600),
+  )..forward();
 
   @override
   void dispose() {
