@@ -247,7 +247,7 @@ void main() {
       expect(events.whereType<HoleEnded>().single.completed, isFalse);
     });
 
-    test('aim wobble is seeded: same seed, same deviation', () {
+    test('a shot fires exactly where it was aimed', () {
       ShotApplied run() {
         final engine = PuttEngine(rulesConfig(
             seed: 31337, wobbleMaxRadians: 0.05, holeTimeLimitSeconds: 30));
@@ -262,8 +262,8 @@ void main() {
       final first = run();
       final second = run();
       expect(second.actualAngle, first.actualAngle);
-      expect((first.actualAngle - first.aimedAngle).abs(),
-          lessThanOrEqualTo(0.05 + 1e-12));
+      // The sway is the view's, drawn on the arrow and in the angle sent.
+      expect(first.actualAngle, first.aimedAngle);
     });
   });
 

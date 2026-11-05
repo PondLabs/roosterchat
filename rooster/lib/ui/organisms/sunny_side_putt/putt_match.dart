@@ -437,8 +437,8 @@ class PuttMatch extends ChangeNotifier {
 
   // ---- player intent ----------------------------------------------------------
 
-  /// STRIKE. The engine applies its own wobble to the REAL angle; the view
-  /// only showed the arrow swaying as a warning.
+  /// STRIKE, exactly at [angle]: the view sends the angle its arrow shows
+  /// at release (the sway included), and the engine adds nothing.
   bool submitShot(double angle, double power) {
     remoteMove
         ?.call(ShotInput(playerId: localPlayerId, angle: angle, power: power));

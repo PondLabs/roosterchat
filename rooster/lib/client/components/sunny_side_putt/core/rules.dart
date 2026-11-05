@@ -9,7 +9,7 @@
 //     -> per course, per hole: holePlay
 //        - everyone strokes simultaneously, in the no-turn-order sense:
 //          a player submits whenever their egg is at rest and it fires at
-//          once (aim wobble rolled from the seeded RNG at that moment)
+//          once, exactly at the aimed angle (the arrow's sway is the view's)
 //        - the hole's timer runs the whole time (default 2 minutes), with
 //          cues at 60/30/15/5 s and per-second in the last 15 s
 //        - hole ends when all eggs are in the nest or the timer runs out;
@@ -105,8 +105,10 @@ class PuttConfig {
   /// The per-hole time limit in seconds (the spec's 2 minutes).
   final int holeTimeLimitSeconds;
 
-  /// Largest aim wobble the engine may roll (radians), symmetric around
-  /// the aim. Hawk Eye zeroes it.
+  /// How far the aim arrow sways either side of the pull (radians). The
+  /// view draws the sway and fires the angle the arrow shows at release:
+  /// the engine fires every shot exactly where it was aimed, so what the
+  /// player sees is what goes. Hawk Eye holds the arrow still.
   final double wobbleMaxRadians;
 
   /// Players above this number join as spectators (the spec's 1-8).
@@ -217,7 +219,7 @@ class ShotApplied extends PuttEvent {
   final String playerId;
   final double aimedAngle;
 
-  /// What actually fired (aim plus the rolled wobble).
+  /// What actually fired: the aimed angle (the engine adds nothing).
   final double actualAngle;
   final double power;
 
@@ -753,11 +755,10 @@ class PuttEngine {
     final world = _world!;
     final player = _players[input.playerId]!;
     final mods = player.nextShot;
-    var angle = input.angle;
+    // Exactly where it was aimed: the sway is the view's, drawn on the
+    // arrow and already in the angle it sent.
+    final angle = input.angle;
     var power = input.power;
-    if (!mods.noWobble) {
-      angle += _rng.nextSymmetric(config.wobbleMaxRadians);
-    }
     power = (power * mods.powerMultiplier).clamp(0.0, 1.0);
     if (mods.hop) {
       world.setBallFlagUntilRest(input.playerId, PowerUpFlag.hop);

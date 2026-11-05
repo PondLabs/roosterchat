@@ -61,10 +61,10 @@ class AimController {
   /// Frequency (Hz) of the arrow's sway while the aim wobbles.
   static const double wobbleHz = 1.6;
 
-  /// The wobble the engine may roll into a real shot (see
-  /// `PuttConfig.wobbleMaxRadians`); the arrow's sway mirrors it. The
-  /// owning view keeps this in sync with the engine's config.
-  final double wobbleAmplitude;
+  /// How far the arrow sways (see `PuttConfig.wobbleMaxRadians`); the shot
+  /// fires at the swayed angle the arrow shows at release. The owning view
+  /// keeps this in sync with the engine's config.
+  double wobbleAmplitude;
 
   AimController({
     this.maxDragLength = 8.0,

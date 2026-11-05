@@ -4,16 +4,16 @@ The first call activity: a minigolf whose balls are EGGS and whose
 holes are NESTS, on a farm, with power-ups. Inspired by Discord's Putt
 Party — the numbers follow it; the identity is the Rooster's own.
 
-![the egg on the tee](images/sunny-side-putt/01-the-egg-on-the-tee.png)
-![aiming, the arrow on the turf](images/sunny-side-putt/02-aiming-the-putt.png)
+![the eggs on the tee: name tags, the viewer's pin and ring](images/sunny-side-putt/01-the-egg-on-the-tee.jpg)
+![aiming: the arrow and the dotted guide toward the bumper crown](images/sunny-side-putt/02-aiming-the-putt.jpg)
 
 In play:
 
-![in the nest](images/sunny-side-putt/05-in-the-nest.png)
-![hole end](images/sunny-side-putt/06-hole-end.png)
+![a hole in one: the egg hatches in the nest](images/sunny-side-putt/05-in-the-nest.jpg)
+![the hole's results](images/sunny-side-putt/06-hole-end.jpg)
 
-A short gameplay clip (aim, roll, the Rabbit Hole trick, the
-scoreboard):
+A short gameplay clip (the coach, the aim, the roll, the hatch, the
+results):
 
 [putt-sunny-side-putt-3d.mp4](images/sunny-side-putt/putt-sunny-side-putt-3d.mp4)
 
@@ -27,8 +27,10 @@ scoreboard):
 - Out of time: the hole scores max(strokes taken, par + 2). Putt
   Party's exact rule is not documented anywhere we could verify; this
   is ours, and it punishes stalling without ending a comeback.
-- Aiming is a slingshot drag with a small wobble on the arrow - the
-  Hawk Eye power-up steadies it.
+- Aiming is a slingshot drag; the arrow sways a little (about 3
+  degrees either side) and the putt goes exactly where the arrow points
+  at release, so the timing of the release is the skill; the engine adds
+  no hidden error. The Hawk Eye power-up holds the arrow still.
 - Mid-join: entering now puts you on the current hole's tee; the holes
   you missed score par.
 

@@ -589,6 +589,7 @@ class SunnySidePuttGame extends FlameGame {
     match.update(dt);
     targeting.validate(match);
     aim.noWobble = match.myNextShotSteady;
+    aim.wobbleAmplitude = match.config.wobbleMaxRadians;
     aimLayer.update(this, dt);
     fx.update(dt);
     _updateHopRides();
@@ -726,8 +727,12 @@ class SunnySidePuttGame extends FlameGame {
           power: aimState.power,
           dragLength: aimState.dragLength,
           eggRadius: eggRadius,
+          // The guide runs from the pull's own angle (cached while the pull
+          // holds) and turns with the sway, so it always shows where the
+          // arrow, and so the shot, points.
           preview: aimState.dragLength >= AimController.deadZone
-              ? _previewFor(aimState.angle, aimState.power)
+              ? _swayed(_previewFor(aimState.angle, aimState.power),
+                  aim.origin!, aim.visualWobble(aimLayer.holdSeconds))
               : const [],
         );
       }
@@ -771,6 +776,18 @@ class SunnySidePuttGame extends FlameGame {
 
   ({double angle, double power})? _previewKey;
   List<core.Vec2> _preview = const [];
+
+  /// [points] turned by [angle] about [origin] (the guide under the sway).
+  static List<core.Vec2> _swayed(
+      List<core.Vec2> points, core.Vec2 origin, double angle) {
+    if (angle == 0 || points.isEmpty) return points;
+    final c = math.cos(angle), s = math.sin(angle);
+    return [
+      for (final p in points)
+        core.Vec2(origin.x + (p.x - origin.x) * c - (p.y - origin.y) * s,
+            origin.y + (p.x - origin.x) * s + (p.y - origin.y) * c),
+    ];
+  }
 
   /// The predicted roll for this aim, cached while the aim holds still.
   List<core.Vec2> _previewFor(double angle, double power) {
@@ -952,11 +969,14 @@ class SunnySidePuttGame extends FlameGame {
     if (!aim.isActive) return;
     aim.update(_pullPoint(point));
     _dragAnchor = null;
+    // The shot goes where the arrow points this frame, sway and all.
+    final sway = aim.visualWobble(aimLayer.holdSeconds);
     final shot = aim.commit();
     if (shot == null) return;
+    final angle = shot.angle + sway;
     final at = match.myBall?.position;
-    if (match.submitShot(shot.angle, shot.power) && at != null) {
-      fx.dust(at, shot.angle);
+    if (match.submitShot(angle, shot.power) && at != null) {
+      fx.dust(at, angle);
     }
   }
 
