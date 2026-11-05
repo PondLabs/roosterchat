@@ -5,6 +5,7 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rooster/client/components/sunny_side_putt/core/hole.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/rules.dart';
 import 'package:rooster/client/components/sunny_side_putt/courses/course_kit.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_match.dart';
@@ -40,6 +41,33 @@ void main() {
       expect(match.myBall, isNull,
           reason: 'a spectator has no egg on the green');
       expect(match.myShotReady, isFalse);
+    });
+  });
+
+  group('resets', () {
+    test('a fast egg into the pond splashes there and pops up home', () {
+      final match = PuttMatch.solo();
+      final hole = match.hole!;
+      final pond = hole.water.first as WaterCircle;
+      final from = match.myBall!.position;
+      // Hard at the pond's middle: in and put back within one tick.
+      final toward = pond.center - from;
+      expect(match.submitShot(toward.angle, 0.9), isTrue);
+      final spots = <PuttFxSpot>[];
+      for (var frame = 0; frame < 120; frame++) {
+        match.update(1 / 60);
+        spots.addAll(match.fxSpots);
+        match.fxSpots.clear();
+      }
+      final splash =
+          spots.where((spot) => spot.kind == PuttFxSpotKind.splash).toList();
+      expect(splash, hasLength(1));
+      expect(splash.single.at!.distanceTo(pond.center),
+          lessThanOrEqualTo(pond.radius + 0.5));
+      final back =
+          spots.where((spot) => spot.kind == PuttFxSpotKind.back).toList();
+      expect(back.single.at!.distanceTo(from), lessThan(0.5),
+          reason: 'it pops up where it was putted from');
     });
   });
 

@@ -374,7 +374,7 @@ class _PuttFxPool {
         if (rings >= _rings.length) continue;
         final ring = _rings[rings++];
         ring.visible = true;
-        final radius = fx.size * (0.3 + progress * 1.4);
+        final radius = fx.size * (0.3 + progress * 1.4) * math.sqrt(scale);
         ring.scale.setValues(radius, radius, 1);
         ring.position
             .setValues(fx.at.x, (ground?.at(fx.at) ?? 0) + 0.08, fx.at.y);
@@ -436,8 +436,11 @@ class _PuttFxPool {
         lift = fx.height!;
       }
       sprite.position.setValues(at.x, (ground?.at(at) ?? 0) + lift, at.y);
+      // What must read from the play camera's distance grows with it.
       final grow = (fx.kind == PuttWorldFxKind.confetti ||
-              fx.kind == PuttWorldFxKind.sparkle)
+              fx.kind == PuttWorldFxKind.sparkle ||
+              fx.kind == PuttWorldFxKind.droplet ||
+              fx.kind == PuttWorldFxKind.poof)
           ? scale
           : 1.0;
       sprite.scale.setValues(width * grow, height * grow, 1);

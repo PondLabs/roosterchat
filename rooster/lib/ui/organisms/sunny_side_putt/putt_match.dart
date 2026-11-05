@@ -279,9 +279,12 @@ class PuttMatch extends ChangeNotifier {
       // Water, then the silo's swallow zone, then off the green.
       handled = false;
       for (final shape in h.water) {
-        if (shape.contains(before)) {
+        // The egg went in (and was put back) within the tick: its last
+        // drawn spot is often still on the bank, so look a step around it.
+        final entry = _entryNear(before, shape.contains);
+        if (entry != null) {
           notices.add(const PuttNotice(PuttSfx.water));
-          spots.add(PuttFxSpot(PuttFxSpotKind.splash, at: before));
+          spots.add(PuttFxSpot(PuttFxSpotKind.splash, at: entry));
           // Where it came back: the egg pops up there, so the player sees
           // the stroke counted and the egg home.
           spots.add(PuttFxSpot(PuttFxSpotKind.back, at: after, who: id));
@@ -292,21 +295,39 @@ class PuttMatch extends ChangeNotifier {
       if (handled) continue;
 
       for (final well in h.wells) {
-        if (well.swallowRadius > 0 &&
-            before.distanceTo(well.position) <= well.swallowRadius) {
+        if (well.swallowRadius <= 0) continue;
+        final entry = _entryNear(
+            before, (p) => p.distanceTo(well.position) <= well.swallowRadius);
+        if (entry != null) {
           notices.add(const PuttNotice(PuttSfx.swallow));
-          spots.add(PuttFxSpot(PuttFxSpotKind.out, at: before));
+          spots.add(PuttFxSpot(PuttFxSpotKind.out, at: entry));
           handled = true;
           break;
         }
       }
       if (handled) continue;
 
-      if (!h.bounds.contains(before)) {
+      final out = _entryNear(before, (p) => !h.bounds.contains(p));
+      if (out != null) {
         notices.add(const PuttNotice(PuttSfx.out));
-        spots.add(PuttFxSpot(PuttFxSpotKind.out, at: before));
+        spots.add(PuttFxSpot(PuttFxSpotKind.out, at: out));
       }
     }
+  }
+
+  /// The spot nearest [from] (itself, or within a frame's roll of it) for
+  /// which [inside] holds, or null: where a reset egg met its hazard.
+  static Vec2? _entryNear(Vec2 from, bool Function(Vec2 point) inside) {
+    if (inside(from)) return from;
+    for (final reach in const [0.4, 0.8, 1.2]) {
+      for (var i = 0; i < 16; i++) {
+        final angle = i * math.pi / 8;
+        final p = Vec2(
+            from.x + math.cos(angle) * reach, from.y + math.sin(angle) * reach);
+        if (inside(p)) return p;
+      }
+    }
+    return null;
   }
 
   // ---- state the HUD and game read ------------------------------------------

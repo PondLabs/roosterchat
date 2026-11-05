@@ -113,6 +113,11 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
   List<String> _powerUps = const [];
   String? _arm;
   double _armAt = 3;
+
+  /// The query's staged splash: the first bot's first putt of the hole
+  /// goes into the nearest pond (for a look at the splash and the return).
+  bool _splash = false;
+  bool _splashed = false;
   bool _armed = false;
 
   static const _step = Duration(milliseconds: 33);
@@ -137,6 +142,7 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
         .toList();
     _arm = query['arm'];
     _armAt = double.tryParse(query['armAt'] ?? '') ?? 3;
+    _splash = query['splash'] == '1';
     final bots = (int.tryParse(query['bots'] ?? '') ?? 3).clamp(0, 7);
     final seated = [for (final (id, _) in _crew.take(bots)) id];
     final played =
@@ -496,7 +502,15 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
       if (_holeTime < nextAt) continue;
       final shots = _botShots[ball.playerId] ?? 0;
       final toNest = hole.nest.position - ball.position;
-      if (shots >= 3 && toNest.length < 6) {
+      final pond = _splash && !_splashed && order == 1
+          ? _nearestWater(hole, ball.position)
+          : null;
+      if (pond != null) {
+        // Staged: straight into the pond, with pace.
+        _splashed = true;
+        final shot = putt(ball.position, pond, arrival: 4.5);
+        match.engine.submitShot(ball.playerId, shot.angle, shot.power);
+      } else if (shots >= 3 && toNest.length < 6) {
         _rabbitHop(ball.playerId, hole.nest.position);
       } else {
         final target = _nextTarget(hole, ball.position);
@@ -518,6 +532,26 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
       _botShots[ball.playerId] = shots + 1;
       _botNextAt[ball.playerId] = _holeTime + 2.2 + order * 0.4;
     }
+  }
+
+  /// The middle of the pond nearest [from], or null on a dry hole.
+  static Vec2? _nearestWater(HoleDef hole, Vec2 from) {
+    Vec2? best;
+    var bestDistance = double.infinity;
+    for (final shape in hole.water) {
+      final Vec2 middle = switch (shape) {
+        WaterCircle() => shape.center,
+        WaterRect() => shape.rect.center,
+        WaterPolygon() =>
+          shape.points.reduce((a, b) => a + b) * (1 / shape.points.length),
+      };
+      final d = middle.distanceTo(from);
+      if (d < bestDistance) {
+        best = middle;
+        bestDistance = d;
+      }
+    }
+    return best;
   }
 
   /// The power that leaves [playerId]'s egg nearest [target] along

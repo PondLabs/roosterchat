@@ -916,7 +916,7 @@ class SunnySidePuttGame extends FlameGame {
         case PuttFxSpotKind.splash:
           if (spot.at != null) {
             fx.splash(spot.at!);
-            fx.ring(spot.at!, PuttPalette.water, size: 2.2);
+            fx.ring(spot.at!, PuttPalette.shell, size: 2.4);
             fx.ring(spot.at!, PuttPalette.shell, size: 1.4);
           }
         case PuttFxSpotKind.back:
@@ -1176,10 +1176,12 @@ class PuttFxLayer {
         velocity: core.Vec2(math.cos(angle), math.sin(angle)) * speed,
         life: 0.8,
         kind: _FxKind.droplet,
-        size: i.isEven ? 0.32 : 0.24,
-        color: i % 3 == 0
-            ? const ui.Color(0xFFFFFFFF)
-            : const ui.Color(0xFFBFE6FF),
+        size: i.isEven ? 0.42 : 0.3,
+        // White spray over a few blue drops: the water's own blue would
+        // hide them against the pond.
+        color: i % 3 == 2
+            ? const ui.Color(0xFF8FD0FF)
+            : const ui.Color(0xFFFFFFFF),
       ));
     }
   }
