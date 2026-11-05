@@ -98,6 +98,37 @@ void main() {
 
     await tester.clearUserData();
     final app = await tester.setupApp();
+
+    // Whatever happens below, the game, the calls and the clients go down
+    // before the test ends: a failure halfway used to leave the WebRTC stack
+    // and the game's surface up, and the run hung on its way out until the
+    // job's timeout. (Teardowns run last registered first: this one last.)
+    var tornDown = false;
+    Future<void> takeDown() async {
+      if (tornDown) return;
+      tornDown = true;
+      // The game's 3D surface (an ANGLE texture) and its sound players are
+      // native resources that only go when their widgets are disposed:
+      // take the whole tree down while the engine still runs, and give the
+      // disposals a beat, so the process does not meet them on its way
+      // out.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 500));
+      // The voice call goes down before the app's own shutdown: a process
+      // that tears down with the WebRTC stack still up dies after the
+      // run's summary prints (exit 1 with every test green), which reads as
+      // a failure.
+      await _bounded(app.clientManager.callManager.disconnect(),
+              'the calls going down',
+              seconds: 20)
+          .catchError((Object _) {});
+      await _bounded(app.clientManager.close(), 'the clients closing',
+              seconds: 20)
+          .catchError((Object _) {});
+      await tester.clean();
+    }
+
+    addTearDown(takeDown);
     await tester.pumpWidget(app);
     await tester.login(app);
     await tester.pumpAndSettle();
@@ -193,7 +224,8 @@ void main() {
     addTearDown(() async {
       final session = bobVoip!.currentSession;
       if (session != null && session.state != VoipState.ended) {
-        await session.hangUpCall().catchError((_) {});
+        await _bounded(session.hangUpCall(), "bob's hang up", seconds: 20)
+            .catchError((Object _) {});
       }
     });
     await _bounded(bobVoip!.joinCall(), "bob's join of the call");
@@ -235,16 +267,37 @@ void main() {
 
     SunnySidePuttGame? aliceGame;
     final gameWidget = find.byType(GameWidget);
-    await tester.waitFor(() {
-      // The stage mounts the game a beat after it shows: until then there
-      // is nothing to read.
-      if (gameWidget.evaluate().isEmpty) return false;
-      aliceGame =
-          (tester.widget(gameWidget) as GameWidget).game as SunnySidePuttGame?;
-      return aliceGame != null &&
-          aliceGame!.match.phase == PuttPhase.holePlay &&
-          aliceGame!.match.myShotReady;
-    }, skipPumpAndSettle: true, timeout: const Duration(seconds: 60));
+    try {
+      await tester.waitFor(() {
+        // The stage mounts the game a beat after it shows: until then there
+        // is nothing to read.
+        if (gameWidget.evaluate().isEmpty) return false;
+        aliceGame = (tester.widget(gameWidget) as GameWidget).game
+            as SunnySidePuttGame?;
+        return aliceGame != null &&
+            aliceGame!.match.phase == PuttPhase.holePlay &&
+            aliceGame!.match.myShotReady;
+      }, skipPumpAndSettle: true, timeout: const Duration(seconds: 60));
+    } catch (_) {
+      // Say how far it got: the stage, the game, the session, the match.
+      final aliceActivities = aliceClient
+          .getRoom(voiceChannel.identifier)
+          ?.getComponent<MatrixCallActivityComponent>();
+      final visible = aliceActivities?.visibleSessions() ?? const [];
+      final session = visible.isEmpty
+          ? null
+          : aliceActivities!.sessionOf(visible.first.sessionId);
+      final match = aliceGame?.match;
+      // ignore: avoid_print
+      print('Sunny Side Putt e2e: the game never came up ready: '
+          'stage ${find.byType(ActivityStage).evaluate().length}, '
+          'game ${gameWidget.evaluate().length}, '
+          'sessions $visible, '
+          'session host ${session?.isHost} players ${session?.snapshot.players}, '
+          'phase ${match?.phase}, my egg ${match?.myBall?.position} '
+          'asleep ${match?.myBall?.asleep}');
+      rethrow;
+    }
     final game = aliceGame!;
     final aliceId = game.match.localPlayerId;
 
@@ -347,23 +400,7 @@ void main() {
           'miss (see the issue).');
     }
 
-    // The game's 3D surface (an ANGLE texture) and its sound players are
-    // native resources that only go when their widgets are disposed: take
-    // the whole tree down while the engine still runs, and give the
-    // disposals a beat, so the process does not meet them on its way out.
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump(const Duration(milliseconds: 500));
-
-    // The voice call goes down before the app's own shutdown: a process
-    // that tears down with the WebRTC stack still up dies after the run's
-    // summary prints (exit 1 with every test green), which reads as a
-    // failure. The pending tearDown helper runs too late - the client
-    // manager's close has already taken the transports down by then.
-    await _bounded(
-        app.clientManager.callManager.disconnect(), 'the calls going down');
-
-    await app.clientManager.close();
-    await tester.clean();
+    await takeDown();
   });
 }
 
