@@ -139,4 +139,15 @@ class FakePowerUpContext implements PowerUpContext {
 
   @override
   void addShield(String playerId) => shields.add(playerId);
+
+  /// Players whose shell stops the cast (and which the fake spent).
+  final Set<String> shelled = {};
+  final List<String> stoppedBy = [];
+
+  @override
+  bool shieldStops(String playerId) {
+    if (playerId == casterId || !shelled.remove(playerId)) return false;
+    stoppedBy.add(playerId);
+    return true;
+  }
 }

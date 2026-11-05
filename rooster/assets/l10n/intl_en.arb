@@ -5530,18 +5530,32 @@
       "name": {}
     }
   },
-  "labelPuttMyShellHeld": "Your shell blocked it!",
-  "@labelPuttMyShellHeld": {
-    "description": "The toast when the player's Thick Shell stops another player's power-up (the toast before it says which one)",
-    "type": "text",
-    "placeholders": {}
-  },
-  "labelPuttShellHeld": "{name}'s shell blocked it",
-  "@labelPuttShellHeld": {
-    "description": "The toast when a player's Thick Shell stops a power-up (the toast before it says which one); the placeholder is that player's name",
+  "labelPuttMyShellBlocked": "Your shell blocked {caster}'s {power}!",
+  "@labelPuttMyShellBlocked": {
+    "description": "The toast when the player's Thick Shell stops another player's power-up; the placeholders are the caster's name and the power-up's name, e.g. Your shell blocked Maya's Corn Rain!",
     "type": "text",
     "placeholders": {
-      "name": {}
+      "caster": {},
+      "power": {}
+    }
+  },
+  "labelPuttShellBlockedMine": "{name}'s shell blocked your {power}",
+  "@labelPuttShellBlockedMine": {
+    "description": "The toast when another player's Thick Shell stops the player's own power-up; the placeholders are that player's name and the power-up's name",
+    "type": "text",
+    "placeholders": {
+      "name": {},
+      "power": {}
+    }
+  },
+  "labelPuttShellBlocked": "{name}'s shell blocked {caster}'s {power}",
+  "@labelPuttShellBlocked": {
+    "description": "The toast when one player's Thick Shell stops another's power-up (neither of them the player); the placeholders are the shielded player's name, the caster's name and the power-up's name",
+    "type": "text",
+    "placeholders": {
+      "name": {},
+      "caster": {},
+      "power": {}
     }
   },
   "labelPuttModeCasual": "Casual",

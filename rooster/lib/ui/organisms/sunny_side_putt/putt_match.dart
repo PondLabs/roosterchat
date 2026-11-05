@@ -955,13 +955,24 @@ class PuttMatch extends ChangeNotifier {
             at: _eggOf(event.victimId)));
         return const [PuttNotice(PuttSfx.crowCaw)];
       case ShieldBlocked():
-        _call((serial) => PuttCastCall(
+        PuttCastCall blocked(int serial) => PuttCastCall(
               serial: serial,
               kind: PuttCastCallKind.blocked,
               casterId: event.casterId,
               effectId: event.effectId,
               otherId: event.playerId,
-            ));
+            );
+        // A cast aimed at one player (a theft, a swap) that their shell
+        // stopped says so in its own toast, at once; an area cast keeps
+        // its call and adds one per shell that held.
+        final aimed =
+            event.effectId == 'thieving_crow' || event.effectId == 'nest_swap';
+        if (aimed && _castCall != null) {
+          _recall((call) => blocked(call.serial));
+          _castCall = null;
+        } else {
+          _call(blocked);
+        }
         fxSpots.add(PuttFxSpot(PuttFxSpotKind.shieldPop,
             who: event.playerId,
             effectId: event.effectId,

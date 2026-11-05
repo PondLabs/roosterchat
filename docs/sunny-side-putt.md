@@ -69,7 +69,7 @@ spares their egg, the sprinkler waters around it.
 | Chicken Hop | your next putt flies over whatever is in the way |
 | Rabbit Hole | teleports your egg a short way, costing no stroke |
 | Gust | a wind of your choosing pushes every egg but yours |
-| Thick Shell | shield: the next negative effect bounces off |
+| Thick Shell | shield: the next negative effect bounces off, a Thieving Crow or a Nest Swap aimed at the egg included |
 | Strong Coffee | your next shot leaves 30% harder |
 | Nest Swap | trade places with a chosen player's egg |
 | Sprinkler | mark a spot; nearby eggs are pushed away |
@@ -97,7 +97,9 @@ vanishes without its cause on screen:
   of the green's middle: the caster's picture (or colour dot), the
   power-up's icon and a short line - "Lou: Corn Rain", "You: Gust",
   "Maya stole your Gust!", "You stole Maya's Gust!", "Maya swapped places
-  with you!", "Jonas's shell blocked it", "Your shell blocked it!". Its
+  with you!", "Jonas's shell blocked Lou's Corn Rain", "Your shell blocked
+  Maya's Thieving Crow!" (a theft or a swap a shell stops says so in its
+  own toast, at once). Its
   edge says how it sits with the viewer: comb red when they were robbed
   or swapped, yolk for their own, the caster's colour otherwise. Calls
   queue: a run of casts reads one after another, a toast hurrying on

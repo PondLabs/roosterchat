@@ -137,7 +137,7 @@ void main() {
       _theyCast(match, 'p3', 'gust', const PowerUpTarget.point(Vec2(3, 3)));
       final calls = match.castCalls.reversed.take(2).toList().reversed;
       expect([for (final call in calls) puttCastLine(match, call)],
-          ['Jonas: Gust', 'Your shell blocked it!']);
+          ['Jonas: Gust', "Your shell blocked Jonas's Gust!"]);
       final blocked = match.castCalls.last;
       expect(blocked.kind, PuttCastCallKind.blocked);
       expect(blocked.leadId, 'me');
@@ -153,8 +153,20 @@ void main() {
       // Someone else's shell, seen from here.
       _theyCast(match, 'p2', 'thick_shell');
       _theyCast(match, 'p3', 'corn_rain');
-      expect(
-          puttCastLine(match, match.castCalls.last), "Maya's shell blocked it");
+      expect(puttCastLine(match, match.castCalls.last),
+          "Maya's shell blocked Jonas's Corn Rain");
+
+      // A theft aimed at a shell is stopped outright, and its own toast
+      // says so at once (no "stole" line behind it).
+      match.engine.player('p2')!.inventory.add('gust');
+      _theyCast(match, 'p2', 'thick_shell');
+      final before = match.castCalls.length;
+      _theyCast(match, 'p3', 'thieving_crow', const PowerUpTarget.player('p2'));
+      final crowCalls = match.castCalls.skip(before).toList();
+      expect([for (final call in crowCalls) puttCastLine(match, call)],
+          ["Maya's shell blocked Jonas's Thieving Crow"]);
+      expect(match.engine.player('p2')!.inventory.contains('gust'), isTrue,
+          reason: 'nothing was taken');
     });
 
     test('a swap that moves my egg is a swap with me', () {
@@ -217,7 +229,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1400));
       await tester.pump(const Duration(milliseconds: 16));
       expect(find.text('Maya: Corn Rain'), findsNothing);
-      expect(find.text('Your shell blocked it!'), findsOneWidget);
+      expect(find.text("Your shell blocked Maya's Corn Rain!"), findsOneWidget);
 
       // The last one stays its full time, then the feed is empty.
       await tester.pump(const Duration(seconds: 3));

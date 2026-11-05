@@ -43,9 +43,15 @@ String puttCastLine(PuttMatch match, PuttCastCall call) {
     case PuttCastCallKind.swap:
       return labelPuttSwappedWithMe(name(call.casterId));
     case PuttCastCallKind.blocked:
-      return call.otherId == me
-          ? labelPuttMyShellHeld()
-          : labelPuttShellHeld(name(call.otherId));
+      final power = puttPowerUpName(call.effectId);
+      if (call.otherId == me) {
+        return labelPuttMyShellBlocked(name(call.casterId), power);
+      }
+      if (call.casterId == me) {
+        return labelPuttShellBlockedMine(name(call.otherId), power);
+      }
+      return labelPuttShellBlocked(
+          name(call.otherId), name(call.casterId), power);
   }
 }
 
@@ -388,15 +394,27 @@ String labelPuttSwappedWithMe(String name) =>
         desc: "The toast when another player's Nest Swap trades their egg's "
             "spot with the player's; the placeholder is their name");
 
-String labelPuttMyShellHeld() => Intl.message("Your shell blocked it!",
-    name: "labelPuttMyShellHeld",
-    desc: "The toast when the player's Thick Shell stops another player's "
-        "power-up (the toast before it says which one)");
+String labelPuttMyShellBlocked(String caster, String power) =>
+    Intl.message("Your shell blocked $caster's $power!",
+        name: "labelPuttMyShellBlocked",
+        args: [caster, power],
+        desc: "The toast when the player's Thick Shell stops another "
+            "player's power-up; the placeholders are the caster's name and "
+            "the power-up's name, e.g. Your shell blocked Maya's Corn Rain!");
 
-String labelPuttShellHeld(String name) =>
-    Intl.message("$name's shell blocked it",
-        name: "labelPuttShellHeld",
-        args: [name],
-        desc: "The toast when a player's Thick Shell stops a power-up (the "
-            "toast before it says which one); the placeholder is that "
-            "player's name");
+String labelPuttShellBlockedMine(String name, String power) =>
+    Intl.message("$name's shell blocked your $power",
+        name: "labelPuttShellBlockedMine",
+        args: [name, power],
+        desc: "The toast when another player's Thick Shell stops the "
+            "player's own power-up; the placeholders are that player's name "
+            "and the power-up's name");
+
+String labelPuttShellBlocked(String name, String caster, String power) =>
+    Intl.message("$name's shell blocked $caster's $power",
+        name: "labelPuttShellBlocked",
+        args: [name, caster, power],
+        desc: "The toast when one player's Thick Shell stops another's "
+            "power-up (neither of them the player); the placeholders are "
+            "the shielded player's name, the caster's name and the "
+            "power-up's name");

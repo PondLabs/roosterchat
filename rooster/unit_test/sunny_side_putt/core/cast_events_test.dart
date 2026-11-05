@@ -44,6 +44,31 @@ PuttEngine _engine({List<String> players = const ['p1', 'p2', 'p3']}) {
 }
 
 void main() {
+  test('a shell stops a swap aimed at its egg, and is spent', () {
+    final engine = _engine();
+    engine.player('p2')!.inventory.add('thick_shell');
+    expect(engine.usePowerUp('p2', 'thick_shell'), isTrue);
+    engine.drainEvents();
+    final p1At = engine.world!.ball('p1')!.position;
+    final p2At = engine.world!.ball('p2')!.position;
+    engine.player('p1')!.inventory.add('nest_swap');
+    expect(
+        engine.usePowerUp('p1', 'nest_swap', const PowerUpTarget.player('p2')),
+        isTrue);
+    final blocked = engine.drainEvents().whereType<ShieldBlocked>().single;
+    expect(blocked.playerId, 'p2');
+    expect(blocked.casterId, 'p1');
+    expect(blocked.effectId, 'nest_swap');
+    expect(engine.world!.ball('p1')!.position, p1At, reason: 'no swap');
+    expect(engine.world!.ball('p2')!.position, p2At);
+    expect(engine.player('p2')!.shields, 0);
+
+    // Spent: the next swap goes through.
+    engine.player('p1')!.inventory.add('nest_swap');
+    engine.usePowerUp('p1', 'nest_swap', const PowerUpTarget.player('p2'));
+    expect(engine.world!.ball('p1')!.position, p2At);
+  });
+
   test('a cast says who, what, where it aimed and where the caster stood', () {
     final engine = _engine();
     engine.player('p1')!.inventory.add('gust');

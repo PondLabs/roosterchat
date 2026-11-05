@@ -12,8 +12,9 @@ class NestSwapEffect extends PowerUpEffect {
   @override
   PowerUpTiming get timing => PowerUpTiming.instant;
 
+  /// Harmful: it hurts the one it is aimed at, so a Thick Shell stops it.
   @override
-  bool get harmful => false;
+  bool get harmful => true;
 
   @override
   void apply(PowerUpContext context) {
@@ -24,6 +25,7 @@ class NestSwapEffect extends PowerUpEffect {
     final mine = context.ballOf(context.casterId);
     final theirs = context.ballOf(victim);
     if (mine == null || theirs == null) return;
+    if (context.shieldStops(victim)) return;
     context.swapBalls(context.casterId, victim);
   }
 }

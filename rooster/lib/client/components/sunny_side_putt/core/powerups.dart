@@ -134,6 +134,12 @@ abstract class PowerUpContext {
   /// Grants a shield: the next harmful effect aimed at this egg is skipped
   /// (Thick Shell).
   void addShield(String playerId);
+
+  /// Whether [playerId]'s shell stops this cast, for an effect aimed at one
+  /// player (a theft, a swap): a harmful effect spends one of their shields
+  /// and the engine tells it as [ShieldBlocked]; the effect then does
+  /// nothing to them. (Area effects meet shields in [targetBalls].)
+  bool shieldStops(String playerId);
 }
 
 /// One of the twelve (or any future) effects.

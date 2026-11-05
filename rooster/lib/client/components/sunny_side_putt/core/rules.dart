@@ -1517,4 +1517,17 @@ class _PowerUpContext implements PowerUpContext {
     final player = _engine._players[playerId];
     if (player != null) player.shields++;
   }
+
+  @override
+  bool shieldStops(String playerId) {
+    if (playerId == casterId) return false;
+    final effect = _engine.config.powerUps.byId(_input.effectId);
+    if (!(effect?.harmful ?? false)) return false;
+    final player = _engine._players[playerId];
+    if (player == null || player.shields <= 0) return false;
+    player.shields--;
+    _engine._events.add(ShieldBlocked(
+        playerId: playerId, effectId: _input.effectId, casterId: casterId));
+    return true;
+  }
 }
