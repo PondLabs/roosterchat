@@ -107,6 +107,9 @@ void main() {
     Future<void> takeDown() async {
       if (tornDown) return;
       tornDown = true;
+      // ignore: avoid_print
+      void step(String what) => print('Sunny Side Putt e2e: down: $what');
+      step('the tree');
       // The game's 3D surface (an ANGLE texture) and its sound players are
       // native resources that only go when their widgets are disposed:
       // take the whole tree down while the engine still runs, and give the
@@ -118,14 +121,19 @@ void main() {
       // that tears down with the WebRTC stack still up dies after the
       // run's summary prints (exit 1 with every test green), which reads as
       // a failure.
+      step('the calls');
       await _bounded(app.clientManager.callManager.disconnect(),
               'the calls going down',
               seconds: 20)
           .catchError((Object _) {});
+      step('the clients');
       await _bounded(app.clientManager.close(), 'the clients closing',
               seconds: 20)
           .catchError((Object _) {});
-      await tester.clean();
+      step('the data');
+      await _bounded(tester.clean(), 'the data clearing', seconds: 20)
+          .catchError((Object _) {});
+      step('done');
     }
 
     addTearDown(takeDown);
@@ -252,18 +260,43 @@ void main() {
     expect(launch, findsOneWidget);
     await tester.tap(launch.first);
 
-    // The launch sheet: casual is the default flight, Start launches.
-    await tester.waitFor(
-        () => find.widgetWithText(FilledButton, 'Start').evaluate().isNotEmpty,
+    // The launch sheet: casual is the default flight, Start launches. The
+    // sheet slides up: let it settle before the tap, and tap again while it
+    // stays open (a tap that lands as it moves misses).
+    final start = find.widgetWithText(FilledButton, 'Start');
+    await tester.waitFor(() => start.evaluate().isNotEmpty,
         timeout: const Duration(seconds: 30));
-    await tester.pump();
-    await tester.tap(find.widgetWithText(FilledButton, 'Start').first);
+    for (var attempt = 0;
+        attempt < 3 && start.evaluate().isNotEmpty;
+        attempt++) {
+      await tester.pump(const Duration(milliseconds: 700));
+      if (start.evaluate().isEmpty) break;
+      await tester.tap(start.first, warnIfMissed: false);
+      for (var i = 0; i < 20 && start.evaluate().isNotEmpty; i++) {
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+    }
 
     // The stage takes over the call and the host's match boots onto it. The
     // game renders every frame from here on: no pumpAndSettle past this
     // point.
-    await tester.waitFor(() => find.byType(ActivityStage).evaluate().isNotEmpty,
-        skipPumpAndSettle: true, timeout: const Duration(seconds: 60));
+    try {
+      await tester.waitFor(
+          () => find.byType(ActivityStage).evaluate().isNotEmpty,
+          skipPumpAndSettle: true,
+          timeout: const Duration(seconds: 60));
+    } catch (_) {
+      final aliceActivities = aliceClient
+          .getRoom(voiceChannel.identifier)
+          ?.getComponent<MatrixCallActivityComponent>();
+      // ignore: avoid_print
+      print('Sunny Side Putt e2e: the stage never came up: '
+          'launch sheet open ${start.evaluate().isNotEmpty}, '
+          'shelf ${find.byType(ActivityPickerPanel).evaluate().length}, '
+          'call view ${find.byType(CallView).evaluate().length}, '
+          'sessions ${aliceActivities?.visibleSessions()}');
+      rethrow;
+    }
 
     SunnySidePuttGame? aliceGame;
     final gameWidget = find.byType(GameWidget);
