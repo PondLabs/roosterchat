@@ -416,11 +416,10 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     _greenShown.value = true;
     final coach = game.coachForFrame();
     _tags.update(game.tagsForFrame(),
-        avoid: [
-          ...game.tagObstacles(),
-          // The coach's hand and ghost arrow: tags keep clear of them.
-          if (coach != null) ...puttCoachObstacles(coach),
-        ],
+        avoid: game.tagObstacles(),
+        // The coach's hand and ghost arrow: tags keep clear of them while
+        // there is room by their eggs.
+        soft: coach == null ? const [] : puttCoachObstacles(coach),
         hud: game.hudOverGreen());
     _coach.value = coach;
     final pointer = game.nestPointerForFrame();

@@ -76,14 +76,17 @@ class PuttTagBoard extends ChangeNotifier {
 
   List<PuttTag> get tags => _tags;
 
-  /// The tags for this frame, laid clear of each other and of [avoid]
-  /// (the eggs, mine with its pin). One that would stand under the [hud]
-  /// (the top strip, the corner buttons) is not drawn: it would read as part
-  /// of the HUD, and an egg that far up is under it too.
+  /// The tags for this frame, laid clear of each other, of [avoid] (the
+  /// eggs, mine with its pin) and where they can of [soft] (the coach's
+  /// hand and ghost arrow). One that would stand under the [hud] (the top
+  /// strip, the corner buttons) is not drawn: it would read as part of the
+  /// HUD, and an egg that far up is under it too.
   void update(List<PuttTag> tags,
-      {List<Rect> avoid = const [], List<Rect> hud = const []}) {
+      {List<Rect> avoid = const [],
+      List<Rect> soft = const [],
+      List<Rect> hud = const []}) {
     if (tags.isEmpty && _tags.isEmpty) return;
-    final laid = declutterTags(tags, avoid: avoid);
+    final laid = declutterTags(tags, avoid: avoid, soft: soft);
     _tags = [
       for (final tag in laid)
         if (!hud.any((rect) => rect.overlaps(puttTagPill(tag, tag.at)))) tag,
@@ -109,22 +112,35 @@ Rect puttTagPill(PuttTag tag, Offset at) {
 }
 
 /// The tags laid clear of each other and of [avoid] (the eggs, mine with
-/// its pin, the coach's hand): eggs bunched on the tee would stack their
-/// pills on top of one another. Each tag, from the lowest on screen up,
-/// tries its own spot, then steps to either side, then rises a row past
-/// what is in the way - but never far over another egg: a tag standing
-/// above someone else's egg names that one. Blocked that way it tries
-/// again with its picture only, and failing that it is not drawn this
+/// its pin): eggs bunched on the tee would stack their pills on top of one
+/// another. Each tag, from the lowest on screen up, tries its own spot,
+/// then steps to either side, then rises a row past what is in the way -
+/// but never far over another egg: a tag standing above someone else's
+/// egg names that one. [soft] (the coach's hand and ghost arrow, drawn
+/// with a margin) is kept clear of while a spot by the egg allows it; a
+/// tag with none then stands by its egg over that margin, its name shown
+/// - failing that its picture alone, and failing that it is not drawn this
 /// frame. A pill's size is read off its name, near enough for the layout.
-List<PuttTag> declutterTags(List<PuttTag> tags, {List<Rect> avoid = const []}) {
-  if (tags.isEmpty || (tags.length < 2 && avoid.isEmpty)) return tags;
+List<PuttTag> declutterTags(List<PuttTag> tags,
+    {List<Rect> avoid = const [], List<Rect> soft = const []}) {
+  if (tags.isEmpty || (tags.length < 2 && avoid.isEmpty && soft.isEmpty)) {
+    return tags;
+  }
   final order = [...tags]..sort((a, b) => b.at.dy.compareTo(a.at.dy));
   final laidPills = <Rect>[];
   final laid = <String, PuttTag>{};
-  final rows = tags.length + avoid.length;
+  final rows = tags.length + avoid.length + soft.length;
   for (final tag in order) {
-    final placed = _layTag(tag, tag.compact, laidPills, avoid, rows) ??
-        (tag.compact ? null : _layTag(tag, true, laidPills, avoid, rows));
+    PuttTag? placed;
+    for (final (compact, keepOff) in [
+      (tag.compact, soft),
+      (tag.compact, const <Rect>[]),
+      (true, soft),
+      (true, const <Rect>[]),
+    ]) {
+      placed = _layTag(tag, compact, laidPills, avoid, keepOff, rows);
+      if (placed != null) break;
+    }
     if (placed == null) continue;
     laidPills.add(puttTagPill(placed, placed.at));
     laid[tag.playerId] = placed;
@@ -135,17 +151,21 @@ List<PuttTag> declutterTags(List<PuttTag> tags, {List<Rect> avoid = const []}) {
   ];
 }
 
-/// How far a tag may rise over an egg in its way, in pixels: over the top
-/// of a small, far egg, not over a whole one.
+/// How far a tag may rise over an egg or the coach in its way, in pixels:
+/// over the top of a small, far egg, not over a whole one.
 const double _tagRiseOverEgg = 40;
 
 PuttTag? _layTag(PuttTag tag, bool compact, List<Rect> laidPills,
-    List<Rect> avoid, int rows) {
+    List<Rect> eggs, List<Rect> soft, int rows) {
   final base = tag.at;
   final shape = tag._laidAt(base, compact: compact, tail: 0);
   final width = puttTagPill(shape, base).width;
   // The pointer reaches no further than the pill's rounded ends.
   final reach = math.max(0.0, width / 2 - 9);
+  bool clear(Rect box) =>
+      !laidPills.any(box.overlaps) &&
+      !eggs.any(box.overlaps) &&
+      !soft.any(box.overlaps);
   var y = base.dy;
   for (var row = 0; row <= rows; row++) {
     for (final dx in [
@@ -156,19 +176,23 @@ PuttTag? _layTag(PuttTag tag, bool compact, List<Rect> laidPills,
       width * 1.15,
     ]) {
       final at = Offset(base.dx + dx, y);
-      final box = puttTagPill(shape, at);
-      if (!laidPills.any(box.overlaps) && !avoid.any(box.overlaps)) {
+      if (clear(puttTagPill(shape, at))) {
         return tag._laidAt(at,
             compact: compact, tail: (-dx).clamp(-reach, reach));
       }
     }
     final box = puttTagPill(shape, Offset(base.dx, y));
-    final eggs = avoid.where(box.overlaps).toList();
-    final hits = [...laidPills.where(box.overlaps), ...eggs];
+    // Over another tag a tag may climb; over an egg or the coach only a
+    // little way (a tag high over them stands by some other egg).
+    final fixed = [
+      ...eggs.where(box.overlaps),
+      ...soft.where(box.overlaps),
+    ];
+    final hits = [...laidPills.where(box.overlaps), ...fixed];
     final next = hits.isEmpty
         ? y - 4
         : hits.map((other) => other.top).reduce(math.min) - 3;
-    if (eggs.isNotEmpty && base.dy - next > _tagRiseOverEgg) return null;
+    if (fixed.isNotEmpty && base.dy - next > _tagRiseOverEgg) return null;
     y = next;
   }
   return null;

@@ -134,9 +134,25 @@ void main() {
           color: Colors.blue,
           at: Offset(410, 500)),
     ];
-    final placed = declutterTags(tags, avoid: obstacles).single;
+    final placed = declutterTags(tags, soft: obstacles).single;
     final pill = puttTagPill(placed, placed.at);
     expect(obstacles.any((rect) => rect.overlaps(pill)), isFalse);
+  });
+
+  test("with no room clear of the coach, a tag stands by its egg anyway", () {
+    // Maya's egg just in front of mine on the tee, the coach's hand and
+    // ghost arrow (with their margins) round her tag's spot.
+    const mine = Rect.fromLTRB(560, 230, 780, 405);
+    const hand = Rect.fromLTRB(495, 339, 655, 423);
+    const arrow = Rect.fromLTRB(600, 372, 820, 441);
+    const maya = PuttTag(
+        playerId: 'a', name: 'Maya', color: Colors.teal, at: Offset(670, 450));
+    final placed =
+        declutterTags(const [maya], avoid: [mine], soft: [hand, arrow]);
+    expect(placed, hasLength(1), reason: 'drawn, not dropped');
+    expect(placed.single.at, const Offset(670, 450),
+        reason: 'by her egg, not up over mine');
+    expect(placed.single.compact, isFalse, reason: 'her name shows');
   });
 
   testWidgets('the reaction picker opens and sends one, then folds',
