@@ -1,9 +1,9 @@
 // The actors: the eggs (a true egg profile turned on a lathe, painted with
-// an Easter band in the player's colour, rolling by their velocity and
-// settling on their side when they stop, a soft contact shadow under them
-// and, under the viewer's own, a marker ring and a bobbing arrow), the hen
-// (legs that walk, a head that bobs), and the "?" crates floating over
-// their glow.
+// an Easter band in the player's colour and the pattern they picked,
+// rolling by their velocity and settling on their side when they stop, a
+// soft contact shadow under them and, under the viewer's own, a marker
+// ring and a bobbing arrow), the hen (legs that walk, a head that bobs),
+// and the "?" crates floating over their glow.
 part of '../putt_world3d.dart';
 
 /// The egg's height over its radius: the long axis' half-length.
@@ -31,13 +31,15 @@ class _EggView3D {
   _EggView3D(this._radius, ui.Color tint,
       {required int trailHex,
       required this.onBounce,
+      EggPattern pattern = EggPattern.zigzag,
       _Ground? terrain,
       int glow = 0x2A2622})
       : terrain = terrain ?? _Ground(),
-        _glow = glow {
+        _glow = glow,
+        _pattern = pattern {
     group = tjs.Group()..name = 'egg';
     _tintHex = _hexOf(tint);
-    _texture = _eggTextureFor(_tintHex);
+    _texture = _eggTextureFor(_tintHex, _pattern);
     body = tjs.Mesh(_eggGeometry(_radius), _shellMaterial(_texture, _glow))
       ..name = 'egg-shell'
       ..castShadow = true;
@@ -214,6 +216,10 @@ class _EggView3D {
   late final tjs.Mesh _arrow;
   late tjs.DataTexture _texture;
   late int _tintHex;
+  EggPattern _pattern;
+
+  /// The hat its player's chick wears: the hatch reads it.
+  HatchlingHat hat = HatchlingHat.none;
 
   final double _radius;
 
@@ -236,24 +242,29 @@ class _EggView3D {
   /// The shadow's soft disc, shared by every egg of every world.
   static final tjs.DataTexture _shadowTexture = _discTexture(hardness: 1.4);
 
-  void retint(ui.Color tint) {
+  /// The egg in [tint] wearing [pattern]: a new seat's colour or a new
+  /// pick of its player's.
+  void restyle(ui.Color tint, EggPattern pattern) {
     final hex = _hexOf(tint);
-    if (hex == _tintHex) return;
+    if (hex == _tintHex && pattern == _pattern) return;
+    final retinted = hex != _tintHex;
     _tintHex = hex;
-    // The shared texture for that colour, on a fresh material: no texture
-    // is made or freed mid-play, and no compiled material has its map
+    _pattern = pattern;
+    // The shared paint for that colour and pattern, on a fresh material:
+    // no paint is freed mid-play, and no compiled material has its map
     // swapped under it (the renderer once drew such an egg not at all).
-    _texture = _eggTextureFor(hex);
+    _texture = _eggTextureFor(hex, pattern);
     final old = body.material;
     body.material = _shellMaterial(_texture, _glow);
     old?.map = null;
     old?.emissiveMap = null;
     old?.dispose();
+    _ghostOpacity = -1; // the fresh shell takes the fade on the next frame
+    if (!retinted) return;
     _marker.material?.color = _lin(hex);
     _tintDisc.material?.color = _lin(hex);
     _xray.material?.color = _lin(_mix(hex, 0xFFFFFF, 0.25));
     _bubble.look.color = _lin(_bubbleHexOf(hex));
-    _ghostOpacity = -1; // the fresh shell takes the fade on the next frame
   }
 
   /// The shell: the colour's paint, a soft sheen, and a whisper of light
@@ -546,51 +557,32 @@ tjs.BufferGeometry _eggGeometry(double radius) {
   return tjg.LatheGeometry(points, segments: 28);
 }
 
-/// The shells' paints, one per player colour, made once and shared by
-/// every egg of every world (eight at most).
-final Map<int, tjs.DataTexture> _eggTextures = {};
+/// The shells' paints, one per player colour and pattern, made once (the
+/// first time an egg wears them) and shared by every egg of every world.
+final Map<(int, EggPattern), tjs.DataTexture> _eggTextures = {};
 
-tjs.DataTexture _eggTextureFor(int tint) =>
-    _eggTextures.putIfAbsent(tint, () => _eggTexture(tint));
+tjs.DataTexture _eggTextureFor(int tint, EggPattern pattern) =>
+    _eggTextures.putIfAbsent((tint, pattern), () => _eggTexture(tint, pattern));
 
 /// The shell's paint: a pastel of the player's colour with fine speckles
-/// (so whose egg it is reads from the overview too), a zig-zag band in the
-/// full colour round the waist and a ring of dots above and below. u runs
-/// around the egg, v from the base (0) to the crown (1).
-tjs.DataTexture _eggTexture(int tint) {
+/// (so whose egg it is reads from the overview too), [pattern] in the full
+/// colour, its edges a shade deeper, and the face. u runs around the egg, v
+/// from the base (0) to the crown (1); the face sits at u = 0 (the side
+/// that looks at the camera on the tee), and every pattern keeps clear of
+/// it.
+tjs.DataTexture _eggTexture(int tint, EggPattern pattern) {
   const width = 256;
   const height = 128;
   final bitmap = _Bitmap(width, height);
   final rand = _Rand(tint);
   final shell = _mix(0xFFF8EE, tint, 0.25);
   final deep = _shade(tint, 0.78);
+  final paint = [shell, tint, deep];
   for (var y = 0; y < height; y++) {
     final v = (y + 0.5) / height;
     for (var x = 0; x < width; x++) {
       final u = (x + 0.5) / width;
-      var color = shell;
-      // The band: a zig-zag-edged stripe in the player's colour.
-      final zig = ((u * 9) % 1.0 - 0.5).abs() * 2; // 0..1 triangle
-      final top = 0.6 + zig * 0.05;
-      final bottom = 0.42 - zig * 0.05;
-      if (v > bottom && v < top) {
-        color = tint;
-        if ((v - (bottom + top) / 2).abs() < 0.018) color = shell;
-      } else if ((v - bottom).abs() < 0.025 || (v - top).abs() < 0.025) {
-        color = deep;
-      }
-      // The face sits at u = 0 (the side that looks at the camera on the
-      // tee): around it, no dots.
-      final faceU = math.min(u, 1 - u); // distance round from the face
-      // Dots above and below the band, a ring of seven each.
-      for (final (row, size) in const [(0.75, 0.05), (0.27, 0.055)]) {
-        if (row > 0.5 && faceU < 0.17) continue;
-        const count = 7;
-        final cell = ((u + 0.5 / count) * count) % 1.0 - 0.5;
-        final du = cell / count * 3.2; // around the egg, in its height's units
-        final dv = v - row;
-        if (du * du + dv * dv < size * size) color = tint;
-      }
+      var color = paint[_eggPatternAt(pattern, u, v)];
       // The face: two ink eyes with a glint, and a little yolk beak. In
       // surface units u runs about 6.3 radii around, v about 3.6 up.
       final su = u < 0.5 ? u : u - 1; // signed, the face at 0
@@ -618,6 +610,173 @@ tjs.DataTexture _eggTexture(int tint) {
     bitmap.blend(x, y, 0xC9B79E, 0.35);
   }
   return bitmap.texture();
+}
+
+/// What [pattern] paints at (u, v) of the shell: 0 the shell, 1 the
+/// player's colour, 2 its deep shade (the edges).
+int _eggPatternAt(EggPattern pattern, double u, double v) {
+  switch (pattern) {
+    case EggPattern.zigzag:
+      return _zigzagAt(u, v);
+    case EggPattern.stripes:
+      // Bold rings, one wide at the waist with a pale line through it, and
+      // a thin deep edge on every one.
+      var paint = 0;
+      for (final (low, high) in const [
+        (0.08, 0.16),
+        (0.25, 0.33),
+        (0.42, 0.58),
+        (0.85, 0.93),
+      ]) {
+        if (v > low && v < high) {
+          return (v - 0.5).abs() < 0.014 ? 0 : 1;
+        }
+        if ((v - low).abs() < 0.02 || (v - high).abs() < 0.02) paint = 2;
+      }
+      return paint;
+    case EggPattern.dots:
+      // Polka dots on staggered rings, round on the shell (fewer toward
+      // the ends, where the rings are short), none over the face.
+      var paint = 0;
+      final ring = _eggRingAt(v);
+      for (var row = 0; row < 7; row++) {
+        final rowV = 0.2 + row * 0.11;
+        final dy = (v - rowV) * 3.9;
+        if (dy.abs() > 0.24) continue;
+        final count = math.max(5, (12 * _eggRingAt(rowV)).round());
+        final offset = row.isOdd ? 0.5 : 0.0;
+        final cell = u * count - offset;
+        final nearest = cell.roundToDouble();
+        final centre = ((nearest + offset) / count) % 1.0;
+        final faceU = math.min(centre, 1 - centre) * 2 * math.pi * ring;
+        if (rowV > 0.58 && rowV < 0.82 && faceU < 0.75) continue;
+        final dx = (cell - nearest) / count * 2 * math.pi * ring;
+        final d = math.sqrt(dx * dx + dy * dy);
+        if (d < 0.17) return 1;
+        if (d < 0.21) paint = 2;
+      }
+      return paint;
+    case EggPattern.hearts:
+      // A ring of six hearts round the waist (one on the egg's chest,
+      // under the face) between two thin lines.
+      final shape = _ringShapeAt(u, v, count: 6, ringV: 0.47, inside: (x, y) {
+        // The heart curve (x^2 + y^2 - 1)^3 = x^2 y^3, lobes up.
+        final a = x * x + y * y - 1;
+        return a * a * a - x * x * y * y * y <= 0;
+      }, scale: 0.36, lift: 0.12);
+      if (shape != 0) return shape;
+      if ((v - 0.335).abs() < 0.009 || (v - 0.61).abs() < 0.009) return 1;
+      return 0;
+    case EggPattern.stars:
+      // A ring of six stars round the waist, a dot between each.
+      final shape = _ringShapeAt(u, v,
+          count: 6,
+          ringV: 0.47,
+          inside: (x, y) => _insideStar(x, y),
+          scale: 0.42);
+      if (shape != 0) return shape;
+      final between = _ringShapeAt(u, v,
+          count: 6,
+          ringV: 0.47,
+          phase: 0.5,
+          inside: (x, y) => x * x + y * y <= 1,
+          scale: 0.07);
+      return between == 0 ? 0 : 1;
+    case EggPattern.waves:
+      // A wavy band round the waist, a ripple under it and one near the
+      // crown, over the face.
+      final band = 0.48 + 0.045 * math.sin(u * 2 * math.pi * 6);
+      final d = (v - band).abs();
+      if (d < 0.075) return 1;
+      if (d < 0.095) return 2;
+      final low = 0.24 + 0.025 * math.sin(u * 2 * math.pi * 6 + math.pi);
+      if ((v - low).abs() < 0.022) return 1;
+      final high = 0.885 + 0.02 * math.sin(u * 2 * math.pi * 5 + math.pi);
+      if ((v - high).abs() < 0.018) return 1;
+      return 0;
+  }
+}
+
+/// The classic band: zig-zag edged in the player's colour, a pale line
+/// through it and deep edges, a ring of seven dots above (but over the
+/// face) and below.
+int _zigzagAt(double u, double v) {
+  var paint = 0;
+  final zig = ((u * 9) % 1.0 - 0.5).abs() * 2; // 0..1 triangle
+  final top = 0.6 + zig * 0.05;
+  final bottom = 0.42 - zig * 0.05;
+  if (v > bottom && v < top) {
+    paint = 1;
+    if ((v - (bottom + top) / 2).abs() < 0.018) paint = 0;
+  } else if ((v - bottom).abs() < 0.025 || (v - top).abs() < 0.025) {
+    paint = 2;
+  }
+  final faceU = math.min(u, 1 - u); // distance round from the face
+  // Dots above and below the band, a ring of seven each.
+  for (final (row, size) in const [(0.75, 0.05), (0.27, 0.055)]) {
+    if (row > 0.5 && faceU < 0.17) continue;
+    const count = 7;
+    final cell = ((u + 0.5 / count) * count) % 1.0 - 0.5;
+    final du = cell / count * 3.2; // around the egg, in its height's units
+    final dv = v - row;
+    if (du * du + dv * dv < size * size) paint = 1;
+  }
+  return paint;
+}
+
+/// The shell's ring radius at height [v], in egg radii (the lathe's own
+/// profile): how far round the egg a step of u goes there.
+double _eggRingAt(double v) {
+  final theta = v * math.pi;
+  return math.sin(theta) * (1 + 0.1 * math.cos(theta));
+}
+
+/// [count] shapes round the shell on the ring at [ringV] (the first at
+/// the face, or [phase] of a step past it), each the region [inside] holds
+/// for in its own units ([scale] radii to one, y toward the crown, raised
+/// by [lift] of them): 1 inside, 2 on the deep edge just outside, 0 off.
+int _ringShapeAt(
+  double u,
+  double v, {
+  required int count,
+  required double ringV,
+  required bool Function(double x, double y) inside,
+  required double scale,
+  double phase = 0,
+  double lift = 0,
+}) {
+  final dy = (v - ringV) * 3.9;
+  if (dy.abs() > scale * 1.6) return 0;
+  final cell = u * count - phase;
+  final nearest = cell.roundToDouble();
+  final dx = (cell - nearest) / count * 2 * math.pi * _eggRingAt(v);
+  final x = dx / scale;
+  final y = dy / scale + lift;
+  if (inside(x, y)) return 1;
+  // The edge: the same shape a size up.
+  return inside(x / 1.14, (y - lift) / 1.14 + lift) ? 2 : 0;
+}
+
+/// Whether (x, y) is inside a five-point star of outer radius 1, a point
+/// up (y toward the crown).
+bool _insideStar(double x, double y) {
+  const inner = 0.44;
+  final distance = math.sqrt(x * x + y * y);
+  if (distance > 1) return false;
+  if (distance < inner * math.cos(math.pi / 5)) return true;
+  // Fold the angle (from the top point) into the first half-sector, where
+  // the edge runs from the point (1, 0) to the inner corner.
+  const sector = 2 * math.pi / 5;
+  var angle = math.atan2(x, y) % sector;
+  if (angle < 0) angle += sector;
+  if (angle > sector / 2) angle = sector - angle;
+  final cornerX = inner * math.cos(sector / 2);
+  final cornerY = inner * math.sin(sector / 2);
+  final edgeX = cornerX - 1;
+  final edgeY = cornerY;
+  // The ray at [angle] meets the edge at t: t * (cos, sin) = (1, 0) + s * edge.
+  final reach = edgeY / (math.cos(angle) * edgeY - math.sin(angle) * edgeX);
+  return distance <= reach;
 }
 
 /// The hen: a plump white body, a cream-tipped tail, wings, a head with

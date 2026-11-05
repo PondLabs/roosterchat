@@ -1,9 +1,10 @@
 // The payoff of a sink: the egg hatches in the nest. The shell's cap pops
 // off and tumbles away, and a chick rises out of the cup standing in the
-// bottom half of its shell (in the player's colour), turns to the camera,
-// hops twice flapping its wings and drops back in. Three are pooled, built
-// once; a hatch only moves them and recolours the shell (a colour, never
-// a texture, so no material recompiles in play).
+// bottom half of its shell (in the player's colour) and wearing the hat its
+// player picked, turns to the camera, hops twice flapping its wings and
+// drops back in. Three are pooled, built once with every hat on hand; a
+// hatch only moves them, recolours the shell (a colour, never a texture, so
+// no material recompiles in play) and shows one hat.
 part of '../putt_world3d.dart';
 
 class _Hatchling {
@@ -47,6 +48,14 @@ class _Hatchling {
             beak);
     }
     _rise.add(chick.mesh('hatchling-chick', flat: false, roughness: 0.78)!);
+    // The hats, one of each, on the head; a hatch shows its player's.
+    for (final hat in HatchlingHat.values) {
+      final mesh = _hatMesh(hat);
+      if (mesh == null) continue;
+      mesh.visible = false;
+      _hats[hat] = mesh;
+      _rise.add(mesh);
+    }
     for (final side in [-1.0, 1.0]) {
       final pivot = tjs.Group()
         ..name = 'hatchling-wing'
@@ -88,6 +97,7 @@ class _Hatchling {
   late final tjs.Mesh _cap;
   late final tjs.MeshStandardMaterial _shellMaterial;
   final List<tjs.Group> _wings = [];
+  final Map<HatchlingHat, tjs.Mesh> _hats = {};
 
   double _age = life;
   double _scale = 1;
@@ -125,12 +135,16 @@ class _Hatchling {
     return geometry;
   }
 
-  /// Hatches at [at] (the nest), the shell in [tint]; [big] for the
-  /// viewer's own egg.
+  /// Hatches at [at] (the nest), the shell in [tint], the chick in [hat];
+  /// [big] for the viewer's own egg.
   void hatch(Vec2 at, int tint,
-      {double floor = 0, bool big = false, double rim = 1.2}) {
+      {HatchlingHat hat = HatchlingHat.none,
+      double floor = 0,
+      bool big = false,
+      double rim = 1.2}) {
     _age = 0;
     _at = at;
+    _hats.forEach((kind, mesh) => mesh.visible = kind == hat);
     _scale = big ? 1.35 : 1.0;
     // Where the cap lands: on the straw, in the hatchling's own units.
     _rim = rim / _scale;
@@ -147,6 +161,99 @@ class _Hatchling {
   void hide() {
     _age = life;
     group.visible = false;
+  }
+
+  /// [hat] built for the chick's head (the head's middle at (0, 1, 0.05),
+  /// about a third of a unit round, the face toward +z); null for none.
+  static tjs.Mesh? _hatMesh(HatchlingHat hat) {
+    final ink = _hexOf(PuttPalette.ink);
+    final comb = _hexOf(PuttPalette.comb);
+    final yolk = _hexOf(PuttPalette.yolk);
+    final hatPieces = _Merged();
+    switch (hat) {
+      case HatchlingHat.none:
+        return null;
+      case HatchlingHat.strawHat:
+        // Pushed back a little: every piece rides the tipped axis.
+        const tip = -0.14;
+        tjs.Matrix4 along(double rise, {double sy = 1}) =>
+            _place(0, 1.25 + rise * math.cos(tip), 0.03 + rise * math.sin(tip),
+                tilt: tip, sy: sy);
+        hatPieces
+          ..add(
+              tjg.CylinderGeometry(0.5, 0.52, 0.04, 28), along(0), _Farm.straw)
+          ..add(tjg.CylinderGeometry(0.21, 0.25, 0.2, 22), along(0.12),
+              _Farm.strawLight)
+          ..add(tjg.CylinderGeometry(0.258, 0.258, 0.06, 22), along(0.05), comb)
+          ..add(tjs.SphereGeometry(0.21, 18, 8), along(0.22, sy: 0.3),
+              _Farm.strawLight);
+      case HatchlingHat.bow:
+        // Two loops and the knot, perched on one side of the head.
+        const knot = (0.16, 1.31, 0.09);
+        for (final side in [-1.0, 1.0]) {
+          hatPieces.add(
+              tjs.SphereGeometry(1, 14, 10),
+              _place(knot.$1 + side * 0.12, knot.$2 + 0.02, knot.$3,
+                  roll: side * 0.35 - 0.2, sx: 0.13, sy: 0.085, sz: 0.06),
+              comb);
+        }
+        hatPieces.add(tjs.SphereGeometry(0.055, 10, 8),
+            _place(knot.$1, knot.$2, knot.$3 + 0.02), _shade(comb, 0.8));
+      case HatchlingHat.crown:
+        // A gold ring round the top of the head, five points with pearls,
+        // a red jewel in front; set at a jaunty angle. A deep gold: the
+        // yolk's would melt into the chick's yellow.
+        const gold = 0xD98A14;
+        const roll = 0.14;
+        final ring = _place(0, 1.27, 0.04, roll: roll);
+        hatPieces.add(
+            tjg.TorusGeometry(0.2, 0.045, 8, 28),
+            tjs.Matrix4().multiply2(ring, _place(0, 0, 0, tilt: math.pi / 2)),
+            gold);
+        for (var i = 0; i < 5; i++) {
+          final angle = i * 2 * math.pi / 5;
+          final x = math.sin(angle) * 0.2;
+          final z = math.cos(angle) * 0.2;
+          hatPieces
+            ..add(tjg.ConeGeometry(0.055, 0.14, 8),
+                tjs.Matrix4().multiply2(ring, _place(x, 0.1, z)), gold)
+            ..add(tjs.SphereGeometry(0.03, 8, 6),
+                tjs.Matrix4().multiply2(ring, _place(x, 0.18, z)), 0xFFF8EE);
+        }
+        hatPieces.add(tjs.SphereGeometry(0.04, 10, 8),
+            tjs.Matrix4().multiply2(ring, _place(0, 0.01, 0.24)), comb);
+      case HatchlingHat.headphones:
+        // The host's: the band over the top, a cup on each side, red rims.
+        hatPieces.add(tjg.TorusGeometry(0.37, 0.035, 8, 24, math.pi),
+            _place(0, 1.0, 0.04), ink);
+        for (final side in [-1.0, 1.0]) {
+          hatPieces
+            ..add(tjg.CylinderGeometry(0.12, 0.12, 0.08, 20),
+                _place(side * 0.34, 1.0, 0.05, roll: math.pi / 2), ink)
+            ..add(tjg.TorusGeometry(0.085, 0.022, 6, 18),
+                _place(side * 0.385, 1.0, 0.05, yaw: math.pi / 2), comb);
+        }
+      case HatchlingHat.daisy:
+        // White petals round a yolk heart, tucked over the left eye and
+        // turned up toward the camera.
+        final flower = _place(-0.16, 1.26, 0.2, tilt: 0.55, roll: 0.45);
+        for (var i = 0; i < 8; i++) {
+          final angle = i * math.pi / 4;
+          hatPieces.add(
+              tjs.SphereGeometry(1, 10, 6),
+              tjs.Matrix4().multiply2(
+                  flower,
+                  _place(math.cos(angle) * 0.075, 0, math.sin(angle) * 0.075,
+                      yaw: -angle, sx: 0.07, sy: 0.022, sz: 0.036)),
+              0xFFF8EE);
+        }
+        hatPieces.add(
+            tjs.SphereGeometry(0.05, 10, 8),
+            tjs.Matrix4().multiply2(flower, _place(0, 0.012, 0, sy: 0.6)),
+            yolk);
+    }
+    return hatPieces.mesh('hatchling-hat-${hat.name}',
+        flat: false, roughness: 0.6);
   }
 
   /// One frame: [camera] is where the chick turns to.

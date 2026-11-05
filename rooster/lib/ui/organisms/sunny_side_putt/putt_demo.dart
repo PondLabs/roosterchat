@@ -31,6 +31,9 @@
 // `putt-demo: hole open <id>` to the console when the camera starts on it
 // (its first drawn frame), and the script's seconds count from there, so a
 // capture can time its shots from the hole's start, not the page's load.
+// The crew wear looks of their own (a pattern on every egg, a hat on every
+// chick), so a capture shows the variety; look=pattern/hat dresses the
+// viewer's (default stars/crown), e.g. look=hearts/daisy.
 library;
 
 import 'dart:async';
@@ -79,6 +82,23 @@ class PuttDemoPage extends StatefulWidget {
   @override
   State<PuttDemoPage> createState() => _PuttDemoPageState();
 }
+
+/// The crew's looks, by player id: with the viewer's, a full table shows
+/// every pattern and every hat.
+const _crewLooks = {
+  'peer-maya': PuttLook(pattern: EggPattern.dots, hat: HatchlingHat.bow),
+  'peer-jonas':
+      PuttLook(pattern: EggPattern.stripes, hat: HatchlingHat.strawHat),
+  'peer-lou': PuttLook(pattern: EggPattern.waves, hat: HatchlingHat.headphones),
+  'peer-ana': PuttLook(pattern: EggPattern.hearts, hat: HatchlingHat.daisy),
+  'peer-theo': PuttLook.standard,
+  'peer-iris': PuttLook(pattern: EggPattern.stars, hat: HatchlingHat.bow),
+  'peer-bento':
+      PuttLook(pattern: EggPattern.dots, hat: HatchlingHat.headphones),
+};
+
+/// The viewer's look when the query names none.
+const _myLook = PuttLook(pattern: EggPattern.stars, hat: HatchlingHat.crown);
 
 /// The demo crew, in seat order after the viewer.
 const _crew = [
@@ -207,7 +227,14 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
       // (painted once the match knows the colours).
       avatarOf: (id) => _avatars[id],
       seatedPlayerIds: seated,
-    )..boot();
+      look: query['look'] == null ? _myLook : PuttLook.decode(query['look']),
+    );
+    // Dressed before the first hole, so no egg puffs into its look on the
+    // tee.
+    for (final id in seated) {
+      match.engine.setLook(id, _crewLooks[id] ?? PuttLook.standard);
+    }
+    match.boot();
     _paintAvatars();
     _ticker = Timer.periodic(_step, (_) => _tick());
   }

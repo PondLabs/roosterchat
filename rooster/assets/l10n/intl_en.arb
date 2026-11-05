@@ -6139,6 +6139,106 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelPuttYourEgg": "Your egg",
+  "@labelPuttYourEgg": {
+    "description": "Title of the sheet where a player picks the pattern on their egg and the hat on their chick, and the pause menu's button that opens it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttLookPattern": "Pattern: {pattern}",
+  "@labelPuttLookPattern": {
+    "description": "Over the row of egg patterns in \"Your egg\"; the placeholder is the name of the pattern picked (Stripes, Dots...)",
+    "type": "text",
+    "placeholders": {
+      "pattern": {}
+    }
+  },
+  "labelPuttLookHat": "Hat: {hat}",
+  "@labelPuttLookHat": {
+    "description": "Over the row of hats in \"Your egg\", when one is picked; the placeholder is the hat's name (Crown, Bow...)",
+    "type": "text",
+    "placeholders": {
+      "hat": {}
+    }
+  },
+  "labelPuttLookWhoSees": "Everyone sees your pattern on the green and your hat when your chick hatches.",
+  "@labelPuttLookWhoSees": {
+    "description": "Under the choices in \"Your egg\": who sees the pick, and where (the egg on the course, the chick that pops out of the shell in the nest)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPatternZigzag": "Zigzag",
+  "@labelPuttPatternZigzag": {
+    "description": "An egg pattern: a zig-zag band round the egg, with dots",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPatternStripes": "Stripes",
+  "@labelPuttPatternStripes": {
+    "description": "An egg pattern: bold stripes round the egg",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPatternDots": "Dots",
+  "@labelPuttPatternDots": {
+    "description": "An egg pattern: polka dots all over the egg",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPatternHearts": "Hearts",
+  "@labelPuttPatternHearts": {
+    "description": "An egg pattern: a ring of hearts round the egg",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPatternStars": "Stars",
+  "@labelPuttPatternStars": {
+    "description": "An egg pattern: a ring of stars round the egg",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttPatternWaves": "Waves",
+  "@labelPuttPatternWaves": {
+    "description": "An egg pattern: a wavy band round the egg",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttHatNone": "No hat",
+  "@labelPuttHatNone": {
+    "description": "The choice of no hat for the chick that hatches from the egg",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttHatStraw": "Straw hat",
+  "@labelPuttHatStraw": {
+    "description": "A hat for the chick: a farmer's straw hat",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttHatBow": "Bow",
+  "@labelPuttHatBow": {
+    "description": "A hat for the chick: a ribbon bow on its head",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttHatCrown": "Crown",
+  "@labelPuttHatCrown": {
+    "description": "A hat for the chick: a little crown",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttHatHeadphones": "Headphones",
+  "@labelPuttHatHeadphones": {
+    "description": "A hat for the chick: headphones over its head, like the rooster host's",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttHatDaisy": "Daisy",
+  "@labelPuttHatDaisy": {
+    "description": "A hat for the chick: a daisy (the flower) tucked on its head",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelPuttGameSettings": "Game settings",
   "@labelPuttGameSettings": {
     "description": "Title of the settings sheet",

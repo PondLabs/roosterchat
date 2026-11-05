@@ -25,6 +25,7 @@ import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
 import 'package:rooster/client/components/sunny_side_putt/courses/sunny_side_putt_courses.dart';
 
 import 'putt_art.dart';
+import 'putt_look.dart';
 import 'stub_courses.dart';
 
 /// Sounds the view's audio service knows. The harness picks them from the
@@ -133,6 +134,10 @@ enum PuttFxSpotKind {
   /// Hawk Eye, Strong Coffee, Chicken Hop, Nest Magnet), from
   /// [PuttFxSpot.at] toward [PuttFxSpot.toward].
   shot,
+
+  /// [PuttFxSpot.who] put on another look, egg out on the green at
+  /// [PuttFxSpot.at]: a puff as the new shell comes on.
+  restyle,
 }
 
 class PuttFxSpot {
@@ -257,6 +262,8 @@ class PuttMatch extends ChangeNotifier {
   /// next state or relayed move.
   final ValueChanged<EngineInput>? remoteMove;
 
+  /// [look] is the one this client's egg wears, the one saved in "Your
+  /// egg" when left out ([savedPuttLook]).
   PuttMatch({
     required this.config,
     PuttEngine? engine,
@@ -266,12 +273,14 @@ class PuttMatch extends ChangeNotifier {
     this.nameOf,
     this.avatarOf,
     List<String> seatedPlayerIds = const [],
-  }) : engine = engine ?? PuttEngine(config) {
+    PuttLook? look,
+  })  : engine = engine ?? PuttEngine(config),
+        _look = look ?? savedPuttLook() {
     if (engine == null) {
       for (final id in seatedPlayerIds) {
         this.engine.join(id);
       }
-      this.engine.join(localPlayerId);
+      this.engine.join(localPlayerId, look: _look);
       drainEvents();
     }
   }
@@ -323,6 +332,9 @@ class PuttMatch extends ChangeNotifier {
   /// Advances the simulated world by [dt] seconds of frame time, in whole
   /// engine ticks, then drains the engine's events into notices and state.
   void update(double dt) {
+    // The look goes out even while the menu is up (it is picked there).
+    _lookWait = math.max(0, _lookWait - dt);
+    _keepLook();
     if (paused) return;
     if (phase == PuttPhase.holeScoreboard && engine.scoreboardSecondsLeft > 0) {
       // The results' pause runs on the engine's ticks, like a hole's
@@ -704,6 +716,61 @@ class PuttMatch extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ---- my look -------------------------------------------------------------------
+
+  /// The look my egg wears in this match: the saved one, or what "Your
+  /// egg" picked since.
+  PuttLook get look => _look;
+  PuttLook _look;
+
+  /// How many times a look goes to the host before this client stops
+  /// asking (a host that never takes it - an older version - is not
+  /// pestered), and how long it waits between asks, seconds.
+  static const int _lookAsks = 3;
+  static const double _lookAskEvery = 3;
+
+  int _lookAsked = 0;
+  double _lookWait = 0;
+
+  /// Whether the engine had a seat for me when last looked at: a new seat
+  /// (a join, a rejoin) comes in the host's guess of a look, and the asks
+  /// start over.
+  bool _lookSeated = false;
+
+  /// Puts on [look]: at once on a local match; on a session's wire, at
+  /// home at once (like a shot) and through the host for everyone.
+  void wear(PuttLook look) {
+    _look = look;
+    _lookAsked = 0;
+    _lookWait = 0;
+    _keepLook();
+  }
+
+  /// Keeps the engine's word on my look in step with mine: whenever it
+  /// differs (my pick, a seat the host gave me without one, a host's
+  /// snapshot from before my pick) the look goes in again, through the
+  /// host on a session - a few asks at most, a few seconds apart.
+  void _keepLook() {
+    final me = engine.player(localPlayerId);
+    if (me == null) {
+      _lookSeated = false;
+      return;
+    }
+    if (!_lookSeated) {
+      _lookSeated = true;
+      _lookAsked = 0;
+    }
+    if (me.look == _look) return;
+    final move = remoteMove;
+    if (move != null) {
+      if (_lookWait > 0 || _lookAsked >= _lookAsks) return;
+      _lookAsked++;
+      _lookWait = _lookAskEvery;
+      move(LookInput(playerId: localPlayerId, look: _look));
+    }
+    if (engine.setLook(localPlayerId, _look)) _afterInput();
+  }
+
   // ---- reactions -----------------------------------------------------------------
 
   /// Sends a quick reaction ([puttReactions]) from me: through the host on
@@ -1004,6 +1071,14 @@ class PuttMatch extends ChangeNotifier {
       case MatchEnded():
         _announce(PuttHeadlineKind.matchOver, labelPuttMatchOver());
         return [PuttNotice(PuttSfx.victory, title: headline)];
+      case PlayerLookChanged():
+        // A new shell on an egg out on the green: a puff as it comes on.
+        final at = _eggOf(event.playerId);
+        if (at != null) {
+          fxSpots.add(
+              PuttFxSpot(PuttFxSpotKind.restyle, who: event.playerId, at: at));
+        }
+        return const [];
       case PlayerReacted():
         final now = reactionClock;
         reactions
@@ -1161,6 +1236,12 @@ ui.Color puttTintOf(PuttMatch match, String playerId) {
   }
   return PuttPalette.tintForIndex(index.clamp(0, 7));
 }
+
+/// A player's look, as the engine has it: the pattern on their egg and the
+/// scorecard's, the hat on their chick and their tag's egg (the default
+/// for anyone the engine does not know).
+PuttLook puttLookOf(PuttMatch match, String playerId) =>
+    match.engine.player(playerId)?.look ?? PuttLook.standard;
 
 // ---- strings -------------------------------------------------------------------
 

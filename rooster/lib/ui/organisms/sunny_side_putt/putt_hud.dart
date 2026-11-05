@@ -25,6 +25,7 @@ import 'package:rooster/client/components/sunny_side_putt/core/rules.dart';
 import 'package:rooster/utils/common_strings.dart';
 
 import 'putt_art.dart';
+import 'putt_look.dart';
 import 'putt_match.dart';
 import 'putt_powerup_icons.dart';
 import 'putt_targeting.dart';
@@ -297,53 +298,20 @@ const List<BoxShadow> _shadow = [
   BoxShadow(color: Color(0x47000000), blurRadius: 14, offset: Offset(0, 4)),
 ];
 
-/// A player's mark: a little egg in their colour, [size] tall.
+/// A player's mark: a little egg in their colour, [size] tall, wearing
+/// their look - the pattern they picked for their egg, their chick's hat
+/// on top (`putt_look.dart` draws it).
 class _TintDot extends StatelessWidget {
   final Color color;
+  final PuttLook look;
   final double size;
 
-  const _TintDot(this.color, {this.size = 13});
+  const _TintDot(this.color, {this.look = PuttLook.standard, this.size = 13});
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      size: Size(size * 0.8, size),
-      painter: _EggGlyphPainter(color),
-    );
+    return PuttEggGlyph(tint: color, look: look, size: size);
   }
-}
-
-/// An egg's profile, narrower at the crown: filled with the player's
-/// colour, a cream glint high on one side, an ink line round it.
-class _EggGlyphPainter extends CustomPainter {
-  final Color tint;
-
-  const _EggGlyphPainter(this.tint);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width, h = size.height;
-    final egg = Path()
-      ..moveTo(w / 2, 0)
-      ..cubicTo(w * 0.86, 0, w, h * 0.36, w, h * 0.62)
-      ..cubicTo(w, h * 0.86, w * 0.78, h, w / 2, h)
-      ..cubicTo(w * 0.22, h, 0, h * 0.86, 0, h * 0.62)
-      ..cubicTo(0, h * 0.36, w * 0.14, 0, w / 2, 0)
-      ..close();
-    canvas
-      ..drawPath(egg, Paint()..color = tint)
-      ..drawOval(Rect.fromLTWH(w * 0.22, h * 0.16, w * 0.22, h * 0.24),
-          Paint()..color = PuttPalette.shell.withValues(alpha: 0.75))
-      ..drawPath(
-          egg,
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = math.max(1.0, h / 11)
-            ..color = PuttPalette.ink);
-  }
-
-  @override
-  bool shouldRepaint(_EggGlyphPainter oldDelegate) => oldDelegate.tint != tint;
 }
 
 // ---- the top row: course chip, hole bar, buttons --------------------------------------
@@ -1220,6 +1188,7 @@ class PuttHoleResultsCard extends StatelessWidget {
                     _CardRow(
                       rank: ranks[i],
                       tint: puttTintOf(match, played[i].playerId),
+                      look: puttLookOf(match, played[i].playerId),
                       name: displayNameOf(match, played[i].playerId),
                       mine: played[i].playerId == match.localPlayerId,
                       detail: labelPuttHoleStrokes(
@@ -1234,6 +1203,7 @@ class PuttHoleResultsCard extends StatelessWidget {
                   for (final row in watching)
                     _CardRow(
                       tint: puttTintOf(match, row.playerId),
+                      look: puttLookOf(match, row.playerId),
                       name: displayNameOf(match, row.playerId),
                       mine: row.playerId == match.localPlayerId,
                       watching: true,
@@ -1387,6 +1357,7 @@ class PuttMatchOverCard extends StatelessWidget {
                     _CardRow(
                       rank: ranks[i],
                       tint: puttTintOf(match, rows[i].playerId),
+                      look: puttLookOf(match, rows[i].playerId),
                       name: displayNameOf(match, rows[i].playerId),
                       mine: rows[i].playerId == match.localPlayerId,
                       detail: labelPuttTotal(rows[i].total),
@@ -1462,6 +1433,7 @@ class _TotalHeader extends StatelessWidget {
 class _CardRow extends StatelessWidget {
   final int? rank;
   final Color tint;
+  final PuttLook look;
   final String name;
   final bool mine;
   final bool watching;
@@ -1472,6 +1444,7 @@ class _CardRow extends StatelessWidget {
   const _CardRow({
     this.rank,
     required this.tint,
+    this.look = PuttLook.standard,
     required this.name,
     required this.mine,
     this.watching = false,
@@ -1505,7 +1478,7 @@ class _CardRow extends StatelessWidget {
                       : PuttPalette.cream.withValues(alpha: 0.5)),
             ),
           ),
-          _TintDot(tint, size: 15),
+          _TintDot(tint, look: look, size: 15),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -1805,6 +1778,7 @@ class PuttScorecard extends StatelessWidget {
                 ? _ScorecardRow(
                     name: displayNameOf(match, row.playerId),
                     tint: puttTintOf(match, row.playerId),
+                    look: puttLookOf(match, row.playerId),
                     mine: row.playerId == match.localPlayerId,
                     holeColumn: holeColumn,
                     totalColumn: totalColumn,
@@ -1813,6 +1787,7 @@ class PuttScorecard extends StatelessWidget {
                 : _ScorecardRow(
                     name: displayNameOf(match, row.playerId),
                     tint: puttTintOf(match, row.playerId),
+                    look: puttLookOf(match, row.playerId),
                     mine: row.playerId == match.localPlayerId,
                     holeColumn: holeColumn,
                     totalColumn: totalColumn,
@@ -1838,6 +1813,7 @@ class PuttScorecard extends StatelessWidget {
 class _ScorecardRow extends StatelessWidget {
   final String name;
   final Color tint;
+  final PuttLook look;
   final bool mine;
   final double holeColumn;
   final double totalColumn;
@@ -1849,6 +1825,7 @@ class _ScorecardRow extends StatelessWidget {
   const _ScorecardRow({
     required this.name,
     required this.tint,
+    this.look = PuttLook.standard,
     required this.mine,
     required this.holeColumn,
     required this.totalColumn,
@@ -1875,7 +1852,7 @@ class _ScorecardRow extends StatelessWidget {
           : null,
       child: Row(
         children: [
-          _TintDot(tint, size: 12),
+          _TintDot(tint, look: look, size: 12),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
@@ -2422,6 +2399,7 @@ class PuttPlayerPicker extends StatelessWidget {
                           key: Key('putt-pick-$id'),
                           name: displayNameOf(match, id),
                           tint: puttTintOf(match, id),
+                          look: puttLookOf(match, id),
                           powerUp: crow ? _firstSlotPowerUp(id) : null,
                           onTap: () => targeting.castOn(match, id),
                         ),
@@ -2458,6 +2436,7 @@ class PuttPlayerPicker extends StatelessWidget {
 class _PickRow extends StatelessWidget {
   final String name;
   final Color tint;
+  final PuttLook look;
 
   /// What picking this player would bring home, by effect id.
   final String? powerUp;
@@ -2467,6 +2446,7 @@ class _PickRow extends StatelessWidget {
     super.key,
     required this.name,
     required this.tint,
+    this.look = PuttLook.standard,
     required this.powerUp,
     required this.onTap,
   });
@@ -2482,7 +2462,7 @@ class _PickRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
         child: Row(
           children: [
-            _TintDot(tint, size: 14),
+            _TintDot(tint, look: look, size: 14),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
