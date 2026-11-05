@@ -1954,6 +1954,63 @@ class _CourseKit {
     return bitmap.texture();
   }
 
+  // ---- the hens' walks --------------------------------------------------------------------------
+
+  /// Every hen's beat worn into the green: a soft band about a hen wide
+  /// along her stops in order (round the loop when she walks three or
+  /// more, out and back when she paces two), faded at its ends and where
+  /// it meets water, and a few three-toed prints where she stands a while
+  /// (`dwellSeconds` over 0). Worn grass, not a road: a duller, drier
+  /// turf at half opacity, its edges soft and a little uneven. Hens that
+  /// share a beat (the Coop's merry-go-round) wear it once. One mesh for
+  /// the hole, laid on [groundAt] (hills, tiers) just over the lawn and
+  /// drawn first of the turf's marks, under the eggs' shadows, the aim and
+  /// its guide. Null when no hen walks the green (the Pond's ducks swim).
+  tjs.Mesh? henPaths(double Function(Vec2 point) groundAt) {
+    final tracks =
+        _HenTracks(hole, groundAt, _Rand(_seedOf('${hole.id}/hens')));
+    final beats = <String>{};
+    final prints = <String>{};
+    String keyOf(Vec2 p) =>
+        '${(p.x * 10).round()},${(p.y * 10).round()}'; // a tenth of a unit
+    for (final obstacle in hole.obstacles) {
+      if (_henSwims(hole, obstacle)) continue;
+      final stops = obstacle.stops;
+      if (stops.length >= 2 &&
+          beats.add((stops.map((stop) => keyOf(stop.at)).toList()..sort())
+              .join(';'))) {
+        tracks.walk(obstacle);
+      }
+      for (final stop in stops) {
+        final waits = stop.dwellSeconds > 0 || stops.length == 1;
+        if (waits && prints.add(keyOf(stop.at))) {
+          tracks.prints(stop.at, obstacle.radius);
+        }
+      }
+    }
+    if (tracks.isEmpty) return null;
+    // The turf's darker green, dulled toward dry earth, and lit like the
+    // turf (sun, slopes, shadows), so it reads as worn grass on every
+    // course's light rather than as a dark stain.
+    final worn = _shade(_mix(theme.turfDark, 0x9C8A5A, 0.55), 0.92);
+    return tjs.Mesh(
+      tracks.geometry(),
+      tjs.MeshStandardMaterial({
+        tjs.MaterialProperty.color: _lin(worn),
+        tjs.MaterialProperty.map: _henTrackTexture(),
+        tjs.MaterialProperty.roughness: 0.98,
+        tjs.MaterialProperty.metalness: 0.0,
+        tjs.MaterialProperty.transparent: true,
+        tjs.MaterialProperty.opacity: _HenTracks.opacity,
+        tjs.MaterialProperty.depthWrite: false,
+        tjs.MaterialProperty.side: tjs.DoubleSide,
+      }),
+    )
+      ..name = 'hen-paths'
+      ..receiveShadow = true
+      ..renderOrder = _HenTracks.renderOrder;
+  }
+
   // ---- the tee ----------------------------------------------------------------------------------
 
   /// The tee: a rubber mat with a cream dashed ring where the eggs start.
@@ -2397,6 +2454,270 @@ class _CourseKit {
     }
     group.add(merged.mesh('fence-pickets', flat: true)!);
     return group;
+  }
+}
+
+// ---- the hens' walks ------------------------------------------------------------------------
+
+/// Whether [obstacle] swims rather than walks: the Pond's ducks, by name
+/// or by a stop out on the water. Swimmers wear no path.
+bool _henSwims(HoleDef hole, MovingObstacle obstacle) =>
+    obstacle.id.contains('duck') ||
+    obstacle.stops
+        .any((stop) => hole.water.any((pond) => pond.contains(stop.at)));
+
+/// The worn band's alpha: soft across (v), and faded in over the first
+/// quarter of u and out over the last, so a band's ends set u from 0 and
+/// to 1 while its middle stays at 0.5. White: the material's colour tints
+/// it. Small, and the hole's own: it goes with the hole's material.
+tjs.DataTexture _henTrackTexture() {
+  const size = 32;
+  final bitmap = _Bitmap(size, size);
+  double ease(double t) {
+    final x = t.clamp(0.0, 1.0);
+    return x * x * (3 - 2 * x);
+  }
+
+  for (var y = 0; y < size; y++) {
+    // Across: full in the middle half, easing out to nothing at the edges.
+    final v = (y + 0.5) / size;
+    final across = ease((1 - (2 * v - 1).abs()) / 0.55);
+    for (var x = 0; x < size; x++) {
+      final u = (x + 0.5) / size;
+      final ends = u < 0.25
+          ? ease(u / 0.25)
+          : u > 0.75
+              ? ease((1 - u) / 0.25)
+              : 1.0;
+      bitmap.set(x, y, 0xFFFFFF, (255 * across * ends).round());
+    }
+  }
+  return bitmap.texture(srgb: false);
+}
+
+/// The geometry of a hole's hen paths and prints, poured into one list of
+/// triangles (x, ground height + lift, y) with their u/v into
+/// [_henTrackTexture].
+class _HenTracks {
+  _HenTracks(this.hole, this.groundAt, this.rand);
+
+  final HoleDef hole;
+  final double Function(Vec2 point) groundAt;
+  final _Rand rand;
+
+  /// The band's opacity at its fullest: the lawn shows through.
+  static const double opacity = 0.5;
+
+  /// Drawn before the eggs' shadows and tint discs (2), the last roll's
+  /// trace (3) and the aim (4 and up, no depth test).
+  static const int renderOrder = 1;
+
+  /// How far over the turf the band lies, and the prints over it.
+  static const double lift = 0.012;
+  static const double printLift = 0.016;
+
+  /// The band's half width against the hen's collision radius.
+  static const double widthOfRadius = 0.75;
+
+  /// Samples along the band, world units.
+  static const double step = 0.35;
+
+  final List<double> _positions = [];
+  final List<double> _uvs = [];
+
+  bool get isEmpty => _positions.isEmpty;
+
+  bool _wet(Vec2 p) => hole.water.any((pond) => pond.contains(p));
+
+  /// [obstacle]'s beat as a band: round its stops (the corners eased)
+  /// when it has three or more, along its one leg (a little past each
+  /// end, faded) when it has two. Broken, and faded, where water lies.
+  void walk(MovingObstacle obstacle) {
+    final stops = [for (final stop in obstacle.stops) stop.at];
+    if (stops.length < 2) return;
+    final halfWidth = obstacle.radius * widthOfRadius;
+    final closed = stops.length > 2;
+    final List<Vec2> line;
+    if (closed) {
+      line = _eased(stops, halfWidth);
+    } else {
+      final along = (stops[1] - stops[0]).normalized(const Vec2(1, 0));
+      final past = obstacle.radius * 0.5;
+      line = [stops[0] - along * past, stops[1] + along * past];
+    }
+    final points = _sample(line, closed: closed);
+    if (points.length < 2) return;
+    // The dry stretches: the whole loop when none of it is wet.
+    final wet = [for (final p in points) _wet(p)];
+    if (closed && !wet.contains(true)) {
+      _band(points, halfWidth, closed: true);
+      return;
+    }
+    // Start a loop at a wet sample, so no dry stretch wraps the seam.
+    var start = 0;
+    if (closed) start = wet.indexOf(true);
+    var run = <Vec2>[];
+    for (var k = 0; k < points.length + (closed ? 1 : 0); k++) {
+      final i = (start + k) % points.length;
+      if (wet[i]) {
+        if (run.length >= 2) _band(run, halfWidth, closed: false);
+        run = [];
+      } else {
+        run.add(points[i]);
+      }
+    }
+    if (run.length >= 2) _band(run, halfWidth, closed: false);
+  }
+
+  /// A loop's corners eased into short curves, so the band's inner edge
+  /// never folds over itself where the hen turns.
+  static List<Vec2> _eased(List<Vec2> loop, double cut) {
+    final eased = <Vec2>[];
+    final n = loop.length;
+    for (var i = 0; i < n; i++) {
+      final before = loop[(i - 1 + n) % n];
+      final at = loop[i];
+      final after = loop[(i + 1) % n];
+      final inLength = at.distanceTo(before);
+      final outLength = at.distanceTo(after);
+      if (inLength < 1e-6 || outLength < 1e-6) {
+        eased.add(at);
+        continue;
+      }
+      final from =
+          at + (before - at) * (math.min(cut, inLength * 0.4) / inLength);
+      final to =
+          at + (after - at) * (math.min(cut, outLength * 0.4) / outLength);
+      for (var k = 0; k <= 4; k++) {
+        final t = k / 4;
+        eased.add(
+            from * ((1 - t) * (1 - t)) + at * (2 * (1 - t) * t) + to * (t * t));
+      }
+    }
+    return eased;
+  }
+
+  /// [line] walked in [step]s (its corners kept), round to its start when
+  /// [closed].
+  static List<Vec2> _sample(List<Vec2> line, {required bool closed}) {
+    final points = <Vec2>[line.first];
+    final legs = closed ? line.length : line.length - 1;
+    for (var i = 0; i < legs; i++) {
+      final a = line[i];
+      final b = line[(i + 1) % line.length];
+      final length = a.distanceTo(b);
+      final count = math.max(1, (length / step).ceil());
+      for (var k = 1; k <= count; k++) {
+        points.add(a.lerp(b, k / count));
+      }
+    }
+    // A loop's last sample is its first again.
+    if (closed && points.length > 1) points.removeLast();
+    return points;
+  }
+
+  /// A band of [halfWidth] down [points]: its edges wander a little, its
+  /// width breathes, each vertex on the ground under it. Its ends fade
+  /// unless [closed] (a loop has none).
+  void _band(List<Vec2> points, double halfWidth, {required bool closed}) {
+    final n = points.length;
+    final phase = rand.range(0, math.pi * 2);
+    final distances = List<double>.filled(n, 0);
+    for (var i = 1; i < n; i++) {
+      distances[i] = distances[i - 1] + points[i - 1].distanceTo(points[i]);
+    }
+    final total = distances.last;
+    final fade = math.min(halfWidth * 1.4, total / 2.5);
+    final lefts = <Vec2>[];
+    final rights = <Vec2>[];
+    final us = <double>[];
+    for (var i = 0; i < n; i++) {
+      final before = points[closed ? (i - 1 + n) % n : math.max(0, i - 1)];
+      final after = points[closed ? (i + 1) % n : math.min(n - 1, i + 1)];
+      final tangent = (after - before).normalized(const Vec2(1, 0));
+      final normal = Vec2(-tangent.y, tangent.x);
+      final d = distances[i];
+      final wander = math.sin(d * 0.9 + phase) * 0.07 +
+          math.sin(d * 2.3 + phase * 1.7) * 0.04;
+      final width = halfWidth *
+          (1 +
+              0.1 * math.sin(d * 1.7 + phase * 0.6) +
+              0.06 * math.sin(d * 3.1 + phase * 2.3));
+      final middle = points[i] + normal * wander;
+      lefts.add(middle - normal * width);
+      rights.add(middle + normal * width);
+      us.add(closed
+          ? 0.5
+          : d < fade
+              ? 0.25 * d / fade
+              : total - d < fade
+                  ? 1 - 0.25 * (total - d) / fade
+                  : 0.5);
+    }
+    final legs = closed ? n : n - 1;
+    for (var i = 0; i < legs; i++) {
+      final j = (i + 1) % n;
+      _vertex(lefts[i], us[i], 0);
+      _vertex(rights[i], us[i], 1);
+      _vertex(rights[j], us[j], 1);
+      _vertex(lefts[i], us[i], 0);
+      _vertex(rights[j], us[j], 1);
+      _vertex(lefts[j], us[j], 0);
+    }
+  }
+
+  /// A few scuffed three-toed prints round [at], where a hen of [radius]
+  /// stands and shifts her feet. None on water.
+  void prints(Vec2 at, double radius) {
+    if (_wet(at)) return;
+    final size = radius / 1.5;
+    final count = 4 + rand.below(3);
+    for (var k = 0; k < count; k++) {
+      final angle = rand.range(0, math.pi * 2);
+      final heel = at +
+          Vec2(math.cos(angle), math.sin(angle)) *
+              (rand.range(0.2, 0.62) * radius);
+      if (_wet(heel)) continue;
+      final heading = rand.range(0, math.pi * 2);
+      final scale = size * rand.range(0.85, 1.1);
+      // Three toes fanned forward, the middle one longest.
+      for (final (turn, length) in const [
+        (-0.62, 0.24),
+        (0.0, 0.3),
+        (0.62, 0.24)
+      ]) {
+        final dir = Vec2(math.cos(heading + turn), math.sin(heading + turn));
+        final side = Vec2(-dir.y, dir.x) * (0.05 * scale);
+        _vertex(heel + side, 0.5, 0.5, lift: printLift);
+        _vertex(heel - side, 0.5, 0.5, lift: printLift);
+        _vertex(heel + dir * (length * scale), 0.5, 0.5, lift: printLift);
+      }
+    }
+  }
+
+  void _vertex(Vec2 p, double u, double v, {double lift = lift}) {
+    _positions.addAll([p.x, groundAt(p) + lift, p.y]);
+    _uvs.addAll([u, v]);
+  }
+
+  /// The triangles, their normals the ground's own under each corner
+  /// (lit like the turf it lies on, both faces drawn).
+  tjs.BufferGeometry geometry() {
+    final normals = <double>[];
+    for (var i = 0; i < _positions.length; i += 3) {
+      final slope = hole.hasRelief
+          ? hole.groundGradientAt(Vec2(_positions[i], _positions[i + 2]))
+          : Vec2.zero;
+      final length = math.sqrt(slope.x * slope.x + 1 + slope.y * slope.y);
+      normals.addAll([-slope.x / length, 1 / length, -slope.y / length]);
+    }
+    return tjs.BufferGeometry()
+      ..setAttributeFromString(
+          'position', tjs.Float32BufferAttribute.fromList(_positions, 3, false))
+      ..setAttributeFromString(
+          'normal', tjs.Float32BufferAttribute.fromList(normals, 3, false))
+      ..setAttributeFromString(
+          'uv', tjs.Float32BufferAttribute.fromList(_uvs, 2, false));
   }
 }
 

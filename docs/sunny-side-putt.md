@@ -508,11 +508,30 @@ contours and shades the crease at the foot. Eggs, their shadows (tilted
 along the slope), the aim, the crates, the hens, the nest and every
 burst stand on the ground's height, and the pointer's ray walks onto it.
 
+The hens' beats are worn into the turf, since a hen is a moving obstacle
+more than three eggs wide (radius 1.4-1.5) and nothing else on the green
+said where she goes: a soft band about her body's width along her stops in
+order (round the loop when she walks three stops or more, out and a
+little past each end when she paces two), its ends faded, its edges soft
+and a little uneven, in the turf's darker green dulled toward dry earth
+at half opacity and lit like the turf (sun, slopes, shadows; an unlit
+darker band read as a grey road on the Coop's light turf and vanished on
+the Farm Road's darker one), and a few three-toed prints round each stop where she
+waits (`dwellSeconds` over 0). The band breaks, faded, at water; the
+Pond's ducks swim and wear none. Hens that share a beat (the Coop's
+merry-go-round) wear it once. Every vertex lies on the ground's height,
+so the band climbs hills and stays on its tier. It is one mesh
+per hole (`_CourseKit.henPaths` in `world3d/course.dart`, one 32-pixel
+alpha texture, no depth write) drawn first of the turf's marks (render
+order 1), so the eggs' shadows, the last roll's trace, the aim and its
+guide all draw over it, and the eggs hide it where they stand.
+
 On the green: mown turf with stripes and contact shade along the rails,
 rubber bumpers (rails and pinball mushrooms), faceted boulders, ponds
 that ripple, speed belts whose chevrons run, rabbit holes glowing their
 pair's colour, the silo over its spiral pull, floating "?" crates, the
-straw nest with a flag flying the hole's number, the tee mat. The characters - the eggs, the
+straw nest with a flag flying the hole's number, the tee mat, and where
+the hens walk and wait (above). The characters - the eggs, the
 hens, the ducks and the host - are drawn with a line of ink round them
 (their back faces pushed out along their normals; the eggs' line weighs
 more as the camera pulls back), so they pop from the softer farm. Eggs are
