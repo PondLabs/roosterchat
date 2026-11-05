@@ -31,6 +31,26 @@ class PuttCoachCue {
   int get hashCode => Object.hash(egg, toward);
 }
 
+/// Where the coach draws for [cue], for the name tags to keep clear of:
+/// the hand's whole pull (it is drawn from 14 px left of its point to 40
+/// right, 4 above to 50 below) and the ghost arrow toward the nest. Round
+/// 4's frames had the hand over other players' tags.
+List<Rect> puttCoachObstacles(PuttCoachCue cue) {
+  final back = -cue.toward;
+  final press = cue.egg + back * 26;
+  final pulled = cue.egg + back * (26 + 110);
+  final hand = Rect.fromLTRB(
+    math.min(press.dx, pulled.dx) - 14,
+    math.min(press.dy, pulled.dy) - 4,
+    math.max(press.dx, pulled.dx) + 40,
+    math.max(press.dy, pulled.dy) + 50,
+  );
+  final arrow = Rect.fromPoints(
+          cue.egg + cue.toward * 22, cue.egg + cue.toward * (22 + 154))
+      .inflate(14);
+  return [hand, arrow];
+}
+
 /// The coach layer: listens to [cue] and loops the gesture over the egg.
 class PuttCoach extends StatefulWidget {
   final ValueListenable<PuttCoachCue?> cue;

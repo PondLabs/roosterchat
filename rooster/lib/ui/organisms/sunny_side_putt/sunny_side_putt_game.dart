@@ -407,9 +407,15 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   void _afterFrame() {
     game.worldDrew();
     _greenShown.value = true;
+    final coach = game.coachForFrame();
     _tags.update(game.tagsForFrame(),
-        avoid: game.tagObstacles(), hud: game.hudOverGreen());
-    _coach.value = game.coachForFrame();
+        avoid: [
+          ...game.tagObstacles(),
+          // The coach's hand and ghost arrow: tags keep clear of them.
+          if (coach != null) ...puttCoachObstacles(coach),
+        ],
+        hud: game.hudOverGreen());
+    _coach.value = coach;
     final pointer = game.nestPointerForFrame();
     _nestPointer.value = pointer;
     _miniMap.value = game.miniMapForFrame(nestOutOfSight: pointer != null);

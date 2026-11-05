@@ -98,6 +98,28 @@ void main() {
         reason: 'under the strip: gone; below it or beside it: drawn');
   });
 
+  test("tags keep clear of the coach's hand and ghost arrow", () {
+    // My egg at (400, 400), the nest up the screen: the hand pulls down
+    // from under the egg, the ghost arrow grows up toward the nest.
+    const cue = PuttCoachCue(egg: Offset(400, 400), toward: Offset(0, -1));
+    final obstacles = puttCoachObstacles(cue);
+    const handAt = Offset(410, 480); // on the hand's path
+    expect(obstacles.any((rect) => rect.contains(handAt)), isTrue);
+    expect(
+        obstacles.any((rect) => rect.contains(const Offset(400, 300))), isTrue,
+        reason: 'the ghost arrow');
+    const tags = [
+      PuttTag(
+          playerId: 'a',
+          name: 'Jonas',
+          color: Colors.blue,
+          at: Offset(410, 500)),
+    ];
+    final placed = declutterTags(tags, avoid: obstacles).single;
+    final pill = puttTagPill(placed, placed.at);
+    expect(obstacles.any((rect) => rect.overlaps(pill)), isFalse);
+  });
+
   testWidgets('the reaction picker opens and sends one, then folds',
       (tester) async {
     final sent = <String>[];
