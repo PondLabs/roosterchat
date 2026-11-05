@@ -230,8 +230,9 @@ class _CrowView3D {
       size = 1 - k * k;
       climb = 0.5 + k;
     }
-    // About an egg and a half across up close (it dwarfed them at 1.3).
-    final scale = math.max(size, 0.001) * 0.95 * grow;
+    // About an egg and a quarter across up close (it dwarfed them at 1.3,
+    // and still read as twice an egg at 0.95).
+    final scale = math.max(size, 0.001) * 0.8 * grow;
     final floor = ground.at(at);
     group
       ..visible = size > 0.01
