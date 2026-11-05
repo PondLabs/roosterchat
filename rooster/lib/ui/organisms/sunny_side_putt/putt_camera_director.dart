@@ -61,8 +61,14 @@ class PuttCameraDirector {
 
   /// The hatch's close-up: how far out the camera stands, and how low it
   /// looks (degrees).
-  static const double celebrateDistance = 5.4;
+  static const double celebrateDistance = 12.5;
   static const double celebratePitch = 28;
+
+  /// How high over the nest the close-up looks: a little over the middle of
+  /// the viewer's chick (drawn a size up, from its feet on the lip to its
+  /// hat mid-hop), so it stands in the lower middle of the frame, its hat
+  /// clear of the score's banner at the top even mid-hop.
+  static const double celebrateLookHeight = 2.2;
 
   /// How tall the nest's flag stands (world units), kept clear of the HUD
   /// when that is cheap.
@@ -197,11 +203,17 @@ class PuttCameraDirector {
     // hatch (unless the player took the camera), then frames the rest.
     if (cue.myEggHoled && !_wasHoled && !_userCamera) {
       _celebrateUntil = _holeClock + celebrateSeconds;
-      // Down low and close, from the side the camera already looks from
-      // (the chick turns to it): the chick in its hat stands in the middle
-      // of the frame, under the banner up top - from high above it was a
-      // yellow blob under its crown.
-      _celebrateAt = hole.nest.position;
+      // Down low, from the side the camera already looks from (the chick
+      // turns to it): the chick in its hat stands whole in the middle of
+      // the frame, under the banner up top - from high above it was a
+      // yellow blob under its crown. The camera looks at the chick's
+      // middle, not the nest's floor: the target lies past the nest by what
+      // lifts the view that high (centred on the ground, the hopping chick
+      // rose out of the top of the frame).
+      final away = Vec2(math.sin(rig.yawTarget), math.cos(rig.yawTarget));
+      _celebrateAt = hole.nest.position +
+          away *
+              (celebrateLookHeight / math.tan(celebratePitch * math.pi / 180));
       rig.glideTo(
         target: _celebrateAt,
         distance: celebrateDistance,

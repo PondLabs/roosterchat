@@ -1049,7 +1049,9 @@ class _PuttMiddleState extends State<_PuttMiddle>
         // stands in the middle of it).
         alignment: switch (match.headlineKind) {
           PuttHeadlineKind.holeStart => const Alignment(0, 0.5),
-          PuttHeadlineKind.scoreTerm => const Alignment(0, -0.74),
+          // At the top, right under the hole bar: the hatch's close-up has
+          // the chick under it.
+          PuttHeadlineKind.scoreTerm => const Alignment(0, -1),
           _ => const Alignment(0, -0.62),
         },
         child: FittedBox(

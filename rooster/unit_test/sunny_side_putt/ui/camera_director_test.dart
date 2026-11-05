@@ -249,13 +249,25 @@ void main() {
       otherEggs: const [Vec2(10, 20)],
     );
     run(1.2, holed);
-    // Down low and close on the nest (the chick in its hat in the middle of
-    // the frame), nearer than the hole's own zoom clamp lets a player come.
-    expect(rig.target.distanceTo(hole.nest.position), lessThan(0.5));
-    expect(rig.distanceTarget,
-        closeTo(PuttCameraDirector.celebrateDistance, 1e-6));
-    expect(rig.distanceTarget, lessThan(rig.distanceMin));
+    // Down low on the nest, the chick in its hat whole in the lower middle
+    // of the frame: from its feet on the lip (0.5 up) to its hat mid-hop
+    // (3.9 up: the viewer's chick is drawn a size up), under the score's
+    // banner at the top (to 175 px) and over the HUD at the bottom (650 px).
     expect(rig.pitchDeg, closeTo(PuttCameraDirector.celebratePitch, 3));
+    final camera = tjs.PerspectiveCamera(PuttCameraRig.fovDeg, 1280 / 800);
+    rig.applyTo(camera);
+    camera.updateMatrixWorld(true);
+    double pixelY(double height) {
+      final nest = hole.nest.position;
+      return (1 - tjs.Vector3(nest.x, height, nest.y).project(camera).y) /
+          2 *
+          800;
+    }
+
+    expect(pixelY(3.9), greaterThan(175), reason: 'its hat mid-hop');
+    expect(pixelY(0.5), lessThan(650), reason: 'its feet on the lip');
+    expect(pixelY(0.5) - pixelY(2.85), greaterThan(200),
+        reason: 'big on the screen, standing');
     run(PuttCameraDirector.celebrateSeconds + 1.5, holed);
     // After it, the frame of the eggs still out is back within the clamp.
     expect(rig.distanceTarget, greaterThanOrEqualTo(rig.distanceMin));
