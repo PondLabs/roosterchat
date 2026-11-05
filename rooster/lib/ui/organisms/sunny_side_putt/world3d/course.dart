@@ -4,7 +4,7 @@
 // outside the green so its face is where the physics' line is), rubber
 // bumpers, boulders, ponds that ripple, speed belts whose chevrons run,
 // rabbit holes, the silo, the "?" crates' face, the straw nest with its
-// flag, and the tee mat.
+// flag, the tee mat and the sign beside it with the hole's number.
 part of '../putt_world3d.dart';
 
 /// How high the table stands over the meadow: the green is a raised
@@ -1859,23 +1859,9 @@ class _CourseKit {
 
     final flagTexture =
         _paintedTexture(160, 112, _Farm.barnRed, (canvas, size) {
-      final builder = ui.ParagraphBuilder(ui.ParagraphStyle(
-        textAlign: ui.TextAlign.center,
-        fontFamily: 'Sora',
-        fontSize: 78,
-        fontWeight: ui.FontWeight.w800,
-      ))
-        ..pushStyle(ui.TextStyle(
-          color: const ui.Color(0xFFFFF4E4),
-          fontFamily: 'Sora',
-          fontWeight: ui.FontWeight.w800,
-        ))
-        // Not translated: the hole's number, digits only.
-        ..addText(label ?? '');
-      final paragraph = builder.build()
-        ..layout(ui.ParagraphConstraints(width: size.width - 20));
-      canvas.drawParagraph(
-          paragraph, ui.Offset(4, (size.height - paragraph.height) / 2));
+      _paintHoleNumber(canvas,
+          ui.Rect.fromLTWH(4, 0, size.width - 20, size.height), label ?? '',
+          color: const ui.Color(0xFFFFF4E4), fontSize: 78);
     });
     const flagWidth = 1.5;
     const flagHeight = 1.05;
@@ -1998,6 +1984,173 @@ class _CourseKit {
         _Farm.trim);
     group.add(dashes.mesh('tee-dashes', castShadow: false, flat: false)!);
     return group;
+  }
+
+  // ---- the tee's sign ---------------------------------------------------------------------------
+
+  /// The tee's sign board, in world units, and how far it leans back so
+  /// the cameras above read it.
+  static const double _signWidth = 1.5;
+  static const double _signHeight = 1.05;
+  static const double _signLean = 0.3;
+
+  /// The sign's paint in the course's colours: the board, and the ink of
+  /// the number and its border.
+  (int, int) get _signPaint => switch (theme.kind) {
+        _ThemeKind.coop => (0xFAF1E4, 0xC63A2C),
+        _ThemeKind.maze => (0xF4C542, 0x2F6B2A),
+        _ThemeKind.pond => (0x2F7DB8, 0xFFFFFF),
+        _ThemeKind.road => (0xF5C21B, 0x1E1A18),
+        _ThemeKind.barn => (0xC63A2C, 0xFFF4E4),
+      };
+
+  /// The tee's sign: a post on the meadow beside the table and a board
+  /// painted in the course's colours with the hole's number ([label]),
+  /// leaning back a touch. Decoration only: it stands off the table, where
+  /// no egg rolls, and out of the close camera's way (see [teeSignSpot]).
+  /// Null without a number, or with no room for it.
+  tjs.Group? teeSign({String? label}) {
+    final spot = teeSignSpot;
+    if (label == null || label.isEmpty || spot == null) return null;
+    final (at, facing) = spot;
+    // The board stands over the rail by the tee, however high the tee.
+    final rise =
+        hole.hasRelief ? math.max(0.0, hole.groundHeightAt(hole.tee)) : 0.0;
+    final boardY = _tableHeight + rise + 1.45;
+    final group = tjs.Group()
+      ..name = 'tee-sign'
+      ..position.setValues(at.x, -_tableHeight, at.y)
+      ..rotation.y = math.atan2(facing.x, facing.y);
+    group.userData['number'] = label;
+    // The post, the board nailed to its front: the board's own wood shows
+    // as a frame round the paint.
+    final wood = _Merged()
+      ..add(tjs.BoxGeometry(0.22, boardY + 0.2, 0.2),
+          _place(0, (boardY + 0.2) / 2, -0.2), 0x8A5E3A,
+          baseShade: 0.6)
+      ..add(tjs.BoxGeometry(_signWidth + 0.16, _signHeight + 0.16, 0.1),
+          _place(0, boardY, 0, tilt: -_signLean), 0x9A6438);
+    group.add(wood.mesh('tee-sign-wood')!);
+
+    final (board, ink) = _signPaint;
+    final paint = _paintedTexture(160, 112, board, (canvas, size) {
+      // Two planks: their seam, a little grain.
+      final grain = ui.Paint()..color = const ui.Color(0x16000000);
+      for (var i = 0; i < 7; i++) {
+        canvas.drawRect(
+            ui.Rect.fromLTWH(0, 6.0 + i * 15.5 + (i % 3) * 2, size.width, 1.5),
+            grain);
+      }
+      canvas.drawRect(ui.Rect.fromLTWH(0, size.height / 2 - 1.5, size.width, 3),
+          ui.Paint()..color = const ui.Color(0x30000000));
+      // A painted border, a nail in each corner.
+      canvas.drawRRect(
+        ui.RRect.fromRectAndRadius(
+          ui.Rect.fromLTWH(11, 11, size.width - 22, size.height - 22),
+          const ui.Radius.circular(12),
+        ),
+        ui.Paint()
+          ..color = ui.Color(0xFF000000 | ink)
+          ..style = ui.PaintingStyle.stroke
+          ..strokeWidth = 6,
+      );
+      final nail = ui.Paint()..color = const ui.Color(0xFF3A2A20);
+      for (final x in [5.0, size.width - 5]) {
+        for (final y in [5.0, size.height - 5]) {
+          canvas.drawCircle(ui.Offset(x, y), 2.6, nail);
+        }
+      }
+      _paintHoleNumber(
+          canvas, ui.Rect.fromLTWH(0, 2, size.width, size.height), label,
+          color: ui.Color(0xFF000000 | ink), fontSize: 74);
+    });
+    final face = tjs.Mesh(
+      tjs.PlaneGeometry(_signWidth, _signHeight),
+      tjs.MeshStandardMaterial({
+        tjs.MaterialProperty.map: paint,
+        // A little of its own light, so the number reads at dusk too.
+        tjs.MaterialProperty.emissive: _lin(0xFFFFFF),
+        tjs.MaterialProperty.emissiveMap: paint,
+        tjs.MaterialProperty.roughness: 0.82,
+        tjs.MaterialProperty.metalness: 0.0,
+      })
+        ..emissiveIntensity = theme.kind == _ThemeKind.barn ? 0.4 : 0.14,
+    )
+      ..name = 'tee-sign-face'
+      // Just proud of the board, leaning with it.
+      ..position.setValues(
+          0, boardY + math.sin(_signLean) * 0.056, math.cos(_signLean) * 0.056)
+      ..rotation.x = -_signLean
+      ..receiveShadow = true;
+    group.add(face);
+    return group;
+  }
+
+  /// Where the tee's sign stands and the way its board faces (a unit
+  /// vector on the ground): on the meadow just off the table, as near the
+  /// tee as the table allows - never on the camera's side of the green,
+  /// never behind the egg on the tee where the close camera looks from,
+  /// clear of the host and of the corners' lanterns. Null when nothing
+  /// round the tee will do.
+  late final (Vec2, Vec2)? teeSignSpot = _findTeeSignSpot();
+
+  (Vec2, Vec2)? _findTeeSignSpot() {
+    final tee = hole.tee;
+    final bounds = hole.bounds;
+    // The close camera at the tee hangs behind the egg, turned partway
+    // toward the nest.
+    final yaw = PuttCameraRig.yawToward(tee, hole.nest.position);
+    final away = Vec2(math.sin(yaw), math.cos(yaw));
+    final host = _hostSpotOf(hole);
+    // The Barn's lanterns stand off the table's corners.
+    const lip = _fenceThickness + 1.8;
+    final lanterns = [
+      for (final x in [bounds.min.x - lip, bounds.max.x + lip])
+        for (final y in [bounds.min.y - lip, bounds.max.y + lip]) Vec2(x, y),
+    ];
+    // Off the table with room for the post and the board round it.
+    bool offTable(Vec2 p) {
+      if (shape.keptAt(p)) return false;
+      for (var k = 0; k < 8; k++) {
+        final angle = k * math.pi / 4;
+        if (shape.keptAt(p + Vec2(math.cos(angle), math.sin(angle)) * 0.9)) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    Vec2? best;
+    var bestScore = double.infinity;
+    for (var step = 0; step < 72; step++) {
+      final angle = step * math.pi / 36;
+      final direction = Vec2(math.cos(angle), math.sin(angle));
+      // Within 70 degrees of the camera's side of the egg: in its way.
+      if (direction.dot(away) < -0.34) continue;
+      // Within a stroll of the tee, or not at all: a sign across the table
+      // (a tee by the camera's edge, the Coop's Nesting Boxes) read as
+      // nobody's.
+      for (var reach = 1.5; reach < 15; reach += 0.25) {
+        final p = tee + direction * reach;
+        if (!offTable(p)) continue;
+        if (p.y > bounds.max.y - 1) break;
+        if (p.distanceTo(host) < 5.5) break;
+        if (lanterns.any((lantern) => p.distanceTo(lantern) < 2)) break;
+        // Beside the tee rather than ahead along the shot.
+        final score = reach * (1 + 0.3 * math.max(0.0, direction.dot(away)));
+        if (score < bestScore) {
+          best = p;
+          bestScore = score;
+        }
+        break;
+      }
+    }
+    if (best == null) return null;
+    // The board turns halfway between the close camera at the tee and the
+    // overview's, both out on the camera's side.
+    final toCamera = (tee - away * 12 - best).normalized(const Vec2(0, 1));
+    final facing = (toCamera + const Vec2(0, 1)).normalized(const Vec2(0, 1));
+    return (best, facing);
   }
 
   // ---- garden beds -------------------------------------------------------------------------------
