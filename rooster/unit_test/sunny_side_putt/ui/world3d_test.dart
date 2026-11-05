@@ -1030,6 +1030,39 @@ void main() {
       expect(outlineMaterial.opacity, closeTo(1, 1e-9));
     });
 
+    test('a hen pops out of the close-up quickly, and back after', () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      final hen = world.holeGroup('hens')!.children.first;
+      const walking = PuttWorldHen(
+          position: Vec2(20, 14), radius: 1.1, phase: 0, heading: Vec2(1, 0));
+      var time = 0.0;
+      void frame({required bool closeUp}) {
+        world.applySnapshot(PuttWorldFrame(
+            time: time, hens: const [walking], closeUp: closeUp));
+        time += 0.016;
+      }
+
+      frame(closeUp: false);
+      expect(hen.visible, isTrue);
+      final opacities = <double>[];
+      for (var i = 0; i < 12; i++) {
+        frame(closeUp: true);
+        opacities.add(
+            walk(hen).firstWhere((o) => o.material != null).material!.opacity);
+      }
+      expect(hen.visible, isFalse, reason: 'gone within 0.2 s');
+      expect(opacities.where((o) => o > 0.02 && o < 0.98).length,
+          lessThanOrEqualTo(10),
+          reason: 'never long half-seen');
+      for (var i = 0; i < 12; i++) {
+        frame(closeUp: false);
+      }
+      expect(hen.visible, isTrue);
+      expect(
+          walk(hen).firstWhere((o) => o.material != null).material!.opacity, 1);
+    });
+
     test("an egg in front of the viewer's resting egg fades aside", () {
       final world = builtWorld();
       addTearDown(world.dispose);

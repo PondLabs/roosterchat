@@ -659,8 +659,19 @@ mixin _Fadable {
   double _fade = 1;
   tjs.Object3D? _fadeRoot;
 
+  /// The root's own scale, which the pop shrinks from.
+  tjs.Vector3? _fadeScale;
+
+  /// How long a figure takes to go, or to come back: a pop, not a ghost
+  /// lingering half-seen.
+  static const double _fadeSeconds = 0.15;
+
+  /// The figure's own height scale (not shrunk by the pop).
+  double get fadeBaseScaleY => _fadeScale?.y ?? 1;
+
   void _prepareFade(tjs.Object3D root) {
     _fadeRoot = root;
+    _fadeScale = root.scale.clone();
     root.traverse((object) {
       if (object.castShadow) _fadeCasters.add(object);
       final material = object.material;
@@ -670,11 +681,14 @@ mixin _Fadable {
     });
   }
 
-  /// Eases toward [target] opacity (1 = solid).
+  /// Goes toward [target] (1 solid, 0 gone) in [_fadeSeconds], shrinking
+  /// a little toward its feet as it goes.
   void fadeToward(double target, double dt) {
-    final next = _fade + (target - _fade) * math.min(1.0, dt * 6);
-    if ((next - _fade).abs() < 1e-3 && (next - target).abs() < 1e-3) return;
-    _fade = next;
+    if (_fade == target) return;
+    final step = dt / _fadeSeconds;
+    _fade = target > _fade
+        ? math.min(target, _fade + step)
+        : math.max(target, _fade - step);
     for (final material in _fadeMaterials) {
       material.opacity = _fade;
     }
@@ -682,7 +696,14 @@ mixin _Fadable {
     for (final caster in _fadeCasters) {
       caster.castShadow = solid;
     }
-    _fadeRoot?.visible = _fade > 0.02;
+    final root = _fadeRoot;
+    if (root == null) return;
+    root.visible = _fade > 0.02;
+    final base = _fadeScale;
+    if (base != null) {
+      final k = 0.6 + 0.4 * _fade;
+      root.scale.setValues(base.x * k, base.y * k, base.z * k);
+    }
   }
 }
 

@@ -1325,18 +1325,18 @@ class PuttWorld3D {
       view.sync(frame.hens[i], frame.time);
       if (view is _HenView3D) {
         // A hen right in front of the camera (a close-up's foreground), or
-        // any hen while the camera is in on my egg's hatch, fades out of
-        // the way (a ghost of her read as a glitch).
+        // any hen while the camera is in on my egg's hatch, pops out of the
+        // way: all or nothing (a ghost of her read as a glitch), with a
+        // little slack so she does not flicker at the line.
         final at = frame.hens[i].position;
         final dx = camera.position.x - at.x;
         final dy = camera.position.y - _ground.at(at);
         final dz = camera.position.z - at.y;
         final near = math.sqrt(dx * dx + dy * dy + dz * dz) /
             math.max(rig.distance, 1e-6);
-        final target = frame.closeUp
-            ? 0.0
-            : (near < 0.5 ? 0.0 : (near < 0.7 ? (near - 0.5) / 0.2 : 1.0));
-        view.fadeToward(target, dt);
+        final gone = view._fade < 0.5;
+        final tooNear = near < (gone ? 0.68 : 0.58);
+        view.fadeToward(frame.closeUp || tooNear ? 0.0 : 1.0, dt);
       }
     }
   }
@@ -1348,7 +1348,9 @@ class PuttWorld3D {
     final size = rig.viewport;
     if (fade == null || size.width <= 0 || size.height <= 0) return;
     final at = fade.figure.position;
-    final head = tjs.Vector3(at.x, at.y + 8.2 * fade.figure.scale.y, at.z)
+    // His own height, not the pop's shrink (that would bring his head out
+    // from under the HUD and back, over and over).
+    final head = tjs.Vector3(at.x, at.y + 8.2 * fade.fadeBaseScaleY, at.z)
         .project(camera);
     final headY = (1 - head.y) / 2 * size.height;
     final headX = (head.x + 1) / 2 * size.width;
