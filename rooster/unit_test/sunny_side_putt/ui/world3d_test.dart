@@ -1296,7 +1296,7 @@ void main() {
       final shell = walk(egg).firstWhere((o) => o.name == 'egg-shell');
       final ring =
           walk(world.scene).firstWhere((o) => o.name == 'egg-wait-ring');
-      expect(shell.material!.opacity, lessThanOrEqualTo(0.45));
+      expect(shell.material!.opacity, lessThanOrEqualTo(0.55));
       expect(shell.material!.opacity, greaterThan(0.3), reason: 'still there');
       expect(ring.visible, isTrue);
       // Putted: solid again, no ring.

@@ -276,7 +276,9 @@ class PuttCastToast extends StatelessWidget {
       constraints: const BoxConstraints(maxWidth: 440),
       padding: const EdgeInsets.fromLTRB(6, 6, 14, 6),
       decoration: BoxDecoration(
-        color: PuttPalette.ink.withValues(alpha: 0.9),
+        // As solid as the HUD's panels: the fence and the lawn showed
+        // through its text.
+        color: PuttPalette.ink.withValues(alpha: 0.97),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: edge, width: 2),
         boxShadow: const [

@@ -111,10 +111,12 @@ class _Podium extends StatelessWidget {
         _ => 26,
       };
 
+  /// Gold, silver (the cream), bronze: the third a warm bronze, not the
+  /// palette's stone grey (a grey "3" on a grey step read as nothing).
   static Color _stepColour(int rank) => switch (rank) {
         1 => PuttPalette.yolk,
         2 => PuttPalette.cream,
-        _ => PuttPalette.stone,
+        _ => const Color(0xFFDB8B47),
       };
 
   @override

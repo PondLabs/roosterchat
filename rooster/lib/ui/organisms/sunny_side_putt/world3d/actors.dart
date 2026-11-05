@@ -480,7 +480,9 @@ class _EggView3D {
     final left = egg.ghostSeconds;
     if (left > 0) {
       final wave = 0.5 + 0.5 * math.sin(time * 7.3) * math.sin(time * 2.9 + 1);
-      target = 0.26 + 0.22 * wave;
+      // The viewer's own ghost stays findable (they still aim it): a
+      // ghost, not gone.
+      target = everMine ? 0.46 + 0.2 * wave : 0.26 + 0.22 * wave;
       if (left < 0.9) {
         // The last beat: it blinks back toward solid.
         final blink = math.sin(time * 26) > 0 ? 1.0 : 0.0;
@@ -514,8 +516,8 @@ class _EggView3D {
   /// Another player's egg that has not putted on the hole, this frame.
   bool _waiting = false;
 
-  /// How see-through a waiting egg is.
-  static const double _waitingOpacity = 0.45;
+  /// How see-through a waiting egg is (its pattern still reads).
+  static const double _waitingOpacity = 0.55;
 
   /// Inside the viewer's egg on the ground: fully aside this frame.
   void screenAtOnce() => _screened = 1;

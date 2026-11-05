@@ -211,7 +211,9 @@ class _PuttLookSheetState extends State<PuttLookSheet> {
         Text(
           labelPuttLookWhoSees(),
           textAlign: TextAlign.center,
-          style: const TextStyle(color: PuttPalette.stone, fontSize: 12.5),
+          // Ink, a little soft: the stone grey on cream read faintly.
+          style: TextStyle(
+              color: PuttPalette.ink.withValues(alpha: 0.72), fontSize: 13),
         ),
         const SizedBox(height: 8),
         _MenuButton(

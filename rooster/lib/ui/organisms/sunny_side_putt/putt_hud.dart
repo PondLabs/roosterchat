@@ -1354,18 +1354,22 @@ class _ContinueButtonState extends State<_ContinueButton>
                     : labelPuttContinue()),
               ),
             ),
+            // The time going: a cream bar filling along the button's foot
+            // (an ink wash over the red dimmed the label and read as dark
+            // red on red).
             if (done > 0)
               Positioned.fill(
                 child: IgnorePointer(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: Align(
-                      alignment: Alignment.centerLeft,
+                      alignment: Alignment.bottomLeft,
                       child: FractionallySizedBox(
+                        key: const Key('putt-continue-time'),
                         widthFactor: done,
-                        heightFactor: 1,
-                        child: ColoredBox(
-                          color: PuttPalette.ink.withValues(alpha: 0.28),
+                        child: Container(
+                          height: 4,
+                          color: PuttPalette.cream.withValues(alpha: 0.9),
                         ),
                       ),
                     ),
