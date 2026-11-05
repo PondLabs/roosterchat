@@ -10,6 +10,7 @@ import 'package:rooster/client/components/sunny_side_putt/core/rules.dart';
 import 'package:rooster/client/components/sunny_side_putt/courses/course_kit.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_hud.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_match.dart';
+import 'package:rooster/ui/organisms/sunny_side_putt/putt_powerup_icons.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/spectator_strip.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/stub_courses.dart';
 
@@ -128,8 +129,16 @@ void main() {
       await tester.pump();
 
       expect(find.byKey(const Key('putt-inventory')), findsOneWidget);
-      // The filled slot shows the power-up's glyph.
-      expect(find.text('🦅'), findsOneWidget);
+      // The filled slot shows the power-up's icon.
+      expect(
+          find.descendant(
+            of: find.byKey(const Key('putt-slot-0')),
+            matching: find.byWidgetPredicate((w) =>
+                w is PuttPowerUpIcon &&
+                w.effectId == 'hawk_eye' &&
+                w.size == 28),
+          ),
+          findsOneWidget);
       // And the two empty slots are right where the cap says.
       expect(find.byKey(const Key('putt-slot-1')), findsOneWidget);
       expect(find.byKey(const Key('putt-slot-2')), findsOneWidget);

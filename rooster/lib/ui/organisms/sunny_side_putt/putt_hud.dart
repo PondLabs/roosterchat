@@ -26,6 +26,7 @@ import 'package:rooster/utils/common_strings.dart';
 
 import 'putt_art.dart';
 import 'putt_match.dart';
+import 'putt_powerup_icons.dart';
 import 'putt_targeting.dart';
 import 'spectator_strip.dart';
 
@@ -1911,7 +1912,7 @@ class _PuttHintLineState extends State<PuttHintLine>
         if (armed != null) {
           line = _HintPill(
             key: ValueKey('armed-$armed'),
-            glyph: puttPowerUpGlyph(armed),
+            powerUp: armed,
             text: labelPuttTargetPrompt(armed),
             detail: labelPuttTargetCancel(),
             accent: true,
@@ -1945,7 +1946,9 @@ class _PuttHintLineState extends State<PuttHintLine>
 class _HintPill extends StatelessWidget {
   final String text;
   final String? detail;
-  final String? glyph;
+
+  /// The power-up the line is about, by effect id: its icon leads.
+  final String? powerUp;
   final IconData? icon;
   final bool accent;
 
@@ -1953,14 +1956,14 @@ class _HintPill extends StatelessWidget {
     super.key,
     required this.text,
     this.detail,
-    this.glyph,
+    this.powerUp,
     this.icon,
     this.accent = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final glyph = this.glyph;
+    final powerUp = this.powerUp;
     final icon = this.icon;
     final detail = this.detail;
     return Container(
@@ -1975,8 +1978,8 @@ class _HintPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (glyph != null) ...[
-            Text(glyph, style: _Type.emoji(20)),
+          if (powerUp != null) ...[
+            PuttPowerUpIcon(effectId: powerUp, size: 20),
             const SizedBox(width: 10),
           ] else if (icon != null) ...[
             Icon(icon, size: 18, color: PuttPalette.yolk),
@@ -2013,7 +2016,7 @@ class _HintPill extends StatelessWidget {
 // ---- the power-up carton ------------------------------------------------------------------
 
 /// The power-up inventory: three slots filled left to right, each power-up
-/// its glyph on ink with the name and what it does in the tooltip; empty
+/// its icon on ink with the name and what it does in the tooltip; empty
 /// slots a dashed outline. The slot whose power-up waits for a spot or a
 /// player glows.
 class PuttInventory extends StatelessWidget {
@@ -2160,7 +2163,7 @@ class _PowerSlotState extends State<_PowerSlot>
           child: child,
         );
       },
-      child: Text(puttPowerUpGlyph(effectId), style: _Type.emoji(28)),
+      child: PuttPowerUpIcon(effectId: effectId, size: 28),
     );
     return Tooltip(
       preferBelow: false,
@@ -2279,7 +2282,7 @@ class PuttPlayerPicker extends StatelessWidget {
           children: [
             Row(
               children: [
-                Text(puttPowerUpGlyph(effectId), style: _Type.emoji(20)),
+                PuttPowerUpIcon(effectId: effectId, size: 20),
                 const SizedBox(width: 9),
                 Expanded(
                   child: Text(
@@ -2312,7 +2315,7 @@ class PuttPlayerPicker extends StatelessWidget {
                           key: Key('putt-pick-$id'),
                           name: displayNameOf(match, id),
                           tint: puttTintOf(match, id),
-                          glyph: crow ? _firstSlotGlyph(id) : null,
+                          powerUp: crow ? _firstSlotPowerUp(id) : null,
                           onTap: () => targeting.castOn(match, id),
                         ),
                     ],
@@ -2338,30 +2341,32 @@ class PuttPlayerPicker extends StatelessWidget {
   }
 
   /// What the crow would take from [playerId]: their first slot.
-  String? _firstSlotGlyph(String playerId) {
+  String? _firstSlotPowerUp(String playerId) {
     final inventory = match.engine.player(playerId)?.inventory.toList();
     if (inventory == null || inventory.isEmpty) return null;
-    return puttPowerUpGlyph(inventory.first);
+    return inventory.first;
   }
 }
 
 class _PickRow extends StatelessWidget {
   final String name;
   final Color tint;
-  final String? glyph;
+
+  /// What picking this player would bring home, by effect id.
+  final String? powerUp;
   final VoidCallback onTap;
 
   const _PickRow({
     super.key,
     required this.name,
     required this.tint,
-    required this.glyph,
+    required this.powerUp,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final glyph = this.glyph;
+    final powerUp = this.powerUp;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(10),
@@ -2380,7 +2385,12 @@ class _PickRow extends StatelessWidget {
                 style: _Type.body(14, weight: 800),
               ),
             ),
-            if (glyph != null) Text(glyph, style: _Type.emoji(18)),
+            if (powerUp != null)
+              PuttPowerUpIcon(
+                effectId: powerUp,
+                size: 18,
+                semanticLabel: puttPowerUpName(powerUp),
+              ),
           ],
         ),
       ),
@@ -2388,27 +2398,8 @@ class _PickRow extends StatelessWidget {
   }
 }
 
-// ---- power-up names, glyphs and lines ------------------------------------------------------
-
-/// The twelve effects' glyphs, drawn by the bundled Twemoji font.
-String puttPowerUpGlyph(String effectId) {
-  // Not translated: an emoji glyph, not a word (every line below).
-  return switch (effectId) {
-    'hawk_eye' => '🦅',
-    'nest_magnet' => '🧲',
-    'ghost_egg' => '👻',
-    'chicken_hop' => '🐔',
-    'rabbit_hole' => '🐇',
-    'gust' => '💨',
-    'thick_shell' => '🛡️',
-    'strong_coffee' => '☕',
-    'nest_swap' => '🔄',
-    'sprinkler' => '💦',
-    'corn_rain' => '🌽',
-    'thieving_crow' => '🐦',
-    _ => '❔',
-  };
-}
+// ---- power-up names and lines -----------------------------------------------------------
+// (their icons are drawn in putt_powerup_icons.dart)
 
 /// The twelve effects' display names, by id (the ids the engine's registry
 /// carries; unknown ids fall back to themselves so nothing renders blank).

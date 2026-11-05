@@ -13,10 +13,15 @@ import 'package:rooster/client/components/sunny_side_putt/core/rules.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_hud.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_match.dart';
+import 'package:rooster/ui/organisms/sunny_side_putt/putt_powerup_icons.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_session.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_targeting.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/stub_courses.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/sunny_side_putt_game.dart';
+
+/// [effectId]'s icon.
+Finder powerUpIcon(String effectId) => find
+    .byWidgetPredicate((w) => w is PuttPowerUpIcon && w.effectId == effectId);
 
 /// A booted match with the twelve real effects, me and [others] on the
 /// stub green.
@@ -208,12 +213,20 @@ void main() {
       expect(targeting.armed, 'sprinkler');
       expect(find.text('Tap a spot: the sprinkler soaks the eggs around it'),
           findsOneWidget);
+      expect(
+          find.descendant(
+            of: find.byKey(const Key('putt-hint')),
+            matching: powerUpIcon('sprinkler'),
+          ),
+          findsOneWidget,
+          reason: 'the line leads with the armed power-up');
       expect(find.text('Tap the power-up again to cancel'), findsOneWidget);
       expect(match.myInventory, ['sprinkler']);
     });
 
     testWidgets('the picker lists the others and casts on the one picked',
         (tester) async {
+      final semantics = tester.ensureSemantics();
       final match = effectsMatch(others: const ['p2', 'p3']);
       match.localPlayer!.inventory.add('thieving_crow');
       match.engine.player('p3')!.inventory.add('ghost_egg');
@@ -229,8 +242,14 @@ void main() {
       // Only the chick holds anything; the crow shows what it would take.
       expect(find.byKey(const Key('putt-pick-p2')), findsNothing);
       expect(find.byKey(const Key('putt-pick-p3')), findsOneWidget);
-      expect(find.descendant(of: picker, matching: find.text('👻')),
+      expect(
+          find.descendant(
+            of: find.byKey(const Key('putt-pick-p3')),
+            matching: powerUpIcon('ghost_egg'),
+          ),
           findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp('Ghost Egg')), findsOneWidget,
+          reason: 'a screen reader hears what the crow would take');
 
       await tester.tap(find.byKey(const Key('putt-pick-p3')));
       await tester.pump();
@@ -238,6 +257,7 @@ void main() {
       expect(match.myInventory, ['ghost_egg'],
           reason: 'the crow was spent and brought the ghost egg home');
       expect(match.engine.player('p3')!.inventory.isEmpty, isTrue);
+      semantics.dispose();
     });
 
     testWidgets('with nobody to pick, the picker says so and keeps it',
