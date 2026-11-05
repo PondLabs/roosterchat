@@ -452,15 +452,27 @@ void main() {
     final aliceCall = app.clientManager.callManager
         .getCallInRoom(aliceClient, voiceChannel.identifier);
     expect(aliceCall, isNotNull);
+    // Alice's view goes before her call, as the teardown does: hung up with
+    // the stage still on screen, the process froze (no log, no timer) for
+    // the rest of the job's hour. Each step says it is reached.
+    // ignore: avoid_print
+    void mark(String what) => print('Sunny Side Putt e2e: $what');
+    mark('the hole is done on both');
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 500));
+    mark("alice's view is down");
     await _bounded(aliceCall!.hangUpCall(), "alice's hang up");
+    mark('alice hung up');
     await tester.waitFor(() => bobPuttSession!.isHost,
         skipPumpAndSettle: true, timeout: const Duration(seconds: 30));
+    mark('bob hosts');
     expect(bobPuttSession!.isHost, isTrue);
     expect(bobPuttSession!.hasSession, isTrue);
     expect(bobActivity.match, isNotNull);
 
     // And the last one out ends the session.
     await _bounded(bobActivity.leave(), "bob's leave of the session");
+    mark('bob left');
     expect(sessionEndedForBob, isTrue);
     expect(bobPuttSession!.hasSession, isFalse);
     // The room state event should be gone too; the component clears it when
