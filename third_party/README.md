@@ -13,10 +13,21 @@ back to their origin; we change them here.
 | `deep_filter` | https://github.com/Rikorose/DeepFilterNet (`libDF/`, `models/DeepFilterNet3_onnx.tar.gz`, MIT or Apache-2.0) | `d375b2d8309e0935d165700c91da9de862a99c31` (2024-10-17), trimmed to the real-time inference |
 | `flutter_vodozemac` | https://pub.dev/packages/flutter_vodozemac | `0.5.0` (2026-10) + the `windows-arm64` cargokit target |
 | `media_kit_libs_windows_video` | https://pub.dev/packages/media_kit_libs_windows_video | `1.0.11` (2026-10) + arm64 libmpv and ANGLE |
+| `three_js_angle_renderer` | https://pub.dev/packages/three_js_angle_renderer (MIT) | `0.0.1` (2026-11) + the tone-mapping program check |
 
 `example/`, `test/`, `testfiles/`, `.github/` and git metadata were dropped
 from the copies. Local changes are marked with `// ROOSTER:` comments in Dart
 and C++ and listed in `docs/voice-audio-processing.md`.
+
+`three_js_angle_renderer` (Sunny Side Putt's 3D renderer) decided on every
+draw whether a material's program had to change by comparing the tone
+mapping the program was built with against a local that `setProgram`
+assigned to itself, so it was always "none"; every tone-mapped material
+(nearly all of them) rebuilt its program parameters and cache key on every
+draw of every frame, and `getParameters` gave render targets (the shadow
+map) the renderer's tone mapping where three.js gives none, so the depth
+materials did the same. Both are fixed and marked `// ROOSTER:` in
+`lib/renderers/renderer.dart` and `lib/angle/angle_programs.dart`.
 
 `flutter-webrtc` replaced the commetchat fork (branch `hkdf`, 1.4.1). Upstream
 1.6.2 already carries the fork's only change (`KeyDerivationAlgorithm`

@@ -1,3 +1,4 @@
+import 'package:rooster/client/matrix/components/call_activity/matrix_call_activity_component.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_call_moves_component.dart';
 import 'package:rooster/client/components/component.dart';
 import 'package:rooster/client/components/voip/media_capture_support.dart';
@@ -103,6 +104,10 @@ class ComponentRegistry {
         MatrixPhotoAlbumRoomComponent(client, room),
       MatrixCalendarRoomComponent(client, room),
       MatrixActivitiesComponent(client, room),
+      // Call activities (games in the voice channel): the state lives on
+      // the room, the wire on the call.
+      if (MatrixVoipRoomComponent.isVoipRoom(room))
+        MatrixCallActivityComponent(client, room),
     ];
   }
 

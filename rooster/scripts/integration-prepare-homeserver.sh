@@ -29,6 +29,23 @@ done
 
 echo "Homeserver is up."
 
+# The MatrixRTC focus is announced by the homeserver itself: the config
+# block joins integration_test/synapse/data/homeserver.yaml BEFORE the
+# container boots (see scripts/integration-server-synapse.sh - Synapse only
+# reads its config at startup, and a restart here was found to kill the
+# container's tmpfs state). Verify the announcement: the e2e's joins hang
+# off it.
+LIVEKIT_URL="${LIVEKIT_URL:-http://localhost:8180}"
+echo "Checking /.well-known/matrix/client announces the LiveKit focus..."
+if ! curl -fS --retry 3 "http://$HOMESERVER/.well-known/matrix/client" \
+    | jq -e --arg url "$LIVEKIT_URL" \
+        '[.["org.matrix.msc4143.rtc_foci"][]? | select(.type == "livekit" and .livekit_service_url == $url)] | length > 0' \
+        >/dev/null; then
+  echo "well-known does not announce $LIVEKIT_URL as a livekit focus" >&2
+  exit 1
+fi
+echo "Well-known announces livekit focus $LIVEKIT_URL"
+
 # create users
 
 curl -fS --retry 3 -XPOST -d "{\"username\":\"$USER1_NAME\", \"password\":\"$USER1_PW\", \"inhibit_login\":true, \"auth\": {\"type\":\"m.login.dummy\"}}" "http://$HOMESERVER/_matrix/client/r0/register"

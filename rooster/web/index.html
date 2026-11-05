@@ -39,6 +39,13 @@
        See docs/voice-audio-processing.md -->
   <script src="audio_dsp.js" defer></script>
 
+  <!-- three_js's web renderer folds its GLES calls through a WebGL2 context
+       shim the flutter_angle package expects as global functions (its own
+       requirement, normally loaded from a CDN; vendored at web/
+       gles_bindings.js instead, so the app carries no third-party CDN).
+       Must run before the 3D world renders - here, before the app. -->
+  <script src="gles_bindings.js" defer></script>
+
   <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
 
 

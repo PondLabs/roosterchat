@@ -13,6 +13,11 @@ concurrency:
 
 env:
   HOMESERVER: localhost
+  # Local LiveKit for voice e2e (issue #225), started by the Start LiveKit
+  # step below and announced to the app through the homeserver's well-known
+  # rtc_foci by scripts/integration-prepare-homeserver.sh. Tests that need it
+  # skip gracefully when it is unreachable, so runs without Docker still work.
+  LIVEKIT_URL: http://localhost:8180
   USER1_NAME: alice
   USER1_PW: AliceInWonderLand
   USER2_NAME: bob
@@ -45,13 +50,26 @@ jobs:
       - name: Setup Tools  ᕙ|” ◉ ◡ ◉ ”|ᕗ
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y ninja-build libgtk-3-dev libmpv-dev mpv ffmpeg libmimalloc-dev \
-            libkeybinder-3.0-dev libayatana-appindicator3-dev libpulse-dev libasound2-dev clang lld cmake pkg-config
+          sudo apt-get install -y ninja-build libgtk-3-dev libmpv-dev mpv libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-good ffmpeg libmimalloc-dev \
+            libkeybinder-3.0-dev libayatana-appindicator3-dev libpulse-dev libasound2-dev clang lld cmake pkg-config network-manager gdb \
+            pulseaudio
+          # connectivity_plus asks NetworkManager over D-Bus when a LiveKit
+          # room connects; these runners use systemd-networkd, so the name
+          # org.freedesktop.NetworkManager does not exist and joining a call
+          # dies on DBusServiceUnknownException before it reaches the room.
+          sudo systemctl enable --now NetworkManager
 
       - name: Start Synapse  [◯ ‸ ◯]
         run: |
           cd $PROJECT_PATH
           scripts/integration-server-synapse.sh
+
+      # Local LiveKit for voice e2e (issue #225); must be up before the
+      # homeserver is configured so its focus lands in the well-known.
+      - name: Start LiveKit
+        run: |
+          cd $PROJECT_PATH
+          scripts/integration-server-livekit.sh
 
       - name: Configure Synapse  ╰[ ⁰﹏⁰ ]╯
         run: |
@@ -80,11 +98,34 @@ jobs:
           for _ in $(seq 1 30); do [ -e /tmp/.X11-unix/X99 ] && break; sleep 1; done
           ffmpeg -f x11grab -video_size 1920x1080 -framerate 15 -i :99 -vcodec libx264 -preset ultrafast -qp 0 -nostdin -loglevel quiet -pix_fmt yuv444p video.mkv &
           FFMPEG_PID=$!
+          # WebRTC's audio device module aborts the app (a fatal check in
+          # adm_helpers::Init, as the voice e2e creates its peer connection)
+          # when it finds no audio server, and these runners run none: give
+          # the app a PulseAudio with a null sink to play into and record
+          # from. The app finds its socket through XDG_RUNTIME_DIR.
+          export XDG_RUNTIME_DIR="/tmp/runtime-$(id -u)"
+          mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+          pulseaudio --start --exit-idle-time=-1 || true
+          pactl load-module module-null-sink sink_name=ci_speaker >/dev/null || true
+          pactl info | head -n 4 || true
+          # A crash in native code (the WebRTC stack, the GL surface) ends the
+          # app without a word, and the run only says a test "did not
+          # complete": keep the app's core and print where it died.
+          ulimit -c unlimited
+          sudo mkdir -p /tmp/cores && sudo chmod 777 /tmp/cores
+          echo '/tmp/cores/core.%e.%p' | sudo tee /proc/sys/kernel/core_pattern >/dev/null
           # The step runs under `bash -e`, so the failure has to be caught here
           # or the recording is never finalised and the artifact is unusable.
           set +e
           scripts/integration-test.sh
           INTEGRATION_TEST_EXIT_CODE=$?
+          for core in /tmp/cores/core.*; do
+            [ -e "$core" ] || continue
+            echo "::group::Backtrace of $core"
+            gdb -batch -ex "thread apply all bt 30" \
+              "$(ls build/linux/x64/*/bundle/rooster | head -1)" "$core" 2>&1 | tail -n 600
+            echo "::endgroup::"
+          done
           set -e
           kill -INT $FFMPEG_PID 2>/dev/null || true
           wait $FFMPEG_PID 2>/dev/null || true

@@ -9,6 +9,7 @@ import 'matrix/key_verification_test.dart' as key_verification_test;
 import 'matrix/create_space_test.dart' as create_space_test;
 import 'matrix/multi_account_test.dart' as multi_account_test;
 import 'matrix/change_space_name_test.dart' as change_space_name_test;
+import 'activities/sunny_side_putt_test.dart' as sunny_side_putt_test;
 
 void main() async {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -20,4 +21,5 @@ void main() async {
   create_space_test.main();
   multi_account_test.main();
   change_space_name_test.main();
+  sunny_side_putt_test.main();
 }

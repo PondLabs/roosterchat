@@ -13,6 +13,7 @@ import 'package:rooster/config/platform_utils.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/utils/notifying_list.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:intl/intl.dart';
 import 'package:media_kit/media_kit.dart';
 
@@ -38,6 +39,14 @@ class CallManager {
 
   NotifyingList<VoipSession> currentSessions =
       NotifyingList.empty(growable: true);
+
+  /// Integration tests only: two accounts signed in to this one app stand
+  /// for two people, each in a call of their own (the voice e2e's alice and
+  /// bob meet in one channel). Joining then leaves only the same account's
+  /// other calls. Everywhere else one person is only ever in one voice
+  /// channel, whichever of their accounts it is on.
+  @visibleForTesting
+  bool accountsAreSeparatePeople = false;
 
   CallManager(this.clientManager) {
     clientManager.onClientAdded.stream.listen(_onClientAdded);
@@ -158,14 +167,19 @@ class CallManager {
   /// is a session that is still ringing — an incoming call is not one they
   /// are in, and hanging it up would decline it on their behalf — or one
   /// that has already ended.
+  ///
+  /// With [onlyThisAccount] (see [accountsAreSeparatePeople]) another
+  /// account's calls are not in it either.
   static List<VoipSession> callsToLeave(
     Iterable<VoipSession> sessions,
     Client client,
-    String roomId,
-  ) =>
+    String roomId, {
+    bool onlyThisAccount = false,
+  }) =>
       sessions
           .where((session) =>
               !(session.client == client && session.roomId == roomId) &&
+              (!onlyThisAccount || session.client == client) &&
               session.state != VoipState.incoming &&
               session.state != VoipState.ended)
           .toList();
@@ -178,7 +192,8 @@ class CallManager {
     required Client client,
     required String roomId,
   }) async {
-    final others = callsToLeave(currentSessions, client, roomId);
+    final others = callsToLeave(currentSessions, client, roomId,
+        onlyThisAccount: accountsAreSeparatePeople);
 
     await Future.wait(others.map((session) async {
       try {

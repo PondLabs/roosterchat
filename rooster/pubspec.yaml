@@ -8,6 +8,7 @@ resolution: workspace
 
 dependencies: 
   build: any
+  audioplayers: ^6.7.1 # Sunny Side Putt's SFX and music buses.
   build_config: ^1.1.1
   rooster_calendar_widget:
     path: ../widgets/calendar
@@ -18,6 +19,7 @@ dependencies:
   desktop_drop: ^0.4.1
   desktop_notifications: ^0.6.3
   device_info_plus: ^12.2.0
+  flame: ^1.38.2
   ffi: ^2.1.0
   flutter_background_service: ^5.0.5
   flutter_blurhash: ^0.8.2
@@ -44,6 +46,18 @@ dependencies:
   shared_preferences: ^2.5.2
   sqflite: ^2.3.0
   sqflite_common_ffi: ^2.3.0+4
+  # Sunny Side Putt's real-3D renderer: three_js (MIT, the Dart three.js).
+  # The `three_js` facade entry pulls three_js_advanced_loaders too, which
+  # forces archive ^4.0.7 against the workspace's archive ^3.6.1, so the
+  # parts the game needs go in directly - the same engine, same author,
+  # same versions, minus the loaders the game never uses.
+  three_js_core: ^0.3.0
+  three_js_math: ^0.3.0
+  three_js_angle_renderer: ^0.0.1
+  three_js_geometry: ^0.3.0
+  # The GL bridge under three_js: the game's surface resizes its texture
+  # through it when the call's stage changes size.
+  flutter_angle: ^0.4.2
   test: ^1.24.3
   unifiedpush: ^5.0.1
   universal_html: ^2.2.4
@@ -202,6 +216,12 @@ dependency_overrides:
   media_kit_libs_windows_video:
     path: ../third_party/media_kit_libs_windows_video
 
+  # Sunny Side Putt's 3D renderer: setProgram compared every tone-mapped
+  # material against no tone mapping (a self-assignment), so each draw
+  # rebuilt its program parameters every frame; the copy fixes it.
+  three_js_angle_renderer:
+    path: ../third_party/three_js_angle_renderer
+
 dev_dependencies:
   drift_dev: ^2.28.0
   build_runner: ^2.4.11
@@ -256,6 +276,7 @@ flutter:
     - assets/js/package/
     - assets/vodozemac/
     - assets/data/
+    - assets/sunny_side_putt/
     - assets/licenses/
   shaders: 
     - assets/shader/texture_coordinate.frag

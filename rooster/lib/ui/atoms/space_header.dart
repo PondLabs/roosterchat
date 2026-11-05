@@ -23,9 +23,24 @@ class _SpaceHeaderState extends State<SpaceHeader> {
   @override
   void initState() {
     super.initState();
+    _listen();
+  }
+
+  void _listen() {
     _sub = widget.space.onUpdate.listen((_) {
       if (mounted) setState(() {});
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant SpaceHeader oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Reused for another space object (the same space reloaded, or a
+    // different one): follow the new one's updates, not the old one's.
+    if (!identical(oldWidget.space, widget.space)) {
+      _sub.cancel();
+      _listen();
+    }
   }
 
   @override

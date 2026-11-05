@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:rooster/client/matrix/components/voip_room/call_membership_writes.dart';
+import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/matrix/components/voip_room/matrix_call_membership.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip/webrtc_default_devices.dart';
@@ -46,10 +47,41 @@ class MatrixLivekitBackend {
               "not join the call': the call's media server (the SFU) answered "
               "with an HTTP error, whose number follows");
 
+  /// The server's discovery document. The spec puts it on the domain's
+  /// HTTPS root and the SDK's discovery asks exactly there - a homeserver
+  /// this client already logs into over plain HTTP on the same host (a
+  /// developer's or the integration one) then answers via its own base
+  /// URL: same box, same trust, same file (Synapse serves it from
+  /// `extra_well_known_client_content`).
+  Future<matrix.DiscoveryInformation> _wellKnown() async {
+    final client = room.matrixRoom.client;
+    try {
+      return await client.getWellknown();
+    } catch (e, s) {
+      Log.onError(e, s,
+          content: 'matrixrtc: the standard well-known did not answer');
+    }
+    final base = client.homeserver;
+    if (base == null) {
+      throw CallJoinException("Could not discover the homeserver's well-known",
+          errorCallNoLivekitService);
+    }
+    final uri =
+        base.replace(path: "/.well-known/matrix/client").normalizePath();
+    final response = await http.get(uri).timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) {
+      throw CallJoinException(
+          "The homeserver's well-known answered HTTP ${response.statusCode}",
+          errorCallNoLivekitService);
+    }
+    return matrix.DiscoveryInformation.fromJson(
+        jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, Object?>);
+  }
+
   Future<List<Uri>> getFociUrl() async {
     final selectedFocus = findSelectedFocus();
 
-    var wellKnown = await room.matrixRoom.client.getWellknown();
+    var wellKnown = await _wellKnown();
     final livekitJwtServiceUrl = wellKnown
         .additionalProperties["org.matrix.msc4143.rtc_foci"] as List<dynamic>?;
 
@@ -153,7 +185,14 @@ class MatrixLivekitBackend {
         room.matrixRoom.client.userID!,
         {}).timeout(const Duration(seconds: 15));
 
-    if (selectedFocus.scheme != "https") {
+    // A remote service must be HTTPS: the OpenID-backed requests leave
+    // this device. A loopback service (a developer's local stack, and the
+    // integration one) is trusted by its address.
+    final focusLoopback = selectedFocus.host == "localhost" ||
+        selectedFocus.host.startsWith("127.") ||
+        selectedFocus.host == "::1" ||
+        selectedFocus.host == "[::1]";
+    if (selectedFocus.scheme != "https" && !focusLoopback) {
       throw CallJoinException(
           "Selected focus JWT does not use HTTPS", errorCallFocusNotHttps);
     }
