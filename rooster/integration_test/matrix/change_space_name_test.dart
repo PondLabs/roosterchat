@@ -33,6 +33,16 @@ void main() {
     String newName = "New Space Name ${RandomUtils.getRandomString(10)}";
     var space = chatPage.currentSpace!;
     String name = space.displayName;
+    // The client may rebuild its spaces while the test runs (sync, the
+    // accounts the earlier tests added), so the name is read off the
+    // space the client holds now, by its id, not off this object.
+    final spaceId = space.identifier;
+    String? nameNow() {
+      for (final current in app.clientManager.spaces) {
+        if (current.identifier == spaceId) return current.displayName;
+      }
+      return null;
+    }
 
     expect(name, isNot(newName));
 
@@ -52,14 +62,14 @@ void main() {
 
     await tester.tap(find.widgetWithIcon(tiamat.IconButton, Icons.check));
 
-    await tester.waitFor(() => space.displayName == newName,
+    await tester.waitFor(() => nameNow() == newName,
         timeout: const Duration(seconds: 30));
 
     await tester.tap(find.byKey(DesktopSettingsPageState.backButtonKey));
 
     await tester.pumpAndSettle();
 
-    expect(space.displayName, equals(newName));
+    expect(nameNow(), equals(newName));
 
     // The header redraws off the space's update stream rather than on the
     // frame after the rename, so give it frames to catch up.
