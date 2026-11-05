@@ -232,10 +232,16 @@ void main() {
       otherEggs: const [Vec2(10, 20)],
     );
     run(1.2, holed);
-    // Just past the nest, so it sits below the middle, under the banner.
-    expect(rig.target.distanceTo(hole.nest.position), lessThan(2.6));
-    expect(rig.distanceTarget, lessThan(rig.overviewDistance * 0.5));
+    // Down low and close on the nest (the chick in its hat in the middle of
+    // the frame), nearer than the hole's own zoom clamp lets a player come.
+    expect(rig.target.distanceTo(hole.nest.position), lessThan(0.5));
+    expect(rig.distanceTarget,
+        closeTo(PuttCameraDirector.celebrateDistance, 1e-6));
+    expect(rig.distanceTarget, lessThan(rig.distanceMin));
+    expect(rig.pitchDeg, closeTo(PuttCameraDirector.celebratePitch, 3));
     run(PuttCameraDirector.celebrateSeconds + 1.5, holed);
+    // After it, the frame of the eggs still out is back within the clamp.
+    expect(rig.distanceTarget, greaterThanOrEqualTo(rig.distanceMin));
     expectInFreeView(const Vec2(10, 20));
     expectInFreeView(hole.nest.position);
   });

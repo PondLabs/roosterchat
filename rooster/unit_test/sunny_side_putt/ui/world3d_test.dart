@@ -133,6 +133,7 @@ void main() {
     double ghostSeconds = 0,
     bool magnet = false,
     bool mine = false,
+    bool waiting = false,
   }) {
     return PuttWorldEgg(
       playerId: playerId,
@@ -145,6 +146,7 @@ void main() {
       ghostSeconds: ghostSeconds,
       magnet: magnet,
       mine: mine,
+      waiting: waiting,
     );
   }
 
@@ -781,6 +783,34 @@ void main() {
       expect(puffs(), greaterThan(0), reason: 'the dust flies where it lands');
     });
 
+    test("the viewer's confetti leaves the camera's side clear", () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      final nest = dressing.nest.position;
+      var time = 0.0;
+      // My egg at the nest's mouth, then gone into it.
+      world.applySnapshot(PuttWorldFrame(
+          time: time, eggs: [eggAt(nest + const Vec2(0.3, 0), mine: true)]));
+      for (var i = 0; i < 18; i++) {
+        time += 0.016;
+        world.applySnapshot(PuttWorldFrame(time: time));
+      }
+      final eye = world.camera.position;
+      final toCamera = math.atan2(eye.z - nest.y, eye.x - nest.x);
+      final pieces = walk(world.scene)
+          .where((o) => o.name == 'burst-paper' && o.visible)
+          .toList();
+      expect(pieces, isNotEmpty, reason: 'the confetti flies');
+      for (final piece in pieces) {
+        final angle =
+            math.atan2(piece.position.z - nest.y, piece.position.x - nest.x);
+        var off = (angle - toCamera).abs() % (2 * math.pi);
+        off = math.min(off, 2 * math.pi - off);
+        expect(off, greaterThan(0.7),
+            reason: 'none between the lens and the chick');
+      }
+    });
+
     test('an egg rides a ramp down and up, never in the air', () {
       final world = PuttWorld3D(viewport: const ui.Size(800, 600));
       addTearDown(world.dispose);
@@ -1230,6 +1260,34 @@ void main() {
       expect(shell.castShadow, isTrue);
     });
 
+    test('a waiting egg is drawn as the ghost it is, a dashed ring at its foot',
+        () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      var time = 0.0;
+      void frame({required bool waiting}) {
+        for (var i = 0; i < 3; i++) {
+          world.applySnapshot(PuttWorldFrame(time: time, eggs: [
+            eggAt(const Vec2(10, 10), playerId: 'maya', waiting: waiting),
+          ]));
+          time += 0.016;
+        }
+      }
+
+      frame(waiting: true);
+      final egg = world.eggOf('maya')!;
+      final shell = walk(egg).firstWhere((o) => o.name == 'egg-shell');
+      final ring =
+          walk(world.scene).firstWhere((o) => o.name == 'egg-wait-ring');
+      expect(shell.material!.opacity, lessThanOrEqualTo(0.45));
+      expect(shell.material!.opacity, greaterThan(0.3), reason: 'still there');
+      expect(ring.visible, isTrue);
+      // Putted: solid again, no ring.
+      frame(waiting: false);
+      expect(shell.material!.opacity, closeTo(1, 1e-9));
+      expect(ring.visible, isFalse);
+    });
+
     test("an egg passing through the viewer's fades aside at once", () {
       final world = builtWorld();
       addTearDown(world.dispose);
@@ -1242,8 +1300,8 @@ void main() {
       final away = Vec2(mineAt.x - eye.x, mineAt.y - eye.z);
       final through = mineAt + away * (0.4 / away.length);
       var time = 0.016;
-      // A tenth of a second of frames, and the one that first sees it.
-      for (var i = 0; i < 7; i++) {
+      // The frame that sees it inside mine, and the next.
+      for (var i = 0; i < 2; i++) {
         world.applySnapshot(PuttWorldFrame(time: time, eggs: [
           eggAt(mineAt, mine: true),
           eggAt(through, playerId: 'through', velocity: const Vec2(4, 0)),

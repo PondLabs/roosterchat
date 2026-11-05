@@ -99,6 +99,17 @@ class _EggView3D {
       ..rotation.x = -math.pi / 2
       ..position.y = 0.025
       ..renderOrder = 2;
+    // A waiting egg's mark (it has not putted, a ghost to the others): a
+    // dashed ink ring at its foot, turning slowly.
+    _waitRing = tjs.Mesh(
+      _dashedRing(_radius * 1.45, _radius * 1.62, 14, 0.55),
+      _unlit(_hexOf(PuttPalette.ink), opacity: 0.6, depthWrite: false),
+    )
+      ..name = 'egg-wait-ring'
+      ..rotation.x = -math.pi / 2
+      ..position.y = 0.028
+      ..renderOrder = 3
+      ..visible = false;
     _marker = tjs.Mesh(
       tjg.RingGeometry(_radius * 1.55, _radius * 1.85, 36, 1),
       _unlit(_tintHex, opacity: 0.9, depthWrite: false),
@@ -139,6 +150,7 @@ class _EggView3D {
     ground
       ..add(_shadow)
       ..add(_tintDisc)
+      ..add(_waitRing)
       ..add(_marker)
       ..add(_arrow);
     trail = tjs.Group()..name = 'egg-trail';
@@ -201,6 +213,7 @@ class _EggView3D {
   bool everMine = false;
 
   late final tjs.Mesh _tintDisc;
+  late final tjs.Mesh _waitRing;
   late final tjs.Mesh _xray;
   late final tjs.Mesh _outline;
 
@@ -408,6 +421,9 @@ class _EggView3D {
         0.55 * (1 - lift * 0.2) * (0.35 + 0.65 * _ghostOpacity.clamp(0.0, 1.0));
 
     _syncBubble(egg, dt, time, drawn + support + egg.height);
+    _waiting = egg.waiting;
+    _waitRing.visible = egg.waiting;
+    if (egg.waiting) _waitRing.rotation.z += dt * 0.5;
     _syncGhost(egg, time, dt);
 
     final resting = speed < 0.05;
@@ -460,11 +476,13 @@ class _EggView3D {
         target += (0.95 - target) * blink * (1 - left / 0.9);
       }
     }
+    // Waiting (it has not putted, a ghost to the others): see-through.
+    if (_waiting) target = math.min(target, _waitingOpacity);
     // Standing aside for the viewer's egg: a third of itself, still there,
     // in a tenth of a second (an egg passing through mine went by half
-    // faded).
+    // faded) - at once when it is inside mine ([screenAtOnce]).
     _screened = (_screened + (screening ? dt : -dt) * 10).clamp(0.0, 1.0);
-    target *= 1 - 0.66 * _screened;
+    target = math.min(target, 1 - 0.66 * _screened);
     body.castShadow = target > 0.9 && !_aloft;
     if ((target - _ghostOpacity).abs() < 1e-3) return;
     _ghostOpacity = target;
@@ -477,6 +495,15 @@ class _EggView3D {
 
   /// Off the ground this frame (its sun shadow out, the spot under it on).
   bool _aloft = false;
+
+  /// Another player's egg that has not putted on the hole, this frame.
+  bool _waiting = false;
+
+  /// How see-through a waiting egg is.
+  static const double _waitingOpacity = 0.45;
+
+  /// Inside the viewer's egg on the ground: fully aside this frame.
+  void screenAtOnce() => _screened = 1;
 
   /// The colour disc's opacity under a solid egg.
   static const double _tintDiscOpacity = 0.78;
@@ -617,6 +644,8 @@ class _EggView3D {
     _marker.material?.dispose();
     _tintDisc.geometry?.dispose();
     _tintDisc.material?.dispose();
+    _waitRing.geometry?.dispose();
+    _waitRing.material?.dispose();
     for (final piece in [_arrow, ..._arrow.children.whereType<tjs.Mesh>()]) {
       piece.geometry?.dispose();
       piece.material?.dispose();

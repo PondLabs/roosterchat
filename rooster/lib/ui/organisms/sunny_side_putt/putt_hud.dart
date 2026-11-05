@@ -1011,9 +1011,13 @@ class _PuttMiddleState extends State<_PuttMiddle>
         // meadow: up high it covered each hole's landmark (the barn, the
         // lake, the maze's far side) in the opening shot. The others high,
         // under the hole bar, clear of the green's middle.
-        alignment: match.headlineKind == PuttHeadlineKind.holeStart
-            ? const Alignment(0, 0.5)
-            : const Alignment(0, -0.62),
+        // A score call high, over the top of the hatch's close-up (the chick
+        // stands in the middle of it).
+        alignment: switch (match.headlineKind) {
+          PuttHeadlineKind.holeStart => const Alignment(0, 0.5),
+          PuttHeadlineKind.scoreTerm => const Alignment(0, -0.74),
+          _ => const Alignment(0, -0.62),
+        },
         child: FittedBox(
           fit: BoxFit.scaleDown,
           child: PuttHeadline(
@@ -1057,12 +1061,21 @@ class PuttHeadline extends StatefulWidget {
 class _PuttHeadlineState extends State<PuttHeadline>
     with SingleTickerProviderStateMixin {
   /// In, hold, out: the banner pops, stays a breath, then goes. The hole's
-  /// own card goes with the camera's opening sweep, before the play view.
+  /// own card goes with the camera's opening sweep, before the play view. A
+  /// score call ("Hole in one!") waits for the chick's first hop: the
+  /// close-up is the chick's before it is the banner's.
+  static const int _scoreWaitMs = 900;
+  static const int _showMs = 2600;
+  static const int _holeStartMs = 1600;
+
+  int get _waitMs =>
+      widget.kind == PuttHeadlineKind.scoreTerm ? _scoreWaitMs : 0;
+
   late final AnimationController _clock = AnimationController(
     vsync: this,
     duration: widget.kind == PuttHeadlineKind.holeStart
-        ? const Duration(milliseconds: 1600)
-        : const Duration(milliseconds: 2600),
+        ? const Duration(milliseconds: _holeStartMs)
+        : Duration(milliseconds: _waitMs + _showMs),
   )..forward();
 
   @override
@@ -1078,7 +1091,10 @@ class _PuttHeadlineState extends State<PuttHeadline>
     return AnimatedBuilder(
       animation: _clock,
       builder: (context, child) {
-        final t = _clock.value;
+        // Its own time, past the wait.
+        final total = _clock.duration!.inMilliseconds;
+        final shown = total - _waitMs;
+        final t = ((_clock.value * total - _waitMs) / shown).clamp(0.0, 1.0);
         // 0-8%: in; 90-100%: out, a quick shrink and lift (a slow fade
         // left a ghost of the banner printed over the lawn).
         final appear = (t / 0.08).clamp(0.0, 1.0);

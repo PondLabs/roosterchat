@@ -128,6 +128,11 @@ class PuttWorldEgg {
   /// shimmers in its colour.
   final bool magnet;
 
+  /// Another player's egg that has not putted on this hole: a ghost to the
+  /// others (they pass through it), so it is drawn as one - see-through,
+  /// a dashed ink ring at its foot.
+  final bool waiting;
+
   const PuttWorldEgg({
     required this.playerId,
     required this.position,
@@ -141,6 +146,7 @@ class PuttWorldEgg {
     this.shielded = false,
     this.ghostSeconds = 0,
     this.magnet = false,
+    this.waiting = false,
   });
 
   double get speed => velocity.length;
@@ -468,6 +474,7 @@ class PuttCameraRig {
   void glideToFramePoints(List<Vec2> points,
       {double margin = 5, double closest = 0.42, double? yaw}) {
     if (points.isEmpty) return;
+    _closeFloor = null;
     if (yaw != null) _yawTarget = yaw;
     final pad = 40 + margin * 6;
     final distance = _fitDistance(points, pad, closest);
@@ -635,16 +642,34 @@ class PuttCameraRig {
   /// Eases toward the given targets without snapping: the scripted moves
   /// (the hole's intro sweep, the follow zoom) glide like gestures do.
   void glideTo(
-      {double? yaw, double? pitchDeg, double? distance, Vec2? target}) {
+      {double? yaw,
+      double? pitchDeg,
+      double? distance,
+      Vec2? target,
+      bool closeUp = false}) {
+    // A close-up (the hatch) may come in nearer than the hole's zoom clamp;
+    // any other glide with a distance ends it.
+    if (closeUp) {
+      _closeFloor = closeUpDistanceMin;
+    } else if (distance != null) {
+      _closeFloor = null;
+    }
     if (yaw != null) _yawTarget = yaw;
     if (pitchDeg != null) {
       _pitchTarget = pitchDeg.clamp(pitchMin, pitchMax);
     }
     if (distance != null) {
-      _distanceTarget = distance.clamp(_distanceMin, _distanceMax).toDouble();
+      _distanceTarget = distance.clamp(_floor, _distanceMax).toDouble();
     }
     if (target != null) _targetTarget = target;
   }
+
+  /// How near a close-up may come (world units).
+  static const double closeUpDistanceMin = 3.5;
+
+  /// The close-up's floor while one is on, below the hole's zoom clamp.
+  double? _closeFloor;
+  double get _floor => _closeFloor ?? _distanceMin;
 
   /// The zoom clamp [fitToHole] last set (world units); tests read them.
   double get distanceMin => _distanceMin;
@@ -682,7 +707,7 @@ class PuttCameraRig {
   void punch() {
     if (reduceMotion) return;
     _distanceTarget =
-        (_distanceTarget * 0.9).clamp(_distanceMin, _distanceMax).toDouble();
+        (_distanceTarget * 0.9).clamp(_floor, _distanceMax).toDouble();
     shake(0.25);
   }
 
@@ -700,7 +725,7 @@ class PuttCameraRig {
   void snap() {
     yaw = _yawTarget;
     pitchDeg = _pitchTarget;
-    distance = _distanceTarget.clamp(_distanceMin, _distanceMax).toDouble();
+    distance = _distanceTarget.clamp(_floor, _distanceMax).toDouble();
     target = _targetTarget;
     _snapNext = false;
   }
@@ -1264,11 +1289,13 @@ class PuttWorld3D {
       final view = _eggViews[egg.playerId];
       if (view == null) continue;
       // In front of mine on the screen, or passing through mine on the
-      // ground (an egg that has not putted is a ghost to the others).
-      view.screening = resting &&
-          (_covers(view, mineView) ||
-              egg.position.distanceTo(mine.position) <
-                  (egg.radius + mine.radius) * 1.1);
+      // ground (an egg that has not putted is a ghost to the others): the
+      // latter at once, the frame it is in.
+      final inside = resting &&
+          egg.position.distanceTo(mine.position) <
+              (egg.radius + mine.radius) * 1.1;
+      view.screening = inside || (resting && _covers(view, mineView));
+      if (inside) view.screenAtOnce();
     }
   }
 
@@ -1350,10 +1377,16 @@ class PuttWorld3D {
         _cheerUntil = frame.time + 2.2;
         _flagShakeUntil = frame.time + 1.4;
         final floor = _ground.at(nest.position);
-        _bursts.straw(nest.position, nest.radius, floor: floor);
+        // For the viewer's own: none of it between the camera and the chick
+        // hatching there.
+        final toCamera = Vec2(camera.position.x - nest.position.x,
+            camera.position.z - nest.position.y);
+        final clear = view.everMine && toCamera.length > 1e-6 ? toCamera : null;
+        _bursts.straw(nest.position, nest.radius,
+            floor: floor, clearToward: clear);
         if (view.everMine) {
           _bursts.confettiColumn(nest.position,
-              floor: floor, radius: nest.radius);
+              floor: floor, radius: nest.radius, clearToward: clear);
           rig.punch();
         }
       } else {

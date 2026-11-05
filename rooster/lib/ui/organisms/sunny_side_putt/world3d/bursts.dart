@@ -71,10 +71,14 @@ class _Bursts {
     return sprite;
   }
 
-  /// Straw flying off the nest's rim as an egg drops in.
-  void straw(Vec2 at, double radius, {double floor = 0}) {
+  /// Straw flying off the nest's rim as an egg drops in; [clearToward] as
+  /// for the confetti (the viewer's own sink, the chick in the close-up).
+  void straw(Vec2 at, double radius, {double floor = 0, Vec2? clearToward}) {
+    final clear =
+        clearToward == null ? null : math.atan2(clearToward.y, clearToward.x);
     for (var i = 0; i < 18; i++) {
-      final angle = _rand.range(0, math.pi * 2);
+      var angle = _rand.range(0, math.pi * 2);
+      if (clear != null) angle = _aside(angle, clear);
       final speed = _rand.range(1.5, 4.5);
       _live.add(_BurstParticle(
         x: at.x + math.cos(angle) * radius,
@@ -96,7 +100,8 @@ class _Bursts {
 
   /// The viewer's own sink: a fountain of confetti out of the nest, big
   /// enough to read from the camera's height.
-  void confettiColumn(Vec2 at, {double floor = 0, double radius = 1.2}) {
+  void confettiColumn(Vec2 at,
+      {double floor = 0, double radius = 1.2, Vec2? clearToward}) {
     const colors = [
       0xE8382A, // comb
       0xF89B17, // yolk
@@ -108,8 +113,13 @@ class _Bursts {
     // A crown more than a column: up and outward from the nest's rim, so
     // it spreads across the close-up the camera takes and leaves the cup
     // (and the chick hatching in it) clear.
+    // [clearToward] (the camera's way, on the ground): a gap in the crown
+    // there, so nothing flies between the lens and the chick.
+    final clear =
+        clearToward == null ? null : math.atan2(clearToward.y, clearToward.x);
     for (var i = 0; i < 84; i++) {
-      final angle = _rand.range(0, math.pi * 2);
+      var angle = _rand.range(0, math.pi * 2);
+      if (clear != null) angle = _aside(angle, clear);
       final spread = _rand.range(1.5, 4.2);
       _live.add(_BurstParticle(
         x: at.x + math.cos(angle) * radius * 0.9,
@@ -156,6 +166,14 @@ class _Bursts {
 
   /// How long paper that has landed takes to fade away, seconds.
   static const double _landedFade = 0.45;
+
+  /// Half the gap the viewer's confetti leaves on the camera's side
+  /// (radians).
+  static const double _clearGap = 0.95;
+
+  /// [angle] (any turn) laid round the circle less the gap about [clear].
+  static double _aside(double angle, double clear) =>
+      clear + _clearGap + angle / (math.pi * 2) * (math.pi * 2 - 2 * _clearGap);
 
   void update(double dt, double time) {
     for (final p in _live) {

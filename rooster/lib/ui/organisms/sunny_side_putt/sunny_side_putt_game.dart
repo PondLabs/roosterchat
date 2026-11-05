@@ -844,6 +844,8 @@ class SunnySidePuttGame extends FlameGame {
                 : (ghostUntil - tick - match.alpha) * tickSeconds,
             magnet: (player?.nextShot.magnet ?? false) ||
                 ball.flagActive(PowerUpFlag.magnet, tick),
+            // Not putted yet on this hole: a ghost to the others, drawn so.
+            waiting: !ball.putted && ball.playerId != match.localPlayerId,
           ));
         }
         for (final obstacle in current.obstacles) {

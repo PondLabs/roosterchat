@@ -59,6 +59,11 @@ class PuttCameraDirector {
   double eggHeight = 1.1;
   static const double aimEggPixels = 30;
 
+  /// The hatch's close-up: how far out the camera stands, and how low it
+  /// looks (degrees).
+  static const double celebrateDistance = 5.4;
+  static const double celebratePitch = 28;
+
   /// How long the hole's overview holds before the camera comes in.
   static const double openingSeconds = 2.4;
 
@@ -184,16 +189,16 @@ class PuttCameraDirector {
     // hatch (unless the player took the camera), then frames the rest.
     if (cue.myEggHoled && !_wasHoled && !_userCamera) {
       _celebrateUntil = _holeClock + celebrateSeconds;
-      // From higher up (less of what stands between the camera and the
-      // nest), the nest a little below the middle, under the banner.
-      final away = Vec2(math.sin(rig.yawTarget), math.cos(rig.yawTarget));
-      // The nest low in the frame and the flag short from up here: both
-      // under the banner across the top.
-      _celebrateAt = hole.nest.position + away * 2.4;
+      // Down low and close, from the side the camera already looks from
+      // (the chick turns to it): the chick in its hat stands in the middle
+      // of the frame, under the banner up top - from high above it was a
+      // yellow blob under its crown.
+      _celebrateAt = hole.nest.position;
       rig.glideTo(
         target: _celebrateAt,
-        distance: math.max(rig.overviewDistance * 0.36, 9.5),
-        pitchDeg: 56,
+        distance: celebrateDistance,
+        pitchDeg: celebratePitch,
+        closeUp: true,
       );
     }
     _wasHoled = cue.myEggHoled;

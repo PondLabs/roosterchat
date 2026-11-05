@@ -504,4 +504,31 @@ void main() {
       expect(find.byKey(const Key('putt-inventory')), findsNothing);
     });
   });
+
+  testWidgets("a score call waits for the chick's first hop; others do not",
+      (tester) async {
+    double opacityOf(String text) {
+      final faded = tester.widget<Opacity>(find
+          .ancestor(of: find.text(text), matching: find.byType(Opacity))
+          .first);
+      return faded.opacity;
+    }
+
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(
+        body: Column(children: [
+          PuttHeadline('Hole in one!',
+              kind: PuttHeadlineKind.scoreTerm, term: ScoreTerm.holeInOne),
+          PuttHeadline('Hole cleared', kind: PuttHeadlineKind.holeEnd),
+        ]),
+      ),
+    ));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(opacityOf('Hole in one!'), 0,
+        reason: 'the close-up is the chick\'s');
+    expect(opacityOf('Hole cleared'), 1);
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(opacityOf('Hole in one!'), 1, reason: 'then the call');
+    await tester.pumpAndSettle();
+  });
 }
