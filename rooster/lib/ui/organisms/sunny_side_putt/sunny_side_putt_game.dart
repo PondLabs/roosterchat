@@ -1155,8 +1155,12 @@ class SunnySidePuttGame extends FlameGame {
         case PuttFxSpotKind.splash:
           if (spot.at != null) {
             fx.splash(spot.at!);
-            fx.ring(spot.at!, PuttPalette.shell, size: 2.4);
-            fx.ring(spot.at!, PuttPalette.shell, size: 1.4);
+            // The rings keep to the water: an egg goes in at the edge, and
+            // a frog pond is narrower than a ring's spread.
+            final reach = math.max(
+                puttWaterReach(match.hole?.water ?? const [], spot.at!), 0.5);
+            fx.ring(spot.at!, PuttPalette.shell, size: 2.4, reach: reach);
+            fx.ring(spot.at!, PuttPalette.shell, size: 1.4, reach: reach * 0.6);
           }
         case PuttFxSpotKind.back:
           // Home again: a pop of the player's colour where the egg is put
@@ -1691,6 +1695,24 @@ class PuttAimLayer {
   }
 }
 
+/// How far from [at] the [water] reaches all round: the widest of a few
+/// radii whose circle lies on water all the way (0 when even the smallest
+/// crosses the shore). A splash's rings spread no further.
+double puttWaterReach(Iterable<hole.WaterShape> water, core.Vec2 at) {
+  bool wet(core.Vec2 p) => water.any((shape) => shape.contains(p));
+  var reach = 0.0;
+  for (final radius in const [0.4, 0.7, 1.0, 1.4, 1.9, 2.5, 3.2, 4.0]) {
+    for (var k = 0; k < 16; k++) {
+      final angle = k / 16 * 2 * math.pi;
+      if (!wet(at + core.Vec2(math.cos(angle), math.sin(angle)) * radius)) {
+        return reach;
+      }
+    }
+    reach = radius;
+  }
+  return reach;
+}
+
 /// The bursts: splash droplets, suction streaks, poofs, pickup sparkles,
 /// the putt's dust, the nest's confetti and shockwave rings. Each lives
 /// about half a second (the confetti longer), on plain velocity math. A
@@ -2086,8 +2108,9 @@ class PuttFxLayer {
     }
   }
 
-  /// A shockwave ring spreading over the turf.
-  void ring(core.Vec2 at, ui.Color color, {double size = 2.5}) {
+  /// A shockwave ring spreading over the turf, no wider than [reach] when
+  /// one is given.
+  void ring(core.Vec2 at, ui.Color color, {double size = 2.5, double? reach}) {
     _particles.add(_FxParticle(
       at: at,
       velocity: core.Vec2.zero,
@@ -2095,6 +2118,7 @@ class PuttFxLayer {
       kind: _FxKind.ring,
       size: size,
       color: color,
+      reach: reach,
     ));
   }
 
@@ -2163,6 +2187,9 @@ class _FxParticle {
   double orbitAngle;
   final double orbitSpeed;
 
+  /// A ring's widest radius (see [PuttWorldFx.reach]).
+  final double? reach;
+
   _FxParticle({
     required core.Vec2 at,
     required this.velocity,
@@ -2178,6 +2205,7 @@ class _FxParticle {
     this.orbitRadius = 0,
     this.orbitAngle = 0,
     this.orbitSpeed = 0,
+    this.reach,
     double delay = 0,
   })  : position = at,
         age = -delay;
@@ -2289,6 +2317,7 @@ class _FxParticle {
       size: size,
       color: color,
       height: height,
+      reach: reach,
     );
   }
 }

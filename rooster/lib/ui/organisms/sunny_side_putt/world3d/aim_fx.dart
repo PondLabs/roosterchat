@@ -530,7 +530,9 @@ class _PuttFxPool {
         if (rings >= _rings.length) continue;
         final ring = _rings[rings++];
         ring.visible = true;
-        final radius = fx.size * (0.3 + progress * 1.4) * math.sqrt(scale);
+        var radius = fx.size * (0.3 + progress * 1.4) * math.sqrt(scale);
+        final reach = fx.reach;
+        if (reach != null) radius = math.min(radius, reach);
         ring.scale.setValues(radius, radius, 1);
         ring.position
             .setValues(fx.at.x, (ground?.at(fx.at) ?? 0) + 0.08, fx.at.y);

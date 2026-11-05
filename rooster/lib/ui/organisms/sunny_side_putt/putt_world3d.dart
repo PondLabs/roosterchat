@@ -217,6 +217,10 @@ class PuttWorldFx {
   /// the kind's own arc.
   final double? height;
 
+  /// A ring's widest radius in world units, whatever the camera's distance
+  /// (a splash's rings keep to the water); null lets it spread.
+  final double? reach;
+
   const PuttWorldFx({
     required this.kind,
     required this.at,
@@ -225,6 +229,7 @@ class PuttWorldFx {
     this.toward,
     this.color,
     this.height,
+    this.reach,
   });
 }
 

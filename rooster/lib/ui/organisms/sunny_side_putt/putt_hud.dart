@@ -2313,8 +2313,10 @@ class _EmptySlotPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final rrect = RRect.fromRectAndRadius(
         (Offset.zero & size).deflate(1.5), const Radius.circular(16));
+    // Near solid, like the HUD's panels: at 0.55 the farm's flowers and
+    // fences showed through it.
     canvas.drawRRect(
-        rrect, Paint()..color = PuttPalette.ink.withValues(alpha: 0.55));
+        rrect, Paint()..color = PuttPalette.ink.withValues(alpha: 0.82));
     // The cup: an egg's outline, broad at the base, narrower at the top.
     final w = size.width * 0.17;
     final h = size.height * 0.22;

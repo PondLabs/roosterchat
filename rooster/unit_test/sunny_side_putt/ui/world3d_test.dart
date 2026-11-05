@@ -1093,6 +1093,31 @@ void main() {
           reason: 'it fades once the pull is over');
     });
 
+    test('a ring with a reach spreads no further, near or far', () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      final root = world.scene.children.firstWhere((c) => c.name == 'fx');
+      world.applySnapshot(const PuttWorldFrame(time: 0, fxs: [
+        PuttWorldFx(
+            kind: PuttWorldFxKind.ring,
+            at: Vec2(10, 10),
+            progress: 0.95,
+            size: 2.4,
+            reach: 0.8),
+        PuttWorldFx(
+            kind: PuttWorldFxKind.ring,
+            at: Vec2(14, 10),
+            progress: 0.95,
+            size: 2.4),
+      ]));
+      final shown =
+          root.children.where((c) => c.name == 'fx-ring' && c.visible).toList();
+      expect(shown, hasLength(2));
+      final radii = shown.map((ring) => ring.scale.x).toList()..sort();
+      expect(radii.first, closeTo(0.8, 1e-6), reason: 'held to its reach');
+      expect(radii.last, greaterThan(3), reason: 'the other spreads');
+    });
+
     test("the casts' particles draw from their own pools", () {
       final world = builtWorld();
       addTearDown(world.dispose);
