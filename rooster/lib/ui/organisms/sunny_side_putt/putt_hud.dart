@@ -1694,6 +1694,13 @@ class PuttScorecard extends StatelessWidget {
     final hidden = compact ? 0 : all.length - shown.length;
     final header = _Type.label(9.5,
         color: PuttPalette.cream.withValues(alpha: 0.55), spacing: 0.9);
+    // On a narrow screen (a phone held upright) the number columns give
+    // way, so a row never runs out of room; the name keeps a sliver.
+    final inner = width - 28; // the panel's padding and the row's
+    final squeeze =
+        ((inner - 40) / (_holeColumn + _totalColumn)).clamp(0.4, 1.0);
+    final holeColumn = _holeColumn * squeeze;
+    final totalColumn = _totalColumn * squeeze;
     return Container(
       key: const Key('putt-scorecard'),
       width: width,
@@ -1717,8 +1724,8 @@ class PuttScorecard extends StatelessWidget {
                     ),
                   ),
                   for (final (label, width) in [
-                    (labelPuttScorecardHole(), _holeColumn),
-                    (labelPuttScorecardTotal(), _totalColumn),
+                    (labelPuttScorecardHole(), holeColumn),
+                    (labelPuttScorecardTotal(), totalColumn),
                   ])
                     SizedBox(
                       width: width,
@@ -1739,12 +1746,16 @@ class PuttScorecard extends StatelessWidget {
                     name: displayNameOf(match, row.playerId),
                     tint: puttTintOf(match, row.playerId),
                     mine: row.playerId == match.localPlayerId,
+                    holeColumn: holeColumn,
+                    totalColumn: totalColumn,
                     watching: true,
                   )
                 : _ScorecardRow(
                     name: displayNameOf(match, row.playerId),
                     tint: puttTintOf(match, row.playerId),
                     mine: row.playerId == match.localPlayerId,
+                    holeColumn: holeColumn,
+                    totalColumn: totalColumn,
                     strokes: engine.strokesInHole(row.playerId),
                     holed: world?.ball(row.playerId)?.holed ?? false,
                     relative: row.relative,
@@ -1768,6 +1779,8 @@ class _ScorecardRow extends StatelessWidget {
   final String name;
   final Color tint;
   final bool mine;
+  final double holeColumn;
+  final double totalColumn;
   final bool watching;
   final int strokes;
   final bool holed;
@@ -1777,6 +1790,8 @@ class _ScorecardRow extends StatelessWidget {
     required this.name,
     required this.tint,
     required this.mine,
+    required this.holeColumn,
+    required this.totalColumn,
     this.watching = false,
     this.strokes = 0,
     this.holed = false,
@@ -1813,33 +1828,44 @@ class _ScorecardRow extends StatelessWidget {
             ),
           ),
           if (watching)
-            Text(
-              labelPuttWatching(),
-              style: _Type.body(11,
-                  color: PuttPalette.stone, style: FontStyle.italic),
+            Flexible(
+              child: Text(
+                labelPuttWatching(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: _Type.body(11,
+                    color: PuttPalette.stone, style: FontStyle.italic),
+              ),
             )
           else ...[
             SizedBox(
-              width: PuttScorecard._holeColumn,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  if (holed)
-                    const Padding(
-                      padding: EdgeInsets.only(right: 2),
-                      child: Icon(Icons.check_rounded,
-                          size: 14, color: _birdieGreen),
-                    ),
-                  Text('$strokes', style: number),
-                ],
+              width: holeColumn,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (holed)
+                      const Padding(
+                        padding: EdgeInsets.only(right: 2),
+                        child: Icon(Icons.check_rounded,
+                            size: 14, color: _birdieGreen),
+                      ),
+                    Text('$strokes', style: number),
+                  ],
+                ),
               ),
             ),
             SizedBox(
-              width: PuttScorecard._totalColumn,
-              child: Text(
-                relativeText(relative),
-                textAlign: TextAlign.end,
-                style: _Type.display(14, color: _relativeColour(relative)),
+              width: totalColumn,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Text(
+                  relativeText(relative),
+                  style: _Type.display(14, color: _relativeColour(relative)),
+                ),
               ),
             ),
           ],

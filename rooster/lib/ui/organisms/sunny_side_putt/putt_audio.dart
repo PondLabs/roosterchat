@@ -152,11 +152,16 @@ class PuttAudio {
       for (final sfx in PuttSfx.values) {
         _sources[sfx] = AssetSource('sunny_side_putt/${assetPathOf(sfx)}');
       }
+      // No position updates: the game never reads where a sound is, and
+      // the default updater asks the platform every frame while a sound
+      // plays (and keeps a frame callback alive after the view is gone).
       _music = AudioPlayer(playerId: 'putt-music')
+        ..positionUpdater = null
         ..setReleaseMode(ReleaseMode.loop)
         ..setVolume(_musicVolume);
       for (var i = 0; i < sfxPoolSize; i++) {
         _sfxPlayers.add(AudioPlayer(playerId: 'putt-sfx-$i')
+          ..positionUpdater = null
           ..setReleaseMode(ReleaseMode.release)
           ..setVolume(_sfxVolume));
       }

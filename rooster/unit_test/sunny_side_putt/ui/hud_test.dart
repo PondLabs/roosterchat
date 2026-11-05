@@ -92,6 +92,39 @@ void main() {
     });
   });
 
+  group('the HUD on a phone held upright', () {
+    testWidgets('every row fits, folded or not', (tester) async {
+      tester.view
+        ..physicalSize = const Size(354, 640)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final course = CourseDef(id: 'narrow', holes: [stubHole(id: 'n0')]);
+      final match = PuttMatch(
+        config: PuttConfig(mode: GameMode.casual, courses: [course], seed: 5),
+        displayNames: const {'me': 'Rooster', 'p2': 'Henrietta'},
+        seatedPlayerIds: const ['p2'],
+      )..boot();
+      final busy = ValueNotifier(false);
+      addTearDown(busy.dispose);
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: PuttHud(match: match, busy: busy, onOpenMenu: () {})),
+      ));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(find.text('E'), findsNWidgets(2));
+
+      // Folding to my own line runs through every width in between.
+      busy.value = true;
+      for (var i = 0; i < 12; i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      expect(tester.takeException(), isNull);
+      expect(find.text('E'), findsOneWidget);
+    });
+  });
+
   group('the scorecard on a short screen', () {
     testWidgets('the leaders and me, then how many more', (tester) async {
       final course = CourseDef(id: 'crowd', holes: [stubHole(id: 'k0')]);
