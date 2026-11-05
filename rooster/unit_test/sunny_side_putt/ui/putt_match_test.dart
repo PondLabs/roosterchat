@@ -197,6 +197,62 @@ void main() {
     });
   });
 
+  group('the results\' pause', () {
+    test('a live session\'s results move on by themselves', () {
+      final course = CourseDef(id: 'two', holes: [
+        stubHole(id: 't0', par: 2),
+        stubHole(id: 't1', par: 3),
+      ]);
+      final match = PuttMatch(
+        config: PuttConfig(
+          mode: GameMode.casual,
+          courses: [course],
+          seed: 13,
+          holeTimeLimitSeconds: 2,
+          scoreboardSeconds: 8,
+        ),
+      )..boot();
+      for (var frame = 0;
+          frame < 40 && match.phase == PuttPhase.holePlay;
+          frame++) {
+        match.update(0.3); // run the hole out, frame by frame
+      }
+      expect(match.phase, PuttPhase.holeScoreboard);
+      expect(match.engine.scoreboardSecondsLeft, closeTo(8, 0.05));
+
+      // Frames through the pause, as the game delivers them.
+      for (var frame = 0; frame < 25; frame++) {
+        match.update(0.2);
+      }
+      expect(match.phase, PuttPhase.holeScoreboard);
+      expect(match.engine.scoreboardSecondsLeft, closeTo(3, 0.1));
+      for (var frame = 0; frame < 20; frame++) {
+        match.update(0.2);
+      }
+      expect(match.phase, PuttPhase.holePlay, reason: 'on to the next hole');
+      expect(match.hole!.id, 't1');
+      expect(match.headline, contains('Hole 2'));
+    });
+
+    test('without a pause the results wait for Continue', () {
+      final course = CourseDef(id: 'two', holes: [
+        stubHole(id: 't0', par: 2),
+        stubHole(id: 't1', par: 3),
+      ]);
+      final match = PuttMatch(
+        config: PuttConfig(
+            mode: GameMode.casual,
+            courses: [course],
+            seed: 13,
+            holeTimeLimitSeconds: 2),
+      )..boot();
+      for (var frame = 0; frame < 60; frame++) {
+        match.update(0.3);
+      }
+      expect(match.phase, PuttPhase.holeScoreboard);
+    });
+  });
+
   group('power-ups', () {
     test('an empty inventory has nothing to use', () {
       final match = PuttMatch.solo();

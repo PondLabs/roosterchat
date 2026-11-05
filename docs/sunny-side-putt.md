@@ -34,9 +34,11 @@ results):
   full power, so on a long putt the timing of the release is the skill.
   The Hawk Eye power-up holds the arrow still.
 - After each hole the results card stays up for 8 seconds in a live
-  session (a band sweeps across Continue as they run out), then the match
-  moves on by itself; the host's Continue moves on at once. The pause
-  rides the engine's snapshot, so a host handoff keeps it.
+  session (Continue counts the seconds down while a band sweeps across
+  it), then the match moves on by itself; the host's Continue moves on at
+  once. The pause runs on the engine's ticks like a hole's clock (every
+  client keeps ticking through it), and rides the engine's snapshot, so a
+  host handoff keeps it.
 - Quick reactions: a cheer, a laugh, a wow, fire or a nice one, from the
   button under the pause button or the keys 1-5, pop as a bubble over the
   sender's egg for everyone (over the nest once their egg is in). They

@@ -181,6 +181,27 @@ class PuttMatch extends ChangeNotifier {
   /// engine ticks, then drains the engine's events into notices and state.
   void update(double dt) {
     if (paused) return;
+    if (phase == PuttPhase.holeScoreboard && engine.scoreboardSecondsLeft > 0) {
+      // The results' pause runs on the engine's ticks, like a hole's
+      // clock: the match moves on by itself at the same tick on every
+      // engine (nothing else ticks it between holes).
+      _accumulator += math.min(dt, 0.25);
+      final step = config.physics.dt;
+      var steps = 0;
+      while (_accumulator >= step &&
+          steps < 30 &&
+          phase == PuttPhase.holeScoreboard) {
+        engine.tickForward();
+        _accumulator -= step;
+        steps++;
+      }
+      if (phase != PuttPhase.holeScoreboard) _accumulator = 0;
+      if (engine.pendingEventCount > 0) {
+        drainEvents();
+      }
+      notifyListeners();
+      return;
+    }
     if (phase != PuttPhase.holePlay) {
       // Between holes the world is static; drop the leftover fraction so
       // the next hole starts its clock fresh. Moves that came in from the

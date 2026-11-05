@@ -237,6 +237,45 @@ void main() {
     });
   });
 
+  group('the results count down', () {
+    testWidgets('Continue shows the seconds left, from the match\'s pause',
+        (tester) async {
+      final course =
+          CourseDef(id: 'one-hole', holes: [stubHole(id: 'only', par: 2)]);
+      final match = PuttMatch(
+        config: PuttConfig(
+            mode: GameMode.casual,
+            courses: [course],
+            catalog: {'one-hole': course},
+            seed: 11,
+            holeTimeLimitSeconds: 2,
+            scoreboardSeconds: 8),
+      )..boot();
+      match.submitShot(0, 0.2);
+      for (var frame = 0;
+          frame < 40 && match.phase != PuttPhase.holeScoreboard;
+          frame++) {
+        match.update(0.3);
+      }
+      expect(match.phase, PuttPhase.holeScoreboard);
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: PuttHud(match: match, onOpenMenu: () {})),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 2800));
+      expect(find.text('Continue · 8'), findsOneWidget);
+
+      // Three seconds of the match (its updates take small steps).
+      for (var step = 0; step < 15; step++) {
+        match.update(0.2);
+      }
+      await tester.pump(const Duration(seconds: 1));
+      expect(match.engine.scoreboardSecondsLeft, closeTo(5, 0.1));
+      expect(find.text('Continue · 5'), findsOneWidget);
+    });
+  });
+
   group('match over', () {
     testWidgets('level at the top is a tie', (tester) async {
       final course = CourseDef(id: 'duo', holes: [stubHole(id: 'd0')]);

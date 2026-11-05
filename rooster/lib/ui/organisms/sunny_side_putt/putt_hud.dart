@@ -1254,9 +1254,6 @@ class _ContinueButtonState extends State<_ContinueButton>
     duration: const Duration(seconds: 1),
   )..repeat();
 
-  /// The pause's full length, read when it first shows.
-  double? _total;
-
   @override
   void dispose() {
     _frames.dispose();
@@ -1268,16 +1265,27 @@ class _ContinueButtonState extends State<_ContinueButton>
     final match = widget.match;
     return AnimatedBuilder(
       animation: _frames,
-      builder: (context, child) {
+      builder: (context, _) {
+        // The pause's full length is the match's: the card may be built
+        // again while it runs, and the band must not start over.
         final left = match.engine.scoreboardSecondsLeft;
-        if (left > 0) _total ??= left;
-        final total = _total;
-        final done = total == null || total <= 0
-            ? 0.0
-            : (1 - left / total).clamp(0.0, 1.0).toDouble();
+        final total = match.config.scoreboardSeconds.toDouble();
+        final counting = total > 0 && left > 0;
+        final done =
+            counting ? (1 - left / total).clamp(0.0, 1.0).toDouble() : 0.0;
         return Stack(
           children: [
-            child!,
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                key: const Key('putt-continue'),
+                style: _cardButton(PuttPalette.comb),
+                onPressed: match.advance,
+                child: Text(counting
+                    ? labelPuttContinueIn(left.ceil())
+                    : labelPuttContinue()),
+              ),
+            ),
             if (done > 0)
               Positioned.fill(
                 child: IgnorePointer(
@@ -1289,7 +1297,7 @@ class _ContinueButtonState extends State<_ContinueButton>
                         widthFactor: done,
                         heightFactor: 1,
                         child: ColoredBox(
-                          color: PuttPalette.cream.withValues(alpha: 0.22),
+                          color: PuttPalette.ink.withValues(alpha: 0.28),
                         ),
                       ),
                     ),
@@ -1299,15 +1307,6 @@ class _ContinueButtonState extends State<_ContinueButton>
           ],
         );
       },
-      child: SizedBox(
-        width: double.infinity,
-        child: FilledButton(
-          key: const Key('putt-continue'),
-          style: _cardButton(PuttPalette.comb),
-          onPressed: match.advance,
-          child: Text(labelPuttContinue()),
-        ),
-      ),
     );
   }
 }
@@ -2757,6 +2756,12 @@ String labelPuttContinue() => Intl.message("Continue",
     name: "labelPuttContinue",
     desc: "Button that moves the match on after "
         "a hole's results");
+
+String labelPuttContinueIn(int seconds) => Intl.message("Continue · $seconds",
+    name: "labelPuttContinueIn",
+    args: [seconds],
+    desc: "Button that moves the match on after a hole's results, with "
+        "the seconds left before the match moves on by itself");
 
 String labelPuttWinner(String name) => Intl.message("$name wins!",
     name: "labelPuttWinner",

@@ -874,6 +874,7 @@
   "labelPuttScorecardTotal": "Total",
   "labelPuttResultsTitle": "Buraco {hole} · Par {par}",
   "labelPuttContinue": "Continuar",
+  "labelPuttContinueIn": "Continuar · {seconds}",
   "labelPuttWinner": "{name} venceu!",
   "labelPuttTie": "Deu empate!",
   "labelPuttEvenShort": "Par",

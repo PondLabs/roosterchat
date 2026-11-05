@@ -5749,6 +5749,14 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelPuttContinueIn": "Continue · {seconds}",
+  "@labelPuttContinueIn": {
+    "description": "Button that moves the match on after a hole's results, with the seconds left before the match moves on by itself",
+    "type": "text",
+    "placeholders": {
+      "seconds": {}
+    }
+  },
   "labelPuttWinner": "{name} wins!",
   "@labelPuttWinner": {
     "description": "The match-over card's title; the placeholder is the winner's name",
