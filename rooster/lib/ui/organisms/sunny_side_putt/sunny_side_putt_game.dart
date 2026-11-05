@@ -1524,9 +1524,11 @@ class SunnySidePuttGame extends FlameGame {
         fx.ring(point, PuttPalette.shell, size: kSprinklerRadius * 0.55);
       case 'gust':
         if (point == null) return;
+        // Where the wind runs to: a ring and a poof. The wind itself runs
+        // past each egg it pushes ([_hitScene]); streaks converging on the
+        // spot from all round read as a burst, not a wind.
         fx.ring(point, PuttPalette.shell, size: 3.2);
         fx.poof(point);
-        fx.windAround(point);
       case 'rabbit_hole':
         // Down the hole: a puff of dirt where the egg was.
         if (at == null) return;
@@ -1567,7 +1569,10 @@ class SunnySidePuttGame extends FlameGame {
         fx.kernels(at, count: 16, inside: match.hole?.bounds);
       case 'gust':
         final toward = _castSpots[spot.other];
-        if (toward != null) fx.windBehind(at, toward);
+        if (toward != null) {
+          fx.windBehind(at, toward);
+          fx.windFeathers(at, toward);
+        }
       case 'sprinkler':
         fx.soak(at);
       case 'nest_swap':
@@ -2237,25 +2242,36 @@ class PuttFxLayer {
     }
   }
 
-  /// A Gust's wind converging on its spot from all round.
-  void windAround(core.Vec2 spot, {int count = 14}) {
-    for (var i = 0; i < count; i++) {
-      final angle = i / count * 2 * math.pi + _random.nextDouble() * 0.3;
-      final reach = 6 + _random.nextDouble() * 5;
-      final from = spot + core.Vec2(math.cos(angle), math.sin(angle)) * reach;
-      _streak(from, spot, delay: _random.nextDouble() * 0.35);
-    }
-  }
-
-  /// The wind behind a pushed egg at [at], running on toward [spot].
-  void windBehind(core.Vec2 at, core.Vec2 spot, {int count = 10}) {
+  /// The wind behind a pushed egg at [at], running on toward [spot]: lanes
+  /// of streaks from well behind it, past it and on, all one way - the way
+  /// it is pushed.
+  void windBehind(core.Vec2 at, core.Vec2 spot, {int count = 14}) {
     final way = (spot - at).normalized(const core.Vec2(1, 0));
     final side = core.Vec2(-way.y, way.x);
     for (var i = 0; i < count; i++) {
-      final back = 1.5 + _random.nextDouble() * 3.5;
-      final off = (_random.nextDouble() * 2 - 1) * 1.1;
+      final back = 2 + _random.nextDouble() * 6;
+      final off = (_random.nextDouble() * 2 - 1) * 1.6;
       final from = at - way * back + side * off;
-      _streak(from, from + way * (back + 4), delay: i * 0.05);
+      _streak(from, from + way * (back + 5), delay: i * 0.04);
+    }
+  }
+
+  /// A feather or two riding a Gust's wind off the egg at [at], toward
+  /// [spot].
+  void windFeathers(core.Vec2 at, core.Vec2 spot, {int count = 2}) {
+    final way = (spot - at).normalized(const core.Vec2(1, 0));
+    for (var i = 0; i < count; i++) {
+      _particles.add(_FxParticle(
+        at: at,
+        velocity: way * (3.2 + _random.nextDouble() * 1.4),
+        life: 1.2 + _random.nextDouble() * 0.4,
+        kind: _FxKind.feather,
+        size: 0.4 + _random.nextDouble() * 0.1,
+        color: i.isEven ? PuttPalette.shell : PuttPalette.cream,
+        height: 0.6,
+        climb: 0.8 + _random.nextDouble() * 0.6,
+        delay: i * 0.12,
+      ));
     }
   }
 

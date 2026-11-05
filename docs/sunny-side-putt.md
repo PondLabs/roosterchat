@@ -166,7 +166,7 @@ vanishes without its cause on screen:
 | Ghost Egg | the egg goes see-through and flickers while it lasts, blinking back to solid at the end, pale wisps rising off it; its shadow thins |
 | Chicken Hop | feathers puff off the egg as it takes off, then the hop lifts it over what stands in the way |
 | Rabbit Hole | a puff and dirt where the egg goes down, dirt, sparkles and a ring where it comes up |
-| Gust | wind streaks converging on the chosen spot, and streaks running behind every egg it pushes |
+| Gust | a ring and a poof at the chosen spot; past every egg it pushes, lanes of wind streaks from well behind it on toward the spot, all one way, and a feather or two riding them |
 | Thick Shell | a soap bubble round the egg while the shield holds; a cast it stops pops it in a ring and shards |
 | Strong Coffee | wisps of steam off the egg while the coffee waits, a trail of steam behind its boosted putt |
 | Nest Swap | a poof, a violet ring and a swirl on both eggs as they trade places, and a dotted line lighting up between their spots |
