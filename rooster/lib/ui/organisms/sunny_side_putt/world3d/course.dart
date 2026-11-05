@@ -1906,8 +1906,10 @@ class _CourseKit {
     return group;
   }
 
-  /// The cup's paint: earth lit on the far wall, shading to black at the
-  /// bottom, a hint of the sun's side.
+  /// The cup's paint: earth lit on the far wall, shading to a deep brown
+  /// at the bottom (not black: round 4's close-ups read a flat black hole),
+  /// a hint of the sun's side, and a few strands of straw lying on the
+  /// floor, so it reads as a nest's cup.
   tjs.DataTexture _cupTexture() {
     const size = 128;
     final bitmap = _Bitmap(size, size);
@@ -1917,11 +1919,29 @@ class _CourseKit {
         final dy = (y + 0.5) / size * 2 - 1;
         final d = math.sqrt(dx * dx + dy * dy).clamp(0.0, 1.0);
         // The wall lit toward the sun's side (texture v up is the far
-        // side), the floor dark.
+        // side), the floor in shadow.
         final lit = (0.5 + 0.5 * (dy * 0.7 - dx * 0.3)).clamp(0.0, 1.0);
-        final wall = math.pow(d, 2.2).toDouble();
-        final hex = _mix(0x0B0806, _mix(0x4A2F1A, 0x7A5432, lit), wall);
+        final wall = math.pow(d, 1.5).toDouble();
+        var hex = _mix(0x1A110A, _mix(0x4E321C, 0x9A6C40, lit), wall);
+        // The rim's lip catches the light.
+        if (d > 0.9) hex = _mix(hex, 0xB88A52, (d - 0.9) / 0.1 * 0.5);
         bitmap.set(x, y, hex);
+      }
+    }
+    // Strands on the floor: short strokes in dull straw.
+    final rand = _Rand(29);
+    for (var i = 0; i < 26; i++) {
+      final angle = rand.range(0, math.pi * 2);
+      final radial = rand.range(0.05, 0.62);
+      final cx = size / 2 + math.cos(angle) * radial * size / 2;
+      final cy = size / 2 + math.sin(angle) * radial * size / 2;
+      final heading = rand.range(0, math.pi);
+      final length = rand.range(6, 13);
+      for (var t = -length / 2; t <= length / 2; t += 0.5) {
+        final px = (cx + math.cos(heading) * t).round();
+        final py = (cy + math.sin(heading) * t).round();
+        if (px < 0 || py < 0 || px >= size || py >= size) continue;
+        bitmap.blend(px, py, i.isEven ? 0x8A6A3A : 0x6E5230, 0.55);
       }
     }
     return bitmap.texture();
