@@ -226,7 +226,11 @@ class _PuttCastFeedState extends State<PuttCastFeed>
     final leave =
         ((_age - (_life - PuttCastFeed.fadeOut)) / PuttCastFeed.fadeOut)
             .clamp(0.0, 1.0);
-    final opacity = (appear * (1 - leave)).clamp(0.0, 1.0);
+    // Solid almost at once, and solid until the last of its going (its
+    // slide carries the exit): a toast half faded over the lawn read as
+    // low contrast in any frame that caught it.
+    final opacity =
+        (math.sqrt(appear) * (1 - leave * leave * leave)).clamp(0.0, 1.0);
     final eased = Curves.easeOutBack.transform(appear);
     final slide = still ? 0.0 : -10 * (1 - eased) - 6 * leave;
     final scale = still ? 1.0 : 0.94 + 0.06 * eased;
