@@ -1117,14 +1117,15 @@ class PuttWorld3D {
         decorations.add(built..position.y += _ground.at(decoration.at));
       }
     }
+    // Where the hens walk and wait, worn into the turf (on the green only).
+    final paths = kit.henPaths(_ground.at);
+    if (paths != null) makeKind('hen-paths').add(paths);
     final hens = makeKind('hens');
     for (final obstacle in hole.obstacles) {
       // Ducks paddle the Pond's water; hens walk everything else.
-      final swims = obstacle.id.contains('duck') ||
-          obstacle.stops
-              .any((stop) => hole.water.any((pond) => pond.contains(stop.at)));
-      final _Walker hen =
-          swims ? _DuckView3D(obstacle) : _HenView3D(obstacle, _ground);
+      final _Walker hen = _henSwims(hole, obstacle)
+          ? _DuckView3D(obstacle)
+          : _HenView3D(obstacle, _ground);
       hens.add(hen.group);
       _henViews.add(hen);
     }

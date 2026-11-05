@@ -17,7 +17,8 @@ library;
 
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart'
+    show ValueListenable, TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/powerups.dart';
@@ -59,6 +60,10 @@ class PuttHud extends StatefulWidget {
   /// line, so the green it covered shows.
   final ValueListenable<bool>? busy;
 
+  /// True while the keys hold the aim (rather than a drag): the hint line
+  /// says how the keys putt.
+  final ValueListenable<bool>? keyAiming;
+
   /// Whether the green is on screen yet: until it is, the banners wait
   /// (a hole's card plays when the player can see the hole, not during a
   /// slow boot). Left out, the green counts as shown.
@@ -74,6 +79,7 @@ class PuttHud extends StatefulWidget {
     this.cameraOverview = false,
     this.targeting,
     this.busy,
+    this.keyAiming,
     this.shown,
   });
 
@@ -93,13 +99,9 @@ class _PuttHudState extends State<PuttHud> {
     super.dispose();
   }
 
-  void _tapSlot(int slot, String effectId) {
-    // A cast says so with its own sound; arming and picking click.
-    if (puttPowerAimOf(effectId) != PuttPowerAim.none) {
-      widget.onSfx?.call(PuttSfx.click);
-    }
-    _targeting.tapSlot(widget.match, slot, effectId);
-  }
+  void _tapSlot(int slot, String effectId) =>
+      puttUseSlot(widget.match, _targeting, slot, effectId,
+          onSfx: widget.onSfx);
 
   @override
   Widget build(BuildContext context) {
@@ -149,6 +151,7 @@ class _PuttHudState extends State<PuttHud> {
                           scorecardWidth: scorecardWidth,
                           scorecardRows: scorecardRows,
                           busy: widget.busy,
+                          keyAiming: widget.keyAiming,
                           onTapSlot: _tapSlot,
                         ),
                     ],
@@ -181,6 +184,22 @@ class _PuttHudState extends State<PuttHud> {
       },
     );
   }
+}
+
+/// A carton slot used: what a click on it does, and what Enter or Space
+/// do on the keyboard's highlight. A cast says so with its own sound;
+/// arming and picking click.
+void puttUseSlot(
+  PuttMatch match,
+  PuttTargeting targeting,
+  int slot,
+  String effectId, {
+  void Function(PuttSfx sfx)? onSfx,
+}) {
+  if (puttPowerAimOf(effectId) != PuttPowerAim.none) {
+    onSfx?.call(PuttSfx.click);
+  }
+  targeting.tapSlot(match, slot, effectId);
 }
 
 const double _topRowHeight = 88;
@@ -1667,6 +1686,7 @@ class _PuttBottomRow extends StatelessWidget {
   final double scorecardWidth;
   final int scorecardRows;
   final ValueListenable<bool>? busy;
+  final ValueListenable<bool>? keyAiming;
   final void Function(int slot, String effectId) onTapSlot;
 
   const _PuttBottomRow({
@@ -1675,6 +1695,7 @@ class _PuttBottomRow extends StatelessWidget {
     required this.scorecardWidth,
     required this.scorecardRows,
     this.busy,
+    this.keyAiming,
     required this.onTapSlot,
   });
 
@@ -1705,8 +1726,11 @@ class _PuttBottomRow extends StatelessWidget {
         const SizedBox(width: 12),
         Expanded(
           child: IgnorePointer(
-            child:
-                PuttHintLine(match: match, targeting: targeting, aiming: busy),
+            child: PuttHintLine(
+                match: match,
+                targeting: targeting,
+                aiming: busy,
+                keyAiming: keyAiming),
           ),
         ),
         if (!spectator) ...[
@@ -1715,6 +1739,7 @@ class _PuttBottomRow extends StatelessWidget {
             slots: match.myInventory,
             enabled: PuttTargeting.canUseNow(match),
             activeSlot: targeting.armedSlot ?? targeting.pickingSlot,
+            highlightSlot: targeting.keySlot,
             onTap: onTapSlot,
           ),
         ],
@@ -1962,7 +1987,9 @@ class _ScorecardRow extends StatelessWidget {
 /// The line at the bottom centre: what to do right now. The targeting
 /// prompt while a slot is armed, a short "not now" when a tap could not
 /// arm, "drag anywhere to aim" until the first putt and "let go to putt"
-/// while that first pull is on, the spectator note while watching.
+/// while that first pull is on, the spectator note while watching. Where
+/// a keyboard is likely (desktop, a browser), the first line also names
+/// the keys once, and a pull held by the keys says how they putt.
 class PuttHintLine extends StatefulWidget {
   final PuttMatch match;
   final PuttTargeting targeting;
@@ -1971,8 +1998,31 @@ class PuttHintLine extends StatefulWidget {
   /// at rest, a pull is on.
   final ValueListenable<bool>? aiming;
 
+  /// True while the keys hold the aim, not a drag.
+  final ValueListenable<bool>? keyAiming;
+
   const PuttHintLine(
-      {super.key, required this.match, required this.targeting, this.aiming});
+      {super.key,
+      required this.match,
+      required this.targeting,
+      this.aiming,
+      this.keyAiming});
+
+  /// Whether this platform likely has a keyboard: a desktop, or a browser
+  /// (a phone's browser has none to speak of, so its platform rules).
+  static bool get hasKeyboard {
+    if (kIsWeb) {
+      return defaultTargetPlatform != TargetPlatform.android &&
+          defaultTargetPlatform != TargetPlatform.iOS;
+    }
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.linux ||
+      TargetPlatform.windows ||
+      TargetPlatform.macOS =>
+        true,
+      _ => false,
+    };
+  }
 
   @override
   State<PuttHintLine> createState() => _PuttHintLineState();
@@ -2018,8 +2068,10 @@ class _PuttHintLineState extends State<PuttHintLine>
     final reduceMotion =
         MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     final aiming = widget.aiming;
+    final keyAiming = widget.keyAiming;
+    final keys = PuttHintLine.hasKeyboard;
     return AnimatedBuilder(
-      animation: aiming == null ? _notice : Listenable.merge([_notice, aiming]),
+      animation: Listenable.merge([_notice, aiming, keyAiming]),
       builder: (context, _) {
         final targeting = widget.targeting;
         final armed = targeting.armed;
@@ -2044,17 +2096,26 @@ class _PuttHintLineState extends State<PuttHintLine>
         } else if (match.myShotReady &&
             !match.hasPutted &&
             targeting.picking == null) {
-          line = pulling
+          final byKeys = keyAiming?.value ?? false;
+          line = pulling && byKeys
               ? _HintPill(
-                  key: const ValueKey('release'),
-                  icon: Icons.sports_golf_rounded,
-                  text: labelPuttReleaseHint(),
+                  key: const ValueKey('release-keys'),
+                  icon: Icons.keyboard_rounded,
+                  text: labelPuttKeyReleaseHint(),
+                  detail: labelPuttKeyReleaseDetail(),
                 )
-              : _HintPill(
-                  key: const ValueKey('aim'),
-                  icon: Icons.touch_app_rounded,
-                  text: labelPuttAimHint(),
-                );
+              : pulling
+                  ? _HintPill(
+                      key: const ValueKey('release'),
+                      icon: Icons.sports_golf_rounded,
+                      text: labelPuttReleaseHint(),
+                    )
+                  : _HintPill(
+                      key: const ValueKey('aim'),
+                      icon: Icons.touch_app_rounded,
+                      text: labelPuttAimHint(),
+                      detail: keys ? labelPuttKeysHint() : null,
+                    );
         }
         return Align(
           alignment: Alignment.bottomCenter,
@@ -2150,7 +2211,7 @@ class _HintPill extends StatelessWidget {
 /// The power-up inventory: three slots filled left to right, each power-up
 /// its icon on ink with the name and what it does in the tooltip; empty
 /// slots a dashed outline. The slot whose power-up waits for a spot or a
-/// player glows.
+/// player glows; the one the keyboard's Tab is on wears a ring.
 class PuttInventory extends StatelessWidget {
   final List<String> slots;
   final void Function(int slot, String effectId)? onTap;
@@ -2159,12 +2220,16 @@ class PuttInventory extends StatelessWidget {
   /// The slot that is armed or picking, if any.
   final int? activeSlot;
 
+  /// The slot the keyboard's highlight is on, if any.
+  final int? highlightSlot;
+
   const PuttInventory({
     super.key,
     required this.slots,
     this.onTap,
     this.enabled = true,
     this.activeSlot,
+    this.highlightSlot,
   });
 
   @override
@@ -2180,6 +2245,7 @@ class PuttInventory extends StatelessWidget {
             effectId: i < slots.length ? slots[i] : null,
             enabled: enabled,
             active: activeSlot == i,
+            highlighted: highlightSlot == i && i < slots.length,
             onTap: onTap,
           ),
         ],
@@ -2193,6 +2259,7 @@ class _PowerSlot extends StatefulWidget {
   final String? effectId;
   final bool enabled;
   final bool active;
+  final bool highlighted;
   final void Function(int slot, String effectId)? onTap;
 
   const _PowerSlot({
@@ -2200,6 +2267,7 @@ class _PowerSlot extends StatefulWidget {
     required this.effectId,
     required this.enabled,
     required this.active,
+    required this.highlighted,
     required this.onTap,
   });
 
@@ -2234,7 +2302,11 @@ class _PowerSlotState extends State<_PowerSlot> with TickerProviderStateMixin {
   void didUpdateWidget(covariant _PowerSlot oldWidget) {
     super.didUpdateWidget(oldWidget);
     _syncGlow();
-    if (widget.effectId != null && widget.effectId != oldWidget.effectId) {
+    // A new power-up says its name; so does the one Tab lands on (a
+    // keyboard has no hover for the tooltip).
+    if (widget.effectId != null &&
+        (widget.effectId != oldWidget.effectId ||
+            (widget.highlighted && !oldWidget.highlighted))) {
       _fresh.forward(from: 0);
     }
   }
@@ -2344,6 +2416,23 @@ class _PowerSlotState extends State<_PowerSlot> with TickerProviderStateMixin {
       clipBehavior: Clip.none,
       children: [
         slot,
+        // The keyboard's highlight: a cream ring just outside the slot.
+        if (widget.highlighted)
+          Positioned(
+            left: -4,
+            top: -4,
+            right: -4,
+            bottom: -4,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                key: const Key('putt-slot-highlight'),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: PuttPalette.cream, width: 2.5),
+                ),
+              ),
+            ),
+          ),
         // Stepped up slot by slot, so three filled at once never overlap,
         // and flush with the slot's right edge: the carton stands at the
         // screen's, and a name centred on the last slot ran off it.
@@ -2371,6 +2460,7 @@ class _PowerSlotState extends State<_PowerSlot> with TickerProviderStateMixin {
       child: Semantics(
         button: true,
         enabled: enabled,
+        focused: widget.highlighted,
         label: name,
         child: MouseRegion(
           cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
@@ -2867,6 +2957,27 @@ String labelPuttReleaseHint() =>
         desc: "Hint line at the bottom of the game while the player pulls "
             "the slingshot for their first putt: releasing strikes the egg, "
             "a longer pull hits it harder");
+
+String labelPuttKeysHint() =>
+    Intl.message("Keys: ← → aim · ↑ ↓ power · Space putts · Tab power-ups",
+        name: "labelPuttKeysHint",
+        desc: "Second line of the first aim hint, on desktop and in the "
+            "browser: the arrow keys turn the aim and set the power, Space "
+            "putts, Tab moves through the power-up slots. The arrows are "
+            "the keys' own symbols");
+
+String labelPuttKeyReleaseHint() => Intl.message("Space or Enter to putt",
+    name: "labelPuttKeyReleaseHint",
+    desc: "Hint line while the player aims their first putt with the "
+        "keyboard: Space or Enter strikes the egg");
+
+String labelPuttKeyReleaseDetail() =>
+    Intl.message("Shift + ← → turns finer · Esc cancels",
+        name: "labelPuttKeyReleaseDetail",
+        desc: "Second line of the hint while the player aims with the "
+            "keyboard: holding Shift with the left and right arrow keys "
+            "turns the aim in small steps, Esc drops the aim without "
+            "putting");
 
 String labelPuttScorecard() => Intl.message("Scorecard",
     name: "labelPuttScorecard",

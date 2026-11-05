@@ -127,7 +127,8 @@ acts on a spot (Rabbit Hole, Gust, Sprinkler) waits for it: the slot
 glows, the green shows what it would reach (the hop's range and landing,
 the spray and the eggs it soaks, the pull on every other egg), and the
 next press on the green casts it there; Esc, a right click, pausing or
-the slot tapped again puts it away. One that acts on a player (Nest
+the slot tapped again puts it away. On a keyboard, Tab rings a slot and
+Enter or Space uses it the same way (see Playing it). One that acts on a player (Nest
 Swap, Thieving Crow) opens a list of the players it can reach, and says
 so when nobody can be picked. Nothing is spent on a cancel, or on a cast
 that could do nothing (no other egg to push, my egg already in the
@@ -527,11 +528,30 @@ contours and shades the crease at the foot. Eggs, their shadows (tilted
 along the slope), the aim, the crates, the hens, the nest and every
 burst stand on the ground's height, and the pointer's ray walks onto it.
 
+The hens' beats are worn into the turf, since a hen is a moving obstacle
+more than three eggs wide (radius 1.4-1.5) and nothing else on the green
+said where she goes: a soft band about her body's width along her stops in
+order (round the loop when she walks three stops or more, out and a
+little past each end when she paces two), its ends faded, its edges soft
+and a little uneven, in the turf's darker green dulled toward dry earth
+at half opacity and lit like the turf (sun, slopes, shadows; an unlit
+darker band read as a grey road on the Coop's light turf and vanished on
+the Farm Road's darker one), and a few three-toed prints round each stop where she
+waits (`dwellSeconds` over 0). The band breaks, faded, at water; the
+Pond's ducks swim and wear none. Hens that share a beat (the Coop's
+merry-go-round) wear it once. Every vertex lies on the ground's height,
+so the band climbs hills and stays on its tier. It is one mesh
+per hole (`_CourseKit.henPaths` in `world3d/course.dart`, one 32-pixel
+alpha texture, no depth write) drawn first of the turf's marks (render
+order 1), so the eggs' shadows, the last roll's trace, the aim and its
+guide all draw over it, and the eggs hide it where they stand.
+
 On the green: mown turf with stripes and contact shade along the rails,
 rubber bumpers (rails and pinball mushrooms), rounded smooth-shaded boulders, ponds
 that ripple, speed belts whose chevrons run, rabbit holes glowing their
 pair's colour, the silo over its spiral pull, floating "?" crates, the
-straw nest with a flag flying the hole's number, the tee mat. The characters - the eggs, the
+straw nest with a flag flying the hole's number, the tee mat, and where
+the hens walk and wait (above). The characters - the eggs, the
 hens, the ducks and the host - are drawn with a line of ink round them
 (their back faces pushed out along their normals; the eggs' line weighs
 more as the camera pulls back), so they pop from the softer farm. Eggs are
@@ -602,6 +622,25 @@ world builds those with `_gridPlane`.
   the other eggs (no egg in the way hides where the putt goes) and under
   the viewer's own. The viewer's last roll on the hole lies under it as
   dots in their colour, from where it stood to where it stopped.
+- The keys putt too, for a player who cannot drag precisely (a
+  trackpad, a shaky hand): Left and Right turn the aim 3 degrees a press
+  (half a degree with Shift), Up and Down set the power in 5% steps (30%
+  to full: softer than the first step a pull out of the tap's dead zone
+  reaches would fire nothing), and Space or Enter putts. The first key
+  starts the aim from the egg toward the nest at half power. The keys
+  hold the same aim a drag does (`AimController.hold`, `turnBy`,
+  `stepPower`), so the arrow, the guide, the resting mark and a kicker's
+  landing ring follow every press, and the putt goes out through the
+  same release, sway included: a hard putt held past 0.8 seconds sways
+  like a held pull. Esc drops the aim unspent (after an armed power-up
+  and the carton's highlight, before the menus). Tab and Shift+Tab move
+  a ring over the carton's filled slots (and off past the last, back to
+  aiming); Enter or Space on it does what a click on that slot does, a
+  spot effect then waiting for its press on the green. The keys are the
+  game's only while its own focus holds them and a hole plays with no
+  menu up (a picker's rows, a focused button and the chat keep theirs),
+  and then always, so an arrow never walks the focus off the green. The
+  first aim hint names them on desktop and in a browser.
 - Until the first putt of the match (and after 14 seconds idle with the
   egg ready), a coach shows the gesture over the egg: a hand presses,
   pulls back away from the nest and lets go while a ghost arrow grows

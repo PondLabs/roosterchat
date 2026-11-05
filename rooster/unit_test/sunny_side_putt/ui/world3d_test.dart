@@ -1504,6 +1504,228 @@ void main() {
     expect(deep / inner, greaterThan(0.85));
   });
 
+  group("the hens' paths", () {
+    /// A green with [obstacles] walking it, flat unless [hills], with
+    /// [water] in it.
+    HoleDef yard(
+            {required List<MovingObstacle> obstacles,
+            List<WaterShape> water = const [],
+            List<Hill> hills = const []}) =>
+        HoleDef(
+          id: 'yard',
+          par: 3,
+          tee: const Vec2(2, 2),
+          nest: Nest(const Vec2(28, 18), 0.9),
+          bounds: Rect(Vec2.zero, Vec2(30, 20)),
+          walls: [
+            WallSegment(Vec2.zero, Vec2(30, 0)),
+            WallSegment(Vec2(30, 0), Vec2(30, 20)),
+            WallSegment(Vec2(30, 20), Vec2(0, 20)),
+            WallSegment(Vec2(0, 20), Vec2.zero),
+          ],
+          obstacles: obstacles,
+          water: water,
+          hills: hills,
+        );
+
+    /// The world's hen path mesh for [hole], or null when it has none.
+    tjs.Mesh? pathsOf(HoleDef hole) {
+      final world = PuttWorld3D(viewport: const ui.Size(800, 600));
+      addTearDown(world.dispose);
+      world.buildHole(hole, eggRadius: 0.45);
+      final group = world.holeGroup('hen-paths');
+      if (group == null) return null;
+      return group.children.single as tjs.Mesh;
+    }
+
+    List<tjs.Vector3> pointsOf(tjs.Mesh mesh) {
+      final position =
+          mesh.geometry!.attributes['position'] as tjs.BufferAttribute;
+      return [
+        for (var i = 0; i < position.count; i++)
+          tjs.Vector3(position.getX(i)!.toDouble(),
+              position.getY(i)!.toDouble(), position.getZ(i)!.toDouble()),
+      ];
+    }
+
+    // The flat green's two heights: the band, and the prints over it.
+    bool isPrint(tjs.Vector3 p) => (p.y - 0.016).abs() < 1e-6;
+    bool isBand(tjs.Vector3 p) => (p.y - 0.012).abs() < 1e-6;
+
+    test('a pacing hen wears a band along her leg, prints where she waits', () {
+      final mesh = pathsOf(dressing)!;
+      expect(mesh.name, 'hen-paths');
+      final points = pointsOf(mesh);
+      final band = points.where(isBand).toList();
+      final prints = points.where(isPrint).toList();
+      expect(band.length + prints.length, points.length);
+      // From a little before her first stop to a little past her second,
+      // about a hen wide (radius 1.1) round her line.
+      final xs = band.map((p) => p.x);
+      expect(xs.reduce(math.min), closeTo(20 - 0.55, 0.01));
+      expect(xs.reduce(math.max), closeTo(26 + 0.55, 0.01));
+      for (final p in band) {
+        expect((p.z - 14).abs(),
+            inInclusiveRange(1.1 * 0.75 * 0.7, 1.1 * 0.75 * 1.3),
+            reason: 'the edges lie a hen wide of the line');
+      }
+      // She waits at both stops: a few three-toed prints at each.
+      bool near(tjs.Vector3 p, Vec2 stop) =>
+          Vec2(p.x, p.z).distanceTo(stop) < 1.1;
+      final atFirst = prints.where((p) => near(p, const Vec2(20, 14)));
+      final atSecond = prints.where((p) => near(p, const Vec2(26, 14)));
+      expect(atFirst.length, greaterThanOrEqualTo(4 * 3 * 3));
+      expect(atSecond.length, greaterThanOrEqualTo(4 * 3 * 3));
+      expect(prints.length % 9, 0, reason: 'three toes, a triangle each');
+    });
+
+    test('lies under the eggs, the aim and its guide, one mesh for the hole',
+        () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      world.applySnapshot(PuttWorldFrame(
+        time: 0,
+        eggs: [eggAt(const Vec2(10, 10), mine: true)],
+        aim: const PuttWorldAim(
+            origin: Vec2(10, 10),
+            angle: 0,
+            power: 0.6,
+            dragLength: 3,
+            eggRadius: 0.45,
+            preview: [
+              Vec2(11, 10),
+              Vec2(13, 10),
+              Vec2(15, 10)
+            ],
+            trace: [
+              [Vec2(4, 10), Vec2(8, 10)]
+            ]),
+      ));
+      final paths = world.holeGroup('hen-paths')!.children;
+      expect(paths, hasLength(1), reason: 'one draw for every hen');
+      final mesh = paths.single as tjs.Mesh;
+      final material = mesh.material!;
+      expect(material.depthWrite, isFalse);
+      expect(material.transparent, isTrue);
+      expect(material.opacity, lessThanOrEqualTo(0.5),
+          reason: 'worn grass, not a road');
+      final aim = walk(world.scene)
+          .where((o) => o.name.startsWith('aim-') && o is tjs.Mesh)
+          .toList();
+      expect(aim, isNotEmpty);
+      for (final piece in aim) {
+        expect(mesh.renderOrder, lessThan(piece.renderOrder),
+            reason: '${piece.name} draws over the path');
+      }
+      final shadow =
+          walk(world.scene).firstWhere((o) => o.name == 'egg-shadow');
+      expect(mesh.renderOrder, lessThan(shadow.renderOrder));
+    });
+
+    test('a walk round three stops or more closes its loop, no prints', () {
+      const stops = [Vec2(6, 5), Vec2(24, 5), Vec2(24, 15), Vec2(6, 15)];
+      final mesh = pathsOf(yard(obstacles: const [
+        MovingObstacle(id: 'loop', radius: 1, stops: [
+          ObstacleStop(Vec2(6, 5)),
+          ObstacleStop(Vec2(24, 5)),
+          ObstacleStop(Vec2(24, 15)),
+          ObstacleStop(Vec2(6, 15)),
+        ]),
+      ]))!;
+      final points = pointsOf(mesh);
+      expect(points.where(isPrint), isEmpty, reason: 'she never stops');
+      // Every leg is worn, the closing one (back to the first) too.
+      for (var i = 0; i < stops.length; i++) {
+        final middle = stops[i].lerp(stops[(i + 1) % stops.length], 0.5);
+        expect(
+            points.any((p) => Vec2(p.x, p.z).distanceTo(middle) < 1.3), isTrue,
+            reason: 'leg $i');
+      }
+      // A loop has no ends to fade: every vertex at the band's middle u.
+      final uv = mesh.geometry!.attributes['uv'] as tjs.BufferAttribute;
+      for (var i = 0; i < uv.count; i++) {
+        expect(uv.getX(i), closeTo(0.5, 1e-6));
+      }
+    });
+
+    test('hens sharing a beat wear it once', () {
+      MovingObstacle hen(String id, int shift) {
+        const walk = [Vec2(6, 5), Vec2(24, 5), Vec2(24, 15), Vec2(6, 15)];
+        return MovingObstacle(id: id, radius: 1, stops: [
+          for (var i = 0; i < walk.length; i++)
+            ObstacleStop(walk[(i + shift) % walk.length]),
+        ]);
+      }
+
+      final one = pointsOf(pathsOf(yard(obstacles: [hen('a', 0)]))!).length;
+      final three = pointsOf(pathsOf(
+              yard(obstacles: [hen('a', 0), hen('b', 1), hen('c', 2)]))!)
+          .length;
+      expect(three, one);
+    });
+
+    test('no path on water: the band breaks at the pond, a swimmer has none',
+        () {
+      final pond = WaterRect(Rect(Vec2(12, 6), Vec2(16, 14)));
+      final mesh = pathsOf(yard(water: [
+        pond
+      ], obstacles: const [
+        MovingObstacle(id: 'hen', radius: 1, stops: [
+          ObstacleStop(Vec2(4, 10), dwellSeconds: 1),
+          ObstacleStop(Vec2(26, 10), dwellSeconds: 1),
+        ]),
+      ]))!;
+      final points = pointsOf(mesh);
+      expect(points.where((p) => p.x > 4 && p.x < 12), isNotEmpty);
+      expect(points.where((p) => p.x > 16 && p.x < 26), isNotEmpty);
+      expect(points.where((p) => p.x > 12 && p.x < 16), isEmpty,
+          reason: 'nothing worn over the water');
+      // Both stretches fade where they meet the pond (and at the far ends).
+      final uv = mesh.geometry!.attributes['uv'] as tjs.BufferAttribute;
+      final ends = [
+        for (var i = 0; i < uv.count; i++)
+          if (uv.getX(i)! < 0.01 || uv.getX(i)! > 0.99) points[i].x,
+      ];
+      expect(ends.where((x) => (x - 12).abs() < 0.5), isNotEmpty);
+      expect(ends.where((x) => (x - 16).abs() < 0.5), isNotEmpty);
+
+      // The Pond's ducks swim: no path, no prints.
+      expect(
+          pathsOf(yard(water: [
+            pond
+          ], obstacles: const [
+            MovingObstacle(id: 'pond_duck', radius: 1.3, stops: [
+              ObstacleStop(Vec2(13, 7), dwellSeconds: 1.5),
+              ObstacleStop(Vec2(15, 13), dwellSeconds: 1.5),
+            ]),
+          ])),
+          isNull);
+      // Nor does a hole without hens.
+      expect(pathsOf(yard(obstacles: const [])), isNull);
+    });
+
+    test('lies on the hills it crosses', () {
+      final hole = yard(hills: const [
+        Hill.mound(Vec2(15, 10), height: 1.2, top: 0.6, skirt: 3),
+      ], obstacles: const [
+        MovingObstacle(id: 'hen', radius: 1, stops: [
+          ObstacleStop(Vec2(6, 10), dwellSeconds: 1),
+          ObstacleStop(Vec2(24, 10)),
+        ]),
+      ]);
+      final points = pointsOf(pathsOf(hole)!);
+      var climbed = 0.0;
+      for (final p in points) {
+        final ground = hole.groundHeightAt(Vec2(p.x, p.z));
+        final lift = p.y - ground;
+        expect(lift, anyOf(closeTo(0.012, 1e-5), closeTo(0.016, 1e-5)),
+            reason: 'on the turf at (${p.x}, ${p.z})');
+        climbed = math.max(climbed, p.y);
+      }
+      expect(climbed, greaterThan(1.0), reason: 'up and over the mound');
+    });
+  });
+
   group('the birds', () {
     /// The vertices of [mesh] in its own frame.
     List<tjs.Vector3> pointsOf(tjs.Object3D mesh) {
@@ -1904,6 +2126,7 @@ void main() {
                 sign == null ? null : Vec2(sign.position.x, sign.position.z),
             signNumber: sign?.userData['number'],
             signPainted: face?.material?.map != null,
+            henPaths: world.holeGroup('hen-paths') != null,
           ));
           world.dispose();
         }
@@ -1921,6 +2144,17 @@ void main() {
       },
       'the_barn': {'lantern post': 2, 'hay wagon': 1},
     };
+
+    test("every hole a hen walks wears her path; the Pond's ducks none", () {
+      expect(built, hasLength(30));
+      var worn = 0;
+      for (final entry in built) {
+        final walks = entry.hole.obstacles.any((o) => !o.id.contains('duck'));
+        expect(entry.henPaths, walks, reason: entry.hole.id);
+        if (entry.henPaths) worn++;
+      }
+      expect(worn, greaterThanOrEqualTo(6));
+    });
 
     test('every course stands its own props, and none of another course', () {
       expect(built, hasLength(30));
@@ -2276,6 +2510,7 @@ class _BuiltHole {
     required this.signAt,
     required this.signNumber,
     required this.signPainted,
+    required this.henPaths,
   });
 
   final String course;
@@ -2296,6 +2531,9 @@ class _BuiltHole {
   final Vec2? signAt;
   final Object? signNumber;
   final bool signPainted;
+
+  /// Whether the hole wore its hens' paths.
+  final bool henPaths;
 }
 
 /// Whether the straight run from [from] to [to] crosses one of [hole]'s

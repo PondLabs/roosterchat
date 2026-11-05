@@ -10,6 +10,10 @@
 // (Nest Swap, Thieving Crow) opens the HUD's picker, which casts on the
 // player picked. Nothing is spent until the cast itself, and only while a
 // hole is being played.
+//
+// On a keyboard, Tab and Shift+Tab move a highlight ([keySlot]) over the
+// carton's filled slots, and Enter or Space on it does what a click on
+// that slot does.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -50,6 +54,7 @@ class PuttTargeting extends ChangeNotifier {
   Vec2? _hover;
   String? _notice;
   int _noticeSerial = 0;
+  int? _keySlot;
 
   /// The point effect waiting for its spot.
   String? get armed => _armed;
@@ -83,6 +88,34 @@ class PuttTargeting extends ChangeNotifier {
   /// twice still shows twice.
   String? get notice => _notice;
   int get noticeSerial => _noticeSerial;
+
+  /// The carton slot the keyboard's highlight is on (Tab moves it), or
+  /// null while the keys aim the egg instead.
+  int? get keySlot => _keySlot;
+
+  /// Tab ([direction] 1) or Shift+Tab (-1): the highlight to the next
+  /// filled slot, or off past the last one (and back on at the first), so
+  /// the keys can go back to aiming. False, and no highlight, while the
+  /// carton is empty or power-ups cannot be used.
+  bool cycleKeySlot(PuttMatch match, int direction) {
+    final filled = match.myInventory.length;
+    if (!canUseNow(match) || filled == 0) {
+      clearKeySlot();
+      return false;
+    }
+    var next = (_keySlot ?? -1) + direction.sign;
+    if (next < -1) next = filled - 1;
+    _keySlot = next < 0 || next >= filled ? null : next;
+    notifyListeners();
+    return true;
+  }
+
+  /// Takes the keyboard's highlight off the carton.
+  void clearKeySlot() {
+    if (_keySlot == null) return;
+    _keySlot = null;
+    notifyListeners();
+  }
 
   /// A slot was tapped: casts, arms, opens the picker, or - the same slot
   /// tapped twice - cancels.
@@ -163,6 +196,12 @@ class PuttTargeting extends ChangeNotifier {
   /// hole ended, a crow took the power-up, I went to watch) and follows
   /// the slot when the inventory shifted under it.
   void validate(PuttMatch match) {
+    // The highlight leaves a slot that emptied, or a hole that ended.
+    final keySlot = _keySlot;
+    if (keySlot != null &&
+        (!canUseNow(match) || keySlot >= match.myInventory.length)) {
+      clearKeySlot();
+    }
     final effectId = _armed ?? _picking;
     if (effectId == null) return;
     final inventory = match.myInventory;
