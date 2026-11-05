@@ -758,10 +758,11 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
         final shot = putt(ball.position, target, arrival: last ? 1.4 : 0.7);
         final spread = 0.16 / (shots + 1);
         final angle = shot.angle + (_random.nextDouble() * 2 - 1) * spread;
-        // Hills, ramps, drops and silos bend and stop a roll the flat math
-        // cannot see: there the bot reads the green by running the engine
-        // ahead.
-        final reads = hole.hasRelief || hole.wells.isNotEmpty;
+        // Hills, ramps, drops, silos and kickers bend, stop or throw a roll
+        // the flat math cannot see: there the bot reads the green by
+        // running the engine ahead.
+        final reads =
+            hole.hasRelief || hole.wells.isNotEmpty || hole.kickers.isNotEmpty;
         final base = reads
             ? _readPower(hole, ball.playerId, angle, target, shot.power)
             : shot.power;

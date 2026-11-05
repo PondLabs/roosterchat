@@ -1,11 +1,17 @@
 // The deterministic physics of Sunny Side Putt: a fixed-timestep world of
 // eggs (circles) rolling among walls, arcs, bumpers, ledges, a walking hen,
 // boost strips, portals, gravity wells, water, "?" boxes and the nest, over
-// ground that pulls them down its slopes (hills, ramps).
+// ground that pulls them down its slopes (hills, ramps), and kickers that
+// throw a fast egg into the air.
 //
 // The world is planar: height exists only as the ground's gradient, which
 // pulls, and as ledges, one-way edges an egg rolls off from above and
-// bounces off from below. A terrace's level top rolls like the flat.
+// bounces off from below. A terrace's level top rolls like the flat. The
+// one egg with a height of its own is one in the air: off a kicker's lip
+// it carries an altitude and a climb (see [BallBody.air]) and flies a
+// ballistic arc over the ground until it comes down on it, passing over
+// water, sensors, hens, other eggs and any step it clears, but never over
+// a rail.
 //
 // Determinism contract:
 //   * Time advances only in whole ticks of [PhysicsConfig.dt] (1/120 s) via
@@ -103,6 +109,30 @@ class PhysicsConfig {
   /// radius against [frictionDeceleration].
   final double ledgeDropSpeed;
 
+  /// The pull on an egg in the air (units/s^2): the view's own fall off a
+  /// ledge, so a flight and a drop come down alike.
+  final double airGravity;
+
+  /// The fastest climb (units/s) a kicker throws an egg up with, however
+  /// hard it comes: about 1.2 units over the lip at the top of its arc, so
+  /// a flight stays near the rails it cannot cross. Past it a harder putt
+  /// only flies farther.
+  final double kickerMaxLift;
+
+  /// The share of its pace an egg keeps rolling over a kicker's lip too
+  /// slow to fly (or crossing it against the way it throws): a small bump.
+  final double kickerBumpKeep;
+
+  /// The share of its ground speed an egg keeps each time it comes down.
+  final double landingKeep;
+
+  /// The share of its fall's speed a landing gives back as a bounce.
+  final double landingBounce;
+
+  /// The least bounce (units/s up) that lifts a landing egg off again: a
+  /// softer landing leaves it rolling.
+  final double landingHopSpeed;
+
   const PhysicsConfig({
     this.dt = 1 / 120,
     this.ballRadius = 0.45,
@@ -121,6 +151,12 @@ class PhysicsConfig {
     this.magnetStrength = 26,
     this.slopeGravity = 24,
     this.ledgeDropSpeed = 3.2,
+    this.airGravity = 18,
+    this.kickerMaxLift = 6.6,
+    this.kickerBumpKeep = 0.88,
+    this.landingKeep = 0.9,
+    this.landingBounce = 0.3,
+    this.landingHopSpeed = 1.2,
   });
 }
 
@@ -136,6 +172,14 @@ class BallBody {
 
   /// Ticks left before this egg may enter a portal again.
   int portalCooldown;
+
+  /// While the egg flies (off a kicker's lip): the altitude of its lowest
+  /// point over the green's base level, the same measure as
+  /// [HoleDef.groundHeightAt]. Null while it rolls on the ground.
+  double? air;
+
+  /// While the egg flies: its climb, units/s (negative once it falls).
+  double airSpeed;
 
   /// Flags active until a world tick (timed effects, Ghost Egg).
   final Map<PowerUpFlag, int> timedUntil = {};
@@ -154,10 +198,21 @@ class BallBody {
       this.holed = false,
       this.asleep = true,
       this.portalCooldown = 0,
-      this.putted = false})
+      this.putted = false,
+      this.air,
+      this.airSpeed = 0})
       : lastSafePosition = position;
 
   double get speed => velocity.length;
+
+  /// Whether the egg is in the air.
+  bool get airborne => air != null;
+
+  /// Puts the egg back on the ground, its flight over.
+  void ground() {
+    air = null;
+    airSpeed = 0;
+  }
 
   bool flagActive(PowerUpFlag flag, int tick) =>
       untilRest.contains(flag) || (timedUntil[flag] ?? -1) > tick;
@@ -176,6 +231,7 @@ class BallBody {
     asleep = true;
     untilRest.clear();
     lastSafePosition = position;
+    ground();
   }
 
   Map<String, Object?> toJson() => {
@@ -189,6 +245,8 @@ class BallBody {
         'sx': lastSafePosition.x,
         'sy': lastSafePosition.y,
         'cd': portalCooldown,
+        'air': air,
+        'vz': airSpeed,
         'timed': {
           for (final entry in timedUntil.entries) entry.key.name: entry.value,
         },
@@ -266,6 +324,39 @@ class BallDropped extends PhysicsEvent {
   final Vec2 at;
 
   const BallDropped({required this.playerId, required this.at});
+}
+
+/// Thrown into the air off a kicker's lip at [at]: the egg flies (the view
+/// draws the arc from [BallBody.air]).
+class BallLaunched extends PhysicsEvent {
+  final String playerId;
+  final Vec2 at;
+
+  /// Its pace along the kicker as it left the lip.
+  final double speed;
+
+  const BallLaunched(
+      {required this.playerId, required this.at, required this.speed});
+}
+
+/// Came down on the ground at [at] after a flight, falling at
+/// [impactSpeed]; a hard landing bounces it up once more.
+class BallLanded extends PhysicsEvent {
+  final String playerId;
+  final Vec2 at;
+  final double impactSpeed;
+
+  const BallLanded(
+      {required this.playerId, required this.at, required this.impactSpeed});
+}
+
+/// Rolled over a kicker's lip at [at] without flying (too slow, or the
+/// other way): a small bump.
+class BallBumped extends PhysicsEvent {
+  final String playerId;
+  final Vec2 at;
+
+  const BallBumped({required this.playerId, required this.at});
 }
 
 /// Out of the hole's bounds: same treatment as water.
@@ -417,16 +508,20 @@ class PhysicsWorld {
     impulseBall(playerId, Vec2(math.cos(angle), math.sin(angle)) * speed);
   }
 
+  /// Moves an egg to [to] at once, speed kept (Rabbit Hole): it comes up
+  /// out of the ground there, so one in the air lands.
   void teleportBall(String playerId, Vec2 to) {
     final ball = _balls[playerId];
     if (ball == null || ball.holed) return;
     ball.position = to;
     ball.asleep = false;
+    ball.ground();
     _insideBoosts[playerId] = _boostsInside(to).toSet();
   }
 
   /// Swaps two eggs' positions and safe positions, speeds preserved
-  /// (Nest Swap).
+  /// (Nest Swap); both stand on the ground after it, even one that was in
+  /// the air.
   void swapBalls(String playerIdA, String playerIdB) {
     final a = _balls[playerIdA];
     final b = _balls[playerIdB];
@@ -439,6 +534,8 @@ class PhysicsWorld {
     b.lastSafePosition = safeA;
     a.asleep = false;
     b.asleep = false;
+    a.ground();
+    b.ground();
     _insideBoosts[playerIdA] = _boostsInside(a.position).toSet();
     _insideBoosts[playerIdB] = _boostsInside(b.position).toSet();
   }
@@ -456,11 +553,14 @@ class PhysicsWorld {
   }
 
   /// Immediate placement checks for an egg that was moved somewhere
-  /// without rolling there (power-ups): bounds, water, capture.
+  /// without rolling there (power-ups): bounds, water, capture. One still
+  /// in the air (a gust caught it in flight) only answers to the bounds:
+  /// it is over the water, not in it.
   void evaluatePlacement(String playerId) {
     final ball = _balls[playerId];
     if (ball == null || ball.holed) return;
     if (_handleBounds(ball)) return;
+    if (ball.airborne) return;
     if (_handleWater(ball)) return;
     _handleNest(ball);
   }
@@ -491,7 +591,11 @@ class PhysicsWorld {
           ball.asleep = false;
         }
       }
-      if (!ball.asleep) {
+      if (!ball.asleep && ball.airborne) {
+        // In the air nothing on the ground pulls or rubs: it keeps its
+        // pace until it comes down.
+        ball.velocity = _clamped(ball.velocity);
+      } else if (!ball.asleep) {
         var velocity = ball.velocity + _accelOn(ball) * config.dt;
         final speed = velocity.length;
         if (speed > 0) {
@@ -507,7 +611,14 @@ class PhysicsWorld {
       // it nudges them awake.
       _integrate(ball, hens);
       if (!ball.holed && !ball.asleep) {
-        _sensors(ball);
+        final touched = ball.airborne && _touchdown(ball);
+        if (!ball.airborne) {
+          _sensors(ball);
+        } else if (!_handleBounds(ball) && touched) {
+          // Bounced back up off the ground it met: wet all the same when
+          // that ground was the pond.
+          _handleWater(ball);
+        }
       }
     }
 
@@ -520,7 +631,8 @@ class PhysicsWorld {
         // Screening: nothing may STAY out of bounds or inside water, even
         // a resting egg that another body pushed there this tick.
         if (!_handleBounds(ball)) _handleWater(ball);
-      } else if (ball.velocity.length < config.sleepSpeed &&
+      } else if (!ball.airborne &&
+          ball.velocity.length < config.sleepSpeed &&
           _restingPull(ball).length <= frictionDeceleration) {
         // True static equilibrium: slow AND nothing pushing it onward.
         // A ball on a gravity well's or a hill's slope (pull > friction)
@@ -617,7 +729,10 @@ class PhysicsWorld {
   /// Moves an egg through the rest of its tick with swept collisions
   /// against walls, arcs and the hen; reflects at each hit. A ledge
   /// stops an egg only from below; rolled over from above, it drops the
-  /// egg to the tier below.
+  /// egg to the tier below. A kicker's lip, rolled over, throws the egg
+  /// into the air or bumps it. In the air the egg passes over the hens and
+  /// over every step whose top it clears, and its flight carries on to the
+  /// tick's end.
   void _integrate(BallBody ball, List<_ObstacleSweep> hens) {
     final radius = config.ballRadius;
     final ghost = ball.flagActive(PowerUpFlag.ghost, _tick);
@@ -625,6 +740,9 @@ class PhysicsWorld {
 
     _depenetrate(ball, hens, ghost, hop);
 
+    // The share of the tick at which the egg's flight state (its altitude
+    // and climb) holds: the tick's start, or where it left a lip.
+    var airFrom = 0.0;
     var fraction = 0.0;
     var bounces = 0;
     while (fraction < 1 - 1e-12 && bounces <= config.maxBouncesPerTick) {
@@ -632,6 +750,7 @@ class PhysicsWorld {
       final velocity = ball.velocity;
       final delta = velocity * (config.dt * remainingFraction);
       final moving = velocity.lengthSquared > 1e-18;
+      final flying = ball.airborne;
 
       _SweepHit? best;
       if (!ghost) {
@@ -642,6 +761,14 @@ class PhysicsWorld {
               : _sweepCapsule(ball.position, delta, radius, wall.a, wall.b);
           if (hit == null) continue;
           if (best == null || hit.$1 < best.t) {
+            // A step's face stops an egg in the air only below its top.
+            if (flying &&
+                wall.ledge &&
+                _altitudeAt(
+                        ball, airFrom, fraction + hit.$1 * remainingFraction) >=
+                    _ledgeTop(wall, ball.position + delta * hit.$1)) {
+              continue;
+            }
             best = _SweepHit(
               t: hit.$1,
               normal: hit.$2,
@@ -668,7 +795,8 @@ class PhysicsWorld {
           }
         }
       }
-      if (!ghost && !hop) {
+      // In the air (or hopping) the egg passes over the hens.
+      if (!ghost && !hop && !flying) {
         for (final hen in hens) {
           final hit = hen.sweep(ball.position, radius, delta, fraction);
           if (hit == null) continue;
@@ -683,21 +811,39 @@ class PhysicsWorld {
           }
         }
       }
-      // The first lip the egg's centre rolls over, from the high side, if
-      // that comes before anything it would hit: a fall is gravity, so a
-      // ghost egg drops too.
-      for (final wall in hole.walls) {
-        if (!moving) break;
-        if (!wall.ledge) continue;
-        final t = _ledgeCrossing(ball.position, delta, wall.a, wall.b);
-        if (t == null || (best != null && best.t <= t)) continue;
-        best = _SweepHit(
-          t: t,
-          normal: _lowSideOf(wall.a, wall.b),
-          restitution: 0,
-          kind: BounceKind.wall,
-          drop: true,
-        );
+      // On the ground: the first lip the egg's centre rolls over, a ledge's
+      // from its high side or a kicker's either way, if that comes before
+      // anything it would hit. A fall is gravity, so a ghost egg drops too
+      // (and a ghost flies off a kicker like any egg). In the air the egg
+      // is over them all.
+      if (!flying) {
+        for (final wall in hole.walls) {
+          if (!moving) break;
+          if (!wall.ledge) continue;
+          final t = _ledgeCrossing(ball.position, delta, wall.a, wall.b);
+          if (t == null || (best != null && best.t <= t)) continue;
+          best = _SweepHit(
+            t: t,
+            normal: _lowSideOf(wall.a, wall.b),
+            restitution: 0,
+            kind: BounceKind.wall,
+            drop: true,
+          );
+        }
+        for (var i = 0; i < hole.kickers.length; i++) {
+          if (!moving) break;
+          final crossing = _lipCrossing(ball.position, delta, hole.kickers[i]);
+          if (crossing == null || (best != null && best.t <= crossing.$1)) {
+            continue;
+          }
+          best = _SweepHit(
+            t: crossing.$1,
+            normal: crossing.$2,
+            restitution: 0,
+            kind: BounceKind.wall,
+            kicker: i,
+          );
+        }
       }
 
       if (best == null) {
@@ -708,7 +854,12 @@ class PhysicsWorld {
       ball.position = ball.position + delta * best.t;
       ball.position = ball.position + best.normal * 1e-6;
       ball.asleep = false;
-      if (best.drop) {
+      final kicker = best.kicker;
+      if (kicker != null) {
+        if (_overLip(ball, hole.kickers[kicker])) {
+          airFrom = fraction + best.t * remainingFraction;
+        }
+      } else if (best.drop) {
         _dropOff(ball, best.normal);
       } else {
         _reflectAtSurface(ball, best);
@@ -716,6 +867,72 @@ class PhysicsWorld {
       fraction = (fraction + best.t * remainingFraction + 1e-9).clamp(0.0, 1.0);
       bounces++;
     }
+    if (ball.airborne) _fly(ball, (1 - airFrom) * config.dt);
+  }
+
+  /// An egg rolling over [kicker]'s lip: off the ground when it goes the
+  /// kicker's way at its threshold or faster, off the lip's height with
+  /// its ground speed kept and a climb of its pace along the kicker times
+  /// the pitch (capped); else a bump that costs it a little pace. Whether
+  /// it flew.
+  bool _overLip(BallBody ball, Kicker kicker) {
+    final along = ball.velocity.dot(kicker.direction);
+    if (along >= kicker.threshold) {
+      ball.air = hole.groundHeightAt(ball.position) + kicker.height;
+      ball.airSpeed = math.min(along * kicker.pitch, config.kickerMaxLift);
+      _events.add(BallLaunched(
+          playerId: ball.playerId, at: ball.position, speed: along));
+      return true;
+    }
+    ball.velocity = ball.velocity * config.kickerBumpKeep;
+    _events.add(BallBumped(playerId: ball.playerId, at: ball.position));
+    return false;
+  }
+
+  /// Carries an egg's flight [seconds] on: its climb slows under
+  /// [PhysicsConfig.airGravity], then turns into a fall.
+  void _fly(BallBody ball, double seconds) {
+    ball.air = ball.air! +
+        ball.airSpeed * seconds -
+        0.5 * config.airGravity * seconds * seconds;
+    ball.airSpeed -= config.airGravity * seconds;
+  }
+
+  /// A flying egg's altitude at [at] of the tick, its flight state holding
+  /// from [from] of it.
+  double _altitudeAt(BallBody ball, double from, double at) {
+    final t = (at - from) * config.dt;
+    return ball.air! + ball.airSpeed * t - 0.5 * config.airGravity * t * t;
+  }
+
+  /// The top an egg in the air must clear to pass over [ledge] by [near]:
+  /// the ground just up on its high side, by the point of it nearest
+  /// [near] (a terrace's height, or a ramp's along its side).
+  double _ledgeTop(WallSegment ledge, Vec2 near) {
+    final closest = _closestPointOnSegment(near, ledge.a, ledge.b);
+    return hole.groundHeightAt(closest + ledge.highSide * 0.05);
+  }
+
+  /// A flying egg that has come down to the ground under it lands, keeping
+  /// [PhysicsConfig.landingKeep] of its ground speed; a hard landing gives
+  /// [PhysicsConfig.landingBounce] of its fall's speed back as a bounce up,
+  /// when that beats [PhysicsConfig.landingHopSpeed], and the egg flies a
+  /// little hop more. Otherwise it rolls on. Whether it touched down.
+  bool _touchdown(BallBody ball) {
+    final ground = hole.groundHeightAt(ball.position);
+    if (ball.air! > ground) return false;
+    final falling = math.max(0.0, -ball.airSpeed);
+    ball.velocity = ball.velocity * config.landingKeep;
+    _events.add(BallLanded(
+        playerId: ball.playerId, at: ball.position, impactSpeed: falling));
+    final bounce = falling * config.landingBounce;
+    if (bounce > config.landingHopSpeed) {
+      ball.air = ground;
+      ball.airSpeed = bounce;
+    } else {
+      ball.ground();
+    }
+    return true;
   }
 
   /// An egg rolling over a ledge's lip falls to the low side, carried
@@ -752,7 +969,8 @@ class PhysicsWorld {
   }
 
   /// Pushes an overlapping egg out of static geometry before sweeping, so
-  /// the sweep never starts inside a wall.
+  /// the sweep never starts inside a wall. An egg in the air over a step
+  /// it clears is no step's business, and it is over the hens.
   void _depenetrate(
       BallBody ball, List<_ObstacleSweep> hens, bool ghost, bool hop) {
     final radius = config.ballRadius;
@@ -760,6 +978,11 @@ class PhysicsWorld {
       var moved = false;
       if (!ghost) {
         for (final wall in hole.walls) {
+          if (wall.ledge &&
+              ball.airborne &&
+              ball.air! >= _ledgeTop(wall, ball.position)) {
+            continue;
+          }
           moved |= wall.ledge
               ? _pushFromLedge(ball, wall.a, wall.b, radius)
               : _pushFromCapsule(ball, wall.a, wall.b, radius);
@@ -767,7 +990,7 @@ class PhysicsWorld {
         for (final arc in hole.arcs) {
           moved |= _pushFromArc(ball, arc, radius);
         }
-        if (!hop) {
+        if (!hop && !ball.airborne) {
           for (final hen in hens) {
             // The hen at its tick-start position; its motion is swept.
             final offset = ball.position - hen.start;
@@ -1033,6 +1256,8 @@ class PhysicsWorld {
         final a = list[i];
         final b = list[j];
         if (a.holed || b.holed) continue;
+        // An egg in the air passes over the others.
+        if (a.airborne || b.airborne) continue;
         final offset = b.position - a.position;
         final distance = offset.length;
         final min = config.ballRadius * 2;
@@ -1148,6 +1373,8 @@ class PhysicsWorld {
         asleep: json['asleep'] == true,
         portalCooldown: (json['cd'] as num).toInt(),
         putted: json['putted'] == true,
+        air: (json['air'] as num?)?.toDouble(),
+        airSpeed: (json['vz'] as num?)?.toDouble() ?? 0,
       )..lastSafePosition =
           Vec2((json['sx'] as num).toDouble(), (json['sy'] as num).toDouble());
       final timed = json['timed'] as Map;
@@ -1195,6 +1422,10 @@ class _SweepHit {
   /// here, [normal] pointing to the low side.
   final bool drop;
 
+  /// Not a hit but a kicker's lip, by its index in the hole: the egg's
+  /// centre crosses it here, [normal] pointing the way it crosses.
+  final int? kicker;
+
   const _SweepHit({
     required this.t,
     required this.normal,
@@ -1202,6 +1433,7 @@ class _SweepHit {
     required this.kind,
     this.surfaceVelocity = Vec2.zero,
     this.drop = false,
+    this.kicker,
   });
 }
 
@@ -1424,6 +1656,22 @@ double? _ledgeCrossing(Vec2 p, Vec2 d, Vec2 a, Vec2 b) {
   final s = (p + d * t - a).dot(u) / l2;
   if (s < 0 || s > 1) return null;
   return t;
+}
+
+/// Where the centre of an egg moving from [p] by [d] crosses [kicker]'s
+/// lip within its width, as a fraction of [d] in [0, 1], and the way it
+/// crosses: the kicker's direction, or back against it. Null when it does
+/// not cross.
+(double, Vec2)? _lipCrossing(Vec2 p, Vec2 d, Kicker kicker) {
+  final way = kicker.direction;
+  final dist0 = (p - kicker.to).dot(way);
+  final dn = d.dot(way);
+  if (dn.abs() <= 1e-12) return null;
+  final t = -dist0 / dn;
+  if (t < 0 || t > 1) return null;
+  final across = (p + d * t - kicker.to).dot(Vec2(way.y, -way.x));
+  if (across.abs() > kicker.width / 2) return null;
+  return (t, dn > 0 ? way : way * -1);
 }
 
 /// Swept circle vs a [WallArc] (a zero-thickness curve the egg can touch

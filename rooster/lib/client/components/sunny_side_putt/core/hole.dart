@@ -4,8 +4,8 @@
 // curved [WallArc]s), sensors (water, boost strips, portals, gravity wells,
 // "?" boxes), the nest to sink the egg into, optional moving obstacles (the
 // hen), the ground's relief (hills, and tiers: [Terrace]s, the [Ramp]s up
-// to them and the ledges they drop off) and decorations the physics
-// ignores.
+// to them and the ledges they drop off), the [Kicker]s that throw an egg
+// into the air, and decorations the physics ignores.
 //
 // Coordinates match the screen: x grows right, y grows down; angles are
 // `atan2(y, x)`, so a positive angle turns clockwise as drawn. Units are
@@ -15,6 +15,8 @@
 // Nothing here imports Flutter: the model, and the [ReferenceSolution]
 // validator at the bottom, run headless in `unit_test/sunny_side_putt/`.
 library;
+
+import 'dart:math' as math;
 
 import 'physics.dart';
 import 'vec.dart';
@@ -461,6 +463,116 @@ class Ramp {
   }
 }
 
+/// A kicker: a short launch ramp standing on the green, its deck rising
+/// from its foot at [from] to its lip at [to] over a rectangle [width]
+/// wide. It throws the way from [from] to [to].
+///
+/// An egg whose centre crosses the lip the way the kicker throws, at
+/// [threshold] units/s or more along it, leaves the ground: it flies off
+/// the lip [height] over the ground with its ground speed kept, climbing
+/// at that pace along the kicker times [pitch] (capped at
+/// [PhysicsConfig.kickerMaxLift]) under [PhysicsConfig.airGravity], so
+/// the faster it comes, the higher and farther it flies. A slower egg rolls
+/// over the lip, a small bump that keeps [PhysicsConfig.kickerBumpKeep]
+/// of its pace, and so does one crossing the lip the other way. Off the
+/// lip's width (past the deck's sides) nothing happens.
+///
+/// [pitch] is the launch angle as rise over run (0.5 is about 27 degrees,
+/// see [launchAngleDegrees]): only + - * / go into the flight, so every
+/// platform flies the same arc. The physics reads only the lip; the deck
+/// under it is the view's to draw ([deckHeightAt]), curving up from the
+/// green to meet the lip at the launch angle.
+class Kicker {
+  final Vec2 from;
+  final Vec2 to;
+  final double width;
+  final double height;
+  final double pitch;
+  final double threshold;
+
+  const Kicker(this.from, this.to,
+      {this.width = 3,
+      this.height = 0.45,
+      this.pitch = 0.5,
+      this.threshold = 7});
+
+  double get length => from.distanceTo(to);
+
+  /// The way the kicker throws, a unit vector from its foot to its lip.
+  Vec2 get direction => (to - from).normalized(const Vec2(1, 0));
+
+  /// The launch angle over the horizontal, in degrees (for people: the
+  /// physics flies [pitch]).
+  double get launchAngleDegrees => math.atan(pitch) * 180 / math.pi;
+
+  /// The unit vector across the kicker, to the left of [direction] as
+  /// drawn.
+  Vec2 get _leftward {
+    final d = direction;
+    return Vec2(d.y, -d.x);
+  }
+
+  /// The lip, from its left end to its right one (walking up the deck).
+  (Vec2, Vec2) get lip {
+    final half = _leftward * (width / 2);
+    return (to + half, to - half);
+  }
+
+  /// The deck's outline: the foot's left corner, the lip's left end, the
+  /// lip's right end, the foot's right corner.
+  List<Vec2> get corners {
+    final half = _leftward * (width / 2);
+    return [from + half, to + half, to - half, from - half];
+  }
+
+  /// Where [point] sits along the deck: 0 at the foot, 1 at the lip (not
+  /// clamped), or null when it is off the deck's width.
+  double? _along(Vec2 point) {
+    final axis = to - from;
+    final lengthSq = axis.dot(axis);
+    if (lengthSq < Vec2.epsilon) return null;
+    final offset = point - from;
+    final across = offset.cross(axis);
+    if (across * across > width * width * 0.25 * lengthSq) return null;
+    return offset.dot(axis) / lengthSq;
+  }
+
+  /// Whether [point] is on the deck.
+  bool covers(Vec2 point) {
+    final t = _along(point);
+    return t != null && t >= 0 && t <= 1;
+  }
+
+  /// How the deck curves up to its lip: `height * t^p`, `t` running from
+  /// 0 at the foot to 1 at the lip, with `p` set so the deck's last slope
+  /// is [pitch] (never under 1, so the deck never bulges).
+  double get _profilePower => math.max(1.0, pitch * length / height);
+
+  /// The deck's height over the green [t] of the way from the foot (0) to
+  /// the lip (1), clamped there: its profile, the same at every point
+  /// across it.
+  double deckRise(double t) =>
+      height * math.pow(t.clamp(0.0, 1.0), _profilePower).toDouble();
+
+  /// The deck's height over the green at [point] (0 off it): what the view
+  /// stands an egg on as it rides up to the lip. The physics never reads
+  /// it.
+  double deckHeightAt(Vec2 point) {
+    final t = _along(point);
+    if (t == null || t < 0 || t > 1) return 0;
+    return deckRise(t);
+  }
+
+  /// The deck's gradient at [point]: its rise per unit, pointing up the
+  /// deck (zero off it).
+  Vec2 deckGradientAt(Vec2 point) {
+    final t = _along(point);
+    if (t == null || t <= 0 || t > 1) return Vec2.zero;
+    final p = _profilePower;
+    return direction * (height * p * math.pow(t, p - 1).toDouble() / length);
+  }
+}
+
 /// A "?" egg-carton block: an egg reaching it picks up a power-up. The box
 /// disappears for the rest of the hole once collected.
 class QuestionBox {
@@ -518,6 +630,10 @@ class HoleDef {
   final List<Terrace> terraces;
   final List<Ramp> ramps;
 
+  /// The launch ramps that throw a fast egg into the air. Empty keeps every
+  /// egg on the ground.
+  final List<Kicker> kickers;
+
   /// Rolling deceleration override for this hole's surface (units/s^2);
   /// null uses [PhysicsConfig.frictionDeceleration].
   final double? friction;
@@ -540,6 +656,7 @@ class HoleDef {
     this.hills = const [],
     this.terraces = const [],
     this.ramps = const [],
+    this.kickers = const [],
     this.friction,
   });
 
@@ -572,6 +689,32 @@ class HoleDef {
   /// 0 off them all. Tiers never overlap - a ramp meets its terrace along
   /// its top, where the two agree - so the highest is the one underfoot.
   double tierHeightAt(Vec2 point) => _tierAt(point).$1;
+
+  /// The height of the kicker deck under [point] over the ground (0 off
+  /// every deck): the view stands an egg on it, the physics never reads
+  /// it.
+  double kickerDeckHeightAt(Vec2 point) {
+    var height = 0.0;
+    for (final kicker in kickers) {
+      final deck = kicker.deckHeightAt(point);
+      if (deck > height) height = deck;
+    }
+    return height;
+  }
+
+  /// [kickerDeckHeightAt]'s gradient: up the deck under [point].
+  Vec2 kickerDeckGradientAt(Vec2 point) {
+    var height = 0.0;
+    var gradient = Vec2.zero;
+    for (final kicker in kickers) {
+      final deck = kicker.deckHeightAt(point);
+      if (deck > height) {
+        height = deck;
+        gradient = kicker.deckGradientAt(point);
+      }
+    }
+    return gradient;
+  }
 
   /// The tier under [point]: its height and its gradient (a terrace is
   /// level, a ramp slopes up its axis).

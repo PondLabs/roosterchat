@@ -77,6 +77,14 @@ enum PuttSfx {
 
   /// A Gust's wind.
   gust,
+
+  /// An egg thrown off a kicker's lip: the ramp's thunk and a rising
+  /// whoosh.
+  kick,
+
+  /// An egg coming down after a flight (or bumping over a lip too slow to
+  /// fly): a soft thump in the straw.
+  land,
 }
 
 /// A headline for the HUD's banner strip: the big, low-frequency things a
@@ -133,6 +141,14 @@ enum PuttFxSpotKind {
   /// Hawk Eye, Strong Coffee, Chicken Hop, Nest Magnet), from
   /// [PuttFxSpot.at] toward [PuttFxSpot.toward].
   shot,
+
+  /// [PuttFxSpot.who]'s egg left a kicker's lip at [PuttFxSpot.at],
+  /// heading for [PuttFxSpot.toward]: straw or dust kicked up behind it.
+  launch,
+
+  /// [PuttFxSpot.who]'s egg came down at [PuttFxSpot.at] after a flight:
+  /// a puff where it lands.
+  land,
 }
 
 class PuttFxSpot {
@@ -325,6 +341,11 @@ class PuttMatch extends ChangeNotifier {
   final Map<String, bool> previousAsleep = {};
   final Map<String, bool> currentAsleep = {};
 
+  /// The altitudes of the eggs in the air over the same two ticks (off a
+  /// kicker; an egg on the ground has none), for the flight's lerp.
+  final Map<String, double> previousAirs = {};
+  final Map<String, double> currentAirs = {};
+
   /// Advances the simulated world by [dt] seconds of frame time, in whole
   /// engine ticks, then drains the engine's events into notices and state.
   void update(double dt) {
@@ -378,7 +399,7 @@ class PuttMatch extends ChangeNotifier {
     }
     if (steps > 0) {
       drainEvents();
-      notices.addAll([...derived, ..._worldNotices()]);
+      notices.addAll([...derived, ..._worldNotices(derivedSpots)]);
       fxSpots.addAll(derivedSpots);
       _trimBatches();
       notifyListeners();
@@ -394,6 +415,18 @@ class PuttMatch extends ChangeNotifier {
     return previous.lerp(current, alphaOverride ?? alpha);
   }
 
+  /// How high egg [playerId] is drawn in the air (the altitude of its
+  /// lowest point, as [BallBody.air]), between the last two whole ticks
+  /// like [renderPositionOf]; null while it is on the ground. The tick it
+  /// left the lip starts the lerp from there.
+  double? renderAirOf(String playerId, [double? alphaOverride]) {
+    final current = currentAirs[playerId];
+    if (current == null) return null;
+    final previous = previousAirs[playerId] ?? current;
+    final t = alphaOverride ?? alpha;
+    return previous + (current - previous) * t;
+  }
+
   /// snaps the eggs into the per-tick maps: with [withPrevious] the last
   /// to-end becomes the new from-end (the capture before a tick); without
   /// it, the to-end alone updates (the capture after a tick).
@@ -407,6 +440,9 @@ class PuttMatch extends ChangeNotifier {
       previousAsleep
         ..clear()
         ..addEntries(currentAsleep.entries);
+      previousAirs
+        ..clear()
+        ..addEntries(currentAirs.entries);
     }
     currentPositions
       ..clear()
@@ -418,6 +454,12 @@ class PuttMatch extends ChangeNotifier {
       ..addEntries([
         for (final ball in world.balls)
           MapEntry(ball.playerId, ball.asleep || ball.holed),
+      ]);
+    currentAirs
+      ..clear()
+      ..addEntries([
+        for (final ball in world.balls)
+          if (ball.air != null) MapEntry(ball.playerId, ball.air!),
       ]);
   }
 
@@ -827,6 +869,8 @@ class PuttMatch extends ChangeNotifier {
         currentPositions.clear();
         previousAsleep.clear();
         currentAsleep.clear();
+        previousAirs.clear();
+        currentAirs.clear();
         _holeEndLine = null;
         // The number its flag flies (the hole bar's), the match-wide one
         // when the course does not know it.
@@ -1050,9 +1094,11 @@ class PuttMatch extends ChangeNotifier {
 
   /// The world's echoes since the last frame as sounds: rails, bumpers,
   /// eggs meeting and the walkers' bumps, each as loud as the hit (another
-  /// player's egg a little quieter than mine), and the speed strips. At
-  /// most the two hardest hits a frame.
-  List<PuttNotice> _worldNotices() {
+  /// player's egg a little quieter than mine), the speed strips, and the
+  /// kickers: an egg thrown off a lip, coming down, or bumping over one.
+  /// At most the two hardest hits a frame. A kicker's takeoff and landing
+  /// also leave their bursts' spots in [spots].
+  List<PuttNotice> _worldNotices(List<PuttFxSpot> spots) {
     final hits = <(double, PuttNotice)>[];
     final rest = <PuttNotice>[];
     for (final event in engine.drainWorldEvents()) {
@@ -1064,6 +1110,31 @@ class PuttMatch extends ChangeNotifier {
           rest.add(const PuttNotice(PuttSfx.boost));
         case BallKnocked():
           _knockCall(event);
+        case BallLaunched():
+          final mine = event.playerId == localPlayerId;
+          final hard = ((event.speed - 6) / 12).clamp(0.0, 1.0);
+          rest.add(PuttNotice(PuttSfx.kick,
+              volume: (0.55 + 0.45 * hard) * (mine ? 1 : 0.7)));
+          final heading = engine.world?.ball(event.playerId)?.velocity;
+          spots.add(PuttFxSpot(PuttFxSpotKind.launch,
+              at: event.at,
+              who: event.playerId,
+              toward: heading == null ? null : event.at + heading));
+        case BallLanded():
+          // The hop after a hard landing comes down soft: only the real
+          // landing thumps and puffs.
+          if (event.impactSpeed < 2.4) break;
+          final mine = event.playerId == localPlayerId;
+          final hard = ((event.impactSpeed - 2.4) / 6).clamp(0.0, 1.0);
+          rest.add(PuttNotice(PuttSfx.land,
+              volume: (0.45 + 0.55 * hard) * (mine ? 1 : 0.7)));
+          spots.add(PuttFxSpot(PuttFxSpotKind.land,
+              at: event.at, who: event.playerId));
+        case BallBumped():
+          if (_within(_lastKnock[event.playerId], 0.075)) break;
+          _lastKnock[event.playerId] = engine.tick;
+          rest.add(PuttNotice(PuttSfx.land,
+              volume: event.playerId == localPlayerId ? 0.4 : 0.28));
         default:
           break;
       }

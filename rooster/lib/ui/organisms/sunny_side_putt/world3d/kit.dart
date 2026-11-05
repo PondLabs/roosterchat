@@ -457,28 +457,35 @@ tjs.Mesh _inkOutline(tjs.Mesh mesh, double thickness) {
 /// a hole.
 final tjs.DataTexture _paperTexture = (_Bitmap(4, 4)..fill(0xFFFFFF)).texture();
 
-/// The green's relief as the actors stand on it: the current hole's hills
-/// and tiers (flat when it has none). Shared by the world and everything
-/// it moves.
+/// The green's relief as the actors stand on it: the current hole's hills,
+/// tiers and kicker decks (flat when it has none). Shared by the world and
+/// everything it moves.
 class _Ground {
   HoleDef? _hole;
 
   set hole(HoleDef? hole) => _hole = hole;
 
-  bool get flat => _hole == null || !_hole!.hasRelief;
+  bool get flat =>
+      _hole == null || (!_hole!.hasRelief && _hole!.kickers.isEmpty);
 
-  /// The ground's height under [point].
-  double at(Vec2 point) => flat ? 0 : _hole!.groundHeightAt(point);
+  /// The ground's height under [point], a kicker's deck included: an egg
+  /// rides up the deck to the lip (the physics reads only the lip).
+  double at(Vec2 point) => flat
+      ? 0
+      : _hole!.groundHeightAt(point) + _hole!.kickerDeckHeightAt(point);
 
-  /// The ground's gradient under [point] (rise per unit, uphill).
-  Vec2 slopeAt(Vec2 point) => flat ? Vec2.zero : _hole!.groundGradientAt(point);
+  /// The ground's gradient under [point] (rise per unit, uphill), a
+  /// kicker's deck included.
+  Vec2 slopeAt(Vec2 point) => flat
+      ? Vec2.zero
+      : _hole!.groundGradientAt(point) + _hole!.kickerDeckGradientAt(point);
 
   /// The turn that stands a flat piece (a shadow, a ring) on the ground
   /// under [point]: world up onto the surface normal.
   tjs.Quaternion tiltAt(Vec2 point) {
     final tilt = tjs.Quaternion();
     if (flat) return tilt;
-    final g = _hole!.groundGradientAt(point);
+    final g = slopeAt(point);
     if (g == Vec2.zero) return tilt;
     final normal = tjs.Vector3(-g.x, 1, -g.y)..normalize();
     return tilt..setFromUnitVectors(tjs.Vector3(0, 1, 0), normal);

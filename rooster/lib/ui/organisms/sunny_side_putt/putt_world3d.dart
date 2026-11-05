@@ -8,11 +8,12 @@
 //   * [PuttWorld3D] - the scene graph, built headlessly from a
 //     [`HoleDef`](../core/hole.dart): the course (`world3d/course.dart`:
 //     turf, table, rails, bumpers, rocks, water, boosts, rabbit holes, the
-//     silo, crates, the nest, the tee, the hen's coop decorations), the
-//     scenery around it (`world3d/scenery.dart`) and the actors
-//     (`world3d/actors.dart`: eggs, hens). Every frame,
-//     [PuttWorld3D.applySnapshot] moves the meshes to the engine's truth
-//     (positions, roll quaternions, the hop's lift, the collected crates),
+//     silo, crates, the nest, the tee, the hen's coop decorations; the
+//     kickers in `world3d/kicker.dart`), the scenery around it
+//     (`world3d/scenery.dart`) and the actors (`world3d/actors.dart`:
+//     eggs, hens). Every frame, [PuttWorld3D.applySnapshot] moves the
+//     meshes to the engine's truth (positions, roll quaternions, the hop's
+//     lift, a flight's altitude, the collected crates),
 //     breathes the time-driven bits (water, flag, windmill, crates,
 //     portals, clouds), and eases the camera rig toward its follow point.
 //     No physics and no engine state here: the world consumes a
@@ -78,6 +79,7 @@ part 'world3d/bursts.dart';
 part 'world3d/hatch.dart';
 part 'world3d/table_shape.dart';
 part 'world3d/casts.dart';
+part 'world3d/kicker.dart';
 
 /// The void behind everything before the sky dome draws: the horizon's
 /// warm haze, so a frame that misses the dome still reads as sky.
@@ -93,6 +95,11 @@ class PuttWorldEgg {
 
   /// Height above the green, 0 unless a hop is lifting the egg.
   final double height;
+
+  /// While the egg flies off a kicker: the altitude of its lowest point
+  /// over the green's base level (the engine's own, see `BallBody.air`),
+  /// which the drawing stands it at; null while it rolls.
+  final double? air;
 
   /// The egg's velocity, which hands the roll its axis.
   final Vec2 velocity;
@@ -121,6 +128,7 @@ class PuttWorldEgg {
     required this.tint,
     required this.radius,
     this.height = 0,
+    this.air,
     this.mine = false,
     this.shielded = false,
     this.ghostSeconds = 0,
@@ -168,6 +176,15 @@ class PuttWorldAim {
   /// putt): marked on the turf, and the arrow ends there.
   final Vec2? rest;
 
+  /// Beside [preview], point for point: the egg's altitude where it flies
+  /// off a kicker (as [PuttWorldEgg.air]), null where it rolls. Empty when
+  /// the guide never leaves the ground.
+  final List<double?> previewAir;
+
+  /// Where a flight in the guide comes down: the guide ends there, the
+  /// spot marked on the turf.
+  final Vec2? landing;
+
   /// The viewer's last roll on this hole, the stretches between jumps (a
   /// splash's return, a rabbit hole): drawn faint under the aim, in
   /// [traceTint], so the next putt can be judged against the last one.
@@ -182,6 +199,8 @@ class PuttWorldAim {
     required this.eggRadius,
     this.preview = const [],
     this.rest,
+    this.previewAir = const [],
+    this.landing,
     this.trace = const [],
     this.traceTint,
   });
@@ -950,6 +969,13 @@ class PuttWorld3D {
     }
     final cliffs = kit.cliffs();
     if (cliffs != null) makeKind('cliffs').add(cliffs);
+    // The kickers, each in the course's build, standing on the ground.
+    if (hole.kickers.isNotEmpty) {
+      final kickers = makeKind('kickers');
+      for (final kicker in hole.kickers) {
+        kickers.add(kit.kicker(kicker));
+      }
+    }
     // What stands free on the green stands on the tier under it (a
     // terrace's flat top lifts it whole).
     final arcs = makeKind('arcs');
@@ -1108,8 +1134,9 @@ class PuttWorld3D {
   // ---- the snapshot -----------------------------------------------------------------
 
   /// Reads one frame: pools egg meshes by player id, rolls them by their
-  /// velocity, lifts the hops, waddles the hens, stands collected crates
-  /// down, breathes the scenery, and glides the camera.
+  /// velocity, lifts the hops and flies the kickers' flights, waddles the
+  /// hens, stands collected crates down, breathes the scenery, and glides
+  /// the camera.
   void applySnapshot(PuttWorldFrame frame) {
     if (_disposed) return;
     final dt = _firstFrame

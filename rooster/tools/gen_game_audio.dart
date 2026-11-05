@@ -76,6 +76,9 @@ final _sounds = [
   _Sound('shield', _Format.wav, -15, 37, shellPop),
   _Sound('corn', _Format.wav, -17, 38, cornPatter),
   _Sound('gust', _Format.wav, -16, 39, gustWind),
+  // The kickers: an egg thrown off a lip, and coming down.
+  _Sound('kick', _Format.wav, -16, 40, kickerLaunch),
+  _Sound('land', _Format.wav, -16.5, 41, kickerLanding),
 ];
 
 /// The music's MP3 quality (LAME's VBR scale: 0 best, 9 smallest).

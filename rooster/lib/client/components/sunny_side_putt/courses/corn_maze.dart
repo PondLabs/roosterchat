@@ -1,8 +1,10 @@
 // Corn Maze - the maze course: corridors cut through the corn, dead ends,
-// and rabbit holes that keep the egg's speed and heading. Each hole is a
-// plan drawn in 2.5-unit squares ('#' corn, the rest open; letters mark
-// the tee, the nest, the rabbit holes and the "?" box). Six holes, all
-// with verified solutions.
+// rabbit holes that keep the egg's speed and heading, and a hop through a
+// gap in the hedge. Each hole is a plan drawn in 2.5-unit squares ('#'
+// corn, the rest open; letters mark the tee, the nest, the rabbit holes
+// and the "?" box, '~' a ditch). Six holes, all with verified solutions.
+
+import 'dart:math' as math;
 
 import '../core/hole.dart';
 import '../core/vec.dart';
@@ -146,23 +148,36 @@ ReferenceSolution _crossroadsSolution() {
 }
 
 // -- hole 3: Hedge Hop --------------------------------------------------------
-// A staircase through the corn, every outer corner boarded at an angle: a
-// putt that meets a board just right climbs a whole step.
+// The nest's garden lies just across the corn from the tee, behind a hedge
+// with a gap in it, and the gap holds a muddy ditch ('~'). The long way
+// round runs east along the corridor, up the open end and all the way back
+// west through the garden. The hop: a dirt kicker in the corridor right
+// under the gap throws a firm, straight putt over the ditch into the
+// garden. Too soft and it drops in the ditch, crooked and it meets the
+// corn, and so hard that it comes back off the garden's far rail rolls all
+// the way back into the ditch.
 
 const List<String> _maze3 = [
-  '############........',
-  '############......NN',
-  '############......NN',
-  '######.........#####',
-  '######.........#####',
-  '######.........#####',
-  '######...###########',
-  '######...###########',
-  '.........###########',
-  'TTTT.....###########',
-  'TTTT.....###########',
-  '.........###########',
+  '....................',
+  '.NN.................',
+  '.NN.................',
+  '....................',
+  '####~~##########....',
+  '####~~##########....',
+  '....................',
+  '....................',
+  '....................',
+  '##..TT..############',
+  '##..TT..############',
+  '##......############',
 ];
+
+/// The ditch filling the hedge's gap.
+const Rect _maze3Ditch = Rect(Vec2(10, 10), Vec2(15, 15));
+
+/// The kicker under the gap, its lip at the ditch's edge.
+const Kicker _maze3Kicker = Kicker(Vec2(12.5, 17.6), Vec2(12.5, 15.6),
+    width: 3, pitch: 0.5, threshold: 8);
 
 HoleDef _hedgeHop() {
   final bounds = _boundsOf(_maze3);
@@ -172,28 +187,22 @@ HoleDef _hedgeHop() {
     tee: _spot(_maze3, 'T'),
     nest: Nest(_spot(_maze3, 'N'), 1.7),
     bounds: bounds,
-    walls: [
-      ...fenceAround(bounds),
-      ...plannedWalls(_maze3, cell: _cell),
-      // the corner boards
-      WallSegment(Vec2(18, 30), Vec2(22.5, 25.5)),
-      WallSegment(Vec2(15, 12), Vec2(19.5, 7.5)),
-      WallSegment(Vec2(33, 15), Vec2(37.5, 10.5)),
-      WallSegment(Vec2(30, 4.5), Vec2(34.5, 0)),
-    ],
-    boxes: [QuestionBox('maze_3_box', Vec2(26, 8.6))],
+    walls: [...fenceAround(bounds), ...plannedWalls(_maze3, cell: _cell)],
+    water: const [WaterRect(_maze3Ditch)],
+    kickers: const [_maze3Kicker],
+    boxes: [QuestionBox('maze_3_box', const Vec2(2.5, 18.75))],
   );
 }
 
+// Found by a sweep, and it holds for nearby aims and powers: straight up
+// the kicker, over the ditch and across the garden to its far rail; then
+// the putt along the rail to the nest.
 ReferenceSolution _hedgeHopSolution() {
   final nest = _spot(_maze3, 'N');
-  // Found by a sweep: off the first board and up the first step, then off
-  // the third board and up the second; both hold for nearby aims.
-  const upTop = Vec2(44.47, 2.72);
+  const byTheFarRail = Vec2(12.50, 1.03);
   return ReferenceSolution([
-    const ReferenceShot(0.052, 0.87),
-    const ReferenceShot(-0.368, 0.72),
-    putt(upTop, nest, arrival: 2.2),
+    const ReferenceShot(-math.pi / 2, 0.62),
+    putt(byTheFarRail, nest, arrival: 2.2),
   ]);
 }
 

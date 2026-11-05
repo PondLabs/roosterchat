@@ -1,6 +1,7 @@
 // The Barn - the last course: hay bales to bank off, red rubber bumpers,
-// and grain silos whose pull bends every putt that passes - and swallows
-// the egg that comes too close. Six holes, all with verified solutions.
+// a hay kicker, and grain silos whose pull bends every putt that passes -
+// and swallows the egg that comes too close. Six holes, all with verified
+// solutions.
 
 import '../core/hole.dart';
 import '../core/vec.dart';
@@ -137,12 +138,21 @@ ReferenceSolution _hayBalePinballSolution() {
 
 // -- hole 3: Twin Silos -------------------------------------------------------
 // Two silos, one north and one south of the line, and between them a
-// chute where their pulls cancel - dead straight or swallowed. The long
-// way round either one is safe enough.
+// chute where their pulls cancel - dead straight or swallowed, the "?" in
+// the middle of it for whoever rolls it. A hay kicker stands in the
+// chute's mouth: a firm, straight putt flies the chute, clear of both
+// pulls, lands past the silos and runs on to the nest; a soft one only
+// hops into the chute, where the silos have it if it strays, and one too
+// firm runs on past the nest into the water trough behind it. The long
+// way round either silo is safe enough.
 
 const Vec2 _barn3Tee = Vec2(6, 15);
 const Vec2 _barn3Nest = Vec2(42, 15);
 const Rect _barn3Bounds = Rect(Vec2.zero, Vec2(48, 30));
+
+/// The hay kicker in the chute's mouth.
+const Kicker _barn3Kicker =
+    Kicker(Vec2(16, 15), Vec2(18, 15), width: 3, pitch: 0.5, threshold: 9);
 
 HoleDef _twinSilos() {
   return HoleDef(
@@ -160,17 +170,22 @@ HoleDef _twinSilos() {
       GravityWell(Vec2(24, 21.5),
           radius: 6.5, strength: 26, captureRadius: 1.5),
     ],
+    kickers: const [_barn3Kicker],
+    // the water trough behind the nest
+    water: const [WaterRect(Rect(Vec2(45.2, 11), Vec2(47.2, 19)))],
     boxes: [QuestionBox('barn_3_box', Vec2(24, 15))],
   );
 }
 
-// Found by a sweep, and it holds for nearby aims: round the north silo
-// off the top boards; then a putt in. (The chute is the ace.)
+// Found by a sweep, and it holds for nearby aims and powers: off the hay
+// kicker, over the chute and past the silos, short of the nest; then the
+// putt in. (A touch firmer sinks it; the long way round the north silo off
+// the top boards is the safe two.)
 ReferenceSolution _twinSilosSolution() {
-  const pastTheSilo = Vec2(36.81, 11.19);
+  const shortOfTheNest = Vec2(36.21, 15.00);
   return ReferenceSolution([
-    const ReferenceShot(-0.724, 0.968),
-    putt(pastTheSilo, _barn3Nest, arrival: 2.2),
+    const ReferenceShot(0, 0.68),
+    putt(shortOfTheNest, _barn3Nest, arrival: 2.2),
   ]);
 }
 

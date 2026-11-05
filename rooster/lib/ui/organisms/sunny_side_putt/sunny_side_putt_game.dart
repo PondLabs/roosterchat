@@ -15,9 +15,9 @@
 //   * [SunnySidePuttGame] - the match's ticker and the world's frame
 //     builder: the orbit rig fitted to the hole (the overview first, then
 //     in close to the egg), the fixed-tick simulation driven through
-//     `PuttMatch.update`, the aim's clock and its predicted roll, the hop
-//     rides and the particle pool, all handed to the 3D world as a frame
-//     each render.
+//     `PuttMatch.update`, the aim's clock and its predicted roll (flights
+//     off the kickers and all), the hop rides, the flights' altitudes and
+//     the particle pool, all handed to the 3D world as a frame each render.
 //   * [PuttWorld3D] - the whole scene graph (putt_world3d.dart), moving to
 //     the engine's truth every rendered frame.
 //
@@ -812,6 +812,7 @@ class SunnySidePuttGame extends FlameGame {
             playerId: ball.playerId,
             position: match.renderPositionOf(ball.playerId),
             height: eggHeightOf(ball),
+            air: match.renderAirOf(ball.playerId),
             velocity: ball.velocity,
             tint: tintFor(ball.playerId),
             radius: eggRadius,
@@ -857,6 +858,7 @@ class SunnySidePuttGame extends FlameGame {
                 _previewFor(aimState.angle, aimState.power), aim.origin!, sway)
             : const <core.Vec2>[];
         final rest = guided ? _previewRest : null;
+        final landing = guided ? _previewLanding : null;
         aimView = PuttWorldAim(
           origin: aim.origin!,
           angle: aimState.angle + sway,
@@ -865,6 +867,10 @@ class SunnySidePuttGame extends FlameGame {
           eggRadius: eggRadius,
           preview: preview,
           rest: rest == null ? null : _swayed([rest], aim.origin!, sway).single,
+          previewAir: guided ? _previewAirs : const [],
+          landing: landing == null
+              ? null
+              : _swayed([landing], aim.origin!, sway).single,
           trace: _lastRoll,
           traceTint: tintFor(match.localPlayerId),
         );
@@ -959,7 +965,7 @@ class SunnySidePuttGame extends FlameGame {
     for (final ball in engineWorld.balls) {
       if (ball.holed || ball.playerId == match.localPlayerId) continue;
       final at = match.renderPositionOf(ball.playerId);
-      final lift = eggRadius * 2.9 + eggHeightOf(ball);
+      final lift = eggRadius * 2.9 + liftOf(ball);
       if (!world3d.inFrontOfCamera(at, height: lift)) continue;
       tags.add(PuttTag(
         playerId: ball.playerId,
@@ -996,8 +1002,10 @@ class SunnySidePuttGame extends FlameGame {
       final ball = world?.ball(reaction.playerId);
       core.Vec2? at;
       var aside = 0.0;
+      var flying = 0.0;
       if (ball != null && !ball.holed) {
         at = match.renderPositionOf(reaction.playerId);
+        flying = liftOf(ball);
       } else if (ball != null && hole != null) {
         at = hole.nest.position;
         // 0, then right, left, further right...
@@ -1005,7 +1013,7 @@ class SunnySidePuttGame extends FlameGame {
         aside = (k.isOdd ? 1 : -1) * ((k + 1) ~/ 2) * 52.0;
       }
       if (at == null) continue;
-      final lift = eggRadius * 5.6;
+      final lift = eggRadius * 5.6 + flying;
       if (!world3d.inFrontOfCamera(at, height: lift)) continue;
       out.add(PuttBubble(
         key: '${reaction.playerId}-${reaction.at}-$serial',
@@ -1126,9 +1134,10 @@ class SunnySidePuttGame extends FlameGame {
       if (!world3d.inFrontOfCamera(at)) continue;
       final foot = world3d.projectToWorld(at);
       // Mine with its pin over it (the pin bobs up to some six radii); the
-      // others up to their shell's top (their own tags stand above that).
-      final top =
-          world3d.projectToWorld(at, height: eggRadius * (mine ? 6.0 : 2.4));
+      // others up to their shell's top (their own tags stand above that),
+      // up in the air with a flight.
+      final top = world3d.projectToWorld(at,
+          height: eggRadius * (mine ? 6.0 : 2.4) + liftOf(ball));
       final half = math.max(mine ? 14.0 : 8.0, (foot.dy - top.dy) * 0.45);
       out.add(Rect.fromLTRB(foot.dx - half, top.dy, foot.dx + half, foot.dy));
     }
@@ -1142,6 +1151,11 @@ class SunnySidePuttGame extends FlameGame {
 
   /// Where the cached guide's egg comes to rest, when it stops inside it.
   core.Vec2? _previewRest;
+
+  /// The cached guide's altitudes beside its points (null on the ground),
+  /// and where its flight off a kicker comes down.
+  List<double?> _previewAirs = const [];
+  core.Vec2? _previewLanding;
 
   /// [points] turned by [angle] about [origin] (the guide under the sway).
   static List<core.Vec2> _swayed(
@@ -1167,6 +1181,8 @@ class SunnySidePuttGame extends FlameGame {
     final world = match.engine.world;
     final current = match.hole;
     _previewRest = null;
+    _previewAirs = const [];
+    _previewLanding = null;
     if (world == null || current == null) return _preview = const [];
     final roll = previewRoll(
       world: world,
@@ -1178,6 +1194,8 @@ class SunnySidePuttGame extends FlameGame {
       modifiers: match.localPlayer?.nextShot,
     );
     _previewRest = roll.rest;
+    _previewAirs = roll.airs;
+    _previewLanding = roll.landing;
     return _preview = roll.points;
   }
 
@@ -1227,7 +1245,10 @@ class SunnySidePuttGame extends FlameGame {
   /// The cosmetic lift of a hopping egg: 0 when the ride is over, a
   /// parabola over the roll's progress (read off the speed decay) while
   /// the hop flag is up. The engine stays planar; only the drawing lifts.
+  /// In a flight off a kicker the engine's own altitude stands the egg up
+  /// instead (the world reads it as the egg's `air`): no hop on top.
   double eggHeightOf(BallBody ball) {
+    if (ball.airborne) return 0;
     final ride = _hopRides[ball.playerId];
     if (ride == null) return 0;
     final t = (1 - ball.speed / ride.launchSpeed).clamp(0.0, 1.0);
@@ -1235,8 +1256,22 @@ class SunnySidePuttGame extends FlameGame {
     return 4 * maxLift * t * (1 - t);
   }
 
+  /// How far over the ground under it egg [ball] is drawn: a hop's lift,
+  /// or its flight's height off a kicker (the name tags and the bubbles
+  /// ride over it).
+  double liftOf(BallBody ball) {
+    final air = match.renderAirOf(ball.playerId);
+    final current = match.hole;
+    if (air == null || current == null) return eggHeightOf(ball);
+    final at = match.renderPositionOf(ball.playerId);
+    return math.max(
+        0.0, air - current.groundHeightAt(at) - current.kickerDeckHeightAt(at));
+  }
+
   /// Keeps [_hopRides] honest: a ride starts at the first moving frame
   /// with the hop flag, dies when the egg settles (the flag's own rule).
+  /// A flight off a kicker ends the ride (the engine's arc takes over); a
+  /// fresh one starts from the turf once the egg is down.
   void _updateHopRides() {
     final world = match.engine.world;
     if (world == null) {
@@ -1248,10 +1283,11 @@ class SunnySidePuttGame extends FlameGame {
       return ball == null ||
           ball.asleep ||
           ball.holed ||
+          ball.airborne ||
           !ball.flagActive(PowerUpFlag.hop, world.tick);
     });
     for (final ball in world.balls) {
-      if (ball.asleep || ball.holed) continue;
+      if (ball.asleep || ball.holed || ball.airborne) continue;
       if (!ball.flagActive(PowerUpFlag.hop, world.tick)) continue;
       if (ball.speed < 1.0) continue;
       _hopRides.putIfAbsent(
@@ -1330,6 +1366,19 @@ class SunnySidePuttGame extends FlameGame {
           }
         case PuttFxSpotKind.shot:
           _shotScene(spot);
+        case PuttFxSpotKind.launch:
+          // Off the lip: straw or dust thrown back off the deck.
+          final at = spot.at;
+          if (at == null) break;
+          final style = kickerPuffOf(match.hole?.id ?? '');
+          final toward = spot.toward;
+          fx.kickUp(at, toward == null ? core.Vec2.zero : toward - at,
+              straw: style.straw, dust: style.dust);
+        case PuttFxSpotKind.land:
+          final at = spot.at;
+          if (at == null) break;
+          final style = kickerPuffOf(match.hole?.id ?? '');
+          fx.landingPuff(at, straw: style.straw, dust: style.dust);
       }
     }
     match.fxSpots.clear();
@@ -1703,6 +1752,19 @@ ui.Color puttPowerUpAccent(String effectId) => switch (effectId) {
       _ => PuttPalette.yolk,
     };
 
+/// What a kicker throws up in each course (by the hole's id, as the
+/// world's theme reads it): straw off the Coop's planks and the Barn's
+/// hay, with their dust; earth in the maze and on Farm Road; stone grit at
+/// the Pond.
+({bool straw, ui.Color dust}) kickerPuffOf(String holeId) =>
+    switch (holeId.split('_').first) {
+      'barn' => (straw: true, dust: const ui.Color(0xFFEAD08E)),
+      'maze' => (straw: false, dust: const ui.Color(0xFFB48C62)),
+      'road' => (straw: false, dust: const ui.Color(0xFFD9BC92)),
+      'pond' => (straw: false, dust: const ui.Color(0xFFDCD6CA)),
+      _ => (straw: true, dust: const ui.Color(0xFFEFDDB8)),
+    };
+
 // ---- the roll guide -----------------------------------------------------------------------
 
 /// The first stretch of the roll a shot would take: the engine's physics
@@ -1710,7 +1772,10 @@ ui.Color puttPowerUpAccent(String effectId) => switch (effectId) {
 /// with the shot's power-up modifiers, cut after the first bounce off a
 /// rail plus a short tail, at a reset (water, out of bounds, the silo, a
 /// rabbit hole's jump), in the nest, or after [maxLength] of travel - a
-/// guide for the line, not a promise of where the egg stops.
+/// guide for the line, not a promise of where the egg stops. A flight off
+/// a kicker runs to where it comes down, however long, and the guide ends
+/// there; an egg on a kicker's deck, or a couple of units short of one,
+/// runs on past the length to show its flight.
 List<core.Vec2> predictRoll({
   required PhysicsWorld world,
   required hole.HoleDef hole,
@@ -1738,8 +1803,16 @@ List<core.Vec2> predictRoll({
 
 /// [predictRoll]'s guide, and where the egg comes to rest when it stops
 /// on the turf inside the guide (a soft putt): null when the guide was cut
-/// first, or the egg drops into the nest or out of play.
-({List<core.Vec2> points, core.Vec2? rest}) previewRoll({
+/// first, or the egg drops into the nest or out of play. Beside the points,
+/// [airs] holds the egg's altitude where it flies off a kicker (null where
+/// it rolls), and [landing] where that flight first comes down (in the
+/// pond, all the same: that is where it would land).
+({
+  List<core.Vec2> points,
+  core.Vec2? rest,
+  List<double?> airs,
+  core.Vec2? landing,
+}) previewRoll({
   required PhysicsWorld world,
   required hole.HoleDef hole,
   required PhysicsConfig config,
@@ -1754,7 +1827,9 @@ List<core.Vec2> predictRoll({
   final copy =
       PhysicsWorld.restore(hole: hole, config: config, state: world.toJson());
   final ball = copy.ball(playerId);
-  if (ball == null || ball.holed) return (points: const [], rest: null);
+  if (ball == null || ball.holed) {
+    return (points: const [], rest: null, airs: const [], landing: null);
+  }
   final shotPower =
       (power * (modifiers?.powerMultiplier ?? 1)).clamp(0.0, 1.0).toDouble();
   if (modifiers?.hop ?? false) {
@@ -1764,17 +1839,38 @@ List<core.Vec2> predictRoll({
     copy.setBallFlagUntilRest(playerId, PowerUpFlag.magnet);
   }
   copy.applyShot(playerId, angle, shotPower);
+  copy.drainEvents();
   final points = <core.Vec2>[ball.position];
+  final airs = <double?>[null];
+  var flew = false;
   core.Vec2? rest;
+  core.Vec2? landing;
   var travelled = 0.0;
   var bounced = false;
   var afterBounce = 0.0;
   var heading = ball.velocity;
+  void add(core.Vec2 point, double? air) {
+    points.add(point);
+    airs.add(air);
+  }
+
   for (var i = 0; i < maxTicks; i++) {
     final before = ball.position;
     copy.stepTick();
+    // A flight comes down: the guide ends on the spot (in the pond too,
+    // before the splash puts the egg back), and marks it.
+    final down = copy
+        .drainEvents()
+        .whereType<BallLanded>()
+        .where((event) => event.playerId == playerId)
+        .firstOrNull;
+    if (down != null) {
+      add(down.at, null);
+      landing = down.at;
+      break;
+    }
     if (ball.holed) {
-      points.add(hole.nest.position);
+      add(hole.nest.position, null);
       break;
     }
     final after = ball.position;
@@ -1791,18 +1887,39 @@ List<core.Vec2> predictRoll({
     }
     if (bounced) afterBounce += step;
     heading = velocity;
-    if (i % 3 == 0) points.add(after);
+    if (ball.airborne) flew = true;
+    if (i % 3 == 0) add(after, ball.air);
     if (ball.asleep) {
-      points.add(after);
+      add(after, null);
       rest = after;
       break;
     }
-    if (travelled >= maxLength || afterBounce >= tailAfterBounce) {
-      points.add(after);
+    // In the air the guide runs on to the landing, whatever its length,
+    // and so does an egg about to take off.
+    if (!ball.airborne &&
+        !_nearKicker(hole, after, velocity) &&
+        (travelled >= maxLength || afterBounce >= tailAfterBounce)) {
+      add(after, null);
       break;
     }
   }
-  return (points: points, rest: rest);
+  return (
+    points: points,
+    rest: rest,
+    airs: flew ? airs : const <double?>[],
+    landing: landing,
+  );
+}
+
+/// Whether an egg at [at] rolling at [velocity] is on a kicker's deck or
+/// heading onto one within two units: the guide runs on to its flight.
+bool _nearKicker(hole.HoleDef current, core.Vec2 at, core.Vec2 velocity) {
+  if (current.kickers.isEmpty) return false;
+  final ahead = at + velocity.normalized(core.Vec2.zero) * 2;
+  return current.kickers.any((kicker) =>
+      kicker.covers(at) ||
+      kicker.covers(at.lerp(ahead, 0.5)) ||
+      kicker.covers(ahead));
 }
 
 // ---- the layers that feed the world ---------------------------------------------------
@@ -2132,6 +2249,79 @@ class PuttFxLayer {
         size: 0.42 + _random.nextDouble() * 0.12,
         color: i % 3 == 2 ? PuttPalette.cream : PuttPalette.shell,
         height: 0.7,
+        climb: 1.8 + _random.nextDouble() * 1.2,
+      ));
+    }
+  }
+
+  /// A kicker's takeoff at [at], the egg leaving along [heading]: a puff
+  /// of [dust] thrown back off the lip, and with [straw] the stalks of a
+  /// planked or hay ramp flung up to drift down.
+  void kickUp(core.Vec2 at, core.Vec2 heading,
+      {required bool straw, required ui.Color dust}) {
+    final way = heading.normalized(const core.Vec2(1, 0));
+    final back = math.atan2(-way.y, -way.x);
+    for (var i = 0; i < 9; i++) {
+      final angle = back + (i - 4) * 0.3 + (_random.nextDouble() - 0.5) * 0.2;
+      _particles.add(_FxParticle(
+        at: at,
+        velocity: core.Vec2(math.cos(angle), math.sin(angle)) *
+            (1.1 + _random.nextDouble() * 1.6),
+        life: 0.6 + _random.nextDouble() * 0.2,
+        kind: _FxKind.dust,
+        size: 0.42 + _random.nextDouble() * 0.12,
+        color: dust,
+      ));
+    }
+    if (!straw) return;
+    for (var i = 0; i < 12; i++) {
+      final angle = _random.nextDouble() * 2 * math.pi;
+      _particles.add(_FxParticle(
+        at: at,
+        velocity: core.Vec2(math.cos(angle), math.sin(angle)) *
+                (0.6 + _random.nextDouble() * 1.6) +
+            way * 1.4,
+        life: 1.1 + _random.nextDouble() * 0.5,
+        kind: _FxKind.feather,
+        size: 0.34 + _random.nextDouble() * 0.14,
+        color:
+            i.isEven ? const ui.Color(0xFFEDBE58) : const ui.Color(0xFFF8DB8A),
+        height: 0.5,
+        climb: 2.6 + _random.nextDouble() * 1.8,
+      ));
+    }
+  }
+
+  /// An egg coming down from a flight at [at]: a ring of [dust] thrown out
+  /// round it, and with [straw] a few stalks kicked up too.
+  void landingPuff(core.Vec2 at,
+      {required bool straw, required ui.Color dust}) {
+    for (var i = 0; i < 10; i++) {
+      final angle = i / 10 * 2 * math.pi + _random.nextDouble() * 0.3;
+      _particles.add(_FxParticle(
+        at: at,
+        velocity: core.Vec2(math.cos(angle), math.sin(angle)) *
+            (1.5 + _random.nextDouble() * 1.3),
+        life: 0.55 + _random.nextDouble() * 0.15,
+        kind: _FxKind.dust,
+        size: 0.38 + _random.nextDouble() * 0.1,
+        color: dust,
+      ));
+    }
+    ring(at, dust, size: 1.5);
+    if (!straw) return;
+    for (var i = 0; i < 6; i++) {
+      final angle = i / 6 * 2 * math.pi + _random.nextDouble() * 0.5;
+      _particles.add(_FxParticle(
+        at: at,
+        velocity: core.Vec2(math.cos(angle), math.sin(angle)) *
+            (0.8 + _random.nextDouble() * 1.0),
+        life: 0.9 + _random.nextDouble() * 0.4,
+        kind: _FxKind.feather,
+        size: 0.3 + _random.nextDouble() * 0.12,
+        color:
+            i.isEven ? const ui.Color(0xFFEDBE58) : const ui.Color(0xFFF8DB8A),
+        height: 0.3,
         climb: 1.8 + _random.nextDouble() * 1.2,
       ));
     }
