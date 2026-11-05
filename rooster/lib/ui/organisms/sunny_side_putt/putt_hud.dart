@@ -17,6 +17,7 @@ library;
 
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/powerups.dart';
@@ -52,6 +53,10 @@ class PuttHud extends StatefulWidget {
   /// keeps its own when left out (a HUD alone still casts and picks).
   final PuttTargeting? targeting;
 
+  /// True while I aim or my egg rolls: the scorecard folds down to my own
+  /// line, so the green it covered shows.
+  final ValueListenable<bool>? busy;
+
   const PuttHud({
     super.key,
     required this.match,
@@ -61,6 +66,7 @@ class PuttHud extends StatefulWidget {
     this.onToggleCamera,
     this.cameraOverview = false,
     this.targeting,
+    this.busy,
   });
 
   @override
@@ -132,6 +138,7 @@ class _PuttHudState extends State<PuttHud> {
                           targeting: targeting,
                           scorecardWidth: scorecardWidth,
                           scorecardRows: scorecardRows,
+                          busy: widget.busy,
                           onTapSlot: _tapSlot,
                         ),
                     ],
@@ -1557,11 +1564,26 @@ String puttBadgeText(ScoreTerm term) {
 
 // ---- the bottom row: scorecard, hint, inventory ---------------------------------------
 
+/// A listenable that is always false (no game told the HUD it is busy).
+class _Never implements ValueListenable<bool> {
+  const _Never();
+
+  @override
+  bool get value => false;
+
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) {}
+}
+
 class _PuttBottomRow extends StatelessWidget {
   final PuttMatch match;
   final PuttTargeting targeting;
   final double scorecardWidth;
   final int scorecardRows;
+  final ValueListenable<bool>? busy;
   final void Function(int slot, String effectId) onTapSlot;
 
   const _PuttBottomRow({
@@ -1569,6 +1591,7 @@ class _PuttBottomRow extends StatelessWidget {
     required this.targeting,
     required this.scorecardWidth,
     required this.scorecardRows,
+    this.busy,
     required this.onTapSlot,
   });
 
@@ -1579,10 +1602,21 @@ class _PuttBottomRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         IgnorePointer(
-          child: PuttScorecard(
-            match: match,
-            width: scorecardWidth,
-            maxRows: scorecardRows,
+          child: ValueListenableBuilder<bool>(
+            valueListenable: busy ?? const _Never(),
+            builder: (context, folded, _) => AnimatedSize(
+              duration: MediaQuery.maybeDisableAnimationsOf(context) == true
+                  ? Duration.zero
+                  : const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.bottomLeft,
+              child: PuttScorecard(
+                match: match,
+                width: scorecardWidth,
+                maxRows: scorecardRows,
+                compact: folded,
+              ),
+            ),
           ),
         ),
         const SizedBox(width: 12),
@@ -1614,11 +1648,15 @@ class PuttScorecard extends StatelessWidget {
   final double width;
   final int maxRows;
 
+  /// Folded to my own line (while I aim or my egg rolls).
+  final bool compact;
+
   const PuttScorecard({
     super.key,
     required this.match,
     this.width = 240,
     this.maxRows = 8,
+    this.compact = false,
   });
 
   static const double _holeColumn = 40;
@@ -1645,7 +1683,11 @@ class PuttScorecard extends StatelessWidget {
           ? [...all.take(keep - 1), all[mine]]
           : all.take(keep).toList();
     }
-    final hidden = all.length - shown.length;
+    if (compact) {
+      final mine = all.where((row) => row.playerId == match.localPlayerId);
+      shown = mine.isNotEmpty ? [mine.first] : all.take(1).toList();
+    }
+    final hidden = compact ? 0 : all.length - shown.length;
     final header = _Type.label(9.5,
         color: PuttPalette.cream.withValues(alpha: 0.55), spacing: 0.9);
     return Container(
@@ -1657,34 +1699,36 @@ class PuttScorecard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    labelPuttScorecard().toUpperCase(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: _Type.label(10.5),
-                  ),
-                ),
-                for (final (label, width) in [
-                  (labelPuttScorecardHole(), _holeColumn),
-                  (labelPuttScorecardTotal(), _totalColumn),
-                ])
-                  SizedBox(
-                    width: width,
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerRight,
-                      child: Text(label.toUpperCase(), style: header),
+          if (!compact) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      labelPuttScorecard().toUpperCase(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _Type.label(10.5),
                     ),
                   ),
-              ],
+                  for (final (label, width) in [
+                    (labelPuttScorecardHole(), _holeColumn),
+                    (labelPuttScorecardTotal(), _totalColumn),
+                  ])
+                    SizedBox(
+                      width: width,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Text(label.toUpperCase(), style: header),
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 5),
+            const SizedBox(height: 5),
+          ],
           for (final row in shown)
             engine.isSpectator(row.playerId)
                 ? _ScorecardRow(

@@ -97,6 +97,9 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   final PuttTagBoard _tags = PuttTagBoard();
   final ValueNotifier<PuttCoachCue?> _coach = ValueNotifier(null);
 
+  /// True while I aim or my egg rolls (the HUD folds its scorecard).
+  final ValueNotifier<bool> _busy = ValueNotifier(false);
+
   /// Where Esc lands: the view holds the focus while the game does. The
   /// GameWidget keeps its own node under it (autofocus off), so the two
   /// never fight over the keyboard.
@@ -133,6 +136,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     _gameFocus.dispose();
     _tags.dispose();
     _coach.dispose();
+    _busy.dispose();
     game.targeting.dispose();
     super.dispose();
   }
@@ -355,6 +359,9 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   void _afterFrame() {
     _tags.update(game.tagsForFrame());
     _coach.value = game.coachForFrame();
+    final mine = game.match.myBall;
+    _busy.value =
+        game.aim.isActive || (mine != null && !mine.asleep && !mine.holed);
   }
 
   @override
@@ -442,6 +449,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
         PuttHud(
           match: match,
           targeting: game.targeting,
+          busy: _busy,
           onSfx: (sfx) => widget.audio?.play(sfx),
           onOpenMenu: _togglePause,
           onToggleCamera: _toggleCamera,

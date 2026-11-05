@@ -249,8 +249,14 @@ class PuttCameraDirector {
         if (_userCamera) {
           rig.glideTo(target: egg.lerp(hole.nest.position, 0.35));
         } else {
-          rig.glideToFrame(egg, hole.nest.position,
-              yaw: _yawToward(egg, hole.nest.position));
+          // My egg, the nest, and the eggs around mine (the tee's crowd),
+          // so none of them sits under the HUD.
+          rig.glideToFramePoints([
+            egg,
+            hole.nest.position,
+            for (final other in cue.otherEggs)
+              if (other.distanceTo(egg) < 5) other,
+          ], yaw: _yawToward(egg, hole.nest.position));
         }
       }
       return;
