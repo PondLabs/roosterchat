@@ -117,6 +117,32 @@ void main() {
         reason: 'under the strip: gone; below it or beside it: drawn');
   });
 
+  test("tags keep inside the screen's margin, and go with their egg", () {
+    final board = PuttTagBoard();
+    addTearDown(board.dispose);
+    const screen = Rect.fromLTRB(12, 12, 1268, 788);
+    board.update(const [
+      // Its egg 20 px from the left edge: the pill would run past it.
+      PuttTag(
+          playerId: 'edge',
+          name: 'Maya',
+          color: Colors.teal,
+          at: Offset(20, 400)),
+      // Its egg off the screen to the right.
+      PuttTag(
+          playerId: 'off',
+          name: 'Lou',
+          color: Colors.pink,
+          at: Offset(1320, 400)),
+    ], screen: screen);
+    expect(board.tags.map((t) => t.playerId), ['edge']);
+    final tag = board.tags.single;
+    final pill = puttTagPill(tag, tag.at);
+    expect(pill.left, greaterThanOrEqualTo(screen.left - 1e-9));
+    expect(tag.at.dx + tag.tail, closeTo(20, 12),
+        reason: 'its pointer leans back to the egg');
+  });
+
   test("tags keep clear of the coach's hand and ghost arrow", () {
     // My egg at (400, 400), the nest up the screen: the hand pulls down
     // from under the egg, the ghost arrow grows up toward the nest.

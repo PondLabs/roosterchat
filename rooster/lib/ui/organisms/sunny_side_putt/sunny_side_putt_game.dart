@@ -409,6 +409,11 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     return game.screenToWorld(Vector2(at.dx, at.dy));
   }
 
+  /// The view's size at its last layout, and the margin the tags keep
+  /// from its edges.
+  Size? _viewSize;
+  static const double _tagMargin = 12;
+
   /// After every rendered frame: the tags follow the eggs on screen, the
   /// coach follows mine.
   void _afterFrame() {
@@ -420,7 +425,12 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
         // The coach's hand and ghost arrow: tags keep clear of them while
         // there is room by their eggs.
         soft: coach == null ? const [] : puttCoachObstacles(coach),
-        hud: game.hudOverGreen());
+        hud: game.hudOverGreen(),
+        // Clear of the screen's edges by a margin: cut at the edge, a tag
+        // read as broken.
+        screen: _viewSize == null
+            ? null
+            : (Offset.zero & _viewSize!).deflate(_tagMargin));
     _coach.value = coach;
     final pointer = game.nestPointerForFrame();
     _nestPointer.value = pointer;
@@ -445,6 +455,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
         backgroundColor: PuttPalette.apron,
         body: LayoutBuilder(builder: (context, constraints) {
           final size = constraints.biggest;
+          _viewSize = size;
           return Stack(
             fit: StackFit.expand,
             children: [

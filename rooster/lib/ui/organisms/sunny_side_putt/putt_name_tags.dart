@@ -81,18 +81,41 @@ class PuttTagBoard extends ChangeNotifier {
   /// eggs, mine with its pin) and where they can of [soft] (the coach's
   /// hand and ghost arrow). One that would stand under the [hud] (the top
   /// strip, the corner buttons) is not drawn: it would read as part of the
-  /// HUD, and an egg that far up is under it too.
+  /// HUD, and an egg that far up is under it too. Inside [screen] (the view
+  /// less a margin) a tag running past an edge steps back in, its pointer
+  /// still at its egg; one whose egg is off the screen is not drawn.
   void update(List<PuttTag> tags,
       {List<Rect> avoid = const [],
       List<Rect> soft = const [],
-      List<Rect> hud = const []}) {
+      List<Rect> hud = const [],
+      Rect? screen}) {
     if (tags.isEmpty && _tags.isEmpty) return;
     final laid = declutterTags(tags, avoid: avoid, soft: soft);
     _tags = [
       for (final tag in laid)
-        if (!hud.any((rect) => rect.overlaps(puttTagPill(tag, tag.at)))) tag,
+        if (_kept(tag, screen) case final kept?)
+          if (!hud.any((rect) => rect.overlaps(puttTagPill(kept, kept.at))))
+            kept,
     ];
     notifyListeners();
+  }
+
+  /// [tag] inside [screen]: stepped in off an edge (its pointer leaning
+  /// back to the egg it names), or none when that egg is off the screen.
+  static PuttTag? _kept(PuttTag tag, Rect? screen) {
+    if (screen == null) return tag;
+    final egg = tag.at + Offset(tag.tail, 0);
+    if (!screen.inflate(8).contains(egg)) return null;
+    final pill = puttTagPill(tag, tag.at);
+    var dx = 0.0;
+    var dy = 0.0;
+    if (pill.left < screen.left) dx = screen.left - pill.left;
+    if (pill.right > screen.right) dx = screen.right - pill.right;
+    if (pill.top < screen.top) dy = screen.top - pill.top;
+    if (dx == 0 && dy == 0) return tag;
+    final reach = math.max(0.0, pill.width / 2 - 9);
+    return tag._laidAt(tag.at + Offset(dx, dy),
+        compact: tag.compact, tail: (tag.tail - dx).clamp(-reach, reach));
   }
 }
 
