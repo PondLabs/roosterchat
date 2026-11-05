@@ -429,6 +429,26 @@ void main() {
       expect(find.text(match.headline ?? ''), findsOneWidget);
       expect(match.headline, contains('Hole 1'));
     });
+
+    testWidgets('the hole\'s card waits until the green is shown',
+        (tester) async {
+      final match = PuttMatch.solo();
+      final shown = ValueNotifier(false);
+      addTearDown(shown.dispose);
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: PuttHud(match: match, shown: shown, onOpenMenu: () {})),
+      ));
+      // A slow boot: seconds go by before the green's first frame.
+      await tester.pump(const Duration(seconds: 5));
+      expect(find.text(match.headline ?? ''), findsNothing);
+
+      shown.value = true;
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.text(match.headline ?? ''), findsOneWidget,
+          reason: 'the card plays when the hole can be seen');
+    });
   });
 
   group('spectators', () {

@@ -115,6 +115,12 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   /// True while I aim or my egg rolls (the HUD folds its scorecard).
   final ValueNotifier<bool> _busy = ValueNotifier(false);
 
+  /// Whether the green has been drawn yet (or never will be: no GPU
+  /// surface here, or it failed). Until then the HUD's banners wait, so a
+  /// slow boot does not play the hole's card to a blank screen.
+  final ValueNotifier<bool> _greenShown =
+      ValueNotifier(!PuttThreeSurface.gpuSupported);
+
   /// Where Esc lands: the view holds the focus while the game does. The
   /// GameWidget keeps its own node under it (autofocus off), so the two
   /// never fight over the keyboard.
@@ -152,6 +158,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     _tags.dispose();
     _coach.dispose();
     _busy.dispose();
+    _greenShown.dispose();
     _bubbles.dispose();
     game.targeting.dispose();
     super.dispose();
@@ -389,6 +396,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   /// coach follows mine.
   void _afterFrame() {
     game.worldDrew();
+    _greenShown.value = true;
     _tags.update(game.tagsForFrame(), avoid: game.tagObstacles());
     _coach.value = game.coachForFrame();
     _bubbles.update(game.bubblesForFrame());
@@ -419,7 +427,10 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
                 world: game.world3d,
                 buildFrame: game.buildWorldFrame,
                 onFrame: _afterFrame,
-                onFailed: game.worldDrew,
+                onFailed: () {
+                  game.worldDrew();
+                  _greenShown.value = true;
+                },
               ),
               // The ticker and the aim gestures, transparent over the
               // world; the pointer plumbing lands world-side through the
@@ -481,11 +492,13 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
       fit: StackFit.expand,
       children: [
         // HUD, with only its buttons and slots eating pointers (the
-        // spectator note rides its hint line).
+        // spectator note rides its hint line); its banners wait for the
+        // green's first frame.
         PuttHud(
           match: match,
           targeting: game.targeting,
           busy: _busy,
+          shown: _greenShown,
           onSfx: (sfx) => widget.audio?.play(sfx),
           onOpenMenu: _togglePause,
           onToggleCamera: _toggleCamera,

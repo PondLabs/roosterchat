@@ -58,6 +58,11 @@ class PuttHud extends StatefulWidget {
   /// line, so the green it covered shows.
   final ValueListenable<bool>? busy;
 
+  /// Whether the green is on screen yet: until it is, the banners wait
+  /// (a hole's card plays when the player can see the hole, not during a
+  /// slow boot). Left out, the green counts as shown.
+  final ValueListenable<bool>? shown;
+
   const PuttHud({
     super.key,
     required this.match,
@@ -68,6 +73,7 @@ class PuttHud extends StatefulWidget {
     this.cameraOverview = false,
     this.targeting,
     this.busy,
+    this.shown,
   });
 
   @override
@@ -130,8 +136,10 @@ class _PuttHudState extends State<PuttHud> {
                         ),
                       ),
                       Expanded(
-                        child:
-                            _PuttMiddle(match: match, onLeave: widget.onLeave),
+                        child: _PuttMiddle(
+                            match: match,
+                            onLeave: widget.onLeave,
+                            shown: widget.shown),
                       ),
                       if (inPlay)
                         _PuttBottomRow(
@@ -885,7 +893,10 @@ class _PuttMiddle extends StatefulWidget {
   final PuttMatch match;
   final VoidCallback? onLeave;
 
-  const _PuttMiddle({required this.match, required this.onLeave});
+  /// See [PuttHud.shown].
+  final ValueListenable<bool>? shown;
+
+  const _PuttMiddle({required this.match, required this.onLeave, this.shown});
 
   @override
   State<_PuttMiddle> createState() => _PuttMiddleState();
@@ -961,7 +972,12 @@ class _PuttMiddleState extends State<_PuttMiddle>
             // popping a second time.
             Opacity(
               opacity: 1 - reveal,
-              child: _banner() ?? const SizedBox.shrink(),
+              child: ValueListenableBuilder<bool>(
+                valueListenable: widget.shown ?? const _Always(),
+                builder: (context, shown, _) => shown
+                    ? _banner() ?? const SizedBox.shrink()
+                    : const SizedBox.shrink(),
+              ),
             ),
             if (phase == PuttPhase.matchOver)
               LayoutBuilder(
@@ -1601,6 +1617,20 @@ class _Never implements ValueListenable<bool> {
 
   @override
   bool get value => false;
+
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) {}
+}
+
+/// A flag that is always up (the green shown, when nobody says).
+class _Always implements ValueListenable<bool> {
+  const _Always();
+
+  @override
+  bool get value => true;
 
   @override
   void addListener(VoidCallback listener) {}
