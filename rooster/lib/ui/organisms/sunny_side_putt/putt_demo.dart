@@ -27,7 +27,9 @@
 //   script=me.thick_shell@3,maya.corn_rain@5,lou.thieving_crow@7.5
 // (the caster is handed the power-up; a crow robs the viewer when they
 // hold one, a swap trades with the viewer, a gust blows the others back
-// toward the tee, a sprinkler soaks the crowd). Each hole logs
+// toward the tee, a sprinkler soaks the crowd). knock=1 has the first crew
+// member, once both have putted, roll into the viewer's egg as soon as it
+// rests after its first putt (the knock's call in the feed). Each hole logs
 // `putt-demo: hole open <id>` to the console when the camera starts on it
 // (its first drawn frame), and the script's seconds count from there, so a
 // capture can time its shots from the hole's start, not the page's load.
@@ -150,6 +152,11 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
   bool _splashed = false;
   bool _armed = false;
 
+  /// The query's staged knock: the first bot rolls into the viewer's egg
+  /// once it rests after its first putt.
+  bool _knock = false;
+  bool _knocked = false;
+
   static const _step = Duration(milliseconds: 33);
 
   @override
@@ -173,6 +180,7 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
     _arm = query['arm'];
     _armAt = double.tryParse(query['armAt'] ?? '') ?? 3;
     _splash = query['splash'] == '1';
+    _knock = query['knock'] == '1';
     _soft = double.tryParse(query['soft'] ?? '');
     _script = [
       for (final entry in (query['script'] ?? '').split(','))
@@ -303,6 +311,7 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
       _holedSeen.clear();
       _reactionsDue.clear();
       _splashLaughed = false;
+      _knocked = false;
       _botNextAt.clear();
       _route = _routeOf(hole);
       _armed = false;
@@ -715,9 +724,26 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
       if (ball.playerId == match.localPlayerId) continue;
       order++;
       if (ball.holed || !ball.asleep) continue;
+      final shots = _botShots[ball.playerId] ?? 0;
+      final mine = world.ball(match.localPlayerId);
+      if (_knock &&
+          !_knocked &&
+          order == 1 &&
+          ball.putted &&
+          mine != null &&
+          mine.putted &&
+          mine.asleep &&
+          !mine.holed) {
+        // Staged: straight into the viewer's egg, with pace.
+        _knocked = true;
+        final shot = putt(ball.position, mine.position, arrival: 3.4);
+        match.engine.submitShot(ball.playerId, shot.angle, shot.power);
+        _botShots[ball.playerId] = shots + 1;
+        _botNextAt[ball.playerId] = _holeTime + 2.6;
+        continue;
+      }
       final nextAt = _botNextAt[ball.playerId] ?? (3.6 + order * 0.55);
       if (_holeTime < nextAt) continue;
-      final shots = _botShots[ball.playerId] ?? 0;
       final toNest = hole.nest.position - ball.position;
       final pond = _splash && !_splashed && order == 1
           ? _nearestWater(hole, ball.position)
