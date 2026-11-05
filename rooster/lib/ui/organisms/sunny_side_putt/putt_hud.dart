@@ -625,13 +625,17 @@ class PuttHoleBar extends StatelessWidget {
         ),
       ),
     ];
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
-          decoration: _panel(radius: 20),
-          child: Row(
+    // The course's dots ride inside the bar, under its numbers: a pill of
+    // their own under it covered a strip more of the green (round 4's
+    // frames had crates and tags hidden behind it).
+    final dots = inCourse > 0 && count > 1;
+    return Container(
+      padding: EdgeInsets.fromLTRB(6, 7, 6, dots ? 6 : 7),
+      decoration: _panel(radius: 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               for (var i = 0; i < segments.length; i++) ...[
@@ -645,12 +649,12 @@ class PuttHoleBar extends StatelessWidget {
               ],
             ],
           ),
-        ),
-        if (inCourse > 0 && count > 1) ...[
-          const SizedBox(height: 6),
-          PuttHoleDots(current: inCourse, count: count),
+          if (dots) ...[
+            const SizedBox(height: 5),
+            PuttHoleDots(current: inCourse, count: count, bare: true),
+          ],
         ],
-      ],
+      ),
     );
   }
 
@@ -690,22 +694,32 @@ class PuttHoleDots extends StatelessWidget {
   final int current;
   final int count;
 
-  const PuttHoleDots({super.key, required this.current, required this.count});
+  /// Inside another panel (the hole bar): no pill of its own.
+  final bool bare;
+
+  const PuttHoleDots(
+      {super.key,
+      required this.current,
+      required this.count,
+      this.bare = false});
 
   @override
   Widget build(BuildContext context) {
+    final row = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var hole = 1; hole <= count; hole++) _dot(hole),
+      ],
+    );
     return Semantics(
       label: labelPuttHoleOf(current, count),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-        decoration: _panel(alpha: 0.62, radius: 10, shadow: false),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (var hole = 1; hole <= count; hole++) _dot(hole),
-          ],
-        ),
-      ),
+      child: bare
+          ? row
+          : Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+              decoration: _panel(alpha: 0.62, radius: 10, shadow: false),
+              child: row,
+            ),
     );
   }
 
