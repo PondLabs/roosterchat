@@ -2340,7 +2340,7 @@ class PuttPlayerPicker extends StatelessWidget {
       type: MaterialType.transparency,
       child: Container(
         key: const Key('putt-picker'),
-        width: 268,
+        width: 300,
         padding: const EdgeInsets.fromLTRB(14, 12, 10, 6),
         decoration: _panel(
           alpha: 0.95,
@@ -2456,12 +2456,34 @@ class _PickRow extends StatelessWidget {
                 style: _Type.body(14, weight: 800),
               ),
             ),
-            if (powerUp != null)
-              PuttPowerUpIcon(
-                effectId: powerUp,
-                size: 18,
-                semanticLabel: puttPowerUpName(powerUp),
+            if (powerUp != null) ...[
+              const SizedBox(width: 8),
+              // What the crow would bring home: its icon and its name.
+              Container(
+                padding: const EdgeInsets.fromLTRB(4, 3, 9, 3),
+                decoration: BoxDecoration(
+                  color: PuttPalette.yolk.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    PuttPowerUpIcon(effectId: powerUp, size: 24),
+                    const SizedBox(width: 5),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 112),
+                      child: Text(
+                        puttPowerUpName(powerUp),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: _Type.body(12.5,
+                            weight: 800, color: PuttPalette.yolk),
+                      ),
+                    ),
+                  ],
+                ),
               ),
+            ],
           ],
         ),
       ),
