@@ -26,7 +26,7 @@
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:flame/game.dart' show GameWidget;
+import 'package:flame/game.dart' show GameWidget, Vector2;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -348,12 +348,43 @@ void main() {
     // One REAL pointer drag, the slingshot the arrow draws: press at the
     // egg, pull back, release - the widget path from the stage's listener
     // through the game's aim controller into PuttMatch.submitShot.
-    final strokesBefore = game.match.myStrokesThisHole;
-    await _dragShotFromEgg(tester, game, 0.0, 0.55);
+    // The camera settled first: the opening sweep over and the rig come to
+    // rest on its frame. Running live, a camera still sweeping moved the
+    // ground under the pointer between the drag's press and its release.
+    final rig = game.world3d.rig;
     await tester.waitFor(
-        () => game.match.myStrokesThisHole == strokesBefore + 1,
+        () =>
+            !game.director.opening &&
+            (rig.distance - rig.distanceTarget).abs() < 0.05,
         skipPumpAndSettle: true,
-        timeout: const Duration(seconds: 15));
+        timeout: const Duration(seconds: 20));
+    await tester.waitFor(() => game.match.myShotReady,
+        skipPumpAndSettle: true, timeout: const Duration(seconds: 10));
+    final strokesBefore = game.match.myStrokesThisHole;
+    final drag = await _dragShotFromEgg(tester, game, 0.0, 0.55);
+    try {
+      await tester.waitFor(
+          () => game.match.myStrokesThisHole == strokesBefore + 1,
+          skipPumpAndSettle: true,
+          timeout: const Duration(seconds: 15));
+    } catch (_) {
+      // Say what the drag met: what sat under the press, the aim, the egg.
+      final hits = tester
+          .hitTestOnBinding(drag.from)
+          .path
+          .map((entry) => entry.target.runtimeType.toString())
+          .take(14)
+          .join(' < ');
+      // ignore: avoid_print
+      print('Sunny Side Putt e2e: the drag made no putt: from ${drag.from} '
+          'to ${drag.to} in ${drag.area}, shot ready ${game.match.myShotReady}, '
+          'aim ${game.aim.isActive} ${game.aim.state}, '
+          'egg ${game.match.myBall?.position} asleep ${game.match.myBall?.asleep}, '
+          'phase ${game.match.phase}, ground under the press '
+          '${game.screenToWorld(Vector2(drag.from.dx - drag.area.left, drag.from.dy - drag.area.top))}, '
+          'hits: $hits');
+      rethrow;
+    }
     expect(game.match.myStrokesThisHole, strokesBefore + 1);
 
     // Bob follows the session alice launched: the state event syncs to him,
@@ -459,7 +490,7 @@ Future<T> _bounded<T>(Future<T> step, String what, {int seconds = 45}) =>
 /// Strokes [match]'s own egg: maps world points to screen through the
 /// game's perspective camera (project), presses at the egg, and pulls
 /// [angle] backwards so the slingshot fires at [angle] with [power].
-Future<void> _dragShotFromEgg(
+Future<({Offset from, Offset to, Rect area})> _dragShotFromEgg(
     WidgetTester tester, SunnySidePuttGame game, double angle, double power,
     {int pointer = 24}) async {
   final area =
@@ -485,6 +516,7 @@ Future<void> _dragShotFromEgg(
   await tester.pump();
   await gesture.up();
   await tester.pump();
+  return (from: from, to: to, area: area);
 }
 
 /// Strokes [match]'s own egg from wherever it currently rests straight at
