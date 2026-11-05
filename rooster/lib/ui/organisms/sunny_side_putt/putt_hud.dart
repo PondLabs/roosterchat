@@ -920,8 +920,9 @@ class _PuttMiddleState extends State<_PuttMiddle>
     duration: const Duration(milliseconds: 3600),
   );
 
-  /// The results card fades in over the clock's last fifth (about 0.7 s).
-  static const _reveal = Interval(0.8, 1, curve: Curves.easeOutCubic);
+  /// The results card fades in over the clock's last half second (the
+  /// awards after it take just that rise).
+  static const _reveal = Interval(0.86, 1, curve: Curves.easeOutCubic);
 
   bool _reduceMotion = false;
 
