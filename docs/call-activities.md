@@ -18,9 +18,12 @@ infrastructure.
   of players and spectators.
 - `client/matrix/components/call_activity/` - the Matrix side: the
   session's room state (`chat.commet.call_activity`, one event per
-  session, state key the session id - this is what people outside the
-  call see), the LiveKit transport, and the component that ties a live
-  call to its session and clears the state when the host's session ends.
+  session, state key the session id behind an underscore - the id is the
+  host's LiveKit identity, and Synapse refuses a state key that starts
+  with "@" unless it is the sender's own user id - this is what people
+  outside the call see), the LiveKit transport, and the component that
+  ties a live call to its session and clears the state when the host's
+  session ends.
 - The games: `client/components/sunny_side_putt/` (the model layer) and
   `ui/organisms/sunny_side_putt/` (the game); see sunny-side-putt.md.
 - `ui/organisms/call_activity/` - the shared UI: the picker (the shelf

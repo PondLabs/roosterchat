@@ -55,6 +55,18 @@ class MatrixCallActivityComponent
 
   // ------------------------------------------------------------- room state
 
+  /// The state key a session's event lives under: its id behind an
+  /// underscore. The id is the host's LiveKit identity ("@alice:server:
+  /// DEVICE"), and Synapse refuses any state key that starts with "@" but
+  /// is not exactly the sender's user id ("You are not allowed to set
+  /// others state"); MatrixRTC's memberships step round it the same way.
+  static String stateKeyOf(String sessionId) => '_$sessionId';
+
+  /// The session id under [stateKey] (a key without the underscore is
+  /// taken as it is).
+  static String sessionIdOf(String stateKey) =>
+      stateKey.startsWith('_') ? stateKey.substring(1) : stateKey;
+
   @override
   Future<void> write({
     required String sessionId,
@@ -62,8 +74,8 @@ class MatrixCallActivityComponent
     required String hostUserId,
     required int createdAtMs,
   }) async {
-    await room.matrixRoom.client
-        .setRoomStateWithKey(room.identifier, stateEventType, sessionId, {
+    await room.matrixRoom.client.setRoomStateWithKey(
+        room.identifier, stateEventType, stateKeyOf(sessionId), {
       'activity': activityId,
       'host': hostUserId,
       'created': createdAtMs,
@@ -73,8 +85,8 @@ class MatrixCallActivityComponent
 
   @override
   Future<void> clear(String sessionId) async {
-    await room.matrixRoom.client
-        .setRoomStateWithKey(room.identifier, stateEventType, sessionId, {});
+    await room.matrixRoom.client.setRoomStateWithKey(
+        room.identifier, stateEventType, stateKeyOf(sessionId), {});
   }
 
   /// The sessions this room shows, from the state alone: expired state is
@@ -103,7 +115,7 @@ class MatrixCallActivityComponent
       final window = windowJson is int ? windowJson : expires.inMilliseconds;
       if (nowMs - created > window) continue;
       result.add((
-        sessionId: entry.key,
+        sessionId: sessionIdOf(entry.key),
         activityId: activityId,
         hostUserId: host,
       ));
