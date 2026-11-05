@@ -490,7 +490,35 @@ class PhysicsWorld {
     ball.velocity = Vec2(math.cos(angle), math.sin(angle)) * speed;
     ball.asleep = false;
     ball.putted = true;
+    // Its own putt now, not a cast's shove.
+    _castPushed.remove(playerId);
   }
+
+  /// After a harmful cast that set eggs rolling: none of the [pushed] can
+  /// move the [spared] (a Thick Shell spent on them, the caster) for
+  /// [ticks] ticks - the shell held, and its neighbours' shove does not get
+  /// round it. A spared egg at rest stays put; a shoved one bounces off it.
+  void shelter({
+    required Iterable<String> spared,
+    required Iterable<String> pushed,
+    required int ticks,
+  }) {
+    final rolling = [
+      for (final id in pushed)
+        if (_balls[id] case final ball? when !ball.holed) id,
+    ];
+    if (rolling.isEmpty) return;
+    for (final id in spared) {
+      if (_balls[id] == null) continue;
+      final until = _tick + ticks;
+      if ((_shelteredUntil[id] ?? 0) < until) _shelteredUntil[id] = until;
+    }
+    _castPushed.addAll(rolling);
+  }
+
+  /// Whether [playerId]'s egg is sheltered from a cast's shove now.
+  bool isSheltered(String playerId) =>
+      (_shelteredUntil[playerId] ?? -1) > _tick;
 
   void impulseBall(String playerId, Vec2 deltaVelocity) {
     final ball = _balls[playerId];
@@ -640,6 +668,16 @@ class PhysicsWorld {
         // one pressed against a rail by the pull settles there.
         if (!_handleBounds(ball) && !_handleWater(ball)) ball.settle();
       }
+    }
+    // A shove ends where its egg comes to rest; a shelter when it runs out.
+    if (_castPushed.isNotEmpty) {
+      _castPushed.removeWhere((id) {
+        final ball = _balls[id];
+        return ball == null || ball.holed || ball.asleep;
+      });
+    }
+    if (_shelteredUntil.isNotEmpty) {
+      _shelteredUntil.removeWhere((_, until) => until <= _tick);
     }
   }
 
@@ -1212,6 +1250,39 @@ class PhysicsWorld {
   /// Below this closing speed a contact is a touch, not a knock.
   static const double _knockSpeed = 1.0;
 
+  /// The eggs a harmful cast spared, and the tick their shelter from the
+  /// eggs it shoved lasts until (see [shelter]).
+  final Map<String, int> _shelteredUntil = {};
+
+  /// The eggs a harmful cast set rolling, until they rest or are putted.
+  final Set<String> _castPushed = {};
+
+  /// A spared egg holds while at rest: one rolling on its own putt meets
+  /// the others as ever.
+  bool _holds(BallBody ball) =>
+      isSheltered(ball.playerId) &&
+      (ball.asleep || ball.velocity.length < 0.05);
+
+  /// A shoved egg meets a spared one at rest: only the shoved one moves,
+  /// off it as off a post.
+  void _offSheltered(BallBody still, BallBody moving, double min) {
+    final offset = moving.position - still.position;
+    final distance = offset.length;
+    final normal =
+        distance < Vec2.epsilon ? const Vec2(1, 0) : offset * (1 / distance);
+    moving.position = still.position + normal * min;
+    final into = moving.velocity.dot(normal);
+    if (into >= 0) return;
+    moving.velocity -= normal * ((1 + config.ballRestitution) * into);
+    _events.add(BallBounced(
+      playerId: moving.playerId,
+      kind: BounceKind.ball,
+      impactSpeed: -into,
+      at: moving.position,
+      otherPlayerId: still.playerId,
+    ));
+  }
+
   /// How many times each pair has drifted apart this hole: wedged in a
   /// corner, two could push, bounce back and push again for ever.
   final Map<String, int> _drifts = {};
@@ -1291,6 +1362,22 @@ class PhysicsWorld {
                 config.ballRadius) {
           continue;
         }
+        // A cast's shove does not get round a shell: an egg it spared, at
+        // rest, stays put, and the egg it shoved bounces off.
+        if (_castPushed.isNotEmpty) {
+          final aHolds =
+              _holds(a) && _castPushed.contains(b.playerId) && !b.asleep;
+          final bHolds =
+              _holds(b) && _castPushed.contains(a.playerId) && !a.asleep;
+          if (aHolds != bHolds) {
+            if (aHolds) {
+              _offSheltered(a, b, min);
+            } else {
+              _offSheltered(b, a, min);
+            }
+            continue;
+          }
+        }
         final normal = distance < Vec2.epsilon
             ? const Vec2(0, -1)
             : offset * (1 / distance);
@@ -1341,6 +1428,12 @@ class PhysicsWorld {
         'boxes': _collectedBoxes.toList()..sort(),
         'balls': [for (final id in _order) _balls[id]!.toJson()],
         if (_passing.isNotEmpty) 'passing': _passing.toList()..sort(),
+        if (_castPushed.isNotEmpty) 'pushed': _castPushed.toList()..sort(),
+        if (_shelteredUntil.isNotEmpty)
+          'sheltered': {
+            for (final id in _shelteredUntil.keys.toList()..sort())
+              id: _shelteredUntil[id],
+          },
         if (_drifts.isNotEmpty)
           'drifts': {
             for (final pair in _drifts.keys.toList()..sort())
@@ -1389,6 +1482,15 @@ class PhysicsWorld {
     }
     world._passing
         .addAll(((state['passing'] as List?) ?? const []).cast<String>());
+    world._castPushed
+        .addAll(((state['pushed'] as List?) ?? const []).cast<String>());
+    final sheltered = state['sheltered'] as Map?;
+    if (sheltered != null) {
+      for (final entry in sheltered.entries) {
+        world._shelteredUntil[entry.key as String] =
+            (entry.value as num).toInt();
+      }
+    }
     final drifts = state['drifts'] as Map?;
     if (drifts != null) {
       for (final entry in drifts.entries) {

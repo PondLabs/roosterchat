@@ -115,7 +115,7 @@ tooltip, on hover, says what it does).
 | Chicken Hop | your next putt flies over whatever is in the way |
 | Rabbit Hole | teleports your egg a short way, costing no stroke |
 | Gust | a wind of your choosing pushes every egg but yours |
-| Thick Shell | shield: the next negative effect bounces off, a Thieving Crow or a Nest Swap aimed at the egg included |
+| Thick Shell | shield: the next negative effect bounces off, a Thieving Crow or a Nest Swap aimed at the egg included; the eggs that cast shoves (a Gust, Corn Rain, a Sprinkler) bounce off the shelled egg at rest too, until they rest (at most 6 s), and so off the caster's own |
 | Strong Coffee | your next shot leaves 30% harder |
 | Nest Swap | trade places with a chosen player's egg |
 | Sprinkler | mark a spot; nearby eggs are pushed away |

@@ -103,6 +103,88 @@ void main() {
     expect(events.whereType<PowerUpHit>().single.playerIds, ['p1']);
   });
 
+  group("a cast's shove does not get round a shell", () {
+    // p1 rests just west of p2, p3 out of the way; all three have putted
+    // (a waiting egg is a ghost anyway). p3's Gust blows p1 east into p2.
+    PuttEngine blown({required bool shelled}) {
+      final engine = _engine();
+      final world = engine.world!;
+      for (final (id, at) in const [
+        ('p1', Vec2(12, 10)),
+        ('p2', Vec2(14, 10)),
+        ('p3', Vec2(6, 3)),
+      ]) {
+        world.ball(id)!
+          ..position = at
+          ..putted = true
+          ..settle();
+      }
+      if (shelled) {
+        engine.player('p2')!.inventory.add('thick_shell');
+        expect(engine.usePowerUp('p2', 'thick_shell'), isTrue);
+      }
+      engine.player('p3')!.inventory.add('gust');
+      expect(
+          engine.usePowerUp(
+              'p3', 'gust', const PowerUpTarget.point(Vec2(20, 10))),
+          isTrue);
+      return engine;
+    }
+
+    void settleAll(PuttEngine engine) {
+      for (var i = 0; i < 720; i++) {
+        engine.tickForward();
+      }
+    }
+
+    test('unshelled, the shoved egg knocks it on', () {
+      final engine = blown(shelled: false);
+      settleAll(engine);
+      expect(engine.world!.ball('p2')!.position.x, greaterThan(14.5));
+    });
+
+    test('shelled, it stays put and the shoved egg bounces off', () {
+      final engine = blown(shelled: true);
+      expect(engine.world!.isSheltered('p2'), isTrue);
+      expect(engine.world!.isSheltered('p3'), isTrue, reason: 'the caster');
+      settleAll(engine);
+      final p2 = engine.world!.ball('p2')!;
+      expect(p2.position, const Vec2(14, 10));
+      expect(p2.asleep, isTrue);
+      final p1 = engine.world!.ball('p1')!;
+      expect(p1.position.x, lessThan(13.5), reason: 'off the shell, back west');
+      expect(engine.world!.isSheltered('p2'), isFalse,
+          reason: 'the shelter runs out');
+    });
+
+    test('a snapshot mid-shove keeps the shelter', () {
+      final engine = blown(shelled: true);
+      for (var i = 0; i < 20; i++) {
+        engine.tickForward();
+      }
+      final copy = PuttEngine(engine.config)..restoreFrom(engine.toJson());
+      expect(copy.world!.isSheltered('p2'), isTrue);
+      settleAll(copy);
+      expect(copy.world!.ball('p2')!.position, const Vec2(14, 10));
+    });
+
+    test("an egg's own putt meets a spared one as ever", () {
+      final engine = blown(shelled: true);
+      settleAll(engine);
+      // The shelter ran out with the shove; a fresh one, then p1's own
+      // putt east into p2 while it lasts.
+      engine.world!.shelter(spared: ['p2'], pushed: ['p1'], ticks: 600);
+      final p1 = engine.world!.ball('p1')!
+        ..position = const Vec2(12, 10)
+        ..settle();
+      expect(p1.position, const Vec2(12, 10));
+      engine.world!.applyShot('p1', 0, 0.35);
+      settleAll(engine);
+      expect(engine.world!.ball('p2')!.position.x, greaterThan(14.2),
+          reason: 'a putt is its own, not the cast\'s shove');
+    });
+  });
+
   test("a crow's theft names the thief, the robbed and the loot", () {
     final engine = _engine();
     engine.player('p2')!.inventory

@@ -677,6 +677,10 @@ class PuttEngine {
   /// How many echoes an engine nobody drains keeps: the latest.
   static const int _worldEchoCap = 128;
 
+  /// How long, at most, the eggs a harmful cast spared stay out of reach of
+  /// the eggs it shoved (a shove usually rests well before).
+  static const double _shelterSeconds = 6;
+
   PhysicsWorld? _world;
 
   PuttEngine(this.config)
@@ -1016,6 +1020,15 @@ class PuttEngine {
     if (effect == null) return true; // consumed even when unknown upstream
     final context = _PowerUpContext(this, input);
     effect.apply(context);
+    // What the cast spared (its caster, a shell it met) its shove does not
+    // reach either: the eggs it set rolling bounce off them.
+    if (effect.harmful && context.pushed.isNotEmpty) {
+      _world?.shelter(
+        spared: [input.playerId, ...context.spared],
+        pushed: context.pushed,
+        ticks: (_shelterSeconds / config.physics.dt).round(),
+      );
+    }
     final touched = context.touched.toList()..sort();
     for (final id in touched) {
       _world?.evaluatePlacement(id);
@@ -1456,6 +1469,12 @@ class _PowerUpContext implements PowerUpContext {
   final PowerUpInput _input;
   final Set<String> touched = {};
 
+  /// The eggs this cast set rolling (pushed, nudged).
+  final Set<String> pushed = {};
+
+  /// The players whose shell stopped this cast.
+  final Set<String> spared = {};
+
   _PowerUpContext(this._engine, this._input);
 
   @override
@@ -1485,6 +1504,7 @@ class _PowerUpContext implements PowerUpContext {
       if (ball == null || ball.holed) continue;
       if (harmful && player.shields > 0) {
         player.shields--;
+        spared.add(player.id);
         _engine._events.add(ShieldBlocked(
             playerId: player.id,
             effectId: _input.effectId,
@@ -1517,12 +1537,14 @@ class _PowerUpContext implements PowerUpContext {
   void impulseBall(String playerId, Vec2 deltaVelocity) {
     _engine._world?.impulseBall(playerId, deltaVelocity);
     _touched(playerId);
+    pushed.add(playerId);
   }
 
   @override
   void nudgeBall(String playerId, double maxSpeed) {
     _engine._world?.nudgeBall(playerId, maxSpeed, _engine._rng);
     _touched(playerId);
+    pushed.add(playerId);
   }
 
   @override
@@ -1598,6 +1620,7 @@ class _PowerUpContext implements PowerUpContext {
     final player = _engine._players[playerId];
     if (player == null || player.shields <= 0) return false;
     player.shields--;
+    spared.add(playerId);
     _engine._events.add(ShieldBlocked(
         playerId: playerId, effectId: _input.effectId, casterId: casterId));
     return true;
