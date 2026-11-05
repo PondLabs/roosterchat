@@ -303,16 +303,39 @@ ReferenceSolution _nestingBoxesSolution() => ReferenceSolution([
     ]);
 
 // -- hole 6: Feeding Time -----------------------------------------------------
-// The finale, every hen out for the feed: through the coop door past a
-// pacing hen, round the far bend whose two kickers throw the egg back up
-// the top lane, past another hen to the nest - or up through the narrow
-// gap in the middle board, if the hen behind the door lets you.
+// The finale, every hen out for the feed, and the nest up in the hayloft:
+// the top lane is the loft's floor, a step above the yard, its edge railed
+// by the middle board. Through the coop door past a pacing hen, then up:
+// by the ladder, a narrow ramp up through the gap in the middle board that
+// takes a firm, straight putt, if the hen behind the door lets you (a short
+// one rolls back down into the yard), or the long way round the far bend,
+// whose kickers throw the egg up the wide ramp at the loft's end. Along the
+// loft, past another hen, to the nest.
 
 const Vec2 _coop6Tee = Vec2(7, 21);
 const Vec2 _coop6Nest = Vec2(6, 7);
 const Rect _coop6Bounds = Rect(Vec2.zero, Vec2(54, 28));
 const Vec2 _coop6PastDoor = Vec2(31.8, 22);
 const Vec2 _coop6UpTop = Vec2(31.8, 7);
+
+/// How high the hayloft stands.
+const double _coop6Loft = 1.2;
+
+/// The hayloft's floor: the top lane, from the west fence to the far bend.
+const Terrace _coop6Hayloft = Terrace([
+  Vec2(40, 0),
+  Vec2(0, 0),
+  Vec2(0, 14),
+  Vec2(40, 14),
+], height: _coop6Loft);
+
+/// The ladder: up through the gap in the middle board.
+const Ramp _coop6Ladder =
+    Ramp(Vec2(31.8, 18.5), Vec2(31.8, 14), width: 3.6, height: _coop6Loft);
+
+/// The loft's end: up from the far bend, along the north fence.
+const Ramp _coop6EndRamp =
+    Ramp(Vec2(46, 5), Vec2(40, 5), width: 10, height: _coop6Loft);
 
 HoleDef _feedingTime() {
   return HoleDef(
@@ -323,9 +346,14 @@ HoleDef _feedingTime() {
     bounds: _coop6Bounds,
     walls: [
       ...fenceAround(_coop6Bounds),
-      // the middle board, with the narrow gap
+      // the middle board along the loft's edge, with the ladder's gap
       WallSegment(Vec2(0, 14), Vec2(30, 14)),
       WallSegment(Vec2(33.6, 14), Vec2(40, 14)),
+      // the loft's end beside its ramp, and the ramp's side board
+      WallSegment(Vec2(40, 14), Vec2(40, 10)),
+      WallSegment(Vec2(40, 10), Vec2(46, 10)),
+      // the ladder's side boards
+      ...rampRails(_coop6Ladder),
       // the coop door across the bottom lane
       ...polyline([Vec2(14, 14), Vec2(18, 18), Vec2(22, 18), Vec2(26, 14)]),
       ...polyline([Vec2(14, 28), Vec2(18, 24), Vec2(22, 24), Vec2(26, 28)]),
@@ -333,14 +361,16 @@ HoleDef _feedingTime() {
       WallSegment.bumper(Vec2(48, 28), Vec2(54, 22)),
       WallSegment.bumper(Vec2(54, 6), Vec2(48, 0)),
     ],
+    terraces: const [_coop6Hayloft],
+    ramps: const [_coop6Ladder, _coop6EndRamp],
     obstacles: const [
       MovingObstacle(
         id: 'coop_6_hen_door',
         radius: 1.5,
         stops: [
-          ObstacleStop(Vec2(28.6, 16.8),
+          ObstacleStop(Vec2(27.9, 16.8),
               dwellSeconds: 1, travelSecondsToNext: 2),
-          ObstacleStop(Vec2(28.6, 25.2),
+          ObstacleStop(Vec2(27.9, 25.2),
               dwellSeconds: 1, travelSecondsToNext: 2),
         ],
       ),
@@ -365,7 +395,8 @@ ReferenceSolution _feedingTimeSolution() {
   return ReferenceSolution([
     // The door hen first walks clear of the doorway.
     ReferenceShot(throughDoor.angle, throughDoor.power, waitSeconds: 1.5),
-    putt(landAt(_coop6Tee, _coop6PastDoor), _coop6UpTop),
+    // Up the ladder: the climb's pace on top of the roll.
+    putt(landAt(_coop6Tee, _coop6PastDoor), _coop6UpTop, rise: _coop6Loft),
     putt(upTop, _coop6Nest, arrival: 2.2),
   ]);
 }

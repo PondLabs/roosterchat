@@ -214,11 +214,13 @@ void main() {
     // A pond, a rabbit hole or a silo on a step would sit level while the
     // ground steps under it, so each keeps 0.3 units off every tier; a
     // speed strip or a "?" box may stand on a terrace's flat with 0.3 of
-    // room round it, else keeps off too; a hill's reach keeps 0.3 off. The
-    // tee and a full table's spawn ring stand on one level, an egg's radius
-    // and 0.3 clear of every tier's outline, and so does every hen's walk.
-    // The nest sits on a terrace with 0.6 of flat round its rim, or half a
-    // unit clear of every tier.
+    // room round it, else keeps off too; a hill's reach keeps 0.3 off; a
+    // rock or a bumper drum stands wholly on one level, off the tiers or on
+    // a terrace's flat, though it may stand against a step's face. The tee
+    // and a full table's spawn ring stand on one level, an egg's radius and
+    // 0.3 clear of every tier's outline, and so does every hen's walk. The
+    // nest sits on a terrace with 0.6 of flat round its rim, or half a unit
+    // clear of every tier.
     const clearance = 0.3;
     const slack = 1e-9;
     const config = PhysicsConfig();
@@ -468,6 +470,15 @@ void main() {
           final clear = off(box.position) - box.radius >= clearance - slack;
           if (!flat && !clear) {
             failures.add('$here: the "?" box ${box.id} straddles a step');
+          }
+        }
+        for (final arc in hole.arcs) {
+          if (arcSpan(arc).$2 < 2 * math.pi - 1e-9) continue;
+          final on = onTerrace(arc.center);
+          final flat = on != null && on.$2 - arc.radius >= -slack;
+          final clear = off(arc.center) - arc.radius >= -slack;
+          if (!flat && !clear) {
+            failures.add('$here: the rock at ${arc.center} straddles a step');
           }
         }
         final spawns = [

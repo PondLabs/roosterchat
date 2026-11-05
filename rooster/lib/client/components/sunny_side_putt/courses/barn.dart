@@ -60,13 +60,31 @@ ReferenceSolution _siloSideSolution() {
 
 // -- hole 2: Hay Bale Pinball -------------------------------------------------
 // The barn floor is stacked with round bales in staggered rows - a giant
-// pinball table - and two rubber bumpers flank the way to the nest, with
-// a ridge across the floor between them: an egg that reaches it short of
-// pace rolls back. Find the alley through, or bank round the lot.
+// pinball table - and the nest sits up on the threshing deck at its far
+// end, its edge a drop to the floor. The one way up is the railed ramp
+// between the two rubber bumpers: line it up through the bales and come
+// with pace - short rolls back down it, and whatever misses it meets the
+// deck's face or a bumper. Too hard runs over the deck and comes back off
+// the barn's wall.
 
 const Vec2 _barn2Tee = Vec2(6, 14);
 const Vec2 _barn2Nest = Vec2(43, 14);
 const Rect _barn2Bounds = Rect(Vec2.zero, Vec2(50, 28));
+
+/// How high the threshing deck stands.
+const double _barn2Deck = 1.2;
+
+/// The threshing deck: the far end of the barn.
+const Terrace _barn2Threshing = Terrace([
+  Vec2(50, 0),
+  Vec2(40.5, 0),
+  Vec2(40.5, 28),
+  Vec2(50, 28),
+], height: _barn2Deck);
+
+/// The ramp up to the deck, between the bumpers.
+const Ramp _barn2Ramp =
+    Ramp(Vec2(36, 14), Vec2(40.5, 14), width: 8, height: _barn2Deck);
 
 HoleDef _hayBalePinball() {
   return HoleDef(
@@ -78,6 +96,10 @@ HoleDef _hayBalePinball() {
     walls: [
       ...fenceAround(_barn2Bounds),
       ...cornerBoards(_barn2Bounds, 5),
+      // the deck's edge either side of its ramp, and the ramp's rails
+      ...ledges([Vec2(40.5, 0), Vec2(40.5, 10)]),
+      ...ledges([Vec2(40.5, 18), Vec2(40.5, 28)]),
+      ...rampRails(_barn2Ramp),
     ],
     arcs: [
       for (final at in const [
@@ -97,20 +119,19 @@ HoleDef _hayBalePinball() {
       rock(const Vec2(39, 19.5), 1.4, bumper: true),
     ],
     boxes: [QuestionBox('barn_2_box', Vec2(24, 3))],
-    // the ridge between the bumpers
-    hills: const [
-      Hill(Vec2(38.4, 12.6), Vec2(38.4, 15.4), height: 0.8, skirt: 2.2),
-    ],
+    terraces: const [_barn2Threshing],
+    ramps: const [_barn2Ramp],
   );
 }
 
-// Found by a sweep, and it holds for nearby aims: up the alley between
-// the bale rows and off the north boards past the bumper; then a putt in.
+// Found by a sweep, and it holds for nearby aims and powers: off the south
+// boards and up the alley between the bale rows, into the lane before the
+// ramp; then a putt up the ramp to the deck and in.
 ReferenceSolution _hayBalePinballSolution() {
-  const pastTheBales = Vec2(40.27, 2.48);
+  const beforeTheRamp = Vec2(30.70, 14.09);
   return ReferenceSolution([
-    const ReferenceShot(-0.448, 0.893),
-    putt(pastTheBales, _barn2Nest, arrival: 2.2),
+    const ReferenceShot(0.925, 0.98),
+    putt(beforeTheRamp, _barn2Nest, arrival: 2.2, rise: _barn2Deck),
   ]);
 }
 

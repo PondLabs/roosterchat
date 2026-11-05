@@ -347,17 +347,35 @@ ReferenceSolution _roundaboutSolution() {
 }
 
 // -- hole 6: Home Stretch -----------------------------------------------------
-// The finale: the whole road home. Out along the bottom, round the first
-// hairpin, back past a hen, round the second, and a last speed strip
-// down the top lane to the nest at the farm gate, past two speed bumps:
-// the strip's pace carries an egg over them, a putt that comes up short
-// of the gate has to top them.
+// The finale: the whole road home. Out along the bottom and round the
+// first hairpin, then up out of the bend onto the flyover, the middle
+// stretch raised over the verges: a putt short of the climb rolls back
+// into the bend. Along the flyover past a hen, its strip throwing the egg
+// off the far end into the second hairpin, which an egg cannot climb back
+// out of, and a last speed strip down the top lane to the nest at the farm
+// gate, past two speed bumps: the strip's pace carries an egg over them, a
+// putt that comes up short of the gate has to top them.
 
 const Vec2 _road6Tee = Vec2(6, 27.25);
 const Vec2 _road6Nest = Vec2(51, 4.5);
 const Rect _road6Bounds = Rect(Vec2.zero, Vec2(56, 32));
 const Vec2 _road6TurnOne = Vec2(42, 21.5);
 const Vec2 _road6TurnTwo = Vec2(14, 9.75);
+
+/// How high the flyover stands.
+const double _road6Rise = 1.2;
+
+/// The flyover: the middle stretch between the verges.
+const Terrace _road6Flyover = Terrace([
+  Vec2(36, 11),
+  Vec2(16, 11),
+  Vec2(16, 19.5),
+  Vec2(36, 19.5),
+], height: _road6Rise);
+
+/// The way up onto it, out of the first hairpin.
+const Ramp _road6Climb =
+    Ramp(Vec2(42, 15.25), Vec2(36, 15.25), width: 8.5, height: _road6Rise);
 
 HoleDef _homeStretch() {
   return HoleDef(
@@ -377,7 +395,11 @@ HoleDef _homeStretch() {
       // the hairpins' outer rails
       ..._uTurnRail(_road6TurnOne, 10.5),
       ..._uTurnRail(_road6TurnTwo, 9.75, east: false),
+      // the flyover's far end, a drop into the second hairpin
+      WallSegment.ledge(Vec2(16, 11), Vec2(16, 19.5)),
     ],
+    terraces: const [_road6Flyover],
+    ramps: const [_road6Climb],
     arcs: [
       _nose(const Vec2(42, 21), 1.5),
       _nose(const Vec2(14, 10), 1, east: false),
@@ -409,12 +431,12 @@ HoleDef _homeStretch() {
 }
 
 // Found by a sweep, each shot holding for nearby aims: off the verge into
-// the first strip, which carries the egg round the first hairpin; down
-// the middle lane; round the second hairpin into the top lane; then off
-// the verge into the last strip, over the bumps and home.
+// the first strip, which carries the egg round the first hairpin, short
+// of the ramp; a firm one off the verge, up the ramp and through the
+// flyover's strip, off its far end into the second hairpin and round it
+// into the top lane; then off the north fence, over the bumps and home.
 ReferenceSolution _homeStretchSolution() => const ReferenceSolution([
       ReferenceShot(-0.546, 0.843),
-      ReferenceShot(-2.332, 0.943),
-      ReferenceShot(-3.148, 0.643),
-      ReferenceShot(-0.560, 0.986),
+      ReferenceShot(-2.4173, 0.90),
+      ReferenceShot(-0.1571, 0.88),
     ]);

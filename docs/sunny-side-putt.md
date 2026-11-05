@@ -148,22 +148,42 @@ Maze (rabbit holes as speed-preserving portals), the Pond (water
 returns the egg, stroke charged), Farm Road (speed strips) and the
 Barn (hay bales, the silo's pull).
 
-Tiers (see below) stack three holes on more than one level:
+Tiers (see below) stack eight holes on more than one level, at least one
+on every course:
 
 - **The Coop**: First Light's tee yard is the coop's raised floor; the
   putt drops off its step through the door into the run, and an egg the
-  hen knocks back meets the step's face and stays in the run.
+  hen knocks back meets the step's face and stays in the run. Feeding
+  Time's top lane is the hayloft, the nest on it and its edge railed by
+  the middle board: up the ladder, a narrow ramp through the gap in the
+  board that takes a firm, straight putt, or the long way round the far
+  bend, whose kickers throw the egg up the wide ramp at the loft's end.
+- **Corn Maze**: Grand Maze's north road climbs a ramp at its far end
+  onto a lookout over the nest's garden; a hedge in its corner turns an
+  egg that comes up with pace off the lookout's edge, down into the
+  garden toward the nest. Short of the climb rolls back down the road.
+- **The Pond**: Island Green's last leg is a stone pier raised over the
+  water, up a ramp from the elbow and dropping onto the island by the
+  nest. Too soft rolls back to the elbow, off the pier's side swims, too
+  hard drops off the end, runs past the nest and swims.
 - **Farm Road**: Front Stretch's road runs on a bank with a ditch across
   it past the speed strip, a drop into it and a ramp out the far side.
   The strip's pace carries an egg through and up; one that misses the
-  strip drops in and needs a firm putt to climb out.
+  strip drops in and needs a firm putt to climb out. Home Stretch's
+  middle stretch is a flyover: the climb up out of the first hairpin
+  takes a firm putt (one short of it rolls back into the bend), and the
+  flyover's strip throws the egg off its far end into the second
+  hairpin, which an egg cannot climb back out of.
 - **The Barn**: Threshing Floor's nest is up in the hayloft, a terrace in
   the far corner walled with rubber on the west, its front a drop to the
   floor with a railed ramp up it behind a bale. Short up the ramp rolls
   back down; long past the nest comes back off the barn's wall and drops
-  off the loft's front or down the ramp.
+  off the loft's front or down the ramp. Hay Bale Pinball's nest is up on
+  the threshing deck at the far end, a drop to the floor all along its
+  edge but for the railed ramp between the bumpers: the alley through the
+  bales has to line up with it and come with pace.
 
-Hills (see below) shape ten of the thirty holes:
+Hills (see below) shape nine of the thirty holes:
 
 - **The Coop**: a hump of packed earth across Pop Hole's far lane
   guards the nest from the safe road (the tunnel's line passes it by),
@@ -179,8 +199,6 @@ Hills (see below) shape ten of the thirty holes:
 - **Farm Road**: a speed bump on the Roundabout's road out turns back an
   egg that leaves the ring short of pace, and two more stand in Home
   Stretch's top lane before the farm gate.
-- **The Barn**: a ridge crosses Hay Bale Pinball's floor between the
-  rubber bumpers.
 
 ### Hills
 

@@ -110,8 +110,12 @@ ReferenceSolution _theWeirSolution() => ReferenceSolution([
 
 // -- hole 3: Island Green -----------------------------------------------------
 // The nest sits on a bare island at the end of a jetty with a dogleg in
-// it: stop on the elbow, then send it up the last leg - too soft and it
-// stops short, too hard and it swims. A "?" waits on the island's far rim.
+// it: stop on the elbow, then send it up the last leg, a stone pier raised
+// over the water that drops onto the island right by the nest. The pier
+// takes the putt up a ramp from the elbow: too soft and it rolls back down
+// to the elbow, off the pier's side and it swims, too hard and it drops off
+// the end, runs past the nest and swims. A "?" waits on the island's far
+// rim.
 
 const Vec2 _pond3Tee = Vec2(7, 22);
 const Vec2 _pond3Island = Vec2(40, 11);
@@ -120,17 +124,47 @@ const Rect _pond3Lake = Rect(Vec2(16, 0), Vec2(50, 28));
 const double _pond3Radius = 5;
 const Vec2 _pond3Elbow = Vec2(26, 22);
 
+/// The jetty's width, and the pier's on it: the pier keeps a strip of
+/// shore either side, off the water.
+const double _pond3JettyWidth = 4.2;
+const double _pond3PierWidth = 3.5;
+
+/// How high the pier stands.
+const double _pond3Pier = 1;
+
+/// Where the pier's ramp starts and ends, and where the pier ends, in
+/// units along the last leg from the elbow (the island's centre is 17.8
+/// along).
+const double _pond3RampFoot = 1;
+const double _pond3RampTop = 5;
+const double _pond3PierEnd = 15.5;
+
+/// The last leg's heading, from the elbow toward the island.
+Vec2 get _pond3Heading => (_pond3Island - _pond3Elbow).normalized();
+
+/// The point [along] units up the last leg, [across] to its left.
+Vec2 _pond3Leg(double along, [double across = 0]) {
+  final heading = _pond3Heading;
+  return _pond3Elbow + heading * along + Vec2(heading.y, -heading.x) * across;
+}
+
 /// The jetty: east from the shore to the elbow, then straight at the
 /// island, ending where its edges meet the island's rim.
 List<Vec2> _pond3Jetty() {
-  final heading = (_pond3Island - _pond3Elbow).normalized();
-  final reach = math.sqrt(_pond3Radius * _pond3Radius - 1.8 * 1.8);
-  return [const Vec2(16, 22), _pond3Elbow, _pond3Island - heading * reach];
+  final half = _pond3JettyWidth / 2;
+  final reach = math.sqrt(_pond3Radius * _pond3Radius - half * half);
+  return [
+    const Vec2(16, 22),
+    _pond3Elbow,
+    _pond3Island - _pond3Heading * reach
+  ];
 }
 
 HoleDef _islandGreen() {
-  final jetty = _pond3Jetty();
-  final heading = (_pond3Island - _pond3Elbow).normalized();
+  final heading = _pond3Heading;
+  const half = _pond3PierWidth / 2;
+  final ramp = Ramp(_pond3Leg(_pond3RampFoot), _pond3Leg(_pond3RampTop),
+      width: _pond3PierWidth, height: _pond3Pier);
   return HoleDef(
     id: 'pond_3',
     par: 3,
@@ -141,12 +175,30 @@ HoleDef _islandGreen() {
       ...fenceAround(_pond3Bounds),
       WallSegment(Vec2(0, 5), Vec2(5, 0)),
       WallSegment(Vec2(5, 28), Vec2(0, 23)),
+      // the ramp's sides, the pier's and its end: drops all round
+      ...ledges([
+        _pond3Leg(_pond3RampFoot, -half),
+        _pond3Leg(_pond3RampTop, -half),
+        _pond3Leg(_pond3PierEnd, -half),
+        _pond3Leg(_pond3PierEnd, half),
+        _pond3Leg(_pond3RampTop, half),
+        _pond3Leg(_pond3RampFoot, half),
+      ]),
     ],
     water: [
-      lakeWithJetty(_pond3Lake, jetty, 3.6,
-          tip: islandTip(_pond3Island, _pond3Radius, 3.6,
+      lakeWithJetty(_pond3Lake, _pond3Jetty(), _pond3JettyWidth,
+          tip: islandTip(_pond3Island, _pond3Radius, _pond3JettyWidth,
               heading: heading.angle)),
     ],
+    terraces: [
+      Terrace([
+        _pond3Leg(_pond3RampTop, -half),
+        _pond3Leg(_pond3PierEnd, -half),
+        _pond3Leg(_pond3PierEnd, half),
+        _pond3Leg(_pond3RampTop, half),
+      ], height: _pond3Pier),
+    ],
+    ramps: [ramp],
     boxes: [QuestionBox('pond_3_box', _pond3Island + heading * 3.4)],
   );
 }
@@ -155,7 +207,10 @@ ReferenceSolution _islandGreenSolution() {
   const onElbow = Vec2(25.6, 22);
   return ReferenceSolution([
     putt(_pond3Tee, onElbow),
-    putt(landAt(_pond3Tee, onElbow), _pond3Island, arrival: 2.2),
+    // Up the pier: the climb's pace on top of the roll (the drop gives
+    // none back).
+    putt(landAt(_pond3Tee, onElbow), _pond3Island,
+        arrival: 2.2, rise: _pond3Pier),
   ]);
 }
 

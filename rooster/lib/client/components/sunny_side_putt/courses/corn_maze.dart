@@ -303,12 +303,16 @@ ReferenceSolution _deadEndsSolution() {
 // -- hole 6: Grand Maze -------------------------------------------------------
 // The finale: two long roads through the whole field, north and south,
 // and between them a straight run from the clearing's low side to a
-// rabbit hole that comes up in the nest's garden - line it up first.
+// rabbit hole that comes up in the nest's garden - line it up first. The
+// north road climbs a ramp at its far end onto a lookout over the garden:
+// a hedge in its corner turns an egg that comes up with pace off the
+// lookout's edge, down into the garden toward the nest; one short of the
+// climb rolls back down the road.
 
 const List<String> _maze6 = [
   '....................',
   '....................',
-  '###..##########..###',
+  '###..############...',
   '.....#######.####...',
   '.TTT.#######.####.NN',
   '.TTT.####..#.####.NN',
@@ -319,6 +323,21 @@ const List<String> _maze6 = [
   '?...................',
 ];
 
+/// How high the lookout stands.
+const double _maze6Lookout = 1.4;
+
+/// The lookout: the north road's far end, over the nest's garden.
+const Terrace _maze6Platform = Terrace([
+  Vec2(47.5, 0),
+  Vec2(37.5, 0),
+  Vec2(37.5, 5),
+  Vec2(47.5, 5),
+], height: _maze6Lookout);
+
+/// The north road's climb up to the lookout.
+const Ramp _maze6Climb =
+    Ramp(Vec2(31.5, 2.5), Vec2(37.5, 2.5), width: 5, height: _maze6Lookout);
+
 HoleDef _grandMaze() {
   final bounds = _boundsOf(_maze6);
   return HoleDef(
@@ -327,7 +346,18 @@ HoleDef _grandMaze() {
     tee: _spot(_maze6, 'T'),
     nest: Nest(_spot(_maze6, 'N'), 1.7),
     bounds: bounds,
-    walls: [...fenceAround(bounds), ...plannedWalls(_maze6, cell: _cell)],
+    walls: [
+      ...fenceAround(bounds),
+      ...plannedWalls(_maze6, cell: _cell),
+      // the hedge across the lookout's corner: its ends stop a hair off
+      // the fence and the drop, too close for an egg, since the view
+      // cannot draw the sliver of hedge a step would cut off at the edge
+      WallSegment(Vec2(43.25, 0.25), Vec2(47.25, 4.25)),
+      // the lookout's edge over the garden, and its east side over a nook
+      ...ledges([Vec2(42.5, 5), Vec2(47.5, 5), Vec2(47.5, 0)]),
+    ],
+    terraces: const [_maze6Platform],
+    ramps: const [_maze6Climb],
     portals: [
       PortalPair('maze_6_burrow', _spot(_maze6, 'a'), _spot(_maze6, 'b'),
           radius: 1.0),
