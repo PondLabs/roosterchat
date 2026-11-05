@@ -36,6 +36,7 @@ class _Theme {
     required this.meadowDry,
     required this.hillFar,
     this.clouds = 0xFFFFFF,
+    this.eggGlow = 0x2A2622,
   });
 
   final _ThemeKind kind;
@@ -66,6 +67,9 @@ class _Theme {
   final int meadowDeep;
   final int meadowDry;
   final int hillFar;
+
+  /// The eggs' shells' own light: a whisper by day, more at dusk.
+  final int eggGlow;
 
   static _Theme of(String holeId) {
     final prefix = holeId.split('_').first;
@@ -113,20 +117,21 @@ class _Theme {
     skyMid: 0x84C2F2,
     horizon: 0xF7EDCB,
     sun: 0xFFF7E8,
-    sunIntensity: 1.42,
+    sunIntensity: 1.26,
     sunFrom: (-12, 52, 14),
     hemiSky: 0xDCEFFF,
-    hemiGround: 0xB8B05A,
-    hemiIntensity: 0.6,
-    exposure: 1.04,
+    hemiGround: 0x8A9A50,
+    hemiIntensity: 0.56,
+    exposure: 0.95,
     rails: _RailStyle.hedge,
-    turfLight: 0x93CE4D,
-    turfDark: 0x80BF42,
-    turfFringe: 0x63A535,
-    meadow: 0xB7BC52,
-    meadowDeep: 0x93AE45,
-    meadowDry: 0xD6C66A,
-    hillFar: 0xB9C77C,
+    turfLight: 0x8ECB4B,
+    turfDark: 0x79BA40,
+    turfFringe: 0x5E9F33,
+    // The meadow round the maze stays a field's green under the high sun.
+    meadow: 0x86A942,
+    meadowDeep: 0x6C9339,
+    meadowDry: 0xA4A650,
+    hillFar: 0x92AC68,
   );
 
   /// A soft afternoon by the water, the light from the other side.
@@ -160,21 +165,23 @@ class _Theme {
     skyMid: 0xF4A86E,
     horizon: 0xFFC98A,
     clouds: 0xFFD9BC,
-    sun: 0xFFAE5C,
-    sunIntensity: 1.36,
+    sun: 0xFFB463,
+    sunIntensity: 1.3,
     sunFrom: (-48, 15, 10),
-    hemiSky: 0xFFD2A8,
-    hemiGround: 0x8A8350,
-    hemiIntensity: 0.5,
-    exposure: 1.06,
+    // A cool fill from the evening sky keeps the greens green; the gold
+    // is in the sun, the sky and the long shadows.
+    hemiSky: 0xC9CDEB,
+    hemiGround: 0x6E7A48,
+    hemiIntensity: 0.56,
+    exposure: 1.0,
     rails: _RailStyle.barrier,
-    turfLight: 0x8DC94C,
-    turfDark: 0x7BB843,
-    turfFringe: 0x60A036,
-    meadow: 0xA2BF4F,
-    meadowDeep: 0x83AA45,
-    meadowDry: 0xD3BF62,
-    hillFar: 0xC7B97A,
+    turfLight: 0x7CC84A,
+    turfDark: 0x68B640,
+    turfFringe: 0x519A33,
+    meadow: 0x8BB84A,
+    meadowDeep: 0x6EA340,
+    meadowDry: 0xC6B65C,
+    hillFar: 0xB4B37A,
   );
 
   /// Dusk at the barn: the sun nearly down, the sky deepening, lanterns
@@ -200,6 +207,7 @@ class _Theme {
     meadowDeep: 0x62983E,
     meadowDry: 0xA7B45A,
     hillFar: 0x8E9E78,
+    eggGlow: 0x5A4C3E,
   );
 }
 

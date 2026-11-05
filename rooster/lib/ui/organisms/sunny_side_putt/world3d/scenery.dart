@@ -1825,7 +1825,7 @@ class _Scenery {
         ..position.setValues(spot.x, _ground + 3.55, spot.y);
       group.add(bulb);
       glow.add(bulb);
-      final light = tjs.PointLight(0xFFFFFF, 3.2, 26, 1.4)
+      final light = tjs.PointLight(0xFFFFFF, 5.0, 30, 1.3)
         ..name = 'lantern-light'
         ..position.setValues(spot.x, _ground + 3.4, spot.y);
       light.color = _lin(0xFFB766);

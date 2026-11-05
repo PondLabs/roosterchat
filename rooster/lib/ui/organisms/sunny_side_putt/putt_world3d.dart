@@ -1004,6 +1004,7 @@ class PuttWorld3D {
           egg.tint,
           trailHex: _mix(_theme.turfFringe, 0x4A3A22, 0.4),
           terrain: _ground,
+          glow: _theme.eggGlow,
           onBounce: (at, strength, mine) {
             _bursts.puff(at, strength, floor: _ground.at(at));
             if (mine && strength > 0.45) rig.shake(0.08 + strength * 0.12);

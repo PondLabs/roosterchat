@@ -29,12 +29,16 @@ class _SinkingEgg {
 /// viewer's marker; [trail] holds the puffs a fast egg leaves behind.
 class _EggView3D {
   _EggView3D(this._radius, ui.Color tint,
-      {required int trailHex, required this.onBounce, _Ground? terrain})
-      : terrain = terrain ?? _Ground() {
+      {required int trailHex,
+      required this.onBounce,
+      _Ground? terrain,
+      int glow = 0x2A2622})
+      : terrain = terrain ?? _Ground(),
+        _glow = glow {
     group = tjs.Group()..name = 'egg';
     _tintHex = _hexOf(tint);
     _texture = _eggTextureFor(_tintHex);
-    body = tjs.Mesh(_eggGeometry(_radius), _shellMaterial(_texture))
+    body = tjs.Mesh(_eggGeometry(_radius), _shellMaterial(_texture, _glow))
       ..name = 'egg-shell'
       ..castShadow = true;
     group.add(body);
@@ -183,7 +187,7 @@ class _EggView3D {
     // swapped under it (the renderer once drew such an egg not at all).
     _texture = _eggTextureFor(hex);
     final old = body.material;
-    body.material = _shellMaterial(_texture);
+    body.material = _shellMaterial(_texture, _glow);
     old?.map = null;
     old?.dispose();
     _marker.material?.color = _lin(hex);
@@ -193,15 +197,20 @@ class _EggView3D {
 
   /// The shell: the colour's paint, a soft sheen, and a whisper of light
   /// so eggs never sit muddy in the shade.
-  static tjs.MeshStandardMaterial _shellMaterial(tjs.DataTexture paint) {
+  static tjs.MeshStandardMaterial _shellMaterial(
+      tjs.DataTexture paint, int glow) {
     final material = tjs.MeshStandardMaterial({
       tjs.MaterialProperty.map: paint,
       tjs.MaterialProperty.roughness: 0.36,
       tjs.MaterialProperty.metalness: 0.0,
     });
-    material.emissive = _lin(0x2A2622);
+    material.emissive = _lin(glow);
     return material;
   }
+
+  /// The shell's own light (the theme's: warmer and stronger at dusk, so
+  /// a white egg stays white in the blue hour).
+  final int _glow;
 
   /// The stand (ground spot plus the hop's lift), then the roll: world
   /// axis from the horizontal velocity, omega = |v| / r, pre-multiplied so
