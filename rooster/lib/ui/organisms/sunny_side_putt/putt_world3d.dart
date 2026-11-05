@@ -268,6 +268,10 @@ class PuttWorldFrame {
   /// The Thieving Crows in the air.
   final List<PuttWorldCrow> crows;
 
+  /// The camera is in close on the nest for my egg's hatch: the hens step
+  /// out of the shot.
+  final bool closeUp;
+
   const PuttWorldFrame({
     required this.time,
     this.eggs = const [],
@@ -277,6 +281,7 @@ class PuttWorldFrame {
     this.followPoint,
     this.collectedBoxes = const {},
     this.crows = const [],
+    this.closeUp = false,
   });
 }
 
@@ -404,10 +409,28 @@ class PuttCameraRig {
       {double margin = 5, double closest = 0.42, double? yaw}) {
     if (points.isEmpty) return;
     if (yaw != null) _yawTarget = yaw;
+    final pad = 40 + margin * 6;
+    final distance = _fitDistance(points, pad, closest);
+    _distanceTarget = distance;
+    _targetTarget = _frameFits(points, distance, pad).target;
+  }
+
+  /// The distance [glideToFramePoints] would come to for [points] from
+  /// [yaw] (the glide's own when left out), without moving the camera.
+  double fitDistance(List<Vec2> points,
+      {double margin = 5, double closest = 0.42, double? yaw}) {
+    if (points.isEmpty) return _distanceTarget;
+    final saved = _yawTarget;
+    if (yaw != null) _yawTarget = yaw;
+    final distance = _fitDistance(points, 40 + margin * 6, closest);
+    _yawTarget = saved;
+    return distance;
+  }
+
+  /// The smallest distance (in range) whose centred frame fits.
+  double _fitDistance(List<Vec2> points, double pad, double closest) {
     final low = math.max(_overviewDistance * closest, _distanceMin);
     final high = math.max(low, math.min(_overviewDistance, _distanceMax));
-    final pad = 40 + margin * 6;
-    // The smallest distance (in range) whose centred frame fits.
     var lo = low, hi = high;
     if (!_frameFits(points, lo, pad).fits) {
       for (var i = 0; i < 22; i++) {
@@ -420,8 +443,17 @@ class PuttCameraRig {
       }
       lo = hi;
     }
-    _distanceTarget = lo;
-    _targetTarget = _frameFits(points, lo, pad).target;
+    return lo;
+  }
+
+  /// The distance from which something standing [height] world units tall
+  /// measures [pixels] in the middle of the screen, seen from the glide's
+  /// pitch (looking down foreshortens it); infinite with no screen.
+  double distanceForHeight(double height, double pixels) {
+    if (viewport.height <= 0 || pixels <= 0) return double.infinity;
+    final focal = viewport.height / 2 / math.tan(fovDeg * math.pi / 360);
+    final upright = math.cos(_pitchTarget * math.pi / 180);
+    return height * upright * focal / pixels;
   }
 
   /// The target that centres [points] in the HUD-free part of the screen
@@ -691,6 +723,9 @@ class PuttWorld3D {
   late final _SkyDome _sky;
   late final tjs.HemisphereLight _ambient;
 
+  /// The theme's rim light (off by day): from behind the green, no shadow.
+  late final tjs.DirectionalLight _rim;
+
   tjs.DirectionalLight? _sun;
 
   /// Textures the world itself owns across holes (the fx disc): disposed
@@ -821,6 +856,9 @@ class PuttWorld3D {
     scene.add(sun);
     scene.add(sun.target!);
     _sun = sun;
+    _rim = tjs.DirectionalLight(0xFFFFFF, 0)..castShadow = false;
+    scene.add(_rim);
+    scene.add(_rim.target!);
   }
 
   /// Plants the sun over the current hole so its shadow camera covers the
@@ -834,6 +872,9 @@ class PuttWorld3D {
     // camera's side), lit faces toward the player, shadows falling away.
     final (sx, sy, sz) = _theme.sunFrom;
     sun.position.setFrom(center).add(tjs.Vector3(sx, sy, sz));
+    final (rx, ry, rz) = _theme.rimFrom;
+    _rim.target!.position.setFrom(center);
+    _rim.position.setFrom(center).add(tjs.Vector3(rx, ry, rz));
     final span = math.max(hole.bounds.width, hole.bounds.height);
     final half = span * 0.62 + 12;
     final shadowCam = sun.shadow!.camera;
@@ -972,7 +1013,38 @@ class PuttWorld3D {
 
     _fx.reset(_fxRoot);
     _firstFrame = true;
+    if (_lowTier) _shedOutlines(_holeRoot);
     fitCamera();
+  }
+
+  /// The low tier is on: what costs most for least is gone (a smaller
+  /// shadow map, the walkers' and the scenery's ink outlines).
+  bool get lowTier => _lowTier;
+  bool _lowTier = false;
+
+  /// Drops to the low tier, once: the sun's shadow map from 2048 to 1024
+  /// pixels a side (rebuilt on the next frame), and the ink outlines on
+  /// everything but the eggs, which keep theirs (they are the characters).
+  /// The GPU surface calls it when frames run slow.
+  void lowerQuality() {
+    if (_lowTier || _disposed) return;
+    _lowTier = true;
+    final shadow = _sun?.shadow;
+    if (shadow != null) {
+      shadow.mapSize.setValues(1024, 1024);
+      shadow.map?.dispose();
+      shadow.map = null;
+    }
+    _shedOutlines(_holeRoot);
+  }
+
+  void _shedOutlines(tjs.Object3D root) {
+    root.traverse((object) {
+      final name = object.name;
+      if (name.endsWith('-outline') && !name.startsWith('egg')) {
+        object.visible = false;
+      }
+    });
   }
 
   /// The theme's light and sky: the dome's colours, the sun's colour and
@@ -990,6 +1062,11 @@ class PuttWorld3D {
         ..color = _lin(_theme.sun)
         ..intensity = _theme.sunIntensity;
     }
+    // Always in the scene (by day at nothing): a light that came and went
+    // would change every material's program on a course change.
+    _rim
+      ..color = _lin(_theme.rim)
+      ..intensity = _theme.rimIntensity;
   }
 
   /// Disposes the whole hole subtree and forgets every per-hole view.
@@ -1188,16 +1265,18 @@ class PuttWorld3D {
       final view = _henViews[i];
       view.sync(frame.hens[i], frame.time);
       if (view is _HenView3D) {
-        // A hen right in front of the camera (a close-up's foreground)
-        // fades out of the way (a ghost of her read as a glitch).
+        // A hen right in front of the camera (a close-up's foreground), or
+        // any hen while the camera is in on my egg's hatch, fades out of
+        // the way (a ghost of her read as a glitch).
         final at = frame.hens[i].position;
         final dx = camera.position.x - at.x;
         final dy = camera.position.y - _ground.at(at);
         final dz = camera.position.z - at.y;
         final near = math.sqrt(dx * dx + dy * dy + dz * dz) /
             math.max(rig.distance, 1e-6);
-        final target =
-            near < 0.5 ? 0.0 : (near < 0.7 ? (near - 0.5) / 0.2 : 1.0);
+        final target = frame.closeUp
+            ? 0.0
+            : (near < 0.5 ? 0.0 : (near < 0.7 ? (near - 0.5) / 0.2 : 1.0));
         view.fadeToward(target, dt);
       }
     }
@@ -1535,6 +1614,8 @@ class _PuttThreeSurfaceState extends State<PuttThreeSurface> {
     final next = governor.frame(seconds);
     final size = _size;
     if (next == null || size == null) return;
+    // The first slow stretch also drops the world to its low tier.
+    widget.world.lowerQuality();
     three.setResolution(next);
     // After this frame: the surface resizes outside the render.
     Timer.run(() {

@@ -81,12 +81,14 @@ void main() {
   test('with reduced motion there is no sweep and no shake', () {
     director.reduceMotion = true;
     rig.reduceMotion = true;
-    director.update(1 / 60, resting(hole.tee));
+    // An egg near enough the nest to frame both at an aimable size.
+    const egg = Vec2(24, 12);
+    director.update(1 / 60, resting(egg));
     expect(rig.pitchDeg, closeTo(PuttCameraRig.pitchDefault, 0.5));
     expect(director.opening, isFalse);
-    run(1.2, resting(hole.tee));
+    run(1.2, resting(egg));
     expect(director.settledFor, greaterThan(0));
-    expectInFreeView(hole.tee);
+    expectInFreeView(egg);
     expectInFreeView(hole.nest.position);
     final before = rig.distanceTarget;
     rig.punch();
@@ -94,11 +96,56 @@ void main() {
   });
 
   test('at rest, the egg and the nest are framed together', () {
-    run(PuttCameraDirector.openingSeconds + 3, resting(hole.tee));
-    expectInFreeView(hole.tee);
+    const egg = Vec2(24, 12);
+    run(PuttCameraDirector.openingSeconds + 3, resting(egg));
+    expectInFreeView(egg);
     expectInFreeView(hole.nest.position);
     expect(rig.distance, lessThanOrEqualTo(rig.overviewDistance + 1e-6));
-    expect(rig.distance, greaterThan(rig.overviewDistance * 0.42 - 1e-6));
+  });
+
+  test('a nest too far to frame with an aimable egg gives way to the egg', () {
+    run(PuttCameraDirector.openingSeconds + 3, resting(hole.tee));
+    // The egg in view, low, and the stretch toward the nest above it; the
+    // nest itself is the HUD's to point at.
+    expectInFreeView(hole.tee);
+    expect(pixelOf(hole.tee).dy, greaterThan(400));
+    expect(
+        rig.distance,
+        lessThanOrEqualTo(
+            rig.distanceForHeight(director.eggHeight, 30) + 1e-6));
+  });
+
+  test('on a long hole the resting egg stays big enough to aim at', () {
+    // A nest 80 units away: framing it with the egg would shrink the egg
+    // to a speck, so the camera frames the egg and the way toward the
+    // nest instead.
+    final long = HoleDef(
+      id: 'camera-long',
+      par: 4,
+      tee: const Vec2(6, 15),
+      nest: Nest(const Vec2(86, 15), 1.7),
+      bounds: Rect(Vec2.zero, Vec2(92, 30)),
+    );
+    rig.fitToHole(long.bounds);
+    director = PuttCameraDirector(rig);
+    final cue = PuttCameraCue(
+        hole: long,
+        phase: PuttPhase.holePlay,
+        myEgg: long.tee,
+        myEggResting: true);
+    run(PuttCameraDirector.openingSeconds + 3, cue);
+    expectInFreeView(long.tee);
+    final camera = tjs.PerspectiveCamera(PuttCameraRig.fovDeg, 1280 / 800);
+    rig.applyTo(camera);
+    camera.updateMatrixWorld(true);
+    double pixelY(double height) =>
+        (1 - tjs.Vector3(long.tee.x, height, long.tee.y).project(camera).y) /
+        2 *
+        800;
+    final eggPixels = pixelY(0) - pixelY(director.eggHeight);
+    expect(
+        eggPixels, greaterThanOrEqualTo(PuttCameraDirector.aimEggPixels * 0.9));
+    expect(rig.distance, lessThan(rig.overviewDistance * 0.8));
   });
 
   test('a short putt left frames closer than the whole hole', () {

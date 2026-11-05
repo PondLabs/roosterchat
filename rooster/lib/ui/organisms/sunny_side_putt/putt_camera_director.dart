@@ -53,6 +53,12 @@ class PuttCameraDirector {
 
   final PuttCameraRig rig;
 
+  /// How tall my egg stands in world units (the view sets it from the
+  /// egg's radius), and the least it should measure on screen at rest, so
+  /// the putt is aimed at an egg, not a speck.
+  double eggHeight = 1.1;
+  static const double aimEggPixels = 30;
+
   /// How long the hole's overview holds before the camera comes in.
   static const double openingSeconds = 2.4;
 
@@ -83,6 +89,9 @@ class PuttCameraDirector {
   /// Whether the player asked for the whole hole (C, the HUD's button).
   bool get overview => _overview;
   bool _overview = false;
+
+  /// Whether the camera is in close on the nest for my egg's hatch.
+  bool get celebrating => _holeClock < _celebrateUntil;
 
   /// The hole the camera is directing, and for how long it has (seconds
   /// of frames, from the hole's first): the demo keeps its script on it.
@@ -264,14 +273,39 @@ class PuttCameraDirector {
         if (_userCamera) {
           rig.glideTo(target: egg.lerp(hole.nest.position, 0.35));
         } else {
-          // My egg, the nest, and the eggs around mine (the tee's crowd),
-          // so none of them sits under the HUD.
-          rig.glideToFramePoints([
+          // My egg, the eggs around mine (the tee's crowd) and the nest, so
+          // none of them sits under the HUD - as long as my egg stays big
+          // enough to aim at (aimEggPixels tall). A nest too far for that
+          // gives way to the stretch toward it, the egg low in the frame;
+          // the HUD points at the nest, and C still shows the whole hole.
+          final yaw = _yawToward(egg, hole.nest.position);
+          final crowd = [
             egg,
-            hole.nest.position,
             for (final other in cue.otherEggs)
               if (other.distanceTo(egg) < 5) other,
-          ], yaw: _yawToward(egg, hole.nest.position));
+          ];
+          final cap = rig.distanceForHeight(eggHeight, aimEggPixels);
+          // The frame may come in as close as the cap asks.
+          final closest = math.min(0.42, cap / rig.overviewDistance);
+          var ahead = hole.nest.position;
+          if (rig.fitDistance([...crowd, ahead], yaw: yaw, closest: closest) >
+              cap) {
+            final way = hole.nest.position - egg;
+            final along = way.normalized(const Vec2(0, -1));
+            var lo = 0.0, hi = way.length;
+            for (var i = 0; i < 14; i++) {
+              final mid = (lo + hi) / 2;
+              if (rig.fitDistance([...crowd, egg + along * mid],
+                      yaw: yaw, closest: closest) <=
+                  cap) {
+                lo = mid;
+              } else {
+                hi = mid;
+              }
+            }
+            ahead = egg + along * lo;
+          }
+          rig.glideToFramePoints([...crowd, ahead], yaw: yaw, closest: closest);
         }
       }
       return;

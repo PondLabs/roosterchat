@@ -338,6 +338,47 @@ void main() {
     });
   });
 
+  group('the low tier', () {
+    test('a smaller shadow map, and outlines only on the eggs', () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      world.applySnapshot(PuttWorldFrame(
+        time: 0,
+        eggs: [eggAt(const Vec2(3, 13))],
+      ));
+      bool shown(tjs.Object3D o) {
+        for (tjs.Object3D? at = o; at != null; at = at.parent) {
+          if (!at.visible) return false;
+        }
+        return true;
+      }
+
+      List<tjs.Object3D> outlines() => [
+            for (final o in walk(world.scene))
+              if (o.name.endsWith('-outline')) o,
+          ];
+      expect(
+          outlines().where((o) => !o.name.startsWith('egg')).any(shown), isTrue,
+          reason: 'the walkers and the host wear outlines by default');
+
+      world.lowerQuality();
+      expect(world.lowTier, isTrue);
+      final sun = walk(world.scene)
+          .whereType<tjs.DirectionalLight>()
+          .firstWhere((light) => light.castShadow);
+      expect(sun.shadow!.mapSize.x, 1024);
+      // The eggs, the aim's arrow and the casts' characters (a crow) keep
+      // theirs: the hole's walkers, host and scenery lose them.
+      bool kept(String name) =>
+          name.startsWith('egg') ||
+          name.startsWith('aim') ||
+          name.startsWith('crow');
+      for (final o in outlines()) {
+        expect(o.visible, kept(o.name), reason: o.name);
+      }
+    });
+  });
+
   group('eggs roll and lift', () {
     test("the roll's axis follows the velocity's sign", () {
       final world = PuttWorld3D(viewport: const ui.Size(800, 600));

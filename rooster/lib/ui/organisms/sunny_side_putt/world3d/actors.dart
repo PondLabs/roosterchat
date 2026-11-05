@@ -635,12 +635,18 @@ abstract class _Walker {
 /// what stands behind it in the depth buffer).
 mixin _Fadable {
   final List<tjs.Material> _fadeMaterials = [];
+
+  /// The parts that cast a shadow when solid: a fading figure lets its
+  /// shadow go (a faded rooster's full shadow on the meadow read as a
+  /// glitch).
+  final List<tjs.Object3D> _fadeCasters = [];
   double _fade = 1;
   tjs.Object3D? _fadeRoot;
 
   void _prepareFade(tjs.Object3D root) {
     _fadeRoot = root;
     root.traverse((object) {
+      if (object.castShadow) _fadeCasters.add(object);
       final material = object.material;
       if (material == null || _fadeMaterials.contains(material)) return;
       material.transparent = true;
@@ -655,6 +661,10 @@ mixin _Fadable {
     _fade = next;
     for (final material in _fadeMaterials) {
       material.opacity = _fade;
+    }
+    final solid = _fade >= 0.9;
+    for (final caster in _fadeCasters) {
+      caster.castShadow = solid;
     }
     _fadeRoot?.visible = _fade > 0.02;
   }

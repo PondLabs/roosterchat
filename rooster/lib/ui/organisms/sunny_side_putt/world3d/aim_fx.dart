@@ -367,7 +367,7 @@ class _PuttFxPool {
   /// swapped while in play.
   static const int poolSize = 150;
   static const int paperSize = 110;
-  static const int dropSize = 56;
+  static const int dropSize = 96;
   static const int kernelSize = 120;
   static const int streakSize = 70;
   static const int ringCount = 8;

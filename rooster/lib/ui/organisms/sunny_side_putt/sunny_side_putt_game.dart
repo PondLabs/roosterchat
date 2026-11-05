@@ -56,6 +56,7 @@ import 'putt_menus.dart';
 import 'putt_coach.dart';
 import 'putt_reactions.dart';
 import 'putt_name_tags.dart';
+import 'putt_nest_marker.dart';
 import 'putt_reticle.dart';
 import 'putt_targeting.dart';
 import 'putt_world3d.dart';
@@ -115,6 +116,9 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   /// True while I aim or my egg rolls (the HUD folds its scorecard).
   final ValueNotifier<bool> _busy = ValueNotifier(false);
 
+  /// The off-screen nest's marker, refreshed after every rendered frame.
+  final ValueNotifier<PuttNestPointer?> _nestPointer = ValueNotifier(null);
+
   /// Whether the green has been drawn yet (or never will be: no GPU
   /// surface here, or it failed). Until then the HUD's banners wait, so a
   /// slow boot does not play the hole's card to a blank screen.
@@ -159,6 +163,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     _coach.dispose();
     _busy.dispose();
     _greenShown.dispose();
+    _nestPointer.dispose();
     _bubbles.dispose();
     game.targeting.dispose();
     super.dispose();
@@ -399,6 +404,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     _greenShown.value = true;
     _tags.update(game.tagsForFrame(), avoid: game.tagObstacles());
     _coach.value = game.coachForFrame();
+    _nestPointer.value = game.nestPointerForFrame();
     _bubbles.update(game.bubblesForFrame());
     final mine = game.match.myBall;
     _busy.value =
@@ -461,6 +467,9 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
               ),
               // Who is who: names over the other players' eggs.
               IgnorePointer(child: PuttNameTags(board: _tags)),
+              // Where the nest is, when the camera is in on my egg and the
+              // nest is off the screen.
+              PuttNestMarker(pointer: _nestPointer),
               // The putt's gesture, shown over my egg until I have it.
               PuttCoach(cue: _coach),
               // Quick reactions over the eggs that sent them.
@@ -604,7 +613,9 @@ class SunnySidePuttGame extends FlameGame {
 
   /// The camera's choreography: the hole's opening sweep, the egg and the
   /// nest framed at rest, the egg followed while it rolls.
-  late final PuttCameraDirector director = PuttCameraDirector(world3d.rig);
+  late final PuttCameraDirector director = PuttCameraDirector(world3d.rig)
+    // The egg as drawn: about 2.4 radii from base to crown.
+    ..eggHeight = eggRadius * 2.4;
 
   /// Where a drag anchored when it began away from the egg: the pull is
   /// measured from there, the arrow still drawn from the egg.
@@ -860,6 +871,7 @@ class SunnySidePuttGame extends FlameGame {
       followPoint: _cameraFollowPoint(),
       collectedBoxes: collected,
       crows: current == null ? const [] : _crowsForFrame(),
+      closeUp: director.celebrating,
     );
   }
 
@@ -928,6 +940,36 @@ class SunnySidePuttGame extends FlameGame {
       ));
     }
     return out;
+  }
+
+  /// The off-screen nest's marker this frame: while my egg is out on the
+  /// green and the nest stands outside the part of the screen the HUD
+  /// leaves free (or behind the camera). Not while the hole opens, nor in
+  /// the whole-hole view, nor in on my egg's hatch.
+  PuttNestPointer? nestPointerForFrame() {
+    final hole = match.hole;
+    final mine = match.myBall;
+    if (hole == null ||
+        mine == null ||
+        mine.holed ||
+        match.isSpectator ||
+        match.phase != PuttPhase.holePlay ||
+        director.opening ||
+        director.overview ||
+        director.celebrating) {
+      return null;
+    }
+    final view = world3d.rig.viewport;
+    if (view.width <= 0 || view.height <= 0) return null;
+    final free = Rect.fromLTRB(16, 104, view.width - 16, view.height - 160);
+    final nest = hole.nest.position;
+    final inCourse = match.holeInCourse;
+    return puttNestPointer(
+      world3d.projectToWorld(nest, height: 0.6),
+      free,
+      behind: !world3d.inFrontOfCamera(nest, height: 0.6),
+      number: '${inCourse > 0 ? inCourse : match.holeNumber}',
+    );
   }
 
   /// What the tags must leave clear: every egg on the green (mine with its
@@ -1649,37 +1691,60 @@ class PuttFxLayer {
   List<_FxParticle> get particles => _particles;
 
   void splash(core.Vec2 at) {
-    // A crown of droplets thrown wide, some white.
-    for (var i = 0; i < 30; i++) {
+    // Water, not cotton: drops in the pond's blues with white highlights,
+    // a crown that keeps close to where the egg went in (over the water,
+    // not spilling onto the turf), thin jets standing up out of it, and a
+    // spout falling back.
+    const blues = [
+      ui.Color(0xFF6CC4F2),
+      ui.Color(0xFF9AD8FA),
+      ui.Color(0xFFFFFFFF),
+      ui.Color(0xFF3FA6E6),
+    ];
+    for (var i = 0; i < 26; i++) {
       final angle = i * 2.39996; // golden spaced
-      final speed = 2.2 + (i % 5) * 0.95;
+      final speed = 1.3 + (i % 5) * 0.5;
       _particles.add(_FxParticle(
         at: at,
         velocity: core.Vec2(math.cos(angle), math.sin(angle)) * speed,
-        life: 0.9,
+        life: 0.85,
         kind: _FxKind.droplet,
-        size: i.isEven ? 0.5 : 0.38,
-        // White spray over a few blue drops: the water's own blue would
-        // hide them against the pond.
-        color: i % 3 == 2
-            ? const ui.Color(0xFF8FD0FF)
-            : const ui.Color(0xFFFFFFFF),
+        size: i.isEven ? 0.46 : 0.34,
+        color: blues[i % blues.length],
       ));
     }
-    // And a spout where the egg went in: white water thrown straight up,
-    // falling back.
-    for (var i = 0; i < 12; i++) {
+    // Four thin jets: small drops stacked up a column, each a beat behind
+    // the one under it.
+    for (var jet = 0; jet < 4; jet++) {
+      final angle = jet * math.pi / 2 + 0.6;
+      final foot = at + core.Vec2(math.cos(angle), math.sin(angle)) * 0.35;
+      for (var k = 0; k < 6; k++) {
+        _particles.add(_FxParticle(
+          at: foot,
+          velocity:
+              core.Vec2(math.cos(angle), math.sin(angle)) * (0.25 + k * 0.04),
+          life: 0.75 + k * 0.05,
+          kind: _FxKind.droplet,
+          size: 0.24 - k * 0.015,
+          color: k.isEven ? const ui.Color(0xFFFFFFFF) : blues[0],
+          height: 0.1,
+          climb: 7.2 + jet * 0.6 - k * 0.55,
+        ));
+      }
+    }
+    // And the spout where the egg went in, falling back.
+    for (var i = 0; i < 10; i++) {
       final angle = i * 2.39996 + 0.4;
       _particles.add(_FxParticle(
         at: at,
         velocity:
-            core.Vec2(math.cos(angle), math.sin(angle)) * (0.3 + (i % 3) * 0.3),
+            core.Vec2(math.cos(angle), math.sin(angle)) * (0.2 + (i % 3) * 0.2),
         life: 1.0,
         kind: _FxKind.droplet,
-        size: 0.55 + (i % 4) * 0.06,
-        color: const ui.Color(0xFFFFFFFF),
+        size: 0.5 + (i % 4) * 0.05,
+        color: i.isEven ? const ui.Color(0xFFFFFFFF) : blues[1],
         height: 0.15,
-        climb: 6.5 + (i % 4) * 1.1,
+        climb: 6.0 + (i % 4) * 1.0,
       ));
     }
   }

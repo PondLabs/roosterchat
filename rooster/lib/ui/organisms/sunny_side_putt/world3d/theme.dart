@@ -37,6 +37,9 @@ class _Theme {
     required this.hillFar,
     this.clouds = 0xFFFFFF,
     this.eggGlow = 0x2A2622,
+    this.rim = 0x000000,
+    this.rimIntensity = 0,
+    this.rimFrom = (-20.0, 18.0, -40.0),
   });
 
   final _ThemeKind kind;
@@ -71,6 +74,13 @@ class _Theme {
   /// The eggs' shells' own light, times their paint: a whisper by day,
   /// at dusk enough that the shells stay white and the bands glow.
   final int eggGlow;
+
+  /// A rim light from behind the green (the far side from the camera), no
+  /// shadow: at dusk a cool edge that sets the turf, the rails and the
+  /// eggs apart from the meadow. Off by day.
+  final int rim;
+  final double rimIntensity;
+  final (double, double, double) rimFrom;
 
   static _Theme of(String holeId) {
     final prefix = holeId.split('_').first;
@@ -209,6 +219,10 @@ class _Theme {
     meadowDry: 0x92A464,
     hillFar: 0x8E9E78,
     eggGlow: 0x8C8274,
+    // The blue hour behind the green, edging what the low sun misses.
+    rim: 0x8EA2FF,
+    rimIntensity: 0.6,
+    rimFrom: (-22, 16, -42),
   );
 }
 

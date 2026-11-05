@@ -328,7 +328,18 @@ When frames run slow (an integrated GPU on a high-density screen) the
 surface draws fewer pixels: after three seconds under 42 fps it steps
 its pixel ratio down by a fifth, settles, and judges again, never below
 half the device's ratio (0.75 on a one-to-one screen) and never back up
-(`PuttResolutionGovernor`).
+(`PuttResolutionGovernor`). Its first step also drops the world to a
+low tier: the sun's shadow map from 2048 to 1024 pixels a side, and the
+ink outlines off the walkers, the host and the scenery (the eggs, the
+aim and the casts' characters keep theirs).
+
+At the Barn's dusk a cool rim light from behind the green edges what the
+low sun misses (the light is always in the scene, at nothing by day, so
+a course change never recompiles the materials). A figure that fades out
+of the way (a hen in the camera's face or during my hatch's close-up,
+the host under the HUD) stops casting its shadow as it goes. A splash is
+water: drops in the pond's blues with white highlights, a crown kept
+close to where the egg went in, four thin jets and a spout.
 
 Colour is linear-correct: three_js takes hex values as linear, so every
 designer's hex goes through `_lin` first; the lights are tuned for the
@@ -354,7 +365,11 @@ world builds those with `_gridPlane`.
   and the nest inside the part of the screen the HUD leaves free (the
   points are projected through the camera the glide ends at) and
   follows the egg; C toggles the whole-hole view, a right drag orbits,
-  the wheel or a pinch zooms.
+  the wheel or a pinch zooms. At rest the frame comes no farther out
+  than keeps my egg 30 pixels tall: a nest too far for that gives way to
+  the stretch toward it (the egg low in the frame), and a marker on the
+  edge of the free view - the flag with the hole's number - points at
+  the nest while it is off the screen (`putt_nest_marker.dart`).
 - With the system's reduced motion on, the hole opens on its play
   framing without the sweep, and the camera never shakes nor punches in.
 
