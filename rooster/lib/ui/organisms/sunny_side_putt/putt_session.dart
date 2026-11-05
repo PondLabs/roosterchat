@@ -55,6 +55,11 @@ class PuttSessionController extends ChangeNotifier {
     session.addListener(_onSessionChanged);
     _subs.add(session.relayed.listen(_onRelayed));
     _subs.add(session.inputs.listen(_onHostInput));
+    // A session already under way (the call's view built again, a rejoin):
+    // its match comes back from the session's last state at once - the
+    // host's too, which goes on hosting from there. A host waiting for its
+    // own was stuck on the stage's "Loading" for good.
+    if (session.snapshot.sessionId.isNotEmpty) _adoptFromSnapshot();
   }
 
   final CallActivitySession session;
@@ -199,7 +204,9 @@ class PuttSessionController extends ChangeNotifier {
   // ------------------------------------------------------------- follow side
 
   /// A guest's first look at the match, and then its resyncs, land here:
-  /// the payload rebuilds the whole engine in place.
+  /// the payload rebuilds the whole engine in place. A host taking its
+  /// session back plays from it as the authority: its moves go straight into
+  /// its own engine, and its beat streams on from there.
   void _adoptFromSnapshot() {
     final game = session.snapshot.game;
     final rawEngine = game['engine'];
@@ -232,8 +239,9 @@ class PuttSessionController extends ChangeNotifier {
       config: config,
       engine: engine,
       localPlayerId: selfId,
-      remoteMove: (input) =>
-          session.sendInput(input.toJson()).catchError((_) {}),
+      remoteMove: session.isHost
+          ? null
+          : (input) => session.sendInput(input.toJson()).catchError((_) {}),
       displayNames: {
         for (final p in engine.players) p.id: nameOf(p.id),
       },
@@ -315,6 +323,9 @@ class PuttSessionController extends ChangeNotifier {
       return;
     }
     if (session.isHost) {
+      // Hosting without a match (handed the seat before the first payload
+      // came, or a view built again): the session's last state is the truth.
+      if (match == null) _adoptFromSnapshot();
       if (match != null) _adoptRoster();
       return;
     }

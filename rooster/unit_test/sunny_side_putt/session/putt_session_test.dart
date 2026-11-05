@@ -128,6 +128,54 @@ void main() {
     });
   });
 
+  test("a host's view built again takes its match back and goes on hosting",
+      () {
+    fakeAsync((async) {
+      final call = InMemoryActivityCall();
+      final hostSession = CallActivitySession(
+          activity: _descriptor,
+          selfUserId: '@alice:example.org',
+          transport: call.join('alice'));
+      final guestSession = CallActivitySession(
+          activity: _descriptor,
+          selfUserId: '@bob:example.org',
+          transport: call.join('bob'));
+      final first =
+          PuttSessionController(session: hostSession, nameOf: (id) => id);
+      first.hostStart(PuttSessionController.buildConfig(
+          const PuttLaunchOptions(mode: GameMode.casual)));
+      async.elapse(const Duration(milliseconds: 100));
+      final seed = first.match!.config.seed;
+      expect(first.match!.submitShot(0.2, 0.5), isTrue);
+      async.elapse(const Duration(milliseconds: 1200));
+
+      // The call's view goes and comes back: its controller with it.
+      first.dispose();
+      final again =
+          PuttSessionController(session: hostSession, nameOf: (id) => id);
+      expect(again.match, isNotNull, reason: 'not "Loading" for good');
+      expect(again.match!.config.seed, seed, reason: 'the same match');
+      expect(again.match!.engine.strokesInHole('alice'), 1,
+          reason: 'from where it stood');
+
+      // Still the host: a guest's shot lands on its engine.
+      final guest =
+          PuttSessionController(session: guestSession, nameOf: (id) => id);
+      guestSession.join();
+      async.elapse(const Duration(milliseconds: 1200));
+      expect(again.match!.engine.players.map((p) => p.id), contains('bob'));
+      expect(guest.match, isNotNull);
+      expect(guest.match!.submitShot(0.3, 0.6), isTrue);
+      async.elapse(const Duration(milliseconds: 300));
+      expect(again.match!.engine.strokesInHole('bob'), 1);
+      // Its own moves go straight into its own engine, not out to a host.
+      expect(again.match!.remoteMove, isNull);
+
+      again.dispose();
+      guest.dispose();
+    });
+  });
+
   test('the host leaving hands the session over, not out with it', () {
     fakeAsync((async) {
       final call = InMemoryActivityCall();
