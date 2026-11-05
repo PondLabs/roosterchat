@@ -277,8 +277,10 @@ Color puttTermColor(ScoreTerm term) => switch (term) {
 /// it reads over grass and sky alike.
 // Nearly solid: at 86% the farm behind (a flower, a bird) showed through
 // the scorecard and the hole bar, over their text.
+/// The HUD's panels: ink, as good as solid (at 0.93 the birds and the
+/// trees behind still showed through the hole bar's numbers).
 BoxDecoration _panel({
-  double alpha = 0.93,
+  double alpha = 0.98,
   double radius = 16,
   Color? edge,
   bool shadow = true,
