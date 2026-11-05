@@ -138,8 +138,8 @@ const Color _husk = Color(0xFF8CCB2E);
 /// The coffee in the mug.
 const Color _coffee = Color(0xFF5A321F);
 
-/// The crow's wing: ink lifted a little, so the feathers read on black.
-const Color _crowWing = Color(0xFF453936);
+/// The crow's wing: a lighter slate over the slate body, its feathers read.
+const Color _crowWing = Color(0xFF727C99);
 
 /// The "?" crates' darker yolk edge, as on the green.
 const Color _cartonEdge = Color(0xFFD9780C);
@@ -544,12 +544,15 @@ _Glyph _thievingCrow() {
     ..lineTo(42, 88)
     ..moveTo(54, 72)
     ..lineTo(56, 88);
+  // A slate bird rather than an ink one: ink on the carton's ink fill
+  // vanished.
+  const crow = Color(0xFF4B5266);
   return _Glyph([
     _Line(legs, _ink, 3),
-    _Shape(tail, _ink),
-    _Shape(body, _ink),
+    _Shape(tail, crow),
+    _Shape(body, crow),
     _Shape(wing, _crowWing, outline: 5),
-    _Shape(_circle(const Offset(68, 35), 16), _ink, inside: [
+    _Shape(_circle(const Offset(68, 35), 16), crow, inside: [
       _Mark(_arc(const Offset(68, 36), 10, math.pi * 1.05, 0.9),
           _shine.withValues(alpha: 0.35),
           width: 4),

@@ -980,7 +980,11 @@ class SunnySidePuttGame extends FlameGame {
       final tall = world3d.projectToWorld(at, height: ground).dy -
           world3d.projectToWorld(at, height: ground + eggRadius * 2.56).dy;
       final wasCompact = _compactTags.contains(ball.playerId);
+      // By the nest too: the target of every putt keeps clear of names.
+      final byNest =
+          at.distanceTo(match.hole!.nest.position) < _nestQuietRadius;
       final compact = world3d.rig.distance > 44 ||
+          byNest ||
           (wasCompact ? tall < _fullTagEgg : tall < _compactTagEgg);
       if (compact) {
         _compactTags.add(ball.playerId);
@@ -1007,6 +1011,9 @@ class SunnySidePuttGame extends FlameGame {
   static const double _compactTagEgg = 26;
   static const double _fullTagEgg = 32;
 
+  /// How near the nest a tag shows its picture only, in world units.
+  static const double _nestQuietRadius = 6;
+
   /// The reactions' bubbles this frame: over the egg of whoever sent each
   /// (over the nest once their egg is in; anyone without an egg on the
   /// green - a spectator - is skipped).
@@ -1028,18 +1035,19 @@ class SunnySidePuttGame extends FlameGame {
       final ball = world?.ball(reaction.playerId);
       core.Vec2? at;
       var aside = 0.0;
-      var flying = 0.0;
+      var lift = eggRadius * 5.6;
       if (ball != null && !ball.holed) {
         at = match.renderPositionOf(reaction.playerId);
-        flying = liftOf(ball);
+        lift += liftOf(ball);
       } else if (ball != null && hole != null) {
         at = hole.nest.position;
-        // 0, then right, left, further right...
+        // Up over the flag's head, side by side (0, then right, left,
+        // further right...): the nest and its flag stay clear.
         final k = atNest++;
-        aside = (k.isOdd ? 1 : -1) * ((k + 1) ~/ 2) * 52.0;
+        aside = (k.isOdd ? 1 : -1) * ((k + 1) ~/ 2) * 56.0;
+        lift = 4.8;
       }
       if (at == null) continue;
-      final lift = eggRadius * 5.6 + flying;
       if (!world3d.inFrontOfCamera(at, height: lift)) continue;
       out.add(PuttBubble(
         key: '${reaction.playerId}-${reaction.at}-$serial',

@@ -7,6 +7,7 @@ import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/rules.dart';
+import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_match.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_session.dart'
     show puttLaunchPowerUps;
@@ -29,6 +30,8 @@ void main() {
     )..boot();
     final game = SunnySidePuttGame(match: match, onSfx: (_, __) {});
     final world = game.world3d;
+    // A tick, so the eggs' drawn places are their own.
+    match.update(1 / 60);
     // The camera close over Maya's egg, at a distance under the far rule's.
     world.rig
       ..target = match.engine.world!.ball('p2')!.position
@@ -46,6 +49,15 @@ void main() {
     final close = maya(const Size(2560, 1600));
     expect(close.compact, isFalse, reason: 'big on the screen: the name');
     expect(close.name, 'Maya');
+
+    // By the nest, big or not: the target of every putt stays clear.
+    final nest = match.hole!.nest.position;
+    match.engine.world!.ball('p2')!.position = nest + const Vec2(1.5, 0);
+    match
+      ..update(1 / 60)
+      ..update(1 / 60);
+    world.rig.target = nest;
+    expect(maya(const Size(2560, 1600)).compact, isTrue);
   });
 }
 
