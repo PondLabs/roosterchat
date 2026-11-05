@@ -1023,7 +1023,13 @@ class _PuttMiddleState extends State<_PuttMiddle>
     if (headline == null) return null;
     return IgnorePointer(
       child: Align(
-        alignment: const Alignment(0, -0.62),
+        // The hole's card low in the middle, over the near rail and the
+        // meadow: up high it covered each hole's landmark (the barn, the
+        // lake, the maze's far side) in the opening shot. The others high,
+        // under the hole bar, clear of the green's middle.
+        alignment: match.headlineKind == PuttHeadlineKind.holeStart
+            ? const Alignment(0, 0.5)
+            : const Alignment(0, -0.62),
         child: FittedBox(
           fit: BoxFit.scaleDown,
           child: PuttHeadline(
@@ -1071,7 +1077,7 @@ class _PuttHeadlineState extends State<PuttHeadline>
   late final AnimationController _clock = AnimationController(
     vsync: this,
     duration: widget.kind == PuttHeadlineKind.holeStart
-        ? const Duration(milliseconds: 2000)
+        ? const Duration(milliseconds: 1600)
         : const Duration(milliseconds: 2600),
   )..forward();
 

@@ -448,17 +448,18 @@ tjs.DataTexture _bubbleTexture() {
       final d = math.sqrt(dx * dx + dy * dy);
       if (d > 1) continue;
       var colour = film;
-      var alpha = 0.2;
-      if (d > 0.68) {
+      var alpha = 0.24;
+      if (d > 0.62) {
         // The rim: deeper and denser toward the edge.
-        final k = ((d - 0.68) / 0.24).clamp(0.0, 1.0);
+        final k = ((d - 0.62) / 0.24).clamp(0.0, 1.0);
         colour = _mix(film, rim, k);
-        alpha = 0.2 + 0.62 * k * k;
+        alpha = 0.24 + 0.7 * k * k;
       }
-      if (d > 0.92) {
-        // The line round it, soft at its outer edge.
+      if (d > 0.86) {
+        // The line round it, soft at its outer edge; wide enough to read
+        // from the overview (a thinner one was lost on light turf).
         colour = line;
-        alpha = 0.9 * ((1 - d) / 0.08).clamp(0.0, 1.0);
+        alpha = 0.95 * ((1 - d) / 0.05).clamp(0.0, 1.0);
       }
       // The shine: a crescent hugging the upper left (the texture's rows
       // run bottom-up, so up is +y here), and a dot.

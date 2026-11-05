@@ -207,9 +207,11 @@ class _Theme {
     sunIntensity: 0.62,
     sunFrom: (34, 11, 8),
     hemiSky: 0x8C9BD6,
-    hemiGround: 0x4F5238,
-    hemiIntensity: 0.7,
-    exposure: 0.95,
+    // A lighter bounce and a touch more fill: the shade side of the green
+    // and the near corners still read near-black (round 4).
+    hemiGround: 0x5E6044,
+    hemiIntensity: 0.82,
+    exposure: 1.0,
     rails: _RailStyle.barnBoard,
     turfLight: 0x6FB447,
     turfDark: 0x5EA23E,

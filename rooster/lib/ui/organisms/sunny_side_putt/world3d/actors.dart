@@ -313,6 +313,10 @@ class _EggView3D {
       body.renderOrder = order;
       _outline.renderOrder = order;
     }
+    // The silhouette through whatever hides it is for finding one's own
+    // egg: on another player's it read as a stray translucent oval over the
+    // silo.
+    _xray.visible = everMine;
     // A bounce: the heading swings hard in one frame while it is quick.
     final last = _lastVelocity;
     if (last != null && dt > 0) {

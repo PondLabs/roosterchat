@@ -1103,6 +1103,21 @@ void main() {
           reason: "softer than the guide's dots");
     });
 
+    test("only the viewer's egg shows through what hides it", () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      world.applySnapshot(PuttWorldFrame(time: 0, eggs: [
+        eggAt(const Vec2(10, 10), mine: true),
+        eggAt(const Vec2(14, 10), playerId: 'other'),
+      ]));
+      bool xray(String id) => walk(world.eggOf(id)!)
+          .firstWhere((o) => o.name == 'egg-xray')
+          .visible;
+      expect(xray('me'), isTrue, reason: 'finding my own egg behind a silo');
+      expect(xray('other'), isFalse,
+          reason: "another's read as a stray translucent oval");
+    });
+
     test('the aim draws over the other eggs, the pin over everything', () {
       final world = builtWorld();
       addTearDown(world.dispose);
