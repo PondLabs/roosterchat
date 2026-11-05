@@ -1711,6 +1711,15 @@ class _PuttThreeSurfaceState extends State<PuttThreeSurface> {
           if (mounted) setState(() {});
           widget.onReady?.call();
         },
+        // The GL context would not start (a machine without the GL it
+        // needs): the plain panel, as for a missing plugin; the game itself
+        // keeps working.
+        onStartFailed: (_) {
+          if (_failed) return;
+          _failed = true;
+          if (mounted) setState(() {});
+          widget.onFailed?.call();
+        },
         settings: tjr.Settings(
           animate: true,
           enableShadowMap: true,
