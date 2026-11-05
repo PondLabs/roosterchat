@@ -381,6 +381,47 @@ tjs.MeshBasicMaterial _unlit(
 // ---- procedural textures ------------------------------------------------------------
 
 /// An RGBA canvas of bytes the texture stamps draw into.
+/// A camera-facing quad: what a three_js Sprite is meant to be, as a plain
+/// mesh. This renderer draws no Sprite on the web (no trail, no confetti,
+/// no glints ever showed), so every camera-facing piece is one of these;
+/// the world turns them all to the camera once a frame, [roll] spinning
+/// one in the screen's plane. Each has its own unit quad, so it disposes
+/// like any mesh.
+class _Billboard extends tjs.Mesh {
+  _Billboard({
+    tjs.Texture? map,
+    Object color = 0xFFFFFF,
+    double opacity = 0,
+    int blending = tjs.NormalBlending,
+    bool fog = true,
+  }) : super(
+          tjs.PlaneGeometry(1, 1),
+          tjs.MeshBasicMaterial({
+            if (map != null) tjs.MaterialProperty.map: map,
+            tjs.MaterialProperty.color: color,
+            tjs.MaterialProperty.transparent: true,
+            tjs.MaterialProperty.opacity: opacity,
+            tjs.MaterialProperty.depthWrite: false,
+            tjs.MaterialProperty.blending: blending,
+            tjs.MaterialProperty.fog: fog,
+          }),
+        ) {
+    castShadow = false;
+    receiveShadow = false;
+  }
+
+  /// The spin in the screen's plane, radians.
+  double roll = 0;
+
+  /// Its material, typed.
+  tjs.MeshBasicMaterial get look => material as tjs.MeshBasicMaterial;
+}
+
+/// Solid white, for the billboards that are flat squares of colour
+/// (confetti, straw). Shared, like the soft disc, and never disposed with
+/// a hole.
+final tjs.DataTexture _paperTexture = (_Bitmap(4, 4)..fill(0xFFFFFF)).texture();
+
 /// The green's relief as the actors stand on it: the current hole's hills
 /// (flat when it has none). Shared by the world and everything it moves.
 class _Ground {

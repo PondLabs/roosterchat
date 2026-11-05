@@ -308,8 +308,8 @@ class _PuttFxPool {
   static const int paperSize = 72;
   static const int ringCount = 4;
 
-  final List<tjs.Sprite> _sprites = [];
-  final List<tjs.Sprite> _paper = [];
+  final List<_Billboard> _sprites = [];
+  final List<_Billboard> _paper = [];
   final List<tjs.Mesh> _rings = [];
   tjs.DataTexture? _disc;
 
@@ -327,14 +327,7 @@ class _PuttFxPool {
     _sprites.clear();
     _paper.clear();
     for (var i = 0; i < paperSize; i++) {
-      final sprite = tjs.Sprite(
-        tjs.SpriteMaterial({
-          tjs.MaterialProperty.color: 0xFFFFFF,
-          tjs.MaterialProperty.transparent: true,
-          tjs.MaterialProperty.opacity: 0.0,
-          tjs.MaterialProperty.depthWrite: false,
-        }),
-      )
+      final sprite = _Billboard(map: _paperTexture)
         ..name = 'fx-paper'
         ..visible = false
         ..renderOrder = 8;
@@ -348,15 +341,7 @@ class _PuttFxPool {
     _rings.clear();
     final discTexture = texture;
     for (var i = 0; i < poolSize; i++) {
-      final sprite = tjs.Sprite(
-        tjs.SpriteMaterial({
-          tjs.MaterialProperty.map: discTexture,
-          tjs.MaterialProperty.color: 0xFFFFFF,
-          tjs.MaterialProperty.transparent: true,
-          tjs.MaterialProperty.opacity: 0.0,
-          tjs.MaterialProperty.depthWrite: false,
-        }),
-      )
+      final sprite = _Billboard(map: discTexture)
         ..name = 'fx'
         ..visible = false
         ..renderOrder = 8;
@@ -397,7 +382,7 @@ class _PuttFxPool {
         ring.material?.opacity = (1 - progress) * 0.85;
         continue;
       }
-      final tjs.Sprite sprite;
+      final _Billboard sprite;
       if (fx.kind == PuttWorldFxKind.confetti) {
         if (paper >= _paper.length) continue;
         sprite = _paper[paper++];
@@ -456,12 +441,10 @@ class _PuttFxPool {
           ? scale
           : 1.0;
       sprite.scale.setValues(width * grow, height * grow, 1);
-      final material = sprite.material;
-      if (material is tjs.SpriteMaterial) {
-        material.color = _linOf(color);
-        material.opacity = opacity.clamp(0.0, 1.0);
-        material.rotation = rotation;
-      }
+      sprite.look
+        ..color = _linOf(color)
+        ..opacity = opacity.clamp(0.0, 1.0);
+      sprite.roll = rotation;
     }
     for (var i = active; i < _sprites.length; i++) {
       _sprites[i]

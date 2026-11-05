@@ -1022,7 +1022,7 @@ class _CourseKit {
     }));
 
     // Sun glints: soft white twinkles coming and going on the water.
-    final glints = <(tjs.Sprite, double, double)>[];
+    final glints = <(_Billboard, double, double)>[];
     final box0 = _waterBox(shape);
     final glintCount =
         ((box0.width * box0.height) / 7).round().clamp(3, 16).toInt();
@@ -1032,16 +1032,8 @@ class _CourseKit {
       final spot = Vec2(_rand.range(box0.min.x, box0.max.x),
           _rand.range(box0.min.y, box0.max.y));
       if (-_waterSignedDistance(shape, spot) < 0.5) continue;
-      final glint = tjs.Sprite(
-        tjs.SpriteMaterial({
-          tjs.MaterialProperty.map: _EggView3D._shadowTexture,
-          tjs.MaterialProperty.color: 0xFFFFFF,
-          tjs.MaterialProperty.transparent: true,
-          tjs.MaterialProperty.opacity: 0.0,
-          tjs.MaterialProperty.depthWrite: false,
-          tjs.MaterialProperty.blending: tjs.AdditiveBlending,
-        }),
-      )
+      final glint = _Billboard(
+          map: _EggView3D._shadowTexture, blending: tjs.AdditiveBlending)
         ..name = 'water-glint'
         ..position.setValues(spot.x, 0.12, spot.y)
         ..renderOrder = 4;
@@ -1368,10 +1360,14 @@ class _CourseKit {
       cloth,
       tjs.MeshStandardMaterial({
         tjs.MaterialProperty.map: flagTexture,
+        // A little of its own light, so the number reads at dusk too.
+        tjs.MaterialProperty.emissive: _lin(0xFFFFFF),
+        tjs.MaterialProperty.emissiveMap: flagTexture,
         tjs.MaterialProperty.roughness: 0.85,
         tjs.MaterialProperty.metalness: 0.0,
         tjs.MaterialProperty.side: tjs.DoubleSide,
-      }),
+      })
+        ..emissiveIntensity = 0.32,
     )
       ..name = 'flag-cloth'
       ..castShadow = true;

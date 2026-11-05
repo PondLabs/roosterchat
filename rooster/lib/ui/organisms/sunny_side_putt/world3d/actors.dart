@@ -116,15 +116,7 @@ class _EggView3D {
     // Turf flecks kicked up behind it, darker than the grass.
     final trailColor = _lin(trailHex);
     for (var i = 0; i < _trailLength; i++) {
-      final puff = tjs.Sprite(
-        tjs.SpriteMaterial({
-          tjs.MaterialProperty.map: _shadowTexture,
-          tjs.MaterialProperty.color: trailColor,
-          tjs.MaterialProperty.transparent: true,
-          tjs.MaterialProperty.opacity: 0.0,
-          tjs.MaterialProperty.depthWrite: false,
-        }),
-      )
+      final puff = _Billboard(map: _shadowTexture, color: trailColor)
         ..name = 'egg-trail-puff'
         ..visible = false
         ..renderOrder = 3;
@@ -152,7 +144,7 @@ class _EggView3D {
   double _squash = 0;
 
   late final tjs.Group trail;
-  final List<tjs.Sprite> _puffs = [];
+  final List<_Billboard> _puffs = [];
 
   /// The trail's recent spots and their ages, newest last.
   final List<(Vec2, double)> _trailSpots = [];

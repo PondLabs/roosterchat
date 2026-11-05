@@ -81,16 +81,11 @@ class _SkyDome {
       ..frustumCulled = false;
     group.add(_clouds);
 
-    tjs.Sprite glow(String name, double size, double opacity) => tjs.Sprite(
-          tjs.SpriteMaterial({
-            tjs.MaterialProperty.map: _EggView3D._shadowTexture,
-            tjs.MaterialProperty.color: 0xFFFFFF,
-            tjs.MaterialProperty.transparent: true,
-            tjs.MaterialProperty.opacity: opacity,
-            tjs.MaterialProperty.depthWrite: false,
-            tjs.MaterialProperty.blending: tjs.AdditiveBlending,
-            tjs.MaterialProperty.fog: false,
-          }),
+    _Billboard glow(String name, double size, double opacity) => _Billboard(
+          map: _EggView3D._shadowTexture,
+          opacity: opacity,
+          blending: tjs.AdditiveBlending,
+          fog: false,
         )
           ..name = name
           ..scale.setValues(size, size, 1)
@@ -115,8 +110,8 @@ class _SkyDome {
   }
 
   /// The sun's disc and its halo, hung on the dome toward the theme's sun.
-  late final tjs.Sprite _sunDisc;
-  late final tjs.Sprite _sunHalo;
+  late final _Billboard _sunDisc;
+  late final _Billboard _sunHalo;
 
   /// Paints the dome for [theme]'s hour: horizon, middle, top.
   void recolor(_Theme theme) {

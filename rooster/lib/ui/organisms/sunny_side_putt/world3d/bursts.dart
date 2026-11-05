@@ -46,37 +46,30 @@ class _Bursts {
     for (var i = 0; i < 48; i++) {
       _soft.add(_sprite(soft: true));
     }
-    for (var i = 0; i < 120; i++) {
+    for (var i = 0; i < 240; i++) {
       _paper.add(_sprite(soft: false));
     }
   }
 
   late final tjs.Group group;
-  final List<tjs.Sprite> _soft = [];
-  final List<tjs.Sprite> _paper = [];
+  final List<_Billboard> _soft = [];
+  final List<_Billboard> _paper = [];
   final List<_BurstParticle> _live = [];
   final _Rand _rand = _Rand(2718);
 
-  tjs.Sprite _sprite({required bool soft}) {
-    final sprite = tjs.Sprite(
-      tjs.SpriteMaterial({
-        if (soft) tjs.MaterialProperty.map: _EggView3D._shadowTexture,
-        tjs.MaterialProperty.color: 0xFFFFFF,
-        tjs.MaterialProperty.transparent: true,
-        tjs.MaterialProperty.opacity: 0.0,
-        tjs.MaterialProperty.depthWrite: false,
-      }),
-    )
-      ..name = soft ? 'burst-puff' : 'burst-paper'
-      ..visible = false
-      ..renderOrder = 9;
+  _Billboard _sprite({required bool soft}) {
+    final sprite =
+        _Billboard(map: soft ? _EggView3D._shadowTexture : _paperTexture)
+          ..name = soft ? 'burst-puff' : 'burst-paper'
+          ..visible = false
+          ..renderOrder = 9;
     group.add(sprite);
     return sprite;
   }
 
   /// Straw flying off the nest's rim as an egg drops in.
   void straw(Vec2 at, double radius, {double floor = 0}) {
-    for (var i = 0; i < 26; i++) {
+    for (var i = 0; i < 18; i++) {
       final angle = _rand.range(0, math.pi * 2);
       final speed = _rand.range(1.5, 4.5);
       _live.add(_BurstParticle(
@@ -97,9 +90,9 @@ class _Bursts {
     }
   }
 
-  /// The viewer's own sink: a column of confetti shooting up out of the
-  /// nest, big enough to read from the camera's height.
-  void confettiColumn(Vec2 at, {double floor = 0}) {
+  /// The viewer's own sink: a fountain of confetti out of the nest, big
+  /// enough to read from the camera's height.
+  void confettiColumn(Vec2 at, {double floor = 0, double radius = 1.2}) {
     const colors = [
       0xE8382A, // comb
       0xF89B17, // yolk
@@ -108,18 +101,21 @@ class _Bursts {
       0x8CCB2E,
       0xE8508F,
     ];
-    for (var i = 0; i < 90; i++) {
+    // A crown more than a column: up and outward from the nest's rim, so
+    // it spreads across the close-up the camera takes and leaves the cup
+    // (and the chick hatching in it) clear.
+    for (var i = 0; i < 110; i++) {
       final angle = _rand.range(0, math.pi * 2);
-      final spread = _rand.range(0.4, 3.2);
+      final spread = _rand.range(2.0, 6.0);
       _live.add(_BurstParticle(
-        x: at.x,
+        x: at.x + math.cos(angle) * radius * 0.9,
         y: floor + 0.4,
-        z: at.y,
+        z: at.y + math.sin(angle) * radius * 0.9,
         vx: math.cos(angle) * spread,
-        vy: _rand.range(9, 16),
+        vy: _rand.range(6.5, 11),
         vz: math.sin(angle) * spread,
         life: _rand.range(1.8, 2.6),
-        size: _rand.range(0.32, 0.5),
+        size: _rand.range(0.2, 0.32),
         hex: colors[i % colors.length],
         paper: true,
         gravity: 9,
@@ -176,7 +172,15 @@ class _Bursts {
     _live.removeWhere((p) => p.age >= p.life);
     var soft = 0;
     var paper = 0;
-    for (final p in _live) {
+    // The confetti (paper that does not fade) claims its sprites first: a
+    // run of sinks' straw must never leave the viewer's own party short.
+    final ordered = [
+      for (final p in _live)
+        if (p.paper && !p.fade) p,
+      for (final p in _live)
+        if (!(p.paper && !p.fade)) p,
+    ];
+    for (final p in ordered) {
       final sprite = p.paper
           ? (paper < _paper.length ? _paper[paper++] : null)
           : (soft < _soft.length ? _soft[soft++] : null);
@@ -184,13 +188,10 @@ class _Bursts {
       final t = (p.age / p.life).clamp(0.0, 1.0);
       sprite.visible = true;
       sprite.position.setValues(p.x, p.y, p.z);
-      final material = sprite.material;
-      if (material is tjs.SpriteMaterial) {
-        material.color = _lin(p.hex);
-        material.opacity =
-            p.fade ? (1 - t) * 0.9 : (t < 0.8 ? 1.0 : (1 - t) * 5);
-        if (p.paper) material.rotation = p.age * 7 + p.x;
-      }
+      sprite.look
+        ..color = _lin(p.hex)
+        ..opacity = p.fade ? (1 - t) * 0.9 : (t < 0.8 ? 1.0 : (1 - t) * 5);
+      if (p.paper) sprite.roll = p.age * 7 + p.x;
       if (p.paper) {
         // A paper square tumbling: one axis breathes as it turns.
         final flip = math.sin(p.age * 14 + p.z * 3).abs();

@@ -960,8 +960,26 @@ class PuttWorld3D {
     rig.update(math.max(dt, 1 / 240), followPoint: frame.followPoint);
     rig.applyTo(camera);
     camera.updateMatrixWorld(true);
+    _faceCamera();
     // The dome rides with the camera, so its horizon never comes near.
     _sky.group.position.setValues(camera.position.x, 0, camera.position.z);
+  }
+
+  final tjs.Quaternion _roll = tjs.Quaternion();
+  final tjs.Vector3 _viewAxis = tjs.Vector3(0, 0, 1);
+
+  /// Turns every billboard (trails, bursts, effects, glints, the sun) to
+  /// face the camera, each spun by its own roll.
+  void _faceCamera() {
+    final facing = camera.quaternion;
+    scene.traverse((object) {
+      if (object is! _Billboard || !object.visible) return;
+      object.quaternion.setFrom(facing);
+      if (object.roll != 0) {
+        object.quaternion
+            .multiply(_roll.setFromAxisAngle(_viewAxis, object.roll));
+      }
+    });
   }
 
   void _syncEggs(PuttWorldFrame frame, double dt) {
@@ -1015,7 +1033,8 @@ class PuttWorld3D {
         final floor = _ground.at(nest.position);
         _bursts.straw(nest.position, nest.radius, floor: floor);
         if (view.everMine) {
-          _bursts.confettiColumn(nest.position, floor: floor);
+          _bursts.confettiColumn(nest.position,
+              floor: floor, radius: nest.radius);
           rig.punch();
         }
       } else {
@@ -1177,6 +1196,7 @@ class PuttWorld3D {
       final map = material.map;
       if (map != null &&
           (identical(map, _EggView3D._shadowTexture) ||
+              identical(map, _paperTexture) ||
               _eggTextures.containsValue(map))) {
         material.map = null;
       }
