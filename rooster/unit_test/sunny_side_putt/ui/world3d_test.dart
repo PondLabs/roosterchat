@@ -1313,6 +1313,50 @@ void main() {
     });
   });
 
+  test("a traced pond's foam is one ribbon along its shore", () {
+    final world = builtWorld();
+    addTearDown(world.dispose);
+    final foam =
+        walk(world.scene).where((o) => o.name == 'water-foam').toList();
+    expect(foam, hasLength(1),
+        reason: 'the triangle pond; circles and rects paint their own');
+    const corners = [Vec2(33, 3), Vec2(38, 3), Vec2(38, 7)];
+    final centre = Vec2((33 + 38 + 38) / 3, (3 + 3 + 7) / 3);
+    double toShore(Vec2 p) {
+      var best = double.infinity;
+      for (var i = 0; i < corners.length; i++) {
+        final a = corners[i];
+        final b = corners[(i + 1) % corners.length];
+        final ab = b - a;
+        final t = ((p - a).dot(ab) / ab.dot(ab)).clamp(0.0, 1.0);
+        best = math.min(best, (a + ab * t - p).length);
+      }
+      return best;
+    }
+
+    final pond = dressing.water.whereType<WaterPolygon>().single;
+    final geometry = foam.single.geometry!;
+    final position = geometry.attributes['position'] as tjs.BufferAttribute;
+    final uv = geometry.attributes['uv'] as tjs.BufferAttribute;
+    expect(position.count, greaterThan(20));
+    var deep = 0;
+    var inner = 0;
+    for (var i = 0; i < position.count; i++) {
+      final p = Vec2(centre.x + position.getX(i)!.toDouble(),
+          centre.y - position.getY(i)!.toDouble());
+      if (uv.getY(i)! < 0.5) {
+        expect(toShore(p), lessThan(0.03), reason: 'its edge on the shore');
+      } else {
+        inner++;
+        expect(pond.contains(p) || toShore(p) < 0.01, isTrue,
+            reason: 'its inner side on the water');
+        if (toShore(p) > 0.15) deep++;
+      }
+    }
+    // A band's width in, but where a sharp corner narrows it.
+    expect(deep / inner, greaterThan(0.85));
+  });
+
   group('the world disposes cleanly', () {
     test('every object and geometry is dead; the gpu resources fire dispose',
         () {

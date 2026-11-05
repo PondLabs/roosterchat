@@ -1434,6 +1434,8 @@ class _CourseKit {
     final group = tjs.Group()..name = 'water';
     final tjs.BufferGeometry geometry;
     final Vec2 center;
+    // A traced pond's shore: its foam is a ribbon of its own (below).
+    final shore = <List<Vec2>>[];
     switch (shape) {
       case WaterCircle(center: final c, :final radius):
         geometry = tjg.RingGeometry(0.0001, radius, 48, 10);
@@ -1450,7 +1452,7 @@ class _CourseKit {
         // Traced, not fanned: a pond cut round an island or a causeway is
         // not star-shaped, and a fan from its centre laid water (and its
         // white rim) over the land.
-        geometry = _tracedWaterGeometry(shape, center);
+        geometry = _tracedWaterGeometry(shape, center, shore: shore);
     }
     // Per-vertex colour: foam at the rim, deeper toward the middle.
     final position = geometry.attributes['position'] as tjs.BufferAttribute;
@@ -1469,7 +1471,7 @@ class _CourseKit {
       final world = Vec2(center.x + lx, center.y - ly);
       final inside = -_waterSignedDistance(shape, world);
       final depth = (inside / 2.4).clamp(0.0, 1.0);
-      final foamK = _softBand(inside, 0.18, 0.16);
+      final foamK = shore.isEmpty ? _softBand(inside, 0.18, 0.16) : 0.0;
       var r = mid.red + (deep.red - mid.red) * depth;
       var g = mid.green + (deep.green - mid.green) * depth;
       var b = mid.blue + (deep.blue - mid.blue) * depth;
@@ -1495,6 +1497,25 @@ class _CourseKit {
       ..position.setValues(center.x, 0.03, center.y)
       ..receiveShadow = true;
     group.add(sheet);
+    final ribbon = _shoreRibbon(shore, shape, 0.24, center);
+    if (ribbon != null) {
+      // Over the sheet's still rim (the ripple only starts inside it).
+      group.add(tjs.Mesh(
+        ribbon,
+        tjs.MeshBasicMaterial({
+          tjs.MaterialProperty.map: _foamFadeTexture(),
+          tjs.MaterialProperty.color: _lin(_Farm.waterFoam),
+          tjs.MaterialProperty.transparent: true,
+          tjs.MaterialProperty.depthWrite: false,
+          // A loop runs either way round: both faces.
+          tjs.MaterialProperty.side: tjs.DoubleSide,
+        }),
+      )
+        ..name = 'water-foam'
+        ..rotation.x = -math.pi / 2
+        ..position.setValues(center.x, 0.055, center.y)
+        ..renderOrder = 1);
+    }
 
     // The ripple: gentle crossing waves, normals refreshed so the sun's
     // glints dance. Still at the rim, full a unit in.
@@ -2327,7 +2348,8 @@ double _waterSignedDistance(WaterShape shape, Vec2 p) {
 /// found along its cell edge by bisection), in the plane's local
 /// coordinates round [center] (x across, y = the game's -y): any outline,
 /// convex or not, holes and all. Indexed, so the ripple stays seamless.
-tjs.BufferGeometry _tracedWaterGeometry(WaterShape shape, Vec2 center) {
+tjs.BufferGeometry _tracedWaterGeometry(WaterShape shape, Vec2 center,
+    {List<List<Vec2>>? shore}) {
   const cell = 0.3;
   final box = _waterBox(shape);
   final x0 = box.min.x - cell;
@@ -2345,6 +2367,10 @@ tjs.BufferGeometry _tracedWaterGeometry(WaterShape shape, Vec2 center) {
   final positions = <double>[];
   final indices = <int>[];
   final ids = <int, int>{};
+  // The outline's vertices (the crossings), and its segments, one per pair
+  // of crossings that follow each other round a cell's polygon.
+  final crossings = <int>{};
+  final segments = <(int, int)>[];
   // Vertices keyed on a half-cell lattice: corners at even, edge
   // crossings at odd coordinates, so neighbours share them.
   int vertex(int key, Vec2 p) => ids.putIfAbsent(key, () {
@@ -2369,7 +2395,9 @@ tjs.BufferGeometry _tracedWaterGeometry(WaterShape shape, Vec2 center) {
         hi = m;
       }
     }
-    return vertex((r0 + r1) * (cols * 2 + 3) + (c0 + c1), (lo + hi) * 0.5);
+    final id = vertex((r0 + r1) * (cols * 2 + 3) + (c0 + c1), (lo + hi) * 0.5);
+    crossings.add(id);
+    return id;
   }
 
   for (var r = 0; r < rows; r++) {
@@ -2404,6 +2432,13 @@ tjs.BufferGeometry _tracedWaterGeometry(WaterShape shape, Vec2 center) {
         10 => [e0(), v1(), e1(), e2(), v3(), e3()],
         _ => const <int>[],
       };
+      for (var i = 0; i < polygon.length; i++) {
+        final a = polygon[i];
+        final b = polygon[(i + 1) % polygon.length];
+        if (crossings.contains(a) && crossings.contains(b)) {
+          segments.add((a, b));
+        }
+      }
       for (var i = 1; i + 1 < polygon.length; i++) {
         var a = polygon[0], b = polygon[i], d = polygon[i + 1];
         // Wound to face the plane's +z (the world's up once laid down).
@@ -2419,6 +2454,11 @@ tjs.BufferGeometry _tracedWaterGeometry(WaterShape shape, Vec2 center) {
       }
     }
   }
+  if (shore != null) {
+    Vec2 world(int id) =>
+        Vec2(center.x + positions[id * 3], center.y - positions[id * 3 + 1]);
+    shore.addAll(_chainShore(segments, world));
+  }
   final normals = List<double>.filled(positions.length, 0);
   for (var i = 2; i < normals.length; i += 3) {
     normals[i] = 1;
@@ -2429,6 +2469,124 @@ tjs.BufferGeometry _tracedWaterGeometry(WaterShape shape, Vec2 center) {
         'position', tjs.Float32BufferAttribute.fromList(positions, 3, false))
     ..setAttributeFromString(
         'normal', tjs.Float32BufferAttribute.fromList(normals, 3, false));
+}
+
+/// The foam ribbon's fade across its width: white, opaque at the edge (v
+/// 0), gone at the inner side (v 1). Made per pond, so it dies with the
+/// hole's materials.
+tjs.DataTexture _foamFadeTexture() {
+  const width = 4;
+  const height = 32;
+  final bitmap = _Bitmap(width, height);
+  for (var y = 0; y < height; y++) {
+    final v = (y + 0.5) / height;
+    final t = (1 - v).clamp(0.0, 1.0);
+    final alpha = (255 * 0.95 * t * t * (3 - 2 * t)).round();
+    for (var x = 0; x < width; x++) {
+      bitmap.set(x, y, 0xFFFFFF, alpha);
+    }
+  }
+  return bitmap.texture();
+}
+
+/// The traced outline's [segments] (pairs of vertex ids) chained into its
+/// loops, each in order, as world points.
+List<List<Vec2>> _chainShore(List<(int, int)> segments, Vec2 Function(int) at) {
+  final next = <int, List<int>>{};
+  for (final (a, b) in segments) {
+    next.putIfAbsent(a, () => []).add(b);
+    next.putIfAbsent(b, () => []).add(a);
+  }
+  final seen = <int>{};
+  final loops = <List<Vec2>>[];
+  for (final start in next.keys) {
+    if (seen.contains(start)) continue;
+    final loop = <int>[start];
+    seen.add(start);
+    var previous = -1;
+    var current = start;
+    while (true) {
+      final options = next[current]!;
+      final step = options.firstWhere(
+          (id) => id != previous && !seen.contains(id),
+          orElse: () => -1);
+      if (step < 0) break;
+      loop.add(step);
+      seen.add(step);
+      previous = current;
+      current = step;
+    }
+    // Crossings bunched at a corner (a few millimetres apart) make segments
+    // whose direction means nothing: keep one point of each bunch.
+    const merge = 0.06;
+    final points = <Vec2>[];
+    for (final id in loop) {
+      final p = at(id);
+      if (points.isEmpty || points.last.distanceTo(p) > merge) points.add(p);
+    }
+    while (points.length > 1 && points.first.distanceTo(points.last) <= merge) {
+      points.removeLast();
+    }
+    if (points.length >= 3) loops.add(points);
+  }
+  return loops;
+}
+
+/// A pond's foam as one ribbon along each loop of its shore: [width] wide
+/// inward, mitred at the joints, opaque at the edge and fading to nothing
+/// inside (its v runs 0 at the edge to 1 in). The foam painted on the
+/// water's vertices sawtoothed along a diagonal shore: the grid is coarser
+/// than the band.
+tjs.BufferGeometry? _shoreRibbon(
+    List<List<Vec2>> loops, WaterShape shape, double width, Vec2 center) {
+  final positions = <double>[];
+  final uvs = <double>[];
+  final indices = <int>[];
+  for (final loop in loops) {
+    final n = loop.length;
+    // Each segment's inward normal (the side the water is on).
+    final normals = <Vec2>[];
+    for (var i = 0; i < n; i++) {
+      final a = loop[i];
+      final b = loop[(i + 1) % n];
+      final along = (b - a).normalized(const Vec2(1, 0));
+      var normal = Vec2(-along.y, along.x);
+      if (!shape.contains((a + b) * 0.5 + normal * 0.1)) normal = -normal;
+      normals.add(normal);
+    }
+    final base = positions.length ~/ 3;
+    for (var i = 0; i < n; i++) {
+      final before = normals[(i - 1 + n) % n];
+      final after = normals[i];
+      final sum = before + after;
+      final miter = sum.length < 1e-6 ? after : sum * (1 / sum.length);
+      final scale = 1 / math.max(miter.dot(after), 0.5);
+      final edge = loop[i];
+      final inner = edge + miter * (width * scale);
+      for (final (p, v) in [(edge, 0.0), (inner, 1.0)]) {
+        positions.addAll([p.x - center.x, center.y - p.y, 0]);
+        uvs.addAll([0.5, v]);
+      }
+    }
+    for (var i = 0; i < n; i++) {
+      final a = base + i * 2;
+      final b = base + ((i + 1) % n) * 2;
+      indices.addAll([a, b, a + 1, b, b + 1, a + 1]);
+    }
+  }
+  if (indices.isEmpty) return null;
+  final normals = List<double>.filled(positions.length, 0);
+  for (var i = 2; i < normals.length; i += 3) {
+    normals[i] = 1;
+  }
+  return tjs.BufferGeometry()
+    ..setIndex(indices)
+    ..setAttributeFromString(
+        'position', tjs.Float32BufferAttribute.fromList(positions, 3, false))
+    ..setAttributeFromString(
+        'normal', tjs.Float32BufferAttribute.fromList(normals, 3, false))
+    ..setAttributeFromString(
+        'uv', tjs.Float32BufferAttribute.fromList(uvs, 2, false));
 }
 
 Vec2 _centroid(List<Vec2> points) {
