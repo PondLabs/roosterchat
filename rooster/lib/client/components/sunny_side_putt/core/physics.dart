@@ -989,14 +989,21 @@ class PhysicsWorld {
   /// Below this closing speed a contact is a touch, not a knock.
   static const double _knockSpeed = 1.0;
 
+  /// How many times each pair has drifted apart this hole: wedged in a
+  /// corner, two could push, bounce back and push again for ever.
+  final Map<String, int> _drifts = {};
+  static const int _maxDrifts = 4;
+
   /// Two eggs at rest inside each other (one rolled through a waiting egg
   /// and stopped in it; a cast's push or a swap set them so) roll just
   /// clear, with a push the friction spends over the overlap: a putted egg
   /// out of a waiting one, which stays put; two of a kind half each. Never
   /// into water (the splash's return would set them back inside each
-  /// other, over and over).
-  void _driftApart(
-      BallBody a, BallBody b, Vec2 offset, double distance, double min) {
+  /// other, over and over), and a pair only a few times a hole.
+  void _driftApart(String pair, BallBody a, BallBody b, Vec2 offset,
+      double distance, double min) {
+    final drifted = _drifts[pair] ?? 0;
+    if (drifted >= _maxDrifts) return;
     final normal =
         distance < Vec2.epsilon ? const Vec2(0, -1) : offset * (1 / distance);
     final overlap = min - distance;
@@ -1011,6 +1018,7 @@ class PhysicsWorld {
     for (final (ball, travel) in moves) {
       if (wet(ball.position + normal * (travel * 1.2))) return;
     }
+    _drifts[pair] = drifted + 1;
     for (final (ball, travel) in moves) {
       ball.velocity = normal * (travel.sign * push(travel.abs()));
       ball.asleep = false;
@@ -1039,11 +1047,15 @@ class PhysicsWorld {
         final pair = '${a.playerId}|${b.playerId}';
         if (!a.putted || !b.putted) {
           _passing.add(pair);
-          if (a.asleep && b.asleep) _driftApart(a, b, offset, distance, min);
+          if (a.asleep && b.asleep) {
+            _driftApart(pair, a, b, offset, distance, min);
+          }
           continue;
         }
         if (_passing.contains(pair)) {
-          if (a.asleep && b.asleep) _driftApart(a, b, offset, distance, min);
+          if (a.asleep && b.asleep) {
+            _driftApart(pair, a, b, offset, distance, min);
+          }
           continue;
         }
         // Eggs a step apart (one on a lip, one at the face's foot below)
@@ -1104,6 +1116,11 @@ class PhysicsWorld {
         'boxes': _collectedBoxes.toList()..sort(),
         'balls': [for (final id in _order) _balls[id]!.toJson()],
         if (_passing.isNotEmpty) 'passing': _passing.toList()..sort(),
+        if (_drifts.isNotEmpty)
+          'drifts': {
+            for (final pair in _drifts.keys.toList()..sort())
+              pair: _drifts[pair],
+          },
       };
 
   /// Rebuilds a world mid-hole from [state] (as [toJson] produced), against
@@ -1145,6 +1162,12 @@ class PhysicsWorld {
     }
     world._passing
         .addAll(((state['passing'] as List?) ?? const []).cast<String>());
+    final drifts = state['drifts'] as Map?;
+    if (drifts != null) {
+      for (final entry in drifts.entries) {
+        world._drifts[entry.key as String] = (entry.value as num).toInt();
+      }
+    }
     world._rebuildOrder();
     for (final id in world._order) {
       world._insideBoosts[id] =

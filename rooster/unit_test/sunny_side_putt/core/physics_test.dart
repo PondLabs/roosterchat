@@ -502,6 +502,34 @@ void main() {
             lessThan(0.05));
       });
 
+      test('a pair drifts apart only a few times a hole', () {
+        // Wedged in a corner, two could push, bounce back and push again
+        // for ever: set back inside each other after every drift, they
+        // stop drifting after the fourth.
+        final world = pair();
+        final a = world.ball('a')!;
+        final b = world.ball('b')!;
+        var drifted = 0;
+        for (var round = 0; round < 6; round++) {
+          a
+            ..position = const Vec2(10, 8)
+            ..velocity = Vec2.zero
+            ..asleep = true;
+          b
+            ..position = const Vec2(10.3, 8)
+            ..velocity = Vec2.zero
+            ..asleep = true;
+          world.stepTick();
+          if (!a.asleep || !b.asleep) drifted++;
+          runUntilSettled(world);
+        }
+        expect(drifted, 4);
+        expect(world.toJson()['drifts'], {'a|b': 4});
+        final restored = PhysicsWorld.restore(
+            hole: world.hole, config: testPhysics, state: world.toJson());
+        expect(restored.toJson(), world.toJson());
+      });
+
       test('two that met as ghosts pass through until they part', () {
         final world = pair();
         final b = world.ball('b')!;
