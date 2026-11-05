@@ -199,7 +199,19 @@ class ThreeJS with WidgetsBindingObserver{
 
     //allNativeData.dispose();
 
-    angle?.dispose([texture]);
+    // ROOSTER: ANGLE torn down while it is starting (its init awaits the
+    // plugin, then makes its context current) failed that makeCurrent with
+    // EGL_BAD_ACCESS, an error nobody caught. A start under way finishes
+    // first; then ANGLE goes.
+    final starting = _starting;
+    if (starting != null) {
+      final owned = angle;
+      starting
+          .catchError((Object _) {})
+          .whenComplete(() => owned?.dispose([texture]));
+    } else {
+      angle?.dispose([texture]);
+    }
     loadingWidget = null;
     _fixedSize = null;
     screenSize = null;
@@ -226,8 +238,26 @@ class ThreeJS with WidgetsBindingObserver{
       // tenth of a second, as in a test's teardown) never starts a context:
       // ANGLE's makeCurrent then failed with EGL_BAD_ACCESS.
       if (_disposed) return;
-      await initPlatformState();
+      final starting = _starting = _startAngle();
+      try {
+        await starting;
+      } finally {
+        if (identical(_starting, starting)) _starting = null;
+      }
     });
+  }
+
+  /// ROOSTER: ANGLE's start, while it runs (dispose waits for it).
+  Future<void>? _starting;
+
+  /// ROOSTER: the start, its failure swallowed once the viewer is gone (the
+  /// page it would draw on is gone too).
+  Future<void> _startAngle() async {
+    try {
+      await initPlatformState();
+    } catch (_) {
+      if (!_disposed) rethrow;
+    }
   }
   
   Future<void> animate(Duration duration) async {
@@ -382,6 +412,9 @@ class ThreeJS with WidgetsBindingObserver{
           useSurfaceProducer: settings.useSurfaceProducer
         )
       );
+      // ROOSTER: disposed while the texture was made: it goes with ANGLE
+      // (dispose's deferred teardown reads it then), no scene for nobody.
+      if (_disposed) return;
     }
 
     console.info(texture?.toMap());
