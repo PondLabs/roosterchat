@@ -60,33 +60,51 @@ class PuttTagBoard extends ChangeNotifier {
 /// stack their pills on top of one another, so each tag (from the lowest
 /// on screen up) rises above any it would overlap. A pill's size is read
 /// off its name, near enough for the layout.
+/// A tag's pill as drawn, anchored at [at] (the tip of its tail): its
+/// padding and border, the picture (or the dot), the gap and the name at
+/// about 7.4 px a letter, and the tail under it.
+Rect puttTagPill(PuttTag tag, Offset at) {
+  final mark = tag.avatar != null ? 18.0 : 8.0;
+  final width = tag.compact
+      ? mark + 9
+      : (19 + mark + 5 + tag.name.length * 7.4).clamp(0.0, 150.0);
+  const height = 32.0;
+  return Rect.fromLTWH(at.dx - width / 2, at.dy - height, width, height);
+}
+
 List<PuttTag> declutterTags(List<PuttTag> tags, {List<Rect> avoid = const []}) {
   if (tags.isEmpty || (tags.length < 2 && avoid.isEmpty)) return tags;
-  // The pill as drawn: its padding and border, the picture (or the dot),
-  // the gap and the name at about 7.4 px a letter, and the tail under it.
-  Rect pill(PuttTag tag, Offset at) {
-    final mark = tag.avatar != null ? 18.0 : 8.0;
-    final width = tag.compact
-        ? mark + 9
-        : (19 + mark + 5 + tag.name.length * 7.4).clamp(0.0, 150.0);
-    const height = 32.0;
-    return Rect.fromLTWH(at.dx - width / 2, at.dy - height, width, height);
-  }
-
   final order = [...tags]..sort((a, b) => b.at.dy.compareTo(a.at.dy));
   final placed = <Rect>[...avoid];
   final moved = <String, Offset>{};
   for (final tag in order) {
-    var at = tag.at;
-    for (var pass = 0; pass < tags.length; pass++) {
-      final box = pill(tag, at);
-      final hit = placed.where((other) => other.overlaps(box)).toList();
-      if (hit.isEmpty) break;
-      final top = hit.map((other) => other.top).reduce(math.min);
-      at = Offset(at.dx, top - 3);
+    final base = tag.at;
+    final width = puttTagPill(tag, base).width;
+    Offset? chosen;
+    var y = base.dy;
+    // Where it stands, then a little to either side, then up a row past
+    // whatever is in the way, and the same again.
+    for (var row = 0;
+        row <= tags.length + avoid.length && chosen == null;
+        row++) {
+      for (final dx in [0.0, -width * 0.6, width * 0.6]) {
+        final at = Offset(base.dx + dx, y);
+        final box = puttTagPill(tag, at);
+        if (!placed.any((other) => other.overlaps(box))) {
+          chosen = at;
+          break;
+        }
+      }
+      if (chosen != null) break;
+      final box = puttTagPill(tag, Offset(base.dx, y));
+      final hits = placed.where((other) => other.overlaps(box));
+      y = hits.isEmpty
+          ? y - 4
+          : hits.map((other) => other.top).reduce(math.min) - 3;
     }
-    placed.add(pill(tag, at));
-    moved[tag.playerId] = at;
+    chosen ??= Offset(base.dx, y);
+    placed.add(puttTagPill(tag, chosen));
+    moved[tag.playerId] = chosen;
   }
   return [
     for (final tag in tags)

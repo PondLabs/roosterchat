@@ -292,6 +292,10 @@ class _PuttAimView3D {
     if (points.length >= 2) {
       const spacing = 0.62;
       var carried = spacing * 0.6;
+      // The dots trail off over the guide's own length: its end reads as
+      // the guide giving out, not as a wall (a soft putt's end has its
+      // resting mark instead).
+      final expected = math.max(1.0, (_pathLength(points) - tip) / spacing);
       for (var i = 1; i < points.length && shown < _dotCount; i++) {
         final a = points[i - 1];
         final b = points[i];
@@ -307,10 +311,12 @@ class _PuttAimView3D {
           dot.visible = true;
           dot.position.setValues(p.x - aim.origin.x,
               terrain.at(p) - floor + 0.05, p.y - aim.origin.y);
-          final fade = 1 - shown / _dotCount;
-          dot.children[0].material?.opacity = 0.45 + 0.4 * fade;
-          dot.children[1].material?.opacity = 0.45 + 0.55 * fade;
-          final s = 0.9 + 0.4 * fade;
+          final left =
+              math.pow((1 - shown / expected).clamp(0.0, 1.0), 0.7).toDouble();
+          final fade = rest != null ? math.max(left, 0.6) : left;
+          dot.children[0].material?.opacity = 0.12 + 0.73 * fade;
+          dot.children[1].material?.opacity = 0.18 + 0.82 * fade;
+          final s = 0.75 + 0.55 * fade;
           dot.scale.setValues(s, 1, s);
           shown++;
         }

@@ -930,16 +930,26 @@ class SunnySidePuttGame extends FlameGame {
     return out;
   }
 
-  /// What the tags must leave clear: my own egg (with its pin above it).
+  /// What the tags must leave clear: every egg on the green (mine with its
+  /// pin above it).
   List<Rect> tagObstacles() {
-    final mine = match.myBall;
-    if (mine == null || mine.holed || match.hole == null) return const [];
-    final at = match.renderPositionOf(match.localPlayerId);
-    if (!world3d.inFrontOfCamera(at)) return const [];
-    final foot = world3d.projectToWorld(at);
-    final top = world3d.projectToWorld(at, height: eggRadius * 4.2);
-    final half = math.max(14.0, (foot.dy - top.dy) * 0.45);
-    return [Rect.fromLTRB(foot.dx - half, top.dy, foot.dx + half, foot.dy)];
+    final world = match.engine.world;
+    if (world == null || match.hole == null) return const [];
+    final out = <Rect>[];
+    for (final ball in world.balls) {
+      if (ball.holed) continue;
+      final mine = ball.playerId == match.localPlayerId;
+      final at = match.renderPositionOf(ball.playerId);
+      if (!world3d.inFrontOfCamera(at)) continue;
+      final foot = world3d.projectToWorld(at);
+      // Mine with its pin over it; the others up to their shell's top (their
+      // own tags stand above that).
+      final top =
+          world3d.projectToWorld(at, height: eggRadius * (mine ? 4.2 : 2.4));
+      final half = math.max(mine ? 14.0 : 8.0, (foot.dy - top.dy) * 0.45);
+      out.add(Rect.fromLTRB(foot.dx - half, top.dy, foot.dx + half, foot.dy));
+    }
+    return out;
   }
 
   // ---- the roll guide ---------------------------------------------------------------

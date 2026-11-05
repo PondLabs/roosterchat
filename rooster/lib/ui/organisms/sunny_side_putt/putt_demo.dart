@@ -136,6 +136,9 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
   /// The viewer's first putt soft, at this power (the `soft` query).
   double? _soft;
 
+  /// When (hole seconds) my egg last came to rest, ready for a putt.
+  double? _restingSince;
+
   /// The query's casts: (hole seconds, player id, power-up), each played
   /// once a hole, and which of them went this hole.
   List<(double, String, String)> _script = const [];
@@ -292,6 +295,7 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
         ..reset();
       _myShot = 0;
       _drag = null;
+      _restingSince = null;
       // The first hole waits for the coach to show the gesture once.
       _myNextAt = _firstHole ? 5.6 : 3.2;
       _firstHole = false;
@@ -509,7 +513,15 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
       }
       return;
     }
-    if (_holeTime < _myNextAt || !match.myShotReady) return;
+    if (!match.myShotReady) {
+      _restingSince = null;
+      return;
+    }
+    // After a putt, a breath with the egg at rest before the next pull
+    // (a still of "after the roll" shows the green, not a new arrow).
+    final restingSince = _restingSince ??= _holeTime;
+    if (_myShot > 0 && _holeTime - restingSince < 2.4) return;
+    if (_holeTime < _myNextAt) return;
     // A power-up armed for the camera holds the putt (an aim would put
     // the targeting away).
     final targeting = game.targeting;

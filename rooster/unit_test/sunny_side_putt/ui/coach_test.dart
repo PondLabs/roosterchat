@@ -44,12 +44,13 @@ void main() {
           playerId: 'c', name: 'Lou', color: Colors.pink, at: Offset(600, 300)),
     ];
     final placed = declutterTags(tags);
-    final a = placed.firstWhere((t) => t.playerId == 'a').at;
-    final b = placed.firstWhere((t) => t.playerId == 'b').at;
-    // The lower one keeps its place; the other rises above it.
-    expect(b, const Offset(310, 306));
-    expect(a.dy, lessThanOrEqualTo(306 - 26));
-    expect(a.dx, 300);
+    final a = placed.firstWhere((t) => t.playerId == 'a');
+    final b = placed.firstWhere((t) => t.playerId == 'b');
+    // The lower one keeps its place; the other steps clear of it, to a side
+    // or above, and stays near its egg.
+    expect(b.at, const Offset(310, 306));
+    expect(puttTagPill(a, a.at).overlaps(puttTagPill(b, b.at)), isFalse);
+    expect((a.at - const Offset(300, 300)).distance, lessThan(80));
     // A tag clear of the others stays put.
     expect(
         placed.firstWhere((t) => t.playerId == 'c').at, const Offset(600, 300));
@@ -65,9 +66,9 @@ void main() {
     ];
     const mine = Rect.fromLTRB(280, 270, 320, 310);
     final placed = declutterTags(tags, avoid: [mine]);
-    final at = placed.single.at;
-    // The pill (26 tall, ending at its anchor) sits above my egg's box.
-    expect(at.dy, lessThanOrEqualTo(mine.top - 2 + 1e-9));
+    final tag = placed.single;
+    // The pill keeps clear of my egg's box.
+    expect(puttTagPill(tag, tag.at).overlaps(mine), isFalse);
   });
 
   testWidgets('the reaction picker opens and sends one, then folds',

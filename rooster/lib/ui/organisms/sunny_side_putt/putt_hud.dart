@@ -275,8 +275,10 @@ Color puttTermColor(ScoreTerm term) => switch (term) {
 
 /// A HUD panel: ink over the green, a hairline edge and a soft shadow so
 /// it reads over grass and sky alike.
+// Nearly solid: at 86% the farm behind (a flower, a bird) showed through
+// the scorecard and the hole bar, over their text.
 BoxDecoration _panel({
-  double alpha = 0.86,
+  double alpha = 0.93,
   double radius = 16,
   Color? edge,
   bool shadow = true,
@@ -559,7 +561,7 @@ class PuttRoundButton extends StatelessWidget {
         icon: Icon(icon),
         iconSize: 22,
         style: IconButton.styleFrom(
-          backgroundColor: PuttPalette.ink.withValues(alpha: 0.86),
+          backgroundColor: PuttPalette.ink.withValues(alpha: 0.92),
           foregroundColor: PuttPalette.cream,
           hoverColor: PuttPalette.cream.withValues(alpha: 0.1),
           fixedSize: const Size(44, 44),
@@ -1114,7 +1116,7 @@ class _PuttHeadlineState extends State<PuttHeadline>
       padding: EdgeInsets.fromLTRB(30, big ? 12 : 11, 30, big ? 15 : 13),
       constraints: const BoxConstraints(maxWidth: 560),
       decoration: _panel(
-        alpha: 0.88,
+        alpha: 0.93,
         radius: 24,
         edge: term == null ? null : colour.withValues(alpha: 0.75),
       ),
@@ -2076,7 +2078,7 @@ class _HintPill extends StatelessWidget {
       constraints: const BoxConstraints(maxWidth: 460),
       padding: const EdgeInsets.fromLTRB(12, 8, 16, 8),
       decoration: _panel(
-        alpha: 0.82,
+        alpha: 0.92,
         radius: 16,
         edge: accent ? PuttPalette.yolk.withValues(alpha: 0.7) : null,
       ),
