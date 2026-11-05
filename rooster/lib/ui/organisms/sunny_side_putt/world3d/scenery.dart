@@ -200,8 +200,10 @@ class _Scenery {
   Vec2 get _hostAt {
     final nest = hole.nest.position;
     final right = nest.x >= _b.center.x;
+    // Out past the picket fence (3.6 off the table) on the grass: at 4.0
+    // he stood on the fence line, over it and the rail from most cameras.
     return Vec2(
-      right ? _b.max.x + 4.0 : _b.min.x - 4.0,
+      right ? _b.max.x + 6.6 : _b.min.x - 6.6,
       nest.y
           .clamp(_b.center.y - _b.height * 0.2, _b.center.y + _b.height * 0.05)
           .toDouble(),
