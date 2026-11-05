@@ -108,23 +108,31 @@ class _EggView3D {
       ..visible = false;
     // The viewer's pin over the egg: a round yolk cone, tip down, inside an
     // ink outline (its back faces, a size up), so it reads from any angle.
+    // Drawn last and over everything (the transparent pass, no depth
+    // test): no egg in front ever hides where the viewer's egg is.
     _arrow = tjs.Mesh(
       tjg.ConeGeometry(_radius * 0.6, _radius * 1.3, 24),
-      _matte(_hexOf(PuttPalette.yolk), roughness: 0.45),
+      _matte(_hexOf(PuttPalette.yolk), roughness: 0.45)
+        ..transparent = true
+        ..depthTest = false,
     )
       ..name = 'egg-arrow'
       // Tip down, toward the egg.
       ..rotation.x = math.pi
       ..castShadow = false
+      ..renderOrder = 22
       ..visible = false;
     _arrow.add(tjs.Mesh(
       tjg.ConeGeometry(_radius * 0.6, _radius * 1.3, 24),
       tjs.MeshBasicMaterial({
         tjs.MaterialProperty.color: _lin(_hexOf(PuttPalette.ink)),
         tjs.MaterialProperty.side: tjs.BackSide,
+        tjs.MaterialProperty.transparent: true,
+        tjs.MaterialProperty.depthTest: false,
       }),
     )
       ..name = 'egg-arrow-outline'
+      ..renderOrder = 21
       ..scale.setValues(1.22, 1.14, 1.22));
     ground
       ..add(_shadow)
@@ -296,6 +304,13 @@ class _EggView3D {
   void sync(PuttWorldEgg egg, double dt, double time) {
     final speed = egg.speed;
     if (egg.mine) everMine = true;
+    // The viewer's egg draws after the aim (which skips the depth test, so
+    // no other egg hides it): the arrow comes out from under this one.
+    final order = egg.mine ? 10 : 0;
+    if (body.renderOrder != order) {
+      body.renderOrder = order;
+      _outline.renderOrder = order;
+    }
     // A bounce: the heading swings hard in one frame while it is quick.
     final last = _lastVelocity;
     if (last != null && dt > 0) {

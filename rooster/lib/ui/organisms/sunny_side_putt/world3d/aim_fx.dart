@@ -44,10 +44,14 @@ class _PuttAimView3D {
       ..renderOrder = 4;
     group.add(ring);
 
-    _arrowMaterial = _unlit(_powerHex(0.5), opacity: 0.95, depthWrite: false);
+    // The aim draws over the other eggs (no depth test, after them): an
+    // egg in the way never hides where the putt goes. The viewer's own egg
+    // draws after it, so the arrow comes out from under the egg.
+    _arrowMaterial = _unlit(_powerHex(0.5),
+        opacity: 0.95, depthWrite: false, depthTest: false);
     // A solid ink line round the arrow: it reads on light and dark turf.
-    _outlineMaterial =
-        _unlit(_hexOf(PuttPalette.ink), opacity: 0.9, depthWrite: false);
+    _outlineMaterial = _unlit(_hexOf(PuttPalette.ink),
+        opacity: 0.9, depthWrite: false, depthTest: false);
     shaft = tjs.Mesh(tjs.BoxGeometry(1, 0.02, 0.46), _arrowMaterial)
       ..name = 'aim-shaft'
       ..position.y = 0.08
@@ -59,7 +63,7 @@ class _PuttAimView3D {
     // A white core down the shaft: the arrow reads on any turf.
     _core = tjs.Mesh(
       tjs.BoxGeometry(1, 0.02, 0.12),
-      _unlit(0xFFFFFF, opacity: 0.85, depthWrite: false),
+      _unlit(0xFFFFFF, opacity: 0.85, depthWrite: false, depthTest: false),
     )
       ..name = 'aim-core'
       ..position.y = 0.09
@@ -86,14 +90,15 @@ class _PuttAimView3D {
     _bounceMark
       ..add(tjs.Mesh(
         tjg.RingGeometry(0.22, 0.38, 24, 1),
-        _unlit(0xFFF8EE, opacity: 0.95, depthWrite: false),
+        _unlit(0xFFF8EE, opacity: 0.95, depthWrite: false, depthTest: false),
       )
         ..rotation.x = -math.pi / 2
         ..position.y = 0.06
         ..renderOrder = 7)
       ..add(tjs.Mesh(
         tjg.RingGeometry(0.16, 0.46, 24, 1),
-        _unlit(_hexOf(PuttPalette.ink), opacity: 0.4, depthWrite: false),
+        _unlit(_hexOf(PuttPalette.ink),
+            opacity: 0.4, depthWrite: false, depthTest: false),
       )
         ..rotation.x = -math.pi / 2
         ..position.y = 0.055
@@ -107,21 +112,23 @@ class _PuttAimView3D {
     _restMark
       ..add(tjs.Mesh(
         tjg.CircleGeometry(radius: eggRadius * 1.25, segments: 28),
-        _unlit(_hexOf(PuttPalette.ink), opacity: 0.16, depthWrite: false),
+        _unlit(_hexOf(PuttPalette.ink),
+            opacity: 0.16, depthWrite: false, depthTest: false),
       )
         ..rotation.x = -math.pi / 2
         ..position.y = 0.05
         ..renderOrder = 8)
       ..add(tjs.Mesh(
         tjg.RingGeometry(eggRadius * 1.08, eggRadius * 1.62, 32, 1),
-        _unlit(_hexOf(PuttPalette.ink), opacity: 0.5, depthWrite: false),
+        _unlit(_hexOf(PuttPalette.ink),
+            opacity: 0.5, depthWrite: false, depthTest: false),
       )
         ..rotation.x = -math.pi / 2
         ..position.y = 0.055
         ..renderOrder = 8)
       ..add(tjs.Mesh(
         tjg.RingGeometry(eggRadius * 1.2, eggRadius * 1.48, 32, 1),
-        _unlit(0xFFF8EE, opacity: 0.95, depthWrite: false),
+        _unlit(0xFFF8EE, opacity: 0.95, depthWrite: false, depthTest: false),
       )
         ..rotation.x = -math.pi / 2
         ..position.y = 0.06
@@ -137,14 +144,15 @@ class _PuttAimView3D {
       dot
         ..add(tjs.Mesh(
           _dotRingGeometry,
-          _unlit(_hexOf(PuttPalette.ink), opacity: 0.45, depthWrite: false),
+          _unlit(_hexOf(PuttPalette.ink),
+              opacity: 0.45, depthWrite: false, depthTest: false),
         )
           ..name = 'aim-dot-ring'
           ..rotation.x = -math.pi / 2
           ..renderOrder = 5)
         ..add(tjs.Mesh(
           _dotGeometry,
-          _unlit(0xFFF8EE, opacity: 0.95, depthWrite: false),
+          _unlit(0xFFF8EE, opacity: 0.95, depthWrite: false, depthTest: false),
         )
           ..name = 'aim-dot-fill'
           ..rotation.x = -math.pi / 2

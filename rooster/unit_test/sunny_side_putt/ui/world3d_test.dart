@@ -1063,6 +1063,46 @@ void main() {
           walk(hen).firstWhere((o) => o.material != null).material!.opacity, 1);
     });
 
+    test('the aim draws over the other eggs, the pin over everything', () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      world.applySnapshot(PuttWorldFrame(
+        time: 0,
+        eggs: [
+          eggAt(const Vec2(10, 10), mine: true),
+          eggAt(const Vec2(13, 10), playerId: 'other'),
+        ],
+        aim: const PuttWorldAim(
+            origin: Vec2(10, 10),
+            angle: 0,
+            power: 0.6,
+            dragLength: 3,
+            eggRadius: 0.45,
+            preview: [Vec2(11, 10), Vec2(13, 10), Vec2(15, 10)]),
+      ));
+      int orderOf(String playerId) => walk(world.eggOf(playerId)!)
+          .firstWhere((o) => o.name == 'egg-shell')
+          .renderOrder;
+      final aim = walk(world.scene)
+          .where((o) => o.name == 'aim-shaft' || o.name == 'aim-head')
+          .toList();
+      expect(aim, isNotEmpty);
+      for (final piece in aim) {
+        expect(piece.material!.depthTest, isFalse,
+            reason: 'no egg in the way hides where the putt goes');
+        expect(piece.renderOrder, greaterThan(orderOf('other')));
+        expect(piece.renderOrder, lessThan(orderOf('me')),
+            reason: 'the arrow comes out from under my own egg');
+      }
+      final pin = walk(world.eggOf('me')!)
+          .followedBy(walk(world.scene))
+          .firstWhere((o) => o.name == 'egg-arrow');
+      expect(pin.material!.depthTest, isFalse);
+      expect(pin.material!.transparent, isTrue,
+          reason: 'in the pass drawn last, by its order');
+      expect(pin.renderOrder, greaterThan(orderOf('me')));
+    });
+
     test("an egg in front of the viewer's resting egg fades aside", () {
       final world = builtWorld();
       addTearDown(world.dispose);

@@ -367,6 +367,7 @@ tjs.MeshBasicMaterial _unlit(
   double opacity = 1,
   bool fog = true,
   bool depthWrite = true,
+  bool depthTest = true,
   int blending = tjs.NormalBlending,
 }) =>
     tjs.MeshBasicMaterial({
@@ -375,6 +376,7 @@ tjs.MeshBasicMaterial _unlit(
       tjs.MaterialProperty.opacity: opacity,
       tjs.MaterialProperty.fog: fog,
       tjs.MaterialProperty.depthWrite: depthWrite,
+      tjs.MaterialProperty.depthTest: depthTest,
       tjs.MaterialProperty.blending: blending,
     });
 
