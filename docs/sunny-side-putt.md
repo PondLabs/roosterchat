@@ -46,6 +46,13 @@ results):
   game; the button keeps a short cooldown (`putt_reactions.dart`).
 - Mid-join: entering now puts you on the current hole's tee; the holes
   you missed score par.
+- Eggs waiting to putt are ghosts: until an egg has putted on the hole,
+  the others pass through it and it through them, so nobody's first putt
+  (nor a cast's push) knocks a waiting egg off the tee. Two that met
+  while one was a ghost go on passing through until they part, rather
+  than spring apart when it putts; both states ride the world's snapshot.
+  An egg at rest that another rolls into hears who did it in the cast
+  feed ("Jonas knocked your egg!", or "You knocked Lou's egg").
 
 ### Modes
 
@@ -282,7 +289,9 @@ green's middle,
 follows the egg in play with his head, bobs it now and then and cheers
 when an egg drops in. Whenever his head would stand under the HUD's top
 bar or corner buttons, or he stands right in front of the camera, he
-fades away (and so does a hen that walks into the camera's face). Ground
+pops out of the way, a quick shrink and fade over 0.15 s (and so does a
+hen that walks into the camera's face: all there or not at all, never a
+half-seen ghost). Ground
 the walls close off from
 the tee (a flood fill stopped by walls, carried through rabbit holes) is
 planted as the theme's garden beds instead of turf, so a hole shaped
@@ -322,9 +331,14 @@ shell stays white and the band glows); they roll
 by their velocity, leave a trail when fast, settle on their side, and
 slide into the nest when they sink. There the egg hatches
 (`world3d/hatch.dart`): the shell's cap pops off in the player's colour
-and a chick rises out of the cup in the other half, hops twice flapping
-at the camera and drops back in. The viewer's egg wears a marker ring
-and a bobbing arrow; the others carry name tags.
+and a chick rises out of the cup in the other half onto the nest's lip,
+hops three times flapping at the camera and drops back in (the viewer's
+own a size up, the camera in on it for 3 s). The viewer's egg wears a
+marker ring and a bobbing pin drawn over everything; the others carry
+name tags, which keep clear of every egg and of the pin, and are not
+drawn under the HUD's widgets. An egg standing in front of the viewer's
+resting egg on the screen fades to a third of itself until the viewer
+putts (the close camera behind a fresh egg looks along the tee's ring).
 
 When frames run slow (an integrated GPU on a high-density screen) the
 surface draws fewer pixels: after three seconds under 42 fps it steps
@@ -341,7 +355,8 @@ a course change never recompiles the materials). A figure that fades out
 of the way (a hen in the camera's face or during my hatch's close-up,
 the host under the HUD) stops casting its shadow as it goes. A splash is
 water: drops in the pond's blues with white highlights, a crown kept
-close to where the egg went in, four thin jets and a spout.
+close to where the egg went in, four thin jets and a spout, and rings no
+wider than the water reaches all round the spot.
 
 Colour is linear-correct: three_js takes hex values as linear, so every
 designer's hex goes through `_lin` first; the lights are tuned for the
@@ -358,7 +373,11 @@ world builds those with `_gridPlane`.
   - the engine's own physics run ahead on a copy of the world, cut a
   short way after the first rail. When the egg would stop inside the
   guide (a soft putt), the spot is marked with an egg's footprint drawn
-  over everything, and the arrow ends there instead of past it.
+  over everything, and the arrow ends there instead of past it. The aim
+  draws over the other eggs (no egg in the way hides where the putt
+  goes) and under the viewer's own. The viewer's last roll on the hole
+  lies under it as faint dots in their colour, from where it stood to
+  where it stopped.
 - Until the first putt of the match (and after 14 seconds idle with the
   egg ready), a coach shows the gesture over the egg: a hand presses,
   pulls back away from the nest and lets go while a ghost arrow grows
@@ -371,7 +390,12 @@ world builds those with `_gridPlane`.
   than keeps my egg 30 pixels tall: a nest too far for that gives way to
   the stretch toward it (the egg low in the frame), and a marker on the
   edge of the free view - the flag with the hole's number - points at
-  the nest while it is off the screen (`putt_nest_marker.dart`).
+  the nest while it is off the screen, behind the camera or under one of
+  the HUD's widgets, never beside a nest in sight (`putt_nest_marker.dart`).
+  While the viewer aims with the nest out of sight, a small map of the
+  hole under the course's chip shows the walls, the water, the nest, the
+  eggs and where the arrow points, turned with the camera so that ahead
+  is up (`putt_mini_map.dart`).
 - With the system's reduced motion on, the hole opens on its play
   framing without the sweep, and the camera never shakes nor punches in.
 
