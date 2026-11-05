@@ -1063,6 +1063,45 @@ void main() {
           walk(hen).firstWhere((o) => o.material != null).material!.opacity, 1);
     });
 
+    test("the aim traces the viewer's last roll, faint, in their colour", () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      List<tjs.Object3D> traced() => walk(world.scene)
+          .where((o) => o.name == 'aim-trace' && o.visible)
+          .toList();
+      PuttWorldFrame frame(List<List<Vec2>> trace) => PuttWorldFrame(
+            time: 0,
+            eggs: [eggAt(const Vec2(10, 10), mine: true)],
+            aim: PuttWorldAim(
+              origin: const Vec2(10, 10),
+              angle: 0,
+              power: 0.5,
+              dragLength: 3,
+              eggRadius: 0.45,
+              trace: trace,
+              traceTint: PuttPalette.tintForIndex(2),
+            ),
+          );
+      world.applySnapshot(frame(const []));
+      expect(traced(), isEmpty);
+      // From the tee at (4, 10) to here, and a stretch after a jump.
+      world.applySnapshot(frame(const [
+        [Vec2(4, 10), Vec2(10, 10)],
+        [Vec2(20, 4), Vec2(22, 4)],
+      ]));
+      final dots = traced();
+      expect(dots.length, greaterThan(15));
+      // Laid along the stretches, relative to the aim's origin.
+      for (final dot in dots) {
+        final x = dot.position.x + 10;
+        final z = dot.position.z + 10;
+        final onFirst = (z - 10).abs() < 1e-6 && x >= 4 - 1e-6 && x <= 10;
+        final onSecond = (z - 4).abs() < 1e-6 && x >= 20 - 1e-6 && x <= 22;
+        expect(onFirst || onSecond, isTrue, reason: 'at ($x, $z)');
+      }
+      expect(dots.first.material!.opacity, lessThan(0.7), reason: 'faint');
+    });
+
     test('the aim draws over the other eggs, the pin over everything', () {
       final world = builtWorld();
       addTearDown(world.dispose);

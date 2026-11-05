@@ -168,6 +168,12 @@ class PuttWorldAim {
   /// putt): marked on the turf, and the arrow ends there.
   final Vec2? rest;
 
+  /// The viewer's last roll on this hole, the stretches between jumps (a
+  /// splash's return, a rabbit hole): drawn faint under the aim, in
+  /// [traceTint], so the next putt can be judged against the last one.
+  final List<List<Vec2>> trace;
+  final ui.Color? traceTint;
+
   const PuttWorldAim({
     required this.origin,
     required this.angle,
@@ -176,6 +182,8 @@ class PuttWorldAim {
     required this.eggRadius,
     this.preview = const [],
     this.rest,
+    this.trace = const [],
+    this.traceTint,
   });
 }
 

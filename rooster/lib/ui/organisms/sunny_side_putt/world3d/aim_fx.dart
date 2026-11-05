@@ -161,9 +161,29 @@ class _PuttAimView3D {
       _dots.add(dot);
       group.add(dot);
     }
+    for (var i = 0; i < _traceCount; i++) {
+      final dot = tjs.Mesh(_traceGeometry, _traceMaterial)
+        ..name = 'aim-trace'
+        ..rotation.x = -math.pi / 2
+        ..renderOrder = 3
+        ..visible = false;
+      _traceDots.add(dot);
+      group.add(dot);
+    }
   }
 
   static const int _dotCount = 44;
+
+  /// The last roll's trace: small dots in the viewer's colour, a shared
+  /// material, under the guide.
+  static const int _traceCount = 90;
+  static final tjs.BufferGeometry _traceGeometry =
+      tjg.CircleGeometry(radius: 0.09, segments: 10);
+  final tjs.MeshBasicMaterial _traceMaterial =
+      _unlit(0xFFF8EE, opacity: 0.5, depthWrite: false);
+  final List<tjs.Mesh> _traceDots = [];
+  int _traceHex = -1;
+
   static final tjs.BufferGeometry _dotGeometry =
       tjg.CircleGeometry(radius: 0.15, segments: 12);
   static final tjs.BufferGeometry _dotRingGeometry =
@@ -187,6 +207,49 @@ class _PuttAimView3D {
   tjs.Mesh? _fill;
   double _fillPower = -1;
   final double _eggRadius;
+
+  /// The viewer's last roll on this hole, faint dots in their colour
+  /// along each stretch (spaced wider on a long roll, so the pool covers
+  /// all of it).
+  void _syncTrace(PuttWorldAim aim, _Ground terrain, double floor) {
+    var shown = 0;
+    final trace = aim.trace;
+    if (trace.isNotEmpty) {
+      final tint = aim.traceTint;
+      final hex = tint == null ? 0xFFF8EE : _mix(_hexOf(tint), 0xFFFFFF, 0.2);
+      if (hex != _traceHex) {
+        _traceHex = hex;
+        _traceMaterial.color = _lin(hex);
+      }
+      var total = 0.0;
+      for (final stretch in trace) {
+        total += _pathLength(stretch);
+      }
+      final spacing = math.max(0.42, total / _traceCount);
+      for (final stretch in trace) {
+        var carried = 0.0;
+        for (var i = 1; i < stretch.length && shown < _traceCount; i++) {
+          final a = stretch[i - 1];
+          final b = stretch[i];
+          final segment = a.distanceTo(b);
+          if (segment <= 1e-6) continue;
+          var t = carried;
+          while (t <= segment && shown < _traceCount) {
+            final p = a + (b - a) * (t / segment);
+            t += spacing;
+            _traceDots[shown++]
+              ..visible = true
+              ..position.setValues(p.x - aim.origin.x,
+                  terrain.at(p) - floor + 0.03, p.y - aim.origin.y);
+          }
+          carried = t - segment;
+        }
+      }
+    }
+    for (var i = shown; i < _traceDots.length; i++) {
+      _traceDots[i].visible = false;
+    }
+  }
 
   /// A flat triangle pointing +x, [length] long and [width] wide, its base
   /// at x = 0.
@@ -284,6 +347,8 @@ class _PuttAimView3D {
       group.add(fill);
       _fill = fill;
     }
+
+    _syncTrace(aim, terrain, floor);
 
     // The dotted guide along the predicted roll, from the arrow's tip on,
     // fading toward its end; a ring where it first meets a rail.

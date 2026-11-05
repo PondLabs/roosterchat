@@ -835,6 +835,7 @@ class SunnySidePuttGame extends FlameGame {
           ));
         }
       }
+      _recordRoll(current);
       final aimState = aim.state;
       if (aim.isActive && aimState != null) {
         final sway = aim.swayNow(aimLayer.holdSeconds);
@@ -855,6 +856,8 @@ class SunnySidePuttGame extends FlameGame {
           eggRadius: eggRadius,
           preview: preview,
           rest: rest == null ? null : _swayed([rest], aim.origin!, sway).single,
+          trace: _lastRoll,
+          traceTint: tintFor(match.localPlayerId),
         );
       }
       fxViews = [
@@ -874,6 +877,68 @@ class SunnySidePuttGame extends FlameGame {
       crows: current == null ? const [] : _crowsForFrame(),
       closeUp: director.celebrating,
     );
+  }
+
+  /// My last roll on this hole (the stretches between jumps), drawn under
+  /// the aim; the roll under way; where my egg last stood still; and the
+  /// hole they belong to.
+  List<List<core.Vec2>> _lastRoll = const [];
+  final List<List<core.Vec2>> _rolling = [];
+  core.Vec2? _stoodAt;
+  hole.HoleDef? _rollHole;
+
+  /// My last roll, for the aim's trace (and tests).
+  List<List<core.Vec2>> get lastRoll => _lastRoll;
+
+  /// Follows my egg frame by frame: a roll runs from where it stood to
+  /// where it stops, a jump (back out of the water, through a rabbit
+  /// hole) starts a new stretch, and the finished roll replaces the last.
+  void _recordRoll(hole.HoleDef current) {
+    if (!identical(current, _rollHole)) {
+      _rollHole = current;
+      _lastRoll = const [];
+      _rolling.clear();
+      _stoodAt = null;
+    }
+    final ball = match.myBall;
+    if (ball == null || ball.holed) {
+      _rolling.clear();
+      return;
+    }
+    final at = match.renderPositionOf(match.localPlayerId);
+    final moving = !ball.asleep && ball.velocity.length > 0.05;
+    if (moving) {
+      if (_rolling.isEmpty) {
+        final stood = _stoodAt;
+        _rolling.add([
+          if (stood != null && stood.distanceTo(at) < 1.5) stood,
+          at,
+        ]);
+        return;
+      }
+      final stretch = _rolling.last;
+      final step = stretch.last.distanceTo(at);
+      if (step > 2.5) {
+        _rolling.add([at]);
+      } else if (step > 0.2) {
+        stretch.add(at);
+      }
+      return;
+    }
+    _stoodAt = at;
+    if (_rolling.isEmpty) return;
+    final stretch = _rolling.last;
+    if (stretch.last.distanceTo(at) > 1e-6) stretch.add(at);
+    var length = 0.0;
+    for (final s in _rolling) {
+      for (var i = 1; i < s.length; i++) {
+        length += s[i - 1].distanceTo(s[i]);
+      }
+    }
+    if (length > 0.8) {
+      _lastRoll = [for (final s in _rolling) List.unmodifiable(s)];
+    }
+    _rolling.clear();
   }
 
   /// The tags for this frame: every other player's egg on the green, at
