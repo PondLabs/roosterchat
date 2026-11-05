@@ -989,6 +989,34 @@ class PhysicsWorld {
   /// Below this closing speed a contact is a touch, not a knock.
   static const double _knockSpeed = 1.0;
 
+  /// Two eggs at rest inside each other (one rolled through a waiting egg
+  /// and stopped in it; a cast's push or a swap set them so) roll just
+  /// clear, with a push the friction spends over the overlap: a putted egg
+  /// out of a waiting one, which stays put; two of a kind half each. Never
+  /// into water (the splash's return would set them back inside each
+  /// other, over and over).
+  void _driftApart(
+      BallBody a, BallBody b, Vec2 offset, double distance, double min) {
+    final normal =
+        distance < Vec2.epsilon ? const Vec2(0, -1) : offset * (1 / distance);
+    final overlap = min - distance;
+    double push(double travel) =>
+        math.sqrt(2 * frictionDeceleration * (travel * 1.15 + 0.05));
+    bool wet(Vec2 p) => hole.water.any((shape) => shape.contains(p));
+    final moves = <(BallBody, double)>[
+      if (a.putted == b.putted) ...[(a, -overlap / 2), (b, overlap / 2)],
+      if (a.putted && !b.putted) (a, -overlap),
+      if (b.putted && !a.putted) (b, overlap),
+    ];
+    for (final (ball, travel) in moves) {
+      if (wet(ball.position + normal * (travel * 1.2))) return;
+    }
+    for (final (ball, travel) in moves) {
+      ball.velocity = normal * (travel.sign * push(travel.abs()));
+      ball.asleep = false;
+    }
+  }
+
   void _ballVsBalls() {
     final list = balls;
     final tiered = hole.terraces.isNotEmpty || hole.ramps.isNotEmpty;
@@ -1011,9 +1039,13 @@ class PhysicsWorld {
         final pair = '${a.playerId}|${b.playerId}';
         if (!a.putted || !b.putted) {
           _passing.add(pair);
+          if (a.asleep && b.asleep) _driftApart(a, b, offset, distance, min);
           continue;
         }
-        if (_passing.contains(pair)) continue;
+        if (_passing.contains(pair)) {
+          if (a.asleep && b.asleep) _driftApart(a, b, offset, distance, min);
+          continue;
+        }
         // Eggs a step apart (one on a lip, one at the face's foot below)
         // pass over and under each other.
         if (tiered &&

@@ -467,6 +467,41 @@ void main() {
         expect(world.ball('b')!.putted, isFalse);
       });
 
+      test('a putted egg that stops inside a waiting one rolls clear of it',
+          () {
+        final world = pair();
+        final b = world.ball('b')!;
+        final a = world.ball('a')!..position = b.position + const Vec2(0.3, 0);
+        a.putted = true;
+        final waiting = b.position;
+        world.stepTick();
+        runUntilSettled(world);
+        expect(a.position.distanceTo(b.position),
+            greaterThan(testPhysics.ballRadius * 2 * 0.95),
+            reason: 'clear of each other');
+        expect(b.position, waiting, reason: 'the waiting egg stays put');
+        expect(
+            world
+                .drainEvents()
+                .whereType<BallBounced>()
+                .where((e) => e.kind == BounceKind.ball),
+            isEmpty,
+            reason: 'no knock');
+      });
+
+      test('two waiting eggs set inside each other drift apart, half each', () {
+        final world = pair();
+        final b = world.ball('b')!;
+        final a = world.ball('a')!..position = b.position + const Vec2(0.3, 0);
+        final middle = (a.position + b.position) * 0.5;
+        world.stepTick();
+        runUntilSettled(world);
+        expect(a.position.distanceTo(b.position),
+            greaterThan(testPhysics.ballRadius * 2 * 0.95));
+        expect(((a.position + b.position) * 0.5).distanceTo(middle),
+            lessThan(0.05));
+      });
+
       test('two that met as ghosts pass through until they part', () {
         final world = pair();
         final b = world.ball('b')!;
@@ -475,10 +510,15 @@ void main() {
         // b putts (a soft one, away from a), a has putted too: both solid,
         // but they still overlap, and do not spring apart.
         a.putted = true;
-        final aAt = a.position;
         world.applyShot('b', math.pi, 0.02);
         world.stepTick();
-        expect(a.position, aAt, reason: 'no shove while they part');
+        expect(
+            world
+                .drainEvents()
+                .whereType<BallBounced>()
+                .where((e) => e.kind == BounceKind.ball),
+            isEmpty,
+            reason: 'no spring apart');
         runUntilSettled(world);
         // Parted, they meet as eggs again.
         world.drainEvents();
