@@ -178,9 +178,9 @@ class _PuttAimView3D {
   /// material, under the guide.
   static const int _traceCount = 90;
   static final tjs.BufferGeometry _traceGeometry =
-      tjg.CircleGeometry(radius: 0.09, segments: 10);
+      tjg.CircleGeometry(radius: 0.12, segments: 10);
   final tjs.MeshBasicMaterial _traceMaterial =
-      _unlit(0xFFF8EE, opacity: 0.5, depthWrite: false);
+      _unlit(0xFFF8EE, opacity: 0.8, depthWrite: false);
   final List<tjs.Mesh> _traceDots = [];
   int _traceHex = -1;
 
@@ -216,7 +216,11 @@ class _PuttAimView3D {
     final trace = aim.trace;
     if (trace.isNotEmpty) {
       final tint = aim.traceTint;
-      final hex = tint == null ? 0xFFF8EE : _mix(_hexOf(tint), 0xFFFFFF, 0.2);
+      // A shade darker than the player's colour: a pale yolk on light
+      // turf all but vanished.
+      final hex = tint == null
+          ? 0xFFF8EE
+          : _mix(_hexOf(tint), _hexOf(PuttPalette.ink), 0.25);
       if (hex != _traceHex) {
         _traceHex = hex;
         _traceMaterial.color = _lin(hex);

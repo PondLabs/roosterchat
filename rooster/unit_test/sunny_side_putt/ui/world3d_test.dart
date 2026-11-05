@@ -1063,7 +1063,7 @@ void main() {
           walk(hen).firstWhere((o) => o.material != null).material!.opacity, 1);
     });
 
-    test("the aim traces the viewer's last roll, faint, in their colour", () {
+    test("the aim traces the viewer's last roll, in their colour", () {
       final world = builtWorld();
       addTearDown(world.dispose);
       List<tjs.Object3D> traced() => walk(world.scene)
@@ -1099,7 +1099,8 @@ void main() {
         final onSecond = (z - 4).abs() < 1e-6 && x >= 20 - 1e-6 && x <= 22;
         expect(onFirst || onSecond, isTrue, reason: 'at ($x, $z)');
       }
-      expect(dots.first.material!.opacity, lessThan(0.7), reason: 'faint');
+      expect(dots.first.material!.opacity, lessThan(0.9),
+          reason: "softer than the guide's dots");
     });
 
     test('the aim draws over the other eggs, the pin over everything', () {

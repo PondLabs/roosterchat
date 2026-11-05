@@ -726,15 +726,12 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
       if (ball.holed || !ball.asleep) continue;
       final shots = _botShots[ball.playerId] ?? 0;
       final mine = world.ball(match.localPlayerId);
-      if (_knock &&
-          !_knocked &&
-          order == 1 &&
-          ball.putted &&
-          mine != null &&
-          mine.putted &&
-          mine.asleep &&
-          !mine.holed) {
-        // Staged: straight into the viewer's egg, with pace.
+      if (_knock && !_knocked && order == 1 && ball.putted) {
+        // Staged: after its first putt it waits for the viewer's egg to
+        // rest after theirs, then rolls straight into it, with pace.
+        if (mine == null || !mine.putted || !mine.asleep || mine.holed) {
+          continue;
+        }
         _knocked = true;
         final shot = putt(ball.position, mine.position, arrival: 3.4);
         match.engine.submitShot(ball.playerId, shot.angle, shot.power);
