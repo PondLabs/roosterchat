@@ -194,12 +194,15 @@ class ThreeJS with WidgetsBindingObserver{
     renderer = null;
     renderTarget?.dispose();
     renderTarget = null;
-    scene.dispose();
+    // ROOSTER: a start that failed (or was cut short) before its setup ran
+    // has no scene nor camera to dispose: reading them threw a late-init
+    // error out of the widget tree's teardown.
+    if (_mounted) scene.dispose();
     for(final event in disposeEvents){
       event.call();
     }
     
-    camera.dispose();
+    if (_mounted) camera.dispose();
     events.clear();
     disposeEvents.clear();
 
@@ -209,13 +212,18 @@ class ThreeJS with WidgetsBindingObserver{
     // plugin, then makes its context current) failed that makeCurrent with
     // EGL_BAD_ACCESS, an error nobody caught. A start under way finishes
     // first; then ANGLE goes.
+    // ROOSTER: and only an ANGLE that came up is torn down (a failed init
+    // leaves nothing to free, and its dispose dereferences what it never
+    // made).
     final starting = _starting;
     if (starting != null) {
       final owned = angle;
       starting
           .catchError((Object _) {})
-          .whenComplete(() => owned?.dispose([texture]));
-    } else {
+          .whenComplete(() {
+            if (_angleUp) owned?.dispose([texture]);
+          });
+    } else if (_angleUp) {
       angle?.dispose([texture]);
     }
     loadingWidget = null;
@@ -255,6 +263,9 @@ class ThreeJS with WidgetsBindingObserver{
 
   /// ROOSTER: ANGLE's start, while it runs (dispose waits for it).
   Future<void>? _starting;
+
+  /// ROOSTER: ANGLE's init came through (there is something to tear down).
+  bool _angleUp = false;
 
   /// ROOSTER: the start, its failure swallowed once the viewer is gone (the
   /// page it would draw on is gone too).
@@ -407,6 +418,7 @@ class ThreeJS with WidgetsBindingObserver{
   Future<void> initPlatformState() async {
     if(texture == null){
       await angle?.init();
+      _angleUp = true;
       // ROOSTER: disposed while ANGLE started: make no texture for nobody.
       if (_disposed) return;
       

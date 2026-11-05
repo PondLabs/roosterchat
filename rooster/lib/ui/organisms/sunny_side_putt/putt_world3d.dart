@@ -45,12 +45,14 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/widgets.dart'
     show
         BoxConstraints,
         BuildContext,
         ColoredBox,
         LayoutBuilder,
+        SingleTickerProviderStateMixin,
         SizedBox,
         State,
         StatefulWidget,
@@ -1729,15 +1731,40 @@ class PuttThreeSurface extends StatefulWidget {
   /// plugin channels stand empty), so it reports false: the view shows
   /// the plain panel and the tests run headless.
   static bool get gpuSupported =>
-      kIsWeb || !flutter_env.runningUnderFlutterTest;
+      debugGpuSupported ?? (kIsWeb || !flutter_env.runningUnderFlutterTest);
+
+  /// Tests: try the GL surface anyway (under the test runner its plugin is
+  /// missing, so the start fails as on a machine without GL).
+  static bool? debugGpuSupported;
 
   @override
   State<PuttThreeSurface> createState() => _PuttThreeSurfaceState();
 }
 
-class _PuttThreeSurfaceState extends State<PuttThreeSurface> {
+class _PuttThreeSurfaceState extends State<PuttThreeSurface>
+    with SingleTickerProviderStateMixin {
   tjr.ThreeJS? _three;
   bool _failed = false;
+
+  /// With no GL to draw with, the world still moves every frame (the
+  /// camera's choreography, the eggs, the tags and the coach riding it,
+  /// the aim's ray through the camera): only the drawing is gone.
+  Ticker? _headless;
+
+  void _failOver(ui.Size size) {
+    if (_headless != null) return;
+    widget.world.setViewport(size);
+    widget.world.fitCamera();
+    _headless = createTicker((_) {
+      if (!mounted) return;
+      final now = _size;
+      if (now != null) widget.world.setViewport(now);
+      widget.world.applySnapshot(widget.buildFrame());
+      widget.onFrame?.call();
+    })
+      ..start();
+  }
+
   bool _ready = false;
   ui.Size? _size;
   ui.Size? _pendingSize;
@@ -1761,9 +1788,10 @@ class _PuttThreeSurfaceState extends State<PuttThreeSurface> {
         // needs): the plain panel, as for a missing plugin; the game itself
         // keeps working.
         onStartFailed: (_) {
-          if (_failed) return;
+          if (_failed || !mounted) return;
           _failed = true;
-          if (mounted) setState(() {});
+          setState(() {});
+          _failOver(size);
           widget.onFailed?.call();
         },
         settings: tjr.Settings(
@@ -1803,6 +1831,7 @@ class _PuttThreeSurfaceState extends State<PuttThreeSurface> {
       // A missing ANGLE plugin (or a headless surprise): fall back to the
       // plain panel; the game itself keeps working.
       _failed = true;
+      _failOver(size);
       widget.onFailed?.call();
     }
   }
@@ -1865,6 +1894,7 @@ class _PuttThreeSurfaceState extends State<PuttThreeSurface> {
 
   @override
   void dispose() {
+    _headless?.dispose();
     _three?.dispose();
     widget.world.dispose();
     super.dispose();
