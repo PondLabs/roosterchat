@@ -684,7 +684,9 @@ class PuttWorld3D {
       if (hatchling._age > pick._age) pick = hatchling;
     }
     pick.hatch(nest, view._tintHex,
-        floor: _ground.at(nest), big: view.everMine);
+        floor: _ground.at(nest),
+        big: view.everMine,
+        rim: (_hole?.nest.radius ?? 1.2) * 0.85);
   }
 
   /// Until when (the frame clock) the flag shakes: an egg just dropped in.

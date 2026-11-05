@@ -91,6 +91,7 @@ class _Hatchling {
 
   double _age = life;
   double _scale = 1;
+  double _rim = 1.2;
   Vec2 _at = Vec2.zero;
   double _capSpin = 0;
   Vec2 _capHeading = const Vec2(1, 0);
@@ -126,10 +127,13 @@ class _Hatchling {
 
   /// Hatches at [at] (the nest), the shell in [tint]; [big] for the
   /// viewer's own egg.
-  void hatch(Vec2 at, int tint, {double floor = 0, bool big = false}) {
+  void hatch(Vec2 at, int tint,
+      {double floor = 0, bool big = false, double rim = 1.2}) {
     _age = 0;
     _at = at;
     _scale = big ? 1.35 : 1.0;
+    // Where the cap lands: on the straw, in the hatchling's own units.
+    _rim = rim / _scale;
     _shellMaterial.color = _lin(_mix(tint, 0xFFF8EE, 0.3));
     _capSpin = 0;
     final angle = (at.x * 12.9898 + at.y * 78.233) % (math.pi * 2);
@@ -184,23 +188,27 @@ class _Hatchling {
     final dz = camera.z - _at.y;
     _rise.rotation.y = math.atan2(dx, dz);
 
-    // The cap: off the top, tumbling away, gone by the second hop.
-    if (t < 1.1) {
-      _cap.visible = true;
-      final flight = t;
-      final out = flight * 2.2;
+    // The cap: popped off the top, it tumbles in an arc and lands upside
+    // down on the straw, where it rocks to rest until the chick goes.
+    const flight = 0.55;
+    _cap.visible = true;
+    if (t < flight) {
+      final k = t / flight;
       _cap.position.setValues(
-        _capHeading.x * out,
-        0.9 + flight * 6.5 - 0.5 * 15 * flight * flight,
-        _capHeading.y * out,
+        _capHeading.x * _rim * k,
+        0.9 + 1.4 * math.sin(k * math.pi) - 0.75 * k,
+        _capHeading.y * _rim * k,
       );
-      if (_cap.position.y < 0.2) _cap.position.y = 0.2;
       _capSpin += dt * 11;
       _cap.rotation.set(_capSpin, 0, _capSpin * 0.6);
-      final fade = t < 0.8 ? 1.0 : (1.1 - t) / 0.3;
-      _cap.scale.setValues(fade, fade, fade);
     } else {
-      _cap.visible = false;
+      // Landed: upside down (a cup on the straw), a rock that settles.
+      final since = t - flight;
+      final rock = math.sin(since * 14) * 0.35 * math.exp(-since * 4);
+      _cap.position.setValues(_capHeading.x * _rim, 0.15, _capHeading.y * _rim);
+      _cap.rotation.set(math.pi + rock, 0, rock * 0.5);
     }
+    final fade = t < life - 0.3 ? 1.0 : (life - t) / 0.3;
+    _cap.scale.setValues(fade, fade, fade);
   }
 }

@@ -183,11 +183,13 @@ class PuttCameraDirector {
       // From higher up (less of what stands between the camera and the
       // nest), the nest a little below the middle, under the banner.
       final away = Vec2(math.sin(rig.yawTarget), math.cos(rig.yawTarget));
-      _celebrateAt = hole.nest.position + away * 1.4;
+      // The nest low in the frame and the flag short from up here: both
+      // under the banner across the top.
+      _celebrateAt = hole.nest.position + away * 2.4;
       rig.glideTo(
         target: _celebrateAt,
-        distance: math.max(rig.overviewDistance * 0.34, 9.0),
-        pitchDeg: 50,
+        distance: math.max(rig.overviewDistance * 0.36, 9.5),
+        pitchDeg: 56,
       );
     }
     _wasHoled = cue.myEggHoled;
