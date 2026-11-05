@@ -1273,6 +1273,289 @@ void main() {
     });
   });
 
+  group('the birds', () {
+    /// The vertices of [mesh] in its own frame.
+    List<tjs.Vector3> pointsOf(tjs.Object3D mesh) {
+      final position =
+          mesh.geometry!.attributes['position'] as tjs.BufferAttribute;
+      return [
+        for (var i = 0; i < position.count; i++)
+          tjs.Vector3(position.getX(i)!.toDouble(),
+              position.getY(i)!.toDouble(), position.getZ(i)!.toDouble()),
+      ];
+    }
+
+    /// A foot's vertices as (ahead, side) about its ankle: three toes reach
+    /// out past [reach] (straight on and splayed either way) and a fourth
+    /// past [back] behind.
+    void expectToes(List<(double, double)> foot,
+        {required double reach, required double back}) {
+      final ahead = [
+        for (final (a, s) in foot)
+          if (math.sqrt(a * a + s * s) > reach) math.atan2(s, a),
+      ];
+      expect(ahead.any((angle) => angle.abs() < 0.2), isTrue,
+          reason: 'the middle toe');
+      expect(ahead.any((angle) => angle > 0.4 && angle < 0.8), isTrue,
+          reason: 'a toe splayed one way');
+      expect(ahead.any((angle) => angle < -0.4 && angle > -0.8), isTrue,
+          reason: 'and one the other');
+      expect(
+          foot.any((p) =>
+              math.sqrt(p.$1 * p.$1 + p.$2 * p.$2) > back &&
+              math.atan2(p.$2, p.$1).abs() > 2.6),
+          isTrue,
+          reason: 'the short toe behind');
+    }
+
+    tjs.Object3D hostOf(PuttWorld3D world) =>
+        walk(world.holeGroup('scenery')!).firstWhere((o) => o.name == 'host');
+
+    test('the host stands on two scaly legs, three toes ahead and one behind',
+        () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      final body = walk(hostOf(world)).firstWhere((o) => o.name == 'host-body');
+      // His own units: the ground at y = 0, forward +x, his sides along z.
+      final points = pointsOf(body);
+      final shanks = [
+        for (final p in points)
+          if (p.y > 0.8 && p.y < 1.2) p,
+      ];
+      expect(shanks, isNotEmpty);
+      expect(shanks.where((p) => p.z.abs() < 0.5), isEmpty,
+          reason: 'two legs, not one post');
+      for (final side in [-1.0, 1.0]) {
+        // The ankle: the shank's middle just over the foot.
+        final low = [
+          for (final p in points)
+            if (p.y > 0.42 && p.y < 0.6 && p.z * side > 0) p,
+        ];
+        expect(low, isNotEmpty, reason: 'a leg on each side');
+        final ankleX = low.map((p) => p.x).reduce((a, b) => a + b) / low.length;
+        final ankleZ = low.map((p) => p.z).reduce((a, b) => a + b) / low.length;
+        expectToes([
+          for (final p in points)
+            if (p.y < 0.32 && p.z * side > 0) (p.x - ankleX, p.z - ankleZ),
+        ], reach: 0.65, back: 0.4);
+      }
+      // The scales: bands of two yellow-oranges down each shank (between
+      // the spur and the drumstick nothing else stands there).
+      final colors = body.geometry!.attributes['color'] as tjs.BufferAttribute;
+      final ratios = <double>{};
+      for (var i = 0; i < colors.count; i++) {
+        if (points[i].y < 1.05 || points[i].y > 1.6) continue;
+        final r = colors.getX(i)!.toDouble();
+        final g = colors.getY(i)!.toDouble();
+        final b = colors.getZ(i)!.toDouble();
+        expect(g / r, lessThan(0.5), reason: 'yellow-orange');
+        expect(b / r, lessThan(0.1), reason: 'yellow-orange');
+        ratios.add((g / r * 100).roundToDouble());
+      }
+      expect(ratios.reduce(math.max) - ratios.reduce(math.min), greaterThan(5),
+          reason: 'banded: two tones, not one');
+    });
+
+    test('the host breathes, and turns to the camera while the hole opens', () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      final host = hostOf(world);
+      final head = walk(host).firstWhere((o) => o.name == 'host-head');
+      final breath = walk(host).firstWhere((o) => o.name == 'host-breath');
+      // The camera where the sweep sets off: low over the nest, turned off
+      // to the side, well round from where he faces.
+      world.rig.aimAt(
+          yaw: math.pi + 0.55,
+          pitchDeg: 15,
+          distance: world.rig.overviewDistance * 0.92,
+          target: dressing.nest.position);
+      // My egg at rest out on the green, which he watches otherwise.
+      final egg = eggAt(const Vec2(30, 13), mine: true);
+      var time = 0.0;
+      final swells = <double>[];
+      void run(double seconds, {required bool opening}) {
+        for (var t = 0.0; t < seconds; t += 1 / 60) {
+          world.applySnapshot(
+              PuttWorldFrame(time: time, eggs: [egg], opening: opening));
+          swells.add(breath.scale.x);
+          time += 1 / 60;
+        }
+        world.scene.updateMatrixWorld(true);
+      }
+
+      /// Where his beak points, from his head.
+      (tjs.Vector3, tjs.Vector3) look() {
+        final at = head.localToWorld(tjs.Vector3(0, 0, 0));
+        final ahead = head.localToWorld(tjs.Vector3(1, 0, 0))..sub(at);
+        return (at, ahead);
+      }
+
+      /// How far, on the ground, he looks off [target] (radians).
+      double offFrom(tjs.Vector3 target) {
+        final (at, ahead) = look();
+        final to = target.clone()..sub(at);
+        final turn =
+            (math.atan2(ahead.z, ahead.x) - math.atan2(to.z, to.x)).abs() %
+                (2 * math.pi);
+        return math.min(turn, 2 * math.pi - turn);
+      }
+
+      run(2.5, opening: true);
+      expect(offFrom(world.camera.position), lessThan(0.25),
+          reason: 'he looks round at the camera, his body coming too');
+      expect(look().$2.y, greaterThan(0), reason: 'up at it');
+      run(2.5, opening: false);
+      expect(offFrom(tjs.Vector3(30, 0, 13)), lessThan(0.5),
+          reason: 'then back to the egg in play');
+      expect(offFrom(world.camera.position), greaterThan(0.6));
+      expect(look().$2.y, lessThan(0), reason: 'down at the green');
+      // His breath: his body swells about two per cent, and back.
+      final swell = swells.reduce(math.max) - swells.reduce(math.min);
+      expect(swell, inInclusiveRange(0.015, 0.025));
+    });
+
+    test("the host pops out of the camera's face, every feather with him", () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      final host = hostOf(world);
+      final meshes = walk(host).where((o) => o.material != null).toList();
+      expect(
+          meshes
+              .where((o) => o.name.endsWith('-outline'))
+              .map((o) => o.name)
+              .toSet(),
+          {
+            'host-body-outline',
+            'host-wing-feathers-outline',
+            'host-face-outline'
+          },
+          reason: 'inked all over, wings too');
+      for (final mesh in meshes) {
+        expect(mesh.material!.transparent, isTrue,
+            reason: '${mesh.name}: a fade only moves a uniform');
+      }
+      // The camera right over him.
+      world.rig.aimAt(
+          target: Vec2(host.position.x, host.position.z),
+          pitchDeg: 72,
+          distance: 12);
+      var time = 0.0;
+      for (var i = 0; i < 20; i++) {
+        world.applySnapshot(PuttWorldFrame(time: time));
+        time += 1 / 60;
+      }
+      expect(host.visible, isFalse);
+      for (final mesh in meshes) {
+        expect(mesh.material!.opacity, lessThan(0.05), reason: mesh.name);
+      }
+    });
+
+    test("the hen's legs step with her walk, the planted foot on the ground",
+        () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      final hen = world.holeGroup('hens')!.children.first;
+      final legs = hen.children.where((o) => o.name == 'hen-leg').toList();
+      expect(legs, hasLength(2));
+      final feet = [
+        for (final leg in legs)
+          walk(leg).firstWhere((o) => o.name == 'hen-foot'),
+      ];
+      const r = 1.1;
+      // Her own toes, like the host's: in her hip's frame forward is +z.
+      for (final foot in feet) {
+        final points = pointsOf(foot);
+        final low = [
+          for (final p in points)
+            if (p.y < -r * 0.45 && p.y > -r * 0.55) p,
+        ];
+        final ankleZ = low.map((p) => p.z).reduce((a, b) => a + b) / low.length;
+        final ankleX = low.map((p) => p.x).reduce((a, b) => a + b) / low.length;
+        expectToes([
+          for (final p in points)
+            if (p.y < -r * 0.5) (p.z - ankleZ, p.x - ankleX),
+        ], reach: r * 0.25, back: r * 0.14);
+      }
+      double lowest(tjs.Object3D foot) {
+        var low = double.infinity;
+        for (final p in pointsOf(foot)) {
+          low = math.min(low, p.applyMatrix4(foot.matrixWorld).y);
+        }
+        return low;
+      }
+
+      var time = 0.0;
+      var phase = 0.0;
+      final lifted = [false, false];
+      for (var i = 0; i < 90; i++) {
+        // Walking east along her path, the waddle clock running as the
+        // game's does (its ticks times 0.12, 120 a second).
+        world.applySnapshot(PuttWorldFrame(time: time, hens: [
+          PuttWorldHen(
+              position: Vec2(20 + i * 0.03, 14),
+              radius: r,
+              phase: phase,
+              heading: const Vec2(1, 0)),
+        ]));
+        world.scene.updateMatrixWorld(true);
+        final lows = [for (final foot in feet) lowest(foot)];
+        expect(math.min(lows[0], lows[1]), closeTo(0, r * 0.02),
+            reason: 'a foot planted on the ground');
+        if (i > 0) {
+          expect(legs[0].rotation.x, closeTo(-legs[1].rotation.x, 1e-9),
+              reason: 'the legs swing opposite');
+          for (var k = 0; k < 2; k++) {
+            if (lows[k] > r * 0.06) lifted[k] = true;
+          }
+        }
+        time += 1 / 60;
+        phase += 14.4 / 60;
+      }
+      expect(lifted, [true, true], reason: 'each foot lifts as it swings');
+    });
+
+    test('every part of the hen pops out of a close-up with her, legs too', () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      final hen = world.holeGroup('hens')!.children.first;
+      final meshes = walk(hen).where((o) => o.material != null).toList();
+      expect(meshes.where((o) => o.name == 'hen-foot'), hasLength(2));
+      expect(meshes.where((o) => o.name == 'hen-foot-outline'), hasLength(2),
+          reason: 'her legs are inked too');
+      for (final mesh in meshes) {
+        expect(mesh.material!.transparent, isTrue,
+            reason: '${mesh.name}: a fade only moves a uniform');
+      }
+      const walking = PuttWorldHen(
+          position: Vec2(20, 14), radius: 1.1, phase: 0, heading: Vec2(1, 0));
+      var time = 0.0;
+      void frames(int count, {required bool closeUp}) {
+        for (var i = 0; i < count; i++) {
+          world.applySnapshot(PuttWorldFrame(
+              time: time, hens: const [walking], closeUp: closeUp));
+          time += 0.016;
+        }
+      }
+
+      frames(14, closeUp: true);
+      expect(hen.visible, isFalse);
+      for (final mesh in meshes) {
+        expect(mesh.material!.opacity, lessThan(0.05), reason: mesh.name);
+      }
+      expect(walk(hen).where((o) => o.castShadow), isEmpty,
+          reason: 'no shadow of a hen who is not there');
+      frames(14, closeUp: false);
+      expect(hen.visible, isTrue);
+      for (final mesh in meshes) {
+        expect(mesh.material!.opacity, 1, reason: mesh.name);
+      }
+      expect(
+          meshes.where((o) => o.name == 'hen-foot').every((o) => o.castShadow),
+          isTrue,
+          reason: 'her feet cast their shadows again');
+    });
+  });
+
   group('the world disposes cleanly', () {
     test('every object and geometry is dead; the gpu resources fire dispose',
         () {

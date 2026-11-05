@@ -2,8 +2,8 @@
 // an Easter band in the player's colour, rolling by their velocity and
 // settling on their side when they stop, a soft contact shadow under them
 // and, under the viewer's own, a marker ring and a bobbing arrow), the hen
-// (legs that walk, a head that bobs), and the "?" crates floating over
-// their glow.
+// (legs that step with her walk, a head that bobs), and the "?" crates
+// floating over their glow.
 part of '../putt_world3d.dart';
 
 /// The egg's height over its radius: the long axis' half-length.
@@ -651,8 +651,6 @@ tjs.DataTexture _eggTexture(int tint) {
   return bitmap.texture();
 }
 
-/// The hen: a plump white body, a cream-tipped tail, wings, a head with
-/// the red comb and wattle, a yolk beak and legs that walk her path.
 /// Something that walks (or swims) a moving obstacle's path.
 abstract class _Walker {
   tjs.Group get group;
@@ -818,82 +816,44 @@ class _DuckView3D implements _Walker {
   }
 }
 
+/// A hen where the obstacle walks (built in `world3d/birds.dart`): plump
+/// and white, her wings' feathers cut along the edge, a small cream tail,
+/// a little comb and wattle, and two scaly legs that step with her walk.
 class _HenView3D with _Fadable implements _Walker {
   _HenView3D(MovingObstacle obstacle, [_Ground? terrain])
-      : _terrain = terrain ?? _Ground() {
-    final r = obstacle.radius;
+      : _terrain = terrain ?? _Ground(),
+        _r = obstacle.radius {
+    final r = _r;
     group = tjs.Group()..name = 'hen/${obstacle.id}';
-    const white = 0xFCF8F1;
-    const cream = 0xEEDFC8;
-    final comb = _hexOf(PuttPalette.comb);
-    final yolk = _hexOf(PuttPalette.yolk);
-    final ink = _hexOf(PuttPalette.ink);
-    // The body rides the bob; forward is local +z.
+    // The body rides the bob and the waddle; forward is local +z.
     _body = tjs.Group()..name = 'hen-body';
-    final shape = _Merged()
-      ..add(
-          tjs.SphereGeometry(1, 20, 14),
-          _place(0, r * 1.05, 0, sx: r * 0.92, sy: r * 0.82, sz: r * 1.1),
-          white,
-          baseShade: 0.8)
-      ..add(
-          tjs.SphereGeometry(1, 16, 12),
-          _place(0, r * 1.2, r * 0.55, sx: r * 0.62, sy: r * 0.68, sz: r * 0.6),
-          white);
-    for (final side in [-1.0, 1.0]) {
-      shape.add(
-          tjs.SphereGeometry(1, 14, 10),
-          _place(side * r * 0.78, r * 1.08, -r * 0.08,
-              sx: r * 0.22, sy: r * 0.5, sz: r * 0.78),
-          cream);
-    }
-    for (var f = 0; f < 3; f++) {
-      shape.add(
-        tjg.ConeGeometry(r * 0.3, r * 0.9, 6),
-        _place((f - 1) * r * 0.22, r * 1.55, -r * 0.85,
-            tilt: -0.75 - f * 0.08, roll: (f - 1) * 0.25),
-        f == 1 ? cream : white,
-      );
-    }
+    final shape = _Merged();
+    _henBody(shape, tjs.Matrix4(), r);
     final henShape = shape.mesh('hen-shape', flat: false, roughness: 0.8)!;
     _inkOutline(henShape, r * 0.05);
     _body.add(henShape);
     _head = tjs.Group()
       ..name = 'hen-head'
-      ..position.setValues(0, r * 1.85, r * 0.85);
-    final face = _Merged()
-      ..add(tjs.SphereGeometry(r * 0.42, 16, 12), _place(0, 0, 0), white)
-      ..add(tjg.ConeGeometry(r * 0.14, r * 0.38, 8),
-          _place(0, -r * 0.04, r * 0.48, tilt: math.pi / 2), yolk)
-      ..add(tjs.SphereGeometry(r * 0.12, 10, 8),
-          _place(0, -r * 0.26, r * 0.32, sy: 1.5), comb);
-    for (final (z, y, s) in const [
-      (0.12, 0.4, 0.16),
-      (-0.08, 0.46, 0.17),
-      (-0.26, 0.38, 0.13)
-    ]) {
-      face.add(tjs.SphereGeometry(r * s, 10, 8),
-          _place(0, r * y, r * z, sx: 0.55), comb);
-    }
-    for (final side in [-1.0, 1.0]) {
-      face.add(tjs.SphereGeometry(r * 0.065, 8, 6),
-          _place(side * r * 0.3, r * 0.08, r * 0.24), ink);
-    }
+      ..position.setValues(0, r * _henHeadY, r * _henHeadZ);
+    final face = _Merged();
+    _henHead(face, tjs.Matrix4(), r);
     final henFace = face.mesh('hen-face', flat: false, roughness: 0.7)!;
     _inkOutline(henFace, r * 0.05);
     _head.add(henFace);
     _body.add(_head);
     group.add(_body);
+    // Each leg on its own hip, so it steps: drumstick, scaly shank, toes,
+    // inked thinner than her body.
     for (final side in [-1.0, 1.0]) {
       final hip = tjs.Group()
         ..name = 'hen-leg'
-        ..position.setValues(side * r * 0.32, r * 0.55, 0);
-      final leg = _Merged()
-        ..add(tjg.CylinderGeometry(r * 0.06, r * 0.06, r * 0.55, 6),
-            _place(0, -r * 0.27, 0), yolk)
-        ..add(tjs.BoxGeometry(r * 0.12, r * 0.05, r * 0.36),
-            _place(0, -r * 0.54, r * 0.1), yolk);
-      hip.add(leg.mesh('hen-foot', flat: true)!..castShadow = true);
+        ..position.setValues(side * r * 0.32, r * _henHip, 0);
+      final leg = _Merged();
+      _henLeg(leg, tjs.Matrix4(), r, side);
+      final foot = leg.mesh('hen-foot', flat: false, roughness: 0.6)!;
+      _depths.add(_depthsBySwing(foot.geometry!));
+      _inkOutline(foot, r * 0.025);
+      hip.add(foot);
       _legs.add(hip);
       group.add(hip);
     }
@@ -908,11 +868,57 @@ class _HenView3D with _Fadable implements _Walker {
   late final tjs.Group _body;
   late final tjs.Group _head;
   final List<tjs.Group> _legs = [];
+  final double _r;
+
+  /// For each leg, how deep under its hip its lowest point hangs, swung
+  /// to each angle of the table ([_depthAt] reads it).
+  final List<List<double>> _depths = [];
+
+  /// The table's swings: from -0.7 radians, a twentieth apart.
+  static const double _swingFrom = -0.7;
+  static const double _swingStep = 0.05;
+  static const int _swings = 29;
+
+  /// The leg [geometry]'s depth under its hip at each swing of the table
+  /// (turned about the hip's x, forward +z), read off its own vertices: a
+  /// planted foot stands right on the ground, on its claws or its heel.
+  static List<double> _depthsBySwing(tjs.BufferGeometry geometry) {
+    final position = geometry.attributes['position'] as tjs.BufferAttribute;
+    final depths = <double>[];
+    for (var k = 0; k < _swings; k++) {
+      final angle = _swingFrom + k * _swingStep;
+      final c = math.cos(angle);
+      final s = math.sin(angle);
+      var deepest = 0.0;
+      for (var i = 0; i < position.count; i++) {
+        final y = position.getY(i)!.toDouble();
+        final z = position.getZ(i)!.toDouble();
+        deepest = math.max(deepest, z * s - y * c);
+      }
+      depths.add(deepest);
+    }
+    return depths;
+  }
+
+  /// How deep under its hip leg [leg] reaches, swung to [angle].
+  double _depthAt(int leg, double angle) {
+    final depths = _depths[leg];
+    final at = ((angle - _swingFrom) / _swingStep).clamp(0.0, _swings - 1.0);
+    final i = math.min(at.floor(), _swings - 2);
+    return depths[i] + (depths[i + 1] - depths[i]) * (at - i);
+  }
+
   Vec2 _heading = const Vec2(0, 1);
   Vec2? _last;
 
-  /// The stand and the facing (the last non-stop direction she had), the
-  /// legs swinging while she walks and the head bobbing with her steps.
+  /// How far a leg swings either way of straight down while she walks.
+  static const double _stride = 0.5;
+
+  /// The stand and the facing (the last non-stop direction she had), and
+  /// the walk: each leg swings ahead with its foot lifted and back with it
+  /// planted, the planted foot kept to the ground (on its toes as it
+  /// leans back, on its heel as it reaches ahead); her body bobs and rocks
+  /// from foot to foot and her head bobs with her steps.
   @override
   void sync(PuttWorldHen hen, double time) {
     if (hen.heading.length > 1e-4) {
@@ -923,14 +929,27 @@ class _HenView3D with _Fadable implements _Walker {
     final moved = _last == null ? 0.0 : _last!.distanceTo(hen.position);
     _last = hen.position;
     final walking = moved > 1e-4;
-    final stride = walking ? math.sin(hen.phase * 0.9) : 0.0;
-    _legs[0].rotation.x = stride * 0.6;
-    _legs[1].rotation.x = -stride * 0.6;
+    final step = hen.phase * 0.9;
+    final swing = walking ? math.sin(step) : 0.0;
+    // Above 0, the first leg is the one swinging ahead.
+    final ahead = walking ? -math.cos(step) : 0.0;
+    for (var i = 0; i < _legs.length; i++) {
+      final sign = i == 0 ? 1.0 : -1.0;
+      final angle = sign * swing * _stride;
+      final lift = math.max(0.0, sign * ahead) * _r * 0.12;
+      _legs[i]
+        ..rotation.x = angle
+        ..position.y = _depthAt(i, angle) + lift;
+    }
     final bob = walking ? math.sin(hen.phase * 1.8).abs() * 0.08 : 0.0;
     _body.position.y = bob;
+    _body.rotation.z = walking ? math.cos(step) * 0.06 : 0.0;
     // Pecking now and then while she stands.
     final peck = walking ? 0.0 : math.max(0.0, math.sin(time * 2.2)) * 0.5;
-    _head.rotation.x = peck;
+    _head
+      ..rotation.x = peck
+      ..position.z =
+          _r * _henHeadZ + (walking ? math.sin(step * 2) * _r * 0.05 : 0);
     group.position
         .setValues(hen.position.x, _terrain.at(hen.position), hen.position.y);
   }
