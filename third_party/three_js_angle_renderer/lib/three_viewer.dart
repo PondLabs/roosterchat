@@ -96,7 +96,8 @@ class ThreeJS with WidgetsBindingObserver{
     Size? size,
     AngleRenderer? renderer,
     this.renderNumber = 0,
-    this.loadingWidget
+    this.loadingWidget,
+    this.onStartFailed,
   }){
     this.settings = settings ?? Settings();
     _resolution = this.settings.screenResolution;
@@ -104,6 +105,11 @@ class ThreeJS with WidgetsBindingObserver{
   }
 
   int renderNumber;
+
+  /// ROOSTER: called when the GL context could not start (ANGLE's init or
+  /// its texture threw, a machine without the GL it needs); the error is
+  /// passed on instead of thrown into nobody's zone. Unset, it throws.
+  void Function(Object error)? onStartFailed;
 
   BuildContext? _context;
   Timer? _debounceTimer;
@@ -255,8 +261,11 @@ class ThreeJS with WidgetsBindingObserver{
   Future<void> _startAngle() async {
     try {
       await initPlatformState();
-    } catch (_) {
-      if (!_disposed) rethrow;
+    } catch (error) {
+      if (_disposed) return;
+      final failed = onStartFailed;
+      if (failed == null) rethrow;
+      failed(error);
     }
   }
   
