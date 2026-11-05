@@ -22,12 +22,16 @@ class PuttTag {
   /// Faded back (while I aim, the green ahead matters more).
   final bool dim;
 
+  /// The player's picture, when they have one (else the colour dot).
+  final ImageProvider? avatar;
+
   const PuttTag({
     required this.playerId,
     required this.name,
     required this.color,
     required this.at,
     this.dim = false,
+    this.avatar,
   });
 }
 
@@ -79,6 +83,7 @@ List<PuttTag> declutterTags(List<PuttTag> tags) {
         color: tag.color,
         at: moved[tag.playerId] ?? tag.at,
         dim: tag.dim,
+        avatar: tag.avatar,
       ),
   ];
 }
@@ -135,12 +140,30 @@ class _TagPill extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration:
-                    BoxDecoration(color: tag.color, shape: BoxShape.circle),
-              ),
+              if (tag.avatar != null)
+                // The player's picture in a ring of their colour.
+                Container(
+                  width: 18,
+                  height: 18,
+                  padding: const EdgeInsets.all(1.5),
+                  decoration:
+                      BoxDecoration(color: tag.color, shape: BoxShape.circle),
+                  child: ClipOval(
+                    child: Image(
+                      image: tag.avatar!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, _, __) =>
+                          ColoredBox(color: tag.color),
+                    ),
+                  ),
+                )
+              else
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration:
+                      BoxDecoration(color: tag.color, shape: BoxShape.circle),
+                ),
               const SizedBox(width: 5),
               Flexible(
                 child: Text(

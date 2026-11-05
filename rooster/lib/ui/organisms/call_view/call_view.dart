@@ -140,6 +140,11 @@ class _CallViewState extends State<CallView> {
     return room.getMemberOrFallback(userId).displayName;
   }
 
+  ImageProvider? _memberAvatarOf(String identity) {
+    final userId = identity.split(':').take(2).join(':');
+    return room.getMemberOrFallback(userId).avatar;
+  }
+
   /// Rejoining (or a view rebuilt): if we are already in a live session
   /// of this call, its stage comes back.
   void _adoptExistingActivity() {
@@ -155,6 +160,7 @@ class _CallViewState extends State<CallView> {
       _activity = PuttSessionController(
         session: session,
         nameOf: _memberNameOf,
+        avatarOf: _memberAvatarOf,
         onEnded: () => _exitActivity(),
       );
       return;
@@ -187,6 +193,7 @@ class _CallViewState extends State<CallView> {
       _activity = PuttSessionController(
         session: session,
         nameOf: _memberNameOf,
+        avatarOf: _memberAvatarOf,
         onEnded: () => _exitActivity(),
       );
     });
@@ -203,6 +210,7 @@ class _CallViewState extends State<CallView> {
     final controller = PuttSessionController(
       session: session,
       nameOf: _memberNameOf,
+      avatarOf: _memberAvatarOf,
       onEnded: () => _exitActivity(),
     );
     await controller.hostStart(PuttSessionController.buildConfig(options));

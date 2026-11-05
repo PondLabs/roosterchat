@@ -14,6 +14,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart' show ImageProvider;
 import 'package:rooster/client/components/call_activity/call_activity_component.dart';
 import 'package:rooster/client/components/call_activity/call_activity_session.dart';
 import 'package:rooster/client/components/sunny_side_putt/courses/sunny_side_putt_courses.dart';
@@ -48,6 +49,7 @@ class PuttSessionController extends ChangeNotifier {
   PuttSessionController({
     required this.session,
     required this.nameOf,
+    this.avatarOf,
     this.onEnded,
   }) {
     session.addListener(_onSessionChanged);
@@ -59,6 +61,9 @@ class PuttSessionController extends ChangeNotifier {
 
   /// A call identity's display name (the roster and scores show names).
   final String Function(String identity) nameOf;
+
+  /// A call identity's avatar, when it has one (the name tags show it).
+  final ImageProvider? Function(String identity)? avatarOf;
 
   /// The session is over (empty snapshot): the stage should go.
   final VoidCallback? onEnded;
@@ -134,7 +139,11 @@ class PuttSessionController extends ChangeNotifier {
   Future<void> hostStart(PuttConfig config) async {
     await session.launch();
     match?.dispose();
-    match = PuttMatch(config: config, localPlayerId: selfId, nameOf: nameOf);
+    match = PuttMatch(
+        config: config,
+        localPlayerId: selfId,
+        nameOf: nameOf,
+        avatarOf: avatarOf);
     match!.boot();
     _startTicker();
     _publish();
@@ -229,6 +238,7 @@ class PuttSessionController extends ChangeNotifier {
         for (final p in engine.players) p.id: nameOf(p.id),
       },
       nameOf: nameOf,
+      avatarOf: avatarOf,
     );
     _journalSeq = engine.lastSeq;
     _startTicker();

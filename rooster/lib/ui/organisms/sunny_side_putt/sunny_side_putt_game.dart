@@ -781,6 +781,7 @@ class SunnySidePuttGame extends FlameGame {
         color: tintFor(ball.playerId),
         at: world3d.projectToWorld(at, height: lift),
         dim: aim.isActive,
+        avatar: match.avatarOf?.call(ball.playerId),
       ));
     }
     return tags;

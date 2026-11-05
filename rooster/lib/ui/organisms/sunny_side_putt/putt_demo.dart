@@ -23,6 +23,7 @@ library;
 
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/hole.dart';
@@ -161,9 +162,49 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
         'me': 'Gabriel',
         for (final (id, name) in _crew) id: name,
       },
+      // The crew's pictures: their initial on a disc of their colour
+      // (painted once the match knows the colours).
+      avatarOf: (id) => _avatars[id],
       seatedPlayerIds: seated,
     )..boot();
+    _paintAvatars();
     _ticker = Timer.periodic(_step, (_) => _tick());
+  }
+
+  /// The crew's stand-in pictures, by player id.
+  final Map<String, ImageProvider> _avatars = {};
+
+  Future<void> _paintAvatars() async {
+    for (final (id, name) in _crew) {
+      const size = 64.0;
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      final tint = puttTintOf(match, id);
+      canvas.drawCircle(
+          const Offset(size / 2, size / 2), size / 2, Paint()..color = tint);
+      canvas.drawCircle(const Offset(size * 0.38, size * 0.34), size * 0.3,
+          Paint()..color = const Color(0x33FFFFFF));
+      final text = TextPainter(
+        text: TextSpan(
+          text: name.characters.first,
+          style: const TextStyle(
+            color: Color(0xFFFFFFFF),
+            fontSize: 34,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      text.paint(
+          canvas, Offset((size - text.width) / 2, (size - text.height) / 2));
+      final image =
+          await recorder.endRecording().toImage(size.toInt(), size.toInt());
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      if (bytes != null) {
+        _avatars[id] = MemoryImage(bytes.buffer.asUint8List());
+      }
+    }
   }
 
   @override

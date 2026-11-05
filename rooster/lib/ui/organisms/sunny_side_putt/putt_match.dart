@@ -15,6 +15,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart' show ImageProvider;
 import 'package:intl/intl.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/hole.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/physics.dart';
@@ -102,6 +103,10 @@ class PuttMatch extends ChangeNotifier {
   /// after the match was built: the session's roster lookup.
   final String Function(String playerId)? nameOf;
 
+  /// A player's avatar (the call's member picture), when there is one:
+  /// the name tags wear it over the egg.
+  final ImageProvider? Function(String playerId)? avatarOf;
+
   /// Set when this match plays on a session's wire and this client is not
   /// its host: every move of ours is told to the handler (the session
   /// takes it to the host), and the flow moves - advancing, votes,
@@ -116,6 +121,7 @@ class PuttMatch extends ChangeNotifier {
     this.localPlayerId = 'me',
     this.displayNames = const {},
     this.nameOf,
+    this.avatarOf,
     List<String> seatedPlayerIds = const [],
   }) : engine = engine ?? PuttEngine(config) {
     if (engine == null) {
