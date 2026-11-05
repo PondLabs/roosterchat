@@ -1527,7 +1527,11 @@ void main() {
           {
             'host-body-outline',
             'host-wing-feathers-outline',
-            'host-face-outline'
+            'host-face-outline',
+            // His light build for when he stands small, inked the same.
+            'host-body-light-outline',
+            'host-wing-feathers-light-outline',
+            'host-face-light-outline',
           },
           reason: 'inked all over, wings too');
       for (final mesh in meshes) {
@@ -1548,6 +1552,52 @@ void main() {
       for (final mesh in meshes) {
         expect(mesh.material!.opacity, lessThan(0.05), reason: mesh.name);
       }
+    });
+
+    test('the host stands light while small on the screen, in full up close',
+        () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      final host = hostOf(world);
+      final spot = Vec2(host.position.x, host.position.z);
+      List<tjs.Object3D> named(String name) =>
+          walk(host).where((o) => o.name == name).toList();
+      bool shown(String name) =>
+          named(name).isNotEmpty && named(name).every((o) => o.visible);
+      var time = 0.0;
+      void hold(double distance) {
+        world.rig.aimAt(target: spot, pitchDeg: 30, distance: distance);
+        for (var i = 0; i < 10; i++) {
+          world.applySnapshot(PuttWorldFrame(time: time));
+          time += 1 / 60;
+        }
+      }
+
+      // Every part has its light build, with its own ink.
+      for (final part in ['host-body', 'host-face', 'host-wing-feathers']) {
+        expect(named('$part-light'), isNotEmpty, reason: part);
+      }
+      int vertices(bool light) => walk(host)
+              .where((o) =>
+                  o.geometry != null &&
+                  o.name.startsWith('host-') &&
+                  o.name.contains('-light') == light)
+              .fold(0, (sum, o) {
+            final g = o.geometry!;
+            return sum +
+                (g.index?.count ?? g.attributes['position'].count as int);
+          });
+      expect(vertices(true), lessThan(vertices(false) * 0.45),
+          reason: 'under half the vertices');
+
+      hold(90);
+      expect(shown('host-body-light'), isTrue, reason: 'small: light');
+      expect(shown('host-face-light'), isTrue);
+      expect(named('host-body').single.visible, isFalse);
+      hold(10);
+      expect(shown('host-body'), isTrue, reason: 'up close: in full');
+      expect(shown('host-wing-feathers'), isTrue);
+      expect(named('host-body-light').single.visible, isFalse);
     });
 
     test('the host stays gone while the camera wavers at the line', () {

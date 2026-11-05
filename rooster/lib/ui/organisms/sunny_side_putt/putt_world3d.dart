@@ -1085,6 +1085,7 @@ class PuttWorld3D {
     makeKind('scenery').add(scenery);
     final host = scenery.getObjectByName('host');
     _hostFade = host == null ? null : _FadingFigure(host);
+    _hostDetail = host == null ? null : _HostDetail(host);
 
     _fx.reset(_fxRoot);
     _firstFrame = true;
@@ -1160,6 +1161,7 @@ class PuttWorld3D {
     _watch = null;
     _greeting = false;
     _hostFade = null;
+    _hostDetail = null;
     _henViews.clear();
     _crateViews.clear();
     _animated.clear();
@@ -1438,6 +1440,11 @@ class PuttWorld3D {
         .project(camera);
     final headY = (1 - head.y) / 2 * size.height;
     final headX = (head.x + 1) / 2 * size.width;
+    if (head.z < 1) {
+      // In full while he stands tall on the screen, light while small.
+      final foot = tjs.Vector3(at.x, at.y, at.z).project(camera);
+      _hostDetail?.standing((1 - foot.y) / 2 * size.height - headY);
+    }
     final dx = camera.position.x - at.x;
     final dz = camera.position.z - at.z;
     // Some slack once he is gone, as with the hens: a camera on the move
@@ -1456,6 +1463,7 @@ class PuttWorld3D {
   static const double _hudTopBand = 118;
 
   _FadingFigure? _hostFade;
+  _HostDetail? _hostDetail;
 
   void _syncCrates(PuttWorldFrame frame) {
     for (final crate in _crateViews) {

@@ -366,16 +366,19 @@ void _birdToe(
 /// The host's body into [into], in his own frame (forward +x, up +y, the
 /// ground at y = 0): body and breast, the neck, two legs (the near one a
 /// step ahead), the hackles falling over his shoulders and his tail
-/// fanned up behind.
-void _roosterBody(_Merged into) {
+/// fanned up behind. [light]: the same shapes in fewer facets, for while
+/// he stands small on the screen.
+void _roosterBody(_Merged into, {bool light = false}) {
   const white = _Bird.white;
+  final sides = light ? 4 : 6;
+  final steps = light ? _featherStepsCoarse : _featherSteps;
   into
-    ..add(tjs.SphereGeometry(1, 24, 16),
+    ..add(tjs.SphereGeometry(1, light ? 14 : 24, light ? 10 : 16),
         _place(-0.1, 4.3, 0, roll: 0.1, sx: 2.6, sy: 2.15, sz: 2.0), white,
         baseShade: 0.82)
-    ..add(tjs.SphereGeometry(1, 20, 14),
+    ..add(tjs.SphereGeometry(1, light ? 12 : 20, light ? 8 : 14),
         _place(1.45, 4.75, 0, sx: 1.7, sy: 1.85, sz: 1.6), white)
-    ..add(tjg.CylinderGeometry(0.85, 1.25, 2.4, 14),
+    ..add(tjg.CylinderGeometry(0.85, 1.25, 2.4, light ? 9 : 14),
         _place(1.9, 6.3, 0, roll: -0.35), white);
   for (final (side, ahead) in const [(-1.0, 0.16), (1.0, -0.14)]) {
     _birdLeg(into, _place(0.25 + ahead, 2.6, side * 0.9),
@@ -385,7 +388,10 @@ void _roosterBody(_Merged into) {
         outward: side,
         feather: white,
         thigh: 0.14,
-        spur: true);
+        spur: true,
+        bands: light ? 3 : 5,
+        knuckles: light ? 1 : 3,
+        sides: light ? 5 : 8);
   }
   // The hackles: a cream-gold cape of long pointed feathers falling from
   // under his head over the neck and the shoulders, round the back and
@@ -397,7 +403,11 @@ void _roosterBody(_Merged into) {
     final face = out.clone()..add(tjs.Vector3(0, 0.35, 0));
     into.add(
         _feather(k.isEven ? 1.85 : 1.6, 0.72,
-            depth: 0.12, pointed: true, bend: out.z >= 0 ? 0.05 : -0.05),
+            depth: 0.12,
+            pointed: true,
+            bend: out.z >= 0 ? 0.05 : -0.05,
+            sides: sides,
+            steps: steps),
         _aimed(2.12 + out.x * 0.9, 7.0, out.z * 0.9, along, face),
         k.isEven ? _Bird.hackle : _Bird.hackleLight);
   }
@@ -407,7 +417,11 @@ void _roosterBody(_Merged into) {
     for (var k = 0; k < 3; k++) {
       into.add(
           _feather(1.6 - k * 0.12, 0.6,
-              depth: 0.11, pointed: true, bend: side * 0.06),
+              depth: 0.11,
+              pointed: true,
+              bend: side * 0.06,
+              sides: sides,
+              steps: steps),
           _aimed(
               -1.25 - k * 0.4,
               6.1 - k * 0.14,
@@ -424,7 +438,8 @@ void _roosterBody(_Merged into) {
   for (var i = 0; i < 5; i++) {
     final across = i / 4 - 0.5;
     into.add(
-        _feather(1.75 - across.abs() * 0.4, 0.8, depth: 0.14),
+        _feather(1.75 - across.abs() * 0.4, 0.8,
+            depth: 0.14, sides: sides, steps: steps),
         _place(-2.2, 5.3, across * 0.9,
             roll: 2.2 + across.abs() * 0.3, yaw: across * 0.5),
         i.isEven ? ink : spruce);
@@ -438,8 +453,11 @@ void _roosterBody(_Merged into) {
     (0.43, 2.0, 1.65, 3.0, 0.52, spruce),
     (0.0, 2.3, 1.3, 2.6, 0.6, _Bird.sheen),
   ]) {
-    into.add(_sickle(length, width, curl, depth: 0.12),
-        _place(-2.35, 5.45, z, roll: rise, yaw: z * 0.35), hex);
+    into.add(
+        _sickle(length, width, curl,
+            depth: 0.12, steps: light ? 6 : 12, sides: sides),
+        _place(-2.35, 5.45, z, roll: rise, yaw: z * 0.35),
+        hex);
   }
 }
 
@@ -448,9 +466,11 @@ void _roosterBody(_Merged into) {
 /// under them (their rounded tips scallop the wing's lower edge, each a
 /// little inside the one before), and the long pointed primaries layered
 /// along its back edge, out past the body under the tail.
-void _roosterWing(_Merged into, double side) {
+void _roosterWing(_Merged into, double side, {bool light = false}) {
+  final sides = light ? 4 : 6;
+  final steps = light ? _featherStepsCoarse : _featherSteps;
   into.add(
-      tjs.SphereGeometry(1, 16, 12),
+      tjs.SphereGeometry(1, light ? 10 : 16, light ? 7 : 12),
       _place(-0.35, -0.3, side * 0.25,
           tilt: side * 0.12, roll: 0.15, sx: 1.35, sy: 0.68, sz: 0.32),
       _Bird.covert);
@@ -458,14 +478,19 @@ void _roosterWing(_Merged into, double side) {
   for (var j = 0; j < 4; j++) {
     into.add(
         _feather(1.6 + j * 0.15, 0.56,
-            depth: 0.12, pointed: true, bend: side * 0.05),
+            depth: 0.12,
+            pointed: true,
+            bend: side * 0.05,
+            sides: sides,
+            steps: steps),
         _aimed(-0.9 - j * 0.22, -0.5 - j * 0.06, side * (0.4 - j * 0.05),
             tjs.Vector3(-1, -0.5 + j * 0.04, -side * 0.4), face),
         _Bird.flight);
   }
   for (var i = 0; i < 6; i++) {
     into.add(
-        _feather(1.35 + i * 0.06, 0.74, depth: 0.13, bend: side * 0.04),
+        _feather(1.35 + i * 0.06, 0.74,
+            depth: 0.13, bend: side * 0.04, sides: sides, steps: steps),
         _aimed(0.75 - i * 0.42, -0.55 - i * 0.03, side * (0.54 - i * 0.035),
             tjs.Vector3(-0.42 - i * 0.1, -1, -side * (0.06 + i * 0.06)), face),
         i.isEven ? _Bird.wing : _Bird.covert);

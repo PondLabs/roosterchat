@@ -1193,11 +1193,24 @@ class _Scenery {
     final comb = _hexOf(PuttPalette.comb);
     final yolk = _hexOf(PuttPalette.yolk);
     final ink = _hexOf(PuttPalette.ink);
-    final body = _Merged();
-    _roosterBody(body);
-    final hostBody = body.mesh('host-body', flat: false, roughness: 0.75)!;
-    _inkOutline(hostBody, 0.09);
-    breath.add(hostBody);
+    // Each part twice: in full for the close-ups, and light (fewer facets,
+    // the same shapes) for while he stands small on the screen - the world
+    // shows one or the other ([_HostDetail]); the light one waits hidden.
+    tjs.Mesh built(String name, void Function(_Merged into) parts,
+        {required bool light, required double ink}) {
+      final merged = _Merged();
+      parts(merged);
+      final mesh = merged.mesh(light ? '$name-light' : name,
+          flat: false, roughness: 0.75)!
+        ..visible = !light;
+      _inkOutline(mesh, ink);
+      return mesh;
+    }
+
+    for (final light in [false, true]) {
+      breath.add(built('host-body', (into) => _roosterBody(into, light: light),
+          light: light, ink: 0.09));
+    }
     // The wings hang from the shoulders on their own pivots: they flap
     // when he cheers.
     final wings = <(tjs.Group, double)>[];
@@ -1205,12 +1218,11 @@ class _Scenery {
       final shoulder = tjs.Group()
         ..name = 'host-wing'
         ..position.setValues(0.45, 5.3, side * 1.6);
-      final wing = _Merged();
-      _roosterWing(wing, side);
-      final feathers =
-          wing.mesh('host-wing-feathers', flat: false, roughness: 0.75)!;
-      _inkOutline(feathers, 0.07);
-      shoulder.add(feathers);
+      for (final light in [false, true]) {
+        shoulder.add(built('host-wing-feathers',
+            (into) => _roosterWing(into, side, light: light),
+            light: light, ink: 0.07));
+      }
       breath.add(shoulder);
       wings.add((shoulder, side));
     }
@@ -1222,41 +1234,51 @@ class _Scenery {
       ..position.setValues(2.5, 7.4, 0);
     // Turned first, then nodded, then tilted about his own beak.
     head.rotation.order = tjs.RotationOrders.yzx;
-    final face = _Merged();
-    face.add(
-        tjs.SphereGeometry(1.25, 22, 16), _place(0, 0, 0, sx: 1.08), white);
-    final lobes = [
-      (0.55, 1.25, 0.55),
-      (-0.05, 1.45, 0.6),
-      (-0.7, 1.35, 0.52),
-      (-1.2, 1.0, 0.42),
-    ];
-    for (final (lx, ly, lr) in lobes) {
-      face.add(
-          tjs.SphereGeometry(lr, 14, 10), _place(lx, ly, 0, sz: 0.62), comb);
+    void faceParts(_Merged face, {required bool light}) {
+      // Facets per part, in full and light.
+      int n(int full, int few) => light ? few : full;
+      face.add(tjs.SphereGeometry(1.25, n(22, 14), n(16, 10)),
+          _place(0, 0, 0, sx: 1.08), white);
+      final lobes = [
+        (0.55, 1.25, 0.55),
+        (-0.05, 1.45, 0.6),
+        (-0.7, 1.35, 0.52),
+        (-1.2, 1.0, 0.42),
+      ];
+      for (final (lx, ly, lr) in lobes) {
+        face.add(tjs.SphereGeometry(lr, n(14, 8), n(10, 6)),
+            _place(lx, ly, 0, sz: 0.62), comb);
+      }
+      face.add(tjg.ConeGeometry(0.42, 1.05, n(12, 8)),
+          _place(1.45, -0.12, 0, roll: -math.pi / 2), yolk);
+      face.add(tjs.SphereGeometry(0.42, n(12, 8), n(10, 6)),
+          _place(1.0, -0.95, 0, sx: 0.8, sy: 1.25, sz: 0.6), comb);
+      for (final side in [-1.0, 1.0]) {
+        face.add(tjs.SphereGeometry(0.2, n(10, 6), n(8, 5)),
+            _place(0.55, 0.28, side * 1.02), ink);
+        face.add(tjs.SphereGeometry(0.07, n(8, 5), n(6, 4)),
+            _place(0.62, 0.36, side * 1.17), white);
+      }
+      // Headphones: the band over the crown, a cup on each cheek.
+      face.add(tjg.TorusGeometry(1.42, 0.15, n(8, 5), n(28, 16), math.pi),
+          _place(-0.2, 0.05, 0, yaw: math.pi / 2), ink);
+      for (final side in [-1.0, 1.0]) {
+        face.add(tjg.CylinderGeometry(0.62, 0.62, 0.42, n(20, 12)),
+            _place(-0.2, 0.02, side * 1.32, tilt: math.pi / 2), ink);
+        face.add(tjg.TorusGeometry(0.42, 0.08, n(6, 4), n(20, 12)),
+            _place(-0.2, 0.02, side * 1.55), comb);
+      }
     }
-    face.add(tjg.ConeGeometry(0.42, 1.05, 12),
-        _place(1.45, -0.12, 0, roll: -math.pi / 2), yolk);
-    face.add(tjs.SphereGeometry(0.42, 12, 10),
-        _place(1.0, -0.95, 0, sx: 0.8, sy: 1.25, sz: 0.6), comb);
-    for (final side in [-1.0, 1.0]) {
-      face.add(
-          tjs.SphereGeometry(0.2, 10, 8), _place(0.55, 0.28, side * 1.02), ink);
-      face.add(tjs.SphereGeometry(0.07, 8, 6), _place(0.62, 0.36, side * 1.17),
-          white);
+
+    for (final light in [false, true]) {
+      final face = _Merged();
+      faceParts(face, light: light);
+      final hostFace = face.mesh(light ? 'host-face-light' : 'host-face',
+          flat: false, roughness: 0.7)!
+        ..visible = !light;
+      _inkOutline(hostFace, 0.07);
+      head.add(hostFace);
     }
-    // Headphones: the band over the crown, a cup on each cheek.
-    face.add(tjg.TorusGeometry(1.42, 0.15, 8, 28, math.pi),
-        _place(-0.2, 0.05, 0, yaw: math.pi / 2), ink);
-    for (final side in [-1.0, 1.0]) {
-      face.add(tjg.CylinderGeometry(0.62, 0.62, 0.42, 20),
-          _place(-0.2, 0.02, side * 1.32, tilt: math.pi / 2), ink);
-      face.add(tjg.TorusGeometry(0.42, 0.08, 6, 20),
-          _place(-0.2, 0.02, side * 1.55), comb);
-    }
-    final hostFace = face.mesh('host-face', flat: false, roughness: 0.7)!;
-    _inkOutline(hostFace, 0.07);
-    head.add(hostFace);
     breath.add(head);
 
     // Where his head turns (toward what he watches), how far his body

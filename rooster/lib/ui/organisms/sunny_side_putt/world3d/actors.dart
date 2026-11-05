@@ -930,6 +930,53 @@ mixin _Fadable {
   }
 }
 
+/// The host's two builds: in full for when he stands tall on the screen
+/// (the opening shot, a close-up), light - the same shapes in fewer facets,
+/// under half the vertices - while he stands small beyond the fence, as he
+/// mostly does. Each part's two builds hang from the same pivots, so his
+/// breath, his head's turns and his wings' flaps move both.
+class _HostDetail {
+  _HostDetail(tjs.Object3D host) {
+    host.traverse((object) {
+      if (object is! tjs.Mesh) return;
+      final name = object.name;
+      if (name.endsWith('-outline')) return;
+      if (_parts.contains(name)) _full.add(object);
+      if (name.endsWith('-light') &&
+          _parts.contains(name.substring(0, name.length - 6))) {
+        _light.add(object);
+      }
+    });
+  }
+
+  static const Set<String> _parts = {
+    'host-body',
+    'host-wing-feathers',
+    'host-face',
+  };
+
+  final List<tjs.Object3D> _full = [];
+  final List<tjs.Object3D> _light = [];
+  bool _inFull = true;
+
+  /// Whether his full build is the one drawn.
+  bool get inFull => _inFull;
+
+  /// How tall, in pixels, he stands on the screen now: in full past 260,
+  /// light under 220 (the slack between keeps him from flickering).
+  void standing(double pixels) {
+    final full = _inFull ? pixels > 220 : pixels > 260;
+    if (full == _inFull) return;
+    _inFull = full;
+    for (final mesh in _full) {
+      mesh.visible = full;
+    }
+    for (final mesh in _light) {
+      mesh.visible = !full;
+    }
+  }
+}
+
 /// A figure of the scenery that can fade out of the way (the host, when
 /// he would stand behind the HUD or in the camera's face).
 class _FadingFigure with _Fadable {
