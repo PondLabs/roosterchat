@@ -261,7 +261,11 @@ void main() {
   test('eggs a step apart pass over and under each other', () {
     // One hangs over the lip, one rests at the face's foot right below
     // it: a step apart, they never touch.
+    // (Both have putted: eggs still waiting to putt are ghosts anyway.)
     final world = worldOn(tiered(), const ['a', 'b']);
+    for (final id in const ['a', 'b']) {
+      world.ball(id)!.putted = true;
+    }
     world.teleportBall('a', const Vec2(9.9, 6));
     world.teleportBall('b', const Vec2(10.46, 6));
     runUntilSettled(world);
@@ -270,6 +274,9 @@ void main() {
     expect(world.drainEvents().whereType<BallBounced>(), isEmpty);
     // On one level, the same overlap pushes them apart.
     final flat = worldOn(boxHole(), const ['a', 'b']);
+    for (final id in const ['a', 'b']) {
+      flat.ball(id)!.putted = true;
+    }
     flat.teleportBall('a', const Vec2(9.9, 6));
     flat.teleportBall('b', const Vec2(10.46, 6));
     runUntilSettled(flat);

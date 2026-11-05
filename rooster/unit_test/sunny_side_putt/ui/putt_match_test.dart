@@ -431,6 +431,8 @@ void main() {
         seatedPlayerIds: const ['friend'],
       )..boot();
       final mine = match.myBall!.position;
+      // The friend has putted: an egg still waiting would be a ghost.
+      match.engine.world!.ball('friend')!.putted = true;
       final theirs = match.engine.world!.ball('friend')!.position;
       expect(match.submitShot((theirs - mine).angle, 0.35), isTrue);
       final clacks = listen(match, frames: 30)

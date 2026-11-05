@@ -836,6 +836,8 @@
   "labelPuttIStole": "Você roubou o power-up {power} de {name}!",
   "labelPuttStole": "{thief} roubou o power-up {power} de {victim}",
   "labelPuttSwappedWithMe": "{name} trocou de lugar com você!",
+  "labelPuttKnockedMe": "{name} bateu no seu ovo!",
+  "labelPuttIKnocked": "Você bateu no ovo de {name}",
   "labelPuttMyShellBlocked": "{caster} lançou {power}, mas sua casca aguentou!",
   "labelPuttShellBlockedMine": "Você lançou {power}, mas a casca de {name} aguentou",
   "labelPuttShellBlocked": "{caster} lançou {power}, mas a casca de {name} aguentou",

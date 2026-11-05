@@ -52,6 +52,10 @@ String puttCastLine(PuttMatch match, PuttCastCall call) {
       }
       return labelPuttShellBlocked(
           name(call.otherId), name(call.casterId), power);
+    case PuttCastCallKind.knock:
+      return call.casterId == me
+          ? labelPuttIKnocked(name(call.otherId))
+          : labelPuttKnockedMe(name(call.casterId));
   }
 }
 
@@ -68,6 +72,8 @@ PuttCastTone puttCastTone(PuttMatch match, PuttCastCall call) {
       return call.casterId == me ? PuttCastTone.mine : PuttCastTone.theirs;
     case PuttCastCallKind.blocked:
       return call.otherId == me ? PuttCastTone.mine : PuttCastTone.theirs;
+    case PuttCastCallKind.knock:
+      return call.otherId == me ? PuttCastTone.againstMe : PuttCastTone.mine;
     case PuttCastCallKind.cast:
       return call.casterId == me ? PuttCastTone.mine : PuttCastTone.theirs;
   }
@@ -279,11 +285,16 @@ class PuttCastToast extends StatelessWidget {
         children: [
           _Lead(tint: tint, avatar: avatar),
           const SizedBox(width: 8),
-          PuttPowerUpIcon(
-            effectId: call.iconId,
-            size: 24,
-            semanticLabel: puttPowerUpName(call.iconId),
-          ),
+          if (call.kind == PuttCastCallKind.knock)
+            // An egg against an egg: a burst, no power-up in it (the line
+            // says what happened).
+            const Icon(Icons.flare_rounded, size: 24, color: PuttPalette.yolk)
+          else
+            PuttPowerUpIcon(
+              effectId: call.iconId,
+              size: 24,
+              semanticLabel: puttPowerUpName(call.iconId),
+            ),
           const SizedBox(width: 9),
           Flexible(
             child: Text(
@@ -393,6 +404,21 @@ String labelPuttSwappedWithMe(String name) =>
         args: [name],
         desc: "The toast when another player's Nest Swap trades their egg's "
             "spot with the player's; the placeholder is their name");
+
+String labelPuttKnockedMe(String name) =>
+    Intl.message("$name knocked your egg!",
+        name: "labelPuttKnockedMe",
+        args: [name],
+        desc: "The toast when another player's egg rolls into the player's "
+            "resting egg and moves it; the placeholder is that player's name, "
+            "e.g. Jonas knocked your egg!");
+
+String labelPuttIKnocked(String name) => Intl.message("You knocked $name's egg",
+    name: "labelPuttIKnocked",
+    args: [name],
+    desc: "The toast when the player's egg rolls into another player's "
+        "resting egg and moves it; the placeholder is that player's name, "
+        "e.g. You knocked Lou's egg");
 
 String labelPuttMyShellBlocked(String caster, String power) =>
     Intl.message("Your shell blocked $caster's $power!",

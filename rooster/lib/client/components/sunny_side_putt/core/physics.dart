@@ -143,13 +143,18 @@ class BallBody {
   /// Flags active until the egg settles (Chicken Hop, Nest Magnet).
   final Set<PowerUpFlag> untilRest = {};
 
+  /// Whether this egg has been putted this hole. Until then it is a ghost
+  /// to the other eggs (see [PhysicsWorld]'s egg contacts).
+  bool putted;
+
   BallBody(
       {required this.playerId,
       required this.position,
       this.velocity = Vec2.zero,
       this.holed = false,
       this.asleep = true,
-      this.portalCooldown = 0})
+      this.portalCooldown = 0,
+      this.putted = false})
       : lastSafePosition = position;
 
   double get speed => velocity.length;
@@ -191,6 +196,7 @@ class BallBody {
           for (final flag in PowerUpFlag.values)
             if (untilRest.contains(flag)) flag.name,
         ],
+        if (putted) 'putted': true,
       };
 }
 
@@ -219,6 +225,20 @@ class BallBounced extends PhysicsEvent {
     required this.impactSpeed,
     required this.at,
     this.otherPlayerId,
+  });
+}
+
+/// An egg at rest was knocked by another egg ([byPlayerId]) rolling into
+/// it: the one it happened to hears who did it.
+class BallKnocked extends PhysicsEvent {
+  final String playerId;
+  final String byPlayerId;
+  final double impactSpeed;
+
+  const BallKnocked({
+    required this.playerId,
+    required this.byPlayerId,
+    required this.impactSpeed,
   });
 }
 
@@ -378,6 +398,7 @@ class PhysicsWorld {
     final speed = power.clamp(0.0, 1.0) * config.maxShotSpeed;
     ball.velocity = Vec2(math.cos(angle), math.sin(angle)) * speed;
     ball.asleep = false;
+    ball.putted = true;
   }
 
   void impulseBall(String playerId, Vec2 deltaVelocity) {
@@ -960,6 +981,14 @@ class PhysicsWorld {
     _events.add(BallCaptured(playerId: ball.playerId));
   }
 
+  /// Pairs of eggs passing through each other ("a|b", ids in order): one
+  /// of them was still a ghost when they met, and they go on passing
+  /// through until they part (rather than spring apart when it putts).
+  final Set<String> _passing = {};
+
+  /// Below this closing speed a contact is a touch, not a knock.
+  static const double _knockSpeed = 1.0;
+
   void _ballVsBalls() {
     final list = balls;
     final tiered = hole.terraces.isNotEmpty || hole.ramps.isNotEmpty;
@@ -971,7 +1000,20 @@ class PhysicsWorld {
         final offset = b.position - a.position;
         final distance = offset.length;
         final min = config.ballRadius * 2;
-        if (distance >= min) continue;
+        if (distance >= min) {
+          if (_passing.isNotEmpty)
+            _passing.remove('${a.playerId}|${b.playerId}');
+          continue;
+        }
+        // An egg not yet putted this hole is a ghost to the others: a putt
+        // off the tee never knocks a waiting egg off it, and a cast's push
+        // never shoves one waiting egg into another.
+        final pair = '${a.playerId}|${b.playerId}';
+        if (!a.putted || !b.putted) {
+          _passing.add(pair);
+          continue;
+        }
+        if (_passing.contains(pair)) continue;
         // Eggs a step apart (one on a lip, one at the face's foot below)
         // pass over and under each other.
         if (tiered &&
@@ -988,6 +1030,17 @@ class PhysicsWorld {
         b.position += normal * (overlap / 2);
         final closing = (b.velocity - a.velocity).dot(normal);
         if (closing < 0) {
+          // One at rest and the other rolling into it: a knock, told to
+          // the one knocked.
+          final aStill = a.asleep || a.velocity.length < 0.05;
+          final bStill = b.asleep || b.velocity.length < 0.05;
+          if (aStill != bStill && -closing >= _knockSpeed) {
+            _events.add(BallKnocked(
+              playerId: aStill ? a.playerId : b.playerId,
+              byPlayerId: aStill ? b.playerId : a.playerId,
+              impactSpeed: -closing,
+            ));
+          }
           final impulse = (1 + config.ballRestitution) * closing / 2;
           a.velocity += normal * impulse;
           b.velocity -= normal * impulse;
@@ -1018,6 +1071,7 @@ class PhysicsWorld {
         'tick': _tick,
         'boxes': _collectedBoxes.toList()..sort(),
         'balls': [for (final id in _order) _balls[id]!.toJson()],
+        if (_passing.isNotEmpty) 'passing': _passing.toList()..sort(),
       };
 
   /// Rebuilds a world mid-hole from [state] (as [toJson] produced), against
@@ -1044,6 +1098,7 @@ class PhysicsWorld {
         holed: json['holed'] == true,
         asleep: json['asleep'] == true,
         portalCooldown: (json['cd'] as num).toInt(),
+        putted: json['putted'] == true,
       )..lastSafePosition =
           Vec2((json['sx'] as num).toDouble(), (json['sy'] as num).toDouble());
       final timed = json['timed'] as Map;
@@ -1056,6 +1111,8 @@ class PhysicsWorld {
         world._balls[id]!.untilRest.add(PowerUpFlag.values.byName(name));
       }
     }
+    world._passing
+        .addAll(((state['passing'] as List?) ?? const []).cast<String>());
     world._rebuildOrder();
     for (final id in world._order) {
       world._insideBoosts[id] =

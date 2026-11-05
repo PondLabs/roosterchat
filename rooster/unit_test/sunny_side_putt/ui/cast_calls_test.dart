@@ -76,6 +76,56 @@ void main() {
           unorderedEquals(['me', 'p3']));
     });
 
+    test('an egg knocked at rest hears who did it, and the knocker too', () {
+      final match = _match();
+      final world = match.engine.world!;
+      // Maya has putted and rests: her egg is solid (a waiting egg would be
+      // a ghost).
+      world.ball('p2')!.putted = true;
+      final mine = match.myBall!.position;
+      final hers = world.ball('p2')!.position;
+      expect(match.submitShot((hers - mine).angle, 0.45), isTrue);
+      for (var i = 0; i < 90 && match.castCalls.isEmpty; i++) {
+        match.update(1 / 60);
+      }
+      final mineCall = match.castCalls.last;
+      expect(mineCall.kind, PuttCastCallKind.knock);
+      expect(mineCall.casterId, 'me');
+      expect(mineCall.otherId, 'p2');
+      expect(puttCastLine(match, mineCall), "You knocked Maya's egg");
+      expect(puttCastTone(match, mineCall), PuttCastTone.mine);
+
+      // And the other way round: Maya's egg into mine, at rest.
+      for (var i = 0; i < 600 && !world.allSettled; i++) {
+        match.update(1 / 60);
+      }
+      final calls = match.castCalls.length;
+      final me = match.myBall!.position;
+      final from = world.ball('p2')!.position;
+      expect(match.engine.submitShot('p2', (me - from).angle, 0.45), isTrue);
+      for (var i = 0; i < 90 && match.castCalls.length == calls; i++) {
+        match.update(1 / 60);
+      }
+      final theirs = match.castCalls.last;
+      expect(theirs.casterId, 'p2');
+      expect(puttCastLine(match, theirs), 'Maya knocked your egg!');
+      expect(puttCastTone(match, theirs), PuttCastTone.againstMe);
+    });
+
+    test("a knock between two others is not the viewer's news", () {
+      final match = _match();
+      final world = match.engine.world!;
+      world.ball('p3')!.putted = true;
+      final from = world.ball('p2')!.position;
+      final to = world.ball('p3')!.position;
+      expect(match.engine.submitShot('p2', (to - from).angle, 0.45), isTrue);
+      for (var i = 0; i < 120; i++) {
+        match.update(1 / 60);
+      }
+      expect(match.castCalls.where((c) => c.kind == PuttCastCallKind.knock),
+          isEmpty);
+    });
+
     test('a point cast carries its spot to the scene', () {
       final match = _match();
       const spot = Vec2(17, 4);

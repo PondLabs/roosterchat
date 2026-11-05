@@ -173,6 +173,11 @@ enum PuttCastCallKind {
 
   /// A Thick Shell held against a cast.
   blocked,
+
+  /// An egg rolled into the viewer's resting egg and moved it, or the
+  /// viewer's into someone else's: the knocker is the caster, the egg
+  /// knocked the other.
+  knock,
 }
 
 /// One cast as everyone hears of it: a line in the cast feed under the
@@ -215,7 +220,7 @@ class PuttCastCall {
       kind == PuttCastCallKind.blocked ? otherId ?? casterId : casterId;
 
   /// The power-up whose icon the call wears: what the crow took, the
-  /// shell that held, else the one cast.
+  /// shell that held, else the one cast (a knock wears none).
   String get iconId => switch (kind) {
         PuttCastCallKind.steal => stolenId ?? effectId,
         PuttCastCallKind.blocked => 'thick_shell',
@@ -1057,12 +1062,35 @@ class PuttMatch extends ChangeNotifier {
           if (notice != null) hits.add((event.impactSpeed, notice));
         case BallBoosted():
           rest.add(const PuttNotice(PuttSfx.boost));
+        case BallKnocked():
+          _knockCall(event);
         default:
           break;
       }
     }
     hits.sort((a, b) => b.$1.compareTo(a.$1));
     return [...rest, for (final (_, notice) in hits.take(2)) notice];
+  }
+
+  /// When each pair last made a knock call, by engine tick.
+  final Map<String, int> _lastKnockCall = {};
+
+  /// A knock between the viewer's egg and another one, in the cast feed:
+  /// "Jonas knocked your egg!" (or "You knocked Lou's egg"); once a second
+  /// per pair, and nobody else's.
+  void _knockCall(BallKnocked event) {
+    final me = localPlayerId;
+    if (event.playerId != me && event.byPlayerId != me) return;
+    final pair = '${event.byPlayerId}>${event.playerId}';
+    if (_within(_lastKnockCall[pair], 1.0)) return;
+    _lastKnockCall[pair] = engine.tick;
+    _call((serial) => PuttCastCall(
+          serial: serial,
+          kind: PuttCastCallKind.knock,
+          casterId: event.byPlayerId,
+          effectId: 'knock',
+          otherId: event.playerId,
+        ));
   }
 
   PuttNotice? _bounceNotice(BallBounced event) {

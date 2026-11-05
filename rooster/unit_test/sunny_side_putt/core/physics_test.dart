@@ -419,6 +419,8 @@ void main() {
           nest: const Nest(Vec2(20, 8), 0.8));
       final world = PhysicsWorld(
           hole: hole, config: testPhysics, playerIds: const ['a', 'b']);
+      // b has putted already: a waiting egg would be a ghost.
+      world.ball('b')!.putted = true;
       final from = world.ball('a')!.position;
       final target = world.ball('b')!.position;
       world.applyShot('a', (target - from).angle, 0.5);
@@ -435,6 +437,88 @@ void main() {
         world.ball('b')!.position.distanceTo(world.ball('a')!.position),
         greaterThan(0.5),
       );
+    });
+
+    group('eggs that have not putted are ghosts', () {
+      PhysicsWorld pair() => PhysicsWorld(
+          hole: boxHole(
+              width: 24,
+              height: 16,
+              tee: const Vec2(4, 8),
+              nest: const Nest(Vec2(20, 8), 0.8)),
+          config: testPhysics,
+          playerIds: const ['a', 'b']);
+
+      test('a putt off the tee rolls through an egg still waiting', () {
+        final world = pair();
+        final before = world.ball('b')!.position;
+        final from = world.ball('a')!.position;
+        world.applyShot('a', (before - from).angle, 0.5);
+        runUntilSettled(world);
+        final events = world.drainEvents();
+        expect(
+            events
+                .whereType<BallBounced>()
+                .where((e) => e.kind == BounceKind.ball),
+            isEmpty);
+        expect(events.whereType<BallKnocked>(), isEmpty);
+        expect(world.ball('b')!.position, before, reason: 'never knocked');
+        expect(world.ball('a')!.putted, isTrue);
+        expect(world.ball('b')!.putted, isFalse);
+      });
+
+      test('two that met as ghosts pass through until they part', () {
+        final world = pair();
+        final b = world.ball('b')!;
+        final a = world.ball('a')!..position = b.position + const Vec2(0.3, 0);
+        world.stepTick();
+        // b putts (a soft one, away from a), a has putted too: both solid,
+        // but they still overlap, and do not spring apart.
+        a.putted = true;
+        final aAt = a.position;
+        world.applyShot('b', math.pi, 0.02);
+        world.stepTick();
+        expect(a.position, aAt, reason: 'no shove while they part');
+        runUntilSettled(world);
+        // Parted, they meet as eggs again.
+        world.drainEvents();
+        world.applyShot('a', (b.position - a.position).angle, 0.5);
+        runUntilSettled(world);
+        expect(
+            world
+                .drainEvents()
+                .whereType<BallBounced>()
+                .where((e) => e.kind == BounceKind.ball),
+            isNotEmpty);
+      });
+
+      test('a resting egg knocked by another hears who did it', () {
+        final world = pair();
+        world.ball('b')!.putted = true;
+        final from = world.ball('a')!.position;
+        final target = world.ball('b')!.position;
+        world.applyShot('a', (target - from).angle, 0.5);
+        runUntilSettled(world);
+        final knocks = world.drainEvents().whereType<BallKnocked>().toList();
+        expect(knocks, hasLength(1));
+        expect(knocks.single.playerId, 'b');
+        expect(knocks.single.byPlayerId, 'a');
+      });
+
+      test('a snapshot keeps who has putted and who is passing through', () {
+        final world = pair();
+        final b = world.ball('b')!;
+        world.ball('a')!.position = b.position + const Vec2(0.3, 0);
+        world.stepTick();
+        world.applyShot('a', 0, 0.01);
+        final state = world.toJson();
+        expect(state['passing'], ['a|b']);
+        final restored = PhysicsWorld.restore(
+            hole: world.hole, config: testPhysics, state: state);
+        expect(restored.ball('a')!.putted, isTrue);
+        expect(restored.ball('b')!.putted, isFalse);
+        expect(restored.toJson(), state);
+      });
     });
 
     test('same seed and inputs, same world, bit for bit', () {

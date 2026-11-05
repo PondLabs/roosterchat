@@ -5530,6 +5530,22 @@
       "name": {}
     }
   },
+  "labelPuttKnockedMe": "{name} knocked your egg!",
+  "@labelPuttKnockedMe": {
+    "description": "The toast when another player's egg rolls into the player's resting egg and moves it; the placeholder is that player's name, e.g. Jonas knocked your egg!",
+    "type": "text",
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "labelPuttIKnocked": "You knocked {name}'s egg",
+  "@labelPuttIKnocked": {
+    "description": "The toast when the player's egg rolls into another player's resting egg and moves it; the placeholder is that player's name, e.g. You knocked Lou's egg",
+    "type": "text",
+    "placeholders": {
+      "name": {}
+    }
+  },
   "labelPuttMyShellBlocked": "Your shell blocked {caster}'s {power}!",
   "@labelPuttMyShellBlocked": {
     "description": "The toast when the player's Thick Shell stops another player's power-up; the placeholders are the caster's name and the power-up's name, e.g. Your shell blocked Maya's Corn Rain!",
