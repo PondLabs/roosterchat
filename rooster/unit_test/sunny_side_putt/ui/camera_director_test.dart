@@ -103,6 +103,23 @@ void main() {
     expect(rig.distance, lessThanOrEqualTo(rig.overviewDistance + 1e-6));
   });
 
+  test("at rest, the nest's flag stands clear of the HUD, the egg aimable", () {
+    const egg = Vec2(24, 12);
+    run(PuttCameraDirector.openingSeconds + 3, resting(egg));
+    final camera = tjs.PerspectiveCamera(PuttCameraRig.fovDeg, 1280 / 800);
+    rig.applyTo(camera);
+    camera.updateMatrixWorld(true);
+    double pixelY(Vec2 at, double height) =>
+        (1 - tjs.Vector3(at.x, height, at.y).project(camera).y) / 2 * 800;
+    final nest = hole.nest.position;
+    expect(pixelY(nest, PuttCameraDirector.nestFlagHeight),
+        greaterThanOrEqualTo(120),
+        reason: 'under the top strip, the chip and the corner buttons');
+    final eggPixels = pixelY(egg, 0) - pixelY(egg, director.eggHeight);
+    expect(eggPixels, greaterThan(PuttCameraDirector.aimEggPixels * 0.85),
+        reason: 'still an egg to aim at');
+  });
+
   test('a nest too far to frame with an aimable egg gives way to the egg', () {
     run(PuttCameraDirector.openingSeconds + 3, resting(hole.tee));
     // The egg in view, low, and the stretch toward the nest above it; the

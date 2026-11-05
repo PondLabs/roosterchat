@@ -64,6 +64,14 @@ class PuttCameraDirector {
   static const double celebrateDistance = 5.4;
   static const double celebratePitch = 28;
 
+  /// How tall the nest's flag stands (world units), kept clear of the HUD
+  /// when that is cheap.
+  static const double nestFlagHeight = 3.7;
+
+  /// How much farther than the egg's cap the camera may stand to frame the
+  /// nest itself.
+  static const double _nestAllowance = 1.12;
+
   /// How long the hole's overview holds before the camera comes in.
   static const double openingSeconds = 2.4;
 
@@ -279,8 +287,18 @@ class PuttCameraDirector {
           // The frame may come in as close as the cap asks.
           final closest = math.min(0.42, cap / rig.overviewDistance);
           var ahead = hole.nest.position;
-          if (rig.fitDistance([...crowd, ahead], yaw: yaw, closest: closest) >
-              cap) {
+          // The nest with its flag clear of the HUD, if that costs no more
+          // than a little of the egg's size (some 27 px); else the nest as
+          // before (its flag may reach under the bar); else the stretch.
+          final flag = [for (final _ in crowd) 0.0, nestFlagHeight];
+          final looseClosest =
+              math.min(closest, cap * _nestAllowance / rig.overviewDistance);
+          final withFlag = rig.fitDistance([...crowd, ahead],
+                  yaw: yaw, closest: looseClosest, tall: flag) <=
+              cap * _nestAllowance;
+          if (!withFlag &&
+              rig.fitDistance([...crowd, ahead], yaw: yaw, closest: closest) >
+                  cap) {
             final way = hole.nest.position - egg;
             final along = way.normalized(const Vec2(0, -1));
             var lo = 0.0, hi = way.length;
@@ -296,7 +314,11 @@ class PuttCameraDirector {
             }
             ahead = egg + along * lo;
           }
-          rig.glideToFramePoints([...crowd, ahead], yaw: yaw, closest: closest);
+          final flagged = withFlag && identical(ahead, hole.nest.position);
+          rig.glideToFramePoints([...crowd, ahead],
+              yaw: yaw,
+              closest: flagged ? looseClosest : closest,
+              tall: flagged ? flag : null);
         }
       }
       return;

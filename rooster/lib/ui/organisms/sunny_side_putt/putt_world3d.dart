@@ -473,38 +473,47 @@ class PuttCameraRig {
 
   /// [glideToFrame] for any number of points (the eggs still out and the
   /// nest).
+  /// [tall], beside the points, is how high something stands on each (the
+  /// nest's flag): its top must clear the HUD's top band as well.
   void glideToFramePoints(List<Vec2> points,
-      {double margin = 5, double closest = 0.42, double? yaw}) {
+      {double margin = 5,
+      double closest = 0.42,
+      double? yaw,
+      List<double>? tall}) {
     if (points.isEmpty) return;
     _closeFloor = null;
     if (yaw != null) _yawTarget = yaw;
     final pad = 40 + margin * 6;
-    final distance = _fitDistance(points, pad, closest);
+    final distance = _fitDistance(points, pad, closest, tall);
     _distanceTarget = distance;
-    _targetTarget = _frameFits(points, distance, pad).target;
+    _targetTarget = _frameFits(points, distance, pad, tall).target;
   }
 
   /// The distance [glideToFramePoints] would come to for [points] from
   /// [yaw] (the glide's own when left out), without moving the camera.
   double fitDistance(List<Vec2> points,
-      {double margin = 5, double closest = 0.42, double? yaw}) {
+      {double margin = 5,
+      double closest = 0.42,
+      double? yaw,
+      List<double>? tall}) {
     if (points.isEmpty) return _distanceTarget;
     final saved = _yawTarget;
     if (yaw != null) _yawTarget = yaw;
-    final distance = _fitDistance(points, 40 + margin * 6, closest);
+    final distance = _fitDistance(points, 40 + margin * 6, closest, tall);
     _yawTarget = saved;
     return distance;
   }
 
   /// The smallest distance (in range) whose centred frame fits.
-  double _fitDistance(List<Vec2> points, double pad, double closest) {
+  double _fitDistance(
+      List<Vec2> points, double pad, double closest, List<double>? tall) {
     final low = math.max(_overviewDistance * closest, _distanceMin);
     final high = math.max(low, math.min(_overviewDistance, _distanceMax));
     var lo = low, hi = high;
-    if (!_frameFits(points, lo, pad).fits) {
+    if (!_frameFits(points, lo, pad, tall).fits) {
       for (var i = 0; i < 22; i++) {
         final mid = (lo + hi) / 2;
-        if (_frameFits(points, mid, pad).fits) {
+        if (_frameFits(points, mid, pad, tall).fits) {
           hi = mid;
         } else {
           lo = mid;
@@ -529,7 +538,8 @@ class PuttCameraRig {
   /// from [distance] (at the glide's yaw and pitch), and whether they all
   /// fit there with [pad] pixels to spare.
   ({Vec2 target, bool fits}) _frameFits(
-      List<Vec2> points, double distance, double pad) {
+      List<Vec2> points, double distance, double pad,
+      [List<double>? tall]) {
     final width = math.max(1.0, viewport.width);
     final height = math.max(1.0, viewport.height);
     final aspect = width / height;
@@ -555,8 +565,11 @@ class PuttCameraRig {
       var minY = double.infinity, maxY = -double.infinity;
       var depth = 0.0;
       var behind = false;
-      for (final p in points) {
-        final d = p - target;
+      // How far up the screen the tallest thing on the points reaches over
+      // the box's top (NDC).
+      var over = -double.infinity;
+      for (var i = 0; i < points.length; i++) {
+        final d = points[i] - target;
         final f = d.dot(away);
         final zc = distance + f * cp;
         if (zc < 0.5) {
@@ -570,12 +583,22 @@ class PuttCameraRig {
         maxX = math.max(maxX, x);
         minY = math.min(minY, y);
         maxY = math.max(maxY, y);
+        if (tall != null && i < tall.length && tall[i] > 0) {
+          over = math.max(over, y + tall[i] * cp / (zc * t));
+        }
       }
       if (behind || depth == 0) return (target: target, fits: false);
       depth /= points.length;
       fits = maxX - minX <= rightEdge - left && maxY - minY <= top - bottom;
+      // With tall things on the points (the nest's flag), their tops are
+      // what must clear the HUD's top band, by a small pad of their own.
+      final roof = tall == null ? top : 1 - 2 * (_hudTopFree + 36) / height;
+      final high = tall == null ? maxY : math.max(maxY, over);
+      fits = fits && high - minY <= roof - bottom;
       final ex = (minX + maxX) / 2 - (left + rightEdge) / 2;
-      final ey = (minY + maxY) / 2 - (top + bottom) / 2;
+      final ey = tall == null
+          ? (minY + maxY) / 2 - (top + bottom) / 2
+          : (minY + high) / 2 - (roof + bottom) / 2;
       if (ex.abs() < 1e-4 && ey.abs() < 1e-4) break;
       // Shift the target so the points' box moves onto the free box's
       // centre (screen offsets back to ground offsets, near enough).
@@ -584,6 +607,10 @@ class PuttCameraRig {
     }
     return (target: target, fits: fits);
   }
+
+  /// How far down from the top the HUD reaches over the green, in pixels:
+  /// the top strip, the course chip and the corner buttons.
+  static const double _hudTopFree = 120;
 
   /// Orbit: [dxPixels] of horizontal drag turn the yaw, [dyPixels] tilt
   /// the pitch (clamped). Dragging down looks from higher above.
