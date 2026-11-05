@@ -54,12 +54,13 @@ class PuttPauseMenu extends StatelessWidget {
       title: labelPuttPaused(),
       children: [
         const SizedBox(height: 6),
-        SizedBox(
-          width: 120,
+        // The brand's own mark: the rooster in his headphones.
+        Image.asset(
+          'assets/images/app_icon/app_icon_transparent_cropped.png',
+          key: const Key('putt-menu-mark'),
+          width: 96,
           height: 96,
-          child: CustomPaint(
-            painter: _RoosterPainter(phase: 0),
-          ),
+          filterQuality: FilterQuality.medium,
         ),
         const SizedBox(height: 6),
         _MenuButton(
@@ -689,26 +690,6 @@ class _MenuButton extends StatelessWidget {
 }
 
 /// The rooster host, bobbing gently, drawn by the shared painters.
-class _RoosterPainter extends CustomPainter {
-  final double phase;
-
-  _RoosterPainter({required this.phase});
-
-  @override
-  void paint(ui.Canvas canvas, ui.Size size) {
-    final scale = size.shortestSide / 2.6;
-    drawRoosterHead(
-      canvas,
-      ui.Offset(size.width * 0.62, size.height * 0.52),
-      scale,
-      bob: phase,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_RoosterPainter old) => old.phase != phase;
-}
-
 // ---- strings ---------------------------------------------------------------------------------
 
 String labelPuttPaused() => Intl.message("Paused",

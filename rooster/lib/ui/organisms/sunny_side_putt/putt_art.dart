@@ -468,68 +468,6 @@ void drawFence(ui.Canvas canvas, ui.Offset center, int posts, double spacing) {
 
 // ---- the host -------------------------------------------------------------------------
 
-/// The rooster host: head in profile facing [facing] (radians; 0 looks
-/// right), feather white, comb-crown of lobes, comb-red wattle, yolk beak,
-/// ink eye with a shine. [bob] rocks the head gently. Used on the board
-/// between holes and across the HUD and menus.
-void drawRoosterHead(
-  ui.Canvas canvas,
-  ui.Offset center,
-  double scale, {
-  double facing = 0,
-  double bob = 0,
-}) {
-  canvas.save();
-  canvas.translate(center.dx, center.dy);
-  canvas.rotate(facing);
-  canvas.translate(0, bob);
-  // The neck wedge under the head.
-  final neck = ui.Path()
-    ..moveTo(-scale * 0.15, scale * 0.35)
-    ..lineTo(-scale * 0.55, scale * 1.05)
-    ..lineTo(scale * 0.3, scale * 1.05)
-    ..lineTo(scale * 0.35, scale * 0.4)
-    ..close();
-  canvas.drawPath(neck, solidPaint(PuttPalette.shell));
-  // Head.
-  final head = ui.Rect.fromCenter(
-      center: ui.Offset.zero, width: scale * 1.5, height: scale * 1.4);
-  // Comb crown: a fan of lobes arcing back from the crown.
-  final comb = solidPaint(PuttPalette.comb);
-  final combInk = strokePaint(PuttPalette.ink, 0.1);
-  for (var i = 0; i < 4; i++) {
-    final angle = -math.pi / 2 - 0.5 + i * 0.34;
-    final lobeCenter = ui.Offset(
-        math.cos(angle) * scale * 0.62, math.sin(angle) * scale * 0.62);
-    final lobeRadius = scale * (0.3 - i * 0.035);
-    canvas.drawCircle(lobeCenter, lobeRadius, combInk);
-    canvas.drawCircle(lobeCenter, lobeRadius, comb);
-  }
-  canvas.drawOval(head, strokePaint(PuttPalette.ink, 0.16));
-  canvas.drawOval(head, solidPaint(PuttPalette.shell));
-  // Wattle under the beak side.
-  canvas.drawCircle(ui.Offset(scale * 0.32, scale * 0.62), scale * 0.2, comb);
-  // Yolk beak: a wedge pushing right.
-  final beak = ui.Path()
-    ..moveTo(scale * 0.55, -scale * 0.05)
-    ..lineTo(scale * 1.05, scale * 0.14)
-    ..lineTo(scale * 0.5, scale * 0.32)
-    ..close();
-  canvas.drawPath(beak, strokePaint(PuttPalette.ink, 0.1));
-  canvas.drawPath(beak, solidPaint(PuttPalette.yolk));
-  // Ink eye with a shell shine.
-  canvas.drawCircle(ui.Offset(scale * 0.25, -scale * 0.12), scale * 0.17,
-      solidPaint(PuttPalette.ink));
-  canvas.drawCircle(ui.Offset(scale * 0.31, -scale * 0.18), scale * 0.05,
-      solidPaint(PuttPalette.shell));
-  // The little arched door of the brand, bottom of the neck.
-  final door = ui.RRect.fromRectAndRadius(
-      ui.Rect.fromLTWH(-scale * 0.18, scale * 0.72, scale * 0.34, scale * 0.34),
-      const ui.Radius.circular(1));
-  canvas.drawRRect(door, solidPaint(PuttPalette.ink));
-  canvas.restore();
-}
-
 // ---- particles --------------------------------------------------------------------------
 
 /// One sparkle of a power-up burst: a four-point star.
