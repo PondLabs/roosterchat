@@ -19,6 +19,8 @@
 // power-ups: powerups=rabbit_hole,gust fills the viewer's carton, and
 // arm=sprinkler (with armAt=3, seconds into the hole) arms that one's
 // targeting over the green - the scripted putts wait while it is up.
+// soft=0.25 makes the viewer's first putt a soft one at that power,
+// straight at the nest (the guide's resting-spot mark).
 library;
 
 import 'dart:async';
@@ -116,6 +118,9 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
   String? _arm;
   double _armAt = 3;
 
+  /// The viewer's first putt soft, at this power (the `soft` query).
+  double? _soft;
+
   /// The query's staged splash: the first bot's first putt of the hole
   /// goes into the nearest pond (for a look at the splash and the return).
   bool _splash = false;
@@ -145,6 +150,7 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
     _arm = query['arm'];
     _armAt = double.tryParse(query['armAt'] ?? '') ?? 3;
     _splash = query['splash'] == '1';
+    _soft = double.tryParse(query['soft'] ?? '');
     final bots = (int.tryParse(query['bots'] ?? '') ?? 3).clamp(0, 7);
     final seated = [for (final (id, _) in _crew.take(bots)) id];
     final played =
@@ -254,6 +260,8 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
     if (hole == null) return;
     if (hole.id != _holeId) {
       _holeId = hole.id;
+      // The capture tool times its shots from this line.
+      debugPrint('putt-demo: hole open ${hole.id}');
       _holeTime = 0;
       _holeClock
         ..reset()
@@ -385,7 +393,12 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
     final reference = _currentHole?.solution.shots ?? const <ReferenceShot>[];
     double angle;
     double power;
-    if (_myShot < reference.length) {
+    final soft = _soft;
+    if (soft != null && _myShot == 0) {
+      final toNest = hole.nest.position - ball.position;
+      angle = math.atan2(toNest.y, toNest.x);
+      power = soft;
+    } else if (_myShot < reference.length) {
       final shot = reference[_myShot];
       // Exactly the validated line: the engine fires what it is sent.
       angle = shot.angle;

@@ -580,6 +580,14 @@ class _FadingFigure with _Fadable {
   }
 
   final tjs.Object3D figure;
+
+  /// Faded all the way, the figure is not drawn at all (it would still
+  /// hide what stands behind it in the depth buffer).
+  @override
+  void fadeToward(double target, double dt) {
+    super.fadeToward(target, dt);
+    figure.visible = _fade > 0.02;
+  }
 }
 
 /// A duck where the obstacle paddles over water (the Pond's ducks): a

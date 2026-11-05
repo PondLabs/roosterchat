@@ -648,6 +648,21 @@ tjs.DataTexture _grassNormalTexture() {
 
 /// The soft round blob the particles and the eggs' contact shadows use,
 /// white so tinting does the colour.
+/// A disc solid to a crisp, anti-aliased edge (water drops).
+tjs.DataTexture _crispDiscTexture({int size = 32}) {
+  final bitmap = _Bitmap(size, size);
+  for (var row = 0; row < size; row++) {
+    for (var col = 0; col < size; col++) {
+      final dx = col + 0.5 - size / 2;
+      final dy = row + 0.5 - size / 2;
+      final d = math.sqrt(dx * dx + dy * dy) / (size / 2);
+      final edge = ((1 - d) / 0.14).clamp(0.0, 1.0);
+      bitmap.set(col, row, 0xFFFFFF, (edge * 255).round());
+    }
+  }
+  return bitmap.texture(srgb: false);
+}
+
 tjs.DataTexture _discTexture({int size = 64, double hardness = 2}) {
   final bitmap = _Bitmap(size, size);
   for (var row = 0; row < size; row++) {

@@ -357,19 +357,26 @@ class _PuttFxPool {
   /// two pools, so no sprite ever has its texture swapped while in play.
   static const int poolSize = 96;
   static const int paperSize = 72;
+  static const int dropSize = 56;
   static const int ringCount = 4;
 
   final List<_Billboard> _sprites = [];
   final List<_Billboard> _paper = [];
+  final List<_Billboard> _drops = [];
   final List<tjs.Mesh> _rings = [];
   tjs.DataTexture? _disc;
+  tjs.DataTexture? _drop;
 
-  /// The pool's one texture (world-owned): the world's dispose kills it
-  /// via its owned list; a fresh pool stamps a new disc.
+  /// The pool's soft disc (world-owned): the world's dispose kills it via
+  /// its owned list; a fresh pool stamps a new disc.
   tjs.DataTexture get texture => _disc ??= _discTexture(size: 32, hardness: 2);
 
+  /// The water drops' disc: solid to a crisp edge, so a splash reads as
+  /// drops from the overview too (world-owned like [texture]).
+  tjs.DataTexture get dropTexture => _drop ??= _crispDiscTexture(size: 32);
+
   void reset(tjs.Group parent) {
-    for (final sprite in [..._sprites, ..._paper]) {
+    for (final sprite in [..._sprites, ..._paper, ..._drops]) {
       parent.remove(sprite);
       sprite.material?.map = null;
       sprite.material?.dispose();
@@ -377,6 +384,16 @@ class _PuttFxPool {
     }
     _sprites.clear();
     _paper.clear();
+    _drops.clear();
+    final dropTexture = this.dropTexture;
+    for (var i = 0; i < dropSize; i++) {
+      final sprite = _Billboard(map: dropTexture)
+        ..name = 'fx-drop'
+        ..visible = false
+        ..renderOrder = 8;
+      parent.add(sprite);
+      _drops.add(sprite);
+    }
     for (var i = 0; i < paperSize; i++) {
       final sprite = _Billboard(map: _paperTexture)
         ..name = 'fx-paper'
@@ -417,6 +434,7 @@ class _PuttFxPool {
   void apply(PuttWorldFrame frame, {double scale = 1, _Ground? ground}) {
     var active = 0;
     var paper = 0;
+    var drops = 0;
     var rings = 0;
     for (final fx in frame.fxs) {
       final progress = fx.progress.clamp(0.0, 1.0);
@@ -437,6 +455,9 @@ class _PuttFxPool {
       if (fx.kind == PuttWorldFxKind.confetti) {
         if (paper >= _paper.length) continue;
         sprite = _paper[paper++];
+      } else if (fx.kind == PuttWorldFxKind.droplet) {
+        if (drops >= _drops.length) continue;
+        sprite = _drops[drops++];
       } else {
         if (active >= _sprites.length) continue;
         sprite = _sprites[active++];
@@ -452,7 +473,9 @@ class _PuttFxPool {
       switch (fx.kind) {
         case PuttWorldFxKind.droplet:
           lift = 1.7 * math.sin(progress * math.pi);
-          width = height = fx.size * (0.6 + 0.5 * progress);
+          width = height = fx.size * (0.75 + 0.35 * progress);
+          // Whole drops until late in their flight, then gone quickly.
+          opacity = progress < 0.6 ? 1 : (1 - progress) / 0.4;
         case PuttWorldFxKind.sparkle:
           lift = 0.45 + 0.6 * math.sin(progress * math.pi);
           width = height =
@@ -507,6 +530,11 @@ class _PuttFxPool {
     }
     for (var i = paper; i < _paper.length; i++) {
       _paper[i]
+        ..visible = false
+        ..scale.setValues(0.001, 0.001, 1);
+    }
+    for (var i = drops; i < _drops.length; i++) {
+      _drops[i]
         ..visible = false
         ..scale.setValues(0.001, 0.001, 1);
     }

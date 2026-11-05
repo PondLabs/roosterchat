@@ -1133,9 +1133,9 @@ class PuttWorld3D {
     }
   }
 
-  /// The host steps back to a ghost of himself while his head would stand
-  /// under the HUD's top bar or its corner buttons, or right in front of
-  /// the camera.
+  /// The host fades away while his head would stand under the HUD's top
+  /// bar or its corner buttons, and steps back to a ghost of himself right
+  /// in front of the camera.
   void _syncHost(double dt) {
     final fade = _hostFade;
     final size = rig.viewport;
@@ -1152,7 +1152,7 @@ class PuttWorld3D {
         headY < _hudTopBand &&
         headX > -40 &&
         headX < size.width + 40;
-    fade.fadeToward(near || underHud ? 0.3 : 1.0, dt);
+    fade.fadeToward(underHud ? 0.0 : (near ? 0.3 : 1.0), dt);
   }
 
   /// How far down the HUD's top bar and corner buttons reach, in pixels.
@@ -1233,7 +1233,9 @@ class PuttWorld3D {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _owned.add(_fx.texture); // the fx sprites' disc dies with the world
+    _owned
+      ..add(_fx.texture) // the fx sprites' discs die with the world
+      ..add(_fx.dropTexture);
     scene.dispose(); // walks the children, then marks the scene itself
     camera.dispose();
     for (final texture in _owned) {
