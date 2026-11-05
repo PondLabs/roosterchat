@@ -2974,13 +2974,14 @@ String labelPuttReleaseHint() =>
             "the slingshot for their first putt: releasing strikes the egg, "
             "a longer pull hits it harder");
 
-String labelPuttKeysHint() =>
-    Intl.message("Keys: ← → aim · ↑ ↓ power · Space putts · Tab power-ups",
-        name: "labelPuttKeysHint",
-        desc: "Second line of the first aim hint, on desktop and in the "
-            "browser: the arrow keys turn the aim and set the power, Space "
-            "putts, Tab moves through the power-up slots. The arrows are "
-            "the keys' own symbols");
+String labelPuttKeysHint() => Intl.message(
+    "Arrow keys aim and set the power · Space putts · Tab power-ups",
+    name: "labelPuttKeysHint",
+    desc: "Second line of the first aim hint, on desktop and in the "
+        "browser: the arrow keys turn the aim (left and right) and set "
+        "the power (up and down), Space putts, Tab moves through the "
+        "power-up slots. Words, not arrow symbols: the game's fonts "
+        "have none");
 
 String labelPuttKeyReleaseHint() => Intl.message("Space or Enter to putt",
     name: "labelPuttKeyReleaseHint",
@@ -2988,7 +2989,7 @@ String labelPuttKeyReleaseHint() => Intl.message("Space or Enter to putt",
         "keyboard: Space or Enter strikes the egg");
 
 String labelPuttKeyReleaseDetail() =>
-    Intl.message("Shift + ← → turns finer · Esc cancels",
+    Intl.message("Shift with the arrows turns finer · Esc cancels",
         name: "labelPuttKeyReleaseDetail",
         desc: "Second line of the hint while the player aims with the "
             "keyboard: holding Shift with the left and right arrow keys "

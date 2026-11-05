@@ -5903,9 +5903,9 @@
     "type": "text",
     "placeholders": {}
   },
-  "labelPuttKeysHint": "Keys: ← → aim · ↑ ↓ power · Space putts · Tab power-ups",
+  "labelPuttKeysHint": "Arrow keys aim and set the power · Space putts · Tab power-ups",
   "@labelPuttKeysHint": {
-    "description": "Second line of the first aim hint, on desktop and in the browser: the arrow keys turn the aim and set the power, Space putts, Tab moves through the power-up slots. The arrows are the keys' own symbols",
+    "description": "Second line of the first aim hint, on desktop and in the browser: the arrow keys turn the aim (left and right) and set the power (up and down), Space putts, Tab moves through the power-up slots. Words, not arrow symbols: the game's fonts have none",
     "type": "text",
     "placeholders": {}
   },
@@ -5915,7 +5915,7 @@
     "type": "text",
     "placeholders": {}
   },
-  "labelPuttKeyReleaseDetail": "Shift + ← → turns finer · Esc cancels",
+  "labelPuttKeyReleaseDetail": "Shift with the arrows turns finer · Esc cancels",
   "@labelPuttKeyReleaseDetail": {
     "description": "Second line of the hint while the player aims with the keyboard: holding Shift with the left and right arrow keys turns the aim in small steps, Esc drops the aim without putting",
     "type": "text",
