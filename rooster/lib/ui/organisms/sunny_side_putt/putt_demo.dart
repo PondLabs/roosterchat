@@ -790,8 +790,20 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
       } else if (shots >= 3 && toNest.length < 6) {
         _rabbitHop(ball.playerId, hole.nest.position);
       } else {
-        final target = _nextTarget(hole, ball.position);
+        var target = _nextTarget(hole, ball.position);
         final last = target == hole.nest.position;
+        if (!last) {
+          // Each its own lane beside the route's point, an egg and a half
+          // apart: aiming at the very same spot, the crew bunched in
+          // clumps of three (round 5's coop-008600, soft-008600).
+          final way = target - ball.position;
+          final across = Vec2(-way.y, way.x).normalized(const Vec2(0, 1));
+          final lane = target + across * ((order - 2) * 0.95);
+          if (hole.bounds.contains(lane) &&
+              !hole.water.any((shape) => shape.contains(lane))) {
+            target = lane;
+          }
+        }
         final shot = putt(ball.position, target, arrival: last ? 1.4 : 0.7);
         final spread = 0.16 / (shots + 1);
         final angle = shot.angle + (_random.nextDouble() * 2 - 1) * spread;
