@@ -127,7 +127,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     match = widget.match ?? PuttMatch.solo();
     game = SunnySidePuttGame(
       match: match,
-      onSfx: (sfx) => widget.audio?.play(sfx),
+      onSfx: (sfx, volume) => widget.audio?.play(sfx, volume: volume),
     );
     widget.onGame?.call(game);
   }
@@ -545,8 +545,9 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
 class SunnySidePuttGame extends FlameGame {
   PuttMatch match;
 
-  /// The audio tap: strokes, bounces, timers, the works.
-  final void Function(PuttSfx sfx) onSfx;
+  /// The audio tap: strokes, bounces, timers, the works, each at the
+  /// volume its notice asks (a share of the effects bus).
+  final void Function(PuttSfx sfx, double volume) onSfx;
 
   final AimController aim = AimController();
 
@@ -1015,7 +1016,7 @@ class SunnySidePuttGame extends FlameGame {
   void _spendNotices() {
     if (match.notices.isEmpty) return;
     for (final notice in match.notices) {
-      onSfx(notice.sfx);
+      onSfx(notice.sfx, notice.volume);
     }
     match.notices.clear();
   }

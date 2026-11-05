@@ -377,4 +377,123 @@ void main() {
       expect(puttNotices, lessThanOrEqualTo(2));
     });
   });
+
+  group('sounds', () {
+    /// Frames [match] like the game does, gathering what it asks to hear
+    /// (the game spends the notices once a frame).
+    List<PuttNotice> listen(PuttMatch match, {int frames = 120}) {
+      final heard = <PuttNotice>[];
+      for (var frame = 0; frame < frames; frame++) {
+        match.update(1 / 60);
+        heard.addAll(match.notices);
+        match.notices.clear();
+        if (match.phase != PuttPhase.holePlay) break;
+      }
+      return heard;
+    }
+
+    test('a putt tocks as hard as it was struck', () {
+      expect(puttSfxFor(0.1), PuttSfx.puttSoft);
+      expect(puttSfxFor(0.5), PuttSfx.putt);
+      expect(puttSfxFor(0.95), PuttSfx.puttFirm);
+      final match = PuttMatch.solo();
+      match.notices.clear();
+      expect(match.submitShot(0, 0.95), isTrue);
+      expect(match.notices.map((n) => n.sfx), [PuttSfx.puttFirm]);
+    });
+
+    test('a hole opens on the banjo, not on a putt', () {
+      final match = PuttMatch.solo();
+      final heard = match.notices.map((n) => n.sfx);
+      expect(heard, contains(PuttSfx.holeStart));
+      expect(heard, isNot(contains(PuttSfx.putt)));
+    });
+
+    test('an egg off the fence knocks, as loud as it hit', () {
+      final match = PuttMatch.solo();
+      // Due left from the tee: the fence is four units off.
+      expect(match.submitShot(math.pi, 0.7), isTrue);
+      final knocks =
+          listen(match).where((n) => n.sfx == PuttSfx.bounce).toList();
+      expect(knocks, isNotEmpty);
+      expect(knocks.first.volume, greaterThan(0.8));
+      expect(knocks.every((n) => n.volume > 0 && n.volume <= 1), isTrue);
+    });
+
+    test('two eggs meeting clack once', () {
+      final course = CourseDef(id: 'pair', holes: [stubHole(id: 'p0')]);
+      final match = PuttMatch(
+        config: PuttConfig(
+            mode: GameMode.casual,
+            courses: [course],
+            seed: 8,
+            wobbleMaxRadians: 0),
+        seatedPlayerIds: const ['friend'],
+      )..boot();
+      final mine = match.myBall!.position;
+      final theirs = match.engine.world!.ball('friend')!.position;
+      expect(match.submitShot((theirs - mine).angle, 0.35), isTrue);
+      final clacks = listen(match, frames: 30)
+          .where((n) => n.sfx == PuttSfx.clack)
+          .toList();
+      expect(clacks, hasLength(1));
+    });
+
+    test('a sink hatches with a peep; an ace has the host crow too', () {
+      PuttMatch onTee() => PuttMatch(
+            config: PuttConfig(
+                mode: GameMode.casual,
+                courses: [
+                  CourseDef(id: 'ace', holes: [stubHole(id: 'a0', par: 3)]),
+                ],
+                seed: 4,
+                wobbleMaxRadians: 0),
+          )..boot();
+
+      final ace = onTee();
+      final shot =
+          putt(ace.myBall!.position, ace.hole!.nest.position, arrival: 0.6);
+      expect(ace.submitShot(shot.angle, shot.power), isTrue);
+      final aceHeard = listen(ace, frames: 600).map((n) => n.sfx).toSet();
+      expect(
+          aceHeard,
+          containsAll([
+            PuttSfx.holed,
+            PuttSfx.hatch,
+            PuttSfx.crow,
+            PuttSfx.holeEnd,
+          ]));
+
+      final birdie = onTee();
+      // A nudge first (straight back, a short way), then the putt home.
+      expect(birdie.submitShot(math.pi, 0.08), isTrue);
+      listen(birdie, frames: 240);
+      final again = putt(birdie.myBall!.position, birdie.hole!.nest.position,
+          arrival: 0.6);
+      expect(birdie.submitShot(again.angle, again.power), isTrue);
+      final birdieHeard = listen(birdie, frames: 600).map((n) => n.sfx).toSet();
+      expect(birdieHeard, containsAll([PuttSfx.holed, PuttSfx.hatch]));
+      expect(birdieHeard, isNot(contains(PuttSfx.crow)));
+    });
+
+    test('the last seconds go tick, tock', () {
+      final course = CourseDef(id: 'clock', holes: [stubHole(id: 'c0')]);
+      final match = PuttMatch(
+        config: PuttConfig(
+            mode: GameMode.casual,
+            courses: [course],
+            seed: 3,
+            holeTimeLimitSeconds: 16),
+      )..boot();
+      final clock = listen(match, frames: 60 * 17)
+          .map((n) => n.sfx)
+          .where((s) => s == PuttSfx.timerTick || s == PuttSfx.timerTock)
+          .toList();
+      // Fourteen seconds counted down, never the same sound twice running.
+      expect(clock, hasLength(14));
+      for (var i = 1; i < clock.length; i++) {
+        expect(clock[i], isNot(clock[i - 1]));
+      }
+    });
+  });
 }

@@ -6,8 +6,10 @@
 library;
 
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:rooster/client/components/sunny_side_putt/core/hole.dart';
+import 'package:rooster/client/components/sunny_side_putt/core/physics.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/powerups.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/rules.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
@@ -613,6 +615,63 @@ void main() {
           jsonDecode(jsonEncode(snapshot)) as Map<String, Object?>, journal,
           config: engine.config, untilTick: engine.tick);
       expect(handoff.toJson(), engine.toJson());
+    });
+  });
+
+  group('the world\'s echoes', () {
+    PuttEngine fenceShot() {
+      final engine = PuttEngine(rulesConfig())
+        ..join('a')
+        ..start();
+      engine.drainEvents();
+      // Due left from the tee at (4, 8): the fence is four units away.
+      expect(engine.submitShot('a', math.pi, 0.6), isTrue);
+      return engine;
+    }
+
+    test('a putt into the fence echoes its bounce, once', () {
+      final engine = fenceShot();
+      for (var i = 0; i < 240; i++) {
+        engine.tickForward();
+      }
+      final knocks = engine
+          .drainWorldEvents()
+          .whereType<BallBounced>()
+          .where((e) => e.kind == BounceKind.wall)
+          .toList();
+      expect(knocks, isNotEmpty);
+      expect(knocks.first.playerId, 'a');
+      expect(knocks.first.impactSpeed, greaterThan(5));
+      expect(engine.drainWorldEvents(), isEmpty);
+    });
+
+    test('hearing the echoes or not changes nothing the game keeps', () {
+      final heard = fenceShot();
+      final deaf = fenceShot();
+      for (var i = 0; i < 600; i++) {
+        heard.tickForward();
+        heard.drainWorldEvents();
+        deaf.tickForward();
+      }
+      expect(jsonEncode(heard.toJson()), jsonEncode(deaf.toJson()));
+    });
+
+    test('a replayed engine starts with nothing to echo', () {
+      final engine = PuttEngine(rulesConfig())
+        ..join('a')
+        ..start();
+      final snapshotSeq = engine.lastSeq;
+      final snapshot = engine.toJson();
+      expect(engine.submitShot('a', math.pi, 0.6), isTrue);
+      for (var i = 0; i < 240; i++) {
+        engine.tickForward();
+      }
+      final journal =
+          engine.journalSince(snapshotSeq).map((e) => e.toJson()).toList();
+      final handoff = PuttEngine.replay(snapshot, journal,
+          config: engine.config, untilTick: engine.tick);
+      expect(engine.drainWorldEvents(), isNotEmpty);
+      expect(handoff.drainWorldEvents(), isEmpty);
     });
   });
 }

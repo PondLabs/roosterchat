@@ -566,6 +566,13 @@ class PuttEngine {
   final List<PuttEvent> _events = [];
   final List<JournalEntry> _journal = [];
 
+  /// The world's own reports since the last [drainWorldEvents], for the
+  /// view's sounds (see there).
+  final List<PhysicsEvent> _worldEchoes = [];
+
+  /// How many echoes an engine nobody drains keeps: the latest.
+  static const int _worldEchoCap = 128;
+
   PhysicsWorld? _world;
 
   PuttEngine(this.config)
@@ -719,6 +726,17 @@ class PuttEngine {
 
   /// Events waiting for [drainEvents].
   int get pendingEventCount => _events.length;
+
+  /// The world's own reports since the last call - an egg off a rail, a
+  /// bumper, a hen or another egg, over a speed strip, off a ledge - in
+  /// tick order, for the view's sounds. Echoes only: never journaled nor
+  /// snapshotted, and nothing in the match reads them, so they cannot
+  /// move the game.
+  List<PhysicsEvent> drainWorldEvents() {
+    final drained = List.of(_worldEchoes);
+    _worldEchoes.clear();
+    return drained;
+  }
 
   /// Accepted inputs with a seq above [seq] - what a snapshot handoff
   /// replays. Journal entries only accumulate here; the HOST decides when
@@ -1104,6 +1122,7 @@ class PuttEngine {
     final world = _world;
     if (world == null) return;
     for (final event in world.drainEvents()) {
+      _worldEchoes.add(event);
       switch (event) {
         case BallCaptured():
           _holedThisHole.add(event.playerId);
@@ -1118,6 +1137,9 @@ class PuttEngine {
         default:
           break;
       }
+    }
+    if (_worldEchoes.length > _worldEchoCap) {
+      _worldEchoes.removeRange(0, _worldEchoes.length - _worldEchoCap);
     }
   }
 
@@ -1277,6 +1299,8 @@ class PuttEngine {
     while (engine._tick < targetTick) {
       engine.tickForward();
     }
+    // What the replay's ticks bumped into already happened; no echoes.
+    engine._worldEchoes.clear();
     return engine;
   }
 }

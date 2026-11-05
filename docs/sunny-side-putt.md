@@ -285,6 +285,42 @@ world builds those with `_gridPlane`.
 - With the system's reduced motion on, the hole opens on its play
   framing without the sweep, and the camera never shakes nor punches in.
 
+## Sound
+
+Every sound is synthesized by `rooster/tools/gen_game_audio.dart` (the
+instruments, the score and the effects in `tools/game_audio/`) with fixed
+seeds: no samples, nothing licensed, and a re-run writes the same bytes.
+From `rooster/`, with `ffmpeg` (libmp3lame) on the PATH:
+`dart run tools/gen_game_audio.dart`.
+
+- The music is a farm band's 112-second loop in G at 120 bpm: the tin
+  whistle's tune over banjo rolls, a boom-chick guitar, a two-step upright
+  bass, brushes and an egg shaker (A, then A' with the fiddle in thirds);
+  the banjo's B over clip-clop wood blocks; B' on the fiddle doubled by a
+  chiptune pulse, ending in a stop where the hens cluck; a bridge in E
+  minor with chip arpeggios and a stop for the rooster's crow; the banjo's
+  break; the reprise and a stop-time tag. The strings are Karplus-Strong,
+  the whistle and the fiddle monophonic lines with vibrato, all in a small
+  stereo room. It ships as a 44.1 kHz stereo MP3 (about 2 MB), the one
+  compressed format every platform's player decodes. The samples wrap
+  seamlessly, and the file starts inside the tag's stop, so the gap most
+  players leave when they loop (they seek back to the start) falls where
+  the band is silent.
+- The effects are 44.1 kHz mono, WAV for the hits and MP3 for the longer
+  cues, each levelled to a loudness for its kind. My putt tocks in three
+  strengths by its power; an egg knocks on timber, boings off rubber,
+  clacks on another egg, and a hen clucks or a duck quacks when one bumps
+  it, each as loud as the hit; water plops; the nest rustles and chimes,
+  the chick peeps as it hatches and the host crows for a hole in one;
+  speed strips whoosh, a "?" crate pops, a rabbit hole goes thwup, the
+  silo sucks and booms, a fall off the table whistles down; a banjo opens
+  each hole, a sting closes it, a fanfare ends the match; a cowbell warns
+  at 60, 30, 15 and 5 seconds and the last fourteen tick and tock.
+- The hits come from the physics: the engine echoes the world's reports
+  (`PuttEngine.drainWorldEvents`, never journaled nor snapshotted) and the
+  match turns them into sounds, with a short cooldown per egg and at most
+  two a frame.
+
 ## The layers
 
 - `core/` (pure Dart, headless-testable): deterministic physics with
@@ -303,8 +339,7 @@ world builds those with `_gridPlane`.
   buttons, banners by kind, the scorecard, the hint line, the power-up
   carton and its targeting, and the results and match-over cards), the
   name tags, pause/settings/vote menus, the spectator strip, and the
-  audio (synthesized SFX and a looping tune; volume per bus in the
-  settings). The world only reads the engine's snapshots; the physics
+  audio (see Sound; volume per bus in the settings). The world only reads the engine's snapshots; the physics
   stays planar.
 - `putt_demo.dart` - the demo mode (`--dart-define=PUTT_DEMO=true`): the
   game plays itself on the real courses for captures; on the web the query

@@ -27,22 +27,41 @@ import 'package:rooster/client/components/sunny_side_putt/courses/sunny_side_put
 import 'putt_art.dart';
 import 'stub_courses.dart';
 
-/// Sounds the view's audio service knows. The harness picks one per engine
-/// event; the service maps each to a file (see `putt_audio.dart`).
+/// Sounds the view's audio service knows. The harness picks them from the
+/// engine's events and the world's echoes; the service maps each to a file
+/// (see `putt_audio.dart`).
 enum PuttSfx {
+  /// My stroke, a wooden tock in three strengths by the putt's power.
+  puttSoft,
   putt,
+  puttFirm,
+
+  /// An egg off a timber rail (a knock), a rubber bumper (a boing),
+  /// another egg (a clack), or a hen or a duck (who say so).
   bounce,
   bumper,
+  clack,
+  hen,
+  duck,
   water,
   swallow,
   out,
+
+  /// An egg in the nest: straw and a chime at once, then the chick's
+  /// peeps timed to the hatch, and the host's crow for a hole in one.
   holed,
+  hatch,
+  crow,
   boost,
   portal,
   powerUpPicked,
   powerUpUsed,
   timerCue,
+
+  /// The last seconds, one a second, tick then tock.
   timerTick,
+  timerTock,
+  holeStart,
   holeEnd,
   victory,
   click,
@@ -57,7 +76,11 @@ class PuttNotice {
   /// The banner line, when this notice earns one.
   final String? title;
 
-  const PuttNotice(this.sfx, {this.title});
+  /// How loud, as a share of the effects bus: a glancing knock is quieter
+  /// than a hard one.
+  final double volume;
+
+  const PuttNotice(this.sfx, {this.title, this.volume = 1});
 
   @override
   String toString() => 'PuttNotice($sfx, $title)';
@@ -205,8 +228,10 @@ class PuttMatch extends ChangeNotifier {
     if (phase != PuttPhase.holePlay) {
       // Between holes the world is static; drop the leftover fraction so
       // the next hole starts its clock fresh. Moves that came in from the
-      // wire (reactions, mostly) still surface.
+      // wire (reactions, mostly) still surface; the world's last echoes
+      // were heard with the hole.
       _accumulator = 0;
+      engine.drainWorldEvents();
       if (engine.pendingEventCount > 0) {
         drainEvents();
         notifyListeners();
@@ -230,7 +255,7 @@ class PuttMatch extends ChangeNotifier {
       final drained = drainEvents();
       notices
         ..clear()
-        ..addAll([...drained, ...derived]);
+        ..addAll([...drained, ...derived, ..._worldNotices()]);
       fxSpots.addAll(derivedSpots);
       notifyListeners();
     }
@@ -583,22 +608,12 @@ class PuttMatch extends ChangeNotifier {
   // ---- events --------------------------------------------------------------------
 
   /// Empties the engine's event queue into [notices], [fxSpots], banner
-  /// lines and the per-hole bookkeeping the HUD reads. A bounce storm
-  /// collapses to two roll noises; everything else passes through.
+  /// lines and the per-hole bookkeeping the HUD reads.
   List<PuttNotice> drainEvents() {
     fxSpots.clear();
-    final result = <PuttNotice>[];
-    final rollNoises = <PuttNotice>[];
-    for (final event in engine.drainEvents()) {
-      final notice = _noticeFor(event);
-      if (notice == null) continue;
-      if (_isRollNoise(notice.sfx)) {
-        rollNoises.add(notice);
-      } else {
-        result.add(notice);
-      }
-    }
-    result.addAll(rollNoises.take(2));
+    final result = [
+      for (final event in engine.drainEvents()) ..._noticesFor(event),
+    ];
     notices
       ..clear()
       ..addAll(result);
@@ -608,7 +623,7 @@ class PuttMatch extends ChangeNotifier {
   /// Burst anchors from the ticks this [drainEvents] covered.
   final List<PuttFxSpot> fxSpots = [];
 
-  PuttNotice? _noticeFor(PuttEvent event) {
+  List<PuttNotice> _noticesFor(PuttEvent event) {
     switch (event) {
       case HoleStarted():
         _holeNumber = event.globalIndex + 1;
@@ -629,31 +644,39 @@ class PuttMatch extends ChangeNotifier {
               ? labelPuttPar(event.par)
               : labelPuttHoleStartDetail(event.par, course),
         );
-        return PuttNotice(PuttSfx.putt, title: headline);
+        return [PuttNotice(PuttSfx.holeStart, title: headline)];
       case MatchStarted():
         _announce(PuttHeadlineKind.course,
             labelPuttCourseStart(puttCourseName(event.courseId)));
-        return PuttNotice(PuttSfx.click, title: headline);
+        return [PuttNotice(PuttSfx.click, title: headline)];
       case CourseStarted():
         _announce(PuttHeadlineKind.course,
             labelPuttCourseStart(puttCourseName(event.courseId)));
-        return PuttNotice(PuttSfx.click, title: headline);
+        return [PuttNotice(PuttSfx.click, title: headline)];
       case ShotApplied():
-        if (event.playerId != localPlayerId) return null;
+        if (event.playerId != localPlayerId) return const [];
         _hasPutted = true;
-        return const PuttNotice(PuttSfx.putt);
+        return [PuttNotice(puttSfxFor(event.power))];
       case PlayerHoled():
         fxSpots.add(PuttFxSpot(PuttFxSpotKind.holed, who: event.playerId));
+        final term = ScoreTerm.of(event.strokes, par);
         if (event.playerId == localPlayerId) {
-          final term = ScoreTerm.of(event.strokes, par);
           _announce(PuttHeadlineKind.scoreTerm, scoreTermText(term),
               term: term);
         }
-        return PuttNotice(PuttSfx.holed);
+        return [
+          const PuttNotice(PuttSfx.holed),
+          const PuttNotice(PuttSfx.hatch),
+          if (term == ScoreTerm.holeInOne) const PuttNotice(PuttSfx.crow),
+        ];
       case TimerCue():
-        return PuttNotice(PuttSfx.timerCue);
+        return const [PuttNotice(PuttSfx.timerCue)];
       case TimerTick():
-        return PuttNotice(PuttSfx.timerTick);
+        return [
+          PuttNotice(event.remainingSeconds.isEven
+              ? PuttSfx.timerTick
+              : PuttSfx.timerTock),
+        ];
       case HoleEnded():
         _holeEndLine =
             event.completed ? labelPuttHoleCleared() : labelPuttHoleTimedOut();
@@ -662,38 +685,137 @@ class PuttMatch extends ChangeNotifier {
         if (!_myTermIsFresh) {
           _announce(PuttHeadlineKind.holeEnd, _holeEndLine!);
         }
-        return PuttNotice(
-          event.completed ? PuttSfx.holeEnd : PuttSfx.timerCue,
-          title: _holeEndLine,
-        );
+        return [
+          PuttNotice(
+            event.completed ? PuttSfx.holeEnd : PuttSfx.timerCue,
+            title: _holeEndLine,
+          ),
+        ];
       case PowerUpPicked():
         // The pickup's sparkle pops at whoever grabbed the "?" box (the
         // caster or a Barnyard Chaos grain); the sound stays the local
         // player's only.
         fxSpots.add(PuttFxSpot(PuttFxSpotKind.pick, who: event.playerId));
-        if (event.playerId != localPlayerId) return null;
-        return const PuttNotice(PuttSfx.powerUpPicked);
+        if (event.playerId != localPlayerId) return const [];
+        return const [PuttNotice(PuttSfx.powerUpPicked)];
       case PowerUpUsed():
-        if (event.playerId != localPlayerId) return null;
-        return const PuttNotice(PuttSfx.powerUpUsed);
+        if (event.playerId != localPlayerId) return const [];
+        return const [PuttNotice(PuttSfx.powerUpUsed)];
       case MatchEnded():
         _announce(PuttHeadlineKind.matchOver, labelPuttMatchOver());
-        return PuttNotice(PuttSfx.victory, title: headline);
+        return [PuttNotice(PuttSfx.victory, title: headline)];
       case PlayerReacted():
         final now = reactionClock;
         reactions
           ..removeWhere((r) => now - r.at > PuttReaction.life)
           ..add(PuttReaction(event.playerId, event.reaction, now));
-        return null;
+        return const [];
       default:
-        return null;
+        return const [];
     }
   }
 
-  /// Physics noise the egg makes by rolling: many per tick are collapsed
-  /// to the loudest (the noise trimmer keeps at most one of each kind).
-  bool _isRollNoise(PuttSfx sfx) =>
-      sfx == PuttSfx.bounce || sfx == PuttSfx.bumper;
+  // ---- the world's echoes ---------------------------------------------------------
+
+  /// Under this an egg is rolling along a rail, not hitting it (units/s
+  /// into the surface).
+  static const double quietImpact = 1.2;
+
+  /// A walker nudging a resting egg is worth a word from far less.
+  static const double quietNudge = 0.6;
+
+  /// The engine tick each egg last knocked on: a rattle along a rail
+  /// stays a knock, not a drum roll.
+  final Map<String, int> _lastKnock = {};
+  int? _lastWalkerWord;
+
+  /// Whether [last] (an engine tick) is under [seconds] ago. A tick from
+  /// the future - a guest's resnapshot can step the clock back - is long
+  /// ago.
+  bool _within(int? last, double seconds) {
+    if (last == null) return false;
+    final since = engine.tick - last;
+    return since >= 0 && since < (seconds / config.physics.dt).round();
+  }
+
+  /// The world's echoes since the last frame as sounds: rails, bumpers,
+  /// eggs meeting and the walkers' bumps, each as loud as the hit (another
+  /// player's egg a little quieter than mine), and the speed strips. At
+  /// most the two hardest hits a frame.
+  List<PuttNotice> _worldNotices() {
+    final hits = <(double, PuttNotice)>[];
+    final rest = <PuttNotice>[];
+    for (final event in engine.drainWorldEvents()) {
+      switch (event) {
+        case BallBounced():
+          final notice = _bounceNotice(event);
+          if (notice != null) hits.add((event.impactSpeed, notice));
+        case BallBoosted():
+          rest.add(const PuttNotice(PuttSfx.boost));
+        default:
+          break;
+      }
+    }
+    hits.sort((a, b) => b.$1.compareTo(a.$1));
+    return [...rest, for (final (_, notice) in hits.take(2)) notice];
+  }
+
+  PuttNotice? _bounceNotice(BallBounced event) {
+    final walker = event.kind == BounceKind.obstacle;
+    if (event.impactSpeed < (walker ? quietNudge : quietImpact)) return null;
+    // Two eggs meeting report it from both sides: one clack.
+    final other = event.otherPlayerId;
+    if (other != null && other.compareTo(event.playerId) < 0) return null;
+    if (walker) {
+      // A hen with an egg against her says it once.
+      if (_within(_lastWalkerWord, 0.6)) return null;
+      _lastWalkerWord = engine.tick;
+    } else {
+      if (_within(_lastKnock[event.playerId], 0.075)) return null;
+      _lastKnock[event.playerId] = engine.tick;
+    }
+    final hard = ((event.impactSpeed - quietImpact) / 12).clamp(0.0, 1.0);
+    final mine = event.playerId == localPlayerId || other == localPlayerId;
+    final sfx = switch (event.kind) {
+      BounceKind.bumper => PuttSfx.bumper,
+      BounceKind.ball => PuttSfx.clack,
+      BounceKind.obstacle => _walkerAt(event.at),
+      _ => PuttSfx.bounce,
+    };
+    return PuttNotice(sfx,
+        volume: walker ? 1.0 : (0.3 + 0.7 * hard) * (mine ? 1 : 0.7));
+  }
+
+  /// Who an egg bumped into, by the world's own rule: ducks paddle the
+  /// Pond (a duck by name, or one whose path crosses water), hens walk the
+  /// rest; on a hole with both, the walker whose stops lie nearest.
+  PuttSfx _walkerAt(Vec2 at) {
+    final h = hole;
+    if (h == null) return PuttSfx.hen;
+    MovingObstacle? nearest;
+    var best = double.infinity;
+    for (final walker in h.obstacles) {
+      for (final stop in walker.stops) {
+        final distance = stop.at.distanceTo(at);
+        if (distance < best) {
+          best = distance;
+          nearest = walker;
+        }
+      }
+    }
+    if (nearest == null) return PuttSfx.hen;
+    final swims = nearest.id.contains('duck') ||
+        nearest.stops
+            .any((stop) => h.water.any((pond) => pond.contains(stop.at)));
+    return swims ? PuttSfx.duck : PuttSfx.hen;
+  }
+}
+
+/// The tock a putt of [power] (0..1) makes: a tap, a stroke, a whack.
+PuttSfx puttSfxFor(double power) {
+  if (power < 0.3) return PuttSfx.puttSoft;
+  if (power >= 0.7) return PuttSfx.puttFirm;
+  return PuttSfx.putt;
 }
 
 /// A quick reaction someone sent: who, which ([puttReactions]), and when

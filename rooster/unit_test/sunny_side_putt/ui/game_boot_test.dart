@@ -100,7 +100,7 @@ void main() {
   testWidgets('the aim: a press away from the egg anchors the pull there',
       (tester) async {
     final match = PuttMatch.solo();
-    final game = SunnySidePuttGame(match: match, onSfx: (_) {});
+    final game = SunnySidePuttGame(match: match, onSfx: (_, __) {});
     await tester.pumpWidget(MaterialApp(home: GameWidget(game: game)));
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -127,7 +127,7 @@ void main() {
   testWidgets('the aim: starts near my settled egg, submits on release',
       (tester) async {
     final match = PuttMatch.solo();
-    final game = SunnySidePuttGame(match: match, onSfx: (_) {});
+    final game = SunnySidePuttGame(match: match, onSfx: (_, __) {});
     await tester.pumpWidget(MaterialApp(home: GameWidget(game: game)));
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -150,7 +150,7 @@ void main() {
 
   testWidgets('a tap on the egg cancels, no stroke spent', (tester) async {
     final match = PuttMatch.solo();
-    final game = SunnySidePuttGame(match: match, onSfx: (_) {});
+    final game = SunnySidePuttGame(match: match, onSfx: (_, __) {});
     await tester.pumpWidget(MaterialApp(home: GameWidget(game: game)));
     await tester.pump(const Duration(milliseconds: 50));
 

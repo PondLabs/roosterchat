@@ -1,8 +1,10 @@
 // The sound of Sunny Side Putt: one looping music track and a small pool
 // of SFX players, on two buses whose levels the settings sliders persist
 // (and whose levels this service re-applies live). Runs on audioplayers,
-// so it sounds on desktop, mobile and web alike - the assets are plain
-// WAV files synthesized by `tools/gen_game_audio.dart` and committed.
+// so it sounds on desktop, mobile and web alike. The assets are
+// synthesized by `tools/gen_game_audio.dart` and committed: the short hits
+// as WAV, the longer cues and the farm band's 112-second loop as MP3, the
+// one compressed format every platform's player decodes.
 //
 // The buses are the seam: the sliders set `buses.musicVolume` /
 // `buses.sfxVolume` live while dragging, and commit the same levels to
@@ -82,9 +84,13 @@ class _AudioBuses implements PuttBuses {
 /// view routes [PuttSfx]s to [play], and its [buses] are what sliders
 /// drive.
 class PuttAudio {
-  /// How many SFX players share the round-robin: a busy green bounces a
-  /// lot, and eight keeps overlaps from cutting each other off.
-  static const int sfxPoolSize = 8;
+  /// How many SFX players share the round-robin: a busy green knocks a
+  /// lot, and a sink rings three cues at once (the chime, the hatch, an
+  /// ace's crow), so ten keep overlaps from cutting each other off.
+  static const int sfxPoolSize = 10;
+
+  /// The music loop, under the game's directory.
+  static const String musicPath = 'music.mp3';
 
   AudioPlayer? _music;
   final List<AudioPlayer> _sfxPlayers = [];
@@ -106,42 +112,33 @@ class PuttAudio {
   bool _loaded = false;
 
   /// The asset file an effect plays, laid out under the game's directory.
-  static String assetPathOf(PuttSfx sfx) {
-    switch (sfx) {
-      case PuttSfx.putt:
-        return 'putt.wav';
-      case PuttSfx.bounce:
-        return 'bounce.wav';
-      case PuttSfx.bumper:
-        return 'bumper.wav';
-      case PuttSfx.water:
-        return 'splash.wav';
-      case PuttSfx.swallow:
-        return 'swallow.wav';
-      case PuttSfx.out:
-        return 'out.wav';
-      case PuttSfx.holed:
-        return 'holed.wav';
-      case PuttSfx.boost:
-        return 'boost.wav';
-      case PuttSfx.portal:
-        return 'portal.wav';
-      case PuttSfx.powerUpPicked:
-        return 'pick.wav';
-      case PuttSfx.powerUpUsed:
-        return 'use.wav';
-      case PuttSfx.timerCue:
-        return 'cue.wav';
-      case PuttSfx.timerTick:
-        return 'tick.wav';
-      case PuttSfx.holeEnd:
-        return 'holed.wav';
-      case PuttSfx.victory:
-        return 'victory.wav';
-      case PuttSfx.click:
-        return 'click.wav';
-    }
-  }
+  static String assetPathOf(PuttSfx sfx) => switch (sfx) {
+        PuttSfx.puttSoft => 'putt_soft.wav',
+        PuttSfx.putt => 'putt.wav',
+        PuttSfx.puttFirm => 'putt_firm.wav',
+        PuttSfx.bounce => 'bounce.wav',
+        PuttSfx.bumper => 'bumper.wav',
+        PuttSfx.clack => 'clack.wav',
+        PuttSfx.hen => 'hen.wav',
+        PuttSfx.duck => 'duck.wav',
+        PuttSfx.water => 'splash.mp3',
+        PuttSfx.swallow => 'swallow.mp3',
+        PuttSfx.out => 'out.mp3',
+        PuttSfx.holed => 'holed.mp3',
+        PuttSfx.hatch => 'hatch.mp3',
+        PuttSfx.crow => 'crow.mp3',
+        PuttSfx.boost => 'boost.wav',
+        PuttSfx.portal => 'portal.wav',
+        PuttSfx.powerUpPicked => 'pick.wav',
+        PuttSfx.powerUpUsed => 'use.wav',
+        PuttSfx.timerCue => 'cue.mp3',
+        PuttSfx.timerTick => 'tick.wav',
+        PuttSfx.timerTock => 'tock.wav',
+        PuttSfx.holeStart => 'hole_start.mp3',
+        PuttSfx.holeEnd => 'hole_end.mp3',
+        PuttSfx.victory => 'victory.mp3',
+        PuttSfx.click => 'click.wav',
+      };
 
   /// Loads the sources and starts the music loop. Failures land in the
   /// debug log, never in the game's face: a read-only asset cannot wake
@@ -165,24 +162,26 @@ class PuttAudio {
           ..setReleaseMode(ReleaseMode.release)
           ..setVolume(_sfxVolume));
       }
-      await _music!.play(AssetSource('sunny_side_putt/music.wav'));
+      await _music!.play(AssetSource('sunny_side_putt/$musicPath'));
       _loaded = true;
     } catch (error) {
       debugPrint('sunny side putt: audio preload failed: $error');
     }
   }
 
-  /// Fires one effect on the next pool player. Volume rides the bus;
-  /// nothing here blocks the game or throws into it.
-  void play(PuttSfx sfx) {
+  /// Fires one effect on the next pool player, at [volume] (0..1) of the
+  /// effects bus: a glancing knock asks for less than a hard one. Nothing
+  /// here blocks the game or throws into it.
+  void play(PuttSfx sfx, {double volume = 1}) {
     if (!_loaded || _sfxPlayers.isEmpty) return;
     final source = _sources[sfx];
     final player = _sfxPlayers[_nextPlayer];
     _nextPlayer = (_nextPlayer + 1) % _sfxPlayers.length;
+    final level = _sfxVolume * volume.clamp(0.0, 1.0);
     unawaited(() async {
       try {
         await player.stop();
-        await player.setVolume(_sfxVolume);
+        await player.setVolume(level);
         await player.play(source!);
       } catch (error) {
         debugPrint('sunny side putt: sfx $sfx failed: $error');
