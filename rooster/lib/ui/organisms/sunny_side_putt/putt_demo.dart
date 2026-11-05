@@ -15,7 +15,8 @@
 // the_barn; default the_coop), hole: 1-6 (the match opens there), bots:
 // 0-7 other players (default 3). For close looks at the art, cam= holds the
 // camera: nest (the nest and its flag), host (the rooster by the green),
-// wide (the farm around the course), tee (the eggs on the tee). To show the
+// wide (the farm around the course), tee (the eggs on the tee), hen (the
+// hole's first walking hen, followed from her side). To show the
 // power-ups: powerups=rabbit_hole,gust fills the viewer's carton, and
 // arm=sprinkler (with armAt=3, seconds into the hole) arms that one's
 // targeting over the green - the scripted putts wait while it is up.
@@ -525,6 +526,15 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
       case 'tee':
         game.followOverride = hole.tee;
         rig.glideTo(distance: 9, pitchDeg: 30);
+      case 'hen':
+        // Where she is now, seen from the south-west: her legs step across
+        // the frame.
+        final world = match.engine.world;
+        final walker = hole.obstacles.isEmpty ? null : hole.obstacles.first;
+        if (world == null || walker == null) return;
+        game.followOverride =
+            henPositionAt(walker, world.tick, match.config.physics.dt);
+        rig.glideTo(distance: 8, pitchDeg: 24, yaw: math.pi - 1.0);
     }
   }
 

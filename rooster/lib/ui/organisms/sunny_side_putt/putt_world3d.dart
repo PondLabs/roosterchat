@@ -11,9 +11,10 @@
 //     silo, crates, the nest, the tee, the hen's coop decorations; the
 //     kickers in `world3d/kicker.dart`), the scenery around it
 //     (`world3d/scenery.dart`) and the actors (`world3d/actors.dart`:
-//     eggs, hens). Every frame, [PuttWorld3D.applySnapshot] moves the
-//     meshes to the engine's truth (positions, roll quaternions, the hop's
-//     lift, a flight's altitude, the collected crates),
+//     eggs, hens; the birds' legs and feathers come from
+//     `world3d/birds.dart`). Every frame, [PuttWorld3D.applySnapshot]
+//     moves the meshes to the engine's truth (positions, roll quaternions,
+//     the hop's lift, a flight's altitude, the collected crates),
 //     breathes the time-driven bits (water, flag, windmill, crates,
 //     portals, clouds), and eases the camera rig toward its follow point.
 //     No physics and no engine state here: the world consumes a
@@ -74,6 +75,7 @@ part 'world3d/kit.dart';
 part 'world3d/course.dart';
 part 'world3d/scenery.dart';
 part 'world3d/actors.dart';
+part 'world3d/birds.dart';
 part 'world3d/aim_fx.dart';
 part 'world3d/theme.dart';
 part 'world3d/bursts.dart';
@@ -310,6 +312,10 @@ class PuttWorldFrame {
   /// out of the shot.
   final bool closeUp;
 
+  /// The camera's opening sweep of the hole is on: the host turns to the
+  /// camera and looks at it.
+  final bool opening;
+
   const PuttWorldFrame({
     required this.time,
     this.eggs = const [],
@@ -320,6 +326,7 @@ class PuttWorldFrame {
     this.collectedBoxes = const {},
     this.crows = const [],
     this.closeUp = false,
+    this.opening = false,
   });
 }
 
@@ -1051,6 +1058,7 @@ class PuttWorld3D {
             theme: _theme,
             cheerUntil: () => _cheerUntil,
             watch: () => _watch,
+            greet: () => _greeting ? _greetAt : null,
             shape: kit.shape)
         .build();
     makeKind('scenery').add(scenery);
@@ -1129,6 +1137,7 @@ class PuttWorld3D {
     _disposeChildren(_holeRoot);
     _ground.hole = null;
     _watch = null;
+    _greeting = false;
     _hostFade = null;
     _henViews.clear();
     _crateViews.clear();
@@ -1153,6 +1162,10 @@ class PuttWorld3D {
     _firstFrame = false;
 
     _syncEggs(frame, dt);
+    // While the hole opens, the host looks at the camera (where it stood
+    // last frame: the sweep moves it a little at a time).
+    _greeting = frame.opening;
+    if (_greeting) _greetAt.setFrom(camera.position);
     _syncHens(frame, dt);
     _syncCrates(frame);
     _aim.sync(frame.aim, frame.time, _ground);
@@ -1356,6 +1369,11 @@ class PuttWorld3D {
 
   /// The egg the host's head follows.
   Vec2? _watch;
+
+  /// Whether the host looks at the camera (the hole is opening), and
+  /// where it stands.
+  bool _greeting = false;
+  final tjs.Vector3 _greetAt = tjs.Vector3();
 
   void _dropEgg(_EggView3D view) {
     _actorsRoot.remove(view.group);

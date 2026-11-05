@@ -1,6 +1,6 @@
 // The game view boots on the stub hole without network, plays a stroke
-// through the real pipeline, interpolates, and quiets when a menu stands
-// over it.
+// through the real pipeline, interpolates, quiets when a menu stands over
+// it, and tells the world while the camera sweeps in.
 library;
 
 import 'package:flutter/material.dart';
@@ -179,6 +179,24 @@ void main() {
     final aim = game.buildWorldFrame().aim!;
     expect(aim.trace, roll);
     expect(aim.traceTint, isNotNull);
+  });
+
+  testWidgets('the frame tells the world while the camera sweeps in',
+      (tester) async {
+    final match = PuttMatch.solo();
+    final game = SunnySidePuttGame(match: match, onSfx: (_, __) {});
+    await tester.pumpWidget(MaterialApp(home: GameWidget(game: game)));
+    await tester.pump(const Duration(milliseconds: 50));
+
+    // The hole has just opened: the host looks round at the camera.
+    expect(game.director.opening, isTrue);
+    expect(game.buildWorldFrame().opening, isTrue);
+    for (var i = 0; i < 160; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(game.director.opening, isFalse);
+    expect(game.buildWorldFrame().opening, isFalse,
+        reason: 'the sweep is over: back to the egg in play');
   });
 
   testWidgets('a tap on the egg cancels, no stroke spent', (tester) async {

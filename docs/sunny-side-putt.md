@@ -407,19 +407,45 @@ its own hour, read off the hole's id (`world3d/theme.dart`):
 | Farm Road | golden hour | striped road barriers | the dirt road, a red tractor, a water tower, telephone poles, wheat fields, the windmill |
 | The Barn | dusk | red barn boards | the big barn, haystacks, lanterns, fireflies; its round obstacles are hay bales stood on end |
 
-The host - a white rooster with his headphones on, a few eggs tall -
-stands beyond the side rail on the nest's side, about level with the
-green's middle,
-follows the egg in play with his head, bobs it now and then and cheers
-when an egg drops in. Whenever his head would stand under the HUD's top
-bar or corner buttons, or he stands right in front of the camera, he
-pops out of the way, a quick shrink and fade over 0.15 s (and so does a
-hen that walks into the camera's face: all there or not at all, never a
-half-seen ghost). Ground
-the walls close off from
-the tee (a flood fill stopped by walls, carried through rabbit holes) is
-planted as the theme's garden beds instead of turf, so a hole shaped
-with walls reads as its shape.
+The host - a big white rooster with his headphones on, a few eggs tall -
+stands on the grass beyond the picket fence on the nest's side, about
+level with the green's middle. He is built for close-ups (`world3d/birds.dart`): two
+legs in bands of yellow-orange scales, each foot three toes forward and
+a short one back, knuckled and clawed, a spur on each shank; folded
+wings whose secondaries scallop the lower edge, the long primaries
+layered along the back; a cream-gold cape of hackles over his
+shoulders; and a fan of sickles arching over his tail, near-black with a
+green sheen. He breathes (his body swells about two per cent), looks
+about with a bird's quick turns and tilts of the head, follows the egg in
+play, bobs his head to the beat now and then and cheers when an egg drops
+in. While the camera sweeps in over a new hole (the frame's `opening`,
+from the camera director's) he turns and looks at it, his body coming
+round where his neck will not reach.
+
+The hens are built from the same parts at their size: a plump white
+body, wings with their feathers cut along the edge, a small cream fan of
+a tail, a little comb and wattle, and the same legs and toes. A walking
+hen's legs step with her walk: each swings ahead with its foot lifted
+and back with it planted, and the planted foot stays on the ground (on
+its claws as it leans back, on its heel as it reaches ahead: the leg's
+own lowest point at each swing, read off its vertices once); her body
+bobs and rocks from foot to foot, her head bobs with her steps. The yard
+hens by the hen house are merged into the farm's props in fewer facets,
+some pecking at the grass. Each bird stays a few meshes, feathers and
+toes merged: the host's body (legs and tail in it), his two wings and
+his head, each with its ink; a hen's body, head and two legs, each with
+its ink.
+
+Whenever the host's head would stand under the HUD's top bar or corner
+buttons, or he stands right in front of the camera, he pops out of the
+way, a quick shrink and fade over 0.15 s (and so does a hen that walks
+into the camera's face: all there or not at all, never a half-seen
+ghost), every feather with him: his materials are made transparent once
+at build, so a fade only moves a uniform.
+
+Ground the walls close off from the tee (a flood fill stopped by walls,
+carried through rabbit holes) is planted as the theme's garden beds
+instead of turf, so a hole shaped with walls reads as its shape.
 
 The turf rides the hills and the tiers: its vertices sit at the ground's
 height and take their normals from its gradient, and it is cut along
@@ -615,7 +641,8 @@ From `rooster/`, with `ffmpeg` (libmp3lame) on the PATH:
   stays planar.
 - `putt_demo.dart` - the demo mode (`--dart-define=PUTT_DEMO=true`): the
   game plays itself on the real courses for captures; on the web the query
-  picks the course, the hole, the crew, a held camera and a script of
+  picks the course, the hole, the crew, a held camera (`cam=host`, `nest`,
+  `wide`, `tee`, or `hen` to follow a walking hen) and a script of
   casts (`script=me.thick_shell@3,maya.corn_rain@5,lou.thieving_crow@7.5`;
   see its header). The crew wear looks of their own (a full table shows
   every pattern and hat), and `look=hearts/daisy` dresses the viewer's

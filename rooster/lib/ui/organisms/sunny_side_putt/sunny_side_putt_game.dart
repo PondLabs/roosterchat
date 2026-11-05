@@ -913,6 +913,8 @@ class SunnySidePuttGame extends FlameGame {
       collectedBoxes: collected,
       crows: current == null ? const [] : _crowsForFrame(),
       closeUp: director.celebrating,
+      // The host looks round at the camera while it sweeps in.
+      opening: director.opening,
     );
   }
 

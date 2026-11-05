@@ -170,13 +170,19 @@ class _Scenery {
       required this.theme,
       required this.cheerUntil,
       required this.shape,
-      Vec2? Function()? watch})
+      Vec2? Function()? watch,
+      tjs.Vector3? Function()? greet})
       : watch = watch ?? (() => null),
+        greet = greet ?? (() => null),
         _rand = _Rand(_seedOf('${hole.id}/farm'));
 
   /// The egg the host keeps his eye on (the one rolling, else the
   /// viewer's), or null.
   final Vec2? Function() watch;
+
+  /// The camera the host turns to and looks at while it sweeps in over
+  /// the hole (where it stands, in the world), or null.
+  final tjs.Vector3? Function() greet;
 
   /// The table's shape: the meadow fills what the walls carved away.
   final _TableShape shape;
@@ -1050,9 +1056,13 @@ class _Scenery {
   /// beside the rail, not a giant over the green).
   static const double _hostScale = 0.65;
 
-  /// The host: a white rooster in profile beside the green, comb like a
-  /// crown, headphones on (he is always in the call), bobbing his head
-  /// once in a while to the beat.
+  /// The host: a big white rooster beside the green, comb like a crown,
+  /// headphones on (he is always in the call). He stands on two scaly
+  /// legs, his wings folded with their feathers cut along the edge and his
+  /// sickles arched over his tail (`world3d/birds.dart` builds him). He
+  /// breathes, looks about with quick turns and tilts of his head, follows
+  /// the egg in play, bobs to the beat now and then, cheers every egg that
+  /// drops in, and turns to the camera while it sweeps in over a new hole.
   tjs.Group _host(Vec2 at) {
     // He stands beyond the side rail by the nest, facing the green and a
     // little the camera, looking at the players.
@@ -1062,67 +1072,43 @@ class _Scenery {
       ..position.setValues(at.x, _ground, at.y)
       ..rotation.y = turn
       ..scale.setValues(_hostScale, _hostScale, _hostScale);
-    const white = 0xFCF8F1;
-    const shade = 0xEDE3D3;
+    // All of him swells with his breath, from the ground up (the root's
+    // own scale is the fade's to shrink).
+    final breath = tjs.Group()..name = 'host-breath';
+    group.add(breath);
+    const white = _Bird.white;
     final comb = _hexOf(PuttPalette.comb);
     final yolk = _hexOf(PuttPalette.yolk);
     final ink = _hexOf(PuttPalette.ink);
-    const spruce = 0x2E3B33;
     final body = _Merged();
-    // Legs and feet.
-    for (final side in [-0.75, 0.75]) {
-      body.add(tjg.CylinderGeometry(0.22, 0.26, 2.4, 8), _place(0.1, 1.2, side),
-          yolk);
-      for (final toe in [-0.5, 0.0, 0.5]) {
-        body.add(tjs.BoxGeometry(1.0, 0.22, 0.24),
-            _place(0.55, 0.11, side + toe * 0.6, yaw: -toe * 0.7), yolk);
-      }
-    }
-    // Body, breast and wing.
-    body.add(tjs.SphereGeometry(1, 24, 16),
-        _place(0, 4.3, 0, sx: 2.6, sy: 2.2, sz: 2.0), white,
-        baseShade: 0.82);
-    body.add(tjs.SphereGeometry(1, 20, 14),
-        _place(1.5, 4.7, 0, sx: 1.7, sy: 1.8, sz: 1.6), white);
+    _roosterBody(body);
+    final hostBody = body.mesh('host-body', flat: false, roughness: 0.75)!;
+    _inkOutline(hostBody, 0.09);
+    breath.add(hostBody);
     // The wings hang from the shoulders on their own pivots: they flap
     // when he cheers.
     final wings = <(tjs.Group, double)>[];
     for (final side in [-1.0, 1.0]) {
       final shoulder = tjs.Group()
         ..name = 'host-wing'
-        ..position.setValues(0.4, 5.25, side * 1.55);
-      final wing = _Merged()
-        ..add(
-            tjs.SphereGeometry(1, 18, 12),
-            _place(-0.7, -0.75, side * 0.2,
-                tilt: side * 0.2, sx: 1.9, sy: 1.2, sz: 0.45),
-            shade);
-      shoulder
-          .add(wing.mesh('host-wing-feathers', flat: false, roughness: 0.75)!);
-      group.add(shoulder);
+        ..position.setValues(0.45, 5.3, side * 1.6);
+      final wing = _Merged();
+      _roosterWing(wing, side);
+      final feathers =
+          wing.mesh('host-wing-feathers', flat: false, roughness: 0.75)!;
+      _inkOutline(feathers, 0.07);
+      shoulder.add(feathers);
+      breath.add(shoulder);
       wings.add((shoulder, side));
     }
-    // The tail: dark sickle feathers with a spruce sheen.
-    for (var f = 0; f < 5; f++) {
-      final lift = 0.5 + f * 0.22;
-      body.add(
-        tjg.ConeGeometry(0.42, 3.4 - f * 0.25, 8),
-        _place(-2.4 - f * 0.12, 5.6 + f * 0.25, (f - 2) * 0.28,
-            roll: lift, yaw: (f - 2) * 0.12),
-        f.isEven ? ink : spruce,
-      );
-    }
-    // The neck.
-    body.add(tjg.CylinderGeometry(0.85, 1.25, 2.4, 14),
-        _place(1.9, 6.3, 0, roll: -0.35), white);
-    final hostBody = body.mesh('host-body', flat: false, roughness: 0.75)!;
-    _inkOutline(hostBody, 0.09);
-    group.add(hostBody);
 
-    // The head, which bobs: comb, beak, wattle, eyes and the headphones.
+    // The head, which turns, tilts and nods: comb, beak, wattle, eyes and
+    // the headphones.
     final head = tjs.Group()
       ..name = 'host-head'
       ..position.setValues(2.5, 7.4, 0);
+    // Turned first, then nodded, then tilted about his own beak.
+    head.rotation.order = tjs.RotationOrders.yzx;
     final face = _Merged();
     face.add(
         tjs.SphereGeometry(1.25, 22, 16), _place(0, 0, 0, sx: 1.08), white);
@@ -1158,32 +1144,79 @@ class _Scenery {
     final hostFace = face.mesh('host-face', flat: false, roughness: 0.7)!;
     _inkOutline(hostFace, 0.07);
     head.add(hostFace);
-    group.add(head);
+    breath.add(head);
+
+    // Where his head turns (toward what he watches), how far his body
+    // comes round with it (only for the camera), and the glance he holds
+    // between a bird's quick turns and tilts.
     var headYaw = 0.0;
+    var headPitch = 0.0;
+    var bodyYaw = 0.0;
+    var glances = 0;
+    var nextGlance = 1.2;
+    var glanceYaw = 0.0;
+    var glanceTilt = 0.0;
+    var glanceNow = 0.0;
+    var tiltNow = 0.0;
+    final headHeight = _ground + 7.4 * _hostScale;
     animated.add(_AnimatedBy((time, dt) {
-      // He follows the egg in play with his head (as far as a rooster's
-      // neck turns).
-      final watched = watch();
-      var wantYaw = 0.0;
-      if (watched != null) {
+      // He breathes: his body swells about two per cent, and back.
+      final swell = 0.01 + 0.01 * math.sin(time * math.pi * 2 / 3.4);
+      breath.scale.setValues(1 + swell, 1 + swell * 0.5, 1 + swell);
+      // What he looks at: the camera while it sweeps in over the hole,
+      // else the egg in play, as far as a rooster's neck turns - for the
+      // camera his body comes round too.
+      final camera = greet();
+      final target = camera != null ? Vec2(camera.x, camera.z) : watch();
+      var want = 0.0;
+      var wantPitch = 0.0;
+      if (target != null) {
         final hx = at.x + 2.5 * _hostScale * math.cos(turn);
         final hz = at.y - 2.5 * _hostScale * math.sin(turn);
-        final wx = watched.x - hx;
-        final wz = watched.y - hz;
+        final wx = target.x - hx;
+        final wz = target.y - hz;
         final lx = wx * math.cos(turn) - wz * math.sin(turn);
         final lz = wx * math.sin(turn) + wz * math.cos(turn);
-        wantYaw = math.atan2(-lz, lx).clamp(-0.85, 0.85).toDouble();
+        want = math.atan2(-lz, lx);
+        // Up to the camera, down to the green.
+        final rise = (camera?.y ?? 0.0) - headHeight;
+        wantPitch = (math.atan2(rise, math.sqrt(wx * wx + wz * wz)) * 0.6)
+            .clamp(-0.3, 0.35)
+            .toDouble();
       }
-      headYaw += (wantYaw - headYaw) * math.min(1.0, dt * 5);
-      head.rotation.y = headYaw;
+      final bodyWant = camera == null
+          ? 0.0
+          : (want - want.clamp(-0.7, 0.7)).clamp(-0.9, 0.9).toDouble();
+      bodyYaw += (bodyWant - bodyYaw) * math.min(1.0, dt * 3);
+      group.rotation.y = turn + bodyYaw;
+      final headWant = (want - bodyYaw).clamp(-0.85, 0.85).toDouble();
+      headYaw += (headWant - headYaw) * math.min(1.0, dt * 5);
+      headPitch += (wantPitch - headPitch) * math.min(1.0, dt * 4);
+      // Now and then a glance: his head snaps to a small new turn and tilt
+      // and holds it, the way a bird looks about (less of a turn while he
+      // looks at the camera).
+      if (time >= nextGlance) {
+        glances++;
+        nextGlance = time + 0.8 + _hash2(glances, 1, 71) * 2.2;
+        glanceYaw = (_hash2(glances, 2, 71) * 2 - 1) * 0.3;
+        glanceTilt = (_hash2(glances, 3, 71) * 2 - 1) * 0.26;
+      }
       final cheering = time < cheerUntil();
+      final snap = math.min(1.0, dt * 12);
+      final glanceWant =
+          cheering ? 0.0 : glanceYaw * (camera == null ? 1 : 0.3);
+      glanceNow += (glanceWant - glanceNow) * snap;
+      tiltNow += ((cheering ? 0.0 : glanceTilt) - tiltNow) * snap;
+      head.rotation.y = (headYaw + glanceNow).clamp(-1.0, 1.0).toDouble();
+      head.rotation.x = tiltNow;
       if (cheering) {
-        // An egg in the nest: he hops, flaps and crows, beak to the sky.
+        // An egg in the nest: he hops, flaps his wings out and crows, beak
+        // to the sky.
         final hop = math.sin(time * 9).abs();
         group.position.y = _ground + hop * 0.9 * _hostScale;
         for (final (shoulder, side) in wings) {
           shoulder.rotation.x =
-              side * (0.35 + 0.55 * math.sin(time * 18).abs());
+              -side * (0.35 + 0.55 * math.sin(time * 18).abs());
         }
         head.rotation.z = 0.32 + math.sin(time * 6) * 0.06;
         head.position.y = 7.55;
@@ -1196,7 +1229,7 @@ class _Scenery {
       // A bar of nodding every few seconds, still in between.
       final phase = time % 6.0;
       final nod = phase < 2.4 ? math.sin(phase * math.pi * 2.5).abs() : 0.0;
-      head.rotation.z = -nod * 0.16;
+      head.rotation.z = headPitch - nod * 0.16;
       head.position.y = 7.4 - nod * 0.12;
     }));
     return group;
@@ -1331,36 +1364,22 @@ class _Scenery {
     }
   }
 
-  /// A small hen, merged: plump body, head, comb, beak, tail.
+  /// A small hen, merged: the walking hens' own body, head and legs at
+  /// her size, in fewer facets. Some peck at the grass, the others look
+  /// about (each one's pose read off where she stands, so the farm's
+  /// random draws stay as they were).
   void _henFigure(_Merged into, Vec2 at, double yaw, double r) {
-    final cosY = math.cos(yaw);
-    final sinY = math.sin(yaw);
-    tjs.Matrix4 local(double lx, double ly, double lz,
-        {double sx = 1, double sy = 1, double sz = 1, double tilt = 0}) {
-      return _place(at.x + lx * cosY + lz * sinY, _ground + ly,
-          at.y - lx * sinY + lz * cosY,
-          yaw: yaw, tilt: tilt, sx: sx, sy: sy, sz: sz);
-    }
-
-    const white = 0xFCF8F1;
-    into.add(tjs.SphereGeometry(1, 12, 8),
-        local(0, r * 1.0, 0, sx: r * 0.85, sy: r * 0.75, sz: r * 1.05), white,
-        baseShade: 0.78);
-    into.add(tjs.SphereGeometry(r * 0.42, 10, 8), local(0, r * 1.6, r * 0.75),
-        white);
-    into.add(
-        tjs.SphereGeometry(r * 0.16, 8, 6),
-        local(0, r * 2.02, r * 0.75, sx: 0.6, sy: 1.2),
-        _hexOf(PuttPalette.comb));
-    into.add(
-        tjg.ConeGeometry(r * 0.12, r * 0.32, 6),
-        local(0, r * 1.56, r * 1.18, tilt: math.pi / 2),
-        _hexOf(PuttPalette.yolk));
-    into.add(tjg.ConeGeometry(r * 0.32, r * 0.8, 6),
-        local(0, r * 1.45, -r * 0.8, tilt: -0.7), 0xEEDFC8);
-    for (final side in [-0.25, 0.25]) {
-      into.add(tjg.CylinderGeometry(r * 0.05, r * 0.05, r * 0.5, 5),
-          local(side * r, r * 0.25, 0), _hexOf(PuttPalette.yolk));
+    final frame = _place(at.x, _ground, at.y, yaw: yaw);
+    _henBody(into, frame, r, small: true);
+    final pose = _hash2((at.x * 13).floor(), (at.y * 13).floor(), 29);
+    final head = pose < 0.45
+        ? _place(0, r * (_henHeadY - 0.4), r * (_henHeadZ + 0.25), tilt: 0.85)
+        : _place(0, r * _henHeadY, r * _henHeadZ, yaw: (pose - 0.72) * 1.6);
+    _henHead(into, _within(frame, head), r, small: true);
+    for (final side in [-1.0, 1.0]) {
+      _henLeg(into, _within(frame, _place(side * r * 0.32, r * _henHip, 0)), r,
+          side,
+          small: true);
     }
   }
 
