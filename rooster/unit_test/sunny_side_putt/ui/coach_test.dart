@@ -71,6 +71,25 @@ void main() {
     expect(puttTagPill(tag, tag.at).overlaps(mine), isFalse);
   });
 
+  test('a tag steps beside my egg rather than over it, pointing back', () {
+    // Maya's egg stands just in front of mine (lower on the screen): her
+    // tag's own spot is on my egg and its pin.
+    const mine = Rect.fromLTRB(630, 230, 710, 420);
+    const maya = PuttTag(
+        playerId: 'a', name: 'Maya', color: Colors.teal, at: Offset(670, 440));
+    final tag = declutterTags(const [maya], avoid: [mine]).single;
+    final pill = puttTagPill(tag, tag.at);
+    expect(pill.overlaps(mine), isFalse);
+    expect(pill.bottom, 440, reason: 'beside, at her height: not over mine');
+    // The pointer leans back toward her egg.
+    expect(
+        (tag.at.dx + tag.tail - 670).abs(), lessThan((tag.at.dx - 670).abs()));
+
+    // No room beside either: not drawn, rather than over my egg.
+    const wide = Rect.fromLTRB(540, 230, 800, 420);
+    expect(declutterTags(const [maya], avoid: [wide]), isEmpty);
+  });
+
   test('a tag that would stand under the HUD is not drawn', () {
     final board = PuttTagBoard();
     addTearDown(board.dispose);

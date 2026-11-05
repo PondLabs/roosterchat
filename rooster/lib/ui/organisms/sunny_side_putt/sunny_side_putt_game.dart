@@ -1193,12 +1193,22 @@ class SunnySidePuttGame extends FlameGame {
       final at = match.renderPositionOf(ball.playerId);
       if (!world3d.inFrontOfCamera(at)) continue;
       final foot = world3d.projectToWorld(at);
+      final lift = liftOf(ball);
       // Mine with its pin over it (the pin bobs up to some six radii); the
       // others up to their shell's top (their own tags stand above that),
       // up in the air with a flight.
       final top = world3d.projectToWorld(at,
-          height: eggRadius * (mine ? 6.0 : 2.4) + liftOf(ball));
-      final half = math.max(mine ? 14.0 : 8.0, (foot.dy - top.dy) * 0.45);
+          height: eggRadius * (mine ? 6.0 : 2.4) + lift);
+      // As wide as the shell drawn there (mine a little wider, its pin
+      // sways): a radius across the screen, whichever way the camera faces.
+      final middle = world3d.projectToWorld(at, height: eggRadius + lift);
+      final east = world3d.projectToWorld(at + core.Vec2(eggRadius, 0),
+          height: eggRadius + lift);
+      final south = world3d.projectToWorld(at + core.Vec2(0, eggRadius),
+          height: eggRadius + lift);
+      final radius = math.sqrt(
+          math.pow(east.dx - middle.dx, 2) + math.pow(south.dx - middle.dx, 2));
+      final half = math.max(mine ? 14.0 : 8.0, radius * (mine ? 1.25 : 1.05));
       out.add(Rect.fromLTRB(foot.dx - half, top.dy, foot.dx + half, foot.dy));
     }
     return out;

@@ -35,6 +35,10 @@ class PuttTag {
   /// the names would cover the eggs.
   final bool compact;
 
+  /// Where the pointer under the pill sits, in pixels from the pill's
+  /// middle: a tag stepped aside of its egg still points down at it.
+  final double tail;
+
   const PuttTag({
     required this.playerId,
     required this.name,
@@ -44,7 +48,21 @@ class PuttTag {
     this.avatar,
     this.look = PuttLook.standard,
     this.compact = false,
+    this.tail = 0,
   });
+
+  PuttTag _laidAt(Offset to, {required bool compact, required double tail}) =>
+      PuttTag(
+        playerId: playerId,
+        name: name,
+        color: color,
+        at: to,
+        dim: dim,
+        avatar: avatar,
+        look: look,
+        compact: compact,
+        tail: tail,
+      );
 }
 
 /// How tall the little egg on a tag stands, and how wide it is.
@@ -74,10 +92,6 @@ class PuttTagBoard extends ChangeNotifier {
   }
 }
 
-/// The tags lifted clear of each other: eggs bunched on the tee would
-/// stack their pills on top of one another, so each tag (from the lowest
-/// on screen up) rises above any it would overlap. A pill's size is read
-/// off its name, near enough for the layout.
 /// A tag's pill as drawn, anchored at [at] (the tip of its tail): its
 /// padding and border, the picture and the little egg (only one of them
 /// when compact), the gap and the name at about 7.4 px a letter, and the
@@ -94,53 +108,70 @@ Rect puttTagPill(PuttTag tag, Offset at) {
   return Rect.fromLTWH(at.dx - width / 2, at.dy - height, width, height);
 }
 
+/// The tags laid clear of each other and of [avoid] (the eggs, mine with
+/// its pin, the coach's hand): eggs bunched on the tee would stack their
+/// pills on top of one another. Each tag, from the lowest on screen up,
+/// tries its own spot, then steps to either side, then rises a row past
+/// what is in the way - but never far over another egg: a tag standing
+/// above someone else's egg names that one. Blocked that way it tries
+/// again with its picture only, and failing that it is not drawn this
+/// frame. A pill's size is read off its name, near enough for the layout.
 List<PuttTag> declutterTags(List<PuttTag> tags, {List<Rect> avoid = const []}) {
   if (tags.isEmpty || (tags.length < 2 && avoid.isEmpty)) return tags;
   final order = [...tags]..sort((a, b) => b.at.dy.compareTo(a.at.dy));
-  final placed = <Rect>[...avoid];
-  final moved = <String, Offset>{};
+  final laidPills = <Rect>[];
+  final laid = <String, PuttTag>{};
+  final rows = tags.length + avoid.length;
   for (final tag in order) {
-    final base = tag.at;
-    final width = puttTagPill(tag, base).width;
-    Offset? chosen;
-    var y = base.dy;
-    // Where it stands, then a little to either side, then up a row past
-    // whatever is in the way, and the same again.
-    for (var row = 0;
-        row <= tags.length + avoid.length && chosen == null;
-        row++) {
-      for (final dx in [0.0, -width * 0.6, width * 0.6]) {
-        final at = Offset(base.dx + dx, y);
-        final box = puttTagPill(tag, at);
-        if (!placed.any((other) => other.overlaps(box))) {
-          chosen = at;
-          break;
-        }
-      }
-      if (chosen != null) break;
-      final box = puttTagPill(tag, Offset(base.dx, y));
-      final hits = placed.where((other) => other.overlaps(box));
-      y = hits.isEmpty
-          ? y - 4
-          : hits.map((other) => other.top).reduce(math.min) - 3;
-    }
-    chosen ??= Offset(base.dx, y);
-    placed.add(puttTagPill(tag, chosen));
-    moved[tag.playerId] = chosen;
+    final placed = _layTag(tag, tag.compact, laidPills, avoid, rows) ??
+        (tag.compact ? null : _layTag(tag, true, laidPills, avoid, rows));
+    if (placed == null) continue;
+    laidPills.add(puttTagPill(placed, placed.at));
+    laid[tag.playerId] = placed;
   }
   return [
     for (final tag in tags)
-      PuttTag(
-        playerId: tag.playerId,
-        name: tag.name,
-        color: tag.color,
-        at: moved[tag.playerId] ?? tag.at,
-        dim: tag.dim,
-        avatar: tag.avatar,
-        look: tag.look,
-        compact: tag.compact,
-      ),
+      if (laid[tag.playerId] case final placed?) placed,
   ];
+}
+
+/// How far a tag may rise over an egg in its way, in pixels: over the top
+/// of a small, far egg, not over a whole one.
+const double _tagRiseOverEgg = 40;
+
+PuttTag? _layTag(PuttTag tag, bool compact, List<Rect> laidPills,
+    List<Rect> avoid, int rows) {
+  final base = tag.at;
+  final shape = tag._laidAt(base, compact: compact, tail: 0);
+  final width = puttTagPill(shape, base).width;
+  // The pointer reaches no further than the pill's rounded ends.
+  final reach = math.max(0.0, width / 2 - 9);
+  var y = base.dy;
+  for (var row = 0; row <= rows; row++) {
+    for (final dx in [
+      0.0,
+      -width * 0.6,
+      width * 0.6,
+      -width * 1.15,
+      width * 1.15,
+    ]) {
+      final at = Offset(base.dx + dx, y);
+      final box = puttTagPill(shape, at);
+      if (!laidPills.any(box.overlaps) && !avoid.any(box.overlaps)) {
+        return tag._laidAt(at,
+            compact: compact, tail: (-dx).clamp(-reach, reach));
+      }
+    }
+    final box = puttTagPill(shape, Offset(base.dx, y));
+    final eggs = avoid.where(box.overlaps).toList();
+    final hits = [...laidPills.where(box.overlaps), ...eggs];
+    final next = hits.isEmpty
+        ? y - 4
+        : hits.map((other) => other.top).reduce(math.min) - 3;
+    if (eggs.isNotEmpty && base.dy - next > _tagRiseOverEgg) return null;
+    y = next;
+  }
+  return null;
 }
 
 /// The tag layer: a pill per tag, laid at its pixel.
@@ -244,9 +275,12 @@ class _TagPill extends StatelessWidget {
             ],
           ),
         ),
-        CustomPaint(
-          size: const Size(10, 5),
-          painter: _PointerPainter(tag.color),
+        Transform.translate(
+          offset: Offset(tag.tail, 0),
+          child: CustomPaint(
+            size: const Size(10, 5),
+            painter: _PointerPainter(tag.color),
+          ),
         ),
       ],
     );
