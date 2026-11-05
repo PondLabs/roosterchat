@@ -777,19 +777,24 @@ class SunnySidePuttGame extends FlameGame {
       }
       final aimState = aim.state;
       if (aim.isActive && aimState != null) {
+        final sway = aim.swayNow(aimLayer.holdSeconds);
+        // The guide runs from the pull's own angle (cached while the pull
+        // holds) and turns with the sway, so it always shows where the
+        // arrow, and so the shot, points.
+        final guided = aimState.dragLength >= AimController.deadZone;
+        final preview = guided
+            ? _swayed(
+                _previewFor(aimState.angle, aimState.power), aim.origin!, sway)
+            : const <core.Vec2>[];
+        final rest = guided ? _previewRest : null;
         aimView = PuttWorldAim(
           origin: aim.origin!,
-          angle: aimState.angle + aim.visualWobble(aimLayer.holdSeconds),
+          angle: aimState.angle + sway,
           power: aimState.power,
           dragLength: aimState.dragLength,
           eggRadius: eggRadius,
-          // The guide runs from the pull's own angle (cached while the pull
-          // holds) and turns with the sway, so it always shows where the
-          // arrow, and so the shot, points.
-          preview: aimState.dragLength >= AimController.deadZone
-              ? _swayed(_previewFor(aimState.angle, aimState.power),
-                  aim.origin!, aim.visualWobble(aimLayer.holdSeconds))
-              : const [],
+          preview: preview,
+          rest: rest == null ? null : _swayed([rest], aim.origin!, sway).single,
         );
       }
       fxViews = [
@@ -884,6 +889,9 @@ class SunnySidePuttGame extends FlameGame {
   ({double angle, double power})? _previewKey;
   List<core.Vec2> _preview = const [];
 
+  /// Where the cached guide's egg comes to rest, when it stops inside it.
+  core.Vec2? _previewRest;
+
   /// [points] turned by [angle] about [origin] (the guide under the sway).
   static List<core.Vec2> _swayed(
       List<core.Vec2> points, core.Vec2 origin, double angle) {
@@ -907,8 +915,9 @@ class SunnySidePuttGame extends FlameGame {
     _previewKey = (angle: angle, power: power);
     final world = match.engine.world;
     final current = match.hole;
+    _previewRest = null;
     if (world == null || current == null) return _preview = const [];
-    _preview = predictRoll(
+    final roll = previewRoll(
       world: world,
       hole: current,
       config: match.config.physics,
@@ -917,7 +926,8 @@ class SunnySidePuttGame extends FlameGame {
       power: power,
       modifiers: match.localPlayer?.nextShot,
     );
-    return _preview;
+    _previewRest = roll.rest;
+    return _preview = roll.points;
   }
 
   /// The point the camera's target glides toward: my egg while the hole
@@ -1088,7 +1098,7 @@ class SunnySidePuttGame extends FlameGame {
     aim.update(_pullPoint(point));
     _dragAnchor = null;
     // The shot goes where the arrow points this frame, sway and all.
-    final sway = aim.visualWobble(aimLayer.holdSeconds);
+    final sway = aim.swayNow(aimLayer.holdSeconds);
     final shot = aim.commit();
     if (shot == null) return;
     final angle = shot.angle + sway;
@@ -1177,11 +1187,39 @@ List<core.Vec2> predictRoll({
   double maxLength = 12,
   double tailAfterBounce = 3.5,
   int maxTicks = 720,
+}) =>
+    previewRoll(
+      world: world,
+      hole: hole,
+      config: config,
+      playerId: playerId,
+      angle: angle,
+      power: power,
+      modifiers: modifiers,
+      maxLength: maxLength,
+      tailAfterBounce: tailAfterBounce,
+      maxTicks: maxTicks,
+    ).points;
+
+/// [predictRoll]'s guide, and where the egg comes to rest when it stops
+/// on the turf inside the guide (a soft putt): null when the guide was cut
+/// first, or the egg drops into the nest or out of play.
+({List<core.Vec2> points, core.Vec2? rest}) previewRoll({
+  required PhysicsWorld world,
+  required hole.HoleDef hole,
+  required PhysicsConfig config,
+  required String playerId,
+  required double angle,
+  required double power,
+  NextShotModifiers? modifiers,
+  double maxLength = 12,
+  double tailAfterBounce = 3.5,
+  int maxTicks = 720,
 }) {
   final copy =
       PhysicsWorld.restore(hole: hole, config: config, state: world.toJson());
   final ball = copy.ball(playerId);
-  if (ball == null || ball.holed) return const [];
+  if (ball == null || ball.holed) return (points: const [], rest: null);
   final shotPower =
       (power * (modifiers?.powerMultiplier ?? 1)).clamp(0.0, 1.0).toDouble();
   if (modifiers?.hop ?? false) {
@@ -1192,6 +1230,7 @@ List<core.Vec2> predictRoll({
   }
   copy.applyShot(playerId, angle, shotPower);
   final points = <core.Vec2>[ball.position];
+  core.Vec2? rest;
   var travelled = 0.0;
   var bounced = false;
   var afterBounce = 0.0;
@@ -1218,14 +1257,17 @@ List<core.Vec2> predictRoll({
     if (bounced) afterBounce += step;
     heading = velocity;
     if (i % 3 == 0) points.add(after);
-    if (ball.asleep ||
-        travelled >= maxLength ||
-        afterBounce >= tailAfterBounce) {
+    if (ball.asleep) {
+      points.add(after);
+      rest = after;
+      break;
+    }
+    if (travelled >= maxLength || afterBounce >= tailAfterBounce) {
       points.add(after);
       break;
     }
   }
-  return points;
+  return (points: points, rest: rest);
 }
 
 // ---- the layers that feed the world ---------------------------------------------------
@@ -1259,21 +1301,37 @@ class PuttFxLayer {
   List<_FxParticle> get particles => _particles;
 
   void splash(core.Vec2 at) {
-    // A crown of droplets: more of them, thrown wider, some white.
-    for (var i = 0; i < 26; i++) {
+    // A crown of droplets thrown wide, some white.
+    for (var i = 0; i < 30; i++) {
       final angle = i * 2.39996; // golden spaced
-      final speed = 1.8 + (i % 5) * 0.9;
+      final speed = 2.2 + (i % 5) * 0.95;
       _particles.add(_FxParticle(
         at: at,
         velocity: core.Vec2(math.cos(angle), math.sin(angle)) * speed,
-        life: 0.8,
+        life: 0.9,
         kind: _FxKind.droplet,
-        size: i.isEven ? 0.42 : 0.3,
+        size: i.isEven ? 0.5 : 0.38,
         // White spray over a few blue drops: the water's own blue would
         // hide them against the pond.
         color: i % 3 == 2
             ? const ui.Color(0xFF8FD0FF)
             : const ui.Color(0xFFFFFFFF),
+      ));
+    }
+    // And a spout where the egg went in: white water thrown straight up,
+    // falling back.
+    for (var i = 0; i < 12; i++) {
+      final angle = i * 2.39996 + 0.4;
+      _particles.add(_FxParticle(
+        at: at,
+        velocity:
+            core.Vec2(math.cos(angle), math.sin(angle)) * (0.3 + (i % 3) * 0.3),
+        life: 1.0,
+        kind: _FxKind.droplet,
+        size: 0.55 + (i % 4) * 0.06,
+        color: const ui.Color(0xFFFFFFFF),
+        height: 0.15,
+        climb: 6.5 + (i % 4) * 1.1,
       ));
     }
   }
@@ -1441,6 +1499,11 @@ class _FxParticle {
         height = next;
       }
       return;
+    }
+    if (kind == _FxKind.droplet && height != null) {
+      // A spout's drop: up, then back down into the water.
+      climb -= 16.0 * dt;
+      height = math.max(0.05, height! + climb * dt);
     }
     velocity = velocity + velocity * (-2.2 * dt);
   }

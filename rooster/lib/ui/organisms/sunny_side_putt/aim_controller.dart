@@ -6,8 +6,9 @@
 // game, a screen or a pointer: the slingshot angle, the power curve whose
 // exponent is tuned so flicks feel crisp (a half-way drag already gives two
 // thirds of full power, and only a near-zero pull cancels the shot), and
-// the aim arrow's sinusoidal wobble - the visible tell of the wobble the
-// rules engine rolls into the real shot, gone when Hawk Eye is up.
+// the aim arrow's sway - the shot fires at the angle the arrow shows at
+// release. A soft or quick putt holds still; the sway only grows into a
+// hard pull held a while (nerves), and Hawk Eye stills it.
 //
 // The controller never touches Flutter or Flame: the game feeds it world
 // coordinates from pointer events and reads [state] to draw; the game adds
@@ -61,15 +62,25 @@ class AimController {
   /// Frequency (Hz) of the arrow's sway while the aim wobbles.
   static const double wobbleHz = 1.6;
 
-  /// How far the arrow sways (see `PuttConfig.wobbleMaxRadians`); the shot
-  /// fires at the swayed angle the arrow shows at release. The owning view
-  /// keeps this in sync with the engine's config.
+  /// Below this power the arrow holds still: a soft putt is a steady one.
+  /// From here the sway grows in, reaching [wobbleAmplitude] at full power.
+  static const double steadyPower = 0.4;
+
+  /// The arrow holds still this long into a pull (a quick, sure putt never
+  /// shakes), then the sway grows in over [swayRampSeconds].
+  static const double steadySeconds = 0.8;
+  static const double swayRampSeconds = 1.0;
+
+  /// How far the arrow sways at full power, held (see
+  /// `PuttConfig.wobbleMaxRadians`); the shot fires at the swayed angle the
+  /// arrow shows at release. The owning view keeps this in sync with the
+  /// engine's config.
   double wobbleAmplitude;
 
   AimController({
     this.maxDragLength = 8.0,
     this.powerExponent = 0.6,
-    this.wobbleAmplitude = 0.055,
+    this.wobbleAmplitude = 0.035,
   });
 
   /// Set while Hawk Eye (or any no-wobble modifier) covers the shot: the
@@ -109,13 +120,30 @@ class AimController {
     );
   }
 
-  /// The arrow's sway in radians at [elapsed] seconds into the drag.
-  /// Sinusoidal (a steady back-and-forth read of the risk), zero while
-  /// [noWobble] holds. Pure: same time in, same angle out.
-  double visualWobble(double elapsed) {
+  /// The arrow's sway in radians at [elapsed] seconds into a pull of
+  /// [power]. A steady back-and-forth (a read of the risk) whose reach
+  /// grows with the power above [steadyPower] and with the time held past
+  /// [steadySeconds]; zero while [noWobble] holds. Pure: the same time and
+  /// power in, the same angle out.
+  double visualWobble(double elapsed, {double power = 1}) {
     if (noWobble) return 0;
+    final reach = _ease((power - steadyPower) / (1 - steadyPower)) *
+        _ease((elapsed - steadySeconds) / swayRampSeconds);
+    if (reach == 0) return 0;
     final omega = 2 * math.pi * wobbleHz;
-    return math.sin(omega * elapsed) * wobbleAmplitude;
+    return math.sin(omega * elapsed) * wobbleAmplitude * reach;
+  }
+
+  /// The sway of the pull under way at [elapsed] (0 when not pulling).
+  double swayNow(double elapsed) {
+    final state = this.state;
+    if (state == null) return 0;
+    return visualWobble(elapsed, power: state.power);
+  }
+
+  static double _ease(double t) {
+    final x = t.clamp(0.0, 1.0);
+    return x * x * (3 - 2 * x);
   }
 
   /// Releases the drag. Returns (angle, power) for the engine, or null

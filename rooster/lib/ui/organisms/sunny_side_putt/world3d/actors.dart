@@ -221,6 +221,7 @@ class _EggView3D {
     final old = body.material;
     body.material = _shellMaterial(_texture, _glow);
     old?.map = null;
+    old?.emissiveMap = null;
     old?.dispose();
     _marker.material?.color = _lin(hex);
     _tintDisc.material?.color = _lin(hex);
@@ -228,11 +229,14 @@ class _EggView3D {
   }
 
   /// The shell: the colour's paint, a soft sheen, and a whisper of light
-  /// so eggs never sit muddy in the shade.
+  /// so eggs never sit muddy in the shade. The light takes the paint's
+  /// colours: at dusk the shell stays white and the band glows in the
+  /// player's colour.
   static tjs.MeshStandardMaterial _shellMaterial(
       tjs.DataTexture paint, int glow) {
     final material = tjs.MeshStandardMaterial({
       tjs.MaterialProperty.map: paint,
+      tjs.MaterialProperty.emissiveMap: paint,
       tjs.MaterialProperty.roughness: 0.36,
       tjs.MaterialProperty.metalness: 0.0,
     });
@@ -421,6 +425,7 @@ class _EggView3D {
     body.geometry?.dispose();
     // The shell's paint is shared by colour and outlives the egg.
     body.material?.map = null;
+    body.material?.emissiveMap = null;
     body.material?.dispose();
     group.dispose();
     _marker.geometry?.dispose();
@@ -565,6 +570,16 @@ mixin _Fadable {
       material.opacity = _fade;
     }
   }
+}
+
+/// A figure of the scenery that can step back to a ghost of itself (the
+/// host, when he would stand behind the HUD or in the camera's face).
+class _FadingFigure with _Fadable {
+  _FadingFigure(this.figure) {
+    _prepareFade(figure);
+  }
+
+  final tjs.Object3D figure;
 }
 
 /// A duck where the obstacle paddles over water (the Pond's ducks): a

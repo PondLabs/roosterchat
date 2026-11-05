@@ -98,6 +98,34 @@ class _PuttAimView3D {
         ..renderOrder = 6);
     group.add(_bounceMark);
 
+    // Where a soft putt stops: an egg's footprint, drawn over the arrow.
+    _restMark = tjs.Group()
+      ..name = 'aim-rest'
+      ..visible = false;
+    _restMark
+      ..add(tjs.Mesh(
+        tjg.CircleGeometry(radius: eggRadius * 1.25, segments: 28),
+        _unlit(_hexOf(PuttPalette.ink), opacity: 0.16, depthWrite: false),
+      )
+        ..rotation.x = -math.pi / 2
+        ..position.y = 0.05
+        ..renderOrder = 8)
+      ..add(tjs.Mesh(
+        tjg.RingGeometry(eggRadius * 1.08, eggRadius * 1.62, 32, 1),
+        _unlit(_hexOf(PuttPalette.ink), opacity: 0.5, depthWrite: false),
+      )
+        ..rotation.x = -math.pi / 2
+        ..position.y = 0.055
+        ..renderOrder = 8)
+      ..add(tjs.Mesh(
+        tjg.RingGeometry(eggRadius * 1.2, eggRadius * 1.48, 32, 1),
+        _unlit(0xFFF8EE, opacity: 0.95, depthWrite: false),
+      )
+        ..rotation.x = -math.pi / 2
+        ..position.y = 0.06
+        ..renderOrder = 9);
+    group.add(_restMark);
+
     for (var i = 0; i < _dotCount; i++) {
       // Each dot: cream over a soft ink ring, so it reads on light and dark
       // turf stripes alike.
@@ -141,6 +169,7 @@ class _PuttAimView3D {
 
   late final tjs.Mesh _core;
   late final tjs.Group _bounceMark;
+  late final tjs.Group _restMark;
   late final tjs.MeshBasicMaterial _arrowMaterial;
   late final tjs.MeshBasicMaterial _outlineMaterial;
   final List<tjs.Group> _dots = [];
@@ -192,8 +221,21 @@ class _PuttAimView3D {
     }
 
     final scale = aim.eggRadius / _eggRadius;
-    final length = (1.4 + aim.power * 5.2) * scale;
+    var length = (1.4 + aim.power * 5.2) * scale;
     final start = aim.eggRadius * 2.35;
+    // A soft putt's arrow ends where the egg stops, not past it, and the
+    // spot is marked over it.
+    final rest = aim.rest;
+    _restMark.visible = rest != null;
+    if (rest != null) {
+      length = math.min(
+          length, math.max(0.3, _pathLength(aim.preview) - start - 1.15));
+      final breathe = 1 + 0.06 * math.sin(time * 4.2);
+      _restMark
+        ..position.setValues(rest.x - aim.origin.x, terrain.at(rest) - floor,
+            rest.y - aim.origin.y)
+        ..scale.setValues(scale * breathe, 1, scale * breathe);
+    }
     shaft.scale.x = length;
     shaft.position.x = start + length / 2;
     _core.scale.x = math.max(length - 0.3, 0.05);
@@ -276,6 +318,15 @@ class _PuttAimView3D {
     for (var i = shown; i < _dots.length; i++) {
       _dots[i].visible = false;
     }
+  }
+
+  /// How far the guide runs along its points.
+  static double _pathLength(List<Vec2> points) {
+    var length = 0.0;
+    for (var i = 1; i < points.length; i++) {
+      length += points[i - 1].distanceTo(points[i]);
+    }
+    return length;
   }
 
   /// The guide's first sharp turn (a rail's bounce), if it has one.
@@ -400,7 +451,7 @@ class _PuttFxPool {
       double rotation = 0;
       switch (fx.kind) {
         case PuttWorldFxKind.droplet:
-          lift = 1.3 * math.sin(progress * math.pi);
+          lift = 1.7 * math.sin(progress * math.pi);
           width = height = fx.size * (0.6 + 0.5 * progress);
         case PuttWorldFxKind.sparkle:
           lift = 0.45 + 0.6 * math.sin(progress * math.pi);

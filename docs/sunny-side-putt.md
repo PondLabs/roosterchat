@@ -27,10 +27,12 @@ results):
 - Out of time: the hole scores max(strokes taken, par + 2). Putt
   Party's exact rule is not documented anywhere we could verify; this
   is ours, and it punishes stalling without ending a comeback.
-- Aiming is a slingshot drag; the arrow sways a little (about 3
-  degrees either side) and the putt goes exactly where the arrow points
-  at release, so the timing of the release is the skill; the engine adds
-  no hidden error. The Hawk Eye power-up holds the arrow still.
+- Aiming is a slingshot drag, and the putt goes exactly where the arrow
+  points at release; the engine adds no hidden error. A soft putt (under
+  40% power) or a quick one (released within 0.8 seconds) holds still; a
+  hard pull held longer starts to sway, up to 2 degrees either side at
+  full power, so on a long putt the timing of the release is the skill.
+  The Hawk Eye power-up holds the arrow still.
 - After each hole the results card stays up for 8 seconds in a live
   session (a band sweeps across Continue as they run out), then the match
   moves on by itself; the host's Continue moves on at once. The pause
@@ -198,9 +200,12 @@ its own hour, read off the hole's id (`world3d/theme.dart`):
 | Farm Road | golden hour | striped road barriers | the dirt road, a red tractor, a water tower, telephone poles, wheat fields, the windmill |
 | The Barn | dusk | red barn boards | the big barn, haystacks, lanterns, fireflies; its round obstacles are hay bales stood on end |
 
-The host - a big white rooster with his headphones on - stands by every
-green, follows the egg in play with his head, bobs it now and then and
-cheers when an egg drops in. Ground the walls close off from
+The host - a big white rooster with his headphones on - stands beyond
+the side rail on the nest's side, about level with the green's middle,
+follows the egg in play with his head, bobs it now and then and cheers
+when an egg drops in. Whenever his head would stand under the HUD's top
+bar or corner buttons, or right in front of the camera, he steps back to
+a ghost of himself. Ground the walls close off from
 the tee (a flood fill stopped by walls, carried through rabbit holes) is
 planted as the theme's garden beds instead of turf, so a hole shaped
 with walls reads as its shape.
@@ -231,13 +236,21 @@ straw nest with a flag flying the hole's number, the tee mat. The characters - t
 hens, the ducks and the host - are drawn with a line of ink round them
 (their back faces pushed out along their normals; the eggs' line weighs
 more as the camera pulls back), so they pop from the softer farm. Eggs are
-true egg profiles with an Easter band in the player's colour; they roll
+true egg profiles with an Easter band in the player's colour (their
+shells' own light takes the paint's colours, so at the Barn's dusk the
+shell stays white and the band glows); they roll
 by their velocity, leave a trail when fast, settle on their side, and
 slide into the nest when they sink. There the egg hatches
 (`world3d/hatch.dart`): the shell's cap pops off in the player's colour
 and a chick rises out of the cup in the other half, hops twice flapping
 at the camera and drops back in. The viewer's egg wears a marker ring
 and a bobbing arrow; the others carry name tags.
+
+When frames run slow (an integrated GPU on a high-density screen) the
+surface draws fewer pixels: after three seconds under 42 fps it steps
+its pixel ratio down by a fifth, settles, and judges again, never below
+half the device's ratio (0.75 on a one-to-one screen) and never back up
+(`PuttResolutionGovernor`).
 
 Colour is linear-correct: three_js takes hex values as linear, so every
 designer's hex goes through `_lin` first; the lights are tuned for the
@@ -252,7 +265,9 @@ world builds those with `_gridPlane`.
   length and colour say the power (green, yolk, comb red), a ring fills
   around the egg, and a dotted guide shows the first stretch of the roll
   - the engine's own physics run ahead on a copy of the world, cut a
-  short way after the first rail.
+  short way after the first rail. When the egg would stop inside the
+  guide (a soft putt), the spot is marked with an egg's footprint drawn
+  over everything, and the arrow ends there instead of past it.
 - Until the first putt of the match (and after 14 seconds idle with the
   egg ready), a coach shows the gesture over the egg: a hand presses,
   pulls back away from the nest and lets go while a ghost arrow grows

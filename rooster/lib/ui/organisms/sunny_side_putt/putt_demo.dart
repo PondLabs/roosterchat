@@ -337,12 +337,14 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
         game.followOverride = hole.nest.position;
         rig.glideTo(distance: 10, pitchDeg: 32);
       case 'host':
-        // Where he stands: beyond the side rail by the nest.
+        // Where he stands: beyond the side rail on the nest's side, about
+        // level with the green's middle.
         final right = hole.nest.position.x >= bounds.center.x;
         game.followOverride = Vec2(
             right ? bounds.max.x + 3.5 : bounds.min.x - 3.5,
             hole.nest.position.y
-                .clamp(bounds.min.y + 2.5, bounds.center.y)
+                .clamp(bounds.center.y - bounds.height * 0.2,
+                    bounds.center.y + bounds.height * 0.05)
                 .toDouble());
         rig.glideTo(distance: 22, pitchDeg: 13);
       case 'wide':
@@ -376,6 +378,10 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
       return;
     }
     if (_holeTime < _myNextAt || !match.myShotReady) return;
+    // A power-up armed for the camera holds the putt (an aim would put
+    // the targeting away).
+    final targeting = game.targeting;
+    if (targeting.armedSlot != null || targeting.pickingSlot != null) return;
     final reference = _currentHole?.solution.shots ?? const <ReferenceShot>[];
     double angle;
     double power;

@@ -194,15 +194,17 @@ class _Scenery {
   double get _span => math.max(_b.width, _b.height);
   static const double _ground = -_tableHeight;
 
-  /// Where the host stands: beyond the side rail on the nest's side, in
-  /// the far half of the green - in the play view that is the upper half
-  /// of the screen, clear of the HUD's top bar.
+  /// Where the host stands: beyond the side rail on the nest's side, about
+  /// level with the green's middle - in the play view the side of the
+  /// screen, clear of the HUD's top bar and its corner buttons.
   Vec2 get _hostAt {
     final nest = hole.nest.position;
     final right = nest.x >= _b.center.x;
     return Vec2(
       right ? _b.max.x + 5.5 : _b.min.x - 5.5,
-      nest.y.clamp(_b.min.y + 2.5, _b.center.y).toDouble(),
+      nest.y
+          .clamp(_b.center.y - _b.height * 0.2, _b.center.y + _b.height * 0.05)
+          .toDouble(),
     );
   }
 

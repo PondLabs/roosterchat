@@ -68,7 +68,8 @@ class _Theme {
   final int meadowDry;
   final int hillFar;
 
-  /// The eggs' shells' own light: a whisper by day, more at dusk.
+  /// The eggs' shells' own light, times their paint: a whisper by day,
+  /// at dusk enough that the shells stay white and the bands glow.
   final int eggGlow;
 
   static _Theme of(String holeId) {
@@ -99,15 +100,15 @@ class _Theme {
     hemiSky: 0xD6ECFF,
     hemiGround: 0x9DB86A,
     hemiIntensity: 0.62,
-    exposure: 1.08,
+    exposure: 1.0,
     rails: _RailStyle.wood,
-    turfLight: 0x86CF4E,
-    turfDark: 0x72C043,
-    turfFringe: 0x5BA737,
-    meadow: 0x86C24A,
-    meadowDeep: 0x67AB3D,
-    meadowDry: 0xAECB5A,
-    hillFar: 0x9DC872,
+    turfLight: 0x73BE3A,
+    turfDark: 0x60B130,
+    turfFringe: 0x4B9A26,
+    meadow: 0x8FC25C,
+    meadowDeep: 0x71AB4E,
+    meadowDry: 0xB2CB6B,
+    hillFar: 0xA3C87F,
   );
 
   /// High noon over the corn: a bright sun, short shadows, golden fields.
@@ -122,16 +123,16 @@ class _Theme {
     hemiSky: 0xDCEFFF,
     hemiGround: 0x8A9A50,
     hemiIntensity: 0.56,
-    exposure: 0.95,
+    exposure: 0.88,
     rails: _RailStyle.hedge,
-    turfLight: 0x8ECB4B,
-    turfDark: 0x79BA40,
-    turfFringe: 0x5E9F33,
+    turfLight: 0x7CBB37,
+    turfDark: 0x68AB2D,
+    turfFringe: 0x4F9223,
     // The meadow round the maze stays a field's green under the high sun.
-    meadow: 0x86A942,
-    meadowDeep: 0x6C9339,
-    meadowDry: 0xA4A650,
-    hillFar: 0x92AC68,
+    meadow: 0x8BA951,
+    meadowDeep: 0x729346,
+    meadowDry: 0xA4A65D,
+    hillFar: 0x96AC72,
   );
 
   /// A soft afternoon by the water, the light from the other side.
@@ -146,15 +147,15 @@ class _Theme {
     hemiSky: 0xD3EAFF,
     hemiGround: 0x7DAE6A,
     hemiIntensity: 0.7,
-    exposure: 1.06,
+    exposure: 1.02,
     rails: _RailStyle.stone,
-    turfLight: 0x7FCB52,
-    turfDark: 0x6BBA47,
-    turfFringe: 0x549F3A,
-    meadow: 0x72B84C,
-    meadowDeep: 0x559F3F,
-    meadowDry: 0x9CC45C,
-    hillFar: 0x93C47A,
+    turfLight: 0x6CBB3E,
+    turfDark: 0x5AAB35,
+    turfFringe: 0x45922A,
+    meadow: 0x7DB85C,
+    meadowDeep: 0x609F4D,
+    meadowDry: 0xA2C46C,
+    hillFar: 0x9AC485,
   );
 
   /// Golden hour on the farm road: a low sun from the west, long
@@ -175,13 +176,13 @@ class _Theme {
     hemiIntensity: 0.56,
     exposure: 1.0,
     rails: _RailStyle.barrier,
-    turfLight: 0x7CC84A,
-    turfDark: 0x68B640,
-    turfFringe: 0x519A33,
-    meadow: 0x8BB84A,
-    meadowDeep: 0x6EA340,
-    meadowDry: 0xC6B65C,
-    hillFar: 0xB4B37A,
+    turfLight: 0x6AB836,
+    turfDark: 0x57A72E,
+    turfFringe: 0x428E24,
+    meadow: 0x92B85A,
+    meadowDeep: 0x76A34F,
+    meadowDry: 0xC6B86C,
+    hillFar: 0xB4B383,
   );
 
   /// Dusk at the barn: the sun nearly down, the sky deepening, lanterns
@@ -203,11 +204,11 @@ class _Theme {
     turfLight: 0x6FB447,
     turfDark: 0x5EA23E,
     turfFringe: 0x4A8A31,
-    meadow: 0x7FAE48,
-    meadowDeep: 0x62983E,
-    meadowDry: 0xA7B45A,
+    meadow: 0x6E9E52,
+    meadowDeep: 0x548A48,
+    meadowDry: 0x92A464,
     hillFar: 0x8E9E78,
-    eggGlow: 0x5A4C3E,
+    eggGlow: 0x8C8274,
   );
 }
 

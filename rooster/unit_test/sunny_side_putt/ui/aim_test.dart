@@ -87,31 +87,72 @@ void main() {
   });
 
   group('the wobble', () {
+    // Past the hold's ramp, at full power: the sway's whole reach.
+    const held = AimController.steadySeconds + AimController.swayRampSeconds;
+
     test('Hawk Eye holds the arrow dead still', () {
-      final aim = AimController(wobbleAmplitude: 0.055)..noWobble = true;
+      final aim = AimController(wobbleAmplitude: 0.035)..noWobble = true;
       for (var t = 0.0; t <= 10; t += 0.1) {
         expect(aim.visualWobble(t), 0);
       }
     });
 
-    test('otherwise the arrow sways inside the engine wobble, sinusoidal', () {
-      final aim = AimController(wobbleAmplitude: 0.055);
-      expect(aim.visualWobble(0), 0, reason: 'sin(0) is 0');
-      // Peak sway is the amplitude, reached at a quarter period.
-      final peak = aim.visualWobble(0.25 / AimController.wobbleHz);
-      expect(peak, moreOrLessEquals(0.055, epsilon: 1e-9));
-      // Bounded everywhere; returns to 0 each full period.
-      for (var t = 0.0; t <= 4; t += 1.0 / 60) {
-        expect(aim.visualWobble(t).abs(), lessThanOrEqualTo(0.055 + 1e-12));
+    test('a hard pull held a while sways inside the amplitude', () {
+      final aim = AimController(wobbleAmplitude: 0.035);
+      // Peak sway is the amplitude, at a quarter period past the ramp.
+      final period = 1 / AimController.wobbleHz;
+      final quarter = held + period - (held % period) + period / 4;
+      expect(aim.visualWobble(quarter), moreOrLessEquals(0.035, epsilon: 1e-9));
+      // Bounded everywhere.
+      for (var t = 0.0; t <= 6; t += 1.0 / 60) {
+        expect(aim.visualWobble(t).abs(), lessThanOrEqualTo(0.035 + 1e-12));
       }
-      expect(aim.visualWobble(1 / AimController.wobbleHz),
-          moreOrLessEquals(0, epsilon: 1e-9),
-          reason: 'one period later, the sway has come home');
+    });
+
+    test('a quick putt holds still', () {
+      final aim = AimController(wobbleAmplitude: 0.035);
+      for (var t = 0.0; t <= AimController.steadySeconds; t += 1.0 / 60) {
+        expect(aim.visualWobble(t), 0, reason: 'at ${t}s');
+      }
+    });
+
+    test('a soft putt holds still, however long it is held', () {
+      final aim = AimController(wobbleAmplitude: 0.035);
+      for (var t = 0.0; t <= 6; t += 1.0 / 60) {
+        expect(aim.visualWobble(t, power: AimController.steadyPower), 0);
+        expect(aim.visualWobble(t, power: 0.2), 0);
+      }
+    });
+
+    test('the sway grows with the power', () {
+      final aim = AimController(wobbleAmplitude: 0.035);
+      double reach(double power) {
+        var most = 0.0;
+        for (var t = held; t <= held + 2; t += 1.0 / 240) {
+          most = math.max(most, aim.visualWobble(t, power: power).abs());
+        }
+        return most;
+      }
+
+      final half = reach(0.7);
+      expect(half, greaterThan(0));
+      expect(half, lessThan(reach(1)));
+      expect(reach(1), moreOrLessEquals(0.035, epsilon: 1e-4));
+    });
+
+    test('the pull under way sways by its own power', () {
+      final aim = AimController(maxDragLength: 8, wobbleAmplitude: 0.035);
+      expect(aim.swayNow(3), 0, reason: 'no pull, no sway');
+      aim.begin(const Vec2(0, 0));
+      aim.update(const Vec2(0, 8)); // full power
+      expect(aim.swayNow(held + 0.2), aim.visualWobble(held + 0.2));
+      aim.update(const Vec2(0, 0.5)); // a nudge
+      expect(aim.swayNow(held + 0.2), 0);
     });
 
     test('pure: the same elapsed always gives the same sway', () {
       final aim = AimController(wobbleAmplitude: 0.03);
-      expect(aim.visualWobble(0.37), aim.visualWobble(0.37));
+      expect(aim.visualWobble(2.37), aim.visualWobble(2.37));
     });
   });
 }

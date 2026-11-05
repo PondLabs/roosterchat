@@ -147,6 +147,10 @@ class PuttWorldAim {
   /// physics, run ahead): drawn as the dotted guide. Empty draws none.
   final List<Vec2> preview;
 
+  /// Where the egg comes to rest, when it stops inside the guide (a soft
+  /// putt): marked on the turf, and the arrow ends there.
+  final Vec2? rest;
+
   const PuttWorldAim({
     required this.origin,
     required this.angle,
@@ -154,6 +158,7 @@ class PuttWorldAim {
     required this.dragLength,
     required this.eggRadius,
     this.preview = const [],
+    this.rest,
   });
 }
 
@@ -892,13 +897,16 @@ class PuttWorld3D {
       hens.add(hen.group);
       _henViews.add(hen);
     }
-    makeKind('scenery').add(_Scenery(hole,
+    final scenery = _Scenery(hole,
             animated: _animated,
             theme: _theme,
             cheerUntil: () => _cheerUntil,
             watch: () => _watch,
             shape: kit.shape)
-        .build());
+        .build();
+    makeKind('scenery').add(scenery);
+    final host = scenery.getObjectByName('host');
+    _hostFade = host == null ? null : _FadingFigure(host);
 
     _fx.reset(_fxRoot);
     _firstFrame = true;
@@ -935,6 +943,7 @@ class PuttWorld3D {
     _disposeChildren(_holeRoot);
     _ground.hole = null;
     _watch = null;
+    _hostFade = null;
     _henViews.clear();
     _crateViews.clear();
     _animated.clear();
@@ -975,6 +984,7 @@ class PuttWorld3D {
     rig.applyTo(camera);
     camera.updateMatrixWorld(true);
     _faceCamera();
+    _syncHost(dt);
     // The dome rides with the camera, so its horizon never comes near.
     _sky.group.position.setValues(camera.position.x, 0, camera.position.z);
   }
@@ -1123,6 +1133,33 @@ class PuttWorld3D {
     }
   }
 
+  /// The host steps back to a ghost of himself while his head would stand
+  /// under the HUD's top bar or its corner buttons, or right in front of
+  /// the camera.
+  void _syncHost(double dt) {
+    final fade = _hostFade;
+    final size = rig.viewport;
+    if (fade == null || size.width <= 0 || size.height <= 0) return;
+    final at = fade.figure.position;
+    final head = tjs.Vector3(at.x, at.y + 8.2, at.z).project(camera);
+    final headY = (1 - head.y) / 2 * size.height;
+    final headX = (head.x + 1) / 2 * size.width;
+    final dx = camera.position.x - at.x;
+    final dz = camera.position.z - at.z;
+    final near =
+        math.sqrt(dx * dx + dz * dz) / math.max(rig.distance, 1e-6) < 0.55;
+    final underHud = head.z < 1 &&
+        headY < _hudTopBand &&
+        headX > -40 &&
+        headX < size.width + 40;
+    fade.fadeToward(near || underHud ? 0.3 : 1.0, dt);
+  }
+
+  /// How far down the HUD's top bar and corner buttons reach, in pixels.
+  static const double _hudTopBand = 118;
+
+  _FadingFigure? _hostFade;
+
   void _syncCrates(PuttWorldFrame frame) {
     for (final crate in _crateViews) {
       crate.sync(
@@ -1248,6 +1285,62 @@ class PuttCameraSeam {
       _world.projectToWorld(world, height: height);
 }
 
+// ---- the drawing resolution -----------------------------------------------------------------
+
+/// Steps the drawing resolution down while frames run slow - a laptop's
+/// integrated GPU on a high-density screen - so the game keeps its pace:
+/// after [window] seconds averaging under [targetFps], one step of
+/// [step]; then it lets the surface settle before judging again. Never
+/// below [floor], and never back up (a step up and down again would
+/// show as a flicker of sharpness).
+class PuttResolutionGovernor {
+  PuttResolutionGovernor(this.start)
+      : ratio = start,
+        floor = math.min(start, math.max(0.75, start * 0.5));
+
+  /// The device's pixel ratio the surface came up at.
+  final double start;
+
+  /// The lowest ratio it steps down to.
+  final double floor;
+
+  /// The ratio the surface draws at now.
+  double ratio;
+
+  static const double targetFps = 42;
+  static const double window = 3;
+  static const double step = 0.8;
+
+  /// Seconds not judged after boot (shaders compile) and after a step.
+  static const double settle = 2.5;
+
+  double _quiet = settle;
+  double _measured = 0;
+  int _frames = 0;
+
+  /// Feeds one frame's interval (seconds); returns the ratio to draw at
+  /// when it is time for a step down, else null.
+  double? frame(double seconds) {
+    if (ratio <= floor) return null;
+    // A pause (a hidden tab, a debugger) says nothing about the GPU.
+    if (seconds <= 0 || seconds > 0.5) return null;
+    if (_quiet > 0) {
+      _quiet -= seconds;
+      return null;
+    }
+    _measured += seconds;
+    _frames++;
+    if (_measured < window) return null;
+    final fps = _frames / _measured;
+    _measured = 0;
+    _frames = 0;
+    if (fps >= targetFps) return null;
+    ratio = math.max(floor, ratio * step);
+    _quiet = settle;
+    return ratio;
+  }
+}
+
 // ---- the GPU surface ------------------------------------------------------------------------
 
 /// The widget that hosts the three_js renderer bound to a [PuttWorld3D]:
@@ -1301,6 +1394,8 @@ class _PuttThreeSurfaceState extends State<PuttThreeSurface> {
   ui.Size? _size;
   ui.Size? _pendingSize;
   bool _resizing = false;
+  PuttResolutionGovernor? _governor;
+  final Stopwatch _frameClock = Stopwatch();
 
   void _start(ui.Size size) {
     try {
@@ -1339,6 +1434,7 @@ class _PuttThreeSurfaceState extends State<PuttThreeSurface> {
             widget.world.applySnapshot(widget.buildFrame());
             owner.renderer?.toneMappingExposure = widget.world.exposure;
             widget.onFrame?.call();
+            _pace(owner);
           };
         },
       );
@@ -1352,6 +1448,23 @@ class _PuttThreeSurfaceState extends State<PuttThreeSurface> {
       _failed = true;
       widget.onFailed?.call();
     }
+  }
+
+  /// Times the frames; when they run slow, draws fewer pixels.
+  void _pace(tjr.ThreeJS three) {
+    final seconds = _frameClock.elapsedMicroseconds / 1e6;
+    _frameClock
+      ..reset()
+      ..start();
+    final governor = _governor ??= PuttResolutionGovernor(three.dpr);
+    final next = governor.frame(seconds);
+    final size = _size;
+    if (next == null || size == null) return;
+    three.setResolution(next);
+    // After this frame: the surface resizes outside the render.
+    Timer.run(() {
+      if (mounted) unawaited(_resize(size));
+    });
   }
 
   /// The parent's size changed: the GL surface, the renderer and the
@@ -1377,7 +1490,9 @@ class _PuttThreeSurfaceState extends State<PuttThreeSurface> {
             dpr: three.dpr,
           ),
         );
-        renderer.setSize(next.width, next.height);
+        renderer
+          ..setPixelRatio(three.dpr)
+          ..setSize(next.width, next.height);
         widget.world.setViewport(next);
         widget.world.fitCamera();
         if (mounted) setState(() {});

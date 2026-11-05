@@ -217,11 +217,15 @@ class _CourseKit {
         final fringe = _softBand(edge, 0.55, 0.3);
         if (fringe > 0) color = _mix(color, theme.turfFringe, fringe * 0.7);
 
-        // Contact shade along rails and rocks.
+        // Contact shade along rails and rocks, and a tight dark line at
+        // their feet that seats them on the turf.
         final contact = nearest[row * width + col];
         if (contact < shadeReach) {
           final k = math.pow(1 - contact / shadeReach, 1.6).toDouble();
           color = _mix(color, _Farm.turfShade, k * 0.55);
+          if (contact < 0.22) {
+            color = _shade(color, 0.78 + 0.22 * (contact / 0.22));
+          }
         }
         bitmap.set(col, row, color);
       }

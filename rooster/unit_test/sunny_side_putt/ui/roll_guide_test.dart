@@ -98,6 +98,32 @@ void main() {
     expect(points.last.distanceTo(real.ball('me')!.position), lessThan(0.05));
   });
 
+  test('the rest is known only when the egg stops inside the guide', () {
+    final hole = _box();
+    final soft = previewRoll(
+      world: world(hole),
+      hole: hole,
+      config: config,
+      playerId: 'me',
+      angle: math.pi / 2, // south, open turf
+      power: 0.15,
+      maxLength: 40,
+    );
+    expect(soft.rest, isNotNull, reason: 'a soft putt stops in the guide');
+    expect(soft.rest, soft.points.last);
+
+    final hard = previewRoll(
+      world: world(hole),
+      hole: hole,
+      config: config,
+      playerId: 'me',
+      angle: -math.pi / 2,
+      power: 0.9,
+      maxLength: 6,
+    );
+    expect(hard.rest, isNull, reason: 'the guide was cut while it rolled');
+  });
+
   test('the real world is left exactly as it was', () {
     final hole = _box();
     final w = world(hole);
