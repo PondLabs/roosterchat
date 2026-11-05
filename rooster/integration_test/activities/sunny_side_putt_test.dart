@@ -196,7 +196,7 @@ void main() {
         await session.hangUpCall().catchError((_) {});
       }
     });
-    await bobVoip!.joinCall();
+    await _bounded(bobVoip!.joinCall(), "bob's join of the call");
     expect(bobVoip.currentSession, isNotNull);
 
     // Alice reveals the call controls (a mouse hover is how a user reaches
@@ -281,7 +281,7 @@ void main() {
       onEnded: () => sessionEndedForBob = true,
     );
     addTearDown(bobActivity.dispose);
-    await bobPuttSession!.join();
+    await _bounded(bobPuttSession!.join(), "bob's join of the session");
     await tester.waitFor(() => bobActivity.match != null && bobActivity.joined,
         skipPumpAndSettle: true, timeout: const Duration(seconds: 30));
     expect(bobActivity.selfId, isNot(aliceId));
@@ -324,7 +324,7 @@ void main() {
     final aliceCall = app.clientManager.callManager
         .getCallInRoom(aliceClient, voiceChannel.identifier);
     expect(aliceCall, isNotNull);
-    await aliceCall!.hangUpCall();
+    await _bounded(aliceCall!.hangUpCall(), "alice's hang up");
     await tester.waitFor(() => bobPuttSession!.isHost,
         skipPumpAndSettle: true, timeout: const Duration(seconds: 30));
     expect(bobPuttSession!.isHost, isTrue);
@@ -332,7 +332,7 @@ void main() {
     expect(bobActivity.match, isNotNull);
 
     // And the last one out ends the session.
-    await bobActivity.leave();
+    await _bounded(bobActivity.leave(), "bob's leave of the session");
     expect(sessionEndedForBob, isTrue);
     expect(bobPuttSession!.hasSession, isFalse);
     // The room state event should be gone too; the component clears it when
@@ -359,12 +359,21 @@ void main() {
     // summary prints (exit 1 with every test green), which reads as a
     // failure. The pending tearDown helper runs too late - the client
     // manager's close has already taken the transports down by then.
-    await app.clientManager.callManager.disconnect();
+    await _bounded(
+        app.clientManager.callManager.disconnect(), 'the calls going down');
 
     await app.clientManager.close();
     await tester.clean();
   });
 }
+
+/// [step] within [seconds], or the test fails naming it: an await on the
+/// call's wire that never comes back would otherwise run the job into its
+/// hour's timeout with nothing said.
+Future<T> _bounded<T>(Future<T> step, String what, {int seconds = 45}) =>
+    step.timeout(Duration(seconds: seconds),
+        onTimeout: () => throw TestFailure('$what did not finish in '
+            '$seconds s (the call or the session never answered)'));
 
 /// Strokes [match]'s own egg: maps world points to screen through the
 /// game's perspective camera (project), presses at the egg, and pulls
