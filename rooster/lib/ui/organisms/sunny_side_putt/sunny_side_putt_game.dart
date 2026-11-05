@@ -1060,11 +1060,18 @@ class SunnySidePuttGame extends FlameGame {
         lift += liftOf(ball);
       } else if (ball != null && hole != null) {
         at = hole.nest.position;
-        // Up over the flag's head, side by side (0, then right, left,
-        // further right...): the nest and its flag stay clear.
         final k = atNest++;
-        aside = (k.isOdd ? 1 : -1) * ((k + 1) ~/ 2) * 56.0;
-        lift = 4.8;
+        if (director.celebrating) {
+          // In on my hatch, the banner is up there: to either side of the
+          // chick instead, under it (right, left, further right...).
+          aside = (k.isEven ? 1 : -1) * (120 + (k ~/ 2) * 64.0);
+          lift = 2.4;
+        } else {
+          // Up over the flag's head, side by side (0, then right, left,
+          // further right...): the nest and its flag stay clear.
+          aside = (k.isOdd ? 1 : -1) * ((k + 1) ~/ 2) * 56.0;
+          lift = 4.8;
+        }
       }
       if (at == null) continue;
       if (!world3d.inFrontOfCamera(at, height: lift)) continue;
