@@ -37,13 +37,47 @@ WallArc _nose(Vec2 center, double radius, {bool east = true}) =>
         startAngle: east ? -math.pi / 2 : math.pi / 2, sweep: math.pi);
 
 // -- hole 1: Front Stretch ----------------------------------------------------
-// A straight farm road and one speed strip halfway down it. The strip
-// throws every egg on at its own pace, so the stroke is all line: past it,
-// a corner board turns the road up into the nest's lay-by.
+// A straight farm road on its bank and one speed strip halfway down it,
+// and past the strip a ditch across the road: the bank drops into it, a
+// ramp climbs out the far side. The strip throws every egg on at its own
+// pace, through the ditch and up out of it, so the stroke is all line;
+// past it, a corner board turns the road up into the nest's lay-by. An
+// egg that misses the strip drops into the ditch and stays there: the
+// climb out takes a firm putt.
 
 const Vec2 _road1Tee = Vec2(5, 13);
 const Vec2 _road1Nest = Vec2(50, 4.5);
 const Rect _road1Bounds = Rect(Vec2.zero, Vec2(54, 26));
+
+/// How high the road's bank stands over the ditch.
+const double _road1Bank = 1;
+
+/// The road on its bank, from the tee to the ditch.
+const Terrace _road1Near = Terrace([
+  Vec2(31, 9),
+  Vec2(13, 9),
+  Vec2(9, 6),
+  Vec2(0, 6),
+  Vec2(0, 20),
+  Vec2(9, 20),
+  Vec2(13, 17),
+  Vec2(31, 17),
+], height: _road1Bank);
+
+/// The road past the ditch, with the lay-by.
+const Terrace _road1Far = Terrace([
+  Vec2(46, 0),
+  Vec2(46, 9),
+  Vec2(38, 9),
+  Vec2(38, 17),
+  Vec2(48, 17),
+  Vec2(54, 11),
+  Vec2(54, 0),
+], height: _road1Bank);
+
+/// The ditch's far bank: the way up out of it, the road's width.
+const Ramp _road1Climb =
+    Ramp(Vec2(34, 13), Vec2(38, 13), width: 8, height: _road1Bank);
 
 HoleDef _frontStretch() {
   return HoleDef(
@@ -59,17 +93,23 @@ HoleDef _frontStretch() {
       ...polyline([Vec2(0, 20), Vec2(9, 20), Vec2(13, 17), Vec2(54, 17)]),
       // the corner board up into the lay-by
       WallSegment(Vec2(48, 17), Vec2(54, 11)),
+      // the bank's drop into the ditch (the road's rails flank the climb
+      // out)
+      WallSegment.ledge(Vec2(31, 17), Vec2(31, 9)),
     ],
-    boosts: [BoostStrip(Vec2(20, 13), Vec2(28, 13), width: 1.2, speed: 22)],
+    terraces: const [_road1Near, _road1Far],
+    ramps: const [_road1Climb],
+    boosts: [BoostStrip(Vec2(20, 13), Vec2(28, 13), width: 1.2, speed: 23)],
     boxes: [QuestionBox('road_1_box', Vec2(24, 15.3))],
   );
 }
 
-// Found by a sweep, and it holds for nearby aims: off the road's north
-// side into the strip, which throws the egg on to the corner board and up
-// into the lay-by; then the short putt in.
+// Found by a sweep, and it holds for nearby aims and powers: off the
+// road's north side into the strip, which throws the egg on through the
+// ditch, up its far bank, to the corner board and up into the lay-by; then
+// the short putt in.
 ReferenceSolution _frontStretchSolution() {
-  const inTheLayBy = Vec2(50.96, 7.39);
+  const inTheLayBy = Vec2(50.92, 7.56);
   return ReferenceSolution([
     const ReferenceShot(-0.370, 0.955),
     putt(inTheLayBy, _road1Nest, arrival: 2.2),

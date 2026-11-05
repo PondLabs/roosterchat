@@ -196,6 +196,17 @@ class _EggView3D {
   double _still = 0;
   bool _rolled = false;
 
+  /// The ground the egg is drawn on and how fast that drawn ground sinks:
+  /// it follows rising ground at once and sinking ground no faster than a
+  /// fall, so off a ledge's lip the egg drops through the air (null until
+  /// the first frame).
+  double? _floor;
+  double _sinkSpeed = 0;
+
+  /// The fall's pull, units/s^2: a drop of one unit takes a third of a
+  /// second, which reads as a fall at the egg's size.
+  static const double _gravity = 18;
+
   /// The shadow's soft disc, shared by every egg of every world.
   static final tjs.DataTexture _shadowTexture = _discTexture(hardness: 1.4);
 
@@ -293,17 +304,18 @@ class _EggView3D {
     final support = math
         .sqrt(a * a * up.x * up.x + h * h * up.y * up.y + a * a * up.z * up.z);
     final floor = terrain.at(egg.position);
+    final drawn = _fallTo(floor, egg.position, dt);
     group.position.setValues(
-        egg.position.x, floor + support + egg.height, egg.position.y);
+        egg.position.x, drawn + support + egg.height, egg.position.y);
 
     lastPosition = egg.position;
     _syncTrail(egg, dt);
 
-    // The ground pieces: the shadow shrinks and fades as a hop lifts; on
-    // a slope they lie along it.
+    // The ground pieces: the shadow shrinks and fades as a hop or a fall
+    // lifts the egg off it; on a slope they lie along it.
     ground.position.setValues(egg.position.x, floor, egg.position.y);
     if (!terrain.flat) ground.quaternion.setFrom(terrain.tiltAt(egg.position));
-    final lift = (egg.height / (_radius * 3)).clamp(0.0, 1.0);
+    final lift = ((egg.height + drawn - floor) / (_radius * 3)).clamp(0.0, 1.0);
     final shadowScale = 1 - lift * 0.45;
     _shadow.scale.setValues(shadowScale, shadowScale, 1);
     _shadow.material?.opacity = 0.55 * (1 - lift * 0.6);
@@ -320,6 +332,45 @@ class _EggView3D {
       _arrow.position.y = h * 2 + 0.6 + math.sin(time * 3.2).abs() * 0.35;
     }
   }
+
+  /// Where the drawn egg stands, given the [ground] under it: on rising
+  /// ground at once, on sinking ground as fast as it sinks - unless that is
+  /// faster than a fall: then the egg is in the air, falling from where it
+  /// was, and it lands with a squash and a puff of dust. A jump (a reset, a
+  /// rabbit hole, a new hole) puts it down at once.
+  double _fallTo(double ground, Vec2 position, double dt) {
+    final floor = _floor;
+    final last = _drawnAt;
+    _drawnAt = position;
+    final jumped = last == null || last.distanceTo(position) > 2.5;
+    if (floor == null || dt <= 0 || jumped || ground >= floor) {
+      _floor = ground;
+      _sinkSpeed = 0;
+      _inAir = false;
+      return ground;
+    }
+    final speed = _sinkSpeed + _gravity * dt;
+    final fallen = floor - speed * dt;
+    if (fallen > ground) {
+      _floor = fallen;
+      _sinkSpeed = speed;
+      if (fallen - ground > 0.02) _inAir = true;
+      return fallen;
+    }
+    if (_inAir && speed > 2.5) {
+      // Down off a drop: the shell squashes and the dust flies.
+      final strength = ((speed - 2.5) / 5).clamp(0.0, 1.0);
+      _squash = 0.6 + strength * 0.4;
+      onBounce(position, strength, everMine);
+    }
+    _inAir = false;
+    _sinkSpeed = math.min(speed, (floor - ground) / dt);
+    _floor = ground;
+    return ground;
+  }
+
+  Vec2? _drawnAt;
+  bool _inAir = false;
 
   /// The trail: a fast egg drops a soft puff every few hundredths of a
   /// second; the puffs fade and shrink over half a second.

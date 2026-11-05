@@ -92,7 +92,22 @@ Maze (rabbit holes as speed-preserving portals), the Pond (water
 returns the egg, stroke charged), Farm Road (speed strips) and the
 Barn (hay bales, the silo's pull).
 
-Hills (see below) shape eleven of the thirty holes:
+Tiers (see below) stack three holes on more than one level:
+
+- **The Coop**: First Light's tee yard is the coop's raised floor; the
+  putt drops off its step through the door into the run, and an egg the
+  hen knocks back meets the step's face and stays in the run.
+- **Farm Road**: Front Stretch's road runs on a bank with a ditch across
+  it past the speed strip, a drop into it and a ramp out the far side.
+  The strip's pace carries an egg through and up; one that misses the
+  strip drops in and needs a firm putt to climb out.
+- **The Barn**: Threshing Floor's nest is up in the hayloft, a terrace in
+  the far corner walled with rubber on the west, its front a drop to the
+  floor with a railed ramp up it behind a bale. Short up the ramp rolls
+  back down; long past the nest comes back off the barn's wall and drops
+  off the loft's front or down the ramp.
+
+Hills (see below) shape ten of the thirty holes:
 
 - **The Coop**: a hump of packed earth across Pop Hole's far lane
   guards the nest from the safe road (the tunnel's line passes it by),
@@ -109,7 +124,7 @@ Hills (see below) shape eleven of the thirty holes:
   egg that leaves the ring short of pace, and two more stand in Home
   Stretch's top lane before the farm gate.
 - **The Barn**: a ridge crosses Hay Bale Pinball's floor between the
-  rubber bumpers, and Threshing Floor's nest sits up in the hayloft.
+  rubber bumpers.
 
 ### Hills
 
@@ -130,6 +145,44 @@ skirt or on the plateau with 0.6 units of flat round its rim. A
 reference putt up to a raised nest passes the climb to the course
 kit's `putt` as `rise`. The aim's guide runs the same physics, so it
 bends with the slope.
+
+### Tiers
+
+A hole can stand on more than one level (`Terrace` and `Ramp` in
+`core/hole.dart`). A terrace is a polygon raised flat to its height (0.5
+to 1.6 units), wound counter-clockwise as drawn; a ramp is a rectangle
+from a foot on the green's level to a top on a terrace's edge, rising
+along its axis on a smooth step (`height * t^2 * (3 - 2t)`, level at both
+ends) and level across. The ground's height takes the highest tier under
+a point; a ramp's gradient joins the hills' in the slope pull, so an egg
+too slow for the climb rolls back down (near a ramp's ends, where the
+pull is under the rolling friction, it can rest).
+
+The physics stays planar: what a step does comes from what covers its
+edges. A drop is a `WallSegment.ledge`, a one-way edge whose high side is
+the left of its run as drawn (the terrace's own outline direction). An
+egg rolling over its lip passes and falls - the physics carries it off at
+least `ledgeDropSpeed` (3.2) away from the face, so it never rests inside
+the step - and one coming from below bounces off the face like a rail.
+Only the low face collides, and only for an egg heading up into it; the
+face pushes out an egg below it that is not on its way out; an egg
+pressed into it by a slope rests there, and one on the high side hangs
+over the lip. Eggs a step apart (one on a lip, one at the face's foot)
+pass over and under each other. Ordinary rails cover a terrace's railed
+sides and a ramp's sides; the reach flood fill crosses ledges, both
+levels being the course. A reference putt up a ramp passes the climb to
+the course kit's `putt` as `rise`; a drop gives no pace back.
+
+The course test checks every tier: each terrace edge covered by a ledge
+(the terrace on its high side), a rail, a ramp's top of its height or the
+fence; a ramp's sides railed or ledged, its foot on the green's level, its
+top on a terrace's edge, its steepest grade 0.6 at most; ledges along
+tier edges, high side up all along. Ponds, rabbit holes and silos keep
+0.3 units off every tier; a speed strip or a "?" box stands on a
+terrace's flat with 0.3 of room or keeps off; hills keep their reach 0.3
+off; the tee, a full table's spawn ring and every hen's walk stay on one
+level, an egg's radius and 0.3 clear of every tier's outline; the nest
+sits on a terrace with 0.6 of flat round its rim or half a unit clear.
 
 ## How it looks
 
@@ -152,8 +205,19 @@ the tee (a flood fill stopped by walls, carried through rabbit holes) is
 planted as the theme's garden beds instead of turf, so a hole shaped
 with walls reads as its shape.
 
-The turf rides the hills: its vertices sit at the ground's height and
-take their normals from its gradient. The lawn texture lightens the
+The turf rides the hills and the tiers: its vertices sit at the ground's
+height and take their normals from its gradient, and it is cut along
+every terrace edge and ramp side, each piece laid by the tier it lies
+on, so the levels part exactly on the line. Every drop wears a face in
+the course's build - dark timber sleepers by the coop and along the road,
+dry stone by the pond, stacked hay bales under the barn's loft - and a
+rail on a step stands on the high ground with the face under it, a
+ramp's rails climbing with it. The lawn darkens a drop's lip and the
+floor at a step's foot, lifts a terrace's top a touch, and lights a ramp
+by the side it faces, mown in bands across its rise. An egg rolling off a
+lip falls through the air from where it was (18 units/s^2) while its
+shadow is already on the floor below, and lands with a squash and a puff
+of dust; rising ground, up a ramp, it follows at once. The lawn texture lightens the
 slopes facing the sun and darkens the far ones, mows rings along the
 contours and shades the crease at the foot. Eggs, their shadows (tilted
 along the slope), the aim, the crates, the hens, the nest and every

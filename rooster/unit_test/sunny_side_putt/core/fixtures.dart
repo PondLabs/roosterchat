@@ -31,6 +31,8 @@ HoleDef boxHole({
   List<QuestionBox> boxes = const [],
   List<MovingObstacle> obstacles = const [],
   List<Hill> hills = const [],
+  List<Terrace> terraces = const [],
+  List<Ramp> ramps = const [],
 }) {
   return HoleDef(
     id: id,
@@ -53,6 +55,8 @@ HoleDef boxHole({
     wells: wells,
     boxes: boxes,
     hills: hills,
+    terraces: terraces,
+    ramps: ramps,
     friction: friction,
   );
 }

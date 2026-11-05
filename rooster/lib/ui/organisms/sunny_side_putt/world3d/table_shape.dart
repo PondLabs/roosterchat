@@ -248,34 +248,70 @@ class _TableShape {
   /// The top: the turf inside the bounds (UVs over the bounds, for the
   /// lawn's texture), or the timber lip outside them.
   tjs.BufferGeometry top({required bool turf, HoleDef? relief}) {
-    final flat = _fill(
+    var flat = _fill(
         (col, row) => _keptCell(col, row) && (_insideCell(col, row) == turf));
     final positions = <double>[];
     final normals = <double>[];
     final uvs = <double>[];
-    // The turf rides the hole's hills: each vertex at the ground's height,
-    // its normal from the ground's gradient.
-    final hilly = relief != null && relief.hills.isNotEmpty;
-    for (var i = 0; i < flat.length; i += 2) {
-      final x = flat[i];
-      final z = flat[i + 1];
-      if (hilly) {
-        final point = Vec2(x, z);
-        final g = relief.groundGradientAt(point);
-        final n = math.sqrt(g.x * g.x + 1 + g.y * g.y);
-        positions.addAll([x, relief.groundHeightAt(point), z]);
-        normals.addAll([-g.x / n, 1 / n, -g.y / n]);
+    // The turf rides the hole's relief: each vertex at the ground's height,
+    // its normal from the ground's gradient. A tier's edge is a step, not
+    // a slope: the triangles are cut along every terrace edge and ramp
+    // side, and each piece is laid by the tier it lies on, so the two
+    // levels part exactly on the line.
+    final hilly = relief != null && relief.hasRelief;
+    final tiered = relief != null &&
+        (relief.terraces.isNotEmpty || relief.ramps.isNotEmpty);
+    if (tiered) {
+      flat = _cutAlongSteps(flat, [
+        ..._stepEdges(relief),
+        // A ramp's ends are level with what they meet, but cut there too,
+        // each piece then takes the ramp's profile exactly.
+        for (final ramp in relief.ramps) ...[
+          (ramp.sides.$1.$1, ramp.sides.$2.$1),
+          ramp.top,
+        ],
+      ]);
+    }
+    for (var i = 0; i < flat.length; i += 6) {
+      final _Tier? tier;
+      if (tiered) {
+        tier = _tierUnder(
+            relief,
+            Vec2((flat[i] + flat[i + 2] + flat[i + 4]) / 3,
+                (flat[i + 1] + flat[i + 3] + flat[i + 5]) / 3));
       } else {
-        positions.addAll([x, 0, z]);
-        normals.addAll([0, 1, 0]);
+        tier = null;
       }
-      if (turf) {
-        uvs.addAll([
-          (x - bounds.min.x) / bounds.width,
-          1 - (z - bounds.min.y) / bounds.height,
-        ]);
-      } else {
-        uvs.addAll([x / 2.4, z / 2.4]);
+      for (var k = i; k < i + 6; k += 2) {
+        final x = flat[k];
+        final z = flat[k + 1];
+        if (hilly) {
+          final point = Vec2(x, z);
+          var height = 0.0;
+          var g = Vec2.zero;
+          for (final hill in relief.hills) {
+            height += hill.heightAt(point);
+            g += hill.gradientAt(point);
+          }
+          if (tier != null) {
+            height += tier.heightAt(point);
+            g += tier.gradientAt(point);
+          }
+          final n = math.sqrt(g.x * g.x + 1 + g.y * g.y);
+          positions.addAll([x, height, z]);
+          normals.addAll([-g.x / n, 1 / n, -g.y / n]);
+        } else {
+          positions.addAll([x, 0, z]);
+          normals.addAll([0, 1, 0]);
+        }
+        if (turf) {
+          uvs.addAll([
+            (x - bounds.min.x) / bounds.width,
+            1 - (z - bounds.min.y) / bounds.height,
+          ]);
+        } else {
+          uvs.addAll([x / 2.4, z / 2.4]);
+        }
       }
     }
     return tjs.BufferGeometry()
@@ -366,4 +402,148 @@ class _TableShape {
     }
     return runs;
   }
+}
+
+// ---- the tiers' steps ---------------------------------------------------------------
+
+/// The tier under a piece of turf: a terrace (flat at its height) or a
+/// ramp, laid by its profile along its axis with the width ignored, so the
+/// piece's corners on the ramp's side keep the ramp's height and the side
+/// stays a crisp step.
+class _Tier {
+  _Tier.terrace(Terrace this.terrace) : ramp = null;
+  _Tier.ramp(Ramp this.ramp) : terrace = null;
+
+  final Terrace? terrace;
+  final Ramp? ramp;
+
+  double heightAt(Vec2 point) => terrace?.height ?? ramp!.profileAt(point);
+
+  Vec2 gradientAt(Vec2 point) =>
+      terrace != null ? Vec2.zero : ramp!.profileGradientAt(point);
+}
+
+/// The tier holding [point] - the highest, as the ground takes it - or
+/// null on the green's own level.
+_Tier? _tierUnder(HoleDef hole, Vec2 point) {
+  _Tier? tier;
+  var best = 0.0;
+  for (final terrace in hole.terraces) {
+    if (terrace.height > best && terrace.contains(point)) {
+      best = terrace.height;
+      tier = _Tier.terrace(terrace);
+    }
+  }
+  for (final ramp in hole.ramps) {
+    final rise = ramp.heightAt(point);
+    if (rise > best) {
+      best = rise;
+      tier = _Tier.ramp(ramp);
+    }
+  }
+  return tier;
+}
+
+/// Where the ground can step: every terrace edge and both sides of every
+/// ramp (a ramp's foot and top are level with what they meet).
+List<(Vec2, Vec2)> _stepEdges(HoleDef hole) => [
+      for (final terrace in hole.terraces)
+        for (var i = 0; i < terrace.points.length; i++) terrace.edge(i),
+      for (final ramp in hole.ramps) ...[ramp.sides.$1, ramp.sides.$2],
+    ];
+
+/// [flat] (triangles as x, z pairs) with every triangle a step's line
+/// crosses cut along that line, the pieces fanned back into triangles in
+/// the same winding. Each piece then lies wholly on one side of every
+/// step, so it takes one tier's height.
+List<double> _cutAlongSteps(List<double> flat, List<(Vec2, Vec2)> edges) {
+  final boxes = [
+    for (final (a, b) in edges)
+      (
+        math.min(a.x, b.x) - 0.01,
+        math.min(a.y, b.y) - 0.01,
+        math.max(a.x, b.x) + 0.01,
+        math.max(a.y, b.y) + 0.01,
+      ),
+  ];
+  final out = <double>[];
+  for (var i = 0; i < flat.length; i += 6) {
+    final minX = math.min(flat[i], math.min(flat[i + 2], flat[i + 4]));
+    final maxX = math.max(flat[i], math.max(flat[i + 2], flat[i + 4]));
+    final minZ = math.min(flat[i + 1], math.min(flat[i + 3], flat[i + 5]));
+    final maxZ = math.max(flat[i + 1], math.max(flat[i + 3], flat[i + 5]));
+    List<List<(double, double)>>? pieces;
+    for (var e = 0; e < edges.length; e++) {
+      final (x0, z0, x1, z1) = boxes[e];
+      if (x1 < minX || x0 > maxX || z1 < minZ || z0 > maxZ) continue;
+      pieces ??= [
+        [
+          (flat[i], flat[i + 1]),
+          (flat[i + 2], flat[i + 3]),
+          (flat[i + 4], flat[i + 5]),
+        ],
+      ];
+      final (a, b) = edges[e];
+      pieces = [for (final piece in pieces) ..._splitByLine(piece, a, b)];
+    }
+    if (pieces == null) {
+      for (var k = i; k < i + 6; k++) {
+        out.add(flat[k]);
+      }
+      continue;
+    }
+    for (final piece in pieces) {
+      for (var k = 1; k + 1 < piece.length; k++) {
+        out.addAll([
+          piece[0].$1,
+          piece[0].$2,
+          piece[k].$1,
+          piece[k].$2,
+          piece[k + 1].$1,
+          piece[k + 1].$2,
+        ]);
+      }
+    }
+  }
+  return out;
+}
+
+/// A convex [polygon] cut by the line through [a] and [b]: the part on each
+/// side (one piece when the line misses it), the cyclic order kept.
+List<List<(double, double)>> _splitByLine(
+    List<(double, double)> polygon, Vec2 a, Vec2 b) {
+  final ux = b.x - a.x;
+  final uz = b.y - a.y;
+  final sides = [
+    for (final (x, z) in polygon) ux * (z - a.y) - uz * (x - a.x),
+  ];
+  const eps = 1e-9;
+  var positive = false;
+  var negative = false;
+  for (final side in sides) {
+    if (side > eps) positive = true;
+    if (side < -eps) negative = true;
+  }
+  if (!positive || !negative) return [polygon];
+  final one = <(double, double)>[];
+  final other = <(double, double)>[];
+  for (var i = 0; i < polygon.length; i++) {
+    final j = (i + 1) % polygon.length;
+    final p = polygon[i];
+    final q = polygon[j];
+    final sp = sides[i];
+    final sq = sides[j];
+    if (sp >= -eps) one.add(p);
+    if (sp <= eps) other.add(p);
+    if ((sp > eps && sq < -eps) || (sp < -eps && sq > eps)) {
+      final t = sp / (sp - sq);
+      final cut = (p.$1 + (q.$1 - p.$1) * t, p.$2 + (q.$2 - p.$2) * t);
+      one.add(cut);
+      other.add(cut);
+    }
+  }
+  return [
+    if (one.length >= 3) one,
+    if (other.length >= 3) other,
+  ];
 }

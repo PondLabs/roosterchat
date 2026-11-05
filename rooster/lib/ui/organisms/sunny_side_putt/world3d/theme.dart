@@ -368,3 +368,85 @@ tjs.DataTexture _boardTexture() {
   }
   return bitmap.texture(repeat: true);
 }
+
+// ---- the tiers' faces ------------------------------------------------------------
+
+/// The face of a tier's step in a course's build: a retaining wall of dark
+/// timber sleepers by the coop, along the road and in the maze, dry stone
+/// by the pond, a stack of hay bales under the barn's loft. Darker than
+/// the rails and capless, so a drop reads as a step and not as a rail.
+tjs.MeshStandardMaterial _stepMaterial(_ThemeKind kind) {
+  switch (kind) {
+    case _ThemeKind.pond:
+      return tjs.MeshStandardMaterial({
+        tjs.MaterialProperty.color: _lin(0x9C9488),
+        tjs.MaterialProperty.map: _stoneTexture(),
+        tjs.MaterialProperty.roughness: 0.94,
+        tjs.MaterialProperty.metalness: 0.0,
+      });
+    case _ThemeKind.barn:
+      // Big bales: a course is 0.62 high, a bale 1.6 long.
+      return tjs.MeshStandardMaterial({
+        tjs.MaterialProperty.color: _lin(_Farm.hay),
+        tjs.MaterialProperty.map: _baleStackTexture()
+          ..repeat.setValues(0.75, 0.5),
+        tjs.MaterialProperty.roughness: 0.97,
+        tjs.MaterialProperty.metalness: 0.0,
+      });
+    case _ThemeKind.coop:
+    case _ThemeKind.maze:
+    case _ThemeKind.road:
+      return tjs.MeshStandardMaterial({
+        tjs.MaterialProperty.color: _lin(0x8E5B35),
+        tjs.MaterialProperty.map: _sleeperTexture(),
+        tjs.MaterialProperty.roughness: 0.88,
+        tjs.MaterialProperty.metalness: 0.0,
+      });
+  }
+}
+
+/// Timber sleepers laid flat one on another: two to a tile's height, dark
+/// seams between them and grain along them, grey for tinting.
+tjs.DataTexture _sleeperTexture() {
+  final bitmap = _Bitmap(128, 32);
+  final rand = _Rand(431);
+  final shades = [for (var i = 0; i < 8; i++) rand.range(0.84, 1.0)];
+  for (var y = 0; y < 32; y++) {
+    final plank = y ~/ 16;
+    final inPlank = y % 16;
+    for (var x = 0; x < 128; x++) {
+      // Each sleeper ends somewhere along the tile, the rows staggered.
+      final joint = (x + plank * 53) % 128;
+      var v = shades[(plank * 3 + (x + plank * 53) ~/ 128) % shades.length];
+      v += (_noise2(x / 11, y / 2.5, 21) - 0.5) * 0.16;
+      if (inPlank < 2 || inPlank > 14) v = 0.42;
+      if (joint < 2) v = 0.5;
+      final level = (v.clamp(0.0, 1.0) * 255).round();
+      bitmap.set(x, y, (level << 16) | (level << 8) | level);
+    }
+  }
+  return bitmap.texture(repeat: true);
+}
+
+/// Square bales stacked in staggered courses: straw streaking along each,
+/// two twine bands, a dark seam round it; grey for tinting.
+tjs.DataTexture _baleStackTexture() {
+  final bitmap = _Bitmap(128, 64);
+  for (var y = 0; y < 64; y++) {
+    final course = y ~/ 32;
+    final inCourse = y % 32;
+    for (var x = 0; x < 128; x++) {
+      final shifted = (x + course * 32) % 128;
+      final inBale = shifted % 64;
+      var v = 0.82 + (_noise2(x / 3.5, y / 1.4, 17) - 0.5) * 0.3;
+      v += (_hash2(x, y, 29) - 0.5) * 0.08;
+      // The twine, a third in from each end.
+      if ((inBale - 21).abs() < 2 || (inBale - 43).abs() < 2) v = 0.62;
+      // The seams between bales and between courses.
+      if (inBale < 2 || inBale > 61 || inCourse < 2 || inCourse > 29) v = 0.45;
+      final level = (v.clamp(0.0, 1.0) * 255).round();
+      bitmap.set(x, y, (level << 16) | (level << 8) | level);
+    }
+  }
+  return bitmap.texture(repeat: true);
+}

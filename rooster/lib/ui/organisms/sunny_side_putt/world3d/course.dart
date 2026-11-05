@@ -51,6 +51,12 @@ class _CourseKit {
   tjs.MeshStandardMaterial get _railMaterial => _rails.$1;
   tjs.MeshStandardMaterial get _capMaterial => _rails.$2;
 
+  /// The tiers' steps, faced in the course's own build (see
+  /// [_stepMaterial]): under a ledge's lip and under every rail that
+  /// stands on a step.
+  late final tjs.MeshStandardMaterial _cliffMaterial =
+      _stepMaterial(theme.kind);
+
   /// The belt frames keep timber whatever the rails are.
   late final tjs.MeshStandardMaterial _timber = tjs.MeshStandardMaterial({
     tjs.MaterialProperty.color: _lin(_Farm.wood),
@@ -147,13 +153,24 @@ class _CourseKit {
     }
 
     for (final wall in hole.walls) {
+      final box = Rect(
+        Vec2(math.min(wall.a.x, wall.b.x), math.min(wall.a.y, wall.b.y)),
+        Vec2(math.max(wall.a.x, wall.b.x), math.max(wall.a.y, wall.b.y)),
+      );
+      if (wall.ledge) {
+        // A ledge shades only its foot, below it; its lip is the tiers'.
+        final high = wall.highSide;
+        stampDistance(
+            box,
+            (p) => (p - wall.a).dot(high) < 0
+                ? _segmentDistance(p, wall.a, wall.b)
+                : 99);
+        continue;
+      }
       final half = (_isPerimeter(wall) ? 0 : _innerThickness / 2) +
           (wall.bumper ? 0.06 : 0);
       stampDistance(
-        Rect(
-          Vec2(math.min(wall.a.x, wall.b.x), math.min(wall.a.y, wall.b.y)),
-          Vec2(math.max(wall.a.x, wall.b.x), math.max(wall.a.y, wall.b.y)),
-        ),
+        box,
         (p) => math.max(0, _segmentDistance(p, wall.a, wall.b) - half),
       );
     }
@@ -324,6 +341,96 @@ class _CourseKit {
       }
     }
 
+    // Tiers: a terrace's top a touch brighter than the floor below it, a
+    // darker lip along every drop, and a ramp lit by the side it faces
+    // (like a hill's slopes) and mown in bands across its rise.
+    if (hole.terraces.isNotEmpty || hole.ramps.isNotEmpty) {
+      void over(Rect box, void Function(int col, int row, Vec2 point) paint) {
+        final c0 = colOf(box.min.x).clamp(0, width - 1);
+        final c1 = colOf(box.max.x).clamp(0, width - 1);
+        final r0 = rowOf(box.max.y).clamp(0, height - 1);
+        final r1 = rowOf(box.min.y).clamp(0, height - 1);
+        for (var row = r0; row <= r1; row++) {
+          for (var col = c0; col <= c1; col++) {
+            final point = worldAt(col, row);
+            if (_reach.reachableAt(point)) paint(col, row, point);
+          }
+        }
+      }
+
+      Rect boxOf(Iterable<Vec2> points, double pad) {
+        var minX = double.infinity, minY = double.infinity;
+        var maxX = -double.infinity, maxY = -double.infinity;
+        for (final p in points) {
+          minX = math.min(minX, p.x);
+          minY = math.min(minY, p.y);
+          maxX = math.max(maxX, p.x);
+          maxY = math.max(maxY, p.y);
+        }
+        return Rect(Vec2(minX - pad, minY - pad), Vec2(maxX + pad, maxY + pad));
+      }
+
+      for (final terrace in hole.terraces) {
+        over(boxOf(terrace.points, 0), (col, row, point) {
+          if (!terrace.contains(point)) return;
+          bitmap.set(col, row, _shade(bitmap.get(col, row), 1.06));
+        });
+      }
+      // The floor at a step's foot lies in its shade, deeper the taller
+      // the step.
+      for (final (a, b) in _stepEdges(hole)) {
+        final run = b - a;
+        if (run.length < 1e-6) continue;
+        final across = Vec2(-run.y, run.x) * (1 / run.length);
+        over(boxOf([a, b], 1.6), (col, row, point) {
+          final d = _segmentDistance(point, a, b);
+          final side = (point - a).dot(across);
+          final here = hole.tierHeightAt(point);
+          final there = hole.tierHeightAt(point - across * (2 * side));
+          final rise = there - here;
+          if (rise < 0.2) return;
+          final reach = 0.5 + rise * 0.8;
+          if (d >= reach) return;
+          final k = math.pow(1 - d / reach, 2).toDouble() * 0.42;
+          bitmap.set(col, row, _mix(bitmap.get(col, row), _Farm.turfShade, k));
+        });
+      }
+      for (final wall in hole.walls) {
+        if (!wall.ledge) continue;
+        final high = wall.highSide;
+        over(boxOf([wall.a, wall.b], 0.4), (col, row, point) {
+          if ((point - wall.a).dot(high) <= 0) return;
+          final d = _segmentDistance(point, wall.a, wall.b);
+          // The lip: shade sinking to the edge, a bright line right on it
+          // where the light catches the turf's rim.
+          final lip = _softBand(d, 0.14, 0.12);
+          var color = bitmap.get(col, row);
+          if (lip > 0) color = _mix(color, _Farm.turfShade, lip * 0.5);
+          final rim = _softBand(d, 0.03, 0.03);
+          if (rim > 0) color = _mix(color, theme.turfLight, rim * 0.6);
+          bitmap.set(col, row, color);
+        });
+      }
+      final (sx, sy, sz) = theme.sunFrom;
+      final sunLength = math.sqrt(sx * sx + sy * sy + sz * sz);
+      final lx = sx / sunLength, ly = sy / sunLength, lz = sz / sunLength;
+      for (final ramp in hole.ramps) {
+        final (left, right) = ramp.sides;
+        over(boxOf([left.$1, left.$2, right.$1, right.$2], 0),
+            (col, row, point) {
+          if (!ramp.covers(point)) return;
+          final g = ramp.gradientAt(point);
+          final n = math.sqrt(g.x * g.x + 1 + g.y * g.y);
+          final lit = (-g.x * lx + ly - g.y * lz) / n;
+          final relative = ((lit - ly) * 1.6).clamp(-0.3, 0.3);
+          var color = _shade(bitmap.get(col, row), 1 + relative * 0.75);
+          final level = ramp.heightAt(point) / ramp.height;
+          color = _shade(color, (level * 5).floor().isEven ? 1.1 : 0.9);
+          bitmap.set(col, row, color);
+        });
+      }
+    }
+
     // The nest: a soft ring of shade around the straw.
     final nest = hole.nest;
     final reach = nest.radius * 1.9;
@@ -412,21 +519,101 @@ class _CourseKit {
             (spot.y == bounds.min.y || spot.y == bounds.max.y ? outward : 0),
       );
       final at = spot + push;
+      // A post by a raised tier stands as tall as the fence there.
+      final rise =
+          hole.tierHeightAt(spot + (center - spot).normalized(Vec2.zero) * 0.6);
+      final tall = rise + _railHeight + 0.42;
       posts.add(
-        tjs.BoxGeometry(0.82, _railHeight + 0.42, 0.82),
-        _place(at.x, (_railHeight + 0.42) / 2, at.y),
+        tjs.BoxGeometry(0.82, tall, 0.82),
+        _place(at.x, tall / 2, at.y),
         _Farm.post,
         baseShade: 0.82,
       );
       posts.add(
         tjg.ConeGeometry(0.62, 0.42, 4),
-        _place(at.x, _railHeight + 0.42 + 0.21, at.y, yaw: math.pi / 4),
+        _place(at.x, tall + 0.21, at.y, yaw: math.pi / 4),
         _Farm.barnRed,
       );
     }
     final postMesh = posts.mesh('table-posts');
     if (postMesh != null) group.add(postMesh);
     return group;
+  }
+
+  // ---- the tiers' steps -------------------------------------------------------------------
+
+  /// The faces of the tiers' steps: wherever the ground steps down along a
+  /// terrace's edge or a ramp's side and no rail stands on the line (a
+  /// rail carries its own face, see [_railPiece]), a face in the course's
+  /// timber, stone or hay drops from the high turf to the low - so a drop
+  /// reads as a step of the table, not a stretched slope. Null when the
+  /// hole is one level.
+  tjs.Object3D? cliffs() {
+    final edges = _stepEdges(hole);
+    if (edges.isEmpty) return null;
+    final face = _QuadSink();
+    for (final (a, b) in edges) {
+      final run = b - a;
+      final length = run.length;
+      if (length < 1e-6) continue;
+      final along = run * (1 / length);
+      final across = Vec2(-along.y, along.x);
+      final steps = math.max(1, (length / 0.25).ceil());
+      // The levels either side at a point of the edge, read a hair inside
+      // its ends (a corner's other edge is right there).
+      (double, double, bool) levels(double t) {
+        final inset = (t * length).clamp(0.02, length - 0.02) / length;
+        final p = a + run * inset;
+        final one = hole.tierHeightAt(p + across * 0.03);
+        final other = hole.tierHeightAt(p - across * 0.03);
+        return (math.min(one, other), math.max(one, other), one < other);
+      }
+
+      for (var i = 0; i < steps; i++) {
+        final t0 = i / steps, t1 = (i + 1) / steps;
+        final p0 = a + run * t0, p1 = a + run * t1;
+        if (_railAlong((p0 + p1) * 0.5, along)) continue;
+        final (lo0, hi0, _) = levels(t0);
+        final (lo1, hi1, _) = levels(t1);
+        if (hi0 - lo0 < 0.02 && hi1 - lo1 < 0.02) continue;
+        // The face looks out over the low side.
+        final (_, _, oneLow) = levels((t0 + t1) / 2);
+        final out = oneLow ? across : across * -1;
+        final u0 = t0 * length / 2.4, u1 = t1 * length / 2.4;
+        face.quad(
+            [
+              (p0.x, lo0, p0.y),
+              (p1.x, lo1, p1.y),
+              (p1.x, hi1, p1.y),
+              (p0.x, hi0, p0.y),
+            ],
+            out,
+            [
+              (u0, lo0 / 0.62),
+              (u1, lo1 / 0.62),
+              (u1, hi1 / 0.62),
+              (u0, hi0 / 0.62),
+            ]);
+      }
+    }
+    if (face.isEmpty) return null;
+    return tjs.Group()
+      ..name = 'cliffs'
+      ..add(face.mesh('cliff-face', _cliffMaterial)!);
+  }
+
+  /// Whether a rail (not a ledge) stands along [direction] through [point]:
+  /// the step there is the rail's to face.
+  bool _railAlong(Vec2 point, Vec2 direction) {
+    for (final wall in hole.walls) {
+      if (wall.ledge) continue;
+      final run = wall.b - wall.a;
+      final length = run.length;
+      if (length < 1e-6) continue;
+      if ((run * (1 / length)).cross(direction).abs() > 0.02) continue;
+      if (_segmentDistance(point, wall.a, wall.b) < 0.05) return true;
+    }
+    return false;
   }
 
   // ---- the rails ------------------------------------------------------------------------
@@ -456,21 +643,41 @@ class _CourseKit {
       b = clip(b);
     }
     // Only where the table runs under it: over carved-away ground a rail
-    // would float.
-    final runs = shape.keptRuns(a, b);
+    // would float. Where a tier steps under it, it stands on the high
+    // ground with the step's face below it.
+    final runs = [
+      for (final (from, to) in shape.keptRuns(a, b))
+        ..._steppedRuns(from, to, perimeter),
+    ];
     if (runs.length == 1 &&
-        runs.single.$1.distanceTo(a) < 1e-6 &&
-        runs.single.$2.distanceTo(b) < 1e-6) {
+        runs.single.flat &&
+        runs.single.from.distanceTo(a) < 1e-6 &&
+        runs.single.to.distanceTo(b) < 1e-6) {
       return _railPiece(a, b, perimeter);
     }
     final group = tjs.Group()..name = 'wall';
-    for (final (from, to) in runs) {
-      group.add(_railPiece(from, to, perimeter)..name = 'wall-piece');
+    for (final run in runs) {
+      group.add((run.varying
+          ? _profileRail(run, perimeter)
+          : _railPiece(run.from, run.to, perimeter,
+              low: run.low,
+              high: run.high,
+              longAtStart: run.atStart,
+              longAtEnd: run.atEnd))
+        ..name = 'wall-piece');
     }
     return group;
   }
 
-  tjs.Group _railPiece(Vec2 a, Vec2 b, bool perimeter) {
+  /// A rail piece from [a] to [b] standing on the ground at [high], the
+  /// step's face below it down to [low] when the ground steps under it.
+  /// It runs long by its thickness at the ends that close a corner
+  /// ([longAtStart], [longAtEnd]), not where a stepped wall changes level.
+  tjs.Group _railPiece(Vec2 a, Vec2 b, bool perimeter,
+      {double low = 0,
+      double high = 0,
+      bool longAtStart = true,
+      bool longAtEnd = true}) {
     final thickness = perimeter ? _fenceThickness : _innerThickness;
     final run = b - a;
     final length = run.length;
@@ -483,31 +690,271 @@ class _CourseKit {
       final sign = normal.dot(toCenter) > 0 ? -1.0 : 1.0;
       mid = mid + normal * (sign * thickness / 2);
     }
+    // The extensions, along local x: back past a, on past b.
+    final back = longAtStart ? thickness / 2 : 0.0;
+    final on = longAtEnd ? thickness / 2 : 0.0;
+    final long = length + (longAtStart && longAtEnd ? thickness : back + on);
+    final shift = (on - back) / 2;
     final group = tjs.Group()
       ..name = 'wall'
       // The rail runs a to b: long local x, turned by the run's angle (the
       // game's y-down angle reads a negative world turn about y).
       ..rotation.y = -math.atan2(run.y, run.x)
-      ..position.setValues(mid.x, 0, mid.y);
-    final long = length + thickness;
+      ..position.setValues(mid.x, high, mid.y);
     final body = tjs.Mesh(
       _woodBox(long, _railHeight, thickness),
       _railMaterial,
     )
       ..name = 'wall-body'
-      ..position.y = _railHeight / 2
+      ..position.setValues(shift, _railHeight / 2, 0)
       ..castShadow = true
       ..receiveShadow = true;
     final cap = tjs.Mesh(_railCap(long + 0.08, thickness), _capMaterial)
       ..name = 'wall-cap'
-      ..position.y = _railHeight
+      ..position.setValues(shift, _railHeight, 0)
       ..castShadow = true
       ..receiveShadow = true;
     group
       ..add(body)
       ..add(cap);
-    if (theme.rails == _RailStyle.hedge) group.add(_cornTop(long, thickness));
+    if (theme.rails == _RailStyle.hedge) {
+      group.add(_cornTop(long, thickness)..position.x = shift);
+    }
+    if (high - low > 0.01) {
+      group.add(tjs.Mesh(
+        _woodBox(long, high - low, thickness),
+        _cliffMaterial,
+      )
+        ..name = 'wall-step'
+        ..position.setValues(shift, (low - high) / 2, 0)
+        ..castShadow = true
+        ..receiveShadow = true);
+    }
     return group;
+  }
+
+  /// The tiers' heights either side of the wall [a]-[b] along it, as runs
+  /// of one level (a rail on the flat, on a terrace, along a terrace's
+  /// edge) and runs that climb (along a ramp's side). A perimeter fence
+  /// reads the green inside it and the lip outside.
+  List<_WallRun> _steppedRuns(Vec2 a, Vec2 b, bool perimeter) {
+    final run = b - a;
+    final length = run.length;
+    if (length < 1e-6 || (hole.terraces.isEmpty && hole.ramps.isEmpty)) {
+      return [_WallRun(a, b, 0, 0)];
+    }
+    final along = run * (1 / length);
+    final across = Vec2(-along.y, along.x);
+    final reach = perimeter ? _fenceThickness + 0.1 : _innerThickness / 2 + 0.1;
+    (double, double) levels(double t) {
+      final p = a + run * t;
+      final one = hole.tierHeightAt(p + across * reach);
+      final other = hole.tierHeightAt(p - across * reach);
+      return (math.min(one, other), math.max(one, other));
+    }
+
+    bool same((double, double) x, (double, double) y) =>
+        (x.$1 - y.$1).abs() < 0.004 && (x.$2 - y.$2).abs() < 0.004;
+    final steps = math.max(1, (length / 0.1).ceil());
+    final samples = [for (var i = 0; i <= steps; i++) levels(i / steps)];
+    // Where the levels change between two samples: a jump (one changing
+    // step, found by halving) or a climb (several in a row).
+    final cuts = <double>[0];
+    final climbs = <(int, int)>[];
+    var i = 0;
+    while (i < steps) {
+      if (same(samples[i], samples[i + 1])) {
+        i++;
+        continue;
+      }
+      var j = i;
+      while (j < steps && !same(samples[j], samples[j + 1])) {
+        j++;
+      }
+      if (j - i == 1) {
+        var lo = i / steps, hi = (i + 1) / steps;
+        for (var k = 0; k < 12; k++) {
+          final m = (lo + hi) / 2;
+          if (same(levels(m), samples[i])) {
+            lo = m;
+          } else {
+            hi = m;
+          }
+        }
+        cuts.add((lo + hi) / 2);
+      } else {
+        cuts.add(i / steps);
+        cuts.add(j / steps);
+        climbs.add((i, j));
+      }
+      i = j;
+    }
+    cuts.add(1);
+    final runs = <_WallRun>[];
+    for (var k = 0; k + 1 < cuts.length; k++) {
+      final t0 = cuts[k], t1 = cuts[k + 1];
+      if (t1 - t0 < 1e-6) continue;
+      final from = a + run * t0, to = a + run * t1;
+      final climb = climbs.where((c) => c.$1 / steps == t0).firstOrNull;
+      if (climb != null) {
+        runs.add(_WallRun(from, to, 0, 0,
+            profile: [
+              for (var s = climb.$1; s <= climb.$2; s++) samples[s],
+            ],
+            atStart: k == 0,
+            atEnd: k + 2 == cuts.length));
+      } else {
+        final (low, high) = levels((t0 + t1) / 2);
+        runs.add(_WallRun(from, to, low, high,
+            atStart: k == 0, atEnd: k + 2 == cuts.length));
+      }
+    }
+    return runs;
+  }
+
+  /// A rail along a climbing run (a ramp's side): its body and a flat trim
+  /// ride the higher ground, the step's face below them, all following
+  /// the run's sampled levels.
+  tjs.Group _profileRail(_WallRun run, bool perimeter) {
+    final thickness = perimeter ? _fenceThickness : _innerThickness;
+    final span = run.to - run.from;
+    final length = span.length;
+    final mid = (run.from + run.to) * 0.5;
+    final profile = run.profile;
+    final xs = [
+      for (var i = 0; i < profile.length; i++)
+        -length / 2 + length * i / (profile.length - 1),
+    ];
+    final highs = [for (final level in profile) level.$2];
+    final lows = [for (final level in profile) level.$1];
+    final group = tjs.Group()
+      ..name = 'wall'
+      ..rotation.y = -math.atan2(span.y, span.x)
+      ..position.setValues(mid.x, 0, mid.y);
+    group
+      ..add(tjs.Mesh(
+          _profileBox(xs, [for (final h in highs) h],
+              [for (final h in highs) h + _railHeight], thickness),
+          _railMaterial)
+        ..name = 'wall-body'
+        ..castShadow = true
+        ..receiveShadow = true)
+      ..add(tjs.Mesh(
+          _profileBox(xs, [for (final h in highs) h + _railHeight - 0.02],
+              [for (final h in highs) h + _railHeight + 0.1], thickness + 0.12),
+          _capMaterial)
+        ..name = 'wall-cap'
+        ..castShadow = true)
+      ..add(tjs.Mesh(_profileBox(xs, lows, highs, thickness), _cliffMaterial)
+        ..name = 'wall-step'
+        ..castShadow = true
+        ..receiveShadow = true);
+    return group;
+  }
+
+  /// A prism along local x through [xs], [thickness] deep across z, its
+  /// bottom and top following [bottoms] and [tops]: the two long faces, the
+  /// top, the bottom and both ends. UVs run in world units, like
+  /// [_woodBox]'s.
+  tjs.BufferGeometry _profileBox(List<double> xs, List<double> bottoms,
+      List<double> tops, double thickness) {
+    final positions = <double>[];
+    final normals = <double>[];
+    final uvs = <double>[];
+    final h = thickness / 2;
+    void quad(List<(double, double, double)> corners,
+        (double, double, double) n, List<(double, double)> uv) {
+      for (final k in const [0, 1, 2, 0, 2, 3]) {
+        final (x, y, z) = corners[k];
+        positions.addAll([x, y, z]);
+        normals.addAll([n.$1, n.$2, n.$3]);
+        uvs.addAll([uv[k].$1, uv[k].$2]);
+      }
+    }
+
+    for (var i = 0; i + 1 < xs.length; i++) {
+      final x0 = xs[i], x1 = xs[i + 1];
+      final b0 = bottoms[i], b1 = bottoms[i + 1];
+      final t0 = tops[i], t1 = tops[i + 1];
+      // The face toward +z, wound counter-clockwise seen from +z.
+      quad([
+        (x0, b0, h),
+        (x1, b1, h),
+        (x1, t1, h),
+        (x0, t0, h)
+      ], (
+        0,
+        0,
+        1
+      ), [
+        (x0 / 2.4, b0 / 0.62),
+        (x1 / 2.4, b1 / 0.62),
+        (x1 / 2.4, t1 / 0.62),
+        (x0 / 2.4, t0 / 0.62)
+      ]);
+      // The face toward -z.
+      quad([
+        (x1, b1, -h),
+        (x0, b0, -h),
+        (x0, t0, -h),
+        (x1, t1, -h)
+      ], (
+        0,
+        0,
+        -1
+      ), [
+        (x1 / 2.4, b1 / 0.62),
+        (x0 / 2.4, b0 / 0.62),
+        (x0 / 2.4, t0 / 0.62),
+        (x1 / 2.4, t1 / 0.62)
+      ]);
+      // The top, facing up (the slope's tilt is small enough to light it as
+      // level).
+      quad([(x0, t0, h), (x1, t1, h), (x1, t1, -h), (x0, t0, -h)], (0, 1, 0),
+          [(x0 / 2.4, 0), (x1 / 2.4, 0), (x1 / 2.4, 0.5), (x0 / 2.4, 0.5)]);
+      // The bottom, facing down.
+      quad([(x0, b0, -h), (x1, b1, -h), (x1, b1, h), (x0, b0, h)], (0, -1, 0),
+          [(x0 / 2.4, 0), (x1 / 2.4, 0), (x1 / 2.4, 0.5), (x0 / 2.4, 0.5)]);
+    }
+    // The ends.
+    final first = 0, last = xs.length - 1;
+    quad([
+      (xs[first], bottoms[first], -h),
+      (xs[first], bottoms[first], h),
+      (xs[first], tops[first], h),
+      (xs[first], tops[first], -h),
+    ], (
+      -1,
+      0,
+      0
+    ), [
+      (0, bottoms[first] / 0.62),
+      (0.2, bottoms[first] / 0.62),
+      (0.2, tops[first] / 0.62),
+      (0, tops[first] / 0.62)
+    ]);
+    quad([
+      (xs[last], bottoms[last], h),
+      (xs[last], bottoms[last], -h),
+      (xs[last], tops[last], -h),
+      (xs[last], tops[last], h),
+    ], (
+      1,
+      0,
+      0
+    ), [
+      (0, bottoms[last] / 0.62),
+      (0.2, bottoms[last] / 0.62),
+      (0.2, tops[last] / 0.62),
+      (0, tops[last] / 0.62)
+    ]);
+    return tjs.BufferGeometry()
+      ..setAttributeFromString(
+          'position', tjs.Float32BufferAttribute.fromList(positions, 3, false))
+      ..setAttributeFromString(
+          'normal', tjs.Float32BufferAttribute.fromList(normals, 3, false))
+      ..setAttributeFromString(
+          'uv', tjs.Float32BufferAttribute.fromList(uvs, 2, false));
   }
 
   /// The corn hedge's top: tassels standing up along it, leaves arching
@@ -654,17 +1101,49 @@ class _CourseKit {
   // ---- bumpers ----------------------------------------------------------------------------
 
   /// A straight bumper: a red rubber rail with yolk-capped ends and a
-  /// cream band - the pinball rail the egg bounces off.
+  /// cream band - the pinball rail the egg bounces off. Where a tier steps
+  /// under it, it stands on the high ground with the step's face below.
   tjs.Group bumperRail(WallSegment wall) {
-    final run = wall.b - wall.a;
+    final runs = _steppedRuns(wall.a, wall.b, false);
+    if (runs.length == 1 && runs.single.flat) {
+      return _bumperPiece(wall.a, wall.b);
+    }
+    final group = tjs.Group()..name = 'bumper';
+    for (final run in runs) {
+      if (!run.varying) {
+        group.add(_bumperPiece(run.from, run.to, low: run.low, high: run.high));
+        continue;
+      }
+      // Up a climb, in short pieces each at its own level.
+      final pieces = run.profile.length - 1;
+      for (var i = 0; i < pieces; i++) {
+        final level = run.profile[i];
+        group.add(_bumperPiece(run.from.lerp(run.to, i / pieces),
+            run.from.lerp(run.to, (i + 1) / pieces),
+            low: level.$1, high: level.$2));
+      }
+    }
+    return group;
+  }
+
+  tjs.Group _bumperPiece(Vec2 a, Vec2 b, {double low = 0, double high = 0}) {
+    final run = b - a;
     final length = run.length;
-    final mid = (wall.a + wall.b) * 0.5;
+    final mid = (a + b) * 0.5;
     const height = 0.62;
     const thickness = 0.44;
     final group = tjs.Group()
       ..name = 'bumper'
       ..rotation.y = -math.atan2(run.y, run.x)
-      ..position.setValues(mid.x, 0, mid.y);
+      ..position.setValues(mid.x, high, mid.y);
+    if (high - low > 0.01) {
+      group.add(tjs.Mesh(
+          _woodBox(length + thickness, high - low, thickness), _cliffMaterial)
+        ..name = 'bumper-step'
+        ..position.y = (low - high) / 2
+        ..castShadow = true
+        ..receiveShadow = true);
+    }
     final rubber =
         _matte(PuttPalette.comb.toARGB32() & 0xFFFFFF, roughness: 0.42);
     final body = tjs.Mesh(tjs.BoxGeometry(length, height, thickness), rubber)
@@ -1846,7 +2325,8 @@ Vec2 _centroid(List<Vec2> points) {
 /// its chords) crosses the step between two cells, and carried through the
 /// rabbit holes (an egg reaching one end comes out of the other). Water
 /// does not stop it - an island is still turf - and neither do rocks or
-/// bumpers standing free.
+/// bumpers standing free, nor ledges: both levels of a tier are the
+/// course.
 class _ReachGrid {
   _ReachGrid._(this.bounds, this.cell, this.cols, this.rows, this._reachable);
 
@@ -1874,7 +2354,8 @@ class _ReachGrid {
     final rows = math.max(1, (bounds.height / cell).ceil());
     final reachable = Uint8List(cols * rows);
     final segments = <(Vec2, Vec2)>[
-      for (final wall in hole.walls) (wall.a, wall.b),
+      for (final wall in hole.walls)
+        if (!wall.ledge) (wall.a, wall.b),
     ];
     for (final arc in hole.arcs) {
       if (arc.sweep >= 2 * math.pi - 0.01) continue; // a free-standing rock
@@ -1976,4 +2457,79 @@ bool _segmentsCross(Vec2 a, Vec2 b, Vec2 p, Vec2 q) {
   if (d3.abs() < 1e-12 && onSegment(a, b, p)) return true;
   if (d4.abs() < 1e-12 && onSegment(a, b, q)) return true;
   return false;
+}
+
+// ---- the tiers' pieces -------------------------------------------------------------
+
+/// A stretch of a wall at one level, or one that climbs: [low] and [high]
+/// are the tiers either side (the rail stands on [high], the step's face
+/// below it), or [profile] holds the levels sampled evenly along a climb
+/// (a ramp's side). [atStart] and [atEnd] say whether the stretch ends
+/// where the wall does (there the rail runs long to close the corner).
+class _WallRun {
+  _WallRun(this.from, this.to, this.low, this.high,
+      {this.profile = const [], this.atStart = true, this.atEnd = true});
+
+  final Vec2 from;
+  final Vec2 to;
+  final double low;
+  final double high;
+  final List<(double, double)> profile;
+  final bool atStart;
+  final bool atEnd;
+
+  bool get varying => profile.isNotEmpty;
+
+  /// On the green's own level, no step under it.
+  bool get flat => !varying && low.abs() < 1e-6 && high.abs() < 1e-6;
+}
+
+/// Quads poured into one plain geometry (positions, normals, UVs): the
+/// tiers' faces. Each quad's triangles are wound to face its normal; a
+/// quad with no normal faces up.
+class _QuadSink {
+  final List<double> _positions = [];
+  final List<double> _normals = [];
+  final List<double> _uvs = [];
+
+  bool get isEmpty => _positions.isEmpty;
+
+  void quad(List<(double, double, double)> corners, Vec2? out,
+      List<(double, double)> uv) {
+    final n = out == null ? (0.0, 1.0, 0.0) : (out.x, 0.0, out.y);
+    // Wind (0, 1, 2) to face n, else turn it round.
+    final (ax, ay, az) = corners[0];
+    final (bx, by, bz) = corners[1];
+    final (cx, cy, cz) = corners[2];
+    final ux = bx - ax, uy = by - ay, uz = bz - az;
+    final vx = cx - ax, vy = cy - ay, vz = cz - az;
+    final facing = (uy * vz - uz * vy) * n.$1 +
+        (uz * vx - ux * vz) * n.$2 +
+        (ux * vy - uy * vx) * n.$3;
+    final order =
+        facing >= 0 ? const [0, 1, 2, 0, 2, 3] : const [0, 2, 1, 0, 3, 2];
+    for (final k in order) {
+      final (x, y, z) = corners[k];
+      _positions.addAll([x, y, z]);
+      _normals.addAll([n.$1, n.$2, n.$3]);
+      _uvs.addAll([uv[k].$1, uv[k].$2]);
+    }
+  }
+
+  tjs.Mesh? mesh(String name, tjs.Material material) {
+    if (_positions.isEmpty) return null;
+    return tjs.Mesh(
+      tjs.BufferGeometry()
+        ..setAttributeFromString('position',
+            tjs.Float32BufferAttribute.fromList(_positions, 3, false))
+        ..setAttributeFromString(
+            'normal', tjs.Float32BufferAttribute.fromList(_normals, 3, false))
+        ..setAttributeFromString(
+            'uv', tjs.Float32BufferAttribute.fromList(_uvs, 2, false)),
+      material,
+    )
+      ..name = name
+      ..castShadow = true
+      ..receiveShadow = true;
+  }
 }

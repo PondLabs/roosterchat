@@ -819,20 +819,29 @@ class PuttWorld3D {
     final walls = makeKind('walls');
     final bumpers = makeKind('bumpers');
     for (final wall in hole.walls) {
+      // A ledge is no rail: its face is the tiers' step (see 'cliffs').
+      if (wall.ledge) continue;
       if (wall.bumper) {
         bumpers.add(kit.bumperRail(wall));
       } else {
         walls.add(kit.rail(wall.a, wall.b));
       }
     }
+    final cliffs = kit.cliffs();
+    if (cliffs != null) makeKind('cliffs').add(cliffs);
+    // What stands free on the green stands on the tier under it (a
+    // terrace's flat top lifts it whole).
     final arcs = makeKind('arcs');
     for (final arc in hole.arcs) {
       final built = kit.arc(arc);
+      if (arc.sweep >= 2 * math.pi - 0.01) {
+        built.position.y += _ground.at(arc.center);
+      }
       (arc.bumper ? bumpers : arcs).add(built);
     }
     final wells = makeKind('wells');
     for (final well in hole.wells) {
-      wells.add(kit.silo(well));
+      wells.add(kit.silo(well)..position.y += _ground.at(well.position));
     }
     final water = makeKind('water');
     for (final shape in hole.water) {
@@ -840,13 +849,16 @@ class PuttWorld3D {
     }
     final boosts = makeKind('boosts');
     for (final strip in hole.boosts) {
-      boosts.add(kit.boost(strip));
+      boosts.add(kit.boost(strip)
+        ..position.y += _ground.at((strip.from + strip.to) * 0.5));
     }
     final portals = makeKind('portals');
     for (var i = 0; i < hole.portals.length; i++) {
       final pair = hole.portals[i];
-      portals.add(kit.portal(pair.a, pair.radius, pairIndex: i, phase: 0));
-      portals.add(kit.portal(pair.b, pair.radius, pairIndex: i, phase: 1.6));
+      portals.add(kit.portal(pair.a, pair.radius, pairIndex: i, phase: 0)
+        ..position.y += _ground.at(pair.a));
+      portals.add(kit.portal(pair.b, pair.radius, pairIndex: i, phase: 1.6)
+        ..position.y += _ground.at(pair.b));
     }
     final boxes = makeKind('boxes');
     for (final box in hole.boxes) {

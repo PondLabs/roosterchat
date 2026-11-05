@@ -456,13 +456,14 @@ tjs.Mesh _inkOutline(tjs.Mesh mesh, double thickness) {
 final tjs.DataTexture _paperTexture = (_Bitmap(4, 4)..fill(0xFFFFFF)).texture();
 
 /// The green's relief as the actors stand on it: the current hole's hills
-/// (flat when it has none). Shared by the world and everything it moves.
+/// and tiers (flat when it has none). Shared by the world and everything
+/// it moves.
 class _Ground {
   HoleDef? _hole;
 
   set hole(HoleDef? hole) => _hole = hole;
 
-  bool get flat => _hole == null || _hole!.hills.isEmpty;
+  bool get flat => _hole == null || !_hole!.hasRelief;
 
   /// The ground's height under [point].
   double at(Vec2 point) => flat ? 0 : _hole!.groundHeightAt(point);

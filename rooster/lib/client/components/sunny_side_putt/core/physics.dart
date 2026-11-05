@@ -1,6 +1,11 @@
 // The deterministic physics of Sunny Side Putt: a fixed-timestep world of
-// eggs (circles) rolling among walls, arcs, bumpers, a walking hen, boost
-// strips, portals, gravity wells, water, "?" boxes and the nest.
+// eggs (circles) rolling among walls, arcs, bumpers, ledges, a walking hen,
+// boost strips, portals, gravity wells, water, "?" boxes and the nest, over
+// ground that pulls them down its slopes (hills, ramps).
+//
+// The world is planar: height exists only as the ground's gradient, which
+// pulls, and as ledges, one-way edges an egg rolls off from above and
+// bounces off from below. A terrace's level top rolls like the flat.
 //
 // Determinism contract:
 //   * Time advances only in whole ticks of [PhysicsConfig.dt] (1/120 s) via
@@ -91,6 +96,13 @@ class PhysicsConfig {
   /// [frictionDeceleration] it rolls back down; under it, it can rest.
   final double slopeGravity;
 
+  /// The least pace (units/s) an egg leaves a ledge's lip with, away from
+  /// the face: one that rolls over slower is carried off at this pace (the
+  /// rest of its motion kept), the fall taking it clear of the face so it
+  /// never comes to rest inside the step. Enough to coast past an egg's
+  /// radius against [frictionDeceleration].
+  final double ledgeDropSpeed;
+
   const PhysicsConfig({
     this.dt = 1 / 120,
     this.ballRadius = 0.45,
@@ -108,6 +120,7 @@ class PhysicsConfig {
     this.magnetRange = 3.5,
     this.magnetStrength = 26,
     this.slopeGravity = 24,
+    this.ledgeDropSpeed = 3.2,
   });
 }
 
@@ -224,6 +237,15 @@ class BallSwallowed extends PhysicsEvent {
   final Vec2 at;
 
   const BallSwallowed({required this.playerId, required this.at});
+}
+
+/// Rolled off a ledge's lip: the egg drops to the tier below (the view
+/// draws the fall).
+class BallDropped extends PhysicsEvent {
+  final String playerId;
+  final Vec2 at;
+
+  const BallDropped({required this.playerId, required this.at});
 }
 
 /// Out of the hole's bounds: same treatment as water.
@@ -504,14 +526,14 @@ class PhysicsWorld {
     return v * (config.maxSpeed / speed);
   }
 
-  /// Acceleration from gravity wells, hills and the magnet flag.
+  /// Acceleration from gravity wells, hills, ramps and the magnet flag.
   Vec2 _accelOn(BallBody ball) {
     var accel = Vec2.zero;
     for (final well in hole.wells) {
       final pull = well.pullOn(ball.position);
       if (pull != null) accel += pull;
     }
-    if (hole.hills.isNotEmpty) {
+    if (hole.hasRelief) {
       accel -= hole.groundGradientAt(ball.position) * config.slopeGravity;
     }
     if (ball.flagActive(PowerUpFlag.magnet, _tick)) {
@@ -533,7 +555,8 @@ class PhysicsWorld {
 
   /// The pull an egg at rest would have to resist: [_accelOn] minus the
   /// part a wall or rock it touches pushes back (an egg rolled down a
-  /// slope into a rail rests against it instead of rattling there).
+  /// slope into a rail rests against it instead of rattling there). A
+  /// ledge holds an egg only from below: from above it is the drop.
   Vec2 _restingPull(BallBody ball) {
     var accel = _accelOn(ball);
     if (accel == Vec2.zero) return accel;
@@ -545,6 +568,9 @@ class PhysicsWorld {
     }
 
     for (final wall in hole.walls) {
+      if (wall.ledge && _ledgeSide(ball.position, wall.a, wall.b) <= 0) {
+        continue;
+      }
       final closest = _closestPointOnSegment(ball.position, wall.a, wall.b);
       final offset = ball.position - closest;
       final distance = offset.length;
@@ -568,7 +594,9 @@ class PhysicsWorld {
   }
 
   /// Moves an egg through the rest of its tick with swept collisions
-  /// against walls, arcs and the hen; reflects at each hit.
+  /// against walls, arcs and the hen; reflects at each hit. A ledge
+  /// stops an egg only from below; rolled over from above, it drops the
+  /// egg to the tier below.
   void _integrate(BallBody ball, List<_ObstacleSweep> hens) {
     final radius = config.ballRadius;
     final ghost = ball.flagActive(PowerUpFlag.ghost, _tick);
@@ -588,8 +616,9 @@ class PhysicsWorld {
       if (!ghost) {
         for (final wall in hole.walls) {
           if (!moving) break;
-          final hit =
-              _sweepCapsule(ball.position, delta, radius, wall.a, wall.b);
+          final hit = wall.ledge
+              ? _sweepLedge(ball.position, delta, radius, wall.a, wall.b)
+              : _sweepCapsule(ball.position, delta, radius, wall.a, wall.b);
           if (hit == null) continue;
           if (best == null || hit.$1 < best.t) {
             best = _SweepHit(
@@ -633,6 +662,22 @@ class PhysicsWorld {
           }
         }
       }
+      // The first lip the egg's centre rolls over, from the high side, if
+      // that comes before anything it would hit: a fall is gravity, so a
+      // ghost egg drops too.
+      for (final wall in hole.walls) {
+        if (!moving) break;
+        if (!wall.ledge) continue;
+        final t = _ledgeCrossing(ball.position, delta, wall.a, wall.b);
+        if (t == null || (best != null && best.t <= t)) continue;
+        best = _SweepHit(
+          t: t,
+          normal: _lowSideOf(wall.a, wall.b),
+          restitution: 0,
+          kind: BounceKind.wall,
+          drop: true,
+        );
+      }
 
       if (best == null) {
         ball.position = ball.position + delta;
@@ -642,10 +687,27 @@ class PhysicsWorld {
       ball.position = ball.position + delta * best.t;
       ball.position = ball.position + best.normal * 1e-6;
       ball.asleep = false;
-      _reflectAtSurface(ball, best);
+      if (best.drop) {
+        _dropOff(ball, best.normal);
+      } else {
+        _reflectAtSurface(ball, best);
+      }
       fraction = (fraction + best.t * remainingFraction + 1e-9).clamp(0.0, 1.0);
       bounces++;
     }
+  }
+
+  /// An egg rolling over a ledge's lip falls to the low side, carried
+  /// clear of the face: its pace away from the ledge ([lowSide]) is raised
+  /// to at least [PhysicsConfig.ledgeDropSpeed], the rest of its motion
+  /// kept.
+  void _dropOff(BallBody ball, Vec2 lowSide) {
+    final away = ball.velocity.dot(lowSide);
+    if (away < config.ledgeDropSpeed) {
+      ball.velocity =
+          _clamped(ball.velocity + lowSide * (config.ledgeDropSpeed - away));
+    }
+    _events.add(BallDropped(playerId: ball.playerId, at: ball.position));
   }
 
   /// Bounces an egg off the surface [hit]: in a moving surface's frame,
@@ -677,7 +739,9 @@ class PhysicsWorld {
       var moved = false;
       if (!ghost) {
         for (final wall in hole.walls) {
-          moved |= _pushFromCapsule(ball, wall.a, wall.b, radius);
+          moved |= wall.ledge
+              ? _pushFromLedge(ball, wall.a, wall.b, radius)
+              : _pushFromCapsule(ball, wall.a, wall.b, radius);
         }
         for (final arc in hole.arcs) {
           moved |= _pushFromArc(ball, arc, radius);
@@ -706,6 +770,15 @@ class PhysicsWorld {
     if (distance >= radius || distance < Vec2.epsilon) return false;
     ball.position = closest + offset * (radius / distance);
     return true;
+  }
+
+  /// A ledge's face pushes out only an egg below it that is not on its way
+  /// out: one on the high side hangs over the lip, one that has just
+  /// dropped is leaving the face.
+  bool _pushFromLedge(BallBody ball, Vec2 a, Vec2 b, double radius) {
+    if (_ledgeSide(ball.position, a, b) <= 0) return false;
+    if (ball.velocity.dot(_lowSideOf(a, b)) > 0) return false;
+    return _pushFromCapsule(ball, a, b, radius);
   }
 
   bool _pushFromArc(BallBody ball, WallArc arc, double radius) {
@@ -889,6 +962,7 @@ class PhysicsWorld {
 
   void _ballVsBalls() {
     final list = balls;
+    final tiered = hole.terraces.isNotEmpty || hole.ramps.isNotEmpty;
     for (var i = 0; i < list.length; i++) {
       for (var j = i + 1; j < list.length; j++) {
         final a = list[i];
@@ -898,6 +972,14 @@ class PhysicsWorld {
         final distance = offset.length;
         final min = config.ballRadius * 2;
         if (distance >= min) continue;
+        // Eggs a step apart (one on a lip, one at the face's foot below)
+        // pass over and under each other.
+        if (tiered &&
+            (hole.tierHeightAt(a.position) - hole.tierHeightAt(b.position))
+                    .abs() >
+                config.ballRadius) {
+          continue;
+        }
         final normal = distance < Vec2.epsilon
             ? const Vec2(0, -1)
             : offset * (1 / distance);
@@ -997,12 +1079,17 @@ class _SweepHit {
   /// The surface's own velocity (the hen); zero for static geometry.
   final Vec2 surfaceVelocity;
 
+  /// Not a hit but a fall: the egg's centre rolls over a ledge's lip
+  /// here, [normal] pointing to the low side.
+  final bool drop;
+
   const _SweepHit({
     required this.t,
     required this.normal,
     required this.restitution,
     required this.kind,
     this.surfaceVelocity = Vec2.zero,
+    this.drop = false,
   });
 }
 
@@ -1159,6 +1246,72 @@ Vec2 _closestPointOnSegment(Vec2 p, Vec2 a, Vec2 b) {
     }
   }
   return best;
+}
+
+/// The unit normal of the ledge [a]-[b] pointing to its low side: the
+/// right of a->b as drawn (its high side is the left).
+Vec2 _lowSideOf(Vec2 a, Vec2 b) {
+  final u = b - a;
+  return Vec2(-u.y, u.x).normalized();
+}
+
+/// The signed distance from the ledge [a]-[b]'s line to [p]: positive on
+/// its low side, negative on its high side.
+double _ledgeSide(Vec2 p, Vec2 a, Vec2 b) => (p - a).dot(_lowSideOf(a, b));
+
+/// Swept circle (start [p], displacement [d], radius [radius]) against a
+/// ledge: only the face on its low side stops an egg, met heading up into
+/// it, and the ledge's two ends for an egg below it - from the high side
+/// it is a lip to roll over (see [_ledgeCrossing]). Same returns as
+/// [_sweepCapsule].
+(double, Vec2)? _sweepLedge(Vec2 p, Vec2 d, double radius, Vec2 a, Vec2 b) {
+  final u = b - a;
+  final l2 = u.dot(u);
+  if (l2 < 1e-12) return null;
+  final n = Vec2(-u.y, u.x) * (1 / math.sqrt(l2)); // to the low side
+  (double, Vec2)? best;
+
+  void consider((double, Vec2)? hit) {
+    if (hit == null || hit.$1 <= 1e-9 || hit.$1 > 1) return;
+    if (best == null || hit.$1 < best!.$1) best = hit;
+  }
+
+  // The face, [radius] off the line on the low side.
+  final dist0 = (p - a).dot(n);
+  final dn = d.dot(n);
+  if (dist0 > radius && dn < -1e-12) {
+    final t = (radius - dist0) / dn;
+    if (t > 1e-9 && t <= 1) {
+      final s = (p + d * t - a).dot(u) / l2;
+      if (s >= -1e-9 && s <= 1 + 1e-9) consider((t, n));
+    }
+  }
+  // The ends, met from below.
+  for (final end in [a, b]) {
+    final hit = sweepSphere(p - end, d, radius);
+    if (hit == null) continue;
+    if ((p + d * hit.$1 - a).dot(n) <= 0) continue;
+    consider(hit);
+  }
+  return best;
+}
+
+/// Where the centre of an egg moving from [p] by [d] rolls over the
+/// ledge [a]-[b] from its high side to its low side, as a fraction of
+/// [d] in (0, 1], or null when it does not.
+double? _ledgeCrossing(Vec2 p, Vec2 d, Vec2 a, Vec2 b) {
+  final u = b - a;
+  final l2 = u.dot(u);
+  if (l2 < 1e-12) return null;
+  final n = Vec2(-u.y, u.x) * (1 / math.sqrt(l2)); // to the low side
+  final dist0 = (p - a).dot(n);
+  final dn = d.dot(n);
+  if (dist0 >= 0 || dn <= 1e-12) return null;
+  final t = -dist0 / dn;
+  if (t <= 1e-9 || t > 1) return null;
+  final s = (p + d * t - a).dot(u) / l2;
+  if (s < 0 || s > 1) return null;
+  return t;
 }
 
 /// Swept circle vs a [WallArc] (a zero-thickness curve the egg can touch

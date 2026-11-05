@@ -23,9 +23,10 @@ class SunnySidePuttHole {
 /// The baseline hit: launches from [from] toward [to] and arrives at `to`
 /// moving [arrival] units/s (under [PhysicsConfig.captureSpeed] this gets
 /// captured by a nest centered on `to`). [rise] is how much higher `to`
-/// stands than [from] - a nest up on a plateau, or below in a dip with a
-/// negative rise: the stroke carries the climb's pace too, for a putt
-/// straight up (or down) the slope.
+/// stands than [from] - a nest up on a plateau or up a ramp on a terrace,
+/// or below in a dip with a negative rise: the stroke carries the climb's
+/// pace too, for a putt straight up (or down) the slope. A drop off a
+/// ledge gives no pace back: leave it out of [rise].
 ReferenceShot putt(Vec2 from, Vec2 to,
     {double arrival = 0.6, double rise = 0}) {
   final distance = from.distanceTo(to);
@@ -94,6 +95,23 @@ List<WallSegment> polyline(List<Vec2> points,
     for (var i = 0; i < points.length - (closed ? 0 : 1); i++)
       WallSegment(points[i], points[(i + 1) % points.length], bumper: bumper),
   ];
+}
+
+/// Ledges along a chain of [points], joined in order: the drop side of a
+/// tier, its high ground on the left of each piece as drawn (walk the
+/// chain the way the terrace's counter-clockwise outline runs).
+List<WallSegment> ledges(List<Vec2> points) {
+  return [
+    for (var i = 0; i < points.length - 1; i++)
+      WallSegment.ledge(points[i], points[i + 1]),
+  ];
+}
+
+/// The rails along both sides of [ramp], foot to top: an egg climbing it
+/// stays on it, and none comes onto it from the side.
+List<WallSegment> rampRails(Ramp ramp) {
+  final (left, right) = ramp.sides;
+  return [WallSegment(left.$1, left.$2), WallSegment(right.$1, right.$2)];
 }
 
 /// The points of a bend: the circle at [center] with [radius] from

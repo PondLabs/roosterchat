@@ -429,13 +429,16 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
   }
 
   /// Whether an egg can roll the straight line [a]-[b] without meeting a
-  /// wall of [hole]: the centre line and both of the egg's edges clear.
+  /// wall of [hole]: the centre line and both of the egg's edges clear. A
+  /// ledge stops the line only from below; from above, it rolls off.
   bool _clearLine(HoleDef hole, Vec2 a, Vec2 b) {
     final along = (b - a).normalized(const Vec2(1, 0));
     final side = Vec2(-along.y, along.x) * 0.5;
     final lanes = [(a, b), (a + side, b + side), (a - side, b - side)];
     final walls = <(Vec2, Vec2)>[
-      for (final wall in hole.walls) (wall.a, wall.b),
+      for (final wall in hole.walls)
+        if (!wall.ledge || (a - wall.a).dot(wall.highSide) <= 0)
+          (wall.a, wall.b),
       // Arcs as their chords.
       for (final arc in hole.arcs)
         for (var i = 0; i < 16; i++)
@@ -572,9 +575,10 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
         final shot = putt(ball.position, target, arrival: last ? 1.4 : 0.7);
         final spread = 0.16 / (shots + 1);
         final angle = shot.angle + (_random.nextDouble() * 2 - 1) * spread;
-        // Hills and silos bend and stop a roll the flat math cannot see:
-        // there the bot reads the green by running the engine ahead.
-        final reads = hole.hills.isNotEmpty || hole.wells.isNotEmpty;
+        // Hills, ramps, drops and silos bend and stop a roll the flat math
+        // cannot see: there the bot reads the green by running the engine
+        // ahead.
+        final reads = hole.hasRelief || hole.wells.isNotEmpty;
         final base = reads
             ? _readPower(hole, ball.playerId, angle, target, shot.power)
             : shot.power;

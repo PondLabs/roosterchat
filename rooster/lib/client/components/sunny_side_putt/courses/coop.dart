@@ -17,12 +17,26 @@ final List<SunnySidePuttHole> theCoopHoles = [
 ];
 
 // -- hole 1: First Light ------------------------------------------------------
-// Two yards and the coop door between them; a hen paces the far yard, so
-// the straight putt is a question of when.
+// Two yards and the coop door between them. The tee's yard is the coop's
+// raised floor: the putt drops off its step through the door into the
+// run, where a hen paces, so the straight putt is a question of when. An
+// egg the hen knocks back meets the step's face and stays in the run.
 
 const Vec2 _coop1Tee = Vec2(7, 12);
 const Vec2 _coop1Nest = Vec2(37, 10);
 const Rect _coop1Bounds = Rect(Vec2.zero, Vec2(44, 24));
+
+/// The coop's floor: the tee's yard, up to the doorway's mouth.
+const Terrace _coop1Floor = Terrace([
+  Vec2(12, 0),
+  Vec2(6, 0),
+  Vec2(0, 6),
+  Vec2(0, 18),
+  Vec2(6, 24),
+  Vec2(12, 24),
+  Vec2(19, 15.5),
+  Vec2(19, 8.5),
+], height: 1);
 
 HoleDef _firstLight() {
   return HoleDef(
@@ -41,7 +55,10 @@ HoleDef _firstLight() {
       // the coop door: boards slanting in to a doorway seven wide
       ...polyline([Vec2(12, 0), Vec2(19, 8.5), Vec2(25, 8.5), Vec2(32, 0)]),
       ...polyline([Vec2(12, 24), Vec2(19, 15.5), Vec2(25, 15.5), Vec2(32, 24)]),
+      // the floor's step down, across the doorway's mouth
+      WallSegment.ledge(Vec2(19, 15.5), Vec2(19, 8.5)),
     ],
+    terraces: const [_coop1Floor],
     obstacles: const [
       MovingObstacle(
         id: 'coop_1_hen',

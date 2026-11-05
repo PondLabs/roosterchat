@@ -3,7 +3,9 @@
 // green bounded by [HoleDef.bounds], with walls (straight [WallSegment]s and
 // curved [WallArc]s), sensors (water, boost strips, portals, gravity wells,
 // "?" boxes), the nest to sink the egg into, optional moving obstacles (the
-// hen) and decorations the physics ignores.
+// hen), the ground's relief (hills, and tiers: [Terrace]s, the [Ramp]s up
+// to them and the ledges they drop off) and decorations the physics
+// ignores.
 //
 // Coordinates match the screen: x grows right, y grows down; angles are
 // `atan2(y, x)`, so a positive angle turns clockwise as drawn. Units are
@@ -20,16 +22,37 @@ import 'vec.dart';
 /// One straight wall piece. Restitution null means the hole's default wall
 /// bounce ([PhysicsConfig.wallRestitution]); a bumper sets its own high
 /// restitution instead ([PhysicsConfig.bumperRestitution]).
+///
+/// A [ledge] is not a rail but the drop side of a tier (a [Terrace], or a
+/// [Ramp]'s side): a one-way edge. Its high side is on the LEFT of a->b as
+/// drawn - walking from [a] to [b] on the screen (x right, y down), the high
+/// ground is on your left hand, the side `Vec2(d.y, -d.x)` points to for
+/// `d = b - a` (see [highSide]). A terrace's outline runs counter-clockwise
+/// as drawn, so a ledge along one of its edges runs the outline's way. An
+/// egg crossing from the high side to the low side passes and falls (the
+/// physics carries it clear of the face, see
+/// [PhysicsConfig.ledgeDropSpeed]); an egg coming from the low side bounces
+/// off the face like off a rail, with the wall's restitution.
 class WallSegment {
   final Vec2 a;
   final Vec2 b;
   final double? restitution;
   final bool bumper;
+  final bool ledge;
 
-  const WallSegment(this.a, this.b, {this.restitution, this.bumper = false});
+  const WallSegment(this.a, this.b,
+      {this.restitution, this.bumper = false, this.ledge = false});
 
   /// A bumper wall: bounces eggs away with extra energy.
   factory WallSegment.bumper(Vec2 a, Vec2 b) => WallSegment(a, b, bumper: true);
+
+  /// A ledge: the drop along a tier's edge, its high side on the left of
+  /// [a]->[b] as drawn (see the class docs).
+  factory WallSegment.ledge(Vec2 a, Vec2 b) => WallSegment(a, b, ledge: true);
+
+  /// The unit normal pointing to the left of a->b as drawn: a ledge's high
+  /// side.
+  Vec2 get highSide => Vec2(b.y - a.y, a.x - b.x).normalized();
 
   double restitutionOr(double fallback) => restitution ?? fallback;
 }
@@ -278,6 +301,166 @@ class Hill {
   }
 }
 
+/// A raised tier: the ground inside [points] stands flat at [height] over
+/// the green's level - a hayloft, a raised yard, a road on its bank.
+/// Heights run positive (the authoring range is 0.5 to 1.6); a dip below
+/// the green is the green raised round it.
+///
+/// The outline is a simple polygon wound counter-clockwise as drawn (x
+/// right, y down): walking it in order, the terrace lies on your left, so
+/// a [WallSegment.ledge] along one of its edges runs the outline's way.
+///
+/// The physics knows no height: on a terrace an egg rolls as on the flat,
+/// and what the step does comes from what covers its edges - a
+/// [WallSegment.ledge] where it drops away (an egg rolls off it, one below
+/// bounces off its face), an ordinary wall where it is railed, a [Ramp]'s
+/// top where the way up arrives, the green's fence along its bounds. The
+/// course test checks that every edge is covered.
+class Terrace {
+  final List<Vec2> points;
+  final double height;
+
+  const Terrace(this.points, {required this.height});
+
+  /// Whether [point] is inside the outline (ray casting, so a point on an
+  /// edge may fall either way; the ground agrees there wherever a ramp
+  /// meets it, and a ledge or a rail stands everywhere else).
+  bool contains(Vec2 point) {
+    var inside = false;
+    for (var i = 0, j = points.length - 1; i < points.length; j = i++) {
+      final a = points[i];
+      final b = points[j];
+      final intersects = (a.y > point.y) != (b.y > point.y) &&
+          point.x < (b.x - a.x) * (point.y - a.y) / (b.y - a.y) + a.x;
+      if (intersects) inside = !inside;
+    }
+    return inside;
+  }
+
+  /// The ground's height at [point] from this terrace: [height] inside, 0
+  /// off it.
+  double heightAt(Vec2 point) => contains(point) ? height : 0;
+
+  /// The edge from point [index] to the next one (round to the first).
+  (Vec2, Vec2) edge(int index) =>
+      (points[index], points[(index + 1) % points.length]);
+
+  /// Twice the outline's signed area by the shoelace sum in the screen's
+  /// coordinates: negative for the counter-clockwise (as drawn) outline a
+  /// terrace takes.
+  double get signedArea2 {
+    var sum = 0.0;
+    for (var i = 0; i < points.length; i++) {
+      final a = points[i];
+      final b = points[(i + 1) % points.length];
+      sum += a.x * b.y - b.x * a.y;
+    }
+    return sum;
+  }
+}
+
+/// A ramp: the way up a tier. A rectangle [width] wide round the line from
+/// [from], at the green's level, to [to], on a terrace's edge at [height]:
+/// the ground rises along it on the smooth step `height * t^2 * (3 - 2t)`,
+/// `t` running 0 at [from] to 1 at [to] - level at both ends, so there is
+/// no kink where it leaves the green or meets the terrace, and steepest
+/// halfway, where the grade is `1.5 * height / length`. Across it the
+/// ground is level; off the rectangle it adds nothing.
+///
+/// An egg on it feels the pull downhill as on a hill's slope: one too slow
+/// for the climb rolls back down. Its sides are a step, which the author
+/// rails (or ledges, the ramp the high side); its foot and its top are
+/// open. Only + - * / go into its pull, so every platform rolls alike.
+class Ramp {
+  final Vec2 from;
+  final Vec2 to;
+  final double width;
+  final double height;
+
+  const Ramp(this.from, this.to, {required this.width, required this.height});
+
+  double get length => from.distanceTo(to);
+
+  /// Where [point] sits along the ramp: 0 at [from], 1 at [to] (not
+  /// clamped), or null when it is off the rectangle's width or the axis
+  /// is degenerate.
+  double? _along(Vec2 point) {
+    final axis = to - from;
+    final lengthSq = axis.dot(axis);
+    if (lengthSq < Vec2.epsilon) return null;
+    final offset = point - from;
+    final across = offset.cross(axis);
+    // |across| / |axis| is the distance off the axis.
+    if (across * across > width * width * 0.25 * lengthSq) return null;
+    return offset.dot(axis) / lengthSq;
+  }
+
+  /// Whether [point] is on the ramp's rectangle.
+  bool covers(Vec2 point) {
+    final t = _along(point);
+    return t != null && t >= 0 && t <= 1;
+  }
+
+  /// The ground's height at [point] from this ramp (0 off it).
+  double heightAt(Vec2 point) {
+    final t = _along(point);
+    if (t == null || t < 0 || t > 1) return 0;
+    return height * t * t * (3 - 2 * t);
+  }
+
+  /// The ground's gradient at [point] from this ramp: the rise per unit,
+  /// pointing up the ramp. Zero at both ends and off it.
+  Vec2 gradientAt(Vec2 point) {
+    final t = _along(point);
+    if (t == null || t < 0 || t > 1) return Vec2.zero;
+    final axis = to - from;
+    return axis * (6 * height * t * (1 - t) / axis.dot(axis));
+  }
+
+  /// The height of the ramp's profile at [point]'s place along it, the
+  /// width ignored and the ends held: the view lays the turf of a piece
+  /// that is on the ramp by it, so the ramp's side stays a crisp step.
+  double profileAt(Vec2 point) {
+    final axis = to - from;
+    final lengthSq = axis.dot(axis);
+    if (lengthSq < Vec2.epsilon) return 0;
+    final t = ((point - from).dot(axis) / lengthSq).clamp(0.0, 1.0);
+    return height * t * t * (3 - 2 * t);
+  }
+
+  /// [profileAt]'s gradient: up the ramp, zero past its ends.
+  Vec2 profileGradientAt(Vec2 point) {
+    final axis = to - from;
+    final lengthSq = axis.dot(axis);
+    if (lengthSq < Vec2.epsilon) return Vec2.zero;
+    final t = (point - from).dot(axis) / lengthSq;
+    if (t <= 0 || t >= 1) return Vec2.zero;
+    return axis * (6 * height * t * (1 - t) / lengthSq);
+  }
+
+  /// The unit vector across the ramp, to the left of [from]->[to] as
+  /// drawn.
+  Vec2 get _leftward {
+    final axis = (to - from).normalized(const Vec2(1, 0));
+    return Vec2(axis.y, -axis.x);
+  }
+
+  /// The ramp's two sides, each from the foot to the top: the left one
+  /// (as drawn, walking up the ramp) first. The ramp is on the right of
+  /// the left side and on the left of the right side.
+  ((Vec2, Vec2), (Vec2, Vec2)) get sides {
+    final half = _leftward * (width / 2);
+    return ((from + half, to + half), (from - half, to - half));
+  }
+
+  /// The ramp's top end, on the terrace's edge: from its left corner to
+  /// its right one.
+  (Vec2, Vec2) get top {
+    final half = _leftward * (width / 2);
+    return (to + half, to - half);
+  }
+}
+
 /// A "?" egg-carton block: an egg reaching it picks up a power-up. The box
 /// disappears for the rest of the hole once collected.
 class QuestionBox {
@@ -329,6 +512,12 @@ class HoleDef {
   /// dead-flat green.
   final List<Hill> hills;
 
+  /// The raised tiers and the ramps up to them (their drops are the
+  /// [WallSegment.ledge]s among [walls]). Empty keeps the green on one
+  /// level.
+  final List<Terrace> terraces;
+  final List<Ramp> ramps;
+
   /// Rolling deceleration override for this hole's surface (units/s^2);
   /// null uses [PhysicsConfig.frictionDeceleration].
   final double? friction;
@@ -349,26 +538,60 @@ class HoleDef {
     this.boxes = const [],
     this.decorations = const [],
     this.hills = const [],
+    this.terraces = const [],
+    this.ramps = const [],
     this.friction,
   });
 
-  /// The ground's height at [point]: the hills summed (0 on flat green).
+  /// Whether the ground leaves the flat anywhere (hills or tiers).
+  bool get hasRelief =>
+      hills.isNotEmpty || terraces.isNotEmpty || ramps.isNotEmpty;
+
+  /// The ground's height at [point]: the hills summed, on the tier under
+  /// it (0 on flat green).
   double groundHeightAt(Vec2 point) {
     var height = 0.0;
     for (final hill in hills) {
       height += hill.heightAt(point);
     }
-    return height;
+    return height + tierHeightAt(point);
   }
 
   /// The ground's gradient at [point] (rise per unit, pointing uphill):
-  /// the hills summed. An egg feels the pull against it.
+  /// the hills summed, plus the ramp under it. An egg feels the pull
+  /// against it.
   Vec2 groundGradientAt(Vec2 point) {
     var gradient = Vec2.zero;
     for (final hill in hills) {
       gradient += hill.gradientAt(point);
     }
-    return gradient;
+    return gradient + _tierAt(point).$2;
+  }
+
+  /// The tiers' height at [point]: the highest terrace or ramp holding it,
+  /// 0 off them all. Tiers never overlap - a ramp meets its terrace along
+  /// its top, where the two agree - so the highest is the one underfoot.
+  double tierHeightAt(Vec2 point) => _tierAt(point).$1;
+
+  /// The tier under [point]: its height and its gradient (a terrace is
+  /// level, a ramp slopes up its axis).
+  (double, Vec2) _tierAt(Vec2 point) {
+    var height = 0.0;
+    var gradient = Vec2.zero;
+    for (final terrace in terraces) {
+      if (terrace.height > height && terrace.contains(point)) {
+        height = terrace.height;
+        gradient = Vec2.zero;
+      }
+    }
+    for (final ramp in ramps) {
+      final rise = ramp.heightAt(point);
+      if (rise > height) {
+        height = rise;
+        gradient = ramp.gradientAt(point);
+      }
+    }
+    return (height, gradient);
   }
 }
 

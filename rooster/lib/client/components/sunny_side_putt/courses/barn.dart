@@ -240,16 +240,31 @@ ReferenceSolution _slingshotSolution() {
 // -- hole 6: Threshing Floor --------------------------------------------------
 // The finale, the whole barn: two silos pulling at the road along the
 // floor, bales to bank off, kickers in the corners, and the nest up in
-// the hayloft, a raised floor in the far corner walled in by rubber, its
-// only gate on the south side behind a bale. A putt up to the loft that
-// comes up short rolls back down towards the gate.
+// the hayloft, a raised floor in the far corner walled in by rubber on the
+// west, its front a drop to the threshing floor with a ramp up it behind
+// a bale. A putt up the ramp that comes up short rolls back down; one
+// that runs on past the nest comes back off the barn's wall and drops off
+// the loft's front, or down the ramp.
 
 const Vec2 _barn6Tee = Vec2(7, 25);
 const Vec2 _barn6Nest = Vec2(48, 7);
 const Rect _barn6Bounds = Rect(Vec2.zero, Vec2(56, 32));
 
 /// How high the hayloft stands.
-const double _barn6Loft = 1;
+const double _barn6Loft = 1.2;
+
+/// The hayloft: the barn's far corner, behind its corner kicker.
+const Terrace _barn6Hayloft = Terrace([
+  Vec2(40, 0),
+  Vec2(40, 14),
+  Vec2(56, 14),
+  Vec2(56, 6),
+  Vec2(50, 0),
+], height: _barn6Loft);
+
+/// The ramp up to the loft, out from the middle of its front.
+const Ramp _barn6Ramp =
+    Ramp(Vec2(47, 18.5), Vec2(47, 14), width: 6, height: _barn6Loft);
 
 HoleDef _threshingFloor() {
   return HoleDef(
@@ -261,37 +276,37 @@ HoleDef _threshingFloor() {
     walls: [
       ...fenceAround(_barn6Bounds),
       ...cornerBoards(_barn6Bounds, 6, bumper: true),
-      // the rubber round the nest's corner, the gate in its south side
+      // the rubber along the loft's west side
       WallSegment.bumper(Vec2(40, 0), Vec2(40, 14)),
-      WallSegment.bumper(Vec2(40, 14), Vec2(44, 14)),
-      WallSegment.bumper(Vec2(50, 14), Vec2(56, 14)),
+      // the loft's front, a drop either side of the ramp, and the ramp's
+      // side boards
+      ...ledges([Vec2(40, 14), Vec2(44, 14)]),
+      ...ledges([Vec2(50, 14), Vec2(56, 14)]),
+      ...rampRails(_barn6Ramp),
     ],
     arcs: [
       rock(const Vec2(14, 12), 1.8),
       rock(const Vec2(25, 5), 1.6),
       rock(const Vec2(28, 27), 1.6),
-      rock(const Vec2(47, 21), 1.6),
+      rock(const Vec2(47, 22.5), 1.6),
     ],
     wells: [
       GravityWell(Vec2(20, 17), radius: 6, strength: 26, captureRadius: 1.4),
       GravityWell(Vec2(36, 21), radius: 6, strength: 26, captureRadius: 1.4),
     ],
     boxes: [QuestionBox('barn_6_box', Vec2(28, 13))],
-    // the hayloft, the nest in the middle of its floor
-    hills: const [
-      Hill.mound(_barn6Nest, height: _barn6Loft, top: 2.4, skirt: 2.6),
-    ],
+    terraces: const [_barn6Hayloft],
+    ramps: const [_barn6Ramp],
   );
 }
 
-// Found by a sweep, both shots holding for nearby aims: along the floor
-// between the silos to the bale before the gate; up through the gate to
-// the loft's foot; then a putt up to the loft and in.
+// Found by a sweep, and it holds for nearby aims: along the floor between
+// the silos, round the bale and into the ramp's foot; then a putt up the
+// ramp to the loft and in.
 ReferenceSolution _threshingFloorSolution() {
-  const inTheCorner = Vec2(43.99, 10.40);
+  const atTheRampsFoot = Vec2(48.61, 18.21);
   return ReferenceSolution([
-    const ReferenceShot(-0.046, 0.918),
-    const ReferenceShot(-1.708, 0.418),
-    putt(inTheCorner, _barn6Nest, arrival: 2.2, rise: _barn6Loft),
+    const ReferenceShot(-0.068, 0.940),
+    putt(atTheRampsFoot, _barn6Nest, arrival: 2.2, rise: _barn6Loft),
   ]);
 }

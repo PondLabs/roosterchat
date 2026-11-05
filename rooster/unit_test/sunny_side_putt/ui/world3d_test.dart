@@ -564,6 +564,169 @@ void main() {
     });
   });
 
+  group('tiers', () {
+    // A terrace down the west side (its east edge a ledge), the floor, and
+    // a railed ramp up to a higher terrace in the east (ledged either side
+    // of the ramp's top) with the nest on it.
+    HoleDef tiered() => HoleDef(
+          id: 'tiered',
+          par: 3,
+          tee: const Vec2(4, 10),
+          nest: Nest(const Vec2(26, 10), 0.9),
+          bounds: Rect(Vec2.zero, Vec2(30, 20)),
+          walls: [
+            WallSegment(Vec2.zero, Vec2(30, 0)),
+            WallSegment(Vec2(30, 0), Vec2(30, 20)),
+            WallSegment(Vec2(30, 20), Vec2(0, 20)),
+            WallSegment(Vec2(0, 20), Vec2.zero),
+            WallSegment.ledge(const Vec2(10, 20), const Vec2(10, 0)),
+            WallSegment(Vec2(16, 8), Vec2(20, 8)),
+            WallSegment(Vec2(16, 12), Vec2(20, 12)),
+            WallSegment.ledge(const Vec2(20, 0), const Vec2(20, 8)),
+            WallSegment.ledge(const Vec2(20, 12), const Vec2(20, 20)),
+          ],
+          terraces: const [
+            Terrace([Vec2(0, 0), Vec2(0, 20), Vec2(10, 20), Vec2(10, 0)],
+                height: 1),
+            Terrace([Vec2(20, 0), Vec2(20, 20), Vec2(30, 20), Vec2(30, 0)],
+                height: 1.2),
+          ],
+          ramps: const [
+            Ramp(Vec2(16, 10), Vec2(20, 10), width: 4, height: 1.2),
+          ],
+        );
+    const stand = 0.45 * 1.2 * 1.28;
+
+    test('the turf stands on the terraces and steps off them crisply', () {
+      final world = PuttWorld3D(viewport: const ui.Size(800, 600));
+      addTearDown(world.dispose);
+      world.buildHole(tiered(), eggRadius: 0.45);
+      final lawn = world.holeGroup('ground')!.children.single as tjs.Mesh;
+      final position = lawn.geometry!.attributes['position'];
+      var onTheLip = 0;
+      var atTheFoot = 0;
+      for (var i = 0; i < position.count; i++) {
+        final x = position.getX(i)!.toDouble();
+        final y = position.getY(i)!.toDouble();
+        final z = position.getZ(i)!.toDouble();
+        if (z < 1 || z > 19) continue;
+        if (x < 9.9) expect(y, closeTo(1, 1e-6), reason: 'on the terrace');
+        if (x > 10.1 && x < 15.9) expect(y, closeTo(0, 1e-6));
+        if (x > 20.1) expect(y, closeTo(1.2, 1e-6));
+        // On the ledge's line the turf parts: both levels, nothing between.
+        if ((x - 10).abs() < 1e-4) {
+          expect(y.abs() < 1e-6 || (y - 1).abs() < 1e-6, isTrue,
+              reason: 'a step, not a slope, at $x, $z');
+          if (y > 0.5) {
+            onTheLip++;
+          } else {
+            atTheFoot++;
+          }
+        }
+        // Up the ramp: its smooth step along its axis.
+        if (x > 16 && x < 20 && (z - 10).abs() < 1.9) {
+          final t = (x - 16) / 4;
+          expect(y, closeTo(1.2 * t * t * (3 - 2 * t), 1e-4));
+        }
+      }
+      expect(onTheLip, greaterThan(20));
+      expect(atTheFoot, greaterThan(20));
+      // The nest stands on its terrace.
+      expect(world.holeGroup('nest')!.children.single.position.y,
+          closeTo(1.2, 1e-6));
+    });
+
+    test('a drop wears a face; the ramp\'s rails stand on its slope', () {
+      final world = PuttWorld3D(viewport: const ui.Size(800, 600));
+      addTearDown(world.dispose);
+      world.buildHole(tiered(), eggRadius: 0.45);
+      final faces = walk(world.holeGroup('cliffs')!)
+          .whereType<tjs.Mesh>()
+          .where((mesh) => mesh.name == 'cliff-face')
+          .single;
+      final position = faces.geometry!.attributes['position'];
+      var top = 0.0;
+      var west = 0;
+      for (var i = 0; i < position.count; i++) {
+        top = math.max(top, position.getY(i)!.toDouble());
+        if ((position.getX(i)! - 10).abs() < 1e-6) west++;
+      }
+      expect(top, closeTo(1.2, 1e-6));
+      expect(west, greaterThan(0), reason: 'the west terrace\'s drop');
+      // The ramp's rails climb with it, a step's face under them; the
+      // fence round the terraces stands on them.
+      final walls = walk(world.holeGroup('walls')!);
+      expect(walls.where((o) => o.name == 'wall-step'), isNotEmpty);
+      // A ledge is no rail.
+      expect(world.holeGroup('walls')!.children, hasLength(6));
+    });
+
+    test('an egg rolled off a ledge falls through the air and lands', () {
+      final world = PuttWorld3D(viewport: const ui.Size(800, 600));
+      addTearDown(world.dispose);
+      world.buildHole(tiered(), eggRadius: 0.45);
+      var time = 0.0;
+      void frame(Vec2 at) {
+        world.applySnapshot(PuttWorldFrame(time: time, eggs: [eggAt(at)]));
+        time += 1 / 60;
+      }
+
+      tjs.Object3D shadowGroup() =>
+          walk(world.scene).firstWhere((object) => object.name == 'egg-ground');
+      int puffs() => walk(world.scene)
+          .where((object) => object.name == 'burst-puff' && object.visible)
+          .length;
+
+      frame(const Vec2(9.4, 10));
+      frame(const Vec2(9.7, 10));
+      expect(world.eggOf('me')!.position.y, closeTo(1 + stand, 1e-6));
+      // Past the lip: the shadow is on the floor at once, the egg still up
+      // in the air, falling.
+      var x = 10.05;
+      frame(Vec2(x, 10));
+      final first = world.eggOf('me')!.position.y;
+      expect(first, lessThan(1 + stand));
+      expect(first, greaterThan(stand + 0.9));
+      expect(shadowGroup().position.y, closeTo(0, 1e-9));
+      var landedAfter = -1;
+      var previous = first;
+      for (var i = 1; i < 40; i++) {
+        x += 0.05;
+        frame(Vec2(x, 10));
+        final y = world.eggOf('me')!.position.y;
+        expect(y, lessThanOrEqualTo(previous + 1e-9), reason: 'it only falls');
+        previous = y;
+        if (landedAfter < 0 && (y - stand).abs() < 1e-6) landedAfter = i;
+      }
+      // A fall from one unit at 18 units/s^2: a third of a second.
+      expect(landedAfter, inInclusiveRange(17, 23));
+      expect(puffs(), greaterThan(0), reason: 'the dust flies where it lands');
+    });
+
+    test('an egg rides a ramp down and up, never in the air', () {
+      final world = PuttWorld3D(viewport: const ui.Size(800, 600));
+      addTearDown(world.dispose);
+      world.buildHole(tiered(), eggRadius: 0.45);
+      final ramp = tiered().ramps.single;
+      var time = 0.0;
+      for (final step in [
+        for (var i = 0; i <= 40; i++) 19.9 - i * 0.1,
+        for (var i = 0; i <= 40; i++) 15.9 + i * 0.1,
+      ]) {
+        final at = Vec2(step, 10);
+        world.applySnapshot(PuttWorldFrame(time: time, eggs: [eggAt(at)]));
+        time += 1 / 60;
+        expect(world.eggOf('me')!.position.y,
+            closeTo(ramp.heightAt(at) + stand, 0.02),
+            reason: 'at $at');
+      }
+      expect(
+          walk(world.scene)
+              .where((object) => object.name == 'burst-puff' && object.visible),
+          isEmpty);
+    });
+  });
+
   group('the camera rig', () {
     test('the target sits dead-centre under any yaw', () {
       final world = builtWorld();
