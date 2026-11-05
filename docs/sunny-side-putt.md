@@ -253,8 +253,10 @@ fence; a ramp's sides railed or ledged, its foot on the green's level, its
 top on a terrace's edge, its steepest grade 0.6 at most; ledges along
 tier edges, high side up all along. Ponds, rabbit holes and silos keep
 0.3 units off every tier; a speed strip or a "?" box stands on a
-terrace's flat with 0.3 of room or keeps off; hills keep their reach 0.3
-off; the tee, a full table's spawn ring and every hen's walk stay on one
+terrace's flat with 0.3 of room or keeps off; a rock or a bumper stands
+wholly on one level (off the tiers, or on a terrace's flat, where it may
+stand against a step's face), never across a step; hills keep their reach
+0.3 off; the tee, a full table's spawn ring and every hen's walk stay on one
 level, an egg's radius and 0.3 clear of every tier's outline; the nest
 sits on a terrace with 0.6 of flat round its rim or half a unit clear.
 

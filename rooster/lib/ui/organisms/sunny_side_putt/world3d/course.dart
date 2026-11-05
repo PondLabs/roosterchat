@@ -973,8 +973,10 @@ class _CourseKit {
   }
 
   /// The corn hedge's top: tassels standing up along it, leaves arching
-  /// out of its sides, a cob here and there (in the rail's own frame).
-  tjs.Mesh _cornTop(double length, double thickness) {
+  /// out of its sides, a cob here and there (in the rail's own frame). A
+  /// piece too short for a tassel (a sliver where a hedge ends on a tier's
+  /// edge) carries none.
+  tjs.Object3D _cornTop(double length, double thickness) {
     final merged = _Merged();
     final rand = _Rand(_seedOf('${hole.id}/corn/$length'));
     for (var x = -length / 2 + 0.3; x < length / 2 - 0.2; x += 0.62) {
@@ -1002,7 +1004,8 @@ class _CourseKit {
             0xF2C845);
       }
     }
-    return merged.mesh('wall-corn', flat: true)!;
+    return merged.mesh('wall-corn', flat: true) ??
+        (tjs.Group()..name = 'wall-corn');
   }
 
   /// A box whose UVs follow the timber: grain along its length at a fixed

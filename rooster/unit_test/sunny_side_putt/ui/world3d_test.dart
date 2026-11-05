@@ -603,6 +603,26 @@ void main() {
         );
     const stand = 0.45 * 1.2 * 1.28;
 
+    test('a corn hedge too short for a tassel still builds', () {
+      // A maze hole (the corn hedge's style) where a hedge ends a third of
+      // a unit past a terrace's edge: the sliver carries no tassels and the
+      // hole builds rather than throwing.
+      final base = tiered();
+      final hole = HoleDef(
+        id: 'maze_sliver',
+        par: base.par,
+        tee: base.tee,
+        nest: base.nest,
+        bounds: base.bounds,
+        walls: [...base.walls, WallSegment(Vec2(5, 4), Vec2(5.3, 4))],
+        terraces: base.terraces,
+        ramps: base.ramps,
+      );
+      final world = PuttWorld3D();
+      addTearDown(world.dispose);
+      expect(() => world.buildHole(hole, eggRadius: 0.45), returnsNormally);
+    });
+
     test('the turf stands on the terraces and steps off them crisply', () {
       final world = PuttWorld3D(viewport: const ui.Size(800, 600));
       addTearDown(world.dispose);
