@@ -131,10 +131,13 @@ const List<double> _featherSteps = [
   1,
 ];
 
+/// The same, coarser: a feather seen from afar.
+const List<double> _featherStepsCoarse = [0, 0.4, 0.72, 0.9, 1];
+
 /// A cut feather, [length] long and [width] across at its widest: the
 /// quill widening into the vane, then a rounded tip, or a [pointed] one;
 /// [bend] of its length bowed toward -y. Built along +x, flat in its x/y
-/// plane (its broad face toward z), [depth] thick.
+/// plane (its broad face toward z), [depth] thick, sampled at [steps].
 tjs.BufferGeometry _feather(
   double length,
   double width, {
@@ -142,12 +145,13 @@ tjs.BufferGeometry _feather(
   bool pointed = false,
   double bend = 0,
   int sides = 6,
+  List<double> steps = _featherSteps,
 }) {
   final thick = depth ?? width * 0.2;
   final path = <(double, double)>[];
   final widths = <double>[];
   final depths = <double>[];
-  for (final t in _featherSteps) {
+  for (final t in steps) {
     path.add((t * length, -math.sin(t * math.pi) * bend * length));
     double w;
     if (t <= 0.6) {
@@ -308,7 +312,7 @@ void _birdLeg(
   ]) {
     _birdToe(into, _within(frame, _place(ankleX, -length, 0, yaw: yaw)), reach,
         toeRadius,
-        lift: lift, knuckles: knuckles, sides: math.max(5, sides - 2));
+        lift: lift, knuckles: knuckles, sides: math.max(4, sides - 2));
   }
 }
 
@@ -486,67 +490,74 @@ void _henBody(_Merged into, tjs.Matrix4 frame, double r, {bool small = false}) {
   final body = _within(frame, _place(0, r * (_henHip - 0.55), 0));
   into
     ..add(
-        tjs.SphereGeometry(1, small ? 12 : 20, small ? 8 : 14),
+        tjs.SphereGeometry(1, small ? 10 : 20, small ? 7 : 14),
         _within(body,
             _place(0, r * 1.05, 0, sx: r * 0.92, sy: r * 0.82, sz: r * 1.1)),
         _Bird.white,
         baseShade: 0.8)
     ..add(
-        tjs.SphereGeometry(1, small ? 10 : 16, small ? 7 : 12),
+        tjs.SphereGeometry(1, small ? 8 : 16, small ? 6 : 12),
         _within(
             body,
             _place(0, r * 1.2, r * 0.55,
                 sx: r * 0.62, sy: r * 0.68, sz: r * 0.6)),
         _Bird.white);
-  final sides = small ? 5 : 6;
+  // From afar, fewer and coarser feathers make the same shapes.
+  final sides = small ? 4 : 6;
+  final steps = small ? _featherStepsCoarse : _featherSteps;
+  final primaries = small ? 1 : 3;
+  final secondaries = small ? 3 : 5;
+  final fan = small ? 3 : 5;
   for (final side in [-1.0, 1.0]) {
     // The folded wing: rounded coverts on top, sloping to the tail; the
     // long primaries tucked along the back; and the secondaries hanging
     // under the coverts, their rounded tips a scalloped edge.
     into.add(
-        tjs.SphereGeometry(1, small ? 8 : 14, small ? 6 : 10),
+        tjs.SphereGeometry(1, small ? 6 : 14, small ? 5 : 10),
         _within(
             body,
             _place(side * r * 0.82, r * 1.27, r * 0.02,
                 tilt: -0.2, sx: r * 0.17, sy: r * 0.28, sz: r * 0.56)),
         _Bird.covert);
     final face = tjs.Vector3(side, 0.15, 0);
-    for (var j = 0; j < 3; j++) {
+    for (var j = 0; j < primaries; j++) {
+      final f = primaries == 1 ? 0.5 : j / (primaries - 1);
       into.add(
-          _feather(r * (0.45 + j * 0.06), r * 0.25,
-              depth: r * 0.06, bend: side * 0.05, sides: sides),
+          _feather(r * (0.45 + f * 0.12), r * 0.25,
+              depth: r * 0.06, bend: side * 0.05, sides: sides, steps: steps),
           _within(
               body,
               _aimed(
-                  side * r * (0.86 - j * 0.04),
-                  r * (1.12 - j * 0.03),
-                  -r * (0.22 + j * 0.12),
+                  side * r * (0.86 - f * 0.08),
+                  r * (1.12 - f * 0.06),
+                  -r * (0.22 + f * 0.24),
                   tjs.Vector3(-side * 0.25, -0.12, -1),
                   face)),
           _Bird.flight);
     }
-    for (var i = 0; i < 5; i++) {
+    for (var i = 0; i < secondaries; i++) {
+      final f = i / (secondaries - 1);
       into.add(
-          _feather(r * (0.5 + i * 0.03), r * 0.32,
-              depth: r * 0.065, bend: side * 0.04, sides: sides),
+          _feather(r * (0.5 + f * 0.12), r * (small ? 0.4 : 0.32),
+              depth: r * 0.065, bend: side * 0.04, sides: sides, steps: steps),
           _within(
               body,
               _aimed(
-                  side * r * (0.95 - i * 0.03),
-                  r * (1.14 - i * 0.015),
-                  r * (0.4 - i * 0.18),
-                  tjs.Vector3(-side * 0.3, -1, -(0.45 + i * 0.12)),
+                  side * r * (0.95 - f * 0.12),
+                  r * (1.14 - f * 0.06),
+                  r * (0.4 - f * 0.72),
+                  tjs.Vector3(-side * 0.3, -1, -(0.45 + f * 0.48)),
                   face)),
           i.isEven ? _Bird.cream : _Bird.wing);
     }
   }
   // The tail: a little fan, its rounded tips spread from back to up.
-  for (var i = 0; i < 5; i++) {
-    final k = i / 4;
+  for (var i = 0; i < fan; i++) {
+    final k = i / (fan - 1);
     final rise = 0.3 + k * 1.0;
     into.add(
         _feather(r * (0.6 + (0.5 - (k - 0.5).abs()) * 0.24), r * 0.32,
-            depth: r * 0.08, sides: sides),
+            depth: r * 0.08, sides: sides, steps: steps),
         _within(
             body,
             _aimed(
@@ -568,19 +579,19 @@ void _henHead(_Merged into, tjs.Matrix4 frame, double r, {bool small = false}) {
   final yolk = _hexOf(PuttPalette.yolk);
   final ink = _hexOf(PuttPalette.ink);
   into
-    ..add(tjs.SphereGeometry(r * 0.42, small ? 10 : 16, small ? 8 : 12),
+    ..add(tjs.SphereGeometry(r * 0.42, small ? 8 : 16, small ? 6 : 12),
         frame.clone(), _Bird.white)
     ..add(
-        tjg.ConeGeometry(r * 0.14, r * 0.38, 8),
+        tjg.ConeGeometry(r * 0.14, r * 0.38, small ? 5 : 8),
         _within(frame, _place(0, -r * 0.02, r * 0.5, tilt: math.pi / 2 + 0.12)),
         yolk)
     ..add(
-        tjg.ConeGeometry(r * 0.09, r * 0.22, 8),
+        tjg.ConeGeometry(r * 0.09, r * 0.22, small ? 5 : 8),
         _within(frame, _place(0, -r * 0.12, r * 0.45, tilt: math.pi / 2 - 0.2)),
         _shade(yolk, 0.9));
   for (final side in [-1.0, 1.0]) {
     into.add(
-        tjs.SphereGeometry(r * 0.1, small ? 6 : 10, small ? 5 : 8),
+        tjs.SphereGeometry(r * 0.1, small ? 5 : 10, small ? 4 : 8),
         _within(frame,
             _place(side * r * 0.05, -r * 0.27, r * 0.33, sy: 1.5, sz: 0.8)),
         comb);
@@ -590,11 +601,11 @@ void _henHead(_Merged into, tjs.Matrix4 frame, double r, {bool small = false}) {
     (-0.06, 0.47, 0.16),
     (-0.24, 0.4, 0.12)
   ]) {
-    into.add(tjs.SphereGeometry(r * s, small ? 6 : 10, small ? 5 : 8),
+    into.add(tjs.SphereGeometry(r * s, small ? 5 : 10, small ? 4 : 8),
         _within(frame, _place(0, r * y, r * z, sx: 0.55)), comb);
   }
   for (final side in [-1.0, 1.0]) {
-    into.add(tjs.SphereGeometry(r * 0.07, 8, 6),
+    into.add(tjs.SphereGeometry(r * 0.07, small ? 5 : 8, small ? 4 : 6),
         _within(frame, _place(side * r * 0.3, r * 0.08, r * 0.24)), ink);
     if (!small) {
       into.add(
@@ -620,6 +631,6 @@ void _henLeg(_Merged into, tjs.Matrix4 frame, double r, double side,
         outward: -side,
         feather: _Bird.white,
         thigh: 0.42,
-        bands: small ? 3 : 4,
-        knuckles: small ? 2 : 3,
-        sides: small ? 5 : 7);
+        bands: small ? 2 : 4,
+        knuckles: small ? 1 : 3,
+        sides: small ? 4 : 7);
