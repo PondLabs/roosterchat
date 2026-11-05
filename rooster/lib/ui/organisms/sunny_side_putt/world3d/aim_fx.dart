@@ -745,8 +745,10 @@ class _PuttFxPool {
           lift = fx.height ?? 0.55;
           final swell = math.sin(progress * math.pi);
           width = fx.size * (3.2 + 2.4 * swell);
-          height = fx.size * (0.18 + 0.08 * swell);
-          opacity = math.min(1.0, swell * 1.4) * 0.8;
+          // Stout enough to read from the overview (a pixel or two was
+          // lost on the lawn).
+          height = fx.size * (0.32 + 0.12 * swell);
+          opacity = math.min(1.0, swell * 1.6) * 0.92;
           final toward = fx.toward;
           if (camera != null && toward != null) {
             final y = (ground?.at(at) ?? 0) + lift;

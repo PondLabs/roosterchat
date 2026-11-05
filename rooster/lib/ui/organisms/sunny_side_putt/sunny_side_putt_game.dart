@@ -1745,7 +1745,8 @@ ui.Color puttPowerUpAccent(String effectId) => switch (effectId) {
       'gust' => const ui.Color(0xFFE2F4FF),
       'thick_shell' => const ui.Color(0xFFBFEAFF),
       'strong_coffee' => const ui.Color(0xFFB07A52),
-      'nest_swap' => const ui.Color(0xFFC3A2FF),
+      // A deep violet: a pale lavender was lost on the lawn.
+      'nest_swap' => const ui.Color(0xFF8B5CF6),
       'sprinkler' => PuttPalette.water,
       'corn_rain' => const ui.Color(0xFFFFC61A),
       'thieving_crow' => const ui.Color(0xFF5A5470),
@@ -2177,7 +2178,8 @@ class PuttFxLayer {
       life: life,
       kind: _FxKind.streak,
       size: 0.5 + _random.nextDouble() * 0.25,
-      color: const ui.Color(0xFFFFFFFF),
+      // A breath of sky in the white: plain white was lost on light turf.
+      color: const ui.Color(0xFFE3F2FF),
       height: 0.3 + _random.nextDouble() * 0.9,
       delay: delay,
     ));
@@ -2379,7 +2381,7 @@ class PuttFxLayer {
         life: 1.2,
         kind: _FxKind.swirl,
         size: 0.7,
-        color: i.isEven ? tint : const ui.Color(0xFFC3A2FF),
+        color: i.isEven ? tint : const ui.Color(0xFF8B5CF6),
         orbit: at,
         orbitRadius: 0.9 + (i % 3) * 0.22,
         orbitAngle: i / 18 * 2 * math.pi,

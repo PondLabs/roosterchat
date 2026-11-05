@@ -94,15 +94,16 @@ class _ReticlePainter extends CustomPainter {
       case 'sprinkler':
         if (hover == null) return;
         _ground(canvas, hover, kSprinklerRadius,
-            fill: PuttPalette.water.withValues(alpha: 0.22),
+            fill: PuttPalette.water.withValues(alpha: 0.3),
             stroke: PuttPalette.water);
         // The eggs it would soak, and which way the spray sends them.
         for (final egg in others) {
           final away = egg - hover;
           if (away.length > kSprinklerRadius) continue;
+          // A ring, no wash: a tint over the eggs made their colours hard
+          // to tell apart.
           _ground(canvas, egg, 0.8,
-              fill: PuttPalette.comb.withValues(alpha: 0.18),
-              stroke: PuttPalette.comb);
+              fill: const Color(0x00000000), stroke: PuttPalette.comb);
           if (away.length > 0.2) {
             _arrow(canvas, project(egg + away.scaledTo(0.9)),
                 project(egg + away.scaledTo(2.6)), PuttPalette.shell);
@@ -154,18 +155,25 @@ class _ReticlePainter extends CustomPainter {
     }
     path.close();
     canvas.drawPath(path, Paint()..color = fill);
-    final line = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2
-      ..strokeCap = StrokeCap.round
-      ..color = stroke;
-    if (!dashed) {
-      canvas.drawPath(path, line);
-      return;
-    }
-    for (final metric in path.computeMetrics()) {
-      for (var at = 0.0; at < metric.length; at += 14) {
-        canvas.drawPath(metric.extractPath(at, at + 8), line);
+    // The colour over a line of ink, so the ring reads on light turf and
+    // on water alike.
+    for (final (width, colour) in [
+      (4.8, PuttPalette.ink.withValues(alpha: 0.45)),
+      (2.6, stroke),
+    ]) {
+      final line = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = width
+        ..strokeCap = StrokeCap.round
+        ..color = colour;
+      if (!dashed) {
+        canvas.drawPath(path, line);
+        continue;
+      }
+      for (final metric in path.computeMetrics()) {
+        for (var at = 0.0; at < metric.length; at += 14) {
+          canvas.drawPath(metric.extractPath(at, at + 8), line);
+        }
       }
     }
   }
@@ -203,20 +211,39 @@ class _ReticlePainter extends CustomPainter {
     }
   }
 
+  /// Which way a push sends an egg: a stout shaft and a solid head, the
+  /// colour over a line of ink.
   void _arrow(Canvas canvas, Offset from, Offset to, Color colour) {
-    final shaft = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.6
-      ..strokeCap = StrokeCap.round
-      ..color = colour.withValues(alpha: 0.9);
     final delta = to - from;
     if (delta.distance < 6) return;
-    canvas.drawLine(from, to, shaft);
     final heading = delta.direction;
-    for (final side in const [-1, 1]) {
-      final wing = heading + math.pi + side * 0.5;
+    final along = Offset(math.cos(heading), math.sin(heading));
+    final across = Offset(-along.dy, along.dx);
+    final neck = to - along * 9;
+    final head = Path()
+      ..moveTo(to.dx + along.dx * 3, to.dy + along.dy * 3)
+      ..lineTo((neck + across * 7).dx, (neck + across * 7).dy)
+      ..lineTo((neck - across * 7).dx, (neck - across * 7).dy)
+      ..close();
+    for (final (width, paint) in [
+      (7.0, PuttPalette.ink.withValues(alpha: 0.5)),
+      (3.6, colour),
+    ]) {
       canvas.drawLine(
-          to, to + Offset(math.cos(wing), math.sin(wing)) * 9, shaft);
+          from,
+          neck,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = width
+            ..strokeCap = StrokeCap.round
+            ..color = paint);
+      canvas.drawPath(
+          head,
+          Paint()
+            ..style = width > 5 ? PaintingStyle.stroke : PaintingStyle.fill
+            ..strokeWidth = 3.4
+            ..strokeJoin = StrokeJoin.round
+            ..color = paint);
     }
   }
 
