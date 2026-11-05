@@ -915,6 +915,16 @@ class SunnySidePuttGame extends FlameGame {
           if (spot.at != null) {
             fx.splash(spot.at!);
             fx.ring(spot.at!, PuttPalette.water, size: 2.2);
+            fx.ring(spot.at!, PuttPalette.shell, size: 1.4);
+          }
+        case PuttFxSpotKind.back:
+          // Home again: a pop of the player's colour where the egg is put
+          // back after the water.
+          if (spot.at != null) {
+            fx.poof(spot.at!);
+            fx.ring(spot.at!,
+                spot.who == null ? PuttPalette.shell : tintFor(spot.who!),
+                size: 2.0);
           }
         case PuttFxSpotKind.out:
           if (spot.at != null) fx.poof(spot.at!);
@@ -1155,16 +1165,19 @@ class PuttFxLayer {
   List<_FxParticle> get particles => _particles;
 
   void splash(core.Vec2 at) {
-    for (var i = 0; i < 18; i++) {
+    // A crown of droplets: more of them, thrown wider, some white.
+    for (var i = 0; i < 26; i++) {
       final angle = i * 2.39996; // golden spaced
-      final speed = 1.6 + (i % 4) * 0.8;
+      final speed = 1.8 + (i % 5) * 0.9;
       _particles.add(_FxParticle(
         at: at,
         velocity: core.Vec2(math.cos(angle), math.sin(angle)) * speed,
-        life: 0.65,
+        life: 0.8,
         kind: _FxKind.droplet,
-        size: 0.26,
-        color: const ui.Color(0xFFBFE6FF),
+        size: i.isEven ? 0.32 : 0.24,
+        color: i % 3 == 0
+            ? const ui.Color(0xFFFFFFFF)
+            : const ui.Color(0xFFBFE6FF),
       ));
     }
   }

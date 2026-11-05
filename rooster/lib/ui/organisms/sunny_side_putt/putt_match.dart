@@ -69,7 +69,7 @@ enum PuttHeadlineKind { holeStart, scoreTerm, holeEnd, course, matchOver }
 
 /// Where a burst of particles goes: the events that carry a spot on the
 /// green. Filled next to [PuttNotice]s, read by the game's FX layer.
-enum PuttFxSpotKind { splash, out, holed, pick }
+enum PuttFxSpotKind { splash, out, back, holed, pick }
 
 class PuttFxSpot {
   final PuttFxSpotKind kind;
@@ -276,6 +276,9 @@ class PuttMatch extends ChangeNotifier {
         if (shape.contains(before)) {
           notices.add(const PuttNotice(PuttSfx.water));
           spots.add(PuttFxSpot(PuttFxSpotKind.splash, at: before));
+          // Where it came back: the egg pops up there, so the player sees
+          // the stroke counted and the egg home.
+          spots.add(PuttFxSpot(PuttFxSpotKind.back, at: after, who: id));
           handled = true;
           break;
         }

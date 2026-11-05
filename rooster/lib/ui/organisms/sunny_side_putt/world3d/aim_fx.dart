@@ -400,7 +400,7 @@ class _PuttFxPool {
       double rotation = 0;
       switch (fx.kind) {
         case PuttWorldFxKind.droplet:
-          lift = 0.7 * math.sin(progress * math.pi);
+          lift = 1.3 * math.sin(progress * math.pi);
           width = height = fx.size * (0.6 + 0.5 * progress);
         case PuttWorldFxKind.sparkle:
           lift = 0.45 + 0.6 * math.sin(progress * math.pi);
