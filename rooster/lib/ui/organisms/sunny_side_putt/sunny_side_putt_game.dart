@@ -120,6 +120,9 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   /// True while I aim or my egg rolls (the HUD folds its scorecard).
   final ValueNotifier<bool> _busy = ValueNotifier(false);
 
+  /// True while the keys hold the aim (the hint line says how they putt).
+  final ValueNotifier<bool> _keyAiming = ValueNotifier(false);
+
   /// The off-screen nest's marker, refreshed after every rendered frame.
   final ValueNotifier<PuttNestPointer?> _nestPointer = ValueNotifier(null);
 
@@ -148,6 +151,28 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
       onSfx: (sfx, volume) => widget.audio?.play(sfx, volume: volume),
     );
     widget.onGame?.call(game);
+    game.targeting.addListener(_onTargeting);
+  }
+
+  /// Whether the HUD's player picker was open at the last change.
+  bool _picking = false;
+
+  void _onTargeting() {
+    final picking = game.targeting.picking != null;
+    // A picker that closed while a row of it held the keys (Tab walked in)
+    // hands them back to the game, rather than to nobody.
+    if (_picking && !picking) _reclaimKeys();
+    _picking = picking;
+  }
+
+  /// The keys back to the game when a widget of the game's own (a menu
+  /// button, a picker row) holds them; focus elsewhere (the chat) stays.
+  void _reclaimKeys() {
+    if (_keyFocus.hasFocus &&
+        !_keyFocus.hasPrimaryFocus &&
+        !_gameFocus.hasPrimaryFocus) {
+      _keyFocus.requestFocus();
+    }
   }
 
   @override
@@ -169,17 +194,25 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     _tags.dispose();
     _coach.dispose();
     _busy.dispose();
+    _keyAiming.dispose();
     _greenShown.dispose();
     _nestPointer.dispose();
     _miniMap.dispose();
     _bubbles.dispose();
+    game.targeting.removeListener(_onTargeting);
     game.targeting.dispose();
     super.dispose();
   }
 
   void _togglePause() {
-    // A power-up waiting for a spot or a pick goes back in the carton.
+    // A power-up waiting for a spot or a pick goes back in the carton,
+    // and the keys' highlight and aim go too.
     game.targeting.cancel();
+    game.targeting.clearKeySlot();
+    if (game.keyAiming) game.cancelAim();
+    // A menu closed from one of its own buttons (Tab, Enter) hands the
+    // keys back to the game.
+    if (menuOpen) _reclaimKeys();
     setState(() {
       menuOpen = !menuOpen;
       settingsOpen = false;
@@ -214,6 +247,16 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
         game.targeting.cancel();
         return KeyEventResult.handled;
       }
+      // Then the carton's highlight, then an aim under way, unspent.
+      if (game.targeting.keySlot != null) {
+        game.targeting.clearKeySlot();
+        return KeyEventResult.handled;
+      }
+      if (game.aim.isActive) {
+        game.cancelAim();
+        _syncAiming();
+        return KeyEventResult.handled;
+      }
       if (settingsOpen || lookOpen) {
         setState(() {
           settingsOpen = false;
@@ -246,7 +289,75 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
         return KeyEventResult.handled;
       }
     }
-    return KeyEventResult.ignored;
+    return _onPuttKey(event);
+  }
+
+  /// The keys that putt: Left and Right turn the aim (Shift for fine
+  /// steps), Up and Down set the power, Space or Enter putts, Tab and
+  /// Shift+Tab move over the carton's slots and Space or Enter uses the
+  /// one highlighted. Only while the game itself holds the focus (a
+  /// button or a picker row Tab or a click focused keeps its keys) and a
+  /// hole plays with no menu up; then they are always the game's, so an
+  /// arrow never walks the focus off the green while the egg rolls.
+  KeyEventResult _onPuttKey(KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final focused = FocusManager.instance.primaryFocus;
+    if (focused != _keyFocus && focused != _gameFocus) {
+      return KeyEventResult.ignored;
+    }
+    if (menuOpen || match.phase != PuttPhase.holePlay) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    final shift = HardwareKeyboard.instance.isShiftPressed;
+    final targeting = game.targeting;
+    final repeat = event is KeyRepeatEvent;
+    switch (key) {
+      case LogicalKeyboardKey.arrowLeft:
+      case LogicalKeyboardKey.arrowRight:
+        targeting.clearKeySlot();
+        game.keyTurn(key == LogicalKeyboardKey.arrowLeft ? -1 : 1, fine: shift);
+      case LogicalKeyboardKey.arrowUp:
+      case LogicalKeyboardKey.arrowDown:
+        targeting.clearKeySlot();
+        game.keyPower(key == LogicalKeyboardKey.arrowUp ? 1 : -1);
+      case LogicalKeyboardKey.space:
+      case LogicalKeyboardKey.enter:
+      case LogicalKeyboardKey.numpadEnter:
+        if (repeat) return KeyEventResult.handled;
+        final slot = targeting.keySlot;
+        final inventory = match.myInventory;
+        if (slot != null && slot < inventory.length) {
+          puttUseSlot(match, targeting, slot, inventory[slot],
+              onSfx: (sfx) => widget.audio?.play(sfx));
+        } else {
+          game.keyStrike();
+        }
+      case LogicalKeyboardKey.tab:
+        // While a picker is open, Tab walks into its rows like anywhere
+        // else.
+        if (targeting.picking != null) return KeyEventResult.ignored;
+        if (repeat) return KeyEventResult.handled;
+        if (targeting.cycleKeySlot(match, shift ? -1 : 1) &&
+            targeting.keySlot != null) {
+          game.cancelAim();
+        }
+      default:
+        return KeyEventResult.ignored;
+    }
+    _syncAiming();
+    return KeyEventResult.handled;
+  }
+
+  /// The aim's flags for the HUD, at once (the frame hook refreshes them
+  /// too, but a key's change should not wait for a frame).
+  void _syncAiming() {
+    final mine = game.match.myBall;
+    _busy.value =
+        game.aim.isActive || (mine != null && !mine.asleep && !mine.holed);
+    _keyAiming.value = game.keyAiming;
   }
 
   // ---- pointer plumbing ----------------------------------------------------------------
@@ -426,9 +537,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     _nestPointer.value = pointer;
     _miniMap.value = game.miniMapForFrame(nestOutOfSight: pointer != null);
     _bubbles.update(game.bubblesForFrame());
-    final mine = game.match.myBall;
-    _busy.value =
-        game.aim.isActive || (mine != null && !mine.asleep && !mine.holed);
+    _syncAiming();
   }
 
   @override
@@ -529,6 +638,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
           match: match,
           targeting: game.targeting,
           busy: _busy,
+          keyAiming: _keyAiming,
           shown: _greenShown,
           onSfx: (sfx) => widget.audio?.play(sfx),
           onOpenMenu: _togglePause,
@@ -1726,6 +1836,7 @@ class SunnySidePuttGame extends FlameGame {
     if (!match.myShotReady) return;
     final ball = match.myBall;
     if (ball == null) return;
+    _keyAim = false;
     final reach = math.max(match.config.physics.ballRadius * 3, 1.8);
     _dragAnchor = ball.position.distanceTo(point) > reach ? point : null;
     aim.begin(ball.position);
@@ -1747,12 +1858,18 @@ class SunnySidePuttGame extends FlameGame {
   }
 
   void endAim(core.Vec2 point) {
-    if (!aim.isActive) return;
+    if (!aim.isActive || _keyAim) return;
     aim.update(_pullPoint(point));
     _dragAnchor = null;
-    // The shot goes where the arrow points this frame, sway and all.
+    _strike();
+  }
+
+  /// Lets the aim go: the shot goes where the arrow points this frame,
+  /// sway and all (nothing when the pull was a tap).
+  void _strike() {
     final sway = aim.swayNow(aimLayer.holdSeconds);
     final shot = aim.commit();
+    _keyAim = false;
     if (shot == null) return;
     final angle = shot.angle + sway;
     final at = match.myBall?.position;
@@ -1764,6 +1881,66 @@ class SunnySidePuttGame extends FlameGame {
   void cancelAim() {
     aim.cancel();
     _dragAnchor = null;
+    _keyAim = false;
+  }
+
+  // ---- the keyboard's aim -------------------------------------------------------------
+
+  /// Set while the aim under way came from the keys rather than a drag:
+  /// a pointer's release does not fire it, Space or Enter does.
+  bool _keyAim = false;
+
+  /// Whether the keys hold the aim right now.
+  bool get keyAiming => _keyAim && aim.isActive;
+
+  /// Starts a keyboard aim when none is under way: from my egg toward the
+  /// nest (the camera's forward when the egg sits on it), at the middle
+  /// power. True while the keys hold the aim (a drag's aim is left be).
+  bool _ensureKeyAim() {
+    if (aim.isActive) return _keyAim;
+    if (!match.myShotReady || targeting.isActive) return false;
+    final ball = match.myBall;
+    final current = match.hole;
+    if (ball == null || current == null) return false;
+    final toward = current.nest.position - ball.position;
+    final yaw = world3d.rig.yaw;
+    final angle = toward.length > 1e-3
+        ? toward.angle
+        : math.atan2(math.cos(yaw), math.sin(yaw));
+    _dragAnchor = null;
+    aim.hold(ball.position, angle: angle, power: AimController.keyPowerStart);
+    _keyAim = true;
+    _previewKey = null;
+    return true;
+  }
+
+  /// Left (-1) or Right (+1): turns the keyboard's aim, a fine step with
+  /// [fine]. Left turns the arrow anticlockwise on screen whatever the
+  /// camera's orbit: the ground's y runs down the screen's way, so the
+  /// core's angles always grow clockwise. Starts the aim on the first key.
+  bool keyTurn(int direction, {bool fine = false}) {
+    if (!_ensureKeyAim()) return false;
+    aim.turnBy(direction *
+        (fine ? AimController.keyFineTurnStep : AimController.keyTurnStep));
+    return true;
+  }
+
+  /// Up (+1) or Down (-1): the keyboard's aim one power step harder or
+  /// softer. Starts the aim on the first key.
+  bool keyPower(int direction) {
+    if (!_ensureKeyAim()) return false;
+    aim.stepPower(direction);
+    return true;
+  }
+
+  /// Space or Enter: putts the keyboard's aim, or starts one when none is
+  /// under way. False when there is nothing the keys can aim.
+  bool keyStrike() {
+    if (keyAiming) {
+      _strike();
+      return true;
+    }
+    return _ensureKeyAim();
   }
 
   /// The armed power-up, cast at [point] on the green: true when it went

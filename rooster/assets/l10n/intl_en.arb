@@ -5805,6 +5805,24 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelPuttKeysHint": "Keys: ← → aim · ↑ ↓ power · Space putts · Tab power-ups",
+  "@labelPuttKeysHint": {
+    "description": "Second line of the first aim hint, on desktop and in the browser: the arrow keys turn the aim and set the power, Space putts, Tab moves through the power-up slots. The arrows are the keys' own symbols",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttKeyReleaseHint": "Space or Enter to putt",
+  "@labelPuttKeyReleaseHint": {
+    "description": "Hint line while the player aims their first putt with the keyboard: Space or Enter strikes the egg",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttKeyReleaseDetail": "Shift + ← → turns finer · Esc cancels",
+  "@labelPuttKeyReleaseDetail": {
+    "description": "Second line of the hint while the player aims with the keyboard: holding Shift with the left and right arrow keys turns the aim in small steps, Esc drops the aim without putting",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelPuttScorecard": "Scorecard",
   "@labelPuttScorecard": {
     "description": "Title of the score panel in the bottom left corner of the game",

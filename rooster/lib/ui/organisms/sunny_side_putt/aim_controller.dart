@@ -13,6 +13,11 @@
 // The controller never touches Flutter or Flame: the game feeds it world
 // coordinates from pointer events and reads [state] to draw; the game adds
 // [visualWobble] to the drawn angle on every frame it renders.
+//
+// The keyboard drives the same state without a pointer: [hold] sets an
+// angle and a power outright (the state reads as the pull that would give
+// that power), [turnBy] and [stepPower] move them, and the release is the
+// same [commit], so the arrow, the guide and the sway behave alike.
 library;
 
 import 'dart:math' as math;
@@ -155,6 +160,64 @@ class AimController {
     if (state == null || state.dragLength < deadZone) return null;
     return (angle: state.angle, power: state.power);
   }
+
+  // ---- the keyboard's aim ----------------------------------------------------
+
+  /// One press of Left or Right turns the aim this far (radians); with
+  /// Shift held, [keyFineTurnStep].
+  static const double keyTurnStep = 3 * math.pi / 180;
+  static const double keyFineTurnStep = 0.5 * math.pi / 180;
+
+  /// One press of Up or Down moves the power this much.
+  static const double keyPowerStep = 0.05;
+
+  /// The power a keyboard aim starts at: the middle of the stroke.
+  static const double keyPowerStart = 0.5;
+
+  /// The softest keyboard putt: the first [keyPowerStep] a pull just out
+  /// of the [deadZone] reaches (a softer one is a tap, and fires nothing).
+  double get keyPowerMin {
+    final steps = (powerFor(deadZone) / keyPowerStep - 1e-9).ceil();
+    return steps * keyPowerStep;
+  }
+
+  /// Holds an aim from [egg] at [angle] with [power] (clamped into
+  /// [keyPowerMin]..1), no pointer involved: the keyboard's way in. An aim
+  /// already under way keeps its origin.
+  void hold(Vec2 egg, {required double angle, required double power}) {
+    origin ??= egg;
+    _set(angle, power);
+  }
+
+  /// Turns the held aim by [radians] (positive turns clockwise on screen:
+  /// the core's angles grow with y down).
+  void turnBy(double radians) {
+    final state = this.state;
+    if (state == null) return;
+    _set(state.angle + radians, state.power);
+  }
+
+  /// Moves the held aim's power by [steps] of [keyPowerStep], snapped to
+  /// the step so presses never drift between grid points.
+  void stepPower(int steps) {
+    final state = this.state;
+    if (state == null) return;
+    final at = (state.power / keyPowerStep).round();
+    _set(state.angle, (at + steps) * keyPowerStep);
+  }
+
+  void _set(double angle, double power) {
+    final clamped = power.clamp(keyPowerMin, 1.0);
+    state = AimState(
+      angle: math.atan2(math.sin(angle), math.cos(angle)),
+      power: clamped,
+      dragLength: dragFor(clamped),
+    );
+  }
+
+  /// The pull (world units) that gives [power]: the curve run backwards.
+  double dragFor(double power) =>
+      maxDragLength * math.pow(power.clamp(0.0, 1.0), 1 / powerExponent);
 
   /// Cancels the drag (pointer left the area, hole ended mid-aim...).
   void cancel() {
