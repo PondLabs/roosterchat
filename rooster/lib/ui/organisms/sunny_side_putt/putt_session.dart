@@ -247,8 +247,10 @@ class PuttSessionController extends ChangeNotifier {
 
   /// The host's relayed moves: the accepted inputs, in journal order. A
   /// guest's own shot and power-up are already in (it fired them
-  /// optimistically), so those it skips; joins and leaves it takes from
-  /// the host like everything else.
+  /// optimistically), so those it skips; joins, leaves and looks (its own
+  /// too: the same look again changes nothing) it takes from the host like
+  /// everything else. A move this version cannot read (a newer client's
+  /// kind) is passed over; the next snapshot carries what it did.
   void _onRelayed(Map<String, Object?> message) {
     final match = this.match;
     if (match == null || session.isHost) {
@@ -260,7 +262,12 @@ class PuttSessionController extends ChangeNotifier {
     if (entries is! List) return;
     for (final raw in entries) {
       if (raw is! Map) continue;
-      final entry = JournalEntry.fromJson((raw).cast<String, Object?>());
+      final JournalEntry entry;
+      try {
+        entry = JournalEntry.fromJson((raw).cast<String, Object?>());
+      } on Object {
+        continue;
+      }
       if (entry.seq <= _journalSeq) continue;
       _journalSeq = entry.seq;
       final input = entry.input;
@@ -278,12 +285,18 @@ class PuttSessionController extends ChangeNotifier {
 
   /// A player's move arrived at the host: into the engine, then on to the
   /// others (the journal does the relaying on the next beat - this beats
-  /// it when the green is quiet).
+  /// it when the green is quiet). A move this version cannot read (a newer
+  /// client's kind) is dropped.
   void _onHostInput(Map<String, Object?> message) {
     final match = this.match;
     if (match == null || !session.isHost) return;
     final json = Map<String, Object?>.from(message)..remove('t');
-    final input = EngineInput.fromJson(json);
+    final EngineInput input;
+    try {
+      input = EngineInput.fromJson(json);
+    } on Object {
+      return;
+    }
     match.engine.apply(input);
     _relayJournal();
     match.notifyListeners();

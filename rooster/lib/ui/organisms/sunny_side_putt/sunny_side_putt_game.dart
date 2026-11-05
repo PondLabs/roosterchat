@@ -97,6 +97,9 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   bool menuOpen = false;
   bool settingsOpen = false;
 
+  /// "Your egg" is up over the pause menu.
+  bool lookOpen = false;
+
   /// The name tags' positions, refreshed after every rendered frame.
   final PuttTagBoard _tags = PuttTagBoard();
   final ValueNotifier<PuttCoachCue?> _coach = ValueNotifier(null);
@@ -180,6 +183,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     setState(() {
       menuOpen = !menuOpen;
       settingsOpen = false;
+      lookOpen = false;
       match.paused = menuOpen;
     });
     widget.audio?.play(PuttSfx.click);
@@ -210,8 +214,11 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
         game.targeting.cancel();
         return KeyEventResult.handled;
       }
-      if (settingsOpen) {
-        setState(() => settingsOpen = false);
+      if (settingsOpen || lookOpen) {
+        setState(() {
+          settingsOpen = false;
+          lookOpen = false;
+        });
         return KeyEventResult.handled;
       }
       if (match.phase != PuttPhase.awaitingNextCourse) {
@@ -579,12 +586,20 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
                     buses: widget.audio?.buses ?? PuttSilentBuses(),
                     onClose: () => setState(() => settingsOpen = false),
                   )
-                : PuttPauseMenu(
-                    match: match,
-                    onOpenSettings: () => setState(() => settingsOpen = true),
-                    onResume: _togglePause,
-                    onLeave: _leave,
-                  ),
+                : lookOpen
+                    ? PuttLookSheet(
+                        match: match,
+                        onPick: () => widget.audio?.play(PuttSfx.click),
+                        onClose: () => setState(() => lookOpen = false),
+                      )
+                    : PuttPauseMenu(
+                        match: match,
+                        onOpenLook: () => setState(() => lookOpen = true),
+                        onOpenSettings: () =>
+                            setState(() => settingsOpen = true),
+                        onResume: _togglePause,
+                        onLeave: _leave,
+                      ),
           ),
       ],
     );
@@ -821,6 +836,7 @@ class SunnySidePuttGame extends FlameGame {
             air: match.renderAirOf(ball.playerId),
             velocity: ball.velocity,
             tint: tintFor(ball.playerId),
+            look: player?.look ?? PuttLook.standard,
             radius: eggRadius,
             mine: ball.playerId == match.localPlayerId && match.myShotReady,
             shielded: (player?.shields ?? 0) > 0,
@@ -995,6 +1011,7 @@ class SunnySidePuttGame extends FlameGame {
         playerId: ball.playerId,
         name: displayNameOf(match, ball.playerId),
         color: tintFor(ball.playerId),
+        look: puttLookOf(match, ball.playerId),
         at: world3d.projectToWorld(at, height: lift),
         dim: aim.isActive,
         avatar: match.avatarOf?.call(ball.playerId),
@@ -1413,6 +1430,14 @@ class SunnySidePuttGame extends FlameGame {
           if (at == null) break;
           final style = kickerPuffOf(match.hole?.id ?? '');
           fx.landingPuff(at, straw: style.straw, dust: style.dust);
+        case PuttFxSpotKind.restyle:
+          // A new shell on the egg: a puff and a ring in its colour.
+          final at = _eggNow(spot.who) ?? spot.at;
+          if (at != null && spot.who != null) {
+            fx.poof(at);
+            fx.sparkles(at);
+            fx.ring(at, tintFor(spot.who!), size: 1.8);
+          }
       }
     }
     match.fxSpots.clear();

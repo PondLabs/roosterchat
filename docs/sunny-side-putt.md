@@ -65,6 +65,40 @@ results):
 - **Barnyard Chaos** - casual, but everyone starts with two random
   power-ups and the mystery boxes come doubled.
 
+### Looks
+
+Each player picks the Easter band on their egg and a hat for the chick
+that hatches from it, in "Your egg" off the pause menu: the egg and the
+chick drawn as the green shows them, a row of patterns, a row of hats. The
+colour is not part of it: it comes with the seat, so eight eggs never
+share one. The pick is kept on the device like the volumes (the
+`putt_egg_look` preference, `pattern/hat`) and worn in every match after;
+one made mid-match goes on at once, with a puff on the egg.
+
+- Patterns: zigzag (the classic band with its rings of dots, the
+  default), stripes, dots (polka dots all over), hearts and stars (a ring
+  round the waist), waves.
+- Hats: none (the default), a straw hat with a red band, a red bow, a
+  little gold crown, headphones like the host's, a daisy over one eye.
+
+Everyone sees it: the pattern on the egg on the green, the hat on the
+chick at the sink, and both on the little egg by the name on the tags, the
+scorecard, the results cards and the player picker (`putt_look.dart` draws
+them flat, the world in 3D).
+
+A look is the player's state in the engine (`PuttLook` in `core/look.dart`,
+`PuttPlayer.look`): the join brings it (the host's own at launch), a
+`LookInput` changes it in any phase, the player's snapshot keeps it and the
+journal replays it on a handoff. Nothing in the rules or the physics reads
+it. A host seats its guests knowing no look, so a guest's match asks the
+host for its own whenever the engine has it otherwise (a new seat, a fresh
+pick, a snapshot from before it): worn at home at once like a shot, through
+the host for everyone, three asks at most, a few seconds apart, so a host
+that never takes it is not pestered. A snapshot from before looks and a
+name only a newer version knows read as the default, and a move of a kind
+the client does not know is dropped (the next snapshot carries what it
+did).
+
 ### Power-ups
 
 Earned at the "?" boxes (a maximum of 3 in hand; extras discarded), and
@@ -431,14 +465,18 @@ straw nest with a flag flying the hole's number, the tee mat. The characters - t
 hens, the ducks and the host - are drawn with a line of ink round them
 (their back faces pushed out along their normals; the eggs' line weighs
 more as the camera pulls back), so they pop from the softer farm. Eggs are
-true egg profiles with an Easter band in the player's colour (their
-shells' own light takes the paint's colours, so at the Barn's dusk the
-shell stays white and the band glows); they roll
+true egg profiles painted in the player's colour with the band they
+picked (see Looks; one paint per colour and pattern, made the first time an
+egg wears it and shared after), and their shells' own light takes the
+paint's colours, so at the Barn's dusk the shell stays white and the band
+glows; they roll
 by their velocity, leave a trail when fast, settle on their side, and
 slide into the nest when they sink. There the egg hatches
 (`world3d/hatch.dart`): the shell's cap pops off in the player's colour
 and a chick rises out of the cup in the other half onto the nest's lip,
-hops three times flapping at the camera and drops back in (the viewer's
+wearing its player's hat (each of the three pooled chicks carries every
+hat and shows one), hops three times flapping at the camera and drops
+back in (the viewer's
 own a size up, the camera in on it for 3 s). The viewer's egg wears a
 marker ring and a bobbing pin drawn over everything; the others carry
 name tags, which keep clear of every egg and of the pin, are not drawn
@@ -579,7 +617,9 @@ From `rooster/`, with `ffmpeg` (libmp3lame) on the PATH:
   game plays itself on the real courses for captures; on the web the query
   picks the course, the hole, the crew, a held camera and a script of
   casts (`script=me.thick_shell@3,maya.corn_rain@5,lou.thieving_crow@7.5`;
-  see its header).
+  see its header). The crew wear looks of their own (a full table shows
+  every pattern and hat), and `look=hearts/daisy` dresses the viewer's
+  (stars and a crown by default).
 - `putt_session.dart` - the live-session bridge: the host's engine is
   the truth; guests feed their own engine with the accepted-move
   journal and resnapshot, so play is smooth without a game server.
@@ -589,6 +629,8 @@ From `rooster/`, with `ffmpeg` (libmp3lame) on the PATH:
 - `flutter test unit_test/sunny_side_putt` - physics, rules, every
   power-up, the kickers and their flights, every hole's reference solution
   and the courses' lints, the session bridge (two clients on the in-memory
-  wire), the view widgets.
+  wire), the view widgets, the looks (`core/looks_test.dart` for the engine
+  and the wire, `ui/looks_world_test.dart` for the paints and the hats,
+  `ui/looks_view_test.dart` for "Your egg" and the little eggs).
 - The voice e2e plays a hole between two real clients; see
   call-activities.md for the environment.

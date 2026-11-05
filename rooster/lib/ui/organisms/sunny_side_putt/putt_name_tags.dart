@@ -1,15 +1,18 @@
 // Name tags over the other players' eggs: who is who on a busy green. The
 // game projects each egg's spot to the surface after every rendered frame
 // ([PuttTagBoard.update]); the tags are plain Flutter pills riding those
-// pixels - the player's colour dot and name, a little pointer down to the
-// shell. The viewer's own egg has none: the bobbing arrow marks it.
+// pixels - the player's picture, their little egg (their colour, their
+// pattern, their chick's hat) and their name, a little pointer down to
+// the shell. The viewer's own egg has none: the bobbing arrow marks it.
 library;
 
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:rooster/client/components/sunny_side_putt/core/look.dart';
 
 import 'putt_art.dart';
+import 'putt_look.dart';
 
 /// One tag: who, in which colour, at which surface pixel (the spot just
 /// over the egg the pill points down to).
@@ -22,11 +25,14 @@ class PuttTag {
   /// Faded back (while I aim, the green ahead matters more).
   final bool dim;
 
-  /// The player's picture, when they have one (else the colour dot).
+  /// The player's picture, when they have one.
   final ImageProvider? avatar;
 
-  /// Just the picture (or the dot), no name: the camera is far and the
-  /// names would cover the eggs.
+  /// Their pattern and their chick's hat, on the little egg by the name.
+  final PuttLook look;
+
+  /// Just the picture (or the little egg), no name: the camera is far and
+  /// the names would cover the eggs.
   final bool compact;
 
   const PuttTag({
@@ -36,9 +42,14 @@ class PuttTag {
     required this.at,
     this.dim = false,
     this.avatar,
+    this.look = PuttLook.standard,
     this.compact = false,
   });
 }
+
+/// How tall the little egg on a tag stands, and how wide it is.
+const double _tagEggSize = 13;
+const double _tagEggWidth = _tagEggSize * 0.8;
 
 /// The tags' places, refreshed once per rendered frame; the tag layer
 /// listens.
@@ -68,10 +79,14 @@ class PuttTagBoard extends ChangeNotifier {
 /// on screen up) rises above any it would overlap. A pill's size is read
 /// off its name, near enough for the layout.
 /// A tag's pill as drawn, anchored at [at] (the tip of its tail): its
-/// padding and border, the picture (or the dot), the gap and the name at
-/// about 7.4 px a letter, and the tail under it.
+/// padding and border, the picture and the little egg (only one of them
+/// when compact), the gap and the name at about 7.4 px a letter, and the
+/// tail under it.
 Rect puttTagPill(PuttTag tag, Offset at) {
-  final mark = tag.avatar != null ? 18.0 : 8.0;
+  final picture = tag.avatar != null;
+  final mark = tag.compact
+      ? (picture ? 18.0 : _tagEggWidth)
+      : (picture ? 18.0 + 3 + _tagEggWidth : _tagEggWidth);
   final width = tag.compact
       ? mark + 9
       : (19 + mark + 5 + tag.name.length * 7.4).clamp(0.0, 150.0);
@@ -122,6 +137,7 @@ List<PuttTag> declutterTags(List<PuttTag> tags, {List<Rect> avoid = const []}) {
         at: moved[tag.playerId] ?? tag.at,
         dim: tag.dim,
         avatar: tag.avatar,
+        look: tag.look,
         compact: tag.compact,
       ),
   ];
@@ -198,14 +214,17 @@ class _TagPill extends StatelessWidget {
                           ColoredBox(color: tag.color),
                     ),
                   ),
-                )
-              else
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration:
-                      BoxDecoration(color: tag.color, shape: BoxShape.circle),
                 ),
+              // Their little egg: the colour, the pattern, the hat.
+              if (tag.avatar == null || !tag.compact) ...[
+                if (tag.avatar != null) const SizedBox(width: 3),
+                PuttEggGlyph(
+                  key: Key('putt-tag-egg-${tag.playerId}'),
+                  tint: tag.color,
+                  look: tag.look,
+                  size: _tagEggSize,
+                ),
+              ],
               if (!tag.compact) const SizedBox(width: 5),
               if (!tag.compact)
                 Flexible(

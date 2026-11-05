@@ -18,6 +18,11 @@
 //         for the next course (casual/barnyard); scores accumulate
 //   -> matchOver (tournament) or until the host ends it (casual)
 //
+// A player's look (their egg's band pattern, their chick's hat; see
+// look.dart) rides with them: the join brings it, a [LookInput] changes it
+// at any time, the player's snapshot keeps it. Cosmetic only - nothing here
+// reads it - so a look never moves the game.
+//
 // Mid-join drops the player straight onto the current hole's tee; holes
 // they missed score par. Leaving mid-hole stops their egg; at hole end they
 // score max(strokes, par + 2) like any other timeout. Rejoining the same
@@ -36,10 +41,13 @@ library;
 import 'dart:math' as math;
 
 import 'hole.dart';
+import 'look.dart';
 import 'physics.dart';
 import 'powerups.dart';
 import 'rng.dart';
 import 'vec.dart';
+
+export 'look.dart';
 
 enum GameMode { casual, tournament, barnyardChaos }
 
@@ -162,7 +170,14 @@ class PuttPlayer {
   int shields = 0;
   bool leftMidHole = false;
 
-  PuttPlayer({required this.id, this.spectator = false});
+  /// Their egg's pattern and their chick's hat: drawn the same on every
+  /// client, read by nothing in the game.
+  PuttLook look;
+
+  PuttPlayer(
+      {required this.id,
+      this.spectator = false,
+      this.look = PuttLook.standard});
 
   Map<String, Object?> toJson() => {
         'id': id,
@@ -171,12 +186,15 @@ class PuttPlayer {
         'left': leftMidHole,
         'inventory': inventory.toJson(),
         'nextShot': nextShot.toJson(),
+        'look': look.toJson(),
       };
 
   factory PuttPlayer.fromJson(Map<String, Object?> json) {
     final player = PuttPlayer(
       id: json['id'] as String,
       spectator: json['spectator'] == true,
+      // A snapshot from before looks: the default one.
+      look: PuttLook.fromJson(json['look']),
     )
       ..shields = (json['shields'] as num?)?.toInt() ?? 0
       ..leftMidHole = json['left'] == true
@@ -298,6 +316,14 @@ class PlayerLeft extends PuttEvent {
   final String playerId;
 
   const PlayerLeft({required this.playerId});
+}
+
+/// A player put on another look (a [LookInput] took).
+class PlayerLookChanged extends PuttEvent {
+  final String playerId;
+  final PuttLook look;
+
+  const PlayerLookChanged({required this.playerId, required this.look});
 }
 
 /// A player sent a quick reaction ([puttReactions]).
@@ -423,7 +449,8 @@ sealed class EngineInput {
             effectId: json['e'] as String,
             target: target);
       case 'join':
-        return JoinInput(playerId: json['p'] as String);
+        return JoinInput(
+            playerId: json['p'] as String, look: PuttLook.fromJson(json['l']));
       case 'leave':
         return LeaveInput(playerId: json['p'] as String);
       case 'advance':
@@ -437,6 +464,9 @@ sealed class EngineInput {
       case 'react':
         return ReactInput(
             playerId: json['p'] as String, reaction: json['r'] as String);
+      case 'look':
+        return LookInput(
+            playerId: json['p'] as String, look: PuttLook.fromJson(json['l']));
     }
     throw ArgumentError.value(json, 'json', 'unknown input');
   }
@@ -486,10 +516,18 @@ class PowerUpInput extends EngineInput {
 class JoinInput extends EngineInput {
   final String playerId;
 
-  const JoinInput({required this.playerId});
+  /// The look a new player comes with (a host seating its roster knows
+  /// none: the player's own [LookInput] follows).
+  final PuttLook look;
+
+  const JoinInput({required this.playerId, this.look = PuttLook.standard});
 
   @override
-  Map<String, Object?> toJson() => {'k': 'join', 'p': playerId};
+  Map<String, Object?> toJson() => {
+        'k': 'join',
+        'p': playerId,
+        if (!look.isStandard) 'l': look.toJson(),
+      };
 }
 
 class LeaveInput extends EngineInput {
@@ -543,6 +581,19 @@ class ReactInput extends EngineInput {
 
   @override
   Map<String, Object?> toJson() => {'k': 'react', 'p': playerId, 'r': reaction};
+}
+
+/// A player's new look: it changes nothing in the game, everyone draws it.
+/// Taken in any phase, from anyone in the match (playing or watching).
+class LookInput extends EngineInput {
+  final String playerId;
+  final PuttLook look;
+
+  const LookInput({required this.playerId, required this.look});
+
+  @override
+  Map<String, Object?> toJson() =>
+      {'k': 'look', 'p': playerId, 'l': look.toJson()};
 }
 
 /// One accepted input, stamped with its place in the tick stream.
@@ -714,7 +765,14 @@ class PuttEngine {
       _accept(
           PowerUpInput(playerId: playerId, effectId: effectId, target: target));
 
-  bool join(String playerId) => _accept(JoinInput(playerId: playerId));
+  /// Seats [playerId] (a spectator past the table's size) in [look].
+  bool join(String playerId, {PuttLook look = PuttLook.standard}) =>
+      _accept(JoinInput(playerId: playerId, look: look));
+
+  /// Puts [look] on [playerId] (see [LookInput]); false when they already
+  /// wear it or are not in the match.
+  bool setLook(String playerId, PuttLook look) =>
+      _accept(LookInput(playerId: playerId, look: look));
 
   bool leave(String playerId) => _accept(LeaveInput(playerId: playerId));
 
@@ -825,7 +883,7 @@ class PuttEngine {
       case PowerUpInput():
         return _usePowerUp(input);
       case JoinInput():
-        return _join(input.playerId);
+        return _join(input);
       case LeaveInput():
         return _leave(input.playerId);
       case AdvanceInput():
@@ -836,7 +894,19 @@ class PuttEngine {
         return _endMatch();
       case ReactInput():
         return _react(input);
+      case LookInput():
+        return _wear(input);
     }
+  }
+
+  /// A new look on someone in the match: the event, nothing else. The same
+  /// look again is no change (and no journal entry).
+  bool _wear(LookInput input) {
+    final player = _players[input.playerId];
+    if (player == null || player.look == input.look) return false;
+    player.look = input.look;
+    _events.add(PlayerLookChanged(playerId: player.id, look: input.look));
+    return true;
   }
 
   /// A reaction from someone in the match (playing or watching), of a
@@ -957,7 +1027,8 @@ class PuttEngine {
     return true;
   }
 
-  bool _join(String playerId) {
+  bool _join(JoinInput input) {
+    final playerId = input.playerId;
     final existing = _players[playerId];
     if (existing != null) {
       // A player who left mid-hole rejoins: back on the tee, strokes kept.
@@ -973,7 +1044,8 @@ class PuttEngine {
     }
     final activeCount = _players.values.where((p) => !p.spectator).length;
     final asSpectator = activeCount >= config.maxPlayers;
-    _players[playerId] = PuttPlayer(id: playerId, spectator: asSpectator);
+    _players[playerId] =
+        PuttPlayer(id: playerId, spectator: asSpectator, look: input.look);
     _creditMissedHoles(playerId);
     if (_phase == PuttPhase.holePlay) {
       // And a null slot for the hole in progress.

@@ -62,6 +62,7 @@ import 'package:three_js_geometry/three_js_geometry.dart' as tjg;
 import 'package:three_js_math/three_js_math.dart' as tjs;
 
 import 'package:rooster/client/components/sunny_side_putt/core/hole.dart';
+import 'package:rooster/client/components/sunny_side_putt/core/look.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
 
 import 'flutter_env_io.dart'
@@ -104,6 +105,10 @@ class PuttWorldEgg {
   /// The egg's velocity, which hands the roll its axis.
   final Vec2 velocity;
   final ui.Color tint;
+
+  /// The player's look: the band painted on the shell, the hat the chick
+  /// wears when this egg hatches.
+  final PuttLook look;
   final double radius;
 
   /// The viewer's own egg: it wears the marker ring on the turf.
@@ -127,6 +132,7 @@ class PuttWorldEgg {
     required this.velocity,
     required this.tint,
     required this.radius,
+    this.look = PuttLook.standard,
     this.height = 0,
     this.air,
     this.mine = false,
@@ -818,6 +824,7 @@ class PuttWorld3D {
       if (hatchling._age > pick._age) pick = hatchling;
     }
     pick.hatch(nest, view._tintHex,
+        hat: view.hat,
         floor: _ground.at(nest),
         big: view.everMine,
         rim: (_hole?.nest.radius ?? 1.2) * 0.85);
@@ -1268,6 +1275,7 @@ class PuttWorld3D {
         final created = _EggView3D(
           egg.radius * _eggVisualScale,
           egg.tint,
+          pattern: egg.look.pattern,
           trailHex: _mix(_theme.turfFringe, 0x4A3A22, 0.4),
           terrain: _ground,
           glow: _theme.eggGlow,
@@ -1281,7 +1289,9 @@ class PuttWorld3D {
         _actorsRoot.add(created.trail);
         return created;
       });
-      view.retint(egg.tint);
+      view
+        ..restyle(egg.tint, egg.look.pattern)
+        ..hat = egg.look.hat;
       view.sync(egg, dt, frame.time);
       view.outlineFor(rig.distance);
     }
