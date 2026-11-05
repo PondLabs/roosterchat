@@ -338,6 +338,13 @@ void main() {
           'miss (see the issue).');
     }
 
+    // The game's 3D surface (an ANGLE texture) and its sound players are
+    // native resources that only go when their widgets are disposed: take
+    // the whole tree down while the engine still runs, and give the
+    // disposals a beat, so the process does not meet them on its way out.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 500));
+
     // The voice call goes down before the app's own shutdown: a process
     // that tears down with the WebRTC stack still up dies after the run's
     // summary prints (exit 1 with every test green), which reads as a
