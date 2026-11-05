@@ -2092,7 +2092,7 @@ class _HintPill extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (powerUp != null) ...[
-            PuttPowerUpIcon(effectId: powerUp, size: 20),
+            PuttPowerUpIcon(effectId: powerUp, size: 24),
             const SizedBox(width: 10),
           ] else if (icon != null) ...[
             Icon(icon, size: 18, color: PuttPalette.yolk),
@@ -2109,13 +2109,14 @@ class _HintPill extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: _Type.body(13.5, weight: 800),
                 ),
+                // A size up and brighter: at 11.5 it read as small print.
                 if (detail != null)
                   Text(
                     detail,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: _Type.body(11.5,
-                        color: PuttPalette.cream.withValues(alpha: 0.65)),
+                    style: _Type.body(12.5,
+                        color: PuttPalette.cream.withValues(alpha: 0.8)),
                   ),
               ],
             ),
@@ -2454,7 +2455,7 @@ class PuttPlayerPicker extends StatelessWidget {
           children: [
             Row(
               children: [
-                PuttPowerUpIcon(effectId: effectId, size: 20),
+                PuttPowerUpIcon(effectId: effectId, size: 24),
                 const SizedBox(width: 9),
                 Expanded(
                   child: Text(
