@@ -91,7 +91,7 @@ class _EggView3D {
     // reads from the ground even when the band faces away.
     _tintDisc = tjs.Mesh(
       tjg.RingGeometry(_radius * 0.95, _radius * 1.4, 32, 1),
-      _unlit(_tintHex, opacity: 0.78, depthWrite: false),
+      _unlit(_tintHex, opacity: _tintDiscOpacity, depthWrite: false),
     )
       ..name = 'egg-tint-disc'
       ..rotation.x = -math.pi / 2
@@ -164,8 +164,18 @@ class _EggView3D {
   /// How long the bubble has been up (it blows up when the shell comes).
   double _bubbleAge = 0;
 
-  /// The shell's opacity now: 1 solid, lower while a Ghost Egg lasts.
+  /// The shell's opacity now: 1 solid, lower while a Ghost Egg lasts or
+  /// while it stands aside for the viewer's egg.
   double _ghostOpacity = 1;
+
+  /// Whether this egg stands in front of the viewer's resting egg on the
+  /// screen (the world says, each frame): it fades to a ghost of itself,
+  /// so the viewer's egg, its pin and the aim read through it.
+  bool screening = false;
+
+  /// How far it has faded for that, 0 to 1 (eased over a fifth of a
+  /// second).
+  double _screened = 0;
 
   static const int _trailLength = 18;
 
@@ -358,7 +368,7 @@ class _EggView3D {
         0.55 * (1 - lift * 0.6) * (0.35 + 0.65 * _ghostOpacity.clamp(0.0, 1.0));
 
     _syncBubble(egg, dt, time, drawn + support + egg.height);
-    _syncGhost(egg, time, lift);
+    _syncGhost(egg, time, dt);
 
     final resting = speed < 0.05;
     final showMarker = egg.mine && resting;
@@ -398,7 +408,7 @@ class _EggView3D {
   /// A Ghost Egg: the shell and its ink go see-through and flicker while
   /// it lasts, blinking back toward solid as it runs out; its shadow
   /// thins. Opacity only - every material was made transparent at build.
-  void _syncGhost(PuttWorldEgg egg, double time, double lift) {
+  void _syncGhost(PuttWorldEgg egg, double time, double dt) {
     var target = 1.0;
     final left = egg.ghostSeconds;
     if (left > 0) {
@@ -410,14 +420,20 @@ class _EggView3D {
         target += (0.95 - target) * blink * (1 - left / 0.9);
       }
     }
+    // Standing aside for the viewer's egg: a third of itself, still there.
+    _screened = (_screened + (screening ? dt : -dt) * 5).clamp(0.0, 1.0);
+    target *= 1 - 0.66 * _screened;
     if ((target - _ghostOpacity).abs() < 1e-3) return;
     _ghostOpacity = target;
     body.material?.opacity = target;
     _outline.material?.opacity = target >= 1 ? 1 : target * 0.7;
     _xray.material?.opacity = 0.5 * target;
-    _tintDisc.material?.opacity = 0.6 * (0.45 + 0.55 * target);
+    _tintDisc.material?.opacity = _tintDiscOpacity * (0.45 + 0.55 * target);
     body.castShadow = target > 0.9;
   }
+
+  /// The colour disc's opacity under a solid egg.
+  static const double _tintDiscOpacity = 0.78;
 
   /// Where the drawn egg stands, given the [ground] under it: on rising
   /// ground at once, on sinking ground as fast as it sinks - unless that is

@@ -402,7 +402,8 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   void _afterFrame() {
     game.worldDrew();
     _greenShown.value = true;
-    _tags.update(game.tagsForFrame(), avoid: game.tagObstacles());
+    _tags.update(game.tagsForFrame(),
+        avoid: game.tagObstacles(), hud: game.hudOverGreen());
     _coach.value = game.coachForFrame();
     _nestPointer.value = game.nestPointerForFrame();
     _bubbles.update(game.bubblesForFrame());
@@ -972,6 +973,20 @@ class SunnySidePuttGame extends FlameGame {
     );
   }
 
+  /// Where the HUD stands over the green, in screen pixels: the strip at
+  /// the top with the hole's dots under it, the course's chip at the top
+  /// left, the corner buttons at the top right (the reactions under them).
+  List<Rect> hudOverGreen() {
+    final view = world3d.rig.viewport;
+    if (view.width <= 0 || view.height <= 0) return const [];
+    final w = view.width;
+    return [
+      Rect.fromLTRB(w / 2 - 166, 0, w / 2 + 166, 98),
+      const Rect.fromLTRB(0, 0, 164, 66),
+      Rect.fromLTRB(w - 118, 0, w, 110),
+    ];
+  }
+
   /// What the tags must leave clear: every egg on the green (mine with its
   /// pin above it).
   List<Rect> tagObstacles() {
@@ -984,10 +999,10 @@ class SunnySidePuttGame extends FlameGame {
       final at = match.renderPositionOf(ball.playerId);
       if (!world3d.inFrontOfCamera(at)) continue;
       final foot = world3d.projectToWorld(at);
-      // Mine with its pin over it; the others up to their shell's top (their
-      // own tags stand above that).
+      // Mine with its pin over it (the pin bobs up to some six radii); the
+      // others up to their shell's top (their own tags stand above that).
       final top =
-          world3d.projectToWorld(at, height: eggRadius * (mine ? 4.2 : 2.4));
+          world3d.projectToWorld(at, height: eggRadius * (mine ? 6.0 : 2.4));
       final half = math.max(mine ? 14.0 : 8.0, (foot.dy - top.dy) * 0.45);
       out.add(Rect.fromLTRB(foot.dx - half, top.dy, foot.dx + half, foot.dy));
     }

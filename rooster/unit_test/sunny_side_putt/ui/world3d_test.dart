@@ -131,6 +131,7 @@ void main() {
     bool shielded = false,
     double ghostSeconds = 0,
     bool magnet = false,
+    bool mine = false,
   }) {
     return PuttWorldEgg(
       playerId: playerId,
@@ -142,6 +143,7 @@ void main() {
       shielded: shielded,
       ghostSeconds: ghostSeconds,
       magnet: magnet,
+      mine: mine,
     );
   }
 
@@ -1018,6 +1020,48 @@ void main() {
       frame(0);
       expect(shellMaterial.opacity, closeTo(1, 1e-9));
       expect(outlineMaterial.opacity, closeTo(1, 1e-9));
+    });
+
+    test("an egg in front of the viewer's resting egg fades aside", () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      const mineAt = Vec2(10, 10);
+      world.applySnapshot(
+          PuttWorldFrame(time: 0, eggs: [eggAt(mineAt, mine: true)]));
+      // On the ground line from mine toward the camera, close in front.
+      final eye = world.camera.position;
+      final toward = Vec2(eye.x - mineAt.x, eye.z - mineAt.y);
+      final front = mineAt + toward * (1.3 / toward.length);
+      const aside = Vec2(16, 4);
+      var time = 0.016;
+      void frame({Vec2 velocity = Vec2.zero}) {
+        world.applySnapshot(PuttWorldFrame(time: time, eggs: [
+          eggAt(mineAt, mine: true, velocity: velocity),
+          eggAt(front, playerId: 'front'),
+          eggAt(aside, playerId: 'aside'),
+        ]));
+        time += 0.016;
+      }
+
+      double opacityOf(String playerId) => walk(world.eggOf(playerId)!)
+          .firstWhere((o) => o.name == 'egg-shell')
+          .material!
+          .opacity;
+      for (var i = 0; i < 30; i++) {
+        frame();
+      }
+      expect(opacityOf('front'), lessThan(0.5),
+          reason: 'mine, its pin and the aim read through it');
+      expect(opacityOf('front'), greaterThan(0.2), reason: 'still there');
+      expect(opacityOf('aside'), closeTo(1, 1e-9),
+          reason: 'an egg elsewhere stays solid');
+      expect(opacityOf('me'), closeTo(1, 1e-9));
+
+      // Mine on the move: nothing to read through any more.
+      for (var i = 0; i < 30; i++) {
+        frame(velocity: const Vec2(3, 0));
+      }
+      expect(opacityOf('front'), closeTo(1, 1e-9));
     });
 
     test('the nest shimmers while an egg carries a magnet', () {

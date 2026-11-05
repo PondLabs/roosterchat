@@ -1157,6 +1157,56 @@ class PuttWorld3D {
     });
   }
 
+  final tjs.Vector3 _mineInView = tjs.Vector3();
+  final tjs.Vector3 _otherInView = tjs.Vector3();
+
+  /// Marks the eggs that stand in front of the viewer's resting egg on the
+  /// screen (by last frame's camera and places), so they fade aside: the
+  /// close camera behind a fresh egg looks along the tee's ring of eggs,
+  /// and the nearest one hid the viewer's egg, its pin and the aim's base.
+  void _screenEggs(PuttWorldFrame frame) {
+    PuttWorldEgg? mine;
+    for (final egg in frame.eggs) {
+      if (egg.mine) mine = egg;
+    }
+    final mineView = mine == null ? null : _eggViews[mine.playerId];
+    final resting = mineView != null && mine!.speed < 0.05;
+    if (resting) {
+      _mineInView
+        ..setFrom(mineView.group.position)
+        ..applyMatrix4(camera.matrixWorldInverse);
+    }
+    for (final egg in frame.eggs) {
+      if (egg.mine) continue;
+      final view = _eggViews[egg.playerId];
+      if (view == null) continue;
+      view.screening = resting && _covers(view, mineView);
+    }
+  }
+
+  /// Whether [other] stands nearer the camera than [mine] and overlaps it
+  /// on the screen: boxes in the view's slope (x/z, y/z), the viewer's
+  /// reaching up over its pin.
+  bool _covers(_EggView3D other, _EggView3D mine) {
+    _otherInView
+      ..setFrom(other.group.position)
+      ..applyMatrix4(camera.matrixWorldInverse);
+    // The camera looks down its -z.
+    final zMine = -_mineInView.z;
+    final zOther = -_otherInView.z;
+    if (zMine <= 0.1 || zOther <= 0.1 || zOther >= zMine) return false;
+    final rMine = mine._radius / zMine;
+    final rOther = other._radius / zOther;
+    final dx = (_otherInView.x / zOther - _mineInView.x / zMine).abs();
+    if (dx > (rMine + rOther) * 1.05) return false;
+    final yMine = _mineInView.y / zMine;
+    final yOther = _otherInView.y / zOther;
+    final tall = rOther * _eggAspect;
+    // Mine from under its shell to the top of its pin.
+    return yOther + tall > yMine - rMine * _eggAspect &&
+        yOther - tall < yMine + rMine * 4.4;
+  }
+
   void _syncEggs(PuttWorldFrame frame, double dt) {
     // What the host watches: the quickest egg on the move, else mine.
     Vec2? quickest;
@@ -1170,6 +1220,7 @@ class PuttWorld3D {
       }
     }
     if (quickest != null) _watch = quickest;
+    _screenEggs(frame);
     final seen = <String>{};
     for (final egg in frame.eggs) {
       seen.add(egg.playerId);

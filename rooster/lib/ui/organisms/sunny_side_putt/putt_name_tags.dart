@@ -48,10 +48,17 @@ class PuttTagBoard extends ChangeNotifier {
   List<PuttTag> get tags => _tags;
 
   /// The tags for this frame, laid clear of each other and of [avoid]
-  /// (my own egg, which wears no tag but must not vanish under one).
-  void update(List<PuttTag> tags, {List<Rect> avoid = const []}) {
+  /// (the eggs, mine with its pin). One that would stand under the [hud]
+  /// (the top strip, the corner buttons) is not drawn: it would read as part
+  /// of the HUD, and an egg that far up is under it too.
+  void update(List<PuttTag> tags,
+      {List<Rect> avoid = const [], List<Rect> hud = const []}) {
     if (tags.isEmpty && _tags.isEmpty) return;
-    _tags = declutterTags(tags, avoid: avoid);
+    final laid = declutterTags(tags, avoid: avoid);
+    _tags = [
+      for (final tag in laid)
+        if (!hud.any((rect) => rect.overlaps(puttTagPill(tag, tag.at)))) tag,
+    ];
     notifyListeners();
   }
 }

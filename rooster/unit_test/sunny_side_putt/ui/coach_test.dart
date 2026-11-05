@@ -71,6 +71,33 @@ void main() {
     expect(puttTagPill(tag, tag.at).overlaps(mine), isFalse);
   });
 
+  test('a tag that would stand under the HUD is not drawn', () {
+    final board = PuttTagBoard();
+    addTearDown(board.dispose);
+    const strip = Rect.fromLTRB(474, 0, 806, 98);
+    board.update(const [
+      PuttTag(
+          playerId: 'up',
+          name: 'Jonas',
+          color: Colors.blue,
+          at: Offset(640, 90)),
+      PuttTag(
+          playerId: 'down',
+          name: 'Lou',
+          color: Colors.pink,
+          at: Offset(640, 300)),
+      PuttTag(
+          playerId: 'beside',
+          name: 'Maya',
+          color: Colors.teal,
+          at: Offset(300, 60)),
+    ], hud: [
+      strip
+    ]);
+    expect(board.tags.map((t) => t.playerId), ['down', 'beside'],
+        reason: 'under the strip: gone; below it or beside it: drawn');
+  });
+
   testWidgets('the reaction picker opens and sends one, then folds',
       (tester) async {
     final sent = <String>[];
