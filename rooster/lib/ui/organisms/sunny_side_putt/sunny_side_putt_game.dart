@@ -54,6 +54,7 @@ import 'putt_hud.dart';
 import 'putt_match.dart';
 import 'putt_menus.dart';
 import 'putt_coach.dart';
+import 'putt_mini_map.dart';
 import 'putt_reactions.dart';
 import 'putt_name_tags.dart';
 import 'putt_nest_marker.dart';
@@ -119,6 +120,9 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   /// The off-screen nest's marker, refreshed after every rendered frame.
   final ValueNotifier<PuttNestPointer?> _nestPointer = ValueNotifier(null);
 
+  /// The hole from above while I aim with the nest out of sight.
+  final ValueNotifier<PuttMiniMapFrame?> _miniMap = ValueNotifier(null);
+
   /// Whether the green has been drawn yet (or never will be: no GPU
   /// surface here, or it failed). Until then the HUD's banners wait, so a
   /// slow boot does not play the hole's card to a blank screen.
@@ -164,6 +168,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     _busy.dispose();
     _greenShown.dispose();
     _nestPointer.dispose();
+    _miniMap.dispose();
     _bubbles.dispose();
     game.targeting.dispose();
     super.dispose();
@@ -405,7 +410,9 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     _tags.update(game.tagsForFrame(),
         avoid: game.tagObstacles(), hud: game.hudOverGreen());
     _coach.value = game.coachForFrame();
-    _nestPointer.value = game.nestPointerForFrame();
+    final pointer = game.nestPointerForFrame();
+    _nestPointer.value = pointer;
+    _miniMap.value = game.miniMapForFrame(nestOutOfSight: pointer != null);
     _bubbles.update(game.bubblesForFrame());
     final mine = game.match.myBall;
     _busy.value =
@@ -471,6 +478,8 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
               // Where the nest is, when the camera is in on my egg and the
               // nest is off the screen.
               PuttNestMarker(pointer: _nestPointer),
+              // And the whole hole from above, while I aim at it.
+              PuttMiniMap(frame: _miniMap),
               // The putt's gesture, shown over my egg until I have it.
               PuttCoach(cue: _coach),
               // Quick reactions over the eggs that sent them.
@@ -1056,7 +1065,52 @@ class SunnySidePuttGame extends FlameGame {
       Rect.fromLTRB(0, h - 58, 260, h),
       Rect.fromLTRB(w / 2 - 180, h - 52, w / 2 + 180, h),
       Rect.fromLTRB(w - 200, h - 74, w, h),
+      if (_miniMapShown) puttMiniMapRect,
     ];
+  }
+
+  /// Whether the map showed last frame (tags keep out from under it).
+  bool _miniMapShown = false;
+
+  /// The hole from above while I aim with the nest out of sight (the close
+  /// camera on a long hole): see `putt_mini_map.dart`. Null otherwise.
+  PuttMiniMapFrame? miniMapForFrame({required bool nestOutOfSight}) {
+    final hole = match.hole;
+    final mine = match.myBall;
+    final world = match.engine.world;
+    final state = aim.state;
+    PuttMiniMapFrame? frame;
+    if (nestOutOfSight &&
+        hole != null &&
+        world != null &&
+        mine != null &&
+        !mine.holed &&
+        aim.isActive &&
+        state != null) {
+      final eye = world3d.camera.position;
+      final target = world3d.rig.target;
+      final ahead = core.Vec2(target.x - eye.x, target.y - eye.z);
+      final me = match.localPlayerId;
+      frame = PuttMiniMapFrame(
+        hole: hole,
+        forward: ahead.length < 1e-6
+            ? const core.Vec2(0, -1)
+            : ahead * (1 / ahead.length),
+        // The engine's own places: at this size, no tick's interpolation
+        // shows.
+        mine: mine.position,
+        tint: tintFor(me),
+        others: [
+          for (final ball in world.balls)
+            if (!ball.holed && ball.playerId != me)
+              (ball.position, tintFor(ball.playerId)),
+        ],
+        aimAngle: state.angle + aim.swayNow(aimLayer.holdSeconds),
+        aimPower: state.power,
+      );
+    }
+    _miniMapShown = frame != null;
+    return frame;
   }
 
   /// What the tags must leave clear: every egg on the green (mine with its
