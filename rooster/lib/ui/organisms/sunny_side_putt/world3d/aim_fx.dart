@@ -1,7 +1,8 @@
 // The aim and the bursts. The aim lies on the turf: the slingshot's pull
 // behind the egg, a power ring filling around it, the arrow ahead whose
 // length and colour say how hard (green, yolk, comb red), and the dotted
-// guide - the first stretch of the roll the engine's own physics predicts.
+// guide - the first stretch of the roll the engine's own physics predicts,
+// rising through the air off a kicker and marked where it comes down.
 // The bursts are pooled sprites over a soft disc (splashes, sparkles,
 // suction, poofs, dust, confetti) and a few expanding rings.
 part of '../putt_world3d.dart';
@@ -128,6 +129,28 @@ class _PuttAimView3D {
         ..renderOrder = 9);
     group.add(_restMark);
 
+    // Where a flight off a kicker comes down: a yolk ring in an ink one,
+    // a size up on the rail's, so the landing reads as the place to aim.
+    _landMark = tjs.Group()
+      ..name = 'aim-landing'
+      ..visible = false;
+    _landMark
+      ..add(tjs.Mesh(
+        tjg.RingGeometry(0.34, 0.62, 28, 1),
+        _unlit(_hexOf(PuttPalette.ink), opacity: 0.45, depthWrite: false),
+      )
+        ..rotation.x = -math.pi / 2
+        ..position.y = 0.055
+        ..renderOrder = 6)
+      ..add(tjs.Mesh(
+        tjg.RingGeometry(0.4, 0.54, 28, 1),
+        _unlit(_hexOf(PuttPalette.yolk), opacity: 0.95, depthWrite: false),
+      )
+        ..rotation.x = -math.pi / 2
+        ..position.y = 0.06
+        ..renderOrder = 7);
+    group.add(_landMark);
+
     for (var i = 0; i < _dotCount; i++) {
       // Each dot: cream over a soft ink ring, so it reads on light and dark
       // turf stripes alike.
@@ -172,6 +195,7 @@ class _PuttAimView3D {
   late final tjs.Mesh _core;
   late final tjs.Group _bounceMark;
   late final tjs.Group _restMark;
+  late final tjs.Group _landMark;
   late final tjs.MeshBasicMaterial _arrowMaterial;
   late final tjs.MeshBasicMaterial _outlineMaterial;
   final List<tjs.Group> _dots = [];
@@ -278,8 +302,10 @@ class _PuttAimView3D {
     }
 
     // The dotted guide along the predicted roll, from the arrow's tip on,
-    // fading toward its end; a ring where it first meets a rail.
+    // fading toward its end; a ring where it first meets a rail, another
+    // where a flight comes down.
     final points = aim.preview;
+    final airs = aim.previewAir;
     var shown = 0;
     _bounceMark.visible = false;
     final bounce = _firstBounce(points);
@@ -288,6 +314,15 @@ class _PuttAimView3D {
         ..visible = true
         ..position.setValues(bounce.x - aim.origin.x,
             terrain.at(bounce) - floor, bounce.y - aim.origin.y);
+    }
+    final landing = aim.landing;
+    _landMark.visible = landing != null;
+    if (landing != null) {
+      final breathe = 1 + 0.08 * math.sin(time * 5);
+      _landMark
+        ..position.setValues(landing.x - aim.origin.x,
+            terrain.at(landing) - floor, landing.y - aim.origin.y)
+        ..scale.setValues(scale * breathe, 1, scale * breathe);
     }
     if (points.length >= 2) {
       const spacing = 0.62;
@@ -309,8 +344,10 @@ class _PuttAimView3D {
           if (p.distanceTo(aim.origin) < tip) continue;
           final dot = _dots[shown];
           dot.visible = true;
-          dot.position.setValues(p.x - aim.origin.x,
-              terrain.at(p) - floor + 0.05, p.y - aim.origin.y);
+          final rise = _guideHeight(
+              points, airs, i, (t - spacing) / segment, p, terrain);
+          dot.position.setValues(
+              p.x - aim.origin.x, rise - floor + 0.05, p.y - aim.origin.y);
           final left =
               math.pow((1 - shown / expected).clamp(0.0, 1.0), 0.7).toDouble();
           final fade = rest != null ? math.max(left, 0.6) : left;
@@ -326,6 +363,22 @@ class _PuttAimView3D {
     for (var i = shown; i < _dots.length; i++) {
       _dots[i].visible = false;
     }
+  }
+
+  /// The guide's height at [p], [u] of the way from point `i - 1` to
+  /// point [i]: the ground's, or between the flight's altitudes where the
+  /// egg is in the air there ([airs] beside [points]; a point on the ground
+  /// counts at the ground's height, so the dots climb off the lip).
+  static double _guideHeight(List<Vec2> points, List<double?> airs, int i,
+      double u, Vec2 p, _Ground terrain) {
+    final ground = terrain.at(p);
+    if (airs.length <= i) return ground;
+    final from = airs[i - 1];
+    final to = airs[i];
+    if (from == null && to == null) return ground;
+    final a = from ?? terrain.at(points[i - 1]);
+    final b = to ?? terrain.at(points[i]);
+    return math.max(ground, a + (b - a) * u.clamp(0.0, 1.0));
   }
 
   /// How far the guide runs along its points.

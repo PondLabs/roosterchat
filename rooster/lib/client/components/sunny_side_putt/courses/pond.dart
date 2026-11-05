@@ -1,4 +1,4 @@
-// The Pond - the water course: a lane through the lilies, a weir and a
+// The Pond - the water course: a jump over the lilies, a weir and a
 // footbridge, an island green, a railed boardwalk, ducks on their rounds
 // and a field of frog ponds. Wet eggs go back where they were hit from,
 // the stroke counted. Six holes, all with verified solutions.
@@ -19,13 +19,22 @@ final List<SunnySidePuttHole> thePondHoles = [
 ];
 
 // -- hole 1: Lily Pad Lane ----------------------------------------------------
-// A pond in the middle of the green with a causeway straight across it:
-// the bold line to the nest. The banks round the pond are the safe way.
+// A pond fills the middle of the green, lilies on it, and the banks round
+// it are the safe way (a "?" waits on the north one). The bold line is a
+// stone jetty run out into the lilies straight at the nest, a stone kicker
+// at its end: a firm, straight putt flies the rest of the pond onto the
+// far bank and runs on to the nest, or comes back to it off the far rail.
+// A soft one rolls off the lip into the lilies, a crooked one off the
+// jetty's side.
 
 const Vec2 _pond1Tee = Vec2(6, 13);
 const Vec2 _pond1Nest = Vec2(40, 13);
 const Rect _pond1Bounds = Rect(Vec2.zero, Vec2(46, 26));
 const Vec2 _pond1Bank = Vec2(23, 3.5);
+
+/// The kicker at the jetty's end, its lip at the water's edge.
+const Kicker _pond1Kicker =
+    Kicker(Vec2(18, 13), Vec2(20, 13), width: 3, pitch: 0.5, threshold: 8);
 
 HoleDef _lilyPadLane() {
   return HoleDef(
@@ -39,31 +48,38 @@ HoleDef _lilyPadLane() {
       ...cornerBoards(_pond1Bounds, 5),
     ],
     water: const [
+      // The pond, the jetty cut out of its west side.
       WaterPolygon([
         Vec2(15, 10.5),
         Vec2(18.5, 7),
         Vec2(27.5, 7),
         Vec2(31, 10.5),
-        Vec2(31, 11.25),
-        Vec2(15, 11.25),
-      ]),
-      WaterPolygon([
-        Vec2(15, 14.75),
-        Vec2(31, 14.75),
         Vec2(31, 15.5),
         Vec2(27.5, 19),
         Vec2(18.5, 19),
         Vec2(15, 15.5),
+        Vec2(15, 14.9),
+        Vec2(20.35, 14.9),
+        Vec2(20.35, 11.1),
+        Vec2(15, 11.1),
       ]),
     ],
-    boxes: [QuestionBox('pond_1_box', Vec2(23, 13))],
+    kickers: const [_pond1Kicker],
+    boxes: [QuestionBox('pond_1_box', _pond1Bank)],
   );
 }
 
-ReferenceSolution _lilyPadLaneSolution() => ReferenceSolution([
-      putt(_pond1Tee, _pond1Bank),
-      putt(landAt(_pond1Tee, _pond1Bank), _pond1Nest, arrival: 2.2),
-    ]);
+// Found by a sweep, and it holds for nearby aims and powers: down the
+// jetty and off the kicker, over the lilies onto the far bank, back off
+// the far rail; then the putt in. (A touch firmer comes back into the
+// nest; round the north bank is the safe two.)
+ReferenceSolution _lilyPadLaneSolution() {
+  const offTheFarRail = Vec2(43.19, 13.00);
+  return ReferenceSolution([
+    const ReferenceShot(0, 0.84),
+    putt(offTheFarRail, _pond1Nest, arrival: 2.2),
+  ]);
+}
 
 // -- hole 2: The Weir ---------------------------------------------------------
 // A stream cuts the green in two. The weir crosses it in line with the

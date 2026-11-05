@@ -279,10 +279,12 @@ class _EggView3D {
   /// a white egg stays white in the blue hour).
   final int _glow;
 
-  /// The stand (ground spot plus the hop's lift), then the roll: world
-  /// axis from the horizontal velocity, omega = |v| / r, pre-multiplied so
-  /// world space holds the accumulated spin - the egg tips exactly where it
-  /// goes. Still, it eases onto its side, the way an egg rests.
+  /// The stand (ground spot plus the hop's lift, or the flight's altitude
+  /// off a kicker), then the roll: world axis from the horizontal
+  /// velocity, omega = |v| / r, pre-multiplied so world space holds the
+  /// accumulated spin - the egg tips exactly where it goes (and keeps
+  /// spinning in the air). Still, it eases onto its side, the way an egg
+  /// rests.
   void sync(PuttWorldEgg egg, double dt, double time) {
     final speed = egg.speed;
     if (egg.mine) everMine = true;
@@ -339,15 +341,19 @@ class _EggView3D {
     final support = math
         .sqrt(a * a * up.x * up.x + h * h * up.y * up.y + a * a * up.z * up.z);
     final floor = terrain.at(egg.position);
-    final drawn = _fallTo(floor, egg.position, dt);
+    final air = egg.air;
+    final drawn = air != null
+        ? _flyAt(air, floor, egg.position, dt)
+        : _fallTo(floor, egg.position, dt);
     group.position.setValues(
         egg.position.x, drawn + support + egg.height, egg.position.y);
 
     lastPosition = egg.position;
     _syncTrail(egg, dt);
 
-    // The ground pieces: the shadow shrinks and fades as a hop or a fall
-    // lifts the egg off it; on a slope they lie along it.
+    // The ground pieces: the shadow shrinks and fades as a hop, a fall or
+    // a flight lifts the egg off it (it stays on the ground below); on a
+    // slope they lie along it.
     ground.position.setValues(egg.position.x, floor, egg.position.y);
     if (!terrain.flat) ground.quaternion.setFrom(terrain.tiltAt(egg.position));
     final lift = ((egg.height + drawn - floor) / (_radius * 3)).clamp(0.0, 1.0);
@@ -444,19 +450,59 @@ class _EggView3D {
       return fallen;
     }
     if (_inAir && speed > 2.5) {
-      // Down off a drop: the shell squashes and the dust flies.
-      final strength = ((speed - 2.5) / 5).clamp(0.0, 1.0);
-      _squash = 0.6 + strength * 0.4;
-      onBounce(position, strength, everMine);
+      // Down off a drop (or a flight): the shell squashes, the dust flies.
+      _land(position, speed);
     }
     _inAir = false;
+    _fallPeak = 0;
     _sinkSpeed = math.min(speed, (floor - ground) / dt);
     _floor = ground;
     return ground;
   }
 
+  /// Where the drawn egg stands in the air off a kicker: at the engine's
+  /// [air], never under the [ground] drawn. Its fall's pace is kept for the
+  /// drop's bookkeeping ([_fallTo]), which brings it down the last of the
+  /// way once the engine has it rolling again, with the landing's squash;
+  /// a hard landing the engine bounces back up squashes here, where the
+  /// egg turns from falling to rising by the ground.
+  double _flyAt(double air, double ground, Vec2 position, double dt) {
+    final last = _floor;
+    if (last != null && dt > 0 && _inAir) {
+      final falling = (last - air) / dt;
+      if (falling > 0) {
+        _fallPeak = math.max(_fallPeak, falling);
+      } else if (falling < 0) {
+        if (_fallPeak > 2.5 && math.min(last, air) - ground < 0.3) {
+          _land(position, _fallPeak);
+        }
+        _fallPeak = 0;
+      }
+      _sinkSpeed = math.max(0.0, falling);
+    } else {
+      _sinkSpeed = 0;
+      _fallPeak = 0;
+    }
+    _floor = air;
+    _drawnAt = position;
+    _inAir = true;
+    return math.max(air, ground);
+  }
+
+  /// Down on the ground at [speed]: the shell squashes and the dust flies,
+  /// harder the faster it came.
+  void _land(Vec2 position, double speed) {
+    final strength = ((speed - 2.5) / 5).clamp(0.0, 1.0);
+    _squash = 0.6 + strength * 0.4;
+    onBounce(position, strength, everMine);
+  }
+
   Vec2? _drawnAt;
   bool _inAir = false;
+
+  /// The fastest the drawn egg has fallen since it last rose, for the
+  /// squash where a flight's bounce turns it back up.
+  double _fallPeak = 0;
 
   /// The trail: a fast egg drops a soft puff every few hundredths of a
   /// second; the puffs fade and shrink over half a second.
@@ -468,7 +514,8 @@ class _EggView3D {
     }
     _trailSpots.removeWhere((spot) => spot.$2 >= life);
     _sinceSpot += dt;
-    if (egg.speed > 2.6 && _sinceSpot > 0.03) {
+    // In the air it kicks up no turf.
+    if (egg.air == null && egg.speed > 2.6 && _sinceSpot > 0.03) {
       _sinceSpot = 0;
       _trailSpots.add((egg.position, 0));
       if (_trailSpots.length > _trailLength) _trailSpots.removeAt(0);

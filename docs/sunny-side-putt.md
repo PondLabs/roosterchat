@@ -148,7 +148,7 @@ Maze (rabbit holes as speed-preserving portals), the Pond (water
 returns the egg, stroke charged), Farm Road (speed strips) and the
 Barn (hay bales, the silo's pull).
 
-Tiers (see below) stack eight holes on more than one level, at least one
+Tiers (see below) stack nine holes on more than one level, at least one
 on every course:
 
 - **The Coop**: First Light's tee yard is the coop's raised floor; the
@@ -158,6 +158,8 @@ on every course:
   the middle board: up the ladder, a narrow ramp through the gap in the
   board that takes a firm, straight putt, or the long way round the far
   bend, whose kickers throw the egg up the wide ramp at the loft's end.
+  Nesting Boxes' boxes stand up on the roost along the back wall (see
+  Kickers below).
 - **Corn Maze**: Grand Maze's north road climbs a ramp at its far end
   onto a lookout over the nest's garden; a hedge in its corner turns an
   egg that comes up with pace off the lookout's edge, down into the
@@ -199,6 +201,42 @@ Hills (see below) shape nine of the thirty holes:
 - **Farm Road**: a speed bump on the Roundabout's road out turns back an
   egg that leaves the ring short of pace, and two more stand in Home
   Stretch's top lane before the farm gate.
+
+Kickers (see below) throw the egg into the air on five holes, one per
+course, each the bold line beside a longer, safer one:
+
+- **The Coop**: Nesting Boxes' four boxes stand up on the roost along the
+  back wall, its front a drop to the yard, the nest in the second box and
+  a hen pacing the roost before them. Straight up from the tee, a plank
+  kicker throws a firm putt over the roost's edge and the hen into the
+  third box (the "?"), a putt from the nest; a soft one bumps over it into
+  the roost's face, one too firm comes back off the wall and drops off the
+  roost again. The long way is up the ladder at the roost's east end,
+  round the feed trough that stands across the way to it.
+- **Corn Maze**: Hedge Hop's garden lies across the corn from the tee,
+  behind a hedge with a muddy ditch in its gap. A dirt kicker right under
+  the gap hops a firm, straight putt over the ditch into the garden, a putt
+  from the nest at its west end; soft drops in the ditch, crooked meets the
+  corn, and too firm comes back off the garden's far rail all the way into
+  the ditch. The long way runs east along the corridor, up its open end and
+  back west through the garden.
+- **The Pond**: Lily Pad Lane's pond has no causeway: a stone jetty runs
+  out into the lilies straight at the nest, a stone kicker at its end. A
+  firm, straight putt flies the rest of the pond onto the far bank and runs
+  on to the nest, or back to it off the far rail; a soft one rolls off the
+  lip into the lilies, a crooked one off the jetty's side. Round the banks
+  is the safe two.
+- **Farm Road**: Cattle Grid's dirt ramp before the first conveyor throws a
+  firm, straight putt over its push and through the first grid; a very
+  firm one carries on through the second grid too, which now stands a
+  little south of the first, toward the nest's corner. A soft one only
+  bumps over the ramp onto the conveyor, and the grids are aimed off as
+  before.
+- **The Barn**: Twin Silos' hay kicker in the chute's mouth flies a firm,
+  straight putt over the chute, clear of both pulls, onto the far side to
+  run on to the nest; a soft one only hops into the chute, where the silos
+  have it if it strays (the "?" in the chute is for whoever rolls it), and
+  one too firm runs on past the nest into the water trough behind it.
 
 ### Hills
 
@@ -260,6 +298,53 @@ stand against a step's face), never across a step; hills keep their reach
 level, an egg's radius and 0.3 clear of every tier's outline; the nest
 sits on a terrace with 0.6 of flat round its rim or half a unit clear.
 
+### Kickers
+
+A kicker (`Kicker` in `core/hole.dart`) is a short launch ramp on the
+green: a deck from its foot to its lip, a width, the lip's height, a speed
+threshold and a pitch, the launch angle as rise over run (0.5 is about 27
+degrees). The physics reads only the lip. An egg whose centre crosses it
+the way the kicker throws, at the threshold or faster along it, leaves
+the ground: off the lip's height, its ground speed kept, climbing at its
+pace along the kicker times the pitch - capped at 6.6 units/s, about 1.2
+units over the lip at the top of the arc, so a harder putt only flies
+farther - under 18 units/s^2, the view's own fall. A slower egg rolls over
+the lip, a small bump that keeps 0.88 of its pace, and so does one
+crossing it the other way; past the deck's sides nothing happens. The
+flight runs a tick at a time on + - * / alone, so every platform flies
+the same arc.
+
+In the air (`BallBody.air`, the altitude of its lowest point, and
+`airSpeed`, its climb) nothing on the ground pulls or rubs the egg: no
+friction, no slope, no silo, no magnet. It passes over the water, the
+speed strips, the rabbit holes, the "?" crates, the silos, the hens, the
+other eggs and the nest, and over any step whose top it clears, so a
+kicker can throw an egg up onto a terrace over its ledge; below the top
+it meets the face like a rail. It never passes a rail, a rock, a bumper
+or the fence, however high it flies. It comes down on the ground under
+it (a terrace's top, a hill's slope) keeping 0.9 of its ground speed; a
+hard landing gives 0.3 of its fall's speed back as a bounce, one little
+hop more, and a touchdown in the pond swims, bounce or not. A Rabbit Hole
+or a Nest Swap puts a flying egg on the ground; a Gust or a Sprinkler
+moves it in the air without drowning it over the water. The flight rides
+the snapshot (`air`, `vz`) and replays from the journal like everything
+else, and the world echoes `BallLaunched`, `BallLanded` and `BallBumped`
+for the sounds and the bursts.
+
+The course test checks every kicker: its shape in range (height 0.3 to
+0.6, pitch 0.3 to 0.8, threshold 5 to 12, width 2 to 4, length 1.5 to 3,
+a deck that never bulges); its deck on one level, on dry turf inside the
+bounds, 0.3 off every rail, rock, pond, hill, step, ramp, speed strip,
+rabbit hole, "?" box and silo's reach, off the nest's rim, a full table's
+spawn ring and every hen's walk; a run-up two units before its foot that
+an egg can roll to from the tee (stopped by rails and water, carried
+through the rabbit holes, down a ledge but never up one), with a straight
+run up the deck; and a landing zone: thrown off the lip at every speed
+from its threshold to a full putt's, the egg comes down on open, dry turf
+clear of walls, and meets no rail in the air on the way, over a span of at
+least 3 units/s. Slower or harder throws may land in the pond or come off
+the far rail: that is the kicker's risk.
+
 ## How it looks
 
 The green is a minigolf course on a raised wooden table in a farm
@@ -300,7 +385,23 @@ and lights a ramp by the side it faces, with chevrons mown into it
 pointing up its rise. An egg rolling off a
 lip falls through the air from where it was (18 units/s^2) while its
 shadow is already on the floor below, and lands with a squash and a puff
-of dust; rising ground, up a ramp, it follows at once. The lawn texture lightens the
+of dust; rising ground, up a ramp, it follows at once. A kicker stands
+on the turf in the course's build (`world3d/kicker.dart`): timber planks
+on a dark frame at the Coop, a ramp of baled hay bound with twine at the
+Barn, packed earth with dry corn stalks laid across it and a shock of them
+at either corner of the lip in the maze, a pale stone slab on a dry-stone
+wedge at the Pond, a dirt ramp with a striped takeoff board along its lip
+on Farm Road. Its deck curves up to the lip at the launch angle (the
+core's own profile, the one the eggs ride), and two chevrons painted up
+it, a bright fill in an ink rim, point the way it throws. An egg rides up
+the deck and flies the engine's arc, its altitude drawn between ticks like
+its position and its shadow left on the ground below, shrinking as it
+climbs; straw (the Coop, the Barn) or dust (the maze and Farm Road, stone
+grit at the Pond) kicks up behind it off the lip, and it lands with a
+squash and a puff, a ring of the course's dust and, in the farmyard, a few
+stalks. The hop off a hard landing squashes too. Rolled over slowly, an
+egg rides the deck and drops off the lip like off a ledge. The lawn
+texture lightens the
 slopes facing the sun and darkens the far ones, mows rings along the
 contours and shades the crease at the foot. Eggs, their shadows (tilted
 along the slope), the aim, the crates, the hens, the nest and every
@@ -345,7 +446,11 @@ world builds those with `_gridPlane`.
   - the engine's own physics run ahead on a copy of the world, cut a
   short way after the first rail. When the egg would stop inside the
   guide (a soft putt), the spot is marked with an egg's footprint drawn
-  over everything, and the arrow ends there instead of past it.
+  over everything, and the arrow ends there instead of past it. Off a
+  kicker the guide runs the engine's flight to where it comes down,
+  however far: its dots climb off the lip and fall, and a yolk ring marks
+  the landing. A guide whose length ends on a kicker's deck, or a couple
+  of units short of one, runs on to show the flight.
 - Until the first putt of the match (and after 14 seconds idle with the
   egg ready), a coach shows the gesture over the egg: a hand presses,
   pulls back away from the nest and lets go while a ghost arrow grows
@@ -386,7 +491,9 @@ From `rooster/`, with `ffmpeg` (libmp3lame) on the PATH:
   it, each as loud as the hit; water plops; the nest rustles and chimes,
   the chick peeps as it hatches and the host crows for a hole in one;
   speed strips whoosh, a "?" crate pops, a rabbit hole goes thwup, the
-  silo sucks and booms, a fall off the table whistles down; a banjo opens
+  silo sucks and booms, a fall off the table whistles down; an egg thrown
+  off a kicker gets the ramp's thunk under a rising whoosh and thumps down
+  into the straw (the thump, softer, for a bump over a lip); a banjo opens
   each hole, a sting closes it, a fanfare ends the match; a cowbell warns
   at 60, 30, 15 and 5 seconds and the last fourteen tick and tock.
 - The hits come from the physics: the engine echoes the world's reports
@@ -397,8 +504,9 @@ From `rooster/`, with `ffmpeg` (libmp3lame) on the PATH:
 ## The layers
 
 - `core/` (pure Dart, headless-testable): deterministic physics with
-  fixed timestep and swept collision, the hole model (walls, sensors,
-  the wandering hen), the rules engine (phases, clocks, scoring,
+  fixed timestep and swept collision (and the flights off the kickers),
+  the hole model (walls, sensors, the wandering hen, the kickers), the
+  rules engine (phases, clocks, scoring,
   mid-join, snapshot round-trips for host handoff) and the power-up
   contracts.
 - `courses/` - the five launch courses, each hole shipped with a
@@ -427,7 +535,8 @@ From `rooster/`, with `ffmpeg` (libmp3lame) on the PATH:
 ## Testing
 
 - `flutter test unit_test/sunny_side_putt` - physics, rules, every
-  power-up, every hole's reference solution, the session bridge (two
-  clients on the in-memory wire), the view widgets.
+  power-up, the kickers and their flights, every hole's reference solution
+  and the courses' lints, the session bridge (two clients on the in-memory
+  wire), the view widgets.
 - The voice e2e plays a hole between two real clients; see
   call-activities.md for the environment.

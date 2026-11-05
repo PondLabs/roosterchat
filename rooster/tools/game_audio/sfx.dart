@@ -316,6 +316,59 @@ Float64List boostWhoosh(Rng rng) {
   return out;
 }
 
+/// An egg thrown off a kicker's lip: the ramp's hollow thunk under it,
+/// then the air - a breathy whoosh climbing as the egg goes up, with a
+/// soft whistle gliding up on top of it.
+Float64List kickerLaunch(Rng rng) {
+  final thunk = strike([
+    (132, 1.0, 0.06),
+    (296, 0.75, 0.034),
+    (655, 0.32, 0.016),
+    (1240, 0.12, 0.008),
+  ], rng, length: 0.26, click: 0.28, clickHz: 1500, clickDecay: 0.002);
+  final air = Float64List(samplesFor(0.5));
+  final breath = Svf();
+  final sheen = Svf();
+  var phase = 0.0;
+  for (var i = 0; i < air.length; i++) {
+    final t = i / sampleRate;
+    final noise = rng.bipolar();
+    final sweep = 420 * math.pow(6.5, math.min(1, t / 0.32)).toDouble();
+    breath.tick(noise, sweep, 1.3);
+    sheen.tick(noise, sweep * 2.4, 2.6);
+    final env = smoothstep(t / 0.07) * math.exp(-math.max(0, t - 0.1) / 0.16);
+    final whistleHz = 540 + 760 * smoothstep(t / 0.34);
+    phase += whistleHz / sampleRate;
+    if (phase >= 1) phase -= 1;
+    final whistle =
+        smoothstep((t - 0.03) / 0.08) * math.exp(-math.max(0, t - 0.16) / 0.09);
+    air[i] = breath.bandUnity * env * 1.25 +
+        sheen.bandUnity * env * 0.45 +
+        math.sin(twoPi * phase) * whistle * 0.12;
+  }
+  return arrange([(0, thunk, 1.0), (0.01, air, 1.05)]);
+}
+
+/// An egg coming down after a flight: a soft thump into the turf and a
+/// short crunch of straw round it.
+Float64List kickerLanding(Rng rng) {
+  final thump = strike([
+    (86, 1.0, 0.07),
+    (150, 0.55, 0.04),
+    (330, 0.22, 0.02),
+  ], rng, length: 0.3, click: 0.22, clickHz: 900, clickDecay: 0.004);
+  final straw = Float64List(samplesFor(0.2));
+  final crunch = Svf();
+  for (var i = 0; i < straw.length; i++) {
+    final t = i / sampleRate;
+    // Straw crackles: the noise comes in grains, not a steady hiss.
+    final grain = rng.next() < 0.18 ? rng.bipolar() * 2.2 : rng.bipolar() * 0.3;
+    crunch.tick(grain, 3200 - 1400 * math.min(1, t / 0.15), 0.9);
+    straw[i] = crunch.bandUnity * math.min(1, t / 0.004) * math.exp(-t / 0.05);
+  }
+  return arrange([(0, thump, 1.0), (0.006, straw, 0.42)]);
+}
+
 /// A "?" crate: a cork's pop, then a two-note sparkle.
 Float64List cratePop(Rng rng) {
   final pop = Float64List(samplesFor(0.12));

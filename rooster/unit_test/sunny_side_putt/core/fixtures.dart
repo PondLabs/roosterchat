@@ -33,6 +33,7 @@ HoleDef boxHole({
   List<Hill> hills = const [],
   List<Terrace> terraces = const [],
   List<Ramp> ramps = const [],
+  List<Kicker> kickers = const [],
 }) {
   return HoleDef(
     id: id,
@@ -57,6 +58,7 @@ HoleDef boxHole({
     hills: hills,
     terraces: terraces,
     ramps: ramps,
+    kickers: kickers,
     friction: friction,
   );
 }

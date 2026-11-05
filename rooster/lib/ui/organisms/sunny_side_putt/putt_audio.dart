@@ -142,6 +142,8 @@ class PuttAudio {
         PuttSfx.shieldPop => 'shield.wav',
         PuttSfx.cornRain => 'corn.wav',
         PuttSfx.gust => 'gust.wav',
+        PuttSfx.kick => 'kick.wav',
+        PuttSfx.land => 'land.wav',
       };
 
   /// Loads the sources and starts the music loop. Failures land in the

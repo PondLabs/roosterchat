@@ -1,8 +1,8 @@
 // Farm Road - the speed course: tractor-track speed strips that throw the
-// egg on at their own pace, long lanes, hairpins and a roundabout. The
-// outside of every bend is built from straight rails, so an egg riding it
-// bounces along like off any fence. Six holes, all with verified
-// solutions.
+// egg on at their own pace, long lanes, hairpins, a roundabout and a dirt
+// ramp over a cattle grid's conveyor. The outside of every bend is built
+// from straight rails, so an egg riding it bounces along like off any
+// fence. Six holes, all with verified solutions.
 
 import 'dart:math' as math;
 
@@ -222,11 +222,19 @@ ReferenceSolution _chickenCrossingSolution() {
 // -- hole 4: Cattle Grid ------------------------------------------------------
 // Two cattle grids, each a narrow gate in a fence across the road, and a
 // conveyor before each pushing the egg sideways - south, then north. Aim
-// off to come in straight.
+// off to come in straight. Or take the dirt ramp in front of the first:
+// a firm, straight putt flies over its conveyor and through its grid; a
+// very firm one carries on over the second conveyor's push and through
+// the second grid, which stands a little south of the first, toward the
+// nest's corner. A soft one only bumps over the ramp onto the conveyor.
 
 const Vec2 _road4Tee = Vec2(6, 13);
-const Vec2 _road4Nest = Vec2(48, 13);
+const Vec2 _road4Nest = Vec2(45, 9.5);
 const Rect _road4Bounds = Rect(Vec2.zero, Vec2(54, 26));
+
+/// The dirt ramp before the first conveyor, in line with the first grid.
+const Kicker _road4Kicker =
+    Kicker(Vec2(11.5, 13), Vec2(13.5, 13), width: 3, pitch: 0.45, threshold: 8);
 
 HoleDef _cattleGrid() {
   return HoleDef(
@@ -241,28 +249,30 @@ HoleDef _cattleGrid() {
       WallSegment(Vec2(5, 26), Vec2(0, 21)),
       WallSegment(Vec2(48, 0), Vec2(54, 6)),
       WallSegment(Vec2(54, 20), Vec2(48, 26)),
-      // the two fences, each with its grid
+      // the two fences, each with its grid (the second a touch south)
       WallSegment(Vec2(21, 0), Vec2(21, 11)),
       WallSegment(Vec2(21, 15), Vec2(21, 26)),
-      WallSegment(Vec2(36, 0), Vec2(36, 11)),
-      WallSegment(Vec2(36, 15), Vec2(36, 26)),
+      WallSegment(Vec2(36, 0), Vec2(36, 13)),
+      WallSegment(Vec2(36, 17), Vec2(36, 26)),
     ],
     boosts: [
       BoostStrip(Vec2(15, 3), Vec2(15, 23), width: 1.6, speed: 6),
       BoostStrip(Vec2(30, 23), Vec2(30, 3), width: 1.6, speed: 6),
     ],
+    kickers: const [_road4Kicker],
     boxes: [QuestionBox('road_4_box', Vec2(28.5, 20))],
   );
 }
 
-// Found by a sweep, each shot holding for nearby aims: aimed north of the
-// first grid so its conveyor brings the egg in, then a long one through
-// the second grid on the other conveyor's push; then a putt in.
+// Found by a sweep, each shot holding for nearby aims and powers: off the
+// ramp, over the first conveyor and through the first grid; a firm one
+// aimed off south, off the south rail and through the second grid on the
+// second conveyor's push, to the far corner; then a putt in.
 ReferenceSolution _cattleGridSolution() {
-  const pastTheGrids = Vec2(47.36, 4.38);
+  const pastTheGrids = Vec2(52.36, 7.48);
   return ReferenceSolution([
-    const ReferenceShot(-0.530, 0.668),
-    const ReferenceShot(-0.090, 0.918),
+    const ReferenceShot(0, 0.54),
+    const ReferenceShot(0.60, 0.94),
     putt(pastTheGrids, _road4Nest, arrival: 2.2),
   ]);
 }

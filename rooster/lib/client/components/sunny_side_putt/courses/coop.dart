@@ -1,5 +1,6 @@
-// The Coop - the first course: the coop yard's boards, hens on patrol and
-// pinball bumpers. Six holes, all with headless-verified solutions.
+// The Coop - the first course: the coop yard's boards, hens on patrol,
+// pinball bumpers and a kicker up onto the roost. Six holes, all with
+// headless-verified solutions.
 
 import 'dart:math' as math;
 
@@ -256,51 +257,89 @@ ReferenceSolution _merryGoRoundSolution() {
 }
 
 // -- hole 5: Nesting Boxes ----------------------------------------------------
-// Four nesting boxes line the back wall and only one holds the nest (a
-// "?" sits in a wrong one); a feed trough hides it from the tee and a hen
-// paces the boxes' fronts.
+// Four nesting boxes stand up on the roost along the back wall, its front
+// a drop to the yard, and the nest is in the second one; a hen paces the
+// roost in front of them. Straight up from the tee, a plank kicker throws
+// a firm putt up over the roost's edge, over the hen, into the third box,
+// where a "?" waits, one putt from the nest; a soft one bumps over it into
+// the roost's face, and one too firm comes back off the wall and drops off
+// the roost again. The long way is up the ladder at the roost's east end,
+// round the feed trough that stands across the way to it.
 
-const Vec2 _coop5Tee = Vec2(7, 22);
-const Vec2 _coop5Nest = Vec2(26.5, 2.6);
+const Vec2 _coop5Tee = Vec2(26.5, 23.5);
+const Vec2 _coop5Nest = Vec2(21.5, 2.1);
 const Rect _coop5Bounds = Rect(Vec2.zero, Vec2(46, 28));
-const Vec2 _coop5Around = Vec2(36, 18);
+
+/// How high the roost stands.
+const double _coop5Roost = 0.7;
+
+/// The roost: the boxes along the back wall and the walk in front of
+/// them.
+const Terrace _coop5Floor = Terrace([
+  Vec2(34, 0),
+  Vec2(14, 0),
+  Vec2(14, 9),
+  Vec2(34, 9),
+], height: _coop5Roost);
+
+/// The ladder up the roost's east end.
+const Ramp _coop5Ladder =
+    Ramp(Vec2(32, 14), Vec2(32, 9), width: 4, height: _coop5Roost);
+
+/// The kicker in front of the third box.
+const Kicker _coop5Kicker = Kicker(Vec2(26.5, 13.2), Vec2(26.5, 11.2),
+    width: 3, pitch: 0.55, threshold: 8);
 
 HoleDef _nestingBoxes() {
   return HoleDef(
     id: 'coop_5',
     par: 3,
     tee: _coop5Tee,
-    nest: Nest(_coop5Nest, 1.7),
+    nest: Nest(_coop5Nest, 1.4),
     bounds: _coop5Bounds,
     walls: [
       ...fenceAround(_coop5Bounds),
-      // the back wall and its four boxes
-      ...polyline([Vec2(0, 5), Vec2(14, 5), Vec2(14, 0)]),
-      WallSegment(Vec2(19, 0), Vec2(19, 5)),
-      WallSegment(Vec2(24, 0), Vec2(24, 5)),
-      WallSegment(Vec2(29, 0), Vec2(29, 5)),
-      ...polyline([Vec2(34, 0), Vec2(34, 5), Vec2(46, 5)]),
-      // the feed trough
-      WallSegment(Vec2(12, 14), Vec2(32, 14)),
+      // the roost's ends and the boxes' walls
+      const WallSegment(Vec2(14, 0), Vec2(14, 9)),
+      const WallSegment(Vec2(34, 0), Vec2(34, 9)),
+      const WallSegment(Vec2(19, 0), Vec2(19, 3)),
+      const WallSegment(Vec2(24, 0), Vec2(24, 3)),
+      const WallSegment(Vec2(29, 0), Vec2(29, 3)),
+      // the roost's front, a drop, and the ladder's side boards
+      ...ledges([const Vec2(14, 9), const Vec2(30, 9)]),
+      ...rampRails(_coop5Ladder),
+      // the feed trough across the way to the ladder
+      const WallSegment(Vec2(29.5, 17.5), Vec2(41, 17.5)),
     ],
+    terraces: const [_coop5Floor],
+    ramps: const [_coop5Ladder],
+    kickers: const [_coop5Kicker],
     obstacles: const [
       MovingObstacle(
         id: 'coop_5_hen',
-        radius: 1.5,
+        radius: 1.4,
         stops: [
-          ObstacleStop(Vec2(12, 9), dwellSeconds: 1.2, travelSecondsToNext: 5),
-          ObstacleStop(Vec2(38, 9), dwellSeconds: 1.2, travelSecondsToNext: 5),
+          ObstacleStop(Vec2(16, 6.2),
+              dwellSeconds: 1.2, travelSecondsToNext: 4),
+          ObstacleStop(Vec2(31.6, 6.2),
+              dwellSeconds: 1.2, travelSecondsToNext: 4),
         ],
       ),
     ],
-    boxes: [QuestionBox('coop_5_box', Vec2(16.5, 2.5))],
+    boxes: [QuestionBox('coop_5_box', const Vec2(26.5, 1.9))],
   );
 }
 
-ReferenceSolution _nestingBoxesSolution() => ReferenceSolution([
-      putt(_coop5Tee, _coop5Around),
-      putt(landAt(_coop5Tee, _coop5Around), _coop5Nest, arrival: 2.2),
-    ]);
+// Found by a sweep, and it holds for nearby aims and powers: up the kicker
+// a touch to the left, onto the roost and into the walk before the third
+// box; then the putt past the box's wall into the nest.
+ReferenceSolution _nestingBoxesSolution() {
+  const beforeTheBoxes = Vec2(24.64, 5.06);
+  return ReferenceSolution([
+    const ReferenceShot(-1.649, 0.72),
+    putt(beforeTheBoxes, _coop5Nest, arrival: 2.2),
+  ]);
+}
 
 // -- hole 6: Feeding Time -----------------------------------------------------
 // The finale, every hen out for the feed, and the nest up in the hayloft:
