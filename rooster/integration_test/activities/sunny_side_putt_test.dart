@@ -234,9 +234,13 @@ void main() {
         skipPumpAndSettle: true, timeout: const Duration(seconds: 60));
 
     SunnySidePuttGame? aliceGame;
+    final gameWidget = find.byType(GameWidget);
     await tester.waitFor(() {
-      aliceGame = (tester.widget(find.byType(GameWidget)) as GameWidget).game
-          as SunnySidePuttGame?;
+      // The stage mounts the game a beat after it shows: until then there
+      // is nothing to read.
+      if (gameWidget.evaluate().isEmpty) return false;
+      aliceGame =
+          (tester.widget(gameWidget) as GameWidget).game as SunnySidePuttGame?;
       return aliceGame != null &&
           aliceGame!.match.phase == PuttPhase.holePlay &&
           aliceGame!.match.myShotReady;

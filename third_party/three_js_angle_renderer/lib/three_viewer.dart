@@ -222,6 +222,10 @@ class ThreeJS with WidgetsBindingObserver{
     _resolution ??= mqd.devicePixelRatio;
 
     Future.delayed(Duration(milliseconds: renderNumber*100), () async{
+      // ROOSTER: a viewer disposed in the meantime (its page gone within a
+      // tenth of a second, as in a test's teardown) never starts a context:
+      // ANGLE's makeCurrent then failed with EGL_BAD_ACCESS.
+      if (_disposed) return;
       await initPlatformState();
     });
   }
@@ -364,6 +368,8 @@ class ThreeJS with WidgetsBindingObserver{
   Future<void> initPlatformState() async {
     if(texture == null){
       await angle?.init();
+      // ROOSTER: disposed while ANGLE started: make no texture for nobody.
+      if (_disposed) return;
       
       texture = await angle?.createTexture(      
         AngleOptions(
