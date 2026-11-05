@@ -358,6 +358,31 @@ class _PuttAimView3D {
 
 // ---- fx -------------------------------------------------------------------------------------
 
+/// The pools' group: it keeps only its shown children's world matrices up
+/// to date. The pools hold some 550 sprites, nearly all hidden, and the
+/// scene's matrix pass walked every one of them every frame. A child
+/// shown again gets its matrix on the next pass (the face-camera pass
+/// marks it, and the scene's pass forces every shown one).
+class _ShownChildrenGroup extends tjs.Group {
+  @override
+  void updateMatrixWorld([bool force = false]) {
+    if (matrixAutoUpdate) updateMatrix();
+    if (matrixWorldNeedsUpdate || force) {
+      final parent = this.parent;
+      if (parent == null) {
+        matrixWorld.setFrom(matrix);
+      } else {
+        matrixWorld.multiply2(parent.matrixWorld, matrix);
+      }
+      matrixWorldNeedsUpdate = false;
+      force = true;
+    }
+    for (final child in children) {
+      if (child.visible) child.updateMatrixWorld(force);
+    }
+  }
+}
+
 /// The bursts as pooled sprites over a soft disc, tinted and faded per
 /// frame, plus a few rings for the nest's shockwave and the casts.
 class _PuttFxPool {
@@ -416,6 +441,8 @@ class _PuttFxPool {
     for (var i = 0; i < dropSize; i++) {
       final sprite = _Billboard(map: dropTexture)
         ..name = 'fx-drop'
+        // Placed only while shown: the face-camera pass updates its matrix.
+        ..matrixAutoUpdate = false
         ..visible = false
         ..renderOrder = 8;
       parent.add(sprite);
@@ -427,6 +454,8 @@ class _PuttFxPool {
     for (var i = 0; i < streakSize; i++) {
       final sprite = _Billboard(map: streak)
         ..name = 'fx-streak'
+        // Placed only while shown: the face-camera pass updates its matrix.
+        ..matrixAutoUpdate = false
         ..visible = false
         ..renderOrder = 8;
       parent.add(sprite);
@@ -435,6 +464,8 @@ class _PuttFxPool {
     for (var i = 0; i < paperSize; i++) {
       final sprite = _Billboard(map: _paperTexture)
         ..name = 'fx-paper'
+        // Placed only while shown: the face-camera pass updates its matrix.
+        ..matrixAutoUpdate = false
         ..visible = false
         ..renderOrder = 8;
       parent.add(sprite);
@@ -444,6 +475,8 @@ class _PuttFxPool {
     for (var i = 0; i < kernelSize; i++) {
       final sprite = _Billboard(map: kernel)
         ..name = 'fx-kernel'
+        // Placed only while shown: the face-camera pass updates its matrix.
+        ..matrixAutoUpdate = false
         ..visible = false
         ..renderOrder = 8;
       parent.add(sprite);
@@ -458,6 +491,8 @@ class _PuttFxPool {
     for (var i = 0; i < poolSize; i++) {
       final sprite = _Billboard(map: discTexture)
         ..name = 'fx'
+        // Placed only while shown: the face-camera pass updates its matrix.
+        ..matrixAutoUpdate = false
         ..visible = false
         ..renderOrder = 8;
       parent.add(sprite);

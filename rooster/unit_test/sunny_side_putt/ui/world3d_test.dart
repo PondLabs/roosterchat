@@ -1103,6 +1103,15 @@ void main() {
           root.children.firstWhere((c) => c.name == 'fx-streak' && c.visible);
       expect(streak.scale.x, greaterThan(streak.scale.y * 6),
           reason: 'the wind: long and thin');
+      // The pools skip the matrix work while hidden: a shown sprite is
+      // still drawn where it stands.
+      world.scene.updateMatrixWorld();
+      for (final sprite in [kernel, streak]) {
+        final drawn = tjs.Vector3().setFromMatrixPosition(sprite.matrixWorld);
+        expect(drawn.x, closeTo(sprite.position.x, 1e-6));
+        expect(drawn.y, closeTo(sprite.position.y, 1e-6));
+        expect(drawn.z, closeTo(sprite.position.z, 1e-6));
+      }
 
       world.applySnapshot(const PuttWorldFrame(time: 0.016));
       expect(

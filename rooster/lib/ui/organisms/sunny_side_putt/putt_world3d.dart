@@ -694,7 +694,7 @@ class PuttWorld3D {
       ..add(_holeRoot = tjs.Group()..name = 'hole')
       ..add(_actorsRoot = tjs.Group()..name = 'actors')
       ..add(_aimRoot = tjs.Group()..name = 'aim')
-      ..add(_fxRoot = tjs.Group()..name = 'fx')
+      ..add(_fxRoot = _ShownChildrenGroup()..name = 'fx')
       ..add(_bursts.group)
       ..add(_casts.group)
       ..add(_hatchRoot);
@@ -1151,6 +1151,9 @@ class PuttWorld3D {
         object.quaternion
             .multiply(_roll.setFromAxisAngle(_viewAxis, object.roll));
       }
+      // The effects' pooled sprites skip the per-frame matrix work while
+      // hidden (hundreds of them): one shown gets its matrix here.
+      if (!object.matrixAutoUpdate) object.updateMatrix();
     });
   }
 
