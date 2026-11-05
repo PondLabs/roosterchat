@@ -668,6 +668,17 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
         if (_crosses(from, to, p, q)) return false;
       }
     }
+    // Nor over water: a line across a pond dunked the bot every putt, the
+    // same putt again from the same spot (on the Pond's hole 6, dozens).
+    if (hole.water.isNotEmpty) {
+      for (final (from, to) in lanes) {
+        final steps = math.max(2, (from.distanceTo(to) / 0.4).ceil());
+        for (var i = 1; i < steps; i++) {
+          final at = from + (to - from) * (i / steps);
+          if (hole.water.any((shape) => shape.contains(at))) return false;
+        }
+      }
+    }
     return true;
   }
 
