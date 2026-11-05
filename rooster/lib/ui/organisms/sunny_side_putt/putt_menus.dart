@@ -594,6 +594,7 @@ class _CourseCard extends StatelessWidget {
             style: FilledButton.styleFrom(
                 backgroundColor: PuttPalette.combDeep,
                 foregroundColor: PuttPalette.shell,
+                textStyle: _menuLabel,
                 padding: const EdgeInsets.symmetric(horizontal: 14)),
             onPressed: onPlay,
             child: Text(labelPuttPlayCourse()),
@@ -622,15 +623,7 @@ class _MenuSheet extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          title,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: PuttPalette.ink,
-            fontSize: 19,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
+        Text(title, textAlign: TextAlign.center, style: _menuTitle),
         ...children,
       ],
     );
@@ -647,7 +640,10 @@ class _MenuSheet extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: PuttPalette.ink, width: 3),
         ),
-        child: scrollable ? SingleChildScrollView(child: column) : column,
+        child: DefaultTextStyle.merge(
+          style: _menuBody,
+          child: scrollable ? SingleChildScrollView(child: column) : column,
+        ),
       ),
     );
   }
@@ -678,6 +674,7 @@ class _MenuButton extends StatelessWidget {
         foregroundColor: filled ? PuttPalette.shell : foreground,
         side: BorderSide(color: PuttPalette.ink, width: 1.5),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        textStyle: _menuLabel,
       ),
       onPressed: onPressed,
       child: Text(label),
@@ -689,7 +686,24 @@ class _MenuButton extends StatelessWidget {
   }
 }
 
-/// The rooster host, bobbing gently, drawn by the shared painters.
+/// The menus' type, the HUD's own: titles in its display face (Sora),
+/// the rest in its label face (Nunito Sans) - the platform's plain sans
+/// read like another app next to the HUD.
+const TextStyle _menuTitle = TextStyle(
+  fontFamily: 'Sora',
+  color: PuttPalette.ink,
+  fontSize: 20,
+  fontWeight: FontWeight.w800,
+  fontVariations: [ui.FontVariation.weight(800)],
+);
+const TextStyle _menuBody = TextStyle(fontFamily: 'NunitoSans');
+const TextStyle _menuLabel = TextStyle(
+  fontFamily: 'NunitoSans',
+  fontSize: 14.5,
+  fontWeight: FontWeight.w800,
+  fontVariations: [ui.FontVariation.weight(800)],
+);
+
 // ---- strings ---------------------------------------------------------------------------------
 
 String labelPuttPaused() => Intl.message("Paused",

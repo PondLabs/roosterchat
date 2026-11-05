@@ -46,6 +46,15 @@ void main() {
           tester.widget<Image>(find.byKey(const Key('putt-menu-mark')));
       expect((mark.image as AssetImage).assetName,
           'assets/images/app_icon/app_icon_transparent_cropped.png');
+      // The HUD's type: the title in its display face, the buttons in its
+      // label face.
+      expect(
+          tester.widget<Text>(find.text('Paused')).style?.fontFamily, 'Sora');
+      expect(
+          DefaultTextStyle.of(tester.element(find.text('Back to the green')))
+              .style
+              .fontFamily,
+          'NunitoSans');
       await tester.tap(find.byKey(const Key('putt-menu-resume')));
       await tester.tap(find.byKey(const Key('putt-menu-settings')));
       await tester.tap(find.byKey(const Key('putt-menu-leave')));
