@@ -5,7 +5,8 @@
 // spectator) the eggs still out there framed with the nest. The player can
 // take the camera at any time (wheel, pinch, orbit): from then on, for the
 // rest of the hole, the director keeps following but leaves the zoom alone.
-// C (or the HUD's camera button) toggles the whole-hole view.
+// C (or the HUD's camera button) toggles the whole-hole view, until my
+// next putt. Other eggs never move the camera while mine is out.
 library;
 
 import 'dart:math' as math;
@@ -40,6 +41,10 @@ class PuttCameraCue {
   /// in the frame); null when he is not built yet.
   final Vec2? host;
 
+  /// The strokes the viewer took in this hole: one more is a putt of mine
+  /// (another egg knocking mine moves it too, but is no putt).
+  final int myStrokes;
+
   const PuttCameraCue({
     required this.hole,
     required this.phase,
@@ -50,6 +55,7 @@ class PuttCameraCue {
     this.aiming = false,
     this.myEggVelocity = Vec2.zero,
     this.host,
+    this.myStrokes = 0,
   });
 }
 
@@ -125,8 +131,14 @@ class PuttCameraDirector {
   String? _holeId;
   double _holeClock = 0;
   bool _userCamera = false;
-  bool _framedRest = false;
+
+  /// Where my egg rested when the camera last framed it; null asks for a
+  /// new framing at the next rest.
+  Vec2? _framedAt;
   bool _wasRolling = false;
+
+  /// [PuttCameraCue.myStrokes] at the last update.
+  int _myStrokes = 0;
   double _sinceFieldFrame = 0;
   bool _showingBetween = false;
   Vec2? _follow;
@@ -144,7 +156,7 @@ class PuttCameraDirector {
   /// After a refit (a resize): the next rest frames the shot again, and
   /// between holes the whole green is asked for again.
   void reframe() {
-    _framedRest = false;
+    _framedAt = null;
     _showingBetween = false;
   }
 
@@ -155,7 +167,7 @@ class PuttCameraDirector {
       rig.glideTo(
           distance: rig.overviewDistance, yaw: PuttCameraRig.defaultYaw);
     } else {
-      _framedRest = false;
+      _framedAt = null;
     }
   }
 
@@ -225,7 +237,7 @@ class PuttCameraDirector {
       _holeId = hole.id;
       _holeClock = 0;
       _userCamera = false;
-      _framedRest = false;
+      _framedAt = null;
       _wasRolling = false;
       _sinceFieldFrame = 0;
       _showingBetween = false;
@@ -284,6 +296,11 @@ class PuttCameraDirector {
       return;
     }
     _showingBetween = false;
+    // A new putt of mine hands the camera back from the whole-hole view
+    // (my egg knocked by another stays in it).
+    final egg = cue.myEgg;
+    if (cue.myStrokes > _myStrokes) _overview = false;
+    _myStrokes = cue.myStrokes;
     if (opening) {
       _sweep(hole, cue.host);
       _follow = null;
@@ -291,6 +308,7 @@ class PuttCameraDirector {
     }
     if (_overview) {
       _follow = center;
+      _wasRolling = egg != null && !cue.myEggResting;
       return;
     }
     if (cue.aiming) {
@@ -298,7 +316,6 @@ class PuttCameraDirector {
       return;
     }
 
-    final egg = cue.myEgg;
     if (egg != null && !cue.myEggHoled) {
       if (!cue.myEggResting) {
         // Rolling: ride with it, a little farther out than the rest framing
@@ -309,7 +326,7 @@ class PuttCameraDirector {
                   math.max(rig.distanceTarget, rig.overviewDistance * 0.62));
         }
         _wasRolling = true;
-        _framedRest = false;
+        _framedAt = null;
         // A lead along the roll (at most four units), so the way ahead
         // shows more than the way behind.
         final lead = cue.myEggVelocity * 0.28;
@@ -319,8 +336,14 @@ class PuttCameraDirector {
       }
       _wasRolling = false;
       _follow = null;
-      if (!_framedRest) {
-        _framedRest = true;
+      // Framed again whenever the resting egg is somewhere else than where
+      // it was framed: a splash, a silo or the out-of-bounds line puts it
+      // back in the very tick it settles, and that first resting frame
+      // draws it between the two ticks - part way back from the water.
+      // Framed once there, the camera stayed by the pond.
+      final framedAt = _framedAt;
+      if (framedAt == null || framedAt.distanceTo(egg) > 0.5) {
+        _framedAt = egg;
         if (_userCamera) {
           rig.glideTo(target: egg.lerp(hole.nest.position, 0.35));
         } else {

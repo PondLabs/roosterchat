@@ -1,19 +1,24 @@
-// The Sunny Side Putt music loop: a farm band's 112-second romp in G at
-// 120 bpm, bluegrass with a chiptune streak. Fifty-six bars:
+// The Sunny Side Putt music loop: a ranch band's 112-second shuffle in G
+// at 120 bpm, country two-step, all I-IV-V. Fifty-six bars:
 //
-//   A   (1-8)    the tin whistle's tune over banjo rolls, a boom-chick
-//                guitar, a two-step upright bass and brushes;
-//   A'  (9-16)   the tune again, ornamented, the fiddle in thirds under
-//                its second half;
-//   B   (17-24)  the banjo takes the tune, clip-clop wood blocks, the
-//                whistle answering;
-//   B'  (25-32)  the fiddle's tune doubled by a chiptune pulse, a hen's
-//                clucks closing it in a stop;
-//   bridge (33-40) E minor, walking bass, chip arpeggios shimmering, the
-//                whistle long and singing, a stop for the rooster;
+//   A   (1-8)    a twangy electric's tune over banjo rolls, the upright
+//                bass's boom (root, fifth) under the guitar's chick, a
+//                brushed train beat;
+//   A'  (9-16)   the tune again, ornamented, the pedal steel swelling
+//                chords under it, the fiddle in thirds under its second
+//                half;
+//   B   (17-24)  on the IV: the banjo takes the tune, clip-clop wood
+//                blocks, the harmonica answering;
+//   B'  (25-32)  the fiddle's tune, a hen's clucks closing it in a stop;
+//   bridge (33-40) C, G, A7, D7: the pedal steel sings the tune, sliding
+//                into every note, a stop for the rooster;
 //   break (41-48) the banjo plays the tune, the fiddle holds double stops;
-//   reprise (49-56) everyone, the fiddle's thirds, a turnaround to a
-//                stop-time hit and the pickup back to the top.
+//   reprise (49-56) everyone, the fiddle's thirds, the steel's chords, a
+//                turnaround to a stop-time hit and the pickup back to the
+//                top.
+//
+// The eighths swing a little (a shuffle), everything placed through
+// [fileSecondsOf].
 //
 // The file starts in that last stop's rest (bar 56, beat 3), so a player
 // that loops with a gap - most seek back to the start - leaves it where
@@ -39,9 +44,20 @@ final int loopLength = samplesFor(loopBeats * beat);
 /// Where the file starts, in beats of the tune (bar 1's downbeat is 0).
 const double fileStartBeat = 222;
 
+/// Where the off-beat eighth lands, of a beat: past 0.5 is a shuffle.
+const double swing = 0.56;
+
+/// [tuneBeat] with its eighths swung.
+double _swung(double tuneBeat) {
+  final whole = tuneBeat.floorToDouble();
+  final f = tuneBeat - whole;
+  return whole +
+      (f < 0.5 ? f * swing * 2 : swing + (f - 0.5) * (1 - swing) * 2);
+}
+
 /// Seconds into the file of a beat of the tune.
 double fileSecondsOf(double tuneBeat) =>
-    ((tuneBeat - fileStartBeat) % loopBeats) * beat;
+    ((_swung(tuneBeat) - fileStartBeat) % loopBeats) * beat;
 
 /// The tune beat of [bar] (1-based) plus [offset] beats.
 double barBeat(int bar, [double offset = 0]) => (bar - 1) * 4 + offset;
@@ -157,9 +173,9 @@ const chart = [
   // B
   'C', 'C', 'G', 'G', 'C', 'C', 'D', 'D7',
   // B'
-  'C', 'C', 'G', 'Em', 'Am', 'D7', 'G', 'G',
+  'C', 'C', 'G', 'G', 'C', 'D7', 'G', 'G',
   // bridge
-  'Em', 'C', 'G', 'D', 'Em', 'C', 'A7', 'D7',
+  'C', 'C', 'G', 'G', 'A7', 'A7', 'D7', 'D7',
   // break
   'G', 'G', 'C', 'D', 'G', 'C', 'D7', 'G',
   // reprise
@@ -225,24 +241,6 @@ const chords = {
       drone: 69,
       pad: [66, 72],
       arp: [78, 81, 84, 86]),
-  'Em': Chord(
-      root: 40,
-      fifth: 47,
-      third: 3,
-      guitar: [52, 55, 59, 64],
-      roll: [55, 59, 64],
-      drone: 67,
-      pad: [67, 71],
-      arp: [79, 83, 88, 91]),
-  'Am': Chord(
-      root: 45,
-      fifth: 40,
-      third: 3,
-      guitar: [52, 57, 60, 64],
-      roll: [57, 60, 64],
-      drone: 67,
-      pad: [69, 72],
-      arp: [81, 84, 88, 93]),
   'A7': Chord(
       root: 45,
       fifth: 40,
@@ -272,7 +270,7 @@ Section sectionOf(int bar) => switch (bar) {
 /// hens, the bridge to the rooster, the tag to the pickup.
 const stopBars = {32, 40, 56};
 
-// The tunes. A's eight bars, which the whistle plays twice and the
+// The tunes. A's eight bars, which the electric plays twice and the
 // reprise once more, the banjo in the break.
 const tuneA = 'G5:4 B5:8 A5:8 G5:8 E5:8 D5:4 | '
     'E5:8 G5:8 G5:4 A5:8 B5:8 D6:4 | '
@@ -298,20 +296,20 @@ const tuneB = 'E5:4 G5:4 E5:4 C5:4 | D5:4 E5:4 C5:2 | '
     'E5:4 G5:4 A5:4 G5:4 | E5:4 D5:4 C5:2 | '
     'D5:4 F#5:4 A5:4 F#5:4 | E5:4 D5:4 C5:4 A4:4';
 
-/// The whistle's answers in B.
+/// The harmonica's answers in B.
 const answersB = 'r:1 | r:2 G5:8 A5:8 G5:8 E5:8 | r:1 | '
     'r:2 r:8 D5:8 E5:8 G5:8 | r:1 | r:2 G5:8 E5:8 D5:8 C5:8 | r:1 | '
     'r:2 A5:8 F#5:8 E5:8 D5:8';
 
-/// B', the fiddle's (an octave down) and the chip's.
+/// B', the fiddle's (an octave down).
 const tuneB2 = 'G5:4 E5:8 G5:8 C6:4 B5:8 A5:8 | G5:2 E5:4 C5:4 | '
     'D5:8 G5:8 B5:4 A5:8 G5:8 D5:4 | E5:2 G5:4 B5:4 | '
     'C6:4 B5:8 A5:8 E5:4 A5:4 | F#5:4 A5:8 C6:8 B5:8 A5:8 F#5:4 | '
     'G5:4 B5:8 D6:8 B5:4 G5:4 | G5:2 r:2';
 
-/// The bridge, long and slurred.
-const tuneBridge = 'B5:2 _G5:4 _E5:4 | G5:2. _A5:4 | B5:2 _D6:2 | A5:1 | '
-    'G5:2 _B5:4 _E6:4 | E6:2 _D6:4 _C6:4 | C#6:2 _A5:2 | D6:4 r:2.';
+/// The bridge, the steel's: long and slid.
+const tuneBridge = 'E5:2 _G5:4 _C6:4 | C6:2. _A5:4 | B5:2 _D6:2 | G5:1 | '
+    'A5:2 _C#6:4 _E6:4 | E6:2 _C#6:4 _A5:4 | A5:2 _F#5:4 _A5:4 | C6:4 r:2.';
 
 /// The break: A an octave down, simplified for the banjo's thumb.
 const tuneBreak = 'G4:4 B4:8 A4:8 G4:8 E4:8 D4:4 | '
@@ -334,11 +332,9 @@ const tuneReprise = 'D5:8 F#5:8 | '
     'A5:8 F#5:8 A5:8 C6:8 B5:8 A5:8 F#5:8 E5:8 | '
     "'>A5:8 r:8 r:2 D5:8 F#5:8";
 
-List<ScoreNote> get _whistleScore => [
+List<ScoreNote> get _leadScore => [
       ...parseLine(tuneA, barBeat(1), velocity: 0.78),
       ...parseLine(tuneA2, barBeat(9), velocity: 0.82),
-      ...parseLine(answersB, barBeat(17), velocity: 0.62),
-      ...parseLine(tuneBridge, barBeat(33), velocity: 0.76),
       ...parseLine(tuneReprise, barBeat(48, 3), velocity: 0.86, pickup: true),
     ];
 
@@ -435,30 +431,15 @@ Float64List _bass(Rng rng) {
       _pluck(stem, b, chord.root, 0.3, bassString, rng, 0.95, jitter: 0.002);
       continue;
     }
-    final walking = section == Section.b ||
-        section == Section.b2 ||
-        section == Section.bridge;
-    if (walking) {
-      var third = chord.root + chord.third;
-      if (third > 47) third -= 12;
-      final approach = next.root == chord.root ? chord.root + 2 : next.root - 1;
-      final line = [chord.root, third, chord.fifth, approach];
-      for (var i = 0; i < 4; i++) {
-        _pluck(stem, b + i, line[i], beat * 0.82, bassString, rng,
-            (i == 0 ? 0.95 : 0.8) * lift,
-            jitter: 0.002);
-      }
-    } else {
-      _pluck(stem, b, chord.root, beat * 0.85, bassString, rng, 0.95 * lift,
-          jitter: 0.002);
+    // Boom on the root, boom on the fifth, a step into a new chord.
+    _pluck(stem, b, chord.root, beat * 0.85, bassString, rng, 0.95 * lift,
+        jitter: 0.002);
+    _pluck(stem, b + 2, chord.fifth, beat * 0.85, bassString, rng, 0.82 * lift,
+        jitter: 0.002);
+    if (next.root != chord.root) {
       _pluck(
-          stem, b + 2, chord.fifth, beat * 0.85, bassString, rng, 0.82 * lift,
+          stem, b + 3, next.root - 1, beat * 0.7, bassString, rng, 0.7 * lift,
           jitter: 0.002);
-      if (next.root != chord.root) {
-        _pluck(
-            stem, b + 3, next.root - 1, beat * 0.7, bassString, rng, 0.7 * lift,
-            jitter: 0.002);
-      }
     }
   }
   filterLoop(stem, [Biquad.lowpass(1700), Biquad.highpass(34)]);
@@ -481,27 +462,13 @@ Float64List _guitar(Rng rng) {
           rng);
       continue;
     }
-    if (section == Section.bridge) {
-      _place(
-          stem,
-          b,
-          strum(chord.guitar, 1.8, guitarString, rng,
-              spread: 0.024, velocity: 0.75),
-          rng);
-      _place(
-          stem,
-          b + 2,
-          strum(chord.guitar, 0.8, guitarString, rng,
-              spread: 0.016, velocity: 0.45, down: false),
-          rng);
-      continue;
-    }
     for (final offbeat in const [1.0, 3.0]) {
       _place(
           stem,
           b + offbeat,
           strum(chord.guitar, 0.15, guitarString, rng,
-              spread: 0.008, velocity: 0.8 * lift),
+              spread: 0.008,
+              velocity: (section == Section.bridge ? 0.6 : 0.8) * lift),
           rng);
     }
     if (section == Section.b || section == Section.b2) {
@@ -621,20 +588,82 @@ Float64List _banjo(Rng rng) {
   return stem;
 }
 
-Float64List _whistle(Rng rng) {
-  final stem =
-      renderLine(toLine(_whistleScore, rng), whistleStyle, loopLength, rng);
-  filterLoop(stem, [Biquad.highpass(320)]);
+/// The twangy electric: each note picked, a cut a hammer-on from a
+/// whole step under.
+Float64List _lead(Rng rng) {
+  final stem = Float64List(loopLength);
+  for (final n in _leadScore) {
+    var hold = n.beats * beat * (n.staccato ? 0.42 : 0.92);
+    var at = n.beat;
+    if (n.cut) {
+      _pluck(stem, at, n.midi - 2, 0.06, twangString, rng, n.velocity * 0.7);
+      at += 0.12;
+      hold -= 0.12 * beat;
+    }
+    _pluck(stem, at, n.midi, hold, twangString, rng, n.velocity);
+  }
+  filterLoop(stem, [
+    Biquad.highpass(180),
+    Biquad.peak(800, 1.0, -2),
+    Biquad.peak(2600, 1.4, 4),
+    Biquad.lowpass(8000),
+  ]);
+  return stem;
+}
+
+/// The pedal steel: the bridge's tune, and chords swelled under A' and
+/// the reprise, sliding bar to bar.
+Float64List _steel(Rng rng) {
+  final stem = renderLine(
+      toLine(parseLine(tuneBridge, barBeat(33), velocity: 0.8), rng, gap: 0.05),
+      steelStyle,
+      loopLength,
+      rng);
+  final upper = <ScoreNote>[];
+  final lower = <ScoreNote>[];
+  for (final bar in [
+    for (var b = 9; b <= 16; b++) b,
+    for (var b = 49; b <= 55; b++) b
+  ]) {
+    final chord = chordAt(bar);
+    final slide = bar != 9 && bar != 49;
+    upper.add(
+        ScoreNote(barBeat(bar), 4, chord.pad[1], velocity: 0.3, slur: slide));
+    lower.add(
+        ScoreNote(barBeat(bar), 4, chord.pad[0], velocity: 0.26, slur: slide));
+  }
+  for (final voice in [upper, lower]) {
+    final line =
+        renderLine(toLine(voice, rng, gap: 0.08), steelStyle, loopLength, rng);
+    for (var i = 0; i < stem.length; i++) {
+      stem[i] += line[i];
+    }
+  }
+  filterLoop(stem, [Biquad.highpass(200), Biquad.lowpass(5200)]);
+  return stem;
+}
+
+Float64List _harp(Rng rng) {
+  final stem = renderLine(
+      toLine(parseLine(answersB, barBeat(17), velocity: 0.7), rng),
+      harpStyle,
+      loopLength,
+      rng);
+  filterLoop(stem, [
+    Biquad.highpass(300),
+    Biquad.peak(1500, 1.2, 4),
+    Biquad.lowpass(3600),
+  ]);
   return stem;
 }
 
 Float64List _fiddle(Rng rng) {
-  final whistle = _whistleScore;
+  final lead = _leadScore;
   bool harmonized(ScoreNote n) =>
       (n.beat >= barBeat(13) && n.beat < barBeat(17)) ||
       (n.beat >= barBeat(49) && n.beat < barBeat(56));
   final main = <ScoreNote>[
-    for (final n in whistle)
+    for (final n in lead)
       if (harmonized(n))
         ScoreNote(n.beat, n.beats, thirdBelow(n.midi),
             velocity: n.velocity * 0.62, slur: n.slur, staccato: n.staccato),
@@ -645,13 +674,12 @@ Float64List _fiddle(Rng rng) {
   ];
   final stem = renderLine(toLine(main, rng), fiddleStyle, loopLength, rng);
 
-  // Double stops: held chord notes under the bridge and the break.
+  // Double stops: held chord notes under the break.
   final upper = <ScoreNote>[];
   final lower = <ScoreNote>[];
-  for (var bar = 33; bar <= 48; bar++) {
-    if (bar == 40) continue;
+  for (var bar = 41; bar <= 48; bar++) {
     final chord = chordAt(bar);
-    final velocity = sectionOf(bar) == Section.bridge ? 0.25 : 0.21;
+    const velocity = 0.21;
     upper.add(ScoreNote(barBeat(bar), 4, chord.pad[1], velocity: velocity));
     lower.add(
         ScoreNote(barBeat(bar), 4, chord.pad[0], velocity: velocity * 0.9));
@@ -671,27 +699,6 @@ Float64List _fiddle(Rng rng) {
     Biquad.lowpass(6400),
     Biquad.lowpass(7400),
   ]);
-  return stem;
-}
-
-Float64List _chip(Rng rng) {
-  final notes = <ScoreNote>[
-    ...parseLine(tuneB2, barBeat(25), velocity: 0.62),
-  ];
-  // Arpeggios a 64th apart: the bridge's shimmer, the reprise's sparkle.
-  for (var bar = 33; bar <= 52; bar++) {
-    final section = sectionOf(bar);
-    if (bar >= 40 && bar < 49) continue;
-    final chord = chordAt(bar);
-    final velocity = section == Section.bridge ? 0.42 : 0.26;
-    for (var step = 0; step < 4 * 16; step++) {
-      notes.add(ScoreNote(barBeat(bar, step / 16), 1 / 16, chord.arp[step % 4],
-          velocity: velocity * (step % 4 == 0 ? 1.1 : 1), slur: step > 0));
-    }
-  }
-  final stem = renderLine(
-      toLine(notes, rng, gap: 0.0, humanize: 0), chipStyle, loopLength, rng);
-  filterLoop(stem, [Biquad.highpass(220), Biquad.lowpass(6800)]);
   return stem;
 }
 
@@ -724,18 +731,15 @@ Float64List _brushes(Rng rng) {
       _place(stem, b + 3, brushSwish(rng, velocity: 0.5, length: 0.62), rng);
       continue;
     }
-    for (final on in const [1.0, 3.0]) {
-      _place(stem, b + on, brushTap(rng, velocity: 0.78 * lift), rng);
+    // The train beat: every sixteenth brushed, the backbeat leaned on.
+    for (var step = 0; step < 16; step++) {
+      final backbeat = step == 4 || step == 12;
+      final v = backbeat ? 0.78 : (step.isEven ? 0.3 : 0.18);
+      _place(stem, b + step / 4, brushTap(rng, velocity: v * lift), rng,
+          jitter: 0.002);
     }
     for (final on in const [0.0, 2.0]) {
-      _place(stem, b + on, brushSwish(rng, velocity: 0.32 * lift), rng);
-    }
-    if (section != Section.a) {
-      for (final ghost in const [0.5, 1.5, 2.5, 3.5]) {
-        if (rng.chance(0.35)) {
-          _place(stem, b + ghost, brushTap(rng, velocity: 0.22), rng);
-        }
-      }
+      _place(stem, b + on, brushSwish(rng, velocity: 0.28 * lift), rng);
     }
     // Fills into the next section.
     if (bar == 8 || bar == 24 || bar == 55) {
@@ -743,27 +747,6 @@ Float64List _brushes(Rng rng) {
         _place(stem, b + 3 + i * 0.25, brushTap(rng, velocity: 0.35 + i * 0.15),
             rng);
       }
-    }
-  }
-  return stem;
-}
-
-Float64List _shaker(Rng rng) {
-  final stem = Float64List(loopLength);
-  const accents = [0.5, 0.22, 0.85, 0.28];
-  for (var bar = 1; bar <= barCount; bar++) {
-    final section = sectionOf(bar);
-    final b = barBeat(bar);
-    final sixteenths = section != Section.a && section != Section.bridge;
-    final last = stopBars.contains(bar) ? 1 : 16;
-    for (var step = 0; step < last; step++) {
-      if (!sixteenths && step.isOdd) continue;
-      _place(
-          stem,
-          b + step / 4,
-          shaker(rng, velocity: accents[step % 4] * (sixteenths ? 1 : 0.8)),
-          rng,
-          jitter: 0.004);
     }
   }
   return stem;
@@ -862,15 +845,15 @@ class _Stem {
   final rng = Rng(1907);
   final (henLeft, henRight) = _hens(rng);
   final stems = [
-    _Stem('whistle', _whistle(rng), pan: 0.08, send: 0.26, level: 0),
-    _Stem('fiddle', _fiddle(rng), pan: -0.24, send: 0.3, level: -2.5),
-    _Stem('banjo', _banjo(rng), pan: 0.3, send: 0.18, level: -2),
-    _Stem('chip', _chip(rng), pan: 0.42, send: 0.24, level: -10),
-    _Stem('guitar', _guitar(rng), pan: -0.38, send: 0.2, level: -8),
+    _Stem('electric', _lead(rng), pan: 0.08, send: 0.24, level: 0),
+    _Stem('steel', _steel(rng), pan: -0.3, send: 0.4, level: -4),
+    _Stem('harmonica', _harp(rng), pan: 0.32, send: 0.25, level: -7),
+    _Stem('fiddle', _fiddle(rng), pan: -0.24, send: 0.3, level: -3.5),
+    _Stem('banjo', _banjo(rng), pan: 0.3, send: 0.18, level: -4),
+    _Stem('guitar', _guitar(rng), pan: -0.38, send: 0.2, level: -7),
     _Stem('bass', _bass(rng), pan: 0, send: 0.04, level: -6),
     _Stem('kick', _kick(rng), pan: 0, send: 0.05, level: -10),
     _Stem('brushes', _brushes(rng), pan: 0.14, send: 0.2, level: -10),
-    _Stem('shaker', _shaker(rng), pan: 0.36, send: 0.14, level: -15),
     _Stem('wood blocks', _woodblocks(rng), pan: -0.3, send: 0.2, level: -15),
     _Stem('washboard', _washboard(rng), pan: 0.22, send: 0.15, level: -17),
     _Stem('hens left', henLeft, pan: -0.55, send: 0.24, level: -11),

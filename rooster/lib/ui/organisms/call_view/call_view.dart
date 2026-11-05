@@ -8,6 +8,7 @@ import 'package:rooster/client/matrix/components/dj/dj_booths.dart';
 import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/ui/atoms/appear_in.dart';
 import 'package:rooster/client/room.dart';
+import 'package:rooster/debug/log.dart';
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/ui/layout/bento.dart';
 import 'package:rooster/ui/organisms/call_view/call_control_buttons.dart';
@@ -51,6 +52,17 @@ class CallView extends StatefulWidget {
 
   static String get labelCallEnded => Intl.message("Call ended",
       name: "labelCallEnded", desc: "Shown in place of a call that has ended");
+
+  static String get messageActivityNotAllowed => Intl.message(
+      "Only moderators can start activities in this channel.",
+      name: "messageActivityNotAllowed",
+      desc: "Shown when launching a call activity is refused because the user "
+          "may not write the activity's room state in this voice channel");
+
+  static String get messageActivityLaunchFailed =>
+      Intl.message("Could not start the activity. Try again.",
+          name: "messageActivityLaunchFailed",
+          desc: "Shown when launching a call activity failed");
 
   final Future<void> Function(bool)? setMicrophoneMute;
   final Future<void> Function(bool)? setDeafened;
@@ -174,7 +186,7 @@ class _CallViewState extends State<CallView> {
     if (activity != null) return null;
     final component = _activityComponent;
     if (component == null) return null;
-    for (final entry in component.visibleSessions()) {
+    for (final entry in component.liveSessions()) {
       final session = component.sessionOf(entry.sessionId);
       if (session == null) continue;
       final seats = [
@@ -205,8 +217,33 @@ class _CallViewState extends State<CallView> {
     if (!mounted || options == null) return;
     final component = _activityComponent;
     if (component == null) return;
-    final session = await component.launch(activity);
-    if (session == null || !mounted) return;
+    // Called without an await: a launch that fails says so here, or the
+    // button looks dead.
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final CallActivitySession? session;
+    try {
+      session = await component.launch(activity);
+    } catch (e, s) {
+      Log.onError(e, s, content: "Could not launch ${activity.id}");
+      messenger?.showSnackBar(SnackBar(
+          content: Text(e is CallActivityLaunchException && e.notAllowed
+              ? CallView.messageActivityNotAllowed
+              : CallView.messageActivityLaunchFailed)));
+      return;
+    }
+    if (session == null) {
+      // A session is already running in this call: open it, not a failure.
+      for (final entry in component.liveSessions()) {
+        final running = component.sessionOf(entry.sessionId);
+        if (running == null) continue;
+        if (mounted) await _joinSession(running);
+        return;
+      }
+      messenger?.showSnackBar(
+          SnackBar(content: Text(CallView.messageActivityLaunchFailed)));
+      return;
+    }
+    if (!mounted) return;
     final controller = PuttSessionController(
       session: session,
       nameOf: _memberNameOf,
@@ -237,7 +274,7 @@ class _CallViewState extends State<CallView> {
       builder: (context) => SafeArea(
         child: ActivityPickerPanel(
           activities: CallActivityRegistry.all,
-          liveSessions: component.visibleSessions(),
+          liveSessions: component.liveSessions(),
           nameOf: _memberNameOf,
           onLaunch: (activity) {
             Navigator.of(context).pop();

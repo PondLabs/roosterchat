@@ -174,6 +174,20 @@ void main() {
       expect(moves.whereType<ShotInput>(), hasLength(1));
     });
 
+    testWidgets('the keys neither aim nor putt while the hole builds',
+        (tester) async {
+      await boot(tester);
+      game.holeLoading.value = (0, 1);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      expect(game.aim.isActive, isFalse);
+      expect(moves.whereType<ShotInput>(), isEmpty);
+      game.holeLoading.value = null;
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      expect(game.aim.isActive, isTrue, reason: 'built, the keys are back');
+    });
+
     testWidgets('a drag does not fire a keyboard aim on a stray release',
         (tester) async {
       await boot(tester);
@@ -197,7 +211,8 @@ void main() {
 
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pump();
-      expect(match.paused, isTrue);
+      expect(find.text('Game settings'), findsOneWidget);
+      expect(match.paused, isFalse, reason: 'with others the hole runs on');
       // With the menu up the arrows are the menu's, not the aim's.
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
       expect(game.aim.isActive, isFalse);

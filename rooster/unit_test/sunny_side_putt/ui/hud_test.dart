@@ -423,7 +423,11 @@ void main() {
 
       await tester.pumpWidget(hud(true));
       expect(find.byTooltip('Back in close (C)'), findsOneWidget);
-      expect(find.byTooltip('Pause (Esc)'), findsOneWidget);
+      expect(find.byTooltip('Settings (Esc)'), findsOneWidget);
+      final gear = tester
+          .widget<PuttRoundButton>(find.byKey(const Key('putt-settings')));
+      expect(gear.icon, Icons.settings_rounded,
+          reason: 'a gear for the settings, not a pause that pauses nothing');
     });
   });
 

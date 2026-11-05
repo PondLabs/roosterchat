@@ -1,6 +1,7 @@
 // The band and the barnyard the Sunny Side Putt generator plays with: a
-// monophonic line (the tin whistle, the fiddle, the chiptune pulse), the
-// plucked strings (banjo, guitar, upright bass), the brushed kit, struck
+// monophonic line (the tin whistle, the fiddle, the chiptune pulse, the
+// pedal steel, the harmonica), the plucked strings (banjo, guitar, the
+// twangy electric, upright bass), the brushed kit, struck
 // wood and bells, and the farm's voices (the hen, the duck, the chick, the
 // rooster's crow), all synthesized from dsp.dart's parts.
 library;
@@ -12,7 +13,7 @@ import 'dsp.dart';
 
 // ---- the monophonic line ------------------------------------------------------------------
 
-enum LineTone { whistle, fiddle, chip }
+enum LineTone { whistle, fiddle, chip, steel, reed }
 
 /// One note of a line, in seconds of the file it lands in.
 class LineNote {
@@ -109,6 +110,34 @@ const chipStyle = LineStyle(
   duty: 0.25,
 );
 
+/// A pedal steel: swelled in on the volume pedal, sliding into every note
+/// and between slurred ones, a slow bar vibrato.
+const steelStyle = LineStyle(
+  tone: LineTone.steel,
+  attack: 0.16,
+  release: 0.22,
+  vibratoHz: 4.6,
+  vibratoCents: 9,
+  vibratoDelay: 0.3,
+  glide: 0.07,
+  scoopCents: 90,
+  breath: 0,
+);
+
+/// A harmonica: a reedy pulse, breathy, its hand-wah vibrato.
+const harpStyle = LineStyle(
+  tone: LineTone.reed,
+  attack: 0.04,
+  release: 0.06,
+  vibratoHz: 5.2,
+  vibratoCents: 14,
+  vibratoDelay: 0.2,
+  glide: 0.03,
+  scoopCents: 40,
+  breath: 0.06,
+  duty: 0.42,
+);
+
 /// Renders [notes] (in file seconds) as one voice over a loop of
 /// [length] samples: one oscillator whose pitch glides between notes,
 /// tongued or slurred, with blooming vibrato; what rings past the end
@@ -162,7 +191,8 @@ Float64List renderLine(
 
     var target = note.midi;
     if (note.cut && since < 0.038) target = note.midi + 2;
-    pitch += (target - pitch) * (tongued ? pitchSnap : slurCoef);
+    pitch += (target - pitch) *
+        (tongued && style.tone != LineTone.steel ? pitchSnap : slurCoef);
 
     final bloom = gate
         ? style.vibratoCents /
@@ -220,6 +250,17 @@ Float64List renderLine(
         }
       case LineTone.chip:
         sample = pulseWave(phase, dt, style.duty) * 0.6;
+      case LineTone.steel:
+        final sx = math.sin(twoPi * phase);
+        final cx = math.cos(twoPi * phase);
+        final s2 = 2 * sx * cx;
+        sample = sx +
+            0.45 * s2 +
+            0.22 * sx * (3 - 4 * sx * sx) +
+            0.12 * 2 * s2 * (1 - 2 * sx * sx);
+      case LineTone.reed:
+        sample = pulseWave(phase, dt, style.duty) * 0.5 +
+            style.breath * airFilter.process(rng.bipolar()) * 2;
     }
     span[n] = sample * amp;
   }
@@ -250,6 +291,15 @@ const guitarString = StringSpec(
     pickHz: 5200,
     release: 0.08,
     attack: 0.0015);
+
+/// A twangy electric picked by the bridge pickup: bright, snappy.
+const twangString = StringSpec(
+    ring: 1.5,
+    darkness: 0.08,
+    pickAt: 0.07,
+    pickHz: 7800,
+    release: 0.05,
+    attack: 0.0008);
 
 /// An upright bass, plucked with the side of a finger.
 const bassString = StringSpec(

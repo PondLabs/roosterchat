@@ -1,5 +1,5 @@
 // The stage shell: the placeholder where the game's view goes, the way in
-// and out (button and Esc), and the fullscreen toggle existing on desktop.
+// and out (Esc, and the button until the game's own menu takes over), and the fullscreen toggle existing on desktop.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,7 +21,16 @@ void main() {
       expect(find.text('Loading Sunny Side Putt'), findsNothing);
     });
 
-    testWidgets('the exit button releases the stage', (tester) async {
+    testWidgets('no exit button over a game: its own menu has the leave',
+        (tester) async {
+      await tester.pumpWidget(_stage(gameSlot: const Text('THE GAME')));
+
+      expect(find.byTooltip(ActivityStageStrings.leave), findsNothing);
+      expect(find.byIcon(Icons.close_rounded), findsNothing);
+    });
+
+    testWidgets('while loading, the exit button releases the stage',
+        (tester) async {
       var exited = false;
       await tester.pumpWidget(_stage(onExit: () => exited = true));
 

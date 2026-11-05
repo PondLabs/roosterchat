@@ -594,6 +594,11 @@ class PuttMatch extends ChangeNotifier {
 
   bool get isSpectator => engine.isSpectator(localPlayerId);
 
+  /// Alone on the green: no session wire (we are no guest) and no one
+  /// else joined. Only a solo match pauses under the settings menu; with
+  /// others the hole (and the host's engine) keeps running under it.
+  bool get playsAlone => remoteMove == null && engine.players.length <= 1;
+
   /// This client's egg: interpolated for drawing.
   Vec2? get myEggRenderPosition => engine.world?.ball(localPlayerId) == null
       ? null

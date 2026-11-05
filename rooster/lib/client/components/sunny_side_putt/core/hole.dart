@@ -116,8 +116,9 @@ class MovingObstacle {
   double restitutionOr(double fallback) => restitution ?? fallback;
 }
 
-/// The nest (cup): an egg captured when its center gets within the capture
-/// zone while slow enough - see [PhysicsConfig.captureSpeed].
+/// The nest (cup): over it an egg is pulled toward its center and slowed,
+/// and drops when its center is over the cup slow enough for how centered
+/// it is - see [PhysicsConfig.captureSpeed] and its neighbours.
 class Nest {
   final Vec2 position;
   final double radius;

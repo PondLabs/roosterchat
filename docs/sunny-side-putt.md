@@ -40,7 +40,7 @@ results):
   client keeps ticking through it), and rides the engine's snapshot, so a
   host handoff keeps it.
 - Quick reactions: a cheer, a laugh, a wow, fire or a nice one, from the
-  button under the pause button or the keys 1-5, pop as a bubble over the
+  button under the settings button or the keys 1-5, pop as a bubble over the
   sender's egg for everyone (over the nest once their egg is in). They
   ride the engine's journal as `ReactInput`s and change nothing in the
   game; the button keeps a short cooldown (`putt_reactions.dart`).
@@ -56,6 +56,21 @@ results):
   a hole). All of it rides the world's snapshot. An egg at rest that
   another rolls into hears who did it in the cast feed ("Jonas knocked
   your egg!", or "You knocked Lou's egg").
+
+### The nest
+
+The nest is a cup, not a spot to stop on (`core/physics.dart`). Over it
+(the egg's center inside its radius) the funnel pulls the egg toward the
+center at `cupPull` (16 units/s², over the rolling friction, so nothing
+rests on the lip) and drags `cupDrag` (8 units/s²) more pace off. The egg
+drops the moment it is slow enough for how centered it is: up to
+`captureSpeed` (3 units/s) right at the lip, rising in a straight line to
+`captureSpeedCentered` (9 units/s) at dead center. So a firm putt through
+the middle drops, a slow one that only reaches the edge drops, a lip hit
+at a medium pace curls in and drops or spins out bent toward the center,
+and only a really fast egg skips across. An egg in the air (off a kicker)
+flies over it. Nest Magnet pulls from 3.5 units out and, once the egg is
+over the cup, cuts its pace to the lip's limit, so it always drops.
 
 ### Course awards
 
@@ -96,10 +111,14 @@ pause in a live session, moves on from them.
 - **Barnyard Chaos** - casual, but everyone starts with two random
   power-ups and the mystery boxes come doubled.
 
+Casual and Barnyard Chaos start on the course the launcher picks in the
+launch options (a card per course, or "Surprise me" to draw one);
+a tournament draws its courses.
+
 ### Looks
 
 Each player picks the Easter band on their egg and a hat for the chick
-that hatches from it, in "Your egg" off the pause menu: the egg and the
+that hatches from it, in "Your egg" off the settings menu: the egg and the
 chick drawn as the green shows them, a row of patterns, a row of hats. The
 colour is not part of it: it comes with the seat, so eight eggs never
 share one. The pick is kept on the device like the volumes (the
@@ -317,6 +336,22 @@ course, each the bold line beside a longer, safer one:
   run on to the nest; a soft one only hops into the chute, where the silos
   have it if it strays (the "?" in the chute is for whoever rolls it), and
   one too firm runs on past the nest into the water trough behind it.
+
+#### Previews
+
+The course cards (the launch options and casual's next-course vote) show
+the course's first hole from above: a PNG per hole in
+`rooster/assets/sunny_side_putt/previews/<hole id>.png`, 320x200, 10-25 KB
+each. They are drawn from the course data by `PuttHolePreviewPainter`
+(`putt_course_preview.dart`: the theme's turf in mown stripes, the relief
+lit from the top left, rough where no egg can roll, water, rails, the
+tee and the nest), with no GPU. After a course changes, redraw them all:
+
+    cd rooster && flutter test tools/gen_putt_previews_test.dart
+
+It clears the folder first. `unit_test/sunny_side_putt/ui/course_previews_test.dart`
+fails while a hole has no PNG; the card itself paints a missing one live.
+The painter's colours copy the private theme in `world3d/theme.dart`.
 
 ### Hills
 
@@ -621,6 +656,22 @@ low tier: the sun's shadow map from 2048 to 1024 pixels a side, and the
 ink outlines off the walkers, the host and the scenery (the eggs, the
 aim and the casts' characters keep theirs).
 
+A hole builds a step a frame (`PuttWorld3D.buildHoleInSteps`), never in
+one go: built at once, a hole held the UI isolate for 1 to 2.3 s in a
+debug run. The table's shape, the lawn's texture and the turf's
+geometry are worked out on another isolate (`compute`; on the web, in
+place as one step), then the course's pieces and the farm's
+(`_Scenery.stepNames`) follow, one per frame, the last step compiling
+whatever programs are still missing. Meanwhile the view shows "Setting
+up the hole" with an egg rocking and a bar filling (steps done of all),
+over the half-built green and its gestures; the renderer keeps drawing
+behind it, so each step's meshes upload on the frame after. The
+opening's camera clock and the hole's banner wait for the build, and
+the resolution governor judges none of its frames. Each build logs its
+cost per step (`Log.d`, `[Sunny Side Putt] hole ... built in`). The
+tests still build at once (`buildHole`); `stepped_build_test.dart`
+checks both ways make the same scene.
+
 At the Barn's dusk a cool rim light from behind the green edges what the
 low sun misses (the light is always in the scene, at nothing by day, so
 a course change never recompiles the materials). A figure that fades out
@@ -701,15 +752,17 @@ seeds: no samples, nothing licensed, and a re-run writes the same bytes.
 From `rooster/`, with `ffmpeg` (libmp3lame) on the PATH:
 `dart run tools/gen_game_audio.dart`.
 
-- The music is a farm band's 112-second loop in G at 120 bpm: the tin
-  whistle's tune over banjo rolls, a boom-chick guitar, a two-step upright
-  bass, brushes and an egg shaker (A, then A' with the fiddle in thirds);
-  the banjo's B over clip-clop wood blocks; B' on the fiddle doubled by a
-  chiptune pulse, ending in a stop where the hens cluck; a bridge in E
-  minor with chip arpeggios and a stop for the rooster's crow; the banjo's
-  break; the reprise and a stop-time tag. The strings are Karplus-Strong,
-  the whistle and the fiddle monophonic lines with vibrato, all in a small
-  stereo room. It ships as a 44.1 kHz stereo MP3 (about 2 MB), the one
+- The music is a ranch band's 112-second country shuffle in G at 120
+  bpm, all I-IV-V (the bridge runs C, G, A7, D7): a twangy electric's tune
+  over banjo rolls, the upright bass's boom on root and fifth under the
+  guitar's chick, a brushed train beat (A, then A' with the pedal steel's
+  chords and the fiddle in thirds); the banjo's B on the IV over clip-clop
+  wood blocks, the harmonica answering; B' on the fiddle, ending in a stop
+  where the hens cluck; a bridge where the pedal steel slides through the
+  tune, with a stop for the rooster's crow; the banjo's break; the reprise
+  and a stop-time tag. The strings are Karplus-Strong, the steel, the
+  harmonica and the fiddle monophonic lines with slides and vibrato, all in a
+  small stereo room. It ships as a 44.1 kHz stereo MP3 (about 2 MB), the one
   compressed format every platform's player decodes. The samples wrap
   seamlessly, and the file starts inside the tag's stop, so the gap most
   players leave when they loop (they seek back to the start) falls where
@@ -746,11 +799,11 @@ From `rooster/`, with `ffmpeg` (libmp3lame) on the PATH:
   `three_js` (`putt_world3d.dart`, its builders under `world3d/`) under
   the Flutter HUD (`putt_hud.dart`: the hole bar - hole, par, my strokes,
   the clock turning comb red through the last fifteen seconds - with the
-  course's holes as dots under it, the course chip, the camera and pause
+  course's holes as dots under it, the course chip, the camera and settings
   buttons, banners by kind, the scorecard, the hint line, the power-up
   carton and its targeting, and the results and match-over cards), the
   cast feed under the top bar (`putt_cast_feed.dart`), the
-  name tags, pause/settings/vote menus, the spectator strip, and the
+  name tags, settings/vote menus, the spectator strip, and the
   audio (see Sound; volume per bus in the settings). The world only reads the engine's snapshots; the physics
   stays planar.
 - `putt_demo.dart` - the demo mode (`--dart-define=PUTT_DEMO=true`): the

@@ -12,12 +12,14 @@ import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/call_manager.dart';
 import 'package:rooster/client/components/call_activity/call_activity_component.dart';
 import 'package:rooster/client/components/call_activity/call_activity_session.dart';
+import 'package:rooster/client/components/call_activity/call_activity_transport.dart';
 import 'package:rooster/client/components/room_component.dart';
 import 'package:rooster/client/matrix/components/matrix_sync_listener.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_livekit_voip_session.dart';
 import 'package:rooster/client/matrix/homeserver_clock.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
+import 'package:rooster/client/matrix/matrix_room_permissions.dart';
 import 'package:rooster/main.dart';
 
 import 'livekit_call_activity_transport.dart';
@@ -26,9 +28,12 @@ class MatrixCallActivityComponent
     extends RoomComponent<MatrixClient, MatrixRoom>
     implements CallActivityRoomState, MatrixRoomSyncListener {
   MatrixCallActivityComponent(super.client, super.room,
-      {CallManager? callManager, HomeserverClock? clock})
+      {CallManager? callManager,
+      HomeserverClock? clock,
+      CallActivityTransport? Function()? ownCallTransport})
       : _injectedCallManager = callManager,
-        _clock = clock ?? HomeserverClock.instance;
+        _clock = clock ?? HomeserverClock.instance,
+        _injectedOwnCallTransport = ownCallTransport;
 
   static const stateEventType = 'chat.commet.call_activity';
 
@@ -37,19 +42,38 @@ class MatrixCallActivityComponent
   /// anyway: a session only shows while the call that holds it is alive.
   static const expires = Duration(hours: 6);
 
+  /// How far ahead of our clock a session's `created` may be (clock skew
+  /// between clients); further is a forgery meant to never expire.
+  static const createdSkew = Duration(minutes: 1);
+
+  /// How long a session seeded from the room state counts as live before
+  /// anyone on the wire has spoken for it: its host may still be in the
+  /// call under an identity we have not heard from, or a re-host is under
+  /// way.
+  static const seedGrace = Duration(seconds: 5);
+
   /// Injected for tests; otherwise resolved lazily from the global
   /// [clientManager], which is still null while rooms are first loaded.
   final CallManager? _injectedCallManager;
   final HomeserverClock _clock;
 
+  /// Injected for tests: a fresh transport on our call in this room, null
+  /// when we are not in it. Otherwise LiveKit's.
+  final CallActivityTransport? Function()? _injectedOwnCallTransport;
+
   CallManager? get _callManager =>
       _injectedCallManager ?? clientManager?.callManager;
 
   final Map<String, CallActivitySession> _sessionById = {};
-  final Map<CallActivitySession, LivekitCallActivityTransport> _transportOf =
-      {};
+  final Map<CallActivitySession, CallActivityTransport> _transportOf = {};
   final Map<CallActivitySession, String> _lastSessionIdOf = {};
   final Map<CallActivitySession, VoidCallback> _listenersOf = {};
+  final Map<CallActivitySession, DateTime> _seededAt = {};
+
+  /// The last event under each state key that its owner sent: an event
+  /// over it from anyone else (a forgery, or a clear by someone who is not
+  /// the session's host) is ignored and this one stands.
+  final Map<String, matrix.StrippedStateEvent> _ownedState = {};
   final List<StreamSubscription> _callManagerSubs = [];
   bool _watchingCallManager = false;
 
@@ -89,35 +113,50 @@ class MatrixCallActivityComponent
         room.identifier, stateEventType, stateKeyOf(sessionId), {});
   }
 
+  /// Whether [senderId] owns [stateKey]: the session id under it is one
+  /// of the sender's own LiveKit identities ("@alice:server:DEVICE").
+  static bool ownsStateKey(String senderId, String stateKey) =>
+      stateKey.startsWith('_') &&
+      sessionIdOf(stateKey).startsWith('$senderId:');
+
   /// The sessions this room shows, from the state alone: expired state is
-  /// dropped. Everyone (in the call or not) reads this the same way.
+  /// dropped, and so is any event not sent by the host it names under its
+  /// own key (anyone may write this state in a voice channel). Everyone
+  /// (in the call or not) reads this the same way.
   List<({String sessionId, String activityId, String hostUserId})>
       visibleSessions() {
     final state = room.matrixRoom.states[stateEventType] ?? const {};
+    for (final entry in state.entries) {
+      if (ownsStateKey(entry.value.senderId, entry.key)) {
+        _ownedState[entry.key] = entry.value;
+      }
+    }
+    _ownedState.removeWhere((key, _) => !state.containsKey(key));
     final nowMs = _clock.now().millisecondsSinceEpoch;
     final result =
         <({String sessionId, String activityId, String hostUserId})>[];
-    for (final entry in state.entries) {
-      if (entry.value.content.isEmpty) continue;
-      final activityId = entry.value.content.tryGet<String>('activity');
-      final host = entry.value.content.tryGet<String>('host');
-      if (activityId == null || host == null) continue;
-      final int created = switch (entry.value.content['created']) {
+    for (final MapEntry(key: key, value: event) in _ownedState.entries) {
+      if (event.content.isEmpty) continue;
+      final activityId = event.content.tryGet<String>('activity');
+      final host = event.content.tryGet<String>('host');
+      if (activityId == null || host != event.senderId) continue;
+      final int created = switch (event.content['created']) {
         final int ms => ms,
         // This fork's events carry their server time as a DateTime.
-        _ => entry.value is matrix.Event
-            ? (entry.value as matrix.Event)
-                .originServerTs
-                .millisecondsSinceEpoch
+        _ => event is matrix.Event
+            ? event.originServerTs.millisecondsSinceEpoch
             : 0,
       };
-      final windowJson = entry.value.content['expires'];
-      final window = windowJson is int ? windowJson : expires.inMilliseconds;
+      if (created - nowMs > createdSkew.inMilliseconds) continue;
+      final windowJson = event.content['expires'];
+      final window = windowJson is int
+          ? windowJson.clamp(0, expires.inMilliseconds)
+          : expires.inMilliseconds;
       if (nowMs - created > window) continue;
       result.add((
-        sessionId: sessionIdOf(entry.key),
+        sessionId: sessionIdOf(key),
         activityId: activityId,
-        hostUserId: host,
+        hostUserId: event.senderId,
       ));
     }
     return result;
@@ -133,14 +172,58 @@ class MatrixCallActivityComponent
   /// The session this client follows (or hosts) by room-state id, if any.
   CallActivitySession? sessionOf(String sessionId) => _sessionById[sessionId];
 
+  /// The room-state sessions that still have someone in our call to play
+  /// them: a session whose host left without clearing its state (it lives
+  /// up to [expires]) and nobody else holds is dropped, so it neither
+  /// shows a Join that goes nowhere nor stops a launch.
+  List<({String sessionId, String activityId, String hostUserId})>
+      liveSessions() => [
+            for (final entry in visibleSessions())
+              if (_sessionById[entry.sessionId] case final session?
+                  when !_orphaned(session))
+                entry,
+          ];
+
+  /// Nobody but us is left in [session]: not its host, no player, no
+  /// spectator (a session seeded from stale state has only its id, the
+  /// original host's identity, to go on, and is given [seedGrace] for
+  /// someone on the wire to speak for it).
+  bool _orphaned(CallActivitySession session) {
+    if (session.isHost) return false;
+    final transport = _transportOf[session];
+    if (transport == null) return true;
+    final seededAt = _seededAt[session];
+    if (session.hostIdentity == null &&
+        seededAt != null &&
+        _clock.now().difference(seededAt) < seedGrace) {
+      return false;
+    }
+    final snapshot = session.snapshot;
+    return !{
+      snapshot.sessionId,
+      if (session.hostIdentity case final host?) host,
+      ...snapshot.players,
+      ...snapshot.spectators,
+    }.any((id) => id != transport.selfIdentity && transport.isPresent(id));
+  }
+
   /// Launches [activity] in our live call in this room: the host takes the
   /// seat, the state is written. Null when we are not in the call (or it
-  /// is not a LiveKit call), or a session is already running.
+  /// is not a LiveKit call), or a session is already running. Throws
+  /// [CallActivityLaunchException] when the room refuses its state: the
+  /// others in the call find the session through it, so a launch without
+  /// it is undone.
   Future<CallActivitySession?> launch(CallActivity activity) async {
-    if (_sessionById.isNotEmpty) return null;
-    final call = _ownLivekitCall();
-    if (call == null) return null;
-    final transport = LivekitCallActivityTransport(call.livekitRoom);
+    for (final session in _sessionById.values.toList()) {
+      if (!_orphaned(session)) return null;
+      await _untrack(session);
+      session.dispose();
+    }
+    if (!room.matrixRoom.canChangeState(stateEventType)) {
+      throw const CallActivityLaunchException.notAllowed();
+    }
+    final transport = _ownCallTransport();
+    if (transport == null) return null;
     final session = CallActivitySession(
       activity: activity,
       selfUserId: client.self?.identifier ?? '',
@@ -149,20 +232,32 @@ class MatrixCallActivityComponent
     await session.launch();
     final sessionId = session.snapshot.sessionId;
     _track(session, transport);
-    await write(
-      sessionId: sessionId,
-      activityId: activity.id,
-      hostUserId: client.self?.identifier ?? '',
-      createdAtMs: _clock.now().millisecondsSinceEpoch,
-    );
+    try {
+      await write(
+        sessionId: sessionId,
+        activityId: activity.id,
+        hostUserId: client.self?.identifier ?? '',
+        createdAtMs: _clock.now().millisecondsSinceEpoch,
+      );
+    } catch (e) {
+      // Undone, or the session we could not announce blocks every launch
+      // after it in this room.
+      await _untrack(session);
+      await session.end();
+      session.dispose();
+      throw CallActivityLaunchException(e);
+    }
     return session;
   }
 
-  /// The call session of this room that we are in and that carries
-  /// LiveKit, the seat the session's wire lives on.
-  MatrixLivekitVoipSession? _ownLivekitCall() {
+  /// A transport on our call in this room, the seat the session's wire
+  /// lives on; null when we are not in it (or it carries no LiveKit).
+  CallActivityTransport? _ownCallTransport() {
+    if (_injectedOwnCallTransport case final inject?) return inject();
     final call = _callManager?.getCallInRoom(client, room.identifier);
-    return call is MatrixLivekitVoipSession ? call : null;
+    return call is MatrixLivekitVoipSession
+        ? LivekitCallActivityTransport(call.livekitRoom)
+        : null;
   }
 
   /// When our call is in a room whose state carries a live session we do
@@ -172,28 +267,25 @@ class MatrixCallActivityComponent
   /// state when it ends, not before.
   void _followState() {
     _watchCallManager();
-    final call = _ownLivekitCall();
     final visible = visibleSessions();
-    if (call != null) {
-      final knownIds = <String>{};
-      for (final entry in visible) {
-        knownIds.add(entry.sessionId);
-        if (_sessionById.containsKey(entry.sessionId)) continue;
-        final activity = CallActivityRegistry.byId(entry.activityId);
-        if (activity == null) continue;
-        final transport = LivekitCallActivityTransport(call.livekitRoom);
-        final session = CallActivitySession(
-          activity: activity,
-          selfUserId: client.self?.identifier ?? '',
-          transport: transport,
-        );
-        session.seedFromRoom(
-          sessionId: entry.sessionId,
-          activityId: entry.activityId,
-          hostUserId: entry.hostUserId,
-        );
-        _track(session, transport);
-      }
+    for (final entry in visible) {
+      if (_sessionById.containsKey(entry.sessionId)) continue;
+      final activity = CallActivityRegistry.byId(entry.activityId);
+      if (activity == null) continue;
+      final transport = _ownCallTransport();
+      if (transport == null) break;
+      final session = CallActivitySession(
+        activity: activity,
+        selfUserId: client.self?.identifier ?? '',
+        transport: transport,
+      );
+      session.seedFromRoom(
+        sessionId: entry.sessionId,
+        activityId: entry.activityId,
+        hostUserId: entry.hostUserId,
+      );
+      _seededAt[session] = _clock.now();
+      _track(session, transport);
     }
     final liveIds = {for (final s in visible) s.sessionId};
     for (final entry in _sessionById.entries.toList()) {
@@ -202,8 +294,7 @@ class MatrixCallActivityComponent
     }
   }
 
-  void _track(
-      CallActivitySession session, LivekitCallActivityTransport transport) {
+  void _track(CallActivitySession session, CallActivityTransport transport) {
     _sessionById[session.snapshot.sessionId] = session;
     _transportOf[session] = transport;
     _lastSessionIdOf[session] = session.snapshot.sessionId;
@@ -218,6 +309,7 @@ class MatrixCallActivityComponent
     _changes.add(null);
     _sessionById.remove(_lastSessionIdOf[session]);
     _lastSessionIdOf.remove(session);
+    _seededAt.remove(session);
     final transport = _transportOf.remove(session);
     await transport?.dispose();
   }
@@ -278,4 +370,18 @@ class MatrixCallActivityComponent
       _followState();
     }
   }
+}
+
+/// A launch the room refused: [cause] is what the homeserver said, null
+/// when we may not write the activity's state there at all.
+class CallActivityLaunchException implements Exception {
+  const CallActivityLaunchException(this.cause);
+  const CallActivityLaunchException.notAllowed() : cause = null;
+
+  final Object? cause;
+
+  bool get notAllowed => cause == null;
+
+  @override
+  String toString() => 'CallActivityLaunchException: ${cause ?? 'not allowed'}';
 }

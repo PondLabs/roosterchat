@@ -18,6 +18,15 @@ void main() {
     return steps;
   }
 
+  test('slow frames while held (a hole building) are not judged', () {
+    final governor = PuttResolutionGovernor(2);
+    for (var t = 0.0; t < 10; t += 1 / 8) {
+      governor.hold();
+      expect(governor.frame(1 / 8), isNull);
+    }
+    expect(governor.ratio, 2);
+  });
+
   test('a smooth game keeps its sharpness', () {
     final governor = PuttResolutionGovernor(2);
     expect(run(governor, 60, seconds: 30), isEmpty);

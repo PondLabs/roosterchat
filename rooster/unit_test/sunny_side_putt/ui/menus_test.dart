@@ -1,5 +1,5 @@
-// The menus: the pause card's buttons, the settings sheet's two volume
-// sliders persisted to the local preferences, and the course vote sheet.
+// The menus: the settings card's two volume sliders persisted to the local
+// preferences and its leave and done buttons, and the course vote sheet.
 library;
 
 import 'package:flutter/material.dart';
@@ -23,67 +23,60 @@ Future<void> freshPreferences() async {
 }
 
 void main() {
-  group('the pause menu', () {
-    testWidgets('offers resume, settings and leave, with them wired',
-        (tester) async {
-      var resumed = false;
-      var settings = false;
-      var left = false;
-      final match = PuttMatch.solo();
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: PuttPauseMenu(
-            match: match,
-            onResume: () => resumed = true,
-            onOpenSettings: () => settings = true,
-            onLeave: () => left = true,
+  group('the settings menu', () {
+    setUp(() async {
+      await freshPreferences();
+    });
+
+    Widget menu(
+            {PuttBuses? buses, VoidCallback? onClose, VoidCallback? onLeave}) =>
+        MaterialApp(
+          home: Scaffold(
+            body: PuttSettingsMenu(
+              match: PuttMatch.solo(),
+              buses: buses ?? PuttSilentBuses(),
+              onClose: onClose ?? () {},
+              onLeave: onLeave ?? () {},
+            ),
           ),
-        ),
-      ));
-      expect(find.text('Paused'), findsOneWidget);
-      // Over the buttons, the brand's own mark: the rooster in headphones.
+        );
+
+    testWidgets('offers the volumes, leave and done, with them wired',
+        (tester) async {
+      var closed = false;
+      var left = false;
+      await tester.pumpWidget(
+          menu(onClose: () => closed = true, onLeave: () => left = true));
+      expect(find.text('Game settings'), findsOneWidget);
+      // Nothing pauses, so nothing says so.
+      expect(find.text('Paused'), findsNothing);
+      expect(find.text('Back to the green'), findsNothing);
+      // Over the controls, the brand's own mark: the rooster in headphones.
       final mark =
           tester.widget<Image>(find.byKey(const Key('putt-menu-mark')));
       expect((mark.image as AssetImage).assetName,
           'assets/images/app_icon/app_icon_transparent_cropped.png');
       // The HUD's type: the title in its display face, the buttons in its
       // label face.
+      expect(tester.widget<Text>(find.text('Game settings')).style?.fontFamily,
+          'Sora');
       expect(
-          tester.widget<Text>(find.text('Paused')).style?.fontFamily, 'Sora');
-      expect(
-          DefaultTextStyle.of(tester.element(find.text('Back to the green')))
+          DefaultTextStyle.of(tester.element(find.text('Done')))
               .style
               .fontFamily,
           'NunitoSans');
-      await tester.tap(find.byKey(const Key('putt-menu-resume')));
-      await tester.tap(find.byKey(const Key('putt-menu-settings')));
-      await tester.tap(find.byKey(const Key('putt-menu-leave')));
-      expect(resumed, isTrue);
-      expect(settings, isTrue);
-      expect(left, isTrue);
-    });
-  });
-
-  group('the settings sheet', () {
-    setUp(() async {
-      await freshPreferences();
-    });
-
-    testWidgets(
-        'renders both sliders; dragging the music level persists '
-        'it', (tester) async {
-      final buses = PuttSilentBuses();
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: PuttSettingsSheet(buses: buses, onClose: () {}),
-        ),
-      ));
-      await tester.pump();
-
-      expect(find.byKey(const Key('putt-music-volume')), findsOneWidget);
-      expect(find.byKey(const Key('putt-sfx-volume')), findsOneWidget);
       expect(find.text('Music volume'), findsOneWidget);
       expect(find.text('SFX volume'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('putt-menu-leave')));
+      await tester.tap(find.byKey(const Key('putt-menu-close')));
+      expect(left, isTrue);
+      expect(closed, isTrue);
+    });
+
+    testWidgets('dragging the music level persists it', (tester) async {
+      final buses = PuttSilentBuses();
+      await tester.pumpWidget(menu(buses: buses));
+      await tester.pump();
 
       // Drag the music slider to its far left (it starts at 55%).
       await tester.timedDrag(
@@ -101,12 +94,7 @@ void main() {
 
     testWidgets('sfx level persists too, and a fresh bus reads it back',
         (tester) async {
-      final buses = PuttSilentBuses();
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: PuttSettingsSheet(buses: buses, onClose: () {}),
-        ),
-      ));
+      await tester.pumpWidget(menu());
       await tester.timedDrag(
         find.byKey(const Key('putt-sfx-volume')),
         const Offset(-200, 0),
@@ -120,18 +108,6 @@ void main() {
       // silent buses read the same spot the audio service would.
       expect(PuttSilentBuses().sfxVolume, moreOrLessEquals(dropped));
       expect(PuttAudio().buses.sfxVolume, moreOrLessEquals(dropped));
-    });
-
-    testWidgets('Done closes the sheet', (tester) async {
-      var closed = false;
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: PuttSettingsSheet(
-              buses: PuttSilentBuses(), onClose: () => closed = true),
-        ),
-      ));
-      await tester.tap(find.byKey(const Key('putt-settings-close')));
-      expect(closed, isTrue);
     });
   });
 

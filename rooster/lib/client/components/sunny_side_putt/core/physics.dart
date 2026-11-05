@@ -71,9 +71,25 @@ class PhysicsConfig {
   /// Restitution between two eggs.
   final double ballRestitution;
 
-  /// An egg entering the nest's capture zone slower than this sinks; any
-  /// faster rolls across the nest.
+  /// The nest is a cup: an egg whose center is over it drops when slower
+  /// than a speed that grows from this at the lip to [captureSpeedCentered]
+  /// at dead center (linear in the distance from the center). An egg that
+  /// stops anywhere over the cup has dropped long before it rests.
   final double captureSpeed;
+
+  /// The fastest an egg crossing dead center can be going and still drop.
+  /// Faster skips across the cup.
+  final double captureSpeedCentered;
+
+  /// The cup's funnel (units/s^2): over the nest an egg is pulled toward
+  /// its center this hard, so a lip hit curls in toward the middle (and
+  /// drops or spins out, bent) instead of rolling straight over. Over
+  /// [frictionDeceleration], so an egg never rests on the lip.
+  final double cupPull;
+
+  /// Extra rolling drag (units/s^2) over the cup: the egg dips into it and
+  /// loses pace crossing it.
+  final double cupDrag;
 
   /// Below this speed an egg settles (velocity zeroed, asleep).
   final double sleepSpeed;
@@ -143,6 +159,9 @@ class PhysicsConfig {
     this.frictionDeceleration = 7,
     this.ballRestitution = 0.8,
     this.captureSpeed = 3.0,
+    this.captureSpeedCentered = 9.0,
+    this.cupPull = 16,
+    this.cupDrag = 8,
     this.sleepSpeed = 0.05,
     this.maxBouncesPerTick = 8,
     this.portalCooldownTicks = 24,
@@ -624,10 +643,17 @@ class PhysicsWorld {
         // pace until it comes down.
         ball.velocity = _clamped(ball.velocity);
       } else if (!ball.asleep) {
-        var velocity = ball.velocity + _accelOn(ball) * config.dt;
+        // The pull first: the magnet's clamp over the nest changes the
+        // velocity it is added to.
+        final accel = _accelOn(ball);
+        var velocity = ball.velocity + accel * config.dt;
         final speed = velocity.length;
         if (speed > 0) {
-          final dropped = frictionDeceleration * config.dt;
+          final overCup =
+              ball.position.distanceTo(hole.nest.position) < hole.nest.radius;
+          final dropped =
+              (frictionDeceleration + (overCup ? config.cupDrag : 0)) *
+                  config.dt;
           velocity = speed > dropped
               ? velocity * ((speed - dropped) / speed)
               : Vec2.zero;
@@ -706,6 +732,11 @@ class PhysicsWorld {
     }
     if (hole.hasRelief) {
       accel -= hole.groundGradientAt(ball.position) * config.slopeGravity;
+    }
+    final toCup = hole.nest.position - ball.position;
+    final cupDistance = toCup.length;
+    if (cupDistance < hole.nest.radius && cupDistance > Vec2.epsilon) {
+      accel += toCup.scaledTo(config.cupPull);
     }
     if (ball.flagActive(PowerUpFlag.magnet, _tick)) {
       final offset = hole.nest.position - ball.position;
@@ -1232,8 +1263,11 @@ class PhysicsWorld {
   void _handleNest(BallBody ball) {
     if (ball.holed) return;
     final distance = ball.position.distanceTo(hole.nest.position);
-    if (distance > hole.nest.radius - config.ballRadius * 0.5) return;
-    if (ball.velocity.length > config.captureSpeed) return;
+    if (distance >= hole.nest.radius) return;
+    final centered = 1 - distance / hole.nest.radius;
+    final dropSpeed = config.captureSpeed +
+        (config.captureSpeedCentered - config.captureSpeed) * centered;
+    if (ball.velocity.length > dropSpeed) return;
     ball.position = hole.nest.position;
     ball.velocity = Vec2.zero;
     ball.holed = true;

@@ -44,8 +44,8 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/scheduler.dart' show Ticker;
+import 'package:flutter/foundation.dart' show compute, kIsWeb;
+import 'package:flutter/scheduler.dart' show SchedulerBinding, Ticker;
 import 'package:flutter/widgets.dart'
     show
         BoxConstraints,
@@ -67,6 +67,7 @@ import 'package:three_js_math/three_js_math.dart' as tjs;
 import 'package:rooster/client/components/sunny_side_putt/core/hole.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/look.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
+import 'package:rooster/debug/log.dart';
 
 import 'flutter_env_io.dart'
     if (dart.library.js_interop) 'flutter_env_stub.dart' as flutter_env;
@@ -1103,9 +1104,75 @@ class PuttWorld3D {
   /// Builds (or rebuilds) the hole's geometry. A hole whose id is already
   /// up keeps its meshes; a new one disposes the old subtree first.
   /// [label] is the number the flag flies (the hole's place in its course).
+  /// All at once: the tests' way. The game builds with [buildHoleInSteps].
   void buildHole(HoleDef hole, {required double eggRadius, String? label}) {
-    if (_disposed) return;
-    if (_hole?.id == hole.id) return;
+    final steps = _holeSteps(hole, eggRadius: eggRadius, label: label);
+    if (steps == null) return;
+    for (final step in steps) {
+      step.$2();
+    }
+  }
+
+  /// Compiles the scene's programs (the surface's renderer sets it).
+  void Function()? warmUp;
+
+  /// The hole being built step by step (null when none is under way).
+  String? get buildingHole => _building;
+  String? _building;
+
+  /// Bumped by every build: a stepped build whose generation is no longer
+  /// current stops, even when the newer build is of the same hole.
+  int _buildGeneration = 0;
+
+  /// [buildHole] a step per frame, so no frame stalls for the whole build
+  /// and the view's loading card keeps moving over it. The renderer draws
+  /// the hole as it grows (behind the card): each step's meshes upload, and
+  /// their programs compile, on the frame after it, never all at once.
+  /// [onProgress] hears (steps done, steps in all) after each. A newer call
+  /// (or a dispose) abandons the build under way.
+  Future<void> buildHoleInSteps(
+    HoleDef hole, {
+    required double eggRadius,
+    String? label,
+    void Function(int done, int total)? onProgress,
+  }) async {
+    final steps =
+        _holeSteps(hole, eggRadius: eggRadius, label: label, offThread: true);
+    if (steps == null) return;
+    final ticket = _buildGeneration;
+    _building = hole.id;
+    final clock = Stopwatch()..start();
+    final costs = <String>[];
+    try {
+      for (var i = 0; i < steps.length; i++) {
+        final began = clock.elapsedMicroseconds;
+        await steps[i].$2();
+        if (_buildGeneration != ticket || _disposed) return;
+        costs.add('${steps[i].$1} '
+            '${((clock.elapsedMicroseconds - began) / 1000).toStringAsFixed(1)}');
+        onProgress?.call(i + 1, steps.length);
+        // The frame draws (the loading card moves) before the next step.
+        await SchedulerBinding.instance.endOfFrame;
+        if (_buildGeneration != ticket || _disposed) return;
+      }
+    } finally {
+      if (_buildGeneration == ticket) _building = null;
+    }
+    Log.d('[Sunny Side Putt] hole ${hole.id} built in '
+        '${clock.elapsedMilliseconds} ms (ms per step: ${costs.join(', ')})');
+  }
+
+  /// The hole's build as named steps, each a slice of one frame's work;
+  /// null when [hole] is already up (or the world is gone). [offThread]
+  /// adds a step that works the turf out on another isolate first (only
+  /// that step returns a future).
+  List<(String, FutureOr<void> Function())>? _holeSteps(HoleDef hole,
+      {required double eggRadius, String? label, bool offThread = false}) {
+    if (_disposed) return null;
+    if (_hole?.id == hole.id) return null;
+    // A build under way is abandoned (its steps stop at their next turn).
+    _buildGeneration++;
+    _building = null;
     _clearHole();
     _hole = hole;
     _ground.hole = hole;
@@ -1120,121 +1187,196 @@ class PuttWorld3D {
       return group;
     }
 
-    final kit = _CourseKit(hole,
-        eggRadius: eggRadius,
-        animated: _animated,
-        rig: rig,
-        theme: _theme,
-        flagShakeUntil: () => _flagShakeUntil);
-    makeKind('ground').add(kit.lawn());
-    makeKind('table').add(kit.table());
-    final walls = makeKind('walls');
-    final bumpers = makeKind('bumpers');
-    for (final wall in hole.walls) {
-      // A ledge is no rail: its face is the tiers' step (see 'cliffs').
-      if (wall.ledge) continue;
-      if (wall.bumper) {
-        bumpers.add(kit.bumperRail(wall));
-      } else {
-        walls.add(kit.rail(wall.a, wall.b));
-      }
-    }
-    final cliffs = kit.cliffs();
-    if (cliffs != null) makeKind('cliffs').add(cliffs);
-    // The kickers, each in the course's build, standing on the ground.
-    if (hole.kickers.isNotEmpty) {
-      final kickers = makeKind('kickers');
-      for (final kicker in hole.kickers) {
-        kickers.add(kit.kicker(kicker));
-      }
-    }
-    // What stands free on the green stands on the tier under it (a
-    // terrace's flat top lifts it whole).
-    final arcs = makeKind('arcs');
-    for (final arc in hole.arcs) {
-      final built = kit.arc(arc);
-      if (arc.sweep >= 2 * math.pi - 0.01) {
-        built.position.y += _ground.at(arc.center);
-      }
-      (arc.bumper ? bumpers : arcs).add(built);
-    }
-    final wells = makeKind('wells');
-    for (final well in hole.wells) {
-      wells.add(kit.silo(well)..position.y += _ground.at(well.position));
-    }
-    final water = makeKind('water');
-    for (final shape in hole.water) {
-      water.add(kit.water(shape));
-    }
-    final boosts = makeKind('boosts');
-    for (final strip in hole.boosts) {
-      boosts.add(kit.boost(strip)
-        ..position.y += _ground.at((strip.from + strip.to) * 0.5));
-    }
-    final portals = makeKind('portals');
-    for (var i = 0; i < hole.portals.length; i++) {
-      final pair = hole.portals[i];
-      portals.add(kit.portal(pair.a, pair.radius, pairIndex: i, phase: 0)
-        ..position.y += _ground.at(pair.a));
-      portals.add(kit.portal(pair.b, pair.radius, pairIndex: i, phase: 1.6)
-        ..position.y += _ground.at(pair.b));
-    }
-    final boxes = makeKind('boxes');
-    for (final box in hole.boxes) {
-      final crate = _CrateView3D(box, kit.crateTexture(),
-          floor: _ground.at(box.position));
-      boxes.add(crate.group);
-      _crateViews.add(crate);
-    }
-    final garden = kit.garden();
-    if (garden != null) makeKind('garden').add(garden);
-    // The nest, the tee and the props stand on the ground (a plateau
-    // lifts the nest with it).
-    makeKind('nest').add(
-        kit.nest(label: label)..position.y += _ground.at(hole.nest.position));
-    final tee = makeKind('tee')
-      ..add(kit.tee()..position.y += _ground.at(hole.tee));
-    // The hole's number on a sign beside the tee (off the table: it stands
-    // on the meadow, whatever the green's relief).
-    final sign = kit.teeSign(label: label);
-    if (sign != null) tee.add(sign);
-    final decorations = makeKind('decorations');
-    for (final decoration in hole.decorations) {
-      final built = kit.decoration(decoration);
-      if (built != null) {
-        decorations.add(built..position.y += _ground.at(decoration.at));
-      }
-    }
-    // Where the hens walk and wait, worn into the turf (on the green only).
-    final paths = kit.henPaths(_ground.at);
-    if (paths != null) makeKind('hen-paths').add(paths);
-    final hens = makeKind('hens');
-    for (final obstacle in hole.obstacles) {
-      // Ducks paddle the Pond's water; hens walk everything else.
-      final _Walker hen = _henSwims(hole, obstacle)
-          ? _DuckView3D(obstacle)
-          : _HenView3D(obstacle, _ground);
-      hens.add(hen.group);
-      _henViews.add(hen);
-    }
-    final scenery = _Scenery(hole,
+    late final _CourseKit kit;
+    late final tjs.Group bumpers;
+    late final tjs.Group tee;
+    tjs.Group? sign;
+    return [
+      (
+        'kit',
+        () => kit = _CourseKit(hole,
+            eggRadius: eggRadius,
             animated: _animated,
+            rig: rig,
             theme: _theme,
-            cheerUntil: () => _cheerUntil,
-            watch: () => _watch,
-            greet: () => _greeting ? _greetAt : null,
-            shape: kit.shape,
-            signAt: sign == null ? null : kit.teeSignSpot?.$1)
-        .build();
-    makeKind('scenery').add(scenery);
-    final host = scenery.getObjectByName('host');
-    _hostFade = host == null ? null : _FadingFigure(host);
-    _hostDetail = host == null ? null : _HostDetail(host);
-
-    _fx.reset(_fxRoot);
-    _firstFrame = true;
-    if (_lowTier) _shedOutlines(_holeRoot);
-    fitCamera();
+            flagShakeUntil: () => _flagShakeUntil)
+      ),
+      if (offThread)
+        (
+          'turf (off thread, wall time)',
+          () async =>
+              kit.takeTurf(await compute(_prepareTurf, _TurfJob(hole, _theme)))
+        ),
+      ('lawn', () => makeKind('ground').add(kit.lawn())),
+      ('table', () => makeKind('table').add(kit.table())),
+      (
+        'rails',
+        () {
+          final walls = makeKind('walls');
+          bumpers = makeKind('bumpers');
+          for (final wall in hole.walls) {
+            // A ledge is no rail: its face is the tiers' step (see 'cliffs').
+            if (wall.ledge) continue;
+            if (wall.bumper) {
+              bumpers.add(kit.bumperRail(wall));
+            } else {
+              walls.add(kit.rail(wall.a, wall.b));
+            }
+          }
+          final cliffs = kit.cliffs();
+          if (cliffs != null) makeKind('cliffs').add(cliffs);
+        }
+      ),
+      (
+        'pieces',
+        () {
+          // The kickers, each in the course's build, standing on the ground.
+          if (hole.kickers.isNotEmpty) {
+            final kickers = makeKind('kickers');
+            for (final kicker in hole.kickers) {
+              kickers.add(kit.kicker(kicker));
+            }
+          }
+          // What stands free on the green stands on the tier under it (a
+          // terrace's flat top lifts it whole).
+          final arcs = makeKind('arcs');
+          for (final arc in hole.arcs) {
+            final built = kit.arc(arc);
+            if (arc.sweep >= 2 * math.pi - 0.01) {
+              built.position.y += _ground.at(arc.center);
+            }
+            (arc.bumper ? bumpers : arcs).add(built);
+          }
+          final wells = makeKind('wells');
+          for (final well in hole.wells) {
+            wells.add(kit.silo(well)..position.y += _ground.at(well.position));
+          }
+          final water = makeKind('water');
+          for (final shape in hole.water) {
+            water.add(kit.water(shape));
+          }
+          final boosts = makeKind('boosts');
+          for (final strip in hole.boosts) {
+            boosts.add(kit.boost(strip)
+              ..position.y += _ground.at((strip.from + strip.to) * 0.5));
+          }
+          final portals = makeKind('portals');
+          for (var i = 0; i < hole.portals.length; i++) {
+            final pair = hole.portals[i];
+            portals.add(kit.portal(pair.a, pair.radius, pairIndex: i, phase: 0)
+              ..position.y += _ground.at(pair.a));
+            portals.add(
+                kit.portal(pair.b, pair.radius, pairIndex: i, phase: 1.6)
+                  ..position.y += _ground.at(pair.b));
+          }
+          final boxes = makeKind('boxes');
+          for (final box in hole.boxes) {
+            final crate = _CrateView3D(box, kit.crateTexture(),
+                floor: _ground.at(box.position));
+            boxes.add(crate.group);
+            _crateViews.add(crate);
+          }
+        }
+      ),
+      (
+        'garden',
+        () {
+          final garden = kit.garden();
+          if (garden != null) makeKind('garden').add(garden);
+        }
+      ),
+      (
+        'nest and tee',
+        () {
+          // The nest, the tee and the props stand on the ground (a plateau
+          // lifts the nest with it).
+          makeKind('nest').add(kit.nest(label: label)
+            ..position.y += _ground.at(hole.nest.position));
+          tee = makeKind('tee')
+            ..add(kit.tee()..position.y += _ground.at(hole.tee));
+          // The hole's number on a sign beside the tee (off the table: it
+          // stands on the meadow, whatever the green's relief).
+          sign = kit.teeSign(label: label);
+          if (sign != null) tee.add(sign!);
+        }
+      ),
+      (
+        'decorations',
+        () {
+          final decorations = makeKind('decorations');
+          for (final decoration in hole.decorations) {
+            final built = kit.decoration(decoration);
+            if (built != null) {
+              decorations.add(built..position.y += _ground.at(decoration.at));
+            }
+          }
+        }
+      ),
+      (
+        'hens',
+        () {
+          // Where the hens walk and wait, worn into the turf (on the green
+          // only).
+          final paths = kit.henPaths(_ground.at);
+          if (paths != null) makeKind('hen-paths').add(paths);
+          final hens = makeKind('hens');
+          for (final obstacle in hole.obstacles) {
+            // Ducks paddle the Pond's water; hens walk everything else.
+            final _Walker hen = _henSwims(hole, obstacle)
+                ? _DuckView3D(obstacle)
+                : _HenView3D(obstacle, _ground);
+            hens.add(hen.group);
+            _henViews.add(hen);
+          }
+        }
+      ),
+      // The farm round the green: the biggest share, a step per piece
+      // (built into its group in place; the hole stays hidden meanwhile).
+      ...() {
+        final farm = tjs.Group()..name = 'farm';
+        late final List<void Function()> farmSteps;
+        return [
+          (
+            'scenery',
+            () {
+              makeKind('scenery').add(farm);
+              farmSteps = _Scenery(hole,
+                      animated: _animated,
+                      theme: _theme,
+                      cheerUntil: () => _cheerUntil,
+                      watch: () => _watch,
+                      greet: () => _greeting ? _greetAt : null,
+                      shape: kit.shape,
+                      signAt: sign == null ? null : kit.teeSignSpot?.$1)
+                  .buildSteps(farm);
+              assert(farmSteps.length == _Scenery.stepNames.length);
+            }
+          ),
+          for (var i = 0; i < _Scenery.stepNames.length; i++)
+            (_Scenery.stepNames[i], () => farmSteps[i]()),
+          (
+            'host',
+            () {
+              final host = farm.getObjectByName('host');
+              _hostFade = host == null ? null : _FadingFigure(host);
+              _hostDetail = host == null ? null : _HostDetail(host);
+            }
+          ),
+        ];
+      }(),
+      // Whatever program the frames behind the card have not compiled yet
+      // (a piece out of the camera's view) compiles now, not in play.
+      if (offThread) ('shaders', () => warmUp?.call()),
+      (
+        'settle',
+        () {
+          _fx.reset(_fxRoot);
+          _firstFrame = true;
+          if (_lowTier) _shedOutlines(_holeRoot);
+          fitCamera();
+        }
+      ),
+    ];
   }
 
   /// The low tier is on: what costs most for least is gone (a smaller
@@ -1785,6 +1927,14 @@ class PuttResolutionGovernor {
   double _measured = 0;
   int _frames = 0;
 
+  /// Judges nothing now and for [settle] after: the frames are slow for a
+  /// reason of the game's own (a hole building a step a frame).
+  void hold() {
+    _quiet = settle;
+    _measured = 0;
+    _frames = 0;
+  }
+
   /// Feeds one frame's interval (seconds); returns the ratio to draw at
   /// when it is time for a step down, else null.
   double? frame(double seconds) {
@@ -1930,6 +2080,8 @@ class _PuttThreeSurfaceState extends State<PuttThreeSurface>
           owner.camera = widget.world.camera;
           widget.world.setViewport(size);
           widget.world.fitCamera();
+          widget.world.warmUp = () =>
+              owner.renderer?.compile(widget.world.scene, widget.world.camera);
           // The renderer's own ticker: move the world to the frame's
           // truth, then the view draws it.
           owner.rendererUpdate = () {
@@ -1960,6 +2112,7 @@ class _PuttThreeSurfaceState extends State<PuttThreeSurface>
       ..reset()
       ..start();
     final governor = _governor ??= PuttResolutionGovernor(three.dpr);
+    if (widget.world.buildingHole != null) return governor.hold();
     final next = governor.frame(seconds);
     final size = _size;
     if (next == null || size == null) return;

@@ -45,6 +45,18 @@ infrastructure.
    lowest present identity); the last one out ends the session and its
    room state goes with it.
 
+## Who may launch
+
+Launching writes `chat.commet.call_activity`, and the others in the call
+find the session only through it, so a launch whose write the homeserver
+refuses is undone and the call view says why. Voice channels we create
+open the event to everyone (power level 0); older channels keep the
+room's state default, usually moderators only, and their other members
+get "Only moderators can start activities in this channel." State left
+by a host who went without clearing it (it lives up to 6 hours) is
+ignored once nobody in the call holds that session: it shows no Join and
+does not stop a new launch.
+
 ## Testing
 
 - `flutter test unit_test/call_activity` - protocol, session lifecycle

@@ -1,6 +1,6 @@
 // The HUD of Sunny Side Putt, over the 3D farm: the course chip (top
 // left), the hole bar (hole, par, my strokes and the timer, with the
-// course's progress dots under it), the camera and pause buttons (top
+// course's progress dots under it), the camera and settings buttons (top
 // right), the headline banners, the scorecard (bottom left), the hint line
 // (bottom centre), the power-up carton with its targeting (bottom right),
 // and the between-hole, course-awards (putt_awards_card.dart) and
@@ -393,8 +393,8 @@ class _PuttTopRow extends StatelessWidget {
                 const SizedBox(width: 8),
               ],
               PuttRoundButton(
-                key: const Key('putt-pause'),
-                icon: Icons.pause_rounded,
+                key: const Key('putt-settings'),
+                icon: Icons.settings_rounded,
                 tooltip: labelPuttOpenMenu(),
                 onPressed: onOpenMenu,
               ),
@@ -529,7 +529,7 @@ String modeName(GameMode mode) {
   }
 }
 
-/// A round ink button with a cream icon: the camera and the pause.
+/// A round ink button with a cream icon: the camera and the settings.
 class PuttRoundButton extends StatelessWidget {
   final IconData icon;
   final String tooltip;
@@ -2916,10 +2916,10 @@ String labelPuttPowerThievingCrowDetail() =>
 
 // ---- strings ---------------------------------------------------------------------------------
 
-String labelPuttOpenMenu() => Intl.message("Pause (Esc)",
+String labelPuttOpenMenu() => Intl.message("Settings (Esc)",
     name: "labelPuttOpenMenu",
-    desc: "Tooltip of the HUD's pause button; Esc is the key that pauses "
-        "too");
+    desc: "Tooltip of the HUD's settings (gear) button: the volume sliders "
+        "and leave; Esc opens it too");
 
 String tooltipPuttCameraWhole() => Intl.message("See the whole hole (C)",
     name: "tooltipPuttCameraWhole",

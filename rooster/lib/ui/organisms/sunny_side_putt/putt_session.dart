@@ -120,6 +120,12 @@ class PuttSessionController extends ChangeNotifier {
         ? (options.tournamentCount ?? 3).clamp(1, pool.length)
         : 1;
     final picked = <SunnySidePuttCourse>[];
+    final chosen = pool.where((c) => c.id == options.courseId).toList();
+    if (options.mode != GameMode.tournament && chosen.isNotEmpty) {
+      pool
+        ..clear()
+        ..add(chosen.first);
+    }
     for (var i = 0; i < count && pool.isNotEmpty; i++) {
       picked.add(pool.removeAt(random.nextInt(pool.length)));
     }

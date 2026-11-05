@@ -18,58 +18,12 @@ const double _fenceThickness = 0.62;
 const double _innerThickness = 0.34;
 const double _railHeight = 0.78;
 
-/// Builds one hole's course pieces. Every piece is a fresh subtree the
-/// world parents under its kind group; the hole's animated pieces register
-/// with [animated].
-class _CourseKit {
-  _CourseKit(this.hole,
-      {required this.eggRadius,
-      required this.animated,
-      required this.rig,
-      required this.theme,
-      required this.flagShakeUntil})
-      : _rand = _Rand(_seedOf(hole.id));
-
-  /// Until when (the frame clock) the flag shakes: an egg just dropped in.
-  final double Function() flagShakeUntil;
-
-  /// The course's look: the rails' style, the turf's greens.
-  final _Theme theme;
-
-  final HoleDef hole;
-  final double eggRadius;
-  final List<_Animated> animated;
-
-  /// The camera rig: the flag turns its face to it.
-  final PuttCameraRig rig;
-  final _Rand _rand;
-
-  /// One material for every rail body of the hole and one for the caps,
-  /// in the theme's style (timber, corn hedge, stone, barrier, boards).
-  late final (tjs.MeshStandardMaterial, tjs.MeshStandardMaterial) _rails =
-      _railMaterials(theme.rails);
-  tjs.MeshStandardMaterial get _railMaterial => _rails.$1;
-  tjs.MeshStandardMaterial get _capMaterial => _rails.$2;
-
-  /// The tiers' steps, faced in the course's own build (see
-  /// [_stepMaterial]): under a ledge's lip and under every rail that
-  /// stands on a step.
-  late final tjs.MeshStandardMaterial _cliffMaterial =
-      _stepMaterial(theme.kind);
-
-  /// The belt frames keep timber whatever the rails are.
-  late final tjs.MeshStandardMaterial _timber = tjs.MeshStandardMaterial({
-    tjs.MaterialProperty.color: _lin(_Farm.wood),
-    tjs.MaterialProperty.map: _woodGrainTexture(),
-    tjs.MaterialProperty.roughness: 0.78,
-    tjs.MaterialProperty.metalness: 0.0,
-  });
-
-  tjs.DataTexture? _crateFace;
-
-  /// The table's shape: where the egg can roll, the garden islands, the
-  /// carved-away stretches (see `table_shape.dart`).
-  late final _TableShape shape = _TableShape.of(hole);
+/// The lawn's paint and what it reads: the kit's, and the same off the UI
+/// isolate in a [_TurfJob] (pure Dart, no GPU objects).
+mixin _LawnPaint {
+  HoleDef get hole;
+  _Theme get theme;
+  _TableShape get shape;
   _TableShape get _reach => shape;
 
   /// The garden beds' ground per theme: mulch, dark earth, moss, gravel,
@@ -82,36 +36,12 @@ class _CourseKit {
         _ThemeKind.barn => 0xC9A55A,
       };
 
-  // ---- the turf ---------------------------------------------------------------------
-
-  /// The green: one plane carrying the procedural lawn.
-  tjs.Mesh lawn() {
-    final bounds = hole.bounds;
-    // Up close the blades show: a tiling normal map, a tile every 1.6 units.
-    final blades = _grassNormalTexture()
-      ..repeat.setValues(bounds.width / 1.6, bounds.height / 1.6);
-    // The turf follows the table's shape: no green where the walls have
-    // carved the course away.
-    return tjs.Mesh(
-      shape.top(turf: true, relief: hole),
-      tjs.MeshStandardMaterial({
-        tjs.MaterialProperty.map: _lawnTexture(),
-        tjs.MaterialProperty.normalMap: blades,
-        tjs.MaterialProperty.normalScale: tjs.Vector2(0.55, 0.55),
-        tjs.MaterialProperty.roughness: 0.96,
-        tjs.MaterialProperty.metalness: 0.0,
-      }),
-    )
-      ..name = 'lawn'
-      ..receiveShadow = true;
-  }
-
   /// The lawn's texture: mown stripes across the tee-to-nest line, a
   /// darker fringe at the edge, contact shade along every rail, rock and
   /// bumper, sandy shores around the ponds (their beds darker), the
   /// silo's spiral pull, the rabbit holes' dug earth and the nest's ring
   /// of shade.
-  tjs.DataTexture _lawnTexture() {
+  _Bitmap _lawnBitmap() {
     final bounds = hole.bounds;
     final dx = math.max(bounds.width, 0.001);
     final dz = math.max(bounds.height, 0.001);
@@ -461,7 +391,161 @@ class _CourseKit {
       }
     }
 
-    return bitmap.texture();
+    return bitmap;
+  }
+
+  /// Whether a rail (not a ledge) stands along [direction] through [point]:
+  /// the step there is the rail's to face.
+  bool _railAlong(Vec2 point, Vec2 direction) {
+    for (final wall in hole.walls) {
+      if (wall.ledge) continue;
+      final run = wall.b - wall.a;
+      final length = run.length;
+      if (length < 1e-6) continue;
+      if ((run * (1 / length)).cross(direction).abs() > 0.02) continue;
+      if (_segmentDistance(point, wall.a, wall.b) < 0.05) return true;
+    }
+    return false;
+  }
+
+  /// Whether [wall] runs along the green's edge (the outer fence).
+  bool _isPerimeter(WallSegment wall) {
+    final b = hole.bounds;
+    bool onX(double x) =>
+        (wall.a.x - x).abs() < 0.01 && (wall.b.x - x).abs() < 0.01;
+    bool onY(double y) =>
+        (wall.a.y - y).abs() < 0.01 && (wall.b.y - y).abs() < 0.01;
+    return onX(b.min.x) || onX(b.max.x) || onY(b.min.y) || onY(b.max.y);
+  }
+}
+
+/// A hole's turf work sent off the UI isolate: the table's shape and the
+/// lawn's pixels (on the web, where there are no isolates, it runs in
+/// place, a step of its own).
+class _TurfJob with _LawnPaint {
+  _TurfJob(this.hole, this.theme);
+
+  @override
+  final HoleDef hole;
+  @override
+  final _Theme theme;
+  @override
+  late final _TableShape shape = _TableShape.of(hole);
+}
+
+/// What [_prepareTurf] brings back.
+typedef _Turf = ({
+  _TableShape shape,
+  _Bitmap paint,
+  (List<double>, List<double>, List<double>) arrays,
+});
+
+/// [compute]'s entry: the shape, the lawn painted over it, the turf's
+/// geometry.
+_Turf _prepareTurf(_TurfJob job) => (
+      shape: job.shape,
+      paint: job._lawnBitmap(),
+      arrays: job.shape.topArrays(turf: true, relief: job.hole),
+    );
+
+/// Builds one hole's course pieces. Every piece is a fresh subtree the
+/// world parents under its kind group; the hole's animated pieces register
+/// with [animated].
+class _CourseKit with _LawnPaint {
+  _CourseKit(this.hole,
+      {required this.eggRadius,
+      required this.animated,
+      required this.rig,
+      required this.theme,
+      required this.flagShakeUntil})
+      : _rand = _Rand(_seedOf(hole.id));
+
+  /// Until when (the frame clock) the flag shakes: an egg just dropped in.
+  final double Function() flagShakeUntil;
+
+  /// The course's look: the rails' style, the turf's greens.
+  @override
+  final _Theme theme;
+
+  @override
+  final HoleDef hole;
+  final double eggRadius;
+  final List<_Animated> animated;
+
+  /// The camera rig: the flag turns its face to it.
+  final PuttCameraRig rig;
+  final _Rand _rand;
+
+  /// One material for every rail body of the hole and one for the caps,
+  /// in the theme's style (timber, corn hedge, stone, barrier, boards).
+  late final (tjs.MeshStandardMaterial, tjs.MeshStandardMaterial) _rails =
+      _railMaterials(theme.rails);
+  tjs.MeshStandardMaterial get _railMaterial => _rails.$1;
+  tjs.MeshStandardMaterial get _capMaterial => _rails.$2;
+
+  /// The tiers' steps, faced in the course's own build (see
+  /// [_stepMaterial]): under a ledge's lip and under every rail that
+  /// stands on a step.
+  late final tjs.MeshStandardMaterial _cliffMaterial =
+      _stepMaterial(theme.kind);
+
+  /// The belt frames keep timber whatever the rails are.
+  late final tjs.MeshStandardMaterial _timber = tjs.MeshStandardMaterial({
+    tjs.MaterialProperty.color: _lin(_Farm.wood),
+    tjs.MaterialProperty.map: _woodGrainTexture(),
+    tjs.MaterialProperty.roughness: 0.78,
+    tjs.MaterialProperty.metalness: 0.0,
+  });
+
+  tjs.DataTexture? _crateFace;
+
+  /// The table's shape: where the egg can roll, the garden islands, the
+  /// carved-away stretches (see `table_shape.dart`).
+
+  /// The table's outline and reach: worked out here unless [takeTurf]
+  /// brought it from off the UI isolate.
+  @override
+  _TableShape get shape => _shape ??= _TableShape.of(hole);
+  _TableShape? _shape;
+
+  /// The lawn's pixels, painted off the UI isolate (null: paint them here).
+  _Bitmap? _lawnPaint;
+
+  /// The turf's geometry arrays, worked out off the UI isolate (null:
+  /// here).
+  (List<double>, List<double>, List<double>)? _turfArrays;
+
+  /// Takes what [_prepareTurf] worked out for this hole.
+  void takeTurf(_Turf turf) {
+    _shape = turf.shape;
+    _lawnPaint = turf.paint;
+    _turfArrays = turf.arrays;
+  }
+
+  tjs.DataTexture _lawnTexture() => (_lawnPaint ?? _lawnBitmap()).texture();
+
+  // ---- the turf ---------------------------------------------------------------------
+
+  /// The green: one plane carrying the procedural lawn.
+  tjs.Mesh lawn() {
+    final bounds = hole.bounds;
+    // Up close the blades show: a tiling normal map, a tile every 1.6 units.
+    final blades = _grassNormalTexture()
+      ..repeat.setValues(bounds.width / 1.6, bounds.height / 1.6);
+    // The turf follows the table's shape: no green where the walls have
+    // carved the course away.
+    return tjs.Mesh(
+      _topGeometry(_turfArrays ?? shape.topArrays(turf: true, relief: hole)),
+      tjs.MeshStandardMaterial({
+        tjs.MaterialProperty.map: _lawnTexture(),
+        tjs.MaterialProperty.normalMap: blades,
+        tjs.MaterialProperty.normalScale: tjs.Vector2(0.55, 0.55),
+        tjs.MaterialProperty.roughness: 0.96,
+        tjs.MaterialProperty.metalness: 0.0,
+      }),
+    )
+      ..name = 'lawn'
+      ..receiveShadow = true;
   }
 
   // ---- the table ----------------------------------------------------------------------
@@ -617,31 +701,7 @@ class _CourseKit {
       ..add(face.mesh('cliff-face', _cliffMaterial)!);
   }
 
-  /// Whether a rail (not a ledge) stands along [direction] through [point]:
-  /// the step there is the rail's to face.
-  bool _railAlong(Vec2 point, Vec2 direction) {
-    for (final wall in hole.walls) {
-      if (wall.ledge) continue;
-      final run = wall.b - wall.a;
-      final length = run.length;
-      if (length < 1e-6) continue;
-      if ((run * (1 / length)).cross(direction).abs() > 0.02) continue;
-      if (_segmentDistance(point, wall.a, wall.b) < 0.05) return true;
-    }
-    return false;
-  }
-
   // ---- the rails ------------------------------------------------------------------------
-
-  /// Whether [wall] runs along the green's edge (the outer fence).
-  bool _isPerimeter(WallSegment wall) {
-    final b = hole.bounds;
-    bool onX(double x) =>
-        (wall.a.x - x).abs() < 0.01 && (wall.b.x - x).abs() < 0.01;
-    bool onY(double y) =>
-        (wall.a.y - y).abs() < 0.01 && (wall.b.y - y).abs() < 0.01;
-    return onX(b.min.x) || onX(b.max.x) || onY(b.min.y) || onY(b.max.y);
-  }
 
   /// A timber rail along [a]-[b]: the outer fence stands just outside the
   /// green (its inner face on the physics' line), an inner wall stands

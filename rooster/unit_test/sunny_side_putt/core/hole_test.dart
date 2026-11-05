@@ -37,6 +37,22 @@ void main() {
       expect(result.strokes, 2);
     });
 
+    test('a firm one-putt that crosses the cup completes', () {
+      // No need to die on the nest: arriving at 7 units/s through the
+      // middle it drops.
+      final hole = boxHole(
+        id: 'firm',
+        tee: const Vec2(2, 5),
+        nest: const Nest(Vec2(13, 5), 0.8),
+        width: 30,
+      );
+      final (angle, power) = puttFor(hole, hole.tee, arrivalSpeed: 7);
+      final result = validateReferenceSolution(
+          hole, ReferenceSolution([ReferenceShot(angle, power)]));
+      expect(result.completed, isTrue);
+      expect(result.strokes, 1);
+    });
+
     test('a straight shot past a round pillar completes', () {
       // The pillar sits on the tee-nest line's flank; the fairway shot
       // from the raised tee misses it and rolls to the nest.

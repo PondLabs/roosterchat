@@ -53,28 +53,49 @@ void main() {
     final before = match.secondsRemaining;
     await tester.pump(const Duration(seconds: 1));
     expect(match.secondsRemaining, before,
-        reason: 'the pause menu freezes the hole clock');
+        reason: 'the settings menu freezes the hole clock');
   });
 
-  testWidgets('the pause button opens the pause menu and resumes',
+  testWidgets('the gear opens the settings menu and Done closes it',
       (tester) async {
     final match = PuttMatch.solo();
     await tester.pumpWidget(MaterialApp(home: SunnySidePuttView(match: match)));
     await tester.pump(const Duration(milliseconds: 50));
 
-    await tester.tap(find.byKey(const Key('putt-pause')));
+    await tester.tap(find.byKey(const Key('putt-settings')));
     await tester.pump();
-    expect(match.paused, isTrue,
-        reason: 'opening the pause menu freezes the match');
-    expect(find.text('Paused'), findsOneWidget);
+    expect(match.paused, isTrue);
+    expect(find.text('Game settings'), findsOneWidget);
+    expect(find.byKey(const Key('putt-music-volume')), findsOneWidget);
+    expect(find.byKey(const Key('putt-menu-leave')), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('putt-menu-resume')));
+    await tester.tap(find.byKey(const Key('putt-menu-close')));
     await tester.pump();
     expect(match.paused, isFalse);
-    expect(find.text('Paused'), findsNothing);
+    expect(find.text('Game settings'), findsNothing);
   });
 
-  testWidgets('Esc pauses', (tester) async {
+  testWidgets('with others on the green the menu does not pause the hole',
+      (tester) async {
+    final course = CourseDef(id: 'two', holes: [stubHole(id: 't0')]);
+    final match = PuttMatch(
+      config: PuttConfig(mode: GameMode.casual, courses: [course], seed: 5),
+      seatedPlayerIds: const ['p2'],
+    )..boot();
+    await tester.pumpWidget(MaterialApp(home: SunnySidePuttView(match: match)));
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.tap(find.byKey(const Key('putt-settings')));
+    await tester.pump();
+    expect(find.text('Game settings'), findsOneWidget);
+    expect(match.paused, isFalse);
+    final before = match.secondsRemaining;
+    await tester.pump(const Duration(seconds: 1));
+    expect(match.secondsRemaining, lessThan(before),
+        reason: 'the hole clock runs on under the menu');
+  });
+
+  testWidgets('Esc opens the settings', (tester) async {
     final match = PuttMatch.solo();
     await tester.pumpWidget(MaterialApp(home: SunnySidePuttView(match: match)));
     await tester.pump(const Duration(milliseconds: 50));

@@ -957,10 +957,10 @@ void main() {
 
     void hostedBy(String host) {
       room.matrixRoom.states[MatrixCallActivityComponent.stateEventType] = {
-        "_$host": matrix.StrippedStateEvent(
+        "_$host:DEVICE": matrix.StrippedStateEvent(
           type: MatrixCallActivityComponent.stateEventType,
           senderId: host,
-          stateKey: "_$host",
+          stateKey: "_$host:DEVICE",
           content: {
             "activity": "test.game",
             "host": host,

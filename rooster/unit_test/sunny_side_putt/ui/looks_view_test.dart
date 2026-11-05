@@ -1,4 +1,4 @@
-// The looks in the view: "Your egg" off the pause menu keeps its pick on
+// The looks in the view: "Your egg" off the settings menu keeps its pick on
 // this device and dresses the match at once, the next match picks the
 // pick up, a guest's match asks the host for its look (a few times at
 // most) while home shows it at once, and the scorecard's and the tags'
@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/rules.dart';
 import 'package:rooster/config/preferences/preference.dart';
+import 'package:rooster/ui/organisms/sunny_side_putt/putt_audio.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_hud.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_look.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_match.dart';
@@ -44,15 +45,15 @@ void main() {
   tearDown(() => Preference.preferences = null);
 
   group('"Your egg"', () {
-    testWidgets('the pause menu opens it, when wired', (tester) async {
+    testWidgets('the settings menu opens it, when wired', (tester) async {
       var opened = false;
       final match = PuttMatch.solo();
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
-          body: PuttPauseMenu(
+          body: PuttSettingsMenu(
             match: match,
-            onResume: () {},
-            onOpenSettings: () {},
+            buses: PuttSilentBuses(),
+            onClose: () {},
             onLeave: () {},
             onOpenLook: () => opened = true,
           ),
@@ -64,10 +65,10 @@ void main() {
 
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
-          body: PuttPauseMenu(
+          body: PuttSettingsMenu(
             match: match,
-            onResume: () {},
-            onOpenSettings: () {},
+            buses: PuttSilentBuses(),
+            onClose: () {},
             onLeave: () {},
           ),
         ),

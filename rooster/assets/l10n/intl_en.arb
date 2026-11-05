@@ -3992,6 +3992,18 @@
     "type": "text",
     "placeholders": {}
   },
+  "messageActivityNotAllowed": "Only moderators can start activities in this channel.",
+  "@messageActivityNotAllowed": {
+    "description": "Shown when launching a call activity is refused because the user may not write the activity's room state in this voice channel",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageActivityLaunchFailed": "Could not start the activity. Try again.",
+  "@messageActivityLaunchFailed": {
+    "description": "Shown when launching a call activity failed",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelCallScreensTab": "Screens ({howMany})",
   "@labelCallScreensTab": {
     "description": "Tab of the screen share picker listing the screens (monitors) that can be shared, with how many there are",
@@ -5834,9 +5846,9 @@
     "type": "text",
     "placeholders": {}
   },
-  "labelPuttOpenMenu": "Pause (Esc)",
+  "labelPuttOpenMenu": "Settings (Esc)",
   "@labelPuttOpenMenu": {
-    "description": "Tooltip of the HUD's pause button; Esc is the key that pauses too",
+    "description": "Tooltip of the HUD's settings (gear) button: the volume sliders and leave; Esc opens it too",
     "type": "text",
     "placeholders": {}
   },
@@ -6118,6 +6130,12 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelPuttSurpriseCourse": "Surprise me",
+  "@labelPuttSurpriseCourse": {
+    "description": "The launch options' course card that draws a course at random",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelPuttStartMatch": "Start",
   "@labelPuttStartMatch": {
     "description": "Starts the Sunny Side Putt match from the launch options sheet",
@@ -6229,24 +6247,6 @@
     "type": "text",
     "placeholders": {}
   },
-  "labelPuttPaused": "Paused",
-  "@labelPuttPaused": {
-    "description": "Title of the pause menu",
-    "type": "text",
-    "placeholders": {}
-  },
-  "labelPuttResume": "Back to the green",
-  "@labelPuttResume": {
-    "description": "Button that unpauses the game",
-    "type": "text",
-    "placeholders": {}
-  },
-  "labelPuttSettings": "Settings",
-  "@labelPuttSettings": {
-    "description": "Button that opens the game's settings (the volume sliders)",
-    "type": "text",
-    "placeholders": {}
-  },
   "labelPuttLeave": "Leave game",
   "@labelPuttLeave": {
     "description": "Button that leaves the match; the round keeps going without the player",
@@ -6273,7 +6273,7 @@
   },
   "labelPuttYourEgg": "Your egg",
   "@labelPuttYourEgg": {
-    "description": "Title of the sheet where a player picks the pattern on their egg and the hat on their chick, and the pause menu's button that opens it",
+    "description": "Title of the sheet where a player picks the pattern on their egg and the hat on their chick, and the settings menu's button that opens it",
     "type": "text",
     "placeholders": {}
   },
@@ -6373,7 +6373,7 @@
   },
   "labelPuttGameSettings": "Game settings",
   "@labelPuttGameSettings": {
-    "description": "Title of the settings sheet",
+    "description": "Title of the settings menu (the volume sliders, your egg, leave)",
     "type": "text",
     "placeholders": {}
   },
@@ -6391,7 +6391,7 @@
   },
   "labelPuttDone": "Done",
   "@labelPuttDone": {
-    "description": "Button that closes the settings sheet",
+    "description": "Button that closes the settings menu",
     "type": "text",
     "placeholders": {}
   },
@@ -6532,6 +6532,12 @@
       "playing": {},
       "watching": {}
     }
+  },
+  "labelPuttLoadingHole": "Setting up the hole",
+  "@labelPuttLoadingHole": {
+    "description": "Shown over the minigolf game while the next hole's 3D scene is being built, above a progress bar",
+    "type": "text",
+    "placeholders": {}
   },
   "labelUpdateVersion": "Version",
   "@labelUpdateVersion": {

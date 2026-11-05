@@ -235,7 +235,8 @@ void main() {
       expect(engine.usePowerUp('p1', id), isTrue);
     }
     engine.drainEvents();
-    expect(engine.submitShot('p1', 0, 0.4), isTrue);
+    // Aimed wide of the nest: the egg must still be out for a second shot.
+    expect(engine.submitShot('p1', 0.3, 0.4), isTrue);
     final shot = engine.drainEvents().whereType<ShotApplied>().single;
     expect(shot.steady, isTrue);
     expect(shot.powerMultiplier, closeTo(1.3, 1e-9));

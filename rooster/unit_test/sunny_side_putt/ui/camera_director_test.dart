@@ -239,6 +239,61 @@ void main() {
     expect(rig.distanceTarget, closeTo(zoom, 1e-6));
   });
 
+  test('a splash puts the camera back on the egg where it comes back', () {
+    run(PuttCameraDirector.openingSeconds + 3, resting(hole.tee));
+    // A roll toward the pond...
+    run(
+      0.5,
+      PuttCameraCue(
+        hole: hole,
+        phase: PuttPhase.holePlay,
+        myEgg: const Vec2(30, 20),
+        myEggResting: false,
+      ),
+    );
+    // ...in: the egg is put back on the tee and settles in the same tick,
+    // and the first frame draws it part way back from the water.
+    const pond = Vec2(30, 20);
+    director.update(1 / 60, resting(pond.lerp(hole.tee, 0.1)));
+    run(3, resting(hole.tee));
+    expectInFreeView(hole.tee);
+    expect(rig.target.distanceTo(hole.tee),
+        lessThan(pond.distanceTo(hole.tee) / 2),
+        reason: 'the camera is on the egg, not the pond');
+  });
+
+  test('my next putt hands the camera back from the whole-hole view', () {
+    run(PuttCameraDirector.openingSeconds + 3, resting(hole.tee));
+    director.toggleOverview();
+    run(1, resting(hole.tee));
+    expect(director.overview, isTrue);
+    const rolling = Vec2(10, 12);
+    // Another egg knocks mine rolling: no putt of mine, the view stays.
+    director.update(
+      1 / 60,
+      PuttCameraCue(
+        hole: hole,
+        phase: PuttPhase.holePlay,
+        myEgg: rolling,
+        myEggResting: false,
+      ),
+    );
+    expect(director.overview, isTrue, reason: 'a knock is not my putt');
+    run(1, resting(hole.tee));
+    director.update(
+      1 / 60,
+      PuttCameraCue(
+        hole: hole,
+        phase: PuttPhase.holePlay,
+        myEgg: rolling,
+        myEggResting: false,
+        myStrokes: 1,
+      ),
+    );
+    expect(director.overview, isFalse);
+    expect(director.followPoint, rolling);
+  });
+
   test('once in the nest, the eggs still out are framed with the nest', () {
     run(PuttCameraDirector.openingSeconds + 1, resting(hole.tee));
     // Past the close-up on the nest that celebrates the sink.

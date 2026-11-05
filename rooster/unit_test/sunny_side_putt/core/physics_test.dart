@@ -1,5 +1,5 @@
 // Headless physics scenarios: bounce with restitution, tunnel-proof fast
-// shots, water return, the nest capture speed gate, boost strips, portal
+// shots, water return, the nest cup (drops, skips, lip-outs), boost strips, portal
 // speed preservation, gravity-well attraction and swallow, the hen's
 // nudge, the "?" box pickup, plus the determinism contract itself.
 library;
@@ -132,30 +132,79 @@ void main() {
       expect(world.ball('a')!.position.approximates(const Vec2(2, 5)), isTrue);
     });
 
-    test('the nest captures slow eggs, fast eggs roll across', () {
-      // fricção do hole: 4; capture zone at 3.425 from the tee.
-      final hole = boxHole(
-          tee: const Vec2(2, 5),
-          nest: const Nest(Vec2(6, 5), 0.8),
-          friction: 4);
-      final slow =
-          PhysicsWorld(hole: hole, config: testPhysics, playerIds: const ['a']);
-      slow.applyShot('a', 0, 0.216); // arrives inside the zone under 3 u/s
-      runUntilSettled(slow);
-      final slowEvents = slow.drainEvents();
-      expect(slowEvents.whereType<BallCaptured>(), isNotEmpty);
-      expect(slow.ball('a')!.holed, isTrue);
-      expect(slow.ball('a')!.position, hole.nest.position);
+    group('the nest is a cup', () {
+      // A launch-size nest (radius 1.7) on a long flat green. The egg rolls
+      // along +x, [offset] off the cup's center line, and reaches the cup's
+      // near edge (x = 12.3) at [arrival] units/s.
+      PhysicsWorld rollAt(double arrival,
+          {double offset = 0, PhysicsConfig config = testPhysics}) {
+        final hole = boxHole(
+            tee: Vec2(2, 10 + offset),
+            nest: const Nest(Vec2(14, 10), 1.7),
+            width: 40,
+            height: 20);
+        final world =
+            PhysicsWorld(hole: hole, config: config, playerIds: const ['a']);
+        final v0 = math.sqrt(
+            arrival * arrival + 2 * config.frictionDeceleration * (12.3 - 2));
+        world.applyShot('a', 0, v0 / config.maxShotSpeed);
+        return world;
+      }
 
-      final fast =
-          PhysicsWorld(hole: hole, config: testPhysics, playerIds: const ['a']);
-      fast.applyShot('a', 0, 0.5); // arrival ~7 u/s: rolls across the nest
-      runUntilSettled(fast);
-      final fastEvents = fast.drainEvents();
-      expect(fastEvents.whereType<BallCaptured>(), isEmpty);
-      final fastBall = fast.ball('a')!;
-      expect(fastBall.holed, isFalse);
-      expect(fastBall.position.distanceTo(hole.nest.position), greaterThan(1));
+      test('a firm putt through the middle drops', () {
+        final world = rollAt(8);
+        runUntilSettled(world);
+        expect(world.drainEvents().whereType<BallCaptured>(), isNotEmpty);
+        expect(world.ball('a')!.holed, isTrue);
+        expect(world.ball('a')!.position, const Vec2(14, 10));
+      });
+
+      test('a very fast putt skips across', () {
+        final world = rollAt(17);
+        runUntilSettled(world);
+        expect(world.drainEvents().whereType<BallCaptured>(), isEmpty);
+        expect(world.ball('a')!.holed, isFalse);
+        expect(world.ball('a')!.position.x, greaterThan(20));
+      });
+
+      test('a lip hit at pace curls round the rim and spins out, bent', () {
+        final world = rollAt(12, offset: 1.5);
+        runUntilSettled(world);
+        expect(world.drainEvents().whereType<BallCaptured>(), isEmpty);
+        final ball = world.ball('a')!;
+        expect(ball.holed, isFalse);
+        expect(ball.position.x, greaterThan(17));
+        // Pulled toward the center: it left well inside the line it came in
+        // on (y 11.5).
+        expect(ball.position.y, lessThan(11.0));
+      });
+
+      test('a medium lip hit curls in and drops', () {
+        final world = rollAt(6, offset: 1.5);
+        runUntilSettled(world);
+        expect(world.ball('a')!.holed, isTrue);
+      });
+
+      test('a slow roll that only reaches the edge drops', () {
+        // Dies just over the near rim: the funnel takes it, no parking.
+        final world = rollAt(1.2, offset: 0.3);
+        runUntilSettled(world);
+        expect(world.ball('a')!.holed, isTrue);
+      });
+
+      test('the dead-center speed limit is higher than the lip one', () {
+        expect(testPhysics.captureSpeedCentered,
+            greaterThan(testPhysics.captureSpeed * 2));
+        expect(
+            testPhysics.cupPull, greaterThan(testPhysics.frictionDeceleration));
+      });
+
+      test('the nest magnet drops a lip hit that would spin out', () {
+        final world = rollAt(12, offset: 1.5);
+        world.setBallFlagUntilRest('a', PowerUpFlag.magnet);
+        runUntilSettled(world);
+        expect(world.ball('a')!.holed, isTrue);
+      });
     });
 
     test('boost strips raise speed along their direction', () {
