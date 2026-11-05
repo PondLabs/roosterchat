@@ -1089,16 +1089,22 @@ class _PuttHeadlineState extends State<PuttHeadline>
       animation: _clock,
       builder: (context, child) {
         final t = _clock.value;
-        // 0-8%: in; 85-100%: out.
+        // 0-8%: in; 90-100%: out, a quick shrink and lift (a slow fade
+        // left a ghost of the banner printed over the lawn).
         final appear = (t / 0.08).clamp(0.0, 1.0);
-        final leave = ((t - 0.85) / 0.15).clamp(0.0, 1.0);
-        final opacity = (appear * (1 - leave)).clamp(0.0, 1.0);
+        final leave = ((t - 0.9) / 0.1).clamp(0.0, 1.0);
+        final gone = 1 - leave;
+        final opacity = (appear * gone * gone).clamp(0.0, 1.0);
         final scale = reduceMotion
             ? 1.0
-            : 0.92 + 0.08 * Curves.easeOutCubic.transform(appear);
+            : (0.92 + 0.08 * Curves.easeOutCubic.transform(appear)) *
+                (1 - 0.14 * leave);
         return Opacity(
           opacity: opacity,
-          child: Transform.scale(scale: scale, child: child),
+          child: Transform.translate(
+            offset: Offset(0, reduceMotion ? 0 : -18 * leave),
+            child: Transform.scale(scale: scale, child: child),
+          ),
         );
       },
       child: _banner(),
