@@ -299,7 +299,9 @@ void main() {
     }
 
     SunnySidePuttGame? aliceGame;
-    final gameWidget = find.byType(GameWidget);
+    // A GameWidget<SunnySidePuttGame>: byType(GameWidget) matches only the
+    // raw GameWidget<Game> and never found it.
+    final gameWidget = find.byWidgetPredicate((widget) => widget is GameWidget);
     try {
       await tester.waitFor(() {
         // The stage mounts the game a beat after it shows: until then there
@@ -451,7 +453,8 @@ Future<T> _bounded<T>(Future<T> step, String what, {int seconds = 45}) =>
 Future<void> _dragShotFromEgg(
     WidgetTester tester, SunnySidePuttGame game, double angle, double power,
     {int pointer = 24}) async {
-  final area = tester.getRect(find.byType(GameWidget));
+  final area =
+      tester.getRect(find.byWidgetPredicate((widget) => widget is GameWidget));
   final camera = game.view3d;
   final egg = game.match.myBall!.position;
   Offset screenOf(core.Vec2 world) {
