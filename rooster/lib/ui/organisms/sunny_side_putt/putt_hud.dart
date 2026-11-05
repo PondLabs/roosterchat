@@ -287,25 +287,53 @@ const List<BoxShadow> _shadow = [
   BoxShadow(color: Color(0x47000000), blurRadius: 14, offset: Offset(0, 4)),
 ];
 
-/// A player's colour dot: their egg's tint.
+/// A player's mark: a little egg in their colour, [size] tall.
 class _TintDot extends StatelessWidget {
   final Color color;
   final double size;
 
-  const _TintDot(this.color, {this.size = 10});
+  const _TintDot(this.color, {this.size = 13});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-        border: Border.all(color: PuttPalette.shell.withValues(alpha: 0.85)),
-      ),
+    return CustomPaint(
+      size: Size(size * 0.8, size),
+      painter: _EggGlyphPainter(color),
     );
   }
+}
+
+/// An egg's profile, narrower at the crown: filled with the player's
+/// colour, a cream glint high on one side, an ink line round it.
+class _EggGlyphPainter extends CustomPainter {
+  final Color tint;
+
+  const _EggGlyphPainter(this.tint);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    final egg = Path()
+      ..moveTo(w / 2, 0)
+      ..cubicTo(w * 0.86, 0, w, h * 0.36, w, h * 0.62)
+      ..cubicTo(w, h * 0.86, w * 0.78, h, w / 2, h)
+      ..cubicTo(w * 0.22, h, 0, h * 0.86, 0, h * 0.62)
+      ..cubicTo(0, h * 0.36, w * 0.14, 0, w / 2, 0)
+      ..close();
+    canvas
+      ..drawPath(egg, Paint()..color = tint)
+      ..drawOval(Rect.fromLTWH(w * 0.22, h * 0.16, w * 0.22, h * 0.24),
+          Paint()..color = PuttPalette.shell.withValues(alpha: 0.75))
+      ..drawPath(
+          egg,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = math.max(1.0, h / 11)
+            ..color = PuttPalette.ink);
+  }
+
+  @override
+  bool shouldRepaint(_EggGlyphPainter oldDelegate) => oldDelegate.tint != tint;
 }
 
 // ---- the top row: course chip, hole bar, buttons --------------------------------------
@@ -1460,7 +1488,7 @@ class _CardRow extends StatelessWidget {
                       : PuttPalette.cream.withValues(alpha: 0.5)),
             ),
           ),
-          _TintDot(tint),
+          _TintDot(tint, size: 15),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -1815,8 +1843,8 @@ class _ScorecardRow extends StatelessWidget {
           : null,
       child: Row(
         children: [
-          _TintDot(tint, size: 9),
-          const SizedBox(width: 7),
+          _TintDot(tint, size: 12),
+          const SizedBox(width: 6),
           Expanded(
             child: Text(
               mine ? labelPuttYouName(name) : name,
@@ -2401,7 +2429,7 @@ class _PickRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
         child: Row(
           children: [
-            _TintDot(tint, size: 11),
+            _TintDot(tint, size: 14),
             const SizedBox(width: 10),
             Expanded(
               child: Text(

@@ -217,9 +217,11 @@ on, so the levels part exactly on the line. Every drop wears a face in
 the course's build - dark timber sleepers by the coop and along the road,
 dry stone by the pond, stacked hay bales under the barn's loft - and a
 rail on a step stands on the high ground with the face under it, a
-ramp's rails climbing with it. The lawn darkens a drop's lip and the
-floor at a step's foot, lifts a terrace's top a touch, and lights a ramp
-by the side it faces, mown in bands across its rise. An egg rolling off a
+ramp's rails climbing with it. The lawn draws a pale lip along the top
+of every drop where no rail stands, shades the floor at a step's foot
+(deeper and wider the taller the step), lifts a terrace's top a touch,
+and lights a ramp by the side it faces, with chevrons mown into it
+pointing up its rise. An egg rolling off a
 lip falls through the air from where it was (18 units/s^2) while its
 shadow is already on the floor below, and lands with a squash and a puff
 of dust; rising ground, up a ramp, it follows at once. The lawn texture lightens the

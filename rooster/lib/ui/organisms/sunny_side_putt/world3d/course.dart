@@ -348,8 +348,8 @@ class _CourseKit {
     }
 
     // Tiers: a terrace's top a touch brighter than the floor below it, a
-    // darker lip along every drop, and a ramp lit by the side it faces
-    // (like a hill's slopes) and mown in bands across its rise.
+    // pale lip along every drop and a shade at its foot, and a ramp lit by
+    // the side it faces (like a hill's slopes) with chevrons up its rise.
     if (hole.terraces.isNotEmpty || hole.ramps.isNotEmpty) {
       void over(Rect box, void Function(int col, int row, Vec2 point) paint) {
         final c0 = colOf(box.min.x).clamp(0, width - 1);
@@ -382,38 +382,41 @@ class _CourseKit {
           bitmap.set(col, row, _shade(bitmap.get(col, row), 1.06));
         });
       }
-      // The floor at a step's foot lies in its shade, deeper the taller
-      // the step.
+      // Every step reads from above: the floor at its foot lies in its
+      // shade, deeper and wider the taller the step, and the top of a drop
+      // (where no rail stands) carries a pale lip where the light catches
+      // the turf's rim, with a little shade sinking to it.
+      final lipLight = _mix(theme.turfLight, 0xFFF6D5, 0.5);
       for (final (a, b) in _stepEdges(hole)) {
         final run = b - a;
-        if (run.length < 1e-6) continue;
-        final across = Vec2(-run.y, run.x) * (1 / run.length);
-        over(boxOf([a, b], 1.6), (col, row, point) {
+        final length = run.length;
+        if (length < 1e-6) continue;
+        final along = run * (1 / length);
+        final across = Vec2(-along.y, along.x);
+        over(boxOf([a, b], 2.0), (col, row, point) {
           final d = _segmentDistance(point, a, b);
+          if (d > 2.0) return;
           final side = (point - a).dot(across);
           final here = hole.tierHeightAt(point);
           final there = hole.tierHeightAt(point - across * (2 * side));
           final rise = there - here;
-          if (rise < 0.2) return;
-          final reach = 0.5 + rise * 0.8;
-          if (d >= reach) return;
-          final k = math.pow(1 - d / reach, 2).toDouble() * 0.42;
-          bitmap.set(col, row, _mix(bitmap.get(col, row), _Farm.turfShade, k));
-        });
-      }
-      for (final wall in hole.walls) {
-        if (!wall.ledge) continue;
-        final high = wall.highSide;
-        over(boxOf([wall.a, wall.b], 0.4), (col, row, point) {
-          if ((point - wall.a).dot(high) <= 0) return;
-          final d = _segmentDistance(point, wall.a, wall.b);
-          // The lip: shade sinking to the edge, a bright line right on it
-          // where the light catches the turf's rim.
-          final lip = _softBand(d, 0.14, 0.12);
           var color = bitmap.get(col, row);
-          if (lip > 0) color = _mix(color, _Farm.turfShade, lip * 0.5);
-          final rim = _softBand(d, 0.03, 0.03);
-          if (rim > 0) color = _mix(color, theme.turfLight, rim * 0.6);
+          if (rise >= 0.2) {
+            final reach = 0.6 + rise * 0.9;
+            if (d >= reach) return;
+            final k = math.pow(1 - d / reach, 1.6).toDouble() * 0.55;
+            color = _mix(color, _Farm.turfShade, k);
+          } else if (rise <= -0.2) {
+            if (d > 0.5) return;
+            final t = ((point - a).dot(along)).clamp(0.0, length);
+            if (_railAlong(a + along * t, along)) return;
+            final rim = _softBand(d, 0.1, 0.05);
+            final lip = _softBand(d, 0.34, 0.16) * (1 - rim);
+            if (lip > 0) color = _mix(color, _Farm.turfShade, lip * 0.35);
+            if (rim > 0) color = _mix(color, lipLight, rim * 0.85);
+          } else {
+            return;
+          }
           bitmap.set(col, row, color);
         });
       }
@@ -430,8 +433,14 @@ class _CourseKit {
           final lit = (-g.x * lx + ly - g.y * lz) / n;
           final relative = ((lit - ly) * 1.6).clamp(-0.3, 0.3);
           var color = _shade(bitmap.get(col, row), 1 + relative * 0.75);
-          final level = ramp.heightAt(point) / ramp.height;
-          color = _shade(color, (level * 5).floor().isEven ? 1.1 : 0.9);
+          // Chevrons pointing up the ramp, mown into it.
+          final axis = ramp.to - ramp.from;
+          final offset = point - ramp.from;
+          final up = offset.dot(axis) / ramp.length;
+          final aside = offset.cross(axis).abs() / ramp.length;
+          final phase = (up - aside * 0.7) / 1.3;
+          final band = phase - phase.floorToDouble();
+          color = _shade(color, band < 0.38 ? 1.12 : 0.93);
           bitmap.set(col, row, color);
         });
       }
