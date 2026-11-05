@@ -83,8 +83,10 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
   Timer? _ticker;
   final math.Random _random = math.Random(7);
 
-  /// Seconds since the current hole came up, and which hole that is.
+  /// Seconds since the current hole came up (wall time, so a busy frame
+  /// never pushes the script back), and which hole that is.
   double _holeTime = 0;
+  final Stopwatch _holeClock = Stopwatch();
   String? _holeId;
 
   /// My reference shots taken this hole, and the aim in flight.
@@ -253,6 +255,9 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
     if (hole.id != _holeId) {
       _holeId = hole.id;
       _holeTime = 0;
+      _holeClock
+        ..reset()
+        ..start();
       _myShot = 0;
       _drag = null;
       // The first hole waits for the coach to show the gesture once.
@@ -272,7 +277,7 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
         }
       }
     }
-    _holeTime += dt;
+    _holeTime = _holeClock.elapsedMicroseconds / Duration.microsecondsPerSecond;
     _holdCamera(hole);
     _armPowerUp(hole);
     if (!(_game?.targeting.isActive ?? false)) _driveMe(hole);
@@ -618,39 +623,45 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
   double _readPower(
       HoleDef hole, String playerId, double angle, Vec2 target, double guess) {
     final world = match.engine.world;
-    if (world == null) return guess;
+    final start = world?.ball(playerId)?.position;
+    if (world == null || start == null) return guess;
     final state = world.toJson();
-    double miss(double power) {
+    final heading = Vec2(math.cos(angle), math.sin(angle));
+    final wanted = (target - start).dot(heading);
+    if (wanted <= 0.1) return guess;
+    // One roll on a copy of the world: where it stops, how far along the
+    // shot's line that is, and whether it dropped in.
+    (Vec2, double, bool) roll(double power) {
       final copy = PhysicsWorld.restore(
           hole: hole, config: match.config.physics, state: state);
-      final ball = copy.ball(playerId);
-      if (ball == null) return double.infinity;
+      final ball = copy.ball(playerId)!;
       copy.applyShot(playerId, angle, power);
-      for (var i = 0; i < 1500 && !ball.holed && !ball.asleep; i++) {
+      for (var i = 0; i < 1200 && !ball.holed && !ball.asleep; i++) {
         copy.stepTick();
       }
-      return ball.holed ? -1 : ball.position.distanceTo(target);
+      return (ball.position, (ball.position - start).dot(heading), ball.holed);
     }
 
-    var best = guess.clamp(0.05, 1.0).toDouble();
-    var bestMiss = miss(best);
-    for (var k = 1; k <= 8; k++) {
-      final power = k / 8;
-      final m = miss(power);
-      if (m < bestMiss) {
+    // A few rolls, each power scaled by how far short or long the last one
+    // stopped (on flat ground the distance grows with the power squared),
+    // instead of a sweep: the main thread must not stall on a bot's putt.
+    var power = guess.clamp(0.05, 1.0).toDouble();
+    var best = power;
+    var bestMiss = double.infinity;
+    for (var i = 0; i < 4; i++) {
+      final (rest, reached, holed) = roll(power);
+      if (holed) return power;
+      final miss = rest.distanceTo(target);
+      if (miss < bestMiss) {
         best = power;
-        bestMiss = m;
+        bestMiss = miss;
       }
-    }
-    for (var step = 1 / 16; step > 0.006; step /= 2) {
-      for (final power in [best - step, best + step]) {
-        if (power < 0.05 || power > 1) continue;
-        final m = miss(power);
-        if (m < bestMiss) {
-          best = power;
-          bestMiss = m;
-        }
-      }
+      final next = reached <= 0.2
+          // Rolled back (a ramp, a ridge) or stopped at once: more pace.
+          ? math.min(1.0, power * 1.6)
+          : (power * math.sqrt(wanted / reached)).clamp(0.05, 1.0).toDouble();
+      if ((next - power).abs() < 0.004) break;
+      power = next;
     }
     return best;
   }
