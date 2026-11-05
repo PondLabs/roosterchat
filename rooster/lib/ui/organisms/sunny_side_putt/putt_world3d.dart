@@ -1263,7 +1263,12 @@ class PuttWorld3D {
       if (egg.mine) continue;
       final view = _eggViews[egg.playerId];
       if (view == null) continue;
-      view.screening = resting && _covers(view, mineView);
+      // In front of mine on the screen, or passing through mine on the
+      // ground (an egg that has not putted is a ghost to the others).
+      view.screening = resting &&
+          (_covers(view, mineView) ||
+              egg.position.distanceTo(mine.position) <
+                  (egg.radius + mine.radius) * 1.1);
     }
   }
 

@@ -1201,6 +1201,33 @@ void main() {
       expect(opacityOf('front'), closeTo(1, 1e-9));
     });
 
+    test("an egg passing through the viewer's fades aside at once", () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      const mineAt = Vec2(10, 10);
+      world.applySnapshot(
+          PuttWorldFrame(time: 0, eggs: [eggAt(mineAt, mine: true)]));
+      // Half an egg beyond mine, away from the camera: not in front of it
+      // on the screen, but inside it on the ground (a ghost going through).
+      final eye = world.camera.position;
+      final away = Vec2(mineAt.x - eye.x, mineAt.y - eye.z);
+      final through = mineAt + away * (0.4 / away.length);
+      var time = 0.016;
+      // A tenth of a second of frames, and the one that first sees it.
+      for (var i = 0; i < 7; i++) {
+        world.applySnapshot(PuttWorldFrame(time: time, eggs: [
+          eggAt(mineAt, mine: true),
+          eggAt(through, playerId: 'through', velocity: const Vec2(4, 0)),
+        ]));
+        time += 0.016;
+      }
+      final shell = walk(world.eggOf('through')!)
+          .firstWhere((o) => o.name == 'egg-shell')
+          .material!;
+      expect(shell.opacity, lessThan(0.45),
+          reason: 'within a tenth of a second');
+    });
+
     test('the nest shimmers while an egg carries a magnet', () {
       final world = builtWorld();
       addTearDown(world.dispose);

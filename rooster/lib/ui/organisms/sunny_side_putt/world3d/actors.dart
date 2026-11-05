@@ -456,8 +456,10 @@ class _EggView3D {
         target += (0.95 - target) * blink * (1 - left / 0.9);
       }
     }
-    // Standing aside for the viewer's egg: a third of itself, still there.
-    _screened = (_screened + (screening ? dt : -dt) * 5).clamp(0.0, 1.0);
+    // Standing aside for the viewer's egg: a third of itself, still there,
+    // in a tenth of a second (an egg passing through mine went by half
+    // faded).
+    _screened = (_screened + (screening ? dt : -dt) * 10).clamp(0.0, 1.0);
     target *= 1 - 0.66 * _screened;
     if ((target - _ghostOpacity).abs() < 1e-3) return;
     _ghostOpacity = target;
