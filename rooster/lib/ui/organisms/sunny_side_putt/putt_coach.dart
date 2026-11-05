@@ -130,16 +130,21 @@ class _PuttCoachState extends State<PuttCoach>
             child: Transform.scale(
               scale: g.handScale,
               alignment: Alignment.topLeft,
+              // An ink line round the cream hand (four crisp shadows) and
+              // a soft drop under it: it reads over light and dark turf.
               child: const Icon(
                 Icons.touch_app_rounded,
-                size: 46,
+                size: 54,
                 color: PuttPalette.cream,
                 shadows: [
-                  Shadow(color: Color(0xAA2A2018), blurRadius: 6),
+                  Shadow(color: PuttPalette.ink, offset: Offset(1.6, 0)),
+                  Shadow(color: PuttPalette.ink, offset: Offset(-1.6, 0)),
+                  Shadow(color: PuttPalette.ink, offset: Offset(0, 1.6)),
+                  Shadow(color: PuttPalette.ink, offset: Offset(0, -1.6)),
                   Shadow(
-                      color: Color(0x662A2018),
-                      blurRadius: 1,
-                      offset: Offset(1, 2)),
+                      color: Color(0x88211614),
+                      blurRadius: 6,
+                      offset: Offset(1, 3)),
                 ],
               ),
             ),
@@ -169,21 +174,23 @@ class _CoachPose {
 
   static double _ease(double k) => k * k * (3 - 2 * k);
 
-  /// 0-0.12 the hand comes in; 0.12-0.22 it presses (a ripple); 0.22-0.62
-  /// it pulls back while the arrow grows; 0.62-0.74 it lets go (the arrow
-  /// flashes and goes); then a breath.
+  /// 0-0.1 the hand settles on the press point; 0.1-0.2 it presses (a
+  /// ripple); 0.2-0.6 it pulls back while the arrow grows; 0.6-0.7 it lets
+  /// go (the arrow flashes and goes, the hand lifts away); then it comes
+  /// back to wait at the press point, half seen, for the next round - so
+  /// the gesture is on screen nearly all the time.
   factory _CoachPose.at(double t) {
-    if (t < 0.12) {
-      final k = t / 0.12;
+    if (t < 0.1) {
+      final k = t / 0.1;
       return _CoachPose(
           pull: 0,
-          handAlpha: k,
-          handScale: 1.15 - 0.15 * k,
+          handAlpha: 0.6 + 0.4 * k,
+          handScale: 1.1 - 0.1 * k,
           arrowAlpha: 0,
           ripple: -1);
     }
-    if (t < 0.22) {
-      final k = (t - 0.12) / 0.1;
+    if (t < 0.2) {
+      final k = (t - 0.1) / 0.1;
       return _CoachPose(
           pull: 0,
           handAlpha: 1,
@@ -191,13 +198,13 @@ class _CoachPose {
           arrowAlpha: 0,
           ripple: k);
     }
-    if (t < 0.62) {
-      final k = _ease((t - 0.22) / 0.4);
+    if (t < 0.6) {
+      final k = _ease((t - 0.2) / 0.4);
       return _CoachPose(
           pull: k, handAlpha: 1, handScale: 0.95, arrowAlpha: 1, ripple: -1);
     }
-    if (t < 0.74) {
-      final k = (t - 0.62) / 0.12;
+    if (t < 0.7) {
+      final k = (t - 0.6) / 0.1;
       return _CoachPose(
           pull: 1,
           handAlpha: 1 - k,
@@ -205,8 +212,9 @@ class _CoachPose {
           arrowAlpha: 1 - k,
           ripple: -1);
     }
-    return const _CoachPose(
-        pull: 0, handAlpha: 0, handScale: 1, arrowAlpha: 0, ripple: -1);
+    final k = ((t - 0.7) / 0.12).clamp(0.0, 1.0);
+    return _CoachPose(
+        pull: 0, handAlpha: 0.6 * k, handScale: 1.1, arrowAlpha: 0, ripple: -1);
   }
 }
 

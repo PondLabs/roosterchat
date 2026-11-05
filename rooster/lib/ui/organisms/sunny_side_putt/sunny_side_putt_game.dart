@@ -988,7 +988,10 @@ class SunnySidePuttGame extends FlameGame {
     final world = match.engine.world;
     final mine = match.myBall;
     director.update(
-      _worldDrawn ? dt : 0,
+      // A frame after a stall (shaders compiling, a hidden tab) moves the
+      // camera a tenth of a second at most: the opening sweep plays out
+      // rather than being skipped in one step.
+      _worldDrawn ? math.min(dt, 0.1) : 0,
       PuttCameraCue(
         hole: match.hole,
         phase: match.phase,
