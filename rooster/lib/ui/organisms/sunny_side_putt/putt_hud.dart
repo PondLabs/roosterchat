@@ -2325,12 +2325,13 @@ class _PowerSlotState extends State<_PowerSlot> with TickerProviderStateMixin {
       clipBehavior: Clip.none,
       children: [
         slot,
-        // Stepped up slot by slot: three filled at once never overlap.
+        // Stepped up slot by slot, so three filled at once never overlap,
+        // and flush with the slot's right edge: the carton stands at the
+        // screen's, and a name centred on the last slot ran off it.
         Positioned(
-          left: -80,
-          right: -80,
+          right: 0,
           bottom: _slotSize + 8 + widget.index * 32,
-          child: IgnorePointer(child: Center(child: _freshName(name))),
+          child: IgnorePointer(child: _freshName(name)),
         ),
       ],
     );

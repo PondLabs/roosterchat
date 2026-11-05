@@ -34,6 +34,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.byKey(const Key('putt-slot-fresh')), findsOneWidget);
     expect(find.text(puttPowerUpName('gust')), findsOneWidget);
+    // Flush with the slot's right edge: the carton stands at the screen's.
+    expect(
+        tester.getRect(find.byKey(const Key('putt-slot-fresh'))).right,
+        lessThanOrEqualTo(
+            tester.getRect(find.byKey(const Key('putt-slot-0'))).right + 0.5));
     await tester.pump(const Duration(seconds: 3));
     expect(find.byKey(const Key('putt-slot-fresh')), findsNothing,
         reason: 'a moment, then the icon alone');
