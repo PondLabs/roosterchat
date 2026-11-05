@@ -181,6 +181,9 @@ class _Merged {
 
   bool get isEmpty => _positions.isEmpty;
 
+  /// The vertices poured in so far, the far part's included.
+  int get vertexCount => _positions.length ~/ 3 + (_farPart?.vertexCount ?? 0);
+
   /// Pours [geometry] in, moved by [matrix] and painted [hex]. The pieces'
   /// lowest vertices get [baseShade] of the colour (1 keeps it flat);
   /// [rand] with [variation] jitters each piece's tint a touch. The
@@ -285,6 +288,106 @@ class _Merged {
       ..castShadow = castShadow
       ..receiveShadow = receiveShadow;
   }
+}
+
+/// [geometry] (a polyhedron round its origin, its own faces' normals) with
+/// every normal pointing out from the middle: in a smooth-shaded mesh a
+/// polyhedron of few faces reads as round, at a fraction of a sphere's
+/// vertices.
+tjs.BufferGeometry _rounded(tjs.BufferGeometry geometry) {
+  final position = geometry.attributes['position'] as tjs.BufferAttribute;
+  final normal = geometry.attributes['normal'] as tjs.BufferAttribute;
+  for (var i = 0; i < position.count; i++) {
+    final x = position.getX(i)!.toDouble();
+    final y = position.getY(i)!.toDouble();
+    final z = position.getZ(i)!.toDouble();
+    final length = math.max(math.sqrt(x * x + y * y + z * z), 1e-9);
+    normal.setXYZ(i, x / length, y / length, z / length);
+  }
+  normal.needsUpdate = true;
+  return geometry;
+}
+
+/// A round ball of twenty faces ([_rounded]): 60 vertices.
+tjs.BufferGeometry _softBall([double radius = 1]) =>
+    _rounded(tjg.IcosahedronGeometry(radius, 0));
+
+/// A leaf: an octahedron to be pressed flat ([_rounded]), 24 vertices.
+tjs.BufferGeometry _softLeaf() => _rounded(tjg.OctahedronGeometry(1, 0));
+
+/// A stone of radius about 1: an icosahedron of [detail] swelled by a few
+/// broad waves over its surface ([lumps] deep), so it comes out irregular
+/// but rounded, and smooth normals averaged over its own faces - it sits
+/// beside the eggs' smooth shading without facets. Detail 1 is 240
+/// vertices, 2 is 540.
+tjs.BufferGeometry _lumpyStone(_Rand rand,
+    {int detail = 2, double lumps = 0.14}) {
+  final geometry = tjg.IcosahedronGeometry(1, detail);
+  final position = geometry.attributes['position'] as tjs.BufferAttribute;
+  final normal = geometry.attributes['normal'] as tjs.BufferAttribute;
+  final waves = [
+    for (var i = 0; i < 4; i++)
+      () {
+        final y = rand.range(-1, 1);
+        final turn = rand.range(0, math.pi * 2);
+        final across = math.sqrt(1 - y * y);
+        return (
+          math.cos(turn) * across,
+          y,
+          math.sin(turn) * across,
+          rand.range(1.6, 2.9),
+          rand.range(0, math.pi * 2),
+        );
+      }(),
+  ];
+  // The polyhedron is not indexed: the same corner repeats once per face,
+  // so the swell (a function of the spot) moves every copy alike.
+  for (var i = 0; i < position.count; i++) {
+    final x = position.getX(i)!.toDouble();
+    final y = position.getY(i)!.toDouble();
+    final z = position.getZ(i)!.toDouble();
+    var k = 1.0;
+    for (final (dx, dy, dz, frequency, phase) in waves) {
+      k += lumps *
+          0.5 *
+          math.sin((x * dx + y * dy + z * dz) * frequency + phase);
+    }
+    position.setXYZ(i, x * k, y * k, z * k);
+  }
+  // Each corner's normal: the faces round it, weighted by their area.
+  String key(int i) => '${(position.getX(i)! * 1e4).round()},'
+      '${(position.getY(i)! * 1e4).round()},'
+      '${(position.getZ(i)! * 1e4).round()}';
+  final sums = <String, List<double>>{};
+  for (var i = 0; i < position.count; i += 3) {
+    final ax = position.getX(i)!.toDouble();
+    final ay = position.getY(i)!.toDouble();
+    final az = position.getZ(i)!.toDouble();
+    final ux = position.getX(i + 1)! - ax;
+    final uy = position.getY(i + 1)! - ay;
+    final uz = position.getZ(i + 1)! - az;
+    final vx = position.getX(i + 2)! - ax;
+    final vy = position.getY(i + 2)! - ay;
+    final vz = position.getZ(i + 2)! - az;
+    final nx = uy * vz - uz * vy;
+    final ny = uz * vx - ux * vz;
+    final nz = ux * vy - uy * vx;
+    for (var corner = i; corner < i + 3; corner++) {
+      final sum = sums.putIfAbsent(key(corner), () => [0, 0, 0]);
+      sum[0] += nx;
+      sum[1] += ny;
+      sum[2] += nz;
+    }
+  }
+  for (var i = 0; i < position.count; i++) {
+    final sum = sums[key(i)]!;
+    final length = math.max(
+        math.sqrt(sum[0] * sum[0] + sum[1] * sum[1] + sum[2] * sum[2]), 1e-9);
+    normal.setXYZ(i, sum[0] / length, sum[1] / length, sum[2] / length);
+  }
+  position.needsUpdate = true;
+  normal.needsUpdate = true;
+  return geometry;
 }
 
 /// A plane in its own XY plane (normal +z), [nx] by [ny] cells, UVs from

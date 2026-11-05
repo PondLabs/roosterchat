@@ -1,9 +1,10 @@
 // The farm around the course: the sky dome and its clouds (the world's
 // own, kept across holes), and per hole the meadow rolling into hills,
-// groves of oaks and pines, bushes, a scatter of wildflowers and tufts,
-// stones, hay bales, a picket fence around the table, the red barn with
-// its silo, a windmill turning on the hill, and the host himself - a big
-// white rooster with his headphones on, bobbing his head by the green.
+// groves of oaks and pines, the course's own plants (see plants.dart), a
+// scatter of wildflowers and tufts, stones, hay bales, a picket fence
+// around the table, the red barn with its silo, a windmill turning on
+// the hill, and the host himself - a big white rooster with his
+// headphones on, bobbing his head by the green.
 // Each course has props of its own besides: sunflowers and a feeding
 // trough by the Coop, pumpkins and a corn crib in the maze, a rowboat and
 // lily pads on the Pond, road signs and milk churns along Farm Road,
@@ -202,7 +203,8 @@ class _Scenery {
       : watch = watch ?? (() => null),
         greet = greet ?? (() => null),
         _rand = _Rand(_seedOf('${hole.id}/farm')),
-        _propRand = _Rand(_seedOf('${hole.id}/props'));
+        _propRand = _Rand(_seedOf('${hole.id}/props')),
+        _plantRand = _Rand(_seedOf('${hole.id}/plants'));
 
   /// The egg the host keeps his eye on (the one rolling, else the
   /// viewer's), or null.
@@ -231,6 +233,15 @@ class _Scenery {
   /// The course's own props draw from their own random, so they never
   /// shift the scatter's.
   final _Rand _propRand;
+
+  /// The course's plants draw from theirs.
+  final _Rand _plantRand;
+
+  /// The course's plants as they grew round the table, and in the garden
+  /// beds: kind, spot, footprint (the farm group's `userData['plants']`
+  /// and `userData['bed plants']`).
+  final List<(String, Vec2, double)> _grown = [];
+  final List<(String, Vec2, double)> _bedGrown = [];
 
   /// Ground the corn leaves clear: the scarecrow's, the crib's.
   final List<(Vec2, double)> _clearings = [];
@@ -304,6 +315,10 @@ class _Scenery {
     final props =
         _Merged(shadowCenter: _b.center, shadowReach: _span * 0.62 + 16);
     final small = _Merged();
+    // The plants and the stones, smooth-shaded; their far ones in a mesh
+    // of their own that casts no shadow.
+    final soft =
+        _Merged(shadowCenter: _b.center, shadowReach: _span * 0.62 + 16);
     final kind = theme.kind;
     // The far side (the game's north, -z) carries the farm's landmarks;
     // where they stand depends on the course's corner of the farm.
@@ -371,10 +386,12 @@ class _Scenery {
         _barnProps(group, props, small, settle, barnAt, barnScale);
     }
 
-    _carvedMeadow(props, small);
+    _carvedMeadow(soft, small);
     _trees(props, blocked);
-    _bushes(props, blocked);
-    _stones(props, blocked);
+    _coursePlants(soft, small, blocked, roadZ: roadZ);
+    final beforeStones = soft.vertexCount;
+    _stones(soft, blocked);
+    final stoneVertices = soft.vertexCount - beforeStones;
     _fence(props);
     _hay(props, blocked);
     _flowers(small, blocked);
@@ -389,7 +406,7 @@ class _Scenery {
         _scarecrow(props, _scarecrowAt);
       case _ThemeKind.pond:
         group.add(_lake(lakeAt, lakeRadius));
-        _reeds(props, lakeAt, lakeRadius);
+        _reeds(soft, lakeAt, lakeRadius);
         _dock(props, lakeAt, lakeRadius);
         _ducks(group, lakeAt, lakeRadius);
       case _ThemeKind.road:
@@ -407,6 +424,11 @@ class _Scenery {
         _fireflies(group);
     }
 
+    group.userData['plant vertices'] = soft.vertexCount - stoneVertices;
+    final softMesh = soft.mesh('farm-soft', flat: false);
+    if (softMesh != null) group.add(softMesh);
+    final softFar = soft.farMesh('farm-soft-far', flat: false);
+    if (softFar != null) group.add(softFar);
     final propsMesh = props.mesh('farm-props');
     if (propsMesh != null) group.add(propsMesh);
     final farMesh = props.farMesh('farm-props-far');
@@ -418,6 +440,10 @@ class _Scenery {
     if (kind != _ThemeKind.barn) group.add(_butterflies());
     group.add(_birds());
     group.userData['props'] = List<(String, Vec2, double)>.unmodifiable(_stood);
+    group.userData['plants'] =
+        List<(String, Vec2, double)>.unmodifiable(_grown);
+    group.userData['bed plants'] =
+        List<(String, Vec2, double)>.unmodifiable(_bedGrown);
     return group;
   }
 
@@ -603,14 +629,19 @@ class _Scenery {
   }
 
   /// The ground the walls carved off the table, down at the meadow's
-  /// level: bushes, flowers and tufts grow there, clear of the skirt.
-  void _carvedMeadow(_Merged props, _Merged small) {
+  /// level: the course's plants, flowers and tufts grow there, clear of
+  /// the skirt; in the maze, rows of cabbages.
+  void _carvedMeadow(_Merged plants, _Merged small) {
     if (!shape.carved) return;
     final rand = _Rand(_seedOf('${hole.id}/carved'));
     const step = 1.4;
-    for (var z = _b.min.y + 0.7; z < _b.max.y; z += step) {
+    var row = 0;
+    for (var z = _b.min.y + 0.7; z < _b.max.y; z += step, row++) {
       for (var x = _b.min.x + 0.7; x < _b.max.x; x += step) {
-        final p = Vec2(x + rand.range(-0.5, 0.5), z + rand.range(-0.5, 0.5));
+        var p = Vec2(x + rand.range(-0.5, 0.5), z + rand.range(-0.5, 0.5));
+        // The maze's beds are planted in rows, one row in two.
+        final maze = theme.kind == _ThemeKind.maze;
+        if (maze && row.isEven) p = Vec2(x + (p.x - x) * 0.25, z);
         if (!shape.carvedAt(p)) continue;
         // Clear of the table's skirt all round.
         var clear = true;
@@ -625,17 +656,9 @@ class _Scenery {
         if (!clear) continue;
         if (signAt case final sign? when p.distanceTo(sign) < 1.6) continue;
         final roll = rand.next();
-        if (roll < 0.25) {
-          final r = rand.range(0.5, 0.9);
-          props.add(
-            tjg.IcosahedronGeometry(1, 1),
-            _place(p.x, _ground + r * 0.7, p.y, sx: r, sy: r * 0.82, sz: r),
-            rand.chance(0.5) ? _Farm.leafB : _Farm.leafA,
-            baseShade: 0.6,
-            rand: rand,
-            variation: 0.1,
-          );
-        } else if (roll < 0.7) {
+        if (maze ? row.isEven && roll < 0.5 : roll < _bedChance) {
+          _bedPlant(plants, p, rand);
+        } else if (roll >= 0.25 && roll < 0.7) {
           const heads = [
             _Farm.flowerRed,
             _Farm.flowerYolk,
@@ -669,7 +692,7 @@ class _Scenery {
     }
   }
 
-  // ---- trees and bushes ----------------------------------------------------------------
+  // ---- trees ------------------------------------------------------------------------
 
   void _trees(_Merged into, bool Function(double, double) blocked) {
     // Groves: a few clusters, and singles scattered between them.
@@ -703,11 +726,16 @@ class _Scenery {
 
   /// A random spot whose clearance from the table lies in the range; tall
   /// things never stand on the camera's side. Null after too many tries.
+  /// Drawn from [rand], the scatter's own when null.
   Vec2? _spotAround(
-      {required double minClear, required double maxClear, bool tall = false}) {
+      {required double minClear,
+      required double maxClear,
+      bool tall = false,
+      _Rand? rand}) {
+    final from = rand ?? _rand;
     for (var attempt = 0; attempt < 40; attempt++) {
-      final x = _rand.range(_b.min.x - maxClear, _b.max.x + maxClear);
-      final z = _rand.range(_b.min.y - maxClear, _b.max.y + maxClear);
+      final x = from.range(_b.min.x - maxClear, _b.max.x + maxClear);
+      final z = from.range(_b.min.y - maxClear, _b.max.y + maxClear);
       final clear = _clearance(x, z);
       if (clear < minClear || clear > maxClear) continue;
       if (tall && _cameraSide(z)) continue;
@@ -801,48 +829,13 @@ class _Scenery {
     }
   }
 
-  void _bushes(_Merged into, bool Function(double, double) blocked) {
-    // Fewer than the meadow could take: each course's own props stand
-    // where more would grow.
-    for (var i = 0; i < 32; i++) {
-      final at = _spotAround(minClear: 1.6, maxClear: 22);
-      if (at == null || blocked(at.x, at.y)) continue;
-      final r = _rand.range(0.55, 1.05);
-      final lumps = 2 + _rand.below(2);
-      for (var l = 0; l < lumps; l++) {
-        into.add(
-          tjg.IcosahedronGeometry(1, 1),
-          _place(at.x + _rand.range(-0.6, 0.6), _ground + r * 0.7,
-              at.y + _rand.range(-0.6, 0.6),
-              sx: r, sy: r * 0.82, sz: r),
-          _rand.chance(0.5) ? _Farm.leafB : _Farm.leafA,
-          baseShade: 0.6,
-          rand: _rand,
-          variation: 0.1,
-        );
-      }
-      if (_rand.chance(0.35)) {
-        for (var berry = 0; berry < 5; berry++) {
-          into.add(
-            tjg.IcosahedronGeometry(0.09, 0),
-            _place(
-                at.x + _rand.range(-0.8, 0.8),
-                _ground + r * _rand.range(0.9, 1.4),
-                at.y + _rand.range(-0.8, 0.8)),
-            _Farm.flowerRed,
-          );
-        }
-      }
-    }
-  }
-
   void _stones(_Merged into, bool Function(double, double) blocked) {
     for (var i = 0; i < 18; i++) {
       final at = _spotAround(minClear: 2, maxClear: 40);
       if (at == null || blocked(at.x, at.y)) continue;
       final r = _rand.range(0.3, 0.9);
       into.add(
-        tjg.DodecahedronGeometry(1, 0),
+        _lumpyStone(_rand, detail: 1, lumps: 0.16),
         _place(at.x, _ground + r * 0.3, at.y,
             yaw: _rand.range(0, 6.28),
             tilt: _rand.range(-0.3, 0.3),
@@ -2010,26 +2003,18 @@ class _Scenery {
     return group;
   }
 
+  /// Clumps of reeds and cattails along the lake's shore.
   void _reeds(_Merged into, Vec2 at, double radius) {
+    final rand = _plantRand;
     for (var cluster = 0; cluster < 22; cluster++) {
-      final angle = _rand.range(0, math.pi * 2);
-      final r = radius + _rand.range(-1.2, 1.4);
-      final cx = at.x + math.cos(angle) * r;
-      final cz = at.y + math.sin(angle) * r;
-      if (_clearance(cx, cz) < 2) continue;
-      for (var reed = 0; reed < 6; reed++) {
-        final x = cx + _rand.range(-0.6, 0.6);
-        final z = cz + _rand.range(-0.6, 0.6);
-        final h = _rand.range(1.2, 2.3);
-        into.add(
-            tjg.CylinderGeometry(0.03, 0.05, h, 4),
-            _place(x, _ground + h / 2, z, tilt: _rand.range(-0.12, 0.12)),
-            0x4F8A33);
-        if (_rand.chance(0.45)) {
-          into.add(tjg.CylinderGeometry(0.09, 0.09, 0.42, 6),
-              _place(x, _ground + h - 0.1, z), 0x6B4428);
-        }
-      }
+      final angle = rand.range(0, math.pi * 2);
+      final r = radius + rand.range(-1.2, 1.4);
+      final spot = at + Vec2(math.cos(angle), math.sin(angle)) * r;
+      if (_clearance(spot.x, spot.y) < 2) continue;
+      final cattails = rand.chance(0.6);
+      final size = rand.range(0.5, 0.7);
+      _reedClump(into, spot, size, rand, cattails: cattails);
+      _grown.add((cattails ? 'cattails' : 'reeds', spot, size));
     }
   }
 
