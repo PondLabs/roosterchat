@@ -62,9 +62,15 @@ class PuttTagBoard extends ChangeNotifier {
 /// off its name, near enough for the layout.
 List<PuttTag> declutterTags(List<PuttTag> tags, {List<Rect> avoid = const []}) {
   if (tags.isEmpty || (tags.length < 2 && avoid.isEmpty)) return tags;
+  // The pill as drawn: its padding and border, the picture (or the dot),
+  // the gap and the name at about 7.4 px a letter, and the tail under it.
   Rect pill(PuttTag tag, Offset at) {
-    final width = tag.compact ? 26.0 : 30.0 + tag.name.length * 7.2;
-    return Rect.fromLTWH(at.dx - width / 2, at.dy - 26, width, 26);
+    final mark = tag.avatar != null ? 18.0 : 8.0;
+    final width = tag.compact
+        ? mark + 9
+        : (19 + mark + 5 + tag.name.length * 7.4).clamp(0.0, 150.0);
+    const height = 32.0;
+    return Rect.fromLTWH(at.dx - width / 2, at.dy - height, width, height);
   }
 
   final order = [...tags]..sort((a, b) => b.at.dy.compareTo(a.at.dy));
@@ -77,7 +83,7 @@ List<PuttTag> declutterTags(List<PuttTag> tags, {List<Rect> avoid = const []}) {
       final hit = placed.where((other) => other.overlaps(box)).toList();
       if (hit.isEmpty) break;
       final top = hit.map((other) => other.top).reduce(math.min);
-      at = Offset(at.dx, top - 2);
+      at = Offset(at.dx, top - 3);
     }
     placed.add(pill(tag, at));
     moved[tag.playerId] = at;
@@ -115,8 +121,9 @@ class PuttNameTags extends StatelessWidget {
               top: tag.at.dy,
               child: FractionalTranslation(
                 translation: const Offset(-0.5, -1),
+                // Dimmed while I aim, still readable.
                 child: Opacity(
-                  opacity: tag.dim ? 0.35 : 1,
+                  opacity: tag.dim ? 0.6 : 1,
                   child: _TagPill(tag: tag),
                 ),
               ),

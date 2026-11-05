@@ -2036,6 +2036,10 @@ class _PuttHintLineState extends State<PuttHintLine>
             duration: reduceMotion
                 ? Duration.zero
                 : const Duration(milliseconds: 220),
+            // The new line takes the old one's place at once and fades in:
+            // two lines crossfading on one pill read as a muddle.
+            layoutBuilder: (current, previous) =>
+                current ?? const SizedBox.shrink(),
             child: line ?? const SizedBox.shrink(key: ValueKey('none')),
           ),
         );

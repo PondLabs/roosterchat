@@ -510,7 +510,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
         // its queue carries on after).
         if (match.phase == PuttPhase.holePlay)
           Positioned(
-            top: 100,
+            top: 112,
             left: 64,
             right: 64,
             child: SafeArea(
@@ -899,16 +899,23 @@ class SunnySidePuttGame extends FlameGame {
     final world = match.engine.world;
     final out = <PuttBubble>[];
     var serial = 0;
+    // The ones whose egg is in: over the nest, side by side rather than
+    // stacked on the flag.
+    var atNest = 0;
     for (final reaction in list) {
       serial++;
       final age = now - reaction.at;
       if (age < 0 || age > PuttReaction.life) continue;
       final ball = world?.ball(reaction.playerId);
       core.Vec2? at;
+      var aside = 0.0;
       if (ball != null && !ball.holed) {
         at = match.renderPositionOf(reaction.playerId);
       } else if (ball != null && hole != null) {
         at = hole.nest.position;
+        // 0, then right, left, further right...
+        final k = atNest++;
+        aside = (k.isOdd ? 1 : -1) * ((k + 1) ~/ 2) * 52.0;
       }
       if (at == null) continue;
       final lift = eggRadius * 5.6;
@@ -916,7 +923,7 @@ class SunnySidePuttGame extends FlameGame {
       out.add(PuttBubble(
         key: '${reaction.playerId}-${reaction.at}-$serial',
         reaction: reaction.reaction,
-        at: world3d.projectToWorld(at, height: lift),
+        at: world3d.projectToWorld(at, height: lift) + Offset(aside, 0),
         progress: age / PuttReaction.life,
       ));
     }
@@ -1732,14 +1739,18 @@ class PuttFxLayer {
       PuttPalette.water,
       ui.Color(0xFF7BD35A),
     ];
-    final count = mine ? 64 : 32;
+    // Another player's sink: a smaller, shorter burst, so a run of sinks
+    // does not bury the nest.
+    final count = mine ? 64 : 16;
     for (var i = 0; i < count; i++) {
       final angle = _random.nextDouble() * 2 * math.pi;
       final speed = 1.2 + _random.nextDouble() * 3.4;
       _particles.add(_FxParticle(
         at: at,
         velocity: core.Vec2(math.cos(angle), math.sin(angle)) * speed,
-        life: 1.6 + _random.nextDouble() * 0.8,
+        life: mine
+            ? 1.6 + _random.nextDouble() * 0.8
+            : 1.0 + _random.nextDouble() * 0.4,
         kind: _FxKind.confetti,
         size: 0.22 + _random.nextDouble() * 0.12,
         color: colors[i % colors.length],

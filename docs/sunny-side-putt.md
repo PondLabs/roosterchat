@@ -259,8 +259,9 @@ stands beyond the side rail on the nest's side, about level with the
 green's middle,
 follows the egg in play with his head, bobs it now and then and cheers
 when an egg drops in. Whenever his head would stand under the HUD's top
-bar or corner buttons he fades away, and right in front of the camera he
-steps back to a ghost of himself. Ground the walls close off from
+bar or corner buttons, or he stands right in front of the camera, he
+fades away (and so does a hen that walks into the camera's face). Ground
+the walls close off from
 the tee (a flood fill stopped by walls, carried through rabbit holes) is
 planted as the theme's garden beds instead of turf, so a hole shaped
 with walls reads as its shape.

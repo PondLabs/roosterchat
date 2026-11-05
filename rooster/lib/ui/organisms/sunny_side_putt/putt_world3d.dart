@@ -1037,8 +1037,13 @@ class PuttWorld3D {
     final grow = math.max(1.0, rig.distance / 24);
     _fx.apply(frame, scale: grow, ground: _ground, camera: camera);
     _bursts.update(dt, frame.time);
+    // The casts' figures (the crow, the bubbles) grow a little faster
+    // than the particles' square root, so they read from the overview.
     _casts.sync(frame,
-        hole: _hole, ground: _ground, grow: math.sqrt(grow), dt: dt);
+        hole: _hole,
+        ground: _ground,
+        grow: math.pow(grow, 0.75).toDouble(),
+        dt: dt);
     for (final hatchling in _hatchlings) {
       hatchling.update(dt, camera.position);
     }
@@ -1184,24 +1189,22 @@ class PuttWorld3D {
       view.sync(frame.hens[i], frame.time);
       if (view is _HenView3D) {
         // A hen right in front of the camera (a close-up's foreground)
-        // steps back to a ghost of herself.
+        // fades out of the way (a ghost of her read as a glitch).
         final at = frame.hens[i].position;
         final dx = camera.position.x - at.x;
         final dy = camera.position.y - _ground.at(at);
         final dz = camera.position.z - at.y;
         final near = math.sqrt(dx * dx + dy * dy + dz * dz) /
             math.max(rig.distance, 1e-6);
-        final target = near < 0.5
-            ? 0.25
-            : (near < 0.7 ? 0.25 + (near - 0.5) / 0.2 * 0.75 : 1.0);
+        final target =
+            near < 0.5 ? 0.0 : (near < 0.7 ? (near - 0.5) / 0.2 : 1.0);
         view.fadeToward(target, dt);
       }
     }
   }
 
   /// The host fades away while his head would stand under the HUD's top
-  /// bar or its corner buttons, and steps back to a ghost of himself right
-  /// in front of the camera.
+  /// bar or its corner buttons, or right in front of the camera.
   void _syncHost(double dt) {
     final fade = _hostFade;
     final size = rig.viewport;
@@ -1219,7 +1222,7 @@ class PuttWorld3D {
         headY < _hudTopBand &&
         headX > -40 &&
         headX < size.width + 40;
-    fade.fadeToward(underHud ? 0.0 : (near ? 0.3 : 1.0), dt);
+    fade.fadeToward(underHud || near ? 0.0 : 1.0, dt);
   }
 
   /// How far down the HUD's top bar and corner buttons reach, in pixels.

@@ -91,7 +91,7 @@ class _EggView3D {
     // reads from the ground even when the band faces away.
     _tintDisc = tjs.Mesh(
       tjg.RingGeometry(_radius * 0.95, _radius * 1.4, 32, 1),
-      _unlit(_tintHex, opacity: 0.6, depthWrite: false),
+      _unlit(_tintHex, opacity: 0.78, depthWrite: false),
     )
       ..name = 'egg-tint-disc'
       ..rotation.x = -math.pi / 2
@@ -553,15 +553,16 @@ final Map<int, tjs.DataTexture> _eggTextures = {};
 tjs.DataTexture _eggTextureFor(int tint) =>
     _eggTextures.putIfAbsent(tint, () => _eggTexture(tint));
 
-/// The shell's paint: cream with fine speckles, a zig-zag band in the
-/// player's colour round the waist and a ring of dots above and below.
-/// u runs around the egg, v from the base (0) to the crown (1).
+/// The shell's paint: a pastel of the player's colour with fine speckles
+/// (so whose egg it is reads from the overview too), a zig-zag band in the
+/// full colour round the waist and a ring of dots above and below. u runs
+/// around the egg, v from the base (0) to the crown (1).
 tjs.DataTexture _eggTexture(int tint) {
   const width = 256;
   const height = 128;
   final bitmap = _Bitmap(width, height);
   final rand = _Rand(tint);
-  const shell = 0xFFF8EE;
+  final shell = _mix(0xFFF8EE, tint, 0.25);
   final deep = _shade(tint, 0.78);
   for (var y = 0; y < height; y++) {
     final v = (y + 0.5) / height;
@@ -627,14 +628,18 @@ abstract class _Walker {
   void sync(PuttWorldHen hen, double time);
 }
 
-/// Fades a walker that comes right up to the camera (a hen filling the
-/// foreground of a close-up): its materials are made transparent once, at
+/// Fades a figure out of the way (a hen walking into the camera's face,
+/// the host behind the HUD): its materials are made transparent once, at
 /// build, so a fade only moves a uniform and never recompiles a program.
+/// Faded all the way, the figure is not drawn at all (it would still hide
+/// what stands behind it in the depth buffer).
 mixin _Fadable {
   final List<tjs.Material> _fadeMaterials = [];
   double _fade = 1;
+  tjs.Object3D? _fadeRoot;
 
   void _prepareFade(tjs.Object3D root) {
+    _fadeRoot = root;
     root.traverse((object) {
       final material = object.material;
       if (material == null || _fadeMaterials.contains(material)) return;
@@ -651,25 +656,18 @@ mixin _Fadable {
     for (final material in _fadeMaterials) {
       material.opacity = _fade;
     }
+    _fadeRoot?.visible = _fade > 0.02;
   }
 }
 
-/// A figure of the scenery that can step back to a ghost of itself (the
-/// host, when he would stand behind the HUD or in the camera's face).
+/// A figure of the scenery that can fade out of the way (the host, when
+/// he would stand behind the HUD or in the camera's face).
 class _FadingFigure with _Fadable {
   _FadingFigure(this.figure) {
     _prepareFade(figure);
   }
 
   final tjs.Object3D figure;
-
-  /// Faded all the way, the figure is not drawn at all (it would still
-  /// hide what stands behind it in the depth buffer).
-  @override
-  void fadeToward(double target, double dt) {
-    super.fadeToward(target, dt);
-    figure.visible = _fade > 0.02;
-  }
 }
 
 /// A duck where the obstacle paddles over water (the Pond's ducks): a
