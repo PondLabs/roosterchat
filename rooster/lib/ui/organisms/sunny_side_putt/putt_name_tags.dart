@@ -51,13 +51,14 @@ class PuttTag {
     this.tail = 0,
   });
 
-  PuttTag _laidAt(Offset to, {required bool compact, required double tail}) =>
+  PuttTag _laidAt(Offset to,
+          {required bool compact, required double tail, bool? dim}) =>
       PuttTag(
         playerId: playerId,
         name: name,
         color: color,
         at: to,
-        dim: dim,
+        dim: dim ?? this.dim,
         avatar: avatar,
         look: look,
         compact: compact,
@@ -119,8 +120,8 @@ Rect puttTagPill(PuttTag tag, Offset at) {
 /// egg names that one. [soft] (the coach's hand and ghost arrow, drawn
 /// with a margin) is kept clear of while a spot by the egg allows it; a
 /// tag with none then stands by its egg over that margin, its name shown
-/// - failing that its picture alone, and failing that it is not drawn this
-/// frame. A pill's size is read off its name, near enough for the layout.
+/// and faded back under the coach - failing that its picture alone, and
+/// failing that it is not drawn this frame. A pill's size is read off its name, near enough for the layout.
 List<PuttTag> declutterTags(List<PuttTag> tags,
     {List<Rect> avoid = const [], List<Rect> soft = const []}) {
   if (tags.isEmpty || (tags.length < 2 && avoid.isEmpty && soft.isEmpty)) {
@@ -142,6 +143,12 @@ List<PuttTag> declutterTags(List<PuttTag> tags,
       if (placed != null) break;
     }
     if (placed == null) continue;
+    // Standing on the coach, it fades back: the gesture reads first.
+    final pill = puttTagPill(placed, placed.at);
+    if (!placed.dim && soft.any(pill.overlaps)) {
+      placed = placed._laidAt(placed.at,
+          compact: placed.compact, tail: placed.tail, dim: true);
+    }
     laidPills.add(puttTagPill(placed, placed.at));
     laid[tag.playerId] = placed;
   }

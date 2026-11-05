@@ -153,6 +153,7 @@ void main() {
     expect(placed.single.at, const Offset(670, 450),
         reason: 'by her egg, not up over mine');
     expect(placed.single.compact, isFalse, reason: 'her name shows');
+    expect(placed.single.dim, isTrue, reason: 'faded under the coach');
   });
 
   testWidgets('the reaction picker opens and sends one, then folds',
