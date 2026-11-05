@@ -286,6 +286,14 @@ class PlayerLeft extends PuttEvent {
   const PlayerLeft({required this.playerId});
 }
 
+/// A player sent a quick reaction ([puttReactions]).
+class PlayerReacted extends PuttEvent {
+  final String playerId;
+  final String reaction;
+
+  const PlayerReacted({required this.playerId, required this.reaction});
+}
+
 class SpectatorPromoted extends PuttEvent {
   final String playerId;
 
@@ -372,6 +380,9 @@ sealed class EngineInput {
         return StartCourseInput(courseId: json['c'] as String);
       case 'end':
         return const EndMatchInput();
+      case 'react':
+        return ReactInput(
+            playerId: json['p'] as String, reaction: json['r'] as String);
     }
     throw ArgumentError.value(json, 'json', 'unknown input');
   }
@@ -464,6 +475,20 @@ class EndMatchInput extends EngineInput {
 
   @override
   Map<String, Object?> toJson() => {'k': 'end'};
+}
+
+/// The quick reactions a player (or a spectator) can send, by id.
+const List<String> puttReactions = ['cheer', 'laugh', 'wow', 'fire', 'gg'];
+
+/// A quick reaction: it changes nothing in the game, everyone sees it.
+class ReactInput extends EngineInput {
+  final String playerId;
+  final String reaction;
+
+  const ReactInput({required this.playerId, required this.reaction});
+
+  @override
+  Map<String, Object?> toJson() => {'k': 'react', 'p': playerId, 'r': reaction};
 }
 
 /// One accepted input, stamped with its place in the tick stream.
@@ -691,6 +716,9 @@ class PuttEngine {
     return drained;
   }
 
+  /// Events waiting for [drainEvents].
+  int get pendingEventCount => _events.length;
+
   /// Accepted inputs with a seq above [seq] - what a snapshot handoff
   /// replays. Journal entries only accumulate here; the HOST decides when
   /// to snapshot and calls [trimJournal].
@@ -734,8 +762,26 @@ class PuttEngine {
         return _startCourse(input.courseId);
       case EndMatchInput():
         return _endMatch();
+      case ReactInput():
+        return _react(input);
     }
   }
+
+  /// A reaction from someone in the match (playing or watching), of a
+  /// known kind: the event, nothing else.
+  bool _react(ReactInput input) {
+    if (!puttReactions.contains(input.reaction)) return false;
+    final known = _players.containsKey(input.playerId) ||
+        _spectatorQueue.contains(input.playerId);
+    if (!known) return false;
+    _events
+        .add(PlayerReacted(playerId: input.playerId, reaction: input.reaction));
+    return true;
+  }
+
+  /// Sends a quick reaction (see [ReactInput]).
+  bool react(String playerId, String reaction) =>
+      _accept(ReactInput(playerId: playerId, reaction: reaction));
 
   void _appendCoursePars(CourseDef course) {
     _holePars.addAll([for (final hole in course.holes) hole.par]);

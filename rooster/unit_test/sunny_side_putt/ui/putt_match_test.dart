@@ -44,6 +44,22 @@ void main() {
     });
   });
 
+  group('reactions', () {
+    test('my reaction shows at once on a local match', () {
+      final match = PuttMatch.solo();
+      expect(match.react('cheer'), isTrue);
+      expect(match.reactions.single.playerId, 'me');
+      expect(match.reactions.single.reaction, 'cheer');
+    });
+
+    test('a reaction from the wire surfaces on the next frame', () {
+      final match = PuttMatch.solo();
+      match.engine.react('me', 'wow');
+      match.update(1 / 60);
+      expect(match.reactions.map((r) => r.reaction), contains('wow'));
+    });
+  });
+
   group('resets', () {
     test('a fast egg into the pond splashes there and pops up home', () {
       final match = PuttMatch.solo();

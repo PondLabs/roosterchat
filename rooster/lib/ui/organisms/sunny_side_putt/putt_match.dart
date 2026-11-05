@@ -183,8 +183,13 @@ class PuttMatch extends ChangeNotifier {
     if (paused) return;
     if (phase != PuttPhase.holePlay) {
       // Between holes the world is static; drop the leftover fraction so
-      // the next hole starts its clock fresh.
+      // the next hole starts its clock fresh. Moves that came in from the
+      // wire (reactions, mostly) still surface.
       _accumulator = 0;
+      if (engine.pendingEventCount > 0) {
+        drainEvents();
+        notifyListeners();
+      }
       return;
     }
     _accumulator += math.min(dt, 0.25); // clamp jank: no tick avalanches
@@ -532,6 +537,28 @@ class PuttMatch extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ---- reactions -----------------------------------------------------------------
+
+  /// Sends a quick reaction ([puttReactions]) from me: through the host on
+  /// a session, at once on a local match. Everyone sees it over my egg.
+  bool react(String reaction) {
+    if (remoteMove != null) {
+      remoteMove!(ReactInput(playerId: localPlayerId, reaction: reaction));
+      return true;
+    }
+    final accepted = engine.react(localPlayerId, reaction);
+    if (accepted) _afterInput();
+    return accepted;
+  }
+
+  /// The reactions of the last few seconds, oldest first: who, which, and
+  /// when (on [reactionClock]).
+  final List<PuttReaction> reactions = [];
+
+  /// The clock reactions are stamped with (seconds, wall time).
+  double get reactionClock =>
+      DateTime.now().microsecondsSinceEpoch / Duration.microsecondsPerSecond;
+
   // ---- events --------------------------------------------------------------------
 
   /// Empties the engine's event queue into [notices], [fxSpots], banner
@@ -631,6 +658,12 @@ class PuttMatch extends ChangeNotifier {
       case MatchEnded():
         _announce(PuttHeadlineKind.matchOver, labelPuttMatchOver());
         return PuttNotice(PuttSfx.victory, title: headline);
+      case PlayerReacted():
+        final now = reactionClock;
+        reactions
+          ..removeWhere((r) => now - r.at > PuttReaction.life)
+          ..add(PuttReaction(event.playerId, event.reaction, now));
+        return null;
       default:
         return null;
     }
@@ -640,6 +673,19 @@ class PuttMatch extends ChangeNotifier {
   /// to the loudest (the noise trimmer keeps at most one of each kind).
   bool _isRollNoise(PuttSfx sfx) =>
       sfx == PuttSfx.bounce || sfx == PuttSfx.bumper;
+}
+
+/// A quick reaction someone sent: who, which ([puttReactions]), and when
+/// (on [PuttMatch.reactionClock]).
+class PuttReaction {
+  final String playerId;
+  final String reaction;
+  final double at;
+
+  const PuttReaction(this.playerId, this.reaction, this.at);
+
+  /// How long a reaction's bubble stays up, seconds.
+  static const double life = 2.4;
 }
 
 /// The display name of a player id: the match's map, its roster lookup,

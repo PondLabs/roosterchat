@@ -269,6 +269,37 @@ void main() {
     });
   });
 
+  group('reactions', () {
+    test('a known reaction from someone in the match is an event', () {
+      final engine = PuttEngine(rulesConfig());
+      engine.join('p1');
+      engine.start();
+      engine.drainEvents();
+      expect(engine.react('p1', 'fire'), isTrue);
+      final events = engine.drainEvents().whereType<PlayerReacted>().toList();
+      expect(events.single.playerId, 'p1');
+      expect(events.single.reaction, 'fire');
+      // Nothing in the game changed.
+      expect(engine.strokesInHole('p1'), 0);
+    });
+
+    test('unknown reactions and strangers are refused', () {
+      final engine = PuttEngine(rulesConfig());
+      engine.join('p1');
+      engine.start();
+      expect(engine.react('p1', 'boo'), isFalse);
+      expect(engine.react('nobody', 'cheer'), isFalse);
+    });
+
+    test('a reaction rides the journal and the wire', () {
+      const input = ReactInput(playerId: 'p1', reaction: 'gg');
+      final back = EngineInput.fromJson(input.toJson());
+      expect(back, isA<ReactInput>());
+      expect((back as ReactInput).playerId, 'p1');
+      expect(back.reaction, 'gg');
+    });
+  });
+
   group('the results pause', () {
     PuttEngine endedHole({int scoreboardSeconds = 3}) {
       final engine = PuttEngine(rulesConfig(

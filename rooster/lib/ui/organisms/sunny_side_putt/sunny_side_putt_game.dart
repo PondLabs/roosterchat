@@ -53,6 +53,7 @@ import 'putt_hud.dart';
 import 'putt_match.dart';
 import 'putt_menus.dart';
 import 'putt_coach.dart';
+import 'putt_reactions.dart';
 import 'putt_name_tags.dart';
 import 'putt_reticle.dart';
 import 'putt_targeting.dart';
@@ -96,6 +97,19 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   /// The name tags' positions, refreshed after every rendered frame.
   final PuttTagBoard _tags = PuttTagBoard();
   final ValueNotifier<PuttCoachCue?> _coach = ValueNotifier(null);
+  final PuttBubbleBoard _bubbles = PuttBubbleBoard();
+
+  /// When the last reaction went (the keys share the picker's cooldown).
+  DateTime _lastReaction = DateTime.fromMillisecondsSinceEpoch(0);
+
+  void _react(String reaction) {
+    final now = DateTime.now();
+    if (now.difference(_lastReaction) < const Duration(milliseconds: 700)) {
+      return;
+    }
+    _lastReaction = now;
+    match.react(reaction);
+  }
 
   /// True while I aim or my egg rolls (the HUD folds its scorecard).
   final ValueNotifier<bool> _busy = ValueNotifier(false);
@@ -137,6 +151,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     _tags.dispose();
     _coach.dispose();
     _busy.dispose();
+    _bubbles.dispose();
     game.targeting.dispose();
     super.dispose();
   }
@@ -190,6 +205,21 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
       // C swaps between the close view and the whole hole.
       _toggleCamera();
       return KeyEventResult.handled;
+    }
+    if (event is KeyDownEvent) {
+      // 1-5 send the quick reactions.
+      const keys = [
+        LogicalKeyboardKey.digit1,
+        LogicalKeyboardKey.digit2,
+        LogicalKeyboardKey.digit3,
+        LogicalKeyboardKey.digit4,
+        LogicalKeyboardKey.digit5,
+      ];
+      final index = keys.indexOf(event.logicalKey);
+      if (index >= 0) {
+        _react(puttReactions[index]);
+        return KeyEventResult.handled;
+      }
     }
     return KeyEventResult.ignored;
   }
@@ -359,6 +389,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   void _afterFrame() {
     _tags.update(game.tagsForFrame(), avoid: game.tagObstacles());
     _coach.value = game.coachForFrame();
+    _bubbles.update(game.bubblesForFrame());
     final mine = game.match.myBall;
     _busy.value =
         game.aim.isActive || (mine != null && !mine.asleep && !mine.holed);
@@ -418,6 +449,8 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
               IgnorePointer(child: PuttNameTags(board: _tags)),
               // The putt's gesture, shown over my egg until I have it.
               PuttCoach(cue: _coach),
+              // Quick reactions over the eggs that sent them.
+              PuttBubbles(board: _bubbles),
               // Where an armed power-up would land, and what it reaches.
               ListenableBuilder(
                 listenable: Listenable.merge([match, game.targeting]),
@@ -456,6 +489,16 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
           cameraOverview: game.overview,
           onLeave: _leave,
         ),
+        // The quick reactions, under the top-right buttons, while a hole
+        // plays or its results are up.
+        if (!menuOpen &&
+            (match.phase == PuttPhase.holePlay ||
+                match.phase == PuttPhase.holeScoreboard))
+          Positioned(
+            top: 62,
+            right: 10,
+            child: SafeArea(child: PuttReactionPicker(onReact: _react)),
+          ),
         if (showVote)
           Center(
             child: PuttVoteSheet(
@@ -787,6 +830,41 @@ class SunnySidePuttGame extends FlameGame {
       ));
     }
     return tags;
+  }
+
+  /// The reactions' bubbles this frame: over the egg of whoever sent each
+  /// (over the nest once their egg is in; anyone without an egg on the
+  /// green - a spectator - is skipped).
+  List<PuttBubble> bubblesForFrame() {
+    final list = match.reactions;
+    if (list.isEmpty) return const [];
+    final now = match.reactionClock;
+    final hole = match.hole;
+    final world = match.engine.world;
+    final out = <PuttBubble>[];
+    var serial = 0;
+    for (final reaction in list) {
+      serial++;
+      final age = now - reaction.at;
+      if (age < 0 || age > PuttReaction.life) continue;
+      final ball = world?.ball(reaction.playerId);
+      core.Vec2? at;
+      if (ball != null && !ball.holed) {
+        at = match.renderPositionOf(reaction.playerId);
+      } else if (ball != null && hole != null) {
+        at = hole.nest.position;
+      }
+      if (at == null) continue;
+      final lift = eggRadius * 5.6;
+      if (!world3d.inFrontOfCamera(at, height: lift)) continue;
+      out.add(PuttBubble(
+        key: '${reaction.playerId}-${reaction.at}-$serial',
+        reaction: reaction.reaction,
+        at: world3d.projectToWorld(at, height: lift),
+        progress: age / PuttReaction.life,
+      ));
+    }
+    return out;
   }
 
   /// What the tags must leave clear: my own egg (with its pin above it).

@@ -6089,6 +6089,42 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelPuttReact": "React",
+  "@labelPuttReact": {
+    "description": "Tooltip of the button that opens the quick reactions a player can send in Sunny Side Putt (a bubble over their egg)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttReactCheer": "Cheer",
+  "@labelPuttReactCheer": {
+    "description": "A quick reaction in Sunny Side Putt: a party popper bubble over the player's egg",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttReactLaugh": "Ha!",
+  "@labelPuttReactLaugh": {
+    "description": "A quick reaction in Sunny Side Putt: a laughing face over the player's egg (after a funny shot)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttReactWow": "Wow",
+  "@labelPuttReactWow": {
+    "description": "A quick reaction in Sunny Side Putt: sparkles over the player's egg (for an impressive shot)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttReactFire": "On fire",
+  "@labelPuttReactFire": {
+    "description": "A quick reaction in Sunny Side Putt: a flame over the player's egg (someone is playing very well)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttReactNice": "Nice one",
+  "@labelPuttReactNice": {
+    "description": "A quick reaction in Sunny Side Putt: a thumbs up over the player's egg (praising another player's shot)",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelPuttTargetRabbitHole": "Tap a spot to hop your egg there",
   "@labelPuttTargetRabbitHole": {
     "description": "Hint line while the Rabbit Hole power-up waits for the spot on the green the player's egg pops up at (a few steps away at most)",

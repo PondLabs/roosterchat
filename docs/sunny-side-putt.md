@@ -35,6 +35,11 @@ results):
   session (a band sweeps across Continue as they run out), then the match
   moves on by itself; the host's Continue moves on at once. The pause
   rides the engine's snapshot, so a host handoff keeps it.
+- Quick reactions: a cheer, a laugh, a wow, fire or a nice one, from the
+  button under the pause button or the keys 1-5, pop as a bubble over the
+  sender's egg for everyone (over the nest once their egg is in). They
+  ride the engine's journal as `ReactInput`s and change nothing in the
+  game; the button keeps a short cooldown (`putt_reactions.dart`).
 - Mid-join: entering now puts you on the current hole's tee; the holes
   you missed score par.
 

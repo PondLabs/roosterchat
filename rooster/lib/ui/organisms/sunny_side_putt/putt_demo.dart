@@ -259,6 +259,9 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
       _myNextAt = _firstHole ? 5.6 : 3.2;
       _firstHole = false;
       _botShots.clear();
+      _holedSeen.clear();
+      _reactionsDue.clear();
+      _splashLaughed = false;
       _botNextAt.clear();
       _route = _routeOf(hole);
       _armed = false;
@@ -274,6 +277,7 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
     _armPowerUp(hole);
     if (!(_game?.targeting.isActive ?? false)) _driveMe(hole);
     _driveBots(hole);
+    _driveReactions();
   }
 
   /// The query's power-up, armed over the green at its moment, its reticle
@@ -485,6 +489,55 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
       }
     }
     return best;
+  }
+
+  /// Eggs already seen in the nest this hole, and the crew's reactions
+  /// waiting for their moment (hole time, who, which).
+  final Set<String> _holedSeen = {};
+  final List<(double, String, String)> _reactionsDue = [];
+  bool _splashLaughed = false;
+
+  /// The crew reacts the way friends on a call do: the scorer cheers (fire
+  /// for a hole in one), someone says nice one, and my sinks get a wow; a
+  /// splash gets a laugh.
+  void _driveReactions() {
+    final world = match.engine.world;
+    if (world == null) return;
+    final crew = [
+      for (final ball in world.balls)
+        if (ball.playerId != match.localPlayerId) ball.playerId,
+    ];
+    if (crew.isEmpty) return;
+    for (final ball in world.balls) {
+      if (!ball.holed || !_holedSeen.add(ball.playerId)) continue;
+      final strokes = match.engine.strokesInHole(ball.playerId);
+      final others = [
+        for (final id in crew)
+          if (id != ball.playerId) id,
+      ];
+      if (ball.playerId == match.localPlayerId) {
+        _reactionsDue.add((_holeTime + 0.5, crew.first, 'wow'));
+        if (crew.length > 1) {
+          _reactionsDue
+              .add((_holeTime + 1.1, crew[1], strokes == 1 ? 'fire' : 'gg'));
+        }
+      } else {
+        _reactionsDue.add(
+            (_holeTime + 0.3, ball.playerId, strokes == 1 ? 'fire' : 'cheer'));
+        if (others.isNotEmpty) {
+          _reactionsDue.add((_holeTime + 0.9, others.first, 'gg'));
+        }
+      }
+    }
+    if (_splashed && !_splashLaughed && crew.length > 1) {
+      _splashLaughed = true;
+      _reactionsDue.add((_holeTime + 0.7, crew[1], 'laugh'));
+    }
+    _reactionsDue.removeWhere((due) {
+      if (_holeTime < due.$1) return false;
+      match.engine.react(due.$2, due.$3);
+      return true;
+    });
   }
 
   /// The crew: putts along the hole's route (the furthest point of it in
