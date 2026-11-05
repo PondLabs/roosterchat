@@ -242,9 +242,11 @@ class _CourseKit {
             final depth = (-signed / 2.2).clamp(0.0, 1.0);
             bitmap.blend(col, row,
                 _mix(_Farm.shore, _Farm.waterDeep, 0.35 + depth * 0.6), 1);
-          } else if (signed < 0.75) {
-            final k = _softBand(signed, 0.45, 0.3);
-            bitmap.blend(col, row, _Farm.shore, k * 0.9);
+          } else if (signed < 0.5) {
+            // A narrow lip of wet sand: a causeway between two ponds keeps
+            // its green middle.
+            final k = _softBand(signed, 0.2, 0.14);
+            bitmap.blend(col, row, _mix(_Farm.shore, 0xC9B07A, 0.35), k * 0.85);
           }
         }
       }
@@ -1428,8 +1430,11 @@ class _CourseKit {
             (rect.height / 0.8).ceil().clamp(2, 80).toInt());
         center = rect.center;
       case WaterPolygon(:final points):
-        geometry = _polygonGeometry(points, flatOnXY: true);
         center = _centroid(points);
+        // Traced, not fanned: a pond cut round an island or a causeway is
+        // not star-shaped, and a fan from its centre laid water (and its
+        // white rim) over the land.
+        geometry = _tracedWaterGeometry(shape, center);
     }
     // Per-vertex colour: foam at the rim, deeper toward the middle.
     final position = geometry.attributes['position'] as tjs.BufferAttribute;
@@ -1476,7 +1481,13 @@ class _CourseKit {
     group.add(sheet);
 
     // The ripple: gentle crossing waves, normals refreshed so the sun's
-    // glints dance.
+    // glints dance. Still at the rim, full a unit in.
+    final rims = Float32List(count);
+    for (var i = 0; i < count; i++) {
+      rims[i] = (-_waterSignedDistance(
+              shape, Vec2(center.x + rest[i * 2], center.y - rest[i * 2 + 1])))
+          .clamp(0.0, 1.0);
+    }
     final phase = _rand.range(0, 6.28);
     var lastUpdate = -1.0;
     animated.add(_AnimatedBy((time, dt) {
@@ -1486,9 +1497,7 @@ class _CourseKit {
       for (var i = 0; i < count; i++) {
         final x = rest[i * 2];
         final y = rest[i * 2 + 1];
-        final rim =
-            (-_waterSignedDistance(shape, Vec2(center.x + x, center.y - y)))
-                .clamp(0.0, 1.0);
+        final rim = rims[i];
         final wave = (math.sin(x * 1.3 + time * 1.7 + phase) +
                 math.sin(y * 1.7 - time * 1.3 + phase * 0.7) * 0.8 +
                 math.sin((x + y) * 2.9 + time * 2.6) * 0.35) *
@@ -2278,29 +2287,108 @@ double _waterSignedDistance(WaterShape shape, Vec2 p) {
 /// A flat polygon as a triangle fan around [points]' centroid; with
 /// [flatOnXY] it lies in its own XY plane (centred on the centroid) like
 /// the plane geometries, else on the ground plane in world z.
-tjs.BufferGeometry _polygonGeometry(List<Vec2> points,
-    {bool flatOnXY = false}) {
-  if (points.length < 3) return tjs.BufferGeometry();
-  final center = _centroid(points);
+/// A pond's surface traced over a grid (marching squares, each crossing
+/// found along its cell edge by bisection), in the plane's local
+/// coordinates round [center] (x across, y = the game's -y): any outline,
+/// convex or not, holes and all. Indexed, so the ripple stays seamless.
+tjs.BufferGeometry _tracedWaterGeometry(WaterShape shape, Vec2 center) {
+  const cell = 0.3;
+  final box = _waterBox(shape);
+  final x0 = box.min.x - cell;
+  final y0 = box.min.y - cell;
+  final cols = ((box.width + cell * 2) / cell).ceil();
+  final rows = ((box.height + cell * 2) / cell).ceil();
+  bool inside(Vec2 p) => shape.contains(p);
+  final grid = List<bool>.generate(
+      (cols + 1) * (rows + 1),
+      (i) => inside(
+          Vec2(x0 + (i % (cols + 1)) * cell, y0 + (i ~/ (cols + 1)) * cell)));
+  bool at(int c, int r) => grid[r * (cols + 1) + c];
+  Vec2 corner(int c, int r) => Vec2(x0 + c * cell, y0 + r * cell);
+
   final positions = <double>[];
-  final normals = <double>[];
-  for (var i = 0; i < points.length; i++) {
-    final p0 = points[i];
-    final p1 = points[(i + 1) % points.length];
-    if (flatOnXY) {
-      // Local +y is world -z: flip the game's y.
-      positions.addAll([0, 0, 0]);
-      positions.addAll([p0.x - center.x, center.y - p0.y, 0]);
-      positions.addAll([p1.x - center.x, center.y - p1.y, 0]);
-      normals.addAll([0, 0, 1, 0, 0, 1, 0, 0, 1]);
-    } else {
-      positions.addAll([center.x, 0, center.y]);
-      positions.addAll([p0.x, 0, p0.y]);
-      positions.addAll([p1.x, 0, p1.y]);
-      normals.addAll([0, 1, 0, 0, 1, 0, 0, 1, 0]);
+  final indices = <int>[];
+  final ids = <int, int>{};
+  // Vertices keyed on a half-cell lattice: corners at even, edge
+  // crossings at odd coordinates, so neighbours share them.
+  int vertex(int key, Vec2 p) => ids.putIfAbsent(key, () {
+        positions.addAll([p.x - center.x, center.y - p.y, 0]);
+        return positions.length ~/ 3 - 1;
+      });
+  int cornerId(int c, int r) =>
+      vertex((r * 2) * (cols * 2 + 3) + c * 2, corner(c, r));
+  int crossId(int c0, int r0, int c1, int r1) {
+    final a = corner(c0, r0);
+    final b = corner(c1, r1);
+    var lo = a, hi = b;
+    if (!at(c0, r0)) {
+      lo = b;
+      hi = a;
+    }
+    for (var k = 0; k < 6; k++) {
+      final m = (lo + hi) * 0.5;
+      if (inside(m)) {
+        lo = m;
+      } else {
+        hi = m;
+      }
+    }
+    return vertex((r0 + r1) * (cols * 2 + 3) + (c0 + c1), (lo + hi) * 0.5);
+  }
+
+  for (var r = 0; r < rows; r++) {
+    for (var c = 0; c < cols; c++) {
+      final s0 = at(c, r), s1 = at(c + 1, r);
+      final s2 = at(c + 1, r + 1), s3 = at(c, r + 1);
+      final index = (s0 ? 1 : 0) | (s1 ? 2 : 0) | (s2 ? 4 : 0) | (s3 ? 8 : 0);
+      if (index == 0) continue;
+      int v0() => cornerId(c, r);
+      int v1() => cornerId(c + 1, r);
+      int v2() => cornerId(c + 1, r + 1);
+      int v3() => cornerId(c, r + 1);
+      int e0() => crossId(c, r, c + 1, r);
+      int e1() => crossId(c + 1, r, c + 1, r + 1);
+      int e2() => crossId(c, r + 1, c + 1, r + 1);
+      int e3() => crossId(c, r, c, r + 1);
+      final polygon = switch (index) {
+        15 => [v0(), v1(), v2(), v3()],
+        1 => [v0(), e0(), e3()],
+        2 => [e0(), v1(), e1()],
+        4 => [e1(), v2(), e2()],
+        8 => [e3(), e2(), v3()],
+        3 => [v0(), v1(), e1(), e3()],
+        6 => [e0(), v1(), v2(), e2()],
+        12 => [e3(), e1(), v2(), v3()],
+        9 => [v0(), e0(), e2(), v3()],
+        7 => [v0(), v1(), v2(), e2(), e3()],
+        14 => [e0(), v1(), v2(), v3(), e3()],
+        13 => [v0(), e0(), e1(), v2(), v3()],
+        11 => [v0(), v1(), e1(), e2(), v3()],
+        5 => [v0(), e0(), e1(), v2(), e2(), e3()],
+        10 => [e0(), v1(), e1(), e2(), v3(), e3()],
+        _ => const <int>[],
+      };
+      for (var i = 1; i + 1 < polygon.length; i++) {
+        var a = polygon[0], b = polygon[i], d = polygon[i + 1];
+        // Wound to face the plane's +z (the world's up once laid down).
+        final ax = positions[a * 3], ay = positions[a * 3 + 1];
+        final cross = (positions[b * 3] - ax) * (positions[d * 3 + 1] - ay) -
+            (positions[b * 3 + 1] - ay) * (positions[d * 3] - ax);
+        if (cross < 0) {
+          final t = b;
+          b = d;
+          d = t;
+        }
+        indices.addAll([a, b, d]);
+      }
     }
   }
+  final normals = List<double>.filled(positions.length, 0);
+  for (var i = 2; i < normals.length; i += 3) {
+    normals[i] = 1;
+  }
   return tjs.BufferGeometry()
+    ..setIndex(indices)
     ..setAttributeFromString(
         'position', tjs.Float32BufferAttribute.fromList(positions, 3, false))
     ..setAttributeFromString(
