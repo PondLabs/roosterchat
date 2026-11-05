@@ -891,13 +891,14 @@ class _PuttMiddle extends StatefulWidget {
 class _PuttMiddleState extends State<_PuttMiddle>
     with SingleTickerProviderStateMixin {
   // The card waits for the last sink's celebration (the egg hatching in
-  // the nest) before it rises over the green.
+  // the nest, the camera in close on it) before it rises over the green:
+  // early, it stood over the chick and the nest (round 5's play-013800).
   late final AnimationController _clock = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 2700),
+    duration: const Duration(milliseconds: 3600),
   );
 
-  /// The results card fades in over the clock's last fifth (about 240 ms).
+  /// The results card fades in over the clock's last fifth (about 0.7 s).
   static const _reveal = Interval(0.8, 1, curve: Curves.easeOutCubic);
 
   bool _reduceMotion = false;
@@ -1448,7 +1449,9 @@ class _PuttCard extends StatelessWidget {
         maxWidth: 470,
         maxHeight: math.max(0.0, (maxHeight ?? double.infinity) - 12),
       ),
-      decoration: _panel(alpha: 0.94, radius: 22),
+      // Solid, like the HUD's other panels: what stood behind it showed
+      // through its rows.
+      decoration: _panel(alpha: 0.98, radius: 22),
       child: child,
     );
   }

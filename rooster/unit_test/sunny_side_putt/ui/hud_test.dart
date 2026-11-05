@@ -249,7 +249,7 @@ void main() {
       await tester.pump();
       // A beat for the banner (and the last sink's hatch), then the card
       // rises in.
-      await tester.pump(const Duration(milliseconds: 2800));
+      await tester.pump(const Duration(milliseconds: 3700));
       expect(
           tester
               .widget<Text>(find.byKey(const Key('putt-results-subtitle')))
@@ -292,7 +292,7 @@ void main() {
         home: Scaffold(body: PuttHud(match: match, onOpenMenu: () {})),
       ));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 2800));
+      await tester.pump(const Duration(milliseconds: 3700));
       expect(find.text('Continue · 8'), findsOneWidget);
 
       // Three seconds of the match (its updates take small steps).
