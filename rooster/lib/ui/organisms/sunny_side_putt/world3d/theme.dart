@@ -195,36 +195,40 @@ class _Theme {
     hillFar: 0xB4B383,
   );
 
-  /// Dusk at the barn: the sun nearly down, the sky deepening, lanterns
-  /// glowing warm along the yard.
+  /// Dusk at the barn: the sun going down behind the barn in a plum and
+  /// amber sky, its last light warm and low across the yard, the shade
+  /// side violet, lanterns glowing along the yard. (An orange sun from the
+  /// side over an olive bounce read olive-grey and flat, round 5.)
   static const barn = _Theme(
     kind: _ThemeKind.barn,
-    skyTop: 0x243F7C,
-    skyMid: 0xC97B6C,
-    horizon: 0xFFB27A,
-    clouds: 0xE9AE9A,
-    sun: 0xFF8E4E,
-    sunIntensity: 0.62,
-    sunFrom: (34, 11, 8),
-    hemiSky: 0x8C9BD6,
-    // A lighter bounce and a touch more fill: the shade side of the green
-    // and the near corners still read near-black (round 4).
-    hemiGround: 0x5E6044,
-    hemiIntensity: 0.82,
-    exposure: 1.0,
+    skyTop: 0x35306E,
+    skyMid: 0xB8627E,
+    horizon: 0xFFB063,
+    clouds: 0xF0A48E,
+    sun: 0xFF8A62,
+    sunIntensity: 0.78,
+    // Low, from behind the barn on the far side of the green.
+    sunFrom: (24, 9, -44),
+    // A soft violet fill (whites stay pale, the host white, not lilac).
+    hemiSky: 0xACA4D4,
+    // The bounce violet, not olive: the shade side reads as dusk, not mud.
+    hemiGround: 0x5C5272,
+    hemiIntensity: 0.95,
+    exposure: 1.06,
     rails: _RailStyle.barnBoard,
-    turfLight: 0x6FB447,
-    turfDark: 0x5EA23E,
-    turfFringe: 0x4A8A31,
-    meadow: 0x6E9E52,
-    meadowDeep: 0x548A48,
-    meadowDry: 0x92A464,
-    hillFar: 0x8E9E78,
+    // The lawn a fifth more saturated than before.
+    turfLight: 0x72C63E,
+    turfDark: 0x5EB234,
+    turfFringe: 0x47962A,
+    meadow: 0x6FAE4A,
+    meadowDeep: 0x50993E,
+    meadowDry: 0x9AB25A,
+    hillFar: 0x8A84A2,
     eggGlow: 0x8C8274,
-    // The blue hour behind the green, edging what the low sun misses.
-    rim: 0x8EA2FF,
-    rimIntensity: 0.6,
-    rimFrom: (-22, 16, -42),
+    // A cool edge from behind the other side, on what the sun misses.
+    rim: 0xA6A0F0,
+    rimIntensity: 0.45,
+    rimFrom: (-24, 14, -40),
   );
 }
 
