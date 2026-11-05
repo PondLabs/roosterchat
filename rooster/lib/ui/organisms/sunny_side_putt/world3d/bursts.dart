@@ -38,6 +38,10 @@ class _BurstParticle {
   /// The ground's height where it lands.
   final double floor;
   double age = 0;
+
+  /// When it came down on the ground (its age then), if it has: paper
+  /// that lands fades away rather than litter the lawn.
+  double? landed;
 }
 
 class _Bursts {
@@ -104,9 +108,9 @@ class _Bursts {
     // A crown more than a column: up and outward from the nest's rim, so
     // it spreads across the close-up the camera takes and leaves the cup
     // (and the chick hatching in it) clear.
-    for (var i = 0; i < 110; i++) {
+    for (var i = 0; i < 84; i++) {
       final angle = _rand.range(0, math.pi * 2);
-      final spread = _rand.range(2.0, 6.0);
+      final spread = _rand.range(1.5, 4.2);
       _live.add(_BurstParticle(
         x: at.x + math.cos(angle) * radius * 0.9,
         y: floor + 0.4,
@@ -150,6 +154,9 @@ class _Bursts {
     }
   }
 
+  /// How long paper that has landed takes to fade away, seconds.
+  static const double _landedFade = 0.45;
+
   void update(double dt, double time) {
     for (final p in _live) {
       p.age += dt;
@@ -167,9 +174,12 @@ class _Bursts {
         p.vx = 0;
         p.vz = 0;
         p.vy = 0;
+        p.landed ??= p.age;
       }
     }
-    _live.removeWhere((p) => p.age >= p.life);
+    _live.removeWhere((p) =>
+        p.age >= p.life ||
+        (p.landed != null && p.age - p.landed! > _landedFade));
     var soft = 0;
     var paper = 0;
     // The confetti (paper that does not fade) claims its sprites first: a
@@ -188,9 +198,14 @@ class _Bursts {
       final t = (p.age / p.life).clamp(0.0, 1.0);
       sprite.visible = true;
       sprite.position.setValues(p.x, p.y, p.z);
+      final landed = p.landed;
+      final down = landed == null
+          ? 1.0
+          : (1 - (p.age - landed) / _landedFade).clamp(0.0, 1.0);
       sprite.look
         ..color = _lin(p.hex)
-        ..opacity = p.fade ? (1 - t) * 0.9 : (t < 0.8 ? 1.0 : (1 - t) * 5);
+        ..opacity = (p.fade ? (1 - t) * 0.9 : (t < 0.8 ? 1.0 : (1 - t) * 5)) *
+            (p.paper ? down : 1.0);
       if (p.paper) sprite.roll = p.age * 7 + p.x;
       if (p.paper) {
         // A paper square tumbling: one axis breathes as it turns.
