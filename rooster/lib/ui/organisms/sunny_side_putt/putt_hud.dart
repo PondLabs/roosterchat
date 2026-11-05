@@ -2188,11 +2188,18 @@ class _PowerSlot extends StatefulWidget {
   State<_PowerSlot> createState() => _PowerSlotState();
 }
 
-class _PowerSlotState extends State<_PowerSlot>
-    with SingleTickerProviderStateMixin {
+class _PowerSlotState extends State<_PowerSlot> with TickerProviderStateMixin {
   late final AnimationController _glow = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 900),
+  );
+
+  /// A power-up just in the slot says its name above it for a moment: the
+  /// icons alone told a new player nothing (and on a touch screen there is
+  /// no hover for the tooltip).
+  late final AnimationController _fresh = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2400),
   );
 
   bool _reduceMotion = false;
@@ -2208,6 +2215,9 @@ class _PowerSlotState extends State<_PowerSlot>
   void didUpdateWidget(covariant _PowerSlot oldWidget) {
     super.didUpdateWidget(oldWidget);
     _syncGlow();
+    if (widget.effectId != null && widget.effectId != oldWidget.effectId) {
+      _fresh.forward(from: 0);
+    }
   }
 
   void _syncGlow() {
@@ -2221,7 +2231,40 @@ class _PowerSlotState extends State<_PowerSlot>
   @override
   void dispose() {
     _glow.dispose();
+    _fresh.dispose();
     super.dispose();
+  }
+
+  /// The new power-up's name over the slot: in, a hold, out.
+  Widget _freshName(String name) {
+    return AnimatedBuilder(
+      animation: _fresh,
+      builder: (context, child) {
+        final t = _fresh.value;
+        if (!_fresh.isAnimating || t >= 1) return const SizedBox.shrink();
+        final appear = (t / 0.1).clamp(0.0, 1.0);
+        final leave = ((t - 0.8) / 0.2).clamp(0.0, 1.0);
+        return Opacity(
+          opacity: appear * (1 - leave),
+          child: Transform.translate(
+            offset: Offset(0, _reduceMotion ? 0 : 6 * (1 - appear)),
+            child: child,
+          ),
+        );
+      },
+      child: Container(
+        key: const Key('putt-slot-fresh'),
+        padding: const EdgeInsets.fromLTRB(10, 5, 10, 6),
+        decoration: BoxDecoration(
+          color: PuttPalette.ink.withValues(alpha: 0.94),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: PuttPalette.yolk, width: 1.5),
+          boxShadow: _shadow,
+        ),
+        child: Text(name,
+            maxLines: 1, softWrap: false, style: _Type.body(12.5, weight: 800)),
+      ),
+    );
   }
 
   @override
@@ -2278,6 +2321,19 @@ class _PowerSlotState extends State<_PowerSlot>
       },
       child: PuttPowerUpIcon(effectId: effectId, size: 28),
     );
+    final named = Stack(
+      clipBehavior: Clip.none,
+      children: [
+        slot,
+        // Stepped up slot by slot: three filled at once never overlap.
+        Positioned(
+          left: -80,
+          right: -80,
+          bottom: _slotSize + 8 + widget.index * 32,
+          child: IgnorePointer(child: Center(child: _freshName(name))),
+        ),
+      ],
+    );
     return Tooltip(
       preferBelow: false,
       waitDuration: const Duration(milliseconds: 250),
@@ -2302,7 +2358,7 @@ class _PowerSlotState extends State<_PowerSlot>
             key: key,
             behavior: HitTestBehavior.opaque,
             onTap: enabled ? () => widget.onTap!(widget.index, effectId) : null,
-            child: Opacity(opacity: widget.enabled ? 1 : 0.5, child: slot),
+            child: Opacity(opacity: widget.enabled ? 1 : 0.5, child: named),
           ),
         ),
       ),

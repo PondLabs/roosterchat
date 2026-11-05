@@ -15,6 +15,30 @@ import 'package:rooster/ui/organisms/sunny_side_putt/spectator_strip.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/stub_courses.dart';
 
 void main() {
+  testWidgets("a power-up just in the carton says its name, then goes",
+      (tester) async {
+    Widget carton(List<String> slots) => MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.bottomRight,
+              child: Padding(
+                padding: const EdgeInsets.all(120),
+                child: PuttInventory(slots: slots),
+              ),
+            ),
+          ),
+        );
+    await tester.pumpWidget(carton(const []));
+    expect(find.byKey(const Key('putt-slot-fresh')), findsNothing);
+    await tester.pumpWidget(carton(const ['gust']));
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.byKey(const Key('putt-slot-fresh')), findsOneWidget);
+    expect(find.text(puttPowerUpName('gust')), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.byKey(const Key('putt-slot-fresh')), findsNothing,
+        reason: 'a moment, then the icon alone');
+  });
+
   group('timer ring', () {
     testWidgets('calm while the hole is young', (tester) async {
       final match = PuttMatch.solo();
