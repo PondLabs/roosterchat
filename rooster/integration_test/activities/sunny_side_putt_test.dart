@@ -182,7 +182,12 @@ void main() {
     }
 
     // Bob joins the call through the same seam the page's Join button calls
-    // (the room's voip component), since he has no UI of his own.
+    // (the room's voip component), since he has no UI of his own. Both are
+    // signed in to this one app, which otherwise takes them for one person
+    // (in one voice channel at a time): bob's join would hang alice up.
+    final callManager = app.clientManager.callManager;
+    callManager.accountsAreSeparatePeople = true;
+    addTearDown(() => callManager.accountsAreSeparatePeople = false);
     final bobVoip = bobRoom.getComponent<VoipRoomComponent>();
     expect(bobVoip, isNotNull);
     addTearDown(() async {

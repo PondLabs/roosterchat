@@ -35,8 +35,9 @@ void main() {
   final otherAccount = _Client('other');
 
   List<String> leaving(List<VoipSession> sessions,
-          {Client? on, String? join}) =>
-      CallManager.callsToLeave(sessions, on ?? me, join ?? '!new')
+          {Client? on, String? join, bool onlyThisAccount = false}) =>
+      CallManager.callsToLeave(sessions, on ?? me, join ?? '!new',
+              onlyThisAccount: onlyThisAccount)
           .map((s) => '${s.client.identifier}${s.roomId}')
           .toList();
 
@@ -93,5 +94,16 @@ void main() {
       _Session(me, '!new', VoipState.connected),
     ];
     expect(leaving(sessions), ['me!old', 'other!theirs']);
+  });
+
+  test(
+      'with the accounts as separate people (the voice e2e), only this '
+      "account's other calls go", () {
+    final sessions = [
+      _Session(me, '!old', VoipState.connected),
+      _Session(otherAccount, '!new', VoipState.connected),
+      _Session(otherAccount, '!theirs', VoipState.connected),
+    ];
+    expect(leaving(sessions, onlyThisAccount: true), ['me!old']);
   });
 }

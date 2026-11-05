@@ -223,26 +223,35 @@ class _CallSessionPanelState extends State<CallSessionPanel>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Flexible(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    pickAnimation(
-                        entry: widget.session,
-                        child: SizedBox(
-                          height: widget.height,
-                          width: widget.height,
-                          child: Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: buildActivityIndicator(context),
-                          ),
-                        )),
-                    // The status row above names the room.
-                    if (widget.session is! CallConnection)
-                      Flexible(
-                        child: tiamat.Text(widget.session.roomName,
-                            overflow: TextOverflow.ellipsis),
-                      ),
-                  ],
+                // The sidebar with every button on show (seven on the
+                // desktop) leaves less than the indicator's width: it steps
+                // aside then, rather than overflow the row. The mute and
+                // deafen buttons say as much.
+                child: LayoutBuilder(
+                  builder: (context, constraints) =>
+                      constraints.maxWidth < widget.height
+                          ? const SizedBox.shrink()
+                          : Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                pickAnimation(
+                                    entry: widget.session,
+                                    child: SizedBox(
+                                      height: widget.height,
+                                      width: widget.height,
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(8.0),
+                                        child: buildActivityIndicator(context),
+                                      ),
+                                    )),
+                                // The status row above names the room.
+                                if (widget.session is! CallConnection)
+                                  Flexible(
+                                    child: tiamat.Text(widget.session.roomName,
+                                        overflow: TextOverflow.ellipsis),
+                                  ),
+                              ],
+                            ),
                 ),
               ),
               Row(
