@@ -1097,9 +1097,20 @@ void main() {
     test("the aim traces the viewer's last roll, in their colour", () {
       final world = builtWorld();
       addTearDown(world.dispose);
-      List<tjs.Object3D> traced() => walk(world.scene)
-          .where((o) => o.name == 'aim-trace' && o.visible)
-          .toList();
+      // The dots, merged: a centre and ten rim points each.
+      List<tjs.Vector3> traced() {
+        final mesh = walk(world.scene)
+            .where((o) => o.name == 'aim-trace' && o.visible)
+            .firstOrNull;
+        final position = mesh?.geometry?.attributes['position'];
+        if (position == null) return const [];
+        return [
+          for (var i = 0; i < position.count; i += 11)
+            tjs.Vector3(position.getX(i)!.toDouble(),
+                position.getY(i)!.toDouble(), position.getZ(i)!.toDouble()),
+        ];
+      }
+
       PuttWorldFrame frame(List<List<Vec2>> trace) => PuttWorldFrame(
             time: 0,
             eggs: [eggAt(const Vec2(10, 10), mine: true)],
@@ -1124,14 +1135,20 @@ void main() {
       expect(dots.length, greaterThan(15));
       // Laid along the stretches, relative to the aim's origin.
       for (final dot in dots) {
-        final x = dot.position.x + 10;
-        final z = dot.position.z + 10;
-        final onFirst = (z - 10).abs() < 1e-6 && x >= 4 - 1e-6 && x <= 10;
-        final onSecond = (z - 4).abs() < 1e-6 && x >= 20 - 1e-6 && x <= 22;
+        final x = dot.x + 10;
+        final z = dot.z + 10;
+        final onFirst = (z - 10).abs() < 1e-5 && x >= 4 - 1e-5 && x <= 10;
+        final onSecond = (z - 4).abs() < 1e-5 && x >= 20 - 1e-5 && x <= 22;
         expect(onFirst || onSecond, isTrue, reason: 'at ($x, $z)');
       }
-      expect(dots.first.material!.opacity, lessThan(0.9),
-          reason: "softer than the guide's dots");
+      // The viewer's own mark: each dot on an ink ring, all of it in two
+      // draws.
+      final ink = walk(world.scene)
+          .where((o) => o.name == 'aim-trace-ink' && o.visible)
+          .toList();
+      expect(ink, hasLength(1));
+      expect(
+          walk(world.scene).where((o) => o.name == 'aim-trace'), hasLength(1));
     });
 
     test("only the viewer's egg shows through what hides it", () {

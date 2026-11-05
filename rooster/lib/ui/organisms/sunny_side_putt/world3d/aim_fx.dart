@@ -202,28 +202,41 @@ class _PuttAimView3D {
       _dots.add(dot);
       group.add(dot);
     }
-    for (var i = 0; i < _traceCount; i++) {
-      final dot = tjs.Mesh(_traceGeometry, _traceMaterial)
-        ..name = 'aim-trace'
-        ..rotation.x = -math.pi / 2
-        ..renderOrder = 3
-        ..visible = false;
-      _traceDots.add(dot);
-      group.add(dot);
-    }
+    // The last roll: its dots merged, an ink ring under each disc in the
+    // viewer's colour (two draws for all of it; rebuilt only when the
+    // trace or the egg it is drawn from changes).
+    _traceInk = tjs.Mesh(tjs.BufferGeometry(), _traceInkMaterial)
+      ..name = 'aim-trace-ink'
+      ..renderOrder = 3
+      ..visible = false;
+    _traceFill = tjs.Mesh(tjs.BufferGeometry(), _traceMaterial)
+      ..name = 'aim-trace'
+      ..renderOrder = 4
+      ..visible = false;
+    group
+      ..add(_traceInk)
+      ..add(_traceFill);
   }
 
   static const int _dotCount = 44;
 
-  /// The last roll's trace: small dots in the viewer's colour, a shared
-  /// material, under the guide.
+  /// The last roll's trace: dots in the viewer's colour on ink rings,
+  /// under the guide - the viewer's own mark, apart from the sprays and
+  /// rings of the effects (small and faint, it was lost on bright turf).
   static const int _traceCount = 90;
-  static final tjs.BufferGeometry _traceGeometry =
-      tjg.CircleGeometry(radius: 0.12, segments: 10);
+  static const double _traceRadius = 0.17;
+  static const double _traceInkRadius = 0.24;
   final tjs.MeshBasicMaterial _traceMaterial =
-      _unlit(0xFFF8EE, opacity: 0.8, depthWrite: false);
-  final List<tjs.Mesh> _traceDots = [];
+      _unlit(0xFFF8EE, opacity: 0.95, depthWrite: false);
+  final tjs.MeshBasicMaterial _traceInkMaterial =
+      _unlit(_hexOf(PuttPalette.ink), opacity: 0.7, depthWrite: false);
+  late final tjs.Mesh _traceFill;
+  late final tjs.Mesh _traceInk;
   int _traceHex = -1;
+  Object? _traceKey;
+
+  /// How many dots the trace draws now (tests read it).
+  int traceDotsShown = 0;
 
   static final tjs.BufferGeometry _dotGeometry =
       tjg.CircleGeometry(radius: 0.15, segments: 12);
@@ -250,51 +263,89 @@ class _PuttAimView3D {
   double _fillPower = -1;
   final double _eggRadius;
 
-  /// The viewer's last roll on this hole, faint dots in their colour
-  /// along each stretch (spaced wider on a long roll, so the pool covers
-  /// all of it).
+  /// The viewer's last roll on this hole, dots in their colour along each
+  /// stretch (spaced wider on a long roll, so the count covers all of it).
   void _syncTrace(PuttWorldAim aim, _Ground terrain, double floor) {
-    var shown = 0;
     final trace = aim.trace;
-    if (trace.isNotEmpty) {
-      final tint = aim.traceTint;
-      // A shade darker than the player's colour: a pale yolk on light
-      // turf all but vanished.
-      final hex = tint == null
-          ? 0xFFF8EE
-          : _mix(_hexOf(tint), _hexOf(PuttPalette.ink), 0.25);
-      if (hex != _traceHex) {
-        _traceHex = hex;
-        _traceMaterial.color = _lin(hex);
-      }
-      var total = 0.0;
-      for (final stretch in trace) {
-        total += _pathLength(stretch);
-      }
-      final spacing = math.max(0.42, total / _traceCount);
-      for (final stretch in trace) {
-        var carried = 0.0;
-        for (var i = 1; i < stretch.length && shown < _traceCount; i++) {
-          final a = stretch[i - 1];
-          final b = stretch[i];
-          final segment = a.distanceTo(b);
-          if (segment <= 1e-6) continue;
-          var t = carried;
-          while (t <= segment && shown < _traceCount) {
-            final p = a + (b - a) * (t / segment);
-            t += spacing;
-            _traceDots[shown++]
-              ..visible = true
-              ..position.setValues(p.x - aim.origin.x,
-                  terrain.at(p) - floor + 0.03, p.y - aim.origin.y);
-          }
-          carried = t - segment;
+    if (trace.isEmpty) {
+      _traceFill.visible = false;
+      _traceInk.visible = false;
+      traceDotsShown = 0;
+      _traceKey = null;
+      return;
+    }
+    final tint = aim.traceTint;
+    // A shade darker than the player's colour: a pale yolk on light turf
+    // all but vanished.
+    final hex = tint == null
+        ? 0xFFF8EE
+        : _mix(_hexOf(tint), _hexOf(PuttPalette.ink), 0.25);
+    if (hex != _traceHex) {
+      _traceHex = hex;
+      _traceMaterial.color = _lin(hex);
+    }
+    _traceFill.visible = true;
+    _traceInk.visible = true;
+    final key = (identityHashCode(trace), aim.origin.x, aim.origin.y, floor);
+    if (key == _traceKey) return;
+    _traceKey = key;
+    var total = 0.0;
+    for (final stretch in trace) {
+      total += _pathLength(stretch);
+    }
+    final spacing = math.max(0.42, total / _traceCount);
+    final spots = <(double, double, double)>[];
+    for (final stretch in trace) {
+      var carried = 0.0;
+      for (var i = 1; i < stretch.length && spots.length < _traceCount; i++) {
+        final a = stretch[i - 1];
+        final b = stretch[i];
+        final segment = a.distanceTo(b);
+        if (segment <= 1e-6) continue;
+        var t = carried;
+        while (t <= segment && spots.length < _traceCount) {
+          final p = a + (b - a) * (t / segment);
+          t += spacing;
+          spots.add((
+            p.x - aim.origin.x,
+            terrain.at(p) - floor + 0.03,
+            p.y - aim.origin.y
+          ));
         }
+        carried = t - segment;
       }
     }
-    for (var i = shown; i < _traceDots.length; i++) {
-      _traceDots[i].visible = false;
+    traceDotsShown = spots.length;
+    _traceFill.geometry?.dispose();
+    _traceInk.geometry?.dispose();
+    _traceFill.geometry = _discs(spots, _traceRadius, 0.004);
+    _traceInk.geometry = _discs(spots, _traceInkRadius, 0);
+  }
+
+  /// Flat discs of [radius] at [spots] (local x, height, z), lifted by
+  /// [lift], as one geometry.
+  static tjs.BufferGeometry _discs(
+      List<(double, double, double)> spots, double radius, double lift) {
+    const sides = 10;
+    final positions = <double>[];
+    final indices = <int>[];
+    for (final (x, y, z) in spots) {
+      final centre = positions.length ~/ 3;
+      positions.addAll([x, y + lift, z]);
+      for (var k = 0; k < sides; k++) {
+        final a = k / sides * 2 * math.pi;
+        positions.addAll(
+            [x + math.cos(a) * radius, y + lift, z + math.sin(a) * radius]);
+      }
+      for (var k = 0; k < sides; k++) {
+        // Wound to face up.
+        indices.addAll([centre, centre + 1 + (k + 1) % sides, centre + 1 + k]);
+      }
     }
+    return tjs.BufferGeometry()
+      ..setAttributeFromString(
+          'position', tjs.Float32BufferAttribute.fromList(positions, 3, false))
+      ..setIndex(indices);
   }
 
   /// A flat triangle pointing +x, [length] long and [width] wide, its base
