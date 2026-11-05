@@ -1485,7 +1485,7 @@ class SunnySidePuttGame extends FlameGame {
     if (who == null || at == null) return;
     switch (spot.effectId) {
       case 'corn_rain':
-        fx.kernels(at, count: 16);
+        fx.kernels(at, count: 16, inside: match.hole?.bounds);
       case 'gust':
         final toward = _castSpots[spot.other];
         if (toward != null) fx.windBehind(at, toward);
@@ -2123,14 +2123,26 @@ class PuttFxLayer {
   // ---- the casts' particles ----------------------------------------------------------
 
   /// Corn Rain round an egg at [at]: kernels dropping out of the sky on
-  /// staggered beats, bouncing twice and lying a moment.
-  void kernels(core.Vec2 at, {int count = 10}) {
+  /// staggered beats, bouncing twice and lying a moment, inside [inside]
+  /// (the hole's bounds: an egg by the wall threw them over it).
+  void kernels(core.Vec2 at, {int count = 10, core.Rect? inside}) {
     for (var i = 0; i < count; i++) {
       final angle = _random.nextDouble() * 2 * math.pi;
       final reach = 0.35 + _random.nextDouble() * 1.4;
       final scatter = _random.nextDouble() * 2 * math.pi;
+      var spot = at + core.Vec2(math.cos(angle), math.sin(angle)) * reach;
+      const margin = 1.6;
+      if (inside != null &&
+          inside.width > margin * 2 &&
+          inside.height > margin * 2) {
+        // Kept a bounce's length inside the walls.
+        spot = core.Vec2(
+          spot.x.clamp(inside.min.x + margin, inside.max.x - margin).toDouble(),
+          spot.y.clamp(inside.min.y + margin, inside.max.y - margin).toDouble(),
+        );
+      }
       _particles.add(_FxParticle(
-        at: at + core.Vec2(math.cos(angle), math.sin(angle)) * reach,
+        at: spot,
         velocity: core.Vec2.zero,
         life: 1.8 + _random.nextDouble() * 0.5,
         kind: _FxKind.kernel,
