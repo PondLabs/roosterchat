@@ -233,13 +233,30 @@ class _EggView3D {
 
   /// The trail's recent spots and their ages, newest last.
   /// The trail's spots: where, how old, and for a flight the height it
-  /// was drawn at (null: a turf fleck on the ground).
+  /// was drawn at (null: on the ground - a turf fleck, every other one a
+  /// puff in the player's colour).
   final List<(Vec2, double, double?)> _trailSpots = [];
+
+  /// Counts the ground spots, so they alternate fleck and colour.
+  int _trailCount = 0;
 
   /// The turf flecks' colour, and the flight's puffs' (a cream wisp of
   /// air behind the egg).
   late final tjs.Color _turfColor;
   static final tjs.Color _airColor = _lin(0xFFF8EE);
+
+  /// The trail's puffs in the player's colour, lightened a little (made
+  /// again only when the colour changes).
+  tjs.Color get _tintGlow {
+    if (_trailTintHex != _tintHex) {
+      _trailTintHex = _tintHex;
+      _trailTint = _lin(_mix(_tintHex, 0xFFFFFF, 0.25));
+    }
+    return _trailTint!;
+  }
+
+  tjs.Color? _trailTint;
+  int _trailTintHex = -1;
   double _sinceSpot = 0;
 
   /// Where the egg stood last frame, and how high its centre rode at rest
@@ -615,8 +632,10 @@ class _EggView3D {
     _trailSpots.removeWhere((spot) => spot.$2 >= life);
     _sinceSpot += dt;
     if (egg.air == null && egg.speed > 2.6 && _sinceSpot > 0.03) {
-      // Rolling fast: turf flecks kicked up behind it.
+      // Rolling fast: turf flecks kicked up behind it, and puffs in the
+      // player's colour between them - who rolls where reads in a still.
       _sinceSpot = 0;
+      _trailCount++;
       _trailSpots.add((egg.position, 0, null));
     } else if (egg.air != null && egg.speed > 1.5 && _sinceSpot > 0.035) {
       // In the air it kicks up no turf: a wisp of air at its own height,
@@ -635,11 +654,14 @@ class _EggView3D {
       final fade = 1 - age / life;
       puff.visible = true;
       if (y == null) {
+        // Fleck or colour by the spot's place in the run (stable as the
+        // oldest go).
+        final tinted = (_trailCount - (_trailSpots.length - 1 - i)).isOdd;
         puff.position.setValues(at.x, terrain.at(at) + _radius * 0.35, at.y);
-        final size = _radius * (0.7 + 0.8 * fade);
+        final size = _radius * (tinted ? 0.9 + 0.9 * fade : 0.7 + 0.8 * fade);
         puff.scale.setValues(size, size, 1);
-        puff.material?.color = _turfColor;
-        puff.material?.opacity = 0.55 * fade;
+        puff.material?.color = tinted ? _tintGlow : _turfColor;
+        puff.material?.opacity = (tinted ? 0.5 : 0.55) * fade;
       } else {
         puff.position.setValues(at.x, y, at.y);
         final size = _radius * (0.8 + 0.9 * fade);
