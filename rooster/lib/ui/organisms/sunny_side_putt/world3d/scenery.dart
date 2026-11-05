@@ -1384,7 +1384,8 @@ class _Scenery {
         if (Vec2(px, pz).distanceTo(_hostAt) < 6.5) {
           continue; // the host's spot
         }
-        _cornPlant(into, Vec2(px, pz), _rand.range(0.85, 1.2));
+        _cornPlant(into, Vec2(px, pz), _rand.range(0.85, 1.2),
+            far: _clearance(px, pz) > 18);
         plants++;
         if (plants > 520) return;
       }
@@ -1410,20 +1411,24 @@ class _Scenery {
   /// arching out and drooping all the way up (each a quarter turn round
   /// from the last, the way corn grows), a cob in its husk, and the
   /// tassel's spikes on top. Each plant gets its own green.
-  void _cornPlant(_Merged into, Vec2 at, double scale) {
+  void _cornPlant(_Merged into, Vec2 at, double scale, {bool far = false}) {
     final height = 2.6 * scale;
     final base = _ground;
     final tone = _rand.range(0.86, 1.1);
     int green(int hex) => _shade(hex, tone);
-    into.add(
-        tjs.BoxGeometry(1.95, 0.05, 1.5),
-        _place(at.x, base + 0.02, at.y, yaw: _rand.range(-0.05, 0.05)),
-        _shade(0x6B5A34, _rand.range(0.9, 1.08)));
-    into.add(tjg.CylinderGeometry(0.06, 0.1, height, 5),
+    // Far off, a plant is a stalk, a few leaves and a tassel: the detail
+    // would not show, and the field is the game's heaviest geometry.
+    if (!far) {
+      into.add(
+          tjs.BoxGeometry(1.95, 0.05, 1.5),
+          _place(at.x, base + 0.02, at.y, yaw: _rand.range(-0.05, 0.05)),
+          _shade(0x6B5A34, _rand.range(0.9, 1.08)));
+    }
+    into.add(tjg.CylinderGeometry(0.06, 0.1, height, far ? 4 : 5),
         _place(at.x, base + height / 2, at.y), green(0x6E9F3A),
         baseShade: 0.62);
     final yaw0 = _rand.range(0, math.pi * 2);
-    const leaves = 7;
+    final leaves = far ? 4 : 7;
     for (var leaf = 0; leaf < leaves; leaf++) {
       final yaw = yaw0 + leaf * 2.2 + _rand.range(-0.25, 0.25);
       final k = leaf / (leaves - 1);
@@ -1437,7 +1442,7 @@ class _Scenery {
         green(leaf.isEven ? 0x4F8F2E : 0x6FAE3E),
       );
     }
-    if (_rand.chance(0.75)) {
+    if (!far && _rand.chance(0.75)) {
       into.add(
           tjg.CylinderGeometry(0.11, 0.14, 0.55, 6),
           _place(at.x + 0.13, base + height * 0.52, at.y, roll: 0.35),
@@ -1447,7 +1452,7 @@ class _Scenery {
           _place(at.x + 0.24, base + height * 0.52 + 0.32, at.y, roll: 0.35),
           0xE9C866);
     }
-    for (var spike = 0; spike < 3; spike++) {
+    for (var spike = far ? 1 : 0; spike < (far ? 2 : 3); spike++) {
       final lean = (spike - 1) * 0.35;
       into.add(
           tjg.ConeGeometry(0.05, 0.55, 4),
