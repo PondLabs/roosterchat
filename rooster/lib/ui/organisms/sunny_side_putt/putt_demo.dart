@@ -376,7 +376,8 @@ class _PuttDemoPageState extends State<PuttDemoPage> {
     double power;
     if (_myShot < reference.length) {
       final shot = reference[_myShot];
-      angle = shot.angle + (_myShot == 0 ? 0.004 : -0.003);
+      // Exactly the validated line: the engine fires what it is sent.
+      angle = shot.angle;
       power = shot.power;
     } else {
       // Off the script: a hop with the Rabbit Hole when the nest is near,
