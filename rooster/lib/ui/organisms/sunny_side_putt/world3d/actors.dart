@@ -56,6 +56,18 @@ class _EggView3D {
       ..name = 'egg-xray'
       ..renderOrder = 20;
     body.add(_xray);
+    // The ink outline (the shell's back faces, a size up): the eggs are the
+    // characters, drawn with a line round them so they pop from the farm
+    // at any distance. The world sets its weight from the camera's.
+    _outline = tjs.Mesh(
+      body.geometry,
+      tjs.MeshBasicMaterial({
+        tjs.MaterialProperty.color: _lin(_hexOf(PuttPalette.ink)),
+        tjs.MaterialProperty.side: tjs.BackSide,
+      }),
+    )..name = 'egg-outline';
+    body.add(_outline);
+    outlineFor(24);
 
     ground = tjs.Group()..name = 'egg-ground';
     _shadow = tjs.Mesh(
@@ -144,6 +156,15 @@ class _EggView3D {
 
   late final tjs.Mesh _tintDisc;
   late final tjs.Mesh _xray;
+  late final tjs.Mesh _outline;
+
+  /// The outline's weight for a camera [distance] away: about the same
+  /// width on screen near or far.
+  void outlineFor(double distance) {
+    final k = 1 + (0.03 + distance * 0.0026).clamp(0.05, 0.15);
+    _outline.scale.setValues(k, k, k);
+  }
+
   Vec2? _lastVelocity;
   double _squash = 0;
 

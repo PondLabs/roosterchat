@@ -1019,6 +1019,7 @@ class PuttWorld3D {
       });
       view.retint(egg.tint);
       view.sync(egg, dt, frame.time);
+      view.outlineFor(rig.distance);
     }
     _eggViews.removeWhere((playerId, view) {
       if (seen.contains(playerId)) return false;
