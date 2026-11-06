@@ -11,6 +11,7 @@ import 'package:flame/game.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_match.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/sunny_side_putt_game.dart';
+import 'package:rooster/ui/organisms/sunny_side_putt/putt_world3d.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/stub_courses.dart';
 
 void main() {
@@ -43,6 +44,36 @@ void main() {
     expect(after.distanceTo(before), greaterThan(0.5));
     // And the stroke landed in the HUD's numbers.
     expect(match.myStrokesThisHole, 1);
+  });
+
+  testWidgets('a resize onto a new hole fits the camera without throwing',
+      (tester) async {
+    // The GL surface is what puts the loading card up (the headless runner
+    // builds the hole in one go), so the surface is asked for here and
+    // fails over to the headless ticker, as on a machine without GL.
+    PuttThreeSurface.debugGpuSupported = true;
+    addTearDown(() => PuttThreeSurface.debugGpuSupported = null);
+    final course = stubCourse(id: 'stub-course', holeCount: 3);
+    final match = PuttMatch(
+      config: PuttConfig(
+        mode: GameMode.casual,
+        courses: [course],
+        catalog: {'stub-course': course},
+        seed: 31337,
+      ),
+    );
+    await tester.pumpWidget(MaterialApp(home: SunnySidePuttView(match: match)));
+    await tester.pump(const Duration(milliseconds: 50));
+    // The hole arrives and the surface resizes in the same frame: the game
+    // fits the camera from its own layout, and the card's notifier is set
+    // after that build, never during it (its builder would be marked dirty
+    // mid-build and the frame would throw).
+    match.boot();
+    await tester.binding.setSurfaceSize(const Size(900, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(match.hole, isNotNull);
   });
 
   testWidgets('a paused match does not tick', (tester) async {
