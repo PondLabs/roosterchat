@@ -595,6 +595,7 @@
   "ActivityPickerStrings_launch": "Iniciar",
   "ActivityStageStrings_loading": "Carregando {activity}",
   "ActivityStageStrings_toggleFullscreen": "Tela cheia",
+  "ActivityStageStrings_exitFullscreen": "Sair da tela cheia",
   "ActivityStageStrings_leave": "Sair",
   "promptCallOpenDjBooth": "Cabine de DJ – tocar música",
   "promptCallCloseDjBooth": "Fechar a cabine de DJ",

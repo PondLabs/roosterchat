@@ -24,6 +24,11 @@ class _StageFullscreen {
   /// Whether this stage switched fullscreen on, and so should switch it off.
   static Future<bool> _enter() async {
     try {
+      if (ActivityStage.debugSetFullscreen case final set?) {
+        // Tests: no window to fill (the plugin channels stand empty under
+        // the test runner). Answers whether it was already fullscreen.
+        return !await set(true);
+      }
       if (PlatformUtils.isLinux || PlatformUtils.isWindows) {
         // Already fullscreen (F11): leave it that way when the stage goes.
         if (await windowManager.isFullScreen()) return false;
@@ -43,6 +48,10 @@ class _StageFullscreen {
   Future<void> exit() async {
     if (!await _entered) return;
     try {
+      if (ActivityStage.debugSetFullscreen case final set?) {
+        await set(false);
+        return;
+      }
       if (PlatformUtils.isLinux || PlatformUtils.isWindows) {
         await WindowManagement.setFullScreen(false);
       } else if (PlatformUtils.isWeb) {
@@ -89,6 +98,11 @@ class ActivityStage extends StatefulWidget {
   static bool get hasFullscreen =>
       PlatformUtils.isLinux || PlatformUtils.isWindows || PlatformUtils.isWeb;
 
+  /// Tests: the window's fullscreen, without a window (the plugin channels
+  /// stand empty under the test runner). Answers whether it was already
+  /// fullscreen, as the window manager would.
+  static Future<bool> Function(bool on)? debugSetFullscreen;
+
   @override
   State<ActivityStage> createState() => _ActivityStageState();
 }
@@ -96,6 +110,27 @@ class ActivityStage extends StatefulWidget {
 class _ActivityStageState extends State<ActivityStage> {
   _StageFullscreen? _fullscreen;
   bool get _isFullscreen => _fullscreen != null;
+
+  /// The way out of fullscreen, floating over the game: up while the
+  /// pointer moves, gone once it rests, so the game has the screen to
+  /// itself (the call's screen share does the same).
+  bool _controlsUp = true;
+  Timer? _controlsTimer;
+  static const _controlsTimeout = Duration(milliseconds: 2500);
+
+  void _wakeControls() {
+    _controlsTimer?.cancel();
+    _controlsTimer = Timer(_controlsTimeout, () {
+      if (mounted) setState(() => _controlsUp = false);
+    });
+    if (!_controlsUp) setState(() => _controlsUp = true);
+  }
+
+  @override
+  void dispose() {
+    _controlsTimer?.cancel();
+    super.dispose();
+  }
 
   Future<void> _toggleFullscreen() async {
     if (_isFullscreen) {
@@ -107,13 +142,19 @@ class _ActivityStageState extends State<ActivityStage> {
     final entered = await _StageFullscreen.enter();
     if (mounted && await entered._entered) {
       setState(() => _fullscreen = entered);
+      _wakeControls();
     }
   }
 
-  /// Esc leaves the stage, like the header's exit button.
+  /// Esc leaves fullscreen first, then the stage, like the header's exit
+  /// button.
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
     if (event is KeyDownEvent &&
         event.logicalKey == LogicalKeyboardKey.escape) {
+      if (_isFullscreen) {
+        _toggleFullscreen();
+        return KeyEventResult.handled;
+      }
       widget.onExit();
       return KeyEventResult.handled;
     }
@@ -128,18 +169,61 @@ class _ActivityStageState extends State<ActivityStage> {
       onKeyEvent: _onKeyEvent,
       child: Material(
         color: colors.surface,
-        child: Column(
-          children: [
-            _header(context),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(6),
-                child: widget.gameSlot ?? _placeholder(context),
+        child: _isFullscreen ? _fullscreenBody(context) : _stageBody(context),
+      ),
+    );
+  }
+
+  /// The stage as the call shows it: the header, the game, the videos.
+  Widget _stageBody(BuildContext context) {
+    return Column(
+      children: [
+        _header(context),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: widget.gameSlot ?? _placeholder(context),
+          ),
+        ),
+        widget.participantsStrip,
+      ],
+    );
+  }
+
+  /// Fullscreen: the game edge to edge, the stage's own chrome gone - the
+  /// header, the videos and the padding with them. The game keeps its own
+  /// menu (its settings, its leave), so the Rooster options stay reachable
+  /// over the fullscreen game, as they do over a fullscreen screen share.
+  Widget _fullscreenBody(BuildContext context) {
+    return MouseRegion(
+      onHover: (_) => _wakeControls(),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          widget.gameSlot ?? _placeholder(context),
+          Positioned(
+            right: 8,
+            bottom: 8,
+            child: SafeArea(
+              child: IgnorePointer(
+                ignoring: !_controlsUp,
+                child: AnimatedOpacity(
+                  opacity: _controlsUp ? 1 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: IconButton(
+                    tooltip: ActivityStageStrings.exitFullscreen,
+                    icon: const Icon(Icons.fullscreen_exit_rounded),
+                    onPressed: _toggleFullscreen,
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.black.withValues(alpha: 0.55),
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
               ),
             ),
-            widget.participantsStrip,
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -191,6 +275,11 @@ abstract final class ActivityStageStrings {
   static String get toggleFullscreen => Intl.message("Fullscreen",
       name: "ActivityStageStrings_toggleFullscreen",
       desc: "Toggle that fills the app window with the stage");
+
+  static String get exitFullscreen => Intl.message("Exit fullscreen",
+      name: "ActivityStageStrings_exitFullscreen",
+      desc: "Button that leaves the stage's fullscreen and shows the call "
+          "again");
 
   static String get leave => Intl.message("Exit",
       name: "ActivityStageStrings_leave",

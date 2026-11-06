@@ -1101,16 +1101,6 @@ class _HostDetail {
   }
 }
 
-/// A figure of the scenery that can fade out of the way (the host, when
-/// he would stand behind the HUD or in the camera's face).
-class _FadingFigure with _Fadable {
-  _FadingFigure(this.figure) {
-    _prepareFade(figure);
-  }
-
-  final tjs.Object3D figure;
-}
-
 /// A duck where the obstacle paddles over water (the Pond's ducks): a
 /// mallard sitting low in the water - brown body, green head over a white
 /// collar, a yolk bill, a blue patch on the wing - bobbing as it goes, a

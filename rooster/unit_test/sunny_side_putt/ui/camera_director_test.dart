@@ -1,7 +1,8 @@
 // The camera's choreography: the whole hole while it opens, the egg and the
-// nest framed together at rest, the egg followed while it rolls, the rest
-// of the field framed once the egg is in, the whole green between holes -
-// and a player who takes the camera keeps the zoom they chose.
+// nest framed together at rest, the egg followed while it rolls, the nest
+// kept once the egg is in (never another player's egg), a spectator's field
+// watched, the whole green between holes - and a player who takes the
+// camera keeps the zoom they chose.
 library;
 
 import 'dart:ui' as ui;
@@ -294,20 +295,35 @@ void main() {
     expect(director.followPoint, rolling);
   });
 
-  test('once in the nest, the eggs still out are framed with the nest', () {
+  test('once in the nest, the camera stays on it, not on the others', () {
     run(PuttCameraDirector.openingSeconds + 1, resting(hole.tee));
-    // Past the close-up on the nest that celebrates the sink.
-    run(
-      PuttCameraDirector.celebrateSeconds + 3,
-      PuttCameraCue(
-        hole: hole,
-        phase: PuttPhase.holePlay,
-        myEgg: hole.nest.position,
-        myEggHoled: true,
-        otherEggs: const [PuttCameraEgg('them', Vec2(10, 20))],
-      ),
-    );
-    expectInFreeView(const Vec2(10, 20));
+    // Past the close-up on the nest that celebrates the sink, with another
+    // player's egg rolling across the green the whole time.
+    const theirs = Vec2(10, 20);
+    PuttCameraCue holed(Vec2 at, {bool rolling = false}) => PuttCameraCue(
+          hole: hole,
+          phase: PuttPhase.holePlay,
+          myEgg: hole.nest.position,
+          myEggHoled: true,
+          otherEggs: [
+            PuttCameraEgg('them', at,
+                velocity: rolling ? const Vec2(6, 0) : Vec2.zero,
+                resting: !rolling,
+                strokes: rolling ? 1 : 0),
+          ],
+        );
+    run(PuttCameraDirector.celebrateSeconds + 3, holed(theirs));
+    expect(director.watching, isNull,
+        reason: 'my egg is in: the camera is still mine');
+    expect(rig.target.distanceTo(hole.nest.position), lessThan(3));
+    expectInFreeView(hole.nest.position);
+    // Their putt rolls on: the camera does not go with it.
+    for (var x = 10.0; x < 34; x += 0.5) {
+      run(0.1, holed(Vec2(x, 20), rolling: true));
+      expect(director.watching, isNull);
+      expect(rig.target.distanceTo(hole.nest.position), lessThan(3),
+          reason: 'the camera stayed on the nest while they rolled');
+    }
     expectInFreeView(hole.nest.position);
   });
 
@@ -341,28 +357,25 @@ void main() {
     expect(pixelY(0.5) - pixelY(2.85), greaterThan(200),
         reason: 'big on the screen, standing');
     run(PuttCameraDirector.celebrateSeconds + 1.5, holed);
-    // After it, the frame of the eggs still out is back within the clamp.
+    // After it, the frame of the nest is back within the clamp.
     expect(rig.distanceTarget, greaterThanOrEqualTo(rig.distanceMin));
-    expectInFreeView(const Vec2(10, 20));
     expectInFreeView(hole.nest.position);
   });
 
-  /// My egg in the nest, past its hatch, with [others] still out.
+  /// A spectator's view: no egg of mine, [others] still out.
   PuttCameraCue holedWith(List<PuttCameraEgg> others) => PuttCameraCue(
         hole: hole,
         phase: PuttPhase.holePlay,
-        myEgg: hole.nest.position,
-        myEggHoled: true,
         otherEggs: others,
       );
 
-  /// Holes my egg and runs past the hatch's close-up.
+  /// Runs the opening out, then the spectator's view of [others].
   void holeMine(List<PuttCameraEgg> others) {
     run(PuttCameraDirector.openingSeconds + 1, resting(const Vec2(38, 12)));
     run(PuttCameraDirector.celebrateSeconds + 0.5, holedWith(others));
   }
 
-  test('once in, the camera rides with the egg still rolling', () {
+  test('a spectator rides with the egg still rolling', () {
     holeMine(const [PuttCameraEgg('them', Vec2(4, 12))]);
     expect(director.watching, 'them');
     // They putt: the camera follows the egg frame by frame, no stale shot.
@@ -381,7 +394,7 @@ void main() {
     expectInFreeView(const Vec2(30, 19.8));
   });
 
-  test("once in, a splash reframes the watched egg where it comes back", () {
+  test("a spectator's splash reframes the watched egg where it comes back", () {
     holeMine(const [PuttCameraEgg('them', Vec2(4, 12))]);
     const pond = Vec2(30, 20);
     run(
@@ -404,7 +417,7 @@ void main() {
         reason: 'a resting egg is framed once, not pumped');
   });
 
-  test('the watched egg keeps the camera until it drops in or rests', () {
+  test('a spectator keeps the watched egg until it drops in or rests', () {
     holeMine(const []);
     const a = Vec2(30, 12), b = Vec2(8, 20);
     PuttCameraEgg egg(String id, Vec2 at,
@@ -475,7 +488,7 @@ void main() {
     expect(director.watching, 'a', reason: 'past the dwell, still putting');
   });
 
-  test('watching, a player who zoomed keeps their zoom', () {
+  test('a spectator who zoomed keeps their zoom', () {
     holeMine(const [PuttCameraEgg('them', Vec2(4, 12))]);
     rig.setDistance(rig.overviewDistance * 0.9);
     director.noteUserCamera();

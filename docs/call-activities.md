@@ -44,6 +44,16 @@ infrastructure.
 4. The host leaving hands the seat over (the followers re-elect the
    lowest present identity); the last one out ends the session and its
    room state goes with it.
+5. A session dies with the call it was played in. Leaving the call (or
+   the connection dropping it) drops every session we followed: each is
+   told we are out, so the host drops us from its roster now rather than
+   when LiveKit gets round to reporting us gone, and then it is disposed
+   - its transport with it. A session left running after its call was
+   gone kept the game alive, listed everyone still in it (a dead
+   transport still answers for the roster it last heard) and made every
+   later launch in that channel a silent no-op. Joining the call again
+   starts from the room state, never from the session of the call that
+   ended.
 
 ## In the room list and the call's sounds
 

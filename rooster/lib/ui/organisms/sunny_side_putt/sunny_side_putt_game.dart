@@ -920,7 +920,14 @@ class SunnySidePuttGame extends FlameGame {
       if (PuttThreeSurface.gpuSupported) {
         // Over a few frames, the loading card up meanwhile: one build of a
         // whole hole held the frame for a second or more.
-        holeLoading.value = (0, 1);
+        //
+        // The resize that brings us here lands mid-build (the game's own
+        // widget lays out): the card's notifier is set after it, never
+        // during it, or its builder is marked dirty while the framework is
+        // building and the frame throws.
+        scheduleMicrotask(() {
+          if (world3d.buildingHole != null) holeLoading.value = (0, 1);
+        });
         unawaited(world3d
             .buildHoleInSteps(current,
                 eggRadius: eggRadius,

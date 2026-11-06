@@ -996,7 +996,7 @@ class PuttWorld3D {
   /// Where the host stands on the ground, when the hole built is
   /// [holeId] (null with no host, or another hole still built).
   Vec2? hostSpotOn(String holeId) {
-    final figure = _hostFade?.figure;
+    final figure = _hostFigure;
     if (figure == null || _hole?.id != holeId) return null;
     return Vec2(figure.position.x, figure.position.z);
   }
@@ -1354,7 +1354,7 @@ class PuttWorld3D {
             'host',
             () {
               final host = farm.getObjectByName('host');
-              _hostFade = host == null ? null : _FadingFigure(host);
+              _hostFigure = host;
               _hostDetail = host == null ? null : _HostDetail(host);
             }
           ),
@@ -1442,7 +1442,7 @@ class PuttWorld3D {
     _ground.hole = null;
     _watch = null;
     _greeting = false;
-    _hostFade = null;
+    _hostFigure = null;
     _hostDetail = null;
     _henViews.clear();
     _crateViews.clear();
@@ -1497,7 +1497,7 @@ class PuttWorld3D {
     rig.applyTo(camera);
     camera.updateMatrixWorld(true);
     _faceCamera();
-    _syncHost(dt);
+    _syncHost();
     // The dome rides with the camera, so its horizon never comes near.
     _sky.group.position.setValues(camera.position.x, 0, camera.position.z);
   }
@@ -1725,40 +1725,30 @@ class PuttWorld3D {
 
   /// The host fades away while his head would stand under the HUD's top
   /// bar or its corner buttons, or right in front of the camera.
-  void _syncHost(double dt) {
-    final fade = _hostFade;
+  /// The host never leaves the scene: he is scenery, and the HUD's panels
+  /// are opaque, so he simply stands behind them.
+  ///
+  /// He used to pop out of the way whenever his head landed under the HUD's
+  /// top band or the camera came "near" him (a share of the camera's own
+  /// distance, which the whole-hole view made true of everything): both
+  /// rules were crossed and re-crossed by every camera glide, so he
+  /// flickered in and out of the farm all through a hole. Only his build
+  /// changes with how tall he stands on the screen.
+  void _syncHost() {
+    final figure = _hostFigure;
     final size = rig.viewport;
-    if (fade == null || size.width <= 0 || size.height <= 0) return;
-    final at = fade.figure.position;
-    // His own height, not the pop's shrink (that would bring his head out
-    // from under the HUD and back, over and over).
-    final head = tjs.Vector3(at.x, at.y + 8.2 * fade.fadeBaseScaleY, at.z)
-        .project(camera);
-    final headY = (1 - head.y) / 2 * size.height;
-    final headX = (head.x + 1) / 2 * size.width;
-    if (head.z < 1) {
-      // In full while he stands tall on the screen, light while small.
-      final foot = tjs.Vector3(at.x, at.y, at.z).project(camera);
-      _hostDetail?.standing((1 - foot.y) / 2 * size.height - headY);
-    }
-    final dx = camera.position.x - at.x;
-    final dz = camera.position.z - at.z;
-    // Some slack once he is gone, as with the hens: a camera on the move
-    // crossing the line back and forth left him half there, a ghost.
-    final gone = fade._fade < 0.5;
-    final near = math.sqrt(dx * dx + dz * dz) / math.max(rig.distance, 1e-6) <
-        (gone ? 0.62 : 0.55);
-    final underHud = head.z < 1 &&
-        headY < _hudTopBand + (gone ? 28 : 0) &&
-        headX > -40 &&
-        headX < size.width + 40;
-    fade.fadeToward(underHud || near ? 0.0 : 1.0, dt);
+    if (figure == null || size.width <= 0 || size.height <= 0) return;
+    final at = figure.position;
+    final head =
+        tjs.Vector3(at.x, at.y + 8.2 * figure.scale.y, at.z).project(camera);
+    final foot = tjs.Vector3(at.x, at.y, at.z).project(camera);
+    if (head.z >= 1 || foot.z >= 1) return;
+    // In full while he stands tall on the screen, light while small.
+    _hostDetail?.standing(
+        (1 - foot.y) / 2 * size.height - (1 - head.y) / 2 * size.height);
   }
 
-  /// How far down the HUD's top bar and corner buttons reach, in pixels.
-  static const double _hudTopBand = 118;
-
-  _FadingFigure? _hostFade;
+  tjs.Object3D? _hostFigure;
   _HostDetail? _hostDetail;
 
   void _syncCrates(PuttWorldFrame frame) {
