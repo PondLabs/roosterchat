@@ -16,6 +16,36 @@ import 'fixtures.dart';
 
 void main() {
   group('PhysicsWorld scenarios', () {
+    test('two bumpers facing each other cannot keep an egg for ever', () {
+      final hole = boxHole(
+        tee: const Vec2(8, 5),
+        nest: const Nest(Vec2(14.5, 8.8), 0.8),
+        extraWalls: [
+          WallSegment.bumper(const Vec2(2, 2), const Vec2(14, 2)),
+          WallSegment.bumper(const Vec2(2, 8), const Vec2(14, 8)),
+        ],
+      );
+      final world =
+          PhysicsWorld(hole: hole, config: testPhysics, playerIds: const ['a']);
+      world.applyShot('a', -math.pi / 2, 1);
+      var bumps = 0;
+      var ticks = 0;
+      while (!world.allSettled && ticks < 2400) {
+        world.stepTick();
+        ticks++;
+        bumps += world
+            .drainEvents()
+            .whereType<BallBounced>()
+            .where((e) => e.kind == BounceKind.bumper)
+            .length;
+      }
+      expect(world.allSettled, isTrue);
+      expect(ticks, lessThan(1200));
+      expect(bumps, greaterThan(testPhysics.livelyBounces),
+          reason: 'it ping-pongs a while, then the bounces go dead');
+      expect(world.ball('a')!.bumps, 0, reason: 'reset once it rests');
+    });
+
     test('bounces lose energy per the wall restitution', () {
       // Egg at (2,5); wall x=16; full-ish shot right. Rolling friction 7.
       final hole =
@@ -226,6 +256,121 @@ void main() {
       // Carried far beyond what ~6 u/s could give (~1.3 units of roll).
       expect(world.ball('a')!.position.x, greaterThan(20));
       expect(world.ball('a')!.position.y, closeTo(5, 1e-6));
+    });
+
+    group('a boost strip', () {
+      // A strip east along y = 5, from x = 10 to 18, in a long box.
+      HoleDef stripHole({Vec2 tee = const Vec2(2, 5)}) => boxHole(
+            width: 60,
+            height: 20,
+            tee: tee,
+            nest: const Nest(Vec2(58, 18), 0.8),
+            boosts: [
+              BoostStrip(const Vec2(10, 5), const Vec2(18, 5), speed: 18),
+            ],
+          );
+
+      /// Rolls the egg until it is clear of the strip (either way) and
+      /// returns its velocity then.
+      Vec2 throughStrip(PhysicsWorld world, double angle, double power) {
+        if (power > 0) world.applyShot('a', angle, power);
+        final ball = world.ball('a')!;
+        var on = false;
+        for (var i = 0; i < 2400 && !ball.asleep; i++) {
+          world.stepTick();
+          final inside = (ball.position.y - 5).abs() < 1.2 &&
+              ball.position.x > 9 &&
+              ball.position.x < 19;
+          if (inside) on = true;
+          if (on && !inside) return ball.velocity;
+        }
+        return ball.velocity;
+      }
+
+      test('speeds an egg already faster than its pace', () {
+        final world = PhysicsWorld(
+            hole: stripHole(), config: testPhysics, playerIds: const ['a']);
+        // Full power: about 25.7 u/s at the strip, well over its 18.
+        final out = throughStrip(world, 0, 1);
+        final arriving = math.sqrt(26 * 26 - 2 * 7 * 7.1);
+        expect(out.x, greaterThan(arriving + 1.5));
+        expect(world.drainEvents().whereType<BallBoosted>(), hasLength(1));
+      });
+
+      test('raises the cap: a fast egg leaves over maxSpeed, then slows', () {
+        final world = PhysicsWorld(
+            hole: stripHole(), config: testPhysics, playerIds: const ['a']);
+        world.ball('a')!.position = const Vec2(9, 5);
+        world.impulseBall('a', const Vec2(29, 0));
+        final out = throughStrip(world, 0, 0);
+        expect(out.length, greaterThan(testPhysics.maxSpeed));
+        expect(out.length, lessThanOrEqualTo(testPhysics.boostMaxSpeed));
+        runUntilSettled(world);
+        expect(world.ball('a')!.boostCap, 0);
+      });
+
+      test('a firm putt gets across against it, a soft one is turned back', () {
+        PhysicsWorld from(Vec2 tee) => PhysicsWorld(
+            hole: stripHole(tee: tee),
+            config: testPhysics,
+            playerIds: const ['a']);
+        final firm = from(const Vec2(20, 5));
+        expect(throughStrip(firm, math.pi, 1).x, lessThan(0));
+        expect(firm.ball('a')!.position.x, lessThan(9));
+        final soft = from(const Vec2(20, 5));
+        expect(throughStrip(soft, math.pi, 0.5).x, greaterThan(0),
+            reason: 'pushed back');
+        runUntilSettled(soft);
+        expect(soft.ball('a')!.position.x, greaterThan(18));
+      });
+
+      test('bends an egg crossing it only a little', () {
+        final world = PhysicsWorld(
+            hole: stripHole(tee: const Vec2(14, 1)),
+            config: testPhysics,
+            playerIds: const ['a']);
+        final out = throughStrip(world, math.pi / 2, 0.6);
+        expect(out.y, greaterThan(0));
+        expect(math.atan2(out.x, out.y), lessThan(0.35), reason: '< 20 deg');
+      });
+
+      test('never lets an egg rest on it', () {
+        final world = PhysicsWorld(
+            hole: stripHole(tee: const Vec2(12, 5)),
+            config: testPhysics,
+            playerIds: const ['a']);
+        world.ball('a')!.asleep = false;
+        runUntilSettled(world);
+        expect(world.ball('a')!.position.x, greaterThan(18));
+      });
+
+      test('an egg turned back by it never dozes off on it', () {
+        // The strip points at the east rail, which bounces the egg back
+        // against it again and again; the only rest is past its end.
+        final hole = boxHole(
+          width: 16,
+          tee: const Vec2(2, 5),
+          nest: const Nest(Vec2(2, 9), 0.6),
+          boosts: [
+            BoostStrip(const Vec2(4, 5), const Vec2(13, 5),
+                width: 1.2, speed: 14),
+          ],
+        );
+        final world =
+            PhysicsWorld(hole: hole, config: testPhysics, playerIds: ['a']);
+        world.applyShot('a', 0, 0.4);
+        final ball = world.ball('a')!;
+        var naps = 0;
+        var wasAsleep = false;
+        for (var i = 0; i < 7200; i++) {
+          world.stepTick();
+          if (ball.asleep && !wasAsleep) naps++;
+          wasAsleep = ball.asleep;
+        }
+        expect(naps, 1, reason: 'one rest, at the end');
+        expect(ball.asleep, isTrue);
+        expect(ball.position.x, greaterThan(13 + 0.6 + 0.225));
+      });
     });
 
     test('portals swap position and preserve speed exactly', () {
@@ -468,8 +613,11 @@ void main() {
           nest: const Nest(Vec2(20, 8), 0.8));
       final world = PhysicsWorld(
           hole: hole, config: testPhysics, playerIds: const ['a', 'b']);
-      // b has putted already: a waiting egg would be a ghost.
-      world.ball('b')!.putted = true;
+      // b has putted already (a waiting egg would be a ghost) and rests
+      // down the fairway.
+      world.ball('b')!
+        ..putted = true
+        ..position = const Vec2(10, 8);
       final from = world.ball('a')!.position;
       final target = world.ball('b')!.position;
       world.applyShot('a', (target - from).angle, 0.5);
@@ -497,6 +645,57 @@ void main() {
               nest: const Nest(Vec2(20, 8), 0.8)),
           config: testPhysics,
           playerIds: const ['a', 'b']);
+
+      test('every egg spawns on the tee point, and the stack holds', () {
+        final hole = boxHole(
+            width: 24,
+            height: 16,
+            tee: const Vec2(4, 8),
+            nest: const Nest(Vec2(20, 8), 0.8));
+        final world = PhysicsWorld(
+            hole: hole,
+            config: testPhysics,
+            playerIds: [for (var i = 0; i < 8; i++) 'egg$i']);
+        for (var i = 0; i < 240; i++) {
+          world.stepTick();
+        }
+        for (final egg in world.balls) {
+          expect(egg.position, hole.tee);
+          expect(egg.asleep, isTrue);
+        }
+        // Every egg putts off the stack at once: none springs off another.
+        for (final egg in world.balls) {
+          world.applyShot(egg.playerId, 0, 0.4);
+        }
+        runUntilSettled(world);
+        expect(
+            world
+                .drainEvents()
+                .whereType<BallBounced>()
+                .where((e) => e.kind == BounceKind.ball),
+            isEmpty);
+        // A late joiner lands on the tee and goes through the stack too.
+        world.addBall('late');
+        expect(world.ball('late')!.position, hole.tee);
+      });
+
+      test('a joiner onto a putted egg on the tee passes through it', () {
+        final world = pair();
+        final a = world.ball('a')!..putted = true;
+        world.removeBall('b');
+        world.addBall('c');
+        world.applyShot('c', 0, 0.02);
+        a.putted = true;
+        world.applyShot('a', math.pi, 0.02);
+        runUntilSettled(world);
+        expect(
+            world
+                .drainEvents()
+                .whereType<BallBounced>()
+                .where((e) => e.kind == BounceKind.ball),
+            isEmpty,
+            reason: 'both putted before a tick: still no spring apart');
+      });
 
       test('a putt off the tee rolls through an egg still waiting', () {
         final world = pair();
@@ -611,7 +810,9 @@ void main() {
 
       test('a resting egg knocked by another hears who did it', () {
         final world = pair();
-        world.ball('b')!.putted = true;
+        world.ball('b')!
+          ..putted = true
+          ..position = const Vec2(10, 8);
         final from = world.ball('a')!.position;
         final target = world.ball('b')!.position;
         world.applyShot('a', (target - from).angle, 0.5);

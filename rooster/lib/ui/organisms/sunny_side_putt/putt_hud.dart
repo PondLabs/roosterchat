@@ -67,6 +67,10 @@ class PuttHud extends StatefulWidget {
   /// says how the keys putt.
   final ValueListenable<bool>? keyAiming;
 
+  /// The name of the player the camera watches once my egg is in; null
+  /// while it is on mine.
+  final ValueListenable<String?>? watching;
+
   /// Whether the green is on screen yet: until it is, the banners wait
   /// (a hole's card plays when the player can see the hole, not during a
   /// slow boot). Left out, the green counts as shown.
@@ -83,6 +87,7 @@ class PuttHud extends StatefulWidget {
     this.targeting,
     this.busy,
     this.keyAiming,
+    this.watching,
     this.shown,
   });
 
@@ -155,6 +160,7 @@ class _PuttHudState extends State<PuttHud> {
                           scorecardRows: scorecardRows,
                           busy: widget.busy,
                           keyAiming: widget.keyAiming,
+                          watching: widget.watching,
                           onTapSlot: _tapSlot,
                         ),
                     ],
@@ -1707,6 +1713,7 @@ class _PuttBottomRow extends StatelessWidget {
   final int scorecardRows;
   final ValueListenable<bool>? busy;
   final ValueListenable<bool>? keyAiming;
+  final ValueListenable<String?>? watching;
   final void Function(int slot, String effectId) onTapSlot;
 
   const _PuttBottomRow({
@@ -1716,6 +1723,7 @@ class _PuttBottomRow extends StatelessWidget {
     required this.scorecardRows,
     this.busy,
     this.keyAiming,
+    this.watching,
     required this.onTapSlot,
   });
 
@@ -1750,7 +1758,8 @@ class _PuttBottomRow extends StatelessWidget {
                 match: match,
                 targeting: targeting,
                 aiming: busy,
-                keyAiming: keyAiming),
+                keyAiming: keyAiming,
+                watching: watching),
           ),
         ),
         if (!spectator) ...[
@@ -2021,12 +2030,16 @@ class PuttHintLine extends StatefulWidget {
   /// True while the keys hold the aim, not a drag.
   final ValueListenable<bool>? keyAiming;
 
+  /// Who the camera watches once my egg is in.
+  final ValueListenable<String?>? watching;
+
   const PuttHintLine(
       {super.key,
       required this.match,
       required this.targeting,
       this.aiming,
-      this.keyAiming});
+      this.keyAiming,
+      this.watching});
 
   /// Whether this platform likely has a keyboard: a desktop, or a browser
   /// (a phone's browser has none to speak of, so its platform rules).
@@ -2091,7 +2104,8 @@ class _PuttHintLineState extends State<PuttHintLine>
     final keyAiming = widget.keyAiming;
     final keys = PuttHintLine.hasKeyboard;
     return AnimatedBuilder(
-      animation: Listenable.merge([_notice, aiming, keyAiming]),
+      animation:
+          Listenable.merge([_notice, aiming, keyAiming, widget.watching]),
       builder: (context, _) {
         final targeting = widget.targeting;
         final armed = targeting.armed;
@@ -2136,6 +2150,12 @@ class _PuttHintLineState extends State<PuttHintLine>
                       text: labelPuttAimHint(),
                       detail: keys ? labelPuttKeysHint() : null,
                     );
+        } else if (widget.watching?.value case final name?) {
+          line = _HintPill(
+            key: ValueKey('watching-$name'),
+            icon: Icons.visibility_rounded,
+            text: labelPuttWatchingPlayer(name),
+          );
         }
         return Align(
           alignment: Alignment.bottomCenter,
@@ -2963,6 +2983,13 @@ String labelPuttHoleOf(int hole, int count) =>
 String labelPuttCourseDone() => Intl.message("Course done",
     name: "labelPuttCourseDone",
     desc: "Under the course's name while the group votes the next course");
+
+String labelPuttWatchingPlayer(String name) => Intl.message("Watching $name",
+    name: "labelPuttWatchingPlayer",
+    args: [name],
+    desc: "Hint line at the bottom of the game once the player's own egg is "
+        "in the nest: the camera follows another player still out on the "
+        "hole; the placeholder is that player's name");
 
 String labelPuttAimHint() =>
     Intl.message("Drag anywhere to aim · let go to putt",

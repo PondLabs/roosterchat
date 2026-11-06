@@ -319,6 +319,20 @@ class ThreeJS with WidgetsBindingObserver{
     if(sourceTexture != null){
       angle?.activateTexture(texture);
     }
+    // ROOSTER: on the shared-FBO path (Linux, and Windows without a surface
+    // producer: the texture has no EGL surface) the frame is done before
+    // Flutter is told of it. The texture is the one Flutter samples (no
+    // second buffer), and a flush alone let the compositor read it while
+    // the GPU was still drawing: a frame half drawn, the clear colour
+    // through it, a flicker. The surface paths (Android, Apple, Windows'
+    // surface producer) swap buffers, which syncs, and the source-texture
+    // path already finished. Not a fence: the wait has to be here, before
+    // textureFrameAvailable, on the one buffer both sides use, so a
+    // glClientWaitSync would stall as long as glFinish; Flutter's context
+    // waiting on it on the GPU (glWaitSync) is the plugin's side.
+    if (!kIsWeb && sourceTexture == null && texture.surfaceId == null) {
+      gl?.finish();
+    }
     await angle?.updateTexture(texture,sourceTexture);
   }
   
@@ -362,6 +376,15 @@ class ThreeJS with WidgetsBindingObserver{
     renderer!.clippingPlanes = settings.clippingPlanes;
     renderer!.toneMapping = settings.toneMapping;
     renderer!.toneMappingExposure = settings.toneMappingExposure;
+
+    // ROOSTER: the shadow pass binds the texture back (see the renderer's
+    // restoreScreenFramebuffer), so the shadows draw before the scene.
+    if (!kIsWeb && !settings.useSourceTexture) {
+      renderer!.restoreScreenFramebuffer = () {
+        final target = texture;
+        if (target != null) angle?.activateTexture(target);
+      };
+    }
 
     if(settings.useSourceTexture){
       final RenderTargetOptions pars = RenderTargetOptions(settings.renderOptions);

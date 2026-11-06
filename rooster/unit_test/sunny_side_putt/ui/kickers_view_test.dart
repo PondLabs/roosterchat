@@ -356,24 +356,24 @@ void main() {
         first = real.drainEvents().whereType<BallLanded>().firstOrNull;
       }
       expect(roll.landing, first!.at);
-      expect(roll.rest, isNull);
     });
 
     test('runs on to a kicker its length ends on, and shows the flight', () {
       // From the tee (x 3) the kicker's foot is four units off, its lip
       // six: a guide four long ends on the deck, and runs on to the flight.
       final hole = _field(moat: true);
-      ({List<Vec2> points, Vec2? rest, List<double?> airs, Vec2? landing})
-          guide(double length) => previewRoll(
-                world: PhysicsWorld(
-                    hole: hole, config: config, playerIds: const ['me']),
-                hole: hole,
-                config: config,
-                playerId: 'me',
-                angle: 0,
-                power: 0.72,
-                maxLength: length,
-              );
+      ({List<Vec2> points, List<double?> airs, Vec2? landing}) guide(
+              double length) =>
+          previewRoll(
+            world: PhysicsWorld(
+                hole: hole, config: config, playerIds: const ['me']),
+            hole: hole,
+            config: config,
+            playerId: 'me',
+            angle: 0,
+            power: 0.72,
+            maxLength: length,
+          );
       final onTheDeck = guide(4);
       expect(onTheDeck.landing, isNotNull);
       expect(onTheDeck.airs.whereType<double>(), isNotEmpty);

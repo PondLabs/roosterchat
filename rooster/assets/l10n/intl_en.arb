@@ -2568,6 +2568,22 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelPlayingActivity": "Playing {activity}",
+  "@labelPlayingActivity": {
+    "description": "Tooltip on the game icon next to someone in a voice channel who is in a call activity; the activity's name, e.g. Sunny Side Putt",
+    "type": "text",
+    "placeholders": {
+      "activity": {}
+    }
+  },
+  "labelWatchingActivity": "Watching {activity}",
+  "@labelWatchingActivity": {
+    "description": "Tooltip on the game icon next to someone in a voice channel who is watching a call activity as a spectator; the activity's name, e.g. Sunny Side Putt",
+    "type": "text",
+    "placeholders": {
+      "activity": {}
+    }
+  },
   "labelMoreMembers": "and {count} more",
   "@labelMoreMembers": {
     "description": "Last row under a voice channel with more people in it than the list shows; opens the rest of them",
@@ -5903,6 +5919,14 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelPuttWatchingPlayer": "Watching {name}",
+  "@labelPuttWatchingPlayer": {
+    "description": "Hint line at the bottom of the game once the player's own egg is in the nest: the camera follows another player still out on the hole; the placeholder is that player's name",
+    "type": "text",
+    "placeholders": {
+      "name": {}
+    }
+  },
   "labelPuttAimHint": "Drag anywhere to aim · let go to putt",
   "@labelPuttAimHint": {
     "description": "Hint line at the bottom of the game until the player's first putt: dragging anywhere pulls the slingshot, releasing it strikes the egg",
@@ -6449,6 +6473,18 @@
   "labelPuttReactNice": "Nice one",
   "@labelPuttReactNice": {
     "description": "A quick reaction in Sunny Side Putt: a thumbs up over the player's egg (praising another player's shot)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttUpdateToPlay": "Update Rooster to play",
+  "@labelPuttUpdateToPlay": {
+    "description": "On the game's stage, to a player whose app runs a different version of the game than the host's: they cannot play until they update",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttHostUpdateToPlay": "The host needs to update Rooster to play",
+  "@labelPuttHostUpdateToPlay": {
+    "description": "On the game's stage, to a player whose app runs a newer version of the game than the host's: nobody can play with them until the host updates",
     "type": "text",
     "placeholders": {}
   },

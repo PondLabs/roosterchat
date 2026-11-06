@@ -1,21 +1,28 @@
-// The Sunny Side Putt music loop: a ranch band's 112-second shuffle in G
-// at 120 bpm, country two-step, all I-IV-V. Fifty-six bars:
+// The Sunny Side Putt music loop: a bluegrass band's 112-second shuffle
+// in G at 120 bpm, all I-IV-V. Fifty-six bars:
 //
-//   A   (1-8)    a twangy electric's tune over banjo rolls, the upright
-//                bass's boom (root, fifth) under the guitar's chick, a
-//                brushed train beat;
+//   A   (1-8)    a flatpicked flat-top's tune over banjo rolls, the
+//                upright bass's boom (root, fifth, walks at the phrase
+//                ends) under the rhythm guitar's boom-chick, a brushed
+//                train beat;
 //   A'  (9-16)   the tune again, ornamented, the pedal steel swelling
 //                chords under it, the fiddle in thirds under its second
 //                half;
-//   B   (17-24)  on the IV: the banjo takes the tune, clip-clop wood
-//                blocks, the harmonica answering;
-//   B'  (25-32)  the fiddle's tune, a hen's clucks closing it in a stop;
-//   bridge (33-40) C, G, A7, D7: the pedal steel sings the tune, sliding
-//                into every note, a stop for the rooster;
-//   break (41-48) the banjo plays the tune, the fiddle holds double stops;
+//   B   (17-24)  on the IV: the banjo takes the tune, the harmonica
+//                answering;
+//   B'  (25-32)  the fiddle's tune with double stops, a hen's clucks
+//                closing it in a stop;
+//   bridge (33-40) C, G, A7, D7: the pedal steel's tune on two strings,
+//                sliding up into each third, a stop for the rooster;
+//   break (41-48) the banjo plays the tune, the fiddle bows double stops;
 //   reprise (49-56) everyone, the fiddle's thirds, the steel's chords, a
 //                turnaround to a stop-time hit and the pickup back to the
 //                top.
+//
+// The tunes use the whole major scale, with chord tones on the strong
+// beats, the blue third bent up into the major over G and the flat
+// seventh over G7 heading for C: not the pentatonic, whose run of fourths
+// on a bright plucked string reads as East Asian rather than country.
 //
 // The eighths swing a little (a shuffle), everything placed through
 // [fileSecondsOf].
@@ -164,12 +171,12 @@ List<ScoreNote> parseLine(String text, double startBeat,
   return notes;
 }
 
-/// The chord chart, a chord a bar.
+/// The chord chart, a chord a bar. The I goes to I7 on its way to the IV.
 const chart = [
   // A
-  'G', 'G', 'C', 'D', 'G', 'C', 'D7', 'G',
+  'G', 'G7', 'C', 'D', 'G', 'C', 'D7', 'G',
   // A'
-  'G', 'G', 'C', 'D', 'G', 'C', 'D7', 'G',
+  'G', 'G7', 'C', 'D', 'G', 'C', 'D7', 'G',
   // B
   'C', 'C', 'G', 'G', 'C', 'C', 'D', 'D7',
   // B'
@@ -177,79 +184,94 @@ const chart = [
   // bridge
   'C', 'C', 'G', 'G', 'A7', 'A7', 'D7', 'D7',
   // break
-  'G', 'G', 'C', 'D', 'G', 'C', 'D7', 'G',
+  'G', 'G7', 'C', 'D', 'G', 'C', 'D7', 'G',
   // reprise
-  'G', 'G', 'C', 'D', 'G', 'C', 'D7', 'D7',
+  'G', 'G7', 'C', 'D', 'G', 'C', 'D7', 'D7',
 ];
 
 /// What each player reaches for on a chord.
 class Chord {
+  /// The upright bass's root and fifth.
   final double root;
   final double fifth;
-  final double third;
+
+  /// The guitar's open-position grip, low string to high.
   final List<double> guitar;
+
+  /// The banjo's three fretted strings and its fifth-string drone.
   final List<double> roll;
   final double drone;
+
+  /// The pedal steel's grip: two chord tones and the third, which it
+  /// slides into from a whole step under.
   final List<double> pad;
-  final List<double> arp;
+  final double third;
 
   const Chord(
       {required this.root,
       required this.fifth,
-      required this.third,
       required this.guitar,
       required this.roll,
       required this.drone,
       required this.pad,
-      required this.arp});
+      required this.third});
+
+  /// The guitar's alternate bass note (the fifth, on the strings it has).
+  double get boomAlt => fifth < 40 ? fifth + 12 : fifth;
+
+  /// The guitar's chick: the top four strings of the grip.
+  List<double> get chick => guitar.sublist(guitar.length - 4);
 }
 
 const chords = {
   'G': Chord(
       root: 43,
       fifth: 38,
-      third: 4,
-      guitar: [55, 59, 62, 67],
+      guitar: [43, 47, 50, 55, 59, 67],
       roll: [55, 59, 62],
       drone: 67,
-      pad: [71, 74],
-      arp: [79, 83, 86, 91]),
+      pad: [62, 67],
+      third: 71),
+  'G7': Chord(
+      root: 43,
+      fifth: 38,
+      guitar: [43, 47, 50, 55, 59, 65],
+      roll: [55, 59, 65],
+      drone: 67,
+      pad: [62, 65],
+      third: 71),
   'C': Chord(
       root: 36,
       fifth: 43,
-      third: 4,
-      guitar: [52, 55, 60, 64],
+      guitar: [48, 52, 55, 60, 64],
       roll: [55, 60, 64],
       drone: 67,
-      pad: [72, 76],
-      arp: [79, 84, 88, 91]),
+      pad: [60, 67],
+      third: 64),
   'D': Chord(
       root: 38,
       fifth: 45,
-      third: 4,
       guitar: [50, 57, 62, 66],
       roll: [57, 62, 66],
       drone: 69,
-      pad: [69, 74],
-      arp: [78, 81, 86, 90]),
+      pad: [62, 69],
+      third: 66),
   'D7': Chord(
       root: 38,
       fifth: 45,
-      third: 4,
       guitar: [50, 57, 60, 66],
       roll: [57, 60, 66],
       drone: 69,
-      pad: [66, 72],
-      arp: [78, 81, 84, 86]),
+      pad: [60, 69],
+      third: 66),
   'A7': Chord(
       root: 45,
       fifth: 40,
-      third: 4,
-      guitar: [52, 57, 61, 67],
+      guitar: [45, 52, 57, 61, 64],
       roll: [57, 61, 64],
       drone: 67,
-      pad: [67, 73],
-      arp: [79, 81, 85, 88]),
+      pad: [64, 67],
+      third: 61),
 };
 
 Chord chordAt(int bar) => chords[chart[bar - 1]]!;
@@ -270,67 +292,80 @@ Section sectionOf(int bar) => switch (bar) {
 /// hens, the bridge to the rooster, the tag to the pickup.
 const stopBars = {32, 40, 56};
 
-// The tunes. A's eight bars, which the electric plays twice and the
-// reprise once more, the banjo in the break.
-const tuneA = 'G5:4 B5:8 A5:8 G5:8 E5:8 D5:4 | '
-    'E5:8 G5:8 G5:4 A5:8 B5:8 D6:4 | '
-    'E6:4. D6:8 C6:8 B5:8 A5:4 | '
-    'B5:8 A5:8 F#5:4 A5:2 | '
-    'G5:4 B5:8 A5:8 G5:8 E5:8 D5:4 | '
-    'E5:8 G5:8 C6:4 B5:8 A5:8 G5:4 | '
-    'F#5:8 A5:8 D6:4 C6:8 A5:8 F#5:8 A5:8 | '
-    'G5:2. D5:8 F#5:8';
+/// The upright bass's walks, a quarter a beat, at the ends of phrases and
+/// from the I7 down to the IV.
+const walks = <int, List<double>>{
+  2: [43.0, 41, 40, 38],
+  8: [43.0, 42, 40, 38],
+  10: [43.0, 41, 40, 38],
+  16: [43.0, 41, 40, 38],
+  42: [43.0, 41, 40, 38],
+  48: [43.0, 42, 40, 38],
+  50: [43.0, 41, 40, 38],
+};
 
-const tuneA2 = '^G5:4 B5:8 A5:8 G5:8 E5:8 D5:4 | '
-    'E5:8 G5:8 G5:8 A5:8 B5:8 D6:8 E6:8 D6:8 | '
-    'E6:4. D6:8 _C6:8 B5:8 A5:4 | '
-    'B5:8 A5:8 F#5:4 A5:4 D5:8 F#5:8 | '
-    '>G5:4 B5:8 A5:8 G5:8 E5:8 D5:4 | '
-    'E5:8 G5:8 C6:8 E6:8 D6:4 C6:4 | '
-    'B5:8 A5:8 F#5:8 A5:8 C6:4 F#5:4 | '
-    'G5:4 D5:8 B4:8 G4:2';
+// The tunes: the whole G major scale, chord tones on the beats that
+// carry weight, the blue third (Bb) bent up into the B over G, the flat
+// seventh (F) over G7 on its way to C. A, which the flatpicked guitar
+// plays, then A' and the reprise.
+const tuneA = 'G4:4 A4:8 Bb4:16 _B4:16 D5:4 B4:8 G4:8 | '
+    'G4:8 B4:8 D5:8 E5:8 F5:4 D5:8 B4:8 | '
+    'C5:4. B4:8 C5:8 E5:8 G5:8 E5:8 | '
+    'D5:4 F#5:8 E5:8 D5:8 C5:8 A4:4 | '
+    'B4:4 Bb4:16 _B4:16 D5:8 G5:4 F#5:8 E5:8 | '
+    'E5:4 C5:8 E5:8 G5:4 A5:8 G5:8 | '
+    'F#5:8 E5:8 D5:8 C5:8 A4:8 F#4:8 A4:8 C5:8 | '
+    'B4:4 G4:4 r:2';
+
+const tuneA2 = 'G4:8 A4:8 Bb4:16 _B4:16 D5:8 G5:4 D5:8 B4:8 | '
+    'F5:4 D5:8 B4:8 F4:8 G4:8 B4:8 D5:8 | '
+    'E5:4. D5:8 C5:8 D5:8 E5:8 G5:8 | '
+    'A5:4 F#5:8 E5:8 D5:8 E5:8 F#5:8 A5:8 | '
+    '>B4:4 A4:8 G4:8 D4:4 Bb4:16 _B4:16 D5:8 | '
+    'C5:8 E5:8 G5:8 E5:8 C5:4 B4:8 A4:8 | '
+    'F#4:8 A4:8 C5:8 A4:8 D5:4 C5:8 A4:8 | '
+    'G4:4 B4:8 D5:8 G4:2';
 
 /// B, the banjo's: the tune's anchors, on the beats.
-const tuneB = 'E5:4 G5:4 E5:4 C5:4 | D5:4 E5:4 C5:2 | '
-    'B4:4 D5:4 G5:4 D5:4 | B4:4 A4:4 G4:2 | '
-    'E5:4 G5:4 A5:4 G5:4 | E5:4 D5:4 C5:2 | '
-    'D5:4 F#5:4 A5:4 F#5:4 | E5:4 D5:4 C5:4 A4:4';
+const tuneB = 'C5:4 E5:4 G5:4 F5:4 | E5:4 D5:4 C5:2 | '
+    'B4:4 D5:4 G5:4 F#5:4 | G5:4 D5:4 B4:2 | '
+    'C5:4 E5:4 G5:4 A5:4 | G5:4 E5:4 C5:4 B4:4 | '
+    'A4:4 D5:4 F#5:4 E5:4 | D5:4 C5:4 A4:4 F#4:4';
 
-/// The harmonica's answers in B.
-const answersB = 'r:1 | r:2 G5:8 A5:8 G5:8 E5:8 | r:1 | '
-    'r:2 r:8 D5:8 E5:8 G5:8 | r:1 | r:2 G5:8 E5:8 D5:8 C5:8 | r:1 | '
-    'r:2 A5:8 F#5:8 E5:8 D5:8';
+/// The harmonica's answers in B, the blue third bent up.
+const answersB = 'r:1 | r:2 G5:8 E5:8 C5:8 D5:8 | r:1 | '
+    'r:2 Bb4:8 _B4:8 D5:8 G5:8 | r:1 | r:2 E5:8 F5:8 E5:8 C5:8 | r:1 | '
+    'r:2 C6:8 B5:8 A5:8 F#5:8';
 
-/// B', the fiddle's (an octave down).
-const tuneB2 = 'G5:4 E5:8 G5:8 C6:4 B5:8 A5:8 | G5:2 E5:4 C5:4 | '
-    'D5:8 G5:8 B5:4 A5:8 G5:8 D5:4 | E5:2 G5:4 B5:4 | '
-    'C6:4 B5:8 A5:8 E5:4 A5:4 | F#5:4 A5:8 C6:8 B5:8 A5:8 F#5:4 | '
-    'G5:4 B5:8 D6:8 B5:4 G5:4 | G5:2 r:2';
+/// B', the fiddle's.
+const tuneB2 = 'C5:8 D5:8 E5:8 G5:8 E5:4 C5:4 | '
+    'F5:8 E5:8 D5:8 C5:8 G4:4 E4:4 | '
+    'D5:4 Bb4:16 _B4:16 A4:8 G4:4 B4:8 D5:8 | '
+    'G5:4 F#5:8 E5:8 D5:4 B4:4 | '
+    'E5:4 G5:8 E5:8 C5:4 E5:4 | '
+    'F#5:4 A5:8 F#5:8 D5:8 E5:8 F#5:8 C5:8 | '
+    'B4:4 D5:8 B4:8 G4:4 A4:8 B4:8 | G4:2 r:2';
 
-/// The bridge, the steel's: long and slid.
-const tuneBridge = 'E5:2 _G5:4 _C6:4 | C6:2. _A5:4 | B5:2 _D6:2 | G5:1 | '
-    'A5:2 _C#6:4 _E6:4 | E6:2 _C#6:4 _A5:4 | A5:2 _F#5:4 _A5:4 | C6:4 r:2.';
+/// The bridge, the steel's: chord tones swelled, two to a bar.
+const tuneBridge = 'E4:2 G4:2 | C5:2 G4:2 | B4:2 D5:2 | G4:1 | '
+    'C#5:2 E5:2 | G4:2 E4:2 | F#4:2 A4:2 | C5:4 r:2.';
 
-/// The break: A an octave down, simplified for the banjo's thumb.
-const tuneBreak = 'G4:4 B4:8 A4:8 G4:8 E4:8 D4:4 | '
-    'E4:8 G4:8 G4:4 A4:8 B4:8 D5:4 | '
-    'E5:4. D5:8 C5:8 B4:8 A4:4 | '
-    'B4:8 A4:8 F#4:4 A4:2 | '
-    'G4:4 B4:8 A4:8 G4:8 E4:8 D4:4 | '
-    'E4:8 G4:8 C5:4 B4:8 A4:8 G4:4 | '
-    'F#4:8 A4:8 D5:4 C5:8 A4:8 F#4:8 A4:8 | '
-    'G4:2. r:4';
+/// The break, the banjo's: A boiled down to its beats.
+const tuneBreak = 'B4:4 D5:4 G5:4 D5:4 | F5:4 D5:4 B4:4 G4:4 | '
+    'C5:4 E5:4 G5:4 E5:4 | F#5:4 E5:8 D5:8 A4:2 | '
+    'B4:8 Bb4:8 B4:4 D5:4 G5:4 | E5:4 C5:4 G4:4 C5:4 | '
+    'D5:4 F#5:4 C5:4 A4:4 | G4:2 r:2';
 
 /// The reprise, from its pickup in bar 48 to the stop-time tag.
-const tuneReprise = 'D5:8 F#5:8 | '
-    '>G5:4 B5:8 A5:8 G5:8 E5:8 D5:4 | '
-    'E5:8 G5:8 G5:8 A5:8 B5:8 D6:8 E6:8 D6:8 | '
-    '^E6:4. D6:8 C6:8 B5:8 A5:4 | '
-    'B5:8 A5:8 F#5:4 A5:4 D5:8 F#5:8 | '
-    'G5:4 B5:8 A5:8 G5:8 E5:8 D5:4 | '
-    'E5:8 G5:8 C6:8 E6:8 D6:4 C6:4 | '
-    'A5:8 F#5:8 A5:8 C6:8 B5:8 A5:8 F#5:8 E5:8 | '
-    "'>A5:8 r:8 r:2 D5:8 F#5:8";
+const tuneReprise = 'D4:8 F#4:8 | '
+    '>G4:8 A4:8 Bb4:16 _B4:16 D5:8 G5:4 D5:8 B4:8 | '
+    'G4:8 B4:8 D5:8 E5:8 F5:4 D5:8 B4:8 | '
+    '^E5:4. D5:8 C5:8 D5:8 E5:8 G5:8 | '
+    'A5:4 F#5:8 E5:8 D5:8 E5:8 F#5:8 A5:8 | '
+    'B4:4 Bb4:16 _B4:16 D5:8 G5:4 F#5:8 E5:8 | '
+    'E5:4 C5:8 E5:8 G5:4 A5:8 G5:8 | '
+    'F#5:8 E5:8 D5:8 C5:8 A4:8 F#4:8 A4:8 C5:8 | '
+    "'>D5:8 r:8 r:2 D4:8 F#4:8";
 
 List<ScoreNote> get _leadScore => [
       ...parseLine(tuneA, barBeat(1), velocity: 0.78),
@@ -345,12 +380,39 @@ List<double> _scale() => [
         for (final pc in const [0, 2, 4, 6, 7, 9, 11]) (octave * 12 + pc) * 1.0
     ];
 
-/// The note a diatonic third under [midi] in G major.
+/// The note a diatonic third under [midi] in G major (a minor third
+/// under a blue note).
 double thirdBelow(double midi) {
   final scale = _scale();
   final index = scale.indexOf(midi);
-  return index < 2 ? midi - 4 : scale[index - 2];
+  return index < 2 ? midi - 3 : scale[index - 2];
 }
+
+/// The nearest note of [chord] at least a minor third under [midi]: the
+/// lower string of a double stop.
+double chordToneBelow(double midi, Chord chord) {
+  final tones = {
+    for (final m in [...chord.guitar, chord.third]) m % 12
+  };
+  var m = midi - 3;
+  while (!tones.contains(m % 12)) {
+    m--;
+  }
+  return m;
+}
+
+/// [notes] for the pedal steel: a chord's third is reached by sliding up
+/// a whole step from under it, the pedal pressed as it swells.
+List<ScoreNote> steelSlides(List<ScoreNote> notes) => [
+      for (final n in notes)
+        if ((n.midi - chordAt(n.beat ~/ 4 + 1).third) % 12 == 0 &&
+            n.beats >= 1) ...[
+          ScoreNote(n.beat, 0.35, n.midi - 2, velocity: n.velocity),
+          ScoreNote(n.beat + 0.35, n.beats - 0.35, n.midi,
+              velocity: n.velocity, slur: true),
+        ] else
+          n,
+    ];
 
 /// [notes] as a line in the file's seconds: sorted by where they land,
 /// tongued notes a breath apart, slurred ones overlapping, humanized.
@@ -424,11 +486,19 @@ Float64List _bass(Rng rng) {
   for (var bar = 1; bar <= barCount; bar++) {
     final chord = chordAt(bar);
     final next = chordAt(bar % barCount + 1);
-    final section = sectionOf(bar);
-    final lift = _sectionLift(section);
+    final lift = _sectionLift(sectionOf(bar));
     final b = barBeat(bar);
     if (stopBars.contains(bar)) {
       _pluck(stem, b, chord.root, 0.3, bassString, rng, 0.95, jitter: 0.002);
+      continue;
+    }
+    final walk = walks[bar];
+    if (walk != null) {
+      for (var i = 0; i < 4; i++) {
+        _pluck(stem, b + i, walk[i], beat * 0.8, bassString, rng,
+            (i == 0 ? 0.95 : 0.78) * lift,
+            jitter: 0.002);
+      }
       continue;
     }
     // Boom on the root, boom on the fifth, a step into a new chord.
@@ -446,62 +516,66 @@ Float64List _bass(Rng rng) {
   return stem;
 }
 
+/// The rhythm guitar's boom-chick: the thumb on a bass string on 1 and
+/// 3, the grip's top strings strummed on 2 and 4.
 Float64List _guitar(Rng rng) {
   final stem = Float64List(loopLength);
   for (var bar = 1; bar <= barCount; bar++) {
     final chord = chordAt(bar);
     final section = sectionOf(bar);
-    final lift = _sectionLift(section);
+    final lift = _sectionLift(section) * (section == Section.bridge ? 0.75 : 1);
     final b = barBeat(bar);
     if (stopBars.contains(bar)) {
       _place(
           stem,
           b,
-          strum(chord.guitar, bar == 32 ? 0.9 : 0.32, guitarString, rng,
+          strum(chord.guitar, bar == 32 ? 0.9 : 0.32, rhythmString, rng,
               velocity: 0.9),
           rng);
       continue;
+    }
+    _pluck(stem, b, chord.guitar.first, beat * 0.9, rhythmString, rng,
+        0.72 * lift);
+    if (!walks.containsKey(bar)) {
+      _pluck(stem, b + 2, chord.boomAlt, beat * 0.9, rhythmString, rng,
+          0.64 * lift);
     }
     for (final offbeat in const [1.0, 3.0]) {
       _place(
           stem,
           b + offbeat,
-          strum(chord.guitar, 0.15, guitarString, rng,
-              spread: 0.008,
-              velocity: (section == Section.bridge ? 0.6 : 0.8) * lift),
+          strum(chord.chick, 0.18, rhythmString, rng,
+              spread: 0.008, velocity: 0.8 * lift),
           rng);
     }
     if (section == Section.b || section == Section.b2) {
       _place(
           stem,
           b + 3.5,
-          strum(chord.guitar.sublist(1), 0.1, guitarString, rng,
+          strum(chord.chick.sublist(1), 0.1, rhythmString, rng,
               spread: 0.006, velocity: 0.42, down: false),
           rng);
     }
   }
-  // Runs on the bass strings into A', B and the reprise.
+  // Runs on the bass strings into A' and B.
   for (final (bar, run) in const [
     (8, 'r:2 G3:8 A3:8 B3:8 D4:8'),
     (16, 'r:2 D3:8 B2:8 A2:8 B2:8'),
-    (48, 'r:2 G3:8 A3:8 B3:8 C4:8'),
   ]) {
     for (final note in parseLine(run, barBeat(bar))) {
-      _pluck(stem, note.beat, note.midi, beat * 0.45, guitarString, rng, 0.75);
+      _pluck(stem, note.beat, note.midi, beat * 0.45, rhythmString, rng, 0.75);
     }
   }
-  filterLoop(stem, [
-    Biquad.highpass(85),
-    Biquad.peak(230, 1.0, 2),
-    Biquad.lowpass(7200),
-  ]);
+  filterLoop(stem, guitarBody());
   return stem;
 }
 
+/// The banjo's rolls (forward, forward-reverse, alternating thumb), each
+/// eighth a chord tone or the fifth-string drone; in B and the break the
+/// tune's notes ride on the beats with the roll going on around them.
 const _forward = [0, 1, 2, 3, 1, 2, 3, 2];
 const _forwardReverse = [0, 1, 2, 3, 2, 1, 0, 2];
 const _alternating = [0, 1, 3, 2, 0, 1, 3, 2];
-const _melodicFill = [0, 3, 1, 3, 0, 3, 1, 3];
 
 Float64List _banjo(Rng rng) {
   final stem = Float64List(loopLength);
@@ -509,15 +583,16 @@ Float64List _banjo(Rng rng) {
   void note(double tuneBeat, double midi, double hold, double velocity) {
     final jitter = rng.gauss() * 0.003;
     final at = samplesFor(fileSecondsOf(tuneBeat) + jitter);
-    mixWrapped(stem,
-        pluck(midiToHz(midi), hold, banjoString, rng, velocity: velocity), at);
+    mixWrapped(
+        stem,
+        pluck(midiToHz(midi), hold, rollBanjoString, rng, velocity: velocity),
+        at);
     mixWrapped(click, pickClick(rng, velocity: velocity), at);
   }
 
   double voice(Chord chord, int role) =>
       role == 3 ? chord.drone : chord.roll[role];
 
-  // The melodic bars: the tune's notes where they fall, rolls between.
   final melodic = <double, ScoreNote>{
     for (final n in [
       ...parseLine(tuneB, barBeat(17)),
@@ -536,7 +611,7 @@ Float64List _banjo(Rng rng) {
       _place(
           stem,
           b,
-          strum([...chord.roll, chord.drone], 0.22, banjoString, rng,
+          strum([...chord.roll, chord.drone], 0.22, rollBanjoString, rng,
               spread: 0.007, velocity: 0.85),
           rng);
       continue;
@@ -566,16 +641,13 @@ Float64List _banjo(Rng rng) {
         continue;
       }
       if (bar == 40) continue;
-      if (isMelodic) {
-        // A slot the tune holds through: a soft roll note under it.
-        note(at, voice(chord, _melodicFill[slot]), 0.32, base * 0.85);
-        continue;
-      }
       final accent = slot == 0 || slot == 3 || slot == 6 ? 1.22 : 1.0;
-      note(at, voice(chord, pattern[slot]), 0.42, base * accent * lift);
+      // Under a held tune note the roll goes on, softer.
+      final v = base * accent * lift * (isMelodic ? 0.8 : 1);
+      note(at, voice(chord, (isMelodic ? _forward : pattern)[slot]), 0.36, v);
     }
   }
-  scale(click, 0.12);
+  scale(click, 0.18);
   for (var i = 0; i < stem.length; i++) {
     stem[i] += click[i];
   }
@@ -583,63 +655,87 @@ Float64List _banjo(Rng rng) {
     Biquad.highpass(170),
     Biquad.peak(1150, 1.3, 4),
     Biquad.peak(2900, 2.0, 3.5),
-    Biquad.lowpass(9500),
+    Biquad.lowpass(10500),
   ]);
   return stem;
 }
 
-/// The twangy electric: each note picked, a cut a hammer-on from a
-/// whole step under.
+/// The flatpicked flat-top's tune: each note picked, a slurred one
+/// hammered on (no pick), a cut a hammer-on from a whole step under.
 Float64List _lead(Rng rng) {
   final stem = Float64List(loopLength);
+  final click = Float64List(loopLength);
+  void pick(double tuneBeat, double midi, double hold, double velocity,
+      {bool picked = true}) {
+    final at = samplesFor(fileSecondsOf(tuneBeat) + rng.gauss() * 0.004);
+    mixWrapped(
+        stem,
+        pluck(midiToHz(midi), hold, flatpickString, rng,
+            velocity: velocity * (1 + 0.06 * rng.gauss())),
+        at);
+    if (picked) mixWrapped(click, pickClick(rng, velocity: velocity), at);
+  }
+
   for (final n in _leadScore) {
-    var hold = n.beats * beat * (n.staccato ? 0.42 : 0.92);
+    var hold = n.beats * beat * (n.staccato ? 0.42 : 0.95);
     var at = n.beat;
     if (n.cut) {
-      _pluck(stem, at, n.midi - 2, 0.06, twangString, rng, n.velocity * 0.7);
+      pick(at, n.midi - 2, 0.06, n.velocity * 0.7);
       at += 0.12;
       hold -= 0.12 * beat;
     }
-    _pluck(stem, at, n.midi, hold, twangString, rng, n.velocity);
+    pick(at, n.midi, hold, n.velocity * (n.slur ? 0.8 : 1),
+        picked: !n.slur && !n.cut);
   }
-  filterLoop(stem, [
-    Biquad.highpass(180),
-    Biquad.peak(800, 1.0, -2),
-    Biquad.peak(2600, 1.4, 4),
-    Biquad.lowpass(8000),
-  ]);
+  scale(click, 0.1);
+  for (var i = 0; i < stem.length; i++) {
+    stem[i] += click[i];
+  }
+  filterLoop(stem, [...guitarBody(), Biquad.highpass(140)]);
   return stem;
 }
 
-/// The pedal steel: the bridge's tune, and chords swelled under A' and
-/// the reprise, sliding bar to bar.
+/// The pedal steel: the bridge's tune over a second string, and chords
+/// swelled under A' and the reprise; every third slid into.
 Float64List _steel(Rng rng) {
-  final stem = renderLine(
-      toLine(parseLine(tuneBridge, barBeat(33), velocity: 0.8), rng, gap: 0.05),
-      steelStyle,
-      loopLength,
-      rng);
-  final upper = <ScoreNote>[];
-  final lower = <ScoreNote>[];
-  for (final bar in [
-    for (var b = 9; b <= 16; b++) b,
-    for (var b = 49; b <= 55; b++) b
-  ]) {
-    final chord = chordAt(bar);
-    final slide = bar != 9 && bar != 49;
-    upper.add(
-        ScoreNote(barBeat(bar), 4, chord.pad[1], velocity: 0.3, slur: slide));
-    lower.add(
-        ScoreNote(barBeat(bar), 4, chord.pad[0], velocity: 0.26, slur: slide));
+  final bridge = parseLine(tuneBridge, barBeat(33), velocity: 0.8);
+  final pads = [<ScoreNote>[], <ScoreNote>[], <ScoreNote>[]];
+  for (final (from, to) in const [(9, 16), (49, 55)]) {
+    var bar = from;
+    while (bar <= to) {
+      final chord = chordAt(bar);
+      var end = bar + 1;
+      while (end <= to && chart[end - 1] == chart[bar - 1]) {
+        end++;
+      }
+      final beats = (end - bar) * 4.0;
+      pads[0].add(ScoreNote(barBeat(bar), beats, chord.pad[0], velocity: 0.26));
+      pads[1].add(ScoreNote(barBeat(bar), beats, chord.pad[1], velocity: 0.28));
+      pads[2].add(ScoreNote(barBeat(bar), beats, chord.third, velocity: 0.3));
+      bar = end;
+    }
   }
-  for (final voice in [upper, lower]) {
+  final voices = [
+    steelSlides(bridge),
+    [
+      for (final n in bridge)
+        ScoreNote(
+            n.beat, n.beats, chordToneBelow(n.midi, chordAt(n.beat ~/ 4 + 1)),
+            velocity: n.velocity * 0.7),
+    ],
+    pads[0],
+    pads[1],
+    steelSlides(pads[2]),
+  ];
+  final stem = Float64List(loopLength);
+  for (final voice in voices) {
     final line =
         renderLine(toLine(voice, rng, gap: 0.08), steelStyle, loopLength, rng);
     for (var i = 0; i < stem.length; i++) {
       stem[i] += line[i];
     }
   }
-  filterLoop(stem, [Biquad.highpass(200), Biquad.lowpass(5200)]);
+  filterLoop(stem, [Biquad.highpass(160), Biquad.lowpass(5200)]);
   return stem;
 }
 
@@ -657,36 +753,43 @@ Float64List _harp(Rng rng) {
   return stem;
 }
 
+/// The fiddle: thirds under the tune in A' and the reprise, its own B'
+/// with double stops on the long notes, and double stops bowed on 1 and
+/// 3 under the banjo's break.
 Float64List _fiddle(Rng rng) {
-  final lead = _leadScore;
   bool harmonized(ScoreNote n) =>
-      (n.beat >= barBeat(13) && n.beat < barBeat(17)) ||
-      (n.beat >= barBeat(49) && n.beat < barBeat(56));
+      n.beats >= 0.5 &&
+      ((n.beat >= barBeat(13) && n.beat < barBeat(17)) ||
+          (n.beat >= barBeat(49) && n.beat < barBeat(56)));
+  final b2 = parseLine(tuneB2, barBeat(25), velocity: 0.86);
   final main = <ScoreNote>[
-    for (final n in lead)
+    for (final n in _leadScore)
       if (harmonized(n))
         ScoreNote(n.beat, n.beats, thirdBelow(n.midi),
-            velocity: n.velocity * 0.62, slur: n.slur, staccato: n.staccato),
-    ...parseLine(tuneB2, barBeat(25), velocity: 0.86).map((n) => ScoreNote(
-        n.beat, n.beats, n.midi - 12,
-        velocity: n.velocity, slur: n.slur, staccato: n.staccato)),
+            velocity: n.velocity * 0.62, staccato: n.staccato),
+    ...b2,
     ScoreNote(barBeat(56), 0.5, 72, velocity: 0.7, staccato: true),
   ];
-  final stem = renderLine(toLine(main, rng), fiddleStyle, loopLength, rng);
-
-  // Double stops: held chord notes under the break.
-  final upper = <ScoreNote>[];
-  final lower = <ScoreNote>[];
+  final lower = <ScoreNote>[
+    for (final n in b2)
+      if (n.beats >= 1)
+        ScoreNote(
+            n.beat, n.beats, chordToneBelow(n.midi, chordAt(n.beat ~/ 4 + 1)),
+            velocity: n.velocity * 0.55),
+  ];
   for (var bar = 41; bar <= 48; bar++) {
     final chord = chordAt(bar);
-    const velocity = 0.21;
-    upper.add(ScoreNote(barBeat(bar), 4, chord.pad[1], velocity: velocity));
-    lower.add(
-        ScoreNote(barBeat(bar), 4, chord.pad[0], velocity: velocity * 0.9));
+    for (final on in bar == 48 ? const [0.0] : const [0.0, 2.0]) {
+      final at = barBeat(bar, on);
+      main.add(ScoreNote(at, 2, chord.third, velocity: 0.3));
+      lower.add(
+          ScoreNote(at, 2, chordToneBelow(chord.third, chord), velocity: 0.26));
+    }
   }
-  for (final voice in [upper, lower]) {
+  final stem = Float64List(loopLength);
+  for (final voice in [main, lower]) {
     final line =
-        renderLine(toLine(voice, rng, gap: 0.06), fiddleStyle, loopLength, rng);
+        renderLine(toLine(voice, rng), countryFiddleStyle, loopLength, rng);
     for (var i = 0; i < stem.length; i++) {
       stem[i] += line[i];
     }
@@ -752,32 +855,6 @@ Float64List _brushes(Rng rng) {
   return stem;
 }
 
-Float64List _woodblocks(Rng rng) {
-  final stem = Float64List(loopLength);
-  for (var bar = 1; bar <= barCount; bar++) {
-    final section = sectionOf(bar);
-    if (section != Section.b && section != Section.breakdown) continue;
-    final b = barBeat(bar);
-    final fill = bar == 24 || bar == 48;
-    for (var step = 0; step < 8; step++) {
-      if (fill && step >= 6) {
-        for (var i = 0; i < 4; i++) {
-          _place(stem, b + 3 + i * 0.25,
-              woodblock(rng, hz: 900 - i * 70, velocity: 0.6 + i * 0.1), rng);
-        }
-        break;
-      }
-      final high = step.isEven;
-      _place(
-          stem,
-          b + step * 0.5,
-          woodblock(rng, hz: high ? 840 : 615, velocity: high ? 0.7 : 0.5),
-          rng);
-    }
-  }
-  return stem;
-}
-
 Float64List _washboard(Rng rng) {
   final stem = Float64List(loopLength);
   for (final (bar, at) in const [(16, 3.0), (48, 2.5), (54, 3.0), (12, 3.5)]) {
@@ -816,7 +893,7 @@ Float64List _washboard(Rng rng) {
 
 Float64List _rooster(Rng rng) {
   final stem = Float64List(loopLength);
-  _place(stem, barBeat(40, 1), roosterCrow(rng, scale: 0.86, pitch: 0.96), rng);
+  _place(stem, barBeat(40, 1), roosterCrow(pitch: 0.96), rng);
   filterLoop(stem, [Biquad.lowpass(4200), Biquad.highpass(380)]);
   return stem;
 }
@@ -845,7 +922,7 @@ class _Stem {
   final rng = Rng(1907);
   final (henLeft, henRight) = _hens(rng);
   final stems = [
-    _Stem('electric', _lead(rng), pan: 0.08, send: 0.24, level: 0),
+    _Stem('lead guitar', _lead(rng), pan: 0.08, send: 0.24, level: 0),
     _Stem('steel', _steel(rng), pan: -0.3, send: 0.4, level: -4),
     _Stem('harmonica', _harp(rng), pan: 0.32, send: 0.25, level: -7),
     _Stem('fiddle', _fiddle(rng), pan: -0.24, send: 0.3, level: -3.5),
@@ -854,7 +931,6 @@ class _Stem {
     _Stem('bass', _bass(rng), pan: 0, send: 0.04, level: -6),
     _Stem('kick', _kick(rng), pan: 0, send: 0.05, level: -10),
     _Stem('brushes', _brushes(rng), pan: 0.14, send: 0.2, level: -10),
-    _Stem('wood blocks', _woodblocks(rng), pan: -0.3, send: 0.2, level: -15),
     _Stem('washboard', _washboard(rng), pan: 0.22, send: 0.15, level: -17),
     _Stem('hens left', henLeft, pan: -0.55, send: 0.24, level: -11),
     _Stem('hens right', henRight, pan: 0.5, send: 0.24, level: -11),

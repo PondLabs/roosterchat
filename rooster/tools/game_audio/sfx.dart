@@ -202,7 +202,7 @@ Float64List hatchPeeps(Rng rng) {
 
 /// A hole in one: the host crows, a beat after the chime.
 Float64List holeInOneCrow(Rng rng) {
-  final crow = roosterCrow(rng);
+  final crow = roosterCrow();
   final dry =
       arrange([(0.24, crow, 1)], length: 0.24 + crow.length / sampleRate + 0.5);
   final (wet, _) = const Room(size: 0.4, damp: 0.5).once(dry);
@@ -678,7 +678,7 @@ Float64List victoryFanfare(Rng rng) {
     Biquad.peak(2900, 1.6, 5),
     Biquad.lowpass(6400),
   ]);
-  final crow = roosterCrow(rng, scale: 0.8);
+  final crow = roosterCrow();
   return _withRoom(arrange([
     (0, _banjoBody(arrange(banjo, length: 5.0)), 0.55),
     (0, whistle, 0.5),

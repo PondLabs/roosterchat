@@ -11,6 +11,19 @@ enum LiveMedia { screen, camera }
 /// microphone off too.
 enum VoiceState { muted, deafened }
 
+/// A call activity (a game) someone in the call is in, shown next to their
+/// name in the room list.
+class ActivityBadge {
+  const ActivityBadge(
+      {required this.name, required this.icon, this.watching = false});
+
+  final String name;
+  final ImageOrIcon icon;
+
+  /// A spectator, not a player.
+  final bool watching;
+}
+
 class RoomActivitySession {
   Set<String> participants;
 
@@ -28,6 +41,10 @@ class RoomActivitySession {
   /// their music is playing. For people outside the call, who don't get the
   /// booth's own messages; inside it the booth itself is shown.
   final Map<String, bool> djPlaying = {};
+
+  /// Who is in a call activity, by user id: its host, and in our own call
+  /// its players and spectators too.
+  final Map<String, ActivityBadge> playing = {};
 
   String application;
 

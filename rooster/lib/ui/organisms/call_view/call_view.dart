@@ -487,7 +487,12 @@ class _CallViewState extends State<CallView> {
               child: ActivityStage(
                 activityName: 'Sunny Side Putt',
                 gameSlot: activity.match == null
-                    ? null
+                    ? (activity.outdated
+                        ? Center(
+                            child: Text(activity.hostOutdated
+                                ? labelPuttHostUpdateToPlay()
+                                : labelPuttUpdateToPlay()))
+                        : null)
                     : SunnySidePuttView(
                         match: activity.match!,
                         audio: _puttAudio ??= (PuttAudio()..preload()),

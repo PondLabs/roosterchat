@@ -376,7 +376,8 @@ mixin _LawnPaint {
       }
     }
 
-    // The nest: a soft ring of shade around the straw.
+    // The nest: a dish of shade deepening toward the cup (the green worn
+    // down round it), and a dark ring of turf at its rim.
     final nest = hole.nest;
     final reach = nest.radius * 1.9;
     final c0 = colOf(nest.position.x - reach).clamp(0, width - 1);
@@ -386,8 +387,11 @@ mixin _LawnPaint {
     for (var row = r0; row <= r1; row++) {
       for (var col = c0; col <= c1; col++) {
         final d = worldAt(col, row).distanceTo(nest.position);
-        final k = _softBand(d, nest.radius * 1.35, nest.radius * 0.45);
-        if (k > 0) bitmap.blend(col, row, _Farm.turfShade, k * 0.4);
+        final k = _softBand(d, nest.radius * 1.4, nest.radius * 0.5);
+        if (k > 0) bitmap.blend(col, row, _Farm.turfShade, k * 0.45);
+        final rim = 1 - ((d - nest.radius * 1.04) / (nest.radius * 0.12)).abs();
+        if (rim > 0)
+          bitmap.blend(col, row, 0x24401A, rim.clamp(0.0, 1.0) * 0.6);
       }
     }
 
@@ -451,6 +455,15 @@ _Turf _prepareTurf(_TurfJob job) => (
 /// Builds one hole's course pieces. Every piece is a fresh subtree the
 /// world parents under its kind group; the hole's animated pieces register
 /// with [animated].
+/// How deep the nest's cup runs below the turf: room for a holed egg and
+/// the chick to drop out of sight.
+double _nestCupDepth(double radius) => radius * 0.8;
+
+/// The cup's inside, drawn before the opening's depth (and both before the
+/// turf and everything else): see [_CourseKit.nest].
+const int _cupOrder = -2;
+const int _openingOrder = -1;
+
 class _CourseKit with _LawnPaint {
   _CourseKit(this.hole,
       {required this.eggRadius,
@@ -1830,56 +1843,111 @@ class _CourseKit with _LawnPaint {
 
   // ---- the nest and its flag --------------------------------------------------------------------
 
-  /// The nest: a woven straw ring around a dark cup, and the flag on its
-  /// far rim flying the hole's number.
+  /// The nest: a cup sunk into the green (a dark opening flush with the
+  /// turf, a wall falling away to a floor), straw lining its rim, and the
+  /// flag on its far rim flying the hole's number.
+  ///
+  /// The turf is one mesh, not cut: the cup's inside is drawn first
+  /// ([_cupOrder]), then an invisible disc at the opening writes the
+  /// turf's depth there ([_openingOrder]), so the turf drawn after it
+  /// fails the depth test over the opening and the cup shows through.
+  /// Anything drawn after that disc is cut at the turf line there, so what
+  /// goes down into the cup (a holed egg, the chick) draws with the cup's
+  /// inside, at [_cupOrder].
   tjs.Group nest({String? label}) {
     final nest = hole.nest;
     final group = tjs.Group()
       ..name = 'nest'
       ..position.setValues(nest.position.x, 0, nest.position.y);
     final r = nest.radius;
-    // The cup: a lit inner wall falling away to the dark at its bottom -
-    // a radial gradient that reads as depth.
-    final cup = tjs.Mesh(
-      tjg.CircleGeometry(radius: r * 0.8, segments: 48),
+    final depth = _nestCupDepth(r);
+    // The wall: the inside of a slightly tapered tube, earth lit on the
+    // sun's side at the top, falling to near black at the floor.
+    final wallGeometry = tjg.CylinderGeometry(r, r * 0.92, depth, 48, 3, true)
+      ..translate(0, -depth / 2, 0);
+    final wallPosition =
+        wallGeometry.attributes['position'] as tjs.BufferAttribute;
+    final wallColors = <double>[];
+    for (var i = 0; i < wallPosition.count; i++) {
+      final x = wallPosition.getX(i)!.toDouble() / r;
+      final z = wallPosition.getZ(i)!.toDouble() / r;
+      final down = -wallPosition.getY(i)!.toDouble() / depth;
+      // The wall lit toward the sun's side (the far side's inside faces
+      // the camera most of the time), the floor's end in shadow.
+      final lit = (0.5 + 0.5 * (-z * 0.7 - x * 0.3)).clamp(0.0, 1.0);
+      final color = _lin(_mix(_mix(0x4A2E18, 0x8A5E36, lit), 0x120A05,
+          math.pow(down, 0.7).toDouble()));
+      wallColors.addAll([color.red, color.green, color.blue]);
+    }
+    wallGeometry.setAttributeFromString(
+        'color', tjs.Float32BufferAttribute.fromList(wallColors, 3, false));
+    group.add(tjs.Mesh(
+      wallGeometry,
+      tjs.MeshBasicMaterial({
+        tjs.MaterialProperty.vertexColors: true,
+        tjs.MaterialProperty.side: tjs.BackSide,
+      }),
+    )
+      ..name = 'nest-cup-wall'
+      ..renderOrder = _cupOrder);
+    // The floor: dark earth with a few strands of straw.
+    group.add(tjs.Mesh(
+      tjg.CircleGeometry(radius: r * 0.92, segments: 48),
       tjs.MeshBasicMaterial({
         tjs.MaterialProperty.map: _cupTexture(),
       }),
     )
       ..name = 'nest-cup'
       ..rotation.x = -math.pi / 2
-      ..position.y = 0.012;
-    group.add(cup);
+      ..position.y = -depth
+      ..renderOrder = _cupOrder);
+    // The opening: no colour, only the turf's depth (lifted a hair and
+    // pulled nearer by polygon offset, so the turf under it never wins a
+    // tie). No more: what lies on the turf over it (the last roll's trace,
+    // an egg rolling over the lip) must not be cut by it.
+    group.add(tjs.Mesh(
+      tjg.CircleGeometry(radius: r, segments: 48),
+      tjs.MeshBasicMaterial({
+        tjs.MaterialProperty.colorWrite: false,
+        tjs.MaterialProperty.polygonOffset: true,
+        tjs.MaterialProperty.polygonOffsetFactor: -1.0,
+        tjs.MaterialProperty.polygonOffsetUnits: -1.0,
+      }),
+    )
+      ..name = 'nest-opening'
+      ..rotation.x = -math.pi / 2
+      ..position.y = 0.005
+      ..renderOrder = _openingOrder);
 
-    // The straw: a lumpy torus in mixed straw tones, and strands poking
-    // out of it every which way.
+    // The straw: a low, lumpy ring lining the rim (outside the opening, so
+    // the hole stays a hole), and strands lying on the turf round it.
     final straw = _Merged();
-    final torus = tjg.TorusGeometry(r * 1.0, r * 0.24, 10, 44);
+    final torus = tjg.TorusGeometry(r * 1.1, r * 0.09, 8, 48);
     final position = torus.attributes['position'] as tjs.BufferAttribute;
     for (var i = 0; i < position.count; i++) {
       final x = position.getX(i)!.toDouble();
       final y = position.getY(i)!.toDouble();
       final z = position.getZ(i)!.toDouble();
       final k =
-          1 + (_hash2((x * 40).round(), (y * 40).round(), 5) - 0.5) * 0.16;
+          1 + (_hash2((x * 40).round(), (y * 40).round(), 5) - 0.5) * 0.08;
       position.setXYZ(i, x * k, y * k, z * k);
     }
     straw.add(
-        torus, _place(0, r * 0.12, 0, tilt: math.pi / 2, sz: 0.55), _Farm.straw,
+        torus, _place(0, r * 0.02, 0, tilt: math.pi / 2, sz: 0.5), _Farm.straw,
         baseShade: 0.7);
-    for (var i = 0; i < 34; i++) {
-      final angle = i / 34 * math.pi * 2 + _rand.range(-0.1, 0.1);
-      final radial = r * _rand.range(0.88, 1.18);
-      final length = _rand.range(0.45, 0.85) * r;
+    for (var i = 0; i < 30; i++) {
+      final angle = i / 30 * math.pi * 2 + _rand.range(-0.1, 0.1);
+      final radial = r * _rand.range(1.08, 1.28);
+      final length = _rand.range(0.35, 0.6) * r;
       straw.add(
-        tjs.BoxGeometry(length, 0.035, 0.07),
+        tjs.BoxGeometry(length, 0.03, 0.06),
         _place(
           math.cos(angle) * radial,
-          r * 0.16 + _rand.range(0, 0.12),
+          0.04 + _rand.range(0, 0.06),
           math.sin(angle) * radial,
-          yaw: -angle + _rand.range(0.5, 1.2) * (i.isEven ? 1 : -1),
-          tilt: _rand.range(-0.3, 0.3),
-          roll: _rand.range(-0.35, 0.35),
+          yaw: -angle + _rand.range(1.2, 1.9) * (i.isEven ? 1 : -1),
+          tilt: _rand.range(-0.12, 0.12),
+          roll: _rand.range(-0.12, 0.12),
         ),
         i % 3 == 0
             ? _Farm.strawDark
@@ -1963,10 +2031,8 @@ class _CourseKit with _LawnPaint {
     return group;
   }
 
-  /// The cup's paint: earth lit on the far wall, shading to a deep brown
-  /// at the bottom (not black: round 4's close-ups read a flat black hole),
-  /// a hint of the sun's side, and a few strands of straw lying on the
-  /// floor, so it reads as a nest's cup.
+  /// The cup floor's paint: deep brown earth, a little lighter toward the
+  /// wall, and a few strands of straw lying on it.
   tjs.DataTexture _cupTexture() {
     const size = 128;
     final bitmap = _Bitmap(size, size);
@@ -1979,10 +2045,7 @@ class _CourseKit with _LawnPaint {
         // side), the floor in shadow.
         final lit = (0.5 + 0.5 * (dy * 0.7 - dx * 0.3)).clamp(0.0, 1.0);
         final wall = math.pow(d, 1.5).toDouble();
-        var hex = _mix(0x1A110A, _mix(0x4E321C, 0x9A6C40, lit), wall);
-        // The rim's lip catches the light.
-        if (d > 0.9) hex = _mix(hex, 0xB88A52, (d - 0.9) / 0.1 * 0.5);
-        bitmap.set(x, y, hex);
+        bitmap.set(x, y, _mix(0x140C06, _mix(0x24170C, 0x3A2616, lit), wall));
       }
     }
     // Strands on the floor: short strokes in dull straw.
@@ -1998,7 +2061,7 @@ class _CourseKit with _LawnPaint {
         final px = (cx + math.cos(heading) * t).round();
         final py = (cy + math.sin(heading) * t).round();
         if (px < 0 || py < 0 || px >= size || py >= size) continue;
-        bitmap.blend(px, py, i.isEven ? 0x8A6A3A : 0x6E5230, 0.55);
+        bitmap.blend(px, py, i.isEven ? 0x6A5230 : 0x52402A, 0.45);
       }
     }
     return bitmap.texture();

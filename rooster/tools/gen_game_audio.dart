@@ -1,10 +1,15 @@
 // The Sunny Side Putt audio generator: synthesizes the game's whole sound
 // set - the effects the view plays and the farm band's music loop - into
 // `rooster/assets/sunny_side_putt/`, where the files are committed. No
-// samples, no downloads, no licensed material: every sound comes out of
-// `tools/game_audio/` with fixed seeds, so a re-run writes the same bytes.
+// downloads: every sound comes out of `tools/game_audio/` with fixed
+// seeds, so a re-run writes the same bytes. The one sample is the rooster's
+// crow, the recording the soundboard ships
+// (`assets/soundboard/rooster-freesound.org-385820_1554038-lq.mp3`,
+// "Rooster Crowing" by LoafDV, CC0; credited in
+// `assets/soundboard/CREDITS.md`).
 //
-// From `rooster/`: `dart run tools/gen_game_audio.dart`
+// `dart run tools/gen_game_audio.dart` from `rooster/` (or the same script
+// by its path from anywhere: its paths resolve from the script's own)
 //   --out <dir>      write somewhere else
 //   --only <names>   render only these files, comma-separated stems
 //                    (`putt,music`)
@@ -26,6 +31,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'game_audio/dsp.dart';
+import 'game_audio/instruments.dart' show roosterPath;
 import 'game_audio/music.dart';
 import 'game_audio/sfx.dart';
 
@@ -88,7 +94,7 @@ const _musicQuality = 4;
 const _sfxQuality = 3;
 
 void main(List<String> arguments) {
-  var out = 'assets/sunny_side_putt';
+  var out = roosterPath('assets/sunny_side_putt');
   Set<String>? only;
   String? keep;
   final iterator = arguments.iterator;

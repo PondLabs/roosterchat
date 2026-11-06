@@ -512,11 +512,72 @@ void main() {
       final rise =
           walk(out().single).firstWhere((o) => o.name == 'hatchling-rise');
       expect(rise.position.y, greaterThan(0.25));
+      // It rises out of the cup: drawn with the cup's inside, before the
+      // opening's depth-only disc that would cut it at the turf line.
+      final opening = walk(world.holeGroup('nest')!)
+          .firstWhere((o) => o.name == 'nest-opening');
+      for (final mesh in walk(out().single).whereType<tjs.Mesh>()) {
+        expect(mesh.renderOrder, lessThan(opening.renderOrder),
+            reason: mesh.name);
+      }
       while (time < 3.8) {
         world.applySnapshot(PuttWorldFrame(time: time));
         time += 0.016;
       }
       expect(out(), isEmpty, reason: 'the chick drops back into the nest');
+    });
+
+    test('the nest is a cup sunk into the turf', () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      final nest = world.holeGroup('nest')!.children.single;
+      tjs.Mesh part(String name) =>
+          walk(nest).whereType<tjs.Mesh>().firstWhere((m) => m.name == name);
+      final wall = part('nest-cup-wall');
+      final floor = part('nest-cup');
+      final opening = part('nest-opening');
+      expect(floor.position.y, lessThan(-0.5), reason: 'a floor down there');
+      expect(wall.material!.side, tjs.BackSide, reason: 'its inside shows');
+      // The opening writes the turf's depth, no colour, after the cup's
+      // inside and before the turf (so the turf skips it).
+      expect(opening.material!.colorWrite, isFalse);
+      expect(opening.material!.polygonOffset, isTrue);
+      expect(opening.position.y, greaterThan(0));
+      // A hair over the turf: an egg on the lip and the trace (0.03 up)
+      // are not cut by it.
+      expect(opening.position.y, lessThan(0.01));
+      expect(opening.material!.polygonOffsetFactor, greaterThanOrEqualTo(-1));
+      expect(wall.renderOrder, lessThan(opening.renderOrder));
+      expect(opening.renderOrder, lessThan(0));
+    });
+
+    test('a holed egg drops below the turf into the cup', () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      world.applySnapshot(PuttWorldFrame(
+        time: 0,
+        eggs: [eggAt(dressing.nest.position)],
+      ));
+      final egg = world.eggOf('me')!;
+      expect(egg.position.y, greaterThan(0));
+      var time = 0.016;
+      while (time < 0.42) {
+        world.applySnapshot(PuttWorldFrame(time: time));
+        time += 0.016;
+      }
+      // Its top (a standing egg's height over its middle) under the turf.
+      expect(egg.position.y + 0.45 * 1.2 * 1.28, lessThan(0));
+      // And seen down there: the shell and its outline draw with the cup's
+      // inside (opaque, before the opening's depth-only disc), not cut at
+      // the turf line by it.
+      final nest = walk(world.holeGroup('nest')!).whereType<tjs.Mesh>();
+      final wall = nest.firstWhere((m) => m.name == 'nest-cup-wall');
+      for (final name in ['egg-shell', 'egg-outline']) {
+        final mesh =
+            walk(egg).whereType<tjs.Mesh>().firstWhere((m) => m.name == name);
+        expect(mesh.renderOrder, wall.renderOrder, reason: name);
+        expect(mesh.material!.transparent, isFalse, reason: name);
+      }
     });
 
     test('the collected crates stand down and stay down', () {
@@ -1149,6 +1210,19 @@ void main() {
       expect(ink, hasLength(1));
       expect(
           walk(world.scene).where((o) => o.name == 'aim-trace'), hasLength(1));
+      // Over a cup it wins against the opening's depth (see the nest).
+      final opening = walk(world.holeGroup('nest')!)
+          .whereType<tjs.Mesh>()
+          .firstWhere((m) => m.name == 'nest-opening');
+      for (final mark in [
+        ...ink,
+        walk(world.scene).firstWhere((o) => o.name == 'aim-trace')
+      ]) {
+        final material = (mark as tjs.Mesh).material!;
+        expect(material.polygonOffset, isTrue);
+        expect(material.polygonOffsetFactor,
+            lessThan(opening.material!.polygonOffsetFactor));
+      }
     });
 
     test("only the viewer's egg shows through what hides it", () {
@@ -1206,6 +1280,65 @@ void main() {
       expect(pin.material!.transparent, isTrue,
           reason: 'in the pass drawn last, by its order');
       expect(pin.renderOrder, greaterThan(orderOf('me')));
+    });
+
+    test('the arrow grows with the power, short, and none at zero', () {
+      expect(puttArrowLength(0), 0);
+      var previous = 0.0;
+      for (var power = 0.05; power <= 1.0001; power += 0.05) {
+        final length = puttArrowLength(power);
+        expect(length, greaterThan(previous), reason: 'at $power');
+        previous = length;
+      }
+      expect(puttArrowLength(1), lessThan(3), reason: 'a modest arrow');
+
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      bool arrowShown(double power) {
+        world.applySnapshot(PuttWorldFrame(
+          time: 0,
+          eggs: [eggAt(const Vec2(10, 10), mine: true)],
+          aim: PuttWorldAim(
+              origin: const Vec2(10, 10),
+              angle: 0,
+              power: power,
+              dragLength: 0.3,
+              eggRadius: 0.45),
+        ));
+        return walk(world.scene)
+            .firstWhere((o) => o.name == 'aim-turned')
+            .visible;
+      }
+
+      expect(arrowShown(0), isFalse, reason: 'a pull that moves nothing');
+      expect(arrowShown(0.4), isTrue);
+    });
+
+    test('the guide is a short hint, with no mark where the roll stops', () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      // A soft putt's whole roll, stopping 12 units out.
+      world.applySnapshot(PuttWorldFrame(
+        time: 0,
+        eggs: [eggAt(const Vec2(10, 10), mine: true)],
+        aim: PuttWorldAim(
+          origin: const Vec2(10, 10),
+          angle: 0,
+          power: 0.6,
+          dragLength: 3,
+          eggRadius: 0.45,
+          preview: [for (var x = 10.0; x <= 22; x += 0.5) Vec2(x, 10)],
+        ),
+      ));
+      final dots = walk(world.scene)
+          .where((o) => o.name == 'aim-dot' && o.visible)
+          .toList();
+      expect(dots, isNotEmpty);
+      final tip = 0.45 * 2.35 + puttArrowLength(0.6) + 1.15;
+      final farthest = dots.map((dot) => dot.position.x).reduce(math.max);
+      expect(farthest, lessThanOrEqualTo(tip + 2.8 + 1e-6),
+          reason: 'a few egg lengths past the arrow, not the whole roll');
+      expect(walk(world.scene).where((o) => o.name == 'aim-rest'), isEmpty);
     });
 
     test("an egg in front of the viewer's resting egg fades aside", () {

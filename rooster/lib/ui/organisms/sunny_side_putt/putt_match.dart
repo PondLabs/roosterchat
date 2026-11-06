@@ -280,8 +280,9 @@ class PuttMatch extends ChangeNotifier {
   /// its host: every move of ours is told to the handler (the session
   /// takes it to the host), and the flow moves - advancing, votes,
   /// leaving - go ONLY to the handler, the host's word coming back as the
-  /// next state or relayed move.
-  final ValueChanged<EngineInput>? remoteMove;
+  /// next state or relayed move. The session switches it as the host seat
+  /// moves: a guest that takes over plays into its own engine.
+  ValueChanged<EngineInput>? remoteMove;
 
   /// [look] is the one this client's egg wears, the one saved in "Your
   /// egg" when left out ([savedPuttLook]).

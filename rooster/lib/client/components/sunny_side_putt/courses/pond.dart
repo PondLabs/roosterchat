@@ -65,7 +65,14 @@ HoleDef _lilyPadLane() {
       ]),
     ],
     kickers: const [_pond1Kicker],
-    boxes: [QuestionBox('pond_1_box', _pond1Bank)],
+    boxes: [
+      QuestionBox('pond_1_box', _pond1Bank),
+      QuestionBox('pond_1_approach', Vec2(13, 13)),
+      QuestionBox('pond_1_far_bank', Vec2(34.5, 13)),
+      QuestionBox('pond_1_south_bank', Vec2(23, 22.5)),
+      QuestionBox('pond_1_north_east', Vec2(40, 4)),
+      QuestionBox('pond_1_south_east', Vec2(40, 22)),
+    ],
   );
 }
 
@@ -111,7 +118,15 @@ HoleDef _theWeir() {
       WaterRect(Rect(Vec2(19, 10.5), Vec2(29, 19))),
       WaterRect(Rect(Vec2(19, 24), Vec2(29, 28))),
     ],
-    boxes: [QuestionBox('pond_2_box', Vec2(24, 21.5))],
+    boxes: [
+      QuestionBox('pond_2_box', Vec2(24, 21.5)),
+      QuestionBox('pond_2_weir', Vec2(24, 8.75)),
+      QuestionBox('pond_2_tee_lane', Vec2(13, 8.75)),
+      QuestionBox('pond_2_south_west', Vec2(12, 22)),
+      QuestionBox('pond_2_south_east', Vec2(36, 22)),
+      QuestionBox('pond_2_north_east', Vec2(36, 2)),
+      QuestionBox('pond_2_between', Vec2(32, 14.5)),
+    ],
     // the dish round the nest, the nest on its flat bottom
     hills: const [
       Hill.mound(_pond2Nest, height: -0.5, top: 2.4, skirt: 2.6),
@@ -215,7 +230,15 @@ HoleDef _islandGreen() {
       ], height: _pond3Pier),
     ],
     ramps: [ramp],
-    boxes: [QuestionBox('pond_3_box', _pond3Island + heading * 3.4)],
+    boxes: [
+      QuestionBox('pond_3_box', _pond3Island + heading * 3.4),
+      QuestionBox('pond_3_shore', Vec2(12, 22)),
+      QuestionBox('pond_3_jetty', Vec2(20, 22)),
+      QuestionBox('pond_3_island_north',
+          _pond3Island + Vec2(heading.y, -heading.x) * 3.4),
+      QuestionBox('pond_3_north_shore', Vec2(12, 4)),
+      QuestionBox('pond_3_south_shore', Vec2(12, 26)),
+    ],
   );
 }
 
@@ -260,7 +283,14 @@ HoleDef _boardwalk() {
       ...polyline(south),
     ],
     water: lakeCrossedBy(_pond4Pond, _pond4Walk, 5),
-    boxes: [QuestionBox('pond_4_box', Vec2(33, 6.2))],
+    boxes: [
+      QuestionBox('pond_4_box', Vec2(33, 6.6)),
+      QuestionBox('pond_4_shore', Vec2(10, 21.5)),
+      QuestionBox('pond_4_north_west', Vec2(4, 10)),
+      QuestionBox('pond_4_south_west', Vec2(6, 27)),
+      QuestionBox('pond_4_south_east', Vec2(42, 24)),
+      QuestionBox('pond_4_east', Vec2(46, 14)),
+    ],
   );
 }
 
@@ -318,7 +348,14 @@ HoleDef _duckWalk() {
         ],
       ),
     ],
-    boxes: [QuestionBox('pond_5_box', Vec2(45, 21))],
+    boxes: [
+      QuestionBox('pond_5_box', Vec2(45, 21)),
+      QuestionBox('pond_5_causeway', Vec2(25, 13)),
+      QuestionBox('pond_5_far_end', Vec2(35.5, 13)),
+      QuestionBox('pond_5_north_east', Vec2(45, 5)),
+      QuestionBox('pond_5_north_west', Vec2(6, 4)),
+      QuestionBox('pond_5_south_west', Vec2(6, 22)),
+    ],
     // the raised green, the nest in the middle of its flat top
     hills: const [
       Hill.mound(_pond5Nest, height: _pond5Rise, top: 2.4, skirt: 2.6),
@@ -385,7 +422,14 @@ HoleDef _frogPond() {
         ],
       ),
     ],
-    boxes: [QuestionBox('pond_6_box', Vec2(25, 3))],
+    boxes: [
+      QuestionBox('pond_6_box', Vec2(25, 3)),
+      QuestionBox('pond_6_gap', Vec2(10, 15)),
+      QuestionBox('pond_6_causeway', Vec2(36, 15)),
+      QuestionBox('pond_6_south', Vec2(25, 27)),
+      QuestionBox('pond_6_south_pond', Vec2(21, 22.5)),
+      QuestionBox('pond_6_lakeside', Vec2(31, 22)),
+    ],
     // the island's crown, the nest in the middle of its flat top
     hills: const [
       Hill.mound(_pond6Island, height: _pond6Rise, top: 2.4, skirt: 2),

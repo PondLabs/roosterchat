@@ -29,6 +29,19 @@ map) the renderer's tone mapping where three.js gives none, so the depth
 materials did the same. Both are fixed and marked `// ROOSTER:` in
 `lib/renderers/renderer.dart` and `lib/angle/angle_programs.dart`.
 
+On native the renderer drew the shadow map after the scene (a bind of the
+null framebuffer brings nothing back there), so the scene read the last
+frame's map: shadows a frame late, and a dark flash whenever the map was
+remade. `AngleRenderer.restoreScreenFramebuffer`, set by `lib/three_viewer.dart`
+when it draws straight into its texture, binds the texture back after the
+shadow pass, and shadows draw first on native too. On the shared-FBO path
+(Linux, and Windows without a surface producer) the viewer also calls
+`glFinish` before telling Flutter of a frame: Flutter samples that same
+texture, and with a flush alone it could show a frame still being drawn.
+The surface paths swap buffers instead and do not stall. `lib/three_viewer.dart`
+also waits for or drops an ANGLE start that a dispose cut short, and reports
+a start that failed (`onStartFailed`).
+
 `flutter-webrtc` replaced the commetchat fork (branch `hkdf`, 1.4.1). Upstream
 1.6.2 already carries the fork's only change (`KeyDerivationAlgorithm`
 handling in the frame cryptor) and adds what we needed it for: system-audio

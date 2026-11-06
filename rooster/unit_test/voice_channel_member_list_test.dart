@@ -1,10 +1,14 @@
 import 'dart:async';
 
+import 'package:rooster/client/call_manager.dart';
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/client_manager.dart';
 import 'package:rooster/client/components/profile/profile_component.dart';
 import 'package:rooster/client/components/activities/activities_component.dart';
 import 'package:rooster/client/components/call_activity/call_activity_component.dart';
+import 'package:rooster/client/components/call_activity/call_activity_protocol.dart';
+import 'package:rooster/client/components/call_activity/call_activity_session.dart';
+import 'package:rooster/client/components/call_activity/call_activity_transport.dart';
 import 'package:rooster/client/matrix/components/call_activity/matrix_call_activity_component.dart';
 import 'package:rooster/client/components/component.dart';
 import 'package:rooster/client/components/room_component.dart';
@@ -95,6 +99,20 @@ class FakeMatrixRoom implements MatrixRoom {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// Counts the activity sounds instead of playing them.
+class CountingCallManager extends CallManager {
+  CountingCallManager(super.clientManager);
+
+  int joined = 0;
+  int left = 0;
+
+  @override
+  void activityJoinedSound() => joined++;
+
+  @override
+  void activityLeftSound() => left++;
 }
 
 class FakeVoipSession implements VoipSession, CallRoster {
@@ -970,18 +988,146 @@ void main() {
       };
     }
 
-    test("an activity whose host is in the call is listed", () {
+    test("its host in the call gets its badge, not a second call", () {
       hostedBy(otherUserId);
-      final game = component
-          .getSessions()
-          .singleWhere((s) => s.application == "test.game");
-      expect(game.participants, {otherUserId});
-      expect(game.isCall, isFalse);
+      final sessions = component.getSessions();
+      expect(sessions.map((s) => s.application), ["m.call"]);
+      expect(sessions.single.playing.keys, [otherUserId]);
+      expect(sessions.single.playing[otherUserId]!.name, "Test game");
     });
 
-    test("an activity whose host left the call is not listed", () {
+    test("an activity whose host left the call gives nobody its badge", () {
       hostedBy("@gone:example.org");
-      expect(component.getSessions().map((s) => s.application), ["m.call"]);
+      final sessions = component.getSessions();
+      expect(sessions.map((s) => s.application), ["m.call"]);
+      expect(sessions.single.playing, isEmpty);
+    });
+
+    group("in our call", () {
+      const hostIdentity = "$otherUserId:DEVICE";
+      const selfIdentity = "$selfUserId:$selfDeviceId";
+      late InMemoryActivityCall wire;
+      late CallActivityTransport host;
+      late CountingCallManager calls;
+      var seq = 0;
+      late DateTime now;
+
+      setUp(() {
+        seq = 0;
+        now = DateTime.now();
+        wire = InMemoryActivityCall();
+        host = wire.join(hostIdentity);
+        calls = CountingCallManager(clientManager);
+        calls.currentSessions.add(FakeVoipSession(client, roomId, "s"));
+        component = MatrixActivitiesComponent(client, room, callManager: calls);
+        room.callActivity = MatrixCallActivityComponent(client, room,
+            callManager: calls,
+            clock: HomeserverClock(localNow: () => now),
+            ownCallTransport: () => wire.join(selfIdentity));
+        hostedBy(otherUserId);
+        room.callActivity!.onSync(matrix.JoinedRoomUpdate(state: [
+          matrix.MatrixEvent(
+            type: MatrixCallActivityComponent.stateEventType,
+            content: const {},
+            senderId: otherUserId,
+            stateKey: "_$hostIdentity",
+            eventId: r"$activity",
+            originServerTs: DateTime.now(),
+          ),
+        ]));
+      });
+      tearDown(() => wire.close());
+
+      Future<void> state(
+          {Set<String> players = const {hostIdentity},
+          Set<String> spectators = const {}}) async {
+        await host.send({
+          "t": CallActivityMessageType.state,
+          ...CallActivitySnapshot(
+            sessionId: hostIdentity,
+            activityId: "test.game",
+            hostUserId: otherUserId,
+            seq: ++seq,
+            players: players,
+            spectators: spectators,
+          ).toJson(),
+        });
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      Future<void> settle() => Future<void>.delayed(
+          MatrixCallActivityComponent.rosterSoundDelay * 2);
+
+      test("players and spectators get its badge, and the list hears of them",
+          () async {
+        final changes = <void>[];
+        final sub = component.onSessionsChanged.listen(changes.add);
+        addTearDown(sub.cancel);
+
+        await state(spectators: {selfIdentity});
+
+        expect(changes, isNotEmpty);
+        expect(callSession(component).playing.keys,
+            unorderedEquals([otherUserId, selfUserId]));
+      });
+
+      test("a spectator's badge says they watch", () async {
+        await state(spectators: {selfIdentity});
+
+        final playing = callSession(component).playing;
+        expect(playing[otherUserId]!.watching, isFalse);
+        expect(playing[selfUserId]!.watching, isTrue);
+      });
+
+      test("a session nobody holds any more gives nobody its badge", () {
+        // Seeded from the state, its host never spoke and left the call:
+        // its membership is still up, so they are listed in it.
+        wire.leave(hostIdentity);
+        expect(callSession(component).playing.keys, [otherUserId],
+            reason: "the host may still turn up for a while");
+
+        now = now.add(MatrixCallActivityComponent.seedGrace);
+        expect(callSession(component).playing, isEmpty);
+      });
+
+      test("a join and a leave together play both, the join first", () async {
+        await state();
+        await settle();
+        await state(players: {hostIdentity, selfIdentity});
+        await state(players: {selfIdentity, "@c:x.org:D"});
+        await Future<void>.delayed(
+            MatrixCallActivityComponent.rosterSoundDelay +
+                const Duration(milliseconds: 50));
+        expect((calls.joined, calls.left), (1, 0));
+        await Future<void>.delayed(MatrixCallActivityComponent.rosterSoundGap);
+        expect((calls.joined, calls.left), (1, 1));
+      });
+
+      test("closing the room plays nothing that was pending", () async {
+        await state();
+        await settle();
+        await state(players: {hostIdentity, selfIdentity});
+        room.callActivity!.close();
+        await settle();
+        expect((calls.joined, calls.left), (0, 0));
+      });
+
+      test("joins and leaves play one sound each, the first state none",
+          () async {
+        await state();
+        await settle();
+        expect((calls.joined, calls.left), (0, 0),
+            reason: "who was already playing is no news");
+
+        await state(players: {hostIdentity, selfIdentity});
+        await state(players: {hostIdentity, selfIdentity, "@c:x.org:D"});
+        await settle();
+        expect((calls.joined, calls.left), (1, 0));
+
+        await state(players: {hostIdentity});
+        await settle();
+        expect((calls.joined, calls.left), (1, 1));
+      });
     });
   });
 }

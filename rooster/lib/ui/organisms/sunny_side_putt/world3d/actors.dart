@@ -13,15 +13,32 @@ const double _eggAspect = 1.28;
 /// from the camera's height; at a rail the overlap stays a sliver.
 const double _eggVisualScale = 1.2;
 
-/// An egg the nest just took: it slides to the cup's middle and sinks.
+/// An egg the nest just took: it slides to the cup's middle and drops in,
+/// below the opening (where the turf's depth hides it).
 class _SinkingEgg {
-  _SinkingEgg(this.view, this.nest);
+  _SinkingEgg(this.view, this.nest, {required this.depth});
 
   static const double life = 0.42;
 
+  /// When (of [life]) it stops sliding and falls.
+  static const double fallFrom = 0.25;
+
   final _EggView3D view;
   final Vec2 nest;
+
+  /// How far it falls: the cup's depth, and at least its own height.
+  final double depth;
   double age = 0;
+
+  /// Its size, [t] of the way through: a touch smaller, to fit the cup.
+  double scaleAt(double t) => 1 - t * t * 0.15;
+
+  /// Its height over the turf at the nest, [t] of the way through.
+  double heightAt(double t) {
+    final rest = view.restHeight * scaleAt(t);
+    final fall = ((t - fallFrom) / (1 - fallFrom)).clamp(0.0, 1.0);
+    return rest - fall * fall * math.max(depth, rest * 2.4);
+  }
 }
 
 /// One egg on the green. Its [group] carries the roll (position and
@@ -345,6 +362,21 @@ class _EggView3D {
   /// The shell's own light (the theme's: warmer and stronger at dusk, so
   /// a white egg stays white in the blue hour).
   final int _glow;
+
+  /// Holed: the shell and its outline draw with the cup's inside (the
+  /// opaque pass, [_cupOrder]), before the opening's depth-only disc, so
+  /// the turf line does not cut the egg as it sinks into the cup. Opaque
+  /// from here on: the view goes when the chick hatches.
+  // ponytail: the first hole-out compiles the opaque shell's program; warm
+  // it up with the others if that frame ever hitches.
+  void intoCup() {
+    for (final mesh in [body, _outline]) {
+      mesh.renderOrder = _cupOrder;
+      mesh.material!
+        ..transparent = false
+        ..needsUpdate = true;
+    }
+  }
 
   /// The stand (ground spot plus the hop's lift, or the flight's altitude
   /// off a kicker), then the roll: world axis from the horizontal

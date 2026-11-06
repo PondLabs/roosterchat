@@ -124,6 +124,9 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   /// True while the keys hold the aim (the hint line says how they putt).
   final ValueNotifier<bool> _keyAiming = ValueNotifier(false);
 
+  /// Who the camera watches once my egg is in (the hint line says so).
+  final ValueNotifier<String?> _watching = ValueNotifier(null);
+
   /// The off-screen nest's marker, refreshed after every rendered frame.
   final ValueNotifier<PuttNestPointer?> _nestPointer = ValueNotifier(null);
 
@@ -196,6 +199,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     _coach.dispose();
     _busy.dispose();
     _keyAiming.dispose();
+    _watching.dispose();
     _greenShown.dispose();
     _nestPointer.dispose();
     _miniMap.dispose();
@@ -358,6 +362,9 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     _busy.value =
         game.aim.isActive || (mine != null && !mine.asleep && !mine.holed);
     _keyAiming.value = game.keyAiming;
+    final watched = game.director.watching;
+    _watching.value =
+        watched == null ? null : displayNameOf(game.match, watched);
   }
 
   // ---- pointer plumbing ----------------------------------------------------------------
@@ -448,6 +455,15 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
         game.world3d.rig
             .pinch(span / _pinchSpan!, distanceAtGestureStart: _pinchDistance!);
       }
+      return;
+    }
+    // A right click during a left-button pull (the same mouse pointer,
+    // its buttons changed) takes the aim back: nothing fires on release.
+    if (event.buttons & kSecondaryMouseButton != 0 &&
+        game.aim.isActive &&
+        !game.keyAiming) {
+      game.cancelAim();
+      _syncAiming();
       return;
     }
     final world = _toWorld(event.localPosition);
@@ -659,6 +675,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
           targeting: game.targeting,
           busy: _busy,
           keyAiming: _keyAiming,
+          watching: _watching,
           shown: _greenShown,
           onSfx: (sfx) => widget.audio?.play(sfx),
           onOpenMenu: _toggleMenu,
@@ -1101,16 +1118,15 @@ class SunnySidePuttGame extends FlameGame {
             ? _swayed(
                 _previewFor(aimState.angle, aimState.power), aim.origin!, sway)
             : const <core.Vec2>[];
-        final rest = guided ? _previewRest : null;
         final landing = guided ? _previewLanding : null;
         aimView = PuttWorldAim(
           origin: aim.origin!,
           angle: aimState.angle + sway,
-          power: aimState.power,
+          // A pull inside the dead zone moves nothing: no arrow.
+          power: guided ? aimState.power : 0,
           dragLength: aimState.dragLength,
           eggRadius: eggRadius,
           preview: preview,
-          rest: rest == null ? null : _swayed([rest], aim.origin!, sway).single,
           previewAir: guided ? _previewAirs : const [],
           landing: landing == null
               ? null
@@ -1443,9 +1459,6 @@ class SunnySidePuttGame extends FlameGame {
   ({double angle, double power})? _previewKey;
   List<core.Vec2> _preview = const [];
 
-  /// Where the cached guide's egg comes to rest, when it stops inside it.
-  core.Vec2? _previewRest;
-
   /// The cached guide's altitudes beside its points (null on the ground),
   /// and where its flight off a kicker comes down.
   List<double?> _previewAirs = const [];
@@ -1474,7 +1487,6 @@ class SunnySidePuttGame extends FlameGame {
     _previewKey = (angle: angle, power: power);
     final world = match.engine.world;
     final current = match.hole;
-    _previewRest = null;
     _previewAirs = const [];
     _previewLanding = null;
     if (world == null || current == null) return _preview = const [];
@@ -1487,7 +1499,6 @@ class SunnySidePuttGame extends FlameGame {
       power: power,
       modifiers: match.localPlayer?.nextShot,
     );
-    _previewRest = roll.rest;
     _previewAirs = roll.airs;
     _previewLanding = roll.landing;
     return _preview = roll.points;
@@ -1529,7 +1540,11 @@ class SunnySidePuttGame extends FlameGame {
           if (world != null)
             for (final ball in world.balls)
               if (ball.playerId != match.localPlayerId && !ball.holed)
-                match.renderPositionOf(ball.playerId),
+                PuttCameraEgg(
+                    ball.playerId, match.renderPositionOf(ball.playerId),
+                    velocity: ball.velocity,
+                    resting: ball.asleep,
+                    strokes: match.engine.strokesInHole(ball.playerId)),
         ],
         // Aiming, or picking a spot for a power-up: the frame holds still.
         aiming: aim.isActive || targeting.isActive,
@@ -2179,15 +2194,12 @@ List<core.Vec2> predictRoll({
       maxTicks: maxTicks,
     ).points;
 
-/// [predictRoll]'s guide, and where the egg comes to rest when it stops
-/// on the turf inside the guide (a soft putt): null when the guide was cut
-/// first, or the egg drops into the nest or out of play. Beside the points,
-/// [airs] holds the egg's altitude where it flies off a kicker (null where
-/// it rolls), and [landing] where that flight first comes down (in the
-/// pond, all the same: that is where it would land).
+/// [predictRoll]'s guide. Beside the points, [airs] holds the egg's
+/// altitude where it flies off a kicker (null where it rolls), and
+/// [landing] where that flight first comes down (in the pond, all the
+/// same: that is where it would land).
 ({
   List<core.Vec2> points,
-  core.Vec2? rest,
   List<double?> airs,
   core.Vec2? landing,
 }) previewRoll({
@@ -2206,7 +2218,7 @@ List<core.Vec2> predictRoll({
       PhysicsWorld.restore(hole: hole, config: config, state: world.toJson());
   final ball = copy.ball(playerId);
   if (ball == null || ball.holed) {
-    return (points: const [], rest: null, airs: const [], landing: null);
+    return (points: const [], airs: const [], landing: null);
   }
   final shotPower =
       (power * (modifiers?.powerMultiplier ?? 1)).clamp(0.0, 1.0).toDouble();
@@ -2221,7 +2233,6 @@ List<core.Vec2> predictRoll({
   final points = <core.Vec2>[ball.position];
   final airs = <double?>[null];
   var flew = false;
-  core.Vec2? rest;
   core.Vec2? landing;
   var travelled = 0.0;
   var bounced = false;
@@ -2269,7 +2280,6 @@ List<core.Vec2> predictRoll({
     if (i % 3 == 0) add(after, ball.air);
     if (ball.asleep) {
       add(after, null);
-      rest = after;
       break;
     }
     // In the air the guide runs on to the landing, whatever its length,
@@ -2283,7 +2293,6 @@ List<core.Vec2> predictRoll({
   }
   return (
     points: points,
-    rest: rest,
     airs: flew ? airs : const <double?>[],
     landing: landing,
   );

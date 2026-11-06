@@ -1,11 +1,12 @@
 // The band and the barnyard the Sunny Side Putt generator plays with: a
 // monophonic line (the tin whistle, the fiddle, the chiptune pulse, the
 // pedal steel, the harmonica), the plucked strings (banjo, guitar, the
-// twangy electric, upright bass), the brushed kit, struck
-// wood and bells, and the farm's voices (the hen, the duck, the chick, the
+// flatpicked flat-top, upright bass), the brushed kit, struck
+// bells, and the farm's voices (the hen, the duck, the chick, the
 // rooster's crow), all synthesized from dsp.dart's parts.
 library;
 
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -110,17 +111,32 @@ const chipStyle = LineStyle(
   duty: 0.25,
 );
 
-/// A pedal steel: swelled in on the volume pedal, sliding into every note
-/// and between slurred ones, a slow bar vibrato.
+/// The music's fiddle: bowed, a mild vibrato, a short slide up into each
+/// bowed note (a quick one, not a long portamento).
+const countryFiddleStyle = LineStyle(
+  tone: LineTone.fiddle,
+  attack: 0.05,
+  release: 0.06,
+  vibratoHz: 5.8,
+  vibratoCents: 11,
+  vibratoDelay: 0.18,
+  glide: 0.025,
+  scoopCents: 45,
+  breath: 0.05,
+);
+
+/// A pedal steel: each note swelled in from silence on the volume pedal,
+/// no scoop (the score writes its slides: a whole step up into a third),
+/// a slow bar vibrato.
 const steelStyle = LineStyle(
   tone: LineTone.steel,
-  attack: 0.16,
-  release: 0.22,
+  attack: 0.3,
+  release: 0.25,
   vibratoHz: 4.6,
-  vibratoCents: 9,
-  vibratoDelay: 0.3,
-  glide: 0.07,
-  scoopCents: 90,
+  vibratoCents: 7,
+  vibratoDelay: 0.35,
+  glide: 0.06,
+  scoopCents: 0,
   breath: 0,
 );
 
@@ -157,6 +173,8 @@ Float64List renderLine(
   final breathFilter = Svf();
   final airFilter = Biquad.highpass(5200);
   final chiffFilter = Biquad.bandpass(2700, 1.1);
+  final steelTone = OnePole(2300);
+  final floor = style.tone == LineTone.steel ? 0.0 : 0.18;
   final pitchSnap = 1 - math.exp(-1 / (0.012 * sampleRate));
   final slurCoef = 1 - math.exp(-1 / (style.glide * sampleRate));
   final ampSnap = 1 - math.exp(-1 / (0.003 * sampleRate));
@@ -211,7 +229,9 @@ Float64List renderLine(
 
     final level = gate
         ? note.velocity *
-            (tongued ? 0.18 + 0.82 * math.min(1, since / style.attack) : 1)
+            (tongued
+                ? floor + (1 - floor) * math.min(1, since / style.attack)
+                : 1)
         : 0.0;
     amp += (level - amp) * (gate ? ampSnap : releaseCoef);
 
@@ -251,13 +271,8 @@ Float64List renderLine(
       case LineTone.chip:
         sample = pulseWave(phase, dt, style.duty) * 0.6;
       case LineTone.steel:
-        final sx = math.sin(twoPi * phase);
-        final cx = math.cos(twoPi * phase);
-        final s2 = 2 * sx * cx;
-        sample = sx +
-            0.45 * s2 +
-            0.22 * sx * (3 - 4 * sx * sx) +
-            0.12 * 2 * s2 * (1 - 2 * sx * sx);
+        // A string through a pickup: every harmonic, the top rolled off.
+        sample = steelTone.process(sawWave(phase, dt)) * 2;
       case LineTone.reed:
         sample = pulseWave(phase, dt, style.duty) * 0.5 +
             style.breath * airFilter.process(rng.bipolar()) * 2;
@@ -292,14 +307,45 @@ const guitarString = StringSpec(
     release: 0.08,
     attack: 0.0015);
 
-/// A twangy electric picked by the bridge pickup: bright, snappy.
-const twangString = StringSpec(
-    ring: 1.5,
-    darkness: 0.08,
-    pickAt: 0.07,
-    pickHz: 7800,
-    release: 0.05,
+/// A steel-string flat-top flatpicked for the tune: a hard bright pick,
+/// little loss in the loop, a long ring. Its body is [guitarBody].
+const flatpickString = StringSpec(
+    ring: 3.2,
+    darkness: 0.12,
+    pickAt: 0.13,
+    pickHz: 9500,
+    release: 0.09,
+    attack: 0.0005);
+
+/// The same guitar strummed for the rhythm: a touch rounder.
+const rhythmString = StringSpec(
+    ring: 2.8,
+    darkness: 0.2,
+    pickAt: 0.17,
+    pickHz: 8000,
+    release: 0.07,
     attack: 0.0008);
+
+/// A bluegrass banjo for the music's rolls: metallic (almost no loss in
+/// the loop), picked by the bridge, quick to die on the head.
+const rollBanjoString = StringSpec(
+    ring: 0.55,
+    darkness: 0.04,
+    pickAt: 0.08,
+    pickHz: 9000,
+    release: 0.08,
+    attack: 0.0006);
+
+/// A flat-top's body after its strings: the air and top resonances, the
+/// boxy mids scooped, a little presence.
+List<Biquad> guitarBody() => [
+      Biquad.highpass(75),
+      Biquad.peak(102, 2.2, 5),
+      Biquad.peak(215, 1.6, 3.5),
+      Biquad.peak(480, 1.0, -2.5),
+      Biquad.peak(2700, 0.9, 3),
+      Biquad.lowpass(10000),
+    ];
 
 /// An upright bass, plucked with the side of a finger.
 const bassString = StringSpec(
@@ -457,14 +503,6 @@ Float64List shaker(Rng rng, {double velocity = 1}) {
   }
   return edges(out, release: 0.03);
 }
-
-/// A temple block at [hz]: the hollow tok of a clip-clop.
-Float64List woodblock(Rng rng, {double hz = 760, double velocity = 1}) =>
-    strike([
-      (hz, 1.0 * velocity, 0.045),
-      (hz * 2.41, 0.32 * velocity, 0.018),
-      (hz * 4.07, 0.12 * velocity, 0.008),
-    ], rng, length: 0.2, click: 0.12 * velocity, clickHz: 2200);
 
 /// A washboard scraped with thimbles: a quick ratchet of tin ticks.
 Float64List washboard(Rng rng, {double velocity = 1, int ticks = 7}) {
@@ -687,36 +725,56 @@ Float64List chickPeep(Rng rng,
   return out;
 }
 
-/// The rooster's "cock-a-doodle-doo": four quick syllables and the long
-/// one, rising, held with a quaver, falling away, hoarse all through.
-/// [scale] stretches it in time; [pitch] transposes.
-Float64List roosterCrow(Rng rng, {double pitch = 1, double scale = 1}) {
-  const o = (560.0, 980.0, 2550.0);
-  const a = (820.0, 1350.0, 2650.0);
-  const u = (430.0, 900.0, 2350.0);
-  const e = (520.0, 1750.0, 2600.0);
-  final p = pitch;
-  final k = scale;
-  final out = syllables([
-    Syllable(0.0 * k, 0.085 * k, 560 * p, 650 * p, 610 * p,
-        level: 0.72, vowel: o),
-    Syllable(0.115 * k, 0.065 * k, 610 * p, 640 * p, 620 * p,
-        level: 0.6, vowel: a),
-    Syllable(0.205 * k, 0.125 * k, 640 * p, 780 * p, 740 * p,
-        peakAt: 0.4, level: 0.88, vowel: u),
-    Syllable(0.355 * k, 0.085 * k, 740 * p, 770 * p, 700 * p,
-        level: 0.72, vowel: e),
-    Syllable(0.47 * k, 0.72 * k, 700 * p, 900 * p, 610 * p,
-        peakAt: 0.42, level: 1.0, vowel: (500.0, 1050.0, 2500.0)),
-  ], rng,
-      rasp: 0.42,
-      jitter: 0.022,
-      breath: 0.1,
-      drive: 2.1,
-      attack: 0.014,
-      release: 0.09,
-      vibratoHz: 7.5,
-      vibratoDepth: 0.025);
-  filterOnce(out, [Biquad.lowpass(6000)]);
+/// The rooster's "cock-a-doodle-doo": the recorded rooster the soundboard
+/// ships (assets/soundboard/rooster-freesound.org-385820_1554038-lq.mp3,
+/// "Rooster Crowing" by LoafDV, CC0), decoded by ffmpeg. A synthesized
+/// crow sounded nothing like one. [pitch] transposes by resampling (which
+/// also changes its length).
+Float64List roosterCrow({double pitch = 1}) {
+  final source = _recordedCrow ??= _decodeMono(roosterPath(
+      'assets/soundboard/rooster-freesound.org-385820_1554038-lq.mp3'));
+  if (pitch == 1) return Float64List.fromList(source);
+  final out = Float64List((source.length / pitch).floor());
+  for (var i = 0; i < out.length; i++) {
+    final x = i * pitch;
+    final j = x.floor();
+    final f = x - j;
+    final a = source[j];
+    final b = j + 1 < source.length ? source[j + 1] : 0.0;
+    out[i] = a + (b - a) * f;
+  }
   return out;
+}
+
+Float64List? _recordedCrow;
+
+/// [relative] (to rooster/) as a path that holds from any working
+/// directory: the generator lives in rooster/tools/.
+String roosterPath(String relative) =>
+    Platform.script.resolve('../$relative').toFilePath();
+
+/// [path] as mono samples at [sampleRate], peak 1.
+Float64List _decodeMono(String path) {
+  final result = Process.runSync(
+      'ffmpeg',
+      [
+        '-hide_banner', '-loglevel', 'error', '-i', path, //
+        '-ac', '1', '-ar', '$sampleRate', '-f', 'f64le', '-',
+      ],
+      stdoutEncoding: null);
+  if (result.exitCode != 0) {
+    throw StateError('ffmpeg could not decode $path: ${result.stderr}');
+  }
+  final bytes = Uint8List.fromList(result.stdout as List<int>);
+  final samples = Float64List.fromList(bytes.buffer.asFloat64List());
+  var peak = 0.0;
+  for (final s in samples) {
+    peak = math.max(peak, s.abs());
+  }
+  if (peak > 0) {
+    for (var i = 0; i < samples.length; i++) {
+      samples[i] /= peak;
+    }
+  }
+  return samples;
 }

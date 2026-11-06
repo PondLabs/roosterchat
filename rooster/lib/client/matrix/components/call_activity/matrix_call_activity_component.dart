@@ -13,6 +13,7 @@ import 'package:rooster/client/call_manager.dart';
 import 'package:rooster/client/components/call_activity/call_activity_component.dart';
 import 'package:rooster/client/components/call_activity/call_activity_session.dart';
 import 'package:rooster/client/components/call_activity/call_activity_transport.dart';
+import 'package:rooster/client/components/component.dart';
 import 'package:rooster/client/components/room_component.dart';
 import 'package:rooster/client/matrix/components/matrix_sync_listener.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_livekit_voip_session.dart';
@@ -26,7 +27,7 @@ import 'livekit_call_activity_transport.dart';
 
 class MatrixCallActivityComponent
     extends RoomComponent<MatrixClient, MatrixRoom>
-    implements CallActivityRoomState, MatrixRoomSyncListener {
+    implements CallActivityRoomState, MatrixRoomSyncListener, NeedsClose {
   MatrixCallActivityComponent(super.client, super.room,
       {CallManager? callManager,
       HomeserverClock? clock,
@@ -163,7 +164,8 @@ class MatrixCallActivityComponent
   }
 
   /// Fires when the set of live sessions (or who is in them) changes:
-  /// the call's view mounts its stage off it.
+  /// the call's view mounts its stage off it, the room list shows who is
+  /// playing.
   Stream<void> get onChanged => _changes.stream;
   final StreamController<void> _changes = StreamController.broadcast();
 
@@ -301,11 +303,14 @@ class MatrixCallActivityComponent
     _listenersOf[session] = _onSessionChanged;
     session.addListener(_onSessionChanged);
     _changes.add(null);
+    // A launch has its host in already: the session told nobody yet.
+    _noteRosters();
   }
 
   Future<void> _untrack(CallActivitySession session) async {
     final listener = _listenersOf.remove(session);
     if (listener != null) session.removeListener(listener);
+    _rosterOf.remove(session);
     _changes.add(null);
     _sessionById.remove(_lastSessionIdOf[session]);
     _lastSessionIdOf.remove(session);
@@ -324,6 +329,7 @@ class MatrixCallActivityComponent
   final Set<CallActivitySession> _everHostedByUs = {};
 
   void _onSessionChanged() {
+    _noteRosters();
     for (final session in List.of(_sessionById.values)) {
       if (session.isHost) _everHostedByUs.add(session);
       final previous = _lastSessionIdOf[session] ?? '';
@@ -339,6 +345,103 @@ class MatrixCallActivityComponent
         _sessionById[current] = session;
       }
     }
+  }
+
+  // ---------------------------------------------------------------- roster
+
+  /// Who is in each session we follow (players and spectators, by LiveKit
+  /// identity), as last heard. Absent until its first state is.
+  final Map<CallActivitySession, Set<String>> _rosterOf = {};
+
+  /// How long the roster has to keep still before its sound plays: a
+  /// snapshot, a handoff or several people joining at once is one sound.
+  static const rosterSoundDelay = Duration(milliseconds: 300);
+  Timer? _rosterSoundTimer;
+  bool _someoneJoined = false;
+  bool _someoneLeft = false;
+
+  /// Who is in [session] now; null while we know of it but not yet who is
+  /// in it (seeded from the room, or announced before its first state): a
+  /// session always has someone in it, its host ends it when the last one
+  /// leaves.
+  static Set<String>? rosterOf(CallActivitySession session) {
+    if (!session.hasSession) return const {};
+    final roster = {
+      ...session.snapshot.players,
+      ...session.snapshot.spectators,
+    };
+    return roster.isEmpty ? null : roster;
+  }
+
+  /// Whether going from [before] to [now] has someone joining and someone
+  /// leaving. The first roster heard ([before] null) is who was already
+  /// playing: only our own place in it ([self]) is news.
+  static ({bool joined, bool left}) rosterChange(
+          Set<String>? before, Set<String> now, String self) =>
+      before == null
+          ? (joined: now.contains(self), left: false)
+          : (
+              joined: now.difference(before).isNotEmpty,
+              left: before.difference(now).isNotEmpty,
+            );
+
+  /// A join or a leave is heard in the call and shown in the room list: the
+  /// list is told, and the sound is played once things settle.
+  void _noteRosters() {
+    var changed = false;
+    for (final session in _transportOf.keys) {
+      final now = rosterOf(session);
+      if (now == null) continue;
+      final before = _rosterOf[session];
+      if (before != null && setEquals(before, now)) continue;
+      _rosterOf[session] = now;
+      changed = true;
+      final change = rosterChange(before, now, session.selfIdentity);
+      _someoneJoined |= change.joined;
+      _someoneLeft |= change.left;
+    }
+    if (!changed) return;
+    _changes.add(null);
+    if (!_someoneJoined && !_someoneLeft) return;
+    if (_callManager == null) {
+      // Nothing to play it on: not kept for a later, unrelated change.
+      _someoneJoined = _someoneLeft = false;
+      return;
+    }
+    _rosterSoundTimer?.cancel();
+    _rosterSoundTimer = Timer(rosterSoundDelay, _playRosterSound);
+  }
+
+  /// Between the join sound and the leave sound when both happened: the
+  /// cue player plays one sound at a time, and the join's notes are over
+  /// by then.
+  static const rosterSoundGap = Duration(milliseconds: 400);
+  Timer? _leaveSoundTimer;
+
+  void _playRosterSound() {
+    final joined = _someoneJoined;
+    final left = _someoneLeft;
+    _someoneJoined = _someoneLeft = false;
+    final callManager = _callManager;
+    // Only the call we are in: hung up meanwhile, it was the leave sound.
+    if (callManager?.getCallInRoom(client, room.identifier) == null) return;
+    if (joined) callManager!.activityJoinedSound();
+    if (!left) return;
+    if (!joined) return callManager!.activityLeftSound();
+    _leaveSoundTimer = Timer(rosterSoundGap, () {
+      if (callManager!.getCallInRoom(client, room.identifier) == null) return;
+      callManager.activityLeftSound();
+    });
+  }
+
+  @override
+  void close() {
+    _rosterSoundTimer?.cancel();
+    _leaveSoundTimer?.cancel();
+    for (final sub in _callManagerSubs) {
+      sub.cancel();
+    }
+    _callManagerSubs.clear();
   }
 
   // ----------------------------------------------------------- watch calls

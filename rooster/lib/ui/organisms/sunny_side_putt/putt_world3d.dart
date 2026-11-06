@@ -44,7 +44,8 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart' show compute, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, compute, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/scheduler.dart' show SchedulerBinding, Ticker;
 import 'package:flutter/widgets.dart'
     show
@@ -190,10 +191,6 @@ class PuttWorldAim {
   /// physics, run ahead): drawn as the dotted guide. Empty draws none.
   final List<Vec2> preview;
 
-  /// Where the egg comes to rest, when it stops inside the guide (a soft
-  /// putt): marked on the turf, and the arrow ends there.
-  final Vec2? rest;
-
   /// Beside [preview], point for point: the egg's altitude where it flies
   /// off a kicker (as [PuttWorldEgg.air]), null where it rolls. Empty when
   /// the guide never leaves the ground.
@@ -216,7 +213,6 @@ class PuttWorldAim {
     required this.dragLength,
     required this.eggRadius,
     this.preview = const [],
-    this.rest,
     this.previewAir = const [],
     this.landing,
     this.trace = const [],
@@ -1631,7 +1627,9 @@ class PuttWorld3D {
       final nest = _hole?.nest;
       if (nest != null &&
           view.lastPosition.distanceTo(nest.position) < nest.radius * 1.8) {
-        _sinking.add(_SinkingEgg(view, nest.position));
+        view.intoCup();
+        _sinking.add(_SinkingEgg(view, nest.position,
+            depth: _nestCupDepth(nest.radius)));
         // The host celebrates every egg that drops in, the straw flies and
         // the flag shakes; the viewer's own sink gets the confetti column
         // and the camera's punch.
@@ -1658,21 +1656,20 @@ class PuttWorld3D {
     _sinking.removeWhere((sinking) {
       sinking.age += dt;
       final t = (sinking.age / _SinkingEgg.life).clamp(0.0, 1.0);
-      final eased = t * t;
       final view = sinking.view;
       final from = view.lastPosition;
       final at = Vec2(
         from.x + (sinking.nest.x - from.x) * math.min(1, t * 2.2),
         from.y + (sinking.nest.y - from.y) * math.min(1, t * 2.2),
       );
-      final scale = 1 - eased * 0.75;
+      final scale = sinking.scaleAt(t);
       view.group
         ..position.setValues(
-            at.x,
-            _ground.at(sinking.nest) + view.restHeight * scale - eased * 0.9,
-            at.y)
+            at.x, _ground.at(sinking.nest) + sinking.heightAt(t), at.y)
         ..scale.setValues(scale, scale, scale);
       view.ground.visible = false;
+      // Its silhouette would show through the opening's depth.
+      view._xray.visible = false;
       if (t >= 1) {
         // In: the egg hatches.
         _hatch(view, sinking.nest);
@@ -2004,6 +2001,18 @@ class PuttThreeSurface extends StatefulWidget {
   /// missing, so the start fails as on a machine without GL).
   static bool? debugGpuSupported;
 
+  /// Whether the GL surface can change its pixel size in place. On Linux
+  /// flutter_angle's resize registers a new Flutter texture under an id
+  /// the Dart side never learns (the view then showed nothing, or the
+  /// apron through it), and on Android its resize does nothing. There the
+  /// surface keeps the pixels it came up with: the view stretches them to
+  /// its new size, the camera takes the new shape, and the resolution
+  /// governor only drops the world's quality tier.
+  static bool get surfaceResizes =>
+      kIsWeb ||
+      (defaultTargetPlatform != TargetPlatform.linux &&
+          defaultTargetPlatform != TargetPlatform.android);
+
   @override
   State<PuttThreeSurface> createState() => _PuttThreeSurfaceState();
 }
@@ -2118,6 +2127,7 @@ class _PuttThreeSurfaceState extends State<PuttThreeSurface>
     if (next == null || size == null) return;
     // The first slow stretch also drops the world to its low tier.
     widget.world.lowerQuality();
+    if (!PuttThreeSurface.surfaceResizes) return;
     three.setResolution(next);
     // After this frame: the surface resizes outside the render.
     Timer.run(() {
@@ -2139,20 +2149,39 @@ class _PuttThreeSurfaceState extends State<PuttThreeSurface>
         final texture = three?.texture;
         final renderer = three?.renderer;
         if (three == null || texture == null || renderer == null) break;
+        if (!PuttThreeSurface.surfaceResizes) {
+          // The same pixels, stretched to the new box; only the camera's
+          // shape follows.
+          widget.world.setViewport(next);
+          widget.world.fitCamera();
+          if (mounted) setState(() {});
+          continue;
+        }
         three.screenSize = next;
-        await three.angle?.resize(
-          texture,
-          AngleOptions(
-            width: next.width.toInt(),
-            height: next.height.toInt(),
-            dpr: three.dpr,
-          ),
-        );
+        // No frame goes into a surface while it is swapped for one of the
+        // new size.
+        three.isVisibleOnScreen = false;
+        try {
+          await three.angle?.resize(
+            texture,
+            AngleOptions(
+              width: next.width.toInt(),
+              height: next.height.toInt(),
+              dpr: three.dpr,
+            ),
+          );
+        } finally {
+          three.isVisibleOnScreen = true;
+        }
         renderer
           ..setPixelRatio(three.dpr)
           ..setSize(next.width, next.height);
         widget.world.setViewport(next);
         widget.world.fitCamera();
+        // The resized surface holds nothing yet (a web canvas clears when
+        // its size changes, Windows' is a new one): draw it now, not show
+        // it empty until the next tick - a blank flash per resize.
+        if (!three.updating && mounted) await three.render();
         if (mounted) setState(() {});
       }
     } on Object {

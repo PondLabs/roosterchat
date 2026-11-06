@@ -7,6 +7,7 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -195,6 +196,42 @@ void main() {
       game.endAim(match.myBall!.position + const Vec2(0, 4));
       expect(moves.whereType<ShotInput>(), isEmpty);
       expect(game.keyAiming, isTrue);
+    });
+
+    testWidgets('a right click mid-pull takes the aim back, unspent',
+        (tester) async {
+      await boot(tester);
+      final egg = game.view3d.project(match.myBall!.position);
+      final mouse =
+          TestPointer(1, PointerDeviceKind.mouse, null, kPrimaryMouseButton);
+      await tester.sendEventToBinding(mouse.addPointer(location: egg));
+      await tester.sendEventToBinding(mouse.down(egg));
+      await tester.sendEventToBinding(mouse.move(egg + const Offset(0, 90)));
+      expect(game.aim.dragLength, greaterThan(AimController.deadZone));
+
+      // The right button joins the left: the same pointer, its buttons
+      // changed.
+      await tester.sendEventToBinding(mouse.move(egg + const Offset(0, 100),
+          buttons: kPrimaryMouseButton | kSecondaryMouseButton));
+      expect(game.aim.isActive, isFalse);
+      // Still pulling with the left: nothing comes back, nothing fires.
+      await tester.sendEventToBinding(mouse.move(egg + const Offset(0, 120)));
+      expect(game.aim.isActive, isFalse);
+      await tester.sendEventToBinding(mouse.up());
+      await tester.pump();
+      expect(moves.whereType<ShotInput>(), isEmpty);
+      expect(match.myStrokesThisHole, 0);
+      await tester.sendEventToBinding(mouse.removePointer());
+    });
+
+    testWidgets('a release inside the dead zone is a cancel', (tester) async {
+      await boot(tester);
+      final at = match.myBall!.position;
+      game.beginAim(at);
+      expect(game.aim.state!.power, 0);
+      game.endAim(at + const Vec2(0, AimController.deadZone / 2));
+      expect(game.aim.isActive, isFalse);
+      expect(moves.whereType<ShotInput>(), isEmpty);
     });
 
     testWidgets('Esc drops the aim unspent before it pauses', (tester) async {

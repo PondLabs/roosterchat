@@ -67,9 +67,9 @@ void main() {
   });
 
   test('a full table spawns on open, dry turf on the tee\'s side', () {
-    // The world rings every egg after the first round the tee, up to four
-    // units out: on a narrow fairway one could land in a rail, a rock or
-    // the pond - or behind a rail, on turf it can never leave.
+    // Every egg spawns on the tee point today; this guards any spread a
+    // spawn might get again: on a narrow fairway one could land in a rail,
+    // a rock or the pond - or behind a rail, on turf it can never leave.
     const config = PhysicsConfig();
     final clearance = config.ballRadius + 0.05;
     for (final course in sunnySidePuttCourses) {
@@ -765,6 +765,81 @@ void main() {
     expect(failures, isEmpty, reason: failures.join('\n'));
   });
 
+  test(
+      'every hole sets one or two "?" boxes on the line and three or more '
+      'off it, all reachable', () {
+    // Boxes are shared: the first egg over one takes it for the hole. So
+    // one or two sit on the obvious line (within [band] of the straight
+    // tee-to-nest line or of the reference roll), there for whoever putts
+    // first, and the rest sit off it, on the detours, ledges and banks
+    // that cost a stroke or a risk. Every one is on turf an egg can roll
+    // to (the flood fill the kicker test uses), clear of the rails by its
+    // own size, out of a silo's mouth, two egg radii off the nest's rim
+    // and [spacing] from the next box, so no single roll sweeps them all.
+    const config = PhysicsConfig();
+    const band = 2.0;
+    const spacing = 3.0;
+    final failures = <String>[];
+    for (final course in sunnySidePuttCourses) {
+      for (final entry in course.holes) {
+        final hole = entry.hole;
+        final here = '${course.id}/${hole.id}';
+        final reach = _rollReach(hole, config);
+        final trace = _referenceTrace(hole, entry.solution, config);
+        final ids = <String>{};
+        var on = 0;
+        var off = 0;
+        for (final box in hole.boxes) {
+          final at = box.position;
+          final where = '$here "?" ${box.id} at $at';
+          if (!ids.add(box.id)) failures.add('$where: id used twice');
+          if (!hole.bounds.contains(at) || !reach(at)) {
+            failures.add('$where: no egg can roll to it');
+          }
+          for (final wall in hole.walls) {
+            if (_segmentDistance(at, wall.a, wall.b) < box.radius) {
+              failures.add('$where: stands in the wall ${wall.a}-${wall.b}');
+            }
+          }
+          for (final arc in hole.arcs) {
+            if (_arcDistance(at, arc) < box.radius) {
+              failures.add('$where: stands in the arc round ${arc.center}');
+            }
+          }
+          for (final well in hole.wells) {
+            if (at.distanceTo(well.position) <
+                well.swallowRadius + box.radius + config.ballRadius) {
+              failures.add('$where: sits in the silo\'s mouth');
+            }
+          }
+          final rim =
+              at.distanceTo(hole.nest.position) - hole.nest.radius - box.radius;
+          if (rim < 2 * config.ballRadius) {
+            failures.add('$where: ${rim.toStringAsFixed(2)} off the nest');
+          }
+          for (final other in hole.boxes) {
+            if (other != box && at.distanceTo(other.position) < spacing) {
+              failures.add('$where: crowds ${other.id}');
+            }
+          }
+          final onLine =
+              _segmentDistance(at, hole.tee, hole.nest.position) <= band ||
+                  trace.any((p) => p.distanceTo(at) <= band);
+          if (onLine) {
+            on++;
+          } else {
+            off++;
+          }
+        }
+        if (on < 1 || on > 2) {
+          failures.add('$here: $on boxes on the line, want one or two');
+        }
+        if (off < 3) failures.add('$here: $off boxes off the line, want 3+');
+      }
+    }
+    expect(failures, isEmpty, reason: failures.join('\n'));
+  });
+
   test('no "?" box anchors on a tee or nest', () {
     for (final course in sunnySidePuttCourses) {
       for (final entry in course.holes) {
@@ -959,6 +1034,28 @@ Vec2? _flightOff(
     if (!flew && i > 30) return null;
   }
   return null;
+}
+
+/// Every point the reference solution's egg passes through, tick by tick,
+/// waits and flights included: the hole's obvious line.
+List<Vec2> _referenceTrace(
+    HoleDef hole, ReferenceSolution solution, PhysicsConfig config) {
+  final world =
+      PhysicsWorld(hole: hole, config: config, playerIds: const ['trace']);
+  final ball = world.ball('trace')!;
+  final points = [ball.position];
+  for (final shot in solution.shots) {
+    for (var i = 0; i < (shot.waitSeconds / config.dt).round(); i++) {
+      world.stepTick();
+    }
+    if (ball.holed) break;
+    world.applyShot('trace', shot.angle, shot.power);
+    for (var i = 0; i < 40 / config.dt && !ball.holed && !ball.asleep; i++) {
+      world.stepTick();
+      points.add(ball.position);
+    }
+  }
+  return points;
 }
 
 /// Where an egg can roll from [hole]'s tee: a flood fill over a half-unit

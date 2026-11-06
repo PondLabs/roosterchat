@@ -195,7 +195,8 @@ void main() {
       final ball = world.ball('a')!;
       expect(ticks, lessThan(600));
       expect(ball.asleep, isTrue);
-      expect(ball.position.x, closeTo(10.45, 0.01));
+      expect(ball.position.x,
+          closeTo(10.45, 0.025)); // on the face, within the contact slack
       final at = ball.position;
       for (var i = 0; i < 240; i++) {
         world.stepTick();
@@ -277,6 +278,10 @@ void main() {
     for (final id in const ['a', 'b']) {
       flat.ball(id)!.putted = true;
     }
+    // Spawned stacked, they pass through each other until they have
+    // parted once.
+    flat.teleportBall('b', const Vec2(16, 6));
+    flat.stepTick();
     flat.teleportBall('a', const Vec2(9.9, 6));
     flat.teleportBall('b', const Vec2(10.46, 6));
     runUntilSettled(flat);
@@ -287,13 +292,27 @@ void main() {
   group('a ramp', () {
     test('pulls an egg left on its slope back down to its foot', () {
       // Its pull beats the rolling friction except near the ends (t under
-      // about a quarter, or over three quarters), where an egg can rest.
+      // about a quarter, or over three quarters), where it trickles on.
       final world = worldOn(tiered());
       world.teleportBall('a', const Vec2(22, 6));
       runUntilSettled(world);
       final ball = world.ball('a')!;
       expect(ball.asleep, isTrue);
       expect(ball.position.x, lessThan(21.1));
+    });
+
+    test('never parks an egg on its gentle stretch: it slides to the flat', () {
+      // At t = 0.85 the grade is about 0.19: a pull of 4.6, under the
+      // rolling friction, that once held an egg there for good.
+      final world = worldOn(tiered());
+      world.teleportBall('a', const Vec2(23.4, 6));
+      final ticks = runUntilSettled(world);
+      final ball = world.ball('a')!;
+      expect(ticks, lessThan(1200));
+      expect(ball.asleep, isTrue);
+      expect(ball.position.x, lessThan(20.1), reason: 'off the ramp');
+      expect(world.hole.groundGradientAt(ball.position).length,
+          lessThanOrEqualTo(testPhysics.flatGrade));
     });
 
     test('rolls an egg too slow for the climb back down', () {

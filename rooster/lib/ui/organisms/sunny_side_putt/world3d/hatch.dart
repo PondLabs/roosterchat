@@ -84,6 +84,10 @@ class _Hatchling {
     group.add(_cap);
     group.traverse((object) {
       object.castShadow = true;
+      // It rises out of the cup and drops back in: drawn with the cup's
+      // inside, before the opening's depth-only disc that would cut it at
+      // the turf line.
+      if (object is tjs.Mesh) object.renderOrder = _cupOrder;
     });
   }
 

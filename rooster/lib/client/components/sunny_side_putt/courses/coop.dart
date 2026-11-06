@@ -72,7 +72,15 @@ HoleDef _firstLight() {
         ],
       ),
     ],
-    boxes: [QuestionBox('coop_1_box', Vec2(27.5, 12))],
+    boxes: [
+      QuestionBox('coop_1_box', Vec2(27.5, 12)),
+      QuestionBox('coop_1_door', Vec2(15.5, 11.4)),
+      QuestionBox('coop_1_roost_north', Vec2(5, 5)),
+      QuestionBox('coop_1_roost_south', Vec2(5, 19)),
+      QuestionBox('coop_1_run_north', Vec2(38.5, 4)),
+      QuestionBox('coop_1_run_south', Vec2(38.5, 20)),
+      QuestionBox('coop_1_run_corner', Vec2(33.5, 21)),
+    ],
     decorations: const [
       Decoration('hay', Vec2(21, 3), numbers: {'size': 1.1}),
       Decoration('hay', Vec2(23, 21), numbers: {'size': 0.9}),
@@ -121,7 +129,15 @@ HoleDef _popHole() {
       WallSegment(Vec2(39, 28), Vec2(46, 21)),
       WallSegment(Vec2(42, 0), Vec2(46, 4)),
     ],
-    boxes: [QuestionBox('coop_2_box', Vec2(25.3, 13.9))],
+    boxes: [
+      QuestionBox('coop_2_box', Vec2(25.3, 13.9)),
+      QuestionBox('coop_2_road', Vec2(24, 21.9)),
+      QuestionBox('coop_2_attic', Vec2(36, 2)),
+      QuestionBox('coop_2_lane_top', Vec2(45, 7.5)),
+      QuestionBox('coop_2_hump', Vec2(44, 17)),
+      QuestionBox('coop_2_lane_end', Vec2(30, 26)),
+      QuestionBox('coop_2_corner', Vec2(2, 26)),
+    ],
     // the hump across the far lane, short of the nest
     hills: const [
       Hill(Vec2(37, 12.2), Vec2(43, 12.2), height: 1, skirt: 2.5),
@@ -176,7 +192,15 @@ HoleDef _pinballParlor() {
             1.4,
             bumper: true),
     ],
-    boxes: [QuestionBox('coop_3_box', Vec2(33, 3))],
+    boxes: [
+      QuestionBox('coop_3_box', Vec2(33, 3)),
+      QuestionBox('coop_3_lane', Vec2(13, 12.9)),
+      QuestionBox('coop_3_layup', Vec2(24, 10.6)),
+      QuestionBox('coop_3_east', Vec2(44, 14)),
+      QuestionBox('coop_3_south_east', Vec2(40, 24)),
+      QuestionBox('coop_3_south', Vec2(22, 24)),
+      QuestionBox('coop_3_back', Vec2(3, 14)),
+    ],
     // the dust bath, on the straight line from the tee to the crown and
     // clear of the line to the lay-up
     hills: const [
@@ -245,7 +269,15 @@ HoleDef _merryGoRound() {
           ],
         ),
     ],
-    boxes: [QuestionBox('coop_4_box', Vec2(42, 14))],
+    boxes: [
+      QuestionBox('coop_4_box', Vec2(42, 14)),
+      QuestionBox('coop_4_gate', Vec2(14, 14)),
+      QuestionBox('coop_4_ring', Vec2(24.5, 14)),
+      QuestionBox('coop_4_north_west', Vec2(4, 4)),
+      QuestionBox('coop_4_north', Vec2(25, 3)),
+      QuestionBox('coop_4_south', Vec2(24, 25)),
+      QuestionBox('coop_4_south_east', Vec2(39, 24)),
+    ],
   );
 }
 
@@ -326,7 +358,15 @@ HoleDef _nestingBoxes() {
         ],
       ),
     ],
-    boxes: [QuestionBox('coop_5_box', const Vec2(26.5, 1.9))],
+    boxes: [
+      QuestionBox('coop_5_box', Vec2(26.5, 1.9)),
+      QuestionBox('coop_5_run_up', Vec2(26.5, 17.5)),
+      QuestionBox('coop_5_west_hole', Vec2(16.5, 1.9)),
+      QuestionBox('coop_5_east_hole', Vec2(31.5, 1.9)),
+      QuestionBox('coop_5_yard_east', Vec2(38, 12)),
+      QuestionBox('coop_5_yard_west', Vec2(6, 6)),
+      QuestionBox('coop_5_yard_south', Vec2(38, 23)),
+    ],
   );
 }
 
@@ -424,7 +464,15 @@ HoleDef _feedingTime() {
         ],
       ),
     ],
-    boxes: [QuestionBox('coop_6_box', Vec2(44, 14))],
+    boxes: [
+      QuestionBox('coop_6_box', Vec2(44, 14)),
+      QuestionBox('coop_6_door', Vec2(20, 21.5)),
+      QuestionBox('coop_6_loft', Vec2(13, 7)),
+      QuestionBox('coop_6_east_yard', Vec2(50, 5)),
+      QuestionBox('coop_6_loft_corner', Vec2(36, 2)),
+      QuestionBox('coop_6_yard_corner', Vec2(44, 24)),
+      QuestionBox('coop_6_loft_edge', Vec2(26, 11)),
+    ],
   );
 }
 

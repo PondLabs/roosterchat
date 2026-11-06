@@ -20,6 +20,7 @@ import 'package:rooster/rust/frb_generated.dart';
 import 'package:rooster/single_instance.dart';
 import 'package:rooster/ui/organisms/overlay_windows/overlay_window_manager.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_demo.dart';
+import 'package:rooster/ui/organisms/sunny_side_putt/putt_session.dart';
 import 'package:rooster/ui/pages/bubble/bubble_page.dart';
 import 'package:rooster/ui/pages/fatal_error/fatal_error_page.dart';
 import 'package:rooster/ui/pages/loading/loading_page.dart';
@@ -336,6 +337,9 @@ Future<void> initGuiRequirements() async {
   AppLanguage.follow();
 
   UnicodeEmojis.load();
+
+  // The room list names the games people play from outside the call too.
+  registerSunnySidePutt();
 
   tiamat.getAppScale = () {
     return preferences.appScale.value;

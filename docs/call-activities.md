@@ -45,6 +45,23 @@ infrastructure.
    lowest present identity); the last one out ends the session and its
    room state goes with it.
 
+## In the room list and the call's sounds
+
+A running activity is not listed as a second call under the voice
+channel: everyone in it gets the activity's icon next to their name
+("Playing Sunny Side Putt", "Watching Sunny Side Putt" for a
+spectator). Outside the call only the host is known, from the room
+state, and only while they are in the call; inside it the session's
+roster adds the players and spectators, and a session nobody holds any
+more (its host left without clearing the state) gives no badge. A
+third-party widget's members are still listed under its own name. In
+our own call, someone (us too) launching or joining an activity plays
+`activity_joined.ogg`, someone leaving it (or it ending)
+`activity_left.ogg`, once the roster has kept still for 300 ms (both, the
+join first, when both happened), and not while deafened, like the screen
+share cues. They are made by
+`docs/brand/src/build_call_sounds.py`.
+
 ## Who may launch
 
 Launching writes `chat.commet.call_activity`, and the others in the call

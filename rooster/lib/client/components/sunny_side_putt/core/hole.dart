@@ -173,8 +173,12 @@ class WaterPolygon extends WaterShape {
   }
 }
 
-/// A speed strip: while crossing, an egg's velocity along `to - from` is
-/// raised to at least [speed], perpendicular motion kept.
+/// A speed strip: while over it, an egg is pushed along `to - from`, hard
+/// enough that one crossing it from rest leaves at [speed]; one already
+/// rolling with it leaves faster (up to [PhysicsConfig.boostMaxSpeed]),
+/// one rolling against it feels [PhysicsConfig.boostAgainst] of the push
+/// (a firm putt gets across, a soft one is turned back), and one crossing
+/// it is bent along it a little.
 class BoostStrip {
   final Vec2 from;
   final Vec2 to;
@@ -601,10 +605,11 @@ class Decoration {
 class HoleDef {
   final String id;
   final int par;
+
+  /// Where every egg in this hole spawns: all of them on this one point,
+  /// stacked (they pass through each other until they part).
   final Vec2 tee;
 
-  /// Where every egg in this hole spawns (tee markers for solo starts are
-  /// the tee; multi-ball spawns ring around it).
   final Nest nest;
 
   /// The green's extent. An egg whose center leaves it is out of play: it

@@ -304,7 +304,7 @@ void main() {
         phase: PuttPhase.holePlay,
         myEgg: hole.nest.position,
         myEggHoled: true,
-        otherEggs: const [Vec2(10, 20)],
+        otherEggs: const [PuttCameraEgg('them', Vec2(10, 20))],
       ),
     );
     expectInFreeView(const Vec2(10, 20));
@@ -318,7 +318,7 @@ void main() {
       phase: PuttPhase.holePlay,
       myEgg: hole.nest.position,
       myEggHoled: true,
-      otherEggs: const [Vec2(10, 20)],
+      otherEggs: const [PuttCameraEgg('them', Vec2(10, 20))],
     );
     run(1.2, holed);
     // Down low on the nest, the chick in its hat whole in the lower middle
@@ -345,6 +345,150 @@ void main() {
     expect(rig.distanceTarget, greaterThanOrEqualTo(rig.distanceMin));
     expectInFreeView(const Vec2(10, 20));
     expectInFreeView(hole.nest.position);
+  });
+
+  /// My egg in the nest, past its hatch, with [others] still out.
+  PuttCameraCue holedWith(List<PuttCameraEgg> others) => PuttCameraCue(
+        hole: hole,
+        phase: PuttPhase.holePlay,
+        myEgg: hole.nest.position,
+        myEggHoled: true,
+        otherEggs: others,
+      );
+
+  /// Holes my egg and runs past the hatch's close-up.
+  void holeMine(List<PuttCameraEgg> others) {
+    run(PuttCameraDirector.openingSeconds + 1, resting(const Vec2(38, 12)));
+    run(PuttCameraDirector.celebrateSeconds + 0.5, holedWith(others));
+  }
+
+  test('once in, the camera rides with the egg still rolling', () {
+    holeMine(const [PuttCameraEgg('them', Vec2(4, 12))]);
+    expect(director.watching, 'them');
+    // They putt: the camera follows the egg frame by frame, no stale shot.
+    for (var x = 4.0; x < 30; x += 0.4) {
+      final at = Vec2(x, 12 + (x - 4) * 0.3);
+      director.update(
+          1 / 60,
+          holedWith([
+            PuttCameraEgg('them', at,
+                velocity: const Vec2(24, 7), resting: false)
+          ]));
+      rig.update(1 / 60, followPoint: director.followPoint);
+      expect(director.followPoint!.distanceTo(at), lessThanOrEqualTo(4 + 1e-9));
+    }
+    expect(rig.target.distanceTo(const Vec2(30, 20)), lessThan(8));
+    expectInFreeView(const Vec2(30, 19.8));
+  });
+
+  test("once in, a splash reframes the watched egg where it comes back", () {
+    holeMine(const [PuttCameraEgg('them', Vec2(4, 12))]);
+    const pond = Vec2(30, 20);
+    run(
+        0.5,
+        holedWith(const [
+          PuttCameraEgg('them', pond, velocity: Vec2(10, 3), resting: false)
+        ]));
+    // Put back on the tee and settled in one tick: the first frame draws it
+    // part way back from the water.
+    director.update(
+        1 / 60, holedWith([PuttCameraEgg('them', pond.lerp(hole.tee, 0.1))]));
+    run(3, holedWith([PuttCameraEgg('them', hole.tee)]));
+    expectInFreeView(hole.tee);
+    expectInFreeView(hole.nest.position);
+    expect(rig.target.distanceTo(hole.tee), lessThan(pond.distanceTo(hole.tee)),
+        reason: 'the camera came back from the pond');
+    final settled = rig.target;
+    run(1, holedWith([PuttCameraEgg('them', hole.tee)]));
+    expect(rig.target.distanceTo(settled), lessThan(0.05),
+        reason: 'a resting egg is framed once, not pumped');
+  });
+
+  test('the watched egg keeps the camera until it drops in or rests', () {
+    holeMine(const []);
+    const a = Vec2(30, 12), b = Vec2(8, 20);
+    PuttCameraEgg egg(String id, Vec2 at,
+            {bool rolling = false, int strokes = 0}) =>
+        PuttCameraEgg(id, at,
+            velocity: rolling ? const Vec2(5, 0) : Vec2.zero,
+            resting: !rolling,
+            strokes: strokes);
+    // Both roll: the nearer is watched, and kept while b rolls on.
+    run(0.5,
+        holedWith([egg('a', a, rolling: true), egg('b', b, rolling: true)]));
+    expect(director.watching, 'a');
+    run(0.5, holedWith([egg('a', a), egg('b', b, rolling: true)]));
+    expect(director.watching, 'a', reason: 'no hopping to an egg mid-roll');
+    run(0.5, holedWith([egg('a', a), egg('b', b)]));
+    expect(director.watching, 'a');
+    // b putts while a rests: the camera moves on to it.
+    run(0.6, holedWith([egg('a', a), egg('b', b, rolling: true, strokes: 1)]));
+    expect(director.watching, 'b');
+    run(0.5, holedWith([egg('a', a), egg('b', b, strokes: 1)]));
+    // b drops in: back to a, the one still out.
+    run(2, holedWith([egg('a', a)]));
+    expect(director.watching, 'a');
+    expectInFreeView(a);
+    expectInFreeView(hole.nest.position);
+    // Everyone in: the nest, until the scoreboard's whole green.
+    run(2, holedWith(const []));
+    expect(director.watching, isNull);
+    expect(director.followPoint, hole.nest.position);
+  });
+
+  test('an egg a hen bumps never takes the camera; a putt waits a beat', () {
+    holeMine(const []);
+    const a = Vec2(30, 12), b = Vec2(8, 20);
+    PuttCameraEgg egg(String id, Vec2 at,
+            {bool rolling = false, int strokes = 0}) =>
+        PuttCameraEgg(id, at,
+            velocity: rolling ? const Vec2(2, 0) : Vec2.zero,
+            resting: !rolling,
+            strokes: strokes);
+    run(1, holedWith([egg('a', a, rolling: true), egg('b', b)]));
+    run(1, holedWith([egg('a', a), egg('b', b)]));
+    expect(director.watching, 'a');
+    // A hen nudges b again and again: no putt, the camera stays on a.
+    for (var i = 0; i < 6; i++) {
+      run(0.2, holedWith([egg('a', a), egg('b', b, rolling: true)]));
+      run(0.2, holedWith([egg('a', a), egg('b', b)]));
+      expect(director.watching, 'a');
+    }
+    // b putts: the camera moves on, and stays on b for a beat even when a
+    // putts right after.
+    run(0.1, holedWith([egg('a', a), egg('b', b, rolling: true, strokes: 1)]));
+    expect(director.watching, 'b');
+    run(0.5, holedWith([egg('a', a), egg('b', b, strokes: 1)]));
+    run(
+        0.5,
+        holedWith([
+          egg('a', a, rolling: true, strokes: 1),
+          egg('b', b, strokes: 1),
+        ]));
+    expect(director.watching, 'b', reason: 'within the dwell');
+    run(
+        0.6,
+        holedWith([
+          egg('a', a, rolling: true, strokes: 1),
+          egg('b', b, strokes: 1),
+        ]));
+    expect(director.watching, 'a', reason: 'past the dwell, still putting');
+  });
+
+  test('watching, a player who zoomed keeps their zoom', () {
+    holeMine(const [PuttCameraEgg('them', Vec2(4, 12))]);
+    rig.setDistance(rig.overviewDistance * 0.9);
+    director.noteUserCamera();
+    final zoom = rig.distanceTarget;
+    run(
+        0.5,
+        holedWith(const [
+          PuttCameraEgg('them', Vec2(20, 12),
+              velocity: Vec2(10, 0), resting: false)
+        ]));
+    run(2, holedWith(const [PuttCameraEgg('them', Vec2(30, 12))]));
+    expect(rig.distanceTarget, closeTo(zoom, 1e-6));
+    expect(rig.target.distanceTo(const Vec2(30, 12)), lessThan(12));
   });
 
   test('between holes the whole green shows again', () {

@@ -5,6 +5,7 @@
 // the homeserver's here.
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/client_manager.dart';
+import 'package:rooster/client/components/call_activity/call_activity_component.dart';
 import 'package:rooster/client/components/component.dart';
 import 'package:rooster/client/components/profile/profile_component.dart';
 import 'package:rooster/client/components/room_component.dart';
@@ -12,6 +13,7 @@ import 'package:rooster/client/components/voice_channel_status/voice_channel_sta
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/client/components/voip_room/voip_room_component.dart';
+import 'package:rooster/client/matrix/components/call_activity/matrix_call_activity_component.dart';
 import 'package:rooster/client/matrix/components/room_activities/matrix_activities_component.dart';
 import 'package:rooster/client/matrix/homeserver_clock.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
@@ -235,11 +237,13 @@ class _Room implements MatrixRoom {
 
   RoomComponent? voip;
 
+  RoomComponent? callActivity;
+
   final Set<String> fetched = {};
 
   @override
   T? getComponent<T extends RoomComponent>() {
-    for (final component in [activities, status, voip]) {
+    for (final component in [activities, status, voip, callActivity]) {
       if (component is T) return component;
     }
     return null;
@@ -770,6 +774,66 @@ void main() {
     await mouse.moveTo(tester.getCenter(find.text('Alice')));
     await tester.pump();
     expect(find.byIcon(Icons.person_add_alt_1_rounded), findsNothing);
+    await done(tester, list);
+  });
+
+  // A third-party widget's members are not a second call: they are under
+  // its name.
+  testWidgets("a widget's members are under its name", (tester) async {
+    final clock = HomeserverClock()
+      ..readSync(_syncAt(_serverNow()), homeserver: 'example.org');
+    final list = listFor(clock);
+    member('@bob:example.org',
+        joinedAgo: const Duration(minutes: 10),
+        says: const {'application': 'org.example.board'});
+
+    await show(tester);
+
+    expect(find.text('org.example.board'), findsOneWidget);
+    expect(find.text('Bob'), findsOneWidget);
+    await done(tester, list);
+  });
+
+  // Asked for: a game in the channel is not a second box under it, only an
+  // icon next to whoever plays it.
+  testWidgets('who is in a call activity has its icon by their name',
+      (tester) async {
+    final clock = HomeserverClock()
+      ..readSync(_syncAt(_serverNow()), homeserver: 'example.org');
+    final list = listFor(clock);
+    hangout();
+    CallActivityRegistry.register(CallActivity(
+        id: 'test.game', displayName: () => 'Test game', icon: null));
+    addTearDown(() => CallActivityRegistry.remove('test.game'));
+    room.callActivity =
+        MatrixCallActivityComponent(room.client, room, clock: clock);
+    const key = '_@bob:example.org:DEVICE';
+    room.matrixRoom.states[MatrixCallActivityComponent.stateEventType] = {
+      key: matrix.StrippedStateEvent(
+        type: MatrixCallActivityComponent.stateEventType,
+        senderId: '@bob:example.org',
+        stateKey: key,
+        content: {
+          'activity': 'test.game',
+          'host': '@bob:example.org',
+          'created': clock.now().millisecondsSinceEpoch,
+        },
+      ),
+    };
+
+    await show(tester);
+
+    expect(find.text('Test game'), findsNothing);
+    final badge = find.byTooltip('Playing Test game');
+    expect(badge, findsOneWidget);
+    expect(
+        find.descendant(of: badge, matching: find.byIcon(Icons.sports_esports)),
+        findsOneWidget);
+    // On Bob's row, nobody else's.
+    final bobRow = find.ancestor(
+        of: find.text('Bob'), matching: find.byType(tiamat.TextButton));
+    expect(find.descendant(of: bobRow, matching: badge), findsOneWidget);
+    room.callActivity = null;
     await done(tester, list);
   });
 }
