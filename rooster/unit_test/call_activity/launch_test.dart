@@ -78,13 +78,17 @@ void main() {
   late InMemoryActivityCall call;
   late DateTime now;
 
+  /// Whether we are in the call: a test leaves it by clearing this.
+  late bool inCall;
+
   setUp(() {
     room = _Room();
     call = InMemoryActivityCall();
     now = DateTime.now();
+    inCall = true;
     component = MatrixCallActivityComponent(_Client(), room,
         clock: HomeserverClock(localNow: () => now),
-        ownCallTransport: () => call.join('$_self:DEVICE'));
+        ownCallTransport: () => inCall ? call.join('$_self:DEVICE') : null);
   });
 
   /// Puts [events] in the room state and syncs them in.
@@ -235,6 +239,55 @@ void main() {
     ]);
     expect(component.visibleSessions(), hasLength(1));
     expect(component.sessionOf(alice), isNotNull);
+  });
+
+  test('leaving the call drops the activity it was playing', () async {
+    // The call is gone (we left it, or the connection took it down): its
+    // activity goes with it. A session left behind kept the game running
+    // and, its transport dead but its roster still naming everyone, made
+    // every later launch in that channel a silent no-op.
+    final launched = await component.launch(activity);
+    expect(launched, isNotNull);
+    final id = launched!.snapshot.sessionId;
+    expect(component.sessionOf(id), isNotNull);
+
+    inCall = false;
+    sync([session(alice)]);
+    await pumpEventQueue();
+
+    expect(component.liveSessions(), isEmpty,
+        reason: 'nothing of the call we left is ours to follow');
+    expect(component.sessionOf(id), isNull);
+    expect(launched.isDisposed, isTrue, reason: 'and it stops running');
+  });
+
+  test('a call joined again starts from the room state, not the old session',
+      () async {
+    final first = await component.launch(activity);
+    expect(first, isNotNull);
+    final firstId = first!.snapshot.sessionId;
+
+    // Out of the call and back into it: the session we followed was the
+    // old call's, and its transport is dead.
+    inCall = false;
+    sync([session(alice)]);
+    await pumpEventQueue();
+    inCall = true;
+    sync([session(alice)]);
+    await pumpEventQueue();
+
+    expect(component.sessionOf(firstId), isNull);
+    expect(component.liveSessions().map((s) => s.sessionId), [alice],
+        reason: 'the room state is the truth again');
+  });
+
+  test('closing the room drops the activity with it', () async {
+    final launched = await component.launch(activity);
+    expect(launched, isNotNull);
+    component.close();
+    await pumpEventQueue();
+    expect(component.liveSessions(), isEmpty);
+    expect(launched!.isDisposed, isTrue);
   });
 
   test('without permission for the state, the launch says so', () async {

@@ -3954,6 +3954,12 @@
     "type": "text",
     "placeholders": {}
   },
+  "ActivityStageStrings_exitFullscreen": "Exit fullscreen",
+  "@ActivityStageStrings_exitFullscreen": {
+    "description": "Button that leaves the stage's fullscreen and shows the call again",
+    "type": "text",
+    "placeholders": {}
+  },
   "ActivityStageStrings_leave": "Exit",
   "@ActivityStageStrings_leave": {
     "description": "Button that leaves the stage and returns to the call's videos",

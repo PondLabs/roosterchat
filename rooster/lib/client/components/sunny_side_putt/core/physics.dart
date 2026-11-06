@@ -111,6 +111,12 @@ class PhysicsConfig {
   /// [frictionDeceleration], so an egg never rests on the lip.
   final double cupPull;
 
+  /// How far past the rim the cup's funnel reaches, as a share of the
+  /// nest's radius: the lip's bevel. An egg that dies with its center just
+  /// outside the rim (its body half over the hole) is drawn in and drops
+  /// instead of parking there, which is what a real cup's bevel does.
+  final double cupLipReach;
+
   /// Extra rolling drag (units/s^2) over the cup: the egg dips into it and
   /// loses pace crossing it.
   final double cupDrag;
@@ -212,8 +218,9 @@ class PhysicsConfig {
     this.frictionDeceleration = 7,
     this.ballRestitution = 0.8,
     this.captureSpeed = 3.0,
-    this.captureSpeedCentered = 9.0,
+    this.captureSpeedCentered = 14.0,
     this.cupPull = 16,
+    this.cupLipReach = 1.15,
     this.cupDrag = 8,
     this.sleepSpeed = 0.05,
     this.flatGrade = 0.01,
@@ -873,7 +880,8 @@ class PhysicsWorld {
     if (hole.boosts.isNotEmpty) accel += _boostOn(ball).$1;
     final toCup = hole.nest.position - ball.position;
     final cupDistance = toCup.length;
-    if (cupDistance < hole.nest.radius && cupDistance > Vec2.epsilon) {
+    if (cupDistance < hole.nest.radius * config.cupLipReach &&
+        cupDistance > Vec2.epsilon) {
       accel += toCup.scaledTo(config.cupPull);
     }
     if (ball.flagActive(PowerUpFlag.magnet, _tick)) {

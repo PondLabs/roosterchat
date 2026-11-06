@@ -1,13 +1,14 @@
 // The camera's choreography over a hole, kept apart from the game's ticker:
 // the whole hole while it opens, then - whenever the viewer's egg is at
 // rest - the egg and the nest framed together, so the shot ahead always
-// shows; the egg followed while it rolls; and once the egg is in (or for a
-// spectator) one egg still out there watched the same way: the one rolling,
-// else the nearest, kept until another putts or it drops in. The
-// player can take the camera at any time (wheel, pinch, orbit): from then on, for the
-// rest of the hole, the director keeps following but leaves the zoom alone.
-// C (or the HUD's camera button) toggles the whole-hole view, until my
-// next putt. Other eggs never move the camera while mine is out.
+// shows; the egg followed while it rolls; and once the egg is in, the nest
+// it went in, kept. The camera is always on the viewer's own egg: another
+// player's putt never takes it. A spectator, with no egg of their own,
+// watches the field instead: the egg rolling, else the nearest, kept until
+// another putts or it drops in. The player can take the camera at any time
+// (wheel, pinch, orbit): from then on, for the rest of the hole, the
+// director keeps following but leaves the zoom alone. C (or the HUD's
+// camera button) toggles the whole-hole view, until my next putt.
 library;
 
 import 'dart:math' as math;
@@ -360,8 +361,13 @@ class PuttCameraDirector {
       return;
     }
 
-    if (egg != null && !cue.myEggHoled) {
-      if (!cue.myEggResting) {
+    if (egg != null) {
+      // In the nest: the camera stays on it, where my egg went in. Another
+      // player's egg never takes it - the camera is always on mine, as in
+      // Putt Party, so a player waiting their turn still sees their own
+      // green and not someone else's putt.
+      final at = cue.myEggHoled ? hole.nest.position : egg;
+      if (!cue.myEggResting && !cue.myEggHoled) {
         // Rolling: ride with it, a little farther out than the rest framing
         // if that was tight, so the way ahead shows.
         if (!_wasRolling && !_userCamera) {
@@ -386,21 +392,21 @@ class PuttCameraDirector {
       // draws it between the two ticks - part way back from the water.
       // Framed once there, the camera stayed by the pond.
       final framedAt = _framedAt;
-      if (framedAt == null || framedAt.distanceTo(egg) > 0.5) {
-        _framedAt = egg;
+      if (framedAt == null || framedAt.distanceTo(at) > 0.5) {
+        _framedAt = at;
         if (_userCamera) {
-          rig.glideTo(target: egg.lerp(hole.nest.position, 0.35));
+          rig.glideTo(target: at.lerp(hole.nest.position, 0.35));
         } else {
           // My egg, the eggs around mine (the tee's crowd) and the nest, so
           // none of them sits under the HUD - as long as my egg stays big
           // enough to aim at (aimEggPixels tall). A nest too far for that
           // gives way to the stretch toward it, the egg low in the frame;
           // the HUD points at the nest, and C still shows the whole hole.
-          final yaw = PuttCameraRig.yawToward(egg, hole.nest.position);
+          final yaw = PuttCameraRig.yawToward(at, hole.nest.position);
           final crowd = [
-            egg,
+            at,
             for (final other in cue.otherEggs)
-              if (other.position.distanceTo(egg) < 5) other.position,
+              if (other.position.distanceTo(at) < 5) other.position,
           ];
           final cap = rig.distanceForHeight(eggHeight, aimEggPixels);
           // The frame may come in as close as the cap asks.
@@ -418,12 +424,12 @@ class PuttCameraDirector {
           if (!withFlag &&
               rig.fitDistance([...crowd, ahead], yaw: yaw, closest: closest) >
                   cap) {
-            final way = hole.nest.position - egg;
+            final way = hole.nest.position - at;
             final along = way.normalized(const Vec2(0, -1));
             var lo = 0.0, hi = way.length;
             for (var i = 0; i < 14; i++) {
               final mid = (lo + hi) / 2;
-              if (rig.fitDistance([...crowd, egg + along * mid],
+              if (rig.fitDistance([...crowd, at + along * mid],
                       yaw: yaw, closest: closest) <=
                   cap) {
                 lo = mid;
@@ -431,7 +437,7 @@ class PuttCameraDirector {
                 hi = mid;
               }
             }
-            ahead = egg + along * lo;
+            ahead = at + along * lo;
           }
           final flagged = withFlag && identical(ahead, hole.nest.position);
           rig.glideToFramePoints([...crowd, ahead],
@@ -443,16 +449,17 @@ class PuttCameraDirector {
       return;
     }
 
-    // In the nest already (or watching): one egg still out, followed.
+    // A spectator, with no egg of their own: one egg still out, followed.
     _watch(hole, cue.otherEggs);
   }
 
-  /// Picks the egg to watch and frames it like my own: followed while it
-  /// rolls, framed with the nest where it rests (again wherever a splash
-  /// or the line puts it back). The camera moves on only when another
-  /// player putts while the watched egg rests (and has been watched for
-  /// [watchDwellSeconds]), or the watched one drops in - never back and
-  /// forth between eggs in play at once, nor to an egg a hen bumped.
+  /// A spectator's camera: picks the egg to watch and frames it like a
+  /// player's own - followed while it rolls, framed with the nest where it
+  /// rests (again wherever a splash or the line puts it back). The camera
+  /// moves on only when another player putts while the watched egg rests
+  /// (and has been watched for [watchDwellSeconds]), or the watched one
+  /// drops in - never back and forth between eggs in play at once, nor to
+  /// an egg a hen bumped. A player's own egg is never given up this way.
   void _watch(HoleDef hole, List<PuttCameraEgg> others) {
     for (final other in others) {
       final before = _othersStrokes[other.id];

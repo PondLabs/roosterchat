@@ -21,6 +21,7 @@ import 'package:rooster/client/matrix/homeserver_clock.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/matrix/matrix_room_permissions.dart';
+import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 
 import 'livekit_call_activity_transport.dart';
@@ -269,13 +270,20 @@ class MatrixCallActivityComponent
   /// state when it ends, not before.
   void _followState() {
     _watchCallManager();
+    final transport = _ownCallTransport();
+    if (transport == null) {
+      // Out of the call (we left it, or the connection took it down): its
+      // activity is not ours to follow any more, and a session left
+      // running here kept the game alive after the call it belonged to
+      // was gone. The session goes with the call.
+      _dropAllSessions();
+      return;
+    }
     final visible = visibleSessions();
     for (final entry in visible) {
       if (_sessionById.containsKey(entry.sessionId)) continue;
       final activity = CallActivityRegistry.byId(entry.activityId);
       if (activity == null) continue;
-      final transport = _ownCallTransport();
-      if (transport == null) break;
       final session = CallActivitySession(
         activity: activity,
         selfUserId: client.self?.identifier ?? '',
@@ -294,6 +302,34 @@ class MatrixCallActivityComponent
       if (liveIds.contains(entry.key) || entry.value.isHost) continue;
       _untrack(entry.value);
     }
+  }
+
+  /// How long a session gets to say goodbye before we stop waiting on it:
+  /// the call it lived on is gone, and its transport may never answer.
+  static const leaveTimeout = Duration(seconds: 2);
+
+  /// Every session we follow, gone: the call that held them is over.
+  ///
+  /// Each is told we are out first, so the host drops us from its roster
+  /// now rather than when LiveKit gets round to reporting us gone (a
+  /// connection that dropped can take a while, and until then the host
+  /// played for a player who was not there). A host leaving last ends the
+  /// session, and its room state goes with it.
+  void _dropAllSessions() {
+    for (final session in _sessionById.values.toList()) {
+      unawaited(_dropSession(session));
+    }
+  }
+
+  /// One session of a call that is over: told we are out, then gone.
+  Future<void> _dropSession(CallActivitySession session) async {
+    try {
+      await session.leave().timeout(leaveTimeout);
+    } catch (e, s) {
+      Log.onError(e, s, content: 'call activity: could not leave the call');
+    }
+    await _untrack(session);
+    session.dispose();
   }
 
   void _track(CallActivitySession session, CallActivityTransport transport) {
@@ -388,6 +424,8 @@ class MatrixCallActivityComponent
   /// A join or a leave is heard in the call and shown in the room list: the
   /// list is told, and the sound is played once things settle.
   void _noteRosters() {
+    // The room is going: who leaves it now is no news to announce.
+    if (_closed) return;
     var changed = false;
     for (final session in _transportOf.keys) {
       final now = rosterOf(session);
@@ -419,6 +457,7 @@ class MatrixCallActivityComponent
   Timer? _leaveSoundTimer;
 
   void _playRosterSound() {
+    if (_closed) return;
     final joined = _someoneJoined;
     final left = _someoneLeft;
     _someoneJoined = _someoneLeft = false;
@@ -434,14 +473,21 @@ class MatrixCallActivityComponent
     });
   }
 
+  /// The room is closing: nothing of its activity outlives it, and the
+  /// roster it drops on the way out is not announced.
+  bool _closed = false;
+
   @override
   void close() {
+    _closed = true;
     _rosterSoundTimer?.cancel();
     _leaveSoundTimer?.cancel();
     for (final sub in _callManagerSubs) {
       sub.cancel();
     }
     _callManagerSubs.clear();
+    // The room is going: nothing of its activity outlives it.
+    _dropAllSessions();
   }
 
   // ----------------------------------------------------------- watch calls
@@ -453,6 +499,9 @@ class MatrixCallActivityComponent
     _watchingCallManager = true;
     _callManagerSubs.add(callManager.currentSessions.onAdd.listen((session) {
       if (!_isOurCall(session)) return;
+      // A call we just joined: whatever we followed before was another
+      // call's (we left and came back), and its transport is dead.
+      _dropAllSessions();
       _followState();
     }));
     _callManagerSubs.add(callManager.currentSessions.onRemove.listen((session) {

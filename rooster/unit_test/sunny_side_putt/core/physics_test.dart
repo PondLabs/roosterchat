@@ -222,6 +222,32 @@ void main() {
         expect(world.ball('a')!.holed, isTrue);
       });
 
+      test('a firm putt through the middle drops, not skips', () {
+        // 12 u/s at the near rim is a firm putt, not a smash: it used to
+        // cross the cup dead center and roll straight out the far side.
+        final world = rollAt(12);
+        runUntilSettled(world);
+        expect(world.drainEvents().whereType<BallCaptured>(), isNotEmpty);
+        expect(world.ball('a')!.holed, isTrue);
+      });
+
+      test('an egg that dies on the lip is drawn in, not parked there', () {
+        // Its center stops a hair outside the rim, its body half over the
+        // hole: the lip's bevel takes it. It used to rest there for good.
+        final world = rollAt(2, offset: 0.9);
+        runUntilSettled(world);
+        expect(world.ball('a')!.holed, isTrue);
+      });
+
+      test('the lip bevel reaches past the rim, and no further', () {
+        expect(testPhysics.cupLipReach, greaterThan(1));
+        // A putt that dies a whole egg's width outside the rim stays out:
+        // the bevel is a lip, not a magnet.
+        final world = rollAt(2, offset: 1.5);
+        runUntilSettled(world);
+        expect(world.ball('a')!.holed, isFalse);
+      });
+
       test('the dead-center speed limit is higher than the lip one', () {
         expect(testPhysics.captureSpeedCentered,
             greaterThan(testPhysics.captureSpeed * 2));

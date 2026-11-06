@@ -575,12 +575,16 @@ toes merged: the host's body (legs and tail in it), his two wings and
 his head, each with its ink; a hen's body, head and two legs, each with
 its ink.
 
-Whenever the host's head would stand under the HUD's top bar or corner
-buttons, or he stands right in front of the camera, he pops out of the
-way, a quick shrink and fade over 0.15 s (and so does a hen that walks
-into the camera's face: all there or not at all, never a half-seen
-ghost), every feather with him: his materials are made transparent once
-at build, so a fade only moves a uniform.
+The host never leaves the scene: he is scenery, and the HUD's panels are
+opaque, so he simply stands behind them. (He used to pop out of the way
+whenever his head landed under the HUD's top band or the camera came
+"near" him - a share of the camera's own distance, which the whole-hole
+view made true of everything - and both rules were crossed and
+re-crossed by every camera glide, so he flickered in and out of the farm
+all through a hole.) A hen that walks into the camera's face still pops
+out of the way, a quick shrink and fade over 0.15 s, all there or not at
+all, never a half-seen ghost: her materials are made transparent once at
+build, so a fade only moves a uniform.
 
 Ground the walls close off from the tee (a flood fill stopped by walls,
 carried through rabbit holes) is planted as the theme's garden beds
@@ -782,12 +786,17 @@ world builds those with `_gridPlane`.
   and the nest inside the part of the screen the HUD leaves free (the
   points are projected through the camera the glide ends at) and
   follows the egg; C toggles the whole-hole view, a right drag orbits,
-  the wheel or a pinch zooms. At rest the frame comes no farther out
-  than keeps my egg 30 pixels tall: a nest too far for that gives way to
-  the stretch toward it (the egg low in the frame), and a marker on the
-  edge of the free view - the flag with the hole's number - points at
-  the nest while it is off the screen, behind the camera or under one of
-  the HUD's widgets, never beside a nest in sight (`putt_nest_marker.dart`).
+  the wheel or a pinch zooms. It is always on the viewer's own egg, as
+  in Putt Party: once the egg is in, the camera keeps the nest it went
+  in, and another player's putt never takes it. A spectator, with no egg
+  of their own, watches the field instead - the egg rolling, else the
+  nearest, kept until another putts or it drops in. At rest the frame
+  comes no farther out than keeps my egg 30 pixels tall: a nest too far
+  for that gives way to the stretch toward it (the egg low in the
+  frame), and a marker on the edge of the free view - the flag with the
+  hole's number - points at the nest while it is off the screen, behind
+  the camera or under one of the HUD's widgets, never beside a nest in
+  sight (`putt_nest_marker.dart`).
   While the viewer aims with the nest out of sight, a small map of the
   hole under the course's chip shows the walls, the water, the nest, the
   eggs and where the arrow points, turned with the camera so that ahead

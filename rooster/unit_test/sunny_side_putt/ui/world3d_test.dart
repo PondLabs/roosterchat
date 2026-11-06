@@ -2049,7 +2049,7 @@ void main() {
       expect(swell, inInclusiveRange(0.015, 0.025));
     });
 
-    test("the host pops out of the camera's face, every feather with him", () {
+    test('the host is inked all over, wings too', () {
       final world = builtWorld();
       addTearDown(world.dispose);
       final host = hostOf(world);
@@ -2069,24 +2069,46 @@ void main() {
             'host-face-light-outline',
           },
           reason: 'inked all over, wings too');
-      for (final mesh in meshes) {
-        expect(mesh.material!.transparent, isTrue,
-            reason: '${mesh.name}: a fade only moves a uniform');
-      }
-      // The camera right over him.
-      world.rig.aimAt(
-          target: Vec2(host.position.x, host.position.z),
-          pitchDeg: 72,
-          distance: 12);
+    });
+
+    test('the host never leaves the farm, however the camera moves', () {
+      // He used to pop out of the way whenever his head landed under the
+      // HUD's top band or the camera came "near" him, and every glide
+      // crossed those lines again: he flickered in and out all through a
+      // hole. He is scenery now, and the HUD's panels are opaque.
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      final host = hostOf(world);
+      final spot = Vec2(host.position.x, host.position.z);
+      final nest = dressing.nest.position;
+      final tee = dressing.tee;
       var time = 0.0;
-      for (var i = 0; i < 20; i++) {
-        world.applySnapshot(PuttWorldFrame(time: time));
-        time += 1 / 60;
+      var flips = 0;
+      var was = host.visible;
+      // The framings a hole goes through: the opening's sweep, the tee,
+      // the nest, the whole hole, and back in close.
+      for (final (target, pitch, distance) in [
+        (nest, 15.0, 30.0),
+        (nest, 22.0, 24.0),
+        (tee, 34.0, 26.0),
+        (spot, 72.0, 12.0),
+        (nest, 34.0, 14.0),
+        (nest, 28.0, 12.5),
+        (Vec2(20, 13), 34.0, 40.0),
+        (tee, 34.0, 20.0),
+      ]) {
+        world.rig.aimAt(target: target, pitchDeg: pitch, distance: distance);
+        for (var i = 0; i < 30; i++) {
+          world.applySnapshot(PuttWorldFrame(time: time));
+          time += 1 / 60;
+          if (host.visible != was) {
+            flips++;
+            was = host.visible;
+          }
+        }
       }
-      expect(host.visible, isFalse);
-      for (final mesh in meshes) {
-        expect(mesh.material!.opacity, lessThan(0.05), reason: mesh.name);
-      }
+      expect(flips, 0, reason: 'no pop in or out, whatever the camera does');
+      expect(host.visible, isTrue);
     });
 
     test('the host stands light while small on the screen, in full up close',
@@ -2135,16 +2157,15 @@ void main() {
       expect(named('host-body-light').single.visible, isFalse);
     });
 
-    test('the host stays gone while the camera wavers at the line', () {
+    test('the host stays put while the camera wavers at the HUD line', () {
+      // The line his head used to cross: the HUD's top band. Wavering
+      // across it left him popping in and out; now it moves nothing.
       final world = builtWorld();
       addTearDown(world.dispose);
       final host = hostOf(world);
       final spot = Vec2(host.position.x, host.position.z);
       var time = 0.0;
-      // Looking down at him from [pitchDeg]: the camera stands cos(pitch)
-      // of its distance off him, along the ground.
       void hold(double pitchDeg) {
-        // Far enough back that his head stands well clear of the HUD.
         world.rig.aimAt(target: spot, pitchDeg: pitchDeg, distance: 30);
         for (var i = 0; i < 20; i++) {
           world.applySnapshot(PuttWorldFrame(time: time));
@@ -2152,12 +2173,10 @@ void main() {
         }
       }
 
-      hold(72);
-      expect(host.visible, isFalse, reason: 'right over him');
-      hold(54.5);
-      expect(host.visible, isFalse, reason: 'just past the line: still gone');
-      hold(40);
-      expect(host.visible, isTrue, reason: 'well clear: back');
+      for (final pitch in [72.0, 54.5, 40.0, 60.0, 72.0]) {
+        hold(pitch);
+        expect(host.visible, isTrue, reason: 'pitch $pitch');
+      }
     });
 
     test("the hen's legs step with her walk, the planted foot on the ground",
