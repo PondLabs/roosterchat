@@ -478,8 +478,9 @@ and black, barn red and cream; a little of its own light, more at dusk).
 It stands on the meadow just off the table, as near the tee as the table
 allows, its board leaning back and turned between the close camera and
 the overview: never on the camera's side, never within 70 degrees of
-where the close camera at the tee looks from (`PuttCameraRig.yawToward`),
-clear of the host and the corners' lanterns (`_CourseKit.teeSignSpot`).
+where the close camera at the tee looks from (`PuttCameraRig.defaultYaw`,
+the one view a hole keeps), clear of the host and the corners' lanterns
+(`_CourseKit.teeSignSpot`).
 Off the table, no egg ever rolls through it; it is decoration only. A
 hole with no number has no sign.
 
@@ -676,20 +677,27 @@ world builds those with `_gridPlane`.
   egg ready), a coach shows the gesture over the egg: a hand presses,
   pulls back away from the nest and lets go while a ghost arrow grows
   (`putt_coach.dart`).
-- The camera opens with a low sweep over the nest, then frames the egg
-  and the nest inside the part of the screen the HUD leaves free (the
-  points are projected through the camera the glide ends at) and
-  follows the egg; C toggles the whole-hole view, a right drag orbits,
-  the wheel or a pinch zooms. At rest the frame comes no farther out
-  than keeps my egg 30 pixels tall: a nest too far for that gives way to
-  the stretch toward it (the egg low in the frame), and a marker on the
-  edge of the free view - the flag with the hole's number - points at
-  the nest while it is off the screen, behind the camera or under one of
-  the HUD's widgets, never beside a nest in sight (`putt_nest_marker.dart`).
-  While the viewer aims with the nest out of sight, a small map of the
-  hole under the course's chip shows the walls, the water, the nest, the
-  eggs and where the arrow points, turned with the camera so that ahead
-  is up (`putt_mini_map.dart`).
+- The camera opens with a low sweep over the nest and lands on the hole's
+  play framing, which is chosen once and then held for the whole hole:
+  the egg dead centre of the part of the screen the HUD leaves free, at a
+  zoom that keeps it a readable size (about 40 px tall), with the nest in
+  the frame too when the hole is short enough for both
+  (`PuttCameraRig.playFraming`). From then on the camera only pans with
+  the egg - the egg keeps the same place in the frame from the tee to the
+  nest, and no putt ever zooms, turns or re-frames it. That is how Putt
+  Party reads: your ball is the middle of the picture and the frame never
+  moves on its own. On a long hole the nest leaves the free view rather
+  than shrinking the egg to a dot. A drag freezes the frame outright, the
+  opening sweep included, so nothing slides out from under a pull. C
+  toggles the whole-hole view, a right drag orbits, the wheel or a pinch
+  zooms (and the player's zoom then holds for the hole).
+  A marker on the edge of the free view - the flag with the hole's number
+  - points at the nest while it is off the screen, behind the camera or
+  under one of the HUD's widgets, never beside a nest in sight
+  (`putt_nest_marker.dart`). While the viewer aims with the nest out of
+  sight, a small map of the hole under the course's chip shows the walls,
+  the water, the nest, the eggs and where the arrow points, turned with
+  the camera so that ahead is up (`putt_mini_map.dart`).
 - With the system's reduced motion on, the hole opens on its play
   framing without the sweep, and the camera never shakes nor punches in.
 

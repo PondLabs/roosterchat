@@ -2424,8 +2424,9 @@ void main() {
             reason: '${hole.id}: beside the tee');
         expect(at.y, lessThan(hole.bounds.max.y),
             reason: '${hole.id}: on the camera side');
-        // Not where the close camera at the tee looks from.
-        final yaw = PuttCameraRig.yawToward(hole.tee, hole.nest.position);
+        // Not where the close camera at the tee looks from: the hole's own
+        // view, which never turns toward the nest.
+        final yaw = PuttCameraRig.defaultYaw;
         final toCamera = Vec2(-math.sin(yaw), -math.cos(yaw));
         expect((at - hole.tee).normalized().dot(toCamera), lessThan(0.35),
             reason: '${hole.id}: between the camera and the egg');

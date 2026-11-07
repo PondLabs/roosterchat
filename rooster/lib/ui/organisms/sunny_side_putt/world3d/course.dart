@@ -2144,9 +2144,10 @@ class _CourseKit {
   (Vec2, Vec2)? _findTeeSignSpot() {
     final tee = hole.tee;
     final bounds = hole.bounds;
-    // The close camera at the tee hangs behind the egg, turned partway
-    // toward the nest.
-    final yaw = PuttCameraRig.yawToward(tee, hole.nest.position);
+    // The close camera at the tee hangs behind the egg, on the hole's own
+    // view: it never turns toward the nest, so the sign keeps out of that
+    // one side for the whole hole.
+    final yaw = PuttCameraRig.defaultYaw;
     final away = Vec2(math.sin(yaw), math.cos(yaw));
     final host = _hostSpotOf(hole);
     // The Barn's lanterns stand off the table's corners.

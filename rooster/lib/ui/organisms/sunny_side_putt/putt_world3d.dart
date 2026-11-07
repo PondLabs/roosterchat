@@ -375,21 +375,6 @@ class PuttCameraRig {
 
   static const double defaultYaw = math.pi;
 
-  /// The orbit that turns the camera partway behind [from], looking down
-  /// the line to [to]: half the turn from the hole's own view, never more
-  /// than about 45 degrees, so the shot's direction reads while the hole
-  /// keeps the orientation everyone shares. The close camera at the egg
-  /// takes it; the tee's sign stands out of its way.
-  static double yawToward(Vec2 from, Vec2 to) {
-    final line = to - from;
-    if (line.length < 1e-3) return defaultYaw;
-    // The camera's away axis is (sin yaw, cos yaw) in x/z.
-    final along = math.atan2(line.x, line.y);
-    var turn = along - defaultYaw;
-    turn = math.atan2(math.sin(turn), math.cos(turn)); // into (-pi, pi]
-    return defaultYaw + (turn * 0.5).clamp(-0.8, 0.8);
-  }
-
   /// The tilt from the ground plane, degrees, in [pitchMin, pitchMax].
   double pitchDeg = pitchDefault;
 
@@ -456,38 +441,29 @@ class PuttCameraRig {
   /// The distance that frames the whole hole (the last fit's).
   double get overviewDistance => _overviewDistance;
 
-  /// Glides to frame [a] and [b] together (the egg and the nest), or the
-  /// box they span when [box]: the target and the distance that land every
-  /// point inside the part of the screen the HUD leaves free (with room
-  /// for an egg's tag and a flag), found by projecting the points through
-  /// the camera the glide will end at. Never closer than [closest] of the
-  /// overview's distance nor farther than the overview itself. [margin]
-  /// (world units) widens the padding around the points.
-  void glideToFrame(Vec2 a, Vec2 b,
-      {double margin = 5,
-      double closest = 0.42,
-      double? yaw,
-      bool box = false}) {
-    glideToFramePoints(box ? [a, b, Vec2(a.x, b.y), Vec2(b.x, a.y)] : [a, b],
-        margin: margin, closest: closest, yaw: yaw);
-  }
-
-  /// [glideToFrame] for any number of points (the eggs still out and the
-  /// nest).
-  /// [tall], beside the points, is how high something stands on each (the
-  /// nest's flag): its top must clear the HUD's top band as well.
+  /// Glides to frame [points] together (the eggs still out and the nest):
+  /// the target and the distance that land every point inside the part of
+  /// the screen the HUD leaves free (with room for an egg's tag and a
+  /// flag), found by projecting the points through the camera the glide
+  /// will end at. Never closer than [closest] of the overview's distance
+  /// nor farther than the overview itself. [margin] (world units) widens
+  /// the padding around the points; [shrink] pulls the free box in around
+  /// its middle. [tall], beside the points, is how high something stands
+  /// on each (the nest's flag): its top must clear the HUD's top band as
+  /// well.
   void glideToFramePoints(List<Vec2> points,
       {double margin = 5,
       double closest = 0.42,
       double? yaw,
-      List<double>? tall}) {
+      List<double>? tall,
+      double shrink = 1}) {
     if (points.isEmpty) return;
     _closeFloor = null;
     if (yaw != null) _yawTarget = yaw;
     final pad = 40 + margin * 6;
-    final distance = _fitDistance(points, pad, closest, tall);
+    final distance = _fitDistance(points, pad, closest, tall, shrink);
     _distanceTarget = distance;
-    _targetTarget = _frameFits(points, distance, pad, tall).target;
+    _targetTarget = _frameFits(points, distance, pad, tall, shrink).target;
   }
 
   /// The target and distance that land [points] inside the HUD-free part of
@@ -500,41 +476,77 @@ class PuttCameraRig {
       double margin = 2,
       double nearest = 0.5,
       double farthest = 1.6,
-      List<double>? tall}) {
+      List<double>? tall,
+      double shrink = 1,
+      Vec2? anchor,
+      double bias = 0}) {
     final savedYaw = _yawTarget;
     final savedPitch = _pitchTarget;
     _yawTarget = yaw;
     _pitchTarget = pitchDeg.clamp(pitchMin, pitchMax);
     final pad = 40 + margin * 6;
     final distance = _nearestFitting(points, pad, _overviewDistance * nearest,
-        _overviewDistance * farthest, tall);
-    final target = _frameFits(points, distance, pad, tall).target;
+        _overviewDistance * farthest, tall, shrink, anchor, bias);
+    final target =
+        _frameFits(points, distance, pad, tall, shrink, anchor, bias).target;
     _yawTarget = savedYaw;
     _pitchTarget = savedPitch;
     return (target: target, distance: distance);
   }
 
-  /// The distance [glideToFramePoints] would come to for [points] from
-  /// [yaw] (the glide's own when left out), without moving the camera.
-  double fitDistance(List<Vec2> points,
-      {double margin = 5,
-      double closest = 0.42,
-      double? yaw,
-      List<double>? tall}) {
-    if (points.isEmpty) return _distanceTarget;
-    final saved = _yawTarget;
-    if (yaw != null) _yawTarget = yaw;
-    final distance = _fitDistance(points, 40 + margin * 6, closest, tall);
-    _yawTarget = saved;
-    return distance;
-  }
-
   /// The smallest distance (in range) whose centred frame fits.
-  double _fitDistance(
-      List<Vec2> points, double pad, double closest, List<double>? tall) {
+  double _fitDistance(List<Vec2> points, double pad, double closest,
+      List<double>? tall, double shrink) {
     final low = math.max(_overviewDistance * closest, _distanceMin);
     final high = math.max(low, math.min(_overviewDistance, _distanceMax));
-    return _nearestFitting(points, pad, low, high, tall);
+    return _nearestFitting(points, pad, low, high, tall, shrink);
+  }
+
+  /// The hole's play framing: the egg dead centre of the frame, as Putt
+  /// Party has it, and the distance the hole is played at. The distance is
+  /// the one that holds the egg and the nest together in the HUD-free part
+  /// of the screen (with [shrink] of that box kept clear, so neither sits
+  /// against an edge), but never so far out that the egg shrinks below
+  /// [eggPixels] tall: on a long hole the nest then leaves the free view,
+  /// and the HUD's marker and the mini-map point at it. The director takes
+  /// the framing once when the hole opens and then only pans with the egg,
+  /// so a shot never moves the camera. [tall], beside the points, is how
+  /// high something stands on each (the nest's flag).
+  ({Vec2 target, double distance}) playFraming(Vec2 egg, Vec2 nest,
+      {double margin = 5,
+      double closest = 0.42,
+      double shrink = 0.82,
+      double eggHeight = 1.4,
+      double eggPixels = 40,
+      List<double>? tall}) {
+    final fit = frameAt([egg, nest],
+        yaw: defaultYaw,
+        pitchDeg: pitchDefault,
+        margin: margin,
+        nearest: closest,
+        farthest: 1,
+        tall: tall,
+        shrink: shrink,
+        // The egg takes the whole of the room the box has left, which puts
+        // it in the middle of the free view: the nest then has to fit in
+        // the half of the frame to its right.
+        anchor: egg,
+        bias: 1);
+    return (
+      target: fit.target,
+      distance: math.min(fit.distance, distanceForHeight(eggHeight, eggPixels)),
+    );
+  }
+
+  /// The distance at which something [height] world units tall stands
+  /// [pixels] tall on screen, at the hole's own pitch.
+  double distanceForHeight(double height, double pixels) {
+    final t = math.tan(fovDeg * math.pi / 360);
+    final cp = math.max(math.cos(pitchDefault * math.pi / 180), 0.15);
+    return height *
+        cp *
+        math.max(viewport.height, 1) /
+        (2 * math.max(pixels, 1) * t);
   }
 
   /// The nearest distance in [low]..[high] from which [points] fit with
@@ -544,15 +556,19 @@ class PuttCameraRig {
   /// height in the opening's frame, at half the distance it needs), so a
   /// bisection could land in one. [high] when even that does not fit.
   double _nearestFitting(List<Vec2> points, double pad, double low, double high,
-      List<double>? tall) {
-    if (high <= low || !_frameFits(points, high, pad, tall).fits) return high;
+      List<double>? tall, double shrink,
+      [Vec2? anchor, double bias = 0]) {
+    if (high <= low ||
+        !_frameFits(points, high, pad, tall, shrink, anchor, bias).fits) {
+      return high;
+    }
     const steps = 40;
     final step = (high - low) / steps;
     var good = high;
     var bad = low - 1;
     for (var i = 1; i <= steps; i++) {
       final d = high - step * i;
-      if (!_frameFits(points, d, pad, tall).fits) {
+      if (!_frameFits(points, d, pad, tall, shrink, anchor, bias).fits) {
         bad = d;
         break;
       }
@@ -563,7 +579,7 @@ class PuttCameraRig {
     var lo = bad, hi = good;
     for (var i = 0; i < 24; i++) {
       final mid = (lo + hi) / 2;
-      if (_frameFits(points, mid, pad, tall).fits) {
+      if (_frameFits(points, mid, pad, tall, shrink, anchor, bias).fits) {
         hi = mid;
       } else {
         lo = mid;
@@ -572,22 +588,15 @@ class PuttCameraRig {
     return hi;
   }
 
-  /// The distance from which something standing [height] world units tall
-  /// measures [pixels] in the middle of the screen, seen from the glide's
-  /// pitch (looking down foreshortens it); infinite with no screen.
-  double distanceForHeight(double height, double pixels) {
-    if (viewport.height <= 0 || pixels <= 0) return double.infinity;
-    final focal = viewport.height / 2 / math.tan(fovDeg * math.pi / 360);
-    final upright = math.cos(_pitchTarget * math.pi / 180);
-    return height * upright * focal / pixels;
-  }
-
   /// The target that centres [points] in the HUD-free part of the screen
   /// from [distance] (at the glide's yaw and pitch), and whether they all
-  /// fit there with [pad] pixels to spare.
+  /// fit there with [pad] pixels to spare. [shrink] pulls the free box in
+  /// around its middle (1 keeps it whole): under 1 the points keep a
+  /// margin from the HUD's bars, so the egg at one corner of their box
+  /// never sits against an edge.
   ({Vec2 target, bool fits}) _frameFits(
       List<Vec2> points, double distance, double pad,
-      [List<double>? tall]) {
+      [List<double>? tall, double shrink = 1, Vec2? anchor, double bias = 0]) {
     final width = math.max(1.0, viewport.width);
     final height = math.max(1.0, viewport.height);
     final aspect = width / height;
@@ -597,11 +606,18 @@ class PuttCameraRig {
     final sp = math.sin(pitch);
     final away = Vec2(math.sin(_yawTarget), math.cos(_yawTarget));
     final right = Vec2(-away.y, away.x);
-    // The free box in NDC: the HUD's bars at the top and the bottom.
-    final left = -1 + 2 * pad / width;
-    final rightEdge = 1 - 2 * pad / width;
-    final top = 1 - 2 * (96 + pad) / height;
-    final bottom = -1 + 2 * (150 + pad) / height;
+    // The free box in NDC: the HUD's bars at the top and the bottom, pulled
+    // in by [shrink] around its middle.
+    final freeLeft = -1 + 2 * pad / width;
+    final freeRight = 1 - 2 * pad / width;
+    final freeTop = 1 - 2 * (96 + pad) / height;
+    final freeBottom = -1 + 2 * (150 + pad) / height;
+    final midX = (freeLeft + freeRight) / 2;
+    final midY = (freeTop + freeBottom) / 2;
+    final left = midX + (freeLeft - midX) * shrink;
+    final rightEdge = midX + (freeRight - midX) * shrink;
+    final top = midY + (freeTop - midY) * shrink;
+    final bottom = midY + (freeBottom - midY) * shrink;
     // The points' box on the screen from [target]: its extent, how far up
     // the tallest thing on them reaches (NDC), their mean depth, and
     // whether one stands behind the lens.
@@ -676,6 +692,20 @@ class PuttCameraRig {
       if (ex.abs() < 1e-4 && ey.abs() < 1e-4) break;
       target += right * (ex * box.depth * t * aspect * 0.7) +
           away * (ey * box.depth * t / math.max(sp, 0.2) * 0.7);
+    }
+    // [anchor] (the egg) takes [bias] of the room the box has left: the
+    // box's middle stays where it is, the anchor moves that much of the
+    // way toward it, and the far points give up the same room.
+    if (anchor != null && bias > 0) {
+      final d = anchor - target;
+      final f = d.dot(away);
+      final zc = distance + f * cp;
+      if (zc > 0.5) {
+        final ax = d.dot(right) / (zc * t * aspect);
+        final ay = f * sp / (zc * t);
+        target += right * (ax * bias * zc * t * aspect) +
+            away * (ay * bias * zc * t / math.max(sp, 0.2));
+      }
     }
     // It fits when the box, where it settled, lies inside the free box.
     final box = boxFrom(target);

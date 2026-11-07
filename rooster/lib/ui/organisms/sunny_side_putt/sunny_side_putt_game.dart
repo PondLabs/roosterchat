@@ -762,11 +762,9 @@ class SunnySidePuttGame extends FlameGame {
 
   String? _fittedHole;
 
-  /// The camera's choreography: the hole's opening sweep, the egg and the
-  /// nest framed at rest, the egg followed while it rolls.
-  late final PuttCameraDirector director = PuttCameraDirector(world3d.rig)
-    // The egg as drawn: about 2.4 radii from base to crown.
-    ..eggHeight = eggRadius * 2.4;
+  /// The camera's choreography: the hole's opening sweep, then the egg held
+  /// dead centre while the camera only pans with it.
+  late final PuttCameraDirector director = PuttCameraDirector(world3d.rig);
 
   /// Where a drag anchored when it began away from the egg: the pull is
   /// measured from there, the arrow still drawn from the egg.
@@ -1423,7 +1421,6 @@ class SunnySidePuttGame extends FlameGame {
         myEgg: mine == null ? null : match.myEggRenderPosition,
         myEggResting: mine?.asleep ?? true,
         myEggHoled: mine?.holed ?? false,
-        myEggVelocity: mine?.velocity ?? core.Vec2.zero,
         otherEggs: [
           if (world != null)
             for (final ball in world.balls)
@@ -1432,6 +1429,7 @@ class SunnySidePuttGame extends FlameGame {
         ],
         // Aiming, or picking a spot for a power-up: the frame holds still.
         aiming: aim.isActive || targeting.isActive,
+        eggHeight: eggRadius * 2,
         host: match.hole == null ? null : world3d.hostSpotOn(match.hole!.id),
       ),
     );
