@@ -1542,7 +1542,6 @@ class SunnySidePuttGame extends FlameGame {
         myEgg: mine == null ? null : match.myEggRenderPosition,
         myEggResting: mine?.asleep ?? true,
         myEggHoled: mine?.holed ?? false,
-        myEggVelocity: mine?.velocity ?? core.Vec2.zero,
         otherEggs: [
           if (world != null)
             for (final ball in world.balls)

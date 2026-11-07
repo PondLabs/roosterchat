@@ -1,14 +1,14 @@
 // The camera's choreography over a hole, kept apart from the game's ticker:
-// the whole hole while it opens, then - whenever the viewer's egg is at
-// rest - the egg and the nest framed together, so the shot ahead always
-// shows; the egg followed while it rolls; and once the egg is in, the nest
-// it went in, kept. The camera is always on the viewer's own egg: another
-// player's putt never takes it. A spectator, with no egg of their own,
-// watches the field instead: the egg rolling, else the nearest, kept until
-// another putts or it drops in. The player can take the camera at any time
-// (wheel, pinch, orbit): from then on, for the rest of the hole, the
-// director keeps following but leaves the zoom alone. C (or the HUD's
-// camera button) toggles the whole-hole view, until my next putt.
+// the whole hole while it opens, then - for the whole hole - one framing
+// with the viewer's egg dead centre, which only ever pans with the egg, as
+// Putt Party has it; and once the egg is in, the nest it went in, kept. The
+// camera is always on the viewer's own egg: another player's putt never
+// takes it. A spectator, with no egg of their own, watches the field
+// instead: the egg rolling, else the nearest, kept until another putts or
+// it drops in. The player can take the camera at any time (wheel, pinch,
+// orbit): from then on, for the rest of the hole, the director keeps
+// following but leaves the zoom alone. C (or the HUD's camera button)
+// toggles the whole-hole view, until my next putt.
 library;
 
 import 'dart:math' as math;
@@ -53,9 +53,6 @@ class PuttCameraCue {
   /// Whether the viewer is dragging an aim (the frame must hold still).
   final bool aiming;
 
-  /// The viewer's egg's velocity (the follow leads along it).
-  final Vec2 myEggVelocity;
-
   /// Where the host stands beside this hole (the opening's shot keeps him
   /// in the frame); null when he is not built yet.
   final Vec2? host;
@@ -72,7 +69,6 @@ class PuttCameraCue {
     this.myEggHoled = false,
     this.otherEggs = const [],
     this.aiming = false,
-    this.myEggVelocity = Vec2.zero,
     this.host,
     this.myStrokes = 0,
   });
@@ -84,10 +80,10 @@ class PuttCameraDirector {
   final PuttCameraRig rig;
 
   /// How tall my egg stands in world units (the view sets it from the
-  /// egg's radius), and the least it should measure on screen at rest, so
-  /// the putt is aimed at an egg, not a speck.
+  /// egg's radius), and how tall it should measure on screen, so the putt
+  /// is aimed at an egg, not a speck.
   double eggHeight = 1.1;
-  static const double aimEggPixels = 30;
+  static const double aimEggPixels = 40;
 
   /// The hatch's close-up: how far out the camera stands, and how low it
   /// looks (degrees).
@@ -103,10 +99,6 @@ class PuttCameraDirector {
   /// How tall the nest's flag stands (world units), kept clear of the HUD
   /// when that is cheap.
   static const double nestFlagHeight = 3.7;
-
-  /// How much farther than the egg's cap the camera may stand to frame the
-  /// nest itself.
-  static const double _nestAllowance = 1.12;
 
   /// How long the hole's overview holds before the camera comes in.
   static const double openingSeconds = 2.4;
@@ -128,12 +120,12 @@ class PuttCameraDirector {
   bool held = false;
 
   /// Whether the hole's opening sweep is still on.
-  bool get opening => !reduceMotion && _holeClock < openingSeconds;
+  bool get opening => !reduceMotion && _sweepClock < openingSeconds;
 
   /// Seconds since the camera settled on the hole after its opening (a
   /// second's glide after the sweep; at once with reduced motion).
   double get settledFor =>
-      _holeClock - (reduceMotion ? 0.3 : openingSeconds + 1.0);
+      _sweepClock - (reduceMotion ? 0.3 : openingSeconds + 1.0);
 
   /// Whether the player asked for the whole hole (C, the HUD's button).
   bool get overview => _overview;
@@ -149,17 +141,28 @@ class PuttCameraDirector {
 
   String? _holeId;
   double _holeClock = 0;
+
+  /// The opening sweep's own clock: it stops while the player drags an aim,
+  /// so the camera never slides out from under a pull.
+  double _sweepClock = 0;
   bool _userCamera = false;
 
-  /// Where my egg rested when the camera last framed it; null asks for a
-  /// new framing at the next rest.
-  Vec2? _framedAt;
-  bool _wasRolling = false;
+  /// The hole's play framing: the zoom that keeps my egg a readable size
+  /// (and the nest in the free view too, when the hole is short enough for
+  /// both), and the offset from the egg to the point the camera centres on
+  /// - nothing, the egg being the middle of the frame. Both are chosen once
+  /// when the hole opens and held for the whole hole, so the egg keeps the
+  /// same place in the frame from the tee to the nest and a shot never
+  /// moves the camera.
+  double _playDistance = 0;
+  Vec2 _playOffset = Vec2.zero;
+  bool _playFramed = false;
+
+  bool _showingBetween = false;
+  Vec2? _follow;
 
   /// [PuttCameraCue.myStrokes] at the last update.
   int _myStrokes = 0;
-  bool _showingBetween = false;
-  Vec2? _follow;
 
   /// The other player the camera watches once my egg is in (or for a
   /// spectator); null while it is on mine, or no one is out.
@@ -187,14 +190,20 @@ class PuttCameraDirector {
   /// Seconds the current hole has been up.
   double get holeClock => _holeClock;
 
+  /// The zoom the hole plays at, and the offset from my egg to the point
+  /// the camera centres on - both the hole's, from its first frame to its
+  /// last.
+  double get playDistance => _playDistance;
+  Vec2 get playOffset => _playOffset;
+
   /// The player zoomed, pinched or orbited: leave the zoom to them for the
   /// rest of this hole.
   void noteUserCamera() => _userCamera = true;
 
-  /// After a refit (a resize): the next rest frames the shot again, and
+  /// After a refit (a resize): the hole's framing is measured again, and
   /// between holes the whole green is asked for again.
   void reframe() {
-    _framedAt = null;
+    _playFramed = false;
     _watchFramedAt = null;
     _showingBetween = false;
   }
@@ -205,23 +214,23 @@ class PuttCameraDirector {
     if (_overview) {
       rig.glideTo(
           distance: rig.overviewDistance, yaw: PuttCameraRig.defaultYaw);
-    } else {
-      _framedAt = null;
-      _watchFramedAt = null;
+    } else if (!_userCamera) {
+      rig.glideTo(distance: _playDistance);
     }
   }
 
   /// The hole's entrance, driven frame by frame over [openingSeconds]: the
   /// camera starts low over the nest, turned a little, looking across it at
   /// the farm and the sky (the hour shows), holds there a breath, then
-  /// rises and turns onto the whole green.
-  void _sweep(HoleDef hole, Vec2? host) {
-    final t = (_holeClock / (openingSeconds - 0.3)).clamp(0.0, 1.0);
+  /// rises and turns onto the hole's play framing - the egg dead centre -
+  /// so the sweep lands exactly where the hole is played and nothing glides
+  /// afterwards.
+  void _sweep(HoleDef hole, Vec2? host, Vec2 egg) {
+    final t = (_sweepClock / (openingSeconds - 0.3)).clamp(0.0, 1.0);
     // A held beat, then an ease-in-out climb.
     final k = t < 0.25 ? 0.0 : (t - 0.25) / 0.75;
     final eased = k * k * (3 - 2 * k);
     double lerp(double a, double b) => a + (b - a) * eased;
-    final overviewDistance = rig.overviewDistance;
     // The first pose takes in the whole table, its tee and the host beside
     // it, low from the side: aimed at the nest from a set distance, the
     // tee's eggs or the host stood cut at a frame's edge on some holes.
@@ -252,8 +261,8 @@ class PuttCameraDirector {
       ..aimAt(
         yaw: lerp(_openingYaw, PuttCameraRig.defaultYaw),
         pitchDeg: lerp(_openingPitch, PuttCameraRig.pitchDefault),
-        distance: lerp(start.distance, overviewDistance),
-        target: start.target.lerp(hole.bounds.center, eased),
+        distance: lerp(start.distance, _playDistance),
+        target: start.target.lerp(egg + _playOffset, eased),
       )
       ..snap();
   }
@@ -276,9 +285,9 @@ class PuttCameraDirector {
     if (hole.id != _holeId) {
       _holeId = hole.id;
       _holeClock = 0;
+      _sweepClock = 0;
       _userCamera = false;
-      _framedAt = null;
-      _wasRolling = false;
+      _playFramed = false;
       _showingBetween = false;
       _wasHoled = false;
       _celebrateUntil = 0;
@@ -289,11 +298,28 @@ class PuttCameraDirector {
       _othersPutting.clear();
     }
     _holeClock += dt;
+    if (_sweepClock < openingSeconds && !cue.aiming) _sweepClock += dt;
     if (held) {
       _follow = null;
       return;
     }
     final center = hole.bounds.center;
+    final egg = cue.myEgg ?? hole.tee;
+
+    // The hole's play framing, measured once: the egg dead centre, at the
+    // distance that keeps it a readable size (the nest in the frame too
+    // when the hole is short enough for it). Held for the whole hole -
+    // this is the only time the zoom is chosen.
+    if (!_playFramed) {
+      _playFramed = true;
+      final framing = rig.playFraming(egg, hole.nest.position,
+          eggHeight: eggHeight,
+          eggPixels: aimEggPixels,
+          tall: const [0, nestFlagHeight]);
+      _playDistance = framing.distance;
+      _playOffset = framing.target - egg;
+      if (!_userCamera) rig.glideTo(distance: _playDistance);
+    }
 
     // My egg just dropped in: the camera comes in on the nest for the
     // hatch (unless the player took the camera), then frames the rest.
@@ -325,8 +351,19 @@ class PuttCameraDirector {
     if (_celebrateUntil > 0) {
       _celebrateUntil = 0;
       _watchFramedAt = null;
+      // Back out to the hole's own framing, the close-up's floor released.
       rig.glideTo(
-          pitchDeg: PuttCameraRig.pitchDefault, yaw: PuttCameraRig.defaultYaw);
+        pitchDeg: PuttCameraRig.pitchDefault,
+        yaw: PuttCameraRig.defaultYaw,
+        distance: _userCamera ? null : _playDistance,
+      );
+    }
+
+    // A drag never slides out from under the pointer: the frame holds
+    // exactly where it is, whatever the egg or the sweep is doing.
+    if (cue.aiming) {
+      _follow = rig.target;
+      return;
     }
 
     // Between holes, and while the hole opens: the whole green.
@@ -343,109 +380,28 @@ class PuttCameraDirector {
     _showingBetween = false;
     // A new putt of mine hands the camera back from the whole-hole view
     // (my egg knocked by another stays in it).
-    final egg = cue.myEgg;
     if (cue.myStrokes > _myStrokes) _overview = false;
     _myStrokes = cue.myStrokes;
     if (opening) {
-      _sweep(hole, cue.host);
+      _sweep(hole, cue.host, egg);
       _follow = null;
       return;
     }
     if (_overview) {
       _follow = center;
-      _wasRolling = egg != null && !cue.myEggResting;
-      return;
-    }
-    if (cue.aiming) {
-      _follow = null;
       return;
     }
 
-    if (egg != null) {
-      // In the nest: the camera stays on it, where my egg went in. Another
-      // player's egg never takes it - the camera is always on mine, as in
-      // Putt Party, so a player waiting their turn still sees their own
-      // green and not someone else's putt.
-      final at = cue.myEggHoled ? hole.nest.position : egg;
-      if (!cue.myEggResting && !cue.myEggHoled) {
-        // Rolling: ride with it, a little farther out than the rest framing
-        // if that was tight, so the way ahead shows.
-        if (!_wasRolling && !_userCamera) {
-          rig.glideTo(
-              distance:
-                  math.max(rig.distanceTarget, rig.overviewDistance * 0.62));
-        }
-        _wasRolling = true;
-        _framedAt = null;
-        // A lead along the roll (at most four units), so the way ahead
-        // shows more than the way behind.
-        final lead = cue.myEggVelocity * 0.28;
-        _follow =
-            egg + (lead.length > 4 ? lead.normalized(Vec2.zero) * 4.0 : lead);
-        return;
-      }
-      _wasRolling = false;
-      _follow = null;
-      // Framed again whenever the resting egg is somewhere else than where
-      // it was framed: a splash, a silo or the out-of-bounds line puts it
-      // back in the very tick it settles, and that first resting frame
-      // draws it between the two ticks - part way back from the water.
-      // Framed once there, the camera stayed by the pond.
-      final framedAt = _framedAt;
-      if (framedAt == null || framedAt.distanceTo(at) > 0.5) {
-        _framedAt = at;
-        if (_userCamera) {
-          rig.glideTo(target: at.lerp(hole.nest.position, 0.35));
-        } else {
-          // My egg, the eggs around mine (the tee's crowd) and the nest, so
-          // none of them sits under the HUD - as long as my egg stays big
-          // enough to aim at (aimEggPixels tall). A nest too far for that
-          // gives way to the stretch toward it, the egg low in the frame;
-          // the HUD points at the nest, and C still shows the whole hole.
-          final yaw = PuttCameraRig.yawToward(at, hole.nest.position);
-          final crowd = [
-            at,
-            for (final other in cue.otherEggs)
-              if (other.position.distanceTo(at) < 5) other.position,
-          ];
-          final cap = rig.distanceForHeight(eggHeight, aimEggPixels);
-          // The frame may come in as close as the cap asks.
-          final closest = math.min(0.42, cap / rig.overviewDistance);
-          var ahead = hole.nest.position;
-          // The nest with its flag clear of the HUD, if that costs no more
-          // than a little of the egg's size (some 27 px); else the nest as
-          // before (its flag may reach under the bar); else the stretch.
-          final flag = [for (final _ in crowd) 0.0, nestFlagHeight];
-          final looseClosest =
-              math.min(closest, cap * _nestAllowance / rig.overviewDistance);
-          final withFlag = rig.fitDistance([...crowd, ahead],
-                  yaw: yaw, closest: looseClosest, tall: flag) <=
-              cap * _nestAllowance;
-          if (!withFlag &&
-              rig.fitDistance([...crowd, ahead], yaw: yaw, closest: closest) >
-                  cap) {
-            final way = hole.nest.position - at;
-            final along = way.normalized(const Vec2(0, -1));
-            var lo = 0.0, hi = way.length;
-            for (var i = 0; i < 14; i++) {
-              final mid = (lo + hi) / 2;
-              if (rig.fitDistance([...crowd, at + along * mid],
-                      yaw: yaw, closest: closest) <=
-                  cap) {
-                lo = mid;
-              } else {
-                hi = mid;
-              }
-            }
-            ahead = at + along * lo;
-          }
-          final flagged = withFlag && identical(ahead, hole.nest.position);
-          rig.glideToFramePoints([...crowd, ahead],
-              yaw: yaw,
-              closest: flagged ? looseClosest : closest,
-              tall: flagged ? flag : null);
-        }
-      }
+    if (cue.myEgg != null) {
+      // The egg is the anchor. It keeps the one place in the frame the
+      // hole's framing gave it and the camera only pans with it: no zoom,
+      // no turn, no re-framing when it comes to rest, and no lead ahead of
+      // a roll. The nest drifts across the frame as the egg travels; the
+      // HUD's marker points at it when it leaves the free view. Once my
+      // egg is in, the camera stays on the nest it went in - another
+      // player's egg never takes it, as in Putt Party, so a player waiting
+      // their turn still sees their own green and not someone else's putt.
+      _follow = cue.myEggHoled ? hole.nest.position : cue.myEgg! + _playOffset;
       return;
     }
 

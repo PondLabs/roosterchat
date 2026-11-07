@@ -1,8 +1,8 @@
-// The camera's choreography: the whole hole while it opens, the egg and the
-// nest framed together at rest, the egg followed while it rolls, the nest
-// kept once the egg is in (never another player's egg), a spectator's field
-// watched, the whole green between holes - and a player who takes the
-// camera keeps the zoom they chose.
+// The camera's choreography: the whole hole while it opens, then one
+// framing per hole with the egg dead centre that only ever pans with it (as
+// Putt Party has it), the nest kept once the egg is in (never another
+// player's egg), a spectator's field watched, the whole green between holes
+// - and a player who takes the camera keeps the zoom they chose.
 library;
 
 import 'dart:ui' as ui;
@@ -48,12 +48,13 @@ void main() {
   PuttCameraCue resting(Vec2 egg) => PuttCameraCue(
       hole: hole, phase: PuttPhase.holePlay, myEgg: egg, myEggResting: true);
 
-  /// Where a ground point lands on the 1280x800 screen through the rig.
-  ui.Offset pixelOf(Vec2 point) {
+  /// Where a ground point (or something [height] up on it) lands on the
+  /// 1280x800 screen through the rig.
+  ui.Offset pixelOf(Vec2 point, [double height = 0]) {
     final camera = tjs.PerspectiveCamera(PuttCameraRig.fovDeg, 1280 / 800);
     rig.applyTo(camera);
     camera.updateMatrixWorld(true);
-    final ndc = tjs.Vector3(point.x, 0, point.y).project(camera);
+    final ndc = tjs.Vector3(point.x, height, point.y).project(camera);
     return ui.Offset((ndc.x + 1) / 2 * 1280, (1 - ndc.y) / 2 * 800);
   }
 
@@ -66,7 +67,8 @@ void main() {
         reason: '$point at $pixel');
   }
 
-  test('the hole opens with a sweep from low beside it to the whole green', () {
+  test('the hole opens with a sweep from low beside it to its play framing',
+      () {
     // The host stands beyond the far rail, by the nest.
     const host = Vec2(44, -6);
     PuttCameraCue opening() => PuttCameraCue(
@@ -90,10 +92,13 @@ void main() {
       expectInFreeView(corner);
     }
     run(PuttCameraDirector.openingSeconds - 0.2, opening());
-    expect(rig.target.distanceTo(hole.bounds.center), lessThan(0.5));
+    // It lands exactly on the hole's play framing: the egg where the hole
+    // keeps it, the zoom the hole's own. Nothing glides afterwards.
     expect(rig.pitchDeg, closeTo(PuttCameraRig.pitchDefault, 0.5));
     expect(rig.yaw, closeTo(PuttCameraRig.defaultYaw, 0.02));
-    expect(rig.distance, closeTo(rig.overviewDistance, 1.5));
+    expect(rig.distance, closeTo(director.playDistance, 0.5));
+    expect(
+        rig.target.distanceTo(hole.tee + director.playOffset), lessThan(0.5));
   });
 
   test('with reduced motion there is no sweep and no shake', () {
@@ -107,88 +112,165 @@ void main() {
     run(1.2, resting(egg));
     expect(director.settledFor, greaterThan(0));
     expectInFreeView(egg);
-    expectInFreeView(hole.nest.position);
+    final at = pixelOf(egg);
+    expect(at.dx, closeTo(640, 2), reason: 'the egg is the middle: $at');
+    expect(at.dy, closeTo(400, 2), reason: 'the egg is the middle: $at');
     final before = rig.distanceTarget;
     rig.punch();
     expect(rig.distanceTarget, before);
   });
 
-  test('at rest, the egg and the nest are framed together', () {
-    const egg = Vec2(24, 12);
-    run(PuttCameraDirector.openingSeconds + 3, resting(egg));
-    expectInFreeView(egg);
-    expectInFreeView(hole.nest.position);
+  test('the egg is the middle of the frame, at a size to aim at', () {
+    run(PuttCameraDirector.openingSeconds + 3, resting(hole.tee));
+    final egg = pixelOf(hole.tee);
+    expect(egg.dx, closeTo(640, 2), reason: '$egg');
+    expect(egg.dy, closeTo(400, 2), reason: '$egg');
+    // Big enough to read as an egg, not a dot: the framing never zooms out
+    // past this to keep the nest in view.
+    final eggPixels =
+        pixelOf(hole.tee).dy - pixelOf(hole.tee, director.eggHeight).dy;
+    expect(eggPixels, greaterThan(30), reason: '$eggPixels px tall');
     expect(rig.distance, lessThanOrEqualTo(rig.overviewDistance + 1e-6));
   });
 
-  test("at rest, the nest's flag stands clear of the HUD, the egg aimable", () {
-    const egg = Vec2(24, 12);
-    run(PuttCameraDirector.openingSeconds + 3, resting(egg));
-    final camera = tjs.PerspectiveCamera(PuttCameraRig.fovDeg, 1280 / 800);
-    rig.applyTo(camera);
-    camera.updateMatrixWorld(true);
-    double pixelY(Vec2 at, double height) =>
-        (1 - tjs.Vector3(at.x, height, at.y).project(camera).y) / 2 * 800;
-    final nest = hole.nest.position;
-    expect(pixelY(nest, PuttCameraDirector.nestFlagHeight),
+  test('a short hole keeps the nest in the frame too', () {
+    // The nest a dozen units off the tee: the egg's size leaves room for
+    // it, so the hole is played with both in view.
+    final short = HoleDef(
+      id: 'camera-short',
+      par: 2,
+      tee: const Vec2(4, 12),
+      nest: const Nest(Vec2(16, 12), 1.7),
+      bounds: Rect(Vec2.zero, Vec2(24, 26)),
+    );
+    rig.fitToHole(short.bounds);
+    final cue =
+        PuttCameraCue(hole: short, phase: PuttPhase.holePlay, myEgg: short.tee);
+    run(PuttCameraDirector.openingSeconds + 3, cue);
+    expectInFreeView(short.tee);
+    expectInFreeView(short.nest.position);
+    final egg = pixelOf(short.tee);
+    expect(egg.dx, closeTo(640, 2), reason: '$egg');
+    expect(egg.dy, closeTo(400, 2), reason: '$egg');
+  });
+
+  test('a long hole lets the nest leave the view, the egg staying put', () {
+    // The nest 38 units off the tee: keeping it in the frame would shrink
+    // the egg to a dot, so it goes and the HUD's marker points at it.
+    run(PuttCameraDirector.openingSeconds + 3, resting(hole.tee));
+    final nest = pixelOf(hole.nest.position);
+    expect(nest.dx, greaterThan(1280),
+        reason: 'the nest is off the right edge: $nest');
+    final egg = pixelOf(hole.tee);
+    expect(egg.dx, closeTo(640, 2), reason: '$egg');
+  });
+
+  test("the nest's flag stands clear of the HUD when the nest is in view", () {
+    final short = HoleDef(
+      id: 'camera-short',
+      par: 2,
+      tee: const Vec2(4, 12),
+      nest: const Nest(Vec2(16, 12), 1.7),
+      bounds: Rect(Vec2.zero, Vec2(24, 26)),
+    );
+    rig.fitToHole(short.bounds);
+    run(
+      PuttCameraDirector.openingSeconds + 3,
+      PuttCameraCue(hole: short, phase: PuttPhase.holePlay, myEgg: short.tee),
+    );
+    final nest = short.nest.position;
+    expect(pixelOf(nest, PuttCameraDirector.nestFlagHeight).dy,
         greaterThanOrEqualTo(120),
         reason: 'under the top strip, the chip and the corner buttons');
-    final eggPixels = pixelY(egg, 0) - pixelY(egg, director.eggHeight);
-    expect(eggPixels, greaterThan(PuttCameraDirector.aimEggPixels * 0.85),
-        reason: 'still an egg to aim at');
+    final eggPixels =
+        pixelOf(short.tee).dy - pixelOf(short.tee, director.eggHeight).dy;
+    expect(eggPixels, greaterThan(20), reason: 'still an egg to aim at');
   });
 
-  test('a nest too far to frame with an aimable egg gives way to the egg', () {
-    run(PuttCameraDirector.openingSeconds + 3, resting(hole.tee));
-    // The egg in view, low, and the stretch toward the nest above it; the
-    // nest itself is the HUD's to point at.
-    expectInFreeView(hole.tee);
-    expect(pixelOf(hole.tee).dy, greaterThan(400));
-    expect(
-        rig.distance,
-        lessThanOrEqualTo(
-            rig.distanceForHeight(director.eggHeight, 30) + 1e-6));
+  test(
+      'the hole keeps one framing: the egg holds its place in the frame '
+      'from the tee to the nest', () {
+    run(PuttCameraDirector.openingSeconds + 2, resting(hole.tee));
+    final atTee = pixelOf(hole.tee);
+    final yaw = rig.yaw;
+    final pitch = rig.pitchDeg;
+    final distance = rig.distance;
+    // Four putts, each a roll and a rest, walking up to the nest.
+    var from = hole.tee;
+    for (final to in const [
+      Vec2(14, 12),
+      Vec2(24, 12),
+      Vec2(34, 12),
+      Vec2(40, 12),
+    ]) {
+      for (var i = 1; i <= 8; i++) {
+        run(
+          0.1,
+          PuttCameraCue(
+            hole: hole,
+            phase: PuttPhase.holePlay,
+            myEgg: from.lerp(to, i / 8),
+            myEggResting: false,
+          ),
+        );
+      }
+      from = to;
+      run(2.5, resting(to));
+      // The egg is where the hole's framing put it, to the pixel.
+      final at = pixelOf(to);
+      expect(at.dx, closeTo(atTee.dx, 1.5), reason: 'shot to $to');
+      expect(at.dy, closeTo(atTee.dy, 1.5), reason: 'shot to $to');
+      // And the camera never turned nor zoomed to get there.
+      expect(rig.yaw, closeTo(yaw, 1e-6), reason: 'shot to $to');
+      expect(rig.pitchDeg, closeTo(pitch, 1e-6), reason: 'shot to $to');
+      expect(rig.distance, closeTo(distance, 1e-6), reason: 'shot to $to');
+    }
   });
 
-  test('on a long hole the resting egg stays big enough to aim at', () {
-    // A nest 80 units away: framing it with the egg would shrink the egg
-    // to a speck, so the camera frames the egg and the way toward the
-    // nest instead.
-    final long = HoleDef(
-      id: 'camera-long',
-      par: 4,
-      tee: const Vec2(6, 15),
-      nest: Nest(const Vec2(86, 15), 1.7),
-      bounds: Rect(Vec2.zero, Vec2(92, 30)),
-    );
-    rig.fitToHole(long.bounds);
-    director = PuttCameraDirector(rig);
-    final cue = PuttCameraCue(
-        hole: long,
+  test('a drag during the opening holds the sweep where it is', () {
+    PuttCameraCue opening({bool aiming = false}) => PuttCameraCue(
+        hole: hole,
         phase: PuttPhase.holePlay,
-        myEgg: long.tee,
-        myEggResting: true);
-    run(PuttCameraDirector.openingSeconds + 3, cue);
-    expectInFreeView(long.tee);
-    final camera = tjs.PerspectiveCamera(PuttCameraRig.fovDeg, 1280 / 800);
-    rig.applyTo(camera);
-    camera.updateMatrixWorld(true);
-    double pixelY(double height) =>
-        (1 - tjs.Vector3(long.tee.x, height, long.tee.y).project(camera).y) /
-        2 *
-        800;
-    final eggPixels = pixelY(0) - pixelY(director.eggHeight);
-    expect(
-        eggPixels, greaterThanOrEqualTo(PuttCameraDirector.aimEggPixels * 0.9));
-    expect(rig.distance, lessThan(rig.overviewDistance * 0.8));
+        myEgg: hole.tee,
+        myEggResting: true,
+        aiming: aiming);
+    run(0.8, opening());
+    final yaw = rig.yaw;
+    final pitch = rig.pitchDeg;
+    final distance = rig.distance;
+    final target = rig.target;
+    run(1.5, opening(aiming: true));
+    expect(rig.yaw, closeTo(yaw, 1e-6));
+    expect(rig.pitchDeg, closeTo(pitch, 1e-6));
+    expect(rig.distance, closeTo(distance, 1e-6));
+    expect(rig.target.distanceTo(target), lessThan(1e-6));
+    // Let go and the sweep carries on from where it stopped.
+    run(PuttCameraDirector.openingSeconds, opening());
+    expect(rig.distance, closeTo(director.playDistance, 0.5));
+    expect(rig.yaw, closeTo(PuttCameraRig.defaultYaw, 0.02));
   });
 
-  test('a short putt left frames closer than the whole hole', () {
-    run(PuttCameraDirector.openingSeconds + 3, resting(const Vec2(38, 12)));
-    expect(rig.distance, lessThan(rig.overviewDistance * 0.8));
+  test('a drag holds the frame dead still', () {
+    run(PuttCameraDirector.openingSeconds + 2, resting(hole.tee));
+    final target = rig.target;
+    final distance = rig.distance;
+    // The egg is nudged (a stray frame) while the aim is held: the camera
+    // does not follow it out from under the pointer.
+    run(
+      1,
+      PuttCameraCue(
+        hole: hole,
+        phase: PuttPhase.holePlay,
+        myEgg: const Vec2(9, 13),
+        myEggResting: true,
+        aiming: true,
+      ),
+    );
+    expect(rig.target.distanceTo(target), lessThan(1e-6));
+    expect(rig.distance, closeTo(distance, 1e-6));
   });
 
-  test('rolling, the camera rides with the egg', () {
+  test('rolling, the camera pans with the egg, never ahead of it', () {
     run(PuttCameraDirector.openingSeconds + 1, resting(hole.tee));
     const rolling = Vec2(20, 14);
     director.update(
@@ -200,25 +282,7 @@ void main() {
         myEggResting: false,
       ),
     );
-    expect(director.followPoint, rolling);
-  });
-
-  test('rolling fast, the camera looks ahead of the egg', () {
-    run(PuttCameraDirector.openingSeconds + 1, resting(hole.tee));
-    const rolling = Vec2(20, 14);
-    director.update(
-      1 / 60,
-      PuttCameraCue(
-        hole: hole,
-        phase: PuttPhase.holePlay,
-        myEgg: rolling,
-        myEggResting: false,
-        myEggVelocity: const Vec2(20, 0),
-      ),
-    );
-    final follow = director.followPoint!;
-    expect(follow.x, greaterThan(rolling.x + 3));
-    expect(follow.distanceTo(rolling), lessThanOrEqualTo(4 + 1e-9));
+    expect(director.followPoint, rolling + director.playOffset);
   });
 
   test('a player who zoomed keeps their zoom at the next rest', () {
@@ -238,6 +302,18 @@ void main() {
     final zoom = rig.distanceTarget;
     run(2, resting(const Vec2(30, 12)));
     expect(rig.distanceTarget, closeTo(zoom, 1e-6));
+  });
+
+  test('the whole-hole view centres the green and zooms out', () {
+    run(PuttCameraDirector.openingSeconds + 3, resting(hole.tee));
+    director.toggleOverview();
+    run(2, resting(hole.tee));
+    expect(director.overview, isTrue);
+    expect(rig.target.distanceTo(hole.bounds.center), lessThan(0.5));
+    expect(rig.distance, closeTo(rig.overviewDistance, 0.5));
+    director.toggleOverview();
+    run(2, resting(hole.tee));
+    expect(rig.distance, closeTo(director.playDistance, 0.5));
   });
 
   test('a splash puts the camera back on the egg where it comes back', () {
@@ -292,7 +368,7 @@ void main() {
       ),
     );
     expect(director.overview, isFalse);
-    expect(director.followPoint, rolling);
+    expect(director.followPoint, rolling + director.playOffset);
   });
 
   test('once in the nest, the camera stays on it, not on the others', () {
@@ -342,19 +418,10 @@ void main() {
     // (3.9 up: the viewer's chick is drawn a size up), under the score's
     // banner at the top (to 175 px) and over the HUD at the bottom (650 px).
     expect(rig.pitchDeg, closeTo(PuttCameraDirector.celebratePitch, 3));
-    final camera = tjs.PerspectiveCamera(PuttCameraRig.fovDeg, 1280 / 800);
-    rig.applyTo(camera);
-    camera.updateMatrixWorld(true);
-    double pixelY(double height) {
-      final nest = hole.nest.position;
-      return (1 - tjs.Vector3(nest.x, height, nest.y).project(camera).y) /
-          2 *
-          800;
-    }
-
-    expect(pixelY(3.9), greaterThan(175), reason: 'its hat mid-hop');
-    expect(pixelY(0.5), lessThan(650), reason: 'its feet on the lip');
-    expect(pixelY(0.5) - pixelY(2.85), greaterThan(200),
+    final nest = hole.nest.position;
+    expect(pixelOf(nest, 3.9).dy, greaterThan(175), reason: 'its hat mid-hop');
+    expect(pixelOf(nest, 0.5).dy, lessThan(650), reason: 'its feet on the lip');
+    expect(pixelOf(nest, 0.5).dy - pixelOf(nest, 2.85).dy, greaterThan(200),
         reason: 'big on the screen, standing');
     run(PuttCameraDirector.celebrateSeconds + 1.5, holed);
     // After it, the frame of the nest is back within the clamp.
