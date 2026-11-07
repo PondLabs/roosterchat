@@ -42,8 +42,12 @@ infrastructure.
    states (full snapshots plus the accepted-move journal); the others
    run the same engine fed by those and stay in step.
 4. The host leaving hands the seat over (the followers re-elect the
-   lowest present identity); the last one out ends the session and its
-   room state goes with it.
+   lowest present identity, and the new host carries the snapshot
+   sequence on, so the roster it corrects is not dropped as stale by
+   everyone who heard a higher number); the host that left is out of its
+   own roster at once, so its badge goes with it and the join pill can
+   take it back in. The last one out ends the session and its room state
+   goes with it.
 5. A session dies with the call it was played in. Leaving the call (or
    the connection dropping it) drops every session we followed: each is
    told we are out, so the host drops us from its roster now rather than
@@ -51,7 +55,9 @@ infrastructure.
    - its transport with it. A session left running after its call was
    gone kept the game alive, listed everyone still in it (a dead
    transport still answers for the roster it last heard) and made every
-   later launch in that channel a silent no-op. Joining the call again
+   later launch in that channel a silent no-op. A session that ends
+   while the call lives (its last player out, or its host's goodbye) is
+   disposed the same way, its transport with it. Joining the call again
    starts from the room state, never from the session of the call that
    ended.
 

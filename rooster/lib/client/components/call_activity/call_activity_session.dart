@@ -257,6 +257,12 @@ class CallActivitySession extends ChangeNotifier {
   }
 
   Future<void> _sendStateNow(List<String>? to) async {
+    // The sequence counts the session's snapshots, whoever hosts it: a
+    // seat taken over (an election, a handoff) carries on from the last
+    // state heard. Restarting at 1 made everyone who had heard a higher
+    // one drop the new host's states as stale, so the roster it corrected
+    // never reached them.
+    if (_seq < _snapshot.seq) _seq = _snapshot.seq;
     final next = _snapshot.copyWith(seq: ++_seq);
     _snapshot = next;
     final json = {'t': CallActivityMessageType.state, ...next.toJson()};
@@ -339,9 +345,13 @@ class CallActivitySession extends ChangeNotifier {
         ..._snapshot.spectators,
       ].where((id) => id != selfIdentity && transport.isPresent(id));
       if (remaining.isNotEmpty) {
+        // The seat goes to the others (they re-elect among themselves); we
+        // are out of the roster now, or our own client keeps showing us
+        // playing and hides the join pill that would take us back in.
         _hosting = false;
         _host = '';
         _hosts.clear();
+        _leaveLocally(selfIdentity);
         notifyListeners();
         return;
       }
@@ -360,11 +370,16 @@ class CallActivitySession extends ChangeNotifier {
 
   Future<void> _endHosting({required bool bye}) async {
     _hosting = false;
+    _host = '';
     _hosts.clear();
     _seq = 0;
-    if (bye) await _send({'t': CallActivityMessageType.bye});
+    // The session is over the moment we say so: the snapshot goes before
+    // the goodbye is sent, so whoever watches it (the room state's clear)
+    // hears an empty session rather than one that ends after the send.
     _snapshot = CallActivitySnapshot(
         sessionId: '', activityId: '', hostUserId: '', seq: 0);
+    if (bye) await _send({'t': CallActivityMessageType.bye});
+    notifyListeners();
   }
 
   /// Offer the session to another player ([identity]); they acknowledge,
@@ -461,6 +476,8 @@ class CallActivitySession extends ChangeNotifier {
         _leave(sender);
         notifyListeners();
       case CallActivityMessageType.bye:
+        // Only the host ends a session: anyone else's goodbye is not one.
+        if (_hosting || (sender != _host && _host.isNotEmpty)) return;
         _endLocalSession();
         notifyListeners();
       case CallActivityMessageType.handoffOffer:
@@ -519,8 +536,9 @@ class CallActivitySession extends ChangeNotifier {
     final sessionActivity = message['activity'];
     if (id is! String || sessionActivity is! String) return;
     if (sessionActivity != activity.id) return;
-    // The session we are hosting beats any stale announce of the same id.
-    if (_hosting && _snapshot.sessionId == id) return;
+    // The session we are hosting beats any announce, its own or a stale
+    // one from a session that is over: taking one would drop our roster.
+    if (_hosting) return;
     if (_snapshot.sessionId == id) {
       final seq = message['seq'];
       if (seq is int && seq < _snapshot.seq) return;
@@ -646,7 +664,10 @@ class CallActivitySession extends ChangeNotifier {
 
   void _onParticipantJoined(String identity) {
     if (identity == selfIdentity) return;
-    // A hello from them follows; nothing to do yet.
+    // The newcomer asks with a hello once it can hear us; answering here
+    // too covers a hello that went out before its channel was open, and
+    // gives it the roster without waiting for the host's next beat.
+    if (_hosting) sendState(to: [identity]);
     notifyListeners();
   }
 
@@ -721,6 +742,14 @@ class CallActivitySession extends ChangeNotifier {
 
   Set<String> get _pendingHandoff => _pendingHandoffSet;
   final Set<String> _pendingHandoffSet = {};
+
+  @override
+  void notifyListeners() {
+    // A session can be told to leave after it was disposed (the call went
+    // down while the goodbye was in flight): nothing to tell anyone then.
+    if (_disposed) return;
+    super.notifyListeners();
+  }
 
   @override
   void dispose() {

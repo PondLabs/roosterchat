@@ -352,12 +352,26 @@ class MatrixCallActivityComponent
     final listener = _listenersOf.remove(session);
     if (listener != null) session.removeListener(listener);
     _rosterOf.remove(session);
+    _everHostedByUs.remove(session);
     _changes.add(null);
     _sessionById.remove(_lastSessionIdOf[session]);
     _lastSessionIdOf.remove(session);
     _seededAt.remove(session);
     final transport = _transportOf.remove(session);
-    await transport?.dispose();
+    // Sessions seeded together share one transport (one listener on the
+    // call's room): it goes when the last of them does.
+    if (transport != null && !_transportOf.containsValue(transport)) {
+      await transport.dispose();
+    }
+  }
+
+  /// A session that ended: its listener and its transport go with it. The
+  /// transport is a listener on the call's LiveKit room, and a session left
+  /// tracked after its end kept it attached for the rest of the call.
+  void _retire(CallActivitySession session) {
+    if (session.isDisposed) return;
+    unawaited(_untrack(session));
+    session.dispose();
   }
 
   /// The host's own session ending (left the call, ended the activity)
@@ -365,8 +379,7 @@ class MatrixCallActivityComponent
   /// Who we have seen hosting this session: the room state's clear is the
   /// host's job, but the session's [isHost] flag falls BEFORE the notify
   /// that ends a session (the same notification), so the host at the end
-  /// is remembered from before — a re-hosted client that leaves last
-  /// still cleans up after itself.
+  /// is remembered from before.
   final Set<CallActivitySession> _everHostedByUs = {};
 
   void _onSessionChanged() {
@@ -379,9 +392,18 @@ class MatrixCallActivityComponent
       _sessionById.remove(previous);
       _lastSessionIdOf[session] = current;
       if (current.isEmpty) {
-        if (previous.isNotEmpty && _everHostedByUs.contains(session)) {
+        // Only the state's owner may clear it: a client that took the seat
+        // over (an election, a handoff) writes under the first host's key,
+        // and the homeserver refuses it. Its state lapses instead.
+        if (previous.isNotEmpty &&
+            _everHostedByUs.contains(session) &&
+            ownsStateKey(client.self?.identifier ?? '', stateKeyOf(previous))) {
           clear(previous).catchError((_) {});
         }
+        // The session is over: nothing of it outlives the call it was
+        // played in. Retired once this notification is done, so the game's
+        // own listener (which may come after ours) still hears the end.
+        scheduleMicrotask(() => _retire(session));
       } else {
         _sessionById[current] = session;
       }
