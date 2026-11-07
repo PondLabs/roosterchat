@@ -44,6 +44,7 @@ class CallView extends StatefulWidget {
     this.hangUp,
     this.declineCall,
     this.acceptCall,
+    this.puttAudio,
     super.key,
   });
   final VoipSession currentSession;
@@ -73,6 +74,11 @@ class CallView extends StatefulWidget {
   final Future<void> Function()? hangUp;
   final Future<void> Function()? declineCall;
   final Future<void> Function()? acceptCall;
+
+  /// The game's sound, when the caller already has one: the tests pass a
+  /// fake in to watch the exit path release it. Left out, the view builds
+  /// its own the first time the game draws.
+  final PuttAudio? puttAudio;
 
   @override
   State<CallView> createState() => _CallViewState();
@@ -128,6 +134,7 @@ class _CallViewState extends State<CallView> {
     });
 
     room = widget.currentSession.client.getRoom(widget.currentSession.roomId)!;
+    _puttAudio = widget.puttAudio;
     statTimer = Timer.periodic(const Duration(milliseconds: 200), timer);
 
     // Soundboard: preload catalog audio on call join for instant click->play.
@@ -261,6 +268,10 @@ class _CallViewState extends State<CallView> {
     if (controller == null) return;
     await controller.leave();
     controller.dispose();
+    // The game's sound goes with the view: the music loops, and nothing
+    // else stops it until the whole call view is disposed.
+    await _puttAudio?.dispose();
+    _puttAudio = null;
     if (mounted) setState(() => _activity = null);
   }
 

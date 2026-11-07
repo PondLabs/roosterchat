@@ -34,6 +34,14 @@ class _Client implements MatrixClient {
 
 class _SdkClient implements matrix.Client {
   Object? refuseWith;
+
+  /// Every state write, in order: (state key, content).
+  final List<(String, Map<String, Object?>)> writes = [];
+
+  /// The room's state, so a write lands in it like the homeserver's would:
+  /// a clear takes the event out, and the next sync no longer sees it.
+  Map<String, Map<String, matrix.StrippedStateEvent>>? states;
+
   @override
   String? get userID => _self;
 
@@ -41,6 +49,20 @@ class _SdkClient implements matrix.Client {
   Future<String> setRoomStateWithKey(String roomId, String eventType,
       String stateKey, Map<String, Object?> body) async {
     if (refuseWith case final error?) throw error;
+    writes.add((stateKey, Map.of(body)));
+    final states = this.states;
+    if (states == null) return '\$event';
+    final events = states[eventType] ??= {};
+    if (body.isEmpty) {
+      events.remove(stateKey);
+    } else {
+      events[stateKey] = matrix.StrippedStateEvent(
+        type: eventType,
+        senderId: _self,
+        stateKey: stateKey,
+        content: Map.of(body),
+      );
+    }
     return '\$event';
   }
 
@@ -49,7 +71,9 @@ class _SdkClient implements matrix.Client {
 }
 
 class _SdkRoom implements matrix.Room {
-  _SdkRoom(this.client);
+  _SdkRoom(this.client) {
+    client.states = states;
+  }
   @override
   final _SdkClient client;
   bool allowed = true;
@@ -288,6 +312,67 @@ void main() {
     await pumpEventQueue();
     expect(component.liveSessions(), isEmpty);
     expect(launched!.isDisposed, isTrue);
+  });
+
+  // Report (2026-11-07): leaving the activity normally and then the voice
+  // channel left the session registered as if we were still playing, and it
+  // could not be launched again until Rooster restarted. The clear hung on
+  // _everHostedByUs, which only _onSessionChanged filled while isHost was
+  // true: a host alone in its session never got such a notification (the
+  // listener attaches after launch()'s notify, and sendState() does not
+  // notify), and _endHosting() drops isHost before the notify that ends it.
+  test(
+      'leaving the activity and then the call clears its state, so the room '
+      'does not keep it as if we were still playing', () async {
+    final launched = await component.launch(activity);
+    expect(launched, isNotNull);
+    final id = launched!.snapshot.sessionId;
+    final key = MatrixCallActivityComponent.stateKeyOf(id);
+    expect(room._sdk.client.writes.map((write) => write.$1), [key],
+        reason: 'the launch wrote the state');
+
+    // The game's exit button: PuttSessionController.leave() -> session.leave().
+    await launched.leave();
+    await pumpEventQueue();
+
+    final (clearedKey, clearedContent) = room._sdk.client.writes.last;
+    expect(clearedKey, key);
+    expect(clearedContent, isEmpty,
+        reason: 'the state of the session we left must be cleared');
+
+    // Then the call goes.
+    inCall = false;
+    sync([session(alice)]);
+    await pumpEventQueue();
+
+    expect(component.sessionOf(id), isNull);
+  });
+
+  test('back in the channel after leaving the activity, a launch goes through',
+      () async {
+    final launched = await component.launch(activity);
+    expect(launched, isNotNull);
+    final id = launched!.snapshot.sessionId;
+
+    await launched.leave();
+    await pumpEventQueue();
+
+    inCall = false;
+    sync([session(alice)]);
+    await pumpEventQueue();
+
+    inCall = true;
+    sync([session(alice)]);
+    await pumpEventQueue();
+
+    expect(component.sessionOf(id), isNull,
+        reason: 'a stale state must not be seeded back into the sessions');
+
+    // Alice's session is a stranger's, seeded a moment ago: past its grace
+    // period it is nobody's, and does not block our launch.
+    now = now.add(MatrixCallActivityComponent.seedGrace * 2);
+    expect(await component.launch(activity), isNotNull,
+        reason: 'the activity must be launchable again without a restart');
   });
 
   test('without permission for the state, the launch says so', () async {

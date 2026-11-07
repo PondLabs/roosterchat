@@ -339,6 +339,11 @@ class MatrixCallActivityComponent
     _listenersOf[session] = _onSessionChanged;
     session.addListener(_onSessionChanged);
     _changes.add(null);
+    // A host that launched before we listened: launch() notifies before
+    // _track attaches the listener, and a host alone in its session gets no
+    // other notification, so this is the only chance to remember it. Without
+    // it the clear when it leaves has nothing to go on.
+    if (session.isHost) _everHostedByUs.add(session);
     // A launch has its host in already: the session told nobody yet.
     _noteRosters();
   }
