@@ -44,6 +44,45 @@ infrastructure.
 4. The host leaving hands the seat over (the followers re-elect the
    lowest present identity); the last one out ends the session and its
    room state goes with it.
+5. A session dies with the call it was played in. Leaving the call (or
+   the connection dropping it) drops every session we followed: each is
+   told we are out, so the host drops us from its roster now rather than
+   when LiveKit gets round to reporting us gone, and then it is disposed
+   - its transport with it. A session left running after its call was
+   gone kept the game alive, listed everyone still in it (a dead
+   transport still answers for the roster it last heard) and made every
+   later launch in that channel a silent no-op. Joining the call again
+   starts from the room state, never from the session of the call that
+   ended.
+
+## In the room list and the call's sounds
+
+A running activity is not listed as a second call under the voice
+channel: everyone in it gets the activity's icon next to their name
+("Playing Sunny Side Putt", "Watching Sunny Side Putt" for a
+spectator). Outside the call only the host is known, from the room
+state, and only while they are in the call; inside it the session's
+roster adds the players and spectators, and a session nobody holds any
+more (its host left without clearing the state) gives no badge. A
+third-party widget's members are still listed under its own name. In
+our own call, someone (us too) launching or joining an activity plays
+`activity_joined.ogg`, someone leaving it (or it ending)
+`activity_left.ogg`, once the roster has kept still for 300 ms (both, the
+join first, when both happened), and not while deafened, like the screen
+share cues. They are made by
+`docs/brand/src/build_call_sounds.py`.
+
+## Who may launch
+
+Launching writes `chat.commet.call_activity`, and the others in the call
+find the session only through it, so a launch whose write the homeserver
+refuses is undone and the call view says why. Voice channels we create
+open the event to everyone (power level 0); older channels keep the
+room's state default, usually moderators only, and their other members
+get "Only moderators can start activities in this channel." State left
+by a host who went without clearing it (it lives up to 6 hours) is
+ignored once nobody in the call holds that session: it shows no Join and
+does not stop a new launch.
 
 ## Testing
 

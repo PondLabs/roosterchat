@@ -512,11 +512,72 @@ void main() {
       final rise =
           walk(out().single).firstWhere((o) => o.name == 'hatchling-rise');
       expect(rise.position.y, greaterThan(0.25));
+      // It rises out of the cup: drawn with the cup's inside, before the
+      // opening's depth-only disc that would cut it at the turf line.
+      final opening = walk(world.holeGroup('nest')!)
+          .firstWhere((o) => o.name == 'nest-opening');
+      for (final mesh in walk(out().single).whereType<tjs.Mesh>()) {
+        expect(mesh.renderOrder, lessThan(opening.renderOrder),
+            reason: mesh.name);
+      }
       while (time < 3.8) {
         world.applySnapshot(PuttWorldFrame(time: time));
         time += 0.016;
       }
       expect(out(), isEmpty, reason: 'the chick drops back into the nest');
+    });
+
+    test('the nest is a cup sunk into the turf', () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      final nest = world.holeGroup('nest')!.children.single;
+      tjs.Mesh part(String name) =>
+          walk(nest).whereType<tjs.Mesh>().firstWhere((m) => m.name == name);
+      final wall = part('nest-cup-wall');
+      final floor = part('nest-cup');
+      final opening = part('nest-opening');
+      expect(floor.position.y, lessThan(-0.5), reason: 'a floor down there');
+      expect(wall.material!.side, tjs.BackSide, reason: 'its inside shows');
+      // The opening writes the turf's depth, no colour, after the cup's
+      // inside and before the turf (so the turf skips it).
+      expect(opening.material!.colorWrite, isFalse);
+      expect(opening.material!.polygonOffset, isTrue);
+      expect(opening.position.y, greaterThan(0));
+      // A hair over the turf: an egg on the lip and the trace (0.03 up)
+      // are not cut by it.
+      expect(opening.position.y, lessThan(0.01));
+      expect(opening.material!.polygonOffsetFactor, greaterThanOrEqualTo(-1));
+      expect(wall.renderOrder, lessThan(opening.renderOrder));
+      expect(opening.renderOrder, lessThan(0));
+    });
+
+    test('a holed egg drops below the turf into the cup', () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      world.applySnapshot(PuttWorldFrame(
+        time: 0,
+        eggs: [eggAt(dressing.nest.position)],
+      ));
+      final egg = world.eggOf('me')!;
+      expect(egg.position.y, greaterThan(0));
+      var time = 0.016;
+      while (time < 0.42) {
+        world.applySnapshot(PuttWorldFrame(time: time));
+        time += 0.016;
+      }
+      // Its top (a standing egg's height over its middle) under the turf.
+      expect(egg.position.y + 0.45 * 1.2 * 1.28, lessThan(0));
+      // And seen down there: the shell and its outline draw with the cup's
+      // inside (opaque, before the opening's depth-only disc), not cut at
+      // the turf line by it.
+      final nest = walk(world.holeGroup('nest')!).whereType<tjs.Mesh>();
+      final wall = nest.firstWhere((m) => m.name == 'nest-cup-wall');
+      for (final name in ['egg-shell', 'egg-outline']) {
+        final mesh =
+            walk(egg).whereType<tjs.Mesh>().firstWhere((m) => m.name == name);
+        expect(mesh.renderOrder, wall.renderOrder, reason: name);
+        expect(mesh.material!.transparent, isFalse, reason: name);
+      }
     });
 
     test('the collected crates stand down and stay down', () {
@@ -1149,6 +1210,19 @@ void main() {
       expect(ink, hasLength(1));
       expect(
           walk(world.scene).where((o) => o.name == 'aim-trace'), hasLength(1));
+      // Over a cup it wins against the opening's depth (see the nest).
+      final opening = walk(world.holeGroup('nest')!)
+          .whereType<tjs.Mesh>()
+          .firstWhere((m) => m.name == 'nest-opening');
+      for (final mark in [
+        ...ink,
+        walk(world.scene).firstWhere((o) => o.name == 'aim-trace')
+      ]) {
+        final material = (mark as tjs.Mesh).material!;
+        expect(material.polygonOffset, isTrue);
+        expect(material.polygonOffsetFactor,
+            lessThan(opening.material!.polygonOffsetFactor));
+      }
     });
 
     test("only the viewer's egg shows through what hides it", () {
@@ -1206,6 +1280,65 @@ void main() {
       expect(pin.material!.transparent, isTrue,
           reason: 'in the pass drawn last, by its order');
       expect(pin.renderOrder, greaterThan(orderOf('me')));
+    });
+
+    test('the arrow grows with the power, short, and none at zero', () {
+      expect(puttArrowLength(0), 0);
+      var previous = 0.0;
+      for (var power = 0.05; power <= 1.0001; power += 0.05) {
+        final length = puttArrowLength(power);
+        expect(length, greaterThan(previous), reason: 'at $power');
+        previous = length;
+      }
+      expect(puttArrowLength(1), lessThan(3), reason: 'a modest arrow');
+
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      bool arrowShown(double power) {
+        world.applySnapshot(PuttWorldFrame(
+          time: 0,
+          eggs: [eggAt(const Vec2(10, 10), mine: true)],
+          aim: PuttWorldAim(
+              origin: const Vec2(10, 10),
+              angle: 0,
+              power: power,
+              dragLength: 0.3,
+              eggRadius: 0.45),
+        ));
+        return walk(world.scene)
+            .firstWhere((o) => o.name == 'aim-turned')
+            .visible;
+      }
+
+      expect(arrowShown(0), isFalse, reason: 'a pull that moves nothing');
+      expect(arrowShown(0.4), isTrue);
+    });
+
+    test('the guide is a short hint, with no mark where the roll stops', () {
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      // A soft putt's whole roll, stopping 12 units out.
+      world.applySnapshot(PuttWorldFrame(
+        time: 0,
+        eggs: [eggAt(const Vec2(10, 10), mine: true)],
+        aim: PuttWorldAim(
+          origin: const Vec2(10, 10),
+          angle: 0,
+          power: 0.6,
+          dragLength: 3,
+          eggRadius: 0.45,
+          preview: [for (var x = 10.0; x <= 22; x += 0.5) Vec2(x, 10)],
+        ),
+      ));
+      final dots = walk(world.scene)
+          .where((o) => o.name == 'aim-dot' && o.visible)
+          .toList();
+      expect(dots, isNotEmpty);
+      final tip = 0.45 * 2.35 + puttArrowLength(0.6) + 1.15;
+      final farthest = dots.map((dot) => dot.position.x).reduce(math.max);
+      expect(farthest, lessThanOrEqualTo(tip + 2.8 + 1e-6),
+          reason: 'a few egg lengths past the arrow, not the whole roll');
+      expect(walk(world.scene).where((o) => o.name == 'aim-rest'), isEmpty);
     });
 
     test("an egg in front of the viewer's resting egg fades aside", () {
@@ -1916,7 +2049,7 @@ void main() {
       expect(swell, inInclusiveRange(0.015, 0.025));
     });
 
-    test("the host pops out of the camera's face, every feather with him", () {
+    test('the host is inked all over, wings too', () {
       final world = builtWorld();
       addTearDown(world.dispose);
       final host = hostOf(world);
@@ -1936,24 +2069,46 @@ void main() {
             'host-face-light-outline',
           },
           reason: 'inked all over, wings too');
-      for (final mesh in meshes) {
-        expect(mesh.material!.transparent, isTrue,
-            reason: '${mesh.name}: a fade only moves a uniform');
-      }
-      // The camera right over him.
-      world.rig.aimAt(
-          target: Vec2(host.position.x, host.position.z),
-          pitchDeg: 72,
-          distance: 12);
+    });
+
+    test('the host never leaves the farm, however the camera moves', () {
+      // He used to pop out of the way whenever his head landed under the
+      // HUD's top band or the camera came "near" him, and every glide
+      // crossed those lines again: he flickered in and out all through a
+      // hole. He is scenery now, and the HUD's panels are opaque.
+      final world = builtWorld();
+      addTearDown(world.dispose);
+      final host = hostOf(world);
+      final spot = Vec2(host.position.x, host.position.z);
+      final nest = dressing.nest.position;
+      final tee = dressing.tee;
       var time = 0.0;
-      for (var i = 0; i < 20; i++) {
-        world.applySnapshot(PuttWorldFrame(time: time));
-        time += 1 / 60;
+      var flips = 0;
+      var was = host.visible;
+      // The framings a hole goes through: the opening's sweep, the tee,
+      // the nest, the whole hole, and back in close.
+      for (final (target, pitch, distance) in [
+        (nest, 15.0, 30.0),
+        (nest, 22.0, 24.0),
+        (tee, 34.0, 26.0),
+        (spot, 72.0, 12.0),
+        (nest, 34.0, 14.0),
+        (nest, 28.0, 12.5),
+        (Vec2(20, 13), 34.0, 40.0),
+        (tee, 34.0, 20.0),
+      ]) {
+        world.rig.aimAt(target: target, pitchDeg: pitch, distance: distance);
+        for (var i = 0; i < 30; i++) {
+          world.applySnapshot(PuttWorldFrame(time: time));
+          time += 1 / 60;
+          if (host.visible != was) {
+            flips++;
+            was = host.visible;
+          }
+        }
       }
-      expect(host.visible, isFalse);
-      for (final mesh in meshes) {
-        expect(mesh.material!.opacity, lessThan(0.05), reason: mesh.name);
-      }
+      expect(flips, 0, reason: 'no pop in or out, whatever the camera does');
+      expect(host.visible, isTrue);
     });
 
     test('the host stands light while small on the screen, in full up close',
@@ -2002,16 +2157,15 @@ void main() {
       expect(named('host-body-light').single.visible, isFalse);
     });
 
-    test('the host stays gone while the camera wavers at the line', () {
+    test('the host stays put while the camera wavers at the HUD line', () {
+      // The line his head used to cross: the HUD's top band. Wavering
+      // across it left him popping in and out; now it moves nothing.
       final world = builtWorld();
       addTearDown(world.dispose);
       final host = hostOf(world);
       final spot = Vec2(host.position.x, host.position.z);
       var time = 0.0;
-      // Looking down at him from [pitchDeg]: the camera stands cos(pitch)
-      // of its distance off him, along the ground.
       void hold(double pitchDeg) {
-        // Far enough back that his head stands well clear of the HUD.
         world.rig.aimAt(target: spot, pitchDeg: pitchDeg, distance: 30);
         for (var i = 0; i < 20; i++) {
           world.applySnapshot(PuttWorldFrame(time: time));
@@ -2019,12 +2173,10 @@ void main() {
         }
       }
 
-      hold(72);
-      expect(host.visible, isFalse, reason: 'right over him');
-      hold(54.5);
-      expect(host.visible, isFalse, reason: 'just past the line: still gone');
-      hold(40);
-      expect(host.visible, isTrue, reason: 'well clear: back');
+      for (final pitch in [72.0, 54.5, 40.0, 60.0, 72.0]) {
+        hold(pitch);
+        expect(host.visible, isTrue, reason: 'pitch $pitch');
+      }
     });
 
     test("the hen's legs step with her walk, the planted foot on the ground",
@@ -2424,9 +2576,8 @@ void main() {
             reason: '${hole.id}: beside the tee');
         expect(at.y, lessThan(hole.bounds.max.y),
             reason: '${hole.id}: on the camera side');
-        // Not where the close camera at the tee looks from: the hole's own
-        // view, which never turns toward the nest.
-        final yaw = PuttCameraRig.defaultYaw;
+        // Not where the close camera at the tee looks from.
+        final yaw = PuttCameraRig.yawToward(hole.tee, hole.nest.position);
         final toCamera = Vec2(-math.sin(yaw), -math.cos(yaw));
         expect((at - hole.tee).normalized().dot(toCamera), lessThan(0.35),
             reason: '${hole.id}: between the camera and the egg');

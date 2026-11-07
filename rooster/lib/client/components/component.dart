@@ -17,6 +17,12 @@ abstract class EventHandlerComponent {
   });
 }
 
+/// A component holding subscriptions or timers, released when its room is
+/// closed.
+abstract class NeedsClose {
+  void close();
+}
+
 abstract class NeedsPostLoginInit {
   void postLoginInit();
 

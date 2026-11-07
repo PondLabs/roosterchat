@@ -41,7 +41,14 @@ HoleDef _siloSide() {
     wells: [
       GravityWell(Vec2(22, 12.5), radius: 8, strength: 30, captureRadius: 1.8),
     ],
-    boxes: [QuestionBox('barn_1_box', Vec2(22, 22))],
+    boxes: [
+      QuestionBox('barn_1_box', Vec2(22, 22)),
+      QuestionBox('barn_1_bank_leg', Vec2(13.5, 7.5)),
+      QuestionBox('barn_1_down_leg', Vec2(28, 5.4)),
+      QuestionBox('barn_1_south_west', Vec2(7, 21)),
+      QuestionBox('barn_1_south_east', Vec2(34, 21)),
+      QuestionBox('barn_1_north_east', Vec2(40, 4.5)),
+    ],
     decorations: const [
       Decoration('hay', Vec2(2, 2), numbers: {'size': 0.9}),
       Decoration('hay', Vec2(42, 24), numbers: {'size': 0.9}),
@@ -119,7 +126,14 @@ HoleDef _hayBalePinball() {
       rock(const Vec2(39, 8.5), 1.4, bumper: true),
       rock(const Vec2(39, 19.5), 1.4, bumper: true),
     ],
-    boxes: [QuestionBox('barn_2_box', Vec2(24, 3))],
+    boxes: [
+      QuestionBox('barn_2_box', Vec2(24, 3)),
+      QuestionBox('barn_2_bank_leg', Vec2(10, 19.7)),
+      QuestionBox('barn_2_up_leg', Vec2(24, 20)),
+      QuestionBox('barn_2_south_east', Vec2(36, 24)),
+      QuestionBox('barn_2_deck_north', Vec2(45, 4.5)),
+      QuestionBox('barn_2_deck_south', Vec2(45, 23.5)),
+    ],
     terraces: const [_barn2Threshing],
     ramps: const [_barn2Ramp],
   );
@@ -173,7 +187,14 @@ HoleDef _twinSilos() {
     kickers: const [_barn3Kicker],
     // the water trough behind the nest
     water: const [WaterRect(Rect(Vec2(45.2, 11), Vec2(47.2, 19)))],
-    boxes: [QuestionBox('barn_3_box', Vec2(24, 15))],
+    boxes: [
+      QuestionBox('barn_3_box', Vec2(24, 15)),
+      QuestionBox('barn_3_run_in', Vec2(31, 15)),
+      QuestionBox('barn_3_north', Vec2(24, 1.5)),
+      QuestionBox('barn_3_south', Vec2(24, 28.5)),
+      QuestionBox('barn_3_pond_north', Vec2(44, 7.5)),
+      QuestionBox('barn_3_pond_south', Vec2(44, 22.5)),
+    ],
   );
 }
 
@@ -217,7 +238,15 @@ HoleDef _pitchfork() {
     wells: [
       GravityWell(Vec2(25, 4), radius: 5, strength: 22, captureRadius: 1.3),
     ],
-    boxes: [QuestionBox('barn_4_box', Vec2(32, 4.5))],
+    boxes: [
+      QuestionBox('barn_4_box', Vec2(32, 4.5)),
+      QuestionBox('barn_4_channel', Vec2(28, 14)),
+      QuestionBox('barn_4_run_in', Vec2(41, 19.9)),
+      QuestionBox('barn_4_fork', Vec2(25, 20.5)),
+      QuestionBox('barn_4_south_west', Vec2(8, 22)),
+      QuestionBox('barn_4_north_east', Vec2(46, 4)),
+      QuestionBox('barn_4_south_east', Vec2(45, 25.5)),
+    ],
   );
 }
 
@@ -256,7 +285,14 @@ HoleDef _slingshot() {
     wells: [
       GravityWell(Vec2(31, 15), radius: 7, strength: 32, captureRadius: 1.5),
     ],
-    boxes: [QuestionBox('barn_5_box', Vec2(31, 25))],
+    boxes: [
+      QuestionBox('barn_5_box', Vec2(31, 25)),
+      QuestionBox('barn_5_first_leg', Vec2(11.5, 12.8)),
+      QuestionBox('barn_5_swing', Vec2(40, 14.3)),
+      QuestionBox('barn_5_north_pocket', Vec2(31, 3)),
+      QuestionBox('barn_5_north_west', Vec2(19, 2.5)),
+      QuestionBox('barn_5_south_west', Vec2(5, 22)),
+    ],
   );
 }
 
@@ -330,7 +366,15 @@ HoleDef _threshingFloor() {
       GravityWell(Vec2(20, 17), radius: 6, strength: 26, captureRadius: 1.4),
       GravityWell(Vec2(36, 21), radius: 6, strength: 26, captureRadius: 1.4),
     ],
-    boxes: [QuestionBox('barn_6_box', Vec2(28, 13))],
+    boxes: [
+      QuestionBox('barn_6_box', Vec2(28, 13)),
+      QuestionBox('barn_6_run_in', Vec2(18, 24.2)),
+      QuestionBox('barn_6_loft', Vec2(48, 11)),
+      QuestionBox('barn_6_loft_west', Vec2(43, 3)),
+      QuestionBox('barn_6_loft_east', Vec2(54, 11)),
+      QuestionBox('barn_6_north', Vec2(34, 8)),
+      QuestionBox('barn_6_south_east', Vec2(51, 27)),
+    ],
     terraces: const [_barn6Hayloft],
     ramps: const [_barn6Ramp],
   );

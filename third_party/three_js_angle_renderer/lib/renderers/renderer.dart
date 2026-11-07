@@ -95,6 +95,15 @@ class AngleRenderer extends Renderer{
     "checkShaderErrors": true
   };
 
+  /// ROOSTER: binds the surface's own framebuffer again (the viewer's
+  /// texture). On native a bind of the null framebuffer is a no-op, so after
+  /// the shadow pass nothing brought the screen back: the shadows were drawn
+  /// after the scene instead, which then read the last frame's shadow map
+  /// (moving shadows a frame late, and a frame of no map at all - the whole
+  /// green in shadow, a dark flash - whenever the map was remade). With this
+  /// set, shadows draw first on native too.
+  void Function()? restoreScreenFramebuffer;
+
   // clearing
   bool useLegacyLights = false;
 
@@ -877,8 +886,11 @@ class AngleRenderer extends Renderer{
 
     if (_clippingEnabled) clipping.beginShadows();
     final shadowsArray = currentRenderState!.state.shadowsArray;
-    if(kIsWeb){
+    // ROOSTER: first on native too, once the screen can be bound back.
+    final shadowsFirst = kIsWeb || restoreScreenFramebuffer != null;
+    if(shadowsFirst){
       shadowMap.render(shadowsArray, scene, camera);
+      if (!kIsWeb && _currentRenderTarget == null) restoreScreenFramebuffer!();
     }
     if (_clippingEnabled) clipping.endShadows();
 
@@ -911,7 +923,7 @@ class AngleRenderer extends Renderer{
       if(transmissiveObjects != null && transmissiveObjects.isNotEmpty) renderTransmissionPass( opaqueObjects!, transmissiveObjects, scene, camera );
     }
 
-    if(!kIsWeb){
+    if(!shadowsFirst){
       shadowMap.render(shadowsArray, scene, camera);
     }
 

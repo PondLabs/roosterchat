@@ -209,6 +209,8 @@ void main() {
       engine.join('idle');
       engine.start();
       engine.drainEvents();
+      // Off the stack, or each hop would roll busy's egg clear of idle's.
+      engine.world!.teleportBall('idle', const Vec2(4, 12));
       for (var i = 0; i < 7 && engine.phase == PuttPhase.holePlay; i++) {
         expect(engine.submitShot('busy', 0, 0.03), isTrue);
         engine.advanceSeconds(0.25);

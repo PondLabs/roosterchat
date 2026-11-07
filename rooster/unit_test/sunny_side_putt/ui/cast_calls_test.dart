@@ -79,10 +79,12 @@ void main() {
     test('an egg knocked at rest hears who did it, and the knocker too', () {
       final match = _match();
       final world = match.engine.world!;
-      // Maya has putted and rests: her egg is solid (a waiting egg would be
-      // a ghost).
-      world.ball('p2')!.putted = true;
+      // Maya has putted and rests down the fairway (every egg spawns on
+      // the tee point): her egg is solid (a waiting egg would be a ghost).
       final mine = match.myBall!.position;
+      world.ball('p2')!
+        ..putted = true
+        ..position = mine + const Vec2(4, 0);
       final hers = world.ball('p2')!.position;
       expect(match.submitShot((hers - mine).angle, 0.45), isTrue);
       for (var i = 0; i < 90 && match.castCalls.isEmpty; i++) {
@@ -222,6 +224,8 @@ void main() {
     test('a swap that moves my egg is a swap with me', () {
       final match = _match();
       final before = match.myBall!.position;
+      // Maya's egg rests away from the tee point every egg spawns on.
+      match.engine.world!.ball('p2')!.position = before + const Vec2(4, 0);
       _theyCast(match, 'p2', 'nest_swap', const PowerUpTarget.player('me'));
       final call = match.castCalls.last;
       expect(call.kind, PuttCastCallKind.swap);

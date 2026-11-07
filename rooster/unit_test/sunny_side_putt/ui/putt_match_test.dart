@@ -7,6 +7,7 @@ import 'dart:math' as math;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/hole.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/rules.dart';
+import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
 import 'package:rooster/client/components/sunny_side_putt/courses/course_kit.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_match.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/stub_courses.dart';
@@ -433,8 +434,11 @@ void main() {
         seatedPlayerIds: const ['friend'],
       )..boot();
       final mine = match.myBall!.position;
-      // The friend has putted: an egg still waiting would be a ghost.
-      match.engine.world!.ball('friend')!.putted = true;
+      // The friend has putted and rests down the fairway (every egg spawns
+      // on the tee point): an egg still waiting would be a ghost.
+      match.engine.world!.ball('friend')!
+        ..putted = true
+        ..position = mine + const Vec2(3, 0);
       final theirs = match.engine.world!.ball('friend')!.position;
       expect(match.submitShot((theirs - mine).angle, 0.35), isTrue);
       final clacks = listen(match, frames: 30)

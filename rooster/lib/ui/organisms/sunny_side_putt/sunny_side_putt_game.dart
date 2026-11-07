@@ -9,7 +9,7 @@
 //   * [SunnySidePuttView] - the Flutter shell: the GPU surface (the three_js
 //     view), pointer plumbing (the main button putts - or casts an armed
 //     power-up where it lands - a secondary-button drag and the
-//     wheel/pinch orbit and zoom the camera), Esc-to-pause, the HUD
+//     wheel/pinch orbit and zoom the camera), Esc for the settings, the HUD
 //     (rebuilt as the match moves), the targeting reticle, the name tags
 //     and the menus (their own files), and the audio service's cue tap.
 //   * [SunnySidePuttGame] - the match's ticker and the world's frame
@@ -29,6 +29,7 @@
 // wires the authoritative host under the same seams.
 library;
 
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -36,6 +37,7 @@ import 'package:flame/game.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/effects/effect_registry.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/hole.dart'
     as hole;
@@ -71,7 +73,7 @@ class SunnySidePuttView extends StatefulWidget {
   /// view is silent (widget tests pass nothing).
   final PuttAudio? audio;
 
-  /// Called when the player leaves the match from the pause menu.
+  /// Called when the player leaves the match from the settings menu.
   final VoidCallback? onLeave;
 
   /// Handed the game once it exists: the demo drives its aim through it.
@@ -95,9 +97,8 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   late PuttMatch match;
   late SunnySidePuttGame game;
   bool menuOpen = false;
-  bool settingsOpen = false;
 
-  /// "Your egg" is up over the pause menu.
+  /// "Your egg" is up over the settings menu.
   bool lookOpen = false;
 
   /// The name tags' positions, refreshed after every rendered frame.
@@ -122,6 +123,9 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
 
   /// True while the keys hold the aim (the hint line says how they putt).
   final ValueNotifier<bool> _keyAiming = ValueNotifier(false);
+
+  /// Who the camera watches once my egg is in (the hint line says so).
+  final ValueNotifier<String?> _watching = ValueNotifier(null);
 
   /// The off-screen nest's marker, refreshed after every rendered frame.
   final ValueNotifier<PuttNestPointer?> _nestPointer = ValueNotifier(null);
@@ -195,6 +199,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     _coach.dispose();
     _busy.dispose();
     _keyAiming.dispose();
+    _watching.dispose();
     _greenShown.dispose();
     _nestPointer.dispose();
     _miniMap.dispose();
@@ -204,7 +209,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     super.dispose();
   }
 
-  void _togglePause() {
+  void _toggleMenu() {
     // A power-up waiting for a spot or a pick goes back in the carton,
     // and the keys' highlight and aim go too.
     game.targeting.cancel();
@@ -215,9 +220,8 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     if (menuOpen) _reclaimKeys();
     setState(() {
       menuOpen = !menuOpen;
-      settingsOpen = false;
       lookOpen = false;
-      match.paused = menuOpen;
+      match.paused = menuOpen && match.playsAlone;
     });
     widget.audio?.play(PuttSfx.click);
   }
@@ -257,15 +261,12 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
         _syncAiming();
         return KeyEventResult.handled;
       }
-      if (settingsOpen || lookOpen) {
-        setState(() {
-          settingsOpen = false;
-          lookOpen = false;
-        });
+      if (lookOpen) {
+        setState(() => lookOpen = false);
         return KeyEventResult.handled;
       }
       if (match.phase != PuttPhase.awaitingNextCourse) {
-        _togglePause();
+        _toggleMenu();
         return KeyEventResult.handled;
       }
     }
@@ -307,7 +308,10 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     if (focused != _keyFocus && focused != _gameFocus) {
       return KeyEventResult.ignored;
     }
-    if (menuOpen || match.phase != PuttPhase.holePlay) {
+    // The loading card holds the pointer off the green; the keys too.
+    if (menuOpen ||
+        match.phase != PuttPhase.holePlay ||
+        game.holeLoading.value != null) {
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
@@ -358,6 +362,9 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     _busy.value =
         game.aim.isActive || (mine != null && !mine.asleep && !mine.holed);
     _keyAiming.value = game.keyAiming;
+    final watched = game.director.watching;
+    _watching.value =
+        watched == null ? null : displayNameOf(game.match, watched);
   }
 
   // ---- pointer plumbing ----------------------------------------------------------------
@@ -450,6 +457,15 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
       }
       return;
     }
+    // A right click during a left-button pull (the same mouse pointer,
+    // its buttons changed) takes the aim back: nothing fires on release.
+    if (event.buttons & kSecondaryMouseButton != 0 &&
+        game.aim.isActive &&
+        !game.keyAiming) {
+      game.cancelAim();
+      _syncAiming();
+      return;
+    }
     final world = _toWorld(event.localPosition);
     if (world != null) game.moveAim(world);
   }
@@ -529,7 +545,8 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
   /// coach follows mine.
   void _afterFrame() {
     game.worldDrew();
-    _greenShown.value = true;
+    // The hole's banner waits for the hole, not just for a frame.
+    _greenShown.value = game.holeLoading.value == null;
     final coach = game.coachForFrame();
     _tags.update(game.tagsForFrame(),
         avoid: game.tagObstacles(),
@@ -605,6 +622,14 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
                   ),
                 ),
               ),
+              // While the hole builds: the card over the half-built green
+              // (and the aim's gestures), moving between the steps.
+              ValueListenableBuilder<(int, int)?>(
+                valueListenable: game.holeLoading,
+                builder: (context, loading, _) => loading == null
+                    ? const SizedBox.shrink()
+                    : PuttHoleLoading(done: loading.$1, total: loading.$2),
+              ),
               // Who is who: names over the other players' eggs.
               IgnorePointer(child: PuttNameTags(board: _tags)),
               // Where the nest is, when the camera is in on my egg and the
@@ -650,9 +675,10 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
           targeting: game.targeting,
           busy: _busy,
           keyAiming: _keyAiming,
+          watching: _watching,
           shown: _greenShown,
           onSfx: (sfx) => widget.audio?.play(sfx),
-          onOpenMenu: _togglePause,
+          onOpenMenu: _toggleMenu,
           onToggleCamera: _toggleCamera,
           cameraOverview: game.overview,
           onLeave: _leave,
@@ -701,30 +727,106 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
         if (menuOpen)
           Align(
             alignment: Alignment.center,
-            child: settingsOpen
-                ? PuttSettingsSheet(
-                    buses: widget.audio?.buses ?? PuttSilentBuses(),
-                    onClose: () => setState(() => settingsOpen = false),
+            child: lookOpen
+                ? PuttLookSheet(
+                    match: match,
+                    onPick: () => widget.audio?.play(PuttSfx.click),
+                    onClose: () => setState(() => lookOpen = false),
                   )
-                : lookOpen
-                    ? PuttLookSheet(
-                        match: match,
-                        onPick: () => widget.audio?.play(PuttSfx.click),
-                        onClose: () => setState(() => lookOpen = false),
-                      )
-                    : PuttPauseMenu(
-                        match: match,
-                        onOpenLook: () => setState(() => lookOpen = true),
-                        onOpenSettings: () =>
-                            setState(() => settingsOpen = true),
-                        onResume: _togglePause,
-                        onLeave: _leave,
-                      ),
+                : PuttSettingsMenu(
+                    match: match,
+                    buses: widget.audio?.buses ?? PuttSilentBuses(),
+                    onOpenLook: () => setState(() => lookOpen = true),
+                    onClose: _toggleMenu,
+                    onLeave: _leave,
+                  ),
           ),
       ],
     );
   }
 }
+
+/// The card over the green while a hole builds: the steps done of all, on
+/// the horizon's haze (what the surface clears to), an egg rocking so the
+/// wait reads as work under way. It eats the pointers (no blind putts).
+class PuttHoleLoading extends StatefulWidget {
+  final int done;
+  final int total;
+
+  const PuttHoleLoading({super.key, required this.done, required this.total});
+
+  @override
+  State<PuttHoleLoading> createState() => _PuttHoleLoadingState();
+}
+
+class _PuttHoleLoadingState extends State<PuttHoleLoading>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _rock = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 900))
+    ..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _rock.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final share = widget.total <= 0 ? 0.0 : widget.done / widget.total;
+    return AbsorbPointer(
+      child: ColoredBox(
+        color: const Color(0xFFF6E3C4),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedBuilder(
+                animation: _rock,
+                builder: (context, child) => Transform.rotate(
+                  angle: still ? 0 : (_rock.value - 0.5) * 0.5,
+                  child: child,
+                ),
+                child: const Text('🥚', style: TextStyle(fontSize: 44)),
+              ),
+              const SizedBox(height: 14),
+              Text(labelPuttLoadingHole(),
+                  style: const TextStyle(
+                    fontFamily: 'Sora',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: PuttPalette.ink,
+                  )),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: 180,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(end: share),
+                    duration: const Duration(milliseconds: 160),
+                    builder: (context, value, _) => LinearProgressIndicator(
+                      value: value,
+                      minHeight: 8,
+                      color: PuttPalette.yolk,
+                      backgroundColor: PuttPalette.ink.withAlpha(30),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String labelPuttLoadingHole() => Intl.message("Setting up the hole",
+    name: "labelPuttLoadingHole",
+    desc: "Shown over the minigolf game while the next hole's 3D scene is "
+        "being built, above a progress bar");
 
 // ---- the game ---------------------------------------------------------------------------------
 
@@ -762,9 +864,15 @@ class SunnySidePuttGame extends FlameGame {
 
   String? _fittedHole;
 
-  /// The camera's choreography: the hole's opening sweep, then the egg held
-  /// dead centre while the camera only pans with it.
-  late final PuttCameraDirector director = PuttCameraDirector(world3d.rig);
+  /// The hole's build under way: (steps done, steps in all); null when the
+  /// hole stands built. The view shows its loading card meanwhile.
+  final ValueNotifier<(int, int)?> holeLoading = ValueNotifier(null);
+
+  /// The camera's choreography: the hole's opening sweep, the egg and the
+  /// nest framed at rest, the egg followed while it rolls.
+  late final PuttCameraDirector director = PuttCameraDirector(world3d.rig)
+    // The egg as drawn: about 2.4 radii from base to crown.
+    ..eggHeight = eggRadius * 2.4;
 
   /// Where a drag anchored when it began away from the egg: the pull is
   /// measured from there, the arrow still drawn from the egg.
@@ -808,11 +916,29 @@ class SunnySidePuttGame extends FlameGame {
     if (current == null || size.x == 0 || size.y == 0) return;
     if (current.id != _fittedHole) {
       final number = match.holeInCourse;
-      world3d.buildHole(
-        current,
-        eggRadius: eggRadius,
-        label: number > 0 ? '$number' : null,
-      );
+      final label = number > 0 ? '$number' : null;
+      if (PuttThreeSurface.gpuSupported) {
+        // Over a few frames, the loading card up meanwhile: one build of a
+        // whole hole held the frame for a second or more.
+        //
+        // The resize that brings us here lands mid-build (the game's own
+        // widget lays out): the card's notifier is set after it, never
+        // during it, or its builder is marked dirty while the framework is
+        // building and the frame throws.
+        scheduleMicrotask(() {
+          if (world3d.buildingHole != null) holeLoading.value = (0, 1);
+        });
+        unawaited(world3d
+            .buildHoleInSteps(current,
+                eggRadius: eggRadius,
+                label: label,
+                onProgress: (done, total) => holeLoading.value = (done, total))
+            .whenComplete(() {
+          if (world3d.buildingHole == null) holeLoading.value = null;
+        }));
+      } else {
+        world3d.buildHole(current, eggRadius: eggRadius, label: label);
+      }
     }
     world3d.setViewport(ui.Size(size.x, size.y));
     world3d.fitCamera();
@@ -999,16 +1125,15 @@ class SunnySidePuttGame extends FlameGame {
             ? _swayed(
                 _previewFor(aimState.angle, aimState.power), aim.origin!, sway)
             : const <core.Vec2>[];
-        final rest = guided ? _previewRest : null;
         final landing = guided ? _previewLanding : null;
         aimView = PuttWorldAim(
           origin: aim.origin!,
           angle: aimState.angle + sway,
-          power: aimState.power,
+          // A pull inside the dead zone moves nothing: no arrow.
+          power: guided ? aimState.power : 0,
           dragLength: aimState.dragLength,
           eggRadius: eggRadius,
           preview: preview,
-          rest: rest == null ? null : _swayed([rest], aim.origin!, sway).single,
           previewAir: guided ? _previewAirs : const [],
           landing: landing == null
               ? null
@@ -1341,9 +1466,6 @@ class SunnySidePuttGame extends FlameGame {
   ({double angle, double power})? _previewKey;
   List<core.Vec2> _preview = const [];
 
-  /// Where the cached guide's egg comes to rest, when it stops inside it.
-  core.Vec2? _previewRest;
-
   /// The cached guide's altitudes beside its points (null on the ground),
   /// and where its flight off a kicker comes down.
   List<double?> _previewAirs = const [];
@@ -1372,7 +1494,6 @@ class SunnySidePuttGame extends FlameGame {
     _previewKey = (angle: angle, power: power);
     final world = match.engine.world;
     final current = match.hole;
-    _previewRest = null;
     _previewAirs = const [];
     _previewLanding = null;
     if (world == null || current == null) return _preview = const [];
@@ -1385,7 +1506,6 @@ class SunnySidePuttGame extends FlameGame {
       power: power,
       modifiers: match.localPlayer?.nextShot,
     );
-    _previewRest = roll.rest;
     _previewAirs = roll.airs;
     _previewLanding = roll.landing;
     return _preview = roll.points;
@@ -1414,23 +1534,29 @@ class SunnySidePuttGame extends FlameGame {
       // A frame after a stall (shaders compiling, a hidden tab) moves the
       // camera a tenth of a second at most: the opening sweep plays out
       // rather than being skipped in one step.
-      _worldDrawn ? math.min(dt, 0.1) : 0,
+      // Nor does it run while the hole is still being built.
+      _worldDrawn && holeLoading.value == null ? math.min(dt, 0.1) : 0,
       PuttCameraCue(
         hole: match.hole,
         phase: match.phase,
         myEgg: mine == null ? null : match.myEggRenderPosition,
         myEggResting: mine?.asleep ?? true,
         myEggHoled: mine?.holed ?? false,
+        myEggVelocity: mine?.velocity ?? core.Vec2.zero,
         otherEggs: [
           if (world != null)
             for (final ball in world.balls)
               if (ball.playerId != match.localPlayerId && !ball.holed)
-                match.renderPositionOf(ball.playerId),
+                PuttCameraEgg(
+                    ball.playerId, match.renderPositionOf(ball.playerId),
+                    velocity: ball.velocity,
+                    resting: ball.asleep,
+                    strokes: match.engine.strokesInHole(ball.playerId)),
         ],
         // Aiming, or picking a spot for a power-up: the frame holds still.
         aiming: aim.isActive || targeting.isActive,
-        eggHeight: eggRadius * 2,
         host: match.hole == null ? null : world3d.hostSpotOn(match.hole!.id),
+        myStrokes: match.myStrokesThisHole,
       ),
     );
   }
@@ -2075,15 +2201,12 @@ List<core.Vec2> predictRoll({
       maxTicks: maxTicks,
     ).points;
 
-/// [predictRoll]'s guide, and where the egg comes to rest when it stops
-/// on the turf inside the guide (a soft putt): null when the guide was cut
-/// first, or the egg drops into the nest or out of play. Beside the points,
-/// [airs] holds the egg's altitude where it flies off a kicker (null where
-/// it rolls), and [landing] where that flight first comes down (in the
-/// pond, all the same: that is where it would land).
+/// [predictRoll]'s guide. Beside the points, [airs] holds the egg's
+/// altitude where it flies off a kicker (null where it rolls), and
+/// [landing] where that flight first comes down (in the pond, all the
+/// same: that is where it would land).
 ({
   List<core.Vec2> points,
-  core.Vec2? rest,
   List<double?> airs,
   core.Vec2? landing,
 }) previewRoll({
@@ -2102,7 +2225,7 @@ List<core.Vec2> predictRoll({
       PhysicsWorld.restore(hole: hole, config: config, state: world.toJson());
   final ball = copy.ball(playerId);
   if (ball == null || ball.holed) {
-    return (points: const [], rest: null, airs: const [], landing: null);
+    return (points: const [], airs: const [], landing: null);
   }
   final shotPower =
       (power * (modifiers?.powerMultiplier ?? 1)).clamp(0.0, 1.0).toDouble();
@@ -2117,7 +2240,6 @@ List<core.Vec2> predictRoll({
   final points = <core.Vec2>[ball.position];
   final airs = <double?>[null];
   var flew = false;
-  core.Vec2? rest;
   core.Vec2? landing;
   var travelled = 0.0;
   var bounced = false;
@@ -2165,7 +2287,6 @@ List<core.Vec2> predictRoll({
     if (i % 3 == 0) add(after, ball.air);
     if (ball.asleep) {
       add(after, null);
-      rest = after;
       break;
     }
     // In the air the guide runs on to the landing, whatever its length,
@@ -2179,7 +2300,6 @@ List<core.Vec2> predictRoll({
   }
   return (
     points: points,
-    rest: rest,
     airs: flew ? airs : const <double?>[],
     landing: landing,
   );

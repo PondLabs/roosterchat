@@ -24,7 +24,7 @@ import 'putt_match.dart';
 // soundboard's volumes: what your speakers do is your business.
 final puttMusicVolume =
     DoublePreference('putt_music_volume', defaultValue: 0.55);
-final puttSfxVolume = DoublePreference('putt_sfx_volume', defaultValue: 1.0);
+final puttSfxVolume = DoublePreference('putt_sfx_volume', defaultValue: 0.8);
 
 /// The volume controls the settings sliders drive.
 abstract class PuttBuses {

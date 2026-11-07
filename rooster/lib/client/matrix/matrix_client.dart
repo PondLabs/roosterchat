@@ -12,6 +12,7 @@ import 'package:rooster/client/matrix/components/matrix_sync_listener.dart';
 import 'package:rooster/client/matrix/components/profile/matrix_profile_component.dart';
 import 'package:rooster/client/matrix/components/user_presence/matrix_user_presence.dart';
 import 'package:rooster/client/components/space_categories/channel_categories.dart';
+import 'package:rooster/client/matrix/components/call_activity/matrix_call_activity_component.dart';
 import 'package:rooster/client/matrix/components/voice_channel_status/matrix_voice_channel_status_component.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_voip_room_component.dart';
 import 'package:rooster/client/matrix/homeserver_clock.dart';
@@ -585,6 +586,9 @@ class MatrixClient extends Client {
           "org.matrix.msc3401.call.member": 0,
           // Anyone may say what the channel is up to, as on Discord.
           MatrixVoiceChannelStatusComponent.stateEventType: 0,
+          // So may anyone start a call activity: the session's state is how
+          // the others in the call find it.
+          MatrixCallActivityComponent.stateEventType: 0,
         }
       };
     }

@@ -247,7 +247,13 @@ class _TableShape {
 
   /// The top: the turf inside the bounds (UVs over the bounds, for the
   /// lawn's texture), or the timber lip outside them.
-  tjs.BufferGeometry top({required bool turf, HoleDef? relief}) {
+  tjs.BufferGeometry top({required bool turf, HoleDef? relief}) =>
+      _topGeometry(topArrays(turf: turf, relief: relief));
+
+  /// [top]'s positions, normals and uvs: pure Dart, so the turf's can be
+  /// worked out off the UI isolate.
+  (List<double>, List<double>, List<double>) topArrays(
+      {required bool turf, HoleDef? relief}) {
     var flat = _fill(
         (col, row) => _keptCell(col, row) && (_insideCell(col, row) == turf));
     final positions = <double>[];
@@ -314,13 +320,7 @@ class _TableShape {
         }
       }
     }
-    return tjs.BufferGeometry()
-      ..setAttributeFromString(
-          'position', tjs.Float32BufferAttribute.fromList(positions, 3, false))
-      ..setAttributeFromString(
-          'normal', tjs.Float32BufferAttribute.fromList(normals, 3, false))
-      ..setAttributeFromString(
-          'uv', tjs.Float32BufferAttribute.fromList(uvs, 2, false));
+    return (positions, normals, uvs);
   }
 
   /// The skirt: the outline dropped to the meadow, each face turned out.
@@ -547,3 +547,14 @@ List<List<(double, double)>> _splitByLine(
     if (other.length >= 3) other,
   ];
 }
+
+/// A top's arrays as the geometry the renderer takes.
+tjs.BufferGeometry _topGeometry(
+        (List<double>, List<double>, List<double>) arrays) =>
+    tjs.BufferGeometry()
+      ..setAttributeFromString(
+          'position', tjs.Float32BufferAttribute.fromList(arrays.$1, 3, false))
+      ..setAttributeFromString(
+          'normal', tjs.Float32BufferAttribute.fromList(arrays.$2, 3, false))
+      ..setAttributeFromString(
+          'uv', tjs.Float32BufferAttribute.fromList(arrays.$3, 2, false));

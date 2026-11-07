@@ -18,58 +18,12 @@ const double _fenceThickness = 0.62;
 const double _innerThickness = 0.34;
 const double _railHeight = 0.78;
 
-/// Builds one hole's course pieces. Every piece is a fresh subtree the
-/// world parents under its kind group; the hole's animated pieces register
-/// with [animated].
-class _CourseKit {
-  _CourseKit(this.hole,
-      {required this.eggRadius,
-      required this.animated,
-      required this.rig,
-      required this.theme,
-      required this.flagShakeUntil})
-      : _rand = _Rand(_seedOf(hole.id));
-
-  /// Until when (the frame clock) the flag shakes: an egg just dropped in.
-  final double Function() flagShakeUntil;
-
-  /// The course's look: the rails' style, the turf's greens.
-  final _Theme theme;
-
-  final HoleDef hole;
-  final double eggRadius;
-  final List<_Animated> animated;
-
-  /// The camera rig: the flag turns its face to it.
-  final PuttCameraRig rig;
-  final _Rand _rand;
-
-  /// One material for every rail body of the hole and one for the caps,
-  /// in the theme's style (timber, corn hedge, stone, barrier, boards).
-  late final (tjs.MeshStandardMaterial, tjs.MeshStandardMaterial) _rails =
-      _railMaterials(theme.rails);
-  tjs.MeshStandardMaterial get _railMaterial => _rails.$1;
-  tjs.MeshStandardMaterial get _capMaterial => _rails.$2;
-
-  /// The tiers' steps, faced in the course's own build (see
-  /// [_stepMaterial]): under a ledge's lip and under every rail that
-  /// stands on a step.
-  late final tjs.MeshStandardMaterial _cliffMaterial =
-      _stepMaterial(theme.kind);
-
-  /// The belt frames keep timber whatever the rails are.
-  late final tjs.MeshStandardMaterial _timber = tjs.MeshStandardMaterial({
-    tjs.MaterialProperty.color: _lin(_Farm.wood),
-    tjs.MaterialProperty.map: _woodGrainTexture(),
-    tjs.MaterialProperty.roughness: 0.78,
-    tjs.MaterialProperty.metalness: 0.0,
-  });
-
-  tjs.DataTexture? _crateFace;
-
-  /// The table's shape: where the egg can roll, the garden islands, the
-  /// carved-away stretches (see `table_shape.dart`).
-  late final _TableShape shape = _TableShape.of(hole);
+/// The lawn's paint and what it reads: the kit's, and the same off the UI
+/// isolate in a [_TurfJob] (pure Dart, no GPU objects).
+mixin _LawnPaint {
+  HoleDef get hole;
+  _Theme get theme;
+  _TableShape get shape;
   _TableShape get _reach => shape;
 
   /// The garden beds' ground per theme: mulch, dark earth, moss, gravel,
@@ -82,36 +36,12 @@ class _CourseKit {
         _ThemeKind.barn => 0xC9A55A,
       };
 
-  // ---- the turf ---------------------------------------------------------------------
-
-  /// The green: one plane carrying the procedural lawn.
-  tjs.Mesh lawn() {
-    final bounds = hole.bounds;
-    // Up close the blades show: a tiling normal map, a tile every 1.6 units.
-    final blades = _grassNormalTexture()
-      ..repeat.setValues(bounds.width / 1.6, bounds.height / 1.6);
-    // The turf follows the table's shape: no green where the walls have
-    // carved the course away.
-    return tjs.Mesh(
-      shape.top(turf: true, relief: hole),
-      tjs.MeshStandardMaterial({
-        tjs.MaterialProperty.map: _lawnTexture(),
-        tjs.MaterialProperty.normalMap: blades,
-        tjs.MaterialProperty.normalScale: tjs.Vector2(0.55, 0.55),
-        tjs.MaterialProperty.roughness: 0.96,
-        tjs.MaterialProperty.metalness: 0.0,
-      }),
-    )
-      ..name = 'lawn'
-      ..receiveShadow = true;
-  }
-
   /// The lawn's texture: mown stripes across the tee-to-nest line, a
   /// darker fringe at the edge, contact shade along every rail, rock and
   /// bumper, sandy shores around the ponds (their beds darker), the
   /// silo's spiral pull, the rabbit holes' dug earth and the nest's ring
   /// of shade.
-  tjs.DataTexture _lawnTexture() {
+  _Bitmap _lawnBitmap() {
     final bounds = hole.bounds;
     final dx = math.max(bounds.width, 0.001);
     final dz = math.max(bounds.height, 0.001);
@@ -446,7 +376,8 @@ class _CourseKit {
       }
     }
 
-    // The nest: a soft ring of shade around the straw.
+    // The nest: a dish of shade deepening toward the cup (the green worn
+    // down round it), and a dark ring of turf at its rim.
     final nest = hole.nest;
     final reach = nest.radius * 1.9;
     final c0 = colOf(nest.position.x - reach).clamp(0, width - 1);
@@ -456,12 +387,178 @@ class _CourseKit {
     for (var row = r0; row <= r1; row++) {
       for (var col = c0; col <= c1; col++) {
         final d = worldAt(col, row).distanceTo(nest.position);
-        final k = _softBand(d, nest.radius * 1.35, nest.radius * 0.45);
-        if (k > 0) bitmap.blend(col, row, _Farm.turfShade, k * 0.4);
+        final k = _softBand(d, nest.radius * 1.4, nest.radius * 0.5);
+        if (k > 0) bitmap.blend(col, row, _Farm.turfShade, k * 0.45);
+        final rim = 1 - ((d - nest.radius * 1.04) / (nest.radius * 0.12)).abs();
+        if (rim > 0)
+          bitmap.blend(col, row, 0x24401A, rim.clamp(0.0, 1.0) * 0.6);
       }
     }
 
-    return bitmap.texture();
+    return bitmap;
+  }
+
+  /// Whether a rail (not a ledge) stands along [direction] through [point]:
+  /// the step there is the rail's to face.
+  bool _railAlong(Vec2 point, Vec2 direction) {
+    for (final wall in hole.walls) {
+      if (wall.ledge) continue;
+      final run = wall.b - wall.a;
+      final length = run.length;
+      if (length < 1e-6) continue;
+      if ((run * (1 / length)).cross(direction).abs() > 0.02) continue;
+      if (_segmentDistance(point, wall.a, wall.b) < 0.05) return true;
+    }
+    return false;
+  }
+
+  /// Whether [wall] runs along the green's edge (the outer fence).
+  bool _isPerimeter(WallSegment wall) {
+    final b = hole.bounds;
+    bool onX(double x) =>
+        (wall.a.x - x).abs() < 0.01 && (wall.b.x - x).abs() < 0.01;
+    bool onY(double y) =>
+        (wall.a.y - y).abs() < 0.01 && (wall.b.y - y).abs() < 0.01;
+    return onX(b.min.x) || onX(b.max.x) || onY(b.min.y) || onY(b.max.y);
+  }
+}
+
+/// A hole's turf work sent off the UI isolate: the table's shape and the
+/// lawn's pixels (on the web, where there are no isolates, it runs in
+/// place, a step of its own).
+class _TurfJob with _LawnPaint {
+  _TurfJob(this.hole, this.theme);
+
+  @override
+  final HoleDef hole;
+  @override
+  final _Theme theme;
+  @override
+  late final _TableShape shape = _TableShape.of(hole);
+}
+
+/// What [_prepareTurf] brings back.
+typedef _Turf = ({
+  _TableShape shape,
+  _Bitmap paint,
+  (List<double>, List<double>, List<double>) arrays,
+});
+
+/// [compute]'s entry: the shape, the lawn painted over it, the turf's
+/// geometry.
+_Turf _prepareTurf(_TurfJob job) => (
+      shape: job.shape,
+      paint: job._lawnBitmap(),
+      arrays: job.shape.topArrays(turf: true, relief: job.hole),
+    );
+
+/// Builds one hole's course pieces. Every piece is a fresh subtree the
+/// world parents under its kind group; the hole's animated pieces register
+/// with [animated].
+/// How deep the nest's cup runs below the turf: room for a holed egg and
+/// the chick to drop out of sight.
+double _nestCupDepth(double radius) => radius * 0.8;
+
+/// The cup's inside, drawn before the opening's depth (and both before the
+/// turf and everything else): see [_CourseKit.nest].
+const int _cupOrder = -2;
+const int _openingOrder = -1;
+
+class _CourseKit with _LawnPaint {
+  _CourseKit(this.hole,
+      {required this.eggRadius,
+      required this.animated,
+      required this.rig,
+      required this.theme,
+      required this.flagShakeUntil})
+      : _rand = _Rand(_seedOf(hole.id));
+
+  /// Until when (the frame clock) the flag shakes: an egg just dropped in.
+  final double Function() flagShakeUntil;
+
+  /// The course's look: the rails' style, the turf's greens.
+  @override
+  final _Theme theme;
+
+  @override
+  final HoleDef hole;
+  final double eggRadius;
+  final List<_Animated> animated;
+
+  /// The camera rig: the flag turns its face to it.
+  final PuttCameraRig rig;
+  final _Rand _rand;
+
+  /// One material for every rail body of the hole and one for the caps,
+  /// in the theme's style (timber, corn hedge, stone, barrier, boards).
+  late final (tjs.MeshStandardMaterial, tjs.MeshStandardMaterial) _rails =
+      _railMaterials(theme.rails);
+  tjs.MeshStandardMaterial get _railMaterial => _rails.$1;
+  tjs.MeshStandardMaterial get _capMaterial => _rails.$2;
+
+  /// The tiers' steps, faced in the course's own build (see
+  /// [_stepMaterial]): under a ledge's lip and under every rail that
+  /// stands on a step.
+  late final tjs.MeshStandardMaterial _cliffMaterial =
+      _stepMaterial(theme.kind);
+
+  /// The belt frames keep timber whatever the rails are.
+  late final tjs.MeshStandardMaterial _timber = tjs.MeshStandardMaterial({
+    tjs.MaterialProperty.color: _lin(_Farm.wood),
+    tjs.MaterialProperty.map: _woodGrainTexture(),
+    tjs.MaterialProperty.roughness: 0.78,
+    tjs.MaterialProperty.metalness: 0.0,
+  });
+
+  tjs.DataTexture? _crateFace;
+
+  /// The table's shape: where the egg can roll, the garden islands, the
+  /// carved-away stretches (see `table_shape.dart`).
+
+  /// The table's outline and reach: worked out here unless [takeTurf]
+  /// brought it from off the UI isolate.
+  @override
+  _TableShape get shape => _shape ??= _TableShape.of(hole);
+  _TableShape? _shape;
+
+  /// The lawn's pixels, painted off the UI isolate (null: paint them here).
+  _Bitmap? _lawnPaint;
+
+  /// The turf's geometry arrays, worked out off the UI isolate (null:
+  /// here).
+  (List<double>, List<double>, List<double>)? _turfArrays;
+
+  /// Takes what [_prepareTurf] worked out for this hole.
+  void takeTurf(_Turf turf) {
+    _shape = turf.shape;
+    _lawnPaint = turf.paint;
+    _turfArrays = turf.arrays;
+  }
+
+  tjs.DataTexture _lawnTexture() => (_lawnPaint ?? _lawnBitmap()).texture();
+
+  // ---- the turf ---------------------------------------------------------------------
+
+  /// The green: one plane carrying the procedural lawn.
+  tjs.Mesh lawn() {
+    final bounds = hole.bounds;
+    // Up close the blades show: a tiling normal map, a tile every 1.6 units.
+    final blades = _grassNormalTexture()
+      ..repeat.setValues(bounds.width / 1.6, bounds.height / 1.6);
+    // The turf follows the table's shape: no green where the walls have
+    // carved the course away.
+    return tjs.Mesh(
+      _topGeometry(_turfArrays ?? shape.topArrays(turf: true, relief: hole)),
+      tjs.MeshStandardMaterial({
+        tjs.MaterialProperty.map: _lawnTexture(),
+        tjs.MaterialProperty.normalMap: blades,
+        tjs.MaterialProperty.normalScale: tjs.Vector2(0.55, 0.55),
+        tjs.MaterialProperty.roughness: 0.96,
+        tjs.MaterialProperty.metalness: 0.0,
+      }),
+    )
+      ..name = 'lawn'
+      ..receiveShadow = true;
   }
 
   // ---- the table ----------------------------------------------------------------------
@@ -617,31 +714,7 @@ class _CourseKit {
       ..add(face.mesh('cliff-face', _cliffMaterial)!);
   }
 
-  /// Whether a rail (not a ledge) stands along [direction] through [point]:
-  /// the step there is the rail's to face.
-  bool _railAlong(Vec2 point, Vec2 direction) {
-    for (final wall in hole.walls) {
-      if (wall.ledge) continue;
-      final run = wall.b - wall.a;
-      final length = run.length;
-      if (length < 1e-6) continue;
-      if ((run * (1 / length)).cross(direction).abs() > 0.02) continue;
-      if (_segmentDistance(point, wall.a, wall.b) < 0.05) return true;
-    }
-    return false;
-  }
-
   // ---- the rails ------------------------------------------------------------------------
-
-  /// Whether [wall] runs along the green's edge (the outer fence).
-  bool _isPerimeter(WallSegment wall) {
-    final b = hole.bounds;
-    bool onX(double x) =>
-        (wall.a.x - x).abs() < 0.01 && (wall.b.x - x).abs() < 0.01;
-    bool onY(double y) =>
-        (wall.a.y - y).abs() < 0.01 && (wall.b.y - y).abs() < 0.01;
-    return onX(b.min.x) || onX(b.max.x) || onY(b.min.y) || onY(b.max.y);
-  }
 
   /// A timber rail along [a]-[b]: the outer fence stands just outside the
   /// green (its inner face on the physics' line), an inner wall stands
@@ -1770,56 +1843,111 @@ class _CourseKit {
 
   // ---- the nest and its flag --------------------------------------------------------------------
 
-  /// The nest: a woven straw ring around a dark cup, and the flag on its
-  /// far rim flying the hole's number.
+  /// The nest: a cup sunk into the green (a dark opening flush with the
+  /// turf, a wall falling away to a floor), straw lining its rim, and the
+  /// flag on its far rim flying the hole's number.
+  ///
+  /// The turf is one mesh, not cut: the cup's inside is drawn first
+  /// ([_cupOrder]), then an invisible disc at the opening writes the
+  /// turf's depth there ([_openingOrder]), so the turf drawn after it
+  /// fails the depth test over the opening and the cup shows through.
+  /// Anything drawn after that disc is cut at the turf line there, so what
+  /// goes down into the cup (a holed egg, the chick) draws with the cup's
+  /// inside, at [_cupOrder].
   tjs.Group nest({String? label}) {
     final nest = hole.nest;
     final group = tjs.Group()
       ..name = 'nest'
       ..position.setValues(nest.position.x, 0, nest.position.y);
     final r = nest.radius;
-    // The cup: a lit inner wall falling away to the dark at its bottom -
-    // a radial gradient that reads as depth.
-    final cup = tjs.Mesh(
-      tjg.CircleGeometry(radius: r * 0.8, segments: 48),
+    final depth = _nestCupDepth(r);
+    // The wall: the inside of a slightly tapered tube, earth lit on the
+    // sun's side at the top, falling to near black at the floor.
+    final wallGeometry = tjg.CylinderGeometry(r, r * 0.92, depth, 48, 3, true)
+      ..translate(0, -depth / 2, 0);
+    final wallPosition =
+        wallGeometry.attributes['position'] as tjs.BufferAttribute;
+    final wallColors = <double>[];
+    for (var i = 0; i < wallPosition.count; i++) {
+      final x = wallPosition.getX(i)!.toDouble() / r;
+      final z = wallPosition.getZ(i)!.toDouble() / r;
+      final down = -wallPosition.getY(i)!.toDouble() / depth;
+      // The wall lit toward the sun's side (the far side's inside faces
+      // the camera most of the time), the floor's end in shadow.
+      final lit = (0.5 + 0.5 * (-z * 0.7 - x * 0.3)).clamp(0.0, 1.0);
+      final color = _lin(_mix(_mix(0x4A2E18, 0x8A5E36, lit), 0x120A05,
+          math.pow(down, 0.7).toDouble()));
+      wallColors.addAll([color.red, color.green, color.blue]);
+    }
+    wallGeometry.setAttributeFromString(
+        'color', tjs.Float32BufferAttribute.fromList(wallColors, 3, false));
+    group.add(tjs.Mesh(
+      wallGeometry,
+      tjs.MeshBasicMaterial({
+        tjs.MaterialProperty.vertexColors: true,
+        tjs.MaterialProperty.side: tjs.BackSide,
+      }),
+    )
+      ..name = 'nest-cup-wall'
+      ..renderOrder = _cupOrder);
+    // The floor: dark earth with a few strands of straw.
+    group.add(tjs.Mesh(
+      tjg.CircleGeometry(radius: r * 0.92, segments: 48),
       tjs.MeshBasicMaterial({
         tjs.MaterialProperty.map: _cupTexture(),
       }),
     )
       ..name = 'nest-cup'
       ..rotation.x = -math.pi / 2
-      ..position.y = 0.012;
-    group.add(cup);
+      ..position.y = -depth
+      ..renderOrder = _cupOrder);
+    // The opening: no colour, only the turf's depth (lifted a hair and
+    // pulled nearer by polygon offset, so the turf under it never wins a
+    // tie). No more: what lies on the turf over it (the last roll's trace,
+    // an egg rolling over the lip) must not be cut by it.
+    group.add(tjs.Mesh(
+      tjg.CircleGeometry(radius: r, segments: 48),
+      tjs.MeshBasicMaterial({
+        tjs.MaterialProperty.colorWrite: false,
+        tjs.MaterialProperty.polygonOffset: true,
+        tjs.MaterialProperty.polygonOffsetFactor: -1.0,
+        tjs.MaterialProperty.polygonOffsetUnits: -1.0,
+      }),
+    )
+      ..name = 'nest-opening'
+      ..rotation.x = -math.pi / 2
+      ..position.y = 0.005
+      ..renderOrder = _openingOrder);
 
-    // The straw: a lumpy torus in mixed straw tones, and strands poking
-    // out of it every which way.
+    // The straw: a low, lumpy ring lining the rim (outside the opening, so
+    // the hole stays a hole), and strands lying on the turf round it.
     final straw = _Merged();
-    final torus = tjg.TorusGeometry(r * 1.0, r * 0.24, 10, 44);
+    final torus = tjg.TorusGeometry(r * 1.1, r * 0.09, 8, 48);
     final position = torus.attributes['position'] as tjs.BufferAttribute;
     for (var i = 0; i < position.count; i++) {
       final x = position.getX(i)!.toDouble();
       final y = position.getY(i)!.toDouble();
       final z = position.getZ(i)!.toDouble();
       final k =
-          1 + (_hash2((x * 40).round(), (y * 40).round(), 5) - 0.5) * 0.16;
+          1 + (_hash2((x * 40).round(), (y * 40).round(), 5) - 0.5) * 0.08;
       position.setXYZ(i, x * k, y * k, z * k);
     }
     straw.add(
-        torus, _place(0, r * 0.12, 0, tilt: math.pi / 2, sz: 0.55), _Farm.straw,
+        torus, _place(0, r * 0.02, 0, tilt: math.pi / 2, sz: 0.5), _Farm.straw,
         baseShade: 0.7);
-    for (var i = 0; i < 34; i++) {
-      final angle = i / 34 * math.pi * 2 + _rand.range(-0.1, 0.1);
-      final radial = r * _rand.range(0.88, 1.18);
-      final length = _rand.range(0.45, 0.85) * r;
+    for (var i = 0; i < 30; i++) {
+      final angle = i / 30 * math.pi * 2 + _rand.range(-0.1, 0.1);
+      final radial = r * _rand.range(1.08, 1.28);
+      final length = _rand.range(0.35, 0.6) * r;
       straw.add(
-        tjs.BoxGeometry(length, 0.035, 0.07),
+        tjs.BoxGeometry(length, 0.03, 0.06),
         _place(
           math.cos(angle) * radial,
-          r * 0.16 + _rand.range(0, 0.12),
+          0.04 + _rand.range(0, 0.06),
           math.sin(angle) * radial,
-          yaw: -angle + _rand.range(0.5, 1.2) * (i.isEven ? 1 : -1),
-          tilt: _rand.range(-0.3, 0.3),
-          roll: _rand.range(-0.35, 0.35),
+          yaw: -angle + _rand.range(1.2, 1.9) * (i.isEven ? 1 : -1),
+          tilt: _rand.range(-0.12, 0.12),
+          roll: _rand.range(-0.12, 0.12),
         ),
         i % 3 == 0
             ? _Farm.strawDark
@@ -1903,10 +2031,8 @@ class _CourseKit {
     return group;
   }
 
-  /// The cup's paint: earth lit on the far wall, shading to a deep brown
-  /// at the bottom (not black: round 4's close-ups read a flat black hole),
-  /// a hint of the sun's side, and a few strands of straw lying on the
-  /// floor, so it reads as a nest's cup.
+  /// The cup floor's paint: deep brown earth, a little lighter toward the
+  /// wall, and a few strands of straw lying on it.
   tjs.DataTexture _cupTexture() {
     const size = 128;
     final bitmap = _Bitmap(size, size);
@@ -1919,10 +2045,7 @@ class _CourseKit {
         // side), the floor in shadow.
         final lit = (0.5 + 0.5 * (dy * 0.7 - dx * 0.3)).clamp(0.0, 1.0);
         final wall = math.pow(d, 1.5).toDouble();
-        var hex = _mix(0x1A110A, _mix(0x4E321C, 0x9A6C40, lit), wall);
-        // The rim's lip catches the light.
-        if (d > 0.9) hex = _mix(hex, 0xB88A52, (d - 0.9) / 0.1 * 0.5);
-        bitmap.set(x, y, hex);
+        bitmap.set(x, y, _mix(0x140C06, _mix(0x24170C, 0x3A2616, lit), wall));
       }
     }
     // Strands on the floor: short strokes in dull straw.
@@ -1938,7 +2061,7 @@ class _CourseKit {
         final px = (cx + math.cos(heading) * t).round();
         final py = (cy + math.sin(heading) * t).round();
         if (px < 0 || py < 0 || px >= size || py >= size) continue;
-        bitmap.blend(px, py, i.isEven ? 0x8A6A3A : 0x6E5230, 0.55);
+        bitmap.blend(px, py, i.isEven ? 0x6A5230 : 0x52402A, 0.45);
       }
     }
     return bitmap.texture();
@@ -2144,10 +2267,9 @@ class _CourseKit {
   (Vec2, Vec2)? _findTeeSignSpot() {
     final tee = hole.tee;
     final bounds = hole.bounds;
-    // The close camera at the tee hangs behind the egg, on the hole's own
-    // view: it never turns toward the nest, so the sign keeps out of that
-    // one side for the whole hole.
-    final yaw = PuttCameraRig.defaultYaw;
+    // The close camera at the tee hangs behind the egg, turned partway
+    // toward the nest.
+    final yaw = PuttCameraRig.yawToward(tee, hole.nest.position);
     final away = Vec2(math.sin(yaw), math.cos(yaw));
     final host = _hostSpotOf(hole);
     // The Barn's lanterns stand off the table's corners.

@@ -33,16 +33,16 @@ Rect _boundsOf(List<String> plan) =>
 // straight putt back to its line, into the rabbit hole.
 
 const List<String> _maze1 = [
-  '................',
-  '................',
+  '55.....2........',
+  '55.....2........',
   '..############..',
   'TTTT##########..',
-  'TTTT......a?##..',
+  'TTTT......a?##33',
   'TTTT......a.##..',
   'TTTT##########..',
   '##############..',
-  '####b...NN......',
-  '####b...NN......',
+  '####b.1.NN..44..',
+  '####b...NN..44..',
 ];
 
 HoleDef _firstFurrow() {
@@ -58,7 +58,14 @@ HoleDef _firstFurrow() {
       PortalPair('maze_1_burrow', _spot(_maze1, 'a'), _spot(_maze1, 'b'),
           radius: 1.0),
     ],
-    boxes: [QuestionBox('maze_1_box', _spot(_maze1, '?'))],
+    boxes: [
+      QuestionBox('maze_1_box', _spot(_maze1, '?')),
+      QuestionBox('maze_1_exit_run', _spot(_maze1, '1')),
+      QuestionBox('maze_1_top_row', _spot(_maze1, '2')),
+      QuestionBox('maze_1_far_lane', _spot(_maze1, '3')),
+      QuestionBox('maze_1_past_the_nest', _spot(_maze1, '4')),
+      QuestionBox('maze_1_tee_corner', _spot(_maze1, '5')),
+    ],
     // the trough down the spur, from its mouth to short of the rabbit hole
     hills: const [
       Hill(Vec2(10.5, 12.5), Vec2(22.5, 12.5),
@@ -97,16 +104,16 @@ ReferenceSolution _firstFurrowSolution() {
 // short or a little long is gathered back towards it.
 
 const List<String> _maze2 = [
-  '#########...........',
-  '#########...........',
+  '#########66..3....44',
+  '#########....3....44',
   '#########..#####....',
   '#########..#####.dd.',
   'TTTT####....####....',
-  'TTTT..........?#....',
-  'TTTT...........#....',
+  'TTTT..1.......?#....',
+  'TTTT..1........#5...',
   'TTTT####....####....',
   '#########..#####....',
-  '#########..#####.NN.',
+  '#########.2#####.NN.',
   '#########..#####.NN.',
   '#########cc#####....',
 ];
@@ -124,7 +131,15 @@ HoleDef _crossroads() {
       PortalPair('maze_2_burrow', _spot(_maze2, 'c'), _spot(_maze2, 'd'),
           radius: 1.0),
     ],
-    boxes: [QuestionBox('maze_2_box', _spot(_maze2, '?'))],
+    boxes: [
+      QuestionBox('maze_2_box', _spot(_maze2, '?')),
+      QuestionBox('maze_2_first_leg', _spot(_maze2, '1')),
+      QuestionBox('maze_2_down_lane', _spot(_maze2, '2')),
+      QuestionBox('maze_2_north_arm', _spot(_maze2, '6')),
+      QuestionBox('maze_2_top_row', _spot(_maze2, '3')),
+      QuestionBox('maze_2_far_corner', _spot(_maze2, '4')),
+      QuestionBox('maze_2_east_lane', _spot(_maze2, '5')),
+    ],
     // the garden's dip, the nest on its flat bottom
     hills: [
       Hill.mound(_spot(_maze2, 'N'), height: -0.5, top: 2.4, skirt: 2.2),
@@ -190,7 +205,14 @@ HoleDef _hedgeHop() {
     walls: [...fenceAround(bounds), ...plannedWalls(_maze3, cell: _cell)],
     water: const [WaterRect(_maze3Ditch)],
     kickers: const [_maze3Kicker],
-    boxes: [QuestionBox('maze_3_box', const Vec2(2.5, 18.75))],
+    boxes: [
+      QuestionBox('maze_3_box', Vec2(2.5, 18.75)),
+      QuestionBox('maze_3_run_up', Vec2(12.5, 20.5)),
+      QuestionBox('maze_3_landing', Vec2(9, 3)),
+      QuestionBox('maze_3_east_corridor', Vec2(32.5, 18.75)),
+      QuestionBox('maze_3_east_gap', Vec2(45, 12.5)),
+      QuestionBox('maze_3_north_field', Vec2(30, 5)),
+    ],
   );
 }
 
@@ -239,7 +261,14 @@ HoleDef _theBurrow() {
       PortalPair('maze_4_burrow', _spot(_maze4, 'a'), _spot(_maze4, 'b'),
           radius: 1.0),
     ],
-    boxes: [QuestionBox('maze_4_box', Vec2(51, 15))],
+    boxes: [
+      QuestionBox('maze_4_box', Vec2(51, 15)),
+      QuestionBox('maze_4_to_the_burrow', Vec2(8.75, 25)),
+      QuestionBox('maze_4_burrow_run', Vec2(22.5, 5)),
+      QuestionBox('maze_4_behind_the_nest', Vec2(2.5, 2.5)),
+      QuestionBox('maze_4_far_corner', Vec2(52.5, 2.5)),
+      QuestionBox('maze_4_south_east', Vec2(42.5, 27.5)),
+    ],
   );
 }
 
@@ -267,17 +296,17 @@ ReferenceSolution _theBurrowSolution() {
 // The others end in corn - one with a "?" waiting at the bottom.
 
 const List<String> _maze5 = [
-  '....................',
-  '....................',
-  '..################..',
-  '..............#NN...',
-  '.TTT..........#NN...',
+  '..........3.........',
+  '..........3.........',
+  '..################66',
+  '......1.......#NN...',
+  '.TTT..1.......#NN...',
   '.TTT.####..####..###',
-  '.TTT....#...........',
-  '........#...........',
+  '5TTT....#....2......',
+  '5.......#....2......',
   '######..##########..',
-  '######......?.####..',
-  '######......?.####..',
+  '######......?.####44',
+  '######......?.####44',
 ];
 
 // High in the clearing, so the first putt has a clean line east.
@@ -292,7 +321,15 @@ HoleDef _deadEnds() {
     nest: Nest(_spot(_maze5, 'N'), 1.7),
     bounds: bounds,
     walls: [...fenceAround(bounds), ...plannedWalls(_maze5, cell: _cell)],
-    boxes: [QuestionBox('maze_5_box', _spot(_maze5, '?'))],
+    boxes: [
+      QuestionBox('maze_5_box', _spot(_maze5, '?')),
+      QuestionBox('maze_5_first_bank', _spot(_maze5, '1')),
+      QuestionBox('maze_5_second_bank', _spot(_maze5, '2')),
+      QuestionBox('maze_5_top_row', _spot(_maze5, '3')),
+      QuestionBox('maze_5_east_drop', _spot(_maze5, '6')),
+      QuestionBox('maze_5_south_east', _spot(_maze5, '4')),
+      QuestionBox('maze_5_west', _spot(_maze5, '5')),
+    ],
   );
 }
 
@@ -319,17 +356,17 @@ ReferenceSolution _deadEndsSolution() {
 // climb rolls back down the road.
 
 const List<String> _maze6 = [
-  '....................',
-  '....................',
+  '........6.......3...',
+  '........6.......3...',
   '###..############...',
   '.....#######.####...',
   '.TTT.#######.####.NN',
   '.TTT.####..#.####.NN',
-  '.TTT........a.#b....',
-  '............a.#b....',
+  '.TTT....1...a.#b.2..',
+  '........1...a.#b.2..',
   '###..#############..',
-  '?...................',
-  '?...................',
+  '?.........4.......55',
+  '?.........4.......55',
 ];
 
 /// How high the lookout stands.
@@ -371,7 +408,15 @@ HoleDef _grandMaze() {
       PortalPair('maze_6_burrow', _spot(_maze6, 'a'), _spot(_maze6, 'b'),
           radius: 1.0),
     ],
-    boxes: [QuestionBox('maze_6_box', _spot(_maze6, '?'))],
+    boxes: [
+      QuestionBox('maze_6_box', _spot(_maze6, '?')),
+      QuestionBox('maze_6_corridor', _spot(_maze6, '1')),
+      QuestionBox('maze_6_burrow_exit', _spot(_maze6, '2')),
+      QuestionBox('maze_6_lookout', _spot(_maze6, '3')),
+      QuestionBox('maze_6_climb', _spot(_maze6, '6')),
+      QuestionBox('maze_6_bottom_lane', _spot(_maze6, '4')),
+      QuestionBox('maze_6_south_east', _spot(_maze6, '5')),
+    ],
   );
 }
 

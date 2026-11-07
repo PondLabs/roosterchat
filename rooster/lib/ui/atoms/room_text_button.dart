@@ -285,6 +285,22 @@ class _RoomTextButtonState extends State<RoomTextButton> {
       desc: "Tooltip on the record next to someone in a voice channel who "
           "is the DJ with their music paused");
 
+  static String labelPlayingActivity(String activity) =>
+      Intl.message("Playing $activity",
+          name: "labelPlayingActivity",
+          args: [activity],
+          desc: "Tooltip on the game icon next to someone in a voice channel "
+              "who is in a call activity; the activity's name, e.g. Sunny "
+              "Side Putt");
+
+  static String labelWatchingActivity(String activity) =>
+      Intl.message("Watching $activity",
+          name: "labelWatchingActivity",
+          args: [activity],
+          desc: "Tooltip on the game icon next to someone in a voice channel "
+              "who is watching a call activity as a spectator; the "
+              "activity's name, e.g. Sunny Side Putt");
+
   static String labelMoreMembers(int count) => Intl.message("and $count more",
       name: "labelMoreMembers",
       args: [count],
@@ -802,7 +818,10 @@ class _RoomTextButtonState extends State<RoomTextButton> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (activity.thirdparty)
+                // A third-party widget's members are titled, so they do not
+                // read as a second call. Call activities (games) are not
+                // sessions here: they are badges in the call's list.
+                if (!activity.isCall)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(10, 4, 0, 4),
                     child: Row(
@@ -816,13 +835,13 @@ class _RoomTextButtonState extends State<RoomTextButton> {
                       ],
                     ),
                   ),
-                if (activity.thirdparty)
+                if (!activity.isCall)
                   tiamat.Seperator(
                     padding: 2,
                   ),
                 ...buildCallMembers(activity),
-                if (!activity.thirdparty) buildDj(),
-                if (!activity.thirdparty) buildInviteToVoice(),
+                if (activity.isCall) buildDj(),
+                if (activity.isCall) buildInviteToVoice(),
               ],
             ),
           ),
@@ -872,6 +891,7 @@ class _RoomTextButtonState extends State<RoomTextButton> {
               liveMedia: activity.liveMedia[participant] ?? const {},
               voiceState: activity.voiceState[participant] ?? const {},
               djPlaying: activity.djPlaying[participant],
+              playing: activity.playing[participant],
               onOpened: onOpened),
         );
 
@@ -1030,6 +1050,7 @@ class _RoomTextButtonState extends State<RoomTextButton> {
       Set<LiveMedia> liveMedia = const {},
       Set<VoiceState> voiceState = const {},
       bool? djPlaying,
+      ActivityBadge? playing,
       VoidCallback? onOpened}) {
     var color = Theme.of(context).colorScheme.secondary;
 
@@ -1099,6 +1120,20 @@ class _RoomTextButtonState extends State<RoomTextButton> {
                         child: Tooltip(
                           message: djPlaying ? labelDjPlaying : labelDjPaused,
                           child: VinylDisc(size: 16, spinning: djPlaying),
+                        ),
+                      ),
+                    if (playing != null)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(4, 0, 0, 0),
+                        child: Tooltip(
+                          message: playing.watching
+                              ? labelWatchingActivity(playing.name)
+                              : labelPlayingActivity(playing.name),
+                          child: SizedBox.square(
+                              dimension: 16,
+                              child: IconTheme.merge(
+                                  data: IconThemeData(size: 16, color: color),
+                                  child: playing.icon.build(context))),
                         ),
                       ),
                     if (voiceState.isNotEmpty)

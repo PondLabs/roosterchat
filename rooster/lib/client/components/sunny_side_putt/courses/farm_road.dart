@@ -100,7 +100,15 @@ HoleDef _frontStretch() {
     terraces: const [_road1Near, _road1Far],
     ramps: const [_road1Climb],
     boosts: [BoostStrip(Vec2(20, 13), Vec2(28, 13), width: 1.2, speed: 23)],
-    boxes: [QuestionBox('road_1_box', Vec2(24, 15.3))],
+    boxes: [
+      QuestionBox('road_1_box', Vec2(24, 15.3)),
+      QuestionBox('road_1_dip', Vec2(32.5, 13)),
+      QuestionBox('road_1_far_bank', Vec2(42, 15.3)),
+      QuestionBox('road_1_yard_north', Vec2(3, 8.5)),
+      QuestionBox('road_1_yard_south', Vec2(3, 17.5)),
+      QuestionBox('road_1_far_north', Vec2(40, 11)),
+      QuestionBox('road_1_lay_by', Vec2(52, 1.5)),
+    ],
   );
 }
 
@@ -149,7 +157,15 @@ HoleDef _theHairpin() {
       BoostStrip(Vec2(52, 18), Vec2(52, 10), width: 2.4, speed: 16),
       BoostStrip(Vec2(40, 2.5), Vec2(32, 2.5), width: 3, speed: 20),
     ],
-    boxes: [QuestionBox('road_2_box', Vec2(47, 14))],
+    boxes: [
+      QuestionBox('road_2_box', Vec2(47, 14)),
+      QuestionBox('road_2_lower_lane', Vec2(38, 26)),
+      QuestionBox('road_2_upper_lane', Vec2(26, 2)),
+      QuestionBox('road_2_upper_south', Vec2(25, 7.5)),
+      QuestionBox('road_2_lower_north', Vec2(28, 20)),
+      QuestionBox('road_2_upper_end', Vec2(4, 7)),
+      QuestionBox('road_2_lower_end', Vec2(2, 26)),
+    ],
   );
 }
 
@@ -207,7 +223,15 @@ HoleDef _chickenCrossing() {
         ],
       ),
     ],
-    boxes: [QuestionBox('road_3_box', Vec2(27, 19.5))],
+    boxes: [
+      QuestionBox('road_3_box', Vec2(27, 19.5)),
+      QuestionBox('road_3_first_leg', Vec2(14, 10.25)),
+      QuestionBox('road_3_second_leg', Vec2(35, 10.25)),
+      QuestionBox('road_3_north', Vec2(27, 3.5)),
+      QuestionBox('road_3_south_west', Vec2(8, 21)),
+      QuestionBox('road_3_north_east', Vec2(48, 4)),
+      QuestionBox('road_3_south_east', Vec2(48, 22)),
+    ],
   );
 }
 
@@ -260,20 +284,28 @@ HoleDef _cattleGrid() {
       BoostStrip(Vec2(30, 23), Vec2(30, 3), width: 1.6, speed: 6),
     ],
     kickers: const [_road4Kicker],
-    boxes: [QuestionBox('road_4_box', Vec2(28.5, 20))],
+    boxes: [
+      QuestionBox('road_4_box', Vec2(28.5, 20)),
+      QuestionBox('road_4_middle_pen', Vec2(32.5, 14)),
+      QuestionBox('road_4_last_pen', Vec2(40, 11.5)),
+      QuestionBox('road_4_north_pen', Vec2(26, 5)),
+      QuestionBox('road_4_east_south', Vec2(44, 22)),
+      QuestionBox('road_4_west_south', Vec2(18, 21)),
+      QuestionBox('road_4_west_north', Vec2(8, 4)),
+    ],
   );
 }
 
 // Found by a sweep, each shot holding for nearby aims and powers: off the
 // ramp, over the first conveyor and through the first grid; a firm one
-// aimed off south, off the south rail and through the second grid on the
-// second conveyor's push, to the far corner; then a putt in.
+// straight through the second grid, the second conveyor only bending it
+// a little; then a putt in.
 ReferenceSolution _cattleGridSolution() {
-  const pastTheGrids = Vec2(52.36, 7.48);
+  const pastTheGrids = Vec2(42.18, 14.35);
   return ReferenceSolution([
     const ReferenceShot(0, 0.54),
-    const ReferenceShot(0.60, 0.94),
-    putt(pastTheGrids, _road4Nest, arrival: 2.2),
+    const ReferenceShot(0.08, 0.60),
+    putt(pastTheGrids, _road4Nest),
   ]);
 }
 
@@ -335,7 +367,15 @@ HoleDef _roundabout() {
       BoostStrip(Vec2(24, 6.25), Vec2(30, 6.25), width: 1.2, speed: 18),
       BoostStrip(Vec2(24, 21.75), Vec2(30, 21.75), width: 1.2, speed: 18),
     ],
-    boxes: [QuestionBox('road_5_box', Vec2(27, 1.8))],
+    boxes: [
+      QuestionBox('road_5_box', Vec2(27, 1.8)),
+      QuestionBox('road_5_west_lane', Vec2(11, 11.5)),
+      QuestionBox('road_5_east_arm', Vec2(36, 12)),
+      QuestionBox('road_5_south_arm', Vec2(27, 26.2)),
+      QuestionBox('road_5_south_west', Vec2(20, 19.5)),
+      QuestionBox('road_5_south_east', Vec2(34, 19.5)),
+      QuestionBox('road_5_past_the_nest', Vec2(52, 14)),
+    ],
     // the speed bump across the road out
     hills: const [
       Hill(Vec2(42.5, 12.6), Vec2(42.5, 15.4), height: 0.7, skirt: 2.2),
@@ -431,7 +471,14 @@ HoleDef _homeStretch() {
         ],
       ),
     ],
-    boxes: [QuestionBox('road_6_box', Vec2(49, 15))],
+    boxes: [
+      QuestionBox('road_6_box', Vec2(49, 15)),
+      QuestionBox('road_6_upper_lane', Vec2(32, 2.5)),
+      QuestionBox('road_6_flyover', Vec2(24, 12.5)),
+      QuestionBox('road_6_west_turn', Vec2(10, 13)),
+      QuestionBox('road_6_lower_lane', Vec2(40, 24.5)),
+      QuestionBox('road_6_lower_west', Vec2(14, 30)),
+    ],
     // the speed bumps across the top lane, before the gate
     hills: const [
       Hill(Vec2(38, 2.4), Vec2(38, 6.6), height: 0.6, skirt: 2),
@@ -440,13 +487,14 @@ HoleDef _homeStretch() {
   );
 }
 
-// Found by a sweep, each shot holding for nearby aims: off the verge into
-// the first strip, which carries the egg round the first hairpin, short
-// of the ramp; a firm one off the verge, up the ramp and through the
+// Found by a sweep, each shot holding for nearby aims and powers: off the
+// verge into the first strip, which carries the egg round the first
+// hairpin to the foot of the ramp; a firm one up the ramp and through the
 // flyover's strip, off its far end into the second hairpin and round it
-// into the top lane; then off the north fence, over the bumps and home.
-ReferenceSolution _homeStretchSolution() => const ReferenceSolution([
-      ReferenceShot(-0.546, 0.843),
-      ReferenceShot(-2.4173, 0.90),
-      ReferenceShot(-0.1571, 0.88),
+// into the top lane; then straight down the lane, over the bumps and
+// home.
+ReferenceSolution _homeStretchSolution() => ReferenceSolution([
+      const ReferenceShot(-0.53, 0.67),
+      const ReferenceShot(2.60, 0.86),
+      putt(const Vec2(11.97, 6.22), _road6Nest),
     ]);

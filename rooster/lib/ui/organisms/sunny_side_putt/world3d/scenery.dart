@@ -307,9 +307,40 @@ class _Scenery {
         yaw: yaw + turn, tilt: tilt, roll: roll, sx: sx, sy: sy, sz: sz);
   }
 
+  /// The farm, all at once (the tests' way; the world builds it through
+  /// [buildSteps], a step a frame).
   tjs.Group build() {
     final group = tjs.Group()..name = 'farm';
-    group.add(_meadow());
+    for (final step in buildSteps(group)) {
+      step();
+    }
+    return group;
+  }
+
+  /// The names of [buildSteps]' steps, in order (the world's timing log).
+  static const stepNames = [
+    'meadow',
+    'props',
+    'carved meadow',
+    'trees',
+    'plants',
+    'stones',
+    'fence',
+    'hay',
+    'flowers',
+    'barn',
+    'landmarks',
+    'corn rows',
+    'corn field',
+    'merge',
+    'figures',
+  ];
+
+  /// The farm's build into [group] as steps ([stepNames]), run in order
+  /// (the seeded scatter draws in that order).
+  List<void Function()> buildSteps(tjs.Group group) {
+    late final int stoneVertices;
+    int? cornPlanted;
     // What stands beyond the sun's shadow box casts no shadow (see
     // `_aimSun`: the box reaches span * 0.62 + 12 round the green).
     final props =
@@ -373,78 +404,111 @@ class _Scenery {
       return spot;
     }
 
-    switch (kind) {
-      case _ThemeKind.coop:
-        _coopProps(props, settle);
-      case _ThemeKind.maze:
-        _mazeProps(props, settle);
-      case _ThemeKind.pond:
-        _pondProps(props, small, lakeAt, lakeRadius);
-      case _ThemeKind.road:
-        _roadProps(props, settle, roadZ);
-      case _ThemeKind.barn:
-        _barnProps(group, props, small, settle, barnAt, barnScale);
-    }
-
-    _carvedMeadow(soft, small);
-    _trees(props, blocked);
-    _coursePlants(soft, small, blocked, roadZ: roadZ);
-    final beforeStones = soft.vertexCount;
-    _stones(soft, blocked);
-    final stoneVertices = soft.vertexCount - beforeStones;
-    _fence(props);
-    _hay(props, blocked);
-    _flowers(small, blocked);
-    if (hasBarn) _barn(props, barnAt, scale: barnScale);
-    switch (kind) {
-      case _ThemeKind.coop:
-        _henHouse(props, henHouseAt);
-        _yardHens(props, henHouseAt);
-        _path(small, from: Vec2(barnAt.x - 1, barnAt.y + 6), to: hostAt);
-      case _ThemeKind.maze:
-        _cornField(props);
+    return [
+      () {
+        group.add(_meadow());
+      },
+      () {
+        switch (kind) {
+          case _ThemeKind.coop:
+            _coopProps(props, settle);
+          case _ThemeKind.maze:
+            _mazeProps(props, settle);
+          case _ThemeKind.pond:
+            _pondProps(props, small, lakeAt, lakeRadius);
+          case _ThemeKind.road:
+            _roadProps(props, settle, roadZ);
+          case _ThemeKind.barn:
+            _barnProps(group, props, small, settle, barnAt, barnScale);
+        }
+      },
+      () {
+        _carvedMeadow(soft, small);
+      },
+      () {
+        _trees(props, blocked);
+      },
+      () {
+        _coursePlants(soft, small, blocked, roadZ: roadZ);
+      },
+      () {
+        final beforeStones = soft.vertexCount;
+        _stones(soft, blocked);
+        stoneVertices = soft.vertexCount - beforeStones;
+      },
+      () => _fence(props),
+      () => _hay(props, blocked),
+      () => _flowers(small, blocked),
+      () {
+        if (hasBarn) _barn(props, barnAt, scale: barnScale);
+      },
+      () {
+        switch (kind) {
+          case _ThemeKind.coop:
+            _henHouse(props, henHouseAt);
+            _yardHens(props, henHouseAt);
+            _path(small, from: Vec2(barnAt.x - 1, barnAt.y + 6), to: hostAt);
+          case _ThemeKind.maze:
+            // The corn, the maze's whole landmark, steps of its own.
+            cornPlanted = _cornRows(props, 0, near: true);
+          case _ThemeKind.pond:
+            group.add(_lake(lakeAt, lakeRadius));
+            _reeds(soft, lakeAt, lakeRadius);
+            _dock(props, lakeAt, lakeRadius);
+            _ducks(group, lakeAt, lakeRadius);
+          case _ThemeKind.road:
+            _road(small, roadZ);
+            _tractor(props, Vec2(_b.center.x + 9, roadZ - 0.2));
+            _waterTower(props, towerAt);
+            _poles(group, props, roadZ - 3.4);
+            _fields(group, roadZ);
+          case _ThemeKind.barn:
+            _path(small,
+                from: Vec2(barnAt.x, barnAt.y + 9),
+                to: Vec2(_b.center.x, _b.min.y - 4));
+            _haystacks(props, barnAt);
+            _lanterns(group, props);
+            _fireflies(group);
+        }
+      },
+      () {
+        final planted = cornPlanted;
+        if (kind == _ThemeKind.maze && planted != null) {
+          cornPlanted = _cornRows(props, planted, near: false);
+        }
+      },
+      () {
+        if (kind != _ThemeKind.maze) return;
+        final planted = cornPlanted;
+        if (planted != null) _cornSides(props, planted);
         _scarecrow(props, _scarecrowAt);
-      case _ThemeKind.pond:
-        group.add(_lake(lakeAt, lakeRadius));
-        _reeds(soft, lakeAt, lakeRadius);
-        _dock(props, lakeAt, lakeRadius);
-        _ducks(group, lakeAt, lakeRadius);
-      case _ThemeKind.road:
-        _road(small, roadZ);
-        _tractor(props, Vec2(_b.center.x + 9, roadZ - 0.2));
-        _waterTower(props, towerAt);
-        _poles(group, props, roadZ - 3.4);
-        _fields(group, roadZ);
-      case _ThemeKind.barn:
-        _path(small,
-            from: Vec2(barnAt.x, barnAt.y + 9),
-            to: Vec2(_b.center.x, _b.min.y - 4));
-        _haystacks(props, barnAt);
-        _lanterns(group, props);
-        _fireflies(group);
-    }
-
-    group.userData['plant vertices'] = soft.vertexCount - stoneVertices;
-    final softMesh = soft.mesh('farm-soft', flat: false);
-    if (softMesh != null) group.add(softMesh);
-    final softFar = soft.farMesh('farm-soft-far', flat: false);
-    if (softFar != null) group.add(softFar);
-    final propsMesh = props.mesh('farm-props');
-    if (propsMesh != null) group.add(propsMesh);
-    final farMesh = props.farMesh('farm-props-far');
-    if (farMesh != null) group.add(farMesh);
-    final smallMesh = small.mesh('farm-small', castShadow: false);
-    if (smallMesh != null) group.add(smallMesh);
-    if (hasMill) group.add(_windmill(millAt));
-    group.add(_host(hostAt));
-    if (kind != _ThemeKind.barn) group.add(_butterflies());
-    group.add(_birds());
-    group.userData['props'] = List<(String, Vec2, double)>.unmodifiable(_stood);
-    group.userData['plants'] =
-        List<(String, Vec2, double)>.unmodifiable(_grown);
-    group.userData['bed plants'] =
-        List<(String, Vec2, double)>.unmodifiable(_bedGrown);
-    return group;
+      },
+      () {
+        group.userData['plant vertices'] = soft.vertexCount - stoneVertices;
+        final softMesh = soft.mesh('farm-soft', flat: false);
+        if (softMesh != null) group.add(softMesh);
+        final softFar = soft.farMesh('farm-soft-far', flat: false);
+        if (softFar != null) group.add(softFar);
+        final propsMesh = props.mesh('farm-props');
+        if (propsMesh != null) group.add(propsMesh);
+        final farMesh = props.farMesh('farm-props-far');
+        if (farMesh != null) group.add(farMesh);
+        final smallMesh = small.mesh('farm-small', castShadow: false);
+        if (smallMesh != null) group.add(smallMesh);
+      },
+      () {
+        if (hasMill) group.add(_windmill(millAt));
+        group.add(_host(hostAt));
+        if (kind != _ThemeKind.barn) group.add(_butterflies());
+        group.add(_birds());
+        group.userData['props'] =
+            List<(String, Vec2, double)>.unmodifiable(_stood);
+        group.userData['plants'] =
+            List<(String, Vec2, double)>.unmodifiable(_grown);
+        group.userData['bed plants'] =
+            List<(String, Vec2, double)>.unmodifiable(_bedGrown);
+      },
+    ];
   }
 
   /// Butterflies fluttering over the meadow by the table (the dusk keeps
@@ -1715,14 +1779,17 @@ class _Scenery {
     return z < _b.max.y - 2;
   }
 
-  void _cornField(_Merged into) {
-    const spacing = 1.9;
+  /// The field's rows behind the green, the [near] half or the far one,
+  /// after the [plants] already planted; the plants planted then, null when
+  /// they reached the field's cap (then nothing more is planted).
+  int? _cornRows(_Merged into, int plants, {required bool near}) {
+    const spacing = _cornSpacing;
     final rows = <double>[];
     for (var z = _b.min.y - 8; z > _b.min.y - 40; z -= spacing * 1.25) {
       rows.add(z);
     }
-    var plants = 0;
-    for (final z in rows) {
+    final half = rows.length ~/ 2;
+    for (final z in near ? rows.take(half) : rows.skip(half)) {
       for (var x = _b.min.x - 34; x < _b.max.x + 34; x += spacing) {
         final px = x + _rand.range(-0.35, 0.35);
         final pz = z + _rand.range(-0.3, 0.3);
@@ -1738,10 +1805,18 @@ class _Scenery {
         _cornPlant(into, Vec2(px, pz), _rand.range(0.85, 1.2),
             far: _clearance(px, pz) > 18);
         plants++;
-        if (plants > 520) return;
+        if (plants > 520) return null;
       }
     }
-    // The sides: a few rows running beside the course.
+    return plants;
+  }
+
+  static const double _cornSpacing = 1.9;
+
+  /// The sides: a few rows running beside the course, after the [plants]
+  /// the rows planted.
+  void _cornSides(_Merged into, int plants) {
+    const spacing = _cornSpacing;
     for (final side in [-1.0, 1.0]) {
       final x0 = side < 0 ? _b.min.x - 9 : _b.max.x + 9;
       for (var row = 0; row < 4; row++) {

@@ -40,12 +40,26 @@ results):
   client keeps ticking through it), and rides the engine's snapshot, so a
   host handoff keeps it.
 - Quick reactions: a cheer, a laugh, a wow, fire or a nice one, from the
-  button under the pause button or the keys 1-5, pop as a bubble over the
+  button under the settings button or the keys 1-5, pop as a bubble over the
   sender's egg for everyone (over the nest once their egg is in). They
   ride the engine's journal as `ReactInput`s and change nothing in the
   game; the button keeps a short cooldown (`putt_reactions.dart`).
 - Mid-join: entering now puts you on the current hole's tee; the holes
   you missed score par.
+- Every egg starts on the tee point itself, stacked on the others (a
+  mid-join too): an egg that starts inside others passes through them
+  until they have parted once, so the stack never springs apart, even
+  when all of them putt off it at once.
+- Speed strips push an egg along them while it is over them, never in
+  one kick: enough to pay the friction and take an egg that crosses one
+  from rest to the strip's `speed`, and still `boostBeyond` (0.3) of that
+  push for an egg already going faster, whose cap rises to
+  `boostMaxSpeed` (38, over the usual 30) and comes back down with its
+  pace afterwards. Against a strip an egg feels only `boostAgainst`
+  (0.25) of the push, so a full-power putt gets across every shipped
+  strip head on and a soft one is turned back
+  (`unit_test/sunny_side_putt/courses/boost_strips_test.dart`); an egg
+  crossing one is bent along it a little, and none rests on one.
 - Eggs waiting to putt are ghosts: until an egg has putted on the hole,
   the others pass through it and it through them, so nobody's first putt
   (nor a cast's push) knocks a waiting egg off the tee. Two that met
@@ -56,6 +70,28 @@ results):
   a hole). All of it rides the world's snapshot. An egg at rest that
   another rolls into hears who did it in the cast feed ("Jonas knocked
   your egg!", or "You knocked Lou's egg").
+- Every roll ends. A bumper gives a bounce back with interest
+  (`bumperRestitution` 1.6), but only the first `livelyBounces` (8) of a
+  roll; after that, until the egg rests, every surface gives back at
+  most a rail's 0.7, so two bumpers facing each other (Pitchfork's
+  rubber rails) cannot ping-pong an egg for ever. And an egg slower than
+  `sleepSpeed` for `stillTicksToSettle` (120 ticks, a second) settles
+  wherever it is, a backstop for pulls that cancel out.
+
+### The nest
+
+The nest is a cup, not a spot to stop on (`core/physics.dart`). Over it
+(the egg's center inside its radius) the funnel pulls the egg toward the
+center at `cupPull` (16 units/s², over the rolling friction, so nothing
+rests on the lip) and drags `cupDrag` (8 units/s²) more pace off. The egg
+drops the moment it is slow enough for how centered it is: up to
+`captureSpeed` (3 units/s) right at the lip, rising in a straight line to
+`captureSpeedCentered` (9 units/s) at dead center. So a firm putt through
+the middle drops, a slow one that only reaches the edge drops, a lip hit
+at a medium pace curls in and drops or spins out bent toward the center,
+and only a really fast egg skips across. An egg in the air (off a kicker)
+flies over it. Nest Magnet pulls from 3.5 units out and, once the egg is
+over the cup, cuts its pace to the lip's limit, so it always drops.
 
 ### Course awards
 
@@ -96,10 +132,14 @@ pause in a live session, moves on from them.
 - **Barnyard Chaos** - casual, but everyone starts with two random
   power-ups and the mystery boxes come doubled.
 
+Casual and Barnyard Chaos start on the course the launcher picks in the
+launch options (a card per course, or "Surprise me" to draw one);
+a tournament draws its courses.
+
 ### Looks
 
 Each player picks the Easter band on their egg and a hat for the chick
-that hatches from it, in "Your egg" off the pause menu: the egg and the
+that hatches from it, in "Your egg" off the settings menu: the egg and the
 chick drawn as the green shows them, a row of patterns, a row of hats. The
 colour is not part of it: it comes with the seat, so eight eggs never
 share one. The pick is kept on the device like the volumes (the
@@ -318,6 +358,22 @@ course, each the bold line beside a longer, safer one:
   have it if it strays (the "?" in the chute is for whoever rolls it), and
   one too firm runs on past the nest into the water trough behind it.
 
+#### Previews
+
+The course cards (the launch options and casual's next-course vote) show
+the course's first hole from above: a PNG per hole in
+`rooster/assets/sunny_side_putt/previews/<hole id>.png`, 320x200, 10-25 KB
+each. They are drawn from the course data by `PuttHolePreviewPainter`
+(`putt_course_preview.dart`: the theme's turf in mown stripes, the relief
+lit from the top left, rough where no egg can roll, water, rails, the
+tee and the nest), with no GPU. After a course changes, redraw them all:
+
+    cd rooster && flutter test tools/gen_putt_previews_test.dart
+
+It clears the folder first. `unit_test/sunny_side_putt/ui/course_previews_test.dart`
+fails while a hole has no PNG; the card itself paints a missing one live.
+The painter's colours copy the private theme in `world3d/theme.dart`.
+
 ### Hills
 
 A hole can carry hills (`Hill` in `core/hole.dart`): mounds, ridges,
@@ -327,8 +383,14 @@ at both edges, so there is never a kink. The physics stays planar: an
 egg feels `slopeGravity` (24) times the grade downhill. A pull stronger
 than the rolling friction (7) rolls an under-hit egg back down; a
 ridge has to be putted over with pace; a dip gathers eggs toward its
-bottom. An egg pressed into a rail by a slope settles there instead of
-rattling. Since there is no height in the physics, a hill's reach must
+bottom. No egg rests on a slope: it rests only where the grade is
+under `flatGrade` (0.01) or a rail holds it against the slope. Slower
+than `slopeCreepSpeed` (1.5 units/s) on a slope, the rolling friction
+cancels at most `slopeCreepFriction` (half) of the slope's pull, so a
+gentle slope the friction would hold still trickles the egg down to
+the flat, and an egg swinging in a bowl with no flat bottom still loses
+pace and settles at the bottom. An egg pressed into a rail by a slope
+settles there instead of rattling. Since there is no height in the physics, a hill's reach must
 stay clear of walls, water, the tee and the nest's rim, unless its
 plateau carries the nest. The course test checks every hill for this:
 0.3 units off every rail, rock, pond, speed strip, rabbit hole, "?"
@@ -347,8 +409,9 @@ from a foot on the green's level to a top on a terrace's edge, rising
 along its axis on a smooth step (`height * t^2 * (3 - 2t)`, level at both
 ends) and level across. The ground's height takes the highest tier under
 a point; a ramp's gradient joins the hills' in the slope pull, so an egg
-too slow for the climb rolls back down (near a ramp's ends, where the
-pull is under the rolling friction, it can rest).
+too slow for the climb rolls back down, all the way to the flat at its
+foot (or on over its top onto the terrace): like a hill's, a ramp's
+slope never holds an egg.
 
 The physics stays planar: what a step does comes from what covers its
 edges. A drop is a `WallSegment.ledge`, a one-way edge whose high side is
@@ -374,7 +437,7 @@ tier edges, high side up all along. Ponds, rabbit holes and silos keep
 terrace's flat with 0.3 of room or keeps off; a rock or a bumper stands
 wholly on one level (off the tiers, or on a terrace's flat, where it may
 stand against a step's face), never across a step; hills keep their reach
-0.3 off; the tee, a full table's spawn ring and every hen's walk stay on one
+0.3 off; the tee and every hen's walk stay on one
 level, an egg's radius and 0.3 clear of every tier's outline; the nest
 sits on a terrace with 0.6 of flat round its rim or half a unit clear.
 
@@ -416,7 +479,7 @@ The course test checks every kicker: its shape in range (height 0.3 to
 a deck that never bulges); its deck on one level, on dry turf inside the
 bounds, 0.3 off every rail, rock, pond, hill, step, ramp, speed strip,
 rabbit hole, "?" box and silo's reach, off the nest's rim, a full table's
-spawn ring and every hen's walk; a run-up two units before its foot that
+spawn point and every hen's walk; a run-up two units before its foot that
 an egg can roll to from the tee (stopped by rails and water, carried
 through the rabbit holes, down a ledge but never up one), with a straight
 run up the deck; and a landing zone: thrown off the lip at every speed
@@ -478,9 +541,8 @@ and black, barn red and cream; a little of its own light, more at dusk).
 It stands on the meadow just off the table, as near the tee as the table
 allows, its board leaning back and turned between the close camera and
 the overview: never on the camera's side, never within 70 degrees of
-where the close camera at the tee looks from (`PuttCameraRig.defaultYaw`,
-the one view a hole keeps), clear of the host and the corners' lanterns
-(`_CourseKit.teeSignSpot`).
+where the close camera at the tee looks from (`PuttCameraRig.yawToward`),
+clear of the host and the corners' lanterns (`_CourseKit.teeSignSpot`).
 Off the table, no egg ever rolls through it; it is decoration only. A
 hole with no number has no sign.
 
@@ -513,12 +575,16 @@ toes merged: the host's body (legs and tail in it), his two wings and
 his head, each with its ink; a hen's body, head and two legs, each with
 its ink.
 
-Whenever the host's head would stand under the HUD's top bar or corner
-buttons, or he stands right in front of the camera, he pops out of the
-way, a quick shrink and fade over 0.15 s (and so does a hen that walks
-into the camera's face: all there or not at all, never a half-seen
-ghost), every feather with him: his materials are made transparent once
-at build, so a fade only moves a uniform.
+The host never leaves the scene: he is scenery, and the HUD's panels are
+opaque, so he simply stands behind them. (He used to pop out of the way
+whenever his head landed under the HUD's top band or the camera came
+"near" him - a share of the camera's own distance, which the whole-hole
+view made true of everything - and both rules were crossed and
+re-crossed by every camera glide, so he flickered in and out of the farm
+all through a hole.) A hen that walks into the camera's face still pops
+out of the way, a quick shrink and fade over 0.15 s, all there or not at
+all, never a half-seen ghost: her materials are made transparent once at
+build, so a fade only moves a uniform.
 
 Ground the walls close off from the tee (a flood fill stopped by walls,
 carried through rabbit holes) is planted as the theme's garden beds
@@ -606,8 +672,18 @@ under the HUD's widgets, and show the player's picture alone while their
 egg draws under 26 pixels tall (the opening's wide shot, the whole-hole
 view). An egg standing in front of the viewer's resting egg on the
 screen fades to a third of itself until the viewer putts (the close
-camera behind a fresh egg looks along the tee's ring). The nest's cup
-falls from a lit wall to a deep brown floor with straw lying on it; the
+camera behind a fresh egg looks along the tee's ring). The nest is a
+cup sunk into the green: a dark opening flush with the turf, a wall
+falling from lit earth to near black, a floor with straw lying on it, a
+dark ring of turf and a dish of shade round the rim, and a low ring of
+straw lining it. The turf is one mesh, not cut: the cup's inside is drawn
+first, then a colourless disc at the opening writes the turf's depth
+(lifted 0.005 and pulled nearer by polygon offset), so the turf drawn after
+it skips the opening, on the web as on desktop. A holed egg slides to the
+middle and falls below the opening in about 0.3 s; from then on its shell
+and outline draw opaque with the cup's inside, before that disc (which
+would cut it at the turf line), as the chick rising out of the cup always
+does; the
 confetti crown of the viewer's own sink keeps near the nest, and paper
 that lands fades away. The power-ups' marks on the green - the
 targeting rings and push arrows, the wind's streaks, the swap's violet -
@@ -621,6 +697,35 @@ half the device's ratio (0.75 on a one-to-one screen) and never back up
 low tier: the sun's shadow map from 2048 to 1024 pixels a side, and the
 ink outlines off the walkers, the host and the scenery (the eggs, the
 aim and the casts' characters keep theirs).
+
+On desktop the renderer draws straight into the one texture Flutter
+shows, with no second buffer, so the vendored viewer finishes each frame
+(`glFinish`) before telling Flutter it is there: with a flush alone the
+compositor could read a frame still being drawn, a flicker. The shadow
+pass draws first on desktop as on the web (the renderer binds the
+texture back after it), so no frame reads a stale or missing shadow map.
+A resize draws a frame at once into the resized surface instead of
+showing it empty until the next tick. On Linux and Android the surface
+is never resized (`PuttThreeSurface.surfaceResizes`): Linux's
+flutter_angle registers a new texture under an id the view never
+learns, and the view went blank. There the first pixels stretch to the
+new size and the governor only lowers the quality tier.
+
+A hole builds a step a frame (`PuttWorld3D.buildHoleInSteps`), never in
+one go: built at once, a hole held the UI isolate for 1 to 2.3 s in a
+debug run. The table's shape, the lawn's texture and the turf's
+geometry are worked out on another isolate (`compute`; on the web, in
+place as one step), then the course's pieces and the farm's
+(`_Scenery.stepNames`) follow, one per frame, the last step compiling
+whatever programs are still missing. Meanwhile the view shows "Setting
+up the hole" with an egg rocking and a bar filling (steps done of all),
+over the half-built green and its gestures; the renderer keeps drawing
+behind it, so each step's meshes upload on the frame after. The
+opening's camera clock and the hole's banner wait for the build, and
+the resolution governor judges none of its frames. Each build logs its
+cost per step (`Log.d`, `[Sunny Side Putt] hole ... built in`). The
+tests still build at once (`buildHole`); `stepped_build_test.dart`
+checks both ways make the same scene.
 
 At the Barn's dusk a cool rim light from behind the green edges what the
 low sun misses (the light is always in the scene, at nothing by day, so
@@ -661,8 +766,8 @@ world builds those with `_gridPlane`.
   reaches would fire nothing), and Space or Enter putts. The first key
   starts the aim from the egg toward the nest at half power. The keys
   hold the same aim a drag does (`AimController.hold`, `turnBy`,
-  `stepPower`), so the arrow, the guide, the resting mark and a kicker's
-  landing ring follow every press, and the putt goes out through the
+  `stepPower`), so the arrow, the guide and a kicker's landing ring
+  follow every press, and the putt goes out through the
   same release, sway included: a hard putt held past 0.8 seconds sways
   like a held pull. Esc drops the aim unspent (after an armed power-up
   and the carton's highlight, before the menus). Tab and Shift+Tab move
@@ -677,27 +782,25 @@ world builds those with `_gridPlane`.
   egg ready), a coach shows the gesture over the egg: a hand presses,
   pulls back away from the nest and lets go while a ghost arrow grows
   (`putt_coach.dart`).
-- The camera opens with a low sweep over the nest and lands on the hole's
-  play framing, which is chosen once and then held for the whole hole:
-  the egg dead centre of the part of the screen the HUD leaves free, at a
-  zoom that keeps it a readable size (about 40 px tall), with the nest in
-  the frame too when the hole is short enough for both
-  (`PuttCameraRig.playFraming`). From then on the camera only pans with
-  the egg - the egg keeps the same place in the frame from the tee to the
-  nest, and no putt ever zooms, turns or re-frames it. That is how Putt
-  Party reads: your ball is the middle of the picture and the frame never
-  moves on its own. On a long hole the nest leaves the free view rather
-  than shrinking the egg to a dot. A drag freezes the frame outright, the
-  opening sweep included, so nothing slides out from under a pull. C
-  toggles the whole-hole view, a right drag orbits, the wheel or a pinch
-  zooms (and the player's zoom then holds for the hole).
-  A marker on the edge of the free view - the flag with the hole's number
-  - points at the nest while it is off the screen, behind the camera or
-  under one of the HUD's widgets, never beside a nest in sight
-  (`putt_nest_marker.dart`). While the viewer aims with the nest out of
-  sight, a small map of the hole under the course's chip shows the walls,
-  the water, the nest, the eggs and where the arrow points, turned with
-  the camera so that ahead is up (`putt_mini_map.dart`).
+- The camera opens with a low sweep over the nest, then frames the egg
+  and the nest inside the part of the screen the HUD leaves free (the
+  points are projected through the camera the glide ends at) and
+  follows the egg; C toggles the whole-hole view, a right drag orbits,
+  the wheel or a pinch zooms. It is always on the viewer's own egg, as
+  in Putt Party: once the egg is in, the camera keeps the nest it went
+  in, and another player's putt never takes it. A spectator, with no egg
+  of their own, watches the field instead - the egg rolling, else the
+  nearest, kept until another putts or it drops in. At rest the frame
+  comes no farther out than keeps my egg 30 pixels tall: a nest too far
+  for that gives way to the stretch toward it (the egg low in the
+  frame), and a marker on the edge of the free view - the flag with the
+  hole's number - points at the nest while it is off the screen, behind
+  the camera or under one of the HUD's widgets, never beside a nest in
+  sight (`putt_nest_marker.dart`).
+  While the viewer aims with the nest out of sight, a small map of the
+  hole under the course's chip shows the walls, the water, the nest, the
+  eggs and where the arrow points, turned with the camera so that ahead
+  is up (`putt_mini_map.dart`).
 - With the system's reduced motion on, the hole opens on its play
   framing without the sweep, and the camera never shakes nor punches in.
 
@@ -705,20 +808,33 @@ world builds those with `_gridPlane`.
 
 Every sound is synthesized by `rooster/tools/gen_game_audio.dart` (the
 instruments, the score and the effects in `tools/game_audio/`) with fixed
-seeds: no samples, nothing licensed, and a re-run writes the same bytes.
-From `rooster/`, with `ffmpeg` (libmp3lame) on the PATH:
-`dart run tools/gen_game_audio.dart`.
+seeds, and a re-run writes the same bytes. One sample: the rooster's crow
+(`crow.mp3`, `victory.mp3` and the crow in the music's bridge) is the
+soundboard's CC0 "Rooster Crowing" by LoafDV
+([freesound 385820](https://freesound.org/s/385820/), credited in
+`rooster/assets/soundboard/CREDITS.md`), decoded by `roosterCrow` in
+`tools/game_audio/instruments.dart`. From `rooster/`, with `ffmpeg`
+(libmp3lame) on the PATH: `dart run tools/gen_game_audio.dart`.
 
-- The music is a farm band's 112-second loop in G at 120 bpm: the tin
-  whistle's tune over banjo rolls, a boom-chick guitar, a two-step upright
-  bass, brushes and an egg shaker (A, then A' with the fiddle in thirds);
-  the banjo's B over clip-clop wood blocks; B' on the fiddle doubled by a
-  chiptune pulse, ending in a stop where the hens cluck; a bridge in E
-  minor with chip arpeggios and a stop for the rooster's crow; the banjo's
-  break; the reprise and a stop-time tag. The strings are Karplus-Strong,
-  the whistle and the fiddle monophonic lines with vibrato, all in a small
-  stereo room. It ships as a 44.1 kHz stereo MP3 (about 2 MB), the one
-  compressed format every platform's player decodes. The samples wrap
+- The music is a bluegrass band's 112-second country shuffle in G at 120
+  bpm, all I-IV-V (the I going to I7 on its way to the IV; the bridge runs
+  C, G, A7, D7): a flatpicked steel-string guitar's tune over banjo
+  forward rolls, the upright bass's boom on root and fifth (walking at the
+  ends of phrases) under the rhythm guitar's boom-chick, a brushed train
+  beat (A, then A' with the pedal steel's swelled chords and the fiddle in
+  thirds); the banjo's B on the IV, the harmonica answering; B' on the
+  fiddle with double stops, ending in a stop where the hens cluck; a bridge
+  where the pedal steel plays on two strings, sliding up a whole step into
+  each third, with a stop for the rooster's crow; the banjo's break over
+  the fiddle's double stops; the reprise and a stop-time tag. The tunes use
+  the whole major scale with chord tones on the strong beats, the blue
+  third bent into the major and the flat seventh over G7 (a pentatonic tune
+  on a bright plucked string, with long slides and wood blocks, sounded
+  East Asian). The strings are Karplus-Strong (the guitars through a
+  flat-top's body resonances), the steel, the harmonica and the fiddle
+  monophonic lines with vibrato, all in a small stereo room. It ships as
+  a 44.1 kHz stereo MP3 (about 2 MB), the one compressed format every
+  platform's player decodes. The samples wrap
   seamlessly, and the file starts inside the tag's stop, so the gap most
   players leave when they loop (they seek back to the start) falls where
   the band is silent.
@@ -754,11 +870,11 @@ From `rooster/`, with `ffmpeg` (libmp3lame) on the PATH:
   `three_js` (`putt_world3d.dart`, its builders under `world3d/`) under
   the Flutter HUD (`putt_hud.dart`: the hole bar - hole, par, my strokes,
   the clock turning comb red through the last fifteen seconds - with the
-  course's holes as dots under it, the course chip, the camera and pause
+  course's holes as dots under it, the course chip, the camera and settings
   buttons, banners by kind, the scorecard, the hint line, the power-up
   carton and its targeting, and the results and match-over cards), the
   cast feed under the top bar (`putt_cast_feed.dart`), the
-  name tags, pause/settings/vote menus, the spectator strip, and the
+  name tags, settings/vote menus, the spectator strip, and the
   audio (see Sound; volume per bus in the settings). The world only reads the engine's snapshots; the physics
   stays planar.
 - `putt_demo.dart` - the demo mode (`--dart-define=PUTT_DEMO=true`): the
@@ -772,6 +888,14 @@ From `rooster/`, with `ffmpeg` (libmp3lame) on the PATH:
 - `putt_session.dart` - the live-session bridge: the host's engine is
   the truth; guests feed their own engine with the accepted-move
   journal and resnapshot, so play is smooth without a game server.
+  The session's config carries `puttPhysicsVersion` and a hash of every
+  course the build ships: a guest whose own differ does not simulate the
+  match, the stage says "Update Rooster to play" (or "The host needs to
+  update Rooster to play" when the host's version is the older), and it
+  watches as a spectator: never seated, never elected host (a host that
+  finds itself outdated leaves the seat for the others to re-elect).
+  Bump `puttPhysicsVersion` on any change to the physics or to a
+  course's data.
 
 ## Testing
 

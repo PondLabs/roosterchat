@@ -11,6 +11,7 @@ import 'package:rooster/client/components/petname/petname_component.dart';
 import 'package:rooster/client/components/profile/profile_component.dart';
 import 'package:rooster/client/components/push_notification/notification_content.dart';
 import 'package:rooster/client/components/push_notification/notification_manager.dart';
+import 'package:rooster/client/components/component.dart';
 import 'package:rooster/client/components/room_component.dart';
 import 'package:rooster/client/components/user_color/user_color_component.dart';
 import 'package:rooster/client/matrix/components/calendar_room_component/matrix_calendar_room_component.dart';
@@ -829,6 +830,9 @@ class MatrixRoom extends Room {
 
   @override
   Future<void> close() async {
+    for (final component in _components) {
+      if (component is NeedsClose) (component as NeedsClose).close();
+    }
     for (final subscription in _subscriptions) {
       await subscription.cancel();
     }

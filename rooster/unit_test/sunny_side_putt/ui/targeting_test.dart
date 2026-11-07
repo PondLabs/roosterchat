@@ -329,7 +329,8 @@ void main() {
 
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pump();
-      expect(match.paused, isTrue);
+      expect(find.text('Game settings'), findsOneWidget);
+      expect(match.paused, isFalse, reason: 'with others the hole runs on');
     });
 
     testWidgets('armed, a press on the green casts instead of aiming',
@@ -356,7 +357,8 @@ void main() {
       expect(match.myStrokesThisHole, 0, reason: 'and no stroke was taken');
     });
 
-    testWidgets('pausing puts an armed power-up back, unspent', (tester) async {
+    testWidgets('the menu puts an armed power-up back, unspent',
+        (tester) async {
       final match = effectsMatch(others: const ['p2']);
       match.localPlayer!.inventory.add('rabbit_hole');
       late SunnySidePuttGame game;
@@ -368,9 +370,9 @@ void main() {
       await tester.pump();
       expect(game.targeting.armed, 'rabbit_hole');
 
-      await tester.tap(find.byKey(const Key('putt-pause')));
+      await tester.tap(find.byKey(const Key('putt-settings')));
       await tester.pump();
-      expect(match.paused, isTrue);
+      expect(find.text('Game settings'), findsOneWidget);
       expect(game.targeting.isActive, isFalse);
       expect(match.myInventory, ['rabbit_hole']);
     });

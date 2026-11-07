@@ -28,6 +28,12 @@ int _powerHex(double power) {
   return stops.last.$2;
 }
 
+/// The aim arrow's shaft length (world units at the standard egg) for
+/// [power]: none at zero (a pull that moves nothing), short for a tap,
+/// growing with the power to a modest length flat out.
+double puttArrowLength(double power) =>
+    power <= 0 ? 0 : 0.35 + power.clamp(0.0, 1.0) * 2.25;
+
 class _PuttAimView3D {
   _PuttAimView3D({required double eggRadius}) : _eggRadius = eggRadius {
     group = tjs.Group()
@@ -108,36 +114,6 @@ class _PuttAimView3D {
         ..position.y = 0.055
         ..renderOrder = 6);
     group.add(_bounceMark);
-
-    // Where a soft putt stops: an egg's footprint, drawn over the arrow.
-    _restMark = tjs.Group()
-      ..name = 'aim-rest'
-      ..visible = false;
-    _restMark
-      ..add(tjs.Mesh(
-        tjg.CircleGeometry(radius: eggRadius * 1.25, segments: 28),
-        _unlit(_hexOf(PuttPalette.ink),
-            opacity: 0.16, depthWrite: false, depthTest: false),
-      )
-        ..rotation.x = -math.pi / 2
-        ..position.y = 0.05
-        ..renderOrder = 8)
-      ..add(tjs.Mesh(
-        tjg.RingGeometry(eggRadius * 1.08, eggRadius * 1.62, 32, 1),
-        _unlit(_hexOf(PuttPalette.ink),
-            opacity: 0.5, depthWrite: false, depthTest: false),
-      )
-        ..rotation.x = -math.pi / 2
-        ..position.y = 0.055
-        ..renderOrder = 8)
-      ..add(tjs.Mesh(
-        tjg.RingGeometry(eggRadius * 1.2, eggRadius * 1.48, 32, 1),
-        _unlit(0xFFF8EE, opacity: 0.95, depthWrite: false, depthTest: false),
-      )
-        ..rotation.x = -math.pi / 2
-        ..position.y = 0.06
-        ..renderOrder = 9);
-    group.add(_restMark);
 
     // Where a flight off a kicker comes down: a yolk ring in an ink one in
     // a soft cream halo, a size up on the rail's, drawn over everything (a
@@ -226,10 +202,18 @@ class _PuttAimView3D {
   static const int _traceCount = 90;
   static const double _traceRadius = 0.17;
   static const double _traceInkRadius = 0.24;
+  // Pulled nearer than the nest's opening (which writes the turf's depth
+  // over the cup), so the trace over a cup is not cut by it seen low.
   final tjs.MeshBasicMaterial _traceMaterial =
-      _unlit(0xFFF8EE, opacity: 0.95, depthWrite: false);
+      _unlit(0xFFF8EE, opacity: 0.95, depthWrite: false)
+        ..polygonOffset = true
+        ..polygonOffsetFactor = -2
+        ..polygonOffsetUnits = -2;
   final tjs.MeshBasicMaterial _traceInkMaterial =
-      _unlit(_hexOf(PuttPalette.ink), opacity: 0.7, depthWrite: false);
+      _unlit(_hexOf(PuttPalette.ink), opacity: 0.7, depthWrite: false)
+        ..polygonOffset = true
+        ..polygonOffsetFactor = -2
+        ..polygonOffsetUnits = -2;
   late final tjs.Mesh _traceFill;
   late final tjs.Mesh _traceInk;
   int _traceHex = -1;
@@ -253,7 +237,6 @@ class _PuttAimView3D {
 
   late final tjs.Mesh _core;
   late final tjs.Group _bounceMark;
-  late final tjs.Group _restMark;
   late final tjs.Group _landMark;
   late final tjs.MeshBasicMaterial _arrowMaterial;
   late final tjs.MeshBasicMaterial _outlineMaterial;
@@ -391,21 +374,11 @@ class _PuttAimView3D {
     }
 
     final scale = aim.eggRadius / _eggRadius;
-    var length = (1.4 + aim.power * 5.2) * scale;
+    final length = puttArrowLength(aim.power) * scale;
+    // A pull that would not move the egg draws no arrow (its release is a
+    // cancel, not a putt).
+    _turned.visible = length > 0;
     final start = aim.eggRadius * 2.35;
-    // A soft putt's arrow ends where the egg stops, not past it, and the
-    // spot is marked over it.
-    final rest = aim.rest;
-    _restMark.visible = rest != null;
-    if (rest != null) {
-      length = math.min(
-          length, math.max(0.3, _pathLength(aim.preview) - start - 1.15));
-      final breathe = 1 + 0.06 * math.sin(time * 4.2);
-      _restMark
-        ..position.setValues(rest.x - aim.origin.x, terrain.at(rest) - floor,
-            rest.y - aim.origin.y)
-        ..scale.setValues(scale * breathe, 1, scale * breathe);
-    }
     shaft.scale.x = length;
     shaft.position.x = start + length / 2;
     _core.scale.x = math.max(length - 0.3, 0.05);
@@ -444,14 +417,18 @@ class _PuttAimView3D {
       group.add(fill);
       _fill = fill;
     }
+    _fill?.visible = length > 0;
 
     _syncTrace(aim, terrain, floor);
 
-    // The dotted guide along the predicted roll, from the arrow's tip on,
-    // fading toward its end; a ring where it first meets a rail, another
-    // where a flight comes down.
-    final points = aim.preview;
+    // The dotted guide: a few egg lengths of the predicted roll past the
+    // arrow's tip, fading out - the line, never where the egg stops. A
+    // flight off a kicker shows whole, to where it comes down. A ring
+    // where the guide meets a rail, another where a flight lands.
     final airs = aim.previewAir;
+    final points = airs.isEmpty
+        ? _trimmed(aim.preview, tip + guideHintLength * scale)
+        : aim.preview;
     var shown = 0;
     _bounceMark.visible = false;
     final bounce = _firstBounce(points);
@@ -474,8 +451,7 @@ class _PuttAimView3D {
       const spacing = 0.62;
       var carried = spacing * 0.6;
       // The dots trail off over the guide's own length: its end reads as
-      // the guide giving out, not as a wall (a soft putt's end has its
-      // resting mark instead).
+      // the guide giving out, not as a wall.
       final expected = math.max(1.0, (_pathLength(points) - tip) / spacing);
       for (var i = 1; i < points.length && shown < _dotCount; i++) {
         final a = points[i - 1];
@@ -496,10 +472,9 @@ class _PuttAimView3D {
               p.x - aim.origin.x, rise - floor + 0.05, p.y - aim.origin.y);
           final left =
               math.pow((1 - shown / expected).clamp(0.0, 1.0), 0.7).toDouble();
-          final fade = rest != null ? math.max(left, 0.6) : left;
-          dot.children[0].material?.opacity = 0.12 + 0.73 * fade;
-          dot.children[1].material?.opacity = 0.18 + 0.82 * fade;
-          final s = 0.75 + 0.55 * fade;
+          dot.children[0].material?.opacity = 0.12 + 0.73 * left;
+          dot.children[1].material?.opacity = 0.18 + 0.82 * left;
+          final s = 0.75 + 0.55 * left;
           dot.scale.setValues(s, 1, s);
           shown++;
         }
@@ -525,6 +500,26 @@ class _PuttAimView3D {
     final a = from ?? terrain.at(points[i - 1]);
     final b = to ?? terrain.at(points[i]);
     return math.max(ground, a + (b - a) * u.clamp(0.0, 1.0));
+  }
+
+  /// How far the guide runs past the arrow's tip on the ground (world
+  /// units at the standard egg): some three egg lengths.
+  static const double guideHintLength = 2.8;
+
+  /// [points] cut at [length] along the path.
+  static List<Vec2> _trimmed(List<Vec2> points, double length) {
+    var left = length;
+    for (var i = 1; i < points.length; i++) {
+      final step = points[i - 1].distanceTo(points[i]);
+      if (step >= left) {
+        return [
+          ...points.take(i),
+          points[i - 1] + (points[i] - points[i - 1]) * (left / step),
+        ];
+      }
+      left -= step;
+    }
+    return points;
   }
 
   /// How far the guide runs along its points.

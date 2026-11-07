@@ -1,8 +1,7 @@
-// The menus of Sunny Side Putt: pause (with the leave double-check), "Your
-// egg" (the band pattern for my egg and the hat for my chick), the in-game
-// settings sheet with the music and SFX volume sliders persisted to the
-// local preferences, and the course-vote sheet casual shows after a course
-// ends.
+// The menus of Sunny Side Putt: settings (the music and SFX volume sliders
+// persisted to the local preferences, and leave with its double-check),
+// "Your egg" (the band pattern for my egg and the hat for my chick), and
+// the course-vote sheet casual shows after a course ends.
 //
 // The sliders write their levels to SharedPreferences through the same
 // `DoublePreference` objects `putt_audio.dart` reads its buses from, so a
@@ -23,68 +22,90 @@ import 'package:rooster/utils/common_strings.dart';
 
 import 'putt_art.dart';
 import 'putt_audio.dart';
+import 'putt_course_preview.dart';
 import 'putt_look.dart';
 import 'putt_match.dart';
 
-// ---- the pause menu --------------------------------------------------------------------
+// ---- the settings menu -----------------------------------------------------------------
 
-/// The pause card: resume, my egg's look, settings, leave, and the rooster
-/// host asking (with his eyes) whether you really meant that last one.
-class PuttPauseMenu extends StatelessWidget {
+/// The settings card the HUD's gear (or Esc) opens: music and SFX volume,
+/// my egg's look, leave, and the rooster host asking (with his eyes)
+/// whether you really meant that last one. The sliders update their bus
+/// live while dragging and save once, on release. The view hands in the
+/// audio service's buses (silent doubles when the view runs muted).
+class PuttSettingsMenu extends StatefulWidget {
   final PuttMatch match;
-  final VoidCallback onOpenSettings;
-  final VoidCallback onResume;
+  final PuttBuses buses;
+  final VoidCallback onClose;
   final VoidCallback onLeave;
 
   /// Opens "Your egg"; no button when left out.
   final VoidCallback? onOpenLook;
 
-  const PuttPauseMenu({
+  const PuttSettingsMenu({
     super.key,
     required this.match,
-    required this.onOpenSettings,
-    required this.onResume,
+    required this.buses,
+    required this.onClose,
     required this.onLeave,
     this.onOpenLook,
   });
 
   @override
+  State<PuttSettingsMenu> createState() => _PuttSettingsMenuState();
+}
+
+class _PuttSettingsMenuState extends State<PuttSettingsMenu> {
+  @override
   Widget build(BuildContext context) {
+    final buses = widget.buses;
     return _MenuSheet(
-      title: labelPuttPaused(),
+      title: labelPuttGameSettings(),
+      scrollable: true,
       children: [
         const SizedBox(height: 6),
         // The brand's own mark: the rooster in his headphones.
         Image.asset(
           'assets/images/app_icon/app_icon_transparent_cropped.png',
           key: const Key('putt-menu-mark'),
-          width: 96,
-          height: 96,
+          width: 72,
+          height: 72,
           filterQuality: FilterQuality.medium,
         ),
         const SizedBox(height: 6),
-        _MenuButton(
-          key: const Key('putt-menu-resume'),
-          label: labelPuttResume(),
-          onPressed: onResume,
-          filled: true,
+        _VolumeSlider(
+          key: const Key('putt-music-volume'),
+          label: labelPuttMusicVolume(),
+          value: buses.musicVolume,
+          onChanged: (v) => setState(() => buses.musicVolume = v),
+          onCommit: (v) => puttMusicVolume.set(v),
         ),
-        if (onOpenLook != null)
+        const SizedBox(height: 8),
+        _VolumeSlider(
+          key: const Key('putt-sfx-volume'),
+          label: labelPuttSfxVolume(),
+          value: buses.sfxVolume,
+          onChanged: (v) => setState(() => buses.sfxVolume = v),
+          onCommit: (v) => puttSfxVolume.set(v),
+        ),
+        const SizedBox(height: 8),
+        if (widget.onOpenLook != null)
           _MenuButton(
             key: const Key('putt-menu-look'),
             label: labelPuttYourEgg(),
-            onPressed: onOpenLook!,
+            onPressed: widget.onOpenLook!,
           ),
-        _MenuButton(
-          key: const Key('putt-menu-settings'),
-          label: labelPuttSettings(),
-          onPressed: onOpenSettings,
-        ),
         _MenuButton(
           key: const Key('putt-menu-leave'),
           label: labelPuttLeave(),
-          onPressed: onLeave,
+          onPressed: widget.onLeave,
           destructive: true,
+        ),
+        _MenuButton(
+          key: const Key('putt-menu-close'),
+          label: labelPuttDone(),
+          onPressed: widget.onClose,
+          filled: true,
         ),
       ],
     );
@@ -418,58 +439,6 @@ String puttHatName(HatchlingHat hat) => switch (hat) {
 
 // ---- settings ----------------------------------------------------------------------------
 
-/// The settings sheet: music volume and SFX volume, persisted. The sliders
-/// update their bus live while dragging and save once, on release. The
-/// view hands in the audio service's buses (silent doubles when the view
-/// runs muted); tests hand in whatever they need to watch.
-class PuttSettingsSheet extends StatefulWidget {
-  final PuttBuses buses;
-  final VoidCallback onClose;
-
-  const PuttSettingsSheet({
-    super.key,
-    required this.buses,
-    required this.onClose,
-  });
-
-  @override
-  State<PuttSettingsSheet> createState() => _PuttSettingsSheetState();
-}
-
-class _PuttSettingsSheetState extends State<PuttSettingsSheet> {
-  @override
-  Widget build(BuildContext context) {
-    final buses = widget.buses;
-    return _MenuSheet(
-      title: labelPuttGameSettings(),
-      children: [
-        _VolumeSlider(
-          key: const Key('putt-music-volume'),
-          label: labelPuttMusicVolume(),
-          value: buses.musicVolume,
-          onChanged: (v) => setState(() => buses.musicVolume = v),
-          onCommit: (v) => puttMusicVolume.set(v),
-        ),
-        const SizedBox(height: 8),
-        _VolumeSlider(
-          key: const Key('putt-sfx-volume'),
-          label: labelPuttSfxVolume(),
-          value: buses.sfxVolume,
-          onChanged: (v) => setState(() => buses.sfxVolume = v),
-          onCommit: (v) => puttSfxVolume.set(v),
-        ),
-        const SizedBox(height: 12),
-        _MenuButton(
-          key: const Key('putt-settings-close'),
-          label: labelPuttDone(),
-          onPressed: widget.onClose,
-          filled: true,
-        ),
-      ],
-    );
-  }
-}
-
 class _VolumeSlider extends StatelessWidget {
   final String label;
   final double value;
@@ -568,6 +537,11 @@ class _CourseCard extends StatelessWidget {
       ),
       child: Row(
         children: [
+          if (course.holes.isNotEmpty) ...[
+            SizedBox(
+                width: 96, child: PuttHolePreview(hole: course.holes.first)),
+            const SizedBox(width: 10),
+          ],
           Expanded(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -629,7 +603,7 @@ class _MenuSheet extends StatelessWidget {
         ...children,
       ],
     );
-    // The scrim eats the drags a paused game must not hear.
+    // The scrim eats the drags the green under the menu must not hear.
     return Container(
       color: PuttPalette.ink.withValues(alpha: 0.45),
       alignment: Alignment.center,
@@ -708,16 +682,6 @@ const TextStyle _menuLabel = TextStyle(
 
 // ---- strings ---------------------------------------------------------------------------------
 
-String labelPuttPaused() => Intl.message("Paused",
-    name: "labelPuttPaused", desc: "Title of the pause menu");
-
-String labelPuttResume() => Intl.message("Back to the green",
-    name: "labelPuttResume", desc: "Button that unpauses the game");
-
-String labelPuttSettings() => Intl.message("Settings",
-    name: "labelPuttSettings",
-    desc: "Button that opens the game's settings (the volume sliders)");
-
 String labelPuttLeave() => Intl.message("Leave game",
     name: "labelPuttLeave",
     desc: "Button that leaves the match; the round keeps going without "
@@ -741,7 +705,7 @@ String labelPuttStay() => Intl.message("Stay",
 String labelPuttYourEgg() => Intl.message("Your egg",
     name: "labelPuttYourEgg",
     desc: "Title of the sheet where a player picks the pattern on their egg "
-        "and the hat on their chick, and the pause menu's button that opens "
+        "and the hat on their chick, and the settings menu's button that opens "
         "it");
 
 String labelPuttLookPattern(String pattern) => Intl.message("Pattern: $pattern",
@@ -813,7 +777,8 @@ String labelPuttHatDaisy() => Intl.message("Daisy",
     desc: "A hat for the chick: a daisy (the flower) tucked on its head");
 
 String labelPuttGameSettings() => Intl.message("Game settings",
-    name: "labelPuttGameSettings", desc: "Title of the settings sheet");
+    name: "labelPuttGameSettings",
+    desc: "Title of the settings menu (the volume sliders, your egg, leave)");
 
 String labelPuttMusicVolume() => Intl.message("Music volume",
     name: "labelPuttMusicVolume",
@@ -824,7 +789,7 @@ String labelPuttSfxVolume() => Intl.message("SFX volume",
     desc: "Slider: how loud the game's sound effects play");
 
 String labelPuttDone() => Intl.message("Done",
-    name: "labelPuttDone", desc: "Button that closes the settings sheet");
+    name: "labelPuttDone", desc: "Button that closes the settings menu");
 
 String labelPuttChooseNextCourse() => Intl.message("Choose the next course",
     name: "labelPuttChooseNextCourse",

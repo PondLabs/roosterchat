@@ -11,6 +11,7 @@ import 'package:flame/game.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_match.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/sunny_side_putt_game.dart';
+import 'package:rooster/ui/organisms/sunny_side_putt/putt_world3d.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/stub_courses.dart';
 
 void main() {
@@ -45,6 +46,36 @@ void main() {
     expect(match.myStrokesThisHole, 1);
   });
 
+  testWidgets('a resize onto a new hole fits the camera without throwing',
+      (tester) async {
+    // The GL surface is what puts the loading card up (the headless runner
+    // builds the hole in one go), so the surface is asked for here and
+    // fails over to the headless ticker, as on a machine without GL.
+    PuttThreeSurface.debugGpuSupported = true;
+    addTearDown(() => PuttThreeSurface.debugGpuSupported = null);
+    final course = stubCourse(id: 'stub-course', holeCount: 3);
+    final match = PuttMatch(
+      config: PuttConfig(
+        mode: GameMode.casual,
+        courses: [course],
+        catalog: {'stub-course': course},
+        seed: 31337,
+      ),
+    );
+    await tester.pumpWidget(MaterialApp(home: SunnySidePuttView(match: match)));
+    await tester.pump(const Duration(milliseconds: 50));
+    // The hole arrives and the surface resizes in the same frame: the game
+    // fits the camera from its own layout, and the card's notifier is set
+    // after that build, never during it (its builder would be marked dirty
+    // mid-build and the frame would throw).
+    match.boot();
+    await tester.binding.setSurfaceSize(const Size(900, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(match.hole, isNotNull);
+  });
+
   testWidgets('a paused match does not tick', (tester) async {
     final match = PuttMatch.solo();
     await tester.pumpWidget(MaterialApp(home: SunnySidePuttView(match: match)));
@@ -53,28 +84,49 @@ void main() {
     final before = match.secondsRemaining;
     await tester.pump(const Duration(seconds: 1));
     expect(match.secondsRemaining, before,
-        reason: 'the pause menu freezes the hole clock');
+        reason: 'the settings menu freezes the hole clock');
   });
 
-  testWidgets('the pause button opens the pause menu and resumes',
+  testWidgets('the gear opens the settings menu and Done closes it',
       (tester) async {
     final match = PuttMatch.solo();
     await tester.pumpWidget(MaterialApp(home: SunnySidePuttView(match: match)));
     await tester.pump(const Duration(milliseconds: 50));
 
-    await tester.tap(find.byKey(const Key('putt-pause')));
+    await tester.tap(find.byKey(const Key('putt-settings')));
     await tester.pump();
-    expect(match.paused, isTrue,
-        reason: 'opening the pause menu freezes the match');
-    expect(find.text('Paused'), findsOneWidget);
+    expect(match.paused, isTrue);
+    expect(find.text('Game settings'), findsOneWidget);
+    expect(find.byKey(const Key('putt-music-volume')), findsOneWidget);
+    expect(find.byKey(const Key('putt-menu-leave')), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('putt-menu-resume')));
+    await tester.tap(find.byKey(const Key('putt-menu-close')));
     await tester.pump();
     expect(match.paused, isFalse);
-    expect(find.text('Paused'), findsNothing);
+    expect(find.text('Game settings'), findsNothing);
   });
 
-  testWidgets('Esc pauses', (tester) async {
+  testWidgets('with others on the green the menu does not pause the hole',
+      (tester) async {
+    final course = CourseDef(id: 'two', holes: [stubHole(id: 't0')]);
+    final match = PuttMatch(
+      config: PuttConfig(mode: GameMode.casual, courses: [course], seed: 5),
+      seatedPlayerIds: const ['p2'],
+    )..boot();
+    await tester.pumpWidget(MaterialApp(home: SunnySidePuttView(match: match)));
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.tap(find.byKey(const Key('putt-settings')));
+    await tester.pump();
+    expect(find.text('Game settings'), findsOneWidget);
+    expect(match.paused, isFalse);
+    final before = match.secondsRemaining;
+    await tester.pump(const Duration(seconds: 1));
+    expect(match.secondsRemaining, lessThan(before),
+        reason: 'the hole clock runs on under the menu');
+  });
+
+  testWidgets('Esc opens the settings', (tester) async {
     final match = PuttMatch.solo();
     await tester.pumpWidget(MaterialApp(home: SunnySidePuttView(match: match)));
     await tester.pump(const Duration(milliseconds: 50));

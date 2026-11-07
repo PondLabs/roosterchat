@@ -1,5 +1,6 @@
 // Nest Magnet: while the caster's next shot rolls, the egg magnetizes near
-// the nest - passing close bends its path in and can drop it in.
+// the nest - passing close bends its path in, and once over the cup it is
+// never too fast to drop (a pace that would skip or lip out still drops).
 //
 // Next-shot power-up: the engine applies-and-clears the modifier when the
 // caster's next stroke fires (see `NextShotModifiers` in powerups.dart).

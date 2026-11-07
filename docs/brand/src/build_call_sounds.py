@@ -8,7 +8,10 @@ something on, falling turns it off, as unmute and mute do. The screen share
 is three strikes up or down a D major chord; the camera two strikes, a
 little higher, where the first is damped when the second lands so the one
 left ringing tells on from off: up an octave to turn it on, down a fifth to
-turn it off. Plain Python for the samples, ffmpeg
+turn it off. A call activity (a game) is three quick strikes up or down a G
+major chord an octave and a half higher, brighter and closer together, so
+it does not pass for a screen share: up when someone starts or joins one,
+down when someone leaves it. Plain Python for the samples, ffmpeg
 (libvorbis) for the Ogg files.
 
     python3 docs/brand/src/build_call_sounds.py
@@ -39,6 +42,9 @@ FS3 = 185.00
 A3 = 220.00
 E3 = 164.81
 E4 = 329.63
+G4 = 392.00
+B4 = 493.88
+D5 = 587.33
 
 
 def pluck(freq, start, out, damp_at=None):
@@ -68,11 +74,11 @@ def pluck(freq, start, out, damp_at=None):
         out[n0 + i] += 0.6 * lp * math.exp(-i / RATE / 0.004)
 
 
-def render(freqs, name, damped=False):
+def render(freqs, name, damped=False, gap=GAP):
     out = [0.0] * int(LENGTH * RATE)
     for n, f in enumerate(freqs):
         last = n == len(freqs) - 1
-        pluck(f, n * GAP, out, damp_at=GAP if damped and not last else None)
+        pluck(f, n * gap, out, damp_at=gap if damped and not last else None)
     # Fade the tail to silence.
     fade = int(0.15 * RATE)
     for i in range(fade):
@@ -105,3 +111,5 @@ if __name__ == "__main__":
     render([A3, FS3, D3], "screenshare_stopped.ogg")
     render([E3, E4], "camera_on.ogg", damped=True)
     render([E4, A3], "camera_off.ogg", damped=True)
+    render([G4, B4, D5], "activity_joined.ogg", gap=0.06)
+    render([D5, B4, G4], "activity_left.ogg", gap=0.06)

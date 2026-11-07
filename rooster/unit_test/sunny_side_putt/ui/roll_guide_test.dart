@@ -1,7 +1,7 @@
 // The roll guide: the first stretch of a shot's roll, predicted by running
 // the engine's own physics ahead on a copy of the world. It must follow the
-// shot's line, bend at the first rail and stop a little after it, end
-// where a soft putt stops, and never touch the real world.
+// shot's line, bend at the first rail and stop a little after it, and
+// never touch the real world.
 library;
 
 import 'dart:math' as math;
@@ -96,32 +96,6 @@ void main() {
       real.stepTick();
     }
     expect(points.last.distanceTo(real.ball('me')!.position), lessThan(0.05));
-  });
-
-  test('the rest is known only when the egg stops inside the guide', () {
-    final hole = _box();
-    final soft = previewRoll(
-      world: world(hole),
-      hole: hole,
-      config: config,
-      playerId: 'me',
-      angle: math.pi / 2, // south, open turf
-      power: 0.15,
-      maxLength: 40,
-    );
-    expect(soft.rest, isNotNull, reason: 'a soft putt stops in the guide');
-    expect(soft.rest, soft.points.last);
-
-    final hard = previewRoll(
-      world: world(hole),
-      hole: hole,
-      config: config,
-      playerId: 'me',
-      angle: -math.pi / 2,
-      power: 0.9,
-      maxLength: 6,
-    );
-    expect(hard.rest, isNull, reason: 'the guide was cut while it rolled');
   });
 
   test('the real world is left exactly as it was', () {

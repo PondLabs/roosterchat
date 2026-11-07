@@ -431,6 +431,12 @@ class CallManager {
   /// Someone still in the call turned their camera off.
   void cameraOffSound() => _playCue("camera_off.ogg");
 
+  /// Someone in the call (us too) started or joined a call activity.
+  void activityJoinedSound() => _playCue("activity_joined.ogg");
+
+  /// Someone left a call activity, or it ended.
+  void activityLeftSound() => _playCue("activity_left.ogg");
+
   void _playCue(String sound) {
     if (isDeafened) return;
     try {

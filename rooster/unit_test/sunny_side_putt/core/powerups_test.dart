@@ -201,7 +201,8 @@ void main() {
       expect(engine.usePowerUp('p1', 'test/coffee'), isTrue);
       expect(engine.player('p1')!.nextShot.powerMultiplier, 1.3);
 
-      final events = driveAndSettle(engine, 'p1', 0, 0.5);
+      // Aimed wide of the nest: the egg must still be out for a second shot.
+      final events = driveAndSettle(engine, 'p1', 0.3, 0.5);
       final shot = events
           .whereType<ShotApplied>()
           .where((s) => s.playerId == 'p1')

@@ -4,11 +4,13 @@ import 'package:collection/collection.dart';
 import 'package:rooster/client/call_manager.dart';
 import 'package:rooster/client/components/activities/activities_component.dart';
 import 'package:rooster/client/components/call_activity/call_activity_component.dart';
+import 'package:rooster/client/components/component.dart';
 import 'package:rooster/client/matrix/components/call_activity/matrix_call_activity_component.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/client/components/widgets/widget_component.dart';
 import 'package:rooster/client/matrix/components/matrix_sync_listener.dart';
+import 'package:rooster/client/matrix/components/voip_room/call_key_distributor.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_call_membership.dart';
 import 'package:rooster/client/matrix/homeserver_clock.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
@@ -22,7 +24,8 @@ import 'package:matrix/matrix.dart';
 class MatrixActivitiesComponent
     implements
         ActivitiesComponent<MatrixClient, MatrixRoom>,
-        MatrixRoomSyncListener {
+        MatrixRoomSyncListener,
+        NeedsClose {
   @override
   MatrixClient client;
 
@@ -245,37 +248,51 @@ class MatrixActivitiesComponent
       if (call.participants.isEmpty) activities.remove(call);
     }
 
-    // Activities launched in-call (the framework's own state events):
-    // they show in the same list as native sessions while the call that
-    // holds them is alive. Their state lags the call (a client wrote it,
-    // nothing keeps it beating), so the call is the truth and the state
-    // only names which activity and who launched it.
-    final activityStates =
-        room.matrixRoom.states[MatrixCallActivityComponent.stateEventType] ??
-            const {};
-    final callAlive = activities
-        .any((a) => a.application == "m.call" && a.participants.isNotEmpty);
-    if (callAlive) {
-      for (var entry in activityStates.entries) {
-        if (entry.value.content.isEmpty) continue;
-        final activityId = entry.value.content.tryGet<String>("activity");
-        if (activityId == null) continue;
-        final descriptor = CallActivityRegistry.byId(activityId);
+    // Activities launched in-call (the framework's own state events) are
+    // not a second call: whoever is in one gets its badge in the call's
+    // list. The state names the activity and its host; in our own call
+    // the session's roster says who plays and watches, and a session that
+    // nobody holds any more (its host left without clearing the state) is
+    // dropped. Outside it the state is all there is: its host gets the
+    // badge while they are in the call.
+    final call = activities.firstWhereOrNull((a) => a.application == "m.call");
+    final callActivities = room.getComponent<MatrixCallActivityComponent>();
+    if (call != null && callActivities != null) {
+      final entries = session != null
+          ? callActivities.liveSessions()
+          : callActivities.visibleSessions();
+      for (final entry in entries) {
+        final descriptor = CallActivityRegistry.byId(entry.activityId);
         if (descriptor == null) continue;
-        if (activities.any((a) => a.application == activityId)) continue;
         final icon = descriptor.icon?.call();
-        activities.add(RoomActivitySession(
-          participants: {
-            if (entry.value.content.tryGet<String>("host") != null)
-              entry.value.content.tryGet<String>("host")!,
-          },
-          application: activityId,
-          appName: descriptor.displayName(),
-          icon: icon is ImageOrIcon
-              ? icon
-              : ImageOrIcon(icon: Icons.sports_esports),
-          thirdparty: false,
-        ));
+        ActivityBadge badge({required bool watching}) => ActivityBadge(
+            name: descriptor.displayName(),
+            icon: icon is ImageOrIcon
+                ? icon
+                : ImageOrIcon(icon: Icons.sports_esports),
+            watching: watching);
+        final live = callActivities.sessionOf(entry.sessionId);
+        final roster =
+            live == null ? null : MatrixCallActivityComponent.rosterOf(live);
+        String userOf(String identity) =>
+            live!.userIdOf(identity) ??
+            CallMember.fromParticipantId(identity)?.userId ??
+            identity;
+        // By user id: whether they only watch. A player on another device
+        // is playing.
+        final Map<String, bool> watching = switch (roster) {
+          null => {entry.hostUserId: false},
+          final roster when roster.isEmpty => const {},
+          _ => {
+              for (final id in live!.snapshot.spectators) userOf(id): true,
+              for (final id in live.snapshot.players) userOf(id): false,
+            },
+        };
+        for (final MapEntry(key: userId, value: watches) in watching.entries) {
+          if (call.participants.contains(userId)) {
+            call.playing[userId] ??= badge(watching: watches);
+          }
+        }
       }
     }
 
@@ -354,18 +371,39 @@ class MatrixActivitiesComponent
     call.voiceState.addAll(voice);
   }
 
+  StreamSubscription? _callActivitiesSub;
+
   @override
   Stream<void> get onSessionsChanged {
     _watchCallManager();
     _watchClock();
+    // Who plays an activity changes with no membership changing.
+    _callActivitiesSub ??= room
+        .getComponent<MatrixCallActivityComponent>()
+        ?.onChanged
+        .listen((_) => _onParticipantsChanged.add(()));
     return _onParticipantsChanged.stream;
+  }
+
+  @override
+  void close() {
+    _callActivitiesSub?.cancel();
+    _clockSub?.cancel();
+    for (final sub in [..._callManagerSubs, ..._sessionSubs.values]) {
+      sub.cancel();
+    }
+    _callManagerSubs.clear();
+    _sessionSubs.clear();
+    _lapseTimer.cancel();
   }
 
   @override
   onSync(JoinedRoomUpdate update) {
     // A limited sync delivers state changes in `state`, not the timeline.
     final events = [...?update.state, ...?update.timeline?.events];
-    if (events.any((event) => event.type == callMemberStateEvent)) {
+    if (events.any((event) =>
+        event.type == callMemberStateEvent ||
+        event.type == MatrixCallActivityComponent.stateEventType)) {
       _onParticipantsChanged.add(());
     }
   }

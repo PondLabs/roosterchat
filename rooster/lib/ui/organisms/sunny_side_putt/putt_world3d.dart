@@ -44,8 +44,9 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/scheduler.dart' show Ticker;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, compute, defaultTargetPlatform, kIsWeb;
+import 'package:flutter/scheduler.dart' show SchedulerBinding, Ticker;
 import 'package:flutter/widgets.dart'
     show
         BoxConstraints,
@@ -67,6 +68,7 @@ import 'package:three_js_math/three_js_math.dart' as tjs;
 import 'package:rooster/client/components/sunny_side_putt/core/hole.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/look.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
+import 'package:rooster/debug/log.dart';
 
 import 'flutter_env_io.dart'
     if (dart.library.js_interop) 'flutter_env_stub.dart' as flutter_env;
@@ -189,10 +191,6 @@ class PuttWorldAim {
   /// physics, run ahead): drawn as the dotted guide. Empty draws none.
   final List<Vec2> preview;
 
-  /// Where the egg comes to rest, when it stops inside the guide (a soft
-  /// putt): marked on the turf, and the arrow ends there.
-  final Vec2? rest;
-
   /// Beside [preview], point for point: the egg's altitude where it flies
   /// off a kicker (as [PuttWorldEgg.air]), null where it rolls. Empty when
   /// the guide never leaves the ground.
@@ -215,7 +213,6 @@ class PuttWorldAim {
     required this.dragLength,
     required this.eggRadius,
     this.preview = const [],
-    this.rest,
     this.previewAir = const [],
     this.landing,
     this.trace = const [],
@@ -375,6 +372,21 @@ class PuttCameraRig {
 
   static const double defaultYaw = math.pi;
 
+  /// The orbit that turns the camera partway behind [from], looking down
+  /// the line to [to]: half the turn from the hole's own view, never more
+  /// than about 45 degrees, so the shot's direction reads while the hole
+  /// keeps the orientation everyone shares. The close camera at the egg
+  /// takes it; the tee's sign stands out of its way.
+  static double yawToward(Vec2 from, Vec2 to) {
+    final line = to - from;
+    if (line.length < 1e-3) return defaultYaw;
+    // The camera's away axis is (sin yaw, cos yaw) in x/z.
+    final along = math.atan2(line.x, line.y);
+    var turn = along - defaultYaw;
+    turn = math.atan2(math.sin(turn), math.cos(turn)); // into (-pi, pi]
+    return defaultYaw + (turn * 0.5).clamp(-0.8, 0.8);
+  }
+
   /// The tilt from the ground plane, degrees, in [pitchMin, pitchMax].
   double pitchDeg = pitchDefault;
 
@@ -441,29 +453,38 @@ class PuttCameraRig {
   /// The distance that frames the whole hole (the last fit's).
   double get overviewDistance => _overviewDistance;
 
-  /// Glides to frame [points] together (the eggs still out and the nest):
-  /// the target and the distance that land every point inside the part of
-  /// the screen the HUD leaves free (with room for an egg's tag and a
-  /// flag), found by projecting the points through the camera the glide
-  /// will end at. Never closer than [closest] of the overview's distance
-  /// nor farther than the overview itself. [margin] (world units) widens
-  /// the padding around the points; [shrink] pulls the free box in around
-  /// its middle. [tall], beside the points, is how high something stands
-  /// on each (the nest's flag): its top must clear the HUD's top band as
-  /// well.
+  /// Glides to frame [a] and [b] together (the egg and the nest), or the
+  /// box they span when [box]: the target and the distance that land every
+  /// point inside the part of the screen the HUD leaves free (with room
+  /// for an egg's tag and a flag), found by projecting the points through
+  /// the camera the glide will end at. Never closer than [closest] of the
+  /// overview's distance nor farther than the overview itself. [margin]
+  /// (world units) widens the padding around the points.
+  void glideToFrame(Vec2 a, Vec2 b,
+      {double margin = 5,
+      double closest = 0.42,
+      double? yaw,
+      bool box = false}) {
+    glideToFramePoints(box ? [a, b, Vec2(a.x, b.y), Vec2(b.x, a.y)] : [a, b],
+        margin: margin, closest: closest, yaw: yaw);
+  }
+
+  /// [glideToFrame] for any number of points (the eggs still out and the
+  /// nest).
+  /// [tall], beside the points, is how high something stands on each (the
+  /// nest's flag): its top must clear the HUD's top band as well.
   void glideToFramePoints(List<Vec2> points,
       {double margin = 5,
       double closest = 0.42,
       double? yaw,
-      List<double>? tall,
-      double shrink = 1}) {
+      List<double>? tall}) {
     if (points.isEmpty) return;
     _closeFloor = null;
     if (yaw != null) _yawTarget = yaw;
     final pad = 40 + margin * 6;
-    final distance = _fitDistance(points, pad, closest, tall, shrink);
+    final distance = _fitDistance(points, pad, closest, tall);
     _distanceTarget = distance;
-    _targetTarget = _frameFits(points, distance, pad, tall, shrink).target;
+    _targetTarget = _frameFits(points, distance, pad, tall).target;
   }
 
   /// The target and distance that land [points] inside the HUD-free part of
@@ -476,77 +497,41 @@ class PuttCameraRig {
       double margin = 2,
       double nearest = 0.5,
       double farthest = 1.6,
-      List<double>? tall,
-      double shrink = 1,
-      Vec2? anchor,
-      double bias = 0}) {
+      List<double>? tall}) {
     final savedYaw = _yawTarget;
     final savedPitch = _pitchTarget;
     _yawTarget = yaw;
     _pitchTarget = pitchDeg.clamp(pitchMin, pitchMax);
     final pad = 40 + margin * 6;
     final distance = _nearestFitting(points, pad, _overviewDistance * nearest,
-        _overviewDistance * farthest, tall, shrink, anchor, bias);
-    final target =
-        _frameFits(points, distance, pad, tall, shrink, anchor, bias).target;
+        _overviewDistance * farthest, tall);
+    final target = _frameFits(points, distance, pad, tall).target;
     _yawTarget = savedYaw;
     _pitchTarget = savedPitch;
     return (target: target, distance: distance);
   }
 
-  /// The smallest distance (in range) whose centred frame fits.
-  double _fitDistance(List<Vec2> points, double pad, double closest,
-      List<double>? tall, double shrink) {
-    final low = math.max(_overviewDistance * closest, _distanceMin);
-    final high = math.max(low, math.min(_overviewDistance, _distanceMax));
-    return _nearestFitting(points, pad, low, high, tall, shrink);
-  }
-
-  /// The hole's play framing: the egg dead centre of the frame, as Putt
-  /// Party has it, and the distance the hole is played at. The distance is
-  /// the one that holds the egg and the nest together in the HUD-free part
-  /// of the screen (with [shrink] of that box kept clear, so neither sits
-  /// against an edge), but never so far out that the egg shrinks below
-  /// [eggPixels] tall: on a long hole the nest then leaves the free view,
-  /// and the HUD's marker and the mini-map point at it. The director takes
-  /// the framing once when the hole opens and then only pans with the egg,
-  /// so a shot never moves the camera. [tall], beside the points, is how
-  /// high something stands on each (the nest's flag).
-  ({Vec2 target, double distance}) playFraming(Vec2 egg, Vec2 nest,
+  /// The distance [glideToFramePoints] would come to for [points] from
+  /// [yaw] (the glide's own when left out), without moving the camera.
+  double fitDistance(List<Vec2> points,
       {double margin = 5,
       double closest = 0.42,
-      double shrink = 0.82,
-      double eggHeight = 1.4,
-      double eggPixels = 40,
+      double? yaw,
       List<double>? tall}) {
-    final fit = frameAt([egg, nest],
-        yaw: defaultYaw,
-        pitchDeg: pitchDefault,
-        margin: margin,
-        nearest: closest,
-        farthest: 1,
-        tall: tall,
-        shrink: shrink,
-        // The egg takes the whole of the room the box has left, which puts
-        // it in the middle of the free view: the nest then has to fit in
-        // the half of the frame to its right.
-        anchor: egg,
-        bias: 1);
-    return (
-      target: fit.target,
-      distance: math.min(fit.distance, distanceForHeight(eggHeight, eggPixels)),
-    );
+    if (points.isEmpty) return _distanceTarget;
+    final saved = _yawTarget;
+    if (yaw != null) _yawTarget = yaw;
+    final distance = _fitDistance(points, 40 + margin * 6, closest, tall);
+    _yawTarget = saved;
+    return distance;
   }
 
-  /// The distance at which something [height] world units tall stands
-  /// [pixels] tall on screen, at the hole's own pitch.
-  double distanceForHeight(double height, double pixels) {
-    final t = math.tan(fovDeg * math.pi / 360);
-    final cp = math.max(math.cos(pitchDefault * math.pi / 180), 0.15);
-    return height *
-        cp *
-        math.max(viewport.height, 1) /
-        (2 * math.max(pixels, 1) * t);
+  /// The smallest distance (in range) whose centred frame fits.
+  double _fitDistance(
+      List<Vec2> points, double pad, double closest, List<double>? tall) {
+    final low = math.max(_overviewDistance * closest, _distanceMin);
+    final high = math.max(low, math.min(_overviewDistance, _distanceMax));
+    return _nearestFitting(points, pad, low, high, tall);
   }
 
   /// The nearest distance in [low]..[high] from which [points] fit with
@@ -556,19 +541,15 @@ class PuttCameraRig {
   /// height in the opening's frame, at half the distance it needs), so a
   /// bisection could land in one. [high] when even that does not fit.
   double _nearestFitting(List<Vec2> points, double pad, double low, double high,
-      List<double>? tall, double shrink,
-      [Vec2? anchor, double bias = 0]) {
-    if (high <= low ||
-        !_frameFits(points, high, pad, tall, shrink, anchor, bias).fits) {
-      return high;
-    }
+      List<double>? tall) {
+    if (high <= low || !_frameFits(points, high, pad, tall).fits) return high;
     const steps = 40;
     final step = (high - low) / steps;
     var good = high;
     var bad = low - 1;
     for (var i = 1; i <= steps; i++) {
       final d = high - step * i;
-      if (!_frameFits(points, d, pad, tall, shrink, anchor, bias).fits) {
+      if (!_frameFits(points, d, pad, tall).fits) {
         bad = d;
         break;
       }
@@ -579,7 +560,7 @@ class PuttCameraRig {
     var lo = bad, hi = good;
     for (var i = 0; i < 24; i++) {
       final mid = (lo + hi) / 2;
-      if (_frameFits(points, mid, pad, tall, shrink, anchor, bias).fits) {
+      if (_frameFits(points, mid, pad, tall).fits) {
         hi = mid;
       } else {
         lo = mid;
@@ -588,15 +569,22 @@ class PuttCameraRig {
     return hi;
   }
 
+  /// The distance from which something standing [height] world units tall
+  /// measures [pixels] in the middle of the screen, seen from the glide's
+  /// pitch (looking down foreshortens it); infinite with no screen.
+  double distanceForHeight(double height, double pixels) {
+    if (viewport.height <= 0 || pixels <= 0) return double.infinity;
+    final focal = viewport.height / 2 / math.tan(fovDeg * math.pi / 360);
+    final upright = math.cos(_pitchTarget * math.pi / 180);
+    return height * upright * focal / pixels;
+  }
+
   /// The target that centres [points] in the HUD-free part of the screen
   /// from [distance] (at the glide's yaw and pitch), and whether they all
-  /// fit there with [pad] pixels to spare. [shrink] pulls the free box in
-  /// around its middle (1 keeps it whole): under 1 the points keep a
-  /// margin from the HUD's bars, so the egg at one corner of their box
-  /// never sits against an edge.
+  /// fit there with [pad] pixels to spare.
   ({Vec2 target, bool fits}) _frameFits(
       List<Vec2> points, double distance, double pad,
-      [List<double>? tall, double shrink = 1, Vec2? anchor, double bias = 0]) {
+      [List<double>? tall]) {
     final width = math.max(1.0, viewport.width);
     final height = math.max(1.0, viewport.height);
     final aspect = width / height;
@@ -606,18 +594,11 @@ class PuttCameraRig {
     final sp = math.sin(pitch);
     final away = Vec2(math.sin(_yawTarget), math.cos(_yawTarget));
     final right = Vec2(-away.y, away.x);
-    // The free box in NDC: the HUD's bars at the top and the bottom, pulled
-    // in by [shrink] around its middle.
-    final freeLeft = -1 + 2 * pad / width;
-    final freeRight = 1 - 2 * pad / width;
-    final freeTop = 1 - 2 * (96 + pad) / height;
-    final freeBottom = -1 + 2 * (150 + pad) / height;
-    final midX = (freeLeft + freeRight) / 2;
-    final midY = (freeTop + freeBottom) / 2;
-    final left = midX + (freeLeft - midX) * shrink;
-    final rightEdge = midX + (freeRight - midX) * shrink;
-    final top = midY + (freeTop - midY) * shrink;
-    final bottom = midY + (freeBottom - midY) * shrink;
+    // The free box in NDC: the HUD's bars at the top and the bottom.
+    final left = -1 + 2 * pad / width;
+    final rightEdge = 1 - 2 * pad / width;
+    final top = 1 - 2 * (96 + pad) / height;
+    final bottom = -1 + 2 * (150 + pad) / height;
     // The points' box on the screen from [target]: its extent, how far up
     // the tallest thing on them reaches (NDC), their mean depth, and
     // whether one stands behind the lens.
@@ -692,20 +673,6 @@ class PuttCameraRig {
       if (ex.abs() < 1e-4 && ey.abs() < 1e-4) break;
       target += right * (ex * box.depth * t * aspect * 0.7) +
           away * (ey * box.depth * t / math.max(sp, 0.2) * 0.7);
-    }
-    // [anchor] (the egg) takes [bias] of the room the box has left: the
-    // box's middle stays where it is, the anchor moves that much of the
-    // way toward it, and the far points give up the same room.
-    if (anchor != null && bias > 0) {
-      final d = anchor - target;
-      final f = d.dot(away);
-      final zc = distance + f * cp;
-      if (zc > 0.5) {
-        final ax = d.dot(right) / (zc * t * aspect);
-        final ay = f * sp / (zc * t);
-        target += right * (ax * bias * zc * t * aspect) +
-            away * (ay * bias * zc * t / math.max(sp, 0.2));
-      }
     }
     // It fits when the box, where it settled, lies inside the free box.
     final box = boxFrom(target);
@@ -1029,7 +996,7 @@ class PuttWorld3D {
   /// Where the host stands on the ground, when the hole built is
   /// [holeId] (null with no host, or another hole still built).
   Vec2? hostSpotOn(String holeId) {
-    final figure = _hostFade?.figure;
+    final figure = _hostFigure;
     if (figure == null || _hole?.id != holeId) return null;
     return Vec2(figure.position.x, figure.position.z);
   }
@@ -1133,9 +1100,75 @@ class PuttWorld3D {
   /// Builds (or rebuilds) the hole's geometry. A hole whose id is already
   /// up keeps its meshes; a new one disposes the old subtree first.
   /// [label] is the number the flag flies (the hole's place in its course).
+  /// All at once: the tests' way. The game builds with [buildHoleInSteps].
   void buildHole(HoleDef hole, {required double eggRadius, String? label}) {
-    if (_disposed) return;
-    if (_hole?.id == hole.id) return;
+    final steps = _holeSteps(hole, eggRadius: eggRadius, label: label);
+    if (steps == null) return;
+    for (final step in steps) {
+      step.$2();
+    }
+  }
+
+  /// Compiles the scene's programs (the surface's renderer sets it).
+  void Function()? warmUp;
+
+  /// The hole being built step by step (null when none is under way).
+  String? get buildingHole => _building;
+  String? _building;
+
+  /// Bumped by every build: a stepped build whose generation is no longer
+  /// current stops, even when the newer build is of the same hole.
+  int _buildGeneration = 0;
+
+  /// [buildHole] a step per frame, so no frame stalls for the whole build
+  /// and the view's loading card keeps moving over it. The renderer draws
+  /// the hole as it grows (behind the card): each step's meshes upload, and
+  /// their programs compile, on the frame after it, never all at once.
+  /// [onProgress] hears (steps done, steps in all) after each. A newer call
+  /// (or a dispose) abandons the build under way.
+  Future<void> buildHoleInSteps(
+    HoleDef hole, {
+    required double eggRadius,
+    String? label,
+    void Function(int done, int total)? onProgress,
+  }) async {
+    final steps =
+        _holeSteps(hole, eggRadius: eggRadius, label: label, offThread: true);
+    if (steps == null) return;
+    final ticket = _buildGeneration;
+    _building = hole.id;
+    final clock = Stopwatch()..start();
+    final costs = <String>[];
+    try {
+      for (var i = 0; i < steps.length; i++) {
+        final began = clock.elapsedMicroseconds;
+        await steps[i].$2();
+        if (_buildGeneration != ticket || _disposed) return;
+        costs.add('${steps[i].$1} '
+            '${((clock.elapsedMicroseconds - began) / 1000).toStringAsFixed(1)}');
+        onProgress?.call(i + 1, steps.length);
+        // The frame draws (the loading card moves) before the next step.
+        await SchedulerBinding.instance.endOfFrame;
+        if (_buildGeneration != ticket || _disposed) return;
+      }
+    } finally {
+      if (_buildGeneration == ticket) _building = null;
+    }
+    Log.d('[Sunny Side Putt] hole ${hole.id} built in '
+        '${clock.elapsedMilliseconds} ms (ms per step: ${costs.join(', ')})');
+  }
+
+  /// The hole's build as named steps, each a slice of one frame's work;
+  /// null when [hole] is already up (or the world is gone). [offThread]
+  /// adds a step that works the turf out on another isolate first (only
+  /// that step returns a future).
+  List<(String, FutureOr<void> Function())>? _holeSteps(HoleDef hole,
+      {required double eggRadius, String? label, bool offThread = false}) {
+    if (_disposed) return null;
+    if (_hole?.id == hole.id) return null;
+    // A build under way is abandoned (its steps stop at their next turn).
+    _buildGeneration++;
+    _building = null;
     _clearHole();
     _hole = hole;
     _ground.hole = hole;
@@ -1150,121 +1183,196 @@ class PuttWorld3D {
       return group;
     }
 
-    final kit = _CourseKit(hole,
-        eggRadius: eggRadius,
-        animated: _animated,
-        rig: rig,
-        theme: _theme,
-        flagShakeUntil: () => _flagShakeUntil);
-    makeKind('ground').add(kit.lawn());
-    makeKind('table').add(kit.table());
-    final walls = makeKind('walls');
-    final bumpers = makeKind('bumpers');
-    for (final wall in hole.walls) {
-      // A ledge is no rail: its face is the tiers' step (see 'cliffs').
-      if (wall.ledge) continue;
-      if (wall.bumper) {
-        bumpers.add(kit.bumperRail(wall));
-      } else {
-        walls.add(kit.rail(wall.a, wall.b));
-      }
-    }
-    final cliffs = kit.cliffs();
-    if (cliffs != null) makeKind('cliffs').add(cliffs);
-    // The kickers, each in the course's build, standing on the ground.
-    if (hole.kickers.isNotEmpty) {
-      final kickers = makeKind('kickers');
-      for (final kicker in hole.kickers) {
-        kickers.add(kit.kicker(kicker));
-      }
-    }
-    // What stands free on the green stands on the tier under it (a
-    // terrace's flat top lifts it whole).
-    final arcs = makeKind('arcs');
-    for (final arc in hole.arcs) {
-      final built = kit.arc(arc);
-      if (arc.sweep >= 2 * math.pi - 0.01) {
-        built.position.y += _ground.at(arc.center);
-      }
-      (arc.bumper ? bumpers : arcs).add(built);
-    }
-    final wells = makeKind('wells');
-    for (final well in hole.wells) {
-      wells.add(kit.silo(well)..position.y += _ground.at(well.position));
-    }
-    final water = makeKind('water');
-    for (final shape in hole.water) {
-      water.add(kit.water(shape));
-    }
-    final boosts = makeKind('boosts');
-    for (final strip in hole.boosts) {
-      boosts.add(kit.boost(strip)
-        ..position.y += _ground.at((strip.from + strip.to) * 0.5));
-    }
-    final portals = makeKind('portals');
-    for (var i = 0; i < hole.portals.length; i++) {
-      final pair = hole.portals[i];
-      portals.add(kit.portal(pair.a, pair.radius, pairIndex: i, phase: 0)
-        ..position.y += _ground.at(pair.a));
-      portals.add(kit.portal(pair.b, pair.radius, pairIndex: i, phase: 1.6)
-        ..position.y += _ground.at(pair.b));
-    }
-    final boxes = makeKind('boxes');
-    for (final box in hole.boxes) {
-      final crate = _CrateView3D(box, kit.crateTexture(),
-          floor: _ground.at(box.position));
-      boxes.add(crate.group);
-      _crateViews.add(crate);
-    }
-    final garden = kit.garden();
-    if (garden != null) makeKind('garden').add(garden);
-    // The nest, the tee and the props stand on the ground (a plateau
-    // lifts the nest with it).
-    makeKind('nest').add(
-        kit.nest(label: label)..position.y += _ground.at(hole.nest.position));
-    final tee = makeKind('tee')
-      ..add(kit.tee()..position.y += _ground.at(hole.tee));
-    // The hole's number on a sign beside the tee (off the table: it stands
-    // on the meadow, whatever the green's relief).
-    final sign = kit.teeSign(label: label);
-    if (sign != null) tee.add(sign);
-    final decorations = makeKind('decorations');
-    for (final decoration in hole.decorations) {
-      final built = kit.decoration(decoration);
-      if (built != null) {
-        decorations.add(built..position.y += _ground.at(decoration.at));
-      }
-    }
-    // Where the hens walk and wait, worn into the turf (on the green only).
-    final paths = kit.henPaths(_ground.at);
-    if (paths != null) makeKind('hen-paths').add(paths);
-    final hens = makeKind('hens');
-    for (final obstacle in hole.obstacles) {
-      // Ducks paddle the Pond's water; hens walk everything else.
-      final _Walker hen = _henSwims(hole, obstacle)
-          ? _DuckView3D(obstacle)
-          : _HenView3D(obstacle, _ground);
-      hens.add(hen.group);
-      _henViews.add(hen);
-    }
-    final scenery = _Scenery(hole,
+    late final _CourseKit kit;
+    late final tjs.Group bumpers;
+    late final tjs.Group tee;
+    tjs.Group? sign;
+    return [
+      (
+        'kit',
+        () => kit = _CourseKit(hole,
+            eggRadius: eggRadius,
             animated: _animated,
+            rig: rig,
             theme: _theme,
-            cheerUntil: () => _cheerUntil,
-            watch: () => _watch,
-            greet: () => _greeting ? _greetAt : null,
-            shape: kit.shape,
-            signAt: sign == null ? null : kit.teeSignSpot?.$1)
-        .build();
-    makeKind('scenery').add(scenery);
-    final host = scenery.getObjectByName('host');
-    _hostFade = host == null ? null : _FadingFigure(host);
-    _hostDetail = host == null ? null : _HostDetail(host);
-
-    _fx.reset(_fxRoot);
-    _firstFrame = true;
-    if (_lowTier) _shedOutlines(_holeRoot);
-    fitCamera();
+            flagShakeUntil: () => _flagShakeUntil)
+      ),
+      if (offThread)
+        (
+          'turf (off thread, wall time)',
+          () async =>
+              kit.takeTurf(await compute(_prepareTurf, _TurfJob(hole, _theme)))
+        ),
+      ('lawn', () => makeKind('ground').add(kit.lawn())),
+      ('table', () => makeKind('table').add(kit.table())),
+      (
+        'rails',
+        () {
+          final walls = makeKind('walls');
+          bumpers = makeKind('bumpers');
+          for (final wall in hole.walls) {
+            // A ledge is no rail: its face is the tiers' step (see 'cliffs').
+            if (wall.ledge) continue;
+            if (wall.bumper) {
+              bumpers.add(kit.bumperRail(wall));
+            } else {
+              walls.add(kit.rail(wall.a, wall.b));
+            }
+          }
+          final cliffs = kit.cliffs();
+          if (cliffs != null) makeKind('cliffs').add(cliffs);
+        }
+      ),
+      (
+        'pieces',
+        () {
+          // The kickers, each in the course's build, standing on the ground.
+          if (hole.kickers.isNotEmpty) {
+            final kickers = makeKind('kickers');
+            for (final kicker in hole.kickers) {
+              kickers.add(kit.kicker(kicker));
+            }
+          }
+          // What stands free on the green stands on the tier under it (a
+          // terrace's flat top lifts it whole).
+          final arcs = makeKind('arcs');
+          for (final arc in hole.arcs) {
+            final built = kit.arc(arc);
+            if (arc.sweep >= 2 * math.pi - 0.01) {
+              built.position.y += _ground.at(arc.center);
+            }
+            (arc.bumper ? bumpers : arcs).add(built);
+          }
+          final wells = makeKind('wells');
+          for (final well in hole.wells) {
+            wells.add(kit.silo(well)..position.y += _ground.at(well.position));
+          }
+          final water = makeKind('water');
+          for (final shape in hole.water) {
+            water.add(kit.water(shape));
+          }
+          final boosts = makeKind('boosts');
+          for (final strip in hole.boosts) {
+            boosts.add(kit.boost(strip)
+              ..position.y += _ground.at((strip.from + strip.to) * 0.5));
+          }
+          final portals = makeKind('portals');
+          for (var i = 0; i < hole.portals.length; i++) {
+            final pair = hole.portals[i];
+            portals.add(kit.portal(pair.a, pair.radius, pairIndex: i, phase: 0)
+              ..position.y += _ground.at(pair.a));
+            portals.add(
+                kit.portal(pair.b, pair.radius, pairIndex: i, phase: 1.6)
+                  ..position.y += _ground.at(pair.b));
+          }
+          final boxes = makeKind('boxes');
+          for (final box in hole.boxes) {
+            final crate = _CrateView3D(box, kit.crateTexture(),
+                floor: _ground.at(box.position));
+            boxes.add(crate.group);
+            _crateViews.add(crate);
+          }
+        }
+      ),
+      (
+        'garden',
+        () {
+          final garden = kit.garden();
+          if (garden != null) makeKind('garden').add(garden);
+        }
+      ),
+      (
+        'nest and tee',
+        () {
+          // The nest, the tee and the props stand on the ground (a plateau
+          // lifts the nest with it).
+          makeKind('nest').add(kit.nest(label: label)
+            ..position.y += _ground.at(hole.nest.position));
+          tee = makeKind('tee')
+            ..add(kit.tee()..position.y += _ground.at(hole.tee));
+          // The hole's number on a sign beside the tee (off the table: it
+          // stands on the meadow, whatever the green's relief).
+          sign = kit.teeSign(label: label);
+          if (sign != null) tee.add(sign!);
+        }
+      ),
+      (
+        'decorations',
+        () {
+          final decorations = makeKind('decorations');
+          for (final decoration in hole.decorations) {
+            final built = kit.decoration(decoration);
+            if (built != null) {
+              decorations.add(built..position.y += _ground.at(decoration.at));
+            }
+          }
+        }
+      ),
+      (
+        'hens',
+        () {
+          // Where the hens walk and wait, worn into the turf (on the green
+          // only).
+          final paths = kit.henPaths(_ground.at);
+          if (paths != null) makeKind('hen-paths').add(paths);
+          final hens = makeKind('hens');
+          for (final obstacle in hole.obstacles) {
+            // Ducks paddle the Pond's water; hens walk everything else.
+            final _Walker hen = _henSwims(hole, obstacle)
+                ? _DuckView3D(obstacle)
+                : _HenView3D(obstacle, _ground);
+            hens.add(hen.group);
+            _henViews.add(hen);
+          }
+        }
+      ),
+      // The farm round the green: the biggest share, a step per piece
+      // (built into its group in place; the hole stays hidden meanwhile).
+      ...() {
+        final farm = tjs.Group()..name = 'farm';
+        late final List<void Function()> farmSteps;
+        return [
+          (
+            'scenery',
+            () {
+              makeKind('scenery').add(farm);
+              farmSteps = _Scenery(hole,
+                      animated: _animated,
+                      theme: _theme,
+                      cheerUntil: () => _cheerUntil,
+                      watch: () => _watch,
+                      greet: () => _greeting ? _greetAt : null,
+                      shape: kit.shape,
+                      signAt: sign == null ? null : kit.teeSignSpot?.$1)
+                  .buildSteps(farm);
+              assert(farmSteps.length == _Scenery.stepNames.length);
+            }
+          ),
+          for (var i = 0; i < _Scenery.stepNames.length; i++)
+            (_Scenery.stepNames[i], () => farmSteps[i]()),
+          (
+            'host',
+            () {
+              final host = farm.getObjectByName('host');
+              _hostFigure = host;
+              _hostDetail = host == null ? null : _HostDetail(host);
+            }
+          ),
+        ];
+      }(),
+      // Whatever program the frames behind the card have not compiled yet
+      // (a piece out of the camera's view) compiles now, not in play.
+      if (offThread) ('shaders', () => warmUp?.call()),
+      (
+        'settle',
+        () {
+          _fx.reset(_fxRoot);
+          _firstFrame = true;
+          if (_lowTier) _shedOutlines(_holeRoot);
+          fitCamera();
+        }
+      ),
+    ];
   }
 
   /// The low tier is on: what costs most for least is gone (a smaller
@@ -1334,7 +1442,7 @@ class PuttWorld3D {
     _ground.hole = null;
     _watch = null;
     _greeting = false;
-    _hostFade = null;
+    _hostFigure = null;
     _hostDetail = null;
     _henViews.clear();
     _crateViews.clear();
@@ -1389,7 +1497,7 @@ class PuttWorld3D {
     rig.applyTo(camera);
     camera.updateMatrixWorld(true);
     _faceCamera();
-    _syncHost(dt);
+    _syncHost();
     // The dome rides with the camera, so its horizon never comes near.
     _sky.group.position.setValues(camera.position.x, 0, camera.position.z);
   }
@@ -1519,7 +1627,9 @@ class PuttWorld3D {
       final nest = _hole?.nest;
       if (nest != null &&
           view.lastPosition.distanceTo(nest.position) < nest.radius * 1.8) {
-        _sinking.add(_SinkingEgg(view, nest.position));
+        view.intoCup();
+        _sinking.add(_SinkingEgg(view, nest.position,
+            depth: _nestCupDepth(nest.radius)));
         // The host celebrates every egg that drops in, the straw flies and
         // the flag shakes; the viewer's own sink gets the confetti column
         // and the camera's punch.
@@ -1546,21 +1656,20 @@ class PuttWorld3D {
     _sinking.removeWhere((sinking) {
       sinking.age += dt;
       final t = (sinking.age / _SinkingEgg.life).clamp(0.0, 1.0);
-      final eased = t * t;
       final view = sinking.view;
       final from = view.lastPosition;
       final at = Vec2(
         from.x + (sinking.nest.x - from.x) * math.min(1, t * 2.2),
         from.y + (sinking.nest.y - from.y) * math.min(1, t * 2.2),
       );
-      final scale = 1 - eased * 0.75;
+      final scale = sinking.scaleAt(t);
       view.group
         ..position.setValues(
-            at.x,
-            _ground.at(sinking.nest) + view.restHeight * scale - eased * 0.9,
-            at.y)
+            at.x, _ground.at(sinking.nest) + sinking.heightAt(t), at.y)
         ..scale.setValues(scale, scale, scale);
       view.ground.visible = false;
+      // Its silhouette would show through the opening's depth.
+      view._xray.visible = false;
       if (t >= 1) {
         // In: the egg hatches.
         _hatch(view, sinking.nest);
@@ -1616,40 +1725,30 @@ class PuttWorld3D {
 
   /// The host fades away while his head would stand under the HUD's top
   /// bar or its corner buttons, or right in front of the camera.
-  void _syncHost(double dt) {
-    final fade = _hostFade;
+  /// The host never leaves the scene: he is scenery, and the HUD's panels
+  /// are opaque, so he simply stands behind them.
+  ///
+  /// He used to pop out of the way whenever his head landed under the HUD's
+  /// top band or the camera came "near" him (a share of the camera's own
+  /// distance, which the whole-hole view made true of everything): both
+  /// rules were crossed and re-crossed by every camera glide, so he
+  /// flickered in and out of the farm all through a hole. Only his build
+  /// changes with how tall he stands on the screen.
+  void _syncHost() {
+    final figure = _hostFigure;
     final size = rig.viewport;
-    if (fade == null || size.width <= 0 || size.height <= 0) return;
-    final at = fade.figure.position;
-    // His own height, not the pop's shrink (that would bring his head out
-    // from under the HUD and back, over and over).
-    final head = tjs.Vector3(at.x, at.y + 8.2 * fade.fadeBaseScaleY, at.z)
-        .project(camera);
-    final headY = (1 - head.y) / 2 * size.height;
-    final headX = (head.x + 1) / 2 * size.width;
-    if (head.z < 1) {
-      // In full while he stands tall on the screen, light while small.
-      final foot = tjs.Vector3(at.x, at.y, at.z).project(camera);
-      _hostDetail?.standing((1 - foot.y) / 2 * size.height - headY);
-    }
-    final dx = camera.position.x - at.x;
-    final dz = camera.position.z - at.z;
-    // Some slack once he is gone, as with the hens: a camera on the move
-    // crossing the line back and forth left him half there, a ghost.
-    final gone = fade._fade < 0.5;
-    final near = math.sqrt(dx * dx + dz * dz) / math.max(rig.distance, 1e-6) <
-        (gone ? 0.62 : 0.55);
-    final underHud = head.z < 1 &&
-        headY < _hudTopBand + (gone ? 28 : 0) &&
-        headX > -40 &&
-        headX < size.width + 40;
-    fade.fadeToward(underHud || near ? 0.0 : 1.0, dt);
+    if (figure == null || size.width <= 0 || size.height <= 0) return;
+    final at = figure.position;
+    final head =
+        tjs.Vector3(at.x, at.y + 8.2 * figure.scale.y, at.z).project(camera);
+    final foot = tjs.Vector3(at.x, at.y, at.z).project(camera);
+    if (head.z >= 1 || foot.z >= 1) return;
+    // In full while he stands tall on the screen, light while small.
+    _hostDetail?.standing(
+        (1 - foot.y) / 2 * size.height - (1 - head.y) / 2 * size.height);
   }
 
-  /// How far down the HUD's top bar and corner buttons reach, in pixels.
-  static const double _hudTopBand = 118;
-
-  _FadingFigure? _hostFade;
+  tjs.Object3D? _hostFigure;
   _HostDetail? _hostDetail;
 
   void _syncCrates(PuttWorldFrame frame) {
@@ -1815,6 +1914,14 @@ class PuttResolutionGovernor {
   double _measured = 0;
   int _frames = 0;
 
+  /// Judges nothing now and for [settle] after: the frames are slow for a
+  /// reason of the game's own (a hole building a step a frame).
+  void hold() {
+    _quiet = settle;
+    _measured = 0;
+    _frames = 0;
+  }
+
   /// Feeds one frame's interval (seconds); returns the ratio to draw at
   /// when it is time for a step down, else null.
   double? frame(double seconds) {
@@ -1883,6 +1990,18 @@ class PuttThreeSurface extends StatefulWidget {
   /// Tests: try the GL surface anyway (under the test runner its plugin is
   /// missing, so the start fails as on a machine without GL).
   static bool? debugGpuSupported;
+
+  /// Whether the GL surface can change its pixel size in place. On Linux
+  /// flutter_angle's resize registers a new Flutter texture under an id
+  /// the Dart side never learns (the view then showed nothing, or the
+  /// apron through it), and on Android its resize does nothing. There the
+  /// surface keeps the pixels it came up with: the view stretches them to
+  /// its new size, the camera takes the new shape, and the resolution
+  /// governor only drops the world's quality tier.
+  static bool get surfaceResizes =>
+      kIsWeb ||
+      (defaultTargetPlatform != TargetPlatform.linux &&
+          defaultTargetPlatform != TargetPlatform.android);
 
   @override
   State<PuttThreeSurface> createState() => _PuttThreeSurfaceState();
@@ -1960,6 +2079,8 @@ class _PuttThreeSurfaceState extends State<PuttThreeSurface>
           owner.camera = widget.world.camera;
           widget.world.setViewport(size);
           widget.world.fitCamera();
+          widget.world.warmUp = () =>
+              owner.renderer?.compile(widget.world.scene, widget.world.camera);
           // The renderer's own ticker: move the world to the frame's
           // truth, then the view draws it.
           owner.rendererUpdate = () {
@@ -1990,11 +2111,13 @@ class _PuttThreeSurfaceState extends State<PuttThreeSurface>
       ..reset()
       ..start();
     final governor = _governor ??= PuttResolutionGovernor(three.dpr);
+    if (widget.world.buildingHole != null) return governor.hold();
     final next = governor.frame(seconds);
     final size = _size;
     if (next == null || size == null) return;
     // The first slow stretch also drops the world to its low tier.
     widget.world.lowerQuality();
+    if (!PuttThreeSurface.surfaceResizes) return;
     three.setResolution(next);
     // After this frame: the surface resizes outside the render.
     Timer.run(() {
@@ -2016,20 +2139,39 @@ class _PuttThreeSurfaceState extends State<PuttThreeSurface>
         final texture = three?.texture;
         final renderer = three?.renderer;
         if (three == null || texture == null || renderer == null) break;
+        if (!PuttThreeSurface.surfaceResizes) {
+          // The same pixels, stretched to the new box; only the camera's
+          // shape follows.
+          widget.world.setViewport(next);
+          widget.world.fitCamera();
+          if (mounted) setState(() {});
+          continue;
+        }
         three.screenSize = next;
-        await three.angle?.resize(
-          texture,
-          AngleOptions(
-            width: next.width.toInt(),
-            height: next.height.toInt(),
-            dpr: three.dpr,
-          ),
-        );
+        // No frame goes into a surface while it is swapped for one of the
+        // new size.
+        three.isVisibleOnScreen = false;
+        try {
+          await three.angle?.resize(
+            texture,
+            AngleOptions(
+              width: next.width.toInt(),
+              height: next.height.toInt(),
+              dpr: three.dpr,
+            ),
+          );
+        } finally {
+          three.isVisibleOnScreen = true;
+        }
         renderer
           ..setPixelRatio(three.dpr)
           ..setSize(next.width, next.height);
         widget.world.setViewport(next);
         widget.world.fitCamera();
+        // The resized surface holds nothing yet (a web canvas clears when
+        // its size changes, Windows' is a new one): draw it now, not show
+        // it empty until the next tick - a blank flash per resize.
+        if (!three.updating && mounted) await three.render();
         if (mounted) setState(() {});
       }
     } on Object {

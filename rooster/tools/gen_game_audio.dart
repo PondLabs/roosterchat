@@ -1,10 +1,15 @@
 // The Sunny Side Putt audio generator: synthesizes the game's whole sound
 // set - the effects the view plays and the farm band's music loop - into
 // `rooster/assets/sunny_side_putt/`, where the files are committed. No
-// samples, no downloads, no licensed material: every sound comes out of
-// `tools/game_audio/` with fixed seeds, so a re-run writes the same bytes.
+// downloads: every sound comes out of `tools/game_audio/` with fixed
+// seeds, so a re-run writes the same bytes. The one sample is the rooster's
+// crow, the recording the soundboard ships
+// (`assets/soundboard/rooster-freesound.org-385820_1554038-lq.mp3`,
+// "Rooster Crowing" by LoafDV, CC0; credited in
+// `assets/soundboard/CREDITS.md`).
 //
-// From `rooster/`: `dart run tools/gen_game_audio.dart`
+// `dart run tools/gen_game_audio.dart` from `rooster/` (or the same script
+// by its path from anywhere: its paths resolve from the script's own)
 //   --out <dir>      write somewhere else
 //   --only <names>   render only these files, comma-separated stems
 //                    (`putt,music`)
@@ -16,7 +21,7 @@
 // platform audioplayers runs on decodes (the browsers, Media Foundation,
 // AVFoundation, GStreamer, Android), encoded by `ffmpeg` (with libmp3lame)
 // from the PATH. Every effect is levelled to a loudness for its kind (how
-// loud its loudest 200 ms sound, K-weighted) under a -1 dBFS peak, a hit
+// loud its loudest 200 ms sound, K-weighted) under a -6 dBFS peak, a hit
 // too sharp for that peak having its attack rounded, so no cue jumps out
 // of the set.
 library;
@@ -26,6 +31,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'game_audio/dsp.dart';
+import 'game_audio/instruments.dart' show roosterPath;
 import 'game_audio/music.dart';
 import 'game_audio/sfx.dart';
 
@@ -46,36 +52,36 @@ class _Sound {
 }
 
 final _sounds = [
-  _Sound('putt_soft', _Format.wav, -19, 11, (rng) => puttTock(rng, 0)),
-  _Sound('putt', _Format.wav, -15.5, 12, (rng) => puttTock(rng, 0.5)),
-  _Sound('putt_firm', _Format.wav, -12.5, 13, (rng) => puttTock(rng, 1)),
-  _Sound('bounce', _Format.wav, -15, 14, railKnock),
-  _Sound('bumper', _Format.wav, -15, 15, bumperBoing),
+  _Sound('putt_soft', _Format.wav, -20.5, 11, (rng) => puttTock(rng, 0)),
+  _Sound('putt', _Format.wav, -19, 12, (rng) => puttTock(rng, 0.5)),
+  _Sound('putt_firm', _Format.wav, -16, 13, (rng) => puttTock(rng, 1)),
+  _Sound('bounce', _Format.wav, -18, 14, railKnock),
+  _Sound('bumper', _Format.wav, -16, 15, bumperBoing),
   _Sound('clack', _Format.wav, -19, 16, eggClack),
-  _Sound('hen', _Format.wav, -16, 17, henBump),
-  _Sound('duck', _Format.wav, -16, 18, duckBump),
+  _Sound('hen', _Format.wav, -16.5, 17, henBump),
+  _Sound('duck', _Format.wav, -16.5, 18, duckBump),
   _Sound('splash', _Format.mp3, -14, 19, waterPlop),
-  _Sound('holed', _Format.mp3, -14, 20, nestChime),
-  _Sound('hatch', _Format.mp3, -18, 21, hatchPeeps),
-  _Sound('crow', _Format.mp3, -14, 22, holeInOneCrow),
-  _Sound('boost', _Format.wav, -15, 23, boostWhoosh),
-  _Sound('pick', _Format.wav, -14, 24, cratePop),
-  _Sound('use', _Format.wav, -15, 25, powerCast),
+  _Sound('holed', _Format.mp3, -16, 20, nestChime),
+  _Sound('hatch', _Format.mp3, -18.5, 21, hatchPeeps),
+  _Sound('crow', _Format.mp3, -17, 22, holeInOneCrow),
+  _Sound('boost', _Format.wav, -16.5, 23, boostWhoosh),
+  _Sound('pick', _Format.wav, -15.5, 24, cratePop),
+  _Sound('use', _Format.wav, -17, 25, powerCast),
   _Sound('portal', _Format.wav, -15, 26, burrowThwup),
-  _Sound('swallow', _Format.mp3, -15, 27, siloSuck),
-  _Sound('out', _Format.mp3, -15, 28, outFall),
-  _Sound('cue', _Format.mp3, -15, 29, cowbellCue),
-  _Sound('tick', _Format.wav, -21, 30, (rng) => clockTick(rng)),
-  _Sound('tock', _Format.wav, -22, 31, (rng) => clockTick(rng, tock: true)),
-  _Sound('hole_start', _Format.mp3, -17, 32, holeStartStrum),
-  _Sound('hole_end', _Format.mp3, -13, 33, holeEndSting),
-  _Sound('victory', _Format.mp3, -13, 34, victoryFanfare),
-  _Sound('click', _Format.wav, -23, 35, menuClick),
+  _Sound('swallow', _Format.mp3, -16, 27, siloSuck),
+  _Sound('out', _Format.mp3, -19, 28, outFall),
+  _Sound('cue', _Format.mp3, -16, 29, cowbellCue),
+  _Sound('tick', _Format.wav, -22, 30, (rng) => clockTick(rng)),
+  _Sound('tock', _Format.wav, -22.5, 31, (rng) => clockTick(rng, tock: true)),
+  _Sound('hole_start', _Format.mp3, -19, 32, holeStartStrum),
+  _Sound('hole_end', _Format.mp3, -19, 33, holeEndSting),
+  _Sound('victory', _Format.mp3, -18.5, 34, victoryFanfare),
+  _Sound('click', _Format.wav, -23.5, 35, menuClick),
   // The power-ups' scenes.
-  _Sound('crow_caw', _Format.wav, -15, 36, crowCaw),
+  _Sound('crow_caw', _Format.wav, -18, 36, crowCaw),
   _Sound('shield', _Format.wav, -15, 37, shellPop),
   _Sound('corn', _Format.wav, -17, 38, cornPatter),
-  _Sound('gust', _Format.wav, -16, 39, gustWind),
+  _Sound('gust', _Format.wav, -19, 39, gustWind),
   // The kickers: an egg thrown off a lip, and coming down.
   _Sound('kick', _Format.wav, -16, 40, kickerLaunch),
   _Sound('land', _Format.wav, -16.5, 41, kickerLanding),
@@ -88,7 +94,7 @@ const _musicQuality = 4;
 const _sfxQuality = 3;
 
 void main(List<String> arguments) {
-  var out = 'assets/sunny_side_putt';
+  var out = roosterPath('assets/sunny_side_putt');
   Set<String>? only;
   String? keep;
   final iterator = arguments.iterator;
@@ -165,7 +171,7 @@ void main(List<String> arguments) {
   }
 }
 
-/// Trims [samples]' silent end and levels it to [loudness] under a -1
+/// Trims [samples]' silent end and levels it to [loudness] under a -6
 /// dBFS peak. A hit whose attack is too sharp for that gets the attack
 /// rounded off (up to 4 dB of it, softly) rather than the whole sound
 /// turned down. Says what it measured.
@@ -174,7 +180,7 @@ void main(List<String> arguments) {
   final measured = shortLoudness(trimmed);
   final gain = dbToGain(loudness - measured);
   final peak = peakOf(trimmed);
-  const ceiling = 0.891;
+  const ceiling = 0.5; // -6 dBFS: the effects sit under voices in a call
   if (peak * gain <= ceiling) {
     scale(trimmed, gain);
     return (

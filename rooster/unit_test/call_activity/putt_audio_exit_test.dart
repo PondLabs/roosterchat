@@ -8,7 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/client.dart';
-import 'package:rooster/client/client_manager.dart';
 import 'package:rooster/client/components/call_activity/call_activity_component.dart';
 import 'package:rooster/client/components/call_activity/call_activity_transport.dart';
 import 'package:rooster/client/components/component.dart';
@@ -171,20 +170,6 @@ class _Room implements Room {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-/// Our call in the voice channel.
-class _Call implements VoipSession {
-  _Call(this.client);
-
-  @override
-  final Client client;
-
-  @override
-  String get roomId => _roomId;
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
 class _Session implements VoipSession {
   _Session(this.client);
 
@@ -238,7 +223,6 @@ void main() {
   late _Client client;
   late _Room room;
   late _MatrixRoom matrixRoom;
-  late ClientManager clientManager;
   late MatrixCallActivityComponent component;
   late InMemoryActivityCall wire;
 
@@ -251,12 +235,10 @@ void main() {
     room = _Room();
     client = _Client(room);
     matrixRoom = _MatrixRoom();
-    clientManager = ClientManager();
     wire = InMemoryActivityCall();
     component = MatrixCallActivityComponent(client, matrixRoom,
-        callManager: clientManager.callManager,
         clock: HomeserverClock(),
-        transportFor: (call) => wire.join(_myIdentity));
+        ownCallTransport: () => wire.join(_myIdentity));
     room.component = component;
     matrixRoom.matrixRoom.client.echo = (type, key, content) {
       final event = matrix.Event(
@@ -302,10 +284,8 @@ void main() {
     final audio = _FakeAudio();
 
     await tester.runAsync(() async {
-      // The call is up, and a session we hold a seat in is in the room state.
-      clientManager.callManager.currentSessions.add(_Call(client));
-      await _settle();
-      stateOf(_myIdentity, host: _alice);
+      // A session we hold a seat in is in the room state.
+      stateOf(_myIdentity, host: _me);
       await _settle();
       final aliceSide = wire.join(_aliceIdentity);
       addTearDown(aliceSide.dispose);

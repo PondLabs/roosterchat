@@ -280,8 +280,9 @@ class PuttMatch extends ChangeNotifier {
   /// its host: every move of ours is told to the handler (the session
   /// takes it to the host), and the flow moves - advancing, votes,
   /// leaving - go ONLY to the handler, the host's word coming back as the
-  /// next state or relayed move.
-  final ValueChanged<EngineInput>? remoteMove;
+  /// next state or relayed move. The session switches it as the host seat
+  /// moves: a guest that takes over plays into its own engine.
+  ValueChanged<EngineInput>? remoteMove;
 
   /// [look] is the one this client's egg wears, the one saved in "Your
   /// egg" when left out ([savedPuttLook]).
@@ -593,6 +594,11 @@ class PuttMatch extends ChangeNotifier {
   PuttPlayer? get localPlayer => engine.player(localPlayerId);
 
   bool get isSpectator => engine.isSpectator(localPlayerId);
+
+  /// Alone on the green: no session wire (we are no guest) and no one
+  /// else joined. Only a solo match pauses under the settings menu; with
+  /// others the hole (and the host's engine) keeps running under it.
+  bool get playsAlone => remoteMove == null && engine.players.length <= 1;
 
   /// This client's egg: interpolated for drawing.
   Vec2? get myEggRenderPosition => engine.world?.ball(localPlayerId) == null

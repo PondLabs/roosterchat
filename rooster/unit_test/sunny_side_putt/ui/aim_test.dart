@@ -67,6 +67,14 @@ void main() {
           aim.commit()!.angle, moreOrLessEquals(-math.pi / 2, epsilon: 1e-9));
     });
 
+    test('no pull is no power and no putt', () {
+      final aim = AimController();
+      aim.begin(const Vec2(2, 2));
+      aim.update(const Vec2(2, 2));
+      expect(aim.state!.power, 0);
+      expect(aim.commit(), isNull);
+    });
+
     test('a tap is not a putt: the dead zone cancels', () {
       final aim = AimController();
       aim.begin(const Vec2(2, 2));

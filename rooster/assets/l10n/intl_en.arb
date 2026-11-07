@@ -2568,6 +2568,22 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelPlayingActivity": "Playing {activity}",
+  "@labelPlayingActivity": {
+    "description": "Tooltip on the game icon next to someone in a voice channel who is in a call activity; the activity's name, e.g. Sunny Side Putt",
+    "type": "text",
+    "placeholders": {
+      "activity": {}
+    }
+  },
+  "labelWatchingActivity": "Watching {activity}",
+  "@labelWatchingActivity": {
+    "description": "Tooltip on the game icon next to someone in a voice channel who is watching a call activity as a spectator; the activity's name, e.g. Sunny Side Putt",
+    "type": "text",
+    "placeholders": {
+      "activity": {}
+    }
+  },
   "labelMoreMembers": "and {count} more",
   "@labelMoreMembers": {
     "description": "Last row under a voice channel with more people in it than the list shows; opens the rest of them",
@@ -3938,6 +3954,12 @@
     "type": "text",
     "placeholders": {}
   },
+  "ActivityStageStrings_exitFullscreen": "Exit fullscreen",
+  "@ActivityStageStrings_exitFullscreen": {
+    "description": "Button that leaves the stage's fullscreen and shows the call again",
+    "type": "text",
+    "placeholders": {}
+  },
   "ActivityStageStrings_leave": "Exit",
   "@ActivityStageStrings_leave": {
     "description": "Button that leaves the stage and returns to the call's videos",
@@ -3989,6 +4011,18 @@
   "labelCallEnded": "Call ended",
   "@labelCallEnded": {
     "description": "Shown in place of a call that has ended",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageActivityNotAllowed": "Only moderators can start activities in this channel.",
+  "@messageActivityNotAllowed": {
+    "description": "Shown when launching a call activity is refused because the user may not write the activity's room state in this voice channel",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageActivityLaunchFailed": "Could not start the activity. Try again.",
+  "@messageActivityLaunchFailed": {
+    "description": "Shown when launching a call activity failed",
     "type": "text",
     "placeholders": {}
   },
@@ -5834,9 +5868,9 @@
     "type": "text",
     "placeholders": {}
   },
-  "labelPuttOpenMenu": "Pause (Esc)",
+  "labelPuttOpenMenu": "Settings (Esc)",
   "@labelPuttOpenMenu": {
-    "description": "Tooltip of the HUD's pause button; Esc is the key that pauses too",
+    "description": "Tooltip of the HUD's settings (gear) button: the volume sliders and leave; Esc opens it too",
     "type": "text",
     "placeholders": {}
   },
@@ -5890,6 +5924,14 @@
     "description": "Under the course's name while the group votes the next course",
     "type": "text",
     "placeholders": {}
+  },
+  "labelPuttWatchingPlayer": "Watching {name}",
+  "@labelPuttWatchingPlayer": {
+    "description": "Hint line at the bottom of the game once the player's own egg is in the nest: the camera follows another player still out on the hole; the placeholder is that player's name",
+    "type": "text",
+    "placeholders": {
+      "name": {}
+    }
   },
   "labelPuttAimHint": "Drag anywhere to aim · let go to putt",
   "@labelPuttAimHint": {
@@ -6118,6 +6160,12 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelPuttSurpriseCourse": "Surprise me",
+  "@labelPuttSurpriseCourse": {
+    "description": "The launch options' course card that draws a course at random",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelPuttStartMatch": "Start",
   "@labelPuttStartMatch": {
     "description": "Starts the Sunny Side Putt match from the launch options sheet",
@@ -6229,24 +6277,6 @@
     "type": "text",
     "placeholders": {}
   },
-  "labelPuttPaused": "Paused",
-  "@labelPuttPaused": {
-    "description": "Title of the pause menu",
-    "type": "text",
-    "placeholders": {}
-  },
-  "labelPuttResume": "Back to the green",
-  "@labelPuttResume": {
-    "description": "Button that unpauses the game",
-    "type": "text",
-    "placeholders": {}
-  },
-  "labelPuttSettings": "Settings",
-  "@labelPuttSettings": {
-    "description": "Button that opens the game's settings (the volume sliders)",
-    "type": "text",
-    "placeholders": {}
-  },
   "labelPuttLeave": "Leave game",
   "@labelPuttLeave": {
     "description": "Button that leaves the match; the round keeps going without the player",
@@ -6273,7 +6303,7 @@
   },
   "labelPuttYourEgg": "Your egg",
   "@labelPuttYourEgg": {
-    "description": "Title of the sheet where a player picks the pattern on their egg and the hat on their chick, and the pause menu's button that opens it",
+    "description": "Title of the sheet where a player picks the pattern on their egg and the hat on their chick, and the settings menu's button that opens it",
     "type": "text",
     "placeholders": {}
   },
@@ -6373,7 +6403,7 @@
   },
   "labelPuttGameSettings": "Game settings",
   "@labelPuttGameSettings": {
-    "description": "Title of the settings sheet",
+    "description": "Title of the settings menu (the volume sliders, your egg, leave)",
     "type": "text",
     "placeholders": {}
   },
@@ -6391,7 +6421,7 @@
   },
   "labelPuttDone": "Done",
   "@labelPuttDone": {
-    "description": "Button that closes the settings sheet",
+    "description": "Button that closes the settings menu",
     "type": "text",
     "placeholders": {}
   },
@@ -6449,6 +6479,18 @@
   "labelPuttReactNice": "Nice one",
   "@labelPuttReactNice": {
     "description": "A quick reaction in Sunny Side Putt: a thumbs up over the player's egg (praising another player's shot)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttUpdateToPlay": "Update Rooster to play",
+  "@labelPuttUpdateToPlay": {
+    "description": "On the game's stage, to a player whose app runs a different version of the game than the host's: they cannot play until they update",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPuttHostUpdateToPlay": "The host needs to update Rooster to play",
+  "@labelPuttHostUpdateToPlay": {
+    "description": "On the game's stage, to a player whose app runs a newer version of the game than the host's: nobody can play with them until the host updates",
     "type": "text",
     "placeholders": {}
   },
@@ -6532,6 +6574,12 @@
       "playing": {},
       "watching": {}
     }
+  },
+  "labelPuttLoadingHole": "Setting up the hole",
+  "@labelPuttLoadingHole": {
+    "description": "Shown over the minigolf game while the next hole's 3D scene is being built, above a progress bar",
+    "type": "text",
+    "placeholders": {}
   },
   "labelUpdateVersion": "Version",
   "@labelUpdateVersion": {

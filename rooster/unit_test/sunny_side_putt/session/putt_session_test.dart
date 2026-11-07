@@ -67,6 +67,66 @@ void main() {
     });
   });
 
+  test('a guest on another version of the game does not play it', () {
+    fakeAsync((async) {
+      final call = InMemoryActivityCall();
+      final hostSession = CallActivitySession(
+          activity: _descriptor,
+          selfUserId: '@alice:example.org',
+          transport: call.join('alice'));
+      final guestSession = CallActivitySession(
+          activity: _descriptor,
+          selfUserId: '@bob:example.org',
+          transport: call.join('bob'));
+      final host =
+          PuttSessionController(session: hostSession, nameOf: (id) => id);
+      host.hostStart(PuttSessionController.buildConfig(
+          const PuttLaunchOptions(mode: GameMode.casual)));
+      async.elapse(const Duration(milliseconds: 100));
+      final payload = hostSession.snapshot.game;
+      final config = payload['config']! as Map;
+      expect(config['physics'], puttPhysicsVersion);
+
+      final guest =
+          PuttSessionController(session: guestSession, nameOf: (id) => id);
+      Map<String, Object?> sent(Map<String, Object?> change) => {
+            ...payload,
+            'config': {...config, ...change},
+          };
+      for (final skew in [
+        sent({'physics': puttPhysicsVersion + 1}),
+        sent({'physics': null}), // an older host's, before versions
+        sent({'courseHash': -1}),
+      ]) {
+        hostSession.hostGamePayload(skew);
+        hostSession.sendState();
+        async.elapse(const Duration(milliseconds: 100));
+        guest.adoptForTest();
+        expect(guest.match, isNull, reason: '$skew');
+        expect(guest.outdated, isTrue);
+      }
+      // Who should update: a newer host's game (or the same version with
+      // other courses) is ours to catch up with; an older host's is not.
+      expect(guest.hostOutdated, isFalse);
+      hostSession.hostGamePayload(sent({'physics': null}));
+      hostSession.sendState();
+      async.elapse(const Duration(milliseconds: 100));
+      guest.adoptForTest();
+      expect(guest.hostOutdated, isTrue, reason: 'an older host');
+
+      // The host's own payload again: the guest plays.
+      hostSession.hostGamePayload(payload);
+      hostSession.sendState();
+      async.elapse(const Duration(milliseconds: 100));
+      guest.adoptForTest();
+      expect(guest.match, isNotNull);
+      expect(guest.outdated, isFalse);
+
+      host.dispose();
+      guest.dispose();
+    });
+  });
+
   test('a guest wears its saved look into the match, and everyone sees it',
       () async {
     // Both clients share this process's preferences: the host wears the
@@ -213,6 +273,99 @@ void main() {
 
       host.dispose();
       guest.dispose();
+    });
+  });
+
+  test("the guest who takes the host's seat plays into its own engine", () {
+    fakeAsync((async) {
+      final call = InMemoryActivityCall();
+      CallActivitySession seat(String name) => CallActivitySession(
+          activity: _descriptor,
+          selfUserId: '@$name:example.org',
+          transport: call.join(name));
+      final aliceSession = seat('alice');
+      final bobSession = seat('bob');
+      final carolSession = seat('carol');
+      final alice =
+          PuttSessionController(session: aliceSession, nameOf: (id) => id);
+      alice.hostStart(PuttSessionController.buildConfig(
+          const PuttLaunchOptions(mode: GameMode.casual)));
+      async.elapse(const Duration(milliseconds: 100));
+      final bob =
+          PuttSessionController(session: bobSession, nameOf: (id) => id);
+      final carol =
+          PuttSessionController(session: carolSession, nameOf: (id) => id);
+      bobSession.join();
+      carolSession.join();
+      async.elapse(const Duration(milliseconds: 1200));
+      expect(bob.match, isNotNull);
+      expect(bob.match!.remoteMove, isNotNull, reason: 'a guest, for now');
+
+      // The host goes; bob (the lowest identity left) takes over.
+      aliceSession.leave();
+      async.elapse(const Duration(milliseconds: 300));
+      expect(bobSession.isHost, isTrue);
+      expect(bob.match!.remoteMove, isNull,
+          reason: 'its moves no longer go to a host that is itself');
+
+      // Its own reaction (like its vote at "Course done") lands at once,
+      // and carol's reaches its engine.
+      expect(bob.match!.react('cheer'), isTrue);
+      carol.match!.react('gg');
+      async.elapse(const Duration(milliseconds: 300));
+      bob.match!.drainEvents();
+      expect(bob.match!.reactions.map((r) => (r.playerId, r.reaction)),
+          containsAll([('bob', 'cheer'), ('carol', 'gg')]));
+
+      alice.dispose();
+      bob.dispose();
+      carol.dispose();
+    });
+  });
+
+  test('a client on an older game watches: never seated, never elected', () {
+    fakeAsync((async) {
+      final call = InMemoryActivityCall();
+      CallActivitySession seat(String name) => CallActivitySession(
+          activity: _descriptor,
+          selfUserId: '@$name:example.org',
+          transport: call.join(name));
+      final aliceSession = seat('alice');
+      final bobSession = seat('bob');
+      final carolSession = seat('carol');
+      final alice =
+          PuttSessionController(session: aliceSession, nameOf: (id) => id);
+      alice.hostStart(PuttSessionController.buildConfig(
+          const PuttLaunchOptions(mode: GameMode.casual)));
+      async.elapse(const Duration(milliseconds: 100));
+      final bob = PuttSessionController(
+          session: bobSession,
+          nameOf: (id) => id,
+          physicsVersion: puttPhysicsVersion - 1);
+      final carol =
+          PuttSessionController(session: carolSession, nameOf: (id) => id);
+      bobSession.join();
+      carolSession.join();
+      async.elapse(const Duration(milliseconds: 1200));
+
+      expect(bob.outdated, isTrue);
+      expect(bob.hostOutdated, isFalse, reason: 'bob is the one to update');
+      expect(aliceSession.snapshot.players, isNot(contains('bob')));
+      expect(aliceSession.snapshot.spectators, contains('bob'));
+      expect(
+          alice.match!.engine.players.map((p) => p.id), isNot(contains('bob')),
+          reason: 'no egg that never putts holds every hole to its timer');
+
+      // The host goes: carol takes over, not bob (who sorts first).
+      aliceSession.leave();
+      async.elapse(const Duration(milliseconds: 300));
+      expect(bobSession.isHost, isFalse);
+      expect(carolSession.isHost, isTrue);
+      expect(carol.match!.remoteMove, isNull);
+
+      alice.dispose();
+      bob.dispose();
+      carol.dispose();
     });
   });
 }

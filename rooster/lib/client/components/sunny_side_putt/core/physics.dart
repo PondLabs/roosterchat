@@ -50,8 +50,24 @@ class PhysicsConfig {
 
   final double ballRadius;
 
-  /// Hard speed cap (units/s), applied after forces and bounces.
+  /// Hard speed cap (units/s), applied after forces and bounces. A speed
+  /// strip raises it to [boostMaxSpeed] (see there).
   final double maxSpeed;
+
+  /// The speed cap while an egg rides a speed strip: over [maxSpeed], so
+  /// a fast egg going with a strip still gains. Off the strip the egg
+  /// keeps what it gained, the cap following its pace down as friction
+  /// takes it, back to [maxSpeed].
+  final double boostMaxSpeed;
+
+  /// The share of a speed strip's push an egg feels while it rolls
+  /// against the strip: a firm putt gets across one, a soft one is turned
+  /// back.
+  final double boostAgainst;
+
+  /// The share of a speed strip's push an egg already going faster than
+  /// the strip's pace, with it, still feels: it leaves faster still.
+  final double boostBeyond;
 
   /// Speed a full-power (1.0) shot launches at.
   final double maxShotSpeed;
@@ -60,23 +76,77 @@ class PhysicsConfig {
   /// in [WallSegment.restitution] and [WallArc.restitution].
   final double wallRestitution;
 
-  /// Bumper restitution: bounces give energy back with interest.
+  /// Bumper restitution: bounces give energy back with interest, but only
+  /// the first [livelyBounces] of a roll (see there).
   final double bumperRestitution;
 
-  /// Rolling deceleration (units/s^2), a constant opposing motion; also
-  /// acts as static friction, so a resting egg under a pull weaker than
-  /// this never creeps.
+  /// Bounces with interest (restitution over 1, a bumper's) an egg gets
+  /// per roll, counted until it rests: past them every surface gives back
+  /// at most [wallRestitution]. Two bumpers facing each other can no
+  /// longer hold an egg for ever, so every shot ends.
+  final int livelyBounces;
+
+  /// Rolling deceleration (units/s^2), a constant opposing motion; on the
+  /// flat it also acts as static friction, so a resting egg under a pull
+  /// weaker than this never creeps. On a slope it never holds an egg (see
+  /// [slopeCreepFriction]).
   final double frictionDeceleration;
 
   /// Restitution between two eggs.
   final double ballRestitution;
 
-  /// An egg entering the nest's capture zone slower than this sinks; any
-  /// faster rolls across the nest.
+  /// The nest is a cup: an egg whose center is over it drops when slower
+  /// than a speed that grows from this at the lip to [captureSpeedCentered]
+  /// at dead center (linear in the distance from the center). An egg that
+  /// stops anywhere over the cup has dropped long before it rests.
   final double captureSpeed;
 
-  /// Below this speed an egg settles (velocity zeroed, asleep).
+  /// The fastest an egg crossing dead center can be going and still drop.
+  /// Faster skips across the cup.
+  final double captureSpeedCentered;
+
+  /// The cup's funnel (units/s^2): over the nest an egg is pulled toward
+  /// its center this hard, so a lip hit curls in toward the middle (and
+  /// drops or spins out, bent) instead of rolling straight over. Over
+  /// [frictionDeceleration], so an egg never rests on the lip.
+  final double cupPull;
+
+  /// How far past the rim the cup's funnel reaches, as a share of the
+  /// nest's radius: the lip's bevel. An egg that dies with its center just
+  /// outside the rim (its body half over the hole) is drawn in and drops
+  /// instead of parking there, which is what a real cup's bevel does.
+  final double cupLipReach;
+
+  /// Extra rolling drag (units/s^2) over the cup: the egg dips into it and
+  /// loses pace crossing it.
+  final double cupDrag;
+
+  /// Below this speed an egg settles (velocity zeroed, asleep), where the
+  /// ground is flat ([flatGrade]) or a rail holds it.
   final double sleepSpeed;
+
+  /// The steepest grade that still counts as flat: an egg rests only on
+  /// ground graded less than this, or where a rail holds it against the
+  /// slope. Steeper, it slides down. Small enough that no visible slope
+  /// passes for flat, big enough that a skirt's imperceptible last fade
+  /// does not keep an egg awake.
+  final double flatGrade;
+
+  /// On ground steeper than [flatGrade], an egg slower than this rolls
+  /// against at most [slopeCreepFriction] of the slope's pull rather than
+  /// the full rolling friction: friction never parks it on a slope, it
+  /// trickles down (at about this pace) to the flat.
+  final double slopeCreepSpeed;
+
+  /// The share of a slope's pull the rolling friction may cancel for an
+  /// egg slower than [slopeCreepSpeed]. Under 1, so the slope wins; over
+  /// 0, so an egg swinging in a bowl still loses pace and settles.
+  final double slopeCreepFriction;
+
+  /// Ticks an egg may stay slower than [sleepSpeed] without settling: past
+  /// them it settles where it is (a pull balanced by another, a rail's
+  /// tight corner). A backstop, so every roll ends.
+  final int stillTicksToSettle;
 
   /// Reflections one egg may chain within a single tick (tight corners).
   final int maxBouncesPerTick;
@@ -99,7 +169,8 @@ class PhysicsConfig {
 
   /// How hard a hill pulls (units/s^2 per unit of grade): an egg on a
   /// slope of grade g feels `slopeGravity * g` downhill. Over
-  /// [frictionDeceleration] it rolls back down; under it, it can rest.
+  /// [frictionDeceleration] it rolls back down at once; under it, it
+  /// trickles down (see [slopeCreepSpeed]). It never rests on a slope.
   final double slopeGravity;
 
   /// The least pace (units/s) an egg leaves a ledge's lip with, away from
@@ -137,13 +208,25 @@ class PhysicsConfig {
     this.dt = 1 / 120,
     this.ballRadius = 0.45,
     this.maxSpeed = 30,
+    this.boostMaxSpeed = 38,
+    this.boostAgainst = 0.25,
+    this.boostBeyond = 0.3,
     this.maxShotSpeed = 26,
     this.wallRestitution = 0.7,
     this.bumperRestitution = 1.6,
+    this.livelyBounces = 8,
     this.frictionDeceleration = 7,
     this.ballRestitution = 0.8,
     this.captureSpeed = 3.0,
+    this.captureSpeedCentered = 14.0,
+    this.cupPull = 16,
+    this.cupLipReach = 1.15,
+    this.cupDrag = 8,
     this.sleepSpeed = 0.05,
+    this.flatGrade = 0.01,
+    this.slopeCreepSpeed = 1.5,
+    this.slopeCreepFriction = 0.5,
+    this.stillTicksToSettle = 120,
     this.maxBouncesPerTick = 8,
     this.portalCooldownTicks = 24,
     this.portalExitSpeed = 3.8,
@@ -173,6 +256,14 @@ class BallBody {
   /// Ticks left before this egg may enter a portal again.
   int portalCooldown;
 
+  /// Bounces with interest (off bumpers) this roll, until it rests (see
+  /// [PhysicsConfig.livelyBounces]).
+  int bumps;
+
+  /// Ticks in a row this egg has been awake and slower than
+  /// [PhysicsConfig.sleepSpeed] (see [PhysicsConfig.stillTicksToSettle]).
+  int stillTicks;
+
   /// While the egg flies (off a kicker's lip): the altitude of its lowest
   /// point over the green's base level, the same measure as
   /// [HoleDef.groundHeightAt]. Null while it rolls on the ground.
@@ -191,6 +282,11 @@ class BallBody {
   /// to the other eggs (see [PhysicsWorld]'s egg contacts).
   bool putted;
 
+  /// The speed cap a speed strip raised for this egg, while over
+  /// [PhysicsConfig.maxSpeed] (0 otherwise; see
+  /// [PhysicsConfig.boostMaxSpeed]).
+  double boostCap;
+
   BallBody(
       {required this.playerId,
       required this.position,
@@ -198,9 +294,12 @@ class BallBody {
       this.holed = false,
       this.asleep = true,
       this.portalCooldown = 0,
+      this.bumps = 0,
+      this.stillTicks = 0,
       this.putted = false,
       this.air,
-      this.airSpeed = 0})
+      this.airSpeed = 0,
+      this.boostCap = 0})
       : lastSafePosition = position;
 
   double get speed => velocity.length;
@@ -231,6 +330,9 @@ class BallBody {
     asleep = true;
     untilRest.clear();
     lastSafePosition = position;
+    bumps = 0;
+    stillTicks = 0;
+    boostCap = 0;
     ground();
   }
 
@@ -245,6 +347,8 @@ class BallBody {
         'sx': lastSafePosition.x,
         'sy': lastSafePosition.y,
         'cd': portalCooldown,
+        if (bumps != 0) 'bumps': bumps,
+        if (stillTicks != 0) 'still': stillTicks,
         'air': air,
         'vz': airSpeed,
         'timed': {
@@ -255,6 +359,7 @@ class BallBody {
             if (untilRest.contains(flag)) flag.name,
         ],
         if (putted) 'putted': true,
+        if (boostCap != 0) 'bc': boostCap,
       };
 }
 
@@ -374,7 +479,7 @@ class BallCaptured extends PhysicsEvent {
   const BallCaptured({required this.playerId});
 }
 
-/// Crossed a boost strip: velocity raised along the strip.
+/// Came onto a boost strip (it pushes the egg along it while over it).
 class BallBoosted extends PhysicsEvent {
   final String playerId;
   final Vec2 at;
@@ -448,18 +553,18 @@ class PhysicsWorld {
 
   // ---- eggs in and out -----------------------------------------------------
 
-  /// Spawns an egg at the tee (ringed around it when several share it), at
-  /// rest. Used at hole start and on mid-hole joins. The ring steps start
-  /// at 2 units and grow to 4, golden-angle spaced, so straight putts to a
-  /// shared nest never clip a neighbor on the way out.
+  /// Spawns an egg on the tee point, at rest: every egg on the same spot,
+  /// stacked. Used at hole start and on mid-hole joins. It passes through
+  /// every egg it starts inside until they part (see [_passing]), so a
+  /// stack never springs apart.
   BallBody addBall(String playerId) {
-    final index = _balls.length;
-    final offset = index == 0
-        ? Vec2.zero
-        : Vec2(math.cos(index * 2.39996), math.sin(index * 2.39996)) *
-            (2.0 + index * 0.75).clamp(0.0, 4.0);
-    final body = BallBody(playerId: playerId, position: hole.tee + offset);
-    body.lastSafePosition = body.position;
+    final body = BallBody(playerId: playerId, position: hole.tee);
+    final min = config.ballRadius * 2;
+    for (final other in _balls.values) {
+      if (!other.holed && other.position.distanceTo(hole.tee) < min) {
+        _passing.add(_pairOf(playerId, other.playerId));
+      }
+    }
     _balls[playerId] = body;
     _rebuildOrder();
     _insideBoosts[playerId] = _boostsInside(body.position).toSet();
@@ -622,17 +727,38 @@ class PhysicsWorld {
       if (!ball.asleep && ball.airborne) {
         // In the air nothing on the ground pulls or rubs: it keeps its
         // pace until it comes down.
-        ball.velocity = _clamped(ball.velocity);
+        ball.velocity = _clamped(ball, ball.velocity);
       } else if (!ball.asleep) {
-        var velocity = ball.velocity + _accelOn(ball) * config.dt;
+        // The pull first: the magnet's clamp over the nest changes the
+        // velocity it is added to.
+        final accel = _accelOn(ball);
+        var velocity = ball.velocity + accel * config.dt;
         final speed = velocity.length;
         if (speed > 0) {
-          final dropped = frictionDeceleration * config.dt;
-          velocity = speed > dropped
-              ? velocity * ((speed - dropped) / speed)
-              : Vec2.zero;
+          final overCup =
+              ball.position.distanceTo(hole.nest.position) < hole.nest.radius;
+          final friction =
+              frictionDeceleration + (overCup ? config.cupDrag : 0);
+          final keep = math.max(0.0, 1 - friction * config.dt / speed);
+          final pull =
+              speed < config.slopeCreepSpeed ? _slopePull(ball) : Vec2.zero;
+          final slope = pull.length;
+          final down = slope > _flatPull ? velocity.dot(pull) / slope : 0.0;
+          if (down > 0) {
+            // No static friction on a slope: a slow egg trickles down it.
+            // Only the downhill part of its motion is let off; across or
+            // up the slope it meets the full friction, so a soft putt
+            // across a bank stops about where it would on the flat.
+            final downhill = pull * (down / slope);
+            final creep = math.min(friction, slope * config.slopeCreepFriction);
+            velocity = (velocity - downhill) * keep +
+                downhill * math.max(0.0, 1 - creep * config.dt / speed);
+          } else {
+            velocity = keep > 0 ? velocity * keep : Vec2.zero;
+          }
         }
-        ball.velocity = _clamped(velocity);
+        if (hole.boosts.isNotEmpty) _updateBoostCap(ball, velocity);
+        ball.velocity = _clamped(ball, velocity);
       }
       // Awake eggs sweep their own motion; sleeping eggs still get swept
       // against the hen walking its path (relative motion), which is how
@@ -659,14 +785,20 @@ class PhysicsWorld {
         // Screening: nothing may STAY out of bounds or inside water, even
         // a resting egg that another body pushed there this tick.
         if (!_handleBounds(ball)) _handleWater(ball);
-      } else if (!ball.airborne &&
-          ball.velocity.length < config.sleepSpeed &&
-          _restingPull(ball).length <= frictionDeceleration) {
-        // True static equilibrium: slow AND nothing pushing it onward.
-        // A ball on a gravity well's or a hill's slope (pull > friction)
-        // keeps creeping instead of settling, exactly like physics says;
-        // one pressed against a rail by the pull settles there.
-        if (!_handleBounds(ball) && !_handleWater(ball)) ball.settle();
+      } else if (!ball.airborne && ball.velocity.length < config.sleepSpeed) {
+        // Static equilibrium: slow, nothing pulling harder than friction
+        // holds (a well's pull, the cup's), and level ground or a rail
+        // holding it against the slope. An egg on a ramp or a hill keeps
+        // rolling down instead of parking; one pressed against a rail by
+        // the pull settles there. Slow for long enough, it settles anyway.
+        ball.stillTicks++;
+        if (_restingPull(ball).length <= frictionDeceleration &&
+            (ball.stillTicks >= config.stillTicksToSettle ||
+                _lean(ball, _slopePull(ball)).length <= _flatPull)) {
+          if (!_handleBounds(ball) && !_handleWater(ball)) ball.settle();
+        }
+      } else {
+        ball.stillTicks = 0;
       }
     }
     // A shove ends where its egg comes to rest; a shelter when it runs out.
@@ -691,11 +823,49 @@ class PhysicsWorld {
 
   // ---- internals -----------------------------------------------------------
 
-  Vec2 _clamped(Vec2 v) {
+  Vec2 _clamped(BallBody ball, Vec2 v) {
+    final cap = math.max(config.maxSpeed, ball.boostCap);
     final speed = v.length;
-    if (speed <= config.maxSpeed || speed == 0) return v;
-    return v * (config.maxSpeed / speed);
+    if (speed <= cap || speed == 0) return v;
+    return v * (cap / speed);
   }
+
+  /// A speed strip's push on [ball] there, and whether it is on one: along
+  /// each strip it is over, enough to pay the rolling friction and take an
+  /// egg crossing the strip's sensor from rest to [BoostStrip.speed]. An
+  /// egg already going faster with it still gains, at
+  /// [PhysicsConfig.boostBeyond] of that; one rolling against it feels
+  /// [PhysicsConfig.boostAgainst] of it, over the friction it already
+  /// meets.
+  (Vec2, bool) _boostOn(BallBody ball) {
+    var accel = Vec2.zero;
+    var on = false;
+    for (final strip in hole.boosts) {
+      if (!_insideStrip(strip, ball.position)) continue;
+      on = true;
+      final dir = strip.direction;
+      final run = strip.from.distanceTo(strip.to) + _stripReach(strip) * 2;
+      final gain = strip.speed * strip.speed / (2 * run);
+      final along = ball.velocity.dot(dir);
+      // Only an egg really rolling against the strip is let off lightly:
+      // a near-still one feels the full push, the same as it would asleep,
+      // so it never settles on a strip only to wake on the next tick.
+      final push = along < -config.sleepSpeed
+          ? gain * config.boostAgainst
+          : frictionDeceleration +
+              gain * (along < strip.speed ? 1 : config.boostBeyond);
+      accel += dir * push;
+    }
+    return (accel, on);
+  }
+
+  /// How far a strip's sensor reaches off its center line.
+  double _stripReach(BoostStrip strip) =>
+      strip.width / 2 + config.ballRadius * 0.5;
+
+  bool _insideStrip(BoostStrip strip, Vec2 point) =>
+      point.distanceTo(_closestPointOnSegment(point, strip.from, strip.to)) <=
+      _stripReach(strip);
 
   /// Acceleration from gravity wells, hills, ramps and the magnet flag.
   Vec2 _accelOn(BallBody ball) {
@@ -706,6 +876,13 @@ class PhysicsWorld {
     }
     if (hole.hasRelief) {
       accel -= hole.groundGradientAt(ball.position) * config.slopeGravity;
+    }
+    if (hole.boosts.isNotEmpty) accel += _boostOn(ball).$1;
+    final toCup = hole.nest.position - ball.position;
+    final cupDistance = toCup.length;
+    if (cupDistance < hole.nest.radius * config.cupLipReach &&
+        cupDistance > Vec2.epsilon) {
+      accel += toCup.scaledTo(config.cupPull);
     }
     if (ball.flagActive(PowerUpFlag.magnet, _tick)) {
       final offset = hole.nest.position - ball.position;
@@ -726,10 +903,20 @@ class PhysicsWorld {
 
   /// The pull an egg at rest would have to resist: [_accelOn] minus the
   /// part a wall or rock it touches pushes back (an egg rolled down a
-  /// slope into a rail rests against it instead of rattling there). A
-  /// ledge holds an egg only from below: from above it is the drop.
-  Vec2 _restingPull(BallBody ball) {
-    var accel = _accelOn(ball);
+  /// slope into a rail rests against it instead of rattling there).
+  Vec2 _restingPull(BallBody ball) => _lean(ball, _accelOn(ball));
+
+  /// The ground's own pull on [ball]: down its slope.
+  Vec2 _slopePull(BallBody ball) => hole.hasRelief
+      ? hole.groundGradientAt(ball.position) * -config.slopeGravity
+      : Vec2.zero;
+
+  /// The pull of the steepest ground that still counts as flat.
+  double get _flatPull => config.flatGrade * config.slopeGravity;
+
+  /// [accel] on [ball] minus what the walls and rocks it touches push back.
+  /// A ledge holds an egg only from below: from above it is the drop.
+  Vec2 _lean(BallBody ball, Vec2 accel) {
     if (accel == Vec2.zero) return accel;
     if (ball.flagActive(PowerUpFlag.ghost, _tick)) return accel;
     final reach = config.ballRadius + 0.02;
@@ -810,9 +997,11 @@ class PhysicsWorld {
             best = _SweepHit(
               t: hit.$1,
               normal: hit.$2,
-              restitution: wall.restitutionOr(wall.bumper
-                  ? config.bumperRestitution
-                  : config.wallRestitution),
+              restitution: _bounciness(
+                  ball,
+                  wall.restitutionOr(wall.bumper
+                      ? config.bumperRestitution
+                      : config.wallRestitution)),
               kind: wall.bumper ? BounceKind.bumper : BounceKind.wall,
             );
           }
@@ -825,9 +1014,11 @@ class PhysicsWorld {
             best = _SweepHit(
               t: hit.$1,
               normal: hit.$2,
-              restitution: arc.restitutionOr(arc.bumper
-                  ? config.bumperRestitution
-                  : config.wallRestitution),
+              restitution: _bounciness(
+                  ball,
+                  arc.restitutionOr(arc.bumper
+                      ? config.bumperRestitution
+                      : config.wallRestitution)),
               kind: arc.bumper ? BounceKind.bumper : BounceKind.arc,
             );
           }
@@ -842,7 +1033,8 @@ class PhysicsWorld {
             best = _SweepHit(
               t: hit.$1,
               normal: hit.$2,
-              restitution: hen.obstacle.restitutionOr(config.wallRestitution),
+              restitution: _bounciness(
+                  ball, hen.obstacle.restitutionOr(config.wallRestitution)),
               kind: BounceKind.obstacle,
               surfaceVelocity: hen.velocity,
             );
@@ -980,11 +1172,18 @@ class PhysicsWorld {
   void _dropOff(BallBody ball, Vec2 lowSide) {
     final away = ball.velocity.dot(lowSide);
     if (away < config.ledgeDropSpeed) {
-      ball.velocity =
-          _clamped(ball.velocity + lowSide * (config.ledgeDropSpeed - away));
+      ball.velocity = _clamped(
+          ball, ball.velocity + lowSide * (config.ledgeDropSpeed - away));
     }
     _events.add(BallDropped(playerId: ball.playerId, at: ball.position));
   }
+
+  /// A surface's [restitution] for [ball]: one with interest gives it
+  /// only while the egg has lively bounces left this roll.
+  double _bounciness(BallBody ball, double restitution) =>
+      restitution > 1 && ball.bumps >= config.livelyBounces
+          ? config.wallRestitution
+          : restitution;
 
   /// Bounces an egg off the surface [hit]: in a moving surface's frame,
   /// reflect the approach speed with the surface's restitution.
@@ -994,6 +1193,7 @@ class PhysicsWorld {
         : ball.velocity - hit.surfaceVelocity;
     final into = approach.dot(hit.normal);
     if (into >= 0) return;
+    if (hit.restitution > 1) ball.bumps++;
     final reflected = approach - hit.normal * ((1 + hit.restitution) * into);
     ball.velocity = hit.surfaceVelocity == Vec2.zero
         ? reflected
@@ -1155,18 +1355,26 @@ class PhysicsWorld {
     return ball.lastSafePosition;
   }
 
+  /// On a speed strip the egg's cap is [PhysicsConfig.boostMaxSpeed]; off
+  /// it the raised cap follows the egg's pace ([velocity], after this
+  /// tick's forces) down to [PhysicsConfig.maxSpeed], so what a strip gave
+  /// friction takes back rather than the cap.
+  void _updateBoostCap(BallBody ball, Vec2 velocity) {
+    if (_boostOn(ball).$2) {
+      ball.boostCap = config.boostMaxSpeed;
+    } else if (ball.boostCap != 0) {
+      final cap = math.min(ball.boostCap, velocity.length);
+      ball.boostCap = cap > config.maxSpeed ? cap : 0;
+    }
+  }
+
+  /// Speed strips push in [_accelOn]; this only tells of an egg coming
+  /// onto one.
   void _handleBoosts(BallBody ball) {
     final inside = _boostsInside(ball.position);
     final previous = _insideBoosts[ball.playerId]!;
     for (var i = 0; i < hole.boosts.length; i++) {
       if (!inside.contains(i) || previous.contains(i)) continue;
-      final strip = hole.boosts[i];
-      final dir = strip.direction;
-      final along = ball.velocity.dot(dir);
-      if (along < strip.speed) {
-        ball.velocity += dir * (strip.speed - along);
-        ball.velocity = _clamped(ball.velocity);
-      }
       _events.add(BallBoosted(playerId: ball.playerId, at: ball.position));
     }
     previous
@@ -1177,12 +1385,7 @@ class PhysicsWorld {
   Set<int> _boostsInside(Vec2 point) {
     final result = <int>{};
     for (var i = 0; i < hole.boosts.length; i++) {
-      final strip = hole.boosts[i];
-      final closest = _closestPointOnSegment(point, strip.from, strip.to);
-      if (point.distanceTo(closest) <=
-          strip.width / 2 + config.ballRadius * 0.5) {
-        result.add(i);
-      }
+      if (_insideStrip(hole.boosts[i], point)) result.add(i);
     }
     return result;
   }
@@ -1232,8 +1435,11 @@ class PhysicsWorld {
   void _handleNest(BallBody ball) {
     if (ball.holed) return;
     final distance = ball.position.distanceTo(hole.nest.position);
-    if (distance > hole.nest.radius - config.ballRadius * 0.5) return;
-    if (ball.velocity.length > config.captureSpeed) return;
+    if (distance >= hole.nest.radius) return;
+    final centered = 1 - distance / hole.nest.radius;
+    final dropSpeed = config.captureSpeed +
+        (config.captureSpeedCentered - config.captureSpeed) * centered;
+    if (ball.velocity.length > dropSpeed) return;
     ball.position = hole.nest.position;
     ball.velocity = Vec2.zero;
     ball.holed = true;
@@ -1246,6 +1452,10 @@ class PhysicsWorld {
   /// of them was still a ghost when they met, and they go on passing
   /// through until they part (rather than spring apart when it putts).
   final Set<String> _passing = {};
+
+  /// The [_passing] key of two eggs: their ids in order.
+  static String _pairOf(String a, String b) =>
+      a.compareTo(b) < 0 ? '$a|$b' : '$b|$a';
 
   /// Below this closing speed a contact is a touch, not a knock.
   static const double _knockSpeed = 1.0;
@@ -1298,6 +1508,13 @@ class PhysicsWorld {
       double distance, double min) {
     final drifted = _drifts[pair] ?? 0;
     if (drifted >= _maxDrifts) return;
+    // Waiting eggs stacked on the tee are meant to be there.
+    if (!a.putted &&
+        !b.putted &&
+        a.position == hole.tee &&
+        b.position == hole.tee) {
+      return;
+    }
     final normal =
         distance < Vec2.epsilon ? const Vec2(0, -1) : offset * (1 / distance);
     final overlap = min - distance;
@@ -1465,9 +1682,12 @@ class PhysicsWorld {
         holed: json['holed'] == true,
         asleep: json['asleep'] == true,
         portalCooldown: (json['cd'] as num).toInt(),
+        bumps: (json['bumps'] as num?)?.toInt() ?? 0,
+        stillTicks: (json['still'] as num?)?.toInt() ?? 0,
         putted: json['putted'] == true,
         air: (json['air'] as num?)?.toDouble(),
         airSpeed: (json['vz'] as num?)?.toDouble() ?? 0,
+        boostCap: (json['bc'] as num?)?.toDouble() ?? 0,
       )..lastSafePosition =
           Vec2((json['sx'] as num).toDouble(), (json['sy'] as num).toDouble());
       final timed = json['timed'] as Map;
