@@ -163,6 +163,117 @@ void main() {
       await call.close();
     });
 
+    // Report (2026-11-07): the host left the activity while a friend kept
+    // playing, and the friend's client showed the host gone while the
+    // host's own client kept its "playing" badge until the friend left
+    // too. The badge reads the session's roster, and the host that left
+    // stayed in its own copy of it.
+    test('the host leaving the activity is out of its own roster', () async {
+      final call = InMemoryActivityCall();
+      final alice = CallActivitySession(
+          activity: _activity(),
+          selfUserId: '@alice:example.org',
+          transport: call.join('alice'));
+      final bob = CallActivitySession(
+          activity: _activity(),
+          selfUserId: '@bob:example.org',
+          transport: call.join('bob'));
+      await alice.launch();
+      await _settle();
+      await bob.join();
+      await _settle();
+      expect(alice.snapshot.players, {'alice', 'bob'});
+
+      await alice.leave();
+      await _settle();
+
+      expect(alice.isHost, isFalse);
+      expect(alice.snapshot.players, {'bob'},
+          reason: 'the host that left is not playing any more: its own '
+              'badge reads this roster');
+      expect(bob.isHost, isTrue, reason: 'the seat went to who stayed');
+      expect(bob.snapshot.players, {'bob'});
+      await call.close();
+    });
+
+    // The same report, the other half: the new host's snapshots were
+    // dropped as stale by everyone who had heard a higher sequence number,
+    // so the roster it corrected never reached the host that left.
+    test('the host elected after a leave carries the sequence on', () async {
+      final call = InMemoryActivityCall();
+      final alice = CallActivitySession(
+          activity: _activity(),
+          selfUserId: '@alice:example.org',
+          transport: call.join('alice'));
+      final bob = CallActivitySession(
+          activity: _activity(),
+          selfUserId: '@bob:example.org',
+          transport: call.join('bob'));
+      await alice.launch();
+      await _settle();
+      await bob.join();
+      await _settle();
+      for (var i = 0; i < 3; i++) {
+        await alice.sendState();
+        await _settle();
+      }
+      final last = alice.snapshot.seq;
+
+      await alice.leave();
+      await _settle();
+
+      expect(bob.snapshot.seq, greaterThan(last),
+          reason: 'the new host continues the sequence, not restarts it');
+      expect(alice.snapshot.seq, bob.snapshot.seq,
+          reason: 'the state the new host sent was not dropped as stale');
+      await call.close();
+    });
+
+    test('a newcomer is sent the roster as it arrives', () async {
+      final call = InMemoryActivityCall();
+      final alice = CallActivitySession(
+          activity: _activity(),
+          selfUserId: '@alice:example.org',
+          transport: call.join('alice'));
+      await alice.launch();
+      await _settle();
+
+      final bob = CallActivitySession(
+          activity: _activity(),
+          selfUserId: '@bob:example.org',
+          transport: call.join('bob'));
+      await _settle();
+
+      expect(bob.snapshot.players, {'alice'},
+          reason: 'the host answers a newcomer with the roster, not only on '
+              'its next beat');
+      await call.close();
+    });
+
+    test('a bye from someone who is not the host does not end the session',
+        () async {
+      final call = InMemoryActivityCall();
+      final alice = CallActivitySession(
+          activity: _activity(),
+          selfUserId: '@alice:example.org',
+          transport: call.join('alice'));
+      final bob = CallActivitySession(
+          activity: _activity(),
+          selfUserId: '@bob:example.org',
+          transport: call.join('bob'));
+      await alice.launch();
+      await _settle();
+      await bob.join();
+      await _settle();
+
+      await bob.transport.send({'t': 'bye'});
+      await _settle();
+
+      expect(alice.hasSession, isTrue, reason: 'only the host ends a session');
+      expect(bob.hasSession, isTrue);
+      await call.close();
+    });
+
     test('the host vanishing elects the lowest present identity', () async {
       final call = InMemoryActivityCall();
       final carol = CallActivitySession(

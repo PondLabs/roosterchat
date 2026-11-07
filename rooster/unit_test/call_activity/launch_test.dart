@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/components/call_activity/call_activity_component.dart';
 import 'package:rooster/client/components/call_activity/call_activity_protocol.dart';
+import 'package:rooster/client/components/call_activity/call_activity_session.dart';
 import 'package:rooster/client/components/call_activity/call_activity_transport.dart';
 import 'package:rooster/client/components/profile/profile_component.dart';
 import 'package:rooster/client/matrix/components/call_activity/matrix_call_activity_component.dart';
@@ -381,6 +382,65 @@ void main() {
         component.launch(activity),
         throwsA(isA<CallActivityLaunchException>()
             .having((e) => e.notAllowed, 'notAllowed', isTrue)));
+  });
+
+  // Report (2026-11-07): the host left the activity while a friend kept
+  // playing. The friend's client showed the host gone; the host's own
+  // client kept its "playing" badge until the friend left too. The badge
+  // reads the session's roster, and the host that left stayed in its own
+  // copy of it.
+  test('a host that leaves the activity is out of the roster the badge reads',
+      () async {
+    final launched = await component.launch(activity);
+    expect(launched, isNotNull);
+    final id = launched!.snapshot.sessionId;
+
+    // A friend in the same call joins the session.
+    final bob = CallActivitySession(
+      activity: activity,
+      selfUserId: '@bob:example.org',
+      transport: call.join('@bob:example.org:DEVICE'),
+    );
+    bob.seedFromRoom(
+      sessionId: id,
+      activityId: activity.id,
+      hostUserId: _self,
+    );
+    await bob.join();
+    await pumpEventQueue();
+    expect(MatrixCallActivityComponent.rosterOf(launched),
+        {'$_self:DEVICE', '@bob:example.org:DEVICE'});
+
+    // The host leaves the activity; the friend plays on.
+    await launched.leave();
+    await pumpEventQueue();
+
+    expect(MatrixCallActivityComponent.rosterOf(launched),
+        {'@bob:example.org:DEVICE'},
+        reason: 'the badge reads this roster: the host that left is not in it');
+    expect(bob.isHost, isTrue, reason: 'the seat went to who stayed');
+
+    // The friend leaves too: the session ends, and its state goes with it.
+    await bob.leave();
+    await pumpEventQueue();
+
+    final (clearedKey, clearedContent) = room._sdk.client.writes.last;
+    expect(clearedKey, MatrixCallActivityComponent.stateKeyOf(id));
+    expect(clearedContent, isEmpty,
+        reason: 'a session that ended is not left in the room state');
+  });
+
+  test('a session that ends is retired, not left running', () async {
+    final launched = await component.launch(activity);
+    expect(launched, isNotNull);
+    final id = launched!.snapshot.sessionId;
+
+    await launched.leave();
+    await pumpEventQueue();
+
+    expect(launched.isDisposed, isTrue,
+        reason: 'a session that ended is not left running');
+    expect(component.sessionOf(id), isNull);
   });
 }
 
