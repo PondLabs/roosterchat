@@ -701,7 +701,14 @@ aim and the casts' characters keep theirs).
 On desktop the renderer draws straight into the one texture Flutter
 shows, with no second buffer, so the vendored viewer finishes each frame
 (`glFinish`) before telling Flutter it is there: with a flush alone the
-compositor could read a frame still being drawn, a flicker. The shadow
+compositor could read a frame still being drawn, a flicker. Windows needs
+that wait as much as Linux does, and for a different reason: its surface
+producer is not a swap chain but an EGL *pbuffer* made from a D3D11 shared
+handle (`eglCreatePbufferFromClientBuffer`), and a pbuffer is
+single-buffered, so `eglSwapBuffers` does nothing and nothing orders
+ANGLE's draw against the engine copying the shared texture on its raster
+thread (`needsFinishBeforePresent` in the vendored viewer; Android's
+window surface really swaps, so it is left alone). The shadow
 pass draws first on desktop as on the web (the renderer binds the
 texture back after it), so no frame reads a stale or missing shadow map.
 A resize draws a frame at once into the resized surface instead of
