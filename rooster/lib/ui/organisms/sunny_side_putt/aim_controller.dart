@@ -6,9 +6,9 @@
 // game, a screen or a pointer: the slingshot angle, the power curve whose
 // exponent is tuned so flicks feel crisp (a half-way drag already gives two
 // thirds of full power, and only a near-zero pull cancels the shot), and
-// the aim arrow's sway - the shot fires at the angle the arrow shows at
-// release. A soft or quick putt holds still; the sway only grows into a
-// hard pull held a while (nerves), and Hawk Eye stills it.
+// the aim's sway - the shot fires at the angle the aim shows at release.
+// A soft or quick putt holds still; the sway only grows into a hard pull
+// held a while (nerves), and Hawk Eye stills it.
 //
 // The controller never touches Flutter or Flame: the game feeds it world
 // coordinates from pointer events and reads [state] to draw; the game adds
@@ -17,7 +17,7 @@
 // The keyboard drives the same state without a pointer: [hold] sets an
 // angle and a power outright (the state reads as the pull that would give
 // that power), [turnBy] and [stepPower] move them, and the release is the
-// same [commit], so the arrow, the guide and the sway behave alike.
+// same [commit], so the row, the guide and the sway behave alike.
 library;
 
 import 'dart:math' as math;
@@ -42,7 +42,7 @@ class AimState {
     required this.dragLength,
   });
 
-  /// The angle to DRAW the arrow at: [angle] plus this frame's sway.
+  /// The angle to DRAW the aim at: [angle] plus this frame's sway.
   double visualAngle(double wobble) => angle + wobble;
 }
 
@@ -64,10 +64,10 @@ class AimController {
   /// Pulls shorter than this (world units) cancel the shot on release.
   static const double deadZone = 0.8;
 
-  /// Frequency (Hz) of the arrow's sway while the aim wobbles.
+  /// Frequency (Hz) of the aim's sway while it wobbles.
   static const double wobbleHz = 1.6;
 
-  /// Below this power the arrow holds still: a soft putt is a steady one.
+  /// Below this power the aim holds still: a soft putt is a steady one.
   /// From here the sway grows in, reaching [wobbleAmplitude] at full power.
   static const double steadyPower = 0.4;
 

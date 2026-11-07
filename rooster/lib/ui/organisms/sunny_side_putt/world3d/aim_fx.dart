@@ -1,8 +1,12 @@
-// The aim and the bursts. The aim lies on the turf: the slingshot's pull
-// behind the egg, a power ring filling around it, the arrow ahead whose
-// length and colour say how hard (green, yolk, comb red), and the dotted
-// guide - the first stretch of the roll the engine's own physics predicts,
-// rising through the air off a kicker and marked where it comes down.
+// The aim and the bursts. The aim lies on the turf, and it is always the
+// same three things, in the same order, for every stroke: the power ring
+// filling around the egg, the row of chevrons ahead - one per level of the
+// stroke, as Putt Party reads a putt, the row swinging with the sway so a
+// hard putt is the hard one to line up - and the dotted guide, the first
+// stretch of the roll the engine's own physics predicts, rising through
+// the air off a kicker. Nothing in it comes and goes with the hole: the
+// guide is cut at the same length everywhere, and the viewer's last roll
+// lies under it whenever there is one.
 // The bursts are pooled sprites over a soft disc (splashes, sparkles,
 // suction, poofs, dust, confetti) and a few expanding rings.
 part of '../putt_world3d.dart';
@@ -28,11 +32,42 @@ int _powerHex(double power) {
   return stops.last.$2;
 }
 
-/// The aim arrow's shaft length (world units at the standard egg) for
-/// [power]: none at zero (a pull that moves nothing), short for a tap,
-/// growing with the power to a modest length flat out.
-double puttArrowLength(double power) =>
-    power <= 0 ? 0 : 0.35 + power.clamp(0.0, 1.0) * 2.25;
+/// The levels a stroke is read in: the aim's row shows one chevron each.
+const int puttPowerLevels = 8;
+
+/// How many chevrons the aim's row shows for [power]: one per level of the
+/// stroke, none for a pull that would not move the egg (its release is a
+/// cancel, not a putt). Putt Party's own reading of a putt - the row's
+/// length is the power, so a tap is one chevron and a full pull eight.
+int puttPowerLevel(double power) {
+  if (power <= 0) return 0;
+  return (power.clamp(0.0, 1.0) * puttPowerLevels)
+      .ceil()
+      .clamp(1, puttPowerLevels);
+}
+
+/// One chevron of the row: how long and how wide (world units at the
+/// standard egg), and the gap that follows it - wide enough that the ink
+/// round one never runs into the next.
+const double puttChevronLength = 0.34;
+const double puttChevronWidth = 0.84;
+const double puttChevronGap = 0.26;
+
+/// The distance from one chevron's base to the next's.
+const double puttChevronPitch = puttChevronLength + puttChevronGap;
+
+/// The gap between the row's last chevron and the guide's first dot.
+const double puttGuideGap = 0.35;
+
+/// Where the aim's row ends (world units from the egg's centre) for
+/// [power]: the tip of its last chevron, or 0 for no row at all.
+double puttRowLength(double power, {double eggRadius = 0.45}) {
+  final level = puttPowerLevel(power);
+  if (level == 0) return 0;
+  final scale = eggRadius / 0.45;
+  return eggRadius * 2.35 +
+      ((level - 1) * puttChevronPitch + puttChevronLength) * scale;
+}
 
 class _PuttAimView3D {
   _PuttAimView3D({required double eggRadius}) : _eggRadius = eggRadius {
@@ -54,103 +89,35 @@ class _PuttAimView3D {
 
     // The aim draws over the other eggs (no depth test, after them): an
     // egg in the way never hides where the putt goes. The viewer's own egg
-    // draws after it, so the arrow comes out from under the egg.
+    // draws after it, so the row comes out from under the egg.
     // Transparent like its outline, so it draws after it (renderOrder sorts
     // within a pass; opaque, the outline drew over it, black).
-    _arrowMaterial = _unlit(_powerHex(0.5),
+    _rowFill = _unlit(_powerHex(0.5),
         opacity: 0.97, depthWrite: false, depthTest: false);
-    // A solid ink line round the arrow: it reads on light and dark turf.
-    _outlineMaterial = _unlit(_hexOf(PuttPalette.ink),
+    // A solid ink line round each chevron: it reads on light and dark turf.
+    _rowInk = _unlit(_hexOf(PuttPalette.ink),
         opacity: 0.9, depthWrite: false, depthTest: false);
-    shaft = tjs.Mesh(tjs.BoxGeometry(1, 0.02, 0.46), _arrowMaterial)
-      ..name = 'aim-shaft'
-      ..position.y = 0.08
-      ..renderOrder = 6;
-    _shaftOutline = tjs.Mesh(tjs.BoxGeometry(1, 0.015, 0.84), _outlineMaterial)
-      ..name = 'aim-shaft-outline'
-      ..position.y = 0.07
-      ..renderOrder = 5;
-    // A white core down the shaft: the arrow reads on any turf.
-    _core = tjs.Mesh(
-      tjs.BoxGeometry(1, 0.02, 0.12),
-      _unlit(0xFFFFFF, opacity: 0.85, depthWrite: false, depthTest: false),
-    )
-      ..name = 'aim-core'
-      ..position.y = 0.09
-      ..renderOrder = 7;
-    head = tjs.Mesh(_triangle(1.15, 1.25), _arrowMaterial)
-      ..name = 'aim-head'
-      ..position.y = 0.082
-      ..renderOrder = 6;
-    _headOutline = tjs.Mesh(_triangle(1.72, 1.88), _outlineMaterial)
-      ..name = 'aim-head-outline'
-      ..position.y = 0.072
-      ..renderOrder = 5;
-    _turned
-      ..add(_shaftOutline)
-      ..add(_headOutline)
-      ..add(shaft)
-      ..add(_core)
-      ..add(head);
-
-    // Where the guide meets its first rail: a small ring on the turf.
-    _bounceMark = tjs.Group()
-      ..name = 'aim-bounce'
-      ..visible = false;
-    _bounceMark
-      ..add(tjs.Mesh(
-        tjg.RingGeometry(0.22, 0.38, 24, 1),
-        _unlit(0xFFF8EE, opacity: 0.95, depthWrite: false, depthTest: false),
-      )
-        ..rotation.x = -math.pi / 2
-        ..position.y = 0.06
-        ..renderOrder = 7)
-      ..add(tjs.Mesh(
-        tjg.RingGeometry(0.16, 0.46, 24, 1),
-        _unlit(_hexOf(PuttPalette.ink),
-            opacity: 0.4, depthWrite: false, depthTest: false),
-      )
-        ..rotation.x = -math.pi / 2
-        ..position.y = 0.055
-        ..renderOrder = 6);
-    group.add(_bounceMark);
-
-    // Where a flight off a kicker comes down: a yolk ring in an ink one in
-    // a soft cream halo, a size up on the rail's, drawn over everything (a
-    // crate, a tag or an egg on the spot buried it): the landing reads as
-    // the place to aim.
-    _landMark = tjs.Group()
-      ..name = 'aim-landing'
-      ..visible = false;
-    _landMark
-      ..add(tjs.Mesh(
-        tjg.RingGeometry(0.62, 0.9, 32, 1),
-        _unlit(0xFFF6EA, opacity: 0.45, depthWrite: false, depthTest: false),
-      )
-        ..name = 'aim-landing-halo'
-        ..rotation.x = -math.pi / 2
-        ..position.y = 0.05
-        ..renderOrder = 15)
-      ..add(tjs.Mesh(
-        tjg.RingGeometry(0.32, 0.66, 32, 1),
-        _unlit(_hexOf(PuttPalette.ink),
-            opacity: 0.9, depthWrite: false, depthTest: false),
-      )
-        ..name = 'aim-landing-ink'
-        ..rotation.x = -math.pi / 2
-        ..position.y = 0.055
-        ..renderOrder = 16)
-      ..add(tjs.Mesh(
-        tjg.RingGeometry(0.4, 0.56, 32, 1),
-        _unlit(_hexOf(PuttPalette.yolk),
-            opacity: 1, depthWrite: false, depthTest: false)
-          ..transparent = true,
-      )
-        ..name = 'aim-landing-ring'
-        ..rotation.x = -math.pi / 2
-        ..position.y = 0.06
-        ..renderOrder = 17);
-    group.add(_landMark);
+    // One chevron per level of the stroke, all of them the same shape: the
+    // row's length is the power, and it never changes form with it.
+    final fillGeometry = _triangle(puttChevronLength, puttChevronWidth);
+    final inkGeometry =
+        _triangle(puttChevronLength + 0.14, puttChevronWidth + 0.18);
+    for (var i = 0; i < puttPowerLevels; i++) {
+      final chevron = tjs.Group()
+        ..name = 'aim-chevron'
+        ..visible = false;
+      chevron
+        ..add(tjs.Mesh(inkGeometry, _rowInk)
+          ..name = 'aim-chevron-ink'
+          ..position.setValues(-0.07, 0.07, 0)
+          ..renderOrder = 5)
+        ..add(tjs.Mesh(fillGeometry, _rowFill)
+          ..name = 'aim-chevron-fill'
+          ..position.y = 0.08
+          ..renderOrder = 6);
+      _chevrons.add(chevron);
+      _turned.add(chevron);
+    }
 
     for (var i = 0; i < _dotCount; i++) {
       // Each dot: cream over a soft ink ring, so it reads on light and dark
@@ -230,16 +197,12 @@ class _PuttAimView3D {
   late final tjs.Group group;
   late final tjs.Group _turned;
   late final tjs.Mesh ring;
-  late final tjs.Mesh shaft;
-  late final tjs.Mesh head;
-  late final tjs.Mesh _shaftOutline;
-  late final tjs.Mesh _headOutline;
 
-  late final tjs.Mesh _core;
-  late final tjs.Group _bounceMark;
-  late final tjs.Group _landMark;
-  late final tjs.MeshBasicMaterial _arrowMaterial;
-  late final tjs.MeshBasicMaterial _outlineMaterial;
+  /// The row's chevrons, one per level of the stroke (the first [level]
+  /// shown); all of them share the row's two materials.
+  final List<tjs.Group> _chevrons = [];
+  late final tjs.MeshBasicMaterial _rowFill;
+  late final tjs.MeshBasicMaterial _rowInk;
   final List<tjs.Group> _dots = [];
 
   tjs.Mesh? _fill;
@@ -351,7 +314,7 @@ class _PuttAimView3D {
 
   /// Shows the aim for this frame, or hides the group. The fill arc's
   /// geometry rebuilds only when the power moved enough to see.
-  void sync(PuttWorldAim? aim, double time, [_Ground? ground]) {
+  void sync(PuttWorldAim? aim, [_Ground? ground]) {
     if (aim == null) {
       group.visible = false;
       return;
@@ -361,7 +324,7 @@ class _PuttAimView3D {
     final floor = terrain.at(aim.origin);
     group.position.setValues(aim.origin.x, floor + 0.01, aim.origin.y);
     // The game's y-down angle reads a negative world turn about y; on a
-    // slope the arrow also pitches with the ground along the shot.
+    // slope the row also pitches with the ground along the shot.
     final slope = terrain.slopeAt(aim.origin);
     final along = slope.x * math.cos(aim.angle) + slope.y * math.sin(aim.angle);
     if (along.abs() < 1e-6) {
@@ -374,22 +337,28 @@ class _PuttAimView3D {
     }
 
     final scale = aim.eggRadius / _eggRadius;
-    final length = puttArrowLength(aim.power) * scale;
-    // A pull that would not move the egg draws no arrow (its release is a
-    // cancel, not a putt).
-    _turned.visible = length > 0;
+    // The row: one chevron per level of the stroke, the same shape at every
+    // power, so the aim never changes form under the player's hand. A pull
+    // that would not move the egg draws none (its release is a cancel, not
+    // a putt).
+    final level = puttPowerLevel(aim.power);
     final start = aim.eggRadius * 2.35;
-    shaft.scale.x = length;
-    shaft.position.x = start + length / 2;
-    _core.scale.x = math.max(length - 0.3, 0.05);
-    _core.position.x = start + length / 2 - 0.1;
-    _shaftOutline.scale.x = length + 0.18;
-    _shaftOutline.position.x = start + length / 2 - 0.05;
-    head.position.x = start + length;
-    _headOutline.position.x = start + length - 0.2;
-    _arrowMaterial.color = _lin(_powerHex(aim.power));
-    // The guide takes over where the arrow's head ends.
-    final tip = start + length + 1.15;
+    final pitch = puttChevronPitch * scale;
+    _turned.visible = level > 0;
+    for (var i = 0; i < _chevrons.length; i++) {
+      final chevron = _chevrons[i];
+      chevron.visible = i < level;
+      if (i >= level) continue;
+      chevron
+        ..position.x = start + i * pitch
+        ..scale.setValues(scale, 1, scale);
+    }
+    _rowFill.color = _lin(_powerHex(aim.power));
+    // The guide takes over past the row's last chevron.
+    final tip = level == 0
+        ? 0.0
+        : puttRowLength(aim.power, eggRadius: aim.eggRadius) +
+            puttGuideGap * scale;
 
     if ((aim.power - _fillPower).abs() > 0.015) {
       _fillPower = aim.power;
@@ -417,36 +386,19 @@ class _PuttAimView3D {
       group.add(fill);
       _fill = fill;
     }
-    _fill?.visible = length > 0;
+    _fill?.visible = level > 0;
 
     _syncTrace(aim, terrain, floor);
 
     // The dotted guide: a few egg lengths of the predicted roll past the
-    // arrow's tip, fading out - the line, never where the egg stops. A
-    // flight off a kicker shows whole, to where it comes down. A ring
-    // where the guide meets a rail, another where a flight lands.
+    // row, fading out - the line, never where the egg stops. A flight off a
+    // kicker shows whole, to where it comes down. No mark at either end:
+    // the guide is the same dotted line on every hole.
     final airs = aim.previewAir;
     final points = airs.isEmpty
         ? _trimmed(aim.preview, tip + guideHintLength * scale)
         : aim.preview;
     var shown = 0;
-    _bounceMark.visible = false;
-    final bounce = _firstBounce(points);
-    if (bounce != null) {
-      _bounceMark
-        ..visible = true
-        ..position.setValues(bounce.x - aim.origin.x,
-            terrain.at(bounce) - floor, bounce.y - aim.origin.y);
-    }
-    final landing = aim.landing;
-    _landMark.visible = landing != null;
-    if (landing != null) {
-      final breathe = 1 + 0.08 * math.sin(time * 5);
-      _landMark
-        ..position.setValues(landing.x - aim.origin.x,
-            terrain.at(landing) - floor, landing.y - aim.origin.y)
-        ..scale.setValues(scale * breathe, 1, scale * breathe);
-    }
     if (points.length >= 2) {
       const spacing = 0.62;
       var carried = spacing * 0.6;
@@ -462,7 +414,7 @@ class _PuttAimView3D {
         while (t <= segment && shown < _dotCount) {
           final p = a + (b - a) * (t / segment);
           t += spacing;
-          // Under the arrow the guide would only clutter it.
+          // Under the row the guide would only clutter it.
           if (p.distanceTo(aim.origin) < tip) continue;
           final dot = _dots[shown];
           dot.visible = true;
@@ -502,8 +454,8 @@ class _PuttAimView3D {
     return math.max(ground, a + (b - a) * u.clamp(0.0, 1.0));
   }
 
-  /// How far the guide runs past the arrow's tip on the ground (world
-  /// units at the standard egg): some three egg lengths.
+  /// How far the guide runs past the row's tip on the ground (world units
+  /// at the standard egg): some three egg lengths.
   static const double guideHintLength = 2.8;
 
   /// [points] cut at [length] along the path.
@@ -529,17 +481,6 @@ class _PuttAimView3D {
       length += points[i - 1].distanceTo(points[i]);
     }
     return length;
-  }
-
-  /// The guide's first sharp turn (a rail's bounce), if it has one.
-  static Vec2? _firstBounce(List<Vec2> points) {
-    for (var i = 1; i + 1 < points.length; i++) {
-      final a = points[i] - points[i - 1];
-      final b = points[i + 1] - points[i];
-      if (a.length < 1e-6 || b.length < 1e-6) continue;
-      if (a.dot(b) / (a.length * b.length) < 0.96) return points[i];
-    }
-    return null;
   }
 
   /// Frees the fill's geometry (the shared material belongs to the world).

@@ -1260,9 +1260,8 @@ void main() {
       int orderOf(String playerId) => walk(world.eggOf(playerId)!)
           .firstWhere((o) => o.name == 'egg-shell')
           .renderOrder;
-      final aim = walk(world.scene)
-          .where((o) => o.name == 'aim-shaft' || o.name == 'aim-head')
-          .toList();
+      final aim =
+          walk(world.scene).where((o) => o.name == 'aim-chevron-fill').toList();
       expect(aim, isNotEmpty);
       for (final piece in aim) {
         expect(piece.material!.depthTest, isFalse,
@@ -1282,19 +1281,24 @@ void main() {
       expect(pin.renderOrder, greaterThan(orderOf('me')));
     });
 
-    test('the arrow grows with the power, short, and none at zero', () {
-      expect(puttArrowLength(0), 0);
-      var previous = 0.0;
-      for (var power = 0.05; power <= 1.0001; power += 0.05) {
-        final length = puttArrowLength(power);
-        expect(length, greaterThan(previous), reason: 'at $power');
-        previous = length;
+    test('the row shows one chevron per level of the stroke, none at zero', () {
+      expect(puttPowerLevel(0), 0);
+      expect(puttPowerLevel(0.01), 1);
+      expect(puttPowerLevel(1), puttPowerLevels);
+      var previous = 0;
+      for (var power = 0.01; power <= 1.0001; power += 0.01) {
+        final level = puttPowerLevel(power);
+        expect(level, greaterThanOrEqualTo(previous), reason: 'at $power');
+        expect(level, inInclusiveRange(1, puttPowerLevels));
+        previous = level;
       }
-      expect(puttArrowLength(1), lessThan(3), reason: 'a modest arrow');
+      // The row grows with the power, and never changes shape.
+      expect(puttRowLength(0), 0);
+      expect(puttRowLength(1), greaterThan(puttRowLength(0.2)));
 
       final world = builtWorld();
       addTearDown(world.dispose);
-      bool arrowShown(double power) {
+      int chevronsShown(double power) {
         world.applySnapshot(PuttWorldFrame(
           time: 0,
           eggs: [eggAt(const Vec2(10, 10), mine: true)],
@@ -1306,15 +1310,17 @@ void main() {
               eggRadius: 0.45),
         ));
         return walk(world.scene)
-            .firstWhere((o) => o.name == 'aim-turned')
-            .visible;
+            .where((o) => o.name == 'aim-chevron' && o.visible)
+            .length;
       }
 
-      expect(arrowShown(0), isFalse, reason: 'a pull that moves nothing');
-      expect(arrowShown(0.4), isTrue);
+      expect(chevronsShown(0), 0, reason: 'a pull that moves nothing');
+      expect(chevronsShown(0.1), 1);
+      expect(chevronsShown(0.5), puttPowerLevel(0.5));
+      expect(chevronsShown(1), puttPowerLevels);
     });
 
-    test('the guide is a short hint, with no mark where the roll stops', () {
+    test('the guide is a short hint, the same on every hole, with no mark', () {
       final world = builtWorld();
       addTearDown(world.dispose);
       // A soft putt's whole roll, stopping 12 units out.
@@ -1334,11 +1340,18 @@ void main() {
           .where((o) => o.name == 'aim-dot' && o.visible)
           .toList();
       expect(dots, isNotEmpty);
-      final tip = 0.45 * 2.35 + puttArrowLength(0.6) + 1.15;
+      final tip = puttRowLength(0.6) + puttGuideGap;
       final farthest = dots.map((dot) => dot.position.x).reduce(math.max);
       expect(farthest, lessThanOrEqualTo(tip + 2.8 + 1e-6),
-          reason: 'a few egg lengths past the arrow, not the whole roll');
-      expect(walk(world.scene).where((o) => o.name == 'aim-rest'), isEmpty);
+          reason: 'a few egg lengths past the row, not the whole roll');
+      // No ring at either end: the guide is the same dotted line on every
+      // hole, so nothing in the aim comes and goes with the course.
+      expect(
+          walk(world.scene).where((o) =>
+              o.name == 'aim-rest' ||
+              o.name == 'aim-bounce' ||
+              o.name == 'aim-landing'),
+          isEmpty);
     });
 
     test("an egg in front of the viewer's resting egg fades aside", () {

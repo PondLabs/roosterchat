@@ -1119,25 +1119,21 @@ class SunnySidePuttGame extends FlameGame {
         final sway = aim.swayNow(aimLayer.holdSeconds);
         // The guide runs from the pull's own angle (cached while the pull
         // holds) and turns with the sway, so it always shows where the
-        // arrow, and so the shot, points.
+        // row, and so the shot, points.
         final guided = aimState.dragLength >= AimController.deadZone;
         final preview = guided
             ? _swayed(
                 _previewFor(aimState.angle, aimState.power), aim.origin!, sway)
             : const <core.Vec2>[];
-        final landing = guided ? _previewLanding : null;
         aimView = PuttWorldAim(
           origin: aim.origin!,
           angle: aimState.angle + sway,
-          // A pull inside the dead zone moves nothing: no arrow.
+          // A pull inside the dead zone moves nothing: no row.
           power: guided ? aimState.power : 0,
           dragLength: aimState.dragLength,
           eggRadius: eggRadius,
           preview: preview,
           previewAir: guided ? _previewAirs : const [],
-          landing: landing == null
-              ? null
-              : _swayed([landing], aim.origin!, sway).single,
           trace: _lastRoll,
           traceTint: tintFor(match.localPlayerId),
         );
@@ -1219,7 +1215,10 @@ class SunnySidePuttGame extends FlameGame {
         length += s[i - 1].distanceTo(s[i]);
       }
     }
-    if (length > 0.8) {
+    // Every roll that moved the egg replaces the last one, a nudge too:
+    // the trace under the aim is always the roll just played, never one
+    // from two putts ago.
+    if (length > 0.05) {
       _lastRoll = [for (final s in _rolling) List.unmodifiable(s)];
     }
     _rolling.clear();
@@ -1466,10 +1465,8 @@ class SunnySidePuttGame extends FlameGame {
   ({double angle, double power})? _previewKey;
   List<core.Vec2> _preview = const [];
 
-  /// The cached guide's altitudes beside its points (null on the ground),
-  /// and where its flight off a kicker comes down.
+  /// The cached guide's altitudes beside its points (null on the ground).
   List<double?> _previewAirs = const [];
-  core.Vec2? _previewLanding;
 
   /// [points] turned by [angle] about [origin] (the guide under the sway).
   static List<core.Vec2> _swayed(
@@ -1495,7 +1492,6 @@ class SunnySidePuttGame extends FlameGame {
     final world = match.engine.world;
     final current = match.hole;
     _previewAirs = const [];
-    _previewLanding = null;
     if (world == null || current == null) return _preview = const [];
     final roll = previewRoll(
       world: world,
@@ -1507,7 +1503,6 @@ class SunnySidePuttGame extends FlameGame {
       modifiers: match.localPlayer?.nextShot,
     );
     _previewAirs = roll.airs;
-    _previewLanding = roll.landing;
     return _preview = roll.points;
   }
 

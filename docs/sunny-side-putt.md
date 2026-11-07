@@ -5,7 +5,7 @@ holes are NESTS, on a farm, with power-ups. Inspired by Discord's Putt
 Party — the numbers follow it; the identity is the Rooster's own.
 
 ![the eggs on the tee: name tags, the viewer's pin and ring](images/sunny-side-putt/01-the-egg-on-the-tee.jpg)
-![aiming: the arrow and the dotted guide toward the bumper crown](images/sunny-side-putt/02-aiming-the-putt.jpg)
+![aiming: the power and the dotted guide toward the bumper crown](images/sunny-side-putt/02-aiming-the-putt.jpg)
 
 In play:
 
@@ -27,12 +27,12 @@ results):
 - Out of time: the hole scores max(strokes taken, par + 2). Putt
   Party's exact rule is not documented anywhere we could verify; this
   is ours, and it punishes stalling without ending a comeback.
-- Aiming is a slingshot drag, and the putt goes exactly where the arrow
+- Aiming is a slingshot drag, and the putt goes exactly where the aim
   points at release; the engine adds no hidden error. A soft putt (under
   40% power) or a quick one (released within 0.8 seconds) holds still; a
   hard pull held longer starts to sway, up to 2 degrees either side at
   full power, so on a long putt the timing of the release is the skill.
-  The Hawk Eye power-up holds the arrow still.
+  The Hawk Eye power-up holds the aim still.
 - After each hole the results card stays up for 8 seconds in a live
   session (Continue counts the seconds down while a band sweeps across
   it), then the match moves on by itself; the host's Continue moves on at
@@ -752,20 +752,24 @@ world builds those with `_gridPlane`.
 
 ### Playing it
 
-- Aim from anywhere: press on the green, drag back, let go. The arrow's
-  length and colour say the power (green, yolk, comb red), a ring fills
-  around the egg, and a dotted guide shows the first stretch of the roll
-  - the engine's own physics run ahead on a copy of the world, cut a
-  short way after the first rail. When the egg would stop inside the
-  guide (a soft putt), the spot is marked with an egg's footprint drawn
-  over everything, and the arrow ends there instead of past it. Off a
-  kicker the guide runs the engine's flight to where it comes down,
-  however far: its dots climb off the lip and fall, and a yolk ring marks
-  the landing. A guide whose length ends on a kicker's deck, or a couple
-  of units short of one, runs on to show the flight. The aim draws over
-  the other eggs (no egg in the way hides where the putt goes) and under
-  the viewer's own. The viewer's last roll on the hole lies under it as
-  dots in their colour, from where it stood to where it stopped.
+- Aim from anywhere: press on the green, drag back, let go. The aim is
+  the same three things on every hole, in the same order, so nothing in
+  it comes and goes with the course: a ring fills around the egg with the
+  power, a row of chevrons runs ahead of it - one chevron per level of
+  the stroke, eight at a full pull, as Putt Party reads a putt - and a
+  dotted guide shows the first stretch of the roll, the engine's own
+  physics run ahead on a copy of the world, cut a short way past the row.
+  The row's colour goes yolk to comb red with the power, and the whole
+  aim swings with the sway, so a hard putt is the one that is hard to
+  line up. Off a kicker the guide runs the engine's flight to where it
+  comes down, however far: its dots climb off the lip and fall. A guide
+  whose length ends on a kicker's deck, or a couple of units short of
+  one, runs on to show the flight. No ring marks a bounce or a landing:
+  the guide is the same dotted line everywhere, and it never claims to
+  know where the egg stops. The aim draws over the other eggs (no egg in
+  the way hides where the putt goes) and under the viewer's own. The
+  viewer's last roll on the hole lies under it as dots in their colour,
+  from where it stood to where it stopped, whenever there is one.
 - The keys putt too, for a player who cannot drag precisely (a
   trackpad, a shaky hand): Left and Right turn the aim 3 degrees a press
   (half a degree with Shift), Up and Down set the power in 5% steps (30%
@@ -773,18 +777,17 @@ world builds those with `_gridPlane`.
   reaches would fire nothing), and Space or Enter putts. The first key
   starts the aim from the egg toward the nest at half power. The keys
   hold the same aim a drag does (`AimController.hold`, `turnBy`,
-  `stepPower`), so the arrow, the guide and a kicker's landing ring
-  follow every press, and the putt goes out through the
-  same release, sway included: a hard putt held past 0.8 seconds sways
-  like a held pull. Esc drops the aim unspent (after an armed power-up
-  and the carton's highlight, before the menus). Tab and Shift+Tab move
-  a ring over the carton's filled slots (and off past the last, back to
-  aiming); Enter or Space on it does what a click on that slot does, a
-  spot effect then waiting for its press on the green. The keys are the
-  game's only while its own focus holds them and a hole plays with no
-  menu up (a picker's rows, a focused button and the chat keep theirs),
-  and then always, so an arrow never walks the focus off the green. The
-  first aim hint names them on desktop and in a browser.
+  `stepPower`), so the row and the guide follow every press, and the putt
+  goes out through the same release, sway included: a hard putt held past
+  0.8 seconds sways like a held pull. Esc drops the aim unspent (after an
+  armed power-up and the carton's highlight, before the menus). Tab and
+  Shift+Tab move a ring over the carton's filled slots (and off past the
+  last, back to aiming); Enter or Space on it does what a click on that
+  slot does, a spot effect then waiting for its press on the green. The
+  keys are the game's only while its own focus holds them and a hole
+  plays with no menu up (a picker's rows, a focused button and the chat
+  keep theirs), and then always, so the aim never walks the focus off the
+  green. The first aim hint names them on desktop and in a browser.
 - Until the first putt of the match (and after 14 seconds idle with the
   egg ready), a coach shows the gesture over the egg: a hand presses,
   pulls back away from the nest and lets go while a ghost arrow grows
@@ -806,7 +809,7 @@ world builds those with `_gridPlane`.
   sight (`putt_nest_marker.dart`).
   While the viewer aims with the nest out of sight, a small map of the
   hole under the course's chip shows the walls, the water, the nest, the
-  eggs and where the arrow points, turned with the camera so that ahead
+  eggs and where the aim points, turned with the camera so that ahead
   is up (`putt_mini_map.dart`).
 - With the system's reduced motion on, the hole opens on its play
   framing without the sweep, and the camera never shakes nor punches in.

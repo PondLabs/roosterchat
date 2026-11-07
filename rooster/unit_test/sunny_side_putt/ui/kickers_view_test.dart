@@ -262,8 +262,7 @@ void main() {
           isNotEmpty);
     });
 
-    test('the roll guide climbs through the flight to a mark at its landing',
-        () {
+    test('the roll guide climbs through the flight to its landing', () {
       final world = PuttWorld3D(viewport: const ui.Size(800, 600));
       addTearDown(world.dispose);
       world.buildHole(_field(), eggRadius: 0.45);
@@ -293,7 +292,6 @@ void main() {
           eggRadius: 0.45,
           preview: preview,
           previewAir: airs,
-          landing: landing,
         ),
       ));
       final dots = _walk(world.scene)
@@ -306,11 +304,14 @@ void main() {
           .where((dot) => dot.position.x > 9.5 - 3 && dot.position.x < 14 - 3);
       expect(aloft.map((dot) => dot.position.y).reduce(math.max),
           greaterThan(0.5));
-      final mark = _walk(world.scene)
-          .firstWhere((object) => object.name == 'aim-landing');
-      expect(mark.visible, isTrue);
-      expect(mark.position.x, closeTo(landing.x - 3, 1e-9));
-      expect(mark.position.z, closeTo(0, 1e-9));
+      // The flight shows whole: the last dot is at the landing, and no
+      // ring marks it (the guide is the same dotted line on every hole).
+      final farthest = dots.map((dot) => dot.position.x).reduce(math.max);
+      expect(farthest, closeTo(landing.x - 3, 0.7));
+      expect(
+          _walk(world.scene).where((object) =>
+              object.name == 'aim-landing' || object.name == 'aim-bounce'),
+          isEmpty);
     });
   });
 
