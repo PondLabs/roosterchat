@@ -83,6 +83,32 @@ class Settings{
   double toneMappingExposure;
 }
 
+/// ROOSTER: whether a frame must be finished on the GPU before Flutter is
+/// told it is there.
+///
+/// Only a surface that really swaps buffers orders the draw against
+/// Flutter's read of it. The shared-FBO path (Linux, and Windows without a
+/// surface producer) has one buffer and no swap at all. Windows' and
+/// macOS' surface producers make an EGL *pbuffer* from a client buffer
+/// (`eglCreatePbufferFromClientBuffer`, with
+/// `EGL_D3D_TEXTURE_2D_SHARE_HANDLE_ANGLE` and `EGL_IOSURFACE_ANGLE`), and
+/// a pbuffer is single-buffered: EGL says `eglSwapBuffers` has no effect on
+/// one, so nothing orders the draw against Flutter's read there either -
+/// the engine copies the shared texture on its raster thread while ANGLE
+/// may still be drawing into it. Android's window surface really swaps,
+/// and the source-texture path already finished.
+bool needsFinishBeforePresent({
+  required bool web,
+  required bool hasSourceTexture,
+  required bool hasEglSurface,
+  required TargetPlatform platform,
+}) {
+  if (web || hasSourceTexture) return false;
+  if (!hasEglSurface) return true;
+  return platform == TargetPlatform.windows ||
+      platform == TargetPlatform.macOS;
+}
+
 /// threeJs utility class. If you want to learn how to connect cannon.js with js, please look at the examples/threejs_* instead.
 class ThreeJS with WidgetsBindingObserver{
   void Function() onSetupComplete;
@@ -319,18 +345,20 @@ class ThreeJS with WidgetsBindingObserver{
     if(sourceTexture != null){
       angle?.activateTexture(texture);
     }
-    // ROOSTER: on the shared-FBO path (Linux, and Windows without a surface
-    // producer: the texture has no EGL surface) the frame is done before
-    // Flutter is told of it. The texture is the one Flutter samples (no
-    // second buffer), and a flush alone let the compositor read it while
-    // the GPU was still drawing: a frame half drawn, the clear colour
-    // through it, a flicker. The surface paths (Android, Apple, Windows'
-    // surface producer) swap buffers, which syncs, and the source-texture
-    // path already finished. Not a fence: the wait has to be here, before
-    // textureFrameAvailable, on the one buffer both sides use, so a
+    // ROOSTER: the frame is done before Flutter is told of it, on every
+    // surface that does not swap buffers. The texture is the one Flutter
+    // samples (no second buffer), and a flush alone let the compositor read
+    // it while the GPU was still drawing: a frame half drawn, the clear
+    // colour through it, a flicker. Not a fence: the wait has to be here,
+    // before textureFrameAvailable, on the one buffer both sides use, so a
     // glClientWaitSync would stall as long as glFinish; Flutter's context
     // waiting on it on the GPU (glWaitSync) is the plugin's side.
-    if (!kIsWeb && sourceTexture == null && texture.surfaceId == null) {
+    if (needsFinishBeforePresent(
+      web: kIsWeb,
+      hasSourceTexture: sourceTexture != null,
+      hasEglSurface: texture.surfaceId != null,
+      platform: defaultTargetPlatform,
+    )) {
       gl?.finish();
     }
     await angle?.updateTexture(texture,sourceTexture);
