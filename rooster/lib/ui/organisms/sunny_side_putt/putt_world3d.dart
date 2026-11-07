@@ -196,10 +196,6 @@ class PuttWorldAim {
   /// the guide never leaves the ground.
   final List<double?> previewAir;
 
-  /// Where a flight in the guide comes down: the guide ends there, the
-  /// spot marked on the turf.
-  final Vec2? landing;
-
   /// The viewer's last roll on this hole, the stretches between jumps (a
   /// splash's return, a rabbit hole): drawn faint under the aim, in
   /// [traceTint], so the next putt can be judged against the last one.
@@ -214,7 +210,6 @@ class PuttWorldAim {
     required this.eggRadius,
     this.preview = const [],
     this.previewAir = const [],
-    this.landing,
     this.trace = const [],
     this.traceTint,
   });
@@ -1525,7 +1520,7 @@ class PuttWorld3D {
     if (_greeting) _greetAt.setFrom(camera.position);
     _syncHens(frame, dt);
     _syncCrates(frame);
-    _aim.sync(frame.aim, frame.time, _ground);
+    _aim.sync(frame.aim, _ground);
     // Confetti and sparkles grow with the camera's distance, so the party
     // reads from the overview too.
     final grow = math.max(1.0, rig.distance / 24);
