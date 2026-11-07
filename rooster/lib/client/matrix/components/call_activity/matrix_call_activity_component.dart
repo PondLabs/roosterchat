@@ -12,7 +12,9 @@ import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/call_manager.dart';
 import 'package:rooster/client/components/call_activity/call_activity_component.dart';
 import 'package:rooster/client/components/call_activity/call_activity_session.dart';
+import 'package:rooster/client/components/call_activity/call_activity_transport.dart';
 import 'package:rooster/client/components/room_component.dart';
+import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/matrix/components/matrix_sync_listener.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_livekit_voip_session.dart';
 import 'package:rooster/client/matrix/homeserver_clock.dart';
@@ -26,9 +28,12 @@ class MatrixCallActivityComponent
     extends RoomComponent<MatrixClient, MatrixRoom>
     implements CallActivityRoomState, MatrixRoomSyncListener {
   MatrixCallActivityComponent(super.client, super.room,
-      {CallManager? callManager, HomeserverClock? clock})
+      {CallManager? callManager,
+      HomeserverClock? clock,
+      CallActivityTransport? Function(VoipSession call)? transportFor})
       : _injectedCallManager = callManager,
-        _clock = clock ?? HomeserverClock.instance;
+        _clock = clock ?? HomeserverClock.instance,
+        _transportFor = transportFor ?? _livekitTransportFor;
 
   static const stateEventType = 'chat.commet.call_activity';
 
@@ -42,12 +47,20 @@ class MatrixCallActivityComponent
   final CallManager? _injectedCallManager;
   final HomeserverClock _clock;
 
+  /// The wire a session in [call] talks over: LiveKit's data channel, or
+  /// none for a call without LiveKit. Injected for tests.
+  final CallActivityTransport? Function(VoipSession call) _transportFor;
+
+  static CallActivityTransport? _livekitTransportFor(VoipSession call) =>
+      call is MatrixLivekitVoipSession
+          ? LivekitCallActivityTransport(call.livekitRoom)
+          : null;
+
   CallManager? get _callManager =>
       _injectedCallManager ?? clientManager?.callManager;
 
   final Map<String, CallActivitySession> _sessionById = {};
-  final Map<CallActivitySession, LivekitCallActivityTransport> _transportOf =
-      {};
+  final Map<CallActivitySession, CallActivityTransport> _transportOf = {};
   final Map<CallActivitySession, String> _lastSessionIdOf = {};
   final Map<CallActivitySession, VoidCallback> _listenersOf = {};
   final List<StreamSubscription> _callManagerSubs = [];
@@ -123,9 +136,27 @@ class MatrixCallActivityComponent
     return result;
   }
 
+  /// The sessions the call's shelf and pill offer: visible, and with a
+  /// host in the call (ourselves, or one we have heard from). A state whose
+  /// host is gone without clearing it (its app died) names a session
+  /// nobody runs: offered as one to join, it did nothing, and the shelf had
+  /// no Launch for as long as the state lasted.
+  List<({String sessionId, String activityId, String hostUserId})>
+      liveSessions() => [
+            for (final entry in visibleSessions())
+              if (_isLive(_sessionById[entry.sessionId])) entry,
+          ];
+
+  static bool _isLive(CallActivitySession? session) =>
+      session != null && (session.isHost || session.hostIdentity != null);
+
   /// Fires when the set of live sessions (or who is in them) changes:
   /// the call's view mounts its stage off it.
-  Stream<void> get onChanged => _changes.stream;
+  Stream<void> get onChanged {
+    _watchCallManager();
+    return _changes.stream;
+  }
+
   final StreamController<void> _changes = StreamController.broadcast();
 
   // --------------------------------------------------------- live sessions
@@ -135,12 +166,17 @@ class MatrixCallActivityComponent
 
   /// Launches [activity] in our live call in this room: the host takes the
   /// seat, the state is written. Null when we are not in the call (or it
-  /// is not a LiveKit call), or a session is already running.
+  /// is not a LiveKit call), or a session is already running. A session
+  /// nobody hosts (see [liveSessions]) does not count, and goes.
   Future<CallActivitySession?> launch(CallActivity activity) async {
-    if (_sessionById.isNotEmpty) return null;
-    final call = _ownLivekitCall();
-    if (call == null) return null;
-    final transport = LivekitCallActivityTransport(call.livekitRoom);
+    _watchCallManager();
+    if (_sessionById.values.any(_isLive)) return null;
+    final call = _ownCall();
+    final transport = call == null ? null : _transportFor(call);
+    if (transport == null) return null;
+    for (final stale in List.of(_transportOf.keys)) {
+      await _untrack(stale);
+    }
     final session = CallActivitySession(
       activity: activity,
       selfUserId: client.self?.identifier ?? '',
@@ -158,12 +194,10 @@ class MatrixCallActivityComponent
     return session;
   }
 
-  /// The call session of this room that we are in and that carries
-  /// LiveKit, the seat the session's wire lives on.
-  MatrixLivekitVoipSession? _ownLivekitCall() {
-    final call = _callManager?.getCallInRoom(client, room.identifier);
-    return call is MatrixLivekitVoipSession ? call : null;
-  }
+  /// The call session of this room that we are in, the seat the session's
+  /// wire lives on.
+  VoipSession? _ownCall() =>
+      _callManager?.getCallInRoom(client, room.identifier);
 
   /// When our call is in a room whose state carries a live session we do
   /// not follow yet, follow it: build the session from the state (the
@@ -172,7 +206,7 @@ class MatrixCallActivityComponent
   /// state when it ends, not before.
   void _followState() {
     _watchCallManager();
-    final call = _ownLivekitCall();
+    final call = _ownCall();
     final visible = visibleSessions();
     if (call != null) {
       final knownIds = <String>{};
@@ -181,7 +215,8 @@ class MatrixCallActivityComponent
         if (_sessionById.containsKey(entry.sessionId)) continue;
         final activity = CallActivityRegistry.byId(entry.activityId);
         if (activity == null) continue;
-        final transport = LivekitCallActivityTransport(call.livekitRoom);
+        final transport = _transportFor(call);
+        if (transport == null) continue;
         final session = CallActivitySession(
           activity: activity,
           selfUserId: client.self?.identifier ?? '',
@@ -202,10 +237,16 @@ class MatrixCallActivityComponent
     }
   }
 
-  void _track(
-      CallActivitySession session, LivekitCallActivityTransport transport) {
+  void _track(CallActivitySession session, CallActivityTransport transport) {
     _sessionById[session.snapshot.sessionId] = session;
     _transportOf[session] = transport;
+    _identityOf[session] = session.selfIdentity;
+    _liveOf[session] = _isLive(session);
+    // A host that launched before we listened: launch() notifies before
+    // _track attaches the listener, and a host alone in its session gets no
+    // other notification, so this is the only chance to remember it. Without
+    // it the clear when it leaves has nothing to go on.
+    if (session.isHost) _everHostedByUs.add(session);
     _lastSessionIdOf[session] = session.snapshot.sessionId;
     _listenersOf[session] = _onSessionChanged;
     session.addListener(_onSessionChanged);
@@ -216,8 +257,12 @@ class MatrixCallActivityComponent
     final listener = _listenersOf.remove(session);
     if (listener != null) session.removeListener(listener);
     _changes.add(null);
-    _sessionById.remove(_lastSessionIdOf[session]);
+    final id = _lastSessionIdOf[session];
+    if (identical(_sessionById[id], session)) _sessionById.remove(id);
     _lastSessionIdOf.remove(session);
+    _identityOf.remove(session);
+    _liveOf.remove(session);
+    _everHostedByUs.remove(session);
     final transport = _transportOf.remove(session);
     await transport?.dispose();
   }
@@ -232,8 +277,16 @@ class MatrixCallActivityComponent
   final Set<CallActivitySession> _everHostedByUs = {};
 
   void _onSessionChanged() {
+    var changed = false;
     for (final session in List.of(_sessionById.values)) {
       if (session.isHost) _everHostedByUs.add(session);
+      // Whether it is one to offer moved (its host heard from, gone, or
+      // the session over): the call's pill and shelf follow.
+      final live = _isLive(session);
+      if (_liveOf[session] != live) {
+        _liveOf[session] = live;
+        changed = true;
+      }
       final previous = _lastSessionIdOf[session] ?? '';
       final current = session.snapshot.sessionId;
       if (previous == current) continue;
@@ -245,6 +298,43 @@ class MatrixCallActivityComponent
         }
       } else {
         _sessionById[current] = session;
+      }
+    }
+    if (changed) _changes.add(null);
+  }
+
+  /// Our own LiveKit identity in each session, from when it was tracked:
+  /// once the call is torn down the transport no longer knows it.
+  final Map<CallActivitySession, String> _identityOf = {};
+
+  /// Whether each session was one to offer, last we looked.
+  final Map<CallActivitySession, bool> _liveOf = {};
+
+  /// Our call in this room is gone (hung up, dropped, taken over by
+  /// another device), and every session we followed or hosted in it with
+  /// it: they were bound to its wire. One we hosted with nobody else in it
+  /// is over, and its room state goes; one others are in goes on without
+  /// us (they elect a host among themselves, and whoever ends it last
+  /// clears the state). Rejoining starts afresh from the room state.
+  ///
+  /// Nothing did this before: the host's session outlived its call, its
+  /// state stayed for six hours, the shelf offered it as one to join, and
+  /// it blocked launching another.
+  Future<void> _leaveCall() async {
+    for (final session in List.of(_transportOf.keys)) {
+      final id = _lastSessionIdOf[session] ?? '';
+      final self = _identityOf[session] ?? '';
+      final others = {
+        ...session.snapshot.players,
+        ...session.snapshot.spectators,
+      }..remove(self);
+      // isHost falls before the notify that ends a session, so a host that
+      // left the activity first is only known from _everHostedByUs.
+      final hosting = session.isHost || _everHostedByUs.contains(session);
+      // Not disposed: the call's view may still hold it for a moment.
+      await _untrack(session);
+      if (id.isNotEmpty && hosting && others.isEmpty) {
+        await clear(id).catchError((Object _) {});
       }
     }
   }
@@ -262,7 +352,7 @@ class MatrixCallActivityComponent
     }));
     _callManagerSubs.add(callManager.currentSessions.onRemove.listen((session) {
       if (!_isOurCall(session)) return;
-      _followState();
+      _leaveCall();
     }));
   }
 
