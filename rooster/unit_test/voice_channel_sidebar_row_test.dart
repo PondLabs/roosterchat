@@ -719,6 +719,44 @@ void main() {
     await done(tester, list);
   });
 
+  // Report (2026-11-05), with a screenshot: whoever launched a call activity
+  // showed twice under the channel. Its room state was listed as a second
+  // call, with its host as the one person in it.
+  testWidgets('someone who launched an activity is listed once',
+      (tester) async {
+    CallActivityRegistry.register(CallActivity(
+        id: 'chat.commet.putt', displayName: () => 'Sunny Side Putt'));
+    addTearDown(CallActivityRegistry.clear);
+    final clock = HomeserverClock()
+      ..readSync(_syncAt(_serverNow()), homeserver: 'example.org');
+    final list = listFor(clock);
+    hangout();
+    const key = '_@alice:example.org:ALICE';
+    room.matrixRoom.states[MatrixCallActivityComponent.stateEventType] = {
+      key: matrix.Event(
+        type: MatrixCallActivityComponent.stateEventType,
+        eventId: '\$$key',
+        senderId: '@alice:example.org',
+        stateKey: key,
+        originServerTs: _serverNow(),
+        room: room.matrixRoom,
+        content: {
+          'activity': 'chat.commet.putt',
+          'host': '@alice:example.org',
+          'created': _serverNow().millisecondsSinceEpoch,
+          'expires': MatrixCallActivityComponent.expires.inMilliseconds,
+        },
+      ),
+    };
+
+    await show(tester);
+
+    expect(find.text('Alice'), findsOneWidget);
+    expect(find.text('Bob'), findsOneWidget);
+    expect(find.text('Carol'), findsOneWidget);
+    await done(tester, list);
+  });
+
   testWidgets("a voice channel's status shows under its name, to everyone",
       (tester) async {
     final clock = HomeserverClock()
