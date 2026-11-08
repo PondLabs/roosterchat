@@ -200,37 +200,39 @@ void main() {
     expect(match.myBall!.asleep, isFalse, reason: 'the egg is rolling');
   });
 
-  testWidgets('my last roll is traced under the next aim', (tester) async {
+  testWidgets('the aim is the band and the row, on every putt alike',
+      (tester) async {
     final match = PuttMatch.solo();
     final game = SunnySidePuttGame(match: match, onSfx: (_, __) {});
     await tester.pumpWidget(MaterialApp(home: GameWidget(game: game)));
     await tester.pump(const Duration(milliseconds: 50));
-    game.buildWorldFrame();
-    expect(game.lastRoll, isEmpty, reason: 'nothing putted yet');
 
-    // A soft putt away from the nest, followed frame by frame.
-    final start = match.myBall!.position;
-    final away = (start - match.hole!.nest.position).angle;
+    PuttWorldAim pull() {
+      final egg = match.myBall!.position;
+      game.beginAim(egg);
+      game.moveAim(egg - const Vec2(3, 0));
+      final aim = game.buildWorldFrame().aim!;
+      game.cancelAim();
+      return aim;
+    }
+
+    final first = pull();
+    expect(first.tint, isNotNull, reason: 'the band in my colour');
+    expect(first.dragLength, closeTo(3, 1e-6));
+    expect(first.pullAngle, closeTo(0, 1e-9), reason: 'pulled west, aims east');
+
+    // After a putt the next aim is drawn from the same things: nothing of
+    // the roll just played comes along.
+    final away = (match.myBall!.position - match.hole!.nest.position).angle;
     expect(match.submitShot(away, 0.25), isTrue);
     for (var i = 0; i < 900 && !match.myBall!.asleep; i++) {
       match.update(1 / 60);
       game.buildWorldFrame();
     }
-    game.buildWorldFrame();
-    final roll = game.lastRoll;
-    expect(roll, isNotEmpty);
-    expect(roll.first.first.distanceTo(start), lessThan(0.3),
-        reason: 'from where it stood');
-    expect(roll.last.last.distanceTo(match.myBall!.position), lessThan(0.3),
-        reason: 'to where it stopped');
-
-    // The next aim carries it, in my colour.
-    final egg = match.myBall!.position;
-    game.beginAim(egg);
-    game.moveAim(egg - const Vec2(3, 0));
-    final aim = game.buildWorldFrame().aim!;
-    expect(aim.trace, roll);
-    expect(aim.traceTint, isNotNull);
+    final second = pull();
+    expect(second.power, first.power);
+    expect(second.dragLength, first.dragLength);
+    expect(second.tint, first.tint);
   });
 
   testWidgets('the frame tells the world while the camera sweeps in',

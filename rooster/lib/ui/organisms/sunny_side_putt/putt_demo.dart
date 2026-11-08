@@ -3,7 +3,7 @@
 // which main() branches off before anything the app would otherwise boot).
 //
 // The local egg plays the hole's own reference solution - aimed with the
-// real drag, so the arrow, its power ring and the roll guide show - with a
+// real drag, so the pull's band and the row of chevrons show - with a
 // small, fixed jitter; the other players (Maya, Jonas, Lou and friends, the
 // brand's demo crew) putt toward the nest with seeded jitter and hop in
 // with a Rabbit Hole when a rail stands in their way. The hole's overview
@@ -21,7 +21,7 @@
 // arm=sprinkler (with armAt=3, seconds into the hole) arms that one's
 // targeting over the green - the scripted putts wait while it is up.
 // soft=0.25 makes the viewer's first putt a soft one at that power,
-// straight at the nest (the guide's resting-spot mark). To show the casts
+// straight at the nest. To show the casts
 // everyone sees, script= has the crew (and the viewer) cast at set moments
 // of each hole: who.power@seconds, comma separated, who being me or a crew
 // member's first name, e.g.

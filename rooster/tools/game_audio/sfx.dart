@@ -547,6 +547,37 @@ Float64List clockTick(Rng rng, {bool tock = false}) => strike([
       (tock ? 690 : 930, 0.28, 0.012),
     ], rng, length: 0.09, click: 0.3, clickHz: 3000);
 
+/// The carton's reel turning one power-up on: a bright wooden ratchet
+/// tick, short enough for a dozen in a second.
+Float64List reelTick(Rng rng) => strike([
+      (2350, 1.0, 0.008),
+      (4700, 0.35, 0.004),
+      (1180, 0.3, 0.01),
+    ], rng, length: 0.06, click: 0.4, clickHz: 3600);
+
+/// The reel stopping on its prize: a pop, then a quick climbing sparkle
+/// of chimes (C, E, G, C) over a soft shimmer.
+Float64List prizeReveal(Rng rng) {
+  final pop = Float64List(samplesFor(0.1));
+  var phase = 0.0;
+  for (var i = 0; i < pop.length; i++) {
+    final t = i / sampleRate;
+    final hz = 520 + 900 * math.exp(-t / 0.012);
+    phase += hz / sampleRate;
+    if (phase >= 1) phase -= 1;
+    pop[i] =
+        math.sin(twoPi * phase) * math.min(1, t / 0.0008) * math.exp(-t / 0.03);
+  }
+  return arrange([
+    (0, pop, 0.8),
+    (0.04, chime(1046.5, rng, decay: 0.16), 0.42),
+    (0.1, chime(1318.51, rng, decay: 0.18), 0.4),
+    (0.16, chime(1567.98, rng, decay: 0.2), 0.4),
+    (0.22, chime(2093.0, rng, decay: 0.42), 0.46),
+    (0.24, chime(3135.96, rng, decay: 0.3), 0.16),
+  ]);
+}
+
 /// A button: a soft felt click.
 Float64List menuClick(Rng rng) => strike([
       (1480, 1.0, 0.006),

@@ -85,6 +85,9 @@ final _sounds = [
   // The kickers: an egg thrown off a lip, and coming down.
   _Sound('kick', _Format.wav, -16, 40, kickerLaunch),
   _Sound('land', _Format.wav, -16.5, 41, kickerLanding),
+  // The carton's reel after a "?" box: a tick a turn, and the prize.
+  _Sound('roll', _Format.wav, -22, 42, reelTick),
+  _Sound('reveal', _Format.wav, -15.5, 43, prizeReveal),
 ];
 
 /// The music's MP3 quality (LAME's VBR scale: 0 best, 9 smallest).

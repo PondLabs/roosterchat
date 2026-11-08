@@ -11,6 +11,7 @@ import 'package:rooster/client/components/sunny_side_putt/courses/course_kit.dar
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_hud.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_match.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_powerup_icons.dart';
+import 'package:rooster/ui/organisms/sunny_side_putt/putt_session.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/spectator_strip.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/stub_courses.dart';
 
@@ -42,6 +43,76 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
     expect(find.byKey(const Key('putt-slot-fresh')), findsNothing,
         reason: 'a moment, then the icon alone');
+  });
+
+  testWidgets("a box's prize spins in the slot's reel, then lands named",
+      (tester) async {
+    final sounds = <PuttSfx>[];
+    Widget carton(List<String> slots, List<int> picks) => MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.bottomRight,
+              child: Padding(
+                padding: const EdgeInsets.all(120),
+                child: PuttInventory(
+                    slots: slots, pickSerials: picks, onSfx: sounds.add),
+              ),
+            ),
+          ),
+        );
+    await tester.pumpWidget(carton(const [], const [0, 0, 0]));
+    await tester.pumpWidget(carton(const ['gust'], const [1, 0, 0]));
+    Future<void> frames(int count) async {
+      for (var i = 0; i < count; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+    }
+
+    await frames(12);
+    // The reel turns, ticking, and the name waits for it to stop.
+    expect(find.byKey(const Key('putt-slot-reel')), findsOneWidget);
+    expect(find.byKey(const Key('putt-slot-fresh')), findsNothing);
+    expect(sounds.where((s) => s == PuttSfx.powerUpRoll), isNotEmpty);
+    expect(sounds, isNot(contains(PuttSfx.powerUpReveal)));
+    await frames(75);
+    expect(find.byKey(const Key('putt-slot-reel')), findsNothing);
+    expect(sounds.where((s) => s == PuttSfx.powerUpRoll).length,
+        greaterThanOrEqualTo(8),
+        reason: 'a tick a turn, through the reel');
+    expect(sounds.where((s) => s == PuttSfx.powerUpReveal), hasLength(1));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byKey(const Key('putt-slot-fresh')), findsOneWidget);
+    expect(find.text(puttPowerUpName('gust')), findsOneWidget);
+    // Another power-up moving into the slot after a cast does not spin.
+    sounds.clear();
+    await tester.pumpWidget(carton(const ['sprinkler'], const [1, 0, 0]));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(const Key('putt-slot-reel')), findsNothing);
+    expect(sounds, isEmpty);
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  test("a box taken on the green counts in the slot it fills", () {
+    final course = stubCourse(id: 'boxes', holeCount: 1);
+    final match = PuttMatch(
+      config: PuttConfig(
+        mode: GameMode.casual,
+        courses: [course],
+        seed: 5,
+        wobbleMaxRadians: 0,
+        powerUps: puttLaunchPowerUps(),
+      ),
+      displayNames: const {'me': 'Gabriel'},
+    )..boot();
+    final box = match.hole!.boxes.single.position;
+    final egg = match.myBall!.position;
+    expect(match.myPickSerials, [0, 0, 0]);
+    expect(match.submitShot((box - egg).angle, 0.42), isTrue);
+    for (var i = 0; i < 600 && match.myInventory.isEmpty; i++) {
+      match.update(1 / 60);
+    }
+    expect(match.myInventory, hasLength(1), reason: 'the egg took the box');
+    expect(match.myPickSerials, [1, 0, 0]);
   });
 
   group('timer ring', () {

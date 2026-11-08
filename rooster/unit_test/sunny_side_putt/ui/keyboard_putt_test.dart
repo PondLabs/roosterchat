@@ -30,6 +30,8 @@ PuttMatch keyMatch(List<EngineInput> moves) {
       courses: [course],
       seed: 7,
       powerUps: puttLaunchPowerUps(),
+      // The keys' own aim, still: the sway has its tests in aim_test.
+      wobbleMaxRadians: 0,
     ),
     displayNames: const {'me': 'Rooster', 'p2': 'Hen'},
     seatedPlayerIds: const ['p2'],
@@ -146,13 +148,14 @@ void main() {
       final frame = game.buildWorldFrame();
       expect(frame.aim, isNotNull);
       expect(frame.aim!.power, closeTo(0.45, 1e-9));
-      expect(frame.aim!.preview, isNotEmpty, reason: 'and its dotted guide');
+      expect(frame.aim!.dragLength, closeTo(game.aim.dragFor(0.45), 1e-9),
+          reason: 'and its band, as long as the pull that gives it');
     });
 
     testWidgets('Space putts the angle and power the aim holds',
         (tester) async {
       await boot(tester);
-      // Down twice: 40%, a putt soft enough to hold still (no sway).
+      // Down twice: 40%.
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);

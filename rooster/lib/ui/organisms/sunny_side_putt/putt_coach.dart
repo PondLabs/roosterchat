@@ -1,8 +1,9 @@
 // The aim coach: until the viewer's first putt of the match, and again
 // whenever they sit a while with their egg ready, a hand over the egg
 // shows the gesture - press, pull back away from the nest, let go - while
-// a ghost arrow grows toward the nest (the HUD's hint line says it in
-// words, out of the way of the eggs).
+// the aim the green draws grows with it: the band back to the hand and the
+// row of white chevrons toward the nest, one more per level of the pull
+// (the HUD's hint line says it in words, out of the way of the eggs).
 // The game hands it the egg's pixel and the way to the nest on screen
 // after every rendered frame ([PuttCoachCue]); null hides it.
 library;
@@ -33,8 +34,8 @@ class PuttCoachCue {
 
 /// Where the coach draws for [cue], for the name tags to keep clear of:
 /// the hand's whole pull (it is drawn from 14 px left of its point to 40
-/// right, 4 above to 50 below) and the ghost arrow toward the nest. Round
-/// 4's frames had the hand over other players' tags.
+/// right, 4 above to 50 below) and the row of chevrons toward the nest.
+/// Round 4's frames had the hand over other players' tags.
 List<Rect> puttCoachObstacles(PuttCoachCue cue) {
   final back = -cue.toward;
   final press = cue.egg + back * 26;
@@ -45,11 +46,20 @@ List<Rect> puttCoachObstacles(PuttCoachCue cue) {
     math.max(press.dx, pulled.dx) + 40,
     math.max(press.dy, pulled.dy) + 50,
   );
-  final arrow = Rect.fromPoints(
-          cue.egg + cue.toward * 22, cue.egg + cue.toward * (22 + 154))
+  final row = Rect.fromPoints(cue.egg + cue.toward * _rowStart,
+          cue.egg + cue.toward * (_rowStart + _rowLength))
       .inflate(14);
-  return [hand, arrow];
+  return [hand, row];
 }
+
+/// Where the coach's row starts past the egg's pixel, one chevron's
+/// length and the step to the next, as the green draws them.
+const double _rowStart = 26;
+const double _chevronLength = 9;
+const double _chevronWidth = 22;
+const double _chevronPitch = 16;
+const int _rowLevels = 8;
+const double _rowLength = (_rowLevels - 1) * _chevronPitch + _chevronLength;
 
 /// The coach layer: listens to [cue] and loops the gesture over the egg.
 class PuttCoach extends StatefulWidget {
@@ -176,7 +186,7 @@ class _PuttCoachState extends State<PuttCoach>
 }
 
 /// The gesture at loop time t: how far the hand has pulled (0..1), how it
-/// shows, and how the ghost arrow and the press ripple look.
+/// shows, and how the aim and the press ripple look.
 class _CoachPose {
   final double pull;
   final double handAlpha;
@@ -195,8 +205,8 @@ class _CoachPose {
   static double _ease(double k) => k * k * (3 - 2 * k);
 
   /// 0-0.1 the hand settles on the press point; 0.1-0.2 it presses (a
-  /// ripple); 0.2-0.6 it pulls back while the arrow grows; 0.6-0.7 it lets
-  /// go (the arrow flashes and goes, the hand lifts away); then it comes
+  /// ripple); 0.2-0.6 it pulls back while the aim grows; 0.6-0.7 it lets
+  /// go (the aim fades, the hand lifts away); then it comes
   /// back to wait at the press point, half seen, for the next round - so
   /// the gesture is on screen nearly all the time.
   factory _CoachPose.at(double t) {
@@ -267,46 +277,62 @@ class _CoachPainter extends CustomPainter {
       );
     }
     if (pose.arrowAlpha <= 0) return;
-    // The pull: dashes from the press point to the hand.
-    final pullLength = (hand - press).distance;
-    if (pullLength > 4) {
-      final dash = Paint()
-        ..strokeWidth = 3
-        ..strokeCap = StrokeCap.round
-        ..color = PuttPalette.cream.withValues(alpha: 0.8 * pose.arrowAlpha);
-      final unit = (hand - press) / pullLength;
-      for (var d = 0.0; d < pullLength; d += 12) {
+    final ink = PuttPalette.ink.withValues(alpha: 0.55 * pose.arrowAlpha);
+    final white = Colors.white.withValues(alpha: 0.95 * pose.arrowAlpha);
+    // The pull: the band from the egg back to the hand, a ring at its end,
+    // as the green draws it.
+    final back = -toward;
+    final bandStart = egg + back * 12;
+    final bandLength = (hand - bandStart).distance;
+    if (pose.pull > 0.02 && bandLength > 8) {
+      for (final (width, paint) in [(9.0, ink), (5.0, white)]) {
         canvas.drawLine(
-            press + unit * d, press + unit * math.min(d + 6, pullLength), dash);
+            bandStart,
+            hand,
+            Paint()
+              ..strokeWidth = width
+              ..strokeCap = StrokeCap.round
+              ..color = paint);
       }
+      canvas
+        ..drawCircle(
+            hand,
+            10,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 8
+              ..color = ink)
+        ..drawCircle(
+            hand,
+            10,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 4
+              ..color = white);
     }
-    // The ghost arrow: from the egg toward the nest, as long as the pull.
-    final length = 34 + 120 * pose.pull;
-    final start = egg + toward * 22;
-    final tip = start + toward * length;
+    // The row: one white chevron per level of the pull, toward the nest.
+    final levels = (pose.pull * _rowLevels).ceil().clamp(1, _rowLevels);
     final side = Offset(-toward.dy, toward.dx);
-    final shaftEnd = tip - toward * 16;
-    final path = Path()
-      ..moveTo(start.dx + side.dx * 5, start.dy + side.dy * 5)
-      ..lineTo(shaftEnd.dx + side.dx * 5, shaftEnd.dy + side.dy * 5)
-      ..lineTo(shaftEnd.dx + side.dx * 13, shaftEnd.dy + side.dy * 13)
-      ..lineTo(tip.dx, tip.dy)
-      ..lineTo(shaftEnd.dx - side.dx * 13, shaftEnd.dy - side.dy * 13)
-      ..lineTo(shaftEnd.dx - side.dx * 5, shaftEnd.dy - side.dy * 5)
-      ..lineTo(start.dx - side.dx * 5, start.dy - side.dy * 5)
-      ..close();
-    final power = Color.lerp(
-        const Color(0xFFFFF4CC), const Color(0xFFFFD43B), pose.pull)!;
-    canvas
-      ..drawPath(
-          path,
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 4
-            ..strokeJoin = StrokeJoin.round
-            ..color = PuttPalette.ink.withValues(alpha: 0.7 * pose.arrowAlpha))
-      ..drawPath(path,
-          Paint()..color = power.withValues(alpha: 0.85 * pose.arrowAlpha));
+    for (var i = 0; i < levels; i++) {
+      final base = egg + toward * (_rowStart + i * _chevronPitch);
+      final tip = base + toward * _chevronLength;
+      final path = Path()
+        ..moveTo(base.dx + side.dx * _chevronWidth / 2,
+            base.dy + side.dy * _chevronWidth / 2)
+        ..lineTo(tip.dx, tip.dy)
+        ..lineTo(base.dx - side.dx * _chevronWidth / 2,
+            base.dy - side.dy * _chevronWidth / 2)
+        ..close();
+      canvas
+        ..drawPath(
+            path.shift(back * 2.5),
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 3
+              ..strokeJoin = StrokeJoin.round
+              ..color = ink)
+        ..drawPath(path, Paint()..color = white);
+    }
   }
 
   @override

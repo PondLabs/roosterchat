@@ -14,6 +14,14 @@ import 'package:rooster/ui/organisms/sunny_side_putt/stub_courses.dart';
 
 void main() {
   group('boot', () {
+    test('before the first tick, my egg is drawn where it stands', () {
+      // The camera takes the hole's way from the egg on its first frame:
+      // the table's corner turned it the wrong way round.
+      final match = PuttMatch.solo();
+      expect(match.currentPositions, isEmpty, reason: 'no tick yet');
+      expect(match.myEggRenderPosition, match.hole!.tee);
+    });
+
     test('the solo match is on hole 1 immediately, no network', () {
       final match = PuttMatch.solo(localPlayerName: 'Tester');
       expect(match.phase, PuttPhase.holePlay);
