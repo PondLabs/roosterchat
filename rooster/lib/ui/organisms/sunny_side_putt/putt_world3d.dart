@@ -963,7 +963,11 @@ class PuttWorld3D {
   final tjs.PerspectiveCamera camera = tjs.PerspectiveCamera(
     PuttCameraRig.fovDeg,
     800 / 600,
-    0.3,
+    // The camera stays 3.5 units or more from what it looks at (the
+    // close-up's floor); a near plane twice 0.3's halves the depth
+    // buffer's grain at every distance, so marks a little over the turf
+    // (and a prop's trim on its walls) hold still from across the farm.
+    0.6,
     1400,
   );
   final PuttCameraRig rig;
