@@ -97,6 +97,10 @@ class Settings{
 /// the engine copies the shared texture on its raster thread while ANGLE
 /// may still be drawing into it. Android's window surface really swaps,
 /// and the source-texture path already finished.
+///
+/// Where this holds, the viewer does not draw into that texture: it draws
+/// into a [DeferredScreen] of its own and copies the finished frame over
+/// on the next tick (see [ThreeJS.render]).
 bool needsFinishBeforePresent({
   required bool web,
   required bool hasSourceTexture,
@@ -107,6 +111,81 @@ bool needsFinishBeforePresent({
   if (!hasEglSurface) return true;
   return platform == TargetPlatform.windows ||
       platform == TargetPlatform.macOS;
+}
+
+/// ROOSTER: the framebuffer the scene is drawn into where the texture
+/// Flutter shows is single-buffered ([needsFinishBeforePresent]), and the
+/// frame drawn into it last that Flutter has not been given yet.
+///
+/// Waiting for the GPU (`glFinish`) between the draw and
+/// textureFrameAvailable kept Flutter from showing a frame still being
+/// drawn, but it held the UI thread for the whole of the GPU's frame every
+/// tick, so the CPU's next frame never overlapped the GPU's: the frame
+/// rate fell wherever the two added up to more than a vsync. Here a tick
+/// first copies the frame drawn on the previous tick into Flutter's
+/// texture (one blit; that frame's draw ran on the GPU while the UI thread
+/// was busy elsewhere, so the wait for it is short), tells Flutter, and
+/// only then draws the new frame, into this framebuffer, with a flush and
+/// no wait. Flutter's texture is written by that blit alone, never by a
+/// draw that starts with a clear, so no tick can show a frame half drawn.
+/// The price is one frame of latency.
+class DeferredScreen {
+  DeferredScreen(this.gl);
+
+  final RenderingContext gl;
+  Framebuffer? _framebuffer;
+  Renderbuffer? _color;
+  Renderbuffer? _depth;
+  int width = 0;
+  int height = 0;
+
+  /// A frame was drawn here that Flutter has not been given yet.
+  bool pending = false;
+
+  /// Makes (or, at a new size, reallocates) the framebuffer; true when it
+  /// was, and so holds nothing yet.
+  bool ensure(int width, int height) {
+    if (_framebuffer != null && width == this.width && height == this.height) {
+      return false;
+    }
+    this.width = width;
+    this.height = height;
+    pending = false;
+    final framebuffer = _framebuffer ??= gl.createFramebuffer();
+    final color = _color ??= gl.createRenderbuffer();
+    final depth = _depth ??= gl.createRenderbuffer();
+    gl.bindRenderbuffer(WebGL.RENDERBUFFER, color);
+    gl.renderbufferStorage(WebGL.RENDERBUFFER, WebGL.RGBA8, width, height);
+    gl.bindRenderbuffer(WebGL.RENDERBUFFER, depth);
+    gl.renderbufferStorage(
+        WebGL.RENDERBUFFER, WebGL.DEPTH24_STENCIL8, width, height);
+    gl.bindRenderbuffer(WebGL.RENDERBUFFER, null);
+    gl.bindFramebuffer(WebGL.FRAMEBUFFER, framebuffer);
+    gl.framebufferRenderbuffer(
+        WebGL.FRAMEBUFFER, WebGL.COLOR_ATTACHMENT0, WebGL.RENDERBUFFER, color);
+    gl.framebufferRenderbuffer(WebGL.FRAMEBUFFER,
+        WebGL.DEPTH_STENCIL_ATTACHMENT, WebGL.RENDERBUFFER, depth);
+    return true;
+  }
+
+  /// Draws go here from now on (a null bind is a no-op on native, so the
+  /// renderer's "screen" is whatever was bound last).
+  void bind() {
+    final framebuffer = _framebuffer;
+    if (framebuffer != null) gl.bindFramebuffer(WebGL.FRAMEBUFFER, framebuffer);
+  }
+
+  /// Copies the frame here into [target] (Flutter's texture: the default
+  /// framebuffer of a surface, or the shared FBO) and waits for the copy:
+  /// what follows tells Flutter the texture holds a whole frame.
+  void copyTo(int target) {
+    gl.bindFramebuffer(WebGL.READ_FRAMEBUFFER, _framebuffer);
+    gl.bindFramebuffer(WebGL.DRAW_FRAMEBUFFER, Framebuffer(target));
+    gl.blitFramebuffer(0, 0, width, height, 0, 0, width, height,
+        WebGL.COLOR_BUFFER_BIT, WebGL.NEAREST);
+    gl.finish();
+    pending = false;
+  }
 }
 
 /// threeJs utility class. If you want to learn how to connect cannon.js with js, please look at the examples/threejs_* instead.
@@ -324,11 +403,26 @@ class ThreeJS with WidgetsBindingObserver{
     _updating = false;
   }
 
+  /// ROOSTER: where frames are drawn when Flutter's texture is
+  /// single-buffered (null elsewhere, and until the first such frame).
+  DeferredScreen? deferredScreen;
+
   Future<void> render([core.Scene? scene, core.Camera? camera, FlutterAngleTexture? texture, double? dt]) async{
     scene ??= this.scene;
     camera ??= this.camera;
     texture ??= this.texture!;
-    
+
+    // ROOSTER: a texture that does not swap buffers gets each frame a tick
+    // late, copied whole, instead of a glFinish here (see DeferredScreen).
+    if (needsFinishBeforePresent(
+      web: kIsWeb,
+      hasSourceTexture: sourceTexture != null,
+      hasEglSurface: texture.surfaceId != null,
+      platform: defaultTargetPlatform,
+    )) {
+      return _renderDeferred(scene, camera, texture, dt);
+    }
+
     if(sourceTexture == null){
       angle?.activateTexture(texture);
     }
@@ -345,23 +439,48 @@ class ThreeJS with WidgetsBindingObserver{
     if(sourceTexture != null){
       angle?.activateTexture(texture);
     }
-    // ROOSTER: the frame is done before Flutter is told of it, on every
-    // surface that does not swap buffers. The texture is the one Flutter
-    // samples (no second buffer), and a flush alone let the compositor read
-    // it while the GPU was still drawing: a frame half drawn, the clear
-    // colour through it, a flicker. Not a fence: the wait has to be here,
-    // before textureFrameAvailable, on the one buffer both sides use, so a
-    // glClientWaitSync would stall as long as glFinish; Flutter's context
-    // waiting on it on the GPU (glWaitSync) is the plugin's side.
-    if (needsFinishBeforePresent(
-      web: kIsWeb,
-      hasSourceTexture: sourceTexture != null,
-      hasEglSurface: texture.surfaceId != null,
-      platform: defaultTargetPlatform,
-    )) {
-      gl?.finish();
-    }
     await angle?.updateTexture(texture,sourceTexture);
+  }
+
+  /// ROOSTER: one tick on a single-buffered texture: the last tick's frame
+  /// goes to Flutter, then this tick's is drawn and left to the GPU.
+  Future<void> _renderDeferred(core.Scene scene, core.Camera camera, FlutterAngleTexture texture, double? dt) async {
+    final gl = this.gl;
+    if (gl == null) return;
+    angle?.activateTexture(texture);
+    final screen = deferredScreen ??= DeferredScreen(gl);
+    final options = texture.options;
+    // The same pixel size the texture was made and activated with.
+    final fresh = screen.ensure(
+      (options.width * options.dpr).toInt(),
+      (options.height * options.dpr).toInt(),
+    );
+    if (screen.pending) await _present(screen, texture);
+    screen.bind();
+    rendererUpdate?.call();
+    if(postProcessor == null){
+      renderer!.clear();
+      renderer!.setViewport(0,0,width,height);
+      renderer!.render(scene, camera);
+    }
+    else{
+      postProcessor?.call(dt);
+    }
+    // The GPU starts on it now; nobody waits for it until the next tick.
+    gl.flush();
+    screen.pending = true;
+    // A new framebuffer (the first frame, a resize) has no older frame to
+    // show meanwhile: this one goes now, not an empty texture for a tick.
+    if (fresh) await _present(screen, texture);
+  }
+
+  Future<void> _present(DeferredScreen screen, FlutterAngleTexture texture) async {
+    // A blit obeys the scissor test; the renderer's own is put back after.
+    final scissor = renderer?.getScissorTest() ?? false;
+    if (scissor) renderer!.setScissorTest(false);
+    screen.copyTo(texture.fboId);
+    if (scissor) renderer!.setScissorTest(true);
+    await angle?.updateTexture(texture);
   }
   
   void initRenderer() {
@@ -409,6 +528,10 @@ class ThreeJS with WidgetsBindingObserver{
     // restoreScreenFramebuffer), so the shadows draw before the scene.
     if (!kIsWeb && !settings.useSourceTexture) {
       renderer!.restoreScreenFramebuffer = () {
+        // ROOSTER: the deferred screen when frames are drawn there (the
+        // context is already current: a bind is enough).
+        final screen = deferredScreen;
+        if (screen != null) return screen.bind();
         final target = texture;
         if (target != null) angle?.activateTexture(target);
       };

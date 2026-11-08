@@ -81,7 +81,8 @@ class AngleUniforms with AngleUniform {
 
   static void upload(RenderingContext gl, List seq, Map<String, dynamic> values, [AngleTextures? textures]) {
     for (int i = 0, n = seq.length; i != n; ++i) {
-      final u = seq[i];
+      // ROOSTER: typed, so the setter call is static (see AngleUniformNode).
+      final u = seq[i] as AngleUniformNode;
       final v = values[u.id];
       if (v["needsUpdate"] != false) {
         // note: always updating when .needsUpdate is null
@@ -90,8 +91,8 @@ class AngleUniforms with AngleUniform {
     }
   }
 
-  static List<dynamic> seqWithValue(List seq, Map<String, dynamic> values) {
-    List<dynamic> r = [];
+  static List<AngleUniformNode> seqWithValue(List<AngleUniformNode> seq, Map<String, dynamic> values) {
+    List<AngleUniformNode> r = [];
     for (int i = 0, n = seq.length; i != n; ++i) {
       final u = seq[i];
       // print("seqWithValue  u.id: ${u.id} ");

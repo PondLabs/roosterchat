@@ -29,16 +29,31 @@ map) the renderer's tone mapping where three.js gives none, so the depth
 materials did the same. Both are fixed and marked `// ROOSTER:` in
 `lib/renderers/renderer.dart` and `lib/angle/angle_programs.dart`.
 
+Uploading uniforms was the largest share of the UI thread's time in a
+Sunny Side Putt frame (about a quarter of the samples in a CPU profile):
+each uniform remembered its last value in a `Map<int, dynamic>`, so every
+matrix set hashed 16 keys to compare and, when the matrix had changed
+(every draw, for `modelViewMatrix`), cleared the map and boxed 16 doubles
+back into it, and every set reached its setter through `dynamic` and a
+`Function` field. In `lib/angle/angle_uniforms_helper.dart` the uniforms
+now share a typed `AngleUniformNode` interface with a switch over the
+setter kind, keep their cache in a list (`UniformCache`), and compare and
+copy matrices as a `Float32List`; the values uploaded and when are the
+same (`rooster/unit_test/sunny_side_putt/ui/uniform_upload_test.dart`).
+
 On native the renderer drew the shadow map after the scene (a bind of the
 null framebuffer brings nothing back there), so the scene read the last
 frame's map: shadows a frame late, and a dark flash whenever the map was
 remade. `AngleRenderer.restoreScreenFramebuffer`, set by `lib/three_viewer.dart`
 when it draws straight into its texture, binds the texture back after the
-shadow pass, and shadows draw first on native too. On the shared-FBO path
-(Linux, and Windows without a surface producer) the viewer also calls
-`glFinish` before telling Flutter of a frame: Flutter samples that same
-texture, and with a flush alone it could show a frame still being drawn.
-The surface paths swap buffers instead and do not stall. `lib/three_viewer.dart`
+shadow pass, and shadows draw first on native too. Where Flutter's
+texture is single-buffered (the shared FBO on Linux, the pbuffer surfaces
+on Windows and macOS) the viewer draws into a framebuffer of its own
+(`DeferredScreen`) and, on the next tick, blits the finished frame into
+the texture and waits for that blit alone before telling Flutter: Flutter
+never sees a frame still being drawn, and the UI thread no longer waits
+for each frame's draw (a `glFinish` after every draw cost frame rate).
+Android's window surface swaps buffers and is left as it was. `lib/three_viewer.dart`
 also waits for or drops an ANGLE start that a dispose cut short, and reports
 a start that failed (`onStartFailed`).
 
