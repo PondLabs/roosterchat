@@ -221,7 +221,10 @@ extension _KickerKit on _CourseKit {
           : rand.range(-half, half);
       straw.add(
         tjs.BoxGeometry(rand.range(0.3, 0.55), 0.025, 0.045),
-        _place(x, 0.015, z, yaw: rand.range(0, math.pi)),
+        // Over the pad painted round the kicker (its frame lies 0.02 and
+        // 0.03 up), each a little higher than the last: tops that met the
+        // paint or a crossing straw's flickered.
+        _place(x, 0.035 + i * 0.003, z, yaw: rand.range(0, math.pi)),
         rand.chance(0.5) ? _Farm.straw : _Farm.strawLight,
       );
     }

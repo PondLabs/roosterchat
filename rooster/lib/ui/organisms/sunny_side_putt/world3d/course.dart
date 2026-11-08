@@ -928,8 +928,17 @@ class _CourseKit with _LawnPaint {
         ..castShadow = true
         ..receiveShadow = true)
       ..add(tjs.Mesh(
-          _profileBox(xs, [for (final h in highs) h + _railHeight - 0.02],
-              [for (final h in highs) h + _railHeight + 0.1], thickness + 0.12),
+          // A touch longer than the body, as a straight rail's is: ends
+          // flush with the body's flickered through it.
+          _profileBox([
+            xs.first - 0.04,
+            ...xs.sublist(1, xs.length - 1),
+            xs.last + 0.04,
+          ], [
+            for (final h in highs) h + _railHeight - 0.02
+          ], [
+            for (final h in highs) h + _railHeight + 0.1
+          ], thickness + 0.12),
           _capMaterial)
         ..name = 'wall-cap'
         ..castShadow = true)
@@ -1714,7 +1723,9 @@ class _CourseKit with _LawnPaint {
     )
       ..name = 'boost-belt'
       ..rotation.x = -math.pi / 2
-      ..position.y = 0.065
+      // Two centimetres over the frame's top (0.06): at half a centimetre
+      // the belt and the timber under it flickered through each other.
+      ..position.y = 0.08
       ..receiveShadow = true;
     group
       ..add(frame)
@@ -2502,13 +2513,14 @@ class _CourseKit with _LawnPaint {
       merged.add(tjg.TorusGeometry(radius * 1.012 + 0.01, 0.04, 5, 32),
           _place(0, height * band, 0, tilt: math.pi / 2), _Farm.strawDark);
     }
-    // Loose straw at the foot.
+    // Loose straw at the foot, each a little higher than the last, so
+    // two that cross never share a top (they flickered where they did).
     for (var i = 0; i < 10; i++) {
       final angle = rand.range(0, math.pi * 2);
       final out = radius + rand.range(0.05, 0.4);
       merged.add(
           tjs.BoxGeometry(rand.range(0.35, 0.6), 0.03, 0.05),
-          _place(math.cos(angle) * out, 0.02, math.sin(angle) * out,
+          _place(math.cos(angle) * out, 0.02 + i * 0.004, math.sin(angle) * out,
               yaw: rand.range(0, math.pi)),
           rand.chance(0.5) ? _Farm.straw : _Farm.strawLight);
     }
@@ -2531,7 +2543,9 @@ class _CourseKit with _LawnPaint {
     for (final side in [-1.0, 1.0]) {
       merged.add(
           tjg.CircleGeometry(radius: radius * 0.92, segments: 20),
-          _place(side * (length / 2 + 0.005), radius, 0,
+          // Proud of the roll's flat end by more than a hair, or the two
+          // flicker through each other from across the green.
+          _place(side * (length / 2 + 0.025), radius, 0,
               yaw: side * math.pi / 2),
           _Farm.hayDark);
     }

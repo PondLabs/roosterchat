@@ -636,33 +636,106 @@ class _Scenery {
 
   /// The meadow: a wide field of patchy grass rolling up into hills toward
   /// the horizon, the near ring kept flat around the table.
+  /// The meadow's sheet: [_meadowSegments] squares a side, centred on the
+  /// green.
+  static const double _meadowSize = 1300.0;
+  static const int _meadowSegments = 120;
+
+  /// The meadow's heights over the table's foot ([_ground]) at its grid's
+  /// vertices, row by row along z (the order of its sheet's vertices).
+  late final Float64List _meadowHeights = () {
+    const n = _meadowSegments + 1;
+    const cell = _meadowSize / _meadowSegments;
+    final heights = Float64List(n * n);
+    for (var row = 0; row < n; row++) {
+      for (var col = 0; col < n; col++) {
+        heights[row * n + col] = _meadowRelief(
+            col * cell - _meadowSize / 2, row * cell - _meadowSize / 2);
+      }
+    }
+    return heights;
+  }();
+
+  /// The meadow's height over [_ground] at ([lx], [lz]) from the green's
+  /// centre: hills past the flat ring, a gentle roll nearer in. On Farm
+  /// Road the road's strip stays level (a valley through the hills): the
+  /// road, its poles and the tractor lie flat on it.
+  double _meadowRelief(double lx, double lz) {
+    final seed = _seedOf('${hole.id}/meadow');
+    final x = lx + _b.center.x;
+    final z = lz + _b.center.y;
+    final d = math.sqrt(lx * lx + lz * lz);
+    final angle = math.atan2(lz, lx);
+    final flatReach = _span * 0.7 + 34;
+    // Hills: rising past the flat ring, their crests from noise around
+    // the compass.
+    final rise = ((d - flatReach) / 150).clamp(0.0, 1.0);
+    final crest = 14 +
+        46 * _fbm(angle * 1.6 + 3, d * 0.004, seed) +
+        18 * _noise2(angle * 5, 1.5, seed + 3);
+    final roll = (_fbm(x * 0.03, z * 0.03, seed + 11) - 0.5) *
+        2.4 *
+        ((d - _span * 0.6 - 12) / 30).clamp(0.0, 1.0);
+    final y = rise * rise * (3 - 2 * rise) * crest + roll;
+    if (theme.kind != _ThemeKind.road) return y;
+    // Level a cell of the meadow's grid either side of the road, so the
+    // sheet's triangles over it are flat too.
+    final off = (z - _roadZ).abs();
+    final t = ((off - 12) / 18).clamp(0.0, 1.0);
+    return y * t * t * (3 - 2 * t);
+  }
+
+  /// Farm Road's road: its middle line across the far side.
+  double get _roadZ => _b.min.y - 13.0;
+
+  /// The meadow's surface at ([x], [z]) in the world: its sheet's own
+  /// triangles, interpolated as the GPU draws them, so what is laid on it
+  /// ([_fields]) follows it exactly.
+  double _meadowY(double x, double z) {
+    const n = _meadowSegments + 1;
+    const cell = _meadowSize / _meadowSegments;
+    final gx = ((x - _b.center.x + _meadowSize / 2) / cell)
+        .clamp(0.0, _meadowSegments - 1e-9);
+    final gz = ((z - _b.center.y + _meadowSize / 2) / cell)
+        .clamp(0.0, _meadowSegments - 1e-9);
+    final col = gx.floor();
+    final row = gz.floor();
+    final u = gx - col;
+    final v = gz - row;
+    final h = _meadowHeights;
+    final h00 = h[row * n + col];
+    final h10 = h[row * n + col + 1];
+    final h01 = h[(row + 1) * n + col];
+    final h11 = h[(row + 1) * n + col + 1];
+    // A PlaneGeometry cell splits along its (col, row + 1)-(col + 1, row)
+    // diagonal.
+    final y = u + v <= 1
+        ? h00 + u * (h10 - h00) + v * (h01 - h00)
+        : h11 + (1 - u) * (h01 - h11) + (1 - v) * (h10 - h11);
+    return _ground + y;
+  }
+
   tjs.Mesh _meadow() {
-    const size = 1300.0;
-    const segments = 120;
-    final geometry = tjs.PlaneGeometry(size, size, segments, segments)
+    final geometry = tjs.PlaneGeometry(
+        _meadowSize, _meadowSize, _meadowSegments, _meadowSegments)
       ..rotateX(-math.pi / 2);
     final position = geometry.attributes['position'] as tjs.BufferAttribute;
     final colors = Float32List(position.count * 3);
     final seed = _seedOf('${hole.id}/meadow');
     final center = _b.center;
     final flatReach = _span * 0.7 + 34;
+    const n = _meadowSegments + 1;
+    const cell = _meadowSize / _meadowSegments;
     for (var i = 0; i < position.count; i++) {
       final lx = position.getX(i)!.toDouble();
       final lz = position.getZ(i)!.toDouble();
       final x = lx + center.x;
       final z = lz + center.y;
       final d = math.sqrt(lx * lx + lz * lz);
-      final angle = math.atan2(lz, lx);
-      // Hills: rising past the flat ring, their crests from noise around
-      // the compass.
       final rise = ((d - flatReach) / 150).clamp(0.0, 1.0);
-      final crest = 14 +
-          46 * _fbm(angle * 1.6 + 3, d * 0.004, seed) +
-          18 * _noise2(angle * 5, 1.5, seed + 3);
-      final roll = (_fbm(x * 0.03, z * 0.03, seed + 11) - 0.5) *
-          2.4 *
-          ((d - _span * 0.6 - 12) / 30).clamp(0.0, 1.0);
-      final y = rise * rise * (3 - 2 * rise) * crest + roll;
+      final col = ((lx + _meadowSize / 2) / cell).round().clamp(0, n - 1);
+      final row = ((lz + _meadowSize / 2) / cell).round().clamp(0, n - 1);
+      final y = _meadowHeights[row * n + col];
       position.setXYZ(i, lx, y, lz);
       // Patches of deep and dry grass; the far hills paler.
       final patch = _fbm(x * 0.018, z * 0.018, seed + 5);
@@ -1100,11 +1173,22 @@ class _Scenery {
     // Ridge cap.
     into.add(tjs.BoxGeometry(0.5, 0.3, depth + 1.3),
         _place(x, base + wallHeight + roofHeight + 0.25, z), _Farm.roofDark);
-    // Trim: corner boards and the eave line, on the face toward the green.
+    // Trim: a board up each corner, standing proud of both walls it
+    // meets. (A board as deep as the barn, a hair outside its side wall,
+    // fought the red for every pixel of that wall: it flickered.)
     final front = z + depth / 2 + 0.06;
-    for (final cx in [x - width / 2 + 0.2, x + width / 2 - 0.2]) {
-      into.add(tjs.BoxGeometry(0.42, wallHeight, depth + 0.12),
-          _place(cx, base + wallHeight / 2, z), _Farm.trim);
+    const board = 0.42;
+    const proud = 0.06;
+    for (final sx in [-1.0, 1.0]) {
+      for (final sz in [-1.0, 1.0]) {
+        into.add(
+            tjs.BoxGeometry(board, wallHeight, board),
+            _place(
+                x + sx * (width / 2 + proud - board / 2),
+                base + wallHeight / 2,
+                z + sz * (depth / 2 + proud - board / 2)),
+            _Farm.trim);
+      }
     }
     // The doors: dark red leaves in a cream frame, the X braces.
     final doorWidth = 4.6 * scale;
@@ -1126,8 +1210,10 @@ class _Scenery {
           _Farm.trim,
         );
       }
-      into.add(tjs.BoxGeometry(0.22, doorHeight, 0.1),
-          _place(x, base + doorHeight / 2, front + 0.1), _Farm.trim);
+      // A little short of the leaves' top: level with it, the two tops
+      // flickered through each other.
+      into.add(tjs.BoxGeometry(0.22, doorHeight - 0.06, 0.1),
+          _place(x, base + (doorHeight - 0.06) / 2, front + 0.1), _Farm.trim);
     }
     // The hay loft door, bales peeking out.
     into.add(tjs.BoxGeometry(2.6, 2.2, 0.12),
@@ -2367,8 +2453,10 @@ class _Scenery {
           _place(at.x - 1.3, base + 1.15, at.y + side * 1.15,
               tilt: math.pi / 2),
           tyre);
+      // The hubs stand a few centimetres proud of the tyres: a centimetre
+      // out, their faces flickered through the rubber's.
       into.add(
-          tjg.CylinderGeometry(0.55, 0.55, 0.62, 12),
+          tjg.CylinderGeometry(0.55, 0.55, 0.68, 12),
           _place(at.x - 1.3, base + 1.15, at.y + side * 1.15,
               tilt: math.pi / 2),
           _hexOf(PuttPalette.yolk));
@@ -2378,7 +2466,7 @@ class _Scenery {
               tilt: math.pi / 2),
           tyre);
       into.add(
-          tjg.CylinderGeometry(0.28, 0.28, 0.47, 10),
+          tjg.CylinderGeometry(0.28, 0.28, 0.52, 10),
           _place(at.x + 1.9, base + 0.62, at.y + side * 0.95,
               tilt: math.pi / 2),
           _hexOf(PuttPalette.yolk));
@@ -2428,6 +2516,14 @@ class _Scenery {
     group.add(wires);
   }
 
+  /// A field's sheet: cells at most this long a side (world units), fine
+  /// enough to follow the meadow's own (about 11 wide) within
+  /// [_fieldLift].
+  static const double _fieldCell = 2.5;
+
+  /// How far a field floats over the meadow.
+  static const double _fieldLift = 0.12;
+
   /// Fields beyond the road: golden wheat and fresh-ploughed rows.
   void _fields(tjs.Group group, double roadZ) {
     final rand = _Rand(_seedOf('${hole.id}/fields'));
@@ -2439,17 +2535,37 @@ class _Scenery {
       final golden = f % 3 != 1;
       final texture = _fieldTexture(golden: golden);
       texture.repeat.setValues(width / 4, 1);
+      // Laid over the meadow's roll, a hand's breadth above it: a flat
+      // sheet crossed the rolling grass along its contours, and the two
+      // fought for the same pixels there (they flickered as the camera
+      // moved).
+      // As many squares each way (three_js_core's PlaneGeometry indexes a
+      // grid of unequal sides out of range).
+      final cells = (math.max(width, depth) / _fieldCell).ceil();
+      final geometry = tjs.PlaneGeometry(width, depth, cells, cells)
+        ..rotateX(-math.pi / 2);
+      final position = geometry.attributes['position'] as tjs.BufferAttribute;
+      for (var i = 0; i < position.count; i++) {
+        final lx = position.getX(i)!.toDouble();
+        final lz = position.getZ(i)!.toDouble();
+        position.setY(i, _meadowY(x + lx, z + lz) + _fieldLift);
+      }
+      geometry.computeVertexNormals();
       final mesh = tjs.Mesh(
-        tjs.PlaneGeometry(width, depth, 1, 1),
+        geometry,
         tjs.MeshStandardMaterial({
           tjs.MaterialProperty.map: texture,
           tjs.MaterialProperty.roughness: 1.0,
           tjs.MaterialProperty.metalness: 0.0,
+          // Where a crease of the meadow comes closer than the lift, the
+          // field still wins.
+          tjs.MaterialProperty.polygonOffset: true,
+          tjs.MaterialProperty.polygonOffsetFactor: -1.0,
+          tjs.MaterialProperty.polygonOffsetUnits: -4.0,
         }),
       )
         ..name = 'field'
-        ..rotation.x = -math.pi / 2
-        ..position.setValues(x, _ground + 0.06, z)
+        ..position.setValues(x, 0, z)
         ..receiveShadow = true;
       group.add(mesh);
     }
@@ -2489,6 +2605,11 @@ class _Scenery {
   /// A road sign's black.
   static const int _signBlack = 0x1E1A18;
 
+  /// How far in front of a sign's board (its yellow face is 0.045 out)
+  /// the black drawn on it stands: a centimetre out, the two flickered
+  /// through each other from across the green.
+  static const double _signInk = 0.07;
+
   /// A road sign's yellow.
   static const int _signYellow = 0xF5C21B;
 
@@ -2506,14 +2627,15 @@ class _Scenery {
         _inFrame(at, yaw, 0, y, 0.02, roll: math.pi / 4), _signYellow);
     into.add(
         tjs.SphereGeometry(1, 14, 10),
-        _inFrame(at, yaw, 0.02, y + 0.08, 0.05, sx: 0.2, sy: 0.27, sz: 0.02),
+        _inFrame(at, yaw, 0.02, y + 0.08, _signInk,
+            sx: 0.2, sy: 0.27, sz: 0.02),
         _signBlack);
     for (final (lx, lean) in const [(-0.07, 0.4), (0.08, -0.35)]) {
       into.add(tjs.BoxGeometry(0.045, 0.22, 0.02),
-          _inFrame(at, yaw, lx, y - 0.26, 0.05, roll: lean), _signBlack);
+          _inFrame(at, yaw, lx, y - 0.26, _signInk, roll: lean), _signBlack);
       into.add(
           tjs.BoxGeometry(0.11, 0.04, 0.02),
-          _inFrame(at, yaw, lx - lean * 0.12 + 0.03, y - 0.37, 0.05),
+          _inFrame(at, yaw, lx - lean * 0.12 + 0.03, y - 0.37, _signInk),
           _signBlack);
     }
   }
@@ -2537,7 +2659,8 @@ class _Scenery {
       for (final side in [-1.0, 1.0]) {
         into.add(
             tjs.BoxGeometry(0.4, 0.12, 0.02),
-            _inFrame(at, yaw, lx, y + side * 0.13, 0.05, roll: -side * 0.62),
+            _inFrame(at, yaw, lx, y + side * 0.13, _signInk,
+                roll: -side * 0.62),
             _signBlack);
       }
     }
@@ -2552,8 +2675,10 @@ class _Scenery {
     const height = 1.0;
     for (final lx in [-width / 2 + 0.12, width / 2 - 0.12]) {
       for (final lz in [-depth / 2 + 0.1, depth / 2 - 0.1]) {
-        into.add(tjs.BoxGeometry(0.14, height, 0.14),
-            _inFrame(at, yaw, lx, height / 2, lz), _Farm.trunk,
+        // Up to the planks' underside: into them, their faces met the
+        // planks' edges a hair apart and flickered.
+        into.add(tjs.BoxGeometry(0.14, height - 0.05, 0.14),
+            _inFrame(at, yaw, lx, (height - 0.05) / 2, lz), _Farm.trunk,
             baseShade: 0.65);
       }
     }
@@ -2583,8 +2708,11 @@ class _Scenery {
         _inFrame(at, yaw, lx + dx, ly + y, lz, roll: roll);
     into.add(tjg.CylinderGeometry(0.25, 0.27, 0.56, 14), piece(0.28), steel,
         baseShade: 0.75);
-    for (final y in [0.08, 0.5]) {
-      into.add(tjg.CylinderGeometry(0.278, 0.278, 0.05, 14), piece(y), band);
+    // The bands stand a few centimetres proud of the can (it tapers from
+    // 0.27 at the foot to 0.25 at the shoulder): a centimetre out, they
+    // and the can flickered through each other from across the green.
+    for (final (y, radius) in const [(0.08, 0.3), (0.5, 0.285)]) {
+      into.add(tjg.CylinderGeometry(radius, radius, 0.05, 14), piece(y), band);
     }
     into.add(tjg.CylinderGeometry(0.14, 0.25, 0.2, 14), piece(0.66), steel);
     into.add(tjg.CylinderGeometry(0.13, 0.14, 0.12, 12), piece(0.82), steel);
