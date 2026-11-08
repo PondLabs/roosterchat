@@ -20,59 +20,202 @@ final mat2array = Float32List(4);
 
 // --- Uniform Classes ---
 
-class SingleUniform with AngleUniformsHelper {
-  late Function setValue;
+/// ROOSTER: what every node of a program's uniform tree answers to, so the
+/// renderer calls a uniform's setter statically. Each node used to be
+/// reached through `dynamic` (and a single uniform's setter was a
+/// `Function` field), which made every one of the thousands of uniform
+/// sets a frame a dynamic invocation.
+abstract class AngleUniformNode {
+  dynamic get id;
+  void setValue(RenderingContext gl, dynamic value, [AngleTextures? textures]);
+}
+
+class SingleUniform with AngleUniformsHelper implements AngleUniformNode {
   late int type;
   late ActiveInfo activeInfo;
+  late final int _setter;
 
   SingleUniform(id, this.activeInfo, UniformLocation addr) {
     this.id = id;
     this.addr = addr;
-    cache = {};
     type = activeInfo.type;
-    setValue = getSingularSetter(activeInfo.type);
+    _setter = singularSetterOf(activeInfo.type);
+  }
+
+  @override
+  void setValue(RenderingContext gl, dynamic v, [AngleTextures? textures]) {
+    switch (_setter) {
+      case _v1f: setValueV1f(gl, v, textures);
+      case _v2f: setValueV2f(gl, v, textures);
+      case _v3f: setValueV3f(gl, v, textures);
+      case _v4f: setValueV4f(gl, v, textures);
+      case _m2: setValueM2(gl, v, textures);
+      case _m3: setValueM3(gl, v, textures);
+      case _m4: setValueM4(gl, v, textures);
+      case _v1i: setValueV1i(gl, v, textures);
+      case _v2i: setValueV2i(gl, v, textures);
+      case _v3i: setValueV3i(gl, v, textures);
+      case _v4i: setValueV4i(gl, v, textures);
+      case _v1ui: setValueV1ui(gl, v, textures);
+      case _v2ui: setValueV2ui(gl, v, textures);
+      case _v3ui: setValueV3ui(gl, v, textures);
+      case _v4ui: setValueV4ui(gl, v, textures);
+      case _t1: setValueT1(gl, v, textures!);
+      case _t3d: setValueT3D1(gl, v, textures);
+      case _t6: setValueT6(gl, v, textures);
+      case _t2dArray: setValueT2DArray1(gl, v, textures!);
+    }
   }
 }
 
-class PureArrayUniform with AngleUniformsHelper {
-  late Function setValue;
+class PureArrayUniform with AngleUniformsHelper implements AngleUniformNode {
   late int type;
   late ActiveInfo activeInfo;
+  late final int _setter;
 
   PureArrayUniform(id, this.activeInfo, addr) {
     this.id = id;
     this.addr = addr;
-    cache = {};
     size = activeInfo.size;
     type = activeInfo.type;
-    setValue = getPureArraySetter(activeInfo.type);
+    _setter = pureArraySetterOf(activeInfo.type);
   }
 
   void updateCache(data) {
     final cache = this.cache;
     copyArray(cache, data);
   }
+
+  @override
+  void setValue(RenderingContext gl, dynamic v, [AngleTextures? textures]) {
+    switch (_setter) {
+      case _v1f: setValueV1fArray(gl, v, textures);
+      case _v2f: setValueV2fArray(gl, v, textures);
+      case _v3f: setValueV3fArray(gl, v, textures);
+      case _v4f: setValueV4fArray(gl, v, textures);
+      case _m2: setValueM2Array(gl, v, textures);
+      case _m3: setValueM3Array(gl, v, textures);
+      case _m4: setValueM4Array(gl, v, textures);
+      case _v1i: setValueV1iArray(gl, v, textures);
+      case _v2i: setValueV2iArray(gl, v, textures);
+      case _v3i: setValueV3iArray(gl, v, textures);
+      case _v4i: setValueV4iArray(gl, v, textures);
+      case _v1ui: setValueV1uiArray(gl, v, textures);
+      case _v2ui: setValueV2uiArray(gl, v, textures);
+      case _v3ui: setValueV3uiArray(gl, v, textures);
+      case _v4ui: setValueV4uiArray(gl, v, textures);
+      case _t1: setValueT1Array(gl, v, textures);
+      case _t3d: setValueT3DArray(gl, v, textures);
+      case _t6: setValueT6Array(gl, v, textures);
+      case _t2dArray: setValueT2DArrayArray(gl, v, textures);
+    }
+  }
 }
 
 mixin AngleUniform {
-  late List seq;
-  late Map map;
+  late List<AngleUniformNode> seq;
+  late Map<dynamic, AngleUniformNode> map;
 }
 
-class StructuredUniform with AngleUniformsHelper, AngleUniform {
+class StructuredUniform with AngleUniformsHelper, AngleUniform
+    implements AngleUniformNode {
   StructuredUniform(id) {
     this.id = id;
     seq = [];
     map = {};
   }
 
-  void setValue(gl, value, textures) {
+  @override
+  void setValue(RenderingContext gl, dynamic value, [AngleTextures? textures]) {
     final seq = this.seq;
 
     for (int i = 0, n = seq.length; i != n; ++i) {
       final u = seq[i];
       u.setValue(gl, value[u.id], textures);
     }
+  }
+}
+
+/// ROOSTER: a uniform's last uploaded value, element by element: what the
+/// `Map<int, dynamic>` it replaces held (a missing element reads null), in
+/// a list, with no hashing on the hot path. Elements are always written
+/// from 0 up, so the list has no holes.
+class UniformCache {
+  final List<dynamic> _values = [];
+
+  int get length => _values.length;
+
+  dynamic operator [](int i) => i < _values.length ? _values[i] : null;
+
+  void operator []=(int i, dynamic value) {
+    final values = _values;
+    if (i < values.length) {
+      values[i] = value;
+      return;
+    }
+    while (values.length < i) {
+      values.add(null);
+    }
+    values.add(value);
+  }
+
+  void clear() => _values.clear();
+}
+
+// Setter kinds (ROOSTER: a switch on these replaces the setters' tear-offs).
+const _v1f = 0, _v2f = 1, _v3f = 2, _v4f = 3;
+const _m2 = 4, _m3 = 5, _m4 = 6;
+const _v1i = 7, _v2i = 8, _v3i = 9, _v4i = 10;
+const _v1ui = 11, _v2ui = 12, _v3ui = 13, _v4ui = 14;
+const _t1 = 15, _t3d = 16, _t6 = 17, _t2dArray = 18;
+
+/// The setter kind for a uniform of GL [type], or -1 when there is none.
+int _setterKind(int type) {
+  switch (type) {
+    case 0x1406: return _v1f; // FLOAT
+    case 0x8b50: return _v2f; // _VEC2
+    case 0x8b51: return _v3f; // _VEC3
+    case 0x8b52: return _v4f; // _VEC4
+
+    case 0x8b5a: return _m2; // _MAT2
+    case 0x8b5b: return _m3; // _MAT3
+    case 0x8b5c: return _m4; // _MAT4
+
+    case 0x1404: case 0x8b56: return _v1i; // INT, BOOL
+    case 0x8b53: case 0x8b57: return _v2i; // _VEC2
+    case 0x8b54: case 0x8b58: return _v3i; // _VEC3
+    case 0x8b55: case 0x8b59: return _v4i; // _VEC4
+
+    case 0x1405: return _v1ui; // UINT
+    case 0x8dc6: return _v2ui; // _VEC2
+    case 0x8dc7: return _v3ui; // _VEC3
+    case 0x8dc8: return _v4ui; // _VEC4
+
+    case 0x8b5e: // SAMPLER_2D
+    case 0x8d66: // SAMPLER_EXTERNAL_OES
+    case 0x8dca: // INT_SAMPLER_2D
+    case 0x8dd2: // UNSIGNED_INT_SAMPLER_2D
+    case 0x8b62: // SAMPLER_2D_SHADOW
+      return _t1;
+
+    case 0x8b5f: // SAMPLER_3D
+    case 0x8dcb: // INT_SAMPLER_3D
+    case 0x8dd3: // UNSIGNED_INT_SAMPLER_3D
+      return _t3d;
+
+    case 0x8b60: // SAMPLER_CUBE
+    case 0x8dcc: // INT_SAMPLER_CUBE
+    case 0x8dd4: // UNSIGNED_INT_SAMPLER_CUBE
+    case 0x8dc5: // SAMPLER_CUBE_SHADOW
+      return _t6;
+
+    case 0x8dc1: // SAMPLER_2D_ARRAY
+    case 0x8dcf: // INT_SAMPLER_2D_ARRAY
+    case 0x8dd7: // UNSIGNED_INT_SAMPLER_2D_ARRAY
+    case 0x8dc4: // SAMPLER_2D_ARRAY_SHADOW
+      return _t2dArray;
+    default:
+      return -1;
   }
 }
 
@@ -91,7 +234,7 @@ final rePathPart = RegExp(r"(\w+)(\])?(\[|\.)?"); //g;
 // allow straightforward parsing of the hierarchy that WebGL encodes
 // in the uniform names.
 
-void addUniform(AngleUniform container, uniformObject) {
+void addUniform(AngleUniform container, AngleUniformNode uniformObject) {
   container.seq.add(uniformObject);
   container.map[uniformObject.id] = uniformObject;
 }
@@ -125,7 +268,7 @@ void parseUniform(ActiveInfo activeInfo, UniformLocation addr, AngleUniform cont
       // step into inner node / create it in case it doesn't exist
 
       final map = container.map;
-      StructuredUniform? next = map[id];
+      StructuredUniform? next = map[id] as StructuredUniform?;
 
       if (next == null) {
         next = StructuredUniform(id);
@@ -141,12 +284,19 @@ mixin AngleUniformsHelper {
   // Flattening for arrays of vectors and matrices
   // id string || int
   late dynamic id;
-  Map<int, dynamic> cache = <int, dynamic>{};
+  // ROOSTER: a list, not a Map<int, dynamic> (see UniformCache).
+  final UniformCache cache = UniformCache();
+
+  // ROOSTER: a matrix uniform's last value, compared and copied as floats
+  // (as a Map of boxed doubles, each matrix set hashed 16 keys to compare
+  // and, when the matrix had changed, cleared and refilled the map).
+  Float32List? _matrix;
   UniformLocation addr = UniformLocation(0);
   late int size;
 
   void dispose(){
     cache.clear();
+    _matrix = null;
   }
 
   Float32List flat = Float32List(0);
@@ -186,17 +336,17 @@ mixin AngleUniformsHelper {
     return r;
   }
 
-  bool arraysEqual(Map<int, dynamic> a, b) {
-    if (a.keys.length != b.length) return false;
+  bool arraysEqual(UniformCache a, b) {
+    if (a.length != b.length) return false;
 
-    for (int i = 0, l = a.keys.length; i < l; i++) {
+    for (int i = 0, l = a.length; i < l; i++) {
       if (a[i] != b[i]) return false;
     }
 
     return true;
   }
 
-  void copyArray(Map<int, dynamic> a, b) {
+  void copyArray(UniformCache a, b) {
     final l = b.length;
     a.clear();
     for (int i = 0; i < l; i++) {
@@ -357,35 +507,32 @@ mixin AngleUniformsHelper {
   }
 
   void setValueM3(RenderingContext gl, Matrix3? v, [AngleTextures? textures]) {
-    final cache = this.cache;
     final elements = v?.storage;
-
-    if (elements == null) {
-      if (arraysEqual(cache, v)) return;
-
-      gl.uniformMatrix3fv(addr, false, elements!);
-
-      copyArray(cache, v);
-    } 
-    else {
-      if (arraysEqual(cache, elements)) {
-        return;
-      }
-
-      gl.uniformMatrix3fv(addr, false, elements);
-      copyArray(cache, elements);
-    }
+    if (elements == null) return;
+    if (_matrixChanged(elements)) gl.uniformMatrix3fv(addr, false, elements);
   }
 
   void setValueM4(RenderingContext gl, Matrix4 v, [AngleTextures? textures]) {
-    final cache = this.cache;
     final elements = v.storage;
+    if (_matrixChanged(elements)) gl.uniformMatrix4fv(addr, false, elements);
+  }
 
-    if (arraysEqual(cache, elements)) {
-      return;
+  /// ROOSTER: whether [elements] differ from the matrix uploaded last
+  /// (which they then become).
+  bool _matrixChanged(Float32List elements) {
+    final n = elements.length;
+    var last = _matrix;
+    if (last == null || last.length != n) {
+      _matrix = Float32List.fromList(elements);
+      return true;
     }
-    gl.uniformMatrix4fv(addr, false, elements);
-    copyArray(cache, elements);
+    var i = 0;
+    while (i < n && last[i] == elements[i]) {
+      i++;
+    }
+    if (i == n) return false;
+    last.setRange(i, n, elements, i);
+    return true;
   }
 
   // Single texture (2D / Cube)
@@ -521,53 +668,10 @@ mixin AngleUniformsHelper {
 
   // Helper to pick the right setter for the singular case
 
-  Function getSingularSetter(int type) {
-    switch (type) {
-      case 0x1406: return setValueV1f; // FLOAT
-      case 0x8b50: return setValueV2f; // _VEC2
-      case 0x8b51: return setValueV3f; // _VEC3
-      case 0x8b52: return setValueV4f; // _VEC4
-
-      case 0x8b5a: return setValueM2; // _MAT2
-      case 0x8b5b: return setValueM3; // _MAT3
-      case 0x8b5c: return setValueM4; // _MAT4
-
-      case 0x1404: case 0x8b56: return setValueV1i; // INT, BOOL
-      case 0x8b53: case 0x8b57: return setValueV2i; // _VEC2
-      case 0x8b54: case 0x8b58: return setValueV3i; // _VEC3
-      case 0x8b55: case 0x8b59: return setValueV4i; // _VEC4
-
-      case 0x1405: return setValueV1ui; // UINT
-      case 0x8dc6: return setValueV2ui; // _VEC2
-      case 0x8dc7: return setValueV3ui; // _VEC3
-      case 0x8dc8: return setValueV4ui; // _VEC4
-
-      case 0x8b5e: // SAMPLER_2D
-      case 0x8d66: // SAMPLER_EXTERNAL_OES
-      case 0x8dca: // INT_SAMPLER_2D
-      case 0x8dd2: // UNSIGNED_INT_SAMPLER_2D
-      case 0x8b62: // SAMPLER_2D_SHADOW
-        return setValueT1;
-
-      case 0x8b5f: // SAMPLER_3D
-      case 0x8dcb: // INT_SAMPLER_3D
-      case 0x8dd3: // UNSIGNED_INT_SAMPLER_3D
-        return setValueT3D1;
-
-      case 0x8b60: // SAMPLER_CUBE
-      case 0x8dcc: // INT_SAMPLER_CUBE
-      case 0x8dd4: // UNSIGNED_INT_SAMPLER_CUBE
-      case 0x8dc5: // SAMPLER_CUBE_SHADOW
-        return setValueT6;
-
-      case 0x8dc1: // SAMPLER_2D_ARRAY
-      case 0x8dcf: // INT_SAMPLER_2D_ARRAY
-      case 0x8dd7: // UNSIGNED_INT_SAMPLER_2D_ARRAY
-      case 0x8dc4: // SAMPLER_2D_ARRAY_SHADOW
-        return setValueT2DArray1;
-      default:
-        throw ("getSingularSetter id: $id type: $type");
-    }
+  int singularSetterOf(int type) {
+    final kind = _setterKind(type);
+    if (kind < 0) throw ("getSingularSetter id: $id type: $type");
+    return kind;
   }
 
   // Array of scalars
@@ -705,52 +809,8 @@ mixin AngleUniformsHelper {
     }
   }
 
-  // Helper to pick the right setter for a pure (bottom-level) array
-
-  dynamic getPureArraySetter(int type) {
-    switch (type) {
-      case 0x1406: return setValueV1fArray; // FLOAT
-      case 0x8b50: return setValueV2fArray; // _VEC2
-      case 0x8b51: return setValueV3fArray; // _VEC3
-      case 0x8b52: return setValueV4fArray; // _VEC4
-
-      case 0x8b5a: return setValueM2Array; // _MAT2
-      case 0x8b5b: return setValueM3Array; // _MAT3
-      case 0x8b5c: return setValueM4Array; // _MAT4
-
-      case 0x1404: case 0x8b56: return setValueV1iArray; // INT, BOOL
-      case 0x8b53: case 0x8b57: return setValueV2iArray; // _VEC2
-      case 0x8b54: case 0x8b58: return setValueV3iArray; // _VEC3
-      case 0x8b55: case 0x8b59: return setValueV4iArray; // _VEC4
-
-      case 0x1405: return setValueV1uiArray; // UINT
-      case 0x8dc6: return setValueV2uiArray; // _VEC2
-      case 0x8dc7: return setValueV3uiArray; // _VEC3
-      case 0x8dc8: return setValueV4uiArray; // _VEC4
-
-      case 0x8b5e: // SAMPLER_2D
-      case 0x8d66: // SAMPLER_EXTERNAL_OES
-      case 0x8dca: // INT_SAMPLER_2D
-      case 0x8dd2: // UNSIGNED_INT_SAMPLER_2D
-      case 0x8b62: // SAMPLER_2D_SHADOW
-        return setValueT1Array;
-
-      case 0x8b5f: // SAMPLER_3D
-      case 0x8dcb: // INT_SAMPLER_3D
-      case 0x8dd3: // UNSIGNED_INT_SAMPLER_3D
-        return setValueT3DArray;
-
-      case 0x8b60: // SAMPLER_CUBE
-      case 0x8dcc: // INT_SAMPLER_CUBE
-      case 0x8dd4: // UNSIGNED_INT_SAMPLER_CUBE
-      case 0x8dc5: // SAMPLER_CUBE_SHADOW
-        return setValueT6Array;
-
-      case 0x8dc1: // SAMPLER_2D_ARRAY
-      case 0x8dcf: // INT_SAMPLER_2D_ARRAY
-      case 0x8dd7: // UNSIGNED_INT_SAMPLER_2D_ARRAY
-      case 0x8dc4: // SAMPLER_2D_ARRAY_SHADOW
-        return setValueT2DArrayArray;
-    }
-  }
+  // Helper to pick the right setter for a pure (bottom-level) array (the
+  // upstream picker returned null for an unknown type: such a uniform is
+  // never set).
+  int pureArraySetterOf(int type) => _setterKind(type);
 }
