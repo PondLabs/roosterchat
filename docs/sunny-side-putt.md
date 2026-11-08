@@ -698,25 +698,17 @@ low tier: the sun's shadow map from 2048 to 1024 pixels a side, and the
 ink outlines off the walkers, the host and the scenery (the eggs, the
 aim and the casts' characters keep theirs).
 
-On desktop the texture Flutter shows has no second buffer. Linux shares
-one FBO with Flutter, and Windows' (and macOS') surface producer is not a
-swap chain but an EGL *pbuffer* made from a D3D11 shared handle
-(`eglCreatePbufferFromClientBuffer`): a pbuffer is single-buffered, so
-`eglSwapBuffers` does nothing and nothing orders ANGLE's draw against the
-engine reading the shared texture on its raster thread
-(`needsFinishBeforePresent` in the vendored viewer; Android's window
-surface really swaps, so it is left alone). Drawn straight into it, the
-compositor read frames still being drawn, a flicker. Waiting for the GPU
-(`glFinish`) after each draw fixed that but held the UI thread for the
-GPU's whole frame on every tick, so the CPU's next frame never overlapped
-the GPU's and the frame rate fell. So the viewer draws each frame into a
-framebuffer of its own (`DeferredScreen`) with a flush and no wait, and
-on the next tick copies it into Flutter's texture with one blit, waits
-for that blit alone (the frame's draw ran while the UI thread did other
-work) and only then tells Flutter. Flutter's texture is never cleared or
-drawn into, only overwritten whole, so no frame shows half drawn; the
-cost is one frame of latency. The first frame and the first after a
-resize are shown at once, so a new surface is never shown empty. The shadow
+On desktop the renderer draws straight into the one texture Flutter
+shows, with no second buffer, so the vendored viewer finishes each frame
+(`glFinish`) before telling Flutter it is there: with a flush alone the
+compositor could read a frame still being drawn, a flicker. Windows needs
+that wait as much as Linux does, and for a different reason: its surface
+producer is not a swap chain but an EGL *pbuffer* made from a D3D11 shared
+handle (`eglCreatePbufferFromClientBuffer`), and a pbuffer is
+single-buffered, so `eglSwapBuffers` does nothing and nothing orders
+ANGLE's draw against the engine copying the shared texture on its raster
+thread (`needsFinishBeforePresent` in the vendored viewer; Android's
+window surface really swaps, so it is left alone). The shadow
 pass draws first on desktop as on the web (the renderer binds the
 texture back after it), so no frame reads a stale or missing shadow map.
 A resize draws a frame at once into the resized surface instead of
