@@ -13,6 +13,23 @@ import 'package:flutter/widgets.dart';
 
 import 'putt_art.dart';
 
+/// Every power-up the icons draw, in the carton's order of the rules: the
+/// carton's reel spins through them when a "?" box is opened.
+const List<String> puttPowerUpIds = [
+  'hawk_eye',
+  'nest_magnet',
+  'ghost_egg',
+  'chicken_hop',
+  'rabbit_hole',
+  'gust',
+  'thick_shell',
+  'strong_coffee',
+  'nest_swap',
+  'sprinkler',
+  'corn_rain',
+  'thieving_crow',
+];
+
 /// A power-up's icon, [size] logical pixels square. An id the set does not
 /// know draws a cream "?" on a yolk carton square, like the crates on the
 /// green.

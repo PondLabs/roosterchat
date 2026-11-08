@@ -161,16 +161,16 @@ void main() {
         reason: 'its pointer leans back to the egg');
   });
 
-  test("tags keep clear of the coach's hand and ghost arrow", () {
+  test("tags keep clear of the coach's hand and its row", () {
     // My egg at (400, 400), the nest up the screen: the hand pulls down
-    // from under the egg, the ghost arrow grows up toward the nest.
+    // from under the egg, the row of chevrons grows up toward the nest.
     const cue = PuttCoachCue(egg: Offset(400, 400), toward: Offset(0, -1));
     final obstacles = puttCoachObstacles(cue);
     const handAt = Offset(410, 480); // on the hand's path
     expect(obstacles.any((rect) => rect.contains(handAt)), isTrue);
     expect(
         obstacles.any((rect) => rect.contains(const Offset(400, 300))), isTrue,
-        reason: 'the ghost arrow');
+        reason: 'the row of chevrons');
     const tags = [
       PuttTag(
           playerId: 'a',
@@ -185,7 +185,7 @@ void main() {
 
   test("with no room clear of the coach, a tag stands by its egg anyway", () {
     // Maya's egg just in front of mine on the tee, the coach's hand and
-    // ghost arrow (with their margins) round her tag's spot.
+    // row (with their margins) round her tag's spot.
     const mine = Rect.fromLTRB(560, 230, 780, 405);
     const hand = Rect.fromLTRB(495, 339, 655, 423);
     const arrow = Rect.fromLTRB(600, 372, 820, 441);

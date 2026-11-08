@@ -7,8 +7,9 @@
 // exponent is tuned so flicks feel crisp (a half-way drag already gives two
 // thirds of full power, and only a near-zero pull cancels the shot), and
 // the aim's sway - the shot fires at the angle the aim shows at release.
-// A soft or quick putt holds still; the sway only grows into a hard pull
-// held a while (nerves), and Hawk Eye stills it.
+// As in Putt Party, the sway grows with the power from the moment the pull
+// starts: a one-chevron tap holds still, a full pull swings widest, so the
+// hard putt is the hard one to line up. Hawk Eye stills it.
 //
 // The controller never touches Flutter or Flame: the game feeds it world
 // coordinates from pointer events and reads [state] to draw; the game adds
@@ -17,7 +18,7 @@
 // The keyboard drives the same state without a pointer: [hold] sets an
 // angle and a power outright (the state reads as the pull that would give
 // that power), [turnBy] and [stepPower] move them, and the release is the
-// same [commit], so the row, the guide and the sway behave alike.
+// same [commit], so the row, the band and the sway behave alike.
 library;
 
 import 'dart:math' as math;
@@ -67,25 +68,25 @@ class AimController {
   /// Frequency (Hz) of the aim's sway while it wobbles.
   static const double wobbleHz = 1.6;
 
-  /// Below this power the aim holds still: a soft putt is a steady one.
-  /// From here the sway grows in, reaching [wobbleAmplitude] at full power.
-  static const double steadyPower = 0.4;
+  /// At or below this power (the first of the row's eight levels) the aim
+  /// holds still: a tap is a steady one. Above it the sway grows in,
+  /// reaching [wobbleAmplitude] at full power.
+  static const double steadyPower = 1 / 8;
 
-  /// The arrow holds still this long into a pull (a quick, sure putt never
-  /// shakes), then the sway grows in over [swayRampSeconds].
-  static const double steadySeconds = 0.8;
-  static const double swayRampSeconds = 1.0;
+  /// How the sway's reach climbs with the power past [steadyPower]: above
+  /// 1, the top levels swing much wider than the middle ones.
+  static const double swayCurve = 1.5;
 
-  /// How far the arrow sways at full power, held (see
+  /// How far the aim sways either side at full power (see
   /// `PuttConfig.wobbleMaxRadians`); the shot fires at the swayed angle the
-  /// arrow shows at release. The owning view keeps this in sync with the
+  /// row shows at release. The owning view keeps this in sync with the
   /// engine's config.
   double wobbleAmplitude;
 
   AimController({
     this.maxDragLength = 8.0,
     this.powerExponent = 0.6,
-    this.wobbleAmplitude = 0.035,
+    this.wobbleAmplitude = 0.12,
   });
 
   /// Set while Hawk Eye (or any no-wobble modifier) covers the shot: the
@@ -125,18 +126,23 @@ class AimController {
     );
   }
 
-  /// The arrow's sway in radians at [elapsed] seconds into a pull of
-  /// [power]. A steady back-and-forth (a read of the risk) whose reach
-  /// grows with the power above [steadyPower] and with the time held past
-  /// [steadySeconds]; zero while [noWobble] holds. Pure: the same time and
-  /// power in, the same angle out.
+  /// The aim's sway in radians at [elapsed] seconds into a pull of
+  /// [power]: a steady back-and-forth whose reach grows with the power
+  /// above [steadyPower], from the start of the pull; zero while
+  /// [noWobble] holds. Pure: the same time and power in, the same angle out.
   double visualWobble(double elapsed, {double power = 1}) {
     if (noWobble) return 0;
-    final reach = _ease((power - steadyPower) / (1 - steadyPower)) *
-        _ease((elapsed - steadySeconds) / swayRampSeconds);
+    final reach = swayReach(power);
     if (reach == 0) return 0;
     final omega = 2 * math.pi * wobbleHz;
     return math.sin(omega * elapsed) * wobbleAmplitude * reach;
+  }
+
+  /// The share of [wobbleAmplitude] the sway reaches at [power]: 0 up to
+  /// [steadyPower], 1 at full power.
+  static double swayReach(double power) {
+    final t = ((power - steadyPower) / (1 - steadyPower)).clamp(0.0, 1.0);
+    return math.pow(t, swayCurve).toDouble();
   }
 
   /// The sway of the pull under way at [elapsed] (0 when not pulling).
@@ -144,11 +150,6 @@ class AimController {
     final state = this.state;
     if (state == null) return 0;
     return visualWobble(elapsed, power: state.power);
-  }
-
-  static double _ease(double t) {
-    final x = t.clamp(0.0, 1.0);
-    return x * x * (3 - 2 * x);
   }
 
   /// Releases the drag. Returns (angle, power) for the engine, or null

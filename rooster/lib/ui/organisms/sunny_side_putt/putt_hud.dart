@@ -162,6 +162,7 @@ class _PuttHudState extends State<PuttHud> {
                           keyAiming: widget.keyAiming,
                           watching: widget.watching,
                           onTapSlot: _tapSlot,
+                          onSfx: widget.onSfx,
                         ),
                     ],
                   ),
@@ -1715,6 +1716,7 @@ class _PuttBottomRow extends StatelessWidget {
   final ValueListenable<bool>? keyAiming;
   final ValueListenable<String?>? watching;
   final void Function(int slot, String effectId) onTapSlot;
+  final void Function(PuttSfx sfx)? onSfx;
 
   const _PuttBottomRow({
     required this.match,
@@ -1725,6 +1727,7 @@ class _PuttBottomRow extends StatelessWidget {
     this.keyAiming,
     this.watching,
     required this.onTapSlot,
+    this.onSfx,
   });
 
   @override
@@ -1769,7 +1772,9 @@ class _PuttBottomRow extends StatelessWidget {
             enabled: PuttTargeting.canUseNow(match),
             activeSlot: targeting.armedSlot ?? targeting.pickingSlot,
             highlightSlot: targeting.keySlot,
+            pickSerials: match.myPickSerials,
             onTap: onTapSlot,
+            onSfx: onSfx,
           ),
         ],
       ],
@@ -2251,7 +2256,10 @@ class _HintPill extends StatelessWidget {
 /// The power-up inventory: three slots filled left to right, each power-up
 /// its icon on ink with the name and what it does in the tooltip; empty
 /// slots a dashed outline. The slot whose power-up waits for a spot or a
-/// player glows; the one the keyboard's Tab is on wears a ring.
+/// player glows; the one the keyboard's Tab is on wears a ring. A "?" box's
+/// prize lands as Putt Party's does: the slot's reel spins through the
+/// power-ups, ticking, slows and stops on it with a pop, a flash and its
+/// name over the slot.
 class PuttInventory extends StatelessWidget {
   final List<String> slots;
   final void Function(int slot, String effectId)? onTap;
@@ -2263,6 +2271,13 @@ class PuttInventory extends StatelessWidget {
   /// The slot the keyboard's highlight is on, if any.
   final int? highlightSlot;
 
+  /// Per slot, how many "?" boxes have dropped a power-up into it
+  /// ([PuttMatch.myPickSerials]): a count that moves spins that slot's reel.
+  final List<int> pickSerials;
+
+  /// The reel's ticks and its stop.
+  final void Function(PuttSfx sfx)? onSfx;
+
   const PuttInventory({
     super.key,
     required this.slots,
@@ -2270,6 +2285,8 @@ class PuttInventory extends StatelessWidget {
     this.enabled = true,
     this.activeSlot,
     this.highlightSlot,
+    this.pickSerials = const [],
+    this.onSfx,
   });
 
   @override
@@ -2286,7 +2303,9 @@ class PuttInventory extends StatelessWidget {
             enabled: enabled,
             active: activeSlot == i,
             highlighted: highlightSlot == i && i < slots.length,
+            pickSerial: i < pickSerials.length ? pickSerials[i] : 0,
             onTap: onTap,
+            onSfx: onSfx,
           ),
         ],
       ],
@@ -2300,7 +2319,9 @@ class _PowerSlot extends StatefulWidget {
   final bool enabled;
   final bool active;
   final bool highlighted;
+  final int pickSerial;
   final void Function(int slot, String effectId)? onTap;
+  final void Function(PuttSfx sfx)? onSfx;
 
   const _PowerSlot({
     required this.index,
@@ -2309,6 +2330,8 @@ class _PowerSlot extends StatefulWidget {
     required this.active,
     required this.highlighted,
     required this.onTap,
+    this.pickSerial = 0,
+    this.onSfx,
   });
 
   @override
@@ -2329,7 +2352,81 @@ class _PowerSlotState extends State<_PowerSlot> with TickerProviderStateMixin {
     duration: const Duration(milliseconds: 2400),
   );
 
+  /// The reel a "?" box's prize spins in: [_reel]'s icons go by, slowing,
+  /// and the last is the prize.
+  late final AnimationController _spin = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1250),
+  )
+    ..addListener(_spinTicked)
+    ..addStatusListener(_spinEnded);
+
+  /// The prize landing: a pop of the icon and a flash round the slot.
+  late final AnimationController _land = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 650),
+  );
+
+  List<String> _reel = const [];
+  int _reelStep = 0;
+
+  /// The icons a reel turns through, the prize its last.
+  static const int _reelLength = 15;
+
   bool _reduceMotion = false;
+
+  bool get spinning => _spin.isAnimating;
+
+  /// Where the reel stands: the step it shows and how far on toward the
+  /// next (the reel slows to a stop, as a slot machine's does).
+  (int, double) get _reelAt {
+    final at = Curves.easeOutCubic.transform(_spin.value) * (_reel.length - 1);
+    final step = at.floor().clamp(0, _reel.length - 1);
+    return (step, at - step);
+  }
+
+  void _startSpin(String prize) {
+    if (_reduceMotion) {
+      widget.onSfx?.call(PuttSfx.powerUpReveal);
+      _fresh.forward(from: 0);
+      return;
+    }
+    // Every other power-up in a shuffled run, never one twice in a row,
+    // ending on the prize.
+    final random = math.Random(widget.pickSerial * 31 + widget.index);
+    final reel = <String>[];
+    while (reel.length < _reelLength - 1) {
+      final pool = [...puttPowerUpIds]..shuffle(random);
+      for (final id in pool) {
+        if (reel.length == _reelLength - 1) break;
+        if (reel.isNotEmpty && reel.last == id) continue;
+        reel.add(id);
+      }
+    }
+    if (reel.last == prize) reel[reel.length - 1] = reel.first;
+    reel.add(prize);
+    _reel = reel;
+    _reelStep = 0;
+    _fresh
+      ..stop()
+      ..value = 0;
+    _land.value = 0;
+    _spin.forward(from: 0);
+  }
+
+  void _spinTicked() {
+    final (step, _) = _reelAt;
+    if (step == _reelStep) return;
+    _reelStep = step;
+    if (step < _reel.length - 1) widget.onSfx?.call(PuttSfx.powerUpRoll);
+  }
+
+  void _spinEnded(AnimationStatus status) {
+    if (status != AnimationStatus.completed) return;
+    widget.onSfx?.call(PuttSfx.powerUpReveal);
+    _land.forward(from: 0);
+    _fresh.forward(from: 0);
+  }
 
   @override
   void didChangeDependencies() {
@@ -2342,13 +2439,21 @@ class _PowerSlotState extends State<_PowerSlot> with TickerProviderStateMixin {
   void didUpdateWidget(covariant _PowerSlot oldWidget) {
     super.didUpdateWidget(oldWidget);
     _syncGlow();
-    // A new power-up says its name; so does the one Tab lands on (a
-    // keyboard has no hover for the tooltip).
-    if (widget.effectId != null &&
-        (widget.effectId != oldWidget.effectId ||
+    final effectId = widget.effectId;
+    // A "?" box's prize spins in; its name follows when the reel stops.
+    if (effectId != null && widget.pickSerial != oldWidget.pickSerial) {
+      _startSpin(effectId);
+      return;
+    }
+    // A power-up that moves in otherwise says its name; so does the one
+    // Tab lands on (a keyboard has no hover for the tooltip).
+    if (effectId != null &&
+        !spinning &&
+        (effectId != oldWidget.effectId ||
             (widget.highlighted && !oldWidget.highlighted))) {
       _fresh.forward(from: 0);
     }
+    if (effectId == null && spinning) _spin.stop();
   }
 
   void _syncGlow() {
@@ -2363,6 +2468,8 @@ class _PowerSlotState extends State<_PowerSlot> with TickerProviderStateMixin {
   void dispose() {
     _glow.dispose();
     _fresh.dispose();
+    _spin.dispose();
+    _land.dispose();
     super.dispose();
   }
 
@@ -2398,6 +2505,39 @@ class _PowerSlotState extends State<_PowerSlot> with TickerProviderStateMixin {
     );
   }
 
+  /// The reel turning: this step's icon sliding down out of the slot as
+  /// the next comes in from the top.
+  Widget _reelView() {
+    final (step, along) = _reelAt;
+    const travel = _slotSize * 0.62;
+    Widget icon(int at, double y) => Transform.translate(
+          offset: Offset(0, y),
+          child: PuttPowerUpIcon(effectId: _reel[at], size: 28),
+        );
+    return ClipRRect(
+      key: const Key('putt-slot-reel'),
+      borderRadius: BorderRadius.circular(13),
+      child: SizedBox(
+        width: _slotSize - 6,
+        height: _slotSize - 6,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            icon(step, along * travel),
+            if (step + 1 < _reel.length) icon(step + 1, (along - 1) * travel),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The prize just stopped: it pops big and settles with a bounce.
+  Widget _landed(Widget icon) {
+    if (!_land.isAnimating) return icon;
+    final scale = 1.45 - 0.45 * Curves.elasticOut.transform(_land.value);
+    return Transform.scale(scale: scale, child: icon);
+  }
+
   @override
   Widget build(BuildContext context) {
     final effectId = widget.effectId;
@@ -2413,12 +2553,15 @@ class _PowerSlotState extends State<_PowerSlot> with TickerProviderStateMixin {
         ),
       );
     }
-    final enabled = widget.enabled && widget.onTap != null;
+    final enabled = widget.enabled && widget.onTap != null && !spinning;
     final active = widget.active;
     final name = puttPowerUpName(effectId);
     final slot = AnimatedBuilder(
-      animation: _glow,
+      animation: Listenable.merge([_glow, _spin, _land]),
       builder: (context, child) {
+        final rolling = _spin.isAnimating;
+        // The prize's landing: a cream flash fading to the yolk ring.
+        final flash = _land.isAnimating ? 1 - _land.value : 0.0;
         final glow = !active
             ? 0.0
             : _reduceMotion
@@ -2431,11 +2574,14 @@ class _PowerSlotState extends State<_PowerSlot> with TickerProviderStateMixin {
           decoration: BoxDecoration(
             color: active
                 ? Color.lerp(PuttPalette.ink, PuttPalette.yolk, 0.28)
-                : PuttPalette.ink.withValues(alpha: 0.86),
+                : Color.lerp(PuttPalette.ink.withValues(alpha: 0.86),
+                    PuttPalette.yolk, rolling ? 0.18 : 0.45 * flash),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: PuttPalette.yolk,
-              width: active ? 3 : 2,
+              color: rolling
+                  ? PuttPalette.cream
+                  : Color.lerp(PuttPalette.yolk, PuttPalette.cream, flash)!,
+              width: active || rolling || flash > 0 ? 3 : 2,
             ),
             boxShadow: [
               ..._shadow,
@@ -2445,9 +2591,15 @@ class _PowerSlotState extends State<_PowerSlot> with TickerProviderStateMixin {
                   blurRadius: 6 + 14 * glow,
                   spreadRadius: 1 + 2 * glow,
                 ),
+              if (flash > 0)
+                BoxShadow(
+                  color: PuttPalette.yolk.withValues(alpha: 0.9 * flash),
+                  blurRadius: 8 + 22 * (1 - flash),
+                  spreadRadius: 2 + 8 * (1 - flash),
+                ),
             ],
           ),
-          child: child,
+          child: rolling ? _reelView() : _landed(child!),
         );
       },
       child: PuttPowerUpIcon(effectId: effectId, size: 28),

@@ -1903,8 +1903,8 @@ class _CourseKit with _LawnPaint {
       ..renderOrder = _cupOrder);
     // The opening: no colour, only the turf's depth (lifted a hair and
     // pulled nearer by polygon offset, so the turf under it never wins a
-    // tie). No more: what lies on the turf over it (the last roll's trace,
-    // an egg rolling over the lip) must not be cut by it.
+    // tie). No more: what lies on the turf over it (an egg rolling over
+    // the lip) must not be cut by it.
     group.add(tjs.Mesh(
       tjg.CircleGeometry(radius: r, segments: 48),
       tjs.MeshBasicMaterial({
@@ -2259,16 +2259,16 @@ class _CourseKit with _LawnPaint {
   /// Where the tee's sign stands and the way its board faces (a unit
   /// vector on the ground): on the meadow just off the table, as near the
   /// tee as the table allows - never on the camera's side of the green,
-  /// never behind the egg on the tee where the close camera looks from,
-  /// clear of the host and of the corners' lanterns. Null when nothing
+  /// never straight behind the egg on the tee where the play camera looks
+  /// from, clear of the host and of the corners' lanterns. Null when nothing
   /// round the tee will do.
   late final (Vec2, Vec2)? teeSignSpot = _findTeeSignSpot();
 
   (Vec2, Vec2)? _findTeeSignSpot() {
     final tee = hole.tee;
     final bounds = hole.bounds;
-    // The camera at the tee hangs behind the egg on the hole's own view.
-    final yaw = PuttCameraRig.defaultYaw;
+    // The camera at the tee hangs behind the egg, looking at the nest.
+    final yaw = PuttCameraRig.yawToward(tee, hole.nest.position);
     final away = Vec2(math.sin(yaw), math.cos(yaw));
     final host = _hostSpotOf(hole);
     // The Barn's lanterns stand off the table's corners.
@@ -2294,8 +2294,10 @@ class _CourseKit with _LawnPaint {
     for (var step = 0; step < 72; step++) {
       final angle = step * math.pi / 36;
       final direction = Vec2(math.cos(angle), math.sin(angle));
-      // Within 70 degrees of the camera's side of the egg: in its way.
-      if (direction.dot(away) < -0.34) continue;
+      // Within 35 degrees of straight behind the egg: between it and the
+      // camera, in the way. (The tee mostly backs onto the table's end, so
+      // the sign may stand behind it off to a side.)
+      if (direction.dot(away) < -0.82) continue;
       // Within a stroll of the tee, or not at all: a sign across the table
       // (a tee by the camera's edge, the Coop's Nesting Boxes) read as
       // nobody's.
@@ -2305,8 +2307,8 @@ class _CourseKit with _LawnPaint {
         if (p.y > bounds.max.y - 1) break;
         if (p.distanceTo(host) < 5.5) break;
         if (lanterns.any((lantern) => p.distanceTo(lantern) < 2)) break;
-        // Beside the tee rather than ahead along the shot.
-        final score = reach * (1 + 0.3 * math.max(0.0, direction.dot(away)));
+        // Beside the tee rather than ahead along the shot or behind it.
+        final score = reach * (1 + 0.3 * direction.dot(away).abs());
         if (score < bestScore) {
           best = p;
           bestScore = score;
@@ -2620,8 +2622,8 @@ class _HenTracks {
   /// The band's opacity at its fullest: the lawn shows through.
   static const double opacity = 0.5;
 
-  /// Drawn before the eggs' shadows and tint discs (2), the last roll's
-  /// trace (3) and the aim (4 and up, no depth test).
+  /// Drawn before the eggs' shadows and tint discs (2) and the aim (4 and
+  /// up, no depth test).
   static const int renderOrder = 1;
 
   /// How far over the turf the band lies, and the prints over it.

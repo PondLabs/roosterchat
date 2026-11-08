@@ -23,8 +23,7 @@
 //
 // The game's core (physics, rules, power-ups) stays pure Dart and planar
 // (`client/components/sunny_side_putt/core/`): the 3D world draws it, the
-// engine never bends to the drawing - the roll guide runs a COPY of the
-// engine's world ahead. Nothing here touches the network: the match is the
+// engine never bends to the drawing. Nothing here touches the network: the match is the
 // local harness over the rules engine (`putt_match.dart`); the session
 // wires the authoritative host under the same seams.
 library;
@@ -550,7 +549,7 @@ class _SunnySidePuttViewState extends State<SunnySidePuttView> {
     final coach = game.coachForFrame();
     _tags.update(game.tagsForFrame(),
         avoid: game.tagObstacles(),
-        // The coach's hand and ghost arrow: tags keep clear of them while
+        // The coach's hand and its aim: tags keep clear of them while
         // there is room by their eggs.
         soft: coach == null ? const [] : puttCoachObstacles(coach),
         hud: game.hudOverGreen(),
@@ -895,7 +894,6 @@ class SunnySidePuttGame extends FlameGame {
     aim.cancel();
     targeting.cancel();
     _dragAnchor = null;
-    _previewKey = null;
   }
 
   /// Whether the camera shows the whole hole (the player's pick), rather
@@ -1113,29 +1111,22 @@ class SunnySidePuttGame extends FlameGame {
           ));
         }
       }
-      _recordRoll(current);
       final aimState = aim.state;
       if (aim.isActive && aimState != null) {
+        // The row turns with the sway, so it always shows where the shot
+        // goes; the band lies along the pull itself.
         final sway = aim.swayNow(aimLayer.holdSeconds);
-        // The guide runs from the pull's own angle (cached while the pull
-        // holds) and turns with the sway, so it always shows where the
-        // row, and so the shot, points.
-        final guided = aimState.dragLength >= AimController.deadZone;
-        final preview = guided
-            ? _swayed(
-                _previewFor(aimState.angle, aimState.power), aim.origin!, sway)
-            : const <core.Vec2>[];
         aimView = PuttWorldAim(
           origin: aim.origin!,
           angle: aimState.angle + sway,
+          pullAngle: aimState.angle,
           // A pull inside the dead zone moves nothing: no row.
-          power: guided ? aimState.power : 0,
-          dragLength: aimState.dragLength,
+          power: aimState.dragLength >= AimController.deadZone
+              ? aimState.power
+              : 0,
+          dragLength: math.min(aimState.dragLength, aim.maxDragLength),
           eggRadius: eggRadius,
-          preview: preview,
-          previewAir: guided ? _previewAirs : const [],
-          trace: _lastRoll,
-          traceTint: tintFor(match.localPlayerId),
+          tint: tintFor(match.localPlayerId),
         );
       }
       fxViews = [
@@ -1157,71 +1148,6 @@ class SunnySidePuttGame extends FlameGame {
       // The host looks round at the camera while it sweeps in.
       opening: director.opening,
     );
-  }
-
-  /// My last roll on this hole (the stretches between jumps), drawn under
-  /// the aim; the roll under way; where my egg last stood still; and the
-  /// hole they belong to.
-  List<List<core.Vec2>> _lastRoll = const [];
-  final List<List<core.Vec2>> _rolling = [];
-  core.Vec2? _stoodAt;
-  hole.HoleDef? _rollHole;
-
-  /// My last roll, for the aim's trace (and tests).
-  List<List<core.Vec2>> get lastRoll => _lastRoll;
-
-  /// Follows my egg frame by frame: a roll runs from where it stood to
-  /// where it stops, a jump (back out of the water, through a rabbit
-  /// hole) starts a new stretch, and the finished roll replaces the last.
-  void _recordRoll(hole.HoleDef current) {
-    if (!identical(current, _rollHole)) {
-      _rollHole = current;
-      _lastRoll = const [];
-      _rolling.clear();
-      _stoodAt = null;
-    }
-    final ball = match.myBall;
-    if (ball == null || ball.holed) {
-      _rolling.clear();
-      return;
-    }
-    final at = match.renderPositionOf(match.localPlayerId);
-    final moving = !ball.asleep && ball.velocity.length > 0.05;
-    if (moving) {
-      if (_rolling.isEmpty) {
-        final stood = _stoodAt;
-        _rolling.add([
-          if (stood != null && stood.distanceTo(at) < 1.5) stood,
-          at,
-        ]);
-        return;
-      }
-      final stretch = _rolling.last;
-      final step = stretch.last.distanceTo(at);
-      if (step > 2.5) {
-        _rolling.add([at]);
-      } else if (step > 0.2) {
-        stretch.add(at);
-      }
-      return;
-    }
-    _stoodAt = at;
-    if (_rolling.isEmpty) return;
-    final stretch = _rolling.last;
-    if (stretch.last.distanceTo(at) > 1e-6) stretch.add(at);
-    var length = 0.0;
-    for (final s in _rolling) {
-      for (var i = 1; i < s.length; i++) {
-        length += s[i - 1].distanceTo(s[i]);
-      }
-    }
-    // Every roll that moved the egg replaces the last one, a nudge too:
-    // the trace under the aim is always the roll just played, never one
-    // from two putts ago.
-    if (length > 0.05) {
-      _lastRoll = [for (final s in _rolling) List.unmodifiable(s)];
-    }
-    _rolling.clear();
   }
 
   /// The tags for this frame: every other player's egg on the green, at
@@ -1460,52 +1386,6 @@ class SunnySidePuttGame extends FlameGame {
     return out;
   }
 
-  // ---- the roll guide ---------------------------------------------------------------
-
-  ({double angle, double power})? _previewKey;
-  List<core.Vec2> _preview = const [];
-
-  /// The cached guide's altitudes beside its points (null on the ground).
-  List<double?> _previewAirs = const [];
-
-  /// [points] turned by [angle] about [origin] (the guide under the sway).
-  static List<core.Vec2> _swayed(
-      List<core.Vec2> points, core.Vec2 origin, double angle) {
-    if (angle == 0 || points.isEmpty) return points;
-    final c = math.cos(angle), s = math.sin(angle);
-    return [
-      for (final p in points)
-        core.Vec2(origin.x + (p.x - origin.x) * c - (p.y - origin.y) * s,
-            origin.y + (p.x - origin.x) * s + (p.y - origin.y) * c),
-    ];
-  }
-
-  /// The predicted roll for this aim, cached while the aim holds still.
-  List<core.Vec2> _previewFor(double angle, double power) {
-    final key = _previewKey;
-    if (key != null &&
-        (key.angle - angle).abs() < 0.0012 &&
-        (key.power - power).abs() < 0.003) {
-      return _preview;
-    }
-    _previewKey = (angle: angle, power: power);
-    final world = match.engine.world;
-    final current = match.hole;
-    _previewAirs = const [];
-    if (world == null || current == null) return _preview = const [];
-    final roll = previewRoll(
-      world: world,
-      hole: current,
-      config: match.config.physics,
-      playerId: match.localPlayerId,
-      angle: angle,
-      power: power,
-      modifiers: match.localPlayer?.nextShot,
-    );
-    _previewAirs = roll.airs;
-    return _preview = roll.points;
-  }
-
   /// The point the camera's target glides toward: my egg while the hole
   /// plays (leaning toward the nest while it rests, so the way ahead
   /// shows; a spectator drifts to whoever is out there); held while
@@ -1659,8 +1539,11 @@ class SunnySidePuttGame extends FlameGame {
         case PuttFxSpotKind.pick:
           final at = spot.who == null ? null : match.currentPositions[spot.who];
           if (at != null) {
+            // The "?" box bursts where the egg took it: its carton flies
+            // apart in yolk and orange, stars spray and a ring spreads.
+            fx.crateBurst(at);
             fx.sparkles(at);
-            fx.ring(at, PuttPalette.yolk, size: 1.8);
+            fx.ring(at, PuttPalette.yolk, size: 2.6);
           }
         case PuttFxSpotKind.cast:
           _castScene(spot);
@@ -1980,7 +1863,6 @@ class SunnySidePuttGame extends FlameGame {
     _dragAnchor = ball.position.distanceTo(point) > reach ? point : null;
     aim.begin(ball.position);
     aim.update(_pullPoint(point));
-    _previewKey = null;
   }
 
   /// The pointer as the aim reads it: itself when the drag began on the
@@ -2049,7 +1931,6 @@ class SunnySidePuttGame extends FlameGame {
     _dragAnchor = null;
     aim.hold(ball.position, angle: angle, power: AimController.keyPowerStart);
     _keyAim = true;
-    _previewKey = null;
     return true;
   }
 
@@ -2158,157 +2039,6 @@ ui.Color puttPowerUpAccent(String effectId) => switch (effectId) {
       'pond' => (straw: false, dust: const ui.Color(0xFFDCD6CA)),
       _ => (straw: true, dust: const ui.Color(0xFFEFDDB8)),
     };
-
-// ---- the roll guide -----------------------------------------------------------------------
-
-/// The first stretch of the roll a shot would take: the engine's physics
-/// run ahead on a COPY of [world] (every egg, the hen at her real step),
-/// with the shot's power-up modifiers, cut after the first bounce off a
-/// rail plus a short tail, at a reset (water, out of bounds, the silo, a
-/// rabbit hole's jump), in the nest, or after [maxLength] of travel - a
-/// guide for the line, not a promise of where the egg stops. A flight off
-/// a kicker runs to where it comes down, however long, and the guide ends
-/// there; an egg on a kicker's deck, or a couple of units short of one,
-/// runs on past the length to show its flight.
-List<core.Vec2> predictRoll({
-  required PhysicsWorld world,
-  required hole.HoleDef hole,
-  required PhysicsConfig config,
-  required String playerId,
-  required double angle,
-  required double power,
-  NextShotModifiers? modifiers,
-  double maxLength = 12,
-  double tailAfterBounce = 3.5,
-  int maxTicks = 720,
-}) =>
-    previewRoll(
-      world: world,
-      hole: hole,
-      config: config,
-      playerId: playerId,
-      angle: angle,
-      power: power,
-      modifiers: modifiers,
-      maxLength: maxLength,
-      tailAfterBounce: tailAfterBounce,
-      maxTicks: maxTicks,
-    ).points;
-
-/// [predictRoll]'s guide. Beside the points, [airs] holds the egg's
-/// altitude where it flies off a kicker (null where it rolls), and
-/// [landing] where that flight first comes down (in the pond, all the
-/// same: that is where it would land).
-({
-  List<core.Vec2> points,
-  List<double?> airs,
-  core.Vec2? landing,
-}) previewRoll({
-  required PhysicsWorld world,
-  required hole.HoleDef hole,
-  required PhysicsConfig config,
-  required String playerId,
-  required double angle,
-  required double power,
-  NextShotModifiers? modifiers,
-  double maxLength = 12,
-  double tailAfterBounce = 3.5,
-  int maxTicks = 720,
-}) {
-  final copy =
-      PhysicsWorld.restore(hole: hole, config: config, state: world.toJson());
-  final ball = copy.ball(playerId);
-  if (ball == null || ball.holed) {
-    return (points: const [], airs: const [], landing: null);
-  }
-  final shotPower =
-      (power * (modifiers?.powerMultiplier ?? 1)).clamp(0.0, 1.0).toDouble();
-  if (modifiers?.hop ?? false) {
-    copy.setBallFlagUntilRest(playerId, PowerUpFlag.hop);
-  }
-  if (modifiers?.magnet ?? false) {
-    copy.setBallFlagUntilRest(playerId, PowerUpFlag.magnet);
-  }
-  copy.applyShot(playerId, angle, shotPower);
-  copy.drainEvents();
-  final points = <core.Vec2>[ball.position];
-  final airs = <double?>[null];
-  var flew = false;
-  core.Vec2? landing;
-  var travelled = 0.0;
-  var bounced = false;
-  var afterBounce = 0.0;
-  var heading = ball.velocity;
-  void add(core.Vec2 point, double? air) {
-    points.add(point);
-    airs.add(air);
-  }
-
-  for (var i = 0; i < maxTicks; i++) {
-    final before = ball.position;
-    copy.stepTick();
-    // A flight comes down: the guide ends on the spot (in the pond too,
-    // before the splash puts the egg back), and marks it.
-    final down = copy
-        .drainEvents()
-        .whereType<BallLanded>()
-        .where((event) => event.playerId == playerId)
-        .firstOrNull;
-    if (down != null) {
-      add(down.at, null);
-      landing = down.at;
-      break;
-    }
-    if (ball.holed) {
-      add(hole.nest.position, null);
-      break;
-    }
-    final after = ball.position;
-    final step = before.distanceTo(after);
-    // A jump is a reset or a portal: the guide stops at the edge of it.
-    if (step > 2.0) break;
-    travelled += step;
-    final velocity = ball.velocity;
-    if (!bounced &&
-        velocity.length > 1e-6 &&
-        heading.length > 1e-6 &&
-        velocity.dot(heading) / (velocity.length * heading.length) < 0.985) {
-      bounced = true;
-    }
-    if (bounced) afterBounce += step;
-    heading = velocity;
-    if (ball.airborne) flew = true;
-    if (i % 3 == 0) add(after, ball.air);
-    if (ball.asleep) {
-      add(after, null);
-      break;
-    }
-    // In the air the guide runs on to the landing, whatever its length,
-    // and so does an egg about to take off.
-    if (!ball.airborne &&
-        !_nearKicker(hole, after, velocity) &&
-        (travelled >= maxLength || afterBounce >= tailAfterBounce)) {
-      add(after, null);
-      break;
-    }
-  }
-  return (
-    points: points,
-    airs: flew ? airs : const <double?>[],
-    landing: landing,
-  );
-}
-
-/// Whether an egg at [at] rolling at [velocity] is on a kicker's deck or
-/// heading onto one within two units: the guide runs on to its flight.
-bool _nearKicker(hole.HoleDef current, core.Vec2 at, core.Vec2 velocity) {
-  if (current.kickers.isEmpty) return false;
-  final ahead = at + velocity.normalized(core.Vec2.zero) * 2;
-  return current.kickers.any((kicker) =>
-      kicker.covers(at) ||
-      kicker.covers(at.lerp(ahead, 0.5)) ||
-      kicker.covers(ahead));
-}
 
 // ---- the layers that feed the world ---------------------------------------------------
 
@@ -2737,6 +2467,33 @@ class PuttFxLayer {
         climb: 1.8 + _random.nextDouble() * 1.2,
       ));
     }
+  }
+
+  /// A "?" box taken: its carton's card flying apart from where it hovered,
+  /// and a puff where it stood.
+  void crateBurst(core.Vec2 at) {
+    const colors = [
+      PuttPalette.yolk,
+      ui.Color(0xFFFF9F1C),
+      ui.Color(0xFFFFE08A),
+      ui.Color(0xFFC77A1E),
+    ];
+    for (var i = 0; i < 18; i++) {
+      final angle = i / 18 * 2 * math.pi + _random.nextDouble() * 0.35;
+      _particles.add(_FxParticle(
+        at: at,
+        velocity: core.Vec2(math.cos(angle), math.sin(angle)) *
+            (1.8 + _random.nextDouble() * 2.6),
+        life: 0.9 + _random.nextDouble() * 0.4,
+        kind: _FxKind.shard,
+        size: 0.26 + _random.nextDouble() * 0.16,
+        color: colors[i % colors.length],
+        height: 1.0 + _random.nextDouble() * 0.3,
+        climb: 3.0 + _random.nextDouble() * 3.0,
+        kick: core.Vec2.zero,
+      ));
+    }
+    poof(at);
   }
 
   /// A popped Thick Shell: the bubble's film flying out in shards.

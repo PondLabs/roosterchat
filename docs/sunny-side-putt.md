@@ -5,7 +5,7 @@ holes are NESTS, on a farm, with power-ups. Inspired by Discord's Putt
 Party — the numbers follow it; the identity is the Rooster's own.
 
 ![the eggs on the tee: name tags, the viewer's pin and ring](images/sunny-side-putt/01-the-egg-on-the-tee.jpg)
-![aiming: the power and the dotted guide toward the bumper crown](images/sunny-side-putt/02-aiming-the-putt.jpg)
+![aiming: the pull and the power toward the bumper crown](images/sunny-side-putt/02-aiming-the-putt.jpg)
 
 In play:
 
@@ -28,10 +28,12 @@ results):
   Party's exact rule is not documented anywhere we could verify; this
   is ours, and it punishes stalling without ending a comeback.
 - Aiming is a slingshot drag, and the putt goes exactly where the aim
-  points at release; the engine adds no hidden error. A soft putt (under
-  40% power) or a quick one (released within 0.8 seconds) holds still; a
-  hard pull held longer starts to sway, up to 2 degrees either side at
-  full power, so on a long putt the timing of the release is the skill.
+  points at release; the engine adds no hidden error. As in Putt Party
+  the aim sways from the moment the pull starts, wider at every level of
+  the stroke: a one-chevron tap holds still, the middle levels sway a
+  few degrees, a full pull about 7 degrees either side
+  (`PuttConfig.wobbleMaxRadians`, 0.12; `AimController.swayReach`), so a
+  hard putt is the hard one to line up and its release is the skill.
   The Hawk Eye power-up holds the aim still.
 - After each hole the results card stays up for 8 seconds in a live
   session (Continue counts the seconds down while a band sweeps across
@@ -174,9 +176,20 @@ did).
 
 Earned at the "?" boxes (a maximum of 3 in hand; extras discarded), and
 **the one who casts never suffers their own bad effects** - the wind
-spares their egg, the sprinkler waters around it. A power-up that lands
-in the carton says its name above its slot for a couple of seconds (the
-tooltip, on hover, says what it does).
+spares their egg, the sprinkler waters around it. Taking a box plays out
+as in Putt Party, for the eye, the ear and the HUD: on the green the
+carton swells and spins away while its card bursts apart in yolk and
+orange with a puff, stars and a ring, for everyone to see, and the box
+pops for the one who took it. In their carton the slot the prize falls
+into spins like a slot machine's reel through the other power-ups,
+ticking a turn at a time and slowing (1.25 s, the slot not usable until
+it stops), then stops on the prize with a chime run, the icon popping big
+and settling while a flash spreads round the slot, and the prize's name
+shows above it for a couple of seconds (the tooltip, on hover, says what
+it does). A Barnyard Chaos box spins both slots it fills. Only a box spins
+a reel (`PuttMatch.myPickSerials`, counted per slot): a power-up moving
+along after a cast, or one a crow brings, just says its name. With the
+system's reduced motion on, the prize lands at once with its chime.
 
 | Power-up | Does |
 |---|---|
@@ -397,8 +410,7 @@ plateau carries the nest. The course test checks every hill for this:
 box, silo and spawn spot, and the nest either half a unit past the
 skirt or on the plateau with 0.6 units of flat round its rim. A
 reference putt up to a raised nest passes the climb to the course
-kit's `putt` as `rise`. The aim's guide runs the same physics, so it
-bends with the slope.
+kit's `putt` as `rise`.
 
 ### Tiers
 
@@ -540,8 +552,10 @@ corn yellow and green in the maze, pond blue and white, road-sign yellow
 and black, barn red and cream; a little of its own light, more at dusk).
 It stands on the meadow just off the table, as near the tee as the table
 allows, its board leaning back and turned between the close camera and
-the overview: never on the camera's side, never within 70 degrees of
-where the close camera at the tee looks from (`PuttCameraRig.yawToward`),
+the overview: never on the camera's side, never within 35 degrees of
+straight behind the egg on the tee, where the play camera looks from
+(`PuttCameraRig.yawToward`; the tee mostly backs onto the table's end, so
+the sign may stand behind it off to a side),
 clear of the host and the corners' lanterns (`_CourseKit.teeSignSpot`).
 Off the table, no egg ever rolls through it; it is decoration only. A
 hole with no number has no sign.
@@ -641,8 +655,8 @@ merry-go-round) wear it once. Every vertex lies on the ground's height,
 so the band climbs hills and stays on its tier. It is one mesh
 per hole (`_CourseKit.henPaths` in `world3d/course.dart`, one 32-pixel
 alpha texture, no depth write) drawn first of the turf's marks (render
-order 1), so the eggs' shadows, the last roll's trace, the aim and its
-guide all draw over it, and the eggs hide it where they stand.
+order 1), so the eggs' shadows and the aim draw over it, and the eggs
+hide it where they stand.
 
 On the green: mown turf with stripes and contact shade along the rails,
 rubber bumpers (rails and pinball mushrooms), rounded smooth-shaded boulders, ponds
@@ -753,23 +767,17 @@ world builds those with `_gridPlane`.
 ### Playing it
 
 - Aim from anywhere: press on the green, drag back, let go. The aim is
-  the same three things on every hole, in the same order, so nothing in
-  it comes and goes with the course: a ring fills around the egg with the
-  power, a row of chevrons runs ahead of it - one chevron per level of
-  the stroke, eight at a full pull, as Putt Party reads a putt - and a
-  dotted guide shows the first stretch of the roll, the engine's own
-  physics run ahead on a copy of the world, cut a short way past the row.
-  The row's colour goes yolk to comb red with the power, and the whole
-  aim swings with the sway, so a hard putt is the one that is hard to
-  line up. Off a kicker the guide runs the engine's flight to where it
-  comes down, however far: its dots climb off the lip and fall. A guide
-  whose length ends on a kicker's deck, or a couple of units short of
-  one, runs on to show the flight. No ring marks a bounce or a landing:
-  the guide is the same dotted line everywhere, and it never claims to
-  know where the egg stops. The aim draws over the other eggs (no egg in
-  the way hides where the putt goes) and under the viewer's own. The
-  viewer's last roll on the hole lies under it as dots in their colour,
-  from where it stood to where it stopped, whenever there is one.
+  Putt Party's, and it is the same two things on every putt of every
+  hole, power-ups or not: the pull, a band in the viewer's colour from
+  the egg back to where the slingshot is drawn with a ring at its end,
+  and the row of white chevrons ahead of the egg, one per level of the
+  stroke (eight at a full pull, none inside the tap's dead zone). The row
+  swings with the sway; the band stays along the pull. Nothing predicts
+  the roll: no dotted guide, no mark where the egg would stop or land,
+  no trace of the last putt, so the aim never shows something on one
+  hole that it leaves out on the next. The aim draws over the other eggs
+  (no egg in the way hides where the putt goes) and under the viewer's
+  own (`world3d/aim_fx.dart`).
 - The keys putt too, for a player who cannot drag precisely (a
   trackpad, a shaky hand): Left and Right turn the aim 3 degrees a press
   (half a degree with Shift), Up and Down set the power in 5% steps (30%
@@ -777,9 +785,9 @@ world builds those with `_gridPlane`.
   reaches would fire nothing), and Space or Enter putts. The first key
   starts the aim from the egg toward the nest at half power. The keys
   hold the same aim a drag does (`AimController.hold`, `turnBy`,
-  `stepPower`), so the row and the guide follow every press, and the putt
-  goes out through the same release, sway included: a hard putt held past
-  0.8 seconds sways like a held pull. Esc drops the aim unspent (after an
+  `stepPower`), so the band and the row follow every press (the band as
+  long as the pull that gives that power), and the putt goes out through
+  the same release, sway included. Esc drops the aim unspent (after an
   armed power-up and the carton's highlight, before the menus). Tab and
   Shift+Tab move a ring over the carton's filled slots (and off past the
   last, back to aiming); Enter or Space on it does what a click on that
@@ -790,12 +798,17 @@ world builds those with `_gridPlane`.
   green. The first aim hint names them on desktop and in a browser.
 - Until the first putt of the match (and after 14 seconds idle with the
   egg ready), a coach shows the gesture over the egg: a hand presses,
-  pulls back away from the nest and lets go while a ghost arrow grows
-  (`putt_coach.dart`).
-- The camera opens with a low sweep over the nest, then frames the egg
-  and the nest inside the part of the screen the HUD leaves free (the
-  points are projected through the camera the glide ends at) and
-  follows the egg; C toggles the whole-hole view, a right drag orbits,
+  pulls back away from the nest and lets go while the same aim the green
+  draws grows with it, the band back to the hand and one more white
+  chevron per level (`putt_coach.dart`).
+- The camera opens with a low sweep over the nest, then swings round
+  behind the viewer's egg on the tee looking down the line to the nest,
+  as Putt Party opens a hole: the egg dead centre, the nest straight ahead
+  up the screen (`PuttCameraRig.yawToward`, taken once per hole, so a
+  resize frames again from the same side). It frames the egg and the nest
+  inside the part of the screen the HUD leaves free (the points are
+  projected through the camera the glide ends at) and follows the egg,
+  never turning after a putt, as Putt Party's does not; C toggles the whole-hole view, a right drag orbits,
   the wheel or a pinch zooms. It is always on the viewer's own egg, as
   in Putt Party: once the egg is in, the camera keeps the nest it went
   in, and another player's putt never takes it. A spectator, with no egg
@@ -854,7 +867,8 @@ soundboard's CC0 "Rooster Crowing" by LoafDV
   clacks on another egg, and a hen clucks or a duck quacks when one bumps
   it, each as loud as the hit; water plops; the nest rustles and chimes,
   the chick peeps as it hatches and the host crows for a hole in one;
-  speed strips whoosh, a "?" crate pops, a rabbit hole goes thwup, the
+  speed strips whoosh, a "?" crate pops, the carton's reel ticks round
+  and chimes up a run when it stops, a rabbit hole goes thwup, the
   silo sucks and booms, a fall off the table whistles down; an egg thrown
   off a kicker gets the ramp's thunk under a rising whoosh and thumps down
   into the straw (the thump, softer, for a bump over a lip); a banjo opens

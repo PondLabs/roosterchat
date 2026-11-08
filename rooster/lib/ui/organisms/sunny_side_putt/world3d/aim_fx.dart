@@ -1,36 +1,13 @@
-// The aim and the bursts. The aim lies on the turf, and it is always the
-// same three things, in the same order, for every stroke: the power ring
-// filling around the egg, the row of chevrons ahead - one per level of the
-// stroke, as Putt Party reads a putt, the row swinging with the sway so a
-// hard putt is the hard one to line up - and the dotted guide, the first
-// stretch of the roll the engine's own physics predicts, rising through
-// the air off a kicker. Nothing in it comes and goes with the hole: the
-// guide is cut at the same length everywhere, and the viewer's last roll
-// lies under it whenever there is one.
+// The aim and the bursts. The aim is Putt Party's, and it is the same two
+// things for every stroke, on every hole, from the first putt to the last:
+// the pull - a band in the viewer's colour from the egg back to where the
+// slingshot is drawn, a ring at its end - and the row of white chevrons
+// ahead, one per level of the stroke, swinging the harder the putt. Nothing
+// predicts the roll, marks a landing or traces the last putt: what the aim
+// shows never depends on the hole, the power-ups or what came before.
 // The bursts are pooled sprites over a soft disc (splashes, sparkles,
 // suction, poofs, dust, confetti) and a few expanding rings.
 part of '../putt_world3d.dart';
-
-/// The power's colour, bright all the way: a pale yolk for a tap,
-/// sunflower, orange, red flat out (no muddy olive between).
-int _powerHex(double power) {
-  const stops = [
-    // A yolk, not green or cream, at the soft end: it has to stand off
-    // light and dark turf alike (with the ink outline round it); paler, it
-    // washed into the Pond's bright lawn.
-    (0.0, 0xFFD24A),
-    (0.42, 0xFFCC2E),
-    (0.72, 0xFF8A2A),
-    (1.0, 0xFF3D30),
-  ];
-  final p = power.clamp(0.0, 1.0);
-  for (var i = 1; i < stops.length; i++) {
-    final (at, hex) = stops[i];
-    final (from, fromHex) = stops[i - 1];
-    if (p <= at) return _mix(fromHex, hex, (p - from) / (at - from));
-  }
-  return stops.last.$2;
-}
 
 /// The levels a stroke is read in: the aim's row shows one chevron each.
 const int puttPowerLevels = 8;
@@ -47,17 +24,13 @@ int puttPowerLevel(double power) {
 }
 
 /// One chevron of the row: how long and how wide (world units at the
-/// standard egg), and the gap that follows it - wide enough that the ink
-/// round one never runs into the next.
-const double puttChevronLength = 0.34;
-const double puttChevronWidth = 0.84;
-const double puttChevronGap = 0.26;
+/// standard egg), and the gap that follows it.
+const double puttChevronLength = 0.42;
+const double puttChevronWidth = 1.04;
+const double puttChevronGap = 0.22;
 
 /// The distance from one chevron's base to the next's.
 const double puttChevronPitch = puttChevronLength + puttChevronGap;
-
-/// The gap between the row's last chevron and the guide's first dot.
-const double puttGuideGap = 0.35;
 
 /// Where the aim's row ends (world units from the egg's centre) for
 /// [power]: the tip of its last chevron, or 0 for no row at all.
@@ -74,224 +47,102 @@ class _PuttAimView3D {
     group = tjs.Group()
       ..name = 'aim'
       ..visible = false;
+
+    // The pull: drawn along the pull itself, so it never sways (the row
+    // does). Over the other eggs like the row, under the viewer's own.
+    _pulled = tjs.Group()..name = 'aim-pulled';
+    group.add(_pulled);
+    _bandFill =
+        _unlit(0xFFFFFF, opacity: 0.96, depthWrite: false, depthTest: false);
+    _bandInk = _unlit(_hexOf(PuttPalette.ink),
+        opacity: 0.55, depthWrite: false, depthTest: false);
+    // A unit band along -x, narrow at the egg and wider at the hand: its
+    // length is a scale, so a pull never rebuilds it.
+    band = tjs.Group()..name = 'aim-band';
+    band
+      ..add(tjs.Mesh(_strip(0.40, 0.58), _bandInk)
+        ..name = 'aim-band-ink'
+        ..renderOrder = 4)
+      ..add(tjs.Mesh(_strip(0.26, 0.42), _bandFill)
+        ..name = 'aim-band-fill'
+        ..position.y = 0.006
+        ..renderOrder = 5);
+    _pulled.add(band);
+    handle = tjs.Group()..name = 'aim-handle';
+    handle
+      ..add(tjs.Mesh(tjg.RingGeometry(0.30, 0.66, 32, 1), _bandInk)
+        ..name = 'aim-handle-ink'
+        ..rotation.x = -math.pi / 2
+        ..renderOrder = 4)
+      ..add(tjs.Mesh(tjg.RingGeometry(0.38, 0.58, 32, 1), _bandFill)
+        ..name = 'aim-handle-fill'
+        ..rotation.x = -math.pi / 2
+        ..position.y = 0.006
+        ..renderOrder = 5);
+    _pulled.add(handle);
+
+    // The row: white chevrons over a soft shadow (it reads on light and
+    // dark turf alike), the same shape at every power. Transparent like
+    // the band, so it sorts after it.
     _turned = tjs.Group()..name = 'aim-turned';
     group.add(_turned);
-
-    ring = tjs.Mesh(
-      tjg.RingGeometry(eggRadius * 2.0, eggRadius * 2.3, 48, 1),
-      _unlit(_hexOf(PuttPalette.ink), opacity: 0.28, depthWrite: false),
-    )
-      ..name = 'aim-ring'
-      ..rotation.x = -math.pi / 2
-      ..position.y = 0.035
-      ..renderOrder = 4;
-    group.add(ring);
-
-    // The aim draws over the other eggs (no depth test, after them): an
-    // egg in the way never hides where the putt goes. The viewer's own egg
-    // draws after it, so the row comes out from under the egg.
-    // Transparent like its outline, so it draws after it (renderOrder sorts
-    // within a pass; opaque, the outline drew over it, black).
-    _rowFill = _unlit(_powerHex(0.5),
-        opacity: 0.97, depthWrite: false, depthTest: false);
-    // A solid ink line round each chevron: it reads on light and dark turf.
-    _rowInk = _unlit(_hexOf(PuttPalette.ink),
-        opacity: 0.9, depthWrite: false, depthTest: false);
-    // One chevron per level of the stroke, all of them the same shape: the
-    // row's length is the power, and it never changes form with it.
+    _rowFill =
+        _unlit(0xFFFFFF, opacity: 0.99, depthWrite: false, depthTest: false);
+    _rowShade = _unlit(_hexOf(PuttPalette.ink),
+        opacity: 0.6, depthWrite: false, depthTest: false);
     final fillGeometry = _triangle(puttChevronLength, puttChevronWidth);
-    final inkGeometry =
-        _triangle(puttChevronLength + 0.14, puttChevronWidth + 0.18);
+    final shadeGeometry =
+        _triangle(puttChevronLength + 0.12, puttChevronWidth + 0.16);
     for (var i = 0; i < puttPowerLevels; i++) {
       final chevron = tjs.Group()
         ..name = 'aim-chevron'
         ..visible = false;
       chevron
-        ..add(tjs.Mesh(inkGeometry, _rowInk)
-          ..name = 'aim-chevron-ink'
-          ..position.setValues(-0.07, 0.07, 0)
-          ..renderOrder = 5)
+        ..add(tjs.Mesh(shadeGeometry, _rowShade)
+          ..name = 'aim-chevron-shade'
+          ..position.setValues(-0.1, 0.07, 0)
+          ..renderOrder = 6)
         ..add(tjs.Mesh(fillGeometry, _rowFill)
           ..name = 'aim-chevron-fill'
           ..position.y = 0.08
-          ..renderOrder = 6);
+          ..renderOrder = 7);
       _chevrons.add(chevron);
       _turned.add(chevron);
     }
-
-    for (var i = 0; i < _dotCount; i++) {
-      // Each dot: cream over a soft ink ring, so it reads on light and dark
-      // turf stripes alike.
-      final dot = tjs.Group()
-        ..name = 'aim-dot'
-        ..visible = false;
-      dot
-        ..add(tjs.Mesh(
-          _dotRingGeometry,
-          _unlit(_hexOf(PuttPalette.ink),
-              opacity: 0.45, depthWrite: false, depthTest: false),
-        )
-          ..name = 'aim-dot-ring'
-          ..rotation.x = -math.pi / 2
-          ..renderOrder = 5)
-        ..add(tjs.Mesh(
-          _dotGeometry,
-          _unlit(0xFFF8EE, opacity: 0.95, depthWrite: false, depthTest: false),
-        )
-          ..name = 'aim-dot-fill'
-          ..rotation.x = -math.pi / 2
-          ..position.y = 0.004
-          ..renderOrder = 6);
-      _dots.add(dot);
-      group.add(dot);
-    }
-    // The last roll: its dots merged, an ink ring under each disc in the
-    // viewer's colour (two draws for all of it; rebuilt only when the
-    // trace or the egg it is drawn from changes).
-    _traceInk = tjs.Mesh(tjs.BufferGeometry(), _traceInkMaterial)
-      ..name = 'aim-trace-ink'
-      ..renderOrder = 3
-      ..visible = false;
-    _traceFill = tjs.Mesh(tjs.BufferGeometry(), _traceMaterial)
-      ..name = 'aim-trace'
-      ..renderOrder = 4
-      ..visible = false;
-    group
-      ..add(_traceInk)
-      ..add(_traceFill);
   }
-
-  static const int _dotCount = 44;
-
-  /// The last roll's trace: dots in the viewer's colour on ink rings,
-  /// under the guide - the viewer's own mark, apart from the sprays and
-  /// rings of the effects (small and faint, it was lost on bright turf).
-  static const int _traceCount = 90;
-  static const double _traceRadius = 0.17;
-  static const double _traceInkRadius = 0.24;
-  // Pulled nearer than the nest's opening (which writes the turf's depth
-  // over the cup), so the trace over a cup is not cut by it seen low.
-  final tjs.MeshBasicMaterial _traceMaterial =
-      _unlit(0xFFF8EE, opacity: 0.95, depthWrite: false)
-        ..polygonOffset = true
-        ..polygonOffsetFactor = -2
-        ..polygonOffsetUnits = -2;
-  final tjs.MeshBasicMaterial _traceInkMaterial =
-      _unlit(_hexOf(PuttPalette.ink), opacity: 0.7, depthWrite: false)
-        ..polygonOffset = true
-        ..polygonOffsetFactor = -2
-        ..polygonOffsetUnits = -2;
-  late final tjs.Mesh _traceFill;
-  late final tjs.Mesh _traceInk;
-  int _traceHex = -1;
-  Object? _traceKey;
-
-  /// How many dots the trace draws now (tests read it).
-  int traceDotsShown = 0;
-
-  static final tjs.BufferGeometry _dotGeometry =
-      tjg.CircleGeometry(radius: 0.15, segments: 12);
-  static final tjs.BufferGeometry _dotRingGeometry =
-      tjg.CircleGeometry(radius: 0.25, segments: 12);
 
   late final tjs.Group group;
   late final tjs.Group _turned;
-  late final tjs.Mesh ring;
+  late final tjs.Group _pulled;
+
+  /// The pull's band and the ring at its end (tests read them).
+  late final tjs.Group band;
+  late final tjs.Group handle;
+  late final tjs.MeshBasicMaterial _bandFill;
+  late final tjs.MeshBasicMaterial _bandInk;
+  int _bandHex = -1;
 
   /// The row's chevrons, one per level of the stroke (the first [level]
   /// shown); all of them share the row's two materials.
   final List<tjs.Group> _chevrons = [];
   late final tjs.MeshBasicMaterial _rowFill;
-  late final tjs.MeshBasicMaterial _rowInk;
-  final List<tjs.Group> _dots = [];
-
-  tjs.Mesh? _fill;
-  double _fillPower = -1;
+  late final tjs.MeshBasicMaterial _rowShade;
   final double _eggRadius;
 
-  /// The viewer's last roll on this hole, dots in their colour along each
-  /// stretch (spaced wider on a long roll, so the count covers all of it).
-  void _syncTrace(PuttWorldAim aim, _Ground terrain, double floor) {
-    final trace = aim.trace;
-    if (trace.isEmpty) {
-      _traceFill.visible = false;
-      _traceInk.visible = false;
-      traceDotsShown = 0;
-      _traceKey = null;
-      return;
-    }
-    final tint = aim.traceTint;
-    // A shade darker than the player's colour: a pale yolk on light turf
-    // all but vanished.
-    final hex = tint == null
-        ? 0xFFF8EE
-        : _mix(_hexOf(tint), _hexOf(PuttPalette.ink), 0.25);
-    if (hex != _traceHex) {
-      _traceHex = hex;
-      _traceMaterial.color = _lin(hex);
-    }
-    _traceFill.visible = true;
-    _traceInk.visible = true;
-    final key = (identityHashCode(trace), aim.origin.x, aim.origin.y, floor);
-    if (key == _traceKey) return;
-    _traceKey = key;
-    var total = 0.0;
-    for (final stretch in trace) {
-      total += _pathLength(stretch);
-    }
-    final spacing = math.max(0.42, total / _traceCount);
-    final spots = <(double, double, double)>[];
-    for (final stretch in trace) {
-      var carried = 0.0;
-      for (var i = 1; i < stretch.length && spots.length < _traceCount; i++) {
-        final a = stretch[i - 1];
-        final b = stretch[i];
-        final segment = a.distanceTo(b);
-        if (segment <= 1e-6) continue;
-        var t = carried;
-        while (t <= segment && spots.length < _traceCount) {
-          final p = a + (b - a) * (t / segment);
-          t += spacing;
-          spots.add((
-            p.x - aim.origin.x,
-            terrain.at(p) - floor + 0.03,
-            p.y - aim.origin.y
-          ));
-        }
-        carried = t - segment;
-      }
-    }
-    traceDotsShown = spots.length;
-    _traceFill.geometry?.dispose();
-    _traceInk.geometry?.dispose();
-    _traceFill.geometry = _discs(spots, _traceRadius, 0.004);
-    _traceInk.geometry = _discs(spots, _traceInkRadius, 0);
-  }
-
-  /// Flat discs of [radius] at [spots] (local x, height, z), lifted by
-  /// [lift], as one geometry.
-  static tjs.BufferGeometry _discs(
-      List<(double, double, double)> spots, double radius, double lift) {
-    const sides = 10;
-    final positions = <double>[];
-    final indices = <int>[];
-    for (final (x, y, z) in spots) {
-      final centre = positions.length ~/ 3;
-      positions.addAll([x, y + lift, z]);
-      for (var k = 0; k < sides; k++) {
-        final a = k / sides * 2 * math.pi;
-        positions.addAll(
-            [x + math.cos(a) * radius, y + lift, z + math.sin(a) * radius]);
-      }
-      for (var k = 0; k < sides; k++) {
-        // Wound to face up.
-        indices.addAll([centre, centre + 1 + (k + 1) % sides, centre + 1 + k]);
-      }
-    }
+  /// A flat strip from x = 0 to x = -1, [near] wide at 0 and [far] wide
+  /// at -1, facing up.
+  static tjs.BufferGeometry _strip(double near, double far) {
+    final positions = <double>[
+      0, 0, -near / 2, //
+      0, 0, near / 2,
+      -1, 0, far / 2,
+      -1, 0, -far / 2,
+    ];
     return tjs.BufferGeometry()
       ..setAttributeFromString(
           'position', tjs.Float32BufferAttribute.fromList(positions, 3, false))
-      ..setIndex(indices);
+      // Wound to face up.
+      ..setIndex([0, 2, 1, 0, 3, 2]);
   }
 
   /// A flat triangle pointing +x, [length] long and [width] wide, its base
@@ -312,8 +163,21 @@ class _PuttAimView3D {
               [0, 1, 0, 0, 1, 0, 0, 1, 0], 3, false));
   }
 
-  /// Shows the aim for this frame, or hides the group. The fill arc's
-  /// geometry rebuilds only when the power moved enough to see.
+  /// [angle] (the game's, y down) as a turn about y, pitched with the
+  /// ground along it on a slope.
+  static void _turn(tjs.Object3D object, double angle, Vec2 slope) {
+    final along = slope.x * math.cos(angle) + slope.y * math.sin(angle);
+    if (along.abs() < 1e-6) {
+      object.rotation.set(0, -angle, 0);
+      return;
+    }
+    object.quaternion.setFrom(tjs.Quaternion()
+        .setFromAxisAngle(tjs.Vector3(0, 1, 0), -angle)
+        .multiply(tjs.Quaternion()
+            .setFromAxisAngle(tjs.Vector3(0, 0, 1), math.atan(along))));
+  }
+
+  /// Shows the aim for this frame, or hides the group.
   void sync(PuttWorldAim? aim, [_Ground? ground]) {
     if (aim == null) {
       group.visible = false;
@@ -323,26 +187,38 @@ class _PuttAimView3D {
     final terrain = ground ?? _Ground();
     final floor = terrain.at(aim.origin);
     group.position.setValues(aim.origin.x, floor + 0.01, aim.origin.y);
-    // The game's y-down angle reads a negative world turn about y; on a
-    // slope the row also pitches with the ground along the shot.
     final slope = terrain.slopeAt(aim.origin);
-    final along = slope.x * math.cos(aim.angle) + slope.y * math.sin(aim.angle);
-    if (along.abs() < 1e-6) {
-      _turned.rotation.set(0, -aim.angle, 0);
-    } else {
-      _turned.quaternion.setFrom(tjs.Quaternion()
-          .setFromAxisAngle(tjs.Vector3(0, 1, 0), -aim.angle)
-          .multiply(tjs.Quaternion()
-              .setFromAxisAngle(tjs.Vector3(0, 0, 1), math.atan(along))));
+    _turn(_turned, aim.angle, slope);
+    _turn(_pulled, aim.pullAngle ?? aim.angle, slope);
+    final scale = aim.eggRadius / _eggRadius;
+
+    // The pull: from the egg's edge back to the hand, as long as the pull.
+    final start = aim.eggRadius * 1.1;
+    final reach = aim.dragLength;
+    final shown = reach > start + 0.2;
+    band.visible = shown;
+    handle.visible = shown;
+    if (shown) {
+      band
+        ..position.x = -start
+        ..scale.setValues(reach - start, 1, scale);
+      handle
+        ..position.x = -reach
+        ..scale.setValues(scale, 1, scale);
+    }
+    final tint = aim.tint;
+    // The viewer's colour, lifted toward white: a band, not a second egg.
+    final hex = tint == null ? 0xFFF8EE : _mix(_hexOf(tint), 0xFFFFFF, 0.35);
+    if (hex != _bandHex) {
+      _bandHex = hex;
+      _bandFill.color = _lin(hex);
     }
 
-    final scale = aim.eggRadius / _eggRadius;
     // The row: one chevron per level of the stroke, the same shape at every
     // power, so the aim never changes form under the player's hand. A pull
-    // that would not move the egg draws none (its release is a cancel, not
-    // a putt).
+    // that would not move the egg draws none (its release is a cancel).
     final level = puttPowerLevel(aim.power);
-    final start = aim.eggRadius * 2.35;
+    final first = aim.eggRadius * 2.35;
     final pitch = puttChevronPitch * scale;
     _turned.visible = level > 0;
     for (var i = 0; i < _chevrons.length; i++) {
@@ -350,143 +226,12 @@ class _PuttAimView3D {
       chevron.visible = i < level;
       if (i >= level) continue;
       chevron
-        ..position.x = start + i * pitch
+        ..position.x = first + i * pitch
         ..scale.setValues(scale, 1, scale);
     }
-    _rowFill.color = _lin(_powerHex(aim.power));
-    // The guide takes over past the row's last chevron.
-    final tip = level == 0
-        ? 0.0
-        : puttRowLength(aim.power, eggRadius: aim.eggRadius) +
-            puttGuideGap * scale;
-
-    if ((aim.power - _fillPower).abs() > 0.015) {
-      _fillPower = aim.power;
-      final oldFill = _fill;
-      if (oldFill != null) {
-        group.remove(oldFill);
-        oldFill.geometry?.dispose();
-        oldFill.material?.dispose();
-      }
-      final sweep = math.max(aim.power * 2 * math.pi, 0.05);
-      final fill = tjs.Mesh(
-        tjg.RingGeometry(
-            aim.eggRadius * 1.98,
-            aim.eggRadius * 2.32,
-            (48 * math.max(aim.power, 0.05)).ceil().clamp(3, 48).toInt(),
-            1,
-            math.pi / 2,
-            sweep),
-        _unlit(_powerHex(aim.power), opacity: 0.95, depthWrite: false),
-      )
-        ..name = 'aim-fill'
-        ..rotation.x = -math.pi / 2
-        ..position.y = 0.04
-        ..renderOrder = 5;
-      group.add(fill);
-      _fill = fill;
-    }
-    _fill?.visible = level > 0;
-
-    _syncTrace(aim, terrain, floor);
-
-    // The dotted guide: a few egg lengths of the predicted roll past the
-    // row, fading out - the line, never where the egg stops. A flight off a
-    // kicker shows whole, to where it comes down. No mark at either end:
-    // the guide is the same dotted line on every hole.
-    final airs = aim.previewAir;
-    final points = airs.isEmpty
-        ? _trimmed(aim.preview, tip + guideHintLength * scale)
-        : aim.preview;
-    var shown = 0;
-    if (points.length >= 2) {
-      const spacing = 0.62;
-      var carried = spacing * 0.6;
-      // The dots trail off over the guide's own length: its end reads as
-      // the guide giving out, not as a wall.
-      final expected = math.max(1.0, (_pathLength(points) - tip) / spacing);
-      for (var i = 1; i < points.length && shown < _dotCount; i++) {
-        final a = points[i - 1];
-        final b = points[i];
-        final segment = a.distanceTo(b);
-        if (segment <= 1e-6) continue;
-        var t = carried;
-        while (t <= segment && shown < _dotCount) {
-          final p = a + (b - a) * (t / segment);
-          t += spacing;
-          // Under the row the guide would only clutter it.
-          if (p.distanceTo(aim.origin) < tip) continue;
-          final dot = _dots[shown];
-          dot.visible = true;
-          final rise = _guideHeight(
-              points, airs, i, (t - spacing) / segment, p, terrain);
-          dot.position.setValues(
-              p.x - aim.origin.x, rise - floor + 0.05, p.y - aim.origin.y);
-          final left =
-              math.pow((1 - shown / expected).clamp(0.0, 1.0), 0.7).toDouble();
-          dot.children[0].material?.opacity = 0.12 + 0.73 * left;
-          dot.children[1].material?.opacity = 0.18 + 0.82 * left;
-          final s = 0.75 + 0.55 * left;
-          dot.scale.setValues(s, 1, s);
-          shown++;
-        }
-        carried = t - segment;
-      }
-    }
-    for (var i = shown; i < _dots.length; i++) {
-      _dots[i].visible = false;
-    }
   }
 
-  /// The guide's height at [p], [u] of the way from point `i - 1` to
-  /// point [i]: the ground's, or between the flight's altitudes where the
-  /// egg is in the air there ([airs] beside [points]; a point on the ground
-  /// counts at the ground's height, so the dots climb off the lip).
-  static double _guideHeight(List<Vec2> points, List<double?> airs, int i,
-      double u, Vec2 p, _Ground terrain) {
-    final ground = terrain.at(p);
-    if (airs.length <= i) return ground;
-    final from = airs[i - 1];
-    final to = airs[i];
-    if (from == null && to == null) return ground;
-    final a = from ?? terrain.at(points[i - 1]);
-    final b = to ?? terrain.at(points[i]);
-    return math.max(ground, a + (b - a) * u.clamp(0.0, 1.0));
-  }
-
-  /// How far the guide runs past the row's tip on the ground (world units
-  /// at the standard egg): some three egg lengths.
-  static const double guideHintLength = 2.8;
-
-  /// [points] cut at [length] along the path.
-  static List<Vec2> _trimmed(List<Vec2> points, double length) {
-    var left = length;
-    for (var i = 1; i < points.length; i++) {
-      final step = points[i - 1].distanceTo(points[i]);
-      if (step >= left) {
-        return [
-          ...points.take(i),
-          points[i - 1] + (points[i] - points[i - 1]) * (left / step),
-        ];
-      }
-      left -= step;
-    }
-    return points;
-  }
-
-  /// How far the guide runs along its points.
-  static double _pathLength(List<Vec2> points) {
-    var length = 0.0;
-    for (var i = 1; i < points.length; i++) {
-      length += points[i - 1].distanceTo(points[i]);
-    }
-    return length;
-  }
-
-  /// Frees the fill's geometry (the shared material belongs to the world).
   void dispose() {
-    _fill?.geometry?.dispose();
-    _fill?.material?.dispose();
     group.dispose();
   }
 }

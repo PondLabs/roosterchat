@@ -1155,74 +1155,43 @@ void main() {
           walk(hen).firstWhere((o) => o.material != null).material!.opacity, 1);
     });
 
-    test("the aim traces the viewer's last roll, in their colour", () {
+    test('the pull is a band back to the hand that never sways', () {
       final world = builtWorld();
       addTearDown(world.dispose);
-      // The dots, merged: a centre and ten rim points each.
-      List<tjs.Vector3> traced() {
-        final mesh = walk(world.scene)
-            .where((o) => o.name == 'aim-trace' && o.visible)
-            .firstOrNull;
-        final position = mesh?.geometry?.attributes['position'];
-        if (position == null) return const [];
-        return [
-          for (var i = 0; i < position.count; i += 11)
-            tjs.Vector3(position.getX(i)!.toDouble(),
-                position.getY(i)!.toDouble(), position.getZ(i)!.toDouble()),
-        ];
-      }
-
-      PuttWorldFrame frame(List<List<Vec2>> trace) => PuttWorldFrame(
+      tjs.Object3D named(String name) =>
+          walk(world.scene).firstWhere((o) => o.name == name);
+      PuttWorldFrame frame(double drag, {double sway = 0}) => PuttWorldFrame(
             time: 0,
             eggs: [eggAt(const Vec2(10, 10), mine: true)],
             aim: PuttWorldAim(
               origin: const Vec2(10, 10),
-              angle: 0,
+              angle: sway,
+              pullAngle: 0,
               power: 0.5,
-              dragLength: 3,
+              dragLength: drag,
               eggRadius: 0.45,
-              trace: trace,
-              traceTint: PuttPalette.tintForIndex(2),
+              tint: PuttPalette.tintForIndex(2),
             ),
           );
-      world.applySnapshot(frame(const []));
-      expect(traced(), isEmpty);
-      // From the tee at (4, 10) to here, and a stretch after a jump.
-      world.applySnapshot(frame(const [
-        [Vec2(4, 10), Vec2(10, 10)],
-        [Vec2(20, 4), Vec2(22, 4)],
-      ]));
-      final dots = traced();
-      expect(dots.length, greaterThan(15));
-      // Laid along the stretches, relative to the aim's origin.
-      for (final dot in dots) {
-        final x = dot.x + 10;
-        final z = dot.z + 10;
-        final onFirst = (z - 10).abs() < 1e-5 && x >= 4 - 1e-5 && x <= 10;
-        final onSecond = (z - 4).abs() < 1e-5 && x >= 20 - 1e-5 && x <= 22;
-        expect(onFirst || onSecond, isTrue, reason: 'at ($x, $z)');
-      }
-      // The viewer's own mark: each dot on an ink ring, all of it in two
-      // draws.
-      final ink = walk(world.scene)
-          .where((o) => o.name == 'aim-trace-ink' && o.visible)
-          .toList();
-      expect(ink, hasLength(1));
-      expect(
-          walk(world.scene).where((o) => o.name == 'aim-trace'), hasLength(1));
-      // Over a cup it wins against the opening's depth (see the nest).
-      final opening = walk(world.holeGroup('nest')!)
-          .whereType<tjs.Mesh>()
-          .firstWhere((m) => m.name == 'nest-opening');
-      for (final mark in [
-        ...ink,
-        walk(world.scene).firstWhere((o) => o.name == 'aim-trace')
-      ]) {
-        final material = (mark as tjs.Mesh).material!;
-        expect(material.polygonOffset, isTrue);
-        expect(material.polygonOffsetFactor,
-            lessThan(opening.material!.polygonOffsetFactor));
-      }
+      world.applySnapshot(frame(4));
+      final band = named('aim-band');
+      final handle = named('aim-handle');
+      expect(band.visible, isTrue);
+      expect(handle.visible, isTrue);
+      // Behind the egg (the shot goes +x), the ring at the hand.
+      world.scene.updateMatrixWorld(true);
+      final hand = tjs.Vector3()..setFromMatrixPosition(handle.matrixWorld);
+      expect(hand.x, closeTo(10 - 4, 1e-6));
+      expect(hand.z, closeTo(10, 1e-6));
+      // The row swings with the sway; the band stays along the pull.
+      world.applySnapshot(frame(4, sway: 0.1));
+      world.scene.updateMatrixWorld(true);
+      final still = tjs.Vector3()..setFromMatrixPosition(handle.matrixWorld);
+      expect(still.distanceTo(hand), lessThan(1e-6));
+      // Hardly pulled, there is no band to draw.
+      world.applySnapshot(frame(0.3));
+      expect(band.visible, isFalse);
+      expect(handle.visible, isFalse);
     });
 
     test("only the viewer's egg shows through what hides it", () {
@@ -1254,8 +1223,7 @@ void main() {
             angle: 0,
             power: 0.6,
             dragLength: 3,
-            eggRadius: 0.45,
-            preview: [Vec2(11, 10), Vec2(13, 10), Vec2(15, 10)]),
+            eggRadius: 0.45),
       ));
       int orderOf(String playerId) => walk(world.eggOf(playerId)!)
           .firstWhere((o) => o.name == 'egg-shell')
@@ -1270,7 +1238,7 @@ void main() {
             reason: 'in the pass its ink outline is in, drawn after it');
         expect(piece.renderOrder, greaterThan(orderOf('other')));
         expect(piece.renderOrder, lessThan(orderOf('me')),
-            reason: 'the arrow comes out from under my own egg');
+            reason: 'the row comes out from under my own egg');
       }
       final pin = walk(world.eggOf('me')!)
           .followedBy(walk(world.scene))
@@ -1320,38 +1288,40 @@ void main() {
       expect(chevronsShown(1), puttPowerLevels);
     });
 
-    test('the guide is a short hint, the same on every hole, with no mark', () {
+    test('the aim is the band and the row, nothing else, on every hole', () {
       final world = builtWorld();
       addTearDown(world.dispose);
-      // A soft putt's whole roll, stopping 12 units out.
       world.applySnapshot(PuttWorldFrame(
         time: 0,
         eggs: [eggAt(const Vec2(10, 10), mine: true)],
-        aim: PuttWorldAim(
-          origin: const Vec2(10, 10),
+        aim: const PuttWorldAim(
+          origin: Vec2(10, 10),
           angle: 0,
           power: 0.6,
           dragLength: 3,
           eggRadius: 0.45,
-          preview: [for (var x = 10.0; x <= 22; x += 0.5) Vec2(x, 10)],
         ),
       ));
-      final dots = walk(world.scene)
-          .where((o) => o.name == 'aim-dot' && o.visible)
-          .toList();
-      expect(dots, isNotEmpty);
-      final tip = puttRowLength(0.6) + puttGuideGap;
-      final farthest = dots.map((dot) => dot.position.x).reduce(math.max);
-      expect(farthest, lessThanOrEqualTo(tip + 2.8 + 1e-6),
-          reason: 'a few egg lengths past the row, not the whole roll');
-      // No ring at either end: the guide is the same dotted line on every
-      // hole, so nothing in the aim comes and goes with the course.
+      final shown = walk(world.scene)
+          .where((o) => o.name.startsWith('aim-') && o is tjs.Mesh)
+          .map((o) => o.name)
+          .toSet();
+      // No guide, no mark where the egg stops or lands, no trace of the
+      // last roll, no ring round the egg: only what Putt Party draws.
       expect(
-          walk(world.scene).where((o) =>
-              o.name == 'aim-rest' ||
-              o.name == 'aim-bounce' ||
-              o.name == 'aim-landing'),
-          isEmpty);
+          shown,
+          containsAll(<String>[
+            'aim-band-fill',
+            'aim-band-ink',
+            'aim-handle-fill',
+            'aim-handle-ink',
+            'aim-chevron-fill',
+            'aim-chevron-shade',
+          ]));
+      expect(
+          shown,
+          everyElement(anyOf(startsWith('aim-band'), startsWith('aim-handle'),
+              startsWith('aim-chevron'))));
     });
 
     test("an egg in front of the viewer's resting egg fades aside", () {
@@ -1774,8 +1744,7 @@ void main() {
       expect(prints.length % 9, 0, reason: 'three toes, a triangle each');
     });
 
-    test('lies under the eggs, the aim and its guide, one mesh for the hole',
-        () {
+    test('lies under the eggs and the aim, one mesh for the hole', () {
       final world = builtWorld();
       addTearDown(world.dispose);
       world.applySnapshot(PuttWorldFrame(
@@ -1786,15 +1755,7 @@ void main() {
             angle: 0,
             power: 0.6,
             dragLength: 3,
-            eggRadius: 0.45,
-            preview: [
-              Vec2(11, 10),
-              Vec2(13, 10),
-              Vec2(15, 10)
-            ],
-            trace: [
-              [Vec2(4, 10), Vec2(8, 10)]
-            ]),
+            eggRadius: 0.45),
       ));
       final paths = world.holeGroup('hen-paths')!.children;
       expect(paths, hasLength(1), reason: 'one draw for every hen');
@@ -2590,9 +2551,9 @@ void main() {
         expect(at.y, lessThan(hole.bounds.max.y),
             reason: '${hole.id}: on the camera side');
         // Not where the camera at the tee looks from.
-        final yaw = PuttCameraRig.defaultYaw;
+        final yaw = PuttCameraRig.yawToward(hole.tee, hole.nest.position);
         final toCamera = Vec2(-math.sin(yaw), -math.cos(yaw));
-        expect((at - hole.tee).normalized().dot(toCamera), lessThan(0.35),
+        expect((at - hole.tee).normalized().dot(toCamera), lessThan(0.82),
             reason: '${hole.id}: between the camera and the egg');
         // Off the table: out past the border, or past a rail.
         expect(!hole.bounds.contains(at) || crossesRail(hole, hole.tee, at),

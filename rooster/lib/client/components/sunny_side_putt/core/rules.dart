@@ -118,11 +118,11 @@ class PuttConfig {
   /// The per-hole time limit in seconds (the spec's 2 minutes).
   final int holeTimeLimitSeconds;
 
-  /// How far the aim arrow sways either side of the pull (radians) at
-  /// full power, held (a soft or quick putt holds still). The view draws
-  /// the sway and fires the angle the arrow shows at release: the engine
+  /// How far the aim sways either side of the pull (radians) at full
+  /// power; it grows with the power, and a tap holds still. The view draws
+  /// the sway and fires the angle the aim shows at release: the engine
   /// fires every shot exactly where it was aimed, so what the player sees
-  /// is what goes. Hawk Eye holds the arrow still.
+  /// is what goes. Hawk Eye holds the aim still.
   final double wobbleMaxRadians;
 
   /// Players above this number join as spectators (the spec's 1-8).
@@ -148,7 +148,7 @@ class PuttConfig {
     PhysicsConfig? physics,
     PowerUpRegistry? powerUps,
     this.holeTimeLimitSeconds = 120,
-    this.wobbleMaxRadians = 0.035,
+    this.wobbleMaxRadians = 0.12,
     this.maxPlayers = 8,
     this.startHoleIndex = 0,
     this.scoreboardSeconds = 0,

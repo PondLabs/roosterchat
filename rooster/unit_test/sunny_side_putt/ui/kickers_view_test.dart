@@ -1,8 +1,7 @@
 // The kickers as everyone sees them: a launch ramp built in each course's
 // own material with chevrons pointing the way it throws, an egg riding up
 // its deck and flying the engine's arc with its shadow on the ground
-// below, landing with a squash and a puff; the roll guide climbing through
-// the flight to a mark where it comes down; and the match turning a flight
+// below, landing with a squash and a puff; and the match turning a flight
 // into its sounds and its bursts, the altitude drawn between ticks.
 library;
 
@@ -15,7 +14,6 @@ import 'package:three_js_core/three_js_core.dart' as tjs;
 import 'package:three_js_math/three_js_math.dart' as tjs;
 
 import 'package:rooster/client/components/sunny_side_putt/core/hole.dart';
-import 'package:rooster/client/components/sunny_side_putt/core/physics.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/rules.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_art.dart';
@@ -260,146 +258,6 @@ void main() {
           _walk(world.scene)
               .where((object) => object.name == 'burst-puff' && object.visible),
           isNotEmpty);
-    });
-
-    test('the roll guide climbs through the flight to its landing', () {
-      final world = PuttWorld3D(viewport: const ui.Size(800, 600));
-      addTearDown(world.dispose);
-      world.buildHole(_field(), eggRadius: 0.45);
-      final preview = [
-        for (var x = 3.0; x <= 9.0; x += 0.5) Vec2(x, 6),
-        for (var i = 1; i <= 10; i++) Vec2(9 + i * 0.6, 6),
-      ];
-      final airs = <double?>[
-        for (var x = 3.0; x <= 9.0; x += 0.5) null,
-        for (var i = 1; i <= 10; i++)
-          math.max(
-              0.0,
-              _kicker.height +
-                  0.9 * i / 10 * 4 -
-                  4 * (i / 10) * (i / 10) * 2.4),
-      ];
-      airs[airs.length - 1] = null;
-      final landing = preview.last;
-      world.applySnapshot(PuttWorldFrame(
-        time: 0,
-        eggs: [_egg(const Vec2(3, 6), velocity: Vec2.zero)],
-        aim: PuttWorldAim(
-          origin: const Vec2(3, 6),
-          angle: 0,
-          power: 0.6,
-          dragLength: 3,
-          eggRadius: 0.45,
-          preview: preview,
-          previewAir: airs,
-        ),
-      ));
-      final dots = _walk(world.scene)
-          .where((object) => object.name == 'aim-dot' && object.visible)
-          .toList();
-      expect(dots, isNotEmpty);
-      // Past the lip the dots rise off the turf (the aim group sits on the
-      // turf at the egg).
-      final aloft = dots
-          .where((dot) => dot.position.x > 9.5 - 3 && dot.position.x < 14 - 3);
-      expect(aloft.map((dot) => dot.position.y).reduce(math.max),
-          greaterThan(0.5));
-      // The flight shows whole: the last dot is at the landing, and no
-      // ring marks it (the guide is the same dotted line on every hole).
-      final farthest = dots.map((dot) => dot.position.x).reduce(math.max);
-      expect(farthest, closeTo(landing.x - 3, 0.7));
-      expect(
-          _walk(world.scene).where((object) =>
-              object.name == 'aim-landing' || object.name == 'aim-bounce'),
-          isEmpty);
-    });
-  });
-
-  group('the guide through a jump', () {
-    const config = PhysicsConfig();
-    test('runs the engine\'s flight to where it comes down, and no further',
-        () {
-      final hole = _field(moat: true);
-      final world =
-          PhysicsWorld(hole: hole, config: config, playerIds: const ['me']);
-      final roll = previewRoll(
-        world: world,
-        hole: hole,
-        config: config,
-        playerId: 'me',
-        angle: 0,
-        power: 0.6,
-        maxLength: 6,
-      );
-      expect(roll.landing, isNotNull);
-      expect(roll.points.last, roll.landing);
-      expect(roll.airs, hasLength(roll.points.length));
-      // Up off the lip and back down again.
-      final flying = [
-        for (final air in roll.airs)
-          if (air != null) air,
-      ];
-      expect(flying, isNotEmpty);
-      final peak = flying.reduce(math.max);
-      expect(peak, greaterThan(_kicker.height + 0.3));
-      expect(flying.first, lessThan(peak));
-      expect(flying.last, lessThan(peak));
-      // Far past the guide's usual length: the flight is shown whole.
-      expect(roll.landing!.x - hole.tee.x, greaterThan(6));
-      expect(roll.landing!.x, greaterThan(14), reason: 'over the moat');
-      // The engine's own first landing.
-      final real =
-          PhysicsWorld(hole: hole, config: config, playerIds: const ['me']);
-      real.applyShot('me', 0, 0.6);
-      BallLanded? first;
-      for (var i = 0; i < 600 && first == null; i++) {
-        real.stepTick();
-        first = real.drainEvents().whereType<BallLanded>().firstOrNull;
-      }
-      expect(roll.landing, first!.at);
-    });
-
-    test('runs on to a kicker its length ends on, and shows the flight', () {
-      // From the tee (x 3) the kicker's foot is four units off, its lip
-      // six: a guide four long ends on the deck, and runs on to the flight.
-      final hole = _field(moat: true);
-      ({List<Vec2> points, List<double?> airs, Vec2? landing}) guide(
-              double length) =>
-          previewRoll(
-            world: PhysicsWorld(
-                hole: hole, config: config, playerIds: const ['me']),
-            hole: hole,
-            config: config,
-            playerId: 'me',
-            angle: 0,
-            power: 0.72,
-            maxLength: length,
-          );
-      final onTheDeck = guide(4);
-      expect(onTheDeck.landing, isNotNull);
-      expect(onTheDeck.airs.whereType<double>(), isNotEmpty);
-      expect(onTheDeck.landing!.x, greaterThan(14), reason: 'over the moat');
-      // One that ends well short of the kicker stops where it ends.
-      final short = guide(1.5);
-      expect(short.landing, isNull);
-      expect(short.airs, isEmpty);
-      expect(short.points.last.x, lessThan(6));
-    });
-
-    test('a roll that never leaves the ground has no altitudes', () {
-      final hole = _field();
-      final world =
-          PhysicsWorld(hole: hole, config: config, playerIds: const ['me']);
-      final roll = previewRoll(
-        world: world,
-        hole: hole,
-        config: config,
-        playerId: 'me',
-        angle: math.pi / 2,
-        power: 0.4,
-      );
-      expect(roll.airs, isEmpty);
-      expect(roll.landing, isNull);
     });
   });
 

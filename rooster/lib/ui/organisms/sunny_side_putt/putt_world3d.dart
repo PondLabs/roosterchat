@@ -182,25 +182,23 @@ class PuttWorldHen {
 /// pure angle never left `aim_controller.dart`.
 class PuttWorldAim {
   final Vec2 origin;
+
+  /// Where the row of chevrons points: the shot's angle with this frame's
+  /// sway, so the putt goes where the row points at release.
   final double angle;
+
+  /// The shot's angle without the sway: the band lies behind the egg
+  /// along it, where the slingshot is drawn. Null draws it behind [angle].
+  final double? pullAngle;
   final double power;
+
+  /// How far the slingshot is drawn back (world units, the full pull at
+  /// most): the band's length.
   final double dragLength;
   final double eggRadius;
 
-  /// The first stretch of the egg's predicted roll (the engine's own
-  /// physics, run ahead): drawn as the dotted guide. Empty draws none.
-  final List<Vec2> preview;
-
-  /// Beside [preview], point for point: the egg's altitude where it flies
-  /// off a kicker (as [PuttWorldEgg.air]), null where it rolls. Empty when
-  /// the guide never leaves the ground.
-  final List<double?> previewAir;
-
-  /// The viewer's last roll on this hole, the stretches between jumps (a
-  /// splash's return, a rabbit hole): drawn faint under the aim, in
-  /// [traceTint], so the next putt can be judged against the last one.
-  final List<List<Vec2>> trace;
-  final ui.Color? traceTint;
+  /// The viewer's colour, for the band. Null draws it cream.
+  final ui.Color? tint;
 
   const PuttWorldAim({
     required this.origin,
@@ -208,10 +206,8 @@ class PuttWorldAim {
     required this.power,
     required this.dragLength,
     required this.eggRadius,
-    this.preview = const [],
-    this.previewAir = const [],
-    this.trace = const [],
-    this.traceTint,
+    this.pullAngle,
+    this.tint,
   });
 }
 
@@ -367,19 +363,35 @@ class PuttCameraRig {
 
   static const double defaultYaw = math.pi;
 
-  /// The orbit that turns the camera partway behind [from], looking down
-  /// the line to [to]: half the turn from the hole's own view, never more
-  /// than about 45 degrees, so the shot's direction reads while the hole
-  /// keeps the orientation everyone shares. The close camera at the egg
-  /// takes it; the tee's sign stands out of its way.
+  /// The orbit that puts the camera right behind [from], looking down the
+  /// line to [to], as Putt Party frames a hole: the egg near, the nest
+  /// straight ahead up the screen. The play camera takes it from the egg on
+  /// the tee; the tee's sign stands out of its way.
   static double yawToward(Vec2 from, Vec2 to) {
     final line = to - from;
     if (line.length < 1e-3) return defaultYaw;
     // The camera's away axis is (sin yaw, cos yaw) in x/z.
-    final along = math.atan2(line.x, line.y);
-    var turn = along - defaultYaw;
+    return math.atan2(line.x, line.y);
+  }
+
+  /// The orbit that turns the camera partway behind [from], looking down
+  /// the line to [to]: half the turn from the hole's own view, never more
+  /// than about 45 degrees. A spectator's camera takes it to frame someone
+  /// else's egg with the nest, a long way off, without swinging round the
+  /// green from one watched egg to the next.
+  static double yawLeaningToward(Vec2 from, Vec2 to) {
+    final line = to - from;
+    if (line.length < 1e-3) return defaultYaw;
+    var turn = math.atan2(line.x, line.y) - defaultYaw;
     turn = math.atan2(math.sin(turn), math.cos(turn)); // into (-pi, pi]
     return defaultYaw + (turn * 0.5).clamp(-0.8, 0.8);
+  }
+
+  /// [yaw] as the same direction nearest the rig's own (unbounded) yaw, so
+  /// a glide always takes the short way round.
+  double _nearestTurn(double yaw) {
+    final turn = yaw - this.yaw;
+    return this.yaw + math.atan2(math.sin(turn), math.cos(turn));
   }
 
   /// The tilt from the ground plane, degrees, in [pitchMin, pitchMax].
@@ -475,7 +487,7 @@ class PuttCameraRig {
       List<double>? tall}) {
     if (points.isEmpty) return;
     _closeFloor = null;
-    if (yaw != null) _yawTarget = yaw;
+    if (yaw != null) _yawTarget = _nearestTurn(yaw);
     final pad = 40 + margin * 6;
     final distance = _fitDistance(points, pad, closest, tall);
     _distanceTarget = distance;
@@ -529,14 +541,15 @@ class PuttCameraRig {
   /// so a shot never moves the camera. [tall], beside the points, is how
   /// high something stands on each (the nest's flag).
   ({Vec2 target, double distance}) playFraming(Vec2 egg, Vec2 nest,
-      {double margin = 5,
+      {double yaw = defaultYaw,
+      double margin = 5,
       double closest = 0.42,
       double shrink = 0.82,
       double eggHeight = 1.4,
       double eggPixels = 40,
       List<double>? tall}) {
     final fit = frameAt([egg, nest],
-        yaw: defaultYaw,
+        yaw: yaw,
         pitchDeg: pitchDefault,
         margin: margin,
         nearest: closest,
@@ -808,7 +821,7 @@ class PuttCameraRig {
     } else if (distance != null) {
       _closeFloor = null;
     }
-    if (yaw != null) _yawTarget = yaw;
+    if (yaw != null) _yawTarget = _nearestTurn(yaw);
     if (pitchDeg != null) {
       _pitchTarget = pitchDeg.clamp(pitchMin, pitchMax);
     }

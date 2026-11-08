@@ -86,7 +86,7 @@ class PuttTagBoard extends ChangeNotifier {
 
   /// The tags for this frame, laid clear of each other, of [avoid] (the
   /// eggs, mine with its pin) and where they can of [soft] (the coach's
-  /// hand and ghost arrow). One that would stand under the [hud] (the top
+  /// hand and its aim). One that would stand under the [hud] (the top
   /// strip, the corner buttons) is not drawn: it would read as part of the
   /// HUD, and an egg that far up is under it too. Inside [screen] (the view
   /// less a margin) a tag running past an edge steps back in, its pointer
@@ -147,7 +147,7 @@ Rect puttTagPill(PuttTag tag, Offset at) {
 /// another. Each tag, from the lowest on screen up, tries its own spot,
 /// then steps to either side, then rises a row past what is in the way -
 /// but never far over another egg: a tag standing above someone else's
-/// egg names that one. [soft] (the coach's hand and ghost arrow, drawn
+/// egg names that one. [soft] (the coach's hand and its aim, drawn
 /// with a margin) is kept clear of while a spot by the egg allows it; a
 /// tag with none then stands by its egg over that margin, its name shown
 /// and faded back under the coach - failing that its picture alone, and

@@ -56,6 +56,11 @@ enum PuttSfx {
   boost,
   portal,
   powerUpPicked,
+
+  /// The carton's reel spinning through the power-ups after a "?" box (a
+  /// tick a turn), and the one it stops on.
+  powerUpRoll,
+  powerUpReveal,
   powerUpUsed,
   timerCue,
 
@@ -423,7 +428,12 @@ class PuttMatch extends ChangeNotifier {
   /// Between the last two whole ticks at [alpha], settled otherwise.
   Vec2 renderPositionOf(String playerId, [double? alphaOverride]) {
     final current = currentPositions[playerId];
-    if (current == null) return Vec2.zero;
+    // Before the hole's first tick there is nothing to draw between: the
+    // egg is where the engine has it (the tee). The origin it gave before
+    // turned the hole's camera toward the nest from the table's corner.
+    if (current == null) {
+      return engine.world?.ball(playerId)?.position ?? Vec2.zero;
+    }
     final previous = previousPositions[playerId] ?? current;
     return previous.lerp(current, alphaOverride ?? alpha);
   }
@@ -621,6 +631,13 @@ class PuttMatch extends ChangeNotifier {
 
   /// My held power-ups, oldest first, for the HUD's slots.
   List<String> get myInventory => localPlayer?.inventory.toList() ?? const [];
+
+  /// How many "?" boxes have dropped a power-up into each slot of my
+  /// carton: a count that moves is the slot's reel to spin, as Putt Party
+  /// spins a box's prize (a power-up moving along when another is used, or
+  /// one a crow brings, moves none).
+  List<int> get myPickSerials => List.unmodifiable(_pickSerials);
+  final List<int> _pickSerials = List.filled(PowerUpInventory.cap, 0);
 
   /// The scoreboard as of now.
   List<ScoreRow> get scoreboard => engine.scoreboard();
@@ -1038,6 +1055,8 @@ class PuttMatch extends ChangeNotifier {
         // player's only.
         fxSpots.add(PuttFxSpot(PuttFxSpotKind.pick, who: event.playerId));
         if (event.playerId != localPlayerId) return const [];
+        final slot = myInventory.lastIndexOf(event.effectId);
+        if (slot >= 0 && slot < _pickSerials.length) _pickSerials[slot]++;
         return const [PuttNotice(PuttSfx.powerUpPicked)];
       case PowerUpUsed():
         // Everyone's cast is everyone's: the call in the feed, the burst
