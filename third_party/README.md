@@ -46,14 +46,11 @@ null framebuffer brings nothing back there), so the scene read the last
 frame's map: shadows a frame late, and a dark flash whenever the map was
 remade. `AngleRenderer.restoreScreenFramebuffer`, set by `lib/three_viewer.dart`
 when it draws straight into its texture, binds the texture back after the
-shadow pass, and shadows draw first on native too. Where Flutter's
-texture is single-buffered (the shared FBO on Linux, the pbuffer surfaces
-on Windows and macOS) the viewer draws into a framebuffer of its own
-(`DeferredScreen`) and, on the next tick, blits the finished frame into
-the texture and waits for that blit alone before telling Flutter: Flutter
-never sees a frame still being drawn, and the UI thread no longer waits
-for each frame's draw (a `glFinish` after every draw cost frame rate).
-Android's window surface swaps buffers and is left as it was. `lib/three_viewer.dart`
+shadow pass, and shadows draw first on native too. On the shared-FBO path
+(Linux, and Windows without a surface producer) the viewer also calls
+`glFinish` before telling Flutter of a frame: Flutter samples that same
+texture, and with a flush alone it could show a frame still being drawn.
+The surface paths swap buffers instead and do not stall. `lib/three_viewer.dart`
 also waits for or drops an ANGLE start that a dispose cut short, and reports
 a start that failed (`onStartFailed`).
 
