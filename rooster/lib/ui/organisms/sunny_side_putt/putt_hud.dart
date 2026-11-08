@@ -11,7 +11,8 @@
 // Ink panels over the bright green, cream type, yolk for the numbers and
 // comb red for the one urgent thing (the last fifteen seconds); Sora for
 // numbers and banners, Nunito Sans for labels (docs/brand/README.md).
-// Nothing sits over the middle of the green while a hole plays, and every
+// Nothing sits over the middle of the green while a hole plays but a "?"
+// box's prize, told big for three seconds as Putt Party tells it; every
 // panel that only shows ignores pointers, so aim drags reach the game
 // under the HUD.
 library;
@@ -21,6 +22,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart'
     show ValueListenable, TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:intl/intl.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/powerups.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/rules.dart';
@@ -98,12 +100,18 @@ class PuttHud extends StatefulWidget {
 class _PuttHudState extends State<PuttHud> {
   PuttTargeting? _own;
 
+  /// Per slot, the pick serial whose reveal has reached the carton: the
+  /// slot keeps its prize under a "?" until the middle's card lands in it.
+  final ValueNotifier<List<int>> _landed =
+      ValueNotifier(List.filled(PowerUpInventory.cap, 0));
+
   PuttTargeting get _targeting =>
       widget.targeting ?? (_own ??= PuttTargeting());
 
   @override
   void dispose() {
     _own?.dispose();
+    _landed.dispose();
     super.dispose();
   }
 
@@ -163,9 +171,23 @@ class _PuttHudState extends State<PuttHud> {
                           watching: widget.watching,
                           onTapSlot: _tapSlot,
                           onSfx: widget.onSfx,
+                          landed: _landed,
                         ),
                     ],
                   ),
+                  // A "?" box's prize, big in the middle of the screen.
+                  if (!match.isSpectator)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: PuttPickupReveal(
+                          slots: match.myInventory,
+                          pickSerials: match.myPickSerials,
+                          landed: _landed,
+                          onSfx: widget.onSfx,
+                          hurry: match.myBall?.holed ?? false,
+                        ),
+                      ),
+                    ),
                   if (picking)
                     Positioned(
                       right: 0,
@@ -214,6 +236,7 @@ void puttUseSlot(
 
 const double _topRowHeight = 88;
 const double _slotSize = 56;
+const double _slotGap = 8;
 
 // ---- type, colour and panels -----------------------------------------------------------
 
@@ -1717,6 +1740,7 @@ class _PuttBottomRow extends StatelessWidget {
   final ValueListenable<String?>? watching;
   final void Function(int slot, String effectId) onTapSlot;
   final void Function(PuttSfx sfx)? onSfx;
+  final ValueListenable<List<int>>? landed;
 
   const _PuttBottomRow({
     required this.match,
@@ -1728,6 +1752,7 @@ class _PuttBottomRow extends StatelessWidget {
     this.watching,
     required this.onTapSlot,
     this.onSfx,
+    this.landed,
   });
 
   @override
@@ -1773,6 +1798,7 @@ class _PuttBottomRow extends StatelessWidget {
             activeSlot: targeting.armedSlot ?? targeting.pickingSlot,
             highlightSlot: targeting.keySlot,
             pickSerials: match.myPickSerials,
+            landed: landed,
             onTap: onTapSlot,
             onSfx: onSfx,
           ),
@@ -2257,9 +2283,8 @@ class _HintPill extends StatelessWidget {
 /// its icon on ink with the name and what it does in the tooltip; empty
 /// slots a dashed outline. The slot whose power-up waits for a spot or a
 /// player glows; the one the keyboard's Tab is on wears a ring. A "?" box's
-/// prize lands as Putt Party's does: the slot's reel spins through the
-/// power-ups, ticking, slows and stops on it with a pop, a flash and its
-/// name over the slot.
+/// prize is told in the middle of the screen ([PuttPickupReveal]); its slot
+/// holds a "?" until that card flies down into it, then pops with a flash.
 class PuttInventory extends StatelessWidget {
   final List<String> slots;
   final void Function(int slot, String effectId)? onTap;
@@ -2272,10 +2297,15 @@ class PuttInventory extends StatelessWidget {
   final int? highlightSlot;
 
   /// Per slot, how many "?" boxes have dropped a power-up into it
-  /// ([PuttMatch.myPickSerials]): a count that moves spins that slot's reel.
+  /// ([PuttMatch.myPickSerials]): a count that moves is a prize arriving.
   final List<int> pickSerials;
 
-  /// The reel's ticks and its stop.
+  /// Per slot, the pick serial whose reveal has landed
+  /// ([PuttPickupReveal.landed]): a slot waits under a "?" until its pick
+  /// has. Left out, a prize lands at once, naming itself over the slot.
+  final ValueListenable<List<int>>? landed;
+
+  /// The prize's sound when a slot names it on its own (no [landed]).
   final void Function(PuttSfx sfx)? onSfx;
 
   const PuttInventory({
@@ -2286,6 +2316,7 @@ class PuttInventory extends StatelessWidget {
     this.activeSlot,
     this.highlightSlot,
     this.pickSerials = const [],
+    this.landed,
     this.onSfx,
   });
 
@@ -2296,7 +2327,7 @@ class PuttInventory extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         for (var i = 0; i < PowerUpInventory.cap; i++) ...[
-          if (i > 0) const SizedBox(width: 8),
+          if (i > 0) const SizedBox(width: _slotGap),
           _PowerSlot(
             index: i,
             effectId: i < slots.length ? slots[i] : null,
@@ -2304,6 +2335,7 @@ class PuttInventory extends StatelessWidget {
             active: activeSlot == i,
             highlighted: highlightSlot == i && i < slots.length,
             pickSerial: i < pickSerials.length ? pickSerials[i] : 0,
+            landed: landed,
             onTap: onTap,
             onSfx: onSfx,
           ),
@@ -2320,6 +2352,7 @@ class _PowerSlot extends StatefulWidget {
   final bool active;
   final bool highlighted;
   final int pickSerial;
+  final ValueListenable<List<int>>? landed;
   final void Function(int slot, String effectId)? onTap;
   final void Function(PuttSfx sfx)? onSfx;
 
@@ -2331,6 +2364,7 @@ class _PowerSlot extends StatefulWidget {
     required this.highlighted,
     required this.onTap,
     this.pickSerial = 0,
+    this.landed,
     this.onSfx,
   });
 
@@ -2352,80 +2386,54 @@ class _PowerSlotState extends State<_PowerSlot> with TickerProviderStateMixin {
     duration: const Duration(milliseconds: 2400),
   );
 
-  /// The reel a "?" box's prize spins in: [_reel]'s icons go by, slowing,
-  /// and the last is the prize.
-  late final AnimationController _spin = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1250),
-  )
-    ..addListener(_spinTicked)
-    ..addStatusListener(_spinEnded);
-
   /// The prize landing: a pop of the icon and a flash round the slot.
   late final AnimationController _land = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 650),
   );
 
-  List<String> _reel = const [];
-  int _reelStep = 0;
-
-  /// The icons a reel turns through, the prize its last.
-  static const int _reelLength = 15;
+  /// The pick serial this slot is waiting on the middle's card for: its
+  /// prize stays under a "?" until [_PowerSlot.landed] reaches it.
+  int? _waitingFor;
 
   bool _reduceMotion = false;
 
-  bool get spinning => _spin.isAnimating;
+  bool get waiting => _waitingFor != null;
 
-  /// Where the reel stands: the step it shows and how far on toward the
-  /// next (the reel slows to a stop, as a slot machine's does).
-  (int, double) get _reelAt {
-    final at = Curves.easeOutCubic.transform(_spin.value) * (_reel.length - 1);
-    final step = at.floor().clamp(0, _reel.length - 1);
-    return (step, at - step);
+  @override
+  void initState() {
+    super.initState();
+    widget.landed?.addListener(_landedMoved);
   }
 
-  void _startSpin(String prize) {
-    if (_reduceMotion) {
+  void _arrive({required bool named}) {
+    _waitingFor = null;
+    _land.forward(from: 0);
+    if (named) {
       widget.onSfx?.call(PuttSfx.powerUpReveal);
       _fresh.forward(from: 0);
-      return;
     }
-    // Every other power-up in a shuffled run, never one twice in a row,
-    // ending on the prize.
-    final random = math.Random(widget.pickSerial * 31 + widget.index);
-    final reel = <String>[];
-    while (reel.length < _reelLength - 1) {
-      final pool = [...puttPowerUpIds]..shuffle(random);
-      for (final id in pool) {
-        if (reel.length == _reelLength - 1) break;
-        if (reel.isNotEmpty && reel.last == id) continue;
-        reel.add(id);
+  }
+
+  void _landedMoved() {
+    final waitingFor = _waitingFor;
+    final landed = widget.landed?.value;
+    if (waitingFor == null || landed == null) return;
+    if (!mounted) return;
+    if (widget.index < landed.length && landed[widget.index] >= waitingFor) {
+      // The middle's card named it: the slot only pops.
+      _arrive(named: false);
+      // The card may land from its own dispose, with the tree locked: the
+      // slot redraws on the next frame then.
+      if (SchedulerBinding.instance.schedulerPhase ==
+          SchedulerPhase.persistentCallbacks) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() {});
+        });
+      } else {
+        setState(() {});
       }
     }
-    if (reel.last == prize) reel[reel.length - 1] = reel.first;
-    reel.add(prize);
-    _reel = reel;
-    _reelStep = 0;
-    _fresh
-      ..stop()
-      ..value = 0;
-    _land.value = 0;
-    _spin.forward(from: 0);
-  }
-
-  void _spinTicked() {
-    final (step, _) = _reelAt;
-    if (step == _reelStep) return;
-    _reelStep = step;
-    if (step < _reel.length - 1) widget.onSfx?.call(PuttSfx.powerUpRoll);
-  }
-
-  void _spinEnded(AnimationStatus status) {
-    if (status != AnimationStatus.completed) return;
-    widget.onSfx?.call(PuttSfx.powerUpReveal);
-    _land.forward(from: 0);
-    _fresh.forward(from: 0);
   }
 
   @override
@@ -2438,22 +2446,35 @@ class _PowerSlotState extends State<_PowerSlot> with TickerProviderStateMixin {
   @override
   void didUpdateWidget(covariant _PowerSlot oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.landed != widget.landed) {
+      oldWidget.landed?.removeListener(_landedMoved);
+      widget.landed?.addListener(_landedMoved);
+    }
     _syncGlow();
     final effectId = widget.effectId;
-    // A "?" box's prize spins in; its name follows when the reel stops.
+    // A "?" box's prize: it waits for the middle's card, or (no card to
+    // wait for) lands at once and says its name.
     if (effectId != null && widget.pickSerial != oldWidget.pickSerial) {
-      _startSpin(effectId);
+      _fresh
+        ..stop()
+        ..value = 0;
+      if (widget.landed == null) {
+        _arrive(named: true);
+      } else {
+        _waitingFor = widget.pickSerial;
+        _landedMoved();
+      }
       return;
     }
     // A power-up that moves in otherwise says its name; so does the one
     // Tab lands on (a keyboard has no hover for the tooltip).
     if (effectId != null &&
-        !spinning &&
+        !waiting &&
         (effectId != oldWidget.effectId ||
             (widget.highlighted && !oldWidget.highlighted))) {
       _fresh.forward(from: 0);
     }
-    if (effectId == null && spinning) _spin.stop();
+    if (effectId == null) _waitingFor = null;
   }
 
   void _syncGlow() {
@@ -2466,9 +2487,9 @@ class _PowerSlotState extends State<_PowerSlot> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    widget.landed?.removeListener(_landedMoved);
     _glow.dispose();
     _fresh.dispose();
-    _spin.dispose();
     _land.dispose();
     super.dispose();
   }
@@ -2505,32 +2526,6 @@ class _PowerSlotState extends State<_PowerSlot> with TickerProviderStateMixin {
     );
   }
 
-  /// The reel turning: this step's icon sliding down out of the slot as
-  /// the next comes in from the top.
-  Widget _reelView() {
-    final (step, along) = _reelAt;
-    const travel = _slotSize * 0.62;
-    Widget icon(int at, double y) => Transform.translate(
-          offset: Offset(0, y),
-          child: PuttPowerUpIcon(effectId: _reel[at], size: 28),
-        );
-    return ClipRRect(
-      key: const Key('putt-slot-reel'),
-      borderRadius: BorderRadius.circular(13),
-      child: SizedBox(
-        width: _slotSize - 6,
-        height: _slotSize - 6,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            icon(step, along * travel),
-            if (step + 1 < _reel.length) icon(step + 1, (along - 1) * travel),
-          ],
-        ),
-      ),
-    );
-  }
-
   /// The prize just stopped: it pops big and settles with a bounce.
   Widget _landed(Widget icon) {
     if (!_land.isAnimating) return icon;
@@ -2553,13 +2548,14 @@ class _PowerSlotState extends State<_PowerSlot> with TickerProviderStateMixin {
         ),
       );
     }
-    final enabled = widget.enabled && widget.onTap != null && !spinning;
+    final enabled = widget.enabled && widget.onTap != null && !waiting;
     final active = widget.active;
     final name = puttPowerUpName(effectId);
     final slot = AnimatedBuilder(
-      animation: Listenable.merge([_glow, _spin, _land]),
+      animation: Listenable.merge([_glow, _land]),
       builder: (context, child) {
-        final rolling = _spin.isAnimating;
+        // Waiting for the middle's card: the slot is the "?" box's.
+        final rolling = waiting;
         // The prize's landing: a cream flash fading to the yolk ring.
         final flash = _land.isAnimating ? 1 - _land.value : 0.0;
         final glow = !active
@@ -2599,7 +2595,10 @@ class _PowerSlotState extends State<_PowerSlot> with TickerProviderStateMixin {
                 ),
             ],
           ),
-          child: rolling ? _reelView() : _landed(child!),
+          child: rolling
+              ? const PuttPowerUpIcon(
+                  key: Key('putt-slot-pending'), effectId: '?', size: 28)
+              : _landed(child!),
         );
       },
       child: PuttPowerUpIcon(effectId: effectId, size: 28),
@@ -2664,6 +2663,415 @@ class _PowerSlotState extends State<_PowerSlot> with TickerProviderStateMixin {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ---- a "?" box's prize, in the middle ------------------------------------------------------
+
+/// A "?" box's prize told the way Putt Party tells it: a big card in the
+/// middle of the screen, over the green, whose reel spins through the
+/// power-ups, ticking, slows and stops on the prize with a pop, a flash
+/// and a sound; its name and what it does come up under it, held a
+/// moment, then the card shrinks and flies down into the slot the prize
+/// went to, which pops as it lands ([landed]). Down in the 56 px slot
+/// alone, players never noticed they had picked anything up, nor what.
+///
+/// Several boxes in a row queue up, one card after the other. With reduced
+/// motion the card shows the prize at once, holds and fades; no reel, no
+/// flight.
+class PuttPickupReveal extends StatefulWidget {
+  /// My carton ([PuttMatch.myInventory]).
+  final List<String> slots;
+
+  /// [PuttMatch.myPickSerials]: a count that moves is a prize to tell.
+  final List<int> pickSerials;
+
+  /// Per slot, the pick serial whose card has reached it: the HUD shares
+  /// it with the carton.
+  final ValueNotifier<List<int>> landed;
+
+  /// The reel's ticks and its stop.
+  final void Function(PuttSfx sfx)? onSfx;
+
+  /// My egg is in the nest: the card holds only a moment past its stop,
+  /// then flies, so the chick's hatch in the close-up is not under it.
+  final bool hurry;
+
+  const PuttPickupReveal({
+    super.key,
+    required this.slots,
+    required this.pickSerials,
+    required this.landed,
+    this.onSfx,
+    this.hurry = false,
+  });
+
+  /// The card's beats, in milliseconds from its start: in, the reel's stop,
+  /// the flight down, gone.
+  static const int inMs = 220;
+  static const int stopMs = 1500;
+  static const int flyMs = 2750;
+  static const int doneMs = 3250;
+  static const int calmMs = 2600;
+
+  /// How long a hurried card holds its stop before it flies.
+  static const int hurriedHoldMs = 450;
+
+  /// How long a prize takes from the box to its slot.
+  static const Duration arrival = Duration(milliseconds: doneMs);
+
+  @override
+  State<PuttPickupReveal> createState() => _PuttPickupRevealState();
+}
+
+class _PuttPickupRevealState extends State<PuttPickupReveal>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _clock = AnimationController(vsync: this)
+    ..addListener(_ticked)
+    ..addStatusListener(_ended);
+
+  /// The picks seen so far, per slot: only a count that moves past them is
+  /// told (a HUD built mid-match does not replay old boxes).
+  late List<int> _seen;
+
+  /// Prizes waiting their turn: (slot, power-up, pick serial).
+  final List<(int, String, int)> _queue = [];
+  (int, String, int)? _showing;
+
+  List<String> _reel = const [];
+  int _reelStep = 0;
+  bool _stopped = false;
+  bool _reduceMotion = false;
+
+  static const int _reelLength = 16;
+
+  @override
+  void initState() {
+    super.initState();
+    _seen = List.of(widget.pickSerials);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+  }
+
+  @override
+  void didUpdateWidget(covariant PuttPickupReveal oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final serials = widget.pickSerials;
+    if (_seen.length != serials.length) {
+      _seen = List.filled(serials.length, 0);
+    }
+    for (var i = 0; i < serials.length; i++) {
+      if (serials[i] > _seen[i] && i < widget.slots.length) {
+        _queue.add((i, widget.slots[i], serials[i]));
+      }
+      _seen[i] = serials[i];
+    }
+    if (_showing == null && _queue.isNotEmpty) _next();
+  }
+
+  void _next() {
+    final prize = _queue.removeAt(0);
+    _showing = prize;
+    _stopped = false;
+    _reelStep = 0;
+    if (_reduceMotion) {
+      // No reel: the prize at once, its sound, and it is in the slot.
+      _reel = [prize.$2];
+      _stopped = true;
+      widget.onSfx?.call(PuttSfx.powerUpReveal);
+      _land(prize);
+      _clock
+        ..duration = const Duration(milliseconds: PuttPickupReveal.calmMs)
+        ..forward(from: 0);
+      return;
+    }
+    // Every other power-up in a shuffled run, never one twice in a row,
+    // ending on the prize.
+    final random = math.Random(prize.$3 * 31 + prize.$1);
+    final reel = <String>[];
+    while (reel.length < _reelLength - 1) {
+      final pool = [...puttPowerUpIds]..shuffle(random);
+      for (final id in pool) {
+        if (reel.length == _reelLength - 1) break;
+        if (reel.isNotEmpty && reel.last == id) continue;
+        reel.add(id);
+      }
+    }
+    if (reel.last == prize.$2) reel[reel.length - 1] = reel.first;
+    reel.add(prize.$2);
+    _reel = reel;
+    _clock
+      ..duration = const Duration(milliseconds: PuttPickupReveal.doneMs)
+      ..forward(from: 0);
+  }
+
+  void _land((int, String, int) prize) {
+    final landed = List.of(widget.landed.value);
+    while (landed.length <= prize.$1) {
+      landed.add(0);
+    }
+    if (landed[prize.$1] < prize.$3) landed[prize.$1] = prize.$3;
+    widget.landed.value = landed;
+  }
+
+  double get _ms =>
+      _clock.value * (_clock.duration?.inMilliseconds ?? 0).toDouble();
+
+  /// How far the reel has turned (0 to 1), slowing to its stop.
+  double get _spin =>
+      Curves.easeOutCubic.transform(((_ms - PuttPickupReveal.inMs * 0.5) /
+              (PuttPickupReveal.stopMs - PuttPickupReveal.inMs * 0.5))
+          .clamp(0.0, 1.0));
+
+  (int, double) get _reelAt {
+    final at = _spin * (_reel.length - 1);
+    final step = at.floor().clamp(0, _reel.length - 1);
+    return (step, at - step);
+  }
+
+  void _ticked() {
+    if (_reduceMotion || _showing == null) return;
+    final (step, _) = _reelAt;
+    if (step != _reelStep) {
+      _reelStep = step;
+      if (step < _reel.length - 1) widget.onSfx?.call(PuttSfx.powerUpRoll);
+    }
+    if (!_stopped && _ms >= PuttPickupReveal.stopMs) {
+      _stopped = true;
+      widget.onSfx?.call(PuttSfx.powerUpReveal);
+    }
+    if (widget.hurry &&
+        _ms >= PuttPickupReveal.stopMs + PuttPickupReveal.hurriedHoldMs &&
+        _ms < PuttPickupReveal.flyMs) {
+      _clock.forward(
+          from: PuttPickupReveal.flyMs / PuttPickupReveal.doneMs.toDouble());
+    }
+  }
+
+  void _ended(AnimationStatus status) {
+    if (status != AnimationStatus.completed) return;
+    final prize = _showing;
+    if (prize != null && !_reduceMotion) _land(prize);
+    setState(() => _showing = null);
+    if (_queue.isNotEmpty) _next();
+  }
+
+  @override
+  void dispose() {
+    // Nothing left waiting under a "?": every prize told is in its slot.
+    final prize = _showing;
+    if (prize != null) _land(prize);
+    for (final queued in _queue) {
+      _land(queued);
+    }
+    _clock.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      return AnimatedBuilder(
+        animation: _clock,
+        builder: (context, _) {
+          final prize = _showing;
+          if (prize == null) return const SizedBox.shrink();
+          final size = constraints.biggest;
+          // High in the middle: my egg is the middle of the frame, the card
+          // stands over it, clear of the hole bar.
+          final at = Offset(size.width / 2, size.height * 0.36);
+          // On a short screen the card comes down a size.
+          final fit = (size.height / 640).clamp(0.62, 1.0);
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned(
+                left: at.dx,
+                top: at.dy,
+                child: FractionalTranslation(
+                  translation: const Offset(-0.5, -0.5),
+                  child: _place(size, at, fit, prize),
+                ),
+              ),
+            ],
+          );
+        },
+      );
+    });
+  }
+
+  /// The card where its beat puts it: popping in, held, flying down into
+  /// the slot (or, with reduced motion, fading where it stands).
+  Widget _place(Size size, Offset at, double fit, (int, String, int) prize) {
+    final ms = _ms;
+    final card = _card(prize.$2);
+    if (_reduceMotion) {
+      final total = PuttPickupReveal.calmMs.toDouble();
+      final opacity = ms < 120
+          ? ms / 120
+          : ms > total - 300
+              ? ((total - ms) / 300).clamp(0.0, 1.0)
+              : 1.0;
+      return Opacity(
+          opacity: opacity, child: Transform.scale(scale: fit, child: card));
+    }
+    final appear = Curves.easeOutBack
+        .transform((ms / PuttPickupReveal.inMs).clamp(0.0, 1.0));
+    final fly = Curves.easeInCubic.transform(((ms - PuttPickupReveal.flyMs) /
+            (PuttPickupReveal.doneMs - PuttPickupReveal.flyMs))
+        .clamp(0.0, 1.0));
+    // The slot's middle: the carton stands at the bottom right of the
+    // HUD's box, three slots from the right edge.
+    final slot = Offset(
+      size.width -
+          (PowerUpInventory.cap - prize.$1) * (_slotSize + _slotGap) +
+          _slotGap +
+          _slotSize / 2,
+      size.height - _slotSize / 2,
+    );
+    final scale = fit * (0.55 + 0.45 * appear) * (1 - 0.8 * fly);
+    final opacity = (ms / (PuttPickupReveal.inMs * 0.6)).clamp(0.0, 1.0) *
+        (1 - ((fly - 0.7) / 0.3).clamp(0.0, 1.0));
+    return Opacity(
+      opacity: opacity,
+      child: Transform.translate(
+        offset: (slot - at) * fly,
+        child: Transform.scale(scale: scale, child: card),
+      ),
+    );
+  }
+
+  Widget _card(String prize) {
+    final ms = _ms;
+    final stopped = _reduceMotion || ms >= PuttPickupReveal.stopMs;
+    // The stop: a cream flash round the reel fading to the yolk ring, the
+    // icon popping big and settling, the name and its line coming up.
+    final since = (ms - PuttPickupReveal.stopMs) / 650;
+    final flash = !_reduceMotion && since >= 0 && since < 1 ? 1 - since : 0.0;
+    final pop = !_reduceMotion && since >= 0 && since < 1
+        ? 1.5 - 0.5 * Curves.elasticOut.transform(since)
+        : 1.0;
+    final named = _reduceMotion
+        ? 1.0
+        : Curves.easeOutCubic
+            .transform(((ms - PuttPickupReveal.stopMs) / 260).clamp(0.0, 1.0));
+    const window = 116.0;
+    return Container(
+      key: const Key('putt-pickup-reveal'),
+      width: 320,
+      padding: const EdgeInsets.fromLTRB(22, 16, 22, 20),
+      decoration: BoxDecoration(
+        color: PuttPalette.ink.withValues(alpha: 0.97),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(
+            color: Color.lerp(PuttPalette.yolk, PuttPalette.cream, flash)!,
+            width: 3),
+        boxShadow: [
+          ..._shadow,
+          BoxShadow(
+            color: PuttPalette.yolk.withValues(alpha: 0.35 + 0.5 * flash),
+            blurRadius: 18 + 26 * flash,
+            spreadRadius: 1 + 6 * flash,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            labelPuttNewPowerUp().toUpperCase(),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            style: _Type.label(15, color: PuttPalette.yolk, spacing: 2),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: window,
+            height: window,
+            decoration: BoxDecoration(
+              color: Color.lerp(
+                  PuttPalette.ink, PuttPalette.yolk, 0.16 + 0.4 * flash),
+              borderRadius: BorderRadius.circular(26),
+              border: Border.all(
+                color: stopped
+                    ? Color.lerp(PuttPalette.yolk, PuttPalette.cream, flash)!
+                    : PuttPalette.cream,
+                width: 3,
+              ),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(23),
+              child: stopped
+                  ? Center(
+                      child: Transform.scale(
+                        scale: pop,
+                        child: PuttPowerUpIcon(
+                            key: const Key('putt-pickup-prize'),
+                            effectId: prize,
+                            size: 80),
+                      ),
+                    )
+                  : _reelView(window),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Opacity(
+            opacity: named,
+            child: Transform.translate(
+              offset: Offset(0, 8 * (1 - named)),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    stopped ? puttPowerUpName(prize) : '',
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _Type.display(30, height: 1.1),
+                  ),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    height: 40,
+                    child: Text(
+                      stopped ? puttPowerUpDetail(prize) : '',
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: _Type.body(14.5,
+                          color: PuttPalette.cream.withValues(alpha: 0.85),
+                          weight: 650),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The reel turning: this step's icon sliding down out of the window as
+  /// the next comes in from the top.
+  Widget _reelView(double window) {
+    final (step, along) = _reelAt;
+    final travel = window * 0.72;
+    Widget icon(int at, double y) => Transform.translate(
+          offset: Offset(0, y),
+          child: PuttPowerUpIcon(effectId: _reel[at], size: 80),
+        );
+    return Stack(
+      key: const Key('putt-pickup-reel'),
+      alignment: Alignment.center,
+      children: [
+        icon(step, along * travel),
+        if (step + 1 < _reel.length) icon(step + 1, (along - 1) * travel),
+      ],
     );
   }
 }
@@ -3278,6 +3686,11 @@ String labelPuttYouName(String name) => Intl.message("$name (you)",
 String labelPuttEmptySlot() => Intl.message("Empty slot",
     name: "labelPuttEmptySlot",
     desc: "Tooltip of an empty power-up inventory slot");
+
+String labelPuttNewPowerUp() => Intl.message("New power-up!",
+    name: "labelPuttNewPowerUp",
+    desc:
+        "Heading of the card in the middle of the screen that reveals the power-up a box on the green just gave the player");
 
 String labelPuttLeaveGreen() => Intl.message("Leave the green",
     name: "labelPuttLeaveGreen",

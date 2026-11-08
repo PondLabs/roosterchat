@@ -4,7 +4,9 @@
 // the nest, the egg dead centre, which only ever pans with the egg, as
 // Putt Party has it; and once the egg is in, the nest it went in, kept. The
 // camera is always on the viewer's own egg: another player's putt never
-// takes it. A spectator, with no egg of their own, watches the field
+// takes it; and the hatch's close-up plays every time my egg drops in,
+// even after the player took the camera, the nest kept through the
+// hole's results. A spectator, with no egg of their own, watches the field
 // instead: the egg rolling, else the nearest, kept until another putts or
 // it drops in. The player can take the camera at any time (wheel, pinch,
 // orbit): from then on, for the rest of the hole, the director keeps
@@ -336,9 +338,13 @@ class PuttCameraDirector {
     }
 
     // My egg just dropped in: the camera comes in on the nest for the
-    // hatch (unless the player took the camera), then frames the rest.
-    if (cue.myEggHoled && !_wasHoled && !_userCamera) {
+    // hatch, then frames the rest. Every time: a player who had zoomed,
+    // orbited or asked for the whole hole used to get no close-up at all
+    // (the camera left where they had it, often the middle of the green),
+    // so the same sink showed the chick one time and not the next.
+    if (cue.myEggHoled && !_wasHoled) {
       _celebrateUntil = _holeClock + celebrateSeconds;
+      _overview = false;
       // Down low, from the side the camera already looks from (the chick
       // turns to it): the chick in its hat stands whole in the middle of
       // the frame, under the banner up top - from high above it was a
@@ -377,6 +383,16 @@ class PuttCameraDirector {
     // exactly where it is, whatever the egg or the sweep is doing.
     if (cue.aiming) {
       _follow = rig.target;
+      return;
+    }
+
+    // The hole ended with my egg in (mine the last one in, or alone): the
+    // camera stays on the nest it went in, as it does while the others
+    // still play, under the results card - not off to the middle of the
+    // green the moment the hatch is over.
+    if (cue.phase == PuttPhase.holeScoreboard && cue.myEggHoled) {
+      _follow = hole.nest.position;
+      _watching = null;
       return;
     }
 
