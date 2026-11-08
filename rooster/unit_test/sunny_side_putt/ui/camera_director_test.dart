@@ -437,6 +437,70 @@ void main() {
     expectInFreeView(hole.nest.position);
   });
 
+  test('the close-up plays even after the player took the camera', () {
+    // The same sink, three ways the player may have left the camera: as
+    // the director had it, zoomed with the wheel, or the whole-hole view.
+    // Each one comes in on the chick, low and close.
+    final nest = hole.nest.position;
+    final holed = PuttCameraCue(
+      hole: hole,
+      phase: PuttPhase.holePlay,
+      myEgg: nest,
+      myEggHoled: true,
+      otherEggs: const [PuttCameraEgg('them', Vec2(10, 20))],
+    );
+    for (final take in ['none', 'zoom', 'overview']) {
+      rig = PuttCameraRig(viewport: const ui.Size(1280, 800));
+      rig.fitToHole(hole.bounds);
+      director = PuttCameraDirector(rig);
+      run(PuttCameraDirector.openingSeconds + 2, resting(const Vec2(38, 12)));
+      if (take == 'zoom') {
+        rig.setDistance(rig.overviewDistance * 0.9);
+        director.noteUserCamera();
+      } else if (take == 'overview') {
+        director.toggleOverview();
+      }
+      run(1, resting(const Vec2(38, 12)));
+      run(1.2, holed);
+      expect(director.celebrating, isTrue, reason: take);
+      expect(rig.target.distanceTo(nest), lessThan(4.5), reason: take);
+      expect(rig.pitchDeg, closeTo(PuttCameraDirector.celebratePitch, 3),
+          reason: take);
+      expect(pixelOf(nest, 0.5).dy - pixelOf(nest, 2.85).dy, greaterThan(200),
+          reason: '$take: the chick big on the screen');
+      // And after the hatch the nest is still what the camera looks at.
+      run(PuttCameraDirector.celebrateSeconds + 1.5, holed);
+      expect(director.overview, isFalse, reason: take);
+      expect(rig.target.distanceTo(nest), lessThan(3), reason: take);
+    }
+  });
+
+  test('a hole that ends on my sink keeps the camera on the nest', () {
+    // Alone, or the last one in: the hole ends the tick my egg drops.
+    run(PuttCameraDirector.openingSeconds + 2, resting(const Vec2(38, 12)));
+    final nest = hole.nest.position;
+    final over = PuttCameraCue(
+      hole: hole,
+      phase: PuttPhase.holeScoreboard,
+      myEgg: nest,
+      myEggHoled: true,
+    );
+    run(1.2, over);
+    expect(director.celebrating, isTrue, reason: 'the hatch plays');
+    expect(rig.target.distanceTo(nest), lessThan(4.5));
+    // Through the hatch and the whole results card: the nest, never the
+    // middle of the green.
+    for (var t = 0.0; t < PuttCameraDirector.celebrateSeconds + 6; t += 0.25) {
+      run(0.25, over);
+      // (In close the camera looks a little past the nest, at the chick's
+      // middle: about 4 units.)
+      expect(rig.target.distanceTo(nest), lessThan(4.5),
+          reason: 'at ${t.toStringAsFixed(2)} s');
+    }
+    expect(director.followPoint, nest);
+    expectInFreeView(nest);
+  });
+
   /// A spectator's view: no egg of mine, [others] still out.
   PuttCameraCue holedWith(List<PuttCameraEgg> others) => PuttCameraCue(
         hole: hole,
@@ -579,7 +643,7 @@ void main() {
     expect(rig.target.distanceTo(const Vec2(30, 12)), lessThan(12));
   });
 
-  test('between holes the whole green shows again', () {
+  test('between holes the whole green shows again (my egg not in)', () {
     run(PuttCameraDirector.openingSeconds + 3, resting(const Vec2(38, 12)));
     run(3, PuttCameraCue(hole: hole, phase: PuttPhase.holeScoreboard));
     expect(director.followPoint, hole.bounds.center);
