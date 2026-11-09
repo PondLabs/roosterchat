@@ -128,10 +128,13 @@ fn rms_over(x: &[f32], blocks: &[usize]) -> f32 {
 }
 
 /// How much of the user's voice survives: level lost over the blocks where
-/// the user is talking, from `start_block` on.
+/// the user is talking, from `start_block` on. The output is read as late
+/// as the shipping settings make it (the model's lookahead and the gate's).
 fn voice_loss_db(speech: &[f32], capture: &[f32], out: &[f32], start_block: usize) -> f32 {
+    let lag = audio_dsp::dfn::LATENCY / FRAME_SIZE + audio_dsp::gate::LOOKAHEAD_FRAMES;
     let talking: Vec<usize> = blocks_above(speech, -40.0).into_iter().filter(|&i| i >= start_block).collect();
-    rms_over(capture, &talking) - rms_over(out, &talking)
+    let heard: Vec<usize> = talking.iter().map(|i| i + lag).collect();
+    rms_over(capture, &talking) - rms_over(out, &heard)
 }
 
 // ------------------------------------------------------------------ guards
@@ -270,7 +273,7 @@ fn a_late_and_bursty_reference_still_works() {
 /// The video plays, the user talks over it for ten seconds, pauses, talks
 /// again. The voice has to survive, and once they pause the video has to go
 /// again. The first half second of the pause is not judged: the gate holds
-/// for 150 ms and releases over 200 ms after any speech on purpose, so as not
+/// for 250 ms and releases over 200 ms after any speech on purpose, so as not
 /// to clip the ends of words.
 #[test]
 fn talking_over_the_video_keeps_the_voice_and_drops_it_in_the_pauses() {

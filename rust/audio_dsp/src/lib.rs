@@ -10,7 +10,9 @@
 //!    run,
 //! 3. an input gate (manual threshold or VAD driven) plus a far-end ducker,
 //!    both told by `bleed` when the microphone holds nothing but what the
-//!    loudspeakers are playing,
+//!    loudspeakers are playing; while a speech detector decides their gain
+//!    the audio trails the decision by `gate::LOOKAHEAD_FRAMES`, so a word
+//!    is not cut while the detector makes up its mind,
 //! 4. resample back.
 //!
 //! The loudspeakers are known from two references: WebRTC's playout
@@ -648,6 +650,20 @@ impl Dsp {
         self.shared.report()
     }
 
+    /// Samples by which the output trails the input right now: the noise
+    /// suppressor's (DeepFilterNet's lookahead, or RNNoise's overlap) and,
+    /// in automatic mode, the gate's (`gate::LOOKAHEAD_FRAMES`).
+    pub fn latency(&self) -> usize {
+        let p = self.shared.params();
+        let suppressing = p.noise_suppression != 0 && !self.suppression_broken;
+        let suppressor = match suppressing {
+            false => 0,
+            true if self.has_deep_filter() && self.deep_filter_warmup == 0 => dfn::LATENCY,
+            true => FRAME_SIZE,
+        };
+        suppressor + Gate::latency(&gate_config(&p), suppressing)
+    }
+
     /// Whether DeepFilterNet is built and allowed to run (it suppresses
     /// whenever noise suppression is on).
     pub fn has_deep_filter(&self) -> bool {
@@ -937,7 +953,12 @@ impl Dsp {
             (0.0, false)
         };
 
-        // 4. gate + ducker
+        // 4. gate + ducker. The gate keeps the block for its lookahead:
+        // one that is not a number is caught here, not when it comes out.
+        if !self.scratch_out.iter().all(|x| x.is_finite()) {
+            self.scratch_out.fill(0.0);
+            poisoned = true;
+        }
         let level = level_dbfs(&self.scratch_out);
         let cfg = gate_config(&p);
         self.gate.process(&cfg, level, vad, have_vad, bleed, &mut self.scratch_out);
