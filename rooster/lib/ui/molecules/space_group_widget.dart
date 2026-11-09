@@ -363,10 +363,6 @@ class _SpaceGroupWidgetState extends State<SpaceGroupWidget> {
                         width: widget.width,
                         space: space.space,
                         placeholderColor: space.space.color,
-                        notificationCount: space.space.notificationCount,
-                        onUpdate: space.space.onUpdate,
-                        highlightedNotificationCount:
-                            space.space.highlightedNotificationCount,
                         onSelected: widget.onSelected,
                         userAvatar: space.space.client.self?.avatar,
                         userColor: space.space.client.self?.defaultColor,

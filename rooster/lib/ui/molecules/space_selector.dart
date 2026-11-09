@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/sidebar_component/sidebar_entries_component.dart';
 import 'package:rooster/config/build_config.dart';
@@ -191,7 +189,6 @@ class SpaceSelectorState extends State<SpaceSelector> {
               space: i.space,
               displayName: i.space.displayName,
               placeholderColor: i.space.color,
-              onUpdate: i.space.onUpdate,
               avatar: i.space.avatar),
         ),
         feedback: SizedBox(
@@ -204,7 +201,6 @@ class SpaceSelectorState extends State<SpaceSelector> {
                 space: i.space,
                 placeholderColor: i.space.color,
                 displayName: i.space.displayName,
-                onUpdate: i.space.onUpdate,
                 avatar: i.space.avatar),
           ),
         ),
@@ -232,11 +228,7 @@ class SpaceSelectorState extends State<SpaceSelector> {
               child: buildSpaceIcon(
                 space: i.space,
                 displayName: i.space.displayName,
-                onUpdate: i.space.onUpdate,
                 avatar: i.space.avatar,
-                notificationCount: i.space.displayNotificationCount,
-                highlightedNotificationCount:
-                    i.space.displayHighlightedNotificationCount,
                 showAvatarForSpace:
                     widget.shouldShowAvatarForSpace?.call(i.space) ?? false,
                 userAvatar: i.space.client.self!.avatar,
@@ -323,7 +315,6 @@ class SpaceSelectorState extends State<SpaceSelector> {
 
   static Widget buildSpaceIcon(
       {required String displayName,
-      Stream<void>? onUpdate,
       ImageProvider? avatar,
       ImageProvider? userAvatar,
       Color? userColor,
@@ -332,8 +323,41 @@ class SpaceSelectorState extends State<SpaceSelector> {
       required double width,
       void Function(Space space)? onSelected,
       bool showAvatarForSpace = false,
-      int highlightedNotificationCount = 0,
-      int notificationCount = 0,
+      required Space space}) {
+    // ROOSTER: the counts are read from the space on every update; passing
+    // them in froze them at the parent's last build, so new messages never
+    // showed on the icon.
+    return StreamBuilder(
+      stream: space.onUpdate,
+      builder: (context, _) => _buildSpaceIcon(
+        displayName: displayName,
+        avatar: avatar,
+        userAvatar: userAvatar,
+        userColor: userColor,
+        userDisplayName: userDisplayName,
+        placeholderColor: placeholderColor,
+        width: width,
+        onSelected: onSelected,
+        showAvatarForSpace: showAvatarForSpace,
+        notificationCount: space.displayNotificationCount,
+        highlightedNotificationCount: space.displayHighlightedNotificationCount,
+        space: space,
+      ),
+    );
+  }
+
+  static Widget _buildSpaceIcon(
+      {required String displayName,
+      ImageProvider? avatar,
+      ImageProvider? userAvatar,
+      Color? userColor,
+      String? userDisplayName,
+      Color? placeholderColor,
+      required double width,
+      void Function(Space space)? onSelected,
+      required bool showAvatarForSpace,
+      required int highlightedNotificationCount,
+      required int notificationCount,
       required Space space}) {
     return Stack(
       alignment: Alignment.centerLeft,
@@ -344,7 +368,6 @@ class SpaceSelectorState extends State<SpaceSelector> {
               padding: const EdgeInsets.fromLTRB(0, 2, 0, 2),
               child: SpaceIcon(
                 displayName: displayName,
-                onUpdate: onUpdate,
                 avatar: avatar,
                 userAvatar: userAvatar,
                 spaceId: space.identifier,

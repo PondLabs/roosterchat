@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:async';
 
 import 'package:rooster/client/space.dart';
@@ -93,7 +94,7 @@ class _SpaceIconState extends State<SpaceIcon> {
         ),
       ),
       if (widget.showUser) avatarOverlay(),
-      if (widget.highlightedNotificationCount > 0) notificationOverlay(),
+      if (badgeCount > 0) notificationOverlay(),
     ]);
   }
 
@@ -123,11 +124,15 @@ class _SpaceIconState extends State<SpaceIcon> {
     );
   }
 
+  // ROOSTER: every unread message that notifies counts, not only mentions.
+  int get badgeCount =>
+      max(widget.notificationCount, widget.highlightedNotificationCount);
+
   Positioned notificationOverlay() {
     return Positioned(
       right: 0,
       top: 0,
-      child: NotificationBadge(widget.highlightedNotificationCount),
+      child: NotificationBadge(badgeCount),
     );
   }
 
