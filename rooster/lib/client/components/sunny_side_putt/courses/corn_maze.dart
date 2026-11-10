@@ -51,7 +51,7 @@ HoleDef _firstFurrow() {
     id: 'maze_1',
     par: 2,
     tee: _spot(_maze1, 'T'),
-    nest: Nest(_spot(_maze1, 'N'), 1.7),
+    nest: Nest(_spot(_maze1, 'N'), 0.95),
     bounds: bounds,
     walls: [...fenceAround(bounds), ...plannedWalls(_maze1, cell: _cell)],
     portals: [
@@ -124,7 +124,7 @@ HoleDef _crossroads() {
     id: 'maze_2',
     par: 3,
     tee: _spot(_maze2, 'T'),
-    nest: Nest(_spot(_maze2, 'N'), 1.7),
+    nest: Nest(_spot(_maze2, 'N'), 0.95),
     bounds: bounds,
     walls: [...fenceAround(bounds), ...plannedWalls(_maze2, cell: _cell)],
     portals: [
@@ -200,7 +200,7 @@ HoleDef _hedgeHop() {
     id: 'maze_3',
     par: 3,
     tee: _spot(_maze3, 'T'),
-    nest: Nest(_spot(_maze3, 'N'), 1.7),
+    nest: Nest(_spot(_maze3, 'N'), 0.95),
     bounds: bounds,
     walls: [...fenceAround(bounds), ...plannedWalls(_maze3, cell: _cell)],
     water: const [WaterRect(_maze3Ditch)],
@@ -254,7 +254,7 @@ HoleDef _theBurrow() {
     id: 'maze_4',
     par: 3,
     tee: _spot(_maze4, 'T'),
-    nest: Nest(_spot(_maze4, 'N'), 1.7),
+    nest: Nest(_spot(_maze4, 'N'), 0.95),
     bounds: bounds,
     walls: [...fenceAround(bounds), ...plannedWalls(_maze4, cell: _cell)],
     portals: [
@@ -318,7 +318,7 @@ HoleDef _deadEnds() {
     id: 'maze_5',
     par: 3,
     tee: _maze5Tee,
-    nest: Nest(_spot(_maze5, 'N'), 1.7),
+    nest: Nest(_spot(_maze5, 'N'), 0.95),
     bounds: bounds,
     walls: [...fenceAround(bounds), ...plannedWalls(_maze5, cell: _cell)],
     boxes: [
@@ -390,7 +390,7 @@ HoleDef _grandMaze() {
     id: 'maze_6',
     par: 4,
     tee: _spot(_maze6, 'T'),
-    nest: Nest(_spot(_maze6, 'N'), 1.7),
+    nest: Nest(_spot(_maze6, 'N'), 0.95),
     bounds: bounds,
     walls: [
       ...fenceAround(bounds),

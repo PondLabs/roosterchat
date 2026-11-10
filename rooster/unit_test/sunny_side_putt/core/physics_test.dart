@@ -162,35 +162,60 @@ void main() {
       expect(world.ball('a')!.position.approximates(const Vec2(2, 5)), isTrue);
     });
 
-    group('the nest is a cup', () {
-      // A launch-size nest (radius 1.7) on a long flat green. The egg rolls
-      // along +x, [offset] off the cup's center line, and reaches the cup's
-      // near edge (x = 12.3) at [arrival] units/s.
+    group('the nest is a hole', () {
+      // A launch-size nest (radius 0.95, a little over an egg across) on a
+      // long flat green. The egg rolls along +x, [offset] off the hole's
+      // center line, and is going [arrival] units/s as it comes level with
+      // the hole's near edge (x = 13.05).
+      const nest = Nest(Vec2(14, 10), 0.95);
       PhysicsWorld rollAt(double arrival,
           {double offset = 0, PhysicsConfig config = testPhysics}) {
         final hole = boxHole(
-            tee: Vec2(2, 10 + offset),
-            nest: const Nest(Vec2(14, 10), 1.7),
-            width: 40,
-            height: 20);
+            tee: Vec2(2, 10 + offset), nest: nest, width: 60, height: 20);
         final world =
             PhysicsWorld(hole: hole, config: config, playerIds: const ['a']);
-        final v0 = math.sqrt(
-            arrival * arrival + 2 * config.frictionDeceleration * (12.3 - 2));
+        final v0 = math.sqrt(arrival * arrival +
+            2 * config.frictionDeceleration * (14 - nest.radius - 2));
         world.applyShot('a', 0, v0 / config.maxShotSpeed);
         return world;
       }
 
-      test('a firm putt through the middle drops', () {
+      bool drops(double arrival, {double offset = 0}) {
+        final world = rollAt(arrival, offset: offset);
+        runUntilSettled(world);
+        return world.ball('a')!.holed;
+      }
+
+      test('a putt through the middle drops, and is told once', () {
         final world = rollAt(8);
         runUntilSettled(world);
-        expect(world.drainEvents().whereType<BallCaptured>(), isNotEmpty);
+        expect(world.drainEvents().whereType<BallCaptured>(), hasLength(1));
         expect(world.ball('a')!.holed, isTrue);
-        expect(world.ball('a')!.position, const Vec2(14, 10));
+        expect(world.ball('a')!.position, nest.position);
       });
 
-      test('a very fast putt skips across', () {
-        final world = rollAt(17);
+      // The report: "it feels like a place that sucks eggs in a little bit
+      // but if you're mildly fast you roll over it". An egg that passes
+      // over the hole falls in it, at any pace short of flying.
+      test('an egg rolling over the hole falls in, slow, firm or fast', () {
+        for (final offset in [0.0, 0.2, 0.4]) {
+          for (final arrival in [1.0, 3.0, 6.0, 9.0, 12.0, 15.0, 18.0]) {
+            expect(drops(arrival, offset: offset), isTrue,
+                reason: '$arrival units/s, $offset off the center line');
+          }
+        }
+        // Off toward the lip the hole under the egg is shorter: still every
+        // firm putt.
+        for (final arrival in [3.0, 6.0, 9.0, 12.0]) {
+          expect(drops(arrival, offset: 0.6), isTrue,
+              reason: '$arrival units/s, 0.6 off the center line');
+        }
+      });
+
+      test('only an egg flying over skips it', () {
+        // A full putt still near its launch pace: over the hole for less
+        // time than it takes to fall in.
+        final world = rollAt(24);
         runUntilSettled(world);
         expect(world.drainEvents().whereType<BallCaptured>(), isEmpty);
         expect(world.ball('a')!.holed, isFalse);
@@ -198,65 +223,68 @@ void main() {
       });
 
       test('a lip hit at pace curls round the rim and spins out, bent', () {
-        final world = rollAt(12, offset: 1.5);
+        final world = rollAt(13, offset: 0.9);
         runUntilSettled(world);
-        expect(world.drainEvents().whereType<BallCaptured>(), isEmpty);
         final ball = world.ball('a')!;
         expect(ball.holed, isFalse);
-        expect(ball.position.x, greaterThan(17));
-        // Pulled toward the center: it left well inside the line it came in
-        // on (y 11.5).
-        expect(ball.position.y, lessThan(11.0));
+        expect(ball.position.x, greaterThan(16));
+        // Pulled toward the center: it left inside the line it came in on.
+        expect(ball.position.y, lessThan(10.9));
       });
 
-      test('a medium lip hit curls in and drops', () {
-        final world = rollAt(6, offset: 1.5);
-        runUntilSettled(world);
-        expect(world.ball('a')!.holed, isTrue);
-      });
-
-      test('a slow roll that only reaches the edge drops', () {
-        // Dies just over the near rim: the funnel takes it, no parking.
-        final world = rollAt(1.2, offset: 0.3);
-        runUntilSettled(world);
-        expect(world.ball('a')!.holed, isTrue);
-      });
-
-      test('a firm putt through the middle drops, not skips', () {
-        // 12 u/s at the near rim is a firm putt, not a smash: it used to
-        // cross the cup dead center and roll straight out the far side.
-        final world = rollAt(12);
-        runUntilSettled(world);
-        expect(world.drainEvents().whereType<BallCaptured>(), isNotEmpty);
-        expect(world.ball('a')!.holed, isTrue);
+      test('a soft lip hit curls in and drops', () {
+        expect(drops(5, offset: 0.9), isTrue);
       });
 
       test('an egg that dies on the lip is drawn in, not parked there', () {
         // Its center stops a hair outside the rim, its body half over the
-        // hole: the lip's bevel takes it. It used to rest there for good.
-        final world = rollAt(2, offset: 0.9);
-        runUntilSettled(world);
-        expect(world.ball('a')!.holed, isTrue);
+        // hole: the lip's bevel takes it.
+        expect(testPhysics.cupLipReach, greaterThan(1));
+        expect(
+            testPhysics.cupPull, greaterThan(testPhysics.frictionDeceleration));
+        expect(drops(3, offset: 1.0), isTrue);
       });
 
-      test('the lip bevel reaches past the rim, and no further', () {
-        expect(testPhysics.cupLipReach, greaterThan(1));
-        // A putt that dies a whole egg's width outside the rim stays out:
-        // the bevel is a lip, not a magnet.
-        final world = rollAt(2, offset: 1.5);
+      test('an egg that passes clear of the rim stays out', () {
+        // An egg's width outside the rim: the bevel is a lip, not a magnet.
+        final world = rollAt(3, offset: 1.9);
         runUntilSettled(world);
         expect(world.ball('a')!.holed, isFalse);
       });
 
-      test('the dead-center speed limit is higher than the lip one', () {
-        expect(testPhysics.captureSpeedCentered,
-            greaterThan(testPhysics.captureSpeed * 2));
-        expect(
-            testPhysics.cupPull, greaterThan(testPhysics.frictionDeceleration));
+      test('no egg rests over the hole', () {
+        // Whatever its pace and line, an egg that is not in the nest ends
+        // clear of it.
+        for (final offset in [0.0, 0.5, 0.9, 1.0]) {
+          for (var arrival = 0.5; arrival <= 26; arrival += 1.5) {
+            final world = rollAt(arrival, offset: offset);
+            runUntilSettled(world);
+            final ball = world.ball('a')!;
+            if (ball.holed) continue;
+            expect(ball.position.distanceTo(nest.position),
+                greaterThan(nest.radius),
+                reason: '$arrival units/s, $offset off the center line');
+          }
+        }
+      });
+
+      test('the time over the hole survives a snapshot', () {
+        final world = rollAt(6);
+        while (world.ball('a')!.cupTicks == 0) {
+          world.stepTick();
+        }
+        final restored = PhysicsWorld.restore(
+            hole: world.hole, config: testPhysics, state: world.toJson());
+        expect(restored.ball('a')!.cupTicks, world.ball('a')!.cupTicks);
+        runUntilSettled(world);
+        runUntilSettled(restored);
+        expect(restored.tick, world.tick);
+        expect(restored.ball('a')!.holed, isTrue);
       });
 
       test('the nest magnet drops a lip hit that would spin out', () {
-        final world = rollAt(12, offset: 1.5);
+        expect(drops(13, offset: 0.9), isFalse);
+        final world = rollAt(13, offset: 0.9);
         world.setBallFlagUntilRest('a', PowerUpFlag.magnet);
         runUntilSettled(world);
         expect(world.ball('a')!.holed, isTrue);
@@ -583,8 +611,9 @@ void main() {
       expect(pickups, 1);
     });
 
-    test('ghost passes through walls; hop passes over the hen but not walls',
-        () {
+    // What the Ghost Egg and the Chicken Hop do on a real match is in
+    // powerups_play_test.dart; this is the world's own part of it.
+    test('a ghost passes through a rail and a hen; a hop flies over them', () {
       final hole = boxHole(
         tee: const Vec2(2, 5),
         nest: const Nest(Vec2(2.5, 8.5), 0.8),
@@ -599,36 +628,37 @@ void main() {
       );
       final world =
           PhysicsWorld(hole: hole, config: testPhysics, playerIds: const ['a']);
-      world.setBallFlagFor('a', PowerUpFlag.ghost, 600); // 5 s of ghost
-      world.applyShot('a', 0, 0.4);
+      world.setBallFlagUntilRest('a', PowerUpFlag.ghost);
+      world.applyShot('a', 0, 0.5);
       runUntilSettled(world);
-      final events = world.drainEvents();
-      expect(
-        events.where((e) => e is BallBounced && e.kind == BounceKind.wall),
-        isEmpty,
-      );
-      // Straight through the wall, stopped before the course edge.
-      expect(world.ball('a')!.position.x, greaterThan(8));
+      expect(world.drainEvents().whereType<BallBounced>(), isEmpty);
+      // Straight through the rail and the hen, stopped before the fence.
+      expect(world.ball('a')!.position.x, greaterThan(11.5));
       expect(world.ball('a')!.position.x, lessThan(15));
+      expect(
+          world.ball('a')!.flagActive(PowerUpFlag.ghost, world.tick), isFalse,
+          reason: 'the ghost ends where the egg rests');
 
       final hopped =
           PhysicsWorld(hole: hole, config: testPhysics, playerIds: const ['a']);
-      hopped.setBallFlagUntilRest('a', PowerUpFlag.hop);
-      hopped.applyShot('a', 0, 0.4);
+      hopped.applyShot('a', 0, 0.6, hop: true);
+      expect(hopped.ball('a')!.airborne, isTrue);
       runUntilSettled(hopped);
-      final hoppedEvents = hopped.drainEvents();
       expect(
-        hoppedEvents
-            .where((e) => e is BallBounced && e.kind == BounceKind.obstacle),
+        hopped.drainEvents().whereType<BallBounced>().where((bounce) =>
+            bounce.at.x < 12 &&
+            (bounce.kind == BounceKind.wall ||
+                bounce.kind == BounceKind.obstacle)),
         isEmpty,
+        reason: 'it flew over the rail at x = 8 and the hen at 10.5',
       );
-      // But the wall is still solid.
-      expect(
-        hoppedEvents
-            .where((e) => e is BallBounced && e.kind == BounceKind.wall),
-        isNotEmpty,
-      );
-      expect(hopped.ball('a')!.position.x, lessThan(8));
+
+      // The same putts without a power-up meet the rail.
+      final plain =
+          PhysicsWorld(hole: hole, config: testPhysics, playerIds: const ['a']);
+      plain.applyShot('a', 0, 0.4);
+      runUntilSettled(plain);
+      expect(plain.ball('a')!.position.x, lessThan(8));
     });
 
     test('egg-egg contact is symmetric and wakes sleepers', () {

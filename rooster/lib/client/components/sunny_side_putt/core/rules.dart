@@ -172,7 +172,10 @@ class PuttPlayer {
   bool spectator;
   final PowerUpInventory inventory = PowerUpInventory();
   final NextShotModifiers nextShot = NextShotModifiers();
-  int shields = 0;
+
+  /// The tick of the hole's play their Thick Shell holds until (0: none).
+  /// See [PuttEngine.isShielded].
+  int shieldUntil = 0;
   bool leftMidHole = false;
 
   /// Their egg's pattern and their chick's hat: drawn the same on every
@@ -187,7 +190,7 @@ class PuttPlayer {
   Map<String, Object?> toJson() => {
         'id': id,
         'spectator': spectator,
-        'shields': shields,
+        'shieldUntil': shieldUntil,
         'left': leftMidHole,
         'inventory': inventory.toJson(),
         'nextShot': nextShot.toJson(),
@@ -201,17 +204,11 @@ class PuttPlayer {
       // A snapshot from before looks: the default one.
       look: PuttLook.fromJson(json['look']),
     )
-      ..shields = (json['shields'] as num?)?.toInt() ?? 0
+      ..shieldUntil = (json['shieldUntil'] as num?)?.toInt() ?? 0
       ..leftMidHole = json['left'] == true
       ..inventory.restore((json['inventory'] as List?) ?? const []);
     final mods = json['nextShot'];
-    if (mods is Map) {
-      player.nextShot
-        ..noWobble = mods['noWobble'] == true
-        ..powerMultiplier = (mods['powerMultiplier'] as num?)?.toDouble() ?? 1
-        ..hop = mods['hop'] == true
-        ..magnet = mods['magnet'] == true;
-    }
+    if (mods is Map) player.nextShot.restore(mods);
     return player;
   }
 }
@@ -262,12 +259,13 @@ class ShotApplied extends PuttEvent {
 
   /// The next-shot power-ups that rode this shot (and were spent on it):
   /// Hawk Eye held it straight, Strong Coffee multiplied its power (1 is
-  /// none), Chicken Hop lifts it, Nest Magnet pulls it home. The view
-  /// draws each for everyone.
+  /// none), Chicken Hop lifts it, Nest Magnet pulls it home, Ghost Egg
+  /// takes it through the rails. The view draws each for everyone.
   final bool steady;
   final double powerMultiplier;
   final bool hop;
   final bool magnet;
+  final bool ghost;
 
   const ShotApplied({
     required this.playerId,
@@ -279,6 +277,7 @@ class ShotApplied extends PuttEvent {
     this.powerMultiplier = 1,
     this.hop = false,
     this.magnet = false,
+    this.ghost = false,
   });
 }
 
@@ -783,6 +782,21 @@ class PuttEngine {
   /// for its awards card.
   PuttCourseTally get courseTally => _tally;
 
+  /// Seconds [playerId]'s Thick Shell still holds (0: none up). A shell
+  /// lasts a while of the hole's play, until it stops one cast, and never
+  /// past the hole.
+  double shieldSecondsLeft(String playerId) {
+    final player = _players[playerId];
+    final world = _world;
+    if (player == null || world == null || _phase != PuttPhase.holePlay) {
+      return 0;
+    }
+    final left = player.shieldUntil - world.tick;
+    return left > 0 ? left * config.physics.dt : 0;
+  }
+
+  bool isShielded(String playerId) => shieldSecondsLeft(playerId) > 0;
+
   // ---- inputs ----------------------------------------------------------------
 
   /// Starts the match from the lobby. Barnyard Chaos deals everyone two
@@ -1004,33 +1018,34 @@ class PuttEngine {
     // Exactly where it was aimed: the sway is the view's, drawn on the
     // arrow and already in the angle it sent.
     final angle = input.angle;
-    var power = input.power;
-    power = (power * mods.powerMultiplier).clamp(0.0, 1.0);
-    if (mods.hop) {
-      world.setBallFlagUntilRest(input.playerId, PowerUpFlag.hop);
-    }
+    final power = input.power.clamp(0.0, 1.0).toDouble();
     if (mods.magnet) {
       world.setBallFlagUntilRest(input.playerId, PowerUpFlag.magnet);
+    }
+    if (mods.ghost) {
+      world.setBallFlagUntilRest(input.playerId, PowerUpFlag.ghost);
     }
     // What rode the shot, for the event (the view shows it to everyone).
     final steady = mods.noWobble;
     final multiplier = mods.powerMultiplier;
     final hop = mods.hop;
     final magnet = mods.magnet;
+    final ghost = mods.ghost;
     mods.clear();
-    world.applyShot(input.playerId, angle, power);
+    world.applyShot(input.playerId, angle, power, boost: multiplier, hop: hop);
     _strokesThisHole[input.playerId] =
         (_strokesThisHole[input.playerId] ?? 0) + 1;
     _events.add(ShotApplied(
         playerId: input.playerId,
         aimedAngle: input.angle,
         actualAngle: angle,
-        power: power,
+        power: power * multiplier,
         strokes: _strokesThisHole[input.playerId]!,
         steady: steady,
         powerMultiplier: multiplier,
         hop: hop,
-        magnet: magnet));
+        magnet: magnet,
+        ghost: ghost));
   }
 
   bool _usePowerUp(PowerUpInput input) {
@@ -1156,6 +1171,7 @@ class PuttEngine {
             _holeIndex = 0;
             _appendCoursePars(_playedCourses[_courseIndex]);
             _tally.clear();
+            _disarmEveryone();
             _startHole();
             return true;
           }
@@ -1179,6 +1195,7 @@ class PuttEngine {
     _holeIndex = 0;
     _appendCoursePars(course);
     _tally.clear();
+    _disarmEveryone();
     _events.add(CourseStarted(courseId: course.id, courseIndex: _courseIndex));
     _startHole();
     return true;
@@ -1207,6 +1224,16 @@ class PuttEngine {
 
   bool get _allHoled =>
       _participants.isNotEmpty && _participants.every(_holedThisHole.contains);
+
+  /// A new course starts everyone clean: whatever was armed for a next
+  /// shot and never putted is gone. (From hole to hole of a course it
+  /// stays: an egg that dropped in before its player could use it.) The
+  /// power-ups still in hand are theirs to keep.
+  void _disarmEveryone() {
+    for (final player in _players.values) {
+      player.nextShot.clear();
+    }
+  }
 
   void _startHole() {
     // Free slots go to the spectator queue, from the new hole's tee.
@@ -1243,6 +1270,8 @@ class PuttEngine {
     _holedThisHole.clear();
     for (final player in _players.values) {
       player.leftMidHole = false;
+      // A shell never outlasts its hole.
+      player.shieldUntil = 0;
     }
     _timerTicks = (config.holeTimeLimitSeconds / config.physics.dt).round();
     _cuesFired.clear();
@@ -1550,8 +1579,8 @@ class _PowerUpContext implements PowerUpContext {
       if (player.id == casterId) continue; // hard rule: never the caster
       final ball = _engine._world?.ball(player.id);
       if (ball == null || ball.holed) continue;
-      if (harmful && player.shields > 0) {
-        player.shields--;
+      if (harmful && _engine.isShielded(player.id)) {
+        player.shieldUntil = 0;
         spared.add(player.id);
         _engine._tally.blocked(player.id);
         _engine._events.add(ShieldBlocked(
@@ -1590,10 +1619,31 @@ class _PowerUpContext implements PowerUpContext {
   }
 
   @override
-  void nudgeBall(String playerId, double maxSpeed) {
-    _engine._world?.nudgeBall(playerId, maxSpeed, _engine._rng);
+  void nudgeBall(String playerId, double maxSpeed,
+      {double minSpeed = 0, int delayTicks = 0}) {
+    _engine._world?.nudgeBall(playerId, maxSpeed, _engine._rng,
+        minSpeed: minSpeed, delayTicks: delayTicks);
     _touched(playerId);
     pushed.add(playerId);
+  }
+
+  @override
+  void pushBall(String playerId, Vec2 accel, int durationTicks) {
+    _engine._world?.pushBall(playerId, accel, durationTicks);
+    _touched(playerId);
+    pushed.add(playerId);
+  }
+
+  @override
+  void spray(Vec2 center, double radius, double accel, int durationTicks) {
+    // The eggs in it as it starts are the ones it is said to have hit.
+    for (final ball in targetBalls) {
+      if (ball.position.distanceTo(center) > radius) continue;
+      _touched(ball.playerId);
+      pushed.add(ball.playerId);
+    }
+    _engine._world?.spray(center, radius, accel, durationTicks,
+        spared: [casterId, ...spared]);
   }
 
   @override
@@ -1657,9 +1707,9 @@ class _PowerUpContext implements PowerUpContext {
       _engine._players[playerId]?.inventory.contains(effectId) ?? false;
 
   @override
-  void addShield(String playerId) {
+  void addShield(String playerId, int durationTicks) {
     final player = _engine._players[playerId];
-    if (player != null) player.shields++;
+    if (player != null) player.shieldUntil = tick + durationTicks;
   }
 
   @override
@@ -1668,8 +1718,8 @@ class _PowerUpContext implements PowerUpContext {
     final effect = _engine.config.powerUps.byId(_input.effectId);
     if (!(effect?.harmful ?? false)) return false;
     final player = _engine._players[playerId];
-    if (player == null || player.shields <= 0) return false;
-    player.shields--;
+    if (player == null || !_engine.isShielded(playerId)) return false;
+    player.shieldUntil = 0;
     spared.add(playerId);
     _engine._tally.blocked(playerId);
     _engine._events.add(ShieldBlocked(

@@ -21,8 +21,8 @@ class SunnySidePuttHole {
 }
 
 /// The baseline hit: launches from [from] toward [to] and arrives at `to`
-/// moving [arrival] units/s (under [PhysicsConfig.captureSpeed] this gets
-/// captured by a nest centered on `to`). [rise] is how much higher `to`
+/// moving [arrival] units/s (a nest centered on `to` takes it: see
+/// [PhysicsConfig.cupDropSeconds]). [rise] is how much higher `to`
 /// stands than [from] - a nest up on a plateau or up a ramp on a terrace,
 /// or below in a dip with a negative rise: the stroke carries the climb's
 /// pace too, for a putt straight up (or down) the slope. A drop off a

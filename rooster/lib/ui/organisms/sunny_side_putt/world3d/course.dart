@@ -456,8 +456,9 @@ _Turf _prepareTurf(_TurfJob job) => (
 /// world parents under its kind group; the hole's animated pieces register
 /// with [animated].
 /// How deep the nest's cup runs below the turf: room for a holed egg and
-/// the chick to drop out of sight.
-double _nestCupDepth(double radius) => radius * 0.8;
+/// the chick to drop out of sight. As deep as the wide nest it used to be
+/// (radius 1.7) however narrow it is now: a hole, not a dish.
+double _nestCupDepth(double radius) => math.max(radius * 0.8, 1.36);
 
 /// The cup's inside, drawn before the opening's depth (and both before the
 /// turf and everything else): see [_CourseKit.nest].

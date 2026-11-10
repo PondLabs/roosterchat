@@ -38,6 +38,7 @@ import 'dart:math' as math;
 
 import 'hole.dart';
 import 'powerups.dart';
+import 'reach.dart';
 import 'rng.dart';
 import 'vec.dart';
 
@@ -95,15 +96,18 @@ class PhysicsConfig {
   /// Restitution between two eggs.
   final double ballRestitution;
 
-  /// The nest is a cup: an egg whose center is over it drops when slower
-  /// than a speed that grows from this at the lip to [captureSpeedCentered]
-  /// at dead center (linear in the distance from the center). An egg that
-  /// stops anywhere over the cup has dropped long before it rests.
-  final double captureSpeed;
-
-  /// The fastest an egg crossing dead center can be going and still drop.
-  /// Faster skips across the cup.
-  final double captureSpeedCentered;
+  /// The nest is a hole: an egg whose center is over it has nothing under
+  /// it and falls, and it is in for good once it has been over the hole
+  /// this long without a break (the time it takes to sink too deep to roll
+  /// out the far side). So what an egg needs to drop is time over the hole,
+  /// not a slow pace: across the middle of a nest of radius 0.95 that is
+  /// anything up to about 21 units/s, four fifths of a full putt's
+  /// launch; a chord near the lip is shorter and takes a slower egg, which
+  /// the funnel ([cupPull]) helps by curling it in. Only an egg really
+  /// flying skips the hole. (The rule used to be a speed limit, 3 units/s
+  /// at the lip rising to 14 at dead center of a nest of radius 1.7: a
+  /// "mildly fast" egg rolled across most of it.)
+  final double cupDropSeconds;
 
   /// The cup's funnel (units/s^2): over the nest an egg is pulled toward
   /// its center this hard, so a lip hit curls in toward the middle (and
@@ -204,6 +208,11 @@ class PhysicsConfig {
   /// softer landing leaves it rolling.
   final double landingHopSpeed;
 
+  /// The climb (units/s) a Chicken Hop's putt leaves the ground with: about
+  /// 0.7 s in the air whatever its power, 1.2 units up at the top, so how
+  /// far it flies is its pace alone.
+  final double hopLift;
+
   const PhysicsConfig({
     this.dt = 1 / 120,
     this.ballRadius = 0.45,
@@ -217,8 +226,7 @@ class PhysicsConfig {
     this.livelyBounces = 8,
     this.frictionDeceleration = 7,
     this.ballRestitution = 0.8,
-    this.captureSpeed = 3.0,
-    this.captureSpeedCentered = 14.0,
+    this.cupDropSeconds = 0.09,
     this.cupPull = 16,
     this.cupLipReach = 1.15,
     this.cupDrag = 8,
@@ -240,6 +248,7 @@ class PhysicsConfig {
     this.landingKeep = 0.9,
     this.landingBounce = 0.3,
     this.landingHopSpeed = 1.2,
+    this.hopLift = 6.6,
   });
 }
 
@@ -272,10 +281,15 @@ class BallBody {
   /// While the egg flies: its climb, units/s (negative once it falls).
   double airSpeed;
 
-  /// Flags active until a world tick (timed effects, Ghost Egg).
+  /// Ticks in a row the egg's center has been over the nest (see
+  /// [PhysicsConfig.cupDropSeconds]).
+  int cupTicks;
+
+  /// Flags active until a world tick (timed effects).
   final Map<PowerUpFlag, int> timedUntil = {};
 
-  /// Flags active until the egg settles (Chicken Hop, Nest Magnet).
+  /// Flags active until the egg settles (Ghost Egg, Nest Magnet; a Chicken
+  /// Hop's until its flight is over).
   final Set<PowerUpFlag> untilRest = {};
 
   /// Whether this egg has been putted this hole. Until then it is a ghost
@@ -299,7 +313,8 @@ class BallBody {
       this.putted = false,
       this.air,
       this.airSpeed = 0,
-      this.boostCap = 0})
+      this.boostCap = 0,
+      this.cupTicks = 0})
       : lastSafePosition = position;
 
   double get speed => velocity.length;
@@ -333,6 +348,7 @@ class BallBody {
     bumps = 0;
     stillTicks = 0;
     boostCap = 0;
+    cupTicks = 0;
     ground();
   }
 
@@ -360,6 +376,7 @@ class BallBody {
         ],
         if (putted) 'putted': true,
         if (boostCap != 0) 'bc': boostCap,
+        if (cupTicks != 0) 'cup': cupTicks,
       };
 }
 
@@ -462,6 +479,19 @@ class BallBumped extends PhysicsEvent {
   final Vec2 at;
 
   const BallBumped({required this.playerId, required this.at});
+}
+
+/// An egg that left the ground's rules behind (a Ghost Egg, a Chicken Hop,
+/// a Rabbit Hole's landing) ended at [from], where no egg can stand (in a
+/// rock, a garden bed, past the fence), and came back out at [to], the
+/// nearest turf. No stroke, no penalty.
+class BallSurfaced extends PhysicsEvent {
+  final String playerId;
+  final Vec2 from;
+  final Vec2 to;
+
+  const BallSurfaced(
+      {required this.playerId, required this.from, required this.to});
 }
 
 /// Out of the hole's bounds: same treatment as water.
@@ -587,14 +617,26 @@ class PhysicsWorld {
 
   /// Launches an egg: [angle] in radians, [power] 0..1 scaled by
   /// [PhysicsConfig.maxShotSpeed]. The wobble is the rules engine's
-  /// business; it passes the final, wobbled angle here.
-  void applyShot(String playerId, double angle, double power) {
+  /// business; it passes the final, wobbled angle here. [boost] multiplies
+  /// the pace (Strong Coffee), past a full putt's and past
+  /// [PhysicsConfig.maxSpeed] too: the cap rises to it and follows the egg
+  /// back down. With [hop] the putt leaves the ground (Chicken Hop): it
+  /// flies over everything in its way until it comes down.
+  void applyShot(String playerId, double angle, double power,
+      {double boost = 1, bool hop = false}) {
     final ball = _balls[playerId];
     if (ball == null || ball.holed) return;
-    final speed = power.clamp(0.0, 1.0) * config.maxShotSpeed;
+    final speed = power.clamp(0.0, 1.0) * config.maxShotSpeed * boost;
     ball.velocity = Vec2(math.cos(angle), math.sin(angle)) * speed;
+    if (speed > config.maxSpeed) ball.boostCap = speed;
     ball.asleep = false;
     ball.putted = true;
+    ball.cupTicks = 0;
+    if (hop && speed > 0) {
+      ball.untilRest.add(PowerUpFlag.hop);
+      ball.air = hole.groundHeightAt(ball.position);
+      ball.airSpeed = config.hopLift;
+    }
     // Its own putt now, not a cast's shove.
     _castPushed.remove(playerId);
   }
@@ -632,24 +674,96 @@ class PhysicsWorld {
     ball.asleep = false;
   }
 
-  /// Random kick of at most [maxSpeed], drawn from [rng] (Corn Rain).
-  void nudgeBall(String playerId, double maxSpeed, GameRng rng) {
+  /// A kick in a random direction, between [minSpeed] and [maxSpeed],
+  /// drawn from [rng] now and landing [delayTicks] from now (Corn Rain's
+  /// kernels: the cast draws them all, the world lands them on time).
+  void nudgeBall(String playerId, double maxSpeed, GameRng rng,
+      {double minSpeed = 0, int delayTicks = 0}) {
+    final angle = rng.nextAngle();
+    final speed = minSpeed + rng.nextDouble() * (maxSpeed - minSpeed);
+    final kick = Vec2(math.cos(angle), math.sin(angle)) * speed;
     final ball = _balls[playerId];
     if (ball == null || ball.holed) return;
-    final angle = rng.nextAngle();
-    final speed = rng.nextDouble() * maxSpeed;
-    impulseBall(playerId, Vec2(math.cos(angle), math.sin(angle)) * speed);
+    if (delayTicks <= 0) {
+      impulseBall(playerId, kick);
+    } else {
+      _kicks.add(_Kick(_tick + delayTicks, playerId, kick));
+    }
+  }
+
+  /// A wind on one egg: [accel] (units/s^2) on it for [ticks] ticks (Gust).
+  /// Over the rolling friction it carries an egg at rest away and keeps
+  /// pushing; an egg in the air does not feel it.
+  void pushBall(String playerId, Vec2 accel, int ticks) {
+    final ball = _balls[playerId];
+    if (ball == null || ball.holed || ticks <= 0) return;
+    _winds.add(_Wind(playerId, accel, _tick + ticks));
+    ball.asleep = false;
+  }
+
+  /// A spray on the green for [ticks] ticks (Sprinkler): every egg within
+  /// [radius] of [center] is pushed straight away from it at [accel]
+  /// (units/s^2), the ones that roll into it later too, but for the
+  /// [spared].
+  void spray(Vec2 center, double radius, double accel, int ticks,
+      {Iterable<String> spared = const []}) {
+    if (ticks <= 0) return;
+    final spray = _Spray(center, radius, accel, _tick + ticks, spared.toSet());
+    _sprays.add(spray);
+    for (final ball in _balls.values) {
+      if (ball.holed || spray.spared.contains(ball.playerId)) continue;
+      if (ball.position.distanceTo(center) <= radius) ball.asleep = false;
+    }
+  }
+
+  /// The sprays on the green now: center, radius, the seconds left and
+  /// the eggs they leave dry.
+  List<({Vec2 center, double radius, double secondsLeft, Set<String> spared})>
+      get sprays => [
+            for (final spray in _sprays)
+              (
+                center: spray.center,
+                radius: spray.radius,
+                secondsLeft: (spray.until - _tick) * config.dt,
+                spared: spray.spared,
+              ),
+          ];
+
+  /// The wind on [playerId]'s egg now (units/s^2), zero when none blows.
+  Vec2 windOn(String playerId) {
+    var wind = Vec2.zero;
+    for (final each in _winds) {
+      if (each.playerId == playerId) wind += each.accel;
+    }
+    return wind;
+  }
+
+  /// Whether kernels are still to land on [playerId]'s egg (Corn Rain).
+  bool cornOn(String playerId) =>
+      _kicks.any((kick) => kick.playerId == playerId);
+
+  /// The seconds of wind left on [playerId]'s egg (0: none).
+  double windSecondsLeft(String playerId) {
+    var until = _tick;
+    for (final wind in _winds) {
+      if (wind.playerId == playerId && wind.until > until) until = wind.until;
+    }
+    return (until - _tick) * config.dt;
   }
 
   /// Moves an egg to [to] at once, speed kept (Rabbit Hole): it comes up
-  /// out of the ground there, so one in the air lands.
+  /// out of the ground there, so one in the air lands. Where no egg can
+  /// stand (a rock, a hedge, a garden bed, the pond, past the fence) it
+  /// comes up at the nearest turf instead.
   void teleportBall(String playerId, Vec2 to) {
     final ball = _balls[playerId];
     if (ball == null || ball.holed) return;
-    ball.position = to;
+    ball.position =
+        _reach.nearest(to.clamped(hole.bounds.min, hole.bounds.max));
     ball.asleep = false;
+    ball.cupTicks = 0;
     ball.ground();
-    _insideBoosts[playerId] = _boostsInside(to).toSet();
+    _insideBoosts[playerId] = _boostsInside(ball.position).toSet();
   }
 
   /// Swaps two eggs' positions and safe positions, speeds preserved
@@ -703,6 +817,17 @@ class PhysicsWorld {
   /// Advances exactly one [PhysicsConfig.dt].
   void stepTick() {
     _tick++;
+    if (_kicks.isNotEmpty) {
+      // In the order they were cast.
+      final due = [
+        for (final kick in _kicks)
+          if (kick.tick <= _tick) kick,
+      ];
+      _kicks.removeWhere((kick) => kick.tick <= _tick);
+      for (final kick in due) {
+        impulseBall(kick.playerId, kick.delta);
+      }
+    }
     final hens = [
       for (final obstacle in hole.obstacles)
         _ObstacleSweep(obstacle, _tick, config.dt),
@@ -757,7 +882,9 @@ class PhysicsWorld {
             velocity = keep > 0 ? velocity * keep : Vec2.zero;
           }
         }
-        if (hole.boosts.isNotEmpty) _updateBoostCap(ball, velocity);
+        if (hole.boosts.isNotEmpty || ball.boostCap != 0) {
+          _updateBoostCap(ball, velocity);
+        }
         ball.velocity = _clamped(ball, velocity);
       }
       // Awake eggs sweep their own motion; sleeping eggs still get swept
@@ -783,8 +910,9 @@ class PhysicsWorld {
       if (ball.holed) continue;
       if (ball.asleep) {
         // Screening: nothing may STAY out of bounds or inside water, even
-        // a resting egg that another body pushed there this tick.
-        if (!_handleBounds(ball)) _handleWater(ball);
+        // a resting egg that another body pushed there this tick. Nor over
+        // the nest: an egg at rest over a hole falls in.
+        if (!_handleBounds(ball) && !_handleWater(ball)) _handleNest(ball);
       } else if (!ball.airborne && ball.velocity.length < config.sleepSpeed) {
         // Static equilibrium: slow, nothing pulling harder than friction
         // holds (a well's pull, the cup's), and level ground or a rail
@@ -795,7 +923,11 @@ class PhysicsWorld {
         if (_restingPull(ball).length <= frictionDeceleration &&
             (ball.stillTicks >= config.stillTicksToSettle ||
                 _lean(ball, _slopePull(ball)).length <= _flatPull)) {
-          if (!_handleBounds(ball) && !_handleWater(ball)) ball.settle();
+          if (!_handleBounds(ball) && !_handleWater(ball)) {
+            // A ghost comes to rest where an egg can stand.
+            if (ball.flagActive(PowerUpFlag.ghost, _tick)) _surface(ball);
+            ball.settle();
+          }
         }
       } else {
         ball.stillTicks = 0;
@@ -811,6 +943,63 @@ class PhysicsWorld {
     if (_shelteredUntil.isNotEmpty) {
       _shelteredUntil.removeWhere((_, until) => until <= _tick);
     }
+    if (_winds.isNotEmpty) _winds.removeWhere((wind) => wind.until <= _tick);
+    if (_sprays.isNotEmpty) {
+      _sprays.removeWhere((spray) => spray.until <= _tick);
+    }
+  }
+
+  /// Where an egg can stand on this hole (worked out once per hole, when a
+  /// power-up first needs it).
+  HoleReach get _reach => HoleReach.of(hole, config);
+
+  /// Whether [ball] is out of the ground's rules: a ghost, or a Chicken Hop
+  /// in the air.
+  bool _phasing(BallBody ball) =>
+      ball.flagActive(PowerUpFlag.ghost, _tick) ||
+      (ball.airborne && ball.flagActive(PowerUpFlag.hop, _tick));
+
+  /// Puts [ball] on the nearest turf an egg can stand on, when it is not on
+  /// some already. Whether it moved.
+  bool _surface(BallBody ball) {
+    final from = ball.position;
+    final to = _reach.nearest(from.clamped(hole.bounds.min, hole.bounds.max));
+    if (to == from) return false;
+    ball.position = to;
+    _insideBoosts[ball.playerId] = _boostsInside(to).toSet();
+    _events.add(BallSurfaced(playerId: ball.playerId, from: from, to: to));
+    return true;
+  }
+
+  /// An egg a hazard sent back to where it putted from is let be: the
+  /// wind on it drops and the kernels still to come miss it, rather than
+  /// carry it into the pond again and again while they last.
+  void _calm(BallBody ball) {
+    if (_winds.isNotEmpty) {
+      _winds.removeWhere((wind) => wind.playerId == ball.playerId);
+    }
+    if (_kicks.isNotEmpty) {
+      _kicks.removeWhere((kick) => kick.playerId == ball.playerId);
+    }
+  }
+
+  /// The casts still pushing on [ball]: its winds, and the sprays it is in.
+  Vec2 _castPushOn(BallBody ball) {
+    var push = Vec2.zero;
+    for (final wind in _winds) {
+      if (wind.playerId == ball.playerId) push += wind.accel;
+    }
+    for (final spray in _sprays) {
+      if (spray.spared.contains(ball.playerId)) continue;
+      final away = ball.position - spray.center;
+      final distance = away.length;
+      if (distance > spray.radius) continue;
+      push += (distance < Vec2.epsilon
+              ? const Vec2(0, -1)
+              : away * (1 / distance)) *
+          spray.accel;
+    }
+    return push;
   }
 
   List<PhysicsEvent> drainEvents() {
@@ -885,19 +1074,15 @@ class PhysicsWorld {
       accel += toCup.scaledTo(config.cupPull);
     }
     if (ball.flagActive(PowerUpFlag.magnet, _tick)) {
+      // Over the nest itself a magnetized egg drops at once (see
+      // [_handleNest]).
       final offset = hole.nest.position - ball.position;
       final distance = offset.length;
       if (distance < config.magnetRange && distance > Vec2.epsilon) {
         accel += offset.scaledTo(config.magnetStrength);
-        if (distance < hole.nest.radius) {
-          // Magnetized over the nest ring: never too fast to be caught.
-          final speed = ball.velocity.length;
-          if (speed > config.captureSpeed) {
-            ball.velocity = ball.velocity * (config.captureSpeed / speed);
-          }
-        }
       }
     }
+    if (_winds.isNotEmpty || _sprays.isNotEmpty) accel += _castPushOn(ball);
     return accel;
   }
 
@@ -960,8 +1145,11 @@ class PhysicsWorld {
   /// tick's end.
   void _integrate(BallBody ball, List<_ObstacleSweep> hens) {
     final radius = config.ballRadius;
-    final ghost = ball.flagActive(PowerUpFlag.ghost, _tick);
+    // A ghost passes through rails, rocks and hens; a Chicken Hop over
+    // them while it is in the air.
     final hop = ball.flagActive(PowerUpFlag.hop, _tick);
+    final ghost =
+        ball.flagActive(PowerUpFlag.ghost, _tick) || (hop && ball.airborne);
 
     _depenetrate(ball, hens, ghost, hop);
 
@@ -1149,8 +1337,14 @@ class PhysicsWorld {
   /// when that beats [PhysicsConfig.landingHopSpeed], and the egg flies a
   /// little hop more. Otherwise it rolls on. Whether it touched down.
   bool _touchdown(BallBody ball) {
+    if (ball.air! > hole.groundHeightAt(ball.position)) return false;
+    // A Chicken Hop that comes down on a rock or in a hedge lands on the
+    // turf beside it (in the pond it swims, like any flight).
+    final hop = ball.flagActive(PowerUpFlag.hop, _tick);
+    if (hop && !hole.water.any((shape) => shape.contains(ball.position))) {
+      _surface(ball);
+    }
     final ground = hole.groundHeightAt(ball.position);
-    if (ball.air! > ground) return false;
     final falling = math.max(0.0, -ball.airSpeed);
     ball.velocity = ball.velocity * config.landingKeep;
     _events.add(BallLanded(
@@ -1161,6 +1355,8 @@ class PhysicsWorld {
       ball.airSpeed = bounce;
     } else {
       ball.ground();
+      // The hop is over: from here it rolls like any egg.
+      ball.untilRest.remove(PowerUpFlag.hop);
     }
     return true;
   }
@@ -1292,9 +1488,16 @@ class PhysicsWorld {
 
   bool _handleBounds(BallBody ball) {
     if (!hole.bounds.contains(ball.position)) {
+      if (_phasing(ball)) {
+        // A ghost or a hop never leaves the table: it ends at the fence.
+        _surface(ball);
+        ball.settle();
+        return true;
+      }
       final at = ball.position;
       ball.position = _homeFor(ball);
       ball.settle();
+      _calm(ball);
       _events.add(BallOutOfBounds(playerId: ball.playerId, at: at));
       return true;
     }
@@ -1307,6 +1510,7 @@ class PhysicsWorld {
         final at = ball.position;
         ball.position = _homeFor(ball);
         ball.settle();
+        _calm(ball);
         _events.add(BallSplashed(playerId: ball.playerId, at: at));
         return true;
       }
@@ -1322,6 +1526,7 @@ class PhysicsWorld {
         final at = ball.position;
         ball.position = _homeFor(ball);
         ball.settle();
+        _calm(ball);
         _events.add(BallSwallowed(playerId: ball.playerId, at: at));
         return true;
       }
@@ -1432,18 +1637,27 @@ class PhysicsWorld {
     }
   }
 
+  /// The nest is a hole: over it the egg falls, and once it has been over
+  /// it for [PhysicsConfig.cupDropSeconds] without a break it is in. A
+  /// magnetized egg drops the moment it is over it.
   void _handleNest(BallBody ball) {
     if (ball.holed) return;
     final distance = ball.position.distanceTo(hole.nest.position);
-    if (distance >= hole.nest.radius) return;
-    final centered = 1 - distance / hole.nest.radius;
-    final dropSpeed = config.captureSpeed +
-        (config.captureSpeedCentered - config.captureSpeed) * centered;
-    if (ball.velocity.length > dropSpeed) return;
+    if (distance >= hole.nest.radius) {
+      ball.cupTicks = 0;
+      return;
+    }
+    ball.cupTicks++;
+    if (ball.cupTicks * config.dt < config.cupDropSeconds &&
+        !ball.flagActive(PowerUpFlag.magnet, _tick)) {
+      return;
+    }
     ball.position = hole.nest.position;
     ball.velocity = Vec2.zero;
     ball.holed = true;
     ball.asleep = true;
+    ball.cupTicks = 0;
+    ball.ground();
     ball.clearTransientFlags();
     _events.add(BallCaptured(playerId: ball.playerId));
   }
@@ -1466,6 +1680,12 @@ class PhysicsWorld {
 
   /// The eggs a harmful cast set rolling, until they rest or are putted.
   final Set<String> _castPushed = {};
+
+  /// What casts left pushing: winds on single eggs, sprays on the green,
+  /// and kicks still to land, each in the order it was cast.
+  final List<_Wind> _winds = [];
+  final List<_Spray> _sprays = [];
+  final List<_Kick> _kicks = [];
 
   /// A spared egg holds while at rest: one rolling on its own putt meets
   /// the others as ever.
@@ -1656,6 +1876,26 @@ class PhysicsWorld {
             for (final pair in _drifts.keys.toList()..sort())
               pair: _drifts[pair],
           },
+        if (_winds.isNotEmpty)
+          'winds': [
+            for (final w in _winds) [w.playerId, w.accel.x, w.accel.y, w.until],
+          ],
+        if (_sprays.isNotEmpty)
+          'sprays': [
+            for (final s in _sprays)
+              [
+                s.center.x,
+                s.center.y,
+                s.radius,
+                s.accel,
+                s.until,
+                s.spared.toList()..sort(),
+              ],
+          ],
+        if (_kicks.isNotEmpty)
+          'kicks': [
+            for (final k in _kicks) [k.tick, k.playerId, k.delta.x, k.delta.y],
+          ],
       };
 
   /// Rebuilds a world mid-hole from [state] (as [toJson] produced), against
@@ -1688,6 +1928,7 @@ class PhysicsWorld {
         air: (json['air'] as num?)?.toDouble(),
         airSpeed: (json['vz'] as num?)?.toDouble() ?? 0,
         boostCap: (json['bc'] as num?)?.toDouble() ?? 0,
+        cupTicks: (json['cup'] as num?)?.toInt() ?? 0,
       )..lastSafePosition =
           Vec2((json['sx'] as num).toDouble(), (json['sy'] as num).toDouble());
       final timed = json['timed'] as Map;
@@ -1716,6 +1957,26 @@ class PhysicsWorld {
       for (final entry in drifts.entries) {
         world._drifts[entry.key as String] = (entry.value as num).toInt();
       }
+    }
+    double number(Object? value) => (value as num).toDouble();
+    for (final raw in (state['winds'] as List?) ?? const []) {
+      final w = raw as List;
+      world._winds.add(_Wind(w[0] as String, Vec2(number(w[1]), number(w[2])),
+          (w[3] as num).toInt()));
+    }
+    for (final raw in (state['sprays'] as List?) ?? const []) {
+      final s = raw as List;
+      world._sprays.add(_Spray(
+          Vec2(number(s[0]), number(s[1])),
+          number(s[2]),
+          number(s[3]),
+          (s[4] as num).toInt(),
+          (s[5] as List).cast<String>().toSet()));
+    }
+    for (final raw in (state['kicks'] as List?) ?? const []) {
+      final k = raw as List;
+      world._kicks.add(_Kick((k[0] as num).toInt(), k[1] as String,
+          Vec2(number(k[2]), number(k[3]))));
     }
     world._rebuildOrder();
     for (final id in world._order) {
@@ -1824,6 +2085,35 @@ class _ObstacleSweep {
     }
     return stops.first.at;
   }
+}
+
+/// A wind on one egg until a tick (Gust).
+class _Wind {
+  final String playerId;
+  final Vec2 accel;
+  final int until;
+
+  const _Wind(this.playerId, this.accel, this.until);
+}
+
+/// A spray on the green until a tick (Sprinkler).
+class _Spray {
+  final Vec2 center;
+  final double radius;
+  final double accel;
+  final int until;
+  final Set<String> spared;
+
+  const _Spray(this.center, this.radius, this.accel, this.until, this.spared);
+}
+
+/// A kick due at a tick (Corn Rain).
+class _Kick {
+  final int tick;
+  final String playerId;
+  final Vec2 delta;
+
+  const _Kick(this.tick, this.playerId, this.delta);
 }
 
 /// Normalized (start, sweep) of an arc, sweep in (0, 2pi].

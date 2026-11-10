@@ -41,7 +41,7 @@ HoleDef _lilyPadLane() {
     id: 'pond_1',
     par: 2,
     tee: _pond1Tee,
-    nest: Nest(_pond1Nest, 1.7),
+    nest: Nest(_pond1Nest, 0.95),
     bounds: _pond1Bounds,
     walls: [
       ...fenceAround(_pond1Bounds),
@@ -104,7 +104,7 @@ HoleDef _theWeir() {
     id: 'pond_2',
     par: 2,
     tee: _pond2Tee,
-    nest: Nest(_pond2Nest, 1.7),
+    nest: Nest(_pond2Nest, 0.95),
     bounds: _pond2Bounds,
     walls: [
       ...fenceAround(_pond2Bounds),
@@ -200,7 +200,7 @@ HoleDef _islandGreen() {
     id: 'pond_3',
     par: 3,
     tee: _pond3Tee,
-    nest: Nest(_pond3Island, 1.7),
+    nest: Nest(_pond3Island, 0.95),
     bounds: _pond3Bounds,
     walls: [
       ...fenceAround(_pond3Bounds),
@@ -274,7 +274,7 @@ HoleDef _boardwalk() {
     id: 'pond_4',
     par: 3,
     tee: _pond4Tee,
-    nest: Nest(_pond4Nest, 1.7),
+    nest: Nest(_pond4Nest, 0.95),
     bounds: _pond4Bounds,
     walls: [
       ...fenceAround(_pond4Bounds),
@@ -321,7 +321,7 @@ HoleDef _duckWalk() {
     id: 'pond_5',
     par: 3,
     tee: _pond5Tee,
-    nest: Nest(_pond5Nest, 1.7),
+    nest: Nest(_pond5Nest, 0.95),
     bounds: _pond5Bounds,
     walls: [
       ...fenceAround(_pond5Bounds),
@@ -395,7 +395,7 @@ HoleDef _frogPond() {
     id: 'pond_6',
     par: 4,
     tee: _pond6Tee,
-    nest: Nest(_pond6Island, 1.7),
+    nest: Nest(_pond6Island, 0.95),
     bounds: _pond6Bounds,
     walls: [
       ...fenceAround(_pond6Bounds),

@@ -82,18 +82,31 @@ results):
 
 ### The nest
 
-The nest is a cup, not a spot to stop on (`core/physics.dart`). Over it
-(the egg's center inside its radius) the funnel pulls the egg toward the
-center at `cupPull` (16 units/s², over the rolling friction, so nothing
-rests on the lip) and drags `cupDrag` (8 units/s²) more pace off. The egg
-drops the moment it is slow enough for how centered it is: up to
-`captureSpeed` (3 units/s) right at the lip, rising in a straight line to
-`captureSpeedCentered` (9 units/s) at dead center. So a firm putt through
-the middle drops, a slow one that only reaches the edge drops, a lip hit
-at a medium pace curls in and drops or spins out bent toward the center,
-and only a really fast egg skips across. An egg in the air (off a kicker)
-flies over it. Nest Magnet pulls from 3.5 units out and, once the egg is
-over the cup, cuts its pace to the lip's limit, so it always drops.
+The nest is a hole in the green, a little over an egg across (radius 0.95;
+an egg's is 0.45), and it behaves like one (`core/physics.dart`). An egg
+whose center is over it has nothing under it and falls: once it has been
+over the hole for `cupDropSeconds` (0.09 s) without a break it is in. What
+an egg needs to drop is time over the hole, not a slow pace:
+
+- across the middle, anything up to about 21 units/s drops (a full putt
+  leaves at 26), and so does everything up to 17 that passes within 0.6 of
+  the center line;
+- off toward the lip the hole under the egg is shorter, so it takes a
+  slower egg; the funnel (`cupPull`, 16 units/s², reaching a little past
+  the rim) curls a lip hit in toward the middle and `cupDrag` (8 units/s²)
+  takes pace off it, so a soft lip hit drops and a hard one spins out,
+  bent;
+- only an egg really flying skips across, and nothing rests over the hole
+  or on its lip: an egg at rest over it falls in.
+
+An egg in the air (off a kicker, on a Chicken Hop) flies over it. Nest
+Magnet pulls from 3.5 units out and drops the egg the moment it is over the
+hole.
+
+Until 2026-11-09 the nest was a dish 1.7 in radius with a speed limit (3
+units/s at the lip rising to 14 at dead center): "a place that sucks eggs
+in a little bit, but if you're mildly fast you roll over it". The tests
+hold the hole's behaviour in `physics_test.dart` ("the nest is a hole").
 
 ### Course awards
 
@@ -129,8 +142,8 @@ pause in a live session, moves on from them.
 ### Modes
 
 - **Casual** - one course, then the group votes the next.
-- **Tournament** - 3, 6 or 9 drawn courses; the scores add up and
-  power-ups travel with you.
+- **Tournament** - 3, 6 or 9 drawn courses; the scores add up and the
+  power-ups in hand travel with you (see "What lasts how long").
 - **Barnyard Chaos** - casual, but everyone starts with two random
   power-ups and the mystery boxes come doubled.
 
@@ -194,17 +207,60 @@ system's reduced motion on, the prize lands at once with its chime.
 | Power-up | Does |
 |---|---|
 | Hawk Eye | removes the aim wobble on your next shot |
-| Nest Magnet | the egg is drawn home when it nears the nest |
-| Ghost Egg | passes through fences and obstacles briefly |
-| Chicken Hop | your next putt flies over whatever is in the way |
-| Rabbit Hole | teleports your egg a short way, costing no stroke |
-| Gust | a wind of your choosing pushes every egg but yours |
-| Thick Shell | shield: the next negative effect bounces off, a Thieving Crow or a Nest Swap aimed at the egg included; the eggs that cast shoves (a Gust, Corn Rain, a Sprinkler) bounce off the shelled egg at rest too, until they rest (at most 6 s), and so off the caster's own |
-| Strong Coffee | your next shot leaves 30% harder |
+| Nest Magnet | on your next shot the egg is drawn home when it nears the nest, and drops the moment it is over it |
+| Ghost Egg | your next putt passes through rails, rocks and hens until the egg rests |
+| Chicken Hop | your next putt leaves the ground and flies over whatever is in the way (rails, rocks, hens, water, other eggs, steps) for about 0.7 s; how far is its pace (`hopLift`) |
+| Rabbit Hole | teleports your egg up to 6 units, costing no stroke |
+| Gust | a wind toward a spot of your choosing carries every egg but yours for 2.5 s (`kGustSeconds`, `kGustAccel` 9.5 units/s², 2.5 over the rolling friction): about ten units for an egg in the open, and it cannot be putted while it blows |
+| Thick Shell | shield: for 30 s of the hole's play (`kThickShellSeconds`) the next negative effect bounces off, a Thieving Crow or a Nest Swap aimed at the egg included; it is spent on the one it stops, and never outlasts its hole. The eggs that cast shoves (a Gust, Corn Rain, a Sprinkler) bounce off the shelled egg at rest too, until they rest (at most 6 s), and so off the caster's own |
+| Strong Coffee | your next shot leaves 30% harder, a full pull included (33.8 units/s; the speed cap rises with it and follows it back down) |
 | Nest Swap | trade places with a chosen player's egg |
-| Sprinkler | mark a spot; nearby eggs are pushed away |
-| Corn Rain | kernels bounce around, nudging every egg but yours |
+| Sprinkler | mark a spot; for 3 s (`kSprinklerSeconds`) every other egg within 5 units of it is pushed out of it (12 units/s²: one a unit from the mark ends eight from it), the ones that roll into it later too |
+| Corn Rain | for 3 s kernels pelt every egg but yours: ten kicks each (`kCornRainKicks`) of 2 to 4.5 units/s in random directions, all drawn from the match's seed as it is cast. They come faster than the turf stops the egg, so it is knocked about over some 7 units of roll and ends 3 or 4 from where it stood (over sixty seeds: 5 to 14 rolled, 1 to 13 away) |
 | Thieving Crow | steal a power-up from a chosen player |
+
+An egg that ends where no egg can stand comes back out at the nearest
+turf, with no stroke and no penalty (`core/reach.dart`, the event
+`BallSurfaced`): a ghost that rests inside a rock or a hedge, a hop that
+comes down on one, a Rabbit Hole aimed into one or into the pond (the
+reticle shows where it really comes up). A ghost or a hop never leaves the
+table: it ends at the fence it reached. "Where an egg can stand" is a flood
+fill from the tee over a half-unit grid, stopped by rails, rocks and water,
+carried through the rabbit holes and over ledges both ways; the course test
+checks that every hole's tee, nest, rim, boxes and kicker lips are on it.
+
+An egg a hazard sends back to where it putted from (the pond, the silo,
+out of bounds) is let be: the wind on it drops and the kernels still to
+come miss it, so a Gust dunks an egg once, not again and again while it
+blows.
+
+#### What lasts how long
+
+- **In hand** (the carton, three at most): yours until you use it, from
+  hole to hole and from course to course.
+- **Turned on for your next shot** (Hawk Eye, Nest Magnet, Ghost Egg,
+  Chicken Hop, Strong Coffee): no clock runs on the aim. It rides the next
+  putt, whenever that is, and if your egg drops in before you get to use
+  it, it is still on at the next hole. A new course starts everyone clean
+  (`PuttEngine._disarmEveryone`).
+- **On the green for a while** (a Gust's wind, a Sprinkler's spray, the
+  Corn Rain, a Thick Shell): its seconds of the hole's play, and gone with
+  the hole.
+
+Until 2026-11-09 most of this did not work as described
+(`unit_test/sunny_side_putt/core/powerups_play_test.dart` plays each on a
+real engine, one group per report):
+
+| Power-up | What it did |
+|---|---|
+| Ghost Egg | switched on for 3 s from the cast, which ran out while its player aimed: the putt met the rail like any other |
+| Chicken Hop | drew a hop over an egg that rolled into every rail (it only passed hens) |
+| Gust | one shove of 6 units/s, spent within 2.6 units |
+| Sprinkler | one shove of 5.7 units/s, 2.3 units |
+| Corn Rain | one kick of at most 4 units/s, 0.3 units of roll on average |
+| Thick Shell | held until it stopped a cast, however many holes and courses later |
+| Strong Coffee | capped at a full putt's pace: nothing for the putts that wanted it |
+| Rabbit Hole | could bring the egg up inside a rock or a walled-off bed, for good |
 
 Using one: a tap on its slot casts the ones that need nothing. One that
 acts on a spot (Rabbit Hole, Gust, Sprinkler) waits for it: the slot
@@ -248,15 +304,15 @@ vanishes without its cause on screen:
 |---|---|
 | Hawk Eye | on the putt, glints light up one after another along its dead-straight line, ahead of the egg |
 | Nest Magnet | a ring breathing round the nest in the egg's colour, rings drawn in toward it and glints running round, while the magnet waits or pulls |
-| Ghost Egg | the egg goes see-through and flickers while it lasts, blinking back to solid at the end, pale wisps rising off it; its shadow thins |
-| Chicken Hop | feathers puff off the egg as it takes off, then the hop lifts it over what stands in the way |
+| Ghost Egg | the egg goes see-through and flickers from the cast until its putt rests, pale wisps rising off it; its shadow thins |
+| Chicken Hop | feathers puff off the egg as it takes off, and it flies the engine's own arc (its `air`, like a flight off a kicker), its shadow left on the ground |
 | Rabbit Hole | a puff and dirt where the egg goes down, dirt, sparkles and a ring where it comes up |
-| Gust | a ring and a poof at the chosen spot; past every egg it pushes, lanes of wind streaks from well behind it on toward the spot, all one way, and a feather or two riding them |
-| Thick Shell | a soap bubble round the egg while the shield holds; a cast it stops pops it in a ring and shards |
+| Gust | a ring and a poof at the chosen spot; past every egg it pushes, lanes of wind streaks from well behind it on toward the spot, all one way, and a feather or two riding them, again and again for as long as it blows |
+| Thick Shell | a soap bubble round the egg while the shield holds, pulsing through its last three seconds; a cast it stops pops it in a ring and shards |
 | Strong Coffee | wisps of steam off the egg while the coffee waits, a trail of steam behind its boosted putt |
 | Nest Swap | a poof, a violet ring and a swirl on both eggs as they trade places, and a dotted line lighting up between their spots |
-| Sprinkler | the splash and its rings at the spot, spray on every egg it soaks |
-| Corn Rain | kernels falling out of the sky round every egg it nudges, bouncing twice and lying a moment |
+| Sprinkler | the splash and its rings at the spot, then rings and spray on the spot and on every egg in it for as long as it runs |
+| Corn Rain | kernels falling out of the sky round every egg it pelts for as long as it falls, bouncing twice and lying a moment |
 | Thieving Crow | a black crow swoops onto the robbed egg, flies an arc to the thief's with the stolen power-up's icon in its beak, and drops it in |
 
 The engine says what each cast did: `PowerUpUsed` carries the target and
@@ -832,7 +888,7 @@ world builds those with `_gridPlane`.
 Every sound is synthesized by `rooster/tools/gen_game_audio.dart` (the
 instruments, the score and the effects in `tools/game_audio/`) with fixed
 seeds, and a re-run writes the same bytes. One sample: the rooster's crow
-(`crow.mp3`, `victory.mp3` and the crow in the music's bridge) is the
+(`crow.mp3` and the crow in the music's bridge) is the
 soundboard's CC0 "Rooster Crowing" by LoafDV
 ([freesound 385820](https://freesound.org/s/385820/), credited in
 `rooster/assets/soundboard/CREDITS.md`), decoded by `roosterCrow` in
@@ -872,8 +928,16 @@ soundboard's CC0 "Rooster Crowing" by LoafDV
   silo sucks and booms, a fall off the table whistles down; an egg thrown
   off a kicker gets the ramp's thunk under a rising whoosh and thumps down
   into the straw (the thump, softer, for a bump over a lip); a banjo opens
-  each hole, a sting closes it, a fanfare ends the match; a cowbell warns
-  at 60, 30, 15 and 5 seconds and the last fourteen tick and tock.
+  each hole, a sting closes it; a cowbell warns at 60, 30, 15 and 5
+  seconds and the last fourteen tick and tock. A wind, a sprinkler and the
+  corn are heard again every 0.7 to 0.9 s for as long as they last.
+- The match ends, whoever won, on the barn dance's last bars
+  (`victoryFanfare`, `victory.mp3`, 5 s): the fiddle runs up the scale into
+  "shave and a haircut" played by the whole band, stops and all, the yard
+  clapping on the hits; "two bits" lands on a big chord with the fiddle and
+  the whistle on top, three rockets go up off the barn roof and burst, and
+  the yard claps it out. It used to end on the host's crow, which a hole
+  in one and every course's podium already get.
 - The hits come from the physics: the engine echoes the world's reports
   (`PuttEngine.drainWorldEvents`, never journaled nor snapshotted) and the
   match turns them into sounds, with a short cooldown per egg and at most
@@ -924,7 +988,9 @@ soundboard's CC0 "Rooster Crowing" by LoafDV
 ## Testing
 
 - `flutter test unit_test/sunny_side_putt` - physics, rules, every
-  power-up, the kickers and their flights, every hole's reference solution
+  power-up (`core/powerups_play_test.dart` plays each of the twelve on a
+  real engine: what it does to the eggs, how long it lasts, what a snapshot
+  keeps of it), the kickers and their flights, every hole's reference solution
   and the courses' lints, the session bridge (two clients on the in-memory
   wire), the view widgets, the looks (`core/looks_test.dart` for the engine
   and the wire, `ui/looks_world_test.dart` for the paints and the hats,

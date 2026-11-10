@@ -3,13 +3,13 @@ import 'fake_context.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('ghosts the caster egg for a few seconds, not walls forever', () {
+  test('arms the caster next shot, with no clock running on the aim', () {
     final context = FakePowerUpContext();
 
     GhostEggEffect().apply(context);
 
-    expect(context.flags.single.playerId, 'caster');
-    expect(context.flags.single.durationTicks,
-        (kGhostEggSeconds / context.tickSeconds).round());
+    expect(context.nextShots['caster']!.ghost, isTrue);
+    expect(context.flags, isEmpty,
+        reason: 'no timed flag: it used to run out before the putt');
   });
 }

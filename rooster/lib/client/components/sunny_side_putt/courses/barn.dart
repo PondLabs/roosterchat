@@ -32,7 +32,7 @@ HoleDef _siloSide() {
     id: 'barn_1',
     par: 2,
     tee: _barn1Tee,
-    nest: Nest(_barn1Nest, 1.7),
+    nest: Nest(_barn1Nest, 0.95),
     bounds: _barn1Bounds,
     walls: [
       ...fenceAround(_barn1Bounds),
@@ -99,7 +99,7 @@ HoleDef _hayBalePinball() {
     id: 'barn_2',
     par: 3,
     tee: _barn2Tee,
-    nest: Nest(_barn2Nest, 1.7),
+    nest: Nest(_barn2Nest, 0.95),
     bounds: _barn2Bounds,
     walls: [
       ...fenceAround(_barn2Bounds),
@@ -173,7 +173,7 @@ HoleDef _twinSilos() {
     id: 'barn_3',
     par: 2,
     tee: _barn3Tee,
-    nest: Nest(_barn3Nest, 1.7),
+    nest: Nest(_barn3Nest, 0.95),
     bounds: _barn3Bounds,
     walls: [
       ...fenceAround(_barn3Bounds),
@@ -224,7 +224,7 @@ HoleDef _pitchfork() {
     id: 'barn_4',
     par: 2,
     tee: _barn4Tee,
-    nest: Nest(_barn4Nest, 1.7),
+    nest: Nest(_barn4Nest, 0.95),
     bounds: _barn4Bounds,
     walls: [
       ...fenceAround(_barn4Bounds),
@@ -275,7 +275,7 @@ HoleDef _slingshot() {
     id: 'barn_5',
     par: 3,
     tee: _barn5Tee,
-    nest: Nest(_barn5Nest, 1.7),
+    nest: Nest(_barn5Nest, 0.95),
     bounds: _barn5Bounds,
     walls: [
       ...fenceAround(_barn5Bounds),
@@ -343,7 +343,7 @@ HoleDef _threshingFloor() {
     id: 'barn_6',
     par: 4,
     tee: _barn6Tee,
-    nest: Nest(_barn6Nest, 1.7),
+    nest: Nest(_barn6Nest, 0.95),
     bounds: _barn6Bounds,
     walls: [
       ...fenceAround(_barn6Bounds),

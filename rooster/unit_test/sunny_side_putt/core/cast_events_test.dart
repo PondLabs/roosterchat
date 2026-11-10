@@ -61,7 +61,7 @@ void main() {
     expect(blocked.effectId, 'nest_swap');
     expect(engine.world!.ball('p1')!.position, p1At, reason: 'no swap');
     expect(engine.world!.ball('p2')!.position, p2At);
-    expect(engine.player('p2')!.shields, 0);
+    expect(engine.isShielded('p2'), isFalse);
 
     // Spent: the next swap goes through.
     engine.player('p1')!.inventory.add('nest_swap');
@@ -206,7 +206,7 @@ void main() {
     expect(engine.player('p1')!.inventory.toList(), ['gust']);
   });
 
-  test('a swap hits both eggs, a rabbit hole and a ghost the caster', () {
+  test('a swap hits both eggs, a rabbit hole the caster, a ghost none yet', () {
     final engine = _engine();
     final player = engine.player('p1')!;
     player.inventory
@@ -220,9 +220,13 @@ void main() {
         'p1', 'rabbit_hole', const PowerUpTarget.point(Vec2(12, 10)));
     expect(
         engine.drainEvents().whereType<PowerUpHit>().single.playerIds, ['p1']);
+    // A Ghost Egg waits for the putt: the shot says it rode it.
     engine.usePowerUp('p1', 'ghost_egg');
     expect(
-        engine.drainEvents().whereType<PowerUpHit>().single.playerIds, ['p1']);
+        engine.drainEvents().whereType<PowerUpHit>().single.playerIds, isEmpty);
+    engine.advanceSeconds(1);
+    expect(engine.submitShot('p1', 0.3, 0.2), isTrue);
+    expect(engine.drainEvents().whereType<ShotApplied>().single.ghost, isTrue);
   });
 
   test('a shot says which next-shot power-ups rode it', () {

@@ -173,7 +173,7 @@ class ShellEffect extends PowerUpEffect {
 
   @override
   void apply(PowerUpContext context) {
-    context.addShield(context.casterId);
+    context.addShield(context.casterId, (30 / context.tickSeconds).round());
   }
 }
 

@@ -1,42 +1,37 @@
 import 'package:rooster/client/components/sunny_side_putt/core/effects/sprinkler.dart';
+import 'package:rooster/client/components/sunny_side_putt/core/physics.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/powerups.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
 import 'fake_context.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('sprays eggs near the marked point, pushes them away', () {
+  test('leaves a spray on the marked spot for a while', () {
     final context = FakePowerUpContext(
-      eggs: const [
-        BallView(
-            playerId: 'sprayed',
-            position: Vec2(10, 7),
-            velocity: Vec2.zero,
-            holed: false),
-      ],
       target: const PowerUpTarget.point(Vec2(10, 5)),
     );
 
     SprinklerEffect().apply(context);
 
-    final push = context.impulses.single.deltaVelocity;
-    expect(push.y, greaterThan(0)); // shoved away from the mark, downwards
+    expect(context.impulses, isEmpty, reason: 'a spray, not one shove');
+    final spray = context.sprays.single;
+    expect(spray.center, const Vec2(10, 5));
+    expect(spray.radius, kSprinklerRadius);
+    expect(spray.accel, kSprinklerAccel);
+    expect(
+        spray.durationTicks, (kSprinklerSeconds / context.tickSeconds).round());
   });
 
-  test('leaves far eggs dry', () {
-    final context = FakePowerUpContext(
-      eggs: const [
-        BallView(
-            playerId: 'far',
-            position: Vec2(40, 40),
-            velocity: Vec2.zero,
-            holed: false),
-      ],
-      target: const PowerUpTarget.point(Vec2(10, 5)),
-    );
+  test('strong enough to move an egg at rest', () {
+    expect(kSprinklerAccel,
+        greaterThan(const PhysicsConfig().frictionDeceleration));
+  });
+
+  test('does nothing without a spot', () {
+    final context = FakePowerUpContext();
 
     SprinklerEffect().apply(context);
 
-    expect(context.impulses, isEmpty);
+    expect(context.sprays, isEmpty);
   });
 }

@@ -23,25 +23,30 @@ import 'rng.dart';
 import 'vec.dart';
 
 /// Transient per-egg states power-ups switch on. `ghost` passes through
-/// walls and obstacles; `hop` flies over obstacles; `magnet` pulls the egg
-/// toward the nest when it passes near. See `physics.dart` for how each
-/// changes the simulation.
+/// rails, rocks and hens until the egg rests; `hop` flies over them while
+/// the putt is in the air; `magnet` pulls the egg toward the nest when it
+/// passes near. See `physics.dart` for how each changes the simulation.
+/// (An egg that ends a ghost roll or a hop where none can stand comes back
+/// out at the nearest turf: see `reach.dart`.)
 enum PowerUpFlag { ghost, hop, magnet }
 
 /// When an effect acts.
 enum PowerUpTiming {
   /// Modifies the caster's next shot (Hawk Eye, Strong Coffee, Chicken Hop,
-  /// Nest Magnet): applied when that shot fires, then cleared.
+  /// Nest Magnet, Ghost Egg): applied when that shot fires, then cleared.
+  /// One armed and not yet putted goes on to the next hole with its player
+  /// (their egg dropped in before they could use it), but not to the next
+  /// course, which everyone starts clean.
   nextShot,
 
   /// Acts immediately when cast, on no particular egg (Rabbit Hole on self,
   /// Nest Swap, Thieving Crow).
   instant,
 
-  /// Switches a timed egg state on and lets it run out (Ghost Egg).
+  /// Switches a timed state on and lets it run out (Thick Shell).
   timed,
 
-  /// Acts immediately on every other egg within reach (Gust, Sprinkler,
+  /// Acts on every other egg within reach, for a while (Gust, Sprinkler,
   /// Corn Rain).
   area,
 }
@@ -101,11 +106,22 @@ abstract class PowerUpContext {
 
   // ---- mutations ---------------------------------------------------------
 
-  /// Adds [deltaVelocity] to an egg's velocity (Gust, Sprinkler).
+  /// Adds [deltaVelocity] to an egg's velocity.
   void impulseBall(String playerId, Vec2 deltaVelocity);
 
-  /// Kicks an egg in a random direction, at most [maxSpeed] (Corn Rain).
-  void nudgeBall(String playerId, double maxSpeed);
+  /// Kicks an egg in a random direction, between [minSpeed] and [maxSpeed],
+  /// [delayTicks] from now (Corn Rain's kernels, one after another).
+  void nudgeBall(String playerId, double maxSpeed,
+      {double minSpeed = 0, int delayTicks = 0});
+
+  /// A wind on one egg: [accel] (units/s^2) for [durationTicks] (Gust).
+  void pushBall(String playerId, Vec2 accel, int durationTicks);
+
+  /// A spray on the green for [durationTicks] (Sprinkler): every egg within
+  /// [radius] of [center] is pushed away from it at [accel] (units/s^2),
+  /// the ones that roll into it later too. Never the caster's, nor one
+  /// whose shell stopped the cast.
+  void spray(Vec2 center, double radius, double accel, int durationTicks);
 
   /// Moves an egg somewhere instantly, speed preserved (Rabbit Hole).
   void teleportBall(String playerId, Vec2 to);
@@ -131,9 +147,10 @@ abstract class PowerUpContext {
 
   bool hasPowerUp(String playerId, String effectId);
 
-  /// Grants a shield: the next harmful effect aimed at this egg is skipped
-  /// (Thick Shell).
-  void addShield(String playerId);
+  /// Grants a shield for [durationTicks] of the hole's play: the next
+  /// harmful effect aimed at this egg is skipped (Thick Shell). It ends
+  /// with the hole at the latest.
+  void addShield(String playerId, int durationTicks);
 
   /// Whether [playerId]'s shell stops this cast, for an effect aimed at one
   /// player (a theft, a swap): a harmful effect spends one of their shields
@@ -194,25 +211,42 @@ class NextShotModifiers {
   /// Strong Coffee: multiplies the shot's speed (1.3). Resets to 1 after.
   double powerMultiplier;
 
-  /// Chicken Hop: the shot flies over obstacles until the egg settles.
+  /// Chicken Hop: the shot leaves the ground and flies over whatever is in
+  /// its way until it comes down.
   bool hop;
 
   /// Nest Magnet: the egg magnetizes near the nest until it settles.
   bool magnet;
 
+  /// Ghost Egg: the shot passes through rails, rocks and hens until the
+  /// egg settles.
+  bool ghost;
+
   NextShotModifiers(
       {this.noWobble = false,
       this.powerMultiplier = 1,
       this.hop = false,
-      this.magnet = false});
+      this.magnet = false,
+      this.ghost = false});
 
-  bool get isEmpty => !noWobble && powerMultiplier == 1 && !hop && !magnet;
+  bool get isEmpty =>
+      !noWobble && powerMultiplier == 1 && !hop && !magnet && !ghost;
 
   void clear() {
     noWobble = false;
     powerMultiplier = 1;
     hop = false;
     magnet = false;
+    ghost = false;
+  }
+
+  /// Takes [json]'s values (as [toJson] wrote them).
+  void restore(Map<Object?, Object?> json) {
+    noWobble = json['noWobble'] == true;
+    powerMultiplier = (json['powerMultiplier'] as num?)?.toDouble() ?? 1;
+    hop = json['hop'] == true;
+    magnet = json['magnet'] == true;
+    ghost = json['ghost'] == true;
   }
 
   Map<String, Object?> toJson() => {
@@ -220,15 +254,11 @@ class NextShotModifiers {
         'powerMultiplier': powerMultiplier,
         'hop': hop,
         'magnet': magnet,
+        'ghost': ghost,
       };
 
   factory NextShotModifiers.fromJson(Map<Object?, Object?> json) =>
-      NextShotModifiers(
-        noWobble: json['noWobble'] == true,
-        powerMultiplier: (json['powerMultiplier'] as num?)?.toDouble() ?? 1,
-        hop: json['hop'] == true,
-        magnet: json['magnet'] == true,
-      );
+      NextShotModifiers()..restore(json);
 }
 
 /// A player's held power-ups, first-in first-used, capped at 3.

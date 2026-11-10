@@ -1,5 +1,8 @@
-// Chicken Hop: the caster's next shot flies over obstacles until the egg
-// settles (see `NextShotModifiers` in powerups.dart).
+// Chicken Hop: the caster's next putt leaves the ground and flies over
+// whatever is in its way (rails, rocks, hens, water, other eggs, steps)
+// until it comes down, about 0.7 s later (see `NextShotModifiers` in
+// powerups.dart and `PhysicsConfig.hopLift`). It used to be drawn hopping
+// while it rolled into every rail like any putt.
 
 import 'package:rooster/client/components/sunny_side_putt/core/powerups.dart';
 

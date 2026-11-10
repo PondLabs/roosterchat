@@ -994,6 +994,7 @@ class PuttMatch extends ChangeNotifier {
             (event.powerMultiplier > 1, 'strong_coffee'),
             (event.hop, 'chicken_hop'),
             (event.magnet, 'nest_magnet'),
+            (event.ghost, 'ghost_egg'),
           ]) {
             if (!rode) continue;
             fxSpots.add(PuttFxSpot(PuttFxSpotKind.shot,

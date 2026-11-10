@@ -6,7 +6,9 @@ import 'package:rooster/client/components/sunny_side_putt/core/powerups.dart';
 class StrongCoffeeEffect extends PowerUpEffect {
   const StrongCoffeeEffect();
 
-  /// Putt Party's +30% next-shot power boost.
+  /// Putt Party's +30% next-shot power boost: on the pace the putt leaves
+  /// with, a full pull included (it used to stop at a full putt's pace, so
+  /// the coffee did nothing for the putts that wanted it).
   static const double powerBoost = 1.3;
 
   @override

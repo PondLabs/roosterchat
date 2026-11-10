@@ -126,7 +126,9 @@ class PuttWorldEgg {
   final bool shielded;
 
   /// Seconds of Ghost Egg left on this egg (0: solid): the shell goes
-  /// see-through and flickers, faster as it runs out.
+  /// see-through and flickers, blinking back to solid under 0.9. A ghost
+  /// lasts from its cast until its putt rests, not a count of seconds: the
+  /// game passes a number well over the blink while it does.
   final double ghostSeconds;
 
   /// A Nest Magnet waits on this egg's next shot or pulls it now: the nest

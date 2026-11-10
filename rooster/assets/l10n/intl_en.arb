@@ -5738,7 +5738,7 @@
   },
   "labelPuttPowerGhostEgg": "Ghost Egg",
   "@labelPuttPowerGhostEgg": {
-    "description": "Power-up: the egg passes through fences and obstacles for a few seconds",
+    "description": "Power-up: the player's next shot passes through fences and obstacles",
     "type": "text",
     "placeholders": {}
   },
@@ -5808,7 +5808,7 @@
     "type": "text",
     "placeholders": {}
   },
-  "labelPuttPowerGhostEggDetail": "Your egg rolls through fences and hens for a few seconds.",
+  "labelPuttPowerGhostEggDetail": "Your next shot rolls through rails, rocks and hens.",
   "@labelPuttPowerGhostEggDetail": {
     "description": "Tooltip line under the Ghost Egg power-up's name: what it does",
     "type": "text",
@@ -5826,15 +5826,15 @@
     "type": "text",
     "placeholders": {}
   },
-  "labelPuttPowerGustDetail": "The wind blows every other egg toward a spot you pick.",
+  "labelPuttPowerGustDetail": "For a few seconds the wind blows every other egg toward a spot you pick.",
   "@labelPuttPowerGustDetail": {
-    "description": "Tooltip line under the Gust power-up's name: what it does",
+    "description": "Tooltip line under the Gust power-up's name: what it does (the wind keeps carrying the eggs for a few seconds)",
     "type": "text",
     "placeholders": {}
   },
-  "labelPuttPowerThickShellDetail": "Your egg shrugs off the next push another player sends.",
+  "labelPuttPowerThickShellDetail": "For half a minute, your egg shrugs off the next push another player sends.",
   "@labelPuttPowerThickShellDetail": {
-    "description": "Tooltip line under the Thick Shell power-up's name: it blocks the next Gust, Sprinkler or Corn Rain that would hit the player's egg",
+    "description": "Tooltip line under the Thick Shell power-up's name: for thirty seconds it blocks the next Gust, Sprinkler or Corn Rain that would hit the player's egg",
     "type": "text",
     "placeholders": {}
   },
@@ -5850,13 +5850,13 @@
     "type": "text",
     "placeholders": {}
   },
-  "labelPuttPowerSprinklerDetail": "Soak a spot: the eggs around it get pushed away.",
+  "labelPuttPowerSprinklerDetail": "Soak a spot for a few seconds: the eggs around it get pushed away.",
   "@labelPuttPowerSprinklerDetail": {
     "description": "Tooltip line under the Sprinkler power-up's name: what it does",
     "type": "text",
     "placeholders": {}
   },
-  "labelPuttPowerCornRainDetail": "Corn kernels rain down and nudge every egg but yours.",
+  "labelPuttPowerCornRainDetail": "Corn kernels rain down and knock every egg but yours about.",
   "@labelPuttPowerCornRainDetail": {
     "description": "Tooltip line under the Corn Rain power-up's name: what it does",
     "type": "text",

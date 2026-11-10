@@ -11,6 +11,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/effects/effect_registry.dart';
+import 'package:rooster/client/components/sunny_side_putt/core/reach.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
 
 import 'putt_art.dart';
@@ -47,6 +48,11 @@ class PuttReticle extends StatelessWidget {
             for (final egg in PuttTargeting.otherEggs(match))
               match.renderPositionOf(egg.playerId),
           ],
+          // Where the egg really comes up: on the nearest turf, when the
+          // spot is a rock, a hedge, a bed or the pond.
+          landAt: match.hole == null
+              ? null
+              : HoleReach.of(match.hole!, match.config.physics).nearest,
           project: project,
         ),
       ),
@@ -61,11 +67,15 @@ class _ReticlePainter extends CustomPainter {
   final List<Vec2> others;
   final PuttProjector project;
 
+  /// Where a Rabbit Hole aimed at a spot brings the egg up.
+  final Vec2 Function(Vec2 spot)? landAt;
+
   _ReticlePainter({
     required this.effectId,
     required this.hover,
     required this.mine,
     required this.others,
+    this.landAt,
     required this.project,
   });
 
@@ -86,7 +96,7 @@ class _ReticlePainter extends CustomPainter {
         if (hop.length > kRabbitHoleMaxDistance) {
           hop = hop.scaledTo(kRabbitHoleMaxDistance);
         }
-        final landing = mine + hop;
+        final landing = landAt?.call(mine + hop) ?? mine + hop;
         _dotted(canvas, project(mine), project(landing), PuttPalette.shell);
         _ground(canvas, landing, 0.9,
             fill: PuttPalette.yolk.withValues(alpha: 0.35),

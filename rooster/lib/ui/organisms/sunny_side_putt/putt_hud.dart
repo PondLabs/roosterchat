@@ -3382,8 +3382,8 @@ String labelPuttPowerNestMagnet() => Intl.message("Nest Magnet",
 
 String labelPuttPowerGhostEgg() => Intl.message("Ghost Egg",
     name: "labelPuttPowerGhostEgg",
-    desc: "Power-up: the egg passes through fences and obstacles for a "
-        "few seconds");
+    desc: "Power-up: the player's next shot passes through fences and "
+        "obstacles");
 
 String labelPuttPowerChickenHop() => Intl.message("Chicken Hop",
     name: "labelPuttPowerChickenHop",
@@ -3435,7 +3435,7 @@ String labelPuttPowerNestMagnetDetail() =>
             "does");
 
 String labelPuttPowerGhostEggDetail() =>
-    Intl.message("Your egg rolls through fences and hens for a few seconds.",
+    Intl.message("Your next shot rolls through rails, rocks and hens.",
         name: "labelPuttPowerGhostEggDetail",
         desc: "Tooltip line under the Ghost Egg power-up's name: what it "
             "does");
@@ -3452,17 +3452,18 @@ String labelPuttPowerRabbitHoleDetail() =>
         desc: "Tooltip line under the Rabbit Hole power-up's name: what it "
             "does (the player picks the spot, a few steps away at most)");
 
-String labelPuttPowerGustDetail() =>
-    Intl.message("The wind blows every other egg toward a spot you pick.",
-        name: "labelPuttPowerGustDetail",
-        desc: "Tooltip line under the Gust power-up's name: what it does");
+String labelPuttPowerGustDetail() => Intl.message(
+    "For a few seconds the wind blows every other egg toward a spot you pick.",
+    name: "labelPuttPowerGustDetail",
+    desc: "Tooltip line under the Gust power-up's name: what it does "
+        "(the wind keeps carrying the eggs for a few seconds)");
 
-String labelPuttPowerThickShellDetail() =>
-    Intl.message("Your egg shrugs off the next push another player sends.",
-        name: "labelPuttPowerThickShellDetail",
-        desc: "Tooltip line under the Thick Shell power-up's name: it "
-            "blocks the next Gust, Sprinkler or Corn Rain that would hit "
-            "the player's egg");
+String labelPuttPowerThickShellDetail() => Intl.message(
+    "For half a minute, your egg shrugs off the next push another player sends.",
+    name: "labelPuttPowerThickShellDetail",
+    desc: "Tooltip line under the Thick Shell power-up's name: for "
+        "thirty seconds it blocks the next Gust, Sprinkler or Corn "
+        "Rain that would hit the player's egg");
 
 String labelPuttPowerStrongCoffeeDetail() =>
     Intl.message("Your next shot leaves 30% harder.",
@@ -3476,14 +3477,14 @@ String labelPuttPowerNestSwapDetail() =>
         desc: "Tooltip line under the Nest Swap power-up's name: what it "
             "does");
 
-String labelPuttPowerSprinklerDetail() =>
-    Intl.message("Soak a spot: the eggs around it get pushed away.",
-        name: "labelPuttPowerSprinklerDetail",
-        desc: "Tooltip line under the Sprinkler power-up's name: what it "
-            "does");
+String labelPuttPowerSprinklerDetail() => Intl.message(
+    "Soak a spot for a few seconds: the eggs around it get pushed away.",
+    name: "labelPuttPowerSprinklerDetail",
+    desc: "Tooltip line under the Sprinkler power-up's name: what it "
+        "does");
 
 String labelPuttPowerCornRainDetail() =>
-    Intl.message("Corn kernels rain down and nudge every egg but yours.",
+    Intl.message("Corn kernels rain down and knock every egg but yours about.",
         name: "labelPuttPowerCornRainDetail",
         desc: "Tooltip line under the Corn Rain power-up's name: what it "
             "does");

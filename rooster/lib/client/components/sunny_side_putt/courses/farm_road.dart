@@ -84,7 +84,7 @@ HoleDef _frontStretch() {
     id: 'road_1',
     par: 2,
     tee: _road1Tee,
-    nest: Nest(_road1Nest, 1.7),
+    nest: Nest(_road1Nest, 0.95),
     bounds: _road1Bounds,
     walls: [
       ...fenceAround(_road1Bounds),
@@ -117,7 +117,7 @@ HoleDef _frontStretch() {
 // ditch, up its far bank, to the corner board and up into the lay-by; then
 // the short putt in.
 ReferenceSolution _frontStretchSolution() {
-  const inTheLayBy = Vec2(50.92, 7.56);
+  const inTheLayBy = Vec2(51.83, 3.69);
   return ReferenceSolution([
     const ReferenceShot(-0.370, 0.955),
     putt(inTheLayBy, _road1Nest, arrival: 2.2),
@@ -140,7 +140,7 @@ HoleDef _theHairpin() {
     id: 'road_2',
     par: 3,
     tee: _road2Tee,
-    nest: Nest(_road2Nest, 1.7),
+    nest: Nest(_road2Nest, 0.95),
     bounds: _road2Bounds,
     walls: [
       ...fenceAround(_road2Bounds),
@@ -192,7 +192,7 @@ HoleDef _chickenCrossing() {
     id: 'road_3',
     par: 2,
     tee: _road3Tee,
-    nest: Nest(_road3Nest, 1.7),
+    nest: Nest(_road3Nest, 0.95),
     bounds: _road3Bounds,
     walls: [
       ...fenceAround(_road3Bounds),
@@ -265,7 +265,7 @@ HoleDef _cattleGrid() {
     id: 'road_4',
     par: 3,
     tee: _road4Tee,
-    nest: Nest(_road4Nest, 1.7),
+    nest: Nest(_road4Nest, 0.95),
     bounds: _road4Bounds,
     walls: [
       ...fenceAround(_road4Bounds),
@@ -343,7 +343,7 @@ HoleDef _roundabout() {
     id: 'road_5',
     par: 3,
     tee: _road5Tee,
-    nest: Nest(_road5Nest, 1.7),
+    nest: Nest(_road5Nest, 0.95),
     bounds: _road5Bounds,
     walls: [
       ...fenceAround(_road5Bounds),
@@ -432,7 +432,7 @@ HoleDef _homeStretch() {
     id: 'road_6',
     par: 4,
     tee: _road6Tee,
-    nest: Nest(_road6Nest, 1.7),
+    nest: Nest(_road6Nest, 0.95),
     bounds: _road6Bounds,
     walls: [
       ...fenceAround(_road6Bounds),

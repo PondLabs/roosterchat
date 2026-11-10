@@ -857,10 +857,6 @@ class SunnySidePuttGame extends FlameGame {
 
   final PuttFxLayer fx = PuttFxLayer();
 
-  /// The hop rides, per player: the cosmetic arc of a Chicken Hop, keyed
-  /// off the engine's own flag and sized by the egg's launch speed.
-  final Map<String, _HopRide> _hopRides = {};
-
   String? _fittedHole;
 
   /// The hole's build under way: (steps done, steps in all); null when the
@@ -889,7 +885,6 @@ class SunnySidePuttGame extends FlameGame {
     if (identical(next, match)) return;
     match = next;
     _fittedHole = null;
-    _hopRides.clear();
     _clearCastScenes();
     aim.cancel();
     targeting.cancel();
@@ -967,7 +962,6 @@ class SunnySidePuttGame extends FlameGame {
     aim.wobbleAmplitude = match.config.wobbleMaxRadians;
     aimLayer.update(this, dt);
     fx.update(dt);
-    _updateHopRides();
     final holeId = match.hole?.id;
     if (holeId != null && holeId != _fittedHole) {
       _fitCamera(size);
@@ -1070,21 +1064,24 @@ class SunnySidePuttGame extends FlameGame {
           // The power-ups on this egg, as everyone sees them: the shell's
           // bubble, the ghost's fade, the magnet's pull on the nest.
           final player = match.engine.player(ball.playerId);
-          final ghostUntil = ball.timedUntil[PowerUpFlag.ghost];
+          // A shell about to run out pulses for its last three seconds.
+          final shell = match.engine.shieldSecondsLeft(ball.playerId);
           eggs.add(PuttWorldEgg(
             playerId: ball.playerId,
             position: match.renderPositionOf(ball.playerId),
-            height: eggHeightOf(ball),
             air: match.renderAirOf(ball.playerId),
             velocity: ball.velocity,
             tint: tintFor(ball.playerId),
             look: player?.look ?? PuttLook.standard,
             radius: eggRadius,
             mine: ball.playerId == match.localPlayerId && match.myShotReady,
-            shielded: (player?.shields ?? 0) > 0,
-            ghostSeconds: ghostUntil == null || ghostUntil <= tick
-                ? 0
-                : (ghostUntil - tick - match.alpha) * tickSeconds,
+            shielded: shell > 3 || (shell > 0 && (shell * 4).floor().isEven),
+            // A ghost from the moment it is turned on until the putt it
+            // rides comes to rest.
+            ghostSeconds: (player?.nextShot.ghost ?? false) ||
+                    ball.flagActive(PowerUpFlag.ghost, tick)
+                ? _ghostHolds
+                : 0,
             magnet: (player?.nextShot.magnet ?? false) ||
                 ball.flagActive(PowerUpFlag.magnet, tick),
             // Not putted yet on this hole: a ghost to the others, drawn so.
@@ -1435,60 +1432,23 @@ class SunnySidePuttGame extends FlameGame {
     );
   }
 
-  /// The cosmetic lift of a hopping egg: 0 when the ride is over, a
-  /// parabola over the roll's progress (read off the speed decay) while
-  /// the hop flag is up. The engine stays planar; only the drawing lifts.
-  /// In a flight off a kicker the engine's own altitude stands the egg up
-  /// instead (the world reads it as the egg's `air`): no hop on top.
-  double eggHeightOf(BallBody ball) {
-    if (ball.airborne) return 0;
-    final ride = _hopRides[ball.playerId];
-    if (ride == null) return 0;
-    final t = (1 - ball.speed / ride.launchSpeed).clamp(0.0, 1.0);
-    final maxLift = match.config.physics.ballRadius * 2.6;
-    return 4 * maxLift * t * (1 - t);
-  }
-
-  /// How far over the ground under it egg [ball] is drawn: a hop's lift,
-  /// or its flight's height off a kicker (the name tags and the bubbles
-  /// ride over it).
+  /// How far over the ground under it egg [ball] is drawn: its flight's
+  /// height, off a kicker or on a Chicken Hop (the name tags and the
+  /// bubbles ride over it). A hop is a flight of the engine's own now; it
+  /// used to be an arc drawn over an egg that rolled into every rail.
   double liftOf(BallBody ball) {
     final air = match.renderAirOf(ball.playerId);
     final current = match.hole;
-    if (air == null || current == null) return eggHeightOf(ball);
+    if (air == null || current == null) return 0;
     final at = match.renderPositionOf(ball.playerId);
     return math.max(
         0.0, air - current.groundHeightAt(at) - current.kickerDeckHeightAt(at));
   }
 
-  /// Keeps [_hopRides] honest: a ride starts at the first moving frame
-  /// with the hop flag, dies when the egg settles (the flag's own rule).
-  /// A flight off a kicker ends the ride (the engine's arc takes over); a
-  /// fresh one starts from the turf once the egg is down.
-  void _updateHopRides() {
-    final world = match.engine.world;
-    if (world == null) {
-      _hopRides.clear();
-      return;
-    }
-    _hopRides.removeWhere((playerId, _) {
-      final ball = world.ball(playerId);
-      return ball == null ||
-          ball.asleep ||
-          ball.holed ||
-          ball.airborne ||
-          !ball.flagActive(PowerUpFlag.hop, world.tick);
-    });
-    for (final ball in world.balls) {
-      if (ball.asleep || ball.holed || ball.airborne) continue;
-      if (!ball.flagActive(PowerUpFlag.hop, world.tick)) continue;
-      if (ball.speed < 1.0) continue;
-      _hopRides.putIfAbsent(
-        ball.playerId,
-        () => _HopRide(launchSpeed: math.max(ball.speed, 1.0)),
-      );
-    }
-  }
+  /// What the world is told for an egg that is a ghost: seconds enough
+  /// that it never blinks back to solid (a ghost lasts until its putt
+  /// rests, not a count of seconds).
+  static const double _ghostHolds = 9;
 
   /// Plays this batch's sounds once and drops them (the match refills the
   /// list with the next batch's); without this, an idle frame re-fires
@@ -1599,13 +1559,38 @@ class SunnySidePuttGame extends FlameGame {
   /// Steam trailing a Strong Coffee's putt, per player: seconds left.
   final Map<String, double> _steamRides = {};
 
-  /// Per egg, seconds to its next puff of steam and of the ghost's wisp.
+  /// Per egg, seconds to its next puff of steam and of the ghost's wisp,
+  /// to the wind's next streaks past it, and to the corn's next kernels.
   final Map<String, double> _steamClock = {};
   final Map<String, double> _wispClock = {};
+  final Map<String, double> _windClock = {};
+  final Map<String, double> _cornClock = {};
+
+  /// Seconds to the sprinklers' next burst of spray.
+  double _sprayClock = 0;
+
+  /// Seconds until the wind, the corn and the spray are heard again while
+  /// they last (their sounds run under a second, they run two or three).
+  double _windSound = 0;
+  double _cornSound = 0;
+  double _spraySound = 0;
 
   /// The spot each caster's last cast aimed at: its hits' scenes run
   /// toward it (the gust's wind).
   final Map<String, core.Vec2> _castSpots = {};
+
+  /// Counts the wind's bursts, for a feather on every third.
+  int _windGusts = 0;
+
+  /// One of the lasting casts' sounds: played again [every] seconds while
+  /// it is [on], a little under the cast's own. The seconds left to the
+  /// next one.
+  double _again(double left, bool on, double every, PuttSfx sfx, double dt) {
+    if (!on) return every;
+    if (left - dt > 0) return left - dt;
+    onSfx(sfx, 0.55);
+    return every;
+  }
 
   /// A crow's whole flight, seconds.
   static const double crowFlightSeconds = 1.9;
@@ -1618,6 +1603,12 @@ class SunnySidePuttGame extends FlameGame {
     _steamRides.clear();
     _steamClock.clear();
     _wispClock.clear();
+    _windClock.clear();
+    _cornClock.clear();
+    _sprayClock = 0;
+    _windSound = 0;
+    _cornSound = 0;
+    _spraySound = 0;
     _castSpots.clear();
   }
 
@@ -1732,6 +1723,8 @@ class SunnySidePuttGame extends FlameGame {
         fx.steam(at, count: 4);
       case 'chicken_hop':
         fx.feathers(at, count: 9);
+      case 'ghost_egg':
+        fx.wisps(at, count: 8);
       case 'nest_magnet':
         fx.ring(at, puttPowerUpAccent('nest_magnet'), size: 1.6);
     }
@@ -1792,6 +1785,18 @@ class SunnySidePuttGame extends FlameGame {
       _steamRides.clear();
       return;
     }
+    // Heard for as long as they last: the cast's own sound is the first.
+    var windy = false;
+    var pelted = false;
+    for (final ball in world.balls) {
+      if (ball.holed) continue;
+      windy = windy || world.windOn(ball.playerId) != core.Vec2.zero;
+      pelted = pelted || world.cornOn(ball.playerId);
+    }
+    _windSound = _again(_windSound, windy, 0.7, PuttSfx.gust, dt);
+    _cornSound = _again(_cornSound, pelted, 0.7, PuttSfx.cornRain, dt);
+    _spraySound =
+        _again(_spraySound, world.sprays.isNotEmpty, 0.9, PuttSfx.water, dt);
     for (final ball in world.balls) {
       final id = ball.playerId;
       if (ball.holed) {
@@ -1823,8 +1828,9 @@ class SunnySidePuttGame extends FlameGame {
           _steamClock[id] = next;
         }
       }
-      // Ghost Egg: pale wisps off it while it lasts.
-      if (ball.flagActive(PowerUpFlag.ghost, world.tick)) {
+      // Ghost Egg: pale wisps off it from the cast until its putt rests.
+      if (ball.flagActive(PowerUpFlag.ghost, world.tick) ||
+          (match.engine.player(id)?.nextShot.ghost ?? false)) {
         final next = (_wispClock[id] ?? 0) - dt;
         if (next <= 0) {
           fx.wisps(at, count: 1);
@@ -1832,6 +1838,52 @@ class SunnySidePuttGame extends FlameGame {
         } else {
           _wispClock[id] = next;
         }
+      }
+      // Gust: the wind keeps running past the egg for as long as it blows.
+      final wind = world.windOn(id);
+      if (wind != core.Vec2.zero) {
+        final next = (_windClock[id] ?? 0) - dt;
+        if (next <= 0) {
+          final toward = at + wind.normalized(const core.Vec2(1, 0)) * 8;
+          fx.windBehind(at, toward, count: 6);
+          if (_windGusts++ % 3 == 0) fx.windFeathers(at, toward, count: 1);
+          _windClock[id] = 0.2;
+        } else {
+          _windClock[id] = next;
+        }
+      } else {
+        _windClock.remove(id);
+      }
+      // Corn Rain: kernels keep falling round the egg while they hit it.
+      if (world.cornOn(id)) {
+        final next = (_cornClock[id] ?? 0.25) - dt;
+        if (next <= 0) {
+          fx.kernels(at, count: 7, inside: match.hole?.bounds);
+          _cornClock[id] = 0.25;
+        } else {
+          _cornClock[id] = next;
+        }
+      } else {
+        _cornClock.remove(id);
+      }
+    }
+    // Sprinkler: it sprays for as long as it runs, on the spot and on every
+    // egg in it.
+    final sprays = world.sprays;
+    if (sprays.isEmpty) {
+      _sprayClock = 0;
+      return;
+    }
+    _sprayClock -= dt;
+    if (_sprayClock > 0) return;
+    _sprayClock = 0.35;
+    for (final spray in sprays) {
+      fx.ring(spray.center, PuttPalette.water, size: spray.radius);
+      fx.soak(spray.center);
+      for (final ball in world.balls) {
+        if (ball.holed || spray.spared.contains(ball.playerId)) continue;
+        final at = match.renderPositionOf(ball.playerId);
+        if (at.distanceTo(spray.center) <= spray.radius) fx.soak(at);
       }
     }
   }
@@ -1981,13 +2033,6 @@ class SunnySidePuttGame extends FlameGame {
 
   @override
   ui.Color backgroundColor() => const ui.Color(0x00000000);
-}
-
-/// One egg's hop: how fast it left, so the drawn arc knows its length.
-class _HopRide {
-  final double launchSpeed;
-
-  const _HopRide({required this.launchSpeed});
 }
 
 /// A Thieving Crow's flight: whose egg it heads for, what it carries, the

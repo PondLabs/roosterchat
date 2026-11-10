@@ -670,61 +670,201 @@ Float64List holeEndSting(Rng rng) {
   ], length: total));
 }
 
-/// The match's end: a pickup roll, IV, V7 and a big I with the whistle
-/// riding high, then the host has the last word.
-Float64List victoryFanfare(Rng rng) {
-  const b = 0.5;
-  final banjo = <(double, Float64List, double)>[];
-  const roll = [67.0, 71.0, 74.0, 79.0];
-  for (var step = 0; step < 4; step++) {
-    banjo.add((
-      step * b / 4,
-      _bandPluck(roll[step], 0.3, banjoString, rng, 0.8),
-      1.0
+/// One pair of hands: a few bursts of band-passed noise a few milliseconds
+/// apart (palms never land at once), ringing about a tenth of a second.
+Float64List _clap(Rng rng, {double hz = 1200}) {
+  final out = Float64List(samplesFor(0.14));
+  final body = Svf();
+  final snap = Svf();
+  final starts = [0.0, rng.range(0.007, 0.011), rng.range(0.015, 0.021)];
+  for (var i = 0; i < out.length; i++) {
+    final t = i / sampleRate;
+    var env = 0.0;
+    for (final start in starts) {
+      if (t >= start) env += math.exp(-(t - start) / 0.011);
+    }
+    env = math.min(env, 1.2) + 0.35 * math.exp(-t / 0.045);
+    final noise = rng.bipolar();
+    body.tick(noise, hz, 1.6);
+    snap.tick(noise, hz * 2.3, 1.2);
+    out[i] = (body.bandUnity + snap.bandUnity * 0.5) * env;
+  }
+  return edges(out, attack: 0.0004, release: 0.02);
+}
+
+/// A crowd clapping and settling down: [hands] claps scattered over
+/// [length] seconds, thick at the start and thinning out.
+Float64List _applause(Rng rng, {double length = 2.4, int hands = 150}) {
+  final parts = <(double, Float64List, double)>[];
+  for (var i = 0; i < hands; i++) {
+    // Squared: most of them land early.
+    final at = math.pow(rng.next(), 1.7).toDouble() * (length - 0.2);
+    final fade = 1 - at / length;
+    parts.add((
+      at,
+      _clap(rng, hz: rng.range(850, 1900)),
+      rng.range(0.25, 0.6) * (0.35 + 0.65 * fade),
     ));
   }
-  const ride = [79.0, 74.0, 71.0, 74.0, 79.0, 74.0, 67.0, 71.0];
-  for (var step = 0; step < ride.length; step++) {
-    banjo.add((
-      3 * b + step * b / 4,
-      _bandPluck(ride[step], 0.3, banjoString, rng, 0.6 - step * 0.03),
-      1.0
+  return arrange(parts, length: length);
+}
+
+/// A rocket off the barn roof: a whistle climbing for [climb] seconds,
+/// then the burst - a thump, a crack of noise, and sparks crackling down.
+Float64List _firework(Rng rng, {double climb = 0.5, double pitch = 1}) {
+  final whistle = Float64List(samplesFor(climb));
+  final breath = Svf();
+  var phase = 0.0;
+  for (var i = 0; i < whistle.length; i++) {
+    final t = i / sampleRate;
+    final hz = 780 *
+        pitch *
+        math.pow(3.1, math.min(1, t / climb)).toDouble() *
+        (1 + 0.02 * math.sin(twoPi * 11 * t));
+    phase += hz / sampleRate;
+    if (phase >= 1) phase -= 1;
+    breath.tick(rng.bipolar(), hz, 4);
+    final env = smoothstep(t / 0.08) * smoothstep((climb - t) / 0.05);
+    whistle[i] = (math.sin(twoPi * phase) * 0.7 + breath.bandUnity * 0.4) * env;
+  }
+  final burst = Float64List(samplesFor(0.5));
+  final boom = Svf();
+  for (var i = 0; i < burst.length; i++) {
+    final t = i / sampleRate;
+    final noise = rng.bipolar();
+    boom.tick(noise, 260 + 500 * math.exp(-t / 0.05), 0.8);
+    burst[i] = boom.low * 1.6 * math.exp(-t / 0.13) +
+        noise * 0.5 * math.exp(-t / 0.012);
+  }
+  final sparks = <(double, Float64List, double)>[];
+  for (var i = 0; i < 46; i++) {
+    final at = math.pow(rng.next(), 1.5).toDouble() * 0.85;
+    final hz = rng.range(2600, 5200);
+    sparks.add((
+      at,
+      strike([(hz, 1, 0.004), (hz * 1.7, 0.5, 0.002)], rng,
+          length: 0.03, click: 0.7, clickHz: 5000, clickDecay: 0.0012),
+      rng.range(0.2, 0.55) * (1 - at / 1.1),
     ));
   }
-  final whistle = _whistleLine([
-    LineNote(b, b * 0.45, 88, velocity: 0.85),
-    LineNote(b * 1.5, b * 0.45, 86, velocity: 0.8),
-    LineNote(b * 2, b * 0.45, 84, velocity: 0.85),
-    LineNote(b * 2.5, b * 0.45, 81, velocity: 0.8),
-    LineNote(b * 3, b * 0.22, 83, velocity: 0.85),
-    LineNote(b * 3.25, b * 0.22, 86, velocity: 0.9),
-    LineNote(b * 3.5, 1.1, 91, velocity: 1.0),
-  ], 5.0, rng);
-  final fiddle = renderLine([
-    LineNote(b * 3, 1.5, 71, velocity: 0.7),
-  ], fiddleStyle, samplesFor(5.0), rng);
-  filterOnce(fiddle, [
-    Biquad.highpass(190),
-    Biquad.peak(460, 1.4, 5),
-    Biquad.peak(2900, 1.6, 5),
-    Biquad.lowpass(6400),
-  ]);
-  final crow = roosterCrow();
-  return _withRoom(arrange([
-    (0, _banjoBody(arrange(banjo, length: 5.0)), 0.55),
+  return arrange([
     (0, whistle, 0.5),
-    (0, fiddle, 0.3),
-    (b, strum(const [52, 55, 60, 64], 0.4, guitarString, rng), 0.5),
-    (b, _bandPluck(36, 0.4, bassString, rng, 1), 0.7),
-    (b, kick(rng, velocity: 0.8), 0.5),
-    (b * 2, strum(const [50, 57, 60, 66], 0.4, guitarString, rng), 0.5),
-    (b * 2, _bandPluck(38, 0.4, bassString, rng, 1), 0.7),
-    (b * 2, brushTap(rng), 0.35),
-    (b * 3, strum(const [55, 59, 62, 67], 1.3, guitarString, rng), 0.6),
-    (b * 3, _bandPluck(43, 1.2, bassString, rng, 1), 0.8),
-    (b * 3, kick(rng), 0.6),
-    (b * 3, brushTap(rng), 0.45),
-    (b * 3, washboard(rng), 0.3),
-    (2.75, crow, 0.42),
-  ], length: 4.4));
+    (climb, burst, 1.0),
+    (climb, strike([(74, 1, 0.09)], rng, length: 0.3, click: 0), 0.8),
+    (climb + 0.05, arrange(sparks, length: 0.95), 0.8),
+  ]);
+}
+
+/// The match's end, whoever won: the barn dance's last eight bars in five
+/// seconds. The fiddle runs up the scale into "shave and a haircut" played
+/// by the whole band, stops and all, the yard clapping along on the hits;
+/// "two bits" lands on a big chord with the fiddle and the whistle on top,
+/// three rockets go up off the barn roof, and the yard claps it out.
+///
+/// (It used to end on the host's crow, the same call a hole in one and
+/// every course's podium already get.)
+Float64List victoryFanfare(Rng rng) {
+  const total = 5.0;
+  const sixteenth = 0.095;
+  const quarter = 0.34;
+  const lick = 8 * sixteenth; // where "shave" lands
+  const last = lick + 6 * quarter; // "bits"
+
+  // The run up: the fiddle on the scale, the banjo rolling under it.
+  const scale = [67.0, 69.0, 71.0, 72.0, 74.0, 76.0, 78.0, 79.0];
+  const roll = [55.0, 59.0, 62.0, 67.0, 59.0, 62.0, 67.0, 71.0];
+  final banjo = <(double, Float64List, double)>[];
+  for (var step = 0; step < 8; step++) {
+    banjo.add((
+      step * sixteenth,
+      _bandPluck(roll[step], 0.25, banjoString, rng, 0.55 + step * 0.04),
+      1.0
+    ));
+  }
+  // Shave, and-a, hair, cut ... two, bits: (quarters in, the tune's note,
+  // the chord under it, the bass).
+  const hits = <(double, double, List<double>, double)>[
+    (0, 79, [55, 59, 62, 67], 43),
+    (1, 74, [55, 59, 62, 67], 43),
+    (1.5, 74, [55, 59, 62, 67], 43),
+    (2, 76, [52, 55, 60, 64], 48),
+    (3, 74, [55, 59, 62, 67], 43),
+    (5, 78, [50, 57, 60, 66], 38),
+  ];
+  final band = <(double, Float64List, double)>[
+    (0, kick(rng, velocity: 0.8), 0.5),
+  ];
+  for (final (quarters, midi, chord, bass) in hits) {
+    final at = lick + quarters * quarter;
+    banjo.add((at, _bandPluck(midi, 0.3, banjoString, rng, 0.9), 1.0));
+    band
+      ..add((at, strum(chord, 0.22, guitarString, rng), 0.5))
+      ..add((at, _bandPluck(bass, 0.25, bassString, rng, 1), 0.7))
+      ..add((at, kick(rng, velocity: 0.85), 0.5))
+      ..add((at, _clap(rng), 0.5))
+      ..add((at + 0.012, _clap(rng, hz: 1500), 0.35));
+  }
+  banjo.add((last, _bandPluck(79, 1.2, banjoString, rng, 1), 1.0));
+  for (var step = 1; step < 10; step++) {
+    // The banjo rolls on under the last chord, dying away.
+    banjo.add((
+      last + step * sixteenth * 1.5,
+      _bandPluck(roll[step % 8] + 12, 0.3, banjoString, rng, 0.5),
+      1 - step * 0.08
+    ));
+  }
+  band
+    ..add((
+      last,
+      strum(const [43, 55, 59, 62, 67, 71], 1.6, guitarString, rng),
+      0.65
+    ))
+    ..add((last, _bandPluck(31, 1.4, bassString, rng, 1), 0.8))
+    ..add((last, kick(rng), 0.65))
+    ..add((last, brushTap(rng), 0.45))
+    ..add((last, washboard(rng, ticks: 9), 0.32))
+    ..add((last, _cowbell(rng), 0.3))
+    ..add((last, _clap(rng), 0.55));
+
+  List<Biquad> fiddleTone() => [
+        Biquad.highpass(190),
+        Biquad.peak(460, 1.4, 5),
+        Biquad.peak(2900, 1.6, 5),
+        Biquad.lowpass(6400),
+      ];
+  final fiddle = renderLine([
+    for (var step = 0; step < 8; step++)
+      LineNote(step * sixteenth, sixteenth * 0.92, scale[step],
+          velocity: 0.7 + step * 0.04, slur: step.isOdd),
+    for (final (quarters, midi, _, _) in hits)
+      LineNote(lick + quarters * quarter, quarter * 0.42, midi + 0.0,
+          velocity: 0.85),
+    LineNote(last, 1.5, 83, velocity: 1.0),
+  ], countryFiddleStyle, samplesFor(total), rng);
+  filterOnce(fiddle, fiddleTone());
+  // The fiddle's double stop under its last note.
+  final fiddleLow = renderLine([
+    LineNote(last, 1.5, 79, velocity: 0.8),
+  ], countryFiddleStyle, samplesFor(total), rng);
+  filterOnce(fiddleLow, fiddleTone());
+  final whistle = _whistleLine([
+    LineNote(last - sixteenth * 2, sixteenth * 0.9, 86, velocity: 0.8),
+    LineNote(last - sixteenth, sixteenth * 0.9, 88, velocity: 0.85, slur: true),
+    LineNote(last, 1.2, 91, velocity: 1.0, cut: true),
+  ], total, rng);
+
+  return _withRoom(
+      arrange([
+        (0, _banjoBody(arrange(banjo, length: total)), 0.55),
+        (0, arrange(band, length: total), 1.0),
+        (0, fiddle, 0.42),
+        (0, fiddleLow, 0.3),
+        (0, whistle, 0.42),
+        // Up with the last two notes, bursting over the chord.
+        (last - 0.62, _firework(rng, climb: 0.62), 0.5),
+        (last - 0.1, _firework(rng, climb: 0.55, pitch: 1.18), 0.42),
+        (last + 0.55, _firework(rng, climb: 0.5, pitch: 0.9), 0.36),
+        (last + 0.05, _applause(rng, length: total - last - 0.05), 0.8),
+      ], length: total),
+      wet: 0.5);
 }

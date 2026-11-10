@@ -11,6 +11,7 @@ import 'dart:math' as math;
 import 'package:rooster/client/components/sunny_side_putt/courses/sunny_side_putt_courses.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/hole.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/physics.dart';
+import 'package:rooster/client/components/sunny_side_putt/core/reach.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
 import 'package:test/test.dart';
 
@@ -34,6 +35,50 @@ void main() {
         } else if (result.strokes > hole.par) {
           failures.add(
               '${course.id}/${hole.id}: reference took ${result.strokes} strokes vs par ${hole.par}');
+        }
+      }
+    }
+    expect(failures, isEmpty, reason: failures.join('\n'));
+  });
+
+  // A Ghost Egg, a Chicken Hop or a Rabbit Hole that ends where no egg can
+  // stand comes back out at the nearest turf (core/reach.dart). On every
+  // hole that turf has to include where the game is played: the tee, the
+  // nest and all round it, every "?" box, every kicker's landing side.
+  test('every hole counts its tee, nest and boxes as turf an egg can stand on',
+      () {
+    const config = PhysicsConfig();
+    final failures = <String>[];
+    for (final course in sunnySidePuttCourses) {
+      for (final entry in course.holes) {
+        final hole = entry.hole;
+        final reach = HoleReach.of(hole, config);
+        void turf(String what, Vec2 at) {
+          if (!reach.at(at)) {
+            failures.add('${course.id}/${hole.id}: $what at $at is not turf');
+          }
+        }
+
+        turf('the tee', hole.tee);
+        turf('the nest', hole.nest.position);
+        for (var i = 0; i < 8; i++) {
+          final angle = i * math.pi / 4;
+          turf(
+              'the nest\'s rim',
+              hole.nest.position +
+                  Vec2(math.cos(angle), math.sin(angle)) * hole.nest.radius);
+        }
+        for (final box in hole.boxes) {
+          turf('the box ${box.id}', box.position);
+        }
+        for (final kicker in hole.kickers) {
+          turf('the kicker\'s lip', kicker.to);
+        }
+        // And nothing in the water, a rock or off the table counts.
+        for (final shape in hole.water) {
+          if (shape is WaterCircle && reach.at(shape.center)) {
+            failures.add('${course.id}/${hole.id}: the pond counts as turf');
+          }
         }
       }
     }

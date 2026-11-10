@@ -44,7 +44,7 @@ HoleDef _firstLight() {
     id: 'coop_1',
     par: 2,
     tee: _coop1Tee,
-    nest: Nest(_coop1Nest, 1.7),
+    nest: Nest(_coop1Nest, 0.95),
     bounds: _coop1Bounds,
     walls: [
       ...fenceAround(_coop1Bounds),
@@ -112,7 +112,7 @@ HoleDef _popHole() {
     id: 'coop_2',
     par: 2,
     tee: _coop2Tee,
-    nest: Nest(_coop2Nest, 1.7),
+    nest: Nest(_coop2Nest, 0.95),
     bounds: _coop2Bounds,
     walls: [
       ...fenceAround(_coop2Bounds),
@@ -171,7 +171,7 @@ HoleDef _pinballParlor() {
     id: 'coop_3',
     par: 3,
     tee: _coop3Tee,
-    nest: Nest(_coop3Nest, 1.7),
+    nest: Nest(_coop3Nest, 0.95),
     bounds: _coop3Bounds,
     walls: [
       ...fenceAround(_coop3Bounds),
@@ -245,7 +245,7 @@ HoleDef _merryGoRound() {
     id: 'coop_4',
     par: 2,
     tee: _coop4Tee,
-    nest: Nest(_coop4Nest, 1.7),
+    nest: Nest(_coop4Nest, 0.95),
     bounds: _coop4Bounds,
     walls: [
       ...fenceAround(_coop4Bounds),
@@ -327,7 +327,7 @@ HoleDef _nestingBoxes() {
     id: 'coop_5',
     par: 3,
     tee: _coop5Tee,
-    nest: Nest(_coop5Nest, 1.4),
+    nest: Nest(_coop5Nest, 0.8),
     bounds: _coop5Bounds,
     walls: [
       ...fenceAround(_coop5Bounds),
@@ -421,7 +421,7 @@ HoleDef _feedingTime() {
     id: 'coop_6',
     par: 4,
     tee: _coop6Tee,
-    nest: Nest(_coop6Nest, 1.7),
+    nest: Nest(_coop6Nest, 0.95),
     bounds: _coop6Bounds,
     walls: [
       ...fenceAround(_coop6Bounds),

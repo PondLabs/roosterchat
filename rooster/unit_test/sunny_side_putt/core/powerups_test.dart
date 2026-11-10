@@ -177,11 +177,11 @@ void main() {
         ..add('test/storm');
       engine.player('p2')!.inventory.add('test/storm');
       expect(engine.usePowerUp('p3', 'test/shell'), isTrue); // shield up
-      expect(engine.player('p3')!.shields, 1);
+      expect(engine.isShielded('p3'), isTrue);
 
       expect(engine.usePowerUp('p3', 'test/storm'), isTrue);
       // p3's own storm: hits p1 and p2, never p3 (caster) - no shield spent.
-      expect(engine.player('p3')!.shields, 1);
+      expect(engine.isShielded('p3'), isTrue);
       engine.drainEvents();
 
       // p2's storm: p3's shield eats it.
@@ -189,7 +189,7 @@ void main() {
       final blocked = engine.drainEvents().whereType<ShieldBlocked>().toList();
       expect(blocked.map((b) => b.playerId), ['p3']);
       expect(blocked.single.casterId, 'p2');
-      expect(engine.player('p3')!.shields, 0);
+      expect(engine.isShielded('p3'), isFalse);
       expect(engine.world!.ball('p3')!.velocity, Vec2.zero);
     });
   });

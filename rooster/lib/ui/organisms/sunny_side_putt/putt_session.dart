@@ -44,7 +44,7 @@ final CallActivity _descriptor = CallActivity(
 /// differs from the host's does not play (see
 /// [PuttSessionController.outdated]). Bump it on ANY change to the physics
 /// or to a course's data (geometry, boxes, pars, tuning).
-const int puttPhysicsVersion = 2;
+const int puttPhysicsVersion = 3;
 
 /// Every course this build ships, by id, as the engine takes them.
 Map<String, CourseDef> _puttCatalog() => {

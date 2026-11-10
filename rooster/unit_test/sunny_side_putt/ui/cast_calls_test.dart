@@ -8,6 +8,7 @@ library;
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rooster/client/components/sunny_side_putt/core/effects/thick_shell.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/powerups.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/rules.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
@@ -353,18 +354,103 @@ void main() {
       PuttWorldEgg egg(String id) =>
           game.buildWorldFrame().eggs.firstWhere((e) => e.playerId == id);
       expect(egg('p2').shielded, isTrue);
-      expect(egg('p3').ghostSeconds, inInclusiveRange(2.5, 3.0));
+      expect(egg('p3').ghostSeconds, greaterThan(1));
       expect(egg('me').magnet, isTrue);
       expect(egg('me').shielded || egg('p2').ghostSeconds > 0, isFalse);
 
-      // The ghost runs out; a cast pops the shell.
-      for (var i = 0; i < 200; i++) {
+      // The ghost waits for its putt, however long its player aims (it
+      // used to be solid again three seconds after the cast)...
+      for (var i = 0; i < 250; i++) {
         await tester.pump(const Duration(milliseconds: 16));
       }
+      expect(egg('p3').ghostSeconds, greaterThan(1));
+      // ...rides it, and is solid again once the egg rests.
+      expect(match.engine.submitShot('p3', 0, 0.2), isTrue);
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(egg('p3').ghostSeconds, greaterThan(1));
+      for (var i = 0; i < 250; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(match.engine.world!.ball('p3')!.asleep, isTrue);
       expect(egg('p3').ghostSeconds, 0);
+      // A cast pops the shell.
       _theyCast(match, 'p3', 'corn_rain');
       await tester.pump(const Duration(milliseconds: 16));
       expect(egg('p2').shielded, isFalse);
+    });
+
+    testWidgets('a shell runs out by itself, pulsing before it goes',
+        (tester) async {
+      final match = _match();
+      final game = SunnySidePuttGame(match: match, onSfx: (_, __) {});
+      await tester.pumpWidget(MaterialApp(home: GameWidget(game: game)));
+      await tester.pump(const Duration(milliseconds: 50));
+      _theyCast(match, 'p2', 'thick_shell');
+      bool shown() => game
+          .buildWorldFrame()
+          .eggs
+          .firstWhere((e) => e.playerId == 'p2')
+          .shielded;
+      expect(shown(), isTrue);
+      // Steady for most of its time.
+      match.engine.advanceSeconds(kThickShellSeconds - 5);
+      expect(shown(), isTrue);
+      // Its last three seconds it comes and goes.
+      match.engine.advanceSeconds(2.5);
+      final pulses = <bool>{};
+      for (var i = 0; i < 20; i++) {
+        match.engine.advanceSeconds(0.1);
+        pulses.add(shown());
+      }
+      expect(pulses, {true, false});
+      // Then it is gone, with no cast to pop it.
+      match.engine.advanceSeconds(1);
+      expect(match.engine.isShielded('p2'), isFalse);
+      expect(shown(), isFalse);
+    });
+
+    testWidgets('the wind, the spray and the corn keep showing while they last',
+        (tester) async {
+      final match = _match();
+      final game = SunnySidePuttGame(match: match, onSfx: (_, __) {});
+      await tester.pumpWidget(MaterialApp(home: GameWidget(game: game)));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Each cast starts with a burst; what is asked here is what comes a
+      // second and a half later, when a one-shot scene's particles are
+      // long gone (none lives over a second).
+      Future<int> lateParticles(String effectId,
+          [PowerUpTarget? target]) async {
+        _theyCast(match, 'p2', effectId, target);
+        for (var i = 0; i < 94; i++) {
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        return game.fx.particles.length;
+      }
+
+      final here = match.engine.world!.ball('me')!.position;
+      expect(
+          await lateParticles(
+              'gust', PowerUpTarget.point(here + const Vec2(8, 0))),
+          greaterThan(0),
+          reason: 'the wind still runs past the eggs it carries');
+      for (var i = 0; i < 400; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(game.fx.particles, isEmpty, reason: 'the wind died down');
+
+      expect(
+          await lateParticles('sprinkler',
+              PowerUpTarget.point(match.engine.world!.ball('me')!.position)),
+          greaterThan(0),
+          reason: 'the sprinkler still sprays');
+      for (var i = 0; i < 400; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(game.fx.particles, isEmpty);
+
+      expect(await lateParticles('corn_rain'), greaterThan(0),
+          reason: 'the corn still falls');
     });
 
     testWidgets('corn rain sends kernels down round the eggs it hits',

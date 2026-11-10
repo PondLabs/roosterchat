@@ -101,9 +101,40 @@ class FakePowerUpContext implements PowerUpContext {
   void impulseBall(String playerId, Vec2 deltaVelocity) =>
       impulses.add(RecordedImpulse(playerId, deltaVelocity));
 
+  /// The delay (ticks) and least speed of each recorded nudge, in order.
+  final nudgeDelays = <int>[];
+  final nudgeMinSpeeds = <double>[];
+
   @override
-  void nudgeBall(String playerId, double maxSpeed) =>
-      nudges.add(RecordedImpulse(playerId, Vec2(maxSpeed, 0)));
+  void nudgeBall(String playerId, double maxSpeed,
+      {double minSpeed = 0, int delayTicks = 0}) {
+    nudges.add(RecordedImpulse(playerId, Vec2(maxSpeed, 0)));
+    nudgeDelays.add(delayTicks);
+    nudgeMinSpeeds.add(minSpeed);
+  }
+
+  /// Recorded [pushBall] winds (the acceleration) and how long each lasts.
+  final pushes = <RecordedImpulse>[];
+  final pushTicks = <int>[];
+
+  @override
+  void pushBall(String playerId, Vec2 accel, int durationTicks) {
+    pushes.add(RecordedImpulse(playerId, accel));
+    pushTicks.add(durationTicks);
+  }
+
+  /// Recorded [spray] calls.
+  final sprays =
+      <({Vec2 center, double radius, double accel, int durationTicks})>[];
+
+  @override
+  void spray(Vec2 center, double radius, double accel, int durationTicks) =>
+      sprays.add((
+        center: center,
+        radius: radius,
+        accel: accel,
+        durationTicks: durationTicks
+      ));
 
   @override
   void teleportBall(String playerId, Vec2 to) =>
@@ -137,8 +168,14 @@ class FakePowerUpContext implements PowerUpContext {
   bool hasPowerUp(String playerId, String effectId) =>
       inventories[playerId]?.contains(effectId) ?? false;
 
+  /// How long each recorded shield holds, in ticks.
+  final shieldTicks = <int>[];
+
   @override
-  void addShield(String playerId) => shields.add(playerId);
+  void addShield(String playerId, int durationTicks) {
+    shields.add(playerId);
+    shieldTicks.add(durationTicks);
+  }
 
   /// Players whose shell stops the cast (and which the fake spent).
   final Set<String> shelled = {};

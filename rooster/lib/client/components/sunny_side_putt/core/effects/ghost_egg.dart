@@ -1,13 +1,16 @@
-// Ghost Egg: the caster's egg passes through walls and obstacles for a
-// few seconds.
+// Ghost Egg: the caster's next putt passes through rails, rocks and hens
+// until the egg comes to rest.
+//
+// Next-shot power-up: the engine applies-and-clears the modifier when the
+// caster's next stroke fires (see `NextShotModifiers` in powerups.dart). It
+// used to switch the ghost on for three seconds from the cast: the three
+// seconds ran out while its player was still aiming.
 
 import 'package:rooster/client/components/sunny_side_putt/core/powerups.dart';
 
-/// How long the ghost state lasts, in seconds, converted to ticks with the
-/// context's tick length so the duration is config-independent.
-const double kGhostEggSeconds = 3;
-
-/// Turns on the ghost flag for the caster's egg.
+/// The caster's next shot passes through rails, rocks and hens. An egg that
+/// rests where none can stand (inside a rock, in a hedge, past the fence)
+/// comes back out at the nearest turf.
 class GhostEggEffect extends PowerUpEffect {
   const GhostEggEffect();
 
@@ -15,14 +18,13 @@ class GhostEggEffect extends PowerUpEffect {
   String get id => 'ghost_egg';
 
   @override
-  PowerUpTiming get timing => PowerUpTiming.timed;
+  PowerUpTiming get timing => PowerUpTiming.nextShot;
 
   @override
   bool get harmful => false;
 
   @override
   void apply(PowerUpContext context) {
-    final duration = (kGhostEggSeconds / context.tickSeconds).round();
-    context.setBallFlagFor(context.casterId, PowerUpFlag.ghost, duration);
+    context.nextShotOf(context.casterId).ghost = true;
   }
 }
