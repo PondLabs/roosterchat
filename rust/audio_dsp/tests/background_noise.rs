@@ -23,7 +23,7 @@
 mod common;
 
 use audio_dsp::highpass::{HighPass, CUTOFF_HZ};
-use audio_dsp::{dfn, Dsp, Params, FRAME_SIZE};
+use audio_dsp::{Dsp, Params, FRAME_SIZE};
 use common::*;
 
 /// Levels: the noise alone, the loud noise alone, the user.
@@ -43,19 +43,20 @@ struct Measured {
     snr0: (f32, f32, f32, f32),
 }
 
-fn run_shipping(capture: &[f32]) -> Run {
+/// The run, and the samples its output trails the capture by.
+fn run_shipping(capture: &[f32]) -> (Run, usize) {
     let mut dsp = Dsp::new(Params::default());
     let r = run(&mut dsp, capture, Feeds::default());
     assert!(
         r.frames.iter().skip(1).all(|f| f.deep_filter),
         "DeepFilterNet did not run on every block"
     );
-    r
+    (r, dsp.latency())
 }
 
 fn alone(noise: &[f32], level: f32) -> (f32, f32) {
     let capture = scale_to(&fit(noise, RATE * 6), level);
-    let r = run_shipping(&capture);
+    let (r, _) = run_shipping(&capture);
     let down = rms_dbfs(&capture[SKIP..r.out.len()]) - rms_dbfs(&r.out[SKIP..]);
     let frames = &r.frames[SKIP / FRAME_SIZE..];
     let open = frames.iter().filter(|f| f.gate_open).count() as f32 / frames.len() as f32;
@@ -77,13 +78,12 @@ fn under_speech(noise: &[f32], snr: f32) -> (f32, f32, f32, f32) {
         .collect();
     let noise = scale_to(&fit(noise, n), rms_dbfs(&active) - snr);
     let capture = mix(&speech, &noise);
-    let r = run_shipping(&capture);
+    let (r, lag) = run_shipping(&capture);
 
     // What the voice should come out as: through the same high-pass, as
-    // late as the model makes it.
+    // late as the model and the gate's lookahead make it.
     let mut reference = speech.clone();
     HighPass::new(CUTOFF_HZ, RATE as f32).process(&mut reference);
-    let lag = dfn::LATENCY;
     let len = r.out.len() - lag;
     let (sdr_out, voice) = si_sdr(&reference[SKIP..len], &r.out[SKIP + lag..]);
     let (sdr_in, _) = si_sdr(&speech[SKIP..len], &capture[SKIP..len]);

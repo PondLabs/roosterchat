@@ -131,7 +131,7 @@ abstract class AudioProcessingManager {
   }
 
   /// Last time the input gate was seen open, i.e. the microphone was being
-  /// sent at full gain. The gate holds for 150 ms and reports come every
+  /// sent at full gain. The gate holds for 250 ms and reports come every
   /// 100 ms, so no opening is missed.
   DateTime? get lastGateOpenAt => _gateOpenAt;
 

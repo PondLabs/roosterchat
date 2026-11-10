@@ -31,14 +31,10 @@ fn engine_name(load: ModelLoad) -> &'static str {
     }
 }
 
-/// Blocks by which the output trails the input: RNNoise's window overlap,
-/// plus DeepFilterNet's lookahead when it runs.
+/// Blocks by which the output trails the input: the suppressor's (RNNoise's
+/// window overlap, or DeepFilterNet's lookahead) and the gate's.
 fn latency_blocks(dsp: &Dsp) -> usize {
-    if dsp.has_deep_filter() {
-        audio_dsp::dfn::LATENCY / FRAME_SIZE
-    } else {
-        1
-    }
+    dsp.latency() / FRAME_SIZE
 }
 
 fn process(params: Params, load: ModelLoad, capture: &[f32]) -> (Run, usize) {

@@ -4,7 +4,27 @@ Client-side noise suppression, input gate and far-end ducking for voice
 rooms. Everything runs on the user's own device before audio leaves the
 client. Browser support is a first-class target.
 
-Status (2026-10-18, last): automatic input sensitivity is more lenient. It
+Status (2026-11-09): three ways the gate and the ducker took the user's own
+voice away, none of which showed in a level averaged over a sentence (see
+"The user's own voice"):
+
+- Automatic input sensitivity still cut the start of sentences. The gate
+  opened when the speech detector was sure, 10 to 60 ms into a word; the
+  thresholds loosened on 2026-10-18 were not what held it back. The audio
+  now trails the decision by 50 ms (`gate::LOOKAHEAD_FRAMES`), so the gate
+  is open before the word it opens for. That is 50 ms more latency.
+- "Reduce echo from other participants" turned the user down by 20 dB on
+  one block in seven of what they said while anyone else was heard, headset
+  or not: it took every dip of the speech probability for silence. It now
+  holds "talking" for 250 ms, like the gate.
+- The same ducker let go three times a second while the far end played
+  without a break (its 300 ms peak hold was a level sampled every 300 ms),
+  so it averaged 10 dB instead of 20 and pumped. And with noise suppression
+  and the gate both off it never did anything.
+
+`tests/voice_gate.rs` holds all three.
+
+Status (2026-10-18): automatic input sensitivity is more lenient. It
 cut the start of sentences, so it opens 6 dB above the background (was 10),
 asks at most -40 dBFS of a voice (was -35) and holds open 250 ms (was 150).
 The VAD's 0.5 stays: at 0.4 loud singing in music opened the gate 5 % of the
@@ -262,13 +282,23 @@ crate resamples). The worker hands unit-scale 480-sample blocks.
    the capture restarts run 20 blocks beside RNNoise before they are heard.
 4. Gate (`gate.rs`): manual threshold, or VAD-driven with hysteresis
    (open above 0.5, close below 0.3) *and* above a threshold it sets from
-   the background level (see the status at the top), 250 ms
+   the background level (see the status of 2026-10-10), 250 ms
    hold, 5 ms attack, 200 ms release, closed gain -40 dB (not a hard mute).
    Held shut while step 2 says the microphone holds only bleed.
-5. Ducker: when the far-end peak (300 ms hold) is above -45 dBFS and the
-   user is not talking, apply -20 dB. "Talking" comes from step 2 when it has
-   learned the playout, from the VAD (below 0.4) otherwise.
-6. Resample back.
+5. Ducker: when the far end's loudest block of the last 300 ms is above
+   -45 dBFS and the user is not talking, apply -20 dB. "Talking" comes from
+   step 2 when it has learned the playout, from the VAD (over 0.4)
+   otherwise, from the level against the threshold without one, and is
+   held for 250 ms.
+6. While a speech detector decides either gain (automatic mode, or the
+   ducker, with noise suppression on) the audio leaves 50 ms after the
+   decision made on it (`gate::LOOKAHEAD_FRAMES`, `Gate::latency`).
+7. Resample back.
+
+With noise suppression on, the background the automatic threshold follows
+is what the suppressor leaves of the room, which is next to nothing: the
+threshold then sits at its -50 dBFS floor, and moves only for noise the
+models do not remove (other voices, loud music).
 
 Parameters and the report cross threads through atomics, and so do the
 render and reference levels (a `fetch_max` mailbox the capture side empties
@@ -279,10 +309,13 @@ with allocations (there is a test for everything else). RNNoise does very
 little against pure full-band white noise; real noise is coloured and the
 fixtures reflect that.
 
-Latency added to the microphone: 30 ms natively (DeepFilterNet's window
-overlap and two blocks of lookahead; RNNoise alone was 10 ms), 50 ms on
-the web (the same 30, plus the worklet's 20 ms round trip through the
-worker; the worklet used to add 10).
+Latency added to the microphone at the shipping settings: 80 ms natively
+(30 for DeepFilterNet's window overlap and two blocks of lookahead, 50 for
+the gate's lookahead; RNNoise alone was 10 ms), 100 ms on the web (the same
+80, plus the worklet's 20 ms round trip through the worker). In manual mode
+or with the gate off, and "Reduce echo from other participants" off too,
+the gate adds none: 30 and 50 ms. `Dsp::latency` says which, and
+`tests/voice_gate.rs` checks it against the audio.
 
 Cost: natively about 1 ms per 10 ms block on a 2017 laptop (i7-7700HQ), and
 half a second to build the model when a call starts. In wasm about 4 ms per
@@ -368,6 +401,55 @@ puts any 48 kHz recording through the DSP (`--rnnoise` for the old
 suppressor, `--no-gate`, `--blocks` for per-block levels, gate and SNR
 estimate), for listening to what a noise leaves.
 
+## The user's own voice
+
+Question (2026-11-09): automatic input sensitivity is "still bugged", and
+does the attenuation work?
+
+The other suites ask whether noise stays out and measure the voice by its
+level over a whole run, which the loud blocks carry. `tests/voice_gate.rs`
+asks what is missing from what the user said: it compares, block by block,
+what leaves the client with what leaves it when nothing may turn the voice
+down (the gate and the ducker off). Three voices (`bdl`, `slt`, `clb`), at
+-22 and -36 dBFS, in a quiet room and under a fan, typing and a restaurant.
+
+| What | Before | Now |
+|---|---|---|
+| The start of an utterance (speech after 300 ms of none), left more than 6 dB down | 10 to 60 ms of nearly every one; over 322 starts 31 ms on average, 56 % losing 30 ms or more | 0 ms, 10 ms on a few |
+| The user's speech turned down more than 3 dB while someone else talks or a stream plays, headset | 13.5 % of it (15.8 % for a voice at -36 dBFS) | 0 % |
+| ...and the start of each utterance then, gate off or manual | 10 to 50 ms | 0 ms |
+| The microphone under a far end that plays without a break, user silent | 10 to 11 dB down, pumping at 3 Hz | 20 dB down |
+| The same with noise suppression and the gate off | 0 dB: the ducker never engaged | 20 dB down |
+
+Why the start of a sentence went missing: the gate opens when RNNoise, on
+what DeepFilterNet left, is over 0.5, and that takes 10 to 60 ms of a word
+(now and then a block at the word's full level). The 2026-10-18 change
+loosened the level threshold, which with suppression on was at its floor
+anyway. Opening earlier on the signals that run ahead of the output
+(RNNoise on the raw microphone, the model's SNR estimate) was tried on the
+recordings: it took the loss from 31 to about 20 ms and opened the gate on
+an electronic beat and on knocks 5 % of the time. Delaying the audio behind
+the decision changes no decision: at 40 ms the starts lose 5 ms on average
+(6 % of them 30 ms or more), at 50 ms 3 ms (1 %), at 60 ms 1.5 ms. 50 ms
+it is; the price is the latency (see "Processing inside `audio_dsp`").
+
+What is still not perfect:
+
+- **A voice quieter than about -47 dBFS** (in a room at -62; -50 in one at
+  -75) does not get through at all, gate or no gate: DeepFilterNet takes it
+  for noise and removes it. At -42 dBFS all of it gets through
+  (`a_quiet_voice_gets_through`). WebRTC's and the browser's gain control
+  run ahead of the DSP and should keep a soft voice well above that, which
+  nothing here measures.
+- **The lookahead is a fixed 50 ms**, paid by everyone with automatic
+  sensitivity or ducking on, for the sake of the 10 to 60 ms the detector
+  needs. `LOOKAHEAD_FRAMES` is the knob; the test says what a smaller one
+  costs.
+- **The ducker with loudspeakers and no headset** relies on the bleed
+  detector to tell the user from the echo; the hold means 250 ms of echo
+  after each of the user's own words is no longer ducked (the gate's hold
+  already let it through).
+
 ## Impulsive noise
 
 Report (2026-09-25): "the microphone keeps picking up noises like me
@@ -438,6 +520,7 @@ receiving no frames. That is the first thing to read when the meter is dead.
 | `rust/audio_dsp/tests/speaker_bleed.rs` | what leaves the client with speakers and no headset, on real speech through a simulated room |
 | `rust/audio_dsp/tests/impulsive_noise.rs` | knocks on the table, alone and under speech, both suppressors side by side |
 | `rust/audio_dsp/tests/background_noise.rs` | eighteen noises alone and under speech, with what each has to keep doing |
+| `rust/audio_dsp/tests/voice_gate.rs` | what the gate and the ducker take from the user's own voice: the start of a sentence, talking while others are heard, a quiet voice, the latency |
 | `rust/audio_dsp/src/highpass.rs` | the 70 Hz high-pass after noise suppression |
 | `rust/audio_dsp/examples/process_wav.rs` | a recording through the DSP, for listening and measuring |
 | `third_party/flutter-webrtc/common/cpp/include/rooster_system_audio_reference.h` | system mix to `rooster_dsp_feed_reference`; `roosterStartSystemAudioReference` / `roosterStopSystemAudioReference` in `flutter_webrtc.cc` |
@@ -469,14 +552,16 @@ Vendored LiveKit and flutter-webrtc changes are marked `// ROOSTER`.
 ## Building and testing
 
 ```sh
-# 29 unit tests, 15 recording driven ones (tests/speaker_bleed.rs), 5 on
-# knocking (tests/impulsive_noise.rs) and 18 on background noise
-# (tests/background_noise.rs)
+# 41 unit tests, 15 recording driven ones (tests/speaker_bleed.rs), 5 on
+# knocking (tests/impulsive_noise.rs), 18 on background noise
+# (tests/background_noise.rs), 8 on bad samples (tests/non_finite.rs) and
+# 8 on the user's own voice (tests/voice_gate.rs)
 cargo test -p audio_dsp
 # every scenario with its measured numbers
 cargo test -p audio_dsp --test speaker_bleed -- --nocapture
 cargo test -p audio_dsp --test impulsive_noise -- --nocapture
 cargo test -p audio_dsp --test background_noise -- --nocapture
+cargo test -p audio_dsp --test voice_gate -- --nocapture
 # or without a local toolchain
 docker run --rm -v "$PWD":/w -w /w rust:1 cargo test -p audio_dsp
 
@@ -519,6 +604,11 @@ tools/voice_dsp/native_noise_loop.sh
 | The DSP takes room noise out (≥ 20 dB) and keeps the voice (≥ -4 dB) | `cargo test -p audio_dsp` | ci `test` |
 | Knocks on the table: > 40 dB down and the gate shut while nobody talks, > 20 dB by the suppressor alone, little added under speech | `tests/impulsive_noise.rs` | ci `test` |
 | Sixteen background noises: removed while the user is quiet (≥ 50 dB), the gate shut even when loud, the voice cleaner under them by what was measured, at most 1.5 dB (10 dB SNR) or 5 dB (0 dB) of it lost and the gate open for ≥ 95 % / 80 % of it; restaurant chatter and another person recorded as they are | `tests/background_noise.rs` | ci `test` |
+| The start of a sentence is not cut: at most 20 ms of an utterance's first 200 ms leaves more than 6 dB down (three voices, two levels, a quiet room and three noises; RNNoise alone too), and at most 2 % of the speech | `tests/voice_gate.rs` | ci `test` |
+| Talking while someone else talks or a stream plays is not turned down (headset; automatic, manual and no gate) | `tests/voice_gate.rs` | ci `test` |
+| The ducker takes the microphone 20 dB down for as long as the far end is heard and the user is silent, lets go when it stops, and does nothing when turned off | `tests/voice_gate.rs`, `gate` unit tests | ci `test` |
+| A voice at -42 dBFS gets through, and the gate is shut before it | `tests/voice_gate.rs` | ci `test` |
+| The delay the DSP reports (`Dsp::latency`) is the delay in the audio, for every setting that changes it | `tests/voice_gate.rs` | ci `test` |
 | A model loading in the background takes over after its warm-up; a disabled one leaves RNNoise suppressing | `audio_dsp` unit tests | ci `test` |
 | In the app's own create path (FFI, model built in the background) DeepFilterNet takes over and suppresses | `native_dsp_test.dart` | ci `test` |
 | The browser runs DeepFilterNet in the worker (or says it was too slow); a missing worker script is caught by `probe()` and `create()` | `web_noise_loop.mjs` | ci `voice-dsp` |
