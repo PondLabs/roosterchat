@@ -116,9 +116,17 @@ jobs:
           echo '/tmp/cores/core.%e.%p' | sudo tee /proc/sys/kernel/core_pattern >/dev/null
           # The step runs under `bash -e`, so the failure has to be caught here
           # or the recording is never finalised and the artifact is unusable.
+          # A freeze is not a crash: the app sits there (hanging up the call
+          # in the Sunny Side Putt e2e, most runs since v1.45.3) until the
+          # job's hour is up, and nothing says where. This step takes nine
+          # minutes when it passes: at twenty the app is aborted, so the
+          # backtrace below shows what every thread was waiting on.
+          ( sleep 1200; pkill -ABRT -x rooster ) &
+          WATCHDOG_PID=$!
           set +e
           scripts/integration-test.sh
           INTEGRATION_TEST_EXIT_CODE=$?
+          kill $WATCHDOG_PID 2>/dev/null
           for core in /tmp/cores/core.*; do
             [ -e "$core" ] || continue
             echo "::group::Backtrace of $core"
