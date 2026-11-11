@@ -77,6 +77,12 @@ the publication and renegotiates, backup codec state is cleared on unpublish
 and before a full-reconnect republish, and the degradation preference is
 applied to backup senders too. Marked `// ROOSTER` in
 `lib/src/participant/local.dart` and `lib/src/track/local/video.dart`.
+On Linux, `linux/task_runner_linux.cc` hands each task to the main loop as
+its own callback, which owns it. The runner used to queue tasks and hand the
+loop a pointer to itself; an audio visualizer stopped with a level still on
+its way from the audio thread (hanging up a call) left a callback that
+locked a mutex in the freed runner on the main thread, and the app froze for
+good. The integration test caught it (its watchdog's backtrace).
 `AudioPublishOptions.stereo` (DJ booth music): `TF_STEREO` on the published
 track, `stereo=1;sprop-stereo=1` munged into our offer for it
 (`lib/src/core/transport.dart`), and the subscriber answer asks for stereo
