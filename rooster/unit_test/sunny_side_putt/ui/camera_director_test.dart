@@ -13,6 +13,8 @@ import 'package:three_js_math/three_js_math.dart' as tjs;
 import 'package:rooster/client/components/sunny_side_putt/core/hole.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/rules.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
+import 'package:rooster/ui/organisms/sunny_side_putt/putt_art.dart'
+    show puttDropSeconds;
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_camera_director.dart';
 import 'package:rooster/ui/organisms/sunny_side_putt/putt_world3d.dart';
 
@@ -420,7 +422,12 @@ void main() {
       myEggHoled: true,
       otherEggs: const [PuttCameraEgg('them', Vec2(10, 20))],
     );
-    run(1.2, holed);
+    // Not while the egg drops into the cup: the close-up went off the tick
+    // the nest took it, with the egg still up on the lip.
+    run(puttDropSeconds - 0.1, holed);
+    expect(director.celebrating, isFalse);
+    expect(rig.pitchDeg, closeTo(PuttCameraRig.pitchDefault, 0.5));
+    run(1.3, holed);
     // Down low on the nest, the chick in its hat whole in the lower middle
     // of the frame: from its feet on the lip (0.5 up) to its hat mid-hop
     // (3.9 up: the viewer's chick is drawn a size up), under the score's
@@ -461,7 +468,7 @@ void main() {
         director.toggleOverview();
       }
       run(1, resting(const Vec2(38, 12)));
-      run(1.2, holed);
+      run(1.2 + puttDropSeconds, holed);
       expect(director.celebrating, isTrue, reason: take);
       expect(rig.target.distanceTo(nest), lessThan(4.5), reason: take);
       expect(rig.pitchDeg, closeTo(PuttCameraDirector.celebratePitch, 3),

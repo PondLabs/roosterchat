@@ -130,7 +130,6 @@ class PuttAudio {
         PuttSfx.boost => 'boost.wav',
         PuttSfx.portal => 'portal.wav',
         PuttSfx.powerUpPicked => 'pick.wav',
-        PuttSfx.powerUpRoll => 'roll.wav',
         PuttSfx.powerUpReveal => 'reveal.wav',
         PuttSfx.powerUpUsed => 'use.wav',
         PuttSfx.timerCue => 'cue.mp3',

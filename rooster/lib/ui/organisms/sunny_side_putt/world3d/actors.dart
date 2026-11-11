@@ -18,7 +18,7 @@ const double _eggVisualScale = 1.2;
 class _SinkingEgg {
   _SinkingEgg(this.view, this.nest, {required this.depth});
 
-  static const double life = 0.42;
+  static const double life = puttDropSeconds;
 
   /// When (of [life]) it stops sliding and falls.
   static const double fallFrom = 0.25;

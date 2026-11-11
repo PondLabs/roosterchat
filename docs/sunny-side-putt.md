@@ -193,16 +193,14 @@ spares their egg, the sprinkler waters around it. Taking a box plays out
 as in Putt Party, for the eye, the ear and the HUD: on the green the
 carton swells and spins away while its card bursts apart in yolk and
 orange with a puff, stars and a ring, for everyone to see, and the box
-pops for the one who took it. In their carton the slot the prize falls
-into spins like a slot machine's reel through the other power-ups,
-ticking a turn at a time and slowing (1.25 s, the slot not usable until
-it stops), then stops on the prize with a chime run, the icon popping big
-and settling while a flash spreads round the slot, and the prize's name
-shows above it for a couple of seconds (the tooltip, on hover, says what
-it does). A Barnyard Chaos box spins both slots it fills. Only a box spins
-a reel (`PuttMatch.myPickSerials`, counted per slot): a power-up moving
-along after a cast, or one a crow brings, just says its name. With the
-system's reduced motion on, the prize lands at once with its chime.
+pops for the one who took it. In their carton the prize lands in its slot
+at once with a chime run, the icon popping big and settling while a flash
+spreads round the slot, and the prize's name shows above it for a couple
+of seconds (the tooltip, on hover, says what it does). Only a box's prize
+lands that way (`PuttMatch.myPickSerials`, counted per slot): a power-up
+moving along after a cast, or one a crow brings, just says its name. There
+is no reel: the prize was told by a slot machine's card in the middle of
+the screen, over the egg being played, and players wanted it gone.
 
 | Power-up | Does |
 |---|---|
@@ -753,7 +751,12 @@ it skips the opening, on the web as on desktop. A holed egg slides to the
 middle and falls below the opening in about 0.3 s; from then on its shell
 and outline draw opaque with the cup's inside, before that disc (which
 would cut it at the turf line), as the chick rising out of the cup always
-does; the
+does. The party waits for the drop (`puttDropSeconds`, 0.42 s, in
+`putt_art.dart`): the camera's close-up, the chick, the straw and the
+confetti, the score's banner and the nest's sounds all start when the egg
+is down the cup, under the hole's own framing until then. They used to
+start the tick the physics takes the egg, with it still up on the lip,
+which read as a cutscene for a putt the game already knew was in. The
 confetti crown of the viewer's own sink keeps near the nest, and paper
 that lands fades away. The power-ups' marks on the green - the
 targeting rings and push arrows, the wind's streaks, the swap's violet -
@@ -944,8 +947,8 @@ soundboard's CC0 "Rooster Crowing" by LoafDV
   clacks on another egg, and a hen clucks or a duck quacks when one bumps
   it, each as loud as the hit; water plops; the nest rustles and chimes,
   the chick peeps as it hatches and the host crows for a hole in one;
-  speed strips whoosh, a "?" crate pops, the carton's reel ticks round
-  and chimes up a run when it stops, a rabbit hole goes thwup, the
+  speed strips whoosh, a "?" crate pops, the carton chimes up a run as
+  the prize lands in its slot, a rabbit hole goes thwup, the
   silo sucks and booms, a fall off the table whistles down; an egg thrown
   off a kicker gets the ramp's thunk under a rising whoosh and thumps down
   into the straw (the thump, softer, for a bump over a lip); a banjo opens

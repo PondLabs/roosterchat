@@ -45,156 +45,9 @@ void main() {
         reason: 'a moment, then the icon alone');
   });
 
-  testWidgets("a box's prize is told big in the middle, then flies to its slot",
-      (tester) async {
-    tester.view.physicalSize = const Size(1280, 800);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    final sounds = <PuttSfx>[];
-    final landed = ValueNotifier<List<int>>(const [0, 0, 0]);
-    addTearDown(landed.dispose);
-    Widget hud(List<String> slots, List<int> picks) => MaterialApp(
-          home: Scaffold(
-            body: Stack(
-              children: [
-                Align(
-                  alignment: Alignment.bottomRight,
-                  child: PuttInventory(
-                      slots: slots, pickSerials: picks, landed: landed),
-                ),
-                Positioned.fill(
-                  child: PuttPickupReveal(
-                    slots: slots,
-                    pickSerials: picks,
-                    landed: landed,
-                    onSfx: sounds.add,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-    Future<void> frames(int count) async {
-      for (var i = 0; i < count; i++) {
-        await tester.pump(const Duration(milliseconds: 16));
-      }
-    }
-
-    await tester.pumpWidget(hud(const [], const [0, 0, 0]));
-    expect(find.byKey(const Key('putt-pickup-reveal')), findsNothing);
-    await tester.pumpWidget(hud(const ['gust'], const [1, 0, 0]));
-    await frames(20);
-    // A big card in the middle of the screen, its reel turning and
-    // ticking; the name waits for the stop. The slot holds a "?".
-    final card = tester.getRect(find.byKey(const Key('putt-pickup-reveal')));
-    expect(card.center.dx, closeTo(640, 1));
-    expect(card.center.dy, inInclusiveRange(200, 400));
-    expect(card.width, greaterThanOrEqualTo(300));
-    expect(card.height, greaterThanOrEqualTo(240));
-    expect(find.byKey(const Key('putt-pickup-reel')), findsOneWidget);
-    expect(find.text(puttPowerUpName('gust')), findsNothing);
-    expect(find.byKey(const Key('putt-slot-pending')), findsOneWidget);
-    expect(sounds.where((s) => s == PuttSfx.powerUpRoll), isNotEmpty);
-    expect(sounds, isNot(contains(PuttSfx.powerUpReveal)));
-    await frames(80);
-    // Stopped on the prize: its name and what it does, under it.
-    expect(find.byKey(const Key('putt-pickup-reel')), findsNothing);
-    expect(find.byKey(const Key('putt-pickup-prize')), findsOneWidget);
-    expect(find.text(puttPowerUpName('gust')), findsOneWidget);
-    expect(find.text(puttPowerUpDetail('gust')), findsOneWidget);
-    expect(sounds.where((s) => s == PuttSfx.powerUpRoll).length,
-        greaterThanOrEqualTo(8),
-        reason: 'a tick a turn, through the reel');
-    expect(sounds.where((s) => s == PuttSfx.powerUpReveal), hasLength(1));
-    expect(find.byKey(const Key('putt-slot-pending')), findsOneWidget,
-        reason: 'the slot waits for the card');
-    // Then it flies down into the slot, which shows the prize.
-    await tester.pump(PuttPickupReveal.arrival);
-    await tester.pump(const Duration(milliseconds: 16));
-    expect(find.byKey(const Key('putt-pickup-reveal')), findsNothing);
-    expect(find.byKey(const Key('putt-slot-pending')), findsNothing);
-    expect(landed.value, [1, 0, 0]);
-    expect(sounds.where((s) => s == PuttSfx.powerUpReveal), hasLength(1));
-    // Another power-up moving into the slot after a cast tells nothing.
-    sounds.clear();
-    await tester.pumpWidget(hud(const ['sprinkler'], const [1, 0, 0]));
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(find.byKey(const Key('putt-pickup-reveal')), findsNothing);
-    expect(sounds, isEmpty);
-    await tester.pump(const Duration(seconds: 3));
-  });
-
-  testWidgets("two boxes in a row are told one after the other",
-      (tester) async {
-    final landed = ValueNotifier<List<int>>(const [0, 0, 0]);
-    addTearDown(landed.dispose);
-    Widget reveal(List<String> slots, List<int> picks) => MaterialApp(
-          home: PuttPickupReveal(
-              slots: slots, pickSerials: picks, landed: landed),
-        );
-    await tester.pumpWidget(reveal(const [], const [0, 0, 0]));
-    await tester
-        .pumpWidget(reveal(const ['gust', 'sprinkler'], const [1, 1, 0]));
-    await tester.pump(const Duration(milliseconds: 1600));
-    expect(find.text(puttPowerUpName('gust')), findsOneWidget);
-    expect(landed.value, [0, 0, 0]);
-    await tester.pump(PuttPickupReveal.arrival);
-    await tester.pump(const Duration(milliseconds: 1600));
-    expect(landed.value, [1, 0, 0]);
-    expect(find.text(puttPowerUpName('sprinkler')), findsOneWidget);
-    await tester.pump(PuttPickupReveal.arrival);
-    expect(landed.value, [1, 1, 0]);
-  });
-
-  testWidgets("my egg in the nest hurries the card off the hatch",
-      (tester) async {
-    final landed = ValueNotifier<List<int>>(const [0, 0, 0]);
-    addTearDown(landed.dispose);
-    Widget reveal(List<int> picks, {bool hurry = false}) => MaterialApp(
-          home: PuttPickupReveal(
-              slots: const ['gust'],
-              pickSerials: picks,
-              landed: landed,
-              hurry: hurry),
-        );
-    await tester.pumpWidget(reveal(const [0, 0, 0]));
-    await tester.pumpWidget(reveal(const [1, 0, 0]));
-    await tester.pump(const Duration(milliseconds: 600));
-    // The sink while the reel turns: it still stops and names the prize.
-    await tester.pumpWidget(reveal(const [1, 0, 0], hurry: true));
-    await tester.pump(const Duration(milliseconds: 1000));
-    expect(find.text(puttPowerUpName('gust')), findsOneWidget);
-    // Then off within a moment, not after the full hold.
-    for (var i = 0; i < 70; i++) {
-      await tester.pump(const Duration(milliseconds: 16));
-    }
-    expect(find.byKey(const Key('putt-pickup-reveal')), findsNothing);
-    expect(landed.value, [1, 0, 0]);
-  });
-
-  testWidgets("with reduced motion the prize shows at once, no reel",
-      (tester) async {
-    final landed = ValueNotifier<List<int>>(const [0, 0, 0]);
-    addTearDown(landed.dispose);
-    Widget reveal(List<String> slots, List<int> picks) => MaterialApp(
-          home: MediaQuery(
-            data: const MediaQueryData(disableAnimations: true),
-            child: PuttPickupReveal(
-                slots: slots, pickSerials: picks, landed: landed),
-          ),
-        );
-    await tester.pumpWidget(reveal(const [], const [0, 0, 0]));
-    await tester.pumpWidget(reveal(const ['gust'], const [1, 0, 0]));
-    await tester.pump(const Duration(milliseconds: 200));
-    expect(find.byKey(const Key('putt-pickup-reel')), findsNothing);
-    expect(find.text(puttPowerUpName('gust')), findsOneWidget);
-    expect(landed.value, [1, 0, 0]);
-    await tester.pump(const Duration(seconds: 3));
-    expect(find.byKey(const Key('putt-pickup-reveal')), findsNothing);
-  });
-
-  testWidgets("a carton alone names a box's prize over its slot at once",
-      (tester) async {
+  // The prize was told by a big card in the middle of the screen, a slot
+  // machine's reel over the egg being played.
+  testWidgets("a box's prize is told in its slot, at once", (tester) async {
     final sounds = <PuttSfx>[];
     Widget carton(List<String> slots, List<int> picks) => MaterialApp(
           home: Scaffold(
@@ -211,9 +64,15 @@ void main() {
     await tester.pumpWidget(carton(const [], const [0, 0, 0]));
     await tester.pumpWidget(carton(const ['gust'], const [1, 0, 0]));
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.byKey(const Key('putt-slot-pending')), findsNothing);
     expect(find.byKey(const Key('putt-slot-fresh')), findsOneWidget);
+    expect(find.text(puttPowerUpName('gust')), findsOneWidget);
     expect(sounds, [PuttSfx.powerUpReveal]);
+    await tester.pump(const Duration(seconds: 3));
+    // Another power-up moving into the slot after a cast is no prize.
+    sounds.clear();
+    await tester.pumpWidget(carton(const ['sprinkler'], const [1, 0, 0]));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(sounds, isEmpty);
     await tester.pump(const Duration(seconds: 3));
   });
 
@@ -646,6 +505,10 @@ void main() {
         if (match.phase != PuttPhase.holePlay) break;
       }
       expect(match.phase, PuttPhase.holeScoreboard);
+      // The egg drops into the cup, then its score is called.
+      for (var frame = 0; frame < 30; frame++) {
+        match.update(1 / 60);
+      }
 
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(body: PuttHud(match: match, onOpenMenu: () {})),

@@ -14,6 +14,14 @@ library;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+/// How long an egg the nest has taken is seen dropping into the cup. The
+/// party for it (the camera in on the nest, the chick, the confetti, the
+/// banner, the sounds) starts when it is down, not the tick the physics
+/// takes it: that is 0.09 s after its middle crosses the lip, with the egg
+/// still up on the turf, so the cut read as the game knowing the putt was
+/// in before it had dropped.
+const double puttDropSeconds = 0.42;
+
 /// The brand palette (docs/brand/README.md), plus the shades the board
 /// derives from it. No colour outside these on the green.
 abstract final class PuttPalette {

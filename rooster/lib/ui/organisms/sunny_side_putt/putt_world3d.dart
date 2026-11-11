@@ -1696,24 +1696,6 @@ class PuttWorld3D {
         view.intoCup();
         _sinking.add(_SinkingEgg(view, nest.position,
             depth: _nestCupDepth(nest.radius)));
-        // The host celebrates every egg that drops in, the straw flies and
-        // the flag shakes; the viewer's own sink gets the confetti column
-        // and the camera's punch.
-        _cheerUntil = frame.time + 2.2;
-        _flagShakeUntil = frame.time + 1.4;
-        final floor = _ground.at(nest.position);
-        // For the viewer's own: none of it between the camera and the chick
-        // hatching there.
-        final toCamera = Vec2(camera.position.x - nest.position.x,
-            camera.position.z - nest.position.y);
-        final clear = view.everMine && toCamera.length > 1e-6 ? toCamera : null;
-        _bursts.straw(nest.position, nest.radius,
-            floor: floor, clearToward: clear);
-        if (view.everMine) {
-          _bursts.confettiColumn(nest.position,
-              floor: floor, radius: nest.radius, clearToward: clear);
-          rig.punch();
-        }
       } else {
         _dropEgg(view);
       }
@@ -1737,8 +1719,25 @@ class PuttWorld3D {
       // Its silhouette would show through the opening's depth.
       view._xray.visible = false;
       if (t >= 1) {
-        // In: the egg hatches.
+        // Down the cup ([puttDropSeconds]): the egg hatches, the host
+        // celebrates it, the straw flies and the flag shakes; the viewer's
+        // own gets the confetti column and the camera's punch.
         _hatch(view, sinking.nest);
+        _cheerUntil = frame.time + 2.2;
+        _flagShakeUntil = frame.time + 1.4;
+        final radius = _hole?.nest.radius ?? 1.2;
+        final floor = _ground.at(sinking.nest);
+        // For the viewer's own: none of it between the camera and the chick
+        // hatching there.
+        final toCamera = Vec2(camera.position.x - sinking.nest.x,
+            camera.position.z - sinking.nest.y);
+        final clear = view.everMine && toCamera.length > 1e-6 ? toCamera : null;
+        _bursts.straw(sinking.nest, radius, floor: floor, clearToward: clear);
+        if (view.everMine) {
+          _bursts.confettiColumn(sinking.nest,
+              floor: floor, radius: radius, clearToward: clear);
+          rig.punch();
+        }
         _dropEgg(view);
         return true;
       }

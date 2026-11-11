@@ -6076,12 +6076,6 @@
     "type": "text",
     "placeholders": {}
   },
-  "labelPuttNewPowerUp": "New power-up!",
-  "@labelPuttNewPowerUp": {
-    "description": "Heading of the card in the middle of the screen that reveals the power-up a box on the green just gave the player",
-    "type": "text",
-    "placeholders": {}
-  },
   "labelPuttLeaveGreen": "Leave the green",
   "@labelPuttLeaveGreen": {
     "description": "Button that ends the match for this player and leaves the game",

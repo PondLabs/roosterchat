@@ -57,9 +57,7 @@ enum PuttSfx {
   portal,
   powerUpPicked,
 
-  /// The carton's reel spinning through the power-ups after a "?" box (a
-  /// tick a turn), and the one it stops on.
-  powerUpRoll,
+  /// A "?" box's prize landing in its slot.
   powerUpReveal,
   powerUpUsed,
   timerCue,
@@ -368,6 +366,7 @@ class PuttMatch extends ChangeNotifier {
     _lookWait = math.max(0, _lookWait - dt);
     _keepLook();
     if (paused) return;
+    _landDrops(dt);
     if (phase == PuttPhase.holeScoreboard && engine.scoreboardSecondsLeft > 0) {
       // The results' pause runs on the engine's ticks, like a hole's
       // clock: the match moves on by itself at the same tick on every
@@ -422,6 +421,37 @@ class PuttMatch extends ChangeNotifier {
       _trimBatches();
       notifyListeners();
     }
+  }
+
+  /// Eggs the nest has taken, still dropping into it: seconds left, the
+  /// player, the score's term.
+  final List<(double, String, ScoreTerm)> _drops = [];
+
+  /// An egg down the cup ([puttDropSeconds] after the nest took it) is
+  /// told: its burst, its sounds, and my own score's banner.
+  void _landDrops(double dt) {
+    if (_drops.isEmpty) return;
+    final dropping = <(double, String, ScoreTerm)>[];
+    for (final (left, playerId, term) in _drops) {
+      if (left > dt) {
+        dropping.add((left - dt, playerId, term));
+        continue;
+      }
+      fxSpots.add(PuttFxSpot(PuttFxSpotKind.holed, who: playerId));
+      if (playerId == localPlayerId) {
+        _announce(PuttHeadlineKind.scoreTerm, scoreTermText(term), term: term);
+      }
+      notices.addAll([
+        const PuttNotice(PuttSfx.holed),
+        const PuttNotice(PuttSfx.hatch),
+        if (term == ScoreTerm.holeInOne) const PuttNotice(PuttSfx.crow),
+      ]);
+    }
+    final landed = dropping.length < _drops.length;
+    _drops
+      ..clear()
+      ..addAll(dropping);
+    if (landed) notifyListeners();
   }
 
   /// After the last tick, where is egg [playerId] drawn?
@@ -1008,17 +1038,13 @@ class PuttMatch extends ChangeNotifier {
         _hasPutted = true;
         return [PuttNotice(puttSfxFor(event.power))];
       case PlayerHoled():
-        fxSpots.add(PuttFxSpot(PuttFxSpotKind.holed, who: event.playerId));
-        final term = ScoreTerm.of(event.strokes, par);
-        if (event.playerId == localPlayerId) {
-          _announce(PuttHeadlineKind.scoreTerm, scoreTermText(term),
-              term: term);
-        }
-        return [
-          const PuttNotice(PuttSfx.holed),
-          const PuttNotice(PuttSfx.hatch),
-          if (term == ScoreTerm.holeInOne) const PuttNotice(PuttSfx.crow),
-        ];
+        // Told when the egg is down the cup ([_landDrops]).
+        _drops.add((
+          puttDropSeconds,
+          event.playerId,
+          ScoreTerm.of(event.strokes, par),
+        ));
+        return const [];
       case TimerCue():
         return const [PuttNotice(PuttSfx.timerCue)];
       case TimerTick():
@@ -1032,7 +1058,7 @@ class PuttMatch extends ChangeNotifier {
             event.completed ? labelPuttHoleCleared() : labelPuttHoleTimedOut();
         // My last stroke's term keeps the banner when it only just went
         // up; the results card says how the hole ended either way.
-        if (!_myTermIsFresh) {
+        if (!_myTermIsFresh && !_drops.any((d) => d.$2 == localPlayerId)) {
           _announce(PuttHeadlineKind.holeEnd, _holeEndLine!);
         }
         return [

@@ -20,6 +20,7 @@ import 'package:rooster/client/components/sunny_side_putt/core/hole.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/rules.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/vec.dart';
 
+import 'putt_art.dart' show puttDropSeconds;
 import 'putt_world3d.dart';
 
 /// Another player's egg still out on the green, as the director sees it.
@@ -110,10 +111,13 @@ class PuttCameraDirector {
   /// opening sweep, the camera goes straight to the hole's play framing.
   bool reduceMotion = false;
 
-  /// How long the camera stays in on the nest after the viewer's own egg
-  /// drops in: the sink, the hatch, the chick's hops.
+  /// How long the camera stays in on the nest once the viewer's own egg is
+  /// down the cup: the hatch, the chick's hops.
   static const double celebrateSeconds = 3.0;
 
+  /// How long my egg has been the nest's, seconds: the close-up waits
+  /// [puttDropSeconds] of it, the egg dropping in under the hole's framing.
+  double _holedFor = 0;
   bool _wasHoled = false;
   double _celebrateUntil = 0;
   Vec2? _celebrateAt;
@@ -300,6 +304,7 @@ class PuttCameraDirector {
       _playFramed = false;
       _showingBetween = false;
       _wasHoled = false;
+      _holedFor = 0;
       _celebrateUntil = 0;
       _watching = null;
       _watchFramedAt = null;
@@ -337,12 +342,14 @@ class PuttCameraDirector {
       if (!_userCamera) rig.glideTo(distance: _playDistance, yaw: _playYaw);
     }
 
-    // My egg just dropped in: the camera comes in on the nest for the
+    // My egg is down the cup: the camera comes in on the nest for the
     // hatch, then frames the rest. Every time: a player who had zoomed,
     // orbited or asked for the whole hole used to get no close-up at all
     // (the camera left where they had it, often the middle of the green),
     // so the same sink showed the chick one time and not the next.
-    if (cue.myEggHoled && !_wasHoled) {
+    _holedFor = cue.myEggHoled ? _holedFor + dt : 0;
+    final down = cue.myEggHoled && _holedFor >= puttDropSeconds;
+    if (down && !_wasHoled) {
       _celebrateUntil = _holeClock + celebrateSeconds;
       _overview = false;
       // Down low, from the side the camera already looks from (the chick
@@ -363,7 +370,7 @@ class PuttCameraDirector {
         closeUp: true,
       );
     }
-    _wasHoled = cue.myEggHoled;
+    _wasHoled = down;
     if (_holeClock < _celebrateUntil) {
       _follow = _celebrateAt ?? hole.nest.position;
       return;

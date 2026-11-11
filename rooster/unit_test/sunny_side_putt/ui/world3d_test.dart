@@ -852,15 +852,21 @@ void main() {
       // My egg at the nest's mouth, then gone into it.
       world.applySnapshot(PuttWorldFrame(
           time: time, eggs: [eggAt(nest + const Vec2(0.3, 0), mine: true)]));
+      List<tjs.Object3D> paper() => walk(world.scene)
+          .where((o) => o.name == 'burst-paper' && o.visible)
+          .toList();
+      for (var i = 0; i < 18; i++) {
+        time += 0.016;
+        world.applySnapshot(PuttWorldFrame(time: time));
+      }
+      expect(paper(), isEmpty, reason: 'not while the egg is dropping in');
       for (var i = 0; i < 18; i++) {
         time += 0.016;
         world.applySnapshot(PuttWorldFrame(time: time));
       }
       final eye = world.camera.position;
       final toCamera = math.atan2(eye.z - nest.y, eye.x - nest.x);
-      final pieces = walk(world.scene)
-          .where((o) => o.name == 'burst-paper' && o.visible)
-          .toList();
+      final pieces = paper();
       expect(pieces, isNotEmpty, reason: 'the confetti flies');
       for (final piece in pieces) {
         final angle =

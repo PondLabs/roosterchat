@@ -328,7 +328,13 @@ void main() {
       }
       expect(match.phase, PuttPhase.holeScoreboard);
       // Alone on the green: the nest takes the egg and the hole ends on
-      // the same tick, and the ace is what the banner calls.
+      // the same tick. Nothing is called while the egg drops into the cup
+      // (not the ace, nor the hole's end in its place)...
+      expect(match.headlineKind, PuttHeadlineKind.holeStart);
+      for (var frame = 0; frame < 30; frame++) {
+        match.update(1 / 60);
+      }
+      // ...and once it is down, the ace is what the banner calls.
       expect(match.headlineKind, PuttHeadlineKind.scoreTerm);
       expect(match.headlineTerm, ScoreTerm.holeInOne);
       expect(match.headline, 'Hole in one!');
@@ -392,13 +398,16 @@ void main() {
   group('sounds', () {
     /// Frames [match] like the game does, gathering what it asks to hear
     /// (the game spends the notices once a frame).
+    // Half a second past the hole's end: an egg the nest took on its last
+    // tick is heard when it is down the cup.
     List<PuttNotice> listen(PuttMatch match, {int frames = 120}) {
       final heard = <PuttNotice>[];
+      var past = 30;
       for (var frame = 0; frame < frames; frame++) {
         match.update(1 / 60);
         heard.addAll(match.notices);
         match.notices.clear();
-        if (match.phase != PuttPhase.holePlay) break;
+        if (match.phase != PuttPhase.holePlay && --past < 0) break;
       }
       return heard;
     }
