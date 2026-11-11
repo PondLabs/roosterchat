@@ -788,6 +788,27 @@ flutter_angle registers a new texture under an id the view never
 learns, and the view went blank. There the first pixels stretch to the
 new size and the governor only lowers the quality tier.
 
+On Windows `rooster.exe` itself answers for the GL names flutter_angle
+binds with `@Native`. Those bindings name no library, so the Dart VM looks
+each name up in every module of the process, in the order the modules
+were loaded, and keeps the first it finds; and Flutter's engine imports
+Windows' own `OPENGL32.dll`, which has four of them (`glTexImage2D`,
+`glTexSubImage2D`, `glReadPixels`, `glDeleteTextures`) and ignores a call
+made with no WGL context. With `OPENGL32.dll` loaded ahead of ANGLE's
+`libGLESv2.dll`, no texture the game uploaded ever arrived: everything
+textured drew black or see-through (the lawn, the rails, the flag, the
+eggs down to their ink outline), and the shadow map, a texture left
+without storage, was never drawn, so nothing cast a shadow. That was
+every start of v1.45.2 and v1.45.3, whose delay-loaded plugins came after
+the engine, and the first start after an update (or a build) of the
+others: Windows loads a `libGLESv2.dll` that was just written after
+`OPENGL32.dll` (14 starts of 14, measured), and before it otherwise.
+The program is the first module the VM asks, so it exports every such
+name, forwarded to `libGLESv2.dll` (`windows/runner/angle_names.def`,
+read by the runner's `CMakeLists.txt`), and the order no longer matters;
+`unit_test/windows/angle_exports_test.dart` holds the list to
+flutter_angle's bindings.
+
 A hole builds a step a frame (`PuttWorld3D.buildHoleInSteps`), never in
 one go: built at once, a hole held the UI isolate for 1 to 2.3 s in a
 debug run. The table's shape, the lawn's texture and the turf's
