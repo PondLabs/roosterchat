@@ -92,16 +92,16 @@ soon as it starts (`windows/runner/splash_window.cpp`: the brand
 background and the app icon), and closes it when the Flutter window shows.
 A second copy, which only hands over to the running one, shows nothing.
 
-Two things used to come before that stand-in, and a click on Rooster showed
-nothing while they lasted (November 2026):
+The engine and the plugins are plain imports of `rooster.exe`, so Windows
+loads them (with libwebrtc and ANGLE behind them, some 50 MB) before the
+runner's first line, and the stand-in comes after that. Delay-loading them
+was tried (v1.45.2 and v1.45.3, November 2026) and taken out: on those
+builds Sunny Side Putt drew its lawn and rails black on Windows. Why was not
+established; see `windows/CMakeLists.txt` before trying again.
 
-- **The engine and the plugins.** They were plain imports of `rooster.exe`,
-  so Windows loaded all of them, with libwebrtc and ANGLE behind them (some
-  50 MB), before the runner's first line. On the first start of a new build
-  a virus scanner reads each one through first, and every push to `main` is
-  a new build. They are delay-loaded now (`windows/CMakeLists.txt`): only
-  the runner itself is in front of the stand-in, which for that reason asks
-  Windows, not the engine, for the monitor's DPI.
+One thing used to come before the stand-in, and a click on Rooster showed
+nothing while it lasted (November 2026):
+
 - **A Rooster still closing.** Closing goes on after the window has gone
   (up to 12 s to leave a call, 5 s to close the accounts, then the engine),
   and the instance lock lasted as long as the process. A Rooster opened in

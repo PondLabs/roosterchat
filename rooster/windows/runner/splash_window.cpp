@@ -80,8 +80,8 @@ HWND ShowSplashWindow() {
   HMONITOR monitor = MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
   MONITORINFO info{sizeof(info)};
   GetMonitorInfo(monitor, &info);
-  // From Windows, not from the engine (FlutterDesktopGetDpiForMonitor): this
-  // runs before the engine's DLL is loaded, which is the point of it.
+  // From Windows, not from the engine (FlutterDesktopGetDpiForMonitor): the
+  // stand-in needs nothing of the engine's.
   UINT dpi = USER_DEFAULT_SCREEN_DPI;
   UINT dpi_y = USER_DEFAULT_SCREEN_DPI;
   GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpi, &dpi_y);
