@@ -1,12 +1,9 @@
 #ifndef PACKAGES_FLUTTER_WEBRTC_LINUX_TASK_RUNNER_LINUX_H_
 #define PACKAGES_FLUTTER_WEBRTC_LINUX_TASK_RUNNER_LINUX_H_
 
-#include <memory>
-#include <mutex>
-#include <queue>
- #include <functional>
- 
- using TaskClosure = std::function<void()>;
+#include <functional>
+
+using TaskClosure = std::function<void()>;
 
 namespace livekit_client_plugin {
 
@@ -15,12 +12,9 @@ class TaskRunnerLinux {
   TaskRunnerLinux() = default;
   ~TaskRunnerLinux() = default;
 
-  // TaskRunner implementation.
+  // Runs [task] on the main loop, after the ones enqueued before it.
+  // ROOSTER: the runner holds nothing a task could outlive (see the .cc).
   void EnqueueTask(TaskClosure task);
-
- private:
-  std::mutex tasks_mutex_;
-  std::queue<TaskClosure> tasks_;
 };
 
 }  // namespace livekit_client_plugin
