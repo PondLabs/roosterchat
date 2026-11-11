@@ -1,9 +1,12 @@
 #include "flutter_window.h"
 
+#include <flutter/standard_method_codec.h>
+
 #include <optional>
 
 #include "call_ducking.h"
 #include "flutter/generated_plugin_registrant.h"
+#include "instance_lock.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -36,6 +39,23 @@ bool FlutterWindow::OnCreate() {
   game_overlay_ = std::make_unique<GameOverlay>(
       flutter_controller_->engine()->messenger());
 
+  // ROOSTER: a Rooster that is closing gives the instance lock up, so the
+  // next launch is a new start and not a second copy of this one
+  // (SingleInstance.leave).
+  instance_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(),
+          "com.pondlabs.rooster/instance",
+          &flutter::StandardMethodCodec::GetInstance());
+  instance_channel_->SetMethodCallHandler([](const auto& call, auto result) {
+    if (call.method_name() == "leave") {
+      LeaveInstanceLock();
+      result->Success();
+    } else {
+      result->NotImplemented();
+    }
+  });
+
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();
     // ROOSTER: Dart has drawn its loading page; the stand-in goes.
@@ -54,10 +74,11 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
-  // ROOSTER: the thumbnail buttons' and the overlay's channels go before the
-  // engine they are on.
+  // ROOSTER: the thumbnail buttons', the overlay's and the instance lock's
+  // channels go before the engine they are on.
   voice_thumb_bar_ = nullptr;
   game_overlay_ = nullptr;
+  instance_channel_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }

@@ -1,7 +1,7 @@
 #include "splash_window.h"
 
 #include <dwmapi.h>
-#include <flutter_windows.h>
+#include <shellscalingapi.h>
 
 #include "resource.h"
 
@@ -80,7 +80,12 @@ HWND ShowSplashWindow() {
   HMONITOR monitor = MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
   MONITORINFO info{sizeof(info)};
   GetMonitorInfo(monitor, &info);
-  double scale = FlutterDesktopGetDpiForMonitor(monitor) / 96.0;
+  // From Windows, not from the engine (FlutterDesktopGetDpiForMonitor): this
+  // runs before the engine's DLL is loaded, which is the point of it.
+  UINT dpi = USER_DEFAULT_SCREEN_DPI;
+  UINT dpi_y = USER_DEFAULT_SCREEN_DPI;
+  GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpi, &dpi_y);
+  double scale = dpi / 96.0;
   int width = static_cast<int>(kWidth * scale);
   int height = static_cast<int>(kHeight * scale);
   const RECT& work = info.rcWork;

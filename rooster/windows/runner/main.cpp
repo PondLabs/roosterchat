@@ -4,6 +4,7 @@
 #include <iostream>
 #include "call_ducking.h"
 #include "flutter_window.h"
+#include "instance_lock.h"
 #include "splash_window.h"
 #include "utils.h"
 
@@ -57,15 +58,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
-  // ROOSTER: one Rooster at a time. The named pipe single_instance.dart
-  // checks has gaps (between two connections, and while the running one is
-  // too busy to answer), and a launch that fell into one ran as a second
-  // full copy: two syncs of the same account, two toasts per message. Windows
-  // makes this check atomically. The handle is never closed, so the lock
-  // lasts as long as the process. A launch that is not the first only hands
-  // over to the running one and quits (main.dart).
-  ::CreateMutexW(nullptr, FALSE, L"Local\\com.pondlabs.rooster.instance");
-  bool secondary = ::GetLastError() == ERROR_ALREADY_EXISTS;
+  // ROOSTER: one Rooster at a time (instance_lock.h). A launch that is not
+  // the first only hands over to the running one and quits (main.dart).
+  bool secondary = !TakeInstanceLock();
   if (secondary) {
     command_line_arguments.push_back("--rooster-secondary");
   }
@@ -74,6 +69,14 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // Rooster is seen to do something. A second copy shows nothing: it only
   // hands over to the running one and quits.
   HWND splash = secondary ? nullptr : ShowSplashWindow();
+
+  // ROOSTER: a Rooster that was just closed may still be letting go of the
+  // accounts. This one starts when it has gone, with the loading square up
+  // meanwhile.
+  if (!secondary && !WaitForLeavingInstance()) {
+    ::CoUninitialize();
+    return EXIT_SUCCESS;
+  }
 
   // ROOSTER: a call must not turn the rest of the PC's sound down. After the
   // splash: it wakes every audio device, which can be slow at login.

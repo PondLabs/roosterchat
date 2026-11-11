@@ -12,6 +12,10 @@ works out the next tag, and `gh release create`s it with every archive
 attached. They are named `rooster-<tag>-<platform>-<arch>-<mode>.<zip|tar.gz>`
 (`x64` or `arm64`; macOS builds are `universal`) and each holds a single top
 level directory of the same name, which is the bundle.
+The release also carries `update.json`, written by the publish job: the
+tag and, for every file, its name, address, size and sha256, in the shape of
+the GitHub API's answer for the release. It is what the app reads (see
+Checking).
 
 The arm64 builds are made natively on GitHub's arm64 runners (Flutter
 cross-builds neither Windows nor Linux), from a git checkout of the Flutter
@@ -88,6 +92,31 @@ soon as it starts (`windows/runner/splash_window.cpp`: the brand
 background and the app icon), and closes it when the Flutter window shows.
 A second copy, which only hands over to the running one, shows nothing.
 
+Two things used to come before that stand-in, and a click on Rooster showed
+nothing while they lasted (November 2026):
+
+- **The engine and the plugins.** They were plain imports of `rooster.exe`,
+  so Windows loaded all of them, with libwebrtc and ANGLE behind them (some
+  50 MB), before the runner's first line. On the first start of a new build
+  a virus scanner reads each one through first, and every push to `main` is
+  a new build. They are delay-loaded now (`windows/CMakeLists.txt`): only
+  the runner itself is in front of the stand-in, which for that reason asks
+  Windows, not the engine, for the monitor's DPI.
+- **A Rooster still closing.** Closing goes on after the window has gone
+  (up to 12 s to leave a call, 5 s to close the accounts, then the engine),
+  and the instance lock lasted as long as the process. A Rooster opened in
+  that time was a second copy: it showed nothing, handed the click to the
+  one closing or tried to for 15 s, and quit. Now the one closing gives the
+  lock up when it starts to (`SingleInstance.leave`,
+  `windows/runner/instance_lock.cpp`), and the next one takes it, puts the
+  stand-in up and waits for the other process to end, 30 s at most, before
+  it starts the engine. Not when restarting into an update: a click then
+  must not start the build being replaced, which would hold its directory.
+
+While the loading window restarts into an update it stays up, saying so,
+until the process ends (`WindowManagement.close(restarting: true)`). It
+used to go at once, and nothing was on screen while the accounts closed.
+
 A look still unanswered when the app opens is not dropped: it carries on,
 and the home screen's check (below) offers whatever it fetches. Before this
 (v1.17.0 and v1.18.0, October 2026) the request itself was bounded to five
@@ -109,12 +138,22 @@ pointed at the release page.
 | `lib/utils/updater/self_updater_native.dart` | Desktop: download, verify, unpack, swap. |
 | `lib/ui/organisms/update_button.dart` | The button in general settings. |
 
-The request is one unauthenticated GET to
-`api.github.com/repos/PondLabs/roosterchat/releases/latest`, which is rate
-limited to 60 an hour per IP. `releases/latest` leaves out prereleases by
-design. The request is bounded to 20 seconds. When it fails, the settings
-page says why under "Version" ("Could not reach GitHub to look for updates:
-no answer in 20 s", or the socket error), and every stage of an update is
+The release is read from
+`github.com/PondLabs/roosterchat/releases/latest/download/update.json`, the
+file `ci.yml` attaches to every release (`UpdateChecker.releaseUrls`,
+`UpdateRelease.lookUpFirst`). Only when that has no release to give (a
+release made without the file) is the API asked,
+`api.github.com/repos/PondLabs/roosterchat/releases/latest`. Until November
+2026 the API was the only place asked. Unauthenticated, it allows 60
+requests an hour per IP address, shared with everything else behind that
+address (other programs, other people, a whole ISP behind one NAT), and
+answers HTTP 403 once they are spent: the settings page then said "Could
+not reach GitHub to look for updates: HTTP 403", and no update was found
+until the hour was over. A file of a release has no such budget.
+`releases/latest` leaves out prereleases by design, either way. Each
+request is bounded to 20 seconds. When the look fails, the settings page
+says why under "Version" ("Could not reach GitHub to look for updates: no
+answer in 20 s", or the socket error), and every stage of an update is
 logged once as `Update: <stage>`.
 
 The button is always shown, whatever the preference says: that preference

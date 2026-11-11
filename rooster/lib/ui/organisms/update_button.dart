@@ -98,7 +98,7 @@ class _UpdateButtonState extends State<UpdateButton> {
 
   Future<void> _restart() async {
     if (await updater.installAndRestart()) {
-      await WindowManagement.close();
+      await WindowManagement.close(restarting: true);
     }
   }
 

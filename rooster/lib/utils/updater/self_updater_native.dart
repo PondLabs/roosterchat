@@ -366,7 +366,7 @@ class NativeSelfUpdater implements SelfUpdater {
     _running = true;
     try {
       _set(UpdateStage.checking);
-      final look = await UpdateRelease.lookUp(UpdateChecker.releasesApiUrl,
+      final look = await UpdateRelease.lookUpFirst(UpdateChecker.releaseUrls,
           timeout: checkTimeout ?? UpdateRelease.defaultTimeout);
       final release = look.release;
       if (release == null) {

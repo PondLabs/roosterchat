@@ -7,6 +7,7 @@ import 'package:rooster/config/build_config.dart';
 import 'package:rooster/config/platform_utils.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
+import 'package:rooster/single_instance.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:rooster/utils/voice_tray.dart';
 import 'package:flutter/services.dart';
@@ -15,6 +16,9 @@ import 'package:window_manager/window_manager.dart';
 class WindowManagement {
   static bool _closing = false;
   static bool _clientsClosed = false;
+
+  /// The window is still the small loading one (showLauncher).
+  static bool _launcher = false;
 
   /// Releases the clients and the call manager.
   ///
@@ -40,19 +44,31 @@ class WindowManagement {
   /// Not `exit()`: that skips the engine teardown and crashes on Windows
   /// (coremessaging.dll). `destroy()` posts the platform's quit message, so
   /// the runner's message loop returns and the process tears down normally.
-  static Future<void> close() async {
+  ///
+  /// [restarting] into an update: the swap starts Rooster again once this
+  /// process has gone.
+  static Future<void> close({bool restarting = false}) async {
     if (_closing) return;
     _closing = true;
 
     // Get the window off the screen before the teardown: releasing a client
     // awaits the sync transaction in flight and can use the full budget below.
-    // The user should not watch a frozen window for that long (#80).
-    try {
-      await windowManager.hide();
-    } catch (error, stacktrace) {
-      // A hide that fails must not hold the quit back.
-      Log.onError(error, stacktrace, content: "Failed to hide the window");
+    // The user should not watch a frozen window for that long (#80). The
+    // loading window restarting into an update stays, since it says so:
+    // with it gone, nothing was on screen from here until the new build's
+    // window, and that looked like Rooster had closed.
+    if (!(restarting && _launcher)) {
+      try {
+        await windowManager.hide();
+      } catch (error, stacktrace) {
+        // A hide that fails must not hold the quit back.
+        Log.onError(error, stacktrace, content: "Failed to hide the window");
+      }
     }
+
+    // From here a click on Rooster is a new start, not a second copy. Not
+    // when restarting: a click then must not start the build being replaced.
+    if (!restarting) await SingleInstance.leave();
 
     // Out of the calls first, with the leave sound heard: closing the
     // clients stops every player. The window is already gone, so the wait
@@ -82,6 +98,9 @@ class WindowManagement {
   /// Restores, shows and focuses the window. `show()` alone leaves a
   /// minimized window minimized on Windows. Never throws.
   static Future<void> bringToFront() async {
+    // Asked by a second launch while this one closes: the window is hidden
+    // for good.
+    if (_closing) return;
     try {
       if (await windowManager.isMinimized()) await windowManager.restore();
       await windowManager.show();
@@ -115,6 +134,7 @@ class WindowManagement {
   /// to start.
   static Future<void> showLauncher() async {
     if (!_desktop) return;
+    _launcher = true;
     try {
       await windowManager.ensureInitialized();
       await windowManager.setSize(const Size(380, 440));
@@ -127,6 +147,7 @@ class WindowManagement {
   /// Grows the loading window into the app's.
   static Future<void> openMainWindow() async {
     if (!_desktop) return;
+    _launcher = false;
     try {
       await windowManager.ensureInitialized();
       await windowManager.setSize(const Size(1280, 720));

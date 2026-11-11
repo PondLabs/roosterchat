@@ -2,7 +2,9 @@
 #define RUNNER_FLUTTER_WINDOW_H_
 
 #include <flutter/dart_project.h>
+#include <flutter/encodable_value.h>
 #include <flutter/flutter_view_controller.h>
+#include <flutter/method_channel.h>
 
 #include <memory>
 
@@ -40,6 +42,10 @@ class FlutterWindow : public Win32Window {
 
   // ROOSTER: the in-game overlay (docs/game-overlay.md).
   std::unique_ptr<GameOverlay> game_overlay_;
+
+  // ROOSTER: Dart says when Rooster starts closing (instance_lock.h).
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      instance_channel_;
 
   HWND splash_ = nullptr;
 };

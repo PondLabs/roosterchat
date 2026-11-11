@@ -146,6 +146,20 @@ class UpdateRelease {
     }
   }
 
+  /// [lookUp] at each of [urls] in turn until one answers with a release;
+  /// otherwise the last one's problem.
+  static Future<({UpdateRelease? release, String? problem})> lookUpFirst(
+      List<String> urls,
+      {Duration timeout = defaultTimeout}) async {
+    ({UpdateRelease? release, String? problem}) look =
+        (release: null, problem: null);
+    for (final url in urls) {
+      look = await lookUp(url, timeout: timeout);
+      if (look.release != null) break;
+    }
+    return look;
+  }
+
   /// [duration] in whole seconds, or milliseconds under one.
   static String describe(Duration duration) => duration.inSeconds >= 1
       ? '${duration.inSeconds} s'

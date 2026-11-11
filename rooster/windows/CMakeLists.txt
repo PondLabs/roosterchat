@@ -61,6 +61,20 @@ add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# ROOSTER: the engine and the plugins are loaded when they are first called,
+# not before the program starts. As plain imports Windows loaded all of them
+# (and libwebrtc and ANGLE behind them: some 50 MB) before the first line of
+# the runner, so before the loading square (runner/splash_window.h), and on
+# the first start of a new build a virus scanner reads each of them through
+# first. Now only the runner itself is in front of the square. The square
+# must not call into the engine for this to hold.
+foreach(plugin ${FLUTTER_PLUGIN_LIST})
+  target_link_options(${BINARY_NAME} PRIVATE
+    "/DELAYLOAD:$<TARGET_FILE_NAME:${plugin}_plugin>")
+endforeach(plugin)
+target_link_options(${BINARY_NAME} PRIVATE "/DELAYLOAD:flutter_windows.dll")
+target_link_libraries(${BINARY_NAME} PRIVATE delayimp)
+
 
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can

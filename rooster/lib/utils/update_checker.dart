@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:rooster/client/alert.dart';
 import 'package:rooster/config/build_config.dart';
 import 'package:rooster/config/platform_utils.dart';
@@ -8,11 +6,10 @@ import 'package:rooster/main.dart';
 import 'package:rooster/utils/links/link_utils.dart';
 import 'package:rooster/utils/updater/installable_update_check.dart';
 import 'package:rooster/utils/updater/self_updater.dart';
+import 'package:rooster/utils/updater/update_release.dart';
 import 'package:rooster/utils/window_management.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-
-import 'package:http/http.dart' as http;
 
 /// Checks for a newer Rooster release on GitHub Releases, once the app is up.
 ///
@@ -24,11 +21,14 @@ import 'package:http/http.dart' as http;
 /// can come before the network. Everywhere else it points at the release
 /// page, which is all the app can do there.
 ///
-/// This goes through the unauthenticated GitHub API. That is rate limited to 60
-/// requests per hour per IP, which is ample for a few requests per launch on a
-/// desktop install. Startup uses [checkForUpdatesOncePerLaunch] to preserve
-/// that cadence, while [checkForUpdates] remains available to an explicit
-/// caller that needs a fresh result later in the session.
+/// The release is read from `update.json`, a file `ci.yml` attaches to every
+/// release, in the shape of the GitHub API's answer. The API itself is only
+/// the fallback, for a release without that file: unauthenticated, it allows
+/// 60 requests per hour per IP address, shared with everything else behind
+/// that address (other people, other programs, a whole ISP behind one NAT),
+/// and answers HTTP 403 once they are spent. Startup uses
+/// [checkForUpdatesOncePerLaunch], while [checkForUpdates] remains available
+/// to an explicit caller that needs a fresh result later in the session.
 ///
 /// Note that `releases/latest` excludes prereleases, so a release tagged as a
 /// prerelease is invisible here by design.
@@ -37,9 +37,12 @@ class UpdateChecker {
   static final UpdateCheckState _state = UpdateCheckState();
   static InstallableUpdateCheck? _installable;
 
-  /// The project whose releases we check.
-  static const String releasesApiUrl =
-      "https://api.github.com/repos/PondLabs/roosterchat/releases/latest";
+  /// Where the latest release is described, in the order asked: the file
+  /// attached to the release, then the API (see the class comment).
+  static const List<String> releaseUrls = [
+    "https://github.com/PondLabs/roosterchat/releases/latest/download/update.json",
+    "https://api.github.com/repos/PondLabs/roosterchat/releases/latest",
+  ];
 
   /// Where the "View release" action sends the user.
   static const String releasesPageUrl =
@@ -101,31 +104,10 @@ class UpdateChecker {
 
     if (_state.foundUpdate) return;
 
-    String? latest;
-    try {
-      var response = await http.get(Uri.parse(releasesApiUrl), headers: {
-        // Request GitHub's stable JSON media type. Dart supplies its own
-        // User-Agent, so this client does not need to add one explicitly.
-        "Accept": "application/vnd.github+json",
-      });
-
-      if (response.statusCode != 200) {
-        Log.i("Update check failed: HTTP ${response.statusCode}");
-        return;
-      }
-
-      var data = jsonDecode(response.body);
-      if (data is! Map<String, dynamic>) return;
-
-      latest = data["tag_name"] as String?;
-    } catch (e, s) {
-      // A failed update check is never worth surfacing to the user, and it must
-      // not break startup.
-      Log.onError(e, s);
-      return;
-    }
-
-    if (latest == null || latest.isEmpty) return;
+    // Never throws, and logs why when it finds nothing: a failed update
+    // check is never worth surfacing to the user here.
+    final latest = (await UpdateRelease.lookUpFirst(releaseUrls)).release?.tag;
+    if (latest == null) return;
 
     _offerReleasePage(latest);
   }
@@ -231,7 +213,7 @@ class UpdateChecker {
   /// swap starts again. Nothing changes when there is nothing staged.
   static Future<void> restartIntoUpdate(BuildContext context) async {
     if (await SelfUpdater.instance.installAndRestart()) {
-      await WindowManagement.close();
+      await WindowManagement.close(restarting: true);
     }
   }
 }

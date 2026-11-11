@@ -7,6 +7,8 @@ import 'package:rooster/debug/log.dart';
 import 'package:dart_ipc/dart_ipc.dart';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:rooster/utils/window_management.dart';
 
 class SingleInstance {
@@ -81,7 +83,33 @@ class SingleInstance {
     }
   }
 
+  static bool _main = false;
+
+  @visibleForTesting
+  static set isMainInstance(bool value) => _main = value;
+
+  /// The Windows runner's instance lock (windows/runner/instance_lock.h).
+  static const _lock = MethodChannel('com.pondlabs.rooster/instance');
+
+  /// The main instance is on its way out: it gives the runner's instance
+  /// lock up, so the next launch is not a second copy of it. That launch
+  /// shows its loading square at once and starts when this process has
+  /// gone. Holding the lock until the process ended, a Rooster opened right
+  /// after one was closed showed nothing: it handed the click to the one
+  /// closing, or tried to for 15 s, and quit. Windows only ([windows] is for
+  /// tests); never throws.
+  static Future<void> leave({bool? windows}) async {
+    if (!_main || !(windows ?? PlatformUtils.isWindows)) return;
+    _main = false;
+    try {
+      await _lock.invokeMethod('leave');
+    } catch (e, s) {
+      Log.onError(e, s, content: 'Could not give up the instance lock');
+    }
+  }
+
   static void becomeMainInstance() async {
+    _main = true;
     var path = await AppConfig.getSocketPath();
 
     print("Connecting to socket... $path");

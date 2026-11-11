@@ -254,6 +254,39 @@ void lookUpTests() {
     });
   });
 
+  // The API answers HTTP 403 once its hourly budget for the address is
+  // spent, so the release's own file is asked first and the API only when
+  // that file is not there.
+  test('the next address is asked when one has no release', () async {
+    final asked = <String>[];
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((request) {
+      asked.add(request.uri.path);
+      if (request.uri.path == '/api') {
+        request.response.write(jsonEncode(_release()));
+      } else {
+        request.response.statusCode = request.uri.path == '/gone' ? 404 : 403;
+      }
+      request.response.close();
+    });
+    final at = 'http://127.0.0.1:${server.port}';
+
+    final found = await UpdateRelease.lookUpFirst(['$at/gone', '$at/api']);
+    expect(found.release?.tag, 'v0.13.2');
+    expect(found.problem, isNull);
+    expect(asked, ['/gone', '/api']);
+
+    asked.clear();
+    final first = await UpdateRelease.lookUpFirst(['$at/api', '$at/gone']);
+    expect(first.release?.tag, 'v0.13.2');
+    expect(asked, ['/api'], reason: 'one that answers is enough');
+
+    final none = await UpdateRelease.lookUpFirst(['$at/gone', '$at/limited']);
+    expect(none.release, isNull);
+    expect(none.problem, 'HTTP 403', reason: "the last one's problem");
+    await server.close();
+  });
+
   test('a problem is one line, without the exception types in front', () {
     expect(UpdateRelease.describeProblem(StateError('no')), 'Bad state: no');
     expect(UpdateRelease.describeProblem('x' * 200), hasLength(160));

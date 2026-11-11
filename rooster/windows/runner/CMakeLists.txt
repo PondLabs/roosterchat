@@ -10,6 +10,7 @@ add_executable(${BINARY_NAME} WIN32
   "call_ducking.cpp"
   "flutter_window.cpp"
   "game_overlay.cpp"
+  "instance_lock.cpp"
   "main.cpp"
   "splash_window.cpp"
   "utils.cpp"
@@ -38,6 +39,9 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 # dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
+# ROOSTER: the loading square asks Windows for the monitor's DPI, not the
+# engine, which is not loaded yet when it shows (see ../CMakeLists.txt).
+target_link_libraries(${BINARY_NAME} PRIVATE "shcore.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.

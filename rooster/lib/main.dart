@@ -227,7 +227,8 @@ void appMain() async {
     if (!isHeadless && !kIsWeb) {
       if (!loadingShown) await _showLoadingWindow();
       update = StartupUpdate(SelfUpdater.instance,
-          wanted: _updateWanted, close: WindowManagement.close)
+          wanted: _updateWanted,
+          close: () => WindowManagement.close(restarting: true))
         ..begin();
     }
 
