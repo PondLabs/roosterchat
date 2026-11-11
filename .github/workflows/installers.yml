@@ -58,10 +58,15 @@ jobs:
           # make that build: Flutter 3.41.9 publishes no Dart SDK or engine
           # for Windows arm64. Inno Setup packs an arm64 bundle on any
           # Windows; nothing here runs the build.
+          # On the Intel runner: packing the disk image needs no arm64 (the
+          # app is built universal by desktop-build.yml; this only unpacks it
+          # and runs hdiutil), and GitHub's arm64 macOS runners are short:
+          # this job sat unclaimed for its fifteen minutes three times in a
+          # row on v1.45.5's run and was cancelled, which skips the publish.
           - platform: macos
             os: macos
             arch: universal
-            runner: macos-15
+            runner: macos-15-intel
             build: macos-universal-release
             ext: zip
             installer: macos-universal.dmg
