@@ -96,8 +96,11 @@ The engine and the plugins are plain imports of `rooster.exe`, so Windows
 loads them (with libwebrtc and ANGLE behind them, some 50 MB) before the
 runner's first line, and the stand-in comes after that. Delay-loading them
 was tried (v1.45.2 and v1.45.3, November 2026) and taken out: on those
-builds Sunny Side Putt drew its lawn and rails black on Windows. Why was not
-established; see `windows/CMakeLists.txt` before trying again.
+builds Sunny Side Putt drew everything it textures black on Windows. It was
+the order the DLLs were loaded in that did it (ANGLE after the engine's
+`OPENGL32.dll`), not delay-loading as such, and the game no longer depends
+on that order: see "How it looks" in `docs/sunny-side-putt.md`. A
+delay-loaded build with that fix draws the game right.
 
 One thing used to come before the stand-in, and a click on Rooster showed
 nothing while it lasted (November 2026):

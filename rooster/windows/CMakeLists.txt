@@ -61,13 +61,51 @@ add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
-# ROOSTER: the engine and the plugins stay plain imports of the runner. They
+# ROOSTER: the engine and the plugins are plain imports of the runner. They
 # were delay-loaded (/DELAYLOAD) in v1.45.2 and v1.45.3, to get the loading
 # square (runner/splash_window.h) up before Windows had loaded them, and on
-# those builds Sunny Side Putt drew its lawn and rails black on Windows. Why
-# was not established (nothing else in those builds touches graphics; the
-# guess is that a PC with two GPUs picks one by what the program imports).
-# Do not bring it back without a look at the game on real hardware.
+# those builds Sunny Side Putt drew everything it textures black on Windows.
+# Delay-loading only set the order that did it: the plugins, and ANGLE with
+# them, were loaded after the engine and the OPENGL32.dll it imports, and the
+# game's texture uploads were bound to OPENGL32 (runner/angle_names.def has
+# the whole of it, and the fix, which does not depend on the order). With
+# that fix a delay-loaded build draws the game right, looked at in November
+# 2026: the GPU had nothing to do with it.
+
+# ROOSTER: one ANGLE in the bundle. flutter_angle and
+# media_kit_libs_windows_video each ship a libEGL.dll and a libGLESv2.dll,
+# different builds of ANGLE (2.1.14811 and 2.1.18844), and both were copied
+# into the same folder. The releases hold media_kit's; which of the two a
+# local build was left with varied from one build to the next. media_kit's
+# serves both plugins (flutter_angle's imports libEGL.dll and libGLESv2.dll by
+# name), so flutter_angle's copies stay out, and its zlib.dll with them: only
+# its own libGLESv2.dll wants it, and media_kit ships one of that name too.
+list(FILTER PLUGIN_BUNDLED_LIBRARIES EXCLUDE REGEX
+  "/flutter_angle/windows/bin/dll/(libEGL|libGLESv2|zlib)\\.dll$")
+
+# ROOSTER: two different files of one name in the bundle are an error here,
+# not something the install step settles by which it copies last.
+set(_rooster_bundled_names)
+set(_rooster_bundled_paths)
+foreach(_rooster_lib IN LISTS PLUGIN_BUNDLED_LIBRARIES)
+  if(_rooster_lib MATCHES "^\\$<")
+    continue()
+  endif()
+  get_filename_component(_rooster_name "${_rooster_lib}" NAME)
+  string(TOLOWER "${_rooster_name}" _rooster_name)
+  list(FIND _rooster_bundled_names "${_rooster_name}" _rooster_at)
+  if(_rooster_at EQUAL -1)
+    list(APPEND _rooster_bundled_names "${_rooster_name}")
+    list(APPEND _rooster_bundled_paths "${_rooster_lib}")
+  else()
+    list(GET _rooster_bundled_paths ${_rooster_at} _rooster_first)
+    if(NOT _rooster_first STREQUAL _rooster_lib)
+      message(FATAL_ERROR "Two plugins bundle ${_rooster_name}: "
+        "${_rooster_first} and ${_rooster_lib}. Keep one (see the ANGLE "
+        "note in windows/CMakeLists.txt).")
+    endif()
+  endif()
+endforeach()
 
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can

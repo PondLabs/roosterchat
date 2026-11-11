@@ -1,0 +1,63 @@
+; ROOSTER: the GL names this program answers for, each handed on to ANGLE
+; (libGLESv2.dll). CMakeLists.txt reads the list twice: for the exports
+; (name = libGLESv2.name), and for the import library the linker wants
+; before it will write one.
+;
+; flutter_angle binds these functions with @Native and no library of their
+; own, so the Dart VM looks each name up in every module of the process, in
+; the order the modules were loaded, and keeps the first it finds. Flutter's
+; engine (flutter_windows.dll) imports Windows' own OPENGL32.dll, which has
+; four of them (glTexImage2D, glTexSubImage2D, glReadPixels and
+; glDeleteTextures: OpenGL 1.1) and does nothing with a call when no WGL
+; context is current. Whenever OPENGL32.dll was loaded before libGLESv2.dll,
+; every texture Sunny Side Putt uploaded went there: the lawn, the rails, the
+; flag and the eggs drew black or see-through and the shadows were gone.
+; That was every start of v1.45.2 and v1.45.3, whose delay-loaded plugins
+; came after the engine, and the first start after an update (or a build) of
+; the others: Windows loads a libGLESv2.dll that was just written after
+; OPENGL32.dll (14 starts of 14, measured), and before it otherwise.
+;
+; The program itself is the first module the VM asks, so with these names
+; here the order no longer matters. Every name flutter_angle binds that way
+; is listed, not only the four: unit_test/windows/angle_exports_test.dart
+; fails when its bindings and this list part ways. See docs/sunny-side-putt.md.
+LIBRARY libGLESv2
+EXPORTS
+  glBufferData
+  glBufferSubData
+  glCompressedTexImage2D
+  glCompressedTexImage3D
+  glCompressedTexSubImage2D
+  glCompressedTexSubImage3D
+  glDeleteBuffers
+  glDeleteFramebuffers
+  glDeleteRenderbuffers
+  glDeleteTextures
+  glDeleteTransformFeedbacks
+  glDeleteVertexArrays
+  glDrawBuffers
+  glInvalidateFramebuffer
+  glReadPixels
+  glTexImage2D
+  glTexImage3D
+  glTexSubImage2D
+  glTexSubImage3D
+  glUniform1fv
+  glUniform1iv
+  glUniform1uiv
+  glUniform2fv
+  glUniform2iv
+  glUniform2uiv
+  glUniform3fv
+  glUniform3iv
+  glUniform3uiv
+  glUniform4fv
+  glUniform4iv
+  glUniform4uiv
+  glUniformMatrix2fv
+  glUniformMatrix3fv
+  glUniformMatrix4fv
+  glVertexAttrib1fv
+  glVertexAttrib2fv
+  glVertexAttrib3fv
+  glVertexAttrib4fv
