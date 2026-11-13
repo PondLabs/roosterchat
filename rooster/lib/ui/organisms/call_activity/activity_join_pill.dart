@@ -1,6 +1,7 @@
 // A session is live in the call and this client has not joined it: the
-// pill over the call's tiles says who started what, with a Join on it —
-// the same shape as the DJ booth's now-playing pill.
+// pill in the middle of the game's tile of the call's grid says who
+// started what, with a Join on it - the same shape as the DJ booth's
+// now-playing pill.
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 

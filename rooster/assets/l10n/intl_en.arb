@@ -2764,6 +2764,12 @@
     "type": "text",
     "placeholders": {}
   },
+  "tooltipLeaveActivity": "Leave the activity",
+  "@tooltipLeaveActivity": {
+    "description": "Tooltip on the voice panel's activities button (the rocket) while we are in a call activity (a game played in the call): pressing it leaves the game, the call goes on",
+    "type": "text",
+    "placeholders": {}
+  },
   "promptVoicePanelMixAccounts": "Mix Accounts",
   "@promptVoicePanelMixAccounts": {
     "description": "Menu entry on the user panel at the bottom of the sidebar, with more than one account signed in: shows every account's rooms together instead of one account's",

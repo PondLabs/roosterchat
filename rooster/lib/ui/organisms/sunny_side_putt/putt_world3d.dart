@@ -454,10 +454,20 @@ class PuttCameraRig {
     _distanceMin = 0.3 * maxSpan;
     _distanceMax = 2.4 * maxSpan;
     _overviewDistance = wanted.clamp(_distanceMin, _distanceMax).toDouble();
+    // The same hole fitted again (a resize, the surface stepping its
+    // resolution down on slow frames) only measures: the camera stays where
+    // the director or the player has it. It used to go out to the whole
+    // hole each time, and the director, which picks the zoom once a hole,
+    // left it there.
+    if (bounds.min == _fitted?.min && bounds.max == _fitted?.max) return;
+    _fitted = bounds;
     _distanceTarget = _overviewDistance;
     _targetTarget = bounds.center;
     if (_snapNext) snap();
   }
+
+  /// The bounds [fitToHole] last moved the camera for.
+  Rect? _fitted;
 
   /// The distance that frames the whole hole (the last fit's).
   double get overviewDistance => _overviewDistance;

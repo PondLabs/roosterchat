@@ -66,9 +66,9 @@ class _StageFullscreen {
 /// The stage a call activity takes over: the activity's view in the middle
 /// ([gameSlot], null before the game's ticket plugs it in - a placeholder
 /// holds the slot), the call's videos as a compact strip under it, a
-/// fullscreen toggle on desktop, and the easy exit (Esc, or the exit
-/// button while the placeholder holds the slot: a game's own menu has its
-/// leave, so the stage shows no second way out over it).
+/// fullscreen toggle on desktop, and the easy exit: the header's button,
+/// one press and no question asked, whatever the game is doing (its own
+/// leave is two menus deep), or Esc where the game does not take the key.
 class ActivityStage extends StatefulWidget {
   const ActivityStage({
     required this.activityName,
@@ -89,8 +89,8 @@ class ActivityStage extends StatefulWidget {
   /// wants them (the call view reuses the tiles it already builds).
   final Widget participantsStrip;
 
-  /// The easy exit: Esc, or the button before the game is in. Whatever
-  /// mounted the stage drops it.
+  /// The easy exit: Esc, or the header's button. Whatever mounted the
+  /// stage drops it.
   final VoidCallback onExit;
 
   /// Whether the window a fullscreen would fill is one we can fill (a
@@ -244,12 +244,11 @@ class _ActivityStageState extends State<ActivityStage> {
                   : Icons.fullscreen_rounded),
               onPressed: _toggleFullscreen,
             ),
-          if (widget.gameSlot == null)
-            IconButton(
-              tooltip: ActivityStageStrings.leave,
-              icon: const Icon(Icons.close_rounded),
-              onPressed: widget.onExit,
-            ),
+          IconButton(
+            tooltip: ActivityStageStrings.leave,
+            icon: const Icon(Icons.close_rounded),
+            onPressed: widget.onExit,
+          ),
         ],
       ),
     );

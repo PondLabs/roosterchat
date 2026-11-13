@@ -187,6 +187,18 @@ class MatrixCallActivityComponent
                 entry,
           ];
 
+  /// The session of this call we are in, playing or watching, if any.
+  CallActivitySession? get ownSession {
+    for (final entry in visibleSessions()) {
+      final session = _sessionById[entry.sessionId];
+      if (session != null &&
+          (rosterOf(session)?.contains(session.selfIdentity) ?? false)) {
+        return session;
+      }
+    }
+    return null;
+  }
+
   /// Nobody but us is left in [session]: not its host, no player, no
   /// spectator (a session seeded from stale state has only its id, the
   /// original host's identity, to go on, and is given [seedGrace] for

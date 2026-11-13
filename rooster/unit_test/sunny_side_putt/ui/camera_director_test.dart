@@ -444,6 +444,19 @@ void main() {
     expectInFreeView(hole.nest.position);
   });
 
+  test('fitting the same hole again leaves the zoom where it is', () {
+    // A resize, or the surface stepping its resolution down on slow frames,
+    // fits the hole again mid-play: the camera used to go out to the whole
+    // hole and stay there.
+    run(PuttCameraDirector.openingSeconds + 2, resting(const Vec2(20, 12)));
+    final played = rig.distanceTarget;
+    expect(played, lessThan(rig.overviewDistance));
+    rig.fitToHole(hole.bounds);
+    run(1, resting(const Vec2(20, 12)));
+    expect(rig.distanceTarget, played);
+    expect(rig.target.distanceTo(const Vec2(20, 12)), lessThan(1));
+  });
+
   test('the close-up plays even after the player took the camera', () {
     // The same sink, three ways the player may have left the camera: as
     // the director had it, zoomed with the wheel, or the whole-hole view.

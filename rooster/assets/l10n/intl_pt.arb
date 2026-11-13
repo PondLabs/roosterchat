@@ -410,6 +410,7 @@
   "tooltipTurnOnCamera": "Ligar a câmera",
   "tooltipTurnOffCamera": "Desligar a câmera",
   "tooltipSelectingScreen": "Escolhendo a tela",
+  "tooltipLeaveActivity": "Sair da atividade",
   "promptVoicePanelMixAccounts": "Misturar contas",
   "labelStatusOnline": "Disponível",
   "labelStatusAway": "Ausente",

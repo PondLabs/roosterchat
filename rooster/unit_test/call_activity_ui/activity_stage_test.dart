@@ -28,12 +28,16 @@ void main() {
       expect(find.text('Loading Sunny Side Putt'), findsNothing);
     });
 
-    testWidgets('no exit button over a game: its own menu has the leave',
+    testWidgets('over a game too, the exit button releases the stage',
         (tester) async {
-      await tester.pumpWidget(_stage(gameSlot: const Text('THE GAME')));
+      var exited = false;
+      await tester.pumpWidget(_stage(
+          gameSlot: const Text('THE GAME'), onExit: () => exited = true));
 
-      expect(find.byTooltip(ActivityStageStrings.leave), findsNothing);
-      expect(find.byIcon(Icons.close_rounded), findsNothing);
+      await tester.tap(find.byTooltip(ActivityStageStrings.leave));
+      await tester.pump();
+
+      expect(exited, isTrue);
     });
 
     testWidgets('while loading, the exit button releases the stage',

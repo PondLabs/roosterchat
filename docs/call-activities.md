@@ -30,6 +30,22 @@ infrastructure.
   of activities), the stage (the game takes the call's view while the
   participant videos shrink into a strip), and the join pill.
 
+## Getting in and out
+
+While someone plays and we do not, their game has a tile of the call's
+grid, the way a shared screen has, with the join pill in its middle
+("ggflores23 started Sunny Side Putt", Join). Nothing is streamed into
+it: joining is how the game is seen.
+
+The rocket is in two places: the call's own controls, and the voice panel
+at the bottom of the sidebar, so it is there whatever room is open. In the
+sidebar it opens the call and its shelf; while we are in an activity it is
+lit and one press leaves it (through the call's view when that is showing,
+so the game's view and sound go with it, else the session is told
+directly). On the stage the header's exit button leaves at once, over a
+running game too: the game's own leave sits behind its menu and a
+question. Esc leaves as well where the game does not take the key.
+
 ## How a session lives
 
 1. Someone opens the picker and launches an activity (choosing the

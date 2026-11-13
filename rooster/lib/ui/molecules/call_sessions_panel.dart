@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:rooster/client/components/voip/call_connection.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/room.dart';
 import 'package:rooster/debug/log.dart';
+import 'package:rooster/client/matrix/components/call_activity/matrix_call_activity_component.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/anchored_popover.dart';
 import 'package:rooster/ui/atoms/noise_suppression_button.dart';
@@ -13,6 +15,8 @@ import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/molecules/call_session_live_panel.dart';
 import 'package:rooster/ui/molecules/screen_share_start_reporting.dart';
 import 'package:rooster/ui/molecules/screen_share_stop_reporting.dart';
+import 'package:rooster/ui/organisms/call_activity/activity_requests.dart';
+import 'package:rooster/ui/organisms/call_view/call_control_buttons.dart';
 import 'package:rooster/ui/organisms/call_view/call_view.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_button.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_call_controller.dart';
@@ -120,6 +124,31 @@ class _CallSessionPanelState extends State<CallSessionPanel>
       desc:
           "Tooltip on the voice panel button while the screen picker is open");
 
+  String get tooltipLeaveActivity => Intl.message("Leave the activity",
+      name: "tooltipLeaveActivity",
+      desc: "Tooltip on the voice panel's activities button (the rocket) "
+          "while we are in a call activity (a game played in the call): "
+          "pressing it leaves the game, the call goes on");
+
+  /// The call's activities (the games played in it), where the room has
+  /// them.
+  MatrixCallActivityComponent? get _activities =>
+      room?.getComponent<MatrixCallActivityComponent>();
+
+  /// Out of the activity we are in: through the call's view when it is
+  /// showing (the game's view and sound go with it), else the session is
+  /// told directly.
+  Future<void> _leaveActivity() async {
+    await CallActivityRequests.stageExits[widget.session]?.call();
+    await _activities?.ownSession?.leave();
+  }
+
+  /// The shelf of activities, in the call's view.
+  void _openActivities() {
+    openRoom();
+    CallActivityRequests.showShelf(widget.session);
+  }
+
   @override
   void initState() {
     room = widget.session.client.getRoom(widget.session.roomId);
@@ -135,7 +164,12 @@ class _CallSessionPanelState extends State<CallSessionPanel>
       widget.session.onUpdateVolumeVisualizers.listen((_) async {
         await widget.session.updateStats();
         audioLevel.animateTo(localAudioLevel);
-      })
+      }),
+      // The rocket lights up while we are in an activity.
+      if (_activities case final activities?)
+        activities.onChanged.listen((_) {
+          if (mounted) setState(() {});
+        }),
     ];
 
     super.initState();
@@ -215,184 +249,218 @@ class _CallSessionPanelState extends State<CallSessionPanel>
   }
 
   Widget buildControlsRow(BuildContext context) {
+    final activities = _activities;
+    final inActivity = activities?.ownSession != null;
+    // Every button on show (eight on the desktop) is wider than the
+    // sidebar at its default width: they narrow to share the row rather
+    // than overflow it. The noise suppression button is counted whether or
+    // not it shows: on the web it turns up after this row was built.
+    final buttons = 6 +
+        (widget.session.supportsScreenshare ? 1 : 0) +
+        (activities != null ? 1 : 0) +
+        (BrowserCallControls.canPopOut ? 1 : 0);
     return InkWell(
         onTap: openRoom,
         child: SizedBox(
           height: widget.height,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Flexible(
-                // The sidebar with every button on show (seven on the
-                // desktop) leaves less than the indicator's width: it steps
-                // aside then, rather than overflow the row. The mute and
-                // deafen buttons say as much.
-                child: LayoutBuilder(
-                  builder: (context, constraints) =>
-                      constraints.maxWidth < widget.height
-                          ? const SizedBox.shrink()
-                          : Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                pickAnimation(
-                                    entry: widget.session,
-                                    child: SizedBox(
-                                      height: widget.height,
-                                      width: widget.height,
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(8.0),
-                                        child: buildActivityIndicator(context),
-                                      ),
-                                    )),
-                                // The status row above names the room.
-                                if (widget.session is! CallConnection)
-                                  Flexible(
-                                    child: tiamat.Text(widget.session.roomName,
-                                        overflow: TextOverflow.ellipsis),
-                                  ),
-                              ],
+          child: LayoutBuilder(builder: (context, row) {
+            final extent = math.min(widget.height, row.maxWidth / buttons);
+            return _controlsRow(context, extent, activities, inActivity);
+          }),
+        ));
+  }
+
+  Widget _controlsRow(BuildContext context, double extent,
+      MatrixCallActivityComponent? activities, bool inActivity) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Flexible(
+          // With every button on show the sidebar leaves less than the
+          // indicator's width: it steps aside then, rather than overflow
+          // the row. The mute and deafen buttons say as much.
+          child: LayoutBuilder(
+            builder: (context, constraints) =>
+                constraints.maxWidth < widget.height
+                    ? const SizedBox.shrink()
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          pickAnimation(
+                              entry: widget.session,
+                              child: SizedBox(
+                                height: widget.height,
+                                width: widget.height,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: buildActivityIndicator(context),
+                                ),
+                              )),
+                          // The status row above names the room.
+                          if (widget.session is! CallConnection)
+                            Flexible(
+                              child: tiamat.Text(widget.session.roomName,
+                                  overflow: TextOverflow.ellipsis),
                             ),
+                        ],
+                      ),
+          ),
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: extent,
+              height: widget.height,
+              child: AspectRatio(
+                  aspectRatio: 1.0,
+                  child: tiamat.IconButton(
+                      onPressed: () {
+                        if (widget.session.isMicrophoneMuted) {
+                          clientManager!.callManager.unmute();
+                        } else {
+                          clientManager!.callManager.mute();
+                        }
+                      },
+                      size: iconSize,
+                      iconColor: widget.session.isMicrophoneMuted
+                          ? ColorScheme.of(context).error
+                          : null,
+                      icon: widget.session.isMicrophoneMuted
+                          ? Icons.mic_off_rounded
+                          : Icons.mic_rounded)),
+            ),
+            SizedBox(
+              width: extent,
+              height: widget.height,
+              child: AspectRatio(
+                  aspectRatio: 1.0,
+                  child: tiamat.IconButton(
+                      onPressed: () {
+                        if (widget.session.isDeafened) {
+                          clientManager!.callManager.undeafen();
+                        } else {
+                          clientManager!.callManager.deafen();
+                        }
+                      },
+                      size: iconSize,
+                      iconColor: widget.session.isDeafened
+                          ? ColorScheme.of(context).error
+                          : null,
+                      icon: widget.session.isDeafened
+                          ? Icons.headset_off_rounded
+                          : Icons.headset_rounded)),
+            ),
+            // Hides itself where the voice DSP cannot run.
+            NoiseSuppressionButton(size: iconSize, extent: extent),
+            SizedBox(
+              width: extent,
+              height: widget.height,
+              child: Tooltip(
+                message: widget.session.isCameraEnabled
+                    ? tooltipTurnOffCamera
+                    : tooltipTurnOnCamera,
+                child: tiamat.IconButton(
+                  onPressed: _cameraBusy ? null : toggleCamera,
+                  size: iconSize,
+                  iconColor: widget.session.isCameraEnabled
+                      ? SpeakingIndicator.color
+                      : null,
+                  icon: widget.session.isCameraEnabled
+                      ? Icons.videocam_rounded
+                      : Icons.videocam_outlined,
                 ),
               ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: widget.height,
-                    height: widget.height,
-                    child: AspectRatio(
-                        aspectRatio: 1.0,
-                        child: tiamat.IconButton(
-                            onPressed: () {
-                              if (widget.session.isMicrophoneMuted) {
-                                clientManager!.callManager.unmute();
-                              } else {
-                                clientManager!.callManager.mute();
-                              }
-                            },
-                            size: iconSize,
-                            iconColor: widget.session.isMicrophoneMuted
-                                ? ColorScheme.of(context).error
-                                : null,
-                            icon: widget.session.isMicrophoneMuted
-                                ? Icons.mic_off_rounded
-                                : Icons.mic_rounded)),
+            ),
+            if (widget.session.supportsScreenshare)
+              SizedBox(
+                width: extent,
+                height: widget.height,
+                child: Tooltip(
+                  message: _screenShareBusy
+                      ? tooltipSelectingScreen
+                      : widget.session.isSharingScreen
+                          ? tooltipStopSharingScreen
+                          : tooltipShareScreen,
+                  child: tiamat.IconButton(
+                    onPressed: _screenShareBusy ? null : toggleScreenShare,
+                    size: iconSize,
+                    iconColor: widget.session.isSharingScreen
+                        ? SpeakingIndicator.color
+                        : null,
+                    icon: widget.session.isSharingScreen
+                        ? Icons.stop_screen_share_rounded
+                        : Icons.screen_share_outlined,
                   ),
-                  SizedBox(
-                    width: widget.height,
-                    height: widget.height,
-                    child: AspectRatio(
-                        aspectRatio: 1.0,
-                        child: tiamat.IconButton(
-                            onPressed: () {
-                              if (widget.session.isDeafened) {
-                                clientManager!.callManager.undeafen();
-                              } else {
-                                clientManager!.callManager.deafen();
-                              }
-                            },
-                            size: iconSize,
-                            iconColor: widget.session.isDeafened
-                                ? ColorScheme.of(context).error
-                                : null,
-                            icon: widget.session.isDeafened
-                                ? Icons.headset_off_rounded
-                                : Icons.headset_rounded)),
-                  ),
-                  // Hides itself where the voice DSP cannot run.
-                  NoiseSuppressionButton(size: iconSize, extent: widget.height),
-                  SizedBox(
-                    width: widget.height,
-                    height: widget.height,
-                    child: Tooltip(
-                      message: widget.session.isCameraEnabled
-                          ? tooltipTurnOffCamera
-                          : tooltipTurnOnCamera,
-                      child: tiamat.IconButton(
-                        onPressed: _cameraBusy ? null : toggleCamera,
-                        size: iconSize,
-                        iconColor: widget.session.isCameraEnabled
-                            ? SpeakingIndicator.color
-                            : null,
-                        icon: widget.session.isCameraEnabled
-                            ? Icons.videocam_rounded
-                            : Icons.videocam_outlined,
-                      ),
-                    ),
-                  ),
-                  if (widget.session.supportsScreenshare)
-                    SizedBox(
-                      width: widget.height,
-                      height: widget.height,
-                      child: Tooltip(
-                        message: _screenShareBusy
-                            ? tooltipSelectingScreen
-                            : widget.session.isSharingScreen
-                                ? tooltipStopSharingScreen
-                                : tooltipShareScreen,
-                        child: tiamat.IconButton(
-                          onPressed:
-                              _screenShareBusy ? null : toggleScreenShare,
-                          size: iconSize,
-                          iconColor: widget.session.isSharingScreen
-                              ? SpeakingIndicator.color
-                              : null,
-                          icon: widget.session.isSharingScreen
-                              ? Icons.stop_screen_share_rounded
-                              : Icons.screen_share_outlined,
-                        ),
-                      ),
-                    ),
-                  SizedBox(
-                    width: widget.height,
-                    height: widget.height,
-                    child: SoundboardButton(
-                      controller: soundboard,
-                      deafened: widget.session.isDeafened,
-                      alignment: PopoverAlignment.start,
-                      builder: (context, onPressed) => tiamat.IconButton(
-                        onPressed: onPressed,
-                        size: iconSize,
-                        iconColor: onPressed == null
-                            ? Theme.of(context).disabledColor
-                            : null,
-                        icon: Icons.surround_sound_rounded,
-                      ),
-                    ),
-                  ),
-                  // The call controls in a small window of their own that
-                  // floats over other apps: the browser's stand-in for the
-                  // taskbar buttons (issue #146).
-                  if (BrowserCallControls.canPopOut)
-                    SizedBox(
-                      width: widget.height,
-                      height: widget.height,
-                      child: Tooltip(
-                        message: tooltipPopOutControls,
-                        child: tiamat.IconButton(
-                            onPressed: BrowserCallControls.popOut,
-                            size: iconSize,
-                            icon: Icons.picture_in_picture_alt_rounded),
-                      ),
-                    ),
-                  SizedBox(
-                    width: widget.height,
-                    height: widget.height,
-                    child: AspectRatio(
-                        aspectRatio: 1.0,
-                        child: tiamat.IconButton(
-                            onPressed: () {
-                              widget.session.hangUpCall();
-                            },
-                            size: iconSize,
-                            iconColor: ColorScheme.of(context).error,
-                            icon: Icons.call_end_rounded)),
-                  ),
-                ],
+                ),
               ),
-            ],
-          ),
-        ));
+            SizedBox(
+              width: extent,
+              height: widget.height,
+              child: SoundboardButton(
+                controller: soundboard,
+                deafened: widget.session.isDeafened,
+                alignment: PopoverAlignment.start,
+                builder: (context, onPressed) => tiamat.IconButton(
+                  onPressed: onPressed,
+                  size: iconSize,
+                  iconColor: onPressed == null
+                      ? Theme.of(context).disabledColor
+                      : null,
+                  icon: Icons.surround_sound_rounded,
+                ),
+              ),
+            ),
+            // The call's games: the shelf, or the way out of the one
+            // we are in.
+            if (activities != null)
+              SizedBox(
+                width: extent,
+                height: widget.height,
+                child: Tooltip(
+                  message: inActivity
+                      ? tooltipLeaveActivity
+                      : CallControlButtons.promptCallOpenActivities,
+                  child: tiamat.IconButton(
+                    onPressed: inActivity ? _leaveActivity : _openActivities,
+                    size: iconSize,
+                    iconColor: inActivity ? SpeakingIndicator.color : null,
+                    icon: Icons.rocket_launch,
+                  ),
+                ),
+              ),
+            // The call controls in a small window of their own that
+            // floats over other apps: the browser's stand-in for the
+            // taskbar buttons (issue #146).
+            if (BrowserCallControls.canPopOut)
+              SizedBox(
+                width: extent,
+                height: widget.height,
+                child: Tooltip(
+                  message: tooltipPopOutControls,
+                  child: tiamat.IconButton(
+                      onPressed: BrowserCallControls.popOut,
+                      size: iconSize,
+                      icon: Icons.picture_in_picture_alt_rounded),
+                ),
+              ),
+            SizedBox(
+              width: extent,
+              height: widget.height,
+              child: AspectRatio(
+                  aspectRatio: 1.0,
+                  child: tiamat.IconButton(
+                      onPressed: () {
+                        widget.session.hangUpCall();
+                      },
+                      size: iconSize,
+                      iconColor: ColorScheme.of(context).error,
+                      icon: Icons.call_end_rounded)),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 
   /// Crossed out and red while we are not transmitting, and then static:
