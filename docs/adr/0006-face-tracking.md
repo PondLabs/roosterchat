@@ -10,7 +10,9 @@ This record says how a plaque follows a face, on which engine on each platform, 
 
 ### Whoever shows a video tracks it
 
-Each app finds the faces in the videos it is showing, on its own device. The plaque is worked out from the very picture it is drawn over, so it cannot run ahead of the face or lag behind it, and no frame and nothing about a face is sent or kept.
+Each app finds the faces in the videos it is showing, on its own device. The plaque is worked out from the pictures the app itself is drawing, with no network between the two, and no frame and nothing about a face is sent or kept.
+
+The plaque is not worked out on every frame, though. A plaque on screen comes from the last frame analysed, which is at most one detection old: 100 ms at the ten detections a second R4.3 asks for, 67 ms at the fifteen an engine aims at, plus the few milliseconds the detection takes. R4.2 is measured on the frame that was analysed, by its frame code, not on the frame on screen when the plaque is drawn: it says how well the forehead is found, not how far a quick head gets from its plaque in those 100 ms.
 
 The other way round was refused: each player tracking their own face and sending the position to the others. A position travels on a data message and the picture on a video track with its own jitter buffer, so the two arrive apart by an amount that changes, and the plaque would slide off a moving head. It would also put face data on the network, and a player on a device that cannot track would have no plaque for anyone.
 
@@ -66,11 +68,16 @@ Today `VoipStream.buildVideoRenderer` (`rooster/lib/client/components/voip/voip_
 | macOS (T3.3) | `face_tracking/face_tracker_macos.dart`; `third_party/flutter-webrtc/common/darwin/Classes/FlutterRTCVideoRenderer.{h,m}`, a new tap class beside them, `FlutterWebRTCPlugin.m`; `third_party/flutter-webrtc/macos/flutter_webrtc.podspec` (the Vision framework) |
 | Android (T3.4) | `face_tracking/face_tracker_android.dart`; `third_party/flutter-webrtc/android/src/main/java/com/cloudwebrtc/webrtc/SurfaceTextureRenderer.java`, a new tap and detector class beside it, `MethodCallHandlerImpl.java`; `third_party/flutter-webrtc/android/build.gradle` (LiteRT 1.4.1); the model in `third_party/flutter-webrtc/android/src/main/assets/`; `rooster/android/app/proguard-rules.pro` if LiteRT needs keep rules |
 
-T0.3 and T0.4 run side by side and both add the model and its `pubspec.yaml` line: the same bytes and the same line, so the second merge finds nothing to do.
+T0.3 and T0.4 run side by side and write in four of the same places. Each is fixed here, so the second to merge finds nothing to settle:
+
+- **The model**: `rooster/assets/face_tracking/face_detection_yunet_2023mar_dynamic.onnx`, sha256 `dfa4ed65833981965a206ca22688131f467474f6a8d1c094c0fc2783f2c05022`, the same bytes in both.
+- **`rooster/pubspec.yaml`**: one line, `    - assets/face_tracking/`, right after `    - assets/cock_a_doodle_who/deck/text/`, the same in both.
+- **YuNet's license**: `rooster/assets/licenses/yunet_MIT.txt`, the `LICENSE` file of OpenCV Zoo's `models/face_detection_yunet` byte for byte (sha256 `c83b8120c50ccbd4c4f96edf53141bdd566ebb8f8e9227e415326aa1b1aba958`), the same in both. Only T0.3 adds ONNX Runtime's, as `onnxruntime_MIT.txt`, and only T0.3 puts the two on the licenses screen (`rooster/lib/main.dart`, where `deep_filter_MIT.txt` is loaded): T0.4 does not touch `main.dart`.
+- **`third_party/README.md`**: each adds one paragraph at the end of the file, about its own changes only. The browser's paragraph comes first: T0.4 merging second writes its paragraph after T0.3's, and T0.3 merging second writes its paragraph before T0.4's.
 
 ## The numbers
 
-Five test videos, 640x480 at 30 frames a second, 1146 frames: `front` (a face looking at the camera, with a light head shake), `glasses` (glasses and a beard on a hand-held phone, eyes 44 to 52 pixels apart), `turn` (a head turning 30 degrees each way), `near_far` (a head from 0.30 m to 1.30 m of the camera, eyes 24 to 132 pixels apart) and `leave` (the face leaves the picture and returns, twice). The reference points never come from a detector being judged: MediaPipe's face mesh model (478 points) run on its own for the filmed videos, the projected 3D model for the rendered ones. Against the exact points of the rendered head, the mesh model's forehead is within 0.05 eye distances while the head is turned 18 degrees or less.
+Five test videos, 640x480 at 30 frames a second, 1146 frames: `front` (a face looking at the camera, with a light head shake), `glasses` (glasses and a beard on a hand-held phone, eyes 44 to 52 pixels apart), `turn` (a head turning 30 degrees each way), `near_far` (a head from 0.30 m to 1.30 m of the camera, eyes 24 to 132 pixels apart) and `leave` (the face leaves the picture and returns, twice). The reference points never come from a detector being judged: MediaPipe's face mesh model (478 points) run on its own for the filmed videos, the projected 3D model for the rendered ones. The two sources were checked against each other on the rendered videos, over the frames turned 20 degrees or less: the mesh model's forehead is at most 0.054 eye distances from the projected point in `turn` and 0.092 in `near_far`, whose far end has the smallest faces. The tolerance of R4.2 is 0.25.
 
 **R4.2**: the share of analysed frames whose plaque centre is within 0.25 eye distances of the reference forehead, among the frames with a whole face turned 15 degrees or less. Every frame of every video was analysed. The last column is `turn` again, over all its frames, up to 30 degrees.
 
