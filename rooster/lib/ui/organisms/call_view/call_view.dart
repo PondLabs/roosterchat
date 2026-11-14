@@ -95,6 +95,28 @@ class _CallViewState extends State<CallView> {
   /// the game draws the players' videos).
   CallActivityController? _activity;
   CallActivitySession? _activitySession;
+
+  /// What the stage rebuilds on, made once with [_activity]: the
+  /// controller, and the session too when the strip follows who plays. A
+  /// new one on every build subscribed to the controller again, which
+  /// throws once the controller is disposed while the game's sound is
+  /// still going down.
+  Listenable? _stageListenable;
+
+  /// Puts [controller], the game of [session], on the stage.
+  void _enterStage(
+      CallActivityController controller, CallActivitySession session) {
+    _activity = controller;
+    _activitySession = session;
+    _stageListenable = session.activity.drawsPlayerVideos
+        ? Listenable.merge([controller, session])
+        : controller;
+  }
+
+  /// Whether this client can play [activity]: it has a controller, and
+  /// this device runs it.
+  static bool _playable(CallActivity activity) =>
+      activity.createController != null && activity.availability().isAvailable;
   StreamSubscription? _activityStreamsSub;
   StreamSubscription? _shelfSub;
   StreamSubscription? _boothSub;
@@ -192,8 +214,7 @@ class _CallViewState extends State<CallView> {
     if (session == null) return;
     final controller = _controllerFor(session);
     if (controller == null) return;
-    _activity = controller;
-    _activitySession = session;
+    _enterStage(controller, session);
   }
 
   /// The live session of this call there is a seat in (the pill's
@@ -220,18 +241,23 @@ class _CallViewState extends State<CallView> {
     if (_activity != null) return;
     // The shelf and the pill offer no Join for an activity this device
     // does not run; nor does anything else get in.
-    if (!session.activity.availability().isAvailable) return;
-    final controller = _controllerFor(session);
-    if (controller == null) return;
-    setState(() {
-      _activity = controller;
-      _activitySession = session;
-    });
+    if (!_playable(session.activity)) return;
+    final controller = _controllerFor(session)!;
+    setState(() => _enterStage(controller, session));
     await session.join();
   }
 
   Future<void> _launchActivity(CallActivity activity) async {
     if (!activity.availability().isAvailable) return;
+    // Called without an await: a launch that fails says so here, or the
+    // button looks dead.
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (activity.createController == null) {
+      // Nothing would play it: write no session we could not show.
+      messenger?.showSnackBar(
+          SnackBar(content: Text(CallView.messageActivityLaunchFailed)));
+      return;
+    }
     Object? options;
     if (activity.launchOptions case final ask?) {
       options = await ask(context);
@@ -239,9 +265,6 @@ class _CallViewState extends State<CallView> {
     }
     final component = _activityComponent;
     if (component == null) return;
-    // Called without an await: a launch that fails says so here, or the
-    // button looks dead.
-    final messenger = ScaffoldMessenger.maybeOf(context);
     final CallActivitySession? session;
     try {
       session = await component.launch(activity);
@@ -254,10 +277,12 @@ class _CallViewState extends State<CallView> {
       return;
     }
     if (session == null) {
-      // A session is already running in this call: open it, not a failure.
+      // A session is already running in this call: open it, not a failure
+      // - unless it is one this client cannot play.
       for (final entry in component.liveSessions()) {
         final running = component.sessionOf(entry.sessionId);
         if (running == null) continue;
+        if (!_playable(running.activity)) break;
         if (mounted) await _joinSession(running);
         return;
       }
@@ -266,17 +291,10 @@ class _CallViewState extends State<CallView> {
       return;
     }
     if (!mounted) return;
-    final controller = _controllerFor(session);
-    if (controller == null) {
-      messenger?.showSnackBar(
-          SnackBar(content: Text(CallView.messageActivityLaunchFailed)));
-      return;
-    }
+    final CallActivitySession hosted = session;
+    final controller = _controllerFor(hosted)!;
     await controller.hostStart(options);
-    setState(() {
-      _activity = controller;
-      _activitySession = session;
-    });
+    setState(() => _enterStage(controller, hosted));
   }
 
   /// Out of the activity: back to the plain call (the session goes on
@@ -292,6 +310,7 @@ class _CallViewState extends State<CallView> {
       setState(() {
         _activity = null;
         _activitySession = null;
+        _stageListenable = null;
       });
     }
   }
@@ -525,8 +544,7 @@ class _CallViewState extends State<CallView> {
     final activitySession = _activitySession;
     if (activity != null) {
       return ListenableBuilder(
-        // The session too: the strip follows who plays.
-        listenable: Listenable.merge([activity, activitySession]),
+        listenable: _stageListenable ?? activity,
         builder: (context, _) => Stack(
           children: [
             Positioned.fill(
