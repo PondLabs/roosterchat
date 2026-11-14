@@ -36,8 +36,11 @@ void main() {
   });
 
   group('the starter deck', () {
-    final files = readFiles();
-    final deck = Deck.parse(cards: files.cards, texts: files.texts);
+    late Deck deck;
+    setUpAll(() {
+      final files = readFiles();
+      deck = Deck.parse(cards: files.cards, texts: files.texts);
+    });
 
     test('has at least 10 World cards in every theme', () {
       for (final theme in DeckTheme.values) {
