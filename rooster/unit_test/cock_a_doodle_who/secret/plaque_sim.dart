@@ -65,7 +65,7 @@ class Sim {
   /// Launches the session on `p0` and has `p1`... join it as players.
   Future<void> start() async {
     for (var i = 0; i < count; i++) {
-      _app('p$i');
+      enter('p$i');
     }
     await apps.first.session.launch();
     await settle();
@@ -75,7 +75,8 @@ class Sim {
     await settle();
   }
 
-  SimApp _app(String id) {
+  /// A client enters the call, with its session and its custody.
+  SimApp enter(String id) {
     final session = CallActivitySession(
         activity: whoActivity,
         selfUserId: '@$id:example.org',
@@ -97,7 +98,7 @@ class Sim {
 
   /// Someone enters the call and the session mid-round.
   Future<SimApp> add(String id) async {
-    final app = _app(id);
+    final app = enter(id);
     await settle();
     await app.session.join();
     await settle();
@@ -127,6 +128,14 @@ class Sim {
       await Future<void>.delayed(Duration.zero);
       quiet = call.log.length == last ? quiet + 1 : 0;
       last = call.log.length;
+    }
+  }
+
+  /// Runs until [done], one turn of the call at a time.
+  Future<void> until(bool Function() done) async {
+    for (var turns = 0; !done(); turns++) {
+      if (turns > 1000) throw StateError('never happened');
+      await Future<void>.delayed(Duration.zero);
     }
   }
 

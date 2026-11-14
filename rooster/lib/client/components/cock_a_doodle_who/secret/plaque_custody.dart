@@ -294,7 +294,8 @@ class PlaqueCustody extends ChangeNotifier {
     final own = entries[_self];
     final order = own?.state == PlaqueState.pending ? own!.deal : null;
     if (order?.dealer != null) {
-      if (!session.transport.isPresent(order!.dealer!)) _order(own!, order);
+      // Another dealer only when this one is gone from the game.
+      if (!session.presentPlayers.contains(order!.dealer)) _order(own!, order);
       return;
     }
     if (_ledger.owed.isNotEmpty) return;
@@ -423,7 +424,10 @@ class PlaqueCustody extends ChangeNotifier {
   Set<String> get _roster =>
       {...session.snapshot.players, ...session.snapshot.spectators};
 
-  String _name() => _names.nextInt(1 << 32).toRadixString(36);
+  /// A random name, 60 bits of it: two clients never make the same one.
+  String _name() => [_names.nextInt(1 << 30), _names.nextInt(1 << 30)]
+      .map((n) => n.toRadixString(36))
+      .join();
 
   /// We make [owner]'s plaque: we hold it, and everyone who may read it
   /// gets it. The host, when it is someone else, hears of it in [_announce].

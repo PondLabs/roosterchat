@@ -10,9 +10,9 @@ import 'package:rooster/client/components/cock_a_doodle_who/secret/plaque_custod
 
 import 'plaque_sim.dart';
 
-/// A session of three Deck rounds with swaps, and in one seed out of three
-/// a host that vanishes before the second. Returns the card of every plaque
-/// that was on a forehead, by tag.
+/// A session of three Deck rounds, each with two swaps, and in one seed out
+/// of three a host that vanishes before the second. Returns the card of
+/// every plaque that was on a forehead, by tag.
 Future<Map<String, String>> _deckSession(int count, int seed) async {
   // Ten cards a theme: a theme runs out, and the draw has to leave it.
   final sim = Sim(count, seed: seed, deck: simDeck(perTheme: 10));
@@ -40,9 +40,18 @@ Future<Map<String, String>> _deckSession(int count, int seed) async {
     final theme = DeckTheme.values[(seed + round) % DeckTheme.values.length];
     await sim.deckRound(DeckFilter(theme: theme));
     record();
-    await sim.deal(sim.host.id, DeckFilter(theme: theme));
-    record();
-    await sim.deal(sim.players.last, DeckFilter(theme: theme));
+    // Two swaps at once, the host's own card and the last player's: asked
+    // for together, or the second while the host's card is being drawn.
+    final host = sim.host, last = sim.players.last;
+    sim.opened(host.id);
+    sim.opened(last);
+    host.custody.hostDeal(host.id, DeckFilter(theme: theme));
+    if (seed.isEven) {
+      await sim.until(
+          () => host.custody.ledger.entries[host.id]!.deal?.dealer != null);
+    }
+    host.custody.hostDeal(last, DeckFilter(theme: theme));
+    await sim.settle();
     record();
     for (final owner in sim.players) {
       await sim.reveal(owner);
@@ -67,6 +76,58 @@ void main() {
         }
       }, timeout: const Timeout(Duration(minutes: 10)));
     }
+  });
+
+  test('who just joined draws the host\'s card only once they hold the round',
+      () async {
+    for (var seed = 1; seed <= 40; seed++) {
+      // Eight cards in all, and nobody wrote: p1 and p2 get a card each.
+      final sim = Sim(3, seed: seed, deck: simDeck(perTheme: 1));
+      await sim.start();
+      await sim.homemadeRound(silent: {'p0', 'p1', 'p2'});
+      await sim.deal('p1');
+      await sim.deal('p2');
+
+      // a1 joins, sorts before everyone, and is asked for the host's card
+      // before the round's plaques have reached it.
+      final host = sim.host, joiner = sim.enter('a1');
+      await sim.until(() => joiner.session.hasSession);
+      joiner.session.join();
+      await sim.until(() => host.session.snapshot.players.contains('a1'));
+      host.custody.hostDeal('p0', const DeckFilter());
+      await sim.settle();
+
+      expect(host.custody.ledger.entries['p0']!.state, PlaqueState.dealt);
+      final cards = [
+        for (final p in ['p0', 'p1', 'p2']) sim.truth(p)!.cardId
+      ];
+      expect(cards.toSet().length, 3, reason: 'seed $seed: $cards');
+      expect(sim.misplaced(), isEmpty, reason: 'seed $seed');
+      expect(sim.leaks(), isEmpty, reason: 'seed $seed');
+      await sim.close();
+    }
+  });
+
+  test('the host\'s card goes to another dealer when the first leaves the game',
+      () async {
+    final sim = Sim(3);
+    addTearDown(sim.close);
+    await sim.start();
+    await sim.homemadeRound(silent: {'p0', 'p1', 'p2'});
+    final host = sim.host;
+
+    // Nobody wrote. p1 is asked for the host's card and never answers: it
+    // leaves the game, and stays in the call.
+    sim['p1'].custody.dispose();
+    host.custody.hostDeal('p0', const DeckFilter());
+    await sim
+        .until(() => host.custody.ledger.entries['p0']!.deal?.dealer == 'p1');
+    await sim['p1'].session.leave();
+    await sim.settle();
+
+    expect(host.custody.ledger.entries['p0']!.state, PlaqueState.dealt);
+    expect(sim['p2'].custody.plaqueOf('p0')?.cardId, isNotNull);
+    expect(host.custody.plaqueOf('p0'), isNull);
   });
 
   group('a plaque can still be revealed to its owner', () {
