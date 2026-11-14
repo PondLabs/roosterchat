@@ -22,3 +22,9 @@ debug = false
 [profile.dev.package.deep_filter]
 opt-level = 3
 debug = false
+
+# Face tracking cuts every frame down to the detector's input pixel by pixel:
+# unoptimised, that alone would cost more than the detection.
+[profile.dev.package.face_tracking]
+opt-level = 3
+debug = false

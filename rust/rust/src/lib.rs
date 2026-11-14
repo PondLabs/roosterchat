@@ -25,3 +25,7 @@ pub use audio_dsp;
 // and soundboard clips (decode a window, encode Ogg Opus), same C ABI
 // arrangement.
 pub use dj_audio;
+
+// Face tracking (YuNet on tract, fed by the WebRTC plugin's renderers), same
+// C ABI arrangement: docs/adr/0006-face-tracking.md.
+pub use face_tracking;

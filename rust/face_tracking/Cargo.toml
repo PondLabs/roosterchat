@@ -1,0 +1,15 @@
+[package]
+name = "face_tracking"
+version = "0.1.0"
+edition = "2021"
+description = "Rooster face tracking on the desktop: YuNet on tract, fed with the video frames the WebRTC plugin draws. C ABI. No network, nothing kept."
+license = "AGPL-3.0"
+publish = false
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+# The same tract the voice's DeepFilterNet3 runs on (third_party/deep_filter):
+# already in librust_lib_rooster, so the face detector adds only its model.
+tract-onnx = "=0.21.13"
