@@ -43,11 +43,32 @@
 set -euo pipefail
 
 name=${HEADLESS_NAME:-default}
+# The name becomes a folder that the run removes when it ends: no slashes.
+if [[ ! $name =~ ^[A-Za-z0-9_-][A-Za-z0-9._-]*$ ]]; then
+  echo "headless-linux: HEADLESS_NAME may only hold letters, digits, '.', '_' and '-' (and not start with '.')" >&2
+  exit 1
+fi
 state=${XDG_RUNTIME_DIR:-/tmp}/rooster-headless/$name
 
 die() {
   echo "headless-linux: $*" >&2
   exit 1
+}
+
+# Fails with the end of a log, which the cleanup is about to remove.
+die_log() { # LOG MESSAGE
+  echo "headless-linux: $2; the end of its log:" >&2
+  tail -n 20 "$1" 2>/dev/null | sed 's/^/  | /' >&2
+  exit 1
+}
+
+# Fails at once with the name of every program missing from PATH.
+need() {
+  local missing=() p
+  for p in "$@"; do
+    command -v "$p" >/dev/null || missing+=("$p")
+  done
+  ((${#missing[@]} == 0)) || die "not found in PATH: ${missing[*]}"
 }
 
 # Loads the running session's display, or fails with a hint.
@@ -59,6 +80,7 @@ attach() {
 }
 
 grab() {
+  need ffmpeg
   ffmpeg -hide_banner -loglevel error -y -f x11grab -draw_mouse 0 "$@"
 }
 
@@ -149,6 +171,7 @@ run() {
   [[ $# -ge 1 ]] || die "usage: $0 run [--size WxH] [--keep-home] [--offline] BUNDLE|EXE [ARGS...]"
   [[ $size =~ ^[0-9]*[02468]x[0-9]*[02468]$ ]] || die "--size must be WxH with even numbers"
   local exe
+  need mutter Xwayland dbus-daemon xauth mcookie python3 ffmpeg "${offline[@]:0:1}"
   exe=$(find_executable "$1")
   shift
 
@@ -181,7 +204,7 @@ run() {
   dbus-daemon --session --nofork --nopidfile --address="unix:path=$state/bus" \
     >"$state/logs/dbus.log" 2>&1 &
   pids+=($!)
-  wait_for "$state/bus" || die "the private D-Bus did not start (see $state/logs/dbus.log)"
+  wait_for "$state/bus" || die_log "$state/logs/dbus.log" "the private D-Bus did not start"
   export DBUS_SESSION_BUS_ADDRESS="unix:path=$state/bus"
 
   local wayland=rooster-headless-$name
@@ -189,14 +212,14 @@ run() {
     --wayland-display "$wayland" >"$state/logs/mutter.log" 2>&1 &
   pids+=($!)
   wait_for "${XDG_RUNTIME_DIR:-/tmp}/$wayland" 300 ||
-    die "mutter did not start (see $state/logs/mutter.log)"
+    die_log "$state/logs/mutter.log" "mutter did not start"
 
   touch "$state/xauth"
   WAYLAND_DISPLAY=$wayland Xwayland -displayfd 3 -geometry "$size" -fullscreen \
     -auth "$state/xauth" -nolisten tcp 3>"$state/display.fd" \
     >"$state/logs/xwayland.log" 2>&1 &
   pids+=($!)
-  wait_for "$state/display.fd" 300 || die "Xwayland did not start (see $state/logs/xwayland.log)"
+  wait_for "$state/display.fd" 300 || die_log "$state/logs/xwayland.log" "Xwayland did not start"
   local display
   display=":$(head -n1 "$state/display.fd")"
   xauth -q -f "$state/xauth" add "$display" . "$(mcookie)"
