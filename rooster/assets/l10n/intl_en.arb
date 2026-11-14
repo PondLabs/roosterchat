@@ -3928,9 +3928,15 @@
     "type": "text",
     "placeholders": {}
   },
-  "promptAttachmentProcessingSendOriginal": "Send Original",
+  "promptAttachmentProcessingSendOriginal": "Send original (keeps metadata)",
   "@promptAttachmentProcessingSendOriginal": {
-    "description": "Prompt text for the option to send a file in its original state, without any further processing such as removing metadata",
+    "description": "Switch in the dialog that previews a file before it is attached: sends the file exactly as it is, with its metadata (where and when a photo was taken, the camera) left in",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelAttachmentMetadataNotRemoved": "Couldn't remove this image's metadata. To attach it as it is, turn on \"Send original\".",
+  "@labelAttachmentMetadataNotRemoved": {
+    "description": "Shown in the dialog that previews a file before it is attached, when the image could not be read well enough to remove its metadata; nothing is attached unless the person turns on the \"Send original (keeps metadata)\" switch",
     "type": "text",
     "placeholders": {}
   },
