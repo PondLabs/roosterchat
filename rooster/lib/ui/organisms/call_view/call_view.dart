@@ -22,10 +22,6 @@ import 'package:rooster/ui/organisms/call_activity/activity_requests.dart';
 import 'package:rooster/ui/organisms/call_activity/activity_stage.dart';
 import 'package:rooster/ui/organisms/dj/dj_booth_panel.dart';
 import 'package:rooster/ui/organisms/soundboard/soundboard_call_controller.dart';
-import 'package:rooster/ui/organisms/sunny_side_putt/putt_audio.dart';
-import 'package:rooster/ui/organisms/sunny_side_putt/putt_launch_options.dart';
-import 'package:rooster/ui/organisms/sunny_side_putt/putt_session.dart';
-import 'package:rooster/ui/organisms/sunny_side_putt/sunny_side_putt_game.dart';
 import 'package:rooster/utils/animation/ring_shaker.dart';
 import 'package:rooster/utils/animation/ripple.dart';
 import 'package:flutter/material.dart';
@@ -45,7 +41,6 @@ class CallView extends StatefulWidget {
     this.hangUp,
     this.declineCall,
     this.acceptCall,
-    this.puttAudio,
     super.key,
   });
   final VoipSession currentSession;
@@ -76,11 +71,6 @@ class CallView extends StatefulWidget {
   final Future<void> Function()? declineCall;
   final Future<void> Function()? acceptCall;
 
-  /// The game's sound, when the caller already has one: the tests pass a
-  /// fake in to watch the exit path release it. Left out, the view builds
-  /// its own the first time the game draws.
-  final PuttAudio? puttAudio;
-
   @override
   State<CallView> createState() => _CallViewState();
 }
@@ -101,9 +91,32 @@ class _CallViewState extends State<CallView> {
   bool _boothOpen = false;
 
   /// The live call activity this call is playing (the game on the stage),
-  /// the one the pill invites us into, and the sound they make.
-  PuttSessionController? _activity;
-  PuttAudio? _puttAudio;
+  /// and its session (whose descriptor names the stage and says whether
+  /// the game draws the players' videos).
+  CallActivityController? _activity;
+  CallActivitySession? _activitySession;
+
+  /// What the stage rebuilds on, made once with [_activity]: the
+  /// controller, and the session too when the strip follows who plays. A
+  /// new one on every build subscribed to the controller again, which
+  /// throws once the controller is disposed while the game's sound is
+  /// still going down.
+  Listenable? _stageListenable;
+
+  /// Puts [controller], the game of [session], on the stage.
+  void _enterStage(
+      CallActivityController controller, CallActivitySession session) {
+    _activity = controller;
+    _activitySession = session;
+    _stageListenable = session.activity.drawsPlayerVideos
+        ? Listenable.merge([controller, session])
+        : controller;
+  }
+
+  /// Whether this client can play [activity]: it has a controller, and
+  /// this device runs it.
+  static bool _playable(CallActivity activity) =>
+      activity.createController != null && activity.availability().isAvailable;
   StreamSubscription? _activityStreamsSub;
   StreamSubscription? _shelfSub;
   StreamSubscription? _boothSub;
@@ -136,13 +149,11 @@ class _CallViewState extends State<CallView> {
     });
 
     room = widget.currentSession.client.getRoom(widget.currentSession.roomId)!;
-    _puttAudio = widget.puttAudio;
     statTimer = Timer.periodic(const Duration(milliseconds: 200), timer);
 
     // Soundboard: preload catalog audio on call join for instant click->play.
     _soundboard = SoundboardCallController.acquire(widget.currentSession);
 
-    registerSunnySidePutt();
     // Activities: the call's stage follows a session's whole life
     // (started, joined, ended) through the room component's own stream.
     _activityStreamsSub = _activityComponent?.onChanged.listen((_) {
@@ -179,18 +190,31 @@ class _CallViewState extends State<CallView> {
     return room.getMemberOrFallback(userId).avatar;
   }
 
+  /// The camera of the call participant with [identity] (a LiveKit
+  /// identity, the roster's currency), live: the game asks on each build.
+  VoipStream? _cameraOf(String identity) =>
+      callCameraOf(widget.currentSession.streams, identity);
+
+  /// This client's controller of [session], from its activity's
+  /// descriptor; null when the descriptor has none.
+  CallActivityController? _controllerFor(CallActivitySession session) =>
+      session.activity.createController?.call(CallActivityCallContext(
+        session: session,
+        nameOf: _memberNameOf,
+        avatarOf: _memberAvatarOf,
+        cameraOf: _cameraOf,
+        onEnded: () => _exitActivity(),
+      ));
+
   /// Rejoining (or a view rebuilt): if we are already in a live session
   /// of this call, its stage comes back.
   void _adoptExistingActivity() {
     if (_activity != null) return;
     final session = _activityComponent?.ownSession;
     if (session == null) return;
-    _activity = PuttSessionController(
-      session: session,
-      nameOf: _memberNameOf,
-      avatarOf: _memberAvatarOf,
-      onEnded: () => _exitActivity(),
-    );
+    final controller = _controllerFor(session);
+    if (controller == null) return;
+    _enterStage(controller, session);
   }
 
   /// The live session of this call there is a seat in (the pill's
@@ -215,25 +239,32 @@ class _CallViewState extends State<CallView> {
 
   Future<void> _joinSession(CallActivitySession session) async {
     if (_activity != null) return;
-    setState(() {
-      _activity = PuttSessionController(
-        session: session,
-        nameOf: _memberNameOf,
-        avatarOf: _memberAvatarOf,
-        onEnded: () => _exitActivity(),
-      );
-    });
+    // The shelf and the pill offer no Join for an activity this device
+    // does not run; nor does anything else get in.
+    if (!_playable(session.activity)) return;
+    final controller = _controllerFor(session)!;
+    setState(() => _enterStage(controller, session));
     await session.join();
   }
 
   Future<void> _launchActivity(CallActivity activity) async {
-    final options = await showPuttLaunchOptions(context);
-    if (!mounted || options == null) return;
-    final component = _activityComponent;
-    if (component == null) return;
+    if (!activity.availability().isAvailable) return;
     // Called without an await: a launch that fails says so here, or the
     // button looks dead.
     final messenger = ScaffoldMessenger.maybeOf(context);
+    if (activity.createController == null) {
+      // Nothing would play it: write no session we could not show.
+      messenger?.showSnackBar(
+          SnackBar(content: Text(CallView.messageActivityLaunchFailed)));
+      return;
+    }
+    Object? options;
+    if (activity.launchOptions case final ask?) {
+      options = await ask(context);
+      if (!mounted || options == null) return;
+    }
+    final component = _activityComponent;
+    if (component == null) return;
     final CallActivitySession? session;
     try {
       session = await component.launch(activity);
@@ -246,10 +277,12 @@ class _CallViewState extends State<CallView> {
       return;
     }
     if (session == null) {
-      // A session is already running in this call: open it, not a failure.
+      // A session is already running in this call: open it, not a failure
+      // - unless it is one this client cannot play.
       for (final entry in component.liveSessions()) {
         final running = component.sessionOf(entry.sessionId);
         if (running == null) continue;
+        if (!_playable(running.activity)) break;
         if (mounted) await _joinSession(running);
         return;
       }
@@ -258,14 +291,10 @@ class _CallViewState extends State<CallView> {
       return;
     }
     if (!mounted) return;
-    final controller = PuttSessionController(
-      session: session,
-      nameOf: _memberNameOf,
-      avatarOf: _memberAvatarOf,
-      onEnded: () => _exitActivity(),
-    );
-    await controller.hostStart(PuttSessionController.buildConfig(options));
-    setState(() => _activity = controller);
+    final CallActivitySession hosted = session;
+    final controller = _controllerFor(hosted)!;
+    await controller.hostStart(options);
+    setState(() => _enterStage(controller, hosted));
   }
 
   /// Out of the activity: back to the plain call (the session goes on
@@ -274,12 +303,16 @@ class _CallViewState extends State<CallView> {
     final controller = _activity;
     if (controller == null) return;
     await controller.leave();
-    controller.dispose();
-    // The game's sound goes with the view: the music loops, and nothing
-    // else stops it until the whole call view is disposed.
-    await _puttAudio?.dispose();
-    _puttAudio = null;
-    if (mounted) setState(() => _activity = null);
+    // The game's sound goes with it: the music loops, and nothing else
+    // stops it until the whole call view is disposed.
+    await controller.dispose();
+    if (mounted) {
+      setState(() {
+        _activity = null;
+        _activitySession = null;
+        _stageListenable = null;
+      });
+    }
   }
 
   /// The activity shelf, over the call: what this app can play in the
@@ -309,11 +342,19 @@ class _CallViewState extends State<CallView> {
   }
 
   /// The call's videos as the stage's strip: the same views the grid
-  /// builds, smaller, one row.
-  Widget _activityStrip() {
+  /// builds, smaller, one row. A game that draws the players' videos
+  /// itself leaves the strip to the people who do not play.
+  Widget _activityStrip(CallActivitySession? session) {
     final streams = widget.currentSession.streams;
     final focusedId = mainStream?.streamId;
-    final tiles = callGridTiles(streams);
+    final players = session != null && session.activity.drawsPlayerVideos
+        ? session.snapshot.players
+        : null;
+    final tiles = callGridTiles(streams)
+        .where(
+            (tile) => !(players?.contains(tile.stream.streamOwnerId) ?? false))
+        .toList();
+    if (players != null && tiles.isEmpty) return const SizedBox.shrink();
     return SizedBox(
       height: 118,
       child: ListView(
@@ -357,7 +398,6 @@ class _CallViewState extends State<CallView> {
       CallActivityRequests.stageExits.remove(widget.currentSession);
     }
     _activity?.dispose();
-    _puttAudio?.dispose();
     _soundboard?.release();
     _soundboard = null;
     super.dispose();
@@ -501,27 +541,18 @@ class _CallViewState extends State<CallView> {
     // The activity owns the stage while we are in it; the call's controls
     // float on top of it, like over the tiles of a plain call.
     final activity = _activity;
+    final activitySession = _activitySession;
     if (activity != null) {
       return ListenableBuilder(
-        listenable: activity,
+        listenable: _stageListenable ?? activity,
         builder: (context, _) => Stack(
           children: [
             Positioned.fill(
               child: ActivityStage(
-                activityName: 'Sunny Side Putt',
-                gameSlot: activity.match == null
-                    ? (activity.outdated
-                        ? Center(
-                            child: Text(activity.hostOutdated
-                                ? labelPuttHostUpdateToPlay()
-                                : labelPuttUpdateToPlay()))
-                        : null)
-                    : SunnySidePuttView(
-                        match: activity.match!,
-                        audio: _puttAudio ??= (PuttAudio()..preload()),
-                        onLeave: () => _exitActivity(),
-                      ),
-                participantsStrip: _activityStrip(),
+                activityName: activitySession?.activity.displayName() ?? '',
+                gameSlot: activity.buildStage(context,
+                    onLeave: () => _exitActivity()),
+                participantsStrip: _activityStrip(activitySession),
                 onExit: () => _exitActivity(),
               ),
             ),
@@ -660,8 +691,9 @@ class _CallViewState extends State<CallView> {
                     child: Padding(
                       padding: const EdgeInsets.all(8),
                       child: ActivityJoinPill(
-                        activityName: 'Sunny Side Putt',
+                        activityName: joinable.activity.displayName(),
                         hostName: _memberNameOf(joinable.snapshot.hostUserId),
+                        availability: joinable.activity.availability(),
                         onJoin: () => _joinSession(joinable),
                       ),
                     ),

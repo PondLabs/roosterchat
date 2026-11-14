@@ -594,6 +594,7 @@
   "labelActivityStartedBy": "{host} iniciou {activity}",
   "ActivityPickerPanel__labelNothingToPlay": "Nenhuma atividade para jogar ainda.",
   "ActivityPickerStrings_launch": "Iniciar",
+  "ActivityPickerStrings_unavailableHere": "Indisponível neste dispositivo",
   "ActivityStageStrings_loading": "Carregando {activity}",
   "ActivityStageStrings_toggleFullscreen": "Tela cheia",
   "ActivityStageStrings_exitFullscreen": "Sair da tela cheia",

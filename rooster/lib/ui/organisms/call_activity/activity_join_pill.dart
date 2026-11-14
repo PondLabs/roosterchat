@@ -1,9 +1,13 @@
 // A session is live in the call and this client has not joined it: the
 // pill in the middle of the game's tile of the call's grid says who
 // started what, with a Join on it - the same shape as the DJ booth's
-// now-playing pill.
+// now-playing pill. Where this device does not run the activity, the pill
+// says why instead, and joins nothing.
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
+import 'package:rooster/client/components/call_activity/call_activity_component.dart';
+import 'package:rooster/ui/organisms/call_activity/activity_picker_panel.dart';
 
 /// Pilots a join from the call's view ([onJoin] collects it).
 class ActivityJoinPill extends StatelessWidget {
@@ -11,16 +15,21 @@ class ActivityJoinPill extends StatelessWidget {
     required this.activityName,
     required this.hostName,
     required this.onJoin,
+    this.availability = const CallActivityAvailability.available(),
     super.key,
   });
 
-  /// The running activity's display name (Sunny Side Putt).
+  /// The running activity's display name.
   final String activityName;
 
   /// Who started it, by display name.
   final String hostName;
 
   final VoidCallback onJoin;
+
+  /// Whether this device runs the activity: when it does not, the pill
+  /// shows the reason in place of Join and [onJoin] is never called.
+  final CallActivityAvailability availability;
 
   static String text(String host, String activity) =>
       Intl.message("$host started $activity",
@@ -39,6 +48,7 @@ class ActivityJoinPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    if (!availability.isAvailable) return _unavailable(context);
     return Material(
       color: colors.secondaryContainer,
       borderRadius: BorderRadius.circular(24),
@@ -65,6 +75,38 @@ class ActivityJoinPill extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Who started what, and why we cannot join it here: no button.
+  Widget _unavailable(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      color: colors.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(24),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              text(hostName, activityName),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              ActivityPickerStrings.unavailableReason(availability),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context)
+                  .textTheme
+                  .labelSmall
+                  ?.copyWith(color: colors.onSurfaceVariant),
+            ),
+          ],
         ),
       ),
     );

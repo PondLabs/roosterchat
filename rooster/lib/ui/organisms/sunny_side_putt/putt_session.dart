@@ -13,8 +13,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart';
-import 'package:flutter/painting.dart' show ImageProvider;
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:rooster/client/components/call_activity/call_activity_component.dart';
 import 'package:rooster/client/components/call_activity/call_activity_session.dart';
@@ -23,21 +22,30 @@ import 'package:rooster/client/components/sunny_side_putt/core/effects/effect_re
 import 'package:rooster/client/components/sunny_side_putt/core/powerups.dart';
 import 'package:rooster/client/components/sunny_side_putt/core/rules.dart';
 
+import 'putt_audio.dart';
 import 'putt_launch_options.dart';
 import 'putt_match.dart';
+import 'sunny_side_putt_game.dart';
 
 /// The launch options a launcher picks (the launch sheet's outcome) live
 /// in putt_launch_options.dart, with their sheet.
 
-/// The game's activity descriptor, registered the first time a call view
-/// (or its picker) asks. Titles proper stay in English by design.
-final CallActivity _descriptor = CallActivity(
-  id: 'chat.commet.putt',
-  displayName: () => 'Sunny Side Putt',
-  icon: () => null,
-  minPlayers: 1,
-  maxPlayers: 8,
-);
+/// The game's activity descriptor: the launch sheet, the session's
+/// controller and the view on the stage. Titles proper stay in English by
+/// design. [audio] makes the game's sound (a test passes a fake to watch
+/// it released); left out, each stage builds its own the first time the
+/// game draws.
+CallActivity sunnySidePuttActivity({PuttAudio Function()? audio}) =>
+    CallActivity(
+      id: 'chat.commet.putt',
+      displayName: () => 'Sunny Side Putt',
+      icon: () => null,
+      minPlayers: 1,
+      maxPlayers: 8,
+      launchOptions: showPuttLaunchOptions,
+      createController: (call) => PuttActivityController(call,
+          newAudio: audio ?? () => PuttAudio()..preload()),
+    );
 
 /// The version of the game's simulation: the physics and the courses'
 /// data. Every client must step the same world, so a guest whose version
@@ -100,8 +108,73 @@ String labelPuttHostUpdateToPlay() =>
 
 /// Registers the game's activity descriptor; harmless twice.
 void registerSunnySidePutt() {
-  if (CallActivityRegistry.byId(_descriptor.id) != null) return;
-  CallActivityRegistry.register(_descriptor);
+  final descriptor = sunnySidePuttActivity();
+  if (CallActivityRegistry.byId(descriptor.id) != null) return;
+  CallActivityRegistry.register(descriptor);
+}
+
+/// The game on the call's stage: the [PuttSessionController] that keeps
+/// the match in step with the session, the view of its match, and the
+/// game's sound, which goes with the stage.
+class PuttActivityController implements CallActivityController {
+  PuttActivityController(CallActivityCallContext call,
+      {required PuttAudio Function() newAudio})
+      : _newAudio = newAudio,
+        session = PuttSessionController(
+          session: call.session,
+          nameOf: call.nameOf,
+          avatarOf: call.avatarOf,
+          onEnded: call.onEnded,
+        );
+
+  /// The match's own controller.
+  final PuttSessionController session;
+
+  final PuttAudio Function() _newAudio;
+
+  /// The game's sound, built the first time the game draws.
+  PuttAudio? _audio;
+
+  @override
+  void addListener(VoidCallback listener) => session.addListener(listener);
+
+  @override
+  void removeListener(VoidCallback listener) =>
+      session.removeListener(listener);
+
+  @override
+  Future<void> hostStart(Object? options) => session.hostStart(
+      PuttSessionController.buildConfig(options as PuttLaunchOptions));
+
+  @override
+  Widget? buildStage(BuildContext context, {required VoidCallback onLeave}) {
+    final match = session.match;
+    if (match == null) {
+      if (!session.outdated) return null;
+      return Center(
+          child: Text(session.hostOutdated
+              ? labelPuttHostUpdateToPlay()
+              : labelPuttUpdateToPlay()));
+    }
+    return SunnySidePuttView(
+      match: match,
+      audio: _audio ??= _newAudio(),
+      onLeave: onLeave,
+    );
+  }
+
+  @override
+  Future<void> leave() => session.leave();
+
+  /// The match goes, and the game's sound with it: the music loops, and
+  /// nothing else stops it.
+  @override
+  Future<void> dispose() async {
+    session.dispose();
+    final audio = _audio;
+    _audio = null;
+    await audio?.dispose();
+  }
 }
 
 /// The stage-facing controller of a live session: one per joined client.

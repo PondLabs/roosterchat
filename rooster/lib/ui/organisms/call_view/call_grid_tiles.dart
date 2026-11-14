@@ -35,3 +35,12 @@ List<CallGridTile> callGridTiles(Iterable<VoipStream> streams) {
                 : null)
   ];
 }
+
+/// The camera of the call participant with [identity] (who published it, a
+/// LiveKit identity in a voice room: the call activities' roster names
+/// players by it), or null while they have none on.
+VoipStream? callCameraOf(Iterable<VoipStream> streams, String identity) =>
+    streams
+        .where((s) =>
+            s.type == VoipStreamType.video && s.streamOwnerId == identity)
+        .firstOrNull;
