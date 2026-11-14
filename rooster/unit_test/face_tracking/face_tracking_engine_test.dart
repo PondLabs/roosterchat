@@ -27,12 +27,17 @@ class _Video implements FaceFrameSource {
   final _Eyes? Function(Duration t) faceAt;
   bool onScreen = true;
   int grabs = 0;
+  int discarded = 0;
   final crops = <FaceCrop>[];
+
+  /// When each frame was grabbed, by its frame code.
+  final grabbedAt = <int, Duration>{};
 
   @override
   Future<FaceFrame?> grab() async {
     grabs++;
     if (!onScreen) return null;
+    grabbedAt[grabs] = engine.now();
     return _Frame(this, faceAt(engine.now()), grabs);
   }
 }
@@ -48,16 +53,37 @@ class _Frame implements FaceFrame {
   Size get size => _frameSize;
 
   @override
-  Future<FaceDetection> detect(FaceCrop crop,
-      {required bool readFrameCode}) async {
+  FaceCut cut(FaceCrop crop, {required bool readFrameCode}) {
+    video.crops.add(crop);
     final engine = video.engine;
+    return _Cut(this, crop, readFrameCode, engine.now() + engine.cutTime);
+  }
+
+  @override
+  void discard() => video.discarded++;
+}
+
+class _Cut implements FaceCut {
+  _Cut(this.frame, this.crop, this.readFrameCode, this.readyAt);
+
+  final _Frame frame;
+  final FaceCrop crop;
+  final bool readFrameCode;
+
+  /// When the cut is ready to be read: a browser cuts on the GPU, later.
+  final Duration readyAt;
+
+  @override
+  Future<FaceDetection> detect() async {
+    final engine = frame.video.engine;
     expect(engine.inFlight, 0, reason: 'one detection at a time');
     engine.inFlight++;
-    video.crops.add(crop);
+    final wait = readyAt - engine.now();
+    if (wait > Duration.zero) await Future<void>.delayed(wait);
     await Future<void>.delayed(engine.detectTime);
     engine.inFlight--;
     if (engine.fail) throw StateError('the worker died');
-    final eyes = this.eyes;
+    final eyes = frame.eyes;
     final seen = eyes != null &&
         crop.source.contains(eyes.rightEye) &&
         crop.source.contains(eyes.leftEye);
@@ -66,20 +92,23 @@ class _Frame implements FaceFrame {
       eyes: seen
           ? (rightEye: toInput(eyes.rightEye), leftEye: toInput(eyes.leftEye))
           : null,
-      frameCode: readFrameCode ? code : null,
+      frameCode: readFrameCode ? frame.code : null,
     );
   }
 
   @override
-  void discard() {}
+  void discard() => frame.video.discarded++;
 }
 
 class _Engine {
-  _Engine(this.async) : engine = FaceTrackingEngine(clock: () => async.elapsed);
+  _Engine(this.async, {int lookahead = 8})
+      : engine = FaceTrackingEngine(
+            lookahead: lookahead, clock: () => async.elapsed);
 
   final FakeAsync async;
   final FaceTrackingEngine engine;
   Duration detectTime = const Duration(milliseconds: 6);
+  Duration cutTime = Duration.zero;
   int inFlight = 0;
   bool fail = false;
 
@@ -156,6 +185,25 @@ void main() {
       expect(follow.next(_frameSize).source.center.dy, closeTo(230, 1e-9));
     });
 
+    test('the square is cut on whole pixels, as the browser cuts frames', () {
+      final follow = FaceSearchAndFollow();
+      follow.found(follow.next(_frameSize), (
+        rightEye: const Offset(150.3, 100.2),
+        leftEye: const Offset(180.6, 100.9),
+      ));
+      final square = follow.next(_frameSize);
+
+      for (final side in [
+        square.source.left,
+        square.source.top,
+        square.source.width,
+        square.source.height,
+      ]) {
+        expect(side, side.roundToDouble());
+      }
+      expect(square.scale, 128 / square.source.width);
+    });
+
     test('a point of the square comes back to the frame', () {
       final follow = FaceSearchAndFollow();
       follow.found(follow.next(_frameSize),
@@ -190,20 +238,19 @@ void main() {
     test('puts the anchor on the face, from the frame it analysed', () {
       fakeAsync((async) {
         final engine = _Engine(async);
-        final (_, tracker, seen) = engine.track(_face, readFrameCode: true);
+        final (video, tracker, seen) = engine.track(_face, readFrameCode: true);
 
         async.elapse(const Duration(seconds: 1));
 
         expect(seen, isNotEmpty);
         final observation = tracker.observation.value!;
         expect(observation.videoSize, _frameSize);
-        expect(observation.frameCode, isNotNull);
-        final anchor = observation.anchor!;
-        // The face drifts 20 pixels a second: within a pixel of its place
-        // when the frame was grabbed, one detection ago.
-        final eyes = _face(seen.last.$1 - engine.detectTime);
+        // The face drifts: the anchor is where it was when that very frame
+        // was grabbed.
+        final eyes = _face(video.grabbedAt[observation.frameCode]!);
         final expected =
             FaceAnchor.fromEyes(rightEye: eyes.rightEye, leftEye: eyes.leftEye);
+        final anchor = observation.anchor!;
         expect((anchor.center - expected.center).distance, lessThan(1e-6));
         expect(anchor.width, closeTo(expected.width, 1e-6));
         tracker.dispose();
@@ -305,17 +352,46 @@ void main() {
       });
     });
 
-    test('grabs the newest frame only when it is its turn', () {
+    test('grabs a frame only when it is nearly its turn', () {
       fakeAsync((async) {
         final engine = _Engine(async);
-        final (video, tracker, _) = engine.track(_face);
+        final (video, tracker, seen) = engine.track(_face);
 
         async.elapse(const Duration(seconds: 1));
 
-        expect(video.grabs, video.crops.length);
         expect(video.grabs, inInclusiveRange(14, 16));
+        expect(video.grabs - seen.length, lessThanOrEqualTo(1));
         tracker.dispose();
       });
+    });
+
+    test('cuts the next frames while one is detected, when cuts are slow', () {
+      // A browser cuts on the GPU, and a cut is read 20 ms after it was
+      // asked for: one after the other, eight videos would get 3.6 frames
+      // a second each.
+      for (final (lookahead, enough) in [(1, false), (3, true)]) {
+        fakeAsync((async) {
+          final engine = _Engine(async, lookahead: lookahead)
+            ..detectTime = const Duration(milliseconds: 8)
+            ..cutTime = const Duration(milliseconds: 20);
+          final runs = [
+            for (var i = 0; i < 8; i++) engine.track(_face, readFrameCode: true)
+          ];
+
+          async.elapse(const Duration(seconds: 3));
+
+          for (final (video, tracker, seen) in runs) {
+            expect(seen.length / 3 >= 10, enough,
+                reason: 'lookahead $lookahead');
+            // No frame waits more than a few detections.
+            for (final (time, observation) in seen) {
+              final age = time - video.grabbedAt[observation.frameCode]!;
+              expect(age, lessThanOrEqualTo(const Duration(milliseconds: 60)));
+            }
+            tracker.dispose();
+          }
+        });
+      }
     });
 
     test('a video not on screen is not tracked, until it is', () {
@@ -346,6 +422,7 @@ void main() {
 
         expect(seen, isEmpty);
         expect(video.grabs, 1);
+        expect(video.discarded, 0, reason: 'the cut was being detected');
         expect(engine.engine.trackers, 0);
       });
     });

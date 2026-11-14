@@ -10,9 +10,9 @@ import 'face_tracker.dart';
 /// The two eyes of a face, [rightEye] being the person's right eye.
 typedef FaceEyes = ({Offset rightEye, Offset leftEye});
 
-/// The part of a frame a detector looks at, and how: [source] (in pixels of
-/// the frame, possibly reaching past its edges) scaled by [scale] and drawn
-/// at the top left of a black picture of [input] pixels.
+/// The part of a frame a detector looks at, and how: [source] (in whole
+/// pixels of the frame, possibly reaching past its edges) scaled by [scale]
+/// and drawn at the top left of a black picture of [input] pixels.
 class FaceCrop {
   const FaceCrop(this.source, this.scale, this.input);
 
@@ -39,15 +39,26 @@ class FaceDetection {
   final int? frameCode;
 }
 
-/// One frame of a video, held until a detector has looked at it.
+/// One frame of a video, held until it is cut for a detector.
 abstract class FaceFrame {
   /// The frame's size, upright, in pixels.
   Size get size;
 
-  /// Looks for a face in [crop] of this frame, and lets the frame go.
-  Future<FaceDetection> detect(FaceCrop crop, {required bool readFrameCode});
+  /// Starts cutting [crop] out of this frame for the detector, and lets the
+  /// frame go. The cut may take a while to be ready (a browser cuts on the
+  /// GPU): the engine cuts the next frames while a detection runs.
+  FaceCut cut(FaceCrop crop, {required bool readFrameCode});
 
-  /// Lets the frame go without looking at it.
+  /// Lets the frame go without cutting it.
+  void discard();
+}
+
+/// A [FaceCrop] cut out of a frame, waiting for the detector.
+abstract class FaceCut {
+  /// Looks for a face in it, and lets it go.
+  Future<FaceDetection> detect();
+
+  /// Lets it go without looking.
   void discard();
 }
 
@@ -92,11 +103,16 @@ class FaceSearchAndFollow {
     }
     final across = eyes.leftEye - eyes.rightEye;
     final down = Offset(-across.dy, across.dx);
-    final side =
-        math.max(smallestSquare, across.distance * squareInEyeDistances);
+    // In whole pixels: the browser cuts frames on them.
+    final side = math
+        .max(smallestSquare, across.distance * squareInEyeDistances)
+        .roundToDouble();
     final centre = (eyes.rightEye + eyes.leftEye) / 2 + down * squareDrop;
-    return FaceCrop(Rect.fromCenter(center: centre, width: side, height: side),
-        followSide / side, const Size(followSide, followSide));
+    return FaceCrop(
+        Rect.fromLTWH((centre.dx - side / 2).roundToDouble(),
+            (centre.dy - side / 2).roundToDouble(), side, side),
+        followSide / side,
+        const Size(followSide, followSide));
   }
 
   /// What the detector found in [crop], its eyes in pixels of the input:
@@ -119,11 +135,17 @@ class FaceSearchAndFollow {
 /// One detector serving every tracker of the app, in turn: each at most
 /// [rate] times a second, always on its newest frame, so eight videos cost
 /// eight detections and not eight detectors.
+///
+/// While one detection runs, the frames of the next [lookahead] trackers due
+/// are grabbed and cut, so each cut is ready when its turn comes: a frame
+/// waits at most that many detections.
 class FaceTrackingEngine {
-  FaceTrackingEngine({this.rate = 15, Duration Function()? clock})
+  FaceTrackingEngine(
+      {this.rate = 15, this.lookahead = 8, Duration Function()? clock})
       : _clock = clock ?? _stopwatch();
 
   final int rate;
+  final int lookahead;
   final Duration Function() _clock;
 
   static Duration Function() _stopwatch() {
@@ -132,8 +154,12 @@ class FaceTrackingEngine {
   }
 
   final _trackers = <_EngineTracker>[];
+
+  /// Trackers whose frame is being grabbed and cut, in the order they will
+  /// be detected in.
+  final _queue = <(_EngineTracker, Future<_Cut?>)>[];
+  _EngineTracker? _detecting;
   var _turn = 0;
-  var _busy = false;
   Timer? _wake;
 
   Duration get _every => Duration(microseconds: 1000000 ~/ rate);
@@ -160,33 +186,50 @@ class FaceTrackingEngine {
     }
   }
 
-  /// Starts the next detection that is due, or waits for one to be.
+  bool _waiting(_EngineTracker tracker) =>
+      tracker == _detecting || _queue.any((queued) => queued.$1 == tracker);
+
+  /// Cuts the frames of the trackers due, up to [lookahead] ahead, and
+  /// starts the next detection; or waits for a tracker to be due.
   void _pump() {
-    if (_busy || _trackers.isEmpty) return;
     _wake?.cancel();
     _wake = null;
     final now = _clock();
     Duration? soonest;
-    for (var i = 0; i < _trackers.length; i++) {
-      final index = (_turn + i) % _trackers.length;
-      final tracker = _trackers[index];
-      final last = tracker._lastStart;
-      final wait = last == null ? Duration.zero : last + _every - now;
-      if (wait <= Duration.zero) {
-        _turn = (index + 1) % _trackers.length;
-        tracker._lastStart = now;
-        _busy = true;
-        tracker._detect().whenComplete(() {
-          _busy = false;
-          _pump();
-        });
-        return;
+    while (_queue.length < lookahead) {
+      _EngineTracker? due;
+      for (var i = 0; i < _trackers.length; i++) {
+        final index = (_turn + i) % _trackers.length;
+        final tracker = _trackers[index];
+        if (_waiting(tracker)) continue;
+        final last = tracker._grabbed;
+        final wait = last == null ? Duration.zero : last + _every - now;
+        if (wait <= Duration.zero) {
+          _turn = (index + 1) % _trackers.length;
+          due = tracker;
+          break;
+        }
+        if (soonest == null || wait < soonest) soonest = wait;
       }
-      if (soonest == null || wait < soonest) soonest = wait;
+      if (due == null) break;
+      due._grabbed = now;
+      _queue.add((due, due._cut()));
     }
-    _wake = Timer(soonest!, _pump);
+    if (_detecting == null && _queue.isNotEmpty) {
+      final (tracker, cut) = _queue.removeAt(0);
+      _detecting = tracker;
+      cut.then(tracker._detect).whenComplete(() {
+        _detecting = null;
+        _pump();
+      });
+    }
+    if (soonest != null && _queue.length < lookahead) {
+      _wake = Timer(soonest, _pump);
+    }
   }
 }
+
+typedef _Cut = (Size, FaceCrop, FaceCut);
 
 class _EngineTracker implements FaceTracker {
   _EngineTracker(this._engine, this._source, this._readFrameCode);
@@ -196,40 +239,66 @@ class _EngineTracker implements FaceTracker {
   final bool _readFrameCode;
   final _follow = FaceSearchAndFollow();
   final _observation = ValueNotifier<FaceObservation?>(null);
-  Duration? _lastStart;
+
+  /// When its last frame was grabbed: what its rate is kept by.
+  Duration? _grabbed;
   var _disposed = false;
   var _reported = false;
 
   @override
   ValueListenable<FaceObservation?> get observation => _observation;
 
-  Future<void> _detect() async {
+  /// Grabs its newest frame and starts cutting where the face is expected.
+  Future<_Cut?> _cut() async {
     try {
       final frame = await _source.grab();
-      if (frame == null) return;
+      if (frame == null) return null;
       if (_disposed) {
         frame.discard();
-        return;
+        return null;
       }
       final crop = _follow.next(frame.size);
-      final detection = await frame.detect(crop, readFrameCode: _readFrameCode);
+      return (
+        frame.size,
+        crop,
+        frame.cut(crop, readFrameCode: _readFrameCode),
+      );
+    } catch (error, stack) {
+      _report(error, stack);
+      return null;
+    }
+  }
+
+  Future<void> _detect(_Cut? cut) async {
+    if (cut == null) return;
+    final (size, crop, pending) = cut;
+    if (_disposed) {
+      pending.discard();
+      return;
+    }
+    try {
+      final detection = await pending.detect();
       if (_disposed) return;
       _observation.value = FaceObservation(
-        videoSize: frame.size,
+        videoSize: size,
         anchor: _follow.found(crop, detection.eyes),
         frameCode: detection.frameCode,
       );
     } catch (error, stack) {
-      // Reported once: a detector that cannot load fails every frame.
-      if (_reported || _disposed) return;
-      _reported = true;
-      FlutterError.reportError(FlutterErrorDetails(
-        exception: error,
-        stack: stack,
-        library: 'face tracking',
-        context: ErrorDescription('while looking for a face in a video'),
-      ));
+      _report(error, stack);
     }
+  }
+
+  /// Reported once: a detector that cannot load fails every frame.
+  void _report(Object error, StackTrace stack) {
+    if (_reported || _disposed) return;
+    _reported = true;
+    FlutterError.reportError(FlutterErrorDetails(
+      exception: error,
+      stack: stack,
+      library: 'face tracking',
+      context: ErrorDescription('while looking for a face in a video'),
+    ));
   }
 
   @override
