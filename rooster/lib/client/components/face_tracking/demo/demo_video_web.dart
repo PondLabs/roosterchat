@@ -65,6 +65,9 @@ void publishDemoLog(String Function() read) {
   _faceTrackingLog = (() => read().toJS).toJS;
 }
 
+/// The page is the window: nothing to do.
+Future<void> prepareDemoWindow() async {}
+
 /// The demonstration's settings: the page's query.
 Map<String, String> demoSettings() => Uri.base.queryParameters;
 

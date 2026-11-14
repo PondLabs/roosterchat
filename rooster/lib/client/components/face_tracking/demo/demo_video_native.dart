@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'dart:ui' show Size;
+
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 // ignore: implementation_imports
 import 'package:flutter_webrtc/src/native/media_stream_impl.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../face_tracker.dart';
 import '../face_tracker_linux.dart';
@@ -66,6 +69,19 @@ class DemoVideo {
 Map<String, String> demoSettings() =>
     Uri(query: Platform.environment['FACE_TRACKING_DEMO'] ?? '')
         .queryParameters;
+
+/// Gives the demonstration a window of `window=` (`1600x900`), 1280x720 by
+/// default: the desktop runners open the app's small loading window, which
+/// the app itself grows once it starts, and the demonstration is not the app.
+Future<void> prepareDemoWindow() async {
+  if (!(Platform.isLinux || Platform.isWindows || Platform.isMacOS)) return;
+  final size = (demoSettings()['window'] ?? '1280x720').split('x');
+  await windowManager.ensureInitialized();
+  await windowManager.setSize(Size(
+    double.tryParse(size.first) ?? 1280,
+    double.tryParse(size.last) ?? 720,
+  ));
+}
 
 /// Reads a text file of the test media.
 Future<String> readDemoText(String url) => File(url).readAsString();

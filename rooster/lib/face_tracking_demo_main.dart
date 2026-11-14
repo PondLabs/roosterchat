@@ -24,7 +24,9 @@ import 'package:rooster/client/components/face_tracking/replay_face_tracker.dart
 /// environment variable, and the videos are played from `.y4m` files by a
 /// local video track (demo/demo_video_native.dart). See
 /// tools/face_tracking/README.md.
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await prepareDemoWindow();
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
     home: Scaffold(backgroundColor: Colors.black, body: FaceTrackingDemo()),
