@@ -8,3 +8,11 @@ To run unit tests, there are a few prerequisites.
  - Configure synapse [scripts/integration-prepare-homeserver.sh](../scripts/integration-server-synapse.sh)
 
  If you have done all this you should be ready to test! [scripts/integration-test.sh](../scripts/integration-test.sh)
+
+## Running the Linux app off screen
+
+To run a Linux build without it showing on your screen, and to take
+screenshots and videos of it, use
+[scripts/headless-linux.sh](../scripts/headless-linux.sh). It starts the app
+in a headless compositor of its own, with empty data folders, so it does not
+open your accounts; its header documents the commands.
