@@ -103,6 +103,56 @@ class MeasureTests(unittest.TestCase):
         self.assertEqual(result.tiles, 1)
         self.assertAlmostEqual(result.anchors_per_second, 10.0)
 
+    def test_how_long_the_plaque_takes_to_leave_and_come_back(self) -> None:
+        # A face for 10 frames, none for 10, a face again for 10, at 30 a second.
+        references = _references([_face()] * 10 + [None] * 10 + [_face()] * 10)
+        # Every other frame analysed: the face is still seen on frame 12, gone on
+        # 14, missed on 20 and back on 22.
+        faces = {code: 0.5 for code in range(0, 13, 2)} | {code: 0.5 for code in range(22, 30, 2)}
+        records = [_anchor(code, faces.get(code), t=code * 1000 / 30) for code in range(0, 30, 2)]
+        (result,) = measure.measure(records, references)
+        self.assertEqual(len(result.lost_after), 1)
+        self.assertAlmostEqual(result.lost_after[0], 4 / 30)
+        self.assertEqual(len(result.back_after), 1)
+        self.assertAlmostEqual(result.back_after[0], 2 / 30)
+
+    def test_a_plaque_that_never_leaves_is_counted(self) -> None:
+        references = _references([_face()] * 4 + [None] * 4 + [_face()] * 4)
+        records = [_anchor(code, 0.5, t=code * 100) for code in range(12)]
+        (result,) = measure.measure(records, references)
+        self.assertEqual(result.lost_after, [None])
+        self.assertEqual(result.back_after, [], "it was never gone")
+
+    def test_a_face_found_while_coming_in_is_back_at_once(self) -> None:
+        # The face comes back halfway (not inFrame) before it is whole again.
+        references = _references([_face()] * 4 + [None] * 4 + [_face(in_frame=False)] * 2 + [_face()] * 4)
+        faces = {0: 0.5, 2: 0.5, 9: 0.6, 10: 0.5, 12: 0.5}
+        records = [_anchor(code, faces.get(code), t=code * 100) for code in [0, 2, 4, 6, 9, 10, 12]]
+        (result,) = measure.measure(records, references)
+        self.assertEqual(result.back_after, [0.0])
+
+    def test_a_stretch_across_the_end_of_the_video_is_one_stretch(self) -> None:
+        # The video loops: frames 8, 9, 0 and 1 have no face.
+        references = _references([None] * 2 + [_face()] * 6 + [None] * 2)
+        t = iter(range(0, 10000, 100))
+        codes = [2, 4, 6, 8, 9, 0, 1, 2, 4]
+        faces = {2: 0.5, 4: 0.5, 6: 0.5, 8: 0.5, 9: 0.5}
+        records = [_anchor(code, faces.get(code) if i < 7 else 0.5, t=next(t)) for i, code in enumerate(codes)]
+        (result,) = measure.measure(records, references)
+        self.assertEqual(len(result.lost_after), 1)
+        self.assertAlmostEqual(result.lost_after[0], 2 / 30, msg="from frame 8 to frame 0")
+        self.assertEqual(result.back_after, [0.0])
+
+    def test_the_longest_wait_fails_the_command(self) -> None:
+        faces = {"clip": [_face()] * 30 + [None] * 30 + [_face()] * 30}
+        quick = [_anchor(c, None if 30 <= c < 60 else 0.5, t=c * 33) for c in range(0, 90, 2)]
+        slow = [_anchor(c, None if 50 <= c < 78 else 0.5, t=c * 33) for c in range(0, 90, 2)]
+        self.assertEqual(self._run(faces, quick, "--max-lost", "0.5")[0], 0)
+        code, errors = self._run(faces, slow, "--max-lost", "0.5")
+        self.assertEqual(code, 1)
+        self.assertIn("no face after more than 0.5 s: clip", errors)
+        self.assertIn("anchors back after more than 0.5 s: clip", errors)
+
     def _run(self, faces: dict[str, list[dict | None]], records: list[dict], *arguments: str) -> tuple[int, str]:
         """Runs the command over a media folder with these videos and this log."""
         with TemporaryDirectory() as folder:

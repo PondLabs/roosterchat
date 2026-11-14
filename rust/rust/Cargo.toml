@@ -15,6 +15,7 @@ path = "src/bin/cef_host.rs"
 [dependencies]
 audio_dsp = { path = "../audio_dsp" }
 dj_audio = { path = "../dj_audio" }
+face_tracking = { path = "../face_tracking" }
 base64 = "0.22.1"
 flutter_rust_bridge = "=2.11.1"
 serde = { version = "1.0.228", features = ["derive"] }

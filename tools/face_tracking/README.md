@@ -66,15 +66,55 @@ reference forehead, among the frames where the reference has a whole face
 turned 15 degrees or less; the same over any yaw; how often "no face" was
 right; how many tiles showed the video, and the anchors per second of the
 tile that got the fewest (with `tiles=8` a video is on screen twice, each
-with its own tracker); and the interface's frames per second. Its docstring
-has the log's format.
+with its own tracker); and the interface's frames per second. For a video
+the face leaves (`leave`), it also prints the longest the plaque took to go
+once the face was gone, and to come back once the whole face was in again,
+in seconds of video. Its docstring has the log's format.
 
 `--min-r42 90` fails when a video is under 90%, and also when a video of the
 folder has no anchor in the log or none of its frames with a face looking at
-the camera was analysed: every video has to be on screen.
+the camera was analysed: every video has to be on screen. `--max-lost 0.5`
+fails when the plaque took longer than half a second to go or to come back
+(R4.4), or never went.
 
 `?tracker=replay` (the default) is a tracker that repeats the reference: it
 measures 100%, and 0% with `&shift=0.5`. That is the check of the tool
 itself, also as `python3 -m tools.face_tracking.measure --media <test videos> --replay [--shift 0.5]`.
+
+### On Linux
+
+The app has no page to load the videos into: the demonstration asks the
+WebRTC plugin for a local video track that plays a `.y4m` file (raw 4:2:0
+frames) next to each `.mp4`, and that track goes through the same renderer
+and frame tap as a camera or a call's video. Make the `.y4m` files once,
+into a folder with the references:
+
+```sh
+for v in front glasses turn near_far leave; do
+  ffmpeg -i <test videos>/$v.mp4 -pix_fmt yuv420p -f yuv4mpegpipe <folder>/$v.y4m
+  cp <test videos>/$v.reference.json <folder>/
+done
+```
+
+Build the demonstration, run it off screen with
+`rooster/scripts/headless-linux.sh` (no camera, no window on your screen),
+measure the log it writes:
+
+```sh
+cd rooster && flutter build linux --release -t lib/face_tracking_demo_main.dart --dart-define PLATFORM=linux
+FACE_TRACKING_DEMO="media=<folder>/&tracker=device&tiles=8&log=<out>/anchors.jsonl&seconds=40" \
+  scripts/headless-linux.sh run --offline build/linux/x64/release/bundle
+cd .. && python3 -m tools.face_tracking.measure --media <folder> <out>/anchors.jsonl --min-r42 90 --max-lost 0.5
+```
+
+`FACE_TRACKING_DEMO` takes the page's query (`media`, `videos`, `tiles`,
+`tracker`, `shift`), plus `log=` (the record, written every second) and
+`seconds=` (when to write it a last time and quit). Every second the app
+prints, for each tile, how many frames its renderer handed to the tracker
+and how many the tracker analysed.
+
+The engine alone, outside the app, on every frame (accuracy, and the time
+of one step): `cargo run --release -p face_tracking --example measure --
+<folder> <out>/rust.jsonl`.
 
 Tests: `python3 -m unittest tools.face_tracking.test_measure tools.face_tracking.test_frame_code`.
