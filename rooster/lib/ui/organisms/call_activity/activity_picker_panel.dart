@@ -106,12 +106,14 @@ class ActivityPickerPanel extends StatelessWidget {
   }
 
   /// One registry entry: its name, who is running it, and a Launch or Join
-  /// button.
+  /// button - or, where this device does not run it, why not.
   Widget _activityRow(BuildContext context, CallActivity activity) {
     final colors = Theme.of(context).colorScheme;
     final sessions =
         liveSessions.where((session) => session.activityId == activity.id);
     final live = sessions.isNotEmpty;
+    final availability = activity.availability();
+    final available = availability.isAvailable;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
       child: Material(
@@ -119,7 +121,7 @@ class ActivityPickerPanel extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
-          onTap: live ? null : () => onLaunch?.call(activity),
+          onTap: live || !available ? null : () => onLaunch?.call(activity),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
             child: Row(
@@ -142,10 +144,20 @@ class ActivityPickerPanel extends StatelessWidget {
                                 .labelSmall
                                 ?.copyWith(color: colors.secondary),
                           ),
+                      if (!available)
+                        Text(
+                          ActivityPickerStrings.unavailableReason(availability),
+                          style: Theme.of(context)
+                              .textTheme
+                              .labelSmall
+                              ?.copyWith(color: colors.onSurfaceVariant),
+                        ),
                     ],
                   ),
                 ),
-                if (live)
+                if (!available)
+                  const SizedBox.shrink()
+                else if (live)
                   for (final session in sessions)
                     Padding(
                       padding: const EdgeInsets.only(left: 8),
@@ -176,4 +188,17 @@ abstract final class ActivityPickerStrings {
   static String get launch => Intl.message("Launch",
       name: "ActivityPickerStrings_launch",
       desc: "Button that starts an activity in a call");
+
+  static String get unavailableHere =>
+      Intl.message("Not available on this device",
+          name: "ActivityPickerStrings_unavailableHere",
+          desc: "In a call's activities panel and on the invite to join "
+              "one, in place of the Launch or Join button, when this device "
+              "cannot run the activity and the activity gives no reason of "
+              "its own");
+
+  /// Why an activity cannot be launched or joined here: its own reason,
+  /// or [unavailableHere].
+  static String unavailableReason(CallActivityAvailability availability) =>
+      availability.reason?.call() ?? unavailableHere;
 }

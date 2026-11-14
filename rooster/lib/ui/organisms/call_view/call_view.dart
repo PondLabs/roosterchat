@@ -675,6 +675,7 @@ class _CallViewState extends State<CallView> {
                       child: ActivityJoinPill(
                         activityName: joinable.activity.displayName(),
                         hostName: _memberNameOf(joinable.snapshot.hostUserId),
+                        availability: joinable.activity.availability(),
                         onJoin: () => _joinSession(joinable),
                       ),
                     ),

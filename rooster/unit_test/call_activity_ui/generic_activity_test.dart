@@ -2,11 +2,13 @@
 // game would be, is listed on the shelf, launches onto the stage under its
 // own name with its own view, gets the participants' cameras by identity,
 // and keeps the strip to the people who do not play when it draws the
-// players' videos itself.
+// players' videos itself. One this device cannot run is neither launched
+// nor joined: the shelf and the invite say why, in English and Portuguese.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/call_activity/call_activity_component.dart';
@@ -21,7 +23,9 @@ import 'package:rooster/client/matrix/homeserver_clock.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/member.dart';
+import 'package:rooster/generated/intl/messages_all.dart';
 import 'package:rooster/main.dart';
+import 'package:rooster/ui/organisms/call_activity/activity_join_pill.dart';
 import 'package:rooster/ui/organisms/call_activity/activity_picker_panel.dart';
 import 'package:rooster/ui/organisms/call_activity/activity_requests.dart';
 import 'package:rooster/ui/organisms/call_activity/activity_stage.dart';
@@ -72,6 +76,8 @@ final List<_FakeController> _controllers = [];
 
 CallActivity _fake({
   bool drawsPlayerVideos = false,
+  CallActivityAvailability availability =
+      const CallActivityAvailability.available(),
 }) =>
     CallActivity(
       id: _fakeId,
@@ -83,6 +89,7 @@ CallActivity _fake({
         return controller;
       },
       drawsPlayerVideos: drawsPlayerVideos,
+      availability: () => availability,
     );
 
 class _Stream implements VoipStream {
@@ -353,7 +360,10 @@ void main() {
     };
   });
 
-  tearDown(CallActivityRegistry.clear);
+  tearDown(() {
+    CallActivityRegistry.clear();
+    Intl.defaultLocale = null;
+  });
 
   Future<void> pumpCall(WidgetTester tester) async {
     await tester.pumpWidget(MaterialApp(
@@ -487,5 +497,111 @@ void main() {
     expect(inStrip('my-cam'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox());
+  });
+
+  group('an activity this device does not run', () {
+    const unavailable = CallActivityAvailability.unavailable();
+
+    testWidgets('is not launched from the shelf, which says why',
+        (tester) async {
+      CallActivityRegistry.register(sunnySidePuttActivity());
+      CallActivityRegistry.register(_fake(availability: unavailable));
+      CallActivityRequests.showShelf(call);
+      await pumpCall(tester);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Fake Game'), findsOneWidget);
+      expect(find.text('Not available on this device'), findsOneWidget);
+      // Only Sunny Side Putt's Launch.
+      expect(find.text(ActivityPickerStrings.launch), findsOneWidget);
+
+      await tester.tap(find.text('Fake Game'));
+      await tester.tap(find.text('Not available on this device'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ActivityStage), findsNothing);
+      expect(_controllers, isEmpty);
+
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets("is not joined from the call's invite, which says why",
+        (tester) async {
+      CallActivityRegistry.register(_fake(availability: unavailable));
+      await aliceHosts(tester, [_aliceIdentity]);
+      await pumpCall(tester);
+
+      final pill = find.byType(ActivityJoinPill);
+      expect(pill, findsOneWidget);
+      expect(find.text('Alice started Fake Game'), findsOneWidget);
+      expect(find.text('Not available on this device'), findsOneWidget);
+      expect(find.text(ActivityJoinPill.join), findsNothing);
+
+      await tester.tap(pill);
+      await tester.pumpAndSettle();
+      expect(find.byType(ActivityStage), findsNothing);
+      expect(_controllers, isEmpty);
+
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('the shelf says why in Portuguese', (tester) async {
+      await initializeMessages('pt');
+      Intl.defaultLocale = 'pt';
+      await tester.pumpWidget(MaterialApp(
+        home: Material(
+          child: ActivityPickerPanel(
+            activities: [_fake(availability: unavailable)],
+            liveSessions: const [
+              (sessionId: 's', activityId: _fakeId, hostUserId: _alice),
+            ],
+            nameOf: (id) => 'Alice',
+            onJoin: (_) => fail('an unavailable activity was joined'),
+          ),
+        ),
+      ));
+
+      expect(find.text('Indisponível neste dispositivo'), findsOneWidget);
+      expect(find.text('Alice iniciou Fake Game'), findsOneWidget);
+      expect(find.text('Entrar'), findsNothing);
+      expect(find.text('Iniciar'), findsNothing);
+    });
+
+    testWidgets('the invite says why in Portuguese', (tester) async {
+      await initializeMessages('pt');
+      Intl.defaultLocale = 'pt';
+      await tester.pumpWidget(MaterialApp(
+        home: Material(
+          child: ActivityJoinPill(
+            activityName: 'Fake Game',
+            hostName: 'Alice',
+            availability: unavailable,
+            onJoin: () => fail('an unavailable activity was joined'),
+          ),
+        ),
+      ));
+
+      expect(find.text('Alice iniciou Fake Game'), findsOneWidget);
+      expect(find.text('Indisponível neste dispositivo'), findsOneWidget);
+      await tester.tap(find.byType(ActivityJoinPill));
+      expect(find.text('Entrar'), findsNothing);
+    });
+
+    testWidgets("shows the activity's own reason when it gives one",
+        (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Material(
+          child: ActivityJoinPill(
+            activityName: 'Fake Game',
+            hostName: 'Alice',
+            availability: CallActivityAvailability.unavailable(
+                () => 'Needs face tracking'),
+            onJoin: () => fail('an unavailable activity was joined'),
+          ),
+        ),
+      ));
+
+      expect(find.text('Needs face tracking'), findsOneWidget);
+      expect(find.text('Not available on this device'), findsNothing);
+    });
   });
 }

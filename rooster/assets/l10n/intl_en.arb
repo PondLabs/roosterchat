@@ -3946,6 +3946,12 @@
     "type": "text",
     "placeholders": {}
   },
+  "ActivityPickerStrings_unavailableHere": "Not available on this device",
+  "@ActivityPickerStrings_unavailableHere": {
+    "description": "In a call's activities panel and on the invite to join one, in place of the Launch or Join button, when this device cannot run the activity and the activity gives no reason of its own",
+    "type": "text",
+    "placeholders": {}
+  },
   "ActivityStageStrings_loading": "Loading {activity}",
   "@ActivityStageStrings_loading": {
     "description": "Placeholder where the activity's view goes while it loads",
