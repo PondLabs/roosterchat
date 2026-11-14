@@ -10,7 +10,8 @@ infrastructure.
 ## The pieces
 
 - `client/components/call_activity/` - the contracts: the [CallActivity]
-  descriptor (id, display name, player range), the typed registry, the
+  descriptor (id, display name, player range, and the hooks the stage
+  runs a game through - see "Adding a game" below), the typed registry, the
   wire protocol (JSON envelopes on the LiveKit data channel, topic
   `chat.commet.activity.v1`, with part-assembly past the packet limit)
   and the [CallActivitySession]: host-authoritative, with host election
@@ -28,7 +29,44 @@ infrastructure.
   `ui/organisms/sunny_side_putt/` (the game); see sunny-side-putt.md.
 - `ui/organisms/call_activity/` - the shared UI: the picker (the shelf
   of activities), the stage (the game takes the call's view while the
-  participant videos shrink into a strip), and the join pill.
+  participant videos shrink into a strip), and the join pill. None of it,
+  nor the call view, names a game: what they show of one comes from its
+  descriptor.
+
+## Adding a game
+
+A game registers one `CallActivity` in `CallActivityRegistry` at startup
+(`initGuiRequirements` in `main.dart`; Sunny Side Putt's is
+`registerSunnySidePutt()` in `ui/organisms/sunny_side_putt/putt_session.dart`).
+Besides its `id` (the namespaced event type, e.g. `chat.commet.putt`),
+`displayName` and player range, the descriptor carries:
+
+- `launchOptions(context)` - asks the launcher how to play (a mode, a
+  course) before anything is written; null from it means they backed out.
+  Leave it out to launch straight away.
+- `createController(call)` - this client's `CallActivityController` of a
+  session, built when we launch, join, or come back to a session we hold
+  a seat in. `call` (a `CallActivityCallContext`) has the session, each
+  call identity's name and avatar, `cameraOf(identity)` - that
+  participant's camera `VoipStream`, asked again on each build - and
+  `onEnded`, to call when the session ends under us. The controller is a
+  `Listenable` the stage rebuilds on; `hostStart(options)` takes the host
+  seat with what `launchOptions` returned, `buildStage(context, onLeave:)`
+  is the view under the stage's header (null shows "Loading"), `leave()`
+  tells the session we are out, and `dispose()` releases what the game
+  holds, its sound included.
+- `drawsPlayerVideos` - the game draws the players' cameras itself (from
+  `cameraOf`): the stage's strip then shows only the people in the call
+  who do not play.
+- `availability()` - whether this device runs the game:
+  `CallActivityAvailability.unavailable(reason)` keeps it from being
+  launched or joined here, and the shelf and the invite show the reason
+  (the game's own `Intl.message`, or "Not available on this device")
+  in place of their buttons. A game that needs face tracking says so
+  where there is none.
+
+The room list's badges only need the `id`, the name and the `icon`; a
+descriptor without `createController` cannot be launched or joined.
 
 ## Getting in and out
 
@@ -110,7 +148,9 @@ does not stop a new launch.
 
 - `flutter test unit_test/call_activity` - protocol, session lifecycle
   (launch, join, capacity, election, handoff, inputs) on the in-memory
-  transport, `call_activity_ui` - the picker and stage widgets.
+  transport, `call_activity_ui` - the picker and stage widgets, and a fake
+  second game run through the call view's hooks (launch, stage, cameras,
+  the strip, an unavailable game).
 - The voice e2e (`integration_test/activities/`) runs two real clients
   through a whole hole when the integration stack (Synapse + LiveKit +
   the auth service, `scripts/integration-server-livekit.sh`) is up, and
