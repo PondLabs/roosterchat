@@ -13,5 +13,5 @@ FaceTrackerPlatform get faceTrackerPlatform => switch (defaultTargetPlatform) {
       TargetPlatform.macOS => macosFaceTracker,
       TargetPlatform.windows => windowsFaceTracker,
       // Rooster does not ship for iOS or Fuchsia.
-      _ => const UnavailableFaceTracker(),
+      final other => UnavailableFaceTracker(other.name),
     };

@@ -83,12 +83,15 @@ abstract class FaceTrackerPlatform {
 
 /// A platform that does not track faces, or not yet.
 class UnavailableFaceTracker implements FaceTrackerPlatform {
-  const UnavailableFaceTracker();
+  const UnavailableFaceTracker(this.platform);
+
+  /// Which platform this stands for, as a person would name it.
+  final String platform;
 
   @override
   bool get isSupported => false;
 
   @override
   FaceTracker start(FaceVideoSource source, {required bool readFrameCode}) =>
-      throw UnsupportedError('This device does not track faces');
+      throw UnsupportedError('Rooster does not track faces on $platform');
 }

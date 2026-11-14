@@ -50,6 +50,9 @@ void main() {
       debugDefaultTargetPlatformOverride = platform;
 
       expect(faceTrackerPlatform, same(own));
+      for (final other in platforms.values.where((other) => other != own)) {
+        expect(faceTrackerPlatform, isNot(same(other)));
+      }
       expect(own.isSupported, isFalse);
       expect(FaceTracker.isSupported, isFalse);
       expect(
@@ -58,6 +61,13 @@ void main() {
       );
     });
   }
+
+  test('every platform file stands for a platform of its own', () {
+    final names = [...platforms.values, webFaceTracker]
+        .map((platform) => (platform as UnavailableFaceTracker).platform);
+
+    expect(names, ['Android', 'Linux', 'macOS', 'Windows', 'the web']);
+  });
 
   test('the browser has its own file, unavailable so far', () {
     expect(webFaceTracker.isSupported, isFalse);
