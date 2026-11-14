@@ -22,12 +22,18 @@ For each video it prints the share of analysed frames, among those where the
 reference has a whole face looking at the camera, whose plaque centre is
 within a quarter of the eye distance of the reference forehead point (R4.2);
 the anchors per second of the tile that got the fewest (R4.3 is about each
-plaque); and the interface's frames per second meanwhile.
+plaque); and the interface's frames per second meanwhile. For a video the
+face leaves and comes back to, it also prints how long after the face left
+the tracker said "no face", and how long after it came back whole the
+anchors were back: in seconds of video, by frame code, the worst of every
+tile and every time round the loop (a plaque is drawn one detection later
+still).
 
 With `--min-r42` it fails when a video is below that percentage, and also
 when a video of the media folder has no anchor in the log or no frame with a
 face looking at the camera was judged: a run that left a video out has not
-passed.
+passed. `--max-delay` fails when "no face" or the anchors coming back took
+longer than that many seconds, or never came.
 
 `--replay` writes the log of a tracker that repeats the reference, moved
 sideways by `--shift` eye distances: 100% at 0, 0% at 0.5.
@@ -58,6 +64,9 @@ class VideoResult:
     tiles: int = 0  # how many trackers followed this video
     anchors_per_second: float | None = None  # of the tile with the fewest
     frames_per_second: float | None = None
+    no_face_after: float | None = None  # seconds of video, the worst
+    back_after: float | None = None
+    missed: int = 0  # times the face left or came back and the tracker never said
 
     @property
     def r42(self) -> float | None:
@@ -96,6 +105,42 @@ def _rate(times: list[float]) -> float | None:
     return (len(times) - 1) * 1000 / (times[-1] - times[0])
 
 
+def _events(reference: dict) -> list[tuple[int, bool]]:
+    """The frame codes where the face leaves the picture (False: from there
+    the tracker should say no face) and where it is whole again (True)."""
+    frames = reference["frames"]
+    events = []
+    for before, frame in zip(frames, frames[1:]):
+        if before["face"] is not None and frame["face"] is None:
+            events.append((frame["code"], False))
+        whole = frame["face"] is not None and frame["face"]["inFrame"]
+        if whole and not (before["face"] is not None and before["face"]["inFrame"]):
+            events.append((frame["code"], True))
+    return events
+
+
+def _delays(anchors: list[dict], events: list[tuple[int, bool]], fps: float) -> list[tuple[bool, float | None]]:
+    """For each time one tile's analysed frames pass an event: how many
+    seconds of video until the tracker said what it should, None if it never
+    did before the video looped."""
+    delays = []
+    for i in range(1, len(anchors)):
+        before, now = anchors[i - 1]["code"], anchors[i]["code"]
+        for code, face in events:
+            if not before < code <= now:
+                continue
+            delay, last = None, before
+            for anchor in anchors[i:]:
+                if anchor["code"] < last:
+                    break  # looped
+                if (anchor["face"] is not None) == face:
+                    delay = (anchor["code"] - code) / fps
+                    break
+                last = anchor["code"]
+            delays.append((face, delay))
+    return delays
+
+
 def measure(records: list[dict], references: dict[str, dict]) -> list[VideoResult]:
     drawn = sorted(r["t"] for r in records if r["type"] == "frame")
     results = []
@@ -126,6 +171,16 @@ def measure(records: list[dict], references: dict[str, dict]) -> list[VideoResul
         result.tiles = len(by_tile)
         result.anchors_per_second = None if None in rates else min(rates)
         result.frames_per_second = _rate([t for t in drawn if times[0] <= t <= times[-1]])
+        events = _events(reference)
+        for tile in by_tile:
+            in_order = sorted((r for r in anchors if r.get("tile", 0) == tile), key=lambda r: r["t"])
+            for face, delay in _delays(in_order, events, reference["fps"]):
+                if delay is None:
+                    result.missed += 1
+                elif face:
+                    result.back_after = max(result.back_after or 0.0, delay)
+                else:
+                    result.no_face_after = max(result.no_face_after or 0.0, delay)
         results.append(result)
     return results
 
@@ -160,6 +215,10 @@ def _number(value: float | None, unit: str = "") -> str:
     return "n/a" if value is None else f"{value:.1f}{unit}"
 
 
+def _seconds(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:.2f} s"
+
+
 def report(results: list[VideoResult]) -> str:
     lines = [
         f"{'video':<10} {'R4.2':>7} {'frontal frames':>15} {'any yaw':>8} "
@@ -173,6 +232,13 @@ def report(results: list[VideoResult]) -> str:
             f"{_number(any_yaw, '%'):>8} {absent:>14} {r.tiles:>6} "
             f"{_number(r.anchors_per_second):>10} {_number(r.frames_per_second):>9}"
         )
+    for r in results:
+        if r.no_face_after is not None or r.back_after is not None or r.missed:
+            lines.append(
+                f"{r.video}: no face {_seconds(r.no_face_after)} after the face left, "
+                f"anchors back {_seconds(r.back_after)} after it came back, "
+                f"{r.missed} never"
+            )
     return "\n".join(lines)
 
 
@@ -184,6 +250,11 @@ def main(argv: list[str] | None = None) -> int:
         "--min-r42",
         type=float,
         help="fail when a video's R4.2 is below this percentage, or a video of the media folder was not measured",
+    )
+    parser.add_argument(
+        "--max-delay",
+        type=float,
+        help="fail when no face, or the anchors coming back, took longer than this many seconds of video, or never came",
     )
     parser.add_argument("--replay", action="store_true", help="write the log of a tracker that repeats the reference")
     parser.add_argument("--shift", type=float, default=0.0, help="with --replay: eye distances to move every anchor")
@@ -213,6 +284,15 @@ def main(argv: list[str] | None = None) -> int:
             if videos:
                 print(f"{problem}: {', '.join(videos)}", file=sys.stderr)
         if any(problems.values()):
+            return 1
+    if args.max_delay is not None:
+        late = [
+            r.video
+            for r in results
+            if r.missed or max(r.no_face_after or 0.0, r.back_after or 0.0) > args.max_delay
+        ]
+        if late:
+            print(f"no face or anchors back later than {args.max_delay} s: {', '.join(late)}", file=sys.stderr)
             return 1
     return 0
 

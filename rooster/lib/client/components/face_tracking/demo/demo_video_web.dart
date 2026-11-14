@@ -64,3 +64,12 @@ external set _faceTrackingLog(JSFunction read);
 void publishDemoLog(String Function() read) {
   _faceTrackingLog = (() => read().toJS).toJS;
 }
+
+@JS('faceTrackingStart')
+external set _faceTrackingStart(JSFunction start);
+
+/// Lets whoever drives the demonstration start the tracking: the page's
+/// `faceTrackingStart()` (tools/face_tracking/capture_web.mjs).
+void publishDemoStart(void Function() start) {
+  _faceTrackingStart = start.toJS;
+}

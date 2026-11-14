@@ -162,3 +162,13 @@ media-kit's own `libmpv-win32-video-cmake` (20241021, aarch64) and ANGLE from
 the fork behind media-kit/media-kit#1436 (Carapacik's v1.1.0, built from
 chromium/8059), both pinned by SHA-256. The x64 inputs are upstream's,
 unchanged.
+
+Face tracking in the browser (docs/adr/0006-face-tracking.md) reads the
+frames of the video element a renderer already shows. The `// ROOSTER`
+change in `flutter-webrtc/lib/src/web/rtc_video_renderer_impl.dart` keeps
+the renderers alive and adds `RTCVideoRenderer.videoElementShowing(trackId)`,
+the element showing a track, or null when none is on screen. The one in
+`livekit-client-sdk-flutter/lib/src/widgets/video_track_renderer.dart`
+moves the rule that mirrors a camera out of the widget, as
+`shouldMirrorVideoTrack`, so a camera stream says "mirrored" exactly when
+its renderer mirrors it.

@@ -8,8 +8,6 @@ import 'package:rooster/client/components/face_tracking/face_tracker_android.dar
 import 'package:rooster/client/components/face_tracking/face_tracker_linux.dart';
 import 'package:rooster/client/components/face_tracking/face_tracker_macos.dart';
 import 'package:rooster/client/components/face_tracking/face_tracker_native.dart';
-import 'package:rooster/client/components/face_tracking/face_tracker_web.dart'
-    show webFaceTracker;
 import 'package:rooster/client/components/face_tracking/face_tracker_windows.dart';
 
 class _Track extends Fake implements MediaStreamTrack {}
@@ -62,20 +60,13 @@ void main() {
     });
   }
 
+  // The browser's file tracks faces and only compiles for the web: it is
+  // measured in Chrome with the demonstration (tools/face_tracking/).
   test('every platform file stands for a platform of its own', () {
-    final names = [...platforms.values, webFaceTracker]
+    final names = platforms.values
         .map((platform) => (platform as UnavailableFaceTracker).platform);
 
-    expect(names, ['Android', 'Linux', 'macOS', 'Windows', 'the web']);
-  });
-
-  test('the browser has its own file, unavailable so far', () {
-    expect(webFaceTracker.isSupported, isFalse);
-    expect(
-      () =>
-          webFaceTracker.start(FaceVideoSource(_Track()), readFrameCode: false),
-      throwsUnsupportedError,
-    );
+    expect(names, ['Android', 'Linux', 'macOS', 'Windows']);
   });
 
   test('a platform Rooster does not ship for does not track', () {

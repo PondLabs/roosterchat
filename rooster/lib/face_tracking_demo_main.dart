@@ -18,8 +18,9 @@ import 'package:rooster/client/components/face_tracking/replay_face_tracker.dart
 /// default), `?videos=` (their names, comma separated), `?tiles=` (how many
 /// to show, cycling through the videos), `?tracker=replay` (the default: a
 /// tracker that repeats the reference points) or `device` (this device's
-/// tracker), and `?shift=` (eye distances to move the replayed anchors by).
-/// See tools/face_tracking/README.md.
+/// tracker), `?shift=` (eye distances to move the replayed anchors by) and
+/// `?start=manual` (the videos play, and tracking waits for the page's
+/// `faceTrackingStart()`). See tools/face_tracking/README.md.
 void main() {
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
@@ -28,11 +29,11 @@ void main() {
 }
 
 class _Tile {
-  _Tile(this.name, this.video, this.tracker);
+  _Tile(this.name, this.video);
 
   final String name;
   final DemoVideo video;
-  final FaceTracker tracker;
+  FaceTracker? tracker;
 }
 
 class FaceTrackingDemo extends StatefulWidget {
@@ -70,25 +71,38 @@ class _FaceTrackingDemoState extends State<FaceTrackingDemo>
     for (var i = 0; i < count; i++) {
       final name = names[i % names.length];
       final video = await DemoVideo.open('$media$name.mp4');
-      final FaceTracker tracker;
-      if (replay) {
-        final reference = FaceReference.fromJson(
-          jsonDecode(await readDemoText('$media$name.reference.json')),
-        );
-        tracker = ReplayFaceTracker(
-          reference,
-          () => (video.seconds * reference.fps).floor(),
-          shift: shift,
-        );
-      } else {
-        tracker = FaceTracker.start(video.source, readFrameCode: true);
-      }
-      tracker.observation.addListener(() {
-        final observation = tracker.observation.value;
-        if (observation != null) _log.anchor(name, observation, tile: i);
-      });
       if (!mounted) return;
-      setState(() => _tiles.add(_Tile(name, video, tracker)));
+      setState(() => _tiles.add(_Tile(name, video)));
+    }
+    Future<void> track() async {
+      for (final (i, tile) in _tiles.indexed) {
+        final FaceTracker tracker;
+        if (replay) {
+          final reference = FaceReference.fromJson(
+            jsonDecode(await readDemoText('$media${tile.name}.reference.json')),
+          );
+          tracker = ReplayFaceTracker(
+            reference,
+            () => (tile.video.seconds * reference.fps).floor(),
+            shift: shift,
+          );
+        } else {
+          tracker = FaceTracker.start(tile.video.source, readFrameCode: true);
+        }
+        tracker.observation.addListener(() {
+          final observation = tracker.observation.value;
+          if (observation != null) _log.anchor(tile.name, observation, tile: i);
+        });
+        if (!mounted) return tracker.dispose();
+        setState(() => tile.tracker = tracker);
+      }
+    }
+
+    if (query['start'] == 'manual') {
+      publishDemoStart(() =>
+          track().catchError((Object error) => setState(() => _error = error)));
+    } else {
+      await track();
     }
   }
 
@@ -96,7 +110,7 @@ class _FaceTrackingDemoState extends State<FaceTrackingDemo>
   void dispose() {
     _frames.dispose();
     for (final tile in _tiles) {
-      tile.tracker.dispose();
+      tile.tracker?.dispose();
       tile.video.dispose();
     }
     super.dispose();
@@ -145,13 +159,16 @@ class _TileView extends StatelessWidget {
 /// The rectangle a plaque would fill: on the forehead while the tracker
 /// sees a face, hollow at the top of the video while it does not.
 class _AnchorPainter extends CustomPainter {
-  _AnchorPainter(this.tile) : super(repaint: tile.tracker.observation);
+  _AnchorPainter(this.tile)
+      : tracker = tile.tracker,
+        super(repaint: tile.tracker?.observation);
 
   final _Tile tile;
+  final FaceTracker? tracker;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final observation = tile.tracker.observation.value;
+    final observation = tracker?.observation.value;
     final anchor = observation?.anchor?.inBox(
       videoSize: observation.videoSize,
       boxSize: size,
@@ -194,5 +211,6 @@ class _AnchorPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_AnchorPainter old) => old.tile != tile;
+  bool shouldRepaint(_AnchorPainter old) =>
+      old.tile != tile || old.tracker != tracker;
 }

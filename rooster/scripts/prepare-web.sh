@@ -17,3 +17,6 @@ rm -rf .vodozemac
 
 # Build the voice DSP (rust/audio_dsp) to WebAssembly for the AudioWorklet.
 ./scripts/build-audio-dsp-wasm.sh
+
+# ONNX Runtime Web, for face tracking (docs/adr/0006-face-tracking.md).
+./scripts/fetch-onnxruntime-web.sh

@@ -26,3 +26,6 @@ Future<String> readDemoText(String url) =>
 
 /// Hands the run's record to whoever drives the demonstration.
 void publishDemoLog(String Function() read) {}
+
+/// Lets whoever drives the demonstration start the tracking.
+void publishDemoStart(void Function() start) {}

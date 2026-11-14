@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:rooster/client/components/face_tracking/face_tracker.dart';
 
 enum VoipStreamType {
   audio,
@@ -69,4 +70,15 @@ abstract class VoipStream {
   /// Stops watching: unsubscribes from the screen share video and its audio.
   /// The sharer's mic is not affected.
   Future<void> stopWatching();
+}
+
+/// A stream whose picture a [FaceTracker] can follow. Apart from
+/// [VoipStream] so the legacy call stream and the test fakes need not
+/// answer (docs/adr/0006-face-tracking.md).
+abstract class FaceTrackableStream {
+  /// The camera video to follow, or null when there is none: not a camera,
+  /// or not subscribed yet. When the track is replaced the stream's
+  /// `onStreamChanged` fires, and a tracker of the old one is to be
+  /// replaced too.
+  FaceVideoSource? get faceVideoSource;
 }
