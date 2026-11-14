@@ -64,8 +64,14 @@ python3 -m tools.face_tracking.measure --media <test videos> <folder>/anchors.js
 whose plaque centre is within a quarter of the eye distance of the
 reference forehead, among the frames where the reference has a whole face
 turned 15 degrees or less; the same over any yaw; how often "no face" was
-right; the anchors per second; and the interface's frames per second. Its
-docstring has the log's format.
+right; how many tiles showed the video, and the anchors per second of the
+tile that got the fewest (with `tiles=8` a video is on screen twice, each
+with its own tracker); and the interface's frames per second. Its docstring
+has the log's format.
+
+`--min-r42 90` fails when a video is under 90%, and also when a video of the
+folder has no anchor in the log or none of its frames with a face looking at
+the camera was analysed: every video has to be on screen.
 
 `?tracker=replay` (the default) is a tracker that repeats the reference: it
 measures 100%, and 0% with `&shift=0.5`. That is the check of the tool

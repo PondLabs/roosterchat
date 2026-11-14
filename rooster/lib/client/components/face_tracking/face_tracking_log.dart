@@ -11,9 +11,11 @@ class FaceTrackingLog {
 
   double get _now => _clock.elapsedMicroseconds / 1000;
 
-  /// One analysed frame of [video]. Frames without a frame code are left
-  /// out: nothing to compare them with.
-  void anchor(String video, FaceObservation observation) {
+  /// One analysed frame of [video], from the tracker of the [tile] showing
+  /// it: the same video can be on screen more than once, and each plaque's
+  /// rate is its own. Frames without a frame code are left out: nothing to
+  /// compare them with.
+  void anchor(String video, FaceObservation observation, {int tile = 0}) {
     final code = observation.frameCode;
     if (code == null) return;
     final anchor = observation.anchor;
@@ -21,6 +23,7 @@ class FaceTrackingLog {
     _lines.add(jsonEncode({
       'type': 'anchor',
       'video': video,
+      'tile': tile,
       'code': code,
       't': _now,
       'face': anchor == null

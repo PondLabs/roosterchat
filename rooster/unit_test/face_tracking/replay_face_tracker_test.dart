@@ -94,6 +94,7 @@ void main() {
         ..anchor(
           'clip',
           FaceObservation(videoSize: reference.videoSize, frameCode: 1),
+          tile: 3,
         )
         ..frame();
 
@@ -105,12 +106,14 @@ void main() {
       expect(lines, hasLength(3));
       expect(lines[0], containsPair('type', 'anchor'));
       expect(lines[0], containsPair('video', 'clip'));
+      expect(lines[0], containsPair('tile', 0));
       expect(lines[0], containsPair('code', 0));
       expect(lines[0]['face']['x'], closeTo(0.5, 1e-9));
       expect(lines[0]['face']['y'], closeTo(0.4, 1e-9));
       expect(lines[0]['face']['width'], closeTo(2.2 * 80 / 640, 1e-9));
       expect(lines[0]['face']['angle'], closeTo(0, 1e-9));
       expect(lines[1], containsPair('code', 1));
+      expect(lines[1], containsPair('tile', 3));
       expect(lines[1], containsPair('face', null));
       expect(lines[2], containsPair('type', 'frame'));
       expect(lines[2]['t'], greaterThanOrEqualTo(lines[0]['t'] as num));

@@ -85,7 +85,7 @@ class _FaceTrackingDemoState extends State<FaceTrackingDemo>
       }
       tracker.observation.addListener(() {
         final observation = tracker.observation.value;
-        if (observation != null) _log.anchor(name, observation);
+        if (observation != null) _log.anchor(name, observation, tile: i);
       });
       if (!mounted) return;
       setState(() => _tiles.add(_Tile(name, video, tracker)));

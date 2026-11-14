@@ -33,9 +33,9 @@ def _references(faces: list[dict | None]) -> dict[str, dict]:
     return {"clip": reference}
 
 
-def _anchor(code: int, x: float | None, t: float = 0.0, y: float = 0.4) -> dict:
+def _anchor(code: int, x: float | None, t: float = 0.0, y: float = 0.4, tile: int = 0) -> dict:
     face = None if x is None else {"x": x, "y": y, "width": 0.22, "angle": 0.0}
-    return {"type": "anchor", "video": "clip", "code": code, "t": t, "face": face}
+    return {"type": "anchor", "video": "clip", "tile": tile, "code": code, "t": t, "face": face}
 
 
 class MeasureTests(unittest.TestCase):
@@ -86,6 +86,52 @@ class MeasureTests(unittest.TestCase):
         self.assertAlmostEqual(result.anchors_per_second, 10.0)
         self.assertAlmostEqual(result.frames_per_second, 40.0)
 
+    def test_a_video_on_two_tiles_gets_the_rate_of_the_slower_tile(self) -> None:
+        references = _references([_face()])
+        # Tile 0 at 15 anchors a second, tile 3 at 10: 25 a second between them.
+        records = [_anchor(0, 0.5, t=i * 1000 / 15, tile=0) for i in range(31)]
+        records += [_anchor(0, 0.5, t=i * 100, tile=3) for i in range(21)]
+        (result,) = measure.measure(records, references)
+        self.assertEqual(result.tiles, 2)
+        self.assertAlmostEqual(result.anchors_per_second, 10.0)
+        self.assertEqual(result.judged, 52, "every tile's frames are judged")
+
+    def test_a_log_without_tiles_is_one_tile(self) -> None:
+        references = _references([_face()])
+        records = [{k: v for k, v in _anchor(0, 0.5, t=i * 100).items() if k != "tile"} for i in range(11)]
+        (result,) = measure.measure(records, references)
+        self.assertEqual(result.tiles, 1)
+        self.assertAlmostEqual(result.anchors_per_second, 10.0)
+
+    def _run(self, faces: dict[str, list[dict | None]], records: list[dict], *arguments: str) -> tuple[int, str]:
+        """Runs the command over a media folder with these videos and this log."""
+        with TemporaryDirectory() as folder:
+            for video, frames in faces.items():
+                reference = _references(frames)["clip"]
+                del reference["byCode"]
+                (Path(folder) / f"{video}.reference.json").write_text(json.dumps(reference))
+            log = Path(folder) / "log.jsonl"
+            log.write_text("".join(json.dumps(record) + "\n" for record in records))
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                code = measure.main(["--media", folder, str(log), *arguments])
+            return code, err.getvalue()
+
+    def test_the_minimum_fails_a_log_that_leaves_a_video_out(self) -> None:
+        faces = {"clip": [_face()], "other": [_face()]}
+        records = [_anchor(0, 0.5)]
+        self.assertEqual(self._run(faces, records)[0], 0, "without a minimum it only reports")
+        code, errors = self._run(faces, records, "--min-r42", "90")
+        self.assertEqual(code, 1)
+        self.assertIn("no anchor in the log: other", errors)
+
+    def test_the_minimum_fails_a_video_with_no_frontal_frame_judged(self) -> None:
+        faces = {"clip": [_face(), None, _face(yaw=40)]}
+        records = [_anchor(1, None), _anchor(2, 0.5)]  # only the frames no face looks at the camera in
+        code, errors = self._run(faces, records, "--min-r42", "90")
+        self.assertEqual(code, 1)
+        self.assertIn("no frame with a face looking at the camera was judged: clip", errors)
+
     def test_the_command_prints_a_row_per_video_and_fails_below_the_minimum(self) -> None:
         with TemporaryDirectory() as folder:
             media = Path(folder)
@@ -105,7 +151,7 @@ class MeasureTests(unittest.TestCase):
             code, report = run(str(log), "--min-r42", "90")
             self.assertEqual(code, 0)
             self.assertRegex(report, r"clip\s+100\.0%\s+15/15")
-            self.assertRegex(report, r"15\.0\s+30\.0\s*$")
+            self.assertRegex(report, r"\s1\s+15\.0\s+30\.0\s*$")
 
             code, shifted = run("--replay", "--shift", "0.5")
             log.write_text(shifted)
