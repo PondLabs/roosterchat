@@ -103,6 +103,52 @@ class MeasureTests(unittest.TestCase):
         self.assertEqual(result.tiles, 1)
         self.assertAlmostEqual(result.anchors_per_second, 10.0)
 
+    def _leaving(self) -> dict[str, dict]:
+        """A face for frames 0 to 9, gone for 10 to 19, back from 20."""
+        return _references([_face()] * 10 + [None] * 10 + [_face()] * 10)
+
+    def test_how_long_after_the_face_leaves_the_tracker_says_no_face(self) -> None:
+        references = self._leaving()
+        records = [_anchor(code, None if 12 <= code < 24 else 0.5) for code in range(0, 30, 2)]
+        (result,) = measure.measure(records, references)
+        self.assertAlmostEqual(result.no_face_after, 2 / 30)
+        self.assertAlmostEqual(result.back_after, 4 / 30)
+
+    def test_the_worst_of_every_time_round_the_loop_and_every_tile(self) -> None:
+        references = self._leaving()
+        first = [_anchor(c, None if 11 <= c < 21 else 0.5, t=c) for c in range(30)]
+        second = [_anchor(c, None if 16 <= c < 20 else 0.5, t=100 + c) for c in range(30)]
+        other = [_anchor(c, None if 10 <= c < 27 else 0.5, t=c, tile=1) for c in range(30)]
+        (result,) = measure.measure(first + second + other, references)
+        self.assertAlmostEqual(result.no_face_after, 6 / 30)
+        self.assertAlmostEqual(result.back_after, 7 / 30)
+
+    def test_a_tracker_already_saying_no_face_says_it_at_once(self) -> None:
+        references = self._leaving()
+        records = [_anchor(code, None if 8 <= code < 20 else 0.5) for code in range(30)]
+        (result,) = measure.measure(records, references)
+        self.assertEqual(result.no_face_after, 0.0)
+        self.assertEqual(result.back_after, 0.0)
+
+    def test_a_video_the_face_never_leaves_has_no_delay(self) -> None:
+        references = _references([_face()] * 10)
+        (result,) = measure.measure([_anchor(code, 0.5) for code in range(10)], references)
+        self.assertIsNone(result.no_face_after)
+        self.assertIsNone(result.back_after)
+
+    def test_the_maximum_delay_fails_a_slow_or_a_missed_no_face(self) -> None:
+        faces = {"clip": [_face()] * 10 + [None] * 10 + [_face()] * 10}
+        quick = [_anchor(code, None if 11 <= code < 21 else 0.5) for code in range(30)]
+        slow = [_anchor(code, None if 19 <= code < 21 else 0.5) for code in range(30)]
+        never = [_anchor(code, 0.5) for code in range(30)]
+        self.assertEqual(self._run(faces, quick, "--max-delay", "0.5")[0], 0)
+        code, errors = self._run(faces, slow, "--max-delay", "0.2")
+        self.assertEqual(code, 1)
+        self.assertIn("no face or anchors back later than 0.2 s: clip", errors)
+        code, errors = self._run(faces, never, "--max-delay", "0.5")
+        self.assertEqual(code, 1)
+        self.assertIn("clip", errors)
+
     def _run(self, faces: dict[str, list[dict | None]], records: list[dict], *arguments: str) -> tuple[int, str]:
         """Runs the command over a media folder with these videos and this log."""
         with TemporaryDirectory() as folder:
