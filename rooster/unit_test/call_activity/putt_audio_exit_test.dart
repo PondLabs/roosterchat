@@ -580,6 +580,26 @@ void main() {
   });
 
   testWidgets(
+      "a session of a game with no controller is not joined from the "
+      "call's invite", (tester) async {
+    const nameOnly = 'test.name_only';
+    CallActivityRegistry.register(
+        CallActivity(id: nameOnly, displayName: () => 'Name Only'));
+    await aliceHosts(tester, activity: nameOnly, players: [_aliceIdentity]);
+    await pumpCall(tester);
+    await tester.pump();
+    expect(find.text('Alice started Name Only'), findsOneWidget);
+
+    await tapThrough(tester, find.text(ActivityJoinPill.join));
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(ActivityStage), findsNothing);
+    expect(component.ownSession, isNull,
+        reason: 'nothing would play it: we must not take a seat');
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
       'launching a game while a session this device cannot run is live '
       'says it could not start', (tester) async {
     const fakeId = 'test.unavailable';
