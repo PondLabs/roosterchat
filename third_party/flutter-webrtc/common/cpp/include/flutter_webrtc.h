@@ -3,6 +3,8 @@
 
 #include "flutter_common.h"
 
+#include "rooster_face_tap.h"                 // ROOSTER
+#include "rooster_file_video_source.h"        // ROOSTER
 #include "rooster_music_source.h"             // ROOSTER
 #include "rooster_system_audio_reference.h"  // ROOSTER
 
@@ -54,6 +56,10 @@ class FlutterWebRTC : public FlutterWebRTCBase,
 
   // ROOSTER: roosterCreateMusicTrack / roosterStopMusicTrack (DJ booth).
   RoosterMusicTracks rooster_music_tracks_;
+
+  // ROOSTER: roosterCreateFileVideoTrack / roosterStopFileVideoTrack (face
+  // tracking measured on test videos).
+  RoosterFileVideoTracks rooster_file_video_tracks_;
 };
 
 }  // namespace flutter_webrtc_plugin
