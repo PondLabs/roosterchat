@@ -68,6 +68,25 @@ Besides its `id` (the namespaced event type, e.g. `chat.commet.putt`),
 The room list's badges only need the `id`, the name and the `icon`; a
 descriptor without `createController` cannot be launched or joined.
 
+## A game with secrets
+
+Everything in a session's state reaches every client, the host's too, so
+a secret cannot ride it. Two things in the session are for that:
+
+- `sendTo(identities, message)` - the addressed lane: an opaque message
+  from any participant to the ones it picks (LiveKit's destination
+  identities), heard on `direct` with its authenticated sender. Nobody
+  else receives it, and a message for nobody is not sent.
+- `hostPart(key, json)` - a component's own part of the state, in the
+  snapshot's `parts` beside the game's payload: the game's next payload
+  does not drop it, and an elected host finds it in the last state it
+  heard.
+
+Cock-a-Doodle-Who?'s plaques are built on both
+(`client/components/cock_a_doodle_who/secret/`): everyone holds every
+plaque but their own, and the host publishes only a ledger that says
+nothing an owner may not know. See adr/0007-plaque-secret.md.
+
 ## Getting in and out
 
 While someone plays and we do not, their game has a tile of the call's
@@ -147,8 +166,10 @@ does not stop a new launch.
 ## Testing
 
 - `flutter test unit_test/call_activity` - protocol, session lifecycle
-  (launch, join, capacity, election, handoff, inputs) on the in-memory
-  transport, `call_activity_ui` - the picker and stage widgets, and a fake
+  (launch, join, capacity, election, handoff, inputs, addressed messages
+  and state parts) on the in-memory transport, whose `delivered` record
+  says what each client was sent, and what the LiveKit transport
+  publishes; `call_activity_ui` - the picker and stage widgets, and a fake
   second game run through the call view's hooks (launch, stage, cameras,
   the strip, an unavailable game).
 - The voice e2e (`integration_test/activities/`) runs two real clients

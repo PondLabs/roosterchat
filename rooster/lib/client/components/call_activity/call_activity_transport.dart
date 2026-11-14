@@ -24,7 +24,9 @@ abstract class CallActivityTransport {
   String get selfIdentity;
 
   /// Sends [message] to everyone in the call, or to [to] alone
-  /// (identities, as in [CallActivityIncoming.sender]).
+  /// (identities, as in [CallActivityIncoming.sender]). Null is everyone;
+  /// an empty list is nobody, so a message whose addressees all left is
+  /// not sent to the whole call instead.
   Future<void> send(Map<String, Object?> message, {List<String>? to});
 
   /// Messages from the others.
@@ -48,6 +50,19 @@ abstract class CallActivityTransport {
   Future<void> dispose();
 }
 
+/// One message as one participant received it, in [InMemoryActivityCall]'s
+/// record of deliveries.
+class CallActivityDelivery {
+  const CallActivityDelivery(this.to, this.from, this.message);
+
+  /// Who received it.
+  final String to;
+
+  /// Who sent it.
+  final String from;
+  final Map<String, Object?> message;
+}
+
 /// One call in memory: every transport joined to it hears the others, one
 /// microtask later, exactly as if the packets went over the wire. For unit
 /// and integration tests (the soundboard's in-memory transport precedent);
@@ -55,10 +70,16 @@ abstract class CallActivityTransport {
 class InMemoryActivityCall {
   final Map<String, InMemoryActivityTransport> _members = {};
   final List<(String, Map<String, Object?>, List<String>)> _sent = [];
+  final List<CallActivityDelivery> _delivered = [];
 
   /// Every message sent on this call, in order: (from, message, to).
   List<(String, Map<String, Object?>, List<String>)> get log =>
       List.unmodifiable(_sent);
+
+  /// Every message as each participant received it, in order: what a test
+  /// reads to know what one client was told ([log] has what was sent, with
+  /// no word on who was there to hear it).
+  List<CallActivityDelivery> get delivered => List.unmodifiable(_delivered);
 
   int get memberCount => _members.length;
 
@@ -111,6 +132,8 @@ class InMemoryActivityTransport implements CallActivityTransport {
       if (identical(member, this)) continue;
       if (to != null && !to.contains(member.selfIdentity)) continue;
       if (member._disposed || member._incoming.isClosed) continue;
+      _call._delivered.add(
+          CallActivityDelivery(member.selfIdentity, selfIdentity, message));
       member._incoming.add(CallActivityIncoming(selfIdentity, message));
     }
   }
