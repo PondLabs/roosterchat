@@ -15,4 +15,5 @@ To run a Linux build without it showing on your screen, and to take
 screenshots and videos of it, use
 [scripts/headless-linux.sh](../scripts/headless-linux.sh). It starts the app
 in a headless compositor of its own, with empty data folders, so it does not
-open your accounts; its header documents the commands.
+open your accounts, and `--offline` keeps it off the network; the script's
+header documents the commands.
