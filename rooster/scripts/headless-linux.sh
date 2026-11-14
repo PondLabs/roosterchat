@@ -38,7 +38,8 @@
 # GStreamer PipeWire source to read mutter's own screencast. An X server that
 # draws its whole root window (rootful Xwayland) can be grabbed by ffmpeg's
 # x11grab, so the app runs as an X11 client (GDK_BACKEND=x11). Needs mutter,
-# Xwayland, dbus-daemon, xauth, mcookie and ffmpeg (with libx264); no root.
+# Xwayland, dbus-daemon, xauth, mcookie, python3, libX11 and ffmpeg (with
+# libx264), and unshare for --offline; no root.
 set -euo pipefail
 
 name=${HEADLESS_NAME:-default}
@@ -89,6 +90,50 @@ wait_for() { # FILE [tenths of a second]
     sleep 0.1
   done
   return 1
+}
+
+# There is no window manager, so a window stays where the app puts it, and
+# Rooster's main window grows from where its small loading window was
+# centred, half off the screen. This keeps every top-level window (not menus
+# or popups, which are override-redirect) at the top-left corner. Plain
+# libX11 through ctypes, so nothing to install. Exits with the X server.
+pin_windows() {
+  python3 -I - <<'EOF'
+import ctypes as c, ctypes.util, time
+x = c.CDLL(ctypes.util.find_library("X11"))
+P, W, I = c.c_void_p, c.c_ulong, c.c_int
+class Attrs(c.Structure):
+    _fields_ = [(n, I) for n in "x y w h border depth".split()] + [
+        ("visual", P), ("root", W), ("klass", I), ("bit_gravity", I),
+        ("win_gravity", I), ("backing_store", I), ("planes", W),
+        ("pixel", W), ("save_under", I), ("colormap", W),
+        ("installed", I), ("map_state", I), ("all_masks", c.c_long),
+        ("your_mask", c.c_long), ("no_propagate", c.c_long),
+        ("override_redirect", I), ("screen", P)]
+x.XOpenDisplay.restype = P
+x.XDefaultRootWindow.restype = W
+x.XDefaultRootWindow.argtypes = [P]
+x.XQueryTree.argtypes = [P, W, c.POINTER(W), c.POINTER(W),
+                         c.POINTER(c.POINTER(W)), c.POINTER(c.c_uint)]
+x.XGetWindowAttributes.argtypes = [P, W, c.POINTER(Attrs)]
+x.XMoveWindow.argtypes = [P, W, I, I]
+x.XFree.argtypes = [P]
+x.XSync.argtypes = [P, I]
+d = x.XOpenDisplay(None)
+root = x.XDefaultRootWindow(d)
+while True:
+    r, parent, kids, n = W(), W(), c.POINTER(W)(), c.c_uint()
+    x.XQueryTree(d, root, r, parent, kids, n)
+    for i in range(n.value):
+        a = Attrs()
+        if (x.XGetWindowAttributes(d, kids[i], a) and a.map_state == 2
+                and not a.override_redirect and (a.x, a.y) != (0, 0)):
+            x.XMoveWindow(d, kids[i], 0, 0)
+    if kids:
+        x.XFree(kids)
+    x.XSync(d, 0)
+    time.sleep(0.3)
+EOF
 }
 
 run() {
@@ -162,6 +207,9 @@ run() {
     export XDG_DATA_HOME=$state/home/data XDG_CONFIG_HOME=$state/home/config \
       XDG_CACHE_HOME=$state/home/cache
   fi
+
+  pin_windows >"$state/logs/pin.log" 2>&1 &
+  pids+=($!)
 
   "${offline[@]}" "$exe" "$@" > >(tee "$state/logs/app.log") 2>&1 &
   local app=$!
