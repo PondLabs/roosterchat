@@ -71,6 +71,11 @@ abstract final class CallActivityMessageType {
   /// own relayings, like the accepted-move journal it streams between
   /// snapshots). Only the host's messages count.
   static const relay = 'relay';
+
+  /// An opaque message from any participant to the participants it chose
+  /// (the transport addresses it; the body does not say to whom). What an
+  /// activity with secrets sends: nobody else in the call receives it.
+  static const direct = 'direct';
 }
 
 /// The wire format itself. The packet limit, the part sizes and the
