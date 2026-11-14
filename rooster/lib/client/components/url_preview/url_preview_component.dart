@@ -34,8 +34,10 @@ abstract class UrlPreviewComponent<T extends Client> implements Component<T> {
   /// cards' images. See docs/link-previews.md.
   void warmUpPreviews(Timeline timeline, Iterable<TimelineEvent> events) {}
 
-  /// What the card draws first: up to four photos (the grid), or the one
-  /// image or video thumbnail, and an X author's avatar.
+  /// What the card draws first, as the card asks for it: the grid's four
+  /// cells at most (never the photos past them, nor the lightbox's larger
+  /// copies), or the one image or video thumbnail; an X author's avatar;
+  /// and a quoted post's avatar and first four cells.
   static Iterable<ImageProvider> cardImages(UrlPreviewData data) sync* {
     if (data.images.isNotEmpty) {
       yield* data.images.take(4).map((photo) => photo.image);
@@ -45,6 +47,16 @@ abstract class UrlPreviewComponent<T extends Client> implements Component<T> {
 
     final avatar = data.xPost?.avatarUrl;
     if (avatar != null) yield NetworkImage(avatar.toString());
+
+    final quote = data.xPost?.quote;
+    if (quote != null) {
+      final quoteAvatar = quote.avatarUrl;
+      if (quoteAvatar != null) yield NetworkImage(quoteAvatar.toString());
+      for (final item in quote.media.take(4)) {
+        final cell = quote.cellImageUrl(item);
+        if (cell != null) yield NetworkImage(cell.toString());
+      }
+    }
   }
 
   /// Starts the card's images downloading, so a message scrolling in shows
@@ -79,13 +91,21 @@ enum UrlDestinationType {
   image,
 }
 
-/// One photo attached to a preview that has more than one (an X post with
-/// 2-4 images). Rendered as a grid; [image] alone covers single-photo cases.
+/// One photo of a post's photos (an X post, an Instagram carousel), in post
+/// order. Two or more are drawn as a grid of at most four cells.
 class UrlPreviewImage {
-  const UrlPreviewImage(this.image, {this.aspectRatio});
+  const UrlPreviewImage(this.image, {this.aspectRatio, ImageProvider? full})
+      : _full = full;
 
+  /// What the card draws: a copy sized for the grid when the site serves
+  /// sizes (X), else the photo itself.
   final ImageProvider image;
   final double? aspectRatio;
+  final ImageProvider? _full;
+
+  /// What the lightbox shows: a larger copy than [image] when the site
+  /// serves one, else [image].
+  ImageProvider get full => _full ?? image;
 }
 
 class UrlPreviewData {

@@ -38,8 +38,10 @@ previewed, because those requests never go through the homeserver.
 1. **While you write.** The composer's `UrlPreviewPrefetcher`
    (`rooster/lib/ui/organisms/chat/url_preview_prefetcher.dart`) fetches the
    message's first link once the text has rested for 300 ms. It also loads the
-   card's images into Flutter's image cache: the photo grid, the image or
-   video thumbnail, and an X author's avatar. It only fetches what the
+   card's images into Flutter's image cache: the photo grid's cells (four at
+   most, never the photos past them nor the lightbox's larger copies), the
+   image or video thumbnail, an X author's avatar, and a quoted post's
+   avatar and first four cells. It only fetches what the
    timeline would preview for the sent message. That excludes rooms with
    media previews off, matrix.to links, links without a domain, and pages in
    an encrypted room with URL previews off.
