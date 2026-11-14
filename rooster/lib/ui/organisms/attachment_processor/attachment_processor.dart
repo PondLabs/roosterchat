@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:rooster/client/attachment.dart';
+import 'package:rooster/debug/log.dart';
 import 'package:rooster/ui/atoms/scaled_safe_area.dart';
 import 'package:rooster/ui/molecules/file_preview.dart';
 import 'package:rooster/ui/molecules/video_player/video_player_controller.dart';
@@ -262,7 +263,9 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
       final data =
           attachment.data ?? await File(attachment.path!).readAsBytes();
       result = await removeImageMetadata(data);
-    } catch (_) {
+    } catch (e) {
+      // The type only: a file error's message holds the file's path.
+      Log.w("Could not remove an image's metadata: ${e.runtimeType}");
       return null;
     }
     final bytes = result.bytes;
