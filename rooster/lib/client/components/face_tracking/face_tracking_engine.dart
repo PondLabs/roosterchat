@@ -136,16 +136,27 @@ class FaceSearchAndFollow {
 /// [rate] times a second, always on its newest frame, so eight videos cost
 /// eight detections and not eight detectors.
 ///
-/// While one detection runs, the frames of the next [lookahead] trackers due
-/// are grabbed and cut, so each cut is ready when its turn comes: a frame
-/// waits at most that many detections.
+/// While one detection runs, the frames of the next trackers due are
+/// grabbed and cut, up to [lookahead] frames on their way between grab and
+/// answer, so each cut is ready when its turn comes. A tracker has up to [inFlight] frames on their way: the next
+/// is cut around the face where it was last seen, without waiting for the
+/// one before, so a slow trip to the GPU and back does not slow its rate.
+/// Up to [asked] detections are asked for at once: the detector does them
+/// one after the other, in order, without waiting for each answer to come
+/// back before it hears of the next.
 class FaceTrackingEngine {
-  FaceTrackingEngine(
-      {this.rate = 15, this.lookahead = 8, Duration Function()? clock})
-      : _clock = clock ?? _stopwatch();
+  FaceTrackingEngine({
+    this.rate = 15,
+    this.lookahead = 16,
+    this.inFlight = 2,
+    this.asked = 4,
+    Duration Function()? clock,
+  }) : _clock = clock ?? _stopwatch();
 
   final int rate;
   final int lookahead;
+  final int inFlight;
+  final int asked;
   final Duration Function() _clock;
 
   static Duration Function() _stopwatch() {
@@ -158,7 +169,9 @@ class FaceTrackingEngine {
   /// Trackers whose frame is being grabbed and cut, in the order they will
   /// be detected in.
   final _queue = <(_EngineTracker, Future<_Cut?>)>[];
-  _EngineTracker? _detecting;
+
+  /// The trackers of the detections asked for, once each per detection.
+  final _detecting = <_EngineTracker>[];
   var _turn = 0;
   Timer? _wake;
 
@@ -187,16 +200,19 @@ class FaceTrackingEngine {
   }
 
   bool _waiting(_EngineTracker tracker) =>
-      tracker == _detecting || _queue.any((queued) => queued.$1 == tracker);
+      [..._detecting, for (final (queued, _) in _queue) queued]
+          .where((other) => other == tracker)
+          .length >=
+      inFlight;
 
-  /// Cuts the frames of the trackers due, up to [lookahead] ahead, and
-  /// starts the next detection; or waits for a tracker to be due.
+  /// Cuts the frames of the trackers due, up to [lookahead] ahead, and asks
+  /// for the next detections; or waits for a tracker to be due.
   void _pump() {
     _wake?.cancel();
     _wake = null;
     final now = _clock();
     Duration? soonest;
-    while (_queue.length < lookahead) {
+    while (_queue.length + _detecting.length < lookahead) {
       _EngineTracker? due;
       for (var i = 0; i < _trackers.length; i++) {
         final index = (_turn + i) % _trackers.length;
@@ -215,15 +231,15 @@ class FaceTrackingEngine {
       due._grabbed = now;
       _queue.add((due, due._cut()));
     }
-    if (_detecting == null && _queue.isNotEmpty) {
+    while (_detecting.length < asked && _queue.isNotEmpty) {
       final (tracker, cut) = _queue.removeAt(0);
-      _detecting = tracker;
+      _detecting.add(tracker);
       cut.then(tracker._detect).whenComplete(() {
-        _detecting = null;
+        _detecting.remove(tracker);
         _pump();
       });
     }
-    if (soonest != null && _queue.length < lookahead) {
+    if (soonest != null && _queue.length + _detecting.length < lookahead) {
       _wake = Timer(soonest, _pump);
     }
   }

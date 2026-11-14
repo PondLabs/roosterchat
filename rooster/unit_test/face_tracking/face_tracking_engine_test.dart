@@ -76,12 +76,16 @@ class _Cut implements FaceCut {
   @override
   Future<FaceDetection> detect() async {
     final engine = frame.video.engine;
-    expect(engine.inFlight, 0, reason: 'one detection at a time');
-    engine.inFlight++;
-    final wait = readyAt - engine.now();
-    if (wait > Duration.zero) await Future<void>.delayed(wait);
-    await Future<void>.delayed(engine.detectTime);
-    engine.inFlight--;
+    engine.asked++;
+    expect(engine.asked, lessThanOrEqualTo(engine.engine.asked));
+    // One detection after the other, each once its cut is ready; the
+    // answer takes [answerTime] more to come back.
+    final now = engine.now();
+    var start = readyAt > now ? readyAt : now;
+    if (engine.busyUntil > start) start = engine.busyUntil;
+    engine.busyUntil = start + engine.detectTime;
+    await Future<void>.delayed(engine.busyUntil + engine.answerTime - now);
+    engine.asked--;
     if (engine.fail) throw StateError('the worker died');
     final eyes = frame.eyes;
     final seen = eyes != null &&
@@ -101,15 +105,20 @@ class _Cut implements FaceCut {
 }
 
 class _Engine {
-  _Engine(this.async, {int lookahead = 8})
+  _Engine(this.async, {int lookahead = 16, int inFlight = 2, int asked = 4})
       : engine = FaceTrackingEngine(
-            lookahead: lookahead, clock: () => async.elapsed);
+            lookahead: lookahead,
+            inFlight: inFlight,
+            asked: asked,
+            clock: () => async.elapsed);
 
   final FakeAsync async;
   final FaceTrackingEngine engine;
   Duration detectTime = const Duration(milliseconds: 6);
   Duration cutTime = Duration.zero;
-  int inFlight = 0;
+  Duration answerTime = Duration.zero;
+  Duration busyUntil = Duration.zero;
+  int asked = 0;
   bool fail = false;
 
   Duration now() => async.elapsed;
@@ -360,7 +369,7 @@ void main() {
         async.elapse(const Duration(seconds: 1));
 
         expect(video.grabs, inInclusiveRange(14, 16));
-        expect(video.grabs - seen.length, lessThanOrEqualTo(1));
+        expect(video.grabs - seen.length, lessThanOrEqualTo(2));
         tracker.dispose();
       });
     });
@@ -388,6 +397,52 @@ void main() {
               final age = time - video.grabbedAt[observation.frameCode]!;
               expect(age, lessThanOrEqualTo(const Duration(milliseconds: 60)));
             }
+            tracker.dispose();
+          }
+        });
+      }
+    });
+
+    test('a slow trip to the GPU and back does not slow a video down', () {
+      // A cut read 100 ms after it was asked for: waiting for each result
+      // before the next frame, a video gets 9.5 frames a second.
+      for (final (inFlight, atLeast) in [(1, 9.0), (2, 14.0)]) {
+        fakeAsync((async) {
+          final engine = _Engine(async, inFlight: inFlight)
+            ..cutTime = const Duration(milliseconds: 100)
+            ..detectTime = const Duration(milliseconds: 5);
+          final (video, tracker, seen) =
+              engine.track(_face, readFrameCode: true);
+
+          async.elapse(const Duration(seconds: 3));
+
+          final perSecond = seen.length / 3;
+          expect(perSecond, greaterThanOrEqualTo(atLeast));
+          expect(perSecond, lessThanOrEqualTo(inFlight == 1 ? 10 : 15));
+          // The face drifts and is still found in every frame: the square
+          // cut before the last result still holds it.
+          expect(seen.map((s) => s.$2.anchor), everyElement(isNotNull));
+          tracker.dispose();
+        });
+      }
+    });
+
+    test('asks for the next detections before the answers come back', () {
+      // Each answer takes 9 ms to come back: asking for one detection at a
+      // time, eight videos would get under 10 frames a second each.
+      for (final (asked, enough) in [(1, false), (4, true)]) {
+        fakeAsync((async) {
+          final engine = _Engine(async, asked: asked)
+            ..detectTime = const Duration(milliseconds: 4)
+            ..answerTime = const Duration(milliseconds: 9)
+            ..cutTime = const Duration(milliseconds: 40);
+          final runs = [for (var i = 0; i < 8; i++) engine.track(_face)];
+
+          async.elapse(const Duration(seconds: 3));
+
+          for (final (_, tracker, seen) in runs) {
+            expect(seen.length / 3 >= 12, enough, reason: 'asked $asked');
+            expect(seen.map((s) => s.$2.anchor), everyElement(isNotNull));
             tracker.dispose();
           }
         });

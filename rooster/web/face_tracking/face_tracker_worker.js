@@ -9,8 +9,9 @@
 // and nothing leaves this worker but YuNet's numbers.
 //
 // A frame is "cut" as soon as the app has it: WebGL shrinks the part asked
-// for and the pixels come back from the GPU without blocking this thread,
-// while YuNet looks at an earlier one. "detect" then waits for them.
+// for and the pixels come back from the GPU, with those of the other cuts
+// made meanwhile, without blocking this thread, while YuNet looks at an
+// earlier one. "detect" then waits for them.
 //
 // ONNX Runtime's files sit next to this one, fetched at a pinned version by
 // rooster/scripts/prepare-web.sh.
@@ -86,83 +87,130 @@ const gpu = (() => {
   ]) {
     gl.texParameteri(gl.TEXTURE_2D, key, value);
   }
-  return { gl, src: gl.getUniformLocation(program, "src"), texture, targets: new Map() };
+  return { gl, src: gl.getUniformLocation(program, "src"), texture };
 })();
 
-// The picture a cut is drawn in, one per size.
-function target(width, rows) {
-  const { gl, targets } = gpu;
-  const key = `${width}x${rows}`;
-  if (!targets.has(key)) {
-    const texture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, width, rows);
-    const framebuffer = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
-    targets.set(key, framebuffer);
+// Cuts are drawn side by side in one picture, the atlas, and read back
+// together: each read is a round trip to the GPU, whatever its size. While
+// one read is on its way, the cuts that arrive wait, and go in the next.
+const ATLAS = 1024;
+const atlas = gpu && (() => {
+  const { gl } = gpu;
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, ATLAS, ATLAS);
+  const framebuffer = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+  return { framebuffer, drawn: [], waiting: [], reading: false, x: 0, y: 0, shelf: 0 };
+})();
+
+// Where the next cut of `width` x `rows` goes, from the top left; null when
+// the atlas is full.
+function place(width, rows) {
+  if (atlas.x + width > ATLAS) {
+    atlas.y += atlas.shelf;
+    atlas.x = 0;
+    atlas.shelf = 0;
   }
-  return targets.get(key);
+  if (atlas.y + rows > ATLAS) return null;
+  const slot = { x: atlas.x, y: atlas.y };
+  atlas.x += width;
+  atlas.shelf = Math.max(atlas.shelf, rows);
+  return slot;
 }
 
 // Draws the part of the frame asked for, shrunk to the input's size at its
-// top left, and the frame code's row below it; starts reading it back.
-// Resolves to the pixels, RGBA, top row first.
-function cutOnGpu({ frame, sx, sy, sw, sh, dw, dh, width, height, strip }) {
+// top left, and the frame code's row below it, in a slot of the atlas.
+function draw(cut) {
   const { gl, src, texture } = gpu;
-  const rows = strip ? height + 1 : height;
-  gl.bindFramebuffer(gl.FRAMEBUFFER, target(width, rows));
+  const { frame, sx, sy, sw, sh, dw, dh, width, rows, strip } = cut;
+  const slot = place(width, rows);
+  if (!slot) return false;
+  cut.slot = slot;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, atlas.framebuffer);
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, frame);
   const w = frame.width;
   const h = frame.height;
   frame.close();
-  gl.viewport(0, 0, width, rows);
+  // The framebuffer's rows count from the bottom.
+  const bottom = ATLAS - slot.y - rows;
+  gl.enable(gl.SCISSOR_TEST);
+  gl.scissor(slot.x, bottom, width, rows);
   gl.clearColor(0, 0, 0, 1);
   gl.clear(gl.COLOR_BUFFER_BIT);
-  // The framebuffer's rows count from the bottom.
-  gl.viewport(0, rows - dh, dw, dh);
+  gl.disable(gl.SCISSOR_TEST);
+  gl.viewport(slot.x, bottom + rows - dh, dw, dh);
   gl.uniform4f(src, sx / w, sy / h, sw / w, sh / h);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   if (strip) {
-    gl.viewport(0, 0, width, 1);
+    gl.viewport(slot.x, bottom, width, 1);
     gl.uniform4f(src, 0, CODE_ROW, 1, 0);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
+  atlas.drawn.push(cut);
+  return true;
+}
+
+// Reads back every cut drawn since the last read, in one go, without
+// blocking this thread: each cut gets its pixels, RGBA, top row first.
+function read() {
+  const { gl } = gpu;
+  const cuts = atlas.drawn;
+  atlas.drawn = [];
+  atlas.reading = true;
+  const band = atlas.y + atlas.shelf;
   const buffer = gl.createBuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, atlas.framebuffer);
   gl.bindBuffer(gl.PIXEL_PACK_BUFFER, buffer);
-  gl.bufferData(gl.PIXEL_PACK_BUFFER, width * rows * 4, gl.STREAM_READ);
-  gl.readPixels(0, 0, width, rows, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+  gl.bufferData(gl.PIXEL_PACK_BUFFER, ATLAS * band * 4, gl.STREAM_READ);
+  gl.readPixels(0, ATLAS - band, ATLAS, band, gl.RGBA, gl.UNSIGNED_BYTE, 0);
   gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
   const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
   gl.flush();
-  return new Promise((done) => {
-    const poll = () => {
-      if (gl.clientWaitSync(fence, 0, 0) === gl.TIMEOUT_EXPIRED) {
-        setTimeout(poll, 1);
-        return;
-      }
-      gl.deleteSync(fence);
-      const upsideDown = new Uint8Array(width * rows * 4);
-      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, buffer);
-      gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, upsideDown);
-      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-      gl.deleteBuffer(buffer);
-      const rgba = new Uint8Array(upsideDown.length);
-      const line = width * 4;
+  const poll = () => {
+    if (gl.clientWaitSync(fence, 0, 0) === gl.TIMEOUT_EXPIRED) {
+      setTimeout(poll, 1);
+      return;
+    }
+    gl.deleteSync(fence);
+    const pixels = new Uint8Array(ATLAS * band * 4);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, buffer);
+    gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, pixels);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    gl.deleteBuffer(buffer);
+    for (const { slot, width, rows, done } of cuts) {
+      const rgba = new Uint8Array(width * rows * 4);
       for (let y = 0; y < rows; y++) {
-        rgba.set(upsideDown.subarray((rows - 1 - y) * line, (rows - y) * line), y * line);
+        // The band's first row is the atlas's lowest.
+        const from = ((band - 1 - slot.y - y) * ATLAS + slot.x) * 4;
+        rgba.set(pixels.subarray(from, from + width * 4), y * width * 4);
       }
       done(rgba);
-    };
-    poll();
-  });
+    }
+    atlas.reading = false;
+    atlas.x = atlas.y = atlas.shelf = 0;
+    const waiting = atlas.waiting;
+    atlas.waiting = [];
+    for (const cut of waiting) if (!draw(cut)) atlas.waiting.push(cut);
+    if (atlas.drawn.length) read();
+  };
+  poll();
+}
+
+function cutOnGpu(cut) {
+  if (atlas.reading) {
+    atlas.waiting.push(cut);
+    return;
+  }
+  draw(cut);
+  read();
 }
 
 // Without WebGL 2: the same picture on a 2D canvas, read back at once.
 const canvas = gpu ? null : new OffscreenCanvas(1, 1).getContext("2d", { willReadFrequently: true });
-function cutOnCanvas({ frame, sx, sy, sw, sh, dw, dh, width, height, strip }) {
-  const rows = strip ? height + 1 : height;
+function cutOnCanvas({ frame, sx, sy, sw, sh, dw, dh, width, height, rows, strip, done }) {
   canvas.canvas.width = width;
   canvas.canvas.height = rows;
   canvas.fillStyle = "#000";
@@ -170,14 +218,22 @@ function cutOnCanvas({ frame, sx, sy, sw, sh, dw, dh, width, height, strip }) {
   canvas.drawImage(frame, sx, sy, sw, sh, 0, 0, dw, dh);
   if (strip) canvas.drawImage(frame, 0, Math.floor(frame.height * CODE_ROW), frame.width, 1, 0, height, width, 1);
   frame.close();
-  return Promise.resolve(new Uint8Array(canvas.getImageData(0, 0, width, rows).data.buffer));
+  done(new Uint8Array(canvas.getImageData(0, 0, width, rows).data.buffer));
 }
 
-async function detect({ id }) {
+// Detections asked for while one runs wait their turn, in order.
+let turn = Promise.resolve();
+
+function detect({ id }) {
   const cut = cuts.get(id);
   cuts.delete(id);
-  if (!cut) throw new Error(`no cut ${id}`);
-  const { width, height, strip, pixels, started } = cut;
+  if (!cut) return Promise.reject(new Error(`no cut ${id}`));
+  const result = turn.then(() => run(cut));
+  turn = result.catch(() => {});
+  return result;
+}
+
+async function run({ width, height, strip, pixels, started }) {
   const rgba = await pixels;
   let cells = null;
   if (strip) {
@@ -218,9 +274,10 @@ self.onmessage = async ({ data }) => {
       await session;
       self.postMessage({ id });
     } else if (type === "cut") {
-      const pixels = (gpu ? cutOnGpu : cutOnCanvas)(data);
-      pixels.catch(() => {});
-      cuts.set(id, { width: data.width, height: data.height, strip: data.strip, pixels, started: performance.now() });
+      const cut = { ...data, rows: data.strip ? data.height + 1 : data.height, started: performance.now() };
+      cut.pixels = new Promise((done) => (cut.done = done));
+      cuts.set(id, cut);
+      (gpu ? cutOnGpu : cutOnCanvas)(cut);
     } else if (type === "discard") {
       cuts.delete(id);
     } else {
