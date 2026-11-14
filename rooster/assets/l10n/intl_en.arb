@@ -2376,6 +2376,24 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelLightboxPosition": "{position} / {total}",
+  "@labelLightboxPosition": {
+    "description": "Counter at the top of the image viewer while it pages through several photos: which one is shown, of how many",
+    "type": "text",
+    "placeholders": {
+      "position": {},
+      "total": {}
+    }
+  },
+  "labelPhotoPosition": "Photo {position} of {total}",
+  "@labelPhotoPosition": {
+    "description": "Read by screen readers for one photo of several, in the image viewer and in a link preview's photo grid",
+    "type": "text",
+    "placeholders": {
+      "position": {},
+      "total": {}
+    }
+  },
   "labelLiveBadge": "LIVE",
   "@labelLiveBadge": {
     "description": "Badge next to a voice channel member who is sharing their screen",
@@ -3623,6 +3641,30 @@
     "description": "Shown at the bottom of the window when a video from a link preview could not be opened",
     "type": "text",
     "placeholders": {}
+  },
+  "labelMediaGridHiddenCount": "+{howMany}",
+  "@labelMediaGridHiddenCount": {
+    "description": "Over the last cell of a link preview's photo grid, which shows four photos at most: how many more the post has",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "promptMediaGridShowMorePhotos": "{howMany,plural, =1{Show 1 more photo}other{Show {howMany} more photos}}",
+  "@promptMediaGridShowMorePhotos": {
+    "description": "Read by screen readers for the last cell of a link preview's photo grid, which opens the image viewer on the photos that did not fit in the grid",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "promptXQuoteOpenForMore": "{howMany,plural, =1{Open the post to see 1 more item}other{Open the post to see {howMany} more items}}",
+  "@promptXQuoteOpenForMore": {
+    "description": "Read by screen readers for the last cell of a quoted X post's media grid when what did not fit includes videos: it opens the post on X, where every photo and video is",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
   },
   "promptProfileSetRole": "Set Role",
   "@promptProfileSetRole": {

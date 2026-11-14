@@ -8,6 +8,7 @@ import 'package:rooster/client/components/video_embed/providers/generic_video_pr
 import 'package:rooster/client/components/video_embed/providers/twitter_provider.dart';
 import 'package:rooster/client/components/video_embed/providers/youtube_provider.dart';
 import 'package:rooster/client/components/video_embed/video_embed_info.dart';
+import 'package:rooster/client/components/video_embed/x_post.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
@@ -514,12 +515,18 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
     return null;
   }
 
+  /// X serves every photo at several sizes, so the card draws a small copy
+  /// (a medium one when it is the post's only photo) and the lightbox a
+  /// large one. Other sites' photos (Instagram's are signed URLs) are used
+  /// as they are. See docs/x-posts.md.
   List<UrlPreviewImage> _toPreviewImages(List<PostPhoto> photos) {
+    final cell = photos.length == 1 ? XPhotoSize.medium : XPhotoSize.small;
     return [
       for (final photo in photos)
         UrlPreviewImage(
-          NetworkImage(photo.url.toString()),
+          NetworkImage(cell.of(photo.url).toString()),
           aspectRatio: photo.aspectRatio,
+          full: NetworkImage(XPhotoSize.large.of(photo.url).toString()),
         ),
     ];
   }

@@ -11,6 +11,8 @@ import 'package:rooster/ui/molecules/video_player/video_player.dart';
 import 'package:rooster/ui/molecules/video_player/video_player_controller.dart';
 import 'package:rooster/utils/image/lod_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:tiamat/atoms/popup_dialog.dart';
 import 'dart:ui' as ui;
 
@@ -18,6 +20,8 @@ class Lightbox extends StatefulWidget {
   const Lightbox({
     this.image,
     this.gallery,
+    this.galleryThumbnails,
+    this.galleryAspectRatios,
     this.initialIndex = 0,
     this.video,
     this.thumbnail,
@@ -29,9 +33,20 @@ class Lightbox extends StatefulWidget {
   });
   final ImageProvider? image;
 
-  /// All images of the post/message. When it holds more than one, arrows step
-  /// through them. [image] stays the image shown when there is no gallery.
+  /// All images of the post/message. When it holds more than one, arrows
+  /// (on screen and on the keyboard) step through them and a counter says
+  /// which one is shown. [image] stays the image shown when there is no
+  /// gallery.
   final List<ImageProvider>? gallery;
+
+  /// A smaller copy of each [gallery] image, in the same order, drawn while
+  /// the larger one downloads: the copy a preview card already shows.
+  final List<ImageProvider>? galleryThumbnails;
+
+  /// Each [gallery] image's width over height when known before it loads,
+  /// in the same order, so stepping to an image gives it its own shape at
+  /// once instead of the previous image's.
+  final List<double?>? galleryAspectRatios;
   final int initialIndex;
   final FileProvider? video;
   final ImageProvider? thumbnail;
@@ -43,10 +58,26 @@ class Lightbox extends StatefulWidget {
   @override
   State<Lightbox> createState() => _LightboxState();
 
+  static String labelLightboxPosition(int position, int total) =>
+      Intl.message("$position / $total",
+          name: "labelLightboxPosition",
+          args: [position, total],
+          desc: "Counter at the top of the image viewer while it pages "
+              "through several photos: which one is shown, of how many");
+
+  static String labelPhotoPosition(int position, int total) =>
+      Intl.message("Photo $position of $total",
+          name: "labelPhotoPosition",
+          args: [position, total],
+          desc: "Read by screen readers for one photo of several, in the "
+              "image viewer and in a link preview's photo grid");
+
   static Future<void> show(
     BuildContext context, {
     ImageProvider? image,
     List<ImageProvider>? gallery,
+    List<ImageProvider>? galleryThumbnails,
+    List<double?>? galleryAspectRatios,
     int initialIndex = 0,
     ImageProvider? thumbnail,
     FileProvider? video,
@@ -64,6 +95,8 @@ class Lightbox extends StatefulWidget {
           return Lightbox(
             image: image,
             gallery: gallery,
+            galleryThumbnails: galleryThumbnails,
+            galleryAspectRatios: galleryAspectRatios,
             initialIndex: initialIndex,
             video: video,
             videoController: videoController,
@@ -142,6 +175,30 @@ class _LightboxState extends State<Lightbox> with TickerProviderStateMixin {
     return widget.image;
   }
 
+  /// The smaller copy of the shown gallery image, drawn until it loads.
+  ImageProvider? get displayThumbnail {
+    final thumbnails = widget.galleryThumbnails;
+    if (!hasGallery || thumbnails == null || index >= thumbnails.length) {
+      return null;
+    }
+    return thumbnails[index];
+  }
+
+  /// Gives the shown gallery image its own shape before it has loaded: the
+  /// size the post gave, or, when it gave none, the whole image fitted into
+  /// the frame, never cropped to the previous image's shape.
+  void _takeKnownShape() {
+    final ratios = widget.galleryAspectRatios;
+    final known =
+        ratios != null && index < ratios.length ? ratios[index] : null;
+    if (known != null && known > 0) {
+      aspectRatio = known;
+      knowsImageSize = true;
+    } else {
+      knowsImageSize = false;
+    }
+  }
+
   void step(int delta) {
     final gallery = widget.gallery;
     if (gallery == null || gallery.length < 2) return;
@@ -150,9 +207,37 @@ class _LightboxState extends State<Lightbox> with TickerProviderStateMixin {
       index = (index + delta) % gallery.length;
       if (index < 0) index += gallery.length;
       controller.value = Matrix4.identity();
+      _takeKnownShape();
     });
     getImageInfo();
     shouldRotate();
+    _precacheNeighbours();
+  }
+
+  /// Starts the images on either side of the shown one downloading, so the
+  /// next step shows its image without a wait.
+  void _precacheNeighbours() {
+    final gallery = widget.gallery;
+    if (gallery == null || gallery.length < 2) return;
+    for (final offset in const [1, -1]) {
+      final neighbour = gallery[(index + offset) % gallery.length];
+      // A neighbour that fails is shown failing when stepped to; here it is
+      // no error of anyone's.
+      precacheImage(neighbour, context, onError: (_, __) {});
+    }
+  }
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (!hasGallery || event is KeyUpEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      step(1);
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      step(-1);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   @override
@@ -168,6 +253,12 @@ class _LightboxState extends State<Lightbox> with TickerProviderStateMixin {
     final gallery = widget.gallery;
     if (gallery != null && gallery.isNotEmpty) {
       index = widget.initialIndex.clamp(0, gallery.length - 1);
+      if (hasGallery) {
+        _takeKnownShape();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _precacheNeighbours();
+        });
+      }
     }
 
     if (displayImage != null) {
@@ -197,6 +288,7 @@ class _LightboxState extends State<Lightbox> with TickerProviderStateMixin {
   }
 
   void getImageInfo() async {
+    final asked = displayImage;
     ui.Image? image;
     try {
       image = await getImage();
@@ -205,6 +297,9 @@ class _LightboxState extends State<Lightbox> with TickerProviderStateMixin {
       Log.onError(e, s, content: "Could not read the image's size");
     }
     if (!mounted) return;
+    // The viewer stepped on while this image loaded: its size belongs to
+    // an image no longer shown.
+    if (!identical(displayImage, asked)) return;
     setState(() {
       knowsImageSize = image != null;
       if (image != null) aspectRatio = image.width / image.height;
@@ -294,8 +389,43 @@ class _LightboxState extends State<Lightbox> with TickerProviderStateMixin {
     Navigator.pop(context, widget.contentKey);
   }
 
+  /// The gallery image, with its smaller copy (already on screen in the
+  /// card that opened the viewer) drawn under it until it has loaded.
+  Widget _behindThumbnail(BuildContext context, Widget child, int? frame,
+      bool wasSynchronouslyLoaded) {
+    final thumbnail = displayThumbnail;
+    if (thumbnail == null || frame != null || wasSynchronouslyLoaded) {
+      return child;
+    }
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Image(
+          key: const ValueKey('lightbox-thumbnail'),
+          image: thumbnail,
+          fit: knowsImageSize ? BoxFit.cover : BoxFit.contain,
+          filterQuality: FilterQuality.medium,
+          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+        ),
+        child,
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final viewer = _buildViewer(context);
+    if (!hasGallery) return viewer;
+    // The arrow keys step through the gallery. The viewer takes the focus
+    // so they don't reach what is under it (the composer, on web).
+    return Focus(
+      autofocus: true,
+      onKeyEvent: _onKey,
+      child: viewer,
+    );
+  }
+
+  Widget _buildViewer(BuildContext context) {
     return GestureDetector(
       onTap: () {
         dismiss();
@@ -334,6 +464,8 @@ class _LightboxState extends State<Lightbox> with TickerProviderStateMixin {
                                                   fit: StackFit.expand,
                                                   children: [
                                                     Image(
+                                                      key: const ValueKey(
+                                                          'lightbox-image'),
                                                       fit: knowsImageSize
                                                           ? BoxFit.cover
                                                           : BoxFit.contain,
@@ -341,6 +473,8 @@ class _LightboxState extends State<Lightbox> with TickerProviderStateMixin {
                                                       isAntiAlias: true,
                                                       filterQuality:
                                                           FilterQuality.medium,
+                                                      frameBuilder:
+                                                          _behindThumbnail,
                                                     ),
                                                     if (loadingHighQuality)
                                                       Align(
@@ -421,6 +555,39 @@ class _LightboxState extends State<Lightbox> with TickerProviderStateMixin {
               ),
             ),
             if (hasGallery) ...[
+              Positioned(
+                top: 12,
+                left: 12,
+                child: Semantics(
+                  label: Lightbox.labelPhotoPosition(
+                      index + 1, widget.gallery!.length),
+                  child: ExcludeSemantics(
+                    // A Material, as the buttons are: the viewer's route has
+                    // none, and text outside one is drawn in the debug style.
+                    child: Material(
+                      key: const ValueKey('lightbox-position'),
+                      color: Colors.black.withValues(alpha: 0.55),
+                      shape: const StadiumBorder(),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        child: Text(
+                          Lightbox.labelLightboxPosition(
+                              index + 1, widget.gallery!.length),
+                          style:
+                              Theme.of(context).textTheme.labelLarge?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontFeatures: const [
+                              ui.FontFeature.tabularFigures()
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
               Positioned(
                 left: 12,
                 top: 0,

@@ -144,13 +144,16 @@ void main() {
 
     expect(find.byType(Image), findsNWidgets(4),
         reason: 'the grid shows the first four photos');
+    expect(find.text('+2'), findsOneWidget,
+        reason: 'and says two more are past the fourth');
 
     await tester.tap(find.byType(Image).at(3));
     await tester.pumpAndSettle();
 
     final lightbox = tester.widget<Lightbox>(find.byType(Lightbox));
     expect(lightbox.gallery, photos,
-        reason: 'the photos past the fourth are still one swipe away');
+        reason: 'the photos past the fourth are still one swipe away, and '
+            'Instagram\'s signed links are used as they are');
     expect(lightbox.initialIndex, 3);
   });
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:rooster/client/components/url_preview/url_preview_component.dart';
 import 'package:rooster/client/components/video_embed/composite_video_provider.dart';
@@ -104,6 +105,12 @@ class _Sites {
             '"thumbnail_url":"https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"}',
             200,
             headers: {'content-type': 'application/json'});
+      case 'api.fxtwitter.com' when request.url.path.endsWith(_manyId):
+        return http.Response.bytes(
+            File('unit_test/fixtures/x_status_eleven_photos_fxtwitter.json')
+                .readAsBytesSync(),
+            200,
+            headers: {'content-type': 'application/json'});
       case 'api.fxtwitter.com':
         return http.Response(
             '{"tweet":{"url":"https://x.com/rickastleyco/status/123",'
@@ -131,6 +138,10 @@ class _Sites {
 final _page = Uri.parse('https://example.com/article');
 final _youtube = Uri.parse('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
 final _post = Uri.parse('https://x.com/rickastleyco/status/123');
+
+// A real post with eleven photos (unit_test/fixtures).
+const _manyId = '2120946118267732158';
+final _manyPhotos = Uri.parse('https://x.com/dinkin_flickaa/status/$_manyId');
 
 /// Lets the microtasks of warming (fetches, cache writes, queue pumps) run.
 Future<void> drain() async {
@@ -329,6 +340,33 @@ void main() {
     });
   });
 
+  group('X photo sizes', () {
+    String url(ImageProvider image) => (image as NetworkImage).url;
+
+    test('a post\'s photos are drawn small and opened large', () async {
+      final preview = await component.getPreviewForUrl(room, _manyPhotos);
+
+      final images = preview!.images;
+      expect(images, hasLength(11));
+      expect(url(images.first.image),
+          'https://pbs.twimg.com/media/HW8UTKLW4AEsitH.jpg?name=small');
+      expect(url(images.first.full),
+          'https://pbs.twimg.com/media/HW8UTKLW4AEsitH.jpg?name=large');
+      expect(url(images.last.image),
+          'https://pbs.twimg.com/media/HW8cftTXoAAvBsO.jpg?name=small');
+      expect(preview.image, images.first.image);
+    });
+
+    test('a post\'s only photo is drawn at medium size', () async {
+      final preview = await component.getPreviewForUrl(room, _post);
+
+      expect(url(preview!.images.single.image),
+          'https://pbs.twimg.com/media/abc.jpg?name=medium');
+      expect(url(preview.images.single.full),
+          'https://pbs.twimg.com/media/abc.jpg?name=large');
+    });
+  });
+
   group('warmImages', () {
     test('loads every picture the card draws first', () {
       final photo = _RecordingImage('photo');
@@ -361,6 +399,59 @@ void main() {
         image: main,
       ));
       expect(_RecordingImage.loaded, [main]);
+    });
+
+    test(
+        'warms the grid\'s four cells, not the hidden photos nor the '
+        'lightbox\'s large copies', () {
+      UrlPreviewComponent.warmImages(UrlPreviewData(
+        _manyPhotos,
+        images: [
+          for (var i = 0; i < 6; i++)
+            UrlPreviewImage(_RecordingImage('cell-$i'),
+                full: _RecordingImage('full-$i')),
+        ],
+      ));
+
+      expect(_RecordingImage.loaded.map((image) => image.name),
+          ['cell-0', 'cell-1', 'cell-2', 'cell-3']);
+    });
+
+    test(
+        'warms a quoted post\'s avatar and first four cells, as the card '
+        'asks for them', () {
+      String photo(int i) => 'https://pbs.twimg.com/media/q$i.jpg?name=orig';
+      final avatar = 'https://pbs.twimg.com/profile_images/tidal.jpg';
+      UrlPreviewComponent.warmImages(UrlPreviewData(
+        _post,
+        xPost: XPost(
+          url: _post,
+          authorName: 'rsa',
+          handle: 'rsa',
+          quote: XPost(
+            url: _manyPhotos,
+            authorName: 'TIDAL',
+            handle: 'TIDAL',
+            avatarUrl: Uri.parse(avatar),
+            media: [
+              for (var i = 0; i < 5; i++)
+                XMedia(type: XMediaType.photo, url: Uri.parse(photo(i))),
+            ],
+          ),
+        ),
+      ));
+
+      bool warmed(String url) => PaintingBinding.instance.imageCache
+          .statusForKey(NetworkImage(url))
+          .tracked;
+      expect(warmed(avatar), isTrue);
+      for (var i = 0; i < 4; i++) {
+        expect(warmed('https://pbs.twimg.com/media/q$i.jpg?name=small'), isTrue,
+            reason: 'cell $i, at the size the card draws it');
+      }
+      expect(warmed('https://pbs.twimg.com/media/q4.jpg?name=small'), isFalse,
+          reason: 'the fifth is behind the "+1"');
+      expect(warmed(photo(0)), isFalse, reason: 'never the original');
     });
 
     test('a preview without a picture warms nothing', () {
