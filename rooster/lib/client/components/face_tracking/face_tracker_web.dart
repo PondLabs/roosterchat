@@ -12,6 +12,7 @@ import 'package:web/web.dart' as web;
 
 import 'face_tracker.dart';
 import 'face_tracking_engine.dart';
+import 'face_worker_requests.dart';
 import 'frame_code.dart' as frame_code;
 import 'yunet.dart';
 
@@ -155,69 +156,42 @@ class _Detector {
       base.resolve('face_tracking/face_tracker_worker.js').toString().toJS,
       web.WorkerOptions(type: 'module'),
     );
+    _requests = FaceWorkerRequests<_Reply>(
+        (type, id) => _worker.postMessage(_Message(type: type, id: id)));
     _worker.onmessage = (web.MessageEvent event) {
       final reply = event.data as _Reply;
-      _pending.remove(reply.id)?.complete(reply);
+      _requests.answer(reply.id, reply, error: reply.error);
     }.toJS;
     _worker.onerror = (web.Event event) {
-      final message = event.isA<web.ErrorEvent>()
+      _requests.fail(StateError(event.isA<web.ErrorEvent>()
           ? (event as web.ErrorEvent).message
-          : 'the face tracking worker failed';
-      _broken = StateError(message);
-      for (final waiting in _pending.values) {
-        waiting.completeError(_broken!);
-      }
-      _pending.clear();
+          : 'the face tracking worker failed'));
     }.toJS;
     final model =
         base.resolve(ui_web.assetManager.getAssetUrl(Yunet.asset)).toString();
-    final id = _next++;
-    _loaded = _ask(id);
-    _worker.postMessage(_Message(type: 'load', id: id, model: model));
+    _requests.load((id) =>
+        _worker.postMessage(_Message(type: 'load', id: id, model: model)));
   }
 
   late final web.Worker _worker;
-  late final Future<_Reply> _loaded;
-  final _pending = <int, Completer<_Reply>>{};
-  var _next = 0;
-  StateError? _broken;
+  late final FaceWorkerRequests<_Reply> _requests;
 
   /// Hands a frame over to be cut, and gives the cut's id; null when the
   /// worker is gone.
   int? cut(_Message message) {
-    if (_broken != null) {
+    final id = _requests.nextCut();
+    if (id == null) {
       message.frame?.close();
       return null;
     }
-    final id = _next++;
     message.id = id;
     _worker.postMessage(message, [message.frame!].toJS);
     return id;
   }
 
-  Future<_Reply> detect(int? id) async {
-    await _loaded;
-    if (id == null || _broken != null) throw _broken ?? StateError('no cut');
-    final reply = _ask(id);
-    _worker.postMessage(_Message(type: 'detect', id: id));
-    return reply;
-  }
+  Future<_Reply> detect(int? id) => _requests.detect(id);
 
-  void discard(int? id) {
-    if (id != null && _broken == null) {
-      _worker.postMessage(_Message(type: 'discard', id: id));
-    }
-  }
-
-  Future<_Reply> _ask(int id) {
-    final reply = Completer<_Reply>();
-    _pending[id] = reply;
-    return reply.future.then((reply) {
-      final error = reply.error;
-      if (error != null) throw StateError(error);
-      return reply;
-    });
-  }
+  void discard(int? id) => _requests.discard(id);
 }
 
 extension type _Message._(JSObject _) implements JSObject {
