@@ -44,7 +44,9 @@
 /// one size (the SDK names every encrypted file `crypt`), two
 /// `read_markers` for different events of the same id length, or one GET
 /// asked twice at once by two widgets. Read `attempt=2` as "sent again or
-/// identical on the wire", not as a proven retry.
+/// identical on the wire", not as a proven retry. A body streamed with no
+/// known length tells nothing apart, so such a request is always attempt 1
+/// and nothing is kept for it.
 library;
 
 import 'dart:async';

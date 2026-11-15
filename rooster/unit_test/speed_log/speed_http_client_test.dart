@@ -39,6 +39,19 @@ class _StreamedBodyRequest extends http.BaseRequest {
   }
 }
 
+/// A body handed over as a stream whose length is not known.
+class _UnsizedRequest extends http.BaseRequest {
+  _UnsizedRequest(super.method, super.url, this.body);
+
+  final List<int> body;
+
+  @override
+  http.ByteStream finalize() {
+    super.finalize();
+    return http.ByteStream.fromBytes(body);
+  }
+}
+
 /// The real transport, counting the body chunks it takes from our client.
 class _TransportSpy extends http.BaseClient {
   _TransportSpy(this.onChunk);
@@ -341,6 +354,33 @@ void main() {
     });
     span.finish();
     expect(log.requests.toList().map((r) => r.attempt), [1, 1, 1, 1]);
+  });
+
+  test('a body of unknown length is attempt 1 each time', () async {
+    handler = (request) async {
+      await request.drain<void>();
+      request.response.write('{}');
+      await request.response.close();
+    };
+    final url = base.resolve('/_matrix/media/v3/upload');
+    final span = log.startSpan('text_send');
+    await span.run(() async {
+      // Two different files to one URL: with no length, nothing tells them
+      // from a retry.
+      for (final body in [
+        [1, 2, 3],
+        List.filled(9000, 7),
+      ]) {
+        final response = await client.send(_UnsizedRequest('POST', url, body));
+        await response.stream.drain<void>();
+      }
+    });
+
+    final records = log.requests.toList();
+    expect(records.map((r) => r.bytesUp), [3, 9000]);
+    expect(records.map((r) => r.attempt), [1, 1]);
+    expect(span.rememberedRequests, 0);
+    span.finish();
   });
 
   test(

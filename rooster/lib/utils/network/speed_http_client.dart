@@ -49,9 +49,12 @@ class SpeedHttpClient extends http.BaseClient {
       route: routeTemplate(request.url, hostClass),
       hostClass: hostClass,
       // The same request sent again counts as a new attempt; a different
-      // one of the same route does not. Hashed by the span, never kept.
-      attempt: SpeedLog.nextAttempt(span,
-          '${request.method} ${request.url} ${request.contentLength ?? ''}'),
+      // one of the same route does not. Hashed by the span, never kept. A
+      // body of unknown length cannot be told from another: attempt 1.
+      attempt: request.contentLength == null
+          ? 1
+          : SpeedLog.nextAttempt(span,
+              '${request.method} ${request.url} ${request.contentLength}'),
       operationId: span?.id,
     );
 
