@@ -1,17 +1,17 @@
 import 'dart:io';
 
 import 'package:rooster/client/attachment.dart';
+import 'package:rooster/debug/log.dart';
 import 'package:rooster/ui/atoms/scaled_safe_area.dart';
 import 'package:rooster/ui/molecules/file_preview.dart';
 import 'package:rooster/ui/molecules/video_player/video_player_controller.dart';
+import 'package:rooster/utils/image/metadata/remove_image_metadata.dart';
 import 'package:rooster/utils/mime.dart';
 import 'package:exif/exif.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as path;
-import 'package:image/image.dart' as img;
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class AttachmentProcessor extends StatefulWidget {
@@ -23,11 +23,20 @@ class AttachmentProcessor extends StatefulWidget {
 }
 
 class _AttachmentProcessorState extends State<AttachmentProcessor> {
-  String get promptAttachmentProcessingSendOriginal => Intl.message(
-      "Send Original",
-      name: "promptAttachmentProcessingSendOriginal",
-      desc:
-          "Prompt text for the option to send a file in its original state, without any further processing such as removing metadata");
+  String get promptAttachmentProcessingSendOriginal =>
+      Intl.message("Send original (keeps metadata)",
+          name: "promptAttachmentProcessingSendOriginal",
+          desc: "Switch in the dialog that previews a file before it is "
+              "attached: sends the file exactly as it is, with its metadata "
+              "(where and when a photo was taken, the camera) left in");
+
+  String get labelAttachmentMetadataNotRemoved => Intl.message(
+      "Couldn't remove this image's metadata. To attach it as it is, turn on \"Send original\".",
+      name: "labelAttachmentMetadataNotRemoved",
+      desc: "Shown in the dialog that previews a file before it is attached, "
+          "when the image could not be read well enough to remove its "
+          "metadata; nothing is attached unless the person turns on the "
+          "\"Send original (keeps metadata)\" switch");
 
   String get labelImageContainsLocationInfo => Intl.message(
       "Warning: This image contains location metadata",
@@ -49,6 +58,10 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
   bool sendOriginalFile = false;
 
   bool processing = false;
+
+  /// The image's metadata could not be removed: it is attached only as it
+  /// is, through "Send original".
+  bool metadataRemovalFailed = false;
 
   FocusNode focusNode = FocusNode();
 
@@ -152,6 +165,12 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
                         padding: const EdgeInsets.all(8.0),
                         child: buildFileProcessingSwitch(),
                       ),
+                    if (metadataRemovalFailed && !sendOriginalFile)
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: tiamat.Text.error(
+                            labelAttachmentMetadataNotRemoved),
+                      ),
                     if (sendOriginalFile || !canProcessData)
                       buildMetadataDisplay(),
                     buildConfirmButton(),
@@ -201,19 +220,30 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
   void submit() async {
     if (canProcessData == false || sendOriginalFile) {
       Navigator.of(context).pop(widget.attachment);
+    } else if (metadataRemovalFailed) {
+      // Only "Send original" attaches this file now.
+      return;
     } else {
       setState(() {
         processing = true;
       });
       var file = await processFile();
-      if (mounted) {
-        Navigator.of(context).pop(file);
+      if (!mounted) return;
+      if (file == null) {
+        setState(() {
+          processing = false;
+          metadataRemovalFailed = true;
+        });
+        return;
       }
+      Navigator.of(context).pop(file);
     }
   }
 
-  Future<PendingFileAttachment> processFile() async {
-    late PendingFileAttachment processedFile;
+  /// The file to attach, or null when an image's metadata could not be
+  /// removed.
+  Future<PendingFileAttachment?> processFile() async {
+    PendingFileAttachment? processedFile;
 
     if (Mime.imageTypes.contains(widget.attachment.mimeType)) {
       processedFile = await processImage();
@@ -224,36 +254,34 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
     return processedFile;
   }
 
-  Future<PendingFileAttachment> processImage() async {
-    return await compute((PendingFileAttachment attachment) async {
-      var data = attachment.data ?? await File(attachment.path!).readAsBytes();
+  /// Removes the image's metadata (see [removeImageMetadata]), or returns
+  /// null when it cannot.
+  Future<PendingFileAttachment?> processImage() async {
+    final attachment = widget.attachment;
+    final MetadataRemoval result;
+    try {
+      final data =
+          attachment.data ?? await File(attachment.path!).readAsBytes();
+      result = await removeImageMetadata(data);
+    } catch (e) {
+      // The type only: a file error's message holds the file's path.
+      Log.w("Could not remove an image's metadata: ${e.runtimeType}");
+      return null;
+    }
+    final bytes = result.bytes;
+    if (bytes == null) return null;
 
-      var decoder = img.findDecoderForData(data);
-      var image = decoder!.decode(data)!;
+    final mime = result.mimeType ?? attachment.mimeType!;
+    var name = attachment.name;
+    if (mime != attachment.mimeType) {
+      // A re-encode changed the format: the name follows it.
+      final extension = mime == "image/png" ? "png" : "jpg";
+      final rawName = path.basenameWithoutExtension(name ?? "untitled");
+      name = "$rawName.$extension";
+    }
 
-      image.exif.clear();
-
-      Uint8List? processedData;
-      String? name = attachment.name;
-      String mime = attachment.mimeType!;
-      if (attachment.name != null) {
-        processedData = img.encodeNamedImage(attachment.name!, image);
-      }
-
-      if (processedData == null) {
-        processedData = img.encodePng(image);
-        mime = "image/png";
-        var fileName = attachment.name ?? "untitled.png";
-        var rawName = path.basenameWithoutExtension(fileName);
-        name = "$rawName.png";
-      }
-
-      return PendingFileAttachment(
-          name: name,
-          data: processedData,
-          size: processedData.lengthInBytes,
-          mimeType: mime);
-    }, widget.attachment);
+    return PendingFileAttachment(
+        name: name, data: bytes, size: bytes.lengthInBytes, mimeType: mime);
   }
 
   Future<PendingFileAttachment> processVideo() async {
