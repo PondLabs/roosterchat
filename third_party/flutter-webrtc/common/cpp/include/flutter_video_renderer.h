@@ -52,6 +52,9 @@ class FlutterVideoRenderer
   std::unique_ptr<EventChannelProxy> event_channel_;
   int64_t texture_id_ = -1;
   scoped_refptr<RTCVideoTrack> track_ = nullptr;
+  // ROOSTER: the id of track_, read by OnFrame on WebRTC's thread to hand
+  // the frame to a face tracker following it (rooster_face_tap.h).
+  std::string track_id_;
   scoped_refptr<RTCVideoFrame> frame_;
   std::unique_ptr<flutter::TextureVariant> texture_;
   std::shared_ptr<FlutterDesktopPixelBuffer> pixel_buffer_;

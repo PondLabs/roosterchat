@@ -22,12 +22,18 @@ For each video it prints the share of analysed frames, among those where the
 reference has a whole face looking at the camera, whose plaque centre is
 within a quarter of the eye distance of the reference forehead point (R4.2);
 the anchors per second of the tile that got the fewest (R4.3 is about each
-plaque); and the interface's frames per second meanwhile.
+plaque); and the interface's frames per second meanwhile. For a video where
+the face leaves and comes back it also prints how long the plaque took to
+go (R4.4: the first analysed frame without a face that says so) and to come
+back (the first that has the whole face again and an anchor), the longest
+of each, in seconds of video: the frames between, at the video's rate. It
+leaves out the detection and the drawing after it, a few milliseconds.
 
 With `--min-r42` it fails when a video is below that percentage, and also
 when a video of the media folder has no anchor in the log or no frame with a
 face looking at the camera was judged: a run that left a video out has not
-passed.
+passed. With `--max-lost` it fails when the plaque took longer than that to
+go or to come back, or never went.
 
 `--replay` writes the log of a tracker that repeats the reference, moved
 sideways by `--shift` eye distances: 100% at 0, 0% at 0.5.
@@ -39,7 +45,7 @@ import argparse
 import json
 import math
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 TOLERANCE = 0.25  # of the eye distance (R4.2)
@@ -58,6 +64,11 @@ class VideoResult:
     tiles: int = 0  # how many trackers followed this video
     anchors_per_second: float | None = None  # of the tile with the fewest
     frames_per_second: float | None = None
+    # Seconds of video from the face leaving to the plaque going, one per
+    # time it left in front of a tracker; None where it never went.
+    lost_after: list[float | None] = field(default_factory=list)
+    # Seconds from the whole face being back to an anchor, one per return.
+    back_after: list[float] = field(default_factory=list)
 
     @property
     def r42(self) -> float | None:
@@ -96,6 +107,73 @@ def _rate(times: list[float]) -> float | None:
     return (len(times) - 1) * 1000 / (times[-1] - times[0])
 
 
+def _state(reference: dict, code: int) -> str:
+    """"none", "part" (some of the face outside the picture) or "whole"."""
+    face = reference["byCode"].get(code)
+    return "none" if face is None else ("whole" if face["inFrame"] else "part")
+
+
+def _stretch_start(reference: dict, code: int, inside) -> int:
+    """The first frame of the run of frames around `code` that `inside`
+    holds for, going back across the end of the video (it loops)."""
+    count = len(reference["frames"])
+    start = code
+    for _ in range(count - 1):
+        before = (start - 1) % count
+        if not inside(before):
+            break
+        start = before
+    return start
+
+
+def leaving_and_returning(anchors: list[dict], reference: dict) -> tuple[list[float | None], list[float]]:
+    """How long the plaque took to go each time the face left, and to come
+    back each time the whole face returned after the tracker had lost it, in
+    seconds of video. `anchors` are one tile's, in the order analysed."""
+    count, fps = len(reference["frames"]), reference["fps"]
+    known = [a for a in anchors if a["code"] in reference["byCode"]]
+    lost: list[float | None] = []
+    back: list[float] = []
+    previous: dict | None = None
+    gone = False  # the tracker has said "no face" since the face last went
+    waiting_lost: int | None = None  # first frame of the face's absence, until the plaque goes
+    waiting_back: int | None = None  # first frame of the face's return, until an anchor
+    for anchor in known:
+        code, state = anchor["code"], _state(reference, anchor["code"])
+        previous_state = None if previous is None else _state(reference, previous["code"])
+        if previous is not None and state == "none" and previous_state != "none":
+            if waiting_lost is not None:
+                lost.append(None)
+            waiting_lost = _stretch_start(reference, code, lambda c: _state(reference, c) == "none")
+        if previous is not None and state == "whole" and previous_state != "whole" and gone:
+            waiting_back = _stretch_start(reference, code, lambda c: _state(reference, c) == "whole")
+            if previous["face"] is not None and previous_state == "part":
+                back.append(0.0)  # found while coming in: there before the face was whole
+                waiting_back = None
+        if waiting_lost is not None:
+            if anchor["face"] is None:
+                lost.append(((code - waiting_lost) % count) / fps)
+                waiting_lost = None
+            elif state != "none":
+                lost.append(None)  # the face came back before the plaque went
+                waiting_lost = None
+        if anchor["face"] is None:
+            gone = True
+        if waiting_back is not None:
+            if anchor["face"] is not None:
+                back.append(((code - waiting_back) % count) / fps)
+                waiting_back = None
+                gone = False
+            elif state != "whole":
+                waiting_back = None  # left again before it was found
+        elif anchor["face"] is not None and state == "whole":
+            gone = False
+        previous = anchor
+    if waiting_lost is not None:
+        lost.append(None)
+    return lost, back
+
+
 def measure(records: list[dict], references: dict[str, dict]) -> list[VideoResult]:
     drawn = sorted(r["t"] for r in records if r["type"] == "frame")
     results = []
@@ -124,6 +202,13 @@ def measure(records: list[dict], references: dict[str, dict]) -> list[VideoResul
             by_tile.setdefault(record.get("tile", 0), []).append(record["t"])
         rates = [_rate(sorted(tile)) for tile in by_tile.values()]
         result.tiles = len(by_tile)
+        by_tile_anchors: dict[int, list[dict]] = {}
+        for record in sorted(anchors, key=lambda r: r["t"]):
+            by_tile_anchors.setdefault(record.get("tile", 0), []).append(record)
+        for tile_anchors in by_tile_anchors.values():
+            lost, back = leaving_and_returning(tile_anchors, reference)
+            result.lost_after += lost
+            result.back_after += back
         result.anchors_per_second = None if None in rates else min(rates)
         result.frames_per_second = _rate([t for t in drawn if times[0] <= t <= times[-1]])
         results.append(result)
@@ -173,6 +258,18 @@ def report(results: list[VideoResult]) -> str:
             f"{_number(any_yaw, '%'):>8} {absent:>14} {r.tiles:>6} "
             f"{_number(r.anchors_per_second):>10} {_number(r.frames_per_second):>9}"
         )
+    comings = [r for r in results if r.lost_after or r.back_after]
+    if comings:
+        lines.append("")
+        lines.append(f"{'video':<10} {'left':>5} {'no face after':>14} {'back':>5} {'anchors back after':>19}")
+        for r in comings:
+            never = sum(1 for s in r.lost_after if s is None)
+            went = [s for s in r.lost_after if s is not None]
+            longest = "never" if never else _number(max(went) if went else None, " s")
+            lines.append(
+                f"{r.video:<10} {len(r.lost_after):>5} {longest:>14} {len(r.back_after):>5} "
+                f"{_number(max(r.back_after) if r.back_after else None, ' s'):>19}"
+            )
     return "\n".join(lines)
 
 
@@ -184,6 +281,11 @@ def main(argv: list[str] | None = None) -> int:
         "--min-r42",
         type=float,
         help="fail when a video's R4.2 is below this percentage, or a video of the media folder was not measured",
+    )
+    parser.add_argument(
+        "--max-lost",
+        type=float,
+        help="fail when the plaque took longer than this many seconds to go when the face left, or to come back",
     )
     parser.add_argument("--replay", action="store_true", help="write the log of a tracker that repeats the reference")
     parser.add_argument("--shift", type=float, default=0.0, help="with --replay: eye distances to move every anchor")
@@ -213,6 +315,20 @@ def main(argv: list[str] | None = None) -> int:
             if videos:
                 print(f"{problem}: {', '.join(videos)}", file=sys.stderr)
         if any(problems.values()):
+            return 1
+    if args.max_lost is not None:
+        late = {
+            f"no face after more than {args.max_lost} s": [
+                r.video for r in results if any(s is None or s > args.max_lost for s in r.lost_after)
+            ],
+            f"anchors back after more than {args.max_lost} s": [
+                r.video for r in results if any(s > args.max_lost for s in r.back_after)
+            ],
+        }
+        for problem, videos in late.items():
+            if videos:
+                print(f"{problem}: {', '.join(videos)}", file=sys.stderr)
+        if any(late.values()):
             return 1
     return 0
 

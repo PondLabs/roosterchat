@@ -64,3 +64,13 @@ external set _faceTrackingLog(JSFunction read);
 void publishDemoLog(String Function() read) {
   _faceTrackingLog = (() => read().toJS).toJS;
 }
+
+/// The page is the window: nothing to do.
+Future<void> prepareDemoWindow() async {}
+
+/// The demonstration's settings: the page's query.
+Map<String, String> demoSettings() => Uri.base.queryParameters;
+
+/// How many frames of its video were handed to [tracker]: not counted in
+/// the browser.
+int? framesHandedOver(FaceTracker tracker) => null;

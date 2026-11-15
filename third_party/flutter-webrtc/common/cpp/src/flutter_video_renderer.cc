@@ -1,5 +1,7 @@
 #include "flutter_video_renderer.h"
 
+#include "rooster_face_tap.h"  // ROOSTER
+
 namespace flutter_webrtc_plugin {
 
 FlutterVideoRenderer::~FlutterVideoRenderer() {}
@@ -77,7 +79,12 @@ void FlutterVideoRenderer::OnFrame(scoped_refptr<RTCVideoFrame> frame) {
   }
   mutex_.lock();
   frame_ = frame;
+  // ROOSTER: the face trackers following this track get the very frame
+  // drawn, before it is (docs/adr/0006-face-tracking.md).
+  const std::string track_id =
+      RoosterFaceTaps::Instance().Any() ? track_id_ : std::string();
   mutex_.unlock();
+  if (!track_id.empty()) RoosterFaceTaps::Instance().Deliver(track_id, frame);
   registrar_->MarkTextureFrameAvailable(texture_id_);
 }
 
@@ -86,6 +93,10 @@ void FlutterVideoRenderer::SetVideoTrack(scoped_refptr<RTCVideoTrack> track) {
     if (track_)
       track_->RemoveRenderer(this);
     track_ = track;
+    // ROOSTER: see track_id_.
+    mutex_.lock();
+    track_id_ = track_ ? track_->id().std_string() : std::string();
+    mutex_.unlock();
     last_frame_size_ = {0, 0};
     first_frame_rendered = false;
     if (track_)

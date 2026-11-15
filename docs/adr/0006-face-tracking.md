@@ -1,6 +1,6 @@
 # Face tracking: whoever shows a video follows the face in it
 
-**Status: accepted (2026-11-14) for the browser and Linux, where it was measured. Windows, macOS and Android are decided here and not tested: nobody ran them.**
+**Status: accepted (2026-11-14) for the browser and Linux, where it was measured; on Linux in the app itself since T0.4 ("Measured on Linux, in the app"). Windows, macOS and Android are decided here and not tested: nobody ran them.**
 
 Cock-a-Doodle-Who? is the game of guessing the plaque on your own forehead, played in a voice channel. Everyone sees, on the others' camera video, a plaque pinned to their forehead: it has to follow the head's position, size and tilt, on every platform Rooster ships for (browser, Linux, Windows, macOS, Android). Before this, Rooster had no face detection of any kind. The only inference engine in the repository was tract (`third_party/deep_filter`), for the voice.
 
@@ -38,7 +38,7 @@ No engine below uses the network, sends telemetry or needs Google Play services:
 | Platform | Frames are read at | Engine | Model | License | Adds |
 |---|---|---|---|---|---|
 | Browser | the renderer's own video element, `third_party/flutter-webrtc/lib/src/web/rtc_video_renderer_impl.dart:267` | ONNX Runtime Web 1.31 (wasm, one thread) in a worker | YuNet | MIT, MIT | 3.8 MB gzipped (14.8 MB wasm, 78 KB of JavaScript), downloaded when the first tracker starts; model 230 KB |
-| Linux | `FlutterVideoRenderer::OnFrame`, `third_party/flutter-webrtc/common/cpp/src/flutter_video_renderer.cc:47` | tract 0.21.13, in `librust_lib_rooster` | YuNet | Apache-2.0 or MIT, MIT | the model, 230 KB: tract is already linked, for the voice |
+| Linux | `FlutterVideoRenderer::OnFrame`, `third_party/flutter-webrtc/common/cpp/src/flutter_video_renderer.cc:49` | tract 0.21.13, in `librust_lib_rooster` | YuNet | Apache-2.0 or MIT, MIT | the model, 230 KB: tract is already linked, for the voice |
 | Windows | the same `OnFrame`, shared with Linux | the same | YuNet | the same | the same |
 | macOS | `renderFrame:`, `third_party/flutter-webrtc/common/darwin/Classes/FlutterRTCVideoRenderer.m:196` | Vision (`VNDetectFaceLandmarksRequest`), part of macOS | Apple's | part of the system | nothing |
 | Android | `SurfaceTextureRenderer.onFrame`, `third_party/flutter-webrtc/android/src/main/java/com/cloudwebrtc/webrtc/SurfaceTextureRenderer.java:100` | LiteRT 1.4.1 (`com.google.ai.edge.litert:litert`) | BlazeFace short range | Apache-2.0, Apache-2.0 | 1.7 MB per ABI in the APK (arm64: a 4.3 MB library); model 230 KB |
@@ -55,7 +55,7 @@ Today `VoipStream.buildVideoRenderer` (`rooster/lib/client/components/voip/voip_
 - `rooster/lib/client/matrix/components/voip_room/matrix_livekit_voip_stream.dart`: `MatrixLivekitVoipStream` implements it. A camera publication with a video track gives `FaceVideoSource(track.mediaStreamTrack, mirrored: …)`; a screen share, an audio stream or an unsubscribed camera gives null. `onStreamChanged` already fires when the track is replaced: whoever holds a tracker starts a new one then.
 - `third_party/livekit-client-sdk-flutter/lib/src/widgets/video_track_renderer.dart`: the rule that decides whether a camera is shown mirrored (`_shouldMirror`, line 326) becomes callable from outside the widget, so the stream says "mirrored" exactly when the renderer mirrors.
 - Browser, `third_party/flutter-webrtc/lib/src/web/rtc_video_renderer_impl.dart`: a lookup of the video element showing a given track. No element (the video is not on screen) means no observation: nothing is tracked that is not shown.
-- Linux and Windows, `third_party/flutter-webrtc/common/cpp`: the plugin gets "tap this track" with the address of a Rust function, the way the DJ's music source gets `rooster_music_pull` (`flutter_webrtc.cc:1360`); the renderer whose track it is (`CheckVideoTrack`, `flutter_video_renderer.cc:103`) hands each frame's I420 planes to that function from `OnFrame`. Rust keeps the newest frame, detects on its own thread and answers Dart through flutter_rust_bridge.
+- Linux and Windows, `third_party/flutter-webrtc/common/cpp`: the plugin gets "tap this track" (`roosterTapVideoTrack`) with a tracker's handle and the address of a Rust function, `rooster_face_frame`, the way the DJ's music source gets `rooster_music_pull`; every renderer showing that track hands each frame's I420 planes and rotation to that function from `OnFrame`, before drawing it (`rooster_face_tap.h`). Rust keeps the newest frame, detects on its own threads, and Dart reads the newest observation through the same plain C ABI (`dart:ffi`, `rooster_face_tracker_poll`), as it reads the voice's and the DJ's.
 - macOS and Android: the same "tap this track" on the plugin's method channel, answered on an event channel.
 
 ### What each platform's task touches
@@ -63,7 +63,7 @@ Today `VoipStream.buildVideoRenderer` (`rooster/lib/client/components/voip/voip_
 | Task | Files |
 |---|---|
 | Browser (T0.3) | `face_tracking/face_tracker_web.dart`; `rooster/web/face_tracking/` (the worker; ONNX Runtime's files, fetched by `rooster/scripts/prepare-web.sh` at a pinned version and ignored by git); `rooster/assets/face_tracking/face_detection_yunet_2023mar_dynamic.onnx` and its line in `rooster/pubspec.yaml`; `rooster/assets/licenses/`; `third_party/flutter-webrtc/lib/src/web/rtc_video_renderer_impl.dart`; the three `VoipStream` files above; `third_party/README.md` |
-| Linux (T0.4) | `face_tracking/face_tracker_linux.dart` and `demo/demo_video_native.dart`; a new crate `rust/face_tracking` (the model, search and follow, the frame code, the C function the plugin calls) in `Cargo.toml` and `Cargo.lock`; `rust/rust/src/api/` and the generated `rooster/lib/rust/`; `third_party/flutter-webrtc/common/cpp/include/flutter_video_renderer.h`, `common/cpp/src/flutter_video_renderer.cc`, `common/cpp/src/flutter_webrtc.cc` and new headers beside `rooster_music_source.h` for the tap and for a video track fed by a file (`CreateCustomVideoSource`); the same model file and `pubspec.yaml` line as the browser; `rooster/assets/licenses/`; `third_party/README.md` |
+| Linux (T0.4) | `face_tracking/face_tracker_linux.dart` and `demo/demo_video_native.dart`; a new crate `rust/face_tracking` (the model, search and follow, the frame code, the C function the plugin calls) in `Cargo.toml` and `Cargo.lock`; `rust/rust/Cargo.toml` and `rust/rust/src/lib.rs`, which link it in (planned as `rust/rust/src/api/` and the generated `rooster/lib/rust/`: see "What T0.4 changed from the plan"); `third_party/flutter-webrtc/common/cpp/include/flutter_video_renderer.h`, `common/cpp/src/flutter_video_renderer.cc`, `common/cpp/src/flutter_webrtc.cc` and new headers beside `rooster_music_source.h` for the tap and for a video track fed by a file (`CreateCustomVideoSource`); the same model file and `pubspec.yaml` line as the browser; `rooster/assets/licenses/`; `third_party/README.md` |
 | Windows (T3.2) | `face_tracking/face_tracker_windows.dart`; what Windows needs of the shared `common/cpp` and `rust/face_tracking` to build; `third_party/flutter-webrtc/windows/CMakeLists.txt` if a source file was added |
 | macOS (T3.3) | `face_tracking/face_tracker_macos.dart`; `third_party/flutter-webrtc/common/darwin/Classes/FlutterRTCVideoRenderer.{h,m}`, a new tap class beside them, `FlutterWebRTCPlugin.m`; `third_party/flutter-webrtc/macos/flutter_webrtc.podspec` (the Vision framework) |
 | Android (T3.4) | `face_tracking/face_tracker_android.dart`; `third_party/flutter-webrtc/android/src/main/java/com/cloudwebrtc/webrtc/SurfaceTextureRenderer.java`, a new tap and detector class beside it, `MethodCallHandlerImpl.java`; `third_party/flutter-webrtc/android/build.gradle` (LiteRT 1.4.1); the model in `third_party/flutter-webrtc/android/src/main/assets/`; `rooster/android/app/proguard-rules.pro` if LiteRT needs keep rules |
@@ -112,6 +112,37 @@ Looking at the whole frame at a small size fails the smaller faces whatever the 
 
 R4.3 asks for eight videos at ten anchors a second each: 80 detections a second. Following, that is 0.26 s of one thread per second on Linux (tract, 96x96) and 0.48 s of a worker per second in Chrome (ONNX Runtime Web), off the thread that draws.
 
+## Measured on Linux, in the app (T0.4)
+
+The tracker of this record, in a `--release` build of the demonstration (`rooster/lib/face_tracking_demo_main.dart`), run off screen by `rooster/scripts/headless-linux.sh` with no network (`--offline`) and no camera. Each test video plays from a `.y4m` file into a local WebRTC track (`roosterCreateFileVideoTrack`), shown by the renderer every call video goes through, and its frames reach the engine through the tap above, the same `OnFrame` a camera or a remote video goes through. Eight tiles, so `front`, `glasses` and `turn` are on screen twice, each with its own tracker; 40 seconds a run, three runs, on this machine (8 cores), with no build running and the load of the last minute under 3 before each run (2.92, 2.92, 2.90; 4.0 to 4.9 right after, the app included). Measured by `tools/face_tracking/measure.py`, by frame code.
+
+| | Run 1 | Run 2 | Run 3 | Median |
+|---|---|---|---|---|
+| R4.2 `front` | 100% | 100% | 100% | 100% |
+| R4.2 `glasses` | 99.7% | 99.6% | 99.7% | 99.7% |
+| R4.2 `turn` | 99.8% | 100% | 100% | 100% |
+| R4.2 `near_far` | 99.4% | 99.4% | 98.6% | 99.4% |
+| R4.2 `leave` | 100% | 100% | 99.6% | 100% |
+| `turn`, any angle up to 30 degrees | 99.9% | 100% | 99.9% | 99.9% |
+| R4.3: anchors a second, the slowest of the eight | 14.6 | 14.4 | 14.4 | 14.4 |
+| R4.3: frames the interface drew a second | 57.8 | 56.4 | 58.1 | 57.8 |
+| R4.4: "no face" after the face left, the longest of 10 | 0.067 s | 0.067 s | 0.033 s | 0.067 s |
+| R4.4: anchors back after the whole face returned, the longest of 10 | 0 s | 0 s | 0 s | 0 s |
+
+Every renderer hands its tracker the file's 30 frames a second; each tracker analyses about 15 of them, the engine's ceiling. "No face" is counted in frames of the video from the first frame without a face to the first analysed frame that says so; the face is usually lost already while it goes out of the picture, hence 0 to 2 frames. The interface draws at the display's 60 frames a second, less the odd missed frame.
+
+The engine alone, outside the app, on every frame of the five videos (`cargo run --release -p face_tracking --example measure`): R4.2 100%, 100%, 100%, 99.0% and 100% (`front`, `glasses`, `turn`, `near_far`, `leave`), within a point of the probe above. One step, from the frame to the eyes and the frame code, takes 8.6 ms following (128x128) and 39.1 ms searching (320x256), median, load 2.9 to 3.0: the probe's 6.3 and 31.8 ms are the model alone. Eight videos following at 15 a second are about 1 s of a thread every second, so the engine runs on two threads.
+
+## What T0.4 changed from the plan
+
+- **Dart reads the engine through a plain C ABI, not flutter_rust_bridge.** The plugin already needs a C function to call, and the voice and the DJ already talk to `librust_lib_rooster` this way: `face_tracker_linux.dart` starts the engine, makes a tracker and reads its newest observation with `dart:ffi`, every 16 ms, a struct copy. Nothing is generated, and `rust/rust/src/api/` and `rooster/lib/rust/` are untouched.
+- **Two threads detect, not one**, for all the trackers of the app (above). A tracker is still looked at at most 15 times a second, on its newest frame only, the one that waited longest first.
+- **The detector's input is cut from the upright frame.** Rust undoes the frame's rotation as it samples, so the eyes it reports are already upright and `FaceAnchor.uprightPoint` is not needed on this path. Colours are converted from I420 (BT.601, limited range) while sampling, averaging the pixels an input pixel covers.
+- **The track fed by a file plays `.y4m`**, raw 4:2:0 frames, not the `.mp4` files: no video decoder is added to the app for a measuring tool. `tools/face_tracking/README.md` says how to make them with ffmpeg. The prebuilt libwebrtc (m150.7871.01) implements `CreateCustomVideoSource`; it is not an exported symbol, and needs not be, since the plugin calls it through the factory's virtual table.
+- **The tap is by track id, in every renderer**: two renderers showing the same track both hand over their frames, and the engine keeps the newest. A renderer only looks the tap up when at least one tracker is running.
+- **The demonstration on Linux** takes its settings from the `FACE_TRACKING_DEMO` environment variable (the page's query, plus `log=` and `seconds=`), writes its record to a file, prints the frames handed to each tracker every second, and sizes its own window.
+- **`measure.py` measures R4.4 too**: how long the plaque takes to go when the face leaves and to come back (`--max-lost`).
+
 ## What was refused
 
 - **Tracking on the sender's device**: above.
@@ -132,4 +163,4 @@ R4.3 asks for eight videos at ten anchors a second each: 80 detections a second.
 - Android is the weak one: BlazeFace is 100% on faces looking at the camera and 67% on a head turned 30 degrees, measured here on LiteRT for Linux. YuNet on LiteRT would need the model converted, which nobody has tried; until someone does, its task ships BlazeFace and says what it loses.
 - The smallest face measured has 24 pixels between the eyes (a person 1.30 m from a 640x480 camera). Further than that is not measured.
 - Each engine reads the frame code of the test videos when asked (`readFrameCode`), so every platform is measured the same way, by the frame.
-- The browser timings were taken on the main thread; the worker is expected to cost the same per detection, and T0.3 measures it. The Linux tap, the track fed by a file and everything about Windows, macOS and Android are designs, not measurements.
+- The browser timings were taken on the main thread; the worker is expected to cost the same per detection, and T0.3 measures it. The Linux tap and the track fed by a file are measured (T0.4); a real camera and a call's remote videos go through the same `OnFrame` and have not been run here. Everything about Windows, macOS and Android is a design, not a measurement; the shared C++ and Rust build on Windows.

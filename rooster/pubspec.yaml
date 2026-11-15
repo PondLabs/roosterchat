@@ -280,6 +280,7 @@ flutter:
     - assets/sunny_side_putt/previews/
     - assets/cock_a_doodle_who/deck/
     - assets/cock_a_doodle_who/deck/text/
+    - assets/face_tracking/
     - assets/licenses/
   shaders: 
     - assets/shader/texture_coordinate.frag
