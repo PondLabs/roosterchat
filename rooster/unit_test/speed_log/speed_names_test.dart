@@ -39,13 +39,19 @@ void main() {
     expect(send.outcome, 'failed');
   });
 
-  test('the names the text send and sync spans use are on the list', () {
-    expect(SpeedOperation.all, {'text_send', 'sync'});
+  test(
+      'the names the text send, sync and image_prepare spans use are on '
+      'the list', () {
+    expect(SpeedOperation.all, {'text_send', 'sync', 'image_prepare'});
     expect(SpeedStep.all, {
       'send', 'echo', 'echo_painted', 'queue_wait', 'request', 'retry', //
       'answer', 'response', 'processing', 'clean_up', 'next_request', 'error',
+      'header', 'decode', 'encode', // image_prepare (and queue_wait)
     });
-    expect(SpeedValue.all, {'attempt', 'status', 'retry_after_ms'});
+    expect(SpeedValue.all, {
+      'attempt', 'status', 'retry_after_ms', //
+      'bytes', 'width', 'height', 'frames', // image_prepare
+    });
     expect(SpeedOutcome.all, {'ok', 'failed', 'incomplete', 'abandoned'});
   });
 
