@@ -41,8 +41,21 @@ self.faceDetectionTimes = [];
 // input (plus a row for the frame code), drawn by a shader that leaves
 // black whatever falls outside the frame.
 const gpu = (() => {
-  const gl = new OffscreenCanvas(1, 1).getContext("webgl2", { antialias: false, depth: false });
+  const surface = new OffscreenCanvas(1, 1);
+  const gl = surface.getContext("webgl2", { antialias: false, depth: false });
   if (!gl) return null;
+  // A lost context (the GPU process restarted, say) answers nothing again:
+  // the cuts waiting on it fail, and the next ones go to the 2D canvas.
+  surface.addEventListener("webglcontextlost", () => {
+    gpu.lost = true;
+    const lost = new Error("the WebGL context was lost");
+    for (const cut of atlas.waiting) cut.frame.close();
+    for (const cut of [...atlas.drawn, ...atlas.waiting, ...atlas.reads]) cut.fail(lost);
+    atlas.drawn = [];
+    atlas.waiting = [];
+    atlas.reads = [];
+    atlas.reading = false;
+  });
   const shader = (type, source) => {
     const s = gl.createShader(type);
     gl.shaderSource(s, `#version 300 es\n${source}`);
@@ -102,7 +115,7 @@ const atlas = gpu && (() => {
   const framebuffer = gl.createFramebuffer();
   gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
-  return { framebuffer, drawn: [], waiting: [], reading: false, x: 0, y: 0, shelf: 0 };
+  return { framebuffer, drawn: [], waiting: [], reads: [], reading: false, x: 0, y: 0, shelf: 0 };
 })();
 
 // Where the next cut of `width` x `rows` goes, from the top left; null when
@@ -159,6 +172,7 @@ function read() {
   const { gl } = gpu;
   const cuts = atlas.drawn;
   atlas.drawn = [];
+  atlas.reads = cuts;
   atlas.reading = true;
   const band = atlas.y + atlas.shelf;
   const buffer = gl.createBuffer();
@@ -167,14 +181,16 @@ function read() {
   gl.bufferData(gl.PIXEL_PACK_BUFFER, ATLAS * band * 4, gl.STREAM_READ);
   gl.readPixels(0, ATLAS - band, ATLAS, band, gl.RGBA, gl.UNSIGNED_BYTE, 0);
   gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+  // Without a fence (it can fail), the read below waits for the GPU.
   const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
   gl.flush();
   const poll = () => {
-    if (gl.clientWaitSync(fence, 0, 0) === gl.TIMEOUT_EXPIRED) {
+    if (gpu.lost) return;
+    if (fence && gl.clientWaitSync(fence, 0, 0) === gl.TIMEOUT_EXPIRED) {
       setTimeout(poll, 1);
       return;
     }
-    gl.deleteSync(fence);
+    if (fence) gl.deleteSync(fence);
     const pixels = new Uint8Array(ATLAS * band * 4);
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, buffer);
     gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, pixels);
@@ -189,6 +205,7 @@ function read() {
       }
       done(rgba);
     }
+    atlas.reads = [];
     atlas.reading = false;
     atlas.x = atlas.y = atlas.shelf = 0;
     const waiting = atlas.waiting;
@@ -208,9 +225,11 @@ function cutOnGpu(cut) {
   read();
 }
 
-// Without WebGL 2: the same picture on a 2D canvas, read back at once.
-const canvas = gpu ? null : new OffscreenCanvas(1, 1).getContext("2d", { willReadFrequently: true });
+// Without WebGL 2, or once its context is lost: the same picture on a 2D
+// canvas, read back at once.
+let canvas = null;
 function cutOnCanvas({ frame, sx, sy, sw, sh, dw, dh, width, height, rows, strip, done }) {
+  canvas ??= new OffscreenCanvas(1, 1).getContext("2d", { willReadFrequently: true });
   canvas.canvas.width = width;
   canvas.canvas.height = rows;
   canvas.fillStyle = "#000";
@@ -275,9 +294,10 @@ self.onmessage = async ({ data }) => {
       self.postMessage({ id });
     } else if (type === "cut") {
       const cut = { ...data, rows: data.strip ? data.height + 1 : data.height, started: performance.now() };
-      cut.pixels = new Promise((done) => (cut.done = done));
+      cut.pixels = new Promise((done, fail) => Object.assign(cut, { done, fail }));
+      cut.pixels.catch(() => {});
       cuts.set(id, cut);
-      (gpu ? cutOnGpu : cutOnCanvas)(cut);
+      (gpu && !gpu.lost ? cutOnGpu : cutOnCanvas)(cut);
     } else if (type === "discard") {
       cuts.delete(id);
     } else {
