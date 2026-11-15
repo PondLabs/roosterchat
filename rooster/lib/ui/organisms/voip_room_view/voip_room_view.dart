@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:rooster/client/components/activities/activities_component.dart';
 import 'package:rooster/client/components/soundboard/entrance_sound.dart';
+import 'package:rooster/client/components/voip/audio_processing/audio_processing_manager.dart';
 import 'package:rooster/client/components/voip/media_capture_support.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip_room/voip_room_component.dart';
@@ -16,7 +17,9 @@ import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/organisms/call_view/call.dart';
 import 'package:rooster/ui/organisms/dj/vinyl_disc.dart';
 import 'package:rooster/utils/common_strings.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
@@ -69,6 +72,22 @@ class VoipRoomView extends StatefulWidget {
       desc: "Shown on the page of a voice channel that is end-to-end "
           "encrypted, where calls cannot be joined yet");
 
+  /// Runs when a voice channel's page opens. On the web it fetches and
+  /// test-runs the DSP's wasm, so the first call rarely waits for it (the
+  /// microphone does, for a few seconds at most); it is not fetched at
+  /// startup. It opens no microphone. Only tests replace it.
+  static void Function() prefetchVoiceDsp = _prefetchVoiceDsp;
+
+  static void _prefetchVoiceDsp() {
+    if (!kIsWeb) return;
+    AudioProcessingManager.instance
+        .ensureReady()
+        .catchError((Object e, StackTrace s) {
+      Log.onError(e, s, content: "Voice: could not load the DSP");
+      return false;
+    });
+  }
+
   @override
   State<VoipRoomView> createState() => _VoipRoomViewState();
 }
@@ -120,6 +139,7 @@ class _VoipRoomViewState extends State<VoipRoomView> {
 
     fetchNewMembers();
     updateCallUrl();
+    VoipRoomView.prefetchVoiceDsp();
     WidgetsBinding.instance.addPostFrameCallback((_) => _takeJoinRequest());
     widget.voip.clearStaleOwnMembership().catchError((e, s) {
       Log.onError(e, s);
@@ -396,8 +416,9 @@ class _VoipRoomViewState extends State<VoipRoomView> {
       joining = true;
     });
 
-    // For better UI feedback if program stutters while joining
-    await Future.delayed(Duration(milliseconds: 100));
+    // The spinner is drawn before the join's work starts.
+    await SchedulerBinding.instance.endOfFrame;
+    if (!mounted) return;
 
     if (withoutEntranceSound) EntranceSoundGate.instance.skipNextJoin(roomId);
 
