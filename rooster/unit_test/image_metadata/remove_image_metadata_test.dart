@@ -253,6 +253,26 @@ void main() {
     expect(after[1].$2, icc);
   });
 
+  test("a CMYK JPEG keeps its Adobe segment as it was", () {
+    // The fixture's APP14 says transform 0, which decoders also assume for
+    // a 4-component JPEG without one, so the pixel check cannot see it go:
+    // compare the segment itself.
+    final original = fixture("cmyk.jpg");
+    final (before, _) = walkJpeg(original);
+    final adobe = [
+      for (final (marker, payload) in before)
+        if (marker == 0xEE) payload,
+    ];
+    expect(adobe, hasLength(1), reason: "the fixture has one");
+
+    final out = removeMetadataByRewrite(original)!.bytes!;
+    final (after, _) = walkJpeg(out);
+    expect([
+      for (final (marker, payload) in after)
+        if (marker == 0xEE) payload,
+    ], adobe);
+  });
+
   test("a PNG keeps its transparency", () async {
     final out = removeMetadataByRewrite(fixture("text_exif.png"))!.bytes!;
     final (_, _, pixels) = (await render(out)).single;
