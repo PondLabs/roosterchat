@@ -35,12 +35,32 @@ class MatchSim {
   }
 
   void _attach(SimApp app) {
-    matches[app.id] = WhoMatch(
+    final match = matches[app.id] = WhoMatch(
       session: app.session,
       custody: app.custody,
       random: Random(app.seed),
       now: _clock.now,
     );
+    match.addListener(() => _track(app));
+  }
+
+  /// The round and version of each owner's plaque the host's ledger last
+  /// showed.
+  final Map<String, (int, int)> _versions = {};
+
+  /// Tells the inspection ([Sim.leaks]) when a plaque became public: the
+  /// host's engine turned it, took it off, swapped it out or started a new
+  /// round. The host's match notifies right after it told the custody,
+  /// before anything that says so is delivered.
+  void _track(SimApp app) {
+    if (!app.session.isHost) return;
+    final ledger = app.custody.ledger;
+    for (final MapEntry(key: owner, value: entry) in ledger.entries.entries) {
+      final version = (ledger.round, entry.version);
+      final was = _versions[owner];
+      if (entry.isOpen || (was != null && was != version)) sim.opened(owner);
+      _versions[owner] = version;
+    }
   }
 
   /// Runs every message and timer due now.

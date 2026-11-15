@@ -585,7 +585,8 @@ class WhoMatch extends ChangeNotifier {
 
   void _finish() {
     final s = _state;
-    if (s.phase == MatchPhase.asking || s.phase == MatchPhase.rescue) {
+    // A match cut short mid-round turns the plaques still on foreheads.
+    if (s.phase != MatchPhase.scores && s.phase != MatchPhase.finished) {
       s.active.forEach(custody.hostReveal);
     }
     s
