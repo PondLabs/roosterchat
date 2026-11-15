@@ -38,6 +38,27 @@ void main() {
       });
     });
 
+    test('an author told their owner can write at once', () {
+      play(3, (m) {
+        final results = <String, List<WriteResult>>{};
+        for (final id in ['p1', 'p2']) {
+          m[id].addListener(() {
+            if (m[id].writingFor != null) {
+              results.putIfAbsent(id, () => []).add(
+                    m[id].write('quick', PlaqueKind.object),
+                  );
+            }
+          });
+        }
+        m.host.hostStart();
+        m.run();
+        expect(results, {
+          'p1': [WriteResult.sent],
+          'p2': [WriteResult.sent],
+        });
+      });
+    });
+
     test('text from 1 to 40 characters and a kind, once', () {
       play(2, (m) {
         m.host.hostStart();

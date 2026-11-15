@@ -134,10 +134,13 @@ class WhoMatch extends ChangeNotifier {
     if (owner == null) return WriteResult.closed;
     final clean = plaqueText(text);
     if (clean == null) return WriteResult.badText;
+    // Marked first: the custody tells its listeners while it sends.
+    final wrote = _wroteIn;
+    _wroteIn = _state.round;
     if (!custody.write(owner, kind: kind, text: clean)) {
+      _wroteIn = wrote;
       return WriteResult.closed;
     }
-    _wroteIn = _state.round;
     notifyListeners();
     return WriteResult.sent;
   }
