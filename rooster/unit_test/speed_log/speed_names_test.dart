@@ -40,11 +40,15 @@ void main() {
   });
 
   test('the names the text send and sync spans use are on the list', () {
-    expect(SpeedOperation.all, {'text_send', 'sync'});
-    expect(SpeedStep.all, {
-      'send', 'echo', 'echo_painted', 'queue_wait', 'request', 'retry', //
-      'answer', 'response', 'processing', 'clean_up', 'next_request', 'error',
-    });
+    // Other spans (the voice join) add their own names beside these.
+    expect(SpeedOperation.all, containsAll({'text_send', 'sync'}));
+    expect(
+        SpeedStep.all,
+        containsAll({
+          'send', 'echo', 'echo_painted', 'queue_wait', 'request', 'retry', //
+          'answer', 'response', 'processing', 'clean_up', 'next_request',
+          'error',
+        }));
     expect(SpeedValue.all, {'attempt', 'status', 'retry_after_ms'});
     expect(SpeedOutcome.all, {'ok', 'failed', 'incomplete', 'abandoned'});
   });
