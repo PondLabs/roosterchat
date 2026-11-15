@@ -261,4 +261,20 @@ void main() {
         reason: 'the capture prepared during the connection is closed');
     expect(journal.entries, isNot(contains('microphone_published')));
   });
+
+  test(
+      "in a phone's browser a connection that fails closes the microphone "
+      'opened before it', () async {
+    host.phoneBrowser = true;
+    host.room.connectError = StateError('no SFU');
+
+    await expectLater(join().run(), throwsStateError);
+    await settle();
+
+    expect(journal.before('microphone_open', 'membership_write'), isTrue);
+    expect(host.room.microphones.single.stopped, isTrue,
+        reason: 'the early capture is closed, not left running');
+    expect(journal.entries, contains('membership_clear'));
+    expect(host.room.disposed, isTrue);
+  });
 }
