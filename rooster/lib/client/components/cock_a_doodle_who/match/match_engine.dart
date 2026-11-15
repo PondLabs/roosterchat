@@ -55,8 +55,12 @@ Random _secureRandom() {
 /// stamps its sender, so nobody can act for someone else.
 ///
 /// The times in [state] are milliseconds since the epoch on the host's
-/// clock ([now]). A host that takes the seat over carries on from the last
-/// state it heard: the same phase, order, points and deadlines.
+/// clock, and every state says what that clock read when it was sent
+/// ([MatchState.sentAt]). Each client keeps how far the host's clock is
+/// from its own [now] ([hostNow]); the machines' clocks need not agree. A
+/// host that takes the seat over carries on from the last state it heard,
+/// its deadlines moved onto its own clock: the same phase, order, points
+/// and time left.
 class WhoMatch extends ChangeNotifier {
   WhoMatch({
     required this.session,
@@ -81,7 +85,7 @@ class WhoMatch extends ChangeNotifier {
   /// The plaques of the session. Not ours to dispose.
   final PlaqueCustody custody;
 
-  /// The clock the deadlines are on.
+  /// This machine's clock. The deadlines are on the host's: see [hostNow].
   final DateTime Function() now;
 
   /// Draws the turns' order, who writes for whom and a theme nobody
@@ -101,11 +105,31 @@ class WhoMatch extends ChangeNotifier {
   (int, String)? _writeFor;
   int _wroteIn = 0;
 
+  /// The host's clock less ours, in milliseconds, from the last state
+  /// heard; 0 while we host.
+  int _offset = 0;
+
+  /// The [MatchState.sentAt] [_offset] was taken from. The custody sends
+  /// the state again with its own changes, the match's untouched: only a
+  /// state the match itself sent says what the host's clock reads now.
+  int? _offsetFrom;
+
   /// The match as the host last published it.
   MatchState get state => _state;
 
   String get _self => session.selfIdentity;
   int get _now => now().millisecondsSinceEpoch;
+
+  /// The host's clock now, in milliseconds since the epoch, as far as this
+  /// client can tell (off by the time the last state took to arrive): what
+  /// the deadlines in [state] count down against.
+  int get hostNow => _now + _offset;
+
+  /// A new match in the lobby: nothing to write from the one before.
+  void _forgetWriting() {
+    _writeFor = null;
+    _wroteIn = 0;
+  }
 
   /// Whether we play this round: we were there when it started and have
   /// not left. Who joins mid-round watches until the next one.
@@ -207,6 +231,7 @@ class WhoMatch extends ChangeNotifier {
   void hostPlayAgain() {
     if (!session.isHost || _state.phase != MatchPhase.finished) return;
     _state = MatchState(settings: _state.settings);
+    _forgetWriting();
     _apply(publish: true);
   }
 
@@ -218,8 +243,9 @@ class WhoMatch extends ChangeNotifier {
       _sessionId = session.snapshot.sessionId;
       _state = MatchState();
       _heard = null;
-      _writeFor = null;
-      _wroteIn = 0;
+      _offset = 0;
+      _offsetFrom = null;
+      _forgetWriting();
     }
     final game = session.snapshot.game;
     if (!session.isHost) {
@@ -228,17 +254,36 @@ class WhoMatch extends ChangeNotifier {
       _timer = null;
       if (!identical(game, _heard)) {
         _heard = game;
-        if (game.isNotEmpty) _state = MatchState.fromJson(game);
+        if (game.isNotEmpty) {
+          final was = _state.phase;
+          _state = MatchState.fromJson(game);
+          final sent = _state.sentAt;
+          if (sent != null && sent != _offsetFrom) {
+            _offsetFrom = sent;
+            _offset = sent - _now;
+          }
+          if (_state.phase == MatchPhase.lobby && was != MatchPhase.lobby) {
+            _forgetWriting();
+          }
+        }
         notifyListeners();
       }
       return;
     }
     if (!_hosting) {
-      // The seat is ours: from the state we last heard, if there was one.
+      // The seat is ours: from the state we last heard, if there was one,
+      // its deadlines moved from the old host's clock onto ours.
       _hosting = true;
       if (game.isNotEmpty && !identical(game, _heard)) {
         _state = MatchState.fromJson(game);
       }
+      int? ours(int? deadline) => deadline == null ? null : deadline - _offset;
+      _state
+        ..deadline = ours(_state.deadline)
+        ..tallyDeadline = ours(_state.tallyDeadline);
+      _offset = 0;
+      _apply(publish: true);
+      return;
     }
     _apply();
   }
@@ -298,7 +343,8 @@ class WhoMatch extends ChangeNotifier {
       default:
         return;
     }
-    _apply();
+    // The state changed before [_apply] could see it: send it anyway.
+    _apply(publish: true);
   }
 
   /// The host's pass over the rules, after anything happened: who left,
@@ -316,9 +362,9 @@ class WhoMatch extends ChangeNotifier {
         for (var steps = 0; steps < 32 && _step(); steps++) {}
       }
     }
-    final json = _state.toJson();
-    if (publish || jsonEncode(json) != before) {
-      session.hostGamePayload(json);
+    if (publish || jsonEncode(_state.toJson()) != before) {
+      _state.sentAt = _now;
+      session.hostGamePayload(_state.toJson());
       _heard = session.snapshot.game;
       session.sendState();
       notifyListeners();
@@ -347,6 +393,7 @@ class WhoMatch extends ChangeNotifier {
       if (here.contains(player) || _state.left.contains(player)) continue;
       _state.left.add(player);
       _state.answers.remove(player);
+      if (_state.answers.isEmpty) _state.tallyDeadline = null;
       custody.hostRetire(player);
     }
   }
@@ -390,6 +437,11 @@ class WhoMatch extends ChangeNotifier {
         final asker = s.asker;
         if (asker == null || s.left.contains(asker)) {
           _passTurn();
+          return true;
+        }
+        if (s.active.length < 2) {
+          // One player has not guessed: their rescue, whoever asks now.
+          _rescue();
           return true;
         }
         final responders = s.responders;
@@ -487,20 +539,22 @@ class WhoMatch extends ChangeNotifier {
       _rescue();
       return;
     }
-    var next = s.turn;
+    var next = s.turn, lap = s.lap;
     for (var step = 0; step < s.order.length; step++) {
       next++;
       if (next >= s.order.length) {
         next = 0;
-        s.lap++;
+        lap++;
       }
       if (active.contains(s.order[next])) break;
     }
-    if (s.lap > s.settings.lapLimit) {
+    if (lap > s.settings.lapLimit) {
       _rescue();
       return;
     }
-    s.turn = next;
+    s
+      ..turn = next
+      ..lap = lap;
     _newQuestion(1);
   }
 
@@ -574,8 +628,9 @@ class WhoMatch extends ChangeNotifier {
       s.deadline = _now + MatchTimes.scores.inMilliseconds;
       return;
     }
-    // The last-placed player still here picks the next theme.
-    final here = session.presentPlayers;
+    // The last-placed player of the round still here picks the next
+    // theme; who only watched it is not in the standings.
+    final here = session.presentPlayers.where(s.order.contains);
     final last = here.fold<String?>(
         null,
         (low, p) =>

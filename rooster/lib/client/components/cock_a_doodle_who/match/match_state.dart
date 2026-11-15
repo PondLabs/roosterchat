@@ -115,7 +115,8 @@ class MatchState {
       ..chooser = json['ch'] is String ? json['ch'] as String : null
       ..themePicked = json['nx'] is String
       ..nextTheme = theme(json['nx'])
-      ..last = MatchTally.fromJson(json['last']);
+      ..last = MatchTally.fromJson(json['last'])
+      ..sentAt = integer(json['at']);
   }
 
   /// The settings the host started the match with.
@@ -161,7 +162,7 @@ class MatchState {
   Map<String, MatchAnswer> answers = {};
 
   /// When the phase's time is up, in milliseconds since the epoch on the
-  /// host's clock: the writing, the look, the question, the rescue or the
+  /// host's clock ([sentAt]): the writing, the look, the question, the rescue or the
   /// scoreboard. Null when it has no time (a question without a clock).
   int? deadline;
 
@@ -188,6 +189,10 @@ class MatchState {
 
   /// The last count that closed.
   MatchTally? last;
+
+  /// What the host's clock read when it sent this state: how a client
+  /// whose clock differs reads the deadlines ([WhoMatch.hostNow]).
+  int? sentAt;
 
   /// Whose turn it is, while [phase] is [MatchPhase.asking].
   String? get asker =>
@@ -245,5 +250,6 @@ class MatchState {
         if (chooser != null) 'ch': chooser,
         if (themePicked) 'nx': nextTheme?.key ?? 'any',
         if (last != null) 'last': last!.toJson(),
+        if (sentAt != null) 'at': sentAt,
       };
 }
