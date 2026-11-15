@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart' as intl;
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/generated/intl/messages_all.dart';
@@ -164,6 +165,56 @@ void main() {
     expect(dialog.result!.name, "gps_exif.jpg");
     expect(dialog.result!.mimeType, "image/jpeg");
   });
+
+  for (final (label, bytes, name, mime, expected) in [
+    (
+      "a GIF named .png",
+      img.encodeGif(img.Image(width: 8, height: 8)),
+      "anim.png",
+      "image/png",
+      ("anim.gif", "image/gif"),
+    ),
+    (
+      "a GIF named .jpg",
+      img.encodeGif(img.Image(width: 8, height: 8)),
+      "anim.jpg",
+      "image/jpeg",
+      ("anim.gif", "image/gif"),
+    ),
+    (
+      "a BMP named .png",
+      img.encodeBmp(img.Image(width: 8, height: 8)),
+      "pic.png",
+      "image/png",
+      ("pic.bmp", "image/bmp"),
+    ),
+    (
+      "a JPEG named .png",
+      fixture("gps_xmp.jpg"),
+      "photo.png",
+      "image/png",
+      ("photo.jpg", "image/jpeg"),
+    ),
+    (
+      "a JPEG named .jpeg",
+      fixture("gps_xmp.jpg"),
+      "photo.jpeg",
+      "image/jpeg",
+      ("photo.jpeg", "image/jpeg"),
+    ),
+  ]) {
+    testWidgets("$label is named like its type", (tester) async {
+      final dialog = await openDialog(
+          tester,
+          PendingFileAttachment(
+              name: name, data: bytes, size: bytes.length, mimeType: mime));
+
+      await tester.tap(find.text("Add File"));
+      await waitFor(tester, () => dialog.closed);
+
+      expect((dialog.result!.name, dialog.result!.mimeType), expected);
+    });
+  }
 
   testWidgets("a WebP that comes back a JPEG is named like one",
       (tester) async {

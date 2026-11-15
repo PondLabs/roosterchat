@@ -273,9 +273,16 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
 
     final mime = result.mimeType ?? attachment.mimeType!;
     var name = attachment.name;
-    if (mime != attachment.mimeType) {
-      // A re-encode changed the format: the name follows it.
-      final extension = mime == "image/png" ? "png" : "jpg";
+    final named = Mime.fromExtenstion(
+            path.extension(name ?? "").replaceFirst(".", "").toLowerCase()) ==
+        mime;
+    final extension =
+        mime == "image/jpeg" ? "jpg" : Mime.extensionFromMime(mime);
+    if (!named &&
+        extension != null &&
+        (name != null || mime != attachment.mimeType)) {
+      // A re-encode changed the format, or the name never matched it (a
+      // GIF named .png): the name follows the type.
       final rawName = path.basenameWithoutExtension(name ?? "untitled");
       name = "$rawName.$extension";
     }
