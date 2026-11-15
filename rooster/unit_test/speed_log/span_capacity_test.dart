@@ -6,7 +6,8 @@ import 'package:test/test.dart';
 
 class _NoFrames implements FrameSource {
   @override
-  void listen(void Function(Duration frame) onFrame) {}
+  void listen(Duration Function() clock,
+      void Function(List<FrameSample> batch) onBatch) {}
   @override
   void cancel() {}
 }
@@ -41,19 +42,23 @@ void main() {
   test('the finished spans take a fixed amount of memory', () {
     final log = SpeedLog(frames: _NoFrames());
     for (var round = 0; round < 3; round++) {
-      // More operations than the log keeps, many spans each.
-      for (var op = 0; op < SpeedLog.maxOperations + 4; op++) {
+      // Every listed operation and many invented names, many spans each.
+      for (final name in [
+        ...SpeedOperation.all,
+        for (var i = 0; i < SpeedLog.maxOperations + 4; i++) 'op_$i',
+      ]) {
         for (var i = 0; i < SpeedLog.spansPerOperation + 10; i++) {
-          log.startSpan('op_$op').finish();
+          log.startSpan(name).finish();
         }
       }
     }
 
-    expect(log.spans.operations, hasLength(SpeedLog.maxOperations));
-    expect(
-        log.spans.length, SpeedLog.maxOperations * SpeedLog.spansPerOperation);
+    // The invented names all count as one operation, invalid_name.
+    final operations = {...SpeedOperation.all, invalidSpeedName};
+    expect(log.spans.operations.toSet(), operations);
+    expect(log.spans.length, operations.length * SpeedLog.spansPerOperation);
     expect(log.spans.debugStorageSize,
-        SpeedLog.maxOperations * SpeedLog.spansPerOperation);
+        operations.length * SpeedLog.spansPerOperation);
 
     log.spans.clear();
     expect(log.spans.toList(), isEmpty);

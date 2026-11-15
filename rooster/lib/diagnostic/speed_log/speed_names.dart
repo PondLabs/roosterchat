@@ -2,7 +2,15 @@
 /// names), their steps, the numbers on steps and the outcomes. They are
 /// fixed identifiers (`[a-z][a-z0-9_]*`), never text from a message, a file
 /// or a person; `docs/speed-log.md` says what each one measures.
+///
+/// This is the fixed list: `SpeedSpan` writes a name that is not in the
+/// `all` set of its class as [invalidSpeedName]. A new name is a constant
+/// here and an entry in that class's `all`; when two branches each add
+/// names, keep both sets of entries.
 library;
+
+/// What any name off the lists below is written as.
+const invalidSpeedName = 'invalid_name';
 
 /// Span names.
 abstract final class SpeedOperation {
@@ -11,6 +19,10 @@ abstract final class SpeedOperation {
 
   /// One round of the sync loop, from its request to the next one.
   static const sync = 'sync';
+
+  /// Every span name. With [invalidSpeedName], at most
+  /// `SpeedLog.maxOperations` (the finished spans keep that many).
+  static const all = {textSend, sync};
 }
 
 /// Step names.
@@ -52,6 +64,22 @@ abstract final class SpeedStep {
 
   /// The round failed: from the last step to the error being reported.
   static const error = 'error';
+
+  /// Every step name.
+  static const all = {
+    send,
+    echo,
+    echoPainted,
+    queueWait,
+    request,
+    retry,
+    answer,
+    response,
+    processing,
+    cleanUp,
+    nextRequest,
+    error,
+  };
 }
 
 /// Names of the numbers on steps.
@@ -59,6 +87,9 @@ abstract final class SpeedValue {
   static const attempt = 'attempt';
   static const status = 'status';
   static const retryAfterMs = 'retry_after_ms';
+
+  /// Every name of a number on a step.
+  static const all = {attempt, status, retryAfterMs};
 }
 
 /// Span outcomes.
@@ -72,4 +103,48 @@ abstract final class SpeedOutcome {
   /// Closed without its end being seen (too many open spans, the client
   /// disposed).
   static const abandoned = 'abandoned';
+
+  /// Every outcome.
+  static const all = {ok, failed, incomplete, abandoned};
+}
+
+/// What a request's `error=` says: the kind of failure, by a fixed name.
+/// Never the error's message (it can hold the URL) nor its runtime type
+/// (shortened to `minified:xx` in a web release build).
+abstract final class SpeedError {
+  /// Its `abortTrigger` completed (`RequestAbortedException`).
+  static const aborted = 'aborted';
+
+  /// The response body was abandoned before its end.
+  static const cancelled = 'cancelled';
+
+  /// A `TimeoutException`.
+  static const timeout = 'timeout';
+
+  /// A `SocketException`: no connection, or it broke.
+  static const socket = 'socket';
+
+  /// A `TlsException`, such as a failed handshake.
+  static const tls = 'tls';
+
+  /// A `dart:io` `HttpException`: the response could not be read.
+  static const http = 'http';
+
+  /// Any other `ClientException` of the `http` package (the web's network
+  /// errors among them).
+  static const client = 'client';
+
+  /// Anything else.
+  static const other = 'other';
+
+  static const all = {
+    aborted,
+    cancelled,
+    timeout,
+    socket,
+    tls,
+    http,
+    client,
+    other,
+  };
 }

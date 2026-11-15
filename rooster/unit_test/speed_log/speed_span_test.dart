@@ -4,19 +4,29 @@ import 'package:rooster/diagnostic/speed_log/speed_log.dart';
 import 'package:rooster/diagnostic/speed_log/speed_report.dart';
 import 'package:test/test.dart';
 
+/// Hands batches of frames to the log, already on its clock.
 class _FakeFrames implements FrameSource {
-  void Function(Duration)? onFrame;
+  void Function(List<FrameSample>)? onBatch;
   int listens = 0;
 
+  bool get listening => onBatch != null;
+
   @override
-  void listen(void Function(Duration frame) onFrame) {
+  void listen(Duration Function() clock,
+      void Function(List<FrameSample> batch) onBatch) {
     listens++;
-    this.onFrame = onFrame;
+    this.onBatch = onBatch;
   }
 
   @override
-  void cancel() => onFrame = null;
+  void cancel() => onBatch = null;
+
+  void deliver(List<FrameSample> batch) => onBatch!(batch);
 }
+
+/// A frame drawn from [startMs] to [endMs] on the log's clock.
+FrameSample _frame(int startMs, int endMs) =>
+    FrameSample(Duration(milliseconds: startMs), Duration(milliseconds: endMs));
 
 void main() {
   test('steps are timed on a monotonic clock', () async {
@@ -27,7 +37,7 @@ void main() {
     span.mark('echo_painted');
     await span.time('request', () async {
       await Future<void>.delayed(const Duration(milliseconds: 50));
-    }, values: {'bytes': 120});
+    }, values: {'status': 200});
     span.finish();
 
     final echo = span.steps[0];
@@ -38,7 +48,7 @@ void main() {
     expect(request.name, 'request');
     expect(request.start, greaterThanOrEqualTo(echo.duration!));
     expect(request.duration!.inMilliseconds, greaterThanOrEqualTo(50));
-    expect(request.values, {'bytes': 120});
+    expect(request.values, {'status': 200});
     expect(
         span.duration, greaterThanOrEqualTo(request.start + request.duration!));
     expect(log.spans.toList(), [span]);
@@ -47,12 +57,12 @@ void main() {
 
   test('a step that cannot be timed is unavailable, not guessed', () {
     final log = SpeedLog(frames: _FakeFrames());
-    final span = log.startSpan('voice_join')..unavailable('server_queue');
+    final span = log.startSpan('text_send')..unavailable('answer');
     span.finish();
 
     expect(span.steps.single.available, isFalse);
     expect(span.steps.single.duration, isNull);
-    expect(buildSpeedReport(log), contains('  server_queue unavailable'));
+    expect(buildSpeedReport(log), contains('  answer unavailable'));
   });
 
   test('each span gets a different random id', () {
@@ -63,20 +73,76 @@ void main() {
   });
 
   test('keeps the longest frame drawn while the span was open', () {
+    var now = Duration.zero;
     final frames = _FakeFrames();
-    final log = SpeedLog(frames: frames);
-    final first = log.startSpan('file_send');
-    frames.onFrame!(const Duration(milliseconds: 12));
-    final second = log.startSpan('text_send');
-    frames.onFrame!(const Duration(milliseconds: 48));
+    final log = SpeedLog(frames: frames, clock: () => now);
+    final first = log.startSpan('text_send');
+    now = const Duration(milliseconds: 100);
+    final second = log.startSpan('sync');
+    now = const Duration(milliseconds: 200);
     first.finish();
-    frames.onFrame!(const Duration(milliseconds: 70));
+    now = const Duration(milliseconds: 300);
     second.finish();
+    frames.deliver([
+      _frame(10, 22), // 12 ms, first only
+      _frame(150, 198), // 48 ms, both
+      _frame(220, 290), // 70 ms, second only
+      _frame(400, 405), // after both: they stop waiting
+    ]);
 
     expect(frames.listens, 1);
-    expect(frames.onFrame, isNull, reason: 'no span open, no listening');
+    expect(frames.listening, isFalse, reason: 'no span waits, no listening');
     expect(first.longestFrame, const Duration(milliseconds: 48));
     expect(second.longestFrame, const Duration(milliseconds: 70));
+  });
+
+  test(
+      'frames arrive in batches: only those drawn during the span count, and '
+      'a span closed before its batch gets it when it comes', () {
+    var now = Duration.zero;
+    final frames = _FakeFrames();
+    final log = SpeedLog(frames: frames, clock: () => now);
+    now = const Duration(milliseconds: 1000);
+    final span = log.startSpan('text_send');
+    // A batch while the span is open, with a frame from before it.
+    now = const Duration(milliseconds: 1100);
+    frames.deliver([_frame(900, 990), _frame(1010, 1030)]);
+    now = const Duration(milliseconds: 1200);
+    span.finish();
+    expect(span.longestFrame, const Duration(milliseconds: 20));
+    expect(frames.listening, isTrue, reason: 'its last frames are not in yet');
+
+    // The next batch, a second later: inside, then after the span.
+    now = const Duration(milliseconds: 2100);
+    frames.deliver([
+      _frame(1150, 1195), // 45 ms, inside
+      _frame(1190, 1260), // 70 ms, began inside, counts
+      _frame(1300, 1400), // 100 ms, after the span
+    ]);
+    expect(span.longestFrame, const Duration(milliseconds: 70));
+    expect(frames.listening, isFalse);
+    expect(buildSpeedReport(log), contains('longest_frame=70ms'));
+  });
+
+  test('a closed span stops waiting for frames that never come', () {
+    var now = Duration.zero;
+    final frames = _FakeFrames();
+    final log = SpeedLog(frames: frames, clock: () => now);
+    final first = log.startSpan('sync');
+    now = const Duration(milliseconds: 10);
+    first.finish();
+    expect(frames.listening, isTrue);
+
+    // No batch for longer than the wait: the next span drops the first.
+    now += SpeedLog.frameWait + const Duration(milliseconds: 1);
+    final second = log.startSpan('sync')..finish();
+    now += SpeedLog.frameWait + const Duration(milliseconds: 1);
+    // A late batch, with a frame drawn during the first span only.
+    frames.deliver([_frame(5, 9)]);
+
+    expect(frames.listening, isFalse);
+    expect(first.longestFrame, isNull);
+    expect(second.longestFrame, isNull);
   });
 
   test('without frames the longest frame is unavailable', () {

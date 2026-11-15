@@ -7,21 +7,27 @@
 /// - An operation (a text send, a voice join...) is a [SpeedSpan]:
 ///
 ///   ```dart
-///   final span = SpeedLog.instance.startSpan('text_send');
-///   await span.run(() async {          // requests inside are linked to it
-///     span.mark('echo_painted');        // a step from the last mark to now
-///     await span.time('request', () => room.sendTextEvent(text));
-///     span.unavailable('server_queue'); // cannot be timed from app code
+///   final span = SpeedLog.instance.startSpan(SpeedOperation.textSend);
+///   await span.run(() async {       // requests inside are linked to it
+///     span.mark(SpeedStep.echo);     // a step from the last mark to now
+///     await span.time(SpeedStep.request, () => room.sendTextEvent(text));
+///     span.unavailable(SpeedStep.answer); // cannot be timed from app code
 ///   });
-///   span.finish();                      // or finish(outcome: 'failed')
+///   span.finish();                   // or finish(outcome: SpeedOutcome.failed)
 ///   ```
 ///
 /// - `buildSpeedReport` (`speed_report.dart`) turns the log into text.
 ///
-/// Span, step and outcome names must be fixed identifiers written in the
-/// code (`[a-z][a-z0-9_]*`, at most 40 characters), never text from a
-/// message, a file or a person; any other name is written as `invalid_name`.
-/// Step values are numbers only (sizes, counts).
+/// Names are a fixed list, in `speed_names.dart` and nowhere else: span
+/// names in `SpeedOperation.all`, steps in `SpeedStep.all`, the names of
+/// numbers on steps in `SpeedValue.all`, outcomes in `SpeedOutcome.all`.
+/// Any other name, even one shaped like them, is written `invalid_name`, so
+/// text from a message, a file or a person never reaches the report. To add
+/// a name: a constant in its class there, and the same constant in that
+/// class's `all`. Merging a branch that added names too: keep both sides'
+/// entries in each `all`. `SpeedOperation.all` plus `invalid_name` must fit
+/// in [SpeedLog.maxOperations] (`speed_names_test.dart` checks). Step values
+/// are numbers only (sizes, counts).
 ///
 /// Attempts: inside a span, a request is attempt 1 the first time it is
 /// sent, and 2, 3... each time the same request is sent again (the SDK's
@@ -32,21 +38,51 @@
 /// transaction ids, are each attempt 1. The span keeps only a salted hash of
 /// each request (the salt is random per span), never its URL, and forgets
 /// them all in [SpeedSpan.finish]. Outside a span every request is attempt 1.
+///
+/// The rule cannot see the body, so different requests that share method,
+/// URL and body length also come out as attempt 2: two encrypted uploads of
+/// one size (the SDK names every encrypted file `crypt`), two
+/// `read_markers` for different events of the same id length, or one GET
+/// asked twice at once by two widgets. Read `attempt=2` as "sent again or
+/// identical on the wire", not as a proven retry. A body streamed with no
+/// known length tells nothing apart, so such a request is always attempt 1
+/// and nothing is kept for it. A span remembers at most
+/// [SpeedLog.maxRememberedRequests] requests; past that, a request it has
+/// not seen is attempt 1 and is not remembered.
 library;
 
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:ui' show FramePhase;
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:rooster/diagnostic/speed_log/frame_clock.dart'
+    if (dart.library.js_interop) 'package:rooster/diagnostic/speed_log/frame_clock_web.dart';
 import 'package:rooster/diagnostic/speed_log/request_record.dart';
 import 'package:rooster/diagnostic/speed_log/ring_buffer.dart';
 import 'package:rooster/diagnostic/speed_log/speed_names.dart';
 
-/// Reports the duration of each UI frame drawn while it is listened to.
+/// One UI frame: when its work ran, from [start] (build start) to [end]
+/// (raster finish), on the speed log's clock, and how long it took from
+/// vsync to raster finish.
+class FrameSample {
+  FrameSample(this.start, this.end, [Duration? duration])
+      : duration = duration ?? end - start;
+
+  final Duration start;
+  final Duration end;
+  final Duration duration;
+}
+
+/// Reports the UI frames drawn while it is listened to.
 abstract class FrameSource {
-  void listen(void Function(Duration frame) onFrame);
+  /// From now on, hands [onBatch] the frames drawn, in the batches the
+  /// engine reports them in (about one a second in release, so a frame can
+  /// arrive after the span it was drawn in has closed), timed on [clock].
+  void listen(
+      Duration Function() clock, void Function(List<FrameSample>) onBatch);
   void cancel();
 }
 
@@ -57,7 +93,8 @@ class SchedulerFrameSource implements FrameSource {
   TimingsCallback? _callback;
 
   @override
-  void listen(void Function(Duration frame) onFrame) {
+  void listen(
+      Duration Function() clock, void Function(List<FrameSample>) onBatch) {
     final SchedulerBinding binding;
     try {
       binding = SchedulerBinding.instance;
@@ -65,9 +102,17 @@ class SchedulerFrameSource implements FrameSource {
       return;
     }
     final callback = _callback = (List<FrameTiming> timings) {
-      for (final timing in timings) {
-        onFrame(timing.totalSpan);
-      }
+      // From the engine's clock to the log's: both are monotonic, so the
+      // offset between them read now holds for every frame of the batch.
+      final offset = clock() - Duration(microseconds: frameClockMicros());
+      Duration at(FrameTiming timing, FramePhase phase) =>
+          Duration(microseconds: timing.timestampInMicroseconds(phase)) +
+          offset;
+      onBatch([
+        for (final timing in timings)
+          FrameSample(at(timing, FramePhase.buildStart),
+              at(timing, FramePhase.rasterFinish), timing.totalSpan),
+      ]);
     };
     binding.addTimingsCallback(callback);
   }
@@ -102,7 +147,7 @@ class SpanStep {
 /// timed on the speed log's monotonic clock.
 class SpeedSpan {
   SpeedSpan._(this._log, String name, Duration? startedAt)
-      : name = _identifier(name),
+      : name = _listed(name, SpeedOperation.all),
         id = _randomId(),
         startedAt = startedAt ?? _log.now();
 
@@ -131,8 +176,11 @@ class SpeedSpan {
 
   bool get isFinished => duration != null;
 
-  /// The longest UI frame drawn while the span was open; null when no frame
-  /// was reported (the report says `unavailable`).
+  /// The longest UI frame drawn while the span was open (its work and the
+  /// span's overlap); null when no frame was reported (the report says
+  /// `unavailable`). Frames arrive in batches: after [finish] it can still
+  /// grow, until the log stops waiting for the span's frames
+  /// ([SpeedLog.frameWait]).
   Duration? get longestFrame => _longestFrame;
 
   Duration get _elapsed => _log.now() - startedAt;
@@ -145,7 +193,7 @@ class SpeedSpan {
     final now = _elapsed;
     final from = _lastMark ?? Duration.zero;
     _lastMark = now;
-    _add(SpanStep(_identifier(step), from, now - from, values));
+    _add(SpanStep(step, from, now - from, values));
   }
 
   /// A step that lasts as long as [body]. Steps timed this way may overlap.
@@ -155,20 +203,20 @@ class SpeedSpan {
     try {
       return await body();
     } finally {
-      _add(SpanStep(_identifier(step), from, _elapsed - from, values));
+      _add(SpanStep(step, from, _elapsed - from, values));
     }
   }
 
   /// A step that exists but cannot be timed from app code.
   void unavailable(String step) =>
-      _add(SpanStep(_identifier(step), _elapsed, null, const {}));
+      _add(SpanStep(step, _elapsed, null, const {}));
 
   /// A step measured another way on the log's clock, such as a request read
   /// from the log: [start] counts from the span's start, a null [duration]
   /// is unavailable.
   void addStep(String step, Duration start, Duration? duration,
           {Map<String, num> values = const {}}) =>
-      _add(SpanStep(_identifier(step), start, duration, values));
+      _add(SpanStep(step, start, duration, values));
 
   /// Runs [body] so the requests it makes, through any async gap, are
   /// recorded with this span's id and numbered as attempts.
@@ -179,21 +227,33 @@ class SpeedSpan {
   void finish({String outcome = SpeedOutcome.ok}) {
     if (isFinished) return;
     duration = _elapsed;
-    this.outcome = _identifier(outcome);
+    this.outcome = _listed(outcome, SpeedOutcome.all);
     _attempts.clear();
     _log._close(this);
   }
 
   void _add(SpanStep step) {
     if (steps.length >= SpeedLog.maxStepsPerSpan) return;
-    steps.add(SpanStep(step.name, step.start, step.duration, {
+    steps.add(
+        SpanStep(_listed(step.name, SpeedStep.all), step.start, step.duration, {
       for (final value in step.values.entries)
-        _identifier(value.key): value.value,
+        _listed(value.key, SpeedValue.all): value.value,
     }));
   }
 
-  void _frame(Duration frame) {
-    if (_longestFrame == null || frame > _longestFrame!) _longestFrame = frame;
+  /// When the span ended, on the log's clock; null while it is open.
+  Duration? get _endedAt => duration == null ? null : startedAt + duration!;
+
+  void _frames(List<FrameSample> batch) {
+    final end = _endedAt;
+    for (final frame in batch) {
+      if (frame.end <= startedAt || (end != null && frame.start >= end)) {
+        continue;
+      }
+      if (_longestFrame == null || frame.duration > _longestFrame!) {
+        _longestFrame = frame.duration;
+      }
+    }
   }
 
   /// The attempt number of [request] (what identifies a request, see the
@@ -202,32 +262,38 @@ class SpeedSpan {
   int _nextAttempt(String request) {
     if (isFinished) return 1;
     final key = _attemptHash.convert(utf8.encode(request)).toString();
-    return _attempts.update(key, (n) => n + 1, ifAbsent: () => 1);
+    final seen = _attempts[key];
+    if (seen != null) return _attempts[key] = seen + 1;
+    // Past the cap a new request is attempt 1 and is not remembered.
+    if (_attempts.length < SpeedLog.maxRememberedRequests) _attempts[key] = 1;
+    return 1;
   }
 
   /// How many distinct requests the span remembers for attempt numbering
-  /// (0 once finished). Read by tests; the hashes themselves stay private.
+  /// (0 once finished). Read by tests.
   int get rememberedRequests => _attempts.length;
+
+  /// The keys the span keeps for attempt numbering, for tests that check
+  /// they hold nothing of the request in clear. Nothing else reads them.
+  Iterable<String> get debugAttemptKeys => List.unmodifiable(_attempts.keys);
 
   static final Random _random = Random.secure();
 
   static String _randomId() => List.generate(
       8, (_) => _random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
 
-  static final RegExp _fixedIdentifier = RegExp(r'^[a-z][a-z0-9_]{0,39}$');
-
-  /// [name] if it looks like a constant from the code, else `invalid_name`:
-  /// a name built from content would carry that content into the report.
-  static String _identifier(String name) =>
-      _fixedIdentifier.hasMatch(name) ? name : 'invalid_name';
+  /// [name] if it is on the fixed list [names], else `invalid_name`: a name
+  /// built from content would carry that content into the report.
+  static String _listed(String name, Set<String> names) =>
+      names.contains(name) ? name : invalidSpeedName;
 }
 
 /// Finished spans, the newest [perOperation] of each operation (span name)
 /// in a [RingBuffer] of its own, so a frequent operation (a sync round every
 /// 30 s) never pushes a rare one (a text send) out. At most [maxOperations]
-/// operations are kept; spans of any further name are dropped. Names are
-/// constants from the code, so that bound is never reached in practice and
-/// the memory stays fixed.
+/// operations are kept; spans of any further name are dropped. Span names
+/// come from the fixed list (`SpeedOperation.all`, with `invalid_name`),
+/// which fits in that bound, so the memory stays fixed.
 class FinishedSpans {
   FinishedSpans({required this.perOperation, required this.maxOperations});
 
@@ -291,7 +357,14 @@ class SpeedLog {
   static const maxOperations = 16;
 
   static const maxStepsPerSpan = 64;
+
+  /// Distinct requests an open span remembers for attempt numbering.
+  static const maxRememberedRequests = 256;
   static const maxOpenSpans = 64;
+
+  /// How long a finished span waits for the batch that holds its last
+  /// frames, when no frame drawn after it is reported first.
+  static const frameWait = Duration(seconds: 3);
   static final Object _spanKey = Object();
 
   final RingBuffer<RequestRecord> requests;
@@ -303,6 +376,10 @@ class SpeedLog {
   final Duration Function() _clock;
   final List<SpeedSpan> _open = [];
 
+  /// Finished spans whose last frames may still come (see [frameWait]).
+  final List<SpeedSpan> _waitingForFrames = [];
+  bool _listening = false;
+
   /// Monotonic time since the log started.
   Duration now() => _clock();
 
@@ -313,7 +390,10 @@ class SpeedLog {
   /// [now]) when the operation began before it was known to need one.
   SpeedSpan startSpan(String name, {Duration? startedAt}) {
     final span = SpeedSpan._(this, name, startedAt);
-    if (_open.isEmpty) _frames.listen(_onFrame);
+    if (!_listening) {
+      _listening = true;
+      _frames.listen(now, _onFrames);
+    }
     // A span nobody finishes must not hold memory forever.
     if (_open.length >= maxOpenSpans) {
       _open.first.finish(outcome: SpeedOutcome.abandoned);
@@ -335,16 +415,34 @@ class SpeedLog {
 
   void recordRequest(RequestRecord record) => requests.add(record);
 
-  void _onFrame(Duration frame) {
-    for (final span in _open) {
-      span._frame(frame);
+  void _onFrames(List<FrameSample> batch) {
+    for (final span in [..._open, ..._waitingForFrames]) {
+      span._frames(batch);
     }
+    // Frames come in order: one drawn after a span means all of the span's
+    // frames are in.
+    _waitingForFrames.removeWhere(
+        (span) => batch.any((frame) => frame.start >= span._endedAt!));
+    _stopWaiting();
   }
 
   void _close(SpeedSpan span) {
     _open.remove(span);
     spans.add(span);
-    if (_open.isEmpty) _frames.cancel();
+    _waitingForFrames.add(span);
+    if (_waitingForFrames.length > maxOpenSpans) _waitingForFrames.removeAt(0);
+    _stopWaiting();
+  }
+
+  /// Drops the spans that waited [frameWait] for their frames, and stops
+  /// listening when no span is left to take frames.
+  void _stopWaiting() {
+    final now = this.now();
+    _waitingForFrames.removeWhere((span) => now - span._endedAt! > frameWait);
+    if (_listening && _open.isEmpty && _waitingForFrames.isEmpty) {
+      _listening = false;
+      _frames.cancel();
+    }
   }
 }
 
