@@ -11,6 +11,10 @@ abstract final class SpeedOperation {
 
   /// One round of the sync loop, from its request to the next one.
   static const sync = 'sync';
+
+  /// A voice join, from the join starting to the microphone published and
+  /// the first remote audio (see `call_join_trace.dart`).
+  static const voiceJoin = 'voice_join';
 }
 
 /// Step names.
@@ -52,6 +56,62 @@ abstract final class SpeedStep {
 
   /// The round failed: from the last step to the error being reported.
   static const error = 'error';
+
+  // voice_join (timed steps may overlap: the join runs some side by side)
+  /// The call being left hanging up.
+  static const leavePrevious = 'leave_previous';
+
+  /// The picked speakers handed to WebRTC.
+  static const outputDevice = 'output_device';
+
+  /// Finding the call's token service (the well-known).
+  static const foci = 'foci';
+
+  /// The OpenID token from the homeserver.
+  static const openIdToken = 'openid_token';
+
+  /// `POST /sfu/get` to the call token service.
+  static const sfuToken = 'sfu_token';
+
+  /// The SFU is LiveKit Cloud: when that became known, no duration.
+  static const sfuLivekitCloud = 'sfu_livekit_cloud';
+
+  /// The SFU is not LiveKit Cloud: when that became known, no duration.
+  static const sfuSelfHosted = 'sfu_self_hosted';
+
+  /// A phone's browser opening the microphone before the membership.
+  static const microphoneEarly = 'microphone_early';
+
+  /// LiveKit's DNS, TLS and region warm-up, when awaited or finished.
+  static const prepareConnection = 'prepare_connection';
+
+  /// Waiting for the previous call's clear of our membership.
+  static const membershipClearWait = 'membership_clear_wait';
+
+  /// Writing our call membership.
+  static const membershipWrite = 'membership_write';
+
+  /// The LiveKit connection.
+  static const connect = 'connect';
+
+  /// The microphone's capture options (the DSP's bounded wait included).
+  static const microphoneOptions = 'microphone_options';
+
+  /// Opening the microphone capture during the connection.
+  static const microphoneOpen = 'microphone_open';
+
+  /// The SFU's region, unavailable when it reports none; a known region is
+  /// [sfuRegionPrefix] and its name, with no duration.
+  static const sfuRegion = 'sfu_region';
+  static const sfuRegionPrefix = 'sfu_region_';
+
+  /// From connected to the microphone published; unavailable when it was
+  /// not.
+  static const microphonePublished = 'microphone_published';
+
+  /// From connected to someone else first heard; unavailable when nobody
+  /// spoke in time.
+  static const firstRemoteAudio = 'first_remote_audio';
 }
 
 /// Names of the numbers on steps.

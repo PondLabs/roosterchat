@@ -12,6 +12,7 @@ import 'package:rooster/client/matrix/components/voip_room/matrix_livekit_backen
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/diagnostic/speed_log/call_join_trace.dart';
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
+import 'package:rooster/diagnostic/speed_log/speed_names.dart';
 
 /// The Matrix side of a voice join, for [CallJoin]: what it asks the
 /// account, the room and the device. `MatrixLivekitBackend` is the real one.
@@ -114,18 +115,18 @@ class CallJoin<S> {
 
   Future<S> _join(
       CallJoinTrace trace, Future<void> Function()? leavePrevious) async {
-    final leaving = _quiet(trace.time(
-        'leave_previous', () => leavePrevious?.call() ?? Future.value()));
+    final leaving = _quiet(trace.time(SpeedStep.leavePrevious,
+        () => leavePrevious?.call() ?? Future.value()));
     // Awaited before the connection: joining while this is still running
     // leaves the call on whatever device the system chose.
-    final output =
-        _quiet(trace.time('output_device', () => host.selectOutputDevice()));
+    final output = _quiet(
+        trace.time(SpeedStep.outputDevice, () => host.selectOutputDevice()));
 
-    final openIdRequest =
-        trace.time('openid_token', () => host.openIdToken().timeout(_bound));
+    final openIdRequest = trace.time(
+        SpeedStep.openIdToken, () => host.openIdToken().timeout(_bound));
     // Not left failing unheard when the foci below throw first.
     openIdRequest.ignore();
-    final foci = await trace.time('foci', host.foci);
+    final foci = await trace.time(SpeedStep.foci, host.foci);
     if (foci.isEmpty) {
       throw CallJoinException("Failed to find a valid LiveKit service",
           MatrixLivekitBackend.errorCallNoLivekitService);
@@ -147,7 +148,7 @@ class CallJoin<S> {
     }
 
     final grant = await trace.time(
-        'sfu_token',
+        SpeedStep.sfuToken,
         () => tokens.requestSfu(focus, {
               "device_id": host.deviceId,
               "room": host.roomId,
@@ -175,7 +176,7 @@ class CallJoin<S> {
       // is told we are in while a permission prompt is still up.
       final early = host.mobileBrowser
           ? await trace.time(
-              'microphone_early',
+              SpeedStep.microphoneEarly,
               () => openBeforePlayback<JoinMicrophone>(
                   needed: true,
                   options: host.microphoneOptions,
@@ -186,17 +187,17 @@ class CallJoin<S> {
 
       if (cloud) {
         // The connection uses a region only if this has chosen it.
-        await trace.time('prepare_connection',
+        await trace.time(SpeedStep.prepareConnection,
             () => room.prepareConnection(grant.url, grant.jwt));
       } else if (host.isWeb) {
         // DNS and TLS for the browser, not worth waiting for.
-        unawaited(_quiet(trace.time('prepare_connection',
+        unawaited(_quiet(trace.time(SpeedStep.prepareConnection,
             () => room.prepareConnection(grant.url, grant.jwt))));
       }
 
       // A clear from the previous call may still be in flight, and would
       // erase what we write now (issue #48).
-      await trace.time('membership_clear_wait',
+      await trace.time(SpeedStep.membershipClearWait,
           () => CallMembershipWrites.settled(host.membershipKey));
 
       if (early.track == null && early.retry) {
@@ -204,9 +205,11 @@ class CallJoin<S> {
       }
 
       wroteMembership = true;
-      await trace.time('membership_write', () => host.writeMembership(foci));
+      await trace.time(
+          SpeedStep.membershipWrite, () => host.writeMembership(foci));
 
-      await trace.time('connect', () => room.connect(grant.url, grant.jwt));
+      await trace.time(
+          SpeedStep.connect, () => room.connect(grant.url, grant.jwt));
       trace.connected(room.serverRegion);
 
       final toPublish = early.track;
@@ -264,9 +267,9 @@ class CallJoin<S> {
       CallJoinTrace trace, LivekitJoinRoom room) async {
     try {
       final options =
-          await trace.time('microphone_options', host.microphoneOptions);
+          await trace.time(SpeedStep.microphoneOptions, host.microphoneOptions);
       return await trace.time(
-          'microphone_open', () => room.openMicrophone(options));
+          SpeedStep.microphoneOpen, () => room.openMicrophone(options));
     } catch (e, s) {
       Log.onError(e, s, content: "Could not enable the microphone");
       return null;

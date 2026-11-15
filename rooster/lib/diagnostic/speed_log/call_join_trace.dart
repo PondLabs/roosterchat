@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
+import 'package:rooster/diagnostic/speed_log/speed_names.dart';
 
 /// The `voice_join` span of one voice join, in a [SpeedLog]: from the join
 /// starting to the microphone published and the first remote audio.
@@ -36,7 +37,7 @@ class CallJoinTrace {
       {this.remoteAudioWindow = const Duration(seconds: 30)})
       : span = log.startSpan(spanName);
 
-  static const spanName = 'voice_join';
+  static const spanName = SpeedOperation.voiceJoin;
 
   final SpeedSpan span;
 
@@ -57,8 +58,8 @@ class CallJoinTrace {
       span.time(step, body);
 
   /// Records the SFU's host class: LiveKit Cloud or anything else.
-  void sfuHost({required bool livekitCloud}) =>
-      _instant(livekitCloud ? 'sfu_livekit_cloud' : 'sfu_self_hosted');
+  void sfuHost({required bool livekitCloud}) => _instant(
+      livekitCloud ? SpeedStep.sfuLivekitCloud : SpeedStep.sfuSelfHosted);
 
   /// The connection finished, in the SFU [region] (null when it reports
   /// none). Call [microphone] and [listenForRemoteAudio] right after: their
@@ -66,7 +67,7 @@ class CallJoinTrace {
   void connected(String? region) {
     final name = region == null ? null : _regionStep(region);
     if (name == null) {
-      span.unavailable('sfu_region');
+      span.unavailable(SpeedStep.sfuRegion);
     } else {
       _instant(name);
     }
@@ -78,12 +79,12 @@ class CallJoinTrace {
     // A step is only added when its future completes: one that never does
     // adds nothing, and the step is written unavailable instead.
     final done = Completer<void>();
-    span.time('microphone_published', () => done.future);
+    span.time(SpeedStep.microphonePublished, () => done.future);
     published.then((ok) => ok, onError: (Object _) => false).then((ok) {
       if (ok) {
         done.complete();
       } else {
-        span.unavailable('microphone_published');
+        span.unavailable(SpeedStep.microphonePublished);
       }
       _microphoneSettled = true;
       _finishWhenSettled();
@@ -94,7 +95,7 @@ class CallJoinTrace {
   /// [remoteAudioWindow] at most.
   void listenForRemoteAudio(Stream<void> speaking) {
     final heard = Completer<void>();
-    span.time('first_remote_audio', () => heard.future);
+    span.time(SpeedStep.firstRemoteAudio, () => heard.future);
     _remote = speaking.listen((_) {
       if (_remoteSettled) return;
       heard.complete();
@@ -102,7 +103,7 @@ class CallJoinTrace {
     });
     _remoteTimer = Timer(remoteAudioWindow, () {
       if (_remoteSettled) return;
-      span.unavailable('first_remote_audio');
+      span.unavailable(SpeedStep.firstRemoteAudio);
       _settleRemote();
     });
   }
@@ -111,7 +112,7 @@ class CallJoinTrace {
   void failed() {
     _remote?.cancel();
     _remoteTimer?.cancel();
-    span.finish(outcome: 'failed');
+    span.finish(outcome: SpeedOutcome.failed);
   }
 
   void _settleRemote() {
@@ -139,6 +140,6 @@ class CallJoinTrace {
   static String? _regionStep(String region) {
     final cleaned = region.toLowerCase().replaceAll(_notIdentifier, '_');
     if (cleaned.isEmpty || cleaned.length > 28) return null;
-    return 'sfu_region_$cleaned';
+    return '${SpeedStep.sfuRegionPrefix}$cleaned';
   }
 }
