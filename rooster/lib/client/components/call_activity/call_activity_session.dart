@@ -17,7 +17,8 @@ import 'call_activity_transport.dart';
 /// The state of a session the host owns and everyone else follows. The
 /// roster is keyed by LiveKit identity (one person may be in a call twice)
 /// and carries matrix user ids for people outside the call; [game] holds
-/// whatever the activity's own logic puts there, opaque to the framework.
+/// whatever the activity's own logic puts there, opaque to the framework,
+/// and [parts] what its components keep beside it.
 class CallActivitySnapshot {
   const CallActivitySnapshot({
     required this.sessionId,
@@ -27,6 +28,7 @@ class CallActivitySnapshot {
     this.players = const {},
     this.spectators = const {},
     this.game = const {},
+    this.parts = const {},
   });
 
   /// Read back from a `state` message; null when it is not one.
@@ -55,6 +57,14 @@ class CallActivitySnapshot {
         final Map game => Map<String, Object?>.from(game),
         _ => const {},
       },
+      parts: switch (json['parts']) {
+        final Map parts => {
+            for (final MapEntry(:key, :value) in parts.entries)
+              if (key is String && value is Map)
+                key: Map<String, Object?>.from(value),
+          },
+        _ => const {},
+      },
     );
   }
 
@@ -79,10 +89,16 @@ class CallActivitySnapshot {
   /// The activity's own state, opaque here.
   final Map<String, Object?> game;
 
+  /// The state a component of the activity keeps for everyone, by the
+  /// component's key (see [CallActivitySession.hostPart]). Apart from
+  /// [game], so the activity's next payload does not drop it.
+  final Map<String, Map<String, Object?>> parts;
+
   CallActivitySnapshot copyWith({
     Set<String>? players,
     Set<String>? spectators,
     Map<String, Object?>? game,
+    Map<String, Map<String, Object?>>? parts,
     int? seq,
   }) =>
       CallActivitySnapshot(
@@ -93,6 +109,7 @@ class CallActivitySnapshot {
         players: players ?? this.players,
         spectators: spectators ?? this.spectators,
         game: game ?? this.game,
+        parts: parts ?? this.parts,
       );
 
   Map<String, Object?> toJson() => {
@@ -103,7 +120,18 @@ class CallActivitySnapshot {
         'players': players.toList(),
         'spectators': spectators.toList(),
         'game': game,
+        if (parts.isNotEmpty) 'parts': parts,
       };
+}
+
+/// A message that came for us on the addressed lane
+/// ([CallActivitySession.sendTo]), from the authenticated [sender].
+class CallActivityDirect {
+  const CallActivityDirect(this.sender, this.message);
+
+  /// The LiveKit identity the transport received it from.
+  final String sender;
+  final Map<String, Object?> message;
 }
 
 /// What a client can do inside a call, sent as `caps` on arrival and on
@@ -169,6 +197,8 @@ class CallActivitySession extends ChangeNotifier {
   final StreamController<Map<String, Object?>> _inputs =
       StreamController.broadcast();
   final StreamController<Map<String, Object?>> _relayed =
+      StreamController.broadcast();
+  final StreamController<CallActivityDirect> _direct =
       StreamController.broadcast();
   final Map<String, CallActivityCaps> _caps = {};
   final assembler = CallPartAssembler();
@@ -246,6 +276,36 @@ class CallActivitySession extends ChangeNotifier {
   Future<void> hostAnnounce(Map<String, Object?> message) async {
     if (!_hosting) return;
     await _send({'t': CallActivityMessageType.relay, 'm': message});
+  }
+
+  /// What the others addressed to us with [sendTo].
+  Stream<CallActivityDirect> get direct => _direct.stream;
+
+  /// The addressed lane: an opaque [message] for [identities] alone, from
+  /// anyone in the call to anyone in it (a host is not needed, and the host
+  /// is told nothing unless it is addressed). Nobody else receives it, so
+  /// this is how a secret travels: what is in [snapshot] and on the relay
+  /// lane reaches every client, the one it is kept from included. Sends
+  /// nothing when [identities] names nobody but us.
+  Future<void> sendTo(
+      Iterable<String> identities, Map<String, Object?> message) async {
+    final to = {...identities}..remove(selfIdentity);
+    // Never an empty list: a transport may read it as everyone.
+    if (to.isEmpty) return;
+    final json = {'t': CallActivityMessageType.direct, 'm': message};
+    for (final packet in CallActivityProtocol.split(json) ?? const []) {
+      await _send(packet, to.toList());
+    }
+  }
+
+  /// The host keeps a component's state for everyone under [key], beside
+  /// the activity's own [hostGamePayload]: it rides every state from the
+  /// next [sendState] on, [hostGamePayload] leaves it alone, and a host
+  /// that takes the seat over finds it in the last snapshot it heard. Only
+  /// the host's word counts: everyone else's call is a no-op.
+  void hostPart(String key, Map<String, Object?> part) {
+    if (!_hosting) return;
+    _snapshot = _snapshot.copyWith(parts: {..._snapshot.parts, key: part});
   }
 
   /// The host publishes what the activity's own state [payload] is; the
@@ -528,6 +588,11 @@ class CallActivitySession extends ChangeNotifier {
         if (sender != _host && _host.isNotEmpty) return;
         final payload = message['m'];
         if (payload is Map<String, Object?>) _relayed.add(payload);
+      case CallActivityMessageType.direct:
+        final payload = message['m'];
+        if (payload is Map<String, Object?>) {
+          _direct.add(CallActivityDirect(sender, payload));
+        }
     }
   }
 
@@ -761,6 +826,7 @@ class CallActivitySession extends ChangeNotifier {
     }
     _inputs.close();
     _relayed.close();
+    _direct.close();
     super.dispose();
   }
 

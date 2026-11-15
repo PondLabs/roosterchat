@@ -45,6 +45,9 @@ class LivekitCallActivityTransport implements CallActivityTransport {
   Future<void> send(Map<String, Object?> message, {List<String>? to}) async {
     final participant = room.localParticipant;
     if (participant == null) return;
+    // LiveKit reads an empty destination list as everyone in the room: a
+    // message addressed to people who have all left goes to nobody.
+    if (to != null && to.isEmpty) return;
     try {
       await participant.publishData(
         CallActivityProtocol.encodePacket(message),
