@@ -1,5 +1,6 @@
 import 'package:rooster/diagnostic/speed_log/request_record.dart';
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
+import 'package:rooster/diagnostic/speed_log/speed_summary.dart';
 
 /// The speed log as plain text, to copy into an issue. Times count from the
 /// log's start on a monotonic clock. Holds route templates, host classes,
@@ -10,10 +11,32 @@ import 'package:rooster/diagnostic/speed_log/speed_log.dart';
 /// `+12.345s POST /_matrix/media/v3/upload homeserver status=200 attempt=1 up=1048576 down=62 headers=523ms total=524ms handed_over=12ms(transport) to_answer=511ms up_rate=2052kB/s`
 ///
 /// One span per line, its steps indented under it.
+///
+/// It opens with the summary: per operation, p50 and p95 of the spans that
+/// ended `ok` and of each of their steps (`summarizeSpeedLog`):
+/// `text_send ok=12/13 p50=105ms p95=230ms`, then `  request n=12 ...`.
 String buildSpeedReport(SpeedLog log) {
   final out = StringBuffer()
     ..writeln('Rooster speed report')
     ..writeln('clock: monotonic, +seconds since the log started')
+    ..writeln()
+    ..writeln('summary (p50 and p95 of the finished spans that ended ok):');
+  for (final operation in summarizeSpeedLog(log)) {
+    out.writeln([
+      operation.name,
+      'ok=${operation.ok}/${operation.finished}',
+      ..._percentiles(operation.total),
+    ].join(' '));
+    for (final step in operation.steps) {
+      out.writeln([
+        '  ${step.name}',
+        'n=${step.timing?.count ?? 0}',
+        ..._percentiles(step.timing),
+        if (step.unavailable > 0) 'unavailable=${step.unavailable}',
+      ].join(' '));
+    }
+  }
+  out
     ..writeln()
     ..writeln('requests (${log.requests.length}, newest '
         '${log.requests.capacity} kept):');
@@ -73,6 +96,9 @@ String _step(SpanStep step) => [
       _ms(step.duration),
       for (final value in step.values.entries) '${value.key}=${value.value}',
     ].join(' ');
+
+List<String> _percentiles(Percentiles? p) =>
+    p == null ? const [] : ['p50=${_ms(p.p50)}', 'p95=${_ms(p.p95)}'];
 
 String _at(Duration d) => '+${(d.inMilliseconds / 1000).toStringAsFixed(3)}s';
 

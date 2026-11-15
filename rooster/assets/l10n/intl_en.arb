@@ -10326,6 +10326,55 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelDeveloperSpeedLog": "Speed log",
+  "@labelDeveloperSpeedLog": {
+    "description": "Title of the Developer settings section that shows how long sending a message, each sync and other network operations took on this device",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeveloperSpeedLogEmpty": "Nothing timed yet",
+  "@labelDeveloperSpeedLogEmpty": {
+    "description": "In Developer settings > Speed log, before any operation has been timed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeveloperSpeedLogSamples": "{howMany,plural, =1{1 sample}other{{howMany} samples}}",
+  "@labelDeveloperSpeedLogSamples": {
+    "description": "In Developer settings > Speed log: how many timings an operation or one of its steps has",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "labelDeveloperSpeedLogPercentiles": "p50 {p50} ms · p95 {p95} ms",
+  "@labelDeveloperSpeedLogPercentiles": {
+    "description": "In Developer settings > Speed log: the median (p50) and the 95th percentile (p95) of how long an operation or a step took, in milliseconds",
+    "type": "text",
+    "placeholders": {
+      "p50": {},
+      "p95": {}
+    }
+  },
+  "labelDeveloperSpeedLogNotTimed": "{howMany,plural, =1{1 not timed}other{{howMany} not timed}}",
+  "@labelDeveloperSpeedLogNotTimed": {
+    "description": "In Developer settings > Speed log: how many times a step could not be timed by the app (it is left out, not guessed)",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "promptDeveloperCopySpeedReport": "Copy speed report",
+  "@promptDeveloperCopySpeedReport": {
+    "description": "Button in Developer settings > Speed log that copies the speed report, a text with the timings and no message content, to paste into an issue",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageDeveloperSpeedReportCopied": "Speed report copied",
+  "@messageDeveloperSpeedReportCopied": {
+    "description": "Shown after the speed report was copied from Developer settings > Speed log",
+    "type": "text",
+    "placeholders": {}
+  },
   "promptRoomSetTopicPlaceholder": "Set a topic",
   "@promptRoomSetTopicPlaceholder": {
     "description": "In a room's (or space's) appearance settings, shown in place of the topic while there is none; tapping it opens the topic editor",
