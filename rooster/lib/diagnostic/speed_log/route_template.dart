@@ -74,9 +74,10 @@ const Map<String, String> _sigils = {
   '#': 'roomAlias',
 };
 
-/// An unstable-prefix segment such as `org.matrix.msc3916`. Kept only right
-/// after `unstable`: anywhere else a segment of that shape may be a file
-/// name or a key (`alice.holiday.msc1`).
+/// An unstable-prefix segment such as `org.matrix.msc3916`. Kept only as
+/// the segment right after the word `unstable` in `/_matrix/<api>/unstable/`:
+/// anywhere else a segment of that shape may be a file name or a key
+/// (`alice.holiday.msc1`).
 final RegExp _unstablePrefix = RegExp(r'^[a-z]+(\.[a-z0-9_]+)*\.msc[0-9]+$');
 
 /// The path of [url] with every segment that is not a fixed word replaced
@@ -95,11 +96,11 @@ String routeTemplate(Uri url, [HostClass host = HostClass.homeserver]) {
   }
   final out = <String>[];
   var pending = const <String>[];
-  String? previous;
   for (final segment in url.pathSegments) {
     if (segment.isEmpty) continue;
-    final afterUnstable = previous == 'unstable';
-    previous = segment;
+    // `unstable` kept as a word (not an id in a named slot), third.
+    final afterUnstable =
+        out.length == 3 && out[0] == '_matrix' && out[2] == 'unstable';
     if (pending.isNotEmpty) {
       out.add('{${pending.first}}');
       pending = pending.sublist(1);

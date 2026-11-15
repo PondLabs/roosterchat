@@ -139,6 +139,27 @@ void main() {
           'secret.msc42'
         ])
       ),
+      // Right after `unstable`, but not in `/_matrix/<api>/unstable/`.
+      (
+        'GET',
+        Uri.parse('https://secret-files.example/unstable/alice.holiday.msc1')
+      ),
+      ('GET', at(['unstable', 'alice.holiday.msc1'])),
+      (
+        'GET',
+        at([
+          '_matrix',
+          'client',
+          'v3',
+          'rooms',
+          'unstable',
+          'alice.holiday.msc1'
+        ])
+      ),
+      (
+        'GET',
+        at(['_matrix', 'client', 'unstable', 'unstable', 'alice.holiday.msc1'])
+      ),
       // Another site: none of its words, even the API's, are kept...
       (
         'GET',
@@ -205,6 +226,10 @@ void main() {
       'POST /_matrix/client/unstable/org.matrix.msc3575/sync homeserver',
       'GET /{param}/{param}/{param}/{param}/{param} other',
       'GET /.well-known/matrix/client other',
+      'GET /{param}/{param} other',
+      'GET /unstable/{param} homeserver',
+      'GET /_matrix/client/v3/rooms/{roomId}/{param} homeserver',
+      'GET /_matrix/client/unstable/unstable/{param} homeserver',
     ]) {
       expect(report, contains(line));
     }
