@@ -1,6 +1,7 @@
 @TestOn('browser')
 library;
 
+import 'dart:async';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
@@ -17,7 +18,8 @@ external JSAny? _eval(JSString code);
 
 class _NoFrames implements FrameSource {
   @override
-  void listen(void Function(Duration frame) onFrame) {}
+  void listen(Duration Function() clock,
+      void Function(List<FrameSample> batch) onBatch) {}
   @override
   void cancel() {}
 }
@@ -79,5 +81,41 @@ void main() {
     // The report, for the evidence log.
     print(buildSpeedReport(log));
     client.close();
+  });
+
+  test('an aborted upload throws RequestAbortedException, as a fetch does',
+      () async {
+    final origin = Uri.base.replace(path: '/', query: null, fragment: null);
+    final log = SpeedLog(frames: _NoFrames());
+    final client = SpeedHttpClient(
+      hosts: HostClassifier(homeserver: () => origin),
+      log: log,
+    );
+    Future<Object?> abortedThrough(http.Client c) async {
+      final abort = Completer<void>();
+      final request = http.AbortableRequest(
+          'POST', origin.resolve('/_matrix/media/v3/upload'),
+          abortTrigger: abort.future)
+        ..bodyBytes = Uint8List(8 * 1024 * 1024);
+      final sent = c.send(request);
+      abort.complete();
+      try {
+        await (await sent).stream.drain<void>();
+        return null;
+      } catch (error) {
+        return error;
+      }
+    }
+
+    final plain = http.Client();
+    final viaFetch = await abortedThrough(plain);
+    plain.close();
+    final viaXhr = await abortedThrough(client);
+    client.close();
+
+    print('fetch: ${viaFetch.runtimeType}, xhr: ${viaXhr.runtimeType}');
+    expect(viaFetch, isA<http.RequestAbortedException>());
+    expect(viaXhr, isA<http.RequestAbortedException>());
+    expect(log.requests.toList().single.status, isNull);
   });
 }

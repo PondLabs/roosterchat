@@ -12,7 +12,8 @@ import 'package:tiamat/config/style/theme_dark.dart';
 
 class _NoFrames implements FrameSource {
   @override
-  void listen(void Function(Duration frame) onFrame) {}
+  void listen(Duration Function() clock,
+      void Function(List<FrameSample> batch) onBatch) {}
   @override
   void cancel() {}
 }
@@ -39,10 +40,6 @@ SpeedLog _log() {
   now += const Duration(milliseconds: 30000);
   sync.mark(SpeedStep.response);
   sync.finish();
-
-  final join = log.startSpan('voice_join');
-  now += const Duration(milliseconds: 1500);
-  join.finish();
   return log;
 }
 
@@ -50,7 +47,7 @@ void main() {
   test('p50 and p95 are by nearest rank over the spans that ended ok', () {
     final summary = summarizeSpeedLog(_log());
 
-    expect(summary.map((o) => o.name), ['sync', 'text_send', 'voice_join']);
+    expect(summary.map((o) => o.name), ['sync', 'text_send']);
     final send = summary[1];
     expect(send.finished, 21);
     expect(send.ok, 20);
@@ -92,7 +89,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Every operation in the log, the one it has never heard of included.
-    for (final name in ['text_send', 'sync', 'voice_join', 'request']) {
+    for (final name in ['text_send', 'sync', 'request']) {
       expect(find.text(name), findsOneWidget, reason: name);
     }
     expect(find.text('p50 100 ms · p95 190 ms'), findsOneWidget);

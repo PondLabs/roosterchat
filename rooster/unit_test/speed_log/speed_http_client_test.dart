@@ -8,14 +8,18 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:rooster/diagnostic/speed_log/host_class.dart';
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
+import 'package:rooster/diagnostic/speed_log/speed_names.dart';
+import 'package:rooster/diagnostic/speed_log/speed_report.dart';
 import 'package:rooster/utils/network/speed_http_client.dart';
 import 'package:test/test.dart';
 
 class _NoFrames implements FrameSource {
   @override
-  void listen(void Function(Duration frame) onFrame) {}
+  void listen(Duration Function() clock,
+      void Function(List<FrameSample> batch) onBatch) {}
   @override
   void cancel() {}
 }
@@ -32,6 +36,19 @@ class _StreamedBodyRequest extends http.BaseRequest {
   http.ByteStream finalize() {
     super.finalize();
     return http.ByteStream(body);
+  }
+}
+
+/// A body handed over as a stream whose length is not known.
+class _UnsizedRequest extends http.BaseRequest {
+  _UnsizedRequest(super.method, super.url, this.body);
+
+  final List<int> body;
+
+  @override
+  http.ByteStream finalize() {
+    super.finalize();
+    return http.ByteStream.fromBytes(body);
   }
 }
 
@@ -56,6 +73,9 @@ class _TransportSpy extends http.BaseClient {
   @override
   void close() => _io.close();
 }
+
+/// An error type the speed log knows nothing about.
+class _OddFailure implements Exception {}
 
 void main() {
   late HttpServer server;
@@ -191,6 +211,30 @@ void main() {
     expect(log.requests.toList().single.bytesUp, chunks * chunkSize);
   });
 
+  test('a MultipartRequest arrives with its content-type, as without us',
+      () async {
+    final seen = <String?>[];
+    handler = (request) async {
+      seen.add(request.headers.value('content-type'));
+      await request.drain<void>();
+      request.response.write('{}');
+      await request.response.close();
+    };
+    // The multipart content-type, with its boundary, is set in finalize().
+    http.MultipartRequest multipart() =>
+        http.MultipartRequest('POST', base.resolve('/_matrix/media/v3/upload'))
+          ..fields['a'] = 'b';
+
+    final plain = http.Client();
+    await (await plain.send(multipart())).stream.drain<void>();
+    plain.close();
+    await (await client.send(multipart())).stream.drain<void>();
+
+    expect(seen[0], startsWith('multipart/form-data; boundary='));
+    expect(seen[1], startsWith('multipart/form-data; boundary='));
+    expect(log.requests.toList().single.bytesUp, greaterThan(0));
+  });
+
   test('a 429 records retry_after_ms', () async {
     handler = (request) async {
       await request.drain<void>();
@@ -220,6 +264,44 @@ void main() {
     expect(r.error, isNotNull);
     expect(r.error, isNot(contains('127.0.0.1')));
     expect(r.hostClass, HostClass.other);
+  });
+
+  test('an error is written as a fixed name, never its runtime type', () async {
+    final url = Uri.parse('https://secret-host.example/_matrix/client/v3/sync');
+    final cases = <Object, String>{
+      http.RequestAbortedException(url): SpeedError.aborted,
+      http.ClientException('secret', url): SpeedError.client,
+      TimeoutException('secret'): SpeedError.timeout,
+      const SocketException('secret'): SpeedError.socket,
+      const HandshakeException('secret'): SpeedError.tls,
+      const TlsException('secret'): SpeedError.tls,
+      const HttpException('secret'): SpeedError.http,
+      _OddFailure(): SpeedError.other,
+      StateError('secret'): SpeedError.other,
+    };
+    for (final thrown in cases.keys) {
+      final failing = SpeedHttpClient(
+          inner: MockClient((_) async => throw thrown), log: log);
+      await expectLater(failing.get(url), throwsA(same(thrown)));
+    }
+    // An error in the middle of a response body.
+    final cut = SpeedHttpClient(
+      inner: MockClient.streaming((request, body) async =>
+          http.StreamedResponse(
+              Stream.error(const SocketException('secret')), 200)),
+      log: log,
+    );
+    await expectLater(cut.get(url), throwsA(isA<SocketException>()));
+
+    expect(log.requests.toList().map((r) => r.error),
+        [...cases.values, SpeedError.socket]);
+    expect(log.requests.toList().map((r) => r.error),
+        everyElement(isIn(SpeedError.all)));
+    final report = buildSpeedReport(log);
+    expect(report, contains('error=other'));
+    for (final type in ['_OddFailure', 'StateError', 'Exception', 'secret']) {
+      expect(report, isNot(contains(type)), reason: type);
+    }
   });
 
   test('numbers repeated requests of a span as attempts', () async {
@@ -253,7 +335,7 @@ void main() {
       request.response.write('{}');
       await request.response.close();
     };
-    final span = log.startSpan('file_send');
+    final span = log.startSpan('text_send');
     await span.run(() async {
       // The file, then its thumbnail: two uploads, no retry.
       await client.post(
@@ -274,6 +356,100 @@ void main() {
     expect(log.requests.toList().map((r) => r.attempt), [1, 1, 1, 1]);
   });
 
+  test('the keys an open span keeps hold no URL, id or host', () async {
+    final hs = Uri.parse('https://secret-host.example');
+    final quick = SpeedHttpClient(
+      inner: MockClient((_) async => http.Response('{}', 200)),
+      hosts: HostClassifier(homeserver: () => hs),
+      log: log,
+    );
+    final urls = [
+      hs.resolve('/_matrix/client/v3/rooms/!secretRoom:secret-host.example'
+          '/send/m.room.message/secretTxn'),
+      hs.resolve('/_matrix/client/v3/profile/@secretAlice:secret-host.example'),
+      hs.resolve('/_matrix/media/v3/upload?filename=secret-holiday.jpg'),
+    ];
+    final span = log.startSpan('text_send');
+    await span.run(() async {
+      for (final url in urls) {
+        await quick.put(url, body: '{}');
+      }
+    });
+
+    final keys = span.debugAttemptKeys.toList();
+    print('keys kept by the open span: $keys');
+    expect(keys, hasLength(urls.length));
+    for (final key in keys) {
+      expect(key, matches(RegExp(r'^[0-9a-f]{64}$')));
+      for (final part in [
+        'secret',
+        'secret-host.example',
+        'secretRoom',
+        'secretTxn',
+        'secretAlice',
+        'holiday',
+        'PUT',
+        for (final url in urls) '$url',
+      ]) {
+        expect(key, isNot(contains(part)), reason: part);
+      }
+    }
+    span.finish();
+    expect(span.debugAttemptKeys, isEmpty);
+  });
+
+  test('an open span remembers a bounded number of requests', () async {
+    final quick = SpeedHttpClient(
+      inner: MockClient((_) async => http.Response('{}', 200)),
+      hosts: HostClassifier(homeserver: () => base),
+      log: log,
+    );
+    Uri sync(int i) => base.resolve('/_matrix/client/v3/sync?since=s$i');
+    final span = log.startSpan('sync');
+    await span.run(() async {
+      for (var i = 0; i < 5000; i++) {
+        await quick.get(sync(i));
+      }
+      // Remembered before the cap: still counted. Past it: attempt 1.
+      await quick.get(sync(0));
+      await quick.get(sync(4999));
+    });
+
+    expect(span.rememberedRequests, SpeedLog.maxRememberedRequests);
+    final attempts = log.requests.toList().map((r) => r.attempt).toList();
+    expect(attempts.sublist(attempts.length - 2), [2, 1]);
+    expect(attempts.sublist(0, attempts.length - 2), everyElement(1));
+    span.finish();
+    expect(span.rememberedRequests, 0);
+  });
+
+  test('a body of unknown length is attempt 1 each time', () async {
+    handler = (request) async {
+      await request.drain<void>();
+      request.response.write('{}');
+      await request.response.close();
+    };
+    final url = base.resolve('/_matrix/media/v3/upload');
+    final span = log.startSpan('text_send');
+    await span.run(() async {
+      // Two different files to one URL: with no length, nothing tells them
+      // from a retry.
+      for (final body in [
+        [1, 2, 3],
+        List.filled(9000, 7),
+      ]) {
+        final response = await client.send(_UnsizedRequest('POST', url, body));
+        await response.stream.drain<void>();
+      }
+    });
+
+    final records = log.requests.toList();
+    expect(records.map((r) => r.bytesUp), [3, 9000]);
+    expect(records.map((r) => r.attempt), [1, 1]);
+    expect(span.rememberedRequests, 0);
+    span.finish();
+  });
+
   test(
       'the same request sent again is attempt 2, and the span forgets it '
       'when it finishes', () async {
@@ -282,7 +458,7 @@ void main() {
       request.response.write('{}');
       await request.response.close();
     };
-    final span = log.startSpan('file_send');
+    final span = log.startSpan('text_send');
     Future<void> upload() =>
         client.post(base.resolve('/_matrix/media/v3/upload?filename=photo.jpg'),
             body: Uint8List(2048));
