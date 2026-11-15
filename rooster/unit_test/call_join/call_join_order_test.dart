@@ -24,6 +24,9 @@ void main() {
   setUp(() {
     journal = Journal();
     host = FakeHost(journal);
+    // The sequence of each scenario, for the record.
+    // ignore: avoid_print
+    addTearDown(() => print('sequence: ${journal.entries.join(' > ')}'));
   });
 
   CallJoin<FakeLivekitRoom> join({CallTokenService? tokens}) => CallJoin(
