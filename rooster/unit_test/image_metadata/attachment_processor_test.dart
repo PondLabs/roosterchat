@@ -75,7 +75,7 @@ void main() {
 
   const notRemovedEn = "Couldn't remove this image's metadata. "
       "To attach it as it is, turn on \"Send original\".";
-  const notRemovedPt = "Não deu para remover os metadados desta imagem. "
+  const notRemovedPt = "Não foi possível remover os metadados desta imagem. "
       "Para anexá-la como está, ative \"Enviar original\".";
 
   Future<void> checkUndecodable(WidgetTester tester,

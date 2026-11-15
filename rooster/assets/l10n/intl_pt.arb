@@ -591,7 +591,7 @@
   "labelAppQuickSwitcherDirectMessages": "Mensagens diretas",
   "labelAppQuickSwitcherRecentActivity": "Atividade recente",
   "promptAttachmentProcessingSendOriginal": "Enviar original (mantém os metadados)",
-  "labelAttachmentMetadataNotRemoved": "Não deu para remover os metadados desta imagem. Para anexá-la como está, ative \"Enviar original\".",
+  "labelAttachmentMetadataNotRemoved": "Não foi possível remover os metadados desta imagem. Para anexá-la como está, ative \"Enviar original\".",
   "labelImageContainsLocationInfo": "Aviso: esta imagem contém metadados de localização",
   "promptChatAddFile": "Adicionar arquivo",
   "ActivityJoinPill_text": "{host} iniciou {activity}",
