@@ -112,10 +112,15 @@ abstract final class SpeedStep {
   /// Opening the microphone capture during the connection.
   static const microphoneOpen = 'microphone_open';
 
-  /// The SFU's region, unavailable when it reports none; a known region is
-  /// [sfuRegionPrefix] and its name, with no duration.
+  /// The SFU's region, unavailable when it reports none.
   static const sfuRegion = 'sfu_region';
-  static const sfuRegionPrefix = 'sfu_region_';
+
+  /// The SFU reported a region: when it became known, no duration. Its name
+  /// is never kept: it is the server's text, and a self-hosted SFU can put
+  /// anything there (a host name). LiveKit's client code names no regions
+  /// (`region_url_provider.dart` takes them from the server), so there is
+  /// no checked list of Cloud regions to keep by name.
+  static const sfuRegionOther = 'sfu_region_other';
 
   /// From connected to the microphone published; unavailable when it was
   /// not.
@@ -154,6 +159,7 @@ abstract final class SpeedStep {
     microphoneOptions,
     microphoneOpen,
     sfuRegion,
+    sfuRegionOther,
     microphonePublished,
     firstRemoteAudio,
   };

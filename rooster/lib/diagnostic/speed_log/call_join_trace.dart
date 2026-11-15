@@ -23,8 +23,8 @@ import 'package:rooster/diagnostic/speed_log/speed_names.dart';
 /// - `membership_write`, `connect`;
 /// - `microphone_options`, `microphone_open`: the capture prepared during
 ///   the connection;
-/// - `sfu_region_<region>`, or `sfu_region` unavailable when the SFU reports
-///   none;
+/// - `sfu_region_other` when the SFU reports a region (its name is not
+///   kept), or `sfu_region` unavailable when it reports none;
 /// - `microphone_published`: from connected to the microphone published, or
 ///   unavailable when it was not (denied, no device, muted join);
 /// - `first_remote_audio`: from connected to someone else first heard,
@@ -65,11 +65,11 @@ class CallJoinTrace {
   /// none). Call [microphone] and [listenForRemoteAudio] right after: their
   /// steps count from here.
   void connected(String? region) {
-    final name = region == null ? null : _regionStep(region);
-    if (name == null) {
+    if (region == null || region.isEmpty) {
       span.unavailable(SpeedStep.sfuRegion);
     } else {
-      _instant(name);
+      // Never the region's own text (see SpeedStep.sfuRegionOther).
+      _instant(SpeedStep.sfuRegionOther);
     }
   }
 
@@ -132,14 +132,4 @@ class CallJoinTrace {
 
   /// A step with no duration of its own: when something became known.
   void _instant(String step) => span.time(step, () async {});
-
-  static final RegExp _notIdentifier = RegExp(r'[^a-z0-9_]+');
-
-  /// `sfu_region_<region>` as an identifier, or null when the region does
-  /// not make one (it is the SFU's name for a data centre, such as `gru1`).
-  static String? _regionStep(String region) {
-    final cleaned = region.toLowerCase().replaceAll(_notIdentifier, '_');
-    if (cleaned.isEmpty || cleaned.length > 28) return null;
-    return '${SpeedStep.sfuRegionPrefix}$cleaned';
-  }
 }

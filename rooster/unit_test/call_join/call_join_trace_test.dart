@@ -128,7 +128,7 @@ void main() {
       expect(steps[step]?.available, isTrue, reason: '$step has a duration');
     }
     expect(steps, contains('sfu_self_hosted'));
-    expect(steps, contains('sfu_region_gru1'));
+    expect(steps, contains('sfu_region_other'));
     expect(steps['first_remote_audio']?.available, isFalse,
         reason: 'nobody spoke');
 
@@ -174,6 +174,19 @@ void main() {
         await joinAndWait(host, window: const Duration(milliseconds: 200));
 
     expect(stepsOf(span)['first_remote_audio']?.available, isTrue);
+  });
+
+  test("a region's own text never reaches the report", () async {
+    final host = FakeHost(journal)..room.region = 'Sfu1.Example.Org';
+
+    final span = await joinAndWait(host);
+
+    expect(stepsOf(span), contains('sfu_region_other'));
+    final report = buildSpeedReport(log).toLowerCase();
+    expect(report, isNot(contains('sfu1')));
+    expect(report, isNot(contains('example')));
+    expect(report, isNot(contains('invalid_name')),
+        reason: 'every step of the join is on the fixed list');
   });
 
   test('a LiveKit Cloud SFU that reports no region', () async {

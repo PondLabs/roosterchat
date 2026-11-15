@@ -40,15 +40,17 @@ void main() {
   });
 
   test('the names the text send and sync spans use are on the list', () {
-    // Other spans (the voice join) add their own names beside these.
-    expect(SpeedOperation.all, containsAll({'text_send', 'sync'}));
-    expect(
-        SpeedStep.all,
-        containsAll({
-          'send', 'echo', 'echo_painted', 'queue_wait', 'request', 'retry', //
-          'answer', 'response', 'processing', 'clean_up', 'next_request',
-          'error',
-        }));
+    expect(SpeedOperation.all, {'text_send', 'sync', 'voice_join'});
+    expect(SpeedStep.all, {
+      'send', 'echo', 'echo_painted', 'queue_wait', 'request', 'retry', //
+      'answer', 'response', 'processing', 'clean_up', 'next_request', 'error',
+      // voice_join
+      'leave_previous', 'output_device', 'foci', 'openid_token', 'sfu_token',
+      'sfu_livekit_cloud', 'sfu_self_hosted', 'microphone_early',
+      'prepare_connection', 'membership_clear_wait', 'membership_write',
+      'connect', 'microphone_options', 'microphone_open', 'sfu_region',
+      'sfu_region_other', 'microphone_published', 'first_remote_audio',
+    });
     expect(SpeedValue.all, {'attempt', 'status', 'retry_after_ms'});
     expect(SpeedOutcome.all, {'ok', 'failed', 'incomplete', 'abandoned'});
   });
