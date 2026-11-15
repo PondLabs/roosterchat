@@ -124,6 +124,13 @@ class PlaqueCustody extends ChangeNotifier {
   final Map<String, Set<String>> _tried = {};
   final Map<String, Set<String>> _waiting = {};
 
+  /// The tags everyone here was asked for, in vain: how many retries each
+  /// still waits before it is asked for again, and how many times it went
+  /// round. The wait grows fourfold each time (1, 4, then 16 retries), so
+  /// a plaque nobody has costs a request now and then, not a stream.
+  final Map<String, int> _rested = {};
+  final Map<String, int> _rounds = {};
+
   StreamSubscription<CallActivityDirect>? _directSub;
   Timer? _retry;
   bool _dirty = false;
@@ -353,6 +360,8 @@ class PlaqueCustody extends ChangeNotifier {
         map.clear();
       }
       _seen.clear();
+      _rested.clear();
+      _rounds.clear();
       _heardPart = null;
       _changed = true;
     }
@@ -384,7 +393,7 @@ class PlaqueCustody extends ChangeNotifier {
       _changed = true;
     }
     _dirty = false;
-    final busy = _asks.isNotEmpty || _mine.isNotEmpty;
+    final busy = _asks.isNotEmpty || _rested.isNotEmpty || _mine.isNotEmpty;
     if (!busy) {
       _retry?.cancel();
       _retry = null;
@@ -401,6 +410,8 @@ class PlaqueCustody extends ChangeNotifier {
   /// what we wrote or dealt to the host once more.
   void _retryNow() {
     _asks.clear();
+    _rested.updateAll((_, retries) => retries - 1);
+    _rested.removeWhere((_, retries) => retries <= 0);
     _told.clear();
     _run();
   }
@@ -459,14 +470,23 @@ class PlaqueCustody extends ChangeNotifier {
     if (card != null) _issue(host, entry, Plaque.card(card));
   }
 
+  /// Which half of the deck our own card is in, for as long as we do not
+  /// know the card: on our forehead, or revealed and still on its way
+  /// back from who holds it. Null when there is no such card.
+  int? get _hiddenHalf {
+    final own = _ledger.entries[_self];
+    final hidden =
+        own != null && own.plaque == null && !_held.containsKey(own.tag);
+    return hidden ? own.pool : null;
+  }
+
   /// A card for someone else, never one in play or spent: none that we
   /// hold or have held, none the ledger lists as used, and, as we cannot
   /// see our own card, none from the half of the deck it is in. When the
   /// theme runs out the draw takes any theme, and only when the deck does,
   /// a spent card.
   DeckCard? _draw(DeckFilter filter) {
-    final own = _ledger.entries[_self];
-    final avoid = own?.state == PlaqueState.dealt ? own!.pool : null;
+    final avoid = _hiddenHalf;
     final inPlay = {
       for (final held in _held.values)
         if (held.plaque.cardId != null) held.plaque.cardId!,
@@ -538,8 +558,11 @@ class PlaqueCustody extends ChangeNotifier {
     final missing = _missing();
     _asks.removeWhere((tag, _) => !missing.containsKey(tag));
     _tried.removeWhere((tag, _) => !missing.containsKey(tag));
+    _rested.removeWhere((tag, _) => !missing.containsKey(tag));
+    _rounds.removeWhere((tag, _) => !missing.containsKey(tag));
     for (final MapEntry(key: tag, value: owner) in missing.entries) {
       final asked = _asks[tag];
+      if (_rested.containsKey(tag)) continue;
       if (asked == null || !session.transport.isPresent(asked)) {
         _askNext(tag, owner);
       }
@@ -562,8 +585,11 @@ class PlaqueCustody extends ChangeNotifier {
     _asks.remove(tag);
     if (holders.isEmpty) {
       // Everyone here was asked. A card nobody can tell the host stays
-      // unknown; anything else is asked for again on the next retry.
+      // unknown; anything else is asked for again at a later retry, and
+      // not before: nobody having it must not turn into asking for ever.
       _tried.remove(tag);
+      final round = _rounds.update(tag, (n) => n + 1, ifAbsent: () => 0);
+      _rested[tag] = 1 << (2 * min(round, 2));
       if (session.isHost && _ledger.owed.remove(tag)) _stage();
       return;
     }

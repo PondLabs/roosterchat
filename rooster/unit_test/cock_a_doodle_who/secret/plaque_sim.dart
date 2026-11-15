@@ -112,6 +112,8 @@ class Sim {
     call.leave(id);
     app.custody.dispose();
     app.session.dispose();
+    // What it had not sent yet is never sent.
+    await app.session.transport.dispose();
     await settle();
   }
 
@@ -130,6 +132,22 @@ class Sim {
       last = call.log.length;
     }
   }
+
+  /// Runs [count] turns of the call, whatever is still being sent.
+  Future<void> turns(int count) async {
+    for (var i = 0; i < count; i++) {
+      await Future<void>.delayed(Duration.zero);
+    }
+  }
+
+  /// How many requests for a plaque and refusals were delivered since the
+  /// call's delivery number [from].
+  int asking(int from) => call.delivered.skip(from).where((d) {
+        final message = d.message['m'];
+        return d.message['t'] == 'direct' &&
+            message is Map &&
+            const ['ask', 'nak'].contains(message['plaque']);
+      }).length;
 
   /// Runs until [done], one turn of the call at a time.
   Future<void> until(bool Function() done) async {

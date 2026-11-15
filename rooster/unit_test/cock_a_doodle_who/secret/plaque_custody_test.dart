@@ -256,6 +256,96 @@ void main() {
     });
   });
 
+  group('a plaque nobody in the game has', () {
+    test('is asked for once when its last holder is gone', () async {
+      final sim = Sim(2);
+      addTearDown(sim.close);
+      await sim.start();
+      await sim.deckRound();
+
+      // p1, the only holder of the host's plaque, is gone. Someone opens
+      // the game to watch, and the match, down to one player, ends.
+      await sim.vanish('p1');
+      await sim.retire('p1');
+      final watcher = sim.enter('z1');
+      await sim.until(() => watcher.session.hasSession);
+      await watcher.session.join(asPlayer: false);
+      await sim.settle();
+      final before = sim.call.delivered.length;
+      sim.host.custody.hostReveal('p0');
+      await sim.turns(600);
+
+      expect(sim.asking(before), 2, reason: 'one request, one refusal');
+      expect(sim.host.custody.plaqueOf('p0'), isNull);
+    });
+
+    test('is asked for once when its holder left the game', () async {
+      final sim = Sim(2);
+      addTearDown(sim.close);
+      await sim.start();
+      await sim.homemadeRound();
+
+      // p1 closes the game and stays in the call, with the host's plaque.
+      // Two people join mid-round: neither has it, and each asks the other.
+      await sim['p1'].session.leave();
+      await sim.settle();
+      final before = sim.call.delivered.length;
+      for (final id in ['z1', 'z2']) {
+        final joiner = sim.enter(id);
+        await sim.until(() => joiner.session.hasSession);
+        await joiner.session.join();
+      }
+      await sim.turns(600);
+
+      expect(sim.asking(before), inInclusiveRange(2, 4));
+    });
+
+    test('is asked for again at each retry, further and further apart',
+        () async {
+      final sim = Sim(2, retryEvery: const Duration(milliseconds: 10));
+      addTearDown(sim.close);
+      await sim.start();
+      await sim.deckRound();
+      await sim.vanish('p1');
+      await sim.retire('p1');
+      final watcher = sim.enter('z1');
+      await sim.until(() => watcher.session.hasSession);
+      await watcher.session.join(asPlayer: false);
+      await sim.settle();
+      final before = sim.call.delivered.length;
+      sim.host.custody.hostReveal('p0');
+
+      // Retries wait 1, 4, then 16 periods: in 30 periods the plaque is
+      // asked for three times (at 0, 1 and 5), not thirty.
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      expect(sim.asking(before), inInclusiveRange(4, 6));
+    });
+  });
+
+  test('a card dealt while the host\'s own is on its way back is not that one',
+      () async {
+    const filter = DeckFilter(theme: DeckTheme.animals);
+    for (var seed = 1; seed <= 60; seed++) {
+      final sim = Sim(3, seed: seed, deck: simDeck(perTheme: 6));
+      await sim.start();
+      await sim.deckRound(filter);
+      final own = sim.truth('p0')!.cardId;
+
+      // The host is revealed and deals at once: its card has not come
+      // back from who holds it.
+      sim.opened('p0');
+      sim.opened('p1');
+      sim.host.custody.hostReveal('p0');
+      sim.host.custody.hostDeal('p1', filter);
+      await sim.settle();
+
+      expect(sim.truth('p1')!.cardId, isNot(own), reason: 'seed $seed');
+      expect(sim.host.custody.plaqueOf('p0')!.cardId, own);
+      expect(sim.leaks(), isEmpty, reason: 'seed $seed');
+      await sim.close();
+    }
+  });
+
   test('a plaque written after its time ran out is refused', () async {
     final sim = Sim(3);
     addTearDown(sim.close);
