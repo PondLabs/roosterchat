@@ -52,8 +52,10 @@ A newcomer gets the ledger with the state and asks a holder (the host first) for
 ### A holder leaving, an author leaving, the host changing
 
 - The author's name is in the content, so the reveal shows it after the author has left.
-- Every other client of the session holds the plaque, so one leaving loses nothing. A request that gets no answer goes to the next holder (at once on a refusal, after two seconds otherwise). When the dealer of the host's card leaves the game, the ledger names the next one.
+- Every other client of the session holds the plaque, so one leaving loses nothing. A request that gets no answer goes to the next holder (at once on a refusal, after two seconds otherwise). When everyone in the game was asked in vain, the request rests: it is made again after 2 seconds, then 8, then every 32, so a plaque nobody has is not asked for without end. When the dealer of the host's card leaves the game, the ledger names the next one.
 - A host that takes the seat over continues from the ledger it last heard and from what it holds: every plaque but its own. Anything dealt under the old host that the ledger did not show yet is taken from what the new host holds; an author re-sends to the new host what the ledger does not show; the new host's own plaque is asked from a holder at the reveal, as before.
+
+A card the old host dealt the new host, and left before its ledger showed, was never on a forehead: the clients that received it keep it under a tag the ledger does not name, and show nothing. The new host does not know that card and may deal it to someone later. Telling it would mean sending the host a card held in its name, and each way tried of doing that could put a card that is on someone's forehead into the ledger's list of spent cards, where its owner reads it. The secret comes first.
 
 With two clients the other one is the only holder. If it leaves, the match is over (fewer than two players) and the plaque's text is gone with it.
 
@@ -61,17 +63,23 @@ With two clients the other one is the only holder. If it leaves, the match is ov
 
 - The kind of their plaque, by design.
 - In Deck, that their card is of the theme, packs and difficulties the host picked, and is none of the cards they see or the ledger lists as spent.
-- Which half of the deck their card is in. The unmodified client does nothing with it.
+- Which half of the deck their card is in. The unmodified client does nothing with it. Measured on the shipped deck with 8 players: in Animals at every difficulty (64 cards) the cards an owner's own could be are 57 without the half and, at worst, 23 with it; in Characters at hard only (13 cards), 6 without it and 3 with it.
 - That their plaque was replaced, and afterwards which card they had.
 - Whether their plaque is a card or was written: only a card has a half of the deck in the ledger. In a Homemade round that says their author ran out of time.
-- In Homemade, nothing about the text. The host's client draws who writes for whom, so it has the name of its own author before the reveal; it does not show it.
+- In Homemade, nothing about the text. Their author, though, is hidden by the screen alone: every plaque a client holds names its author and each player writes exactly one, so the one author it does not see is its own. A host also gets the note about its own plaque from its author.
 
 ## What a changed client could do
 
-- List the cards its own could be: the theme's unspent cards in its half of the deck, about half of what it could list anyway.
+- List the cards its own could be: the theme's unspent cards in its half of the deck, about half of what it could list anyway (the numbers above).
+- Show its user who wrote their plaque, before the reveal.
 - Ask a holder for its own plaque. A holder that runs the unmodified client refuses, so this takes two changed clients, and then one could simply tell the other.
 - As host, mark its own plaque revealed early: the holders then send it. Being host already means being trusted with the match.
 - Join with a second device as a spectator: that is another client of the session, and it holds what every spectator holds.
+
+## What is outside this component
+
+- **The LiveKit server reads the plaques.** The addressed lane is LiveKit's data channel, which Rooster does not encrypt end to end: a plaque's text passes in the clear through the LiveKit server, like every data message of the call. The secret is kept from the owner's client, not from whoever runs that server.
+- **LiveKit's data-channel encryption has to stay off until the vendored SDK is changed.** With it on (`RoomOptions.encryption`; Rooster passes `e2eeOptions`, which encrypts media only), `sendDataPacket` in `third_party/livekit-client-sdk-flutter` wraps the packet in an encrypted one and takes the destination from the outer packet, where `publishData` leaves it empty: an addressed message would go to the whole room, the owner included.
 
 ## Alternatives considered
 
