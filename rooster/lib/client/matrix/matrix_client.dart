@@ -26,6 +26,7 @@ import 'package:rooster/config/global_config.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/diagnostic/diagnostics.dart';
 import 'package:rooster/diagnostic/speed_log/host_class.dart';
+import 'package:rooster/diagnostic/speed_log/sync_trace.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/utils/network/speed_http_client.dart';
 import 'package:rooster/utils/notifying_list.dart';
@@ -112,6 +113,9 @@ class MatrixClient extends Client {
       ? const matrix.NativeImplementationsDummy()
       : NativeImplementationsCustom(compute);
 
+  /// The speed log's `sync` spans of this account (docs/speed-log.md).
+  late final SyncSpeedTrace _syncSpeedTrace;
+
   MatrixClient({
     required String identifier,
     required matrix.DatabaseApi database,
@@ -126,6 +130,7 @@ class MatrixClient extends Client {
 
     _id = identifier;
     _matrixClient = _createMatrixClient(identifier, database, transport);
+    _syncSpeedTrace = SyncSpeedTrace(_matrixClient.onSyncStatus.stream);
 
     self = ErrorProfile();
 
@@ -769,6 +774,7 @@ class MatrixClient extends Client {
   @override
   Future<void> close({bool closeDatabase = true}) async {
     getComponent<MatrixUserPresenceComponent>()?.dispose();
+    await _syncSpeedTrace.dispose();
     await _matrixClient.dispose(closeDatabase: closeDatabase);
   }
 
