@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show HttpException, SocketException, TlsException;
 
 import 'package:http/http.dart' as http;
 import 'package:rooster/diagnostic/speed_log/host_class.dart';
 import 'package:rooster/diagnostic/speed_log/request_record.dart';
 import 'package:rooster/diagnostic/speed_log/route_template.dart';
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
+import 'package:rooster/diagnostic/speed_log/speed_names.dart';
 import 'package:rooster/utils/network/xhr_upload_stub.dart'
     if (dart.library.js_interop) 'package:rooster/utils/network/xhr_upload_web.dart';
 
@@ -69,7 +71,7 @@ class SpeedHttpClient extends http.BaseClient {
         response = await _inner.send(_ObservedRequest(request, entry));
       }
     } catch (error) {
-      entry.finish(error: error.runtimeType.toString());
+      entry.finish(error: speedErrorName(error));
       rethrow;
     }
 
@@ -118,6 +120,17 @@ class SpeedHttpClient extends http.BaseClient {
     }
   }
 }
+
+/// The fixed name of [error] in the speed log (see [SpeedError]).
+String speedErrorName(Object error) => switch (error) {
+      http.RequestAbortedException() => SpeedError.aborted,
+      TimeoutException() => SpeedError.timeout,
+      SocketException() => SpeedError.socket,
+      TlsException() => SpeedError.tls,
+      HttpException() => SpeedError.http,
+      http.ClientException() => SpeedError.client,
+      _ => SpeedError.other,
+    };
 
 /// A request being recorded.
 class _Entry {
@@ -225,7 +238,7 @@ class _ObservedRequest extends http.BaseRequest implements http.Abortable {
 
 /// [source], passed through event by event with pause and cancel forwarded,
 /// so it is pulled no faster than its listener takes it. [onEnd] runs once:
-/// with null when it ends, the error's type when it fails, `cancelled` when
+/// with null when it ends, the error's name when it fails, `cancelled` when
 /// the listener stops early.
 Stream<List<int>> _observe(
   Stream<List<int>> source, {
@@ -250,7 +263,7 @@ Stream<List<int>> _observe(
           controller.add(chunk);
         },
         onError: (Object error, StackTrace stack) {
-          end(error.runtimeType.toString());
+          end(speedErrorName(error));
           controller.addError(error, stack);
         },
         onDone: () {
@@ -262,7 +275,7 @@ Stream<List<int>> _observe(
     onPause: () => subscription.pause(),
     onResume: () => subscription.resume(),
     onCancel: () {
-      end('cancelled');
+      end(SpeedError.cancelled);
       return subscription.cancel();
     },
   );

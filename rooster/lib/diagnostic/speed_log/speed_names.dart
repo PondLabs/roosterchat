@@ -73,3 +73,44 @@ abstract final class SpeedOutcome {
   /// disposed).
   static const abandoned = 'abandoned';
 }
+
+/// What a request's `error=` says: the kind of failure, by a fixed name.
+/// Never the error's message (it can hold the URL) nor its runtime type
+/// (shortened to `minified:xx` in a web release build).
+abstract final class SpeedError {
+  /// Its `abortTrigger` completed (`RequestAbortedException`).
+  static const aborted = 'aborted';
+
+  /// The response body was abandoned before its end.
+  static const cancelled = 'cancelled';
+
+  /// A `TimeoutException`.
+  static const timeout = 'timeout';
+
+  /// A `SocketException`: no connection, or it broke.
+  static const socket = 'socket';
+
+  /// A `TlsException`, such as a failed handshake.
+  static const tls = 'tls';
+
+  /// A `dart:io` `HttpException`: the response could not be read.
+  static const http = 'http';
+
+  /// Any other `ClientException` of the `http` package (the web's network
+  /// errors among them).
+  static const client = 'client';
+
+  /// Anything else.
+  static const other = 'other';
+
+  static const all = {
+    aborted,
+    cancelled,
+    timeout,
+    socket,
+    tls,
+    http,
+    client,
+    other,
+  };
+}

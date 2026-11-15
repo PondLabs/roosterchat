@@ -8,8 +8,11 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:rooster/diagnostic/speed_log/host_class.dart';
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
+import 'package:rooster/diagnostic/speed_log/speed_names.dart';
+import 'package:rooster/diagnostic/speed_log/speed_report.dart';
 import 'package:rooster/utils/network/speed_http_client.dart';
 import 'package:test/test.dart';
 
@@ -57,6 +60,9 @@ class _TransportSpy extends http.BaseClient {
   @override
   void close() => _io.close();
 }
+
+/// An error type the speed log knows nothing about.
+class _OddFailure implements Exception {}
 
 void main() {
   late HttpServer server;
@@ -245,6 +251,44 @@ void main() {
     expect(r.error, isNotNull);
     expect(r.error, isNot(contains('127.0.0.1')));
     expect(r.hostClass, HostClass.other);
+  });
+
+  test('an error is written as a fixed name, never its runtime type', () async {
+    final url = Uri.parse('https://secret-host.example/_matrix/client/v3/sync');
+    final cases = <Object, String>{
+      http.RequestAbortedException(url): SpeedError.aborted,
+      http.ClientException('secret', url): SpeedError.client,
+      TimeoutException('secret'): SpeedError.timeout,
+      const SocketException('secret'): SpeedError.socket,
+      const HandshakeException('secret'): SpeedError.tls,
+      const TlsException('secret'): SpeedError.tls,
+      const HttpException('secret'): SpeedError.http,
+      _OddFailure(): SpeedError.other,
+      StateError('secret'): SpeedError.other,
+    };
+    for (final thrown in cases.keys) {
+      final failing = SpeedHttpClient(
+          inner: MockClient((_) async => throw thrown), log: log);
+      await expectLater(failing.get(url), throwsA(same(thrown)));
+    }
+    // An error in the middle of a response body.
+    final cut = SpeedHttpClient(
+      inner: MockClient.streaming((request, body) async =>
+          http.StreamedResponse(
+              Stream.error(const SocketException('secret')), 200)),
+      log: log,
+    );
+    await expectLater(cut.get(url), throwsA(isA<SocketException>()));
+
+    expect(log.requests.toList().map((r) => r.error),
+        [...cases.values, SpeedError.socket]);
+    expect(log.requests.toList().map((r) => r.error),
+        everyElement(isIn(SpeedError.all)));
+    final report = buildSpeedReport(log);
+    expect(report, contains('error=other'));
+    for (final type in ['_OddFailure', 'StateError', 'Exception', 'secret']) {
+      expect(report, isNot(contains(type)), reason: type);
+    }
   });
 
   test('numbers repeated requests of a span as attempts', () async {

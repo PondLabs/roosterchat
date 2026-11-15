@@ -43,9 +43,10 @@ class RequestRecord {
   /// The HTTP status, null when no response came.
   final int? status;
 
-  /// The type of the error when no response came or its body failed
-  /// (`SocketException`, `TimeoutException`), or `cancelled` when the body
-  /// was abandoned. Never the error's message, which can hold the URL.
+  /// Why no response came or its body failed, as one of the fixed names of
+  /// `SpeedError` (`socket`, `timeout`...; `cancelled` when the body was
+  /// abandoned). Never the error's message, which can hold the URL, nor its
+  /// runtime type.
   final String? error;
 
   final int bytesUp;
