@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:rooster/client/components/face_tracking/face_tracker.dart';
 import 'package:rooster/client/components/voip/audio_processing/audio_processing_manager.dart';
 import 'package:rooster/client/components/voip/voip_stream.dart';
 import 'package:rooster/client/matrix/components/voip_room/video_stall_detector.dart';
@@ -27,7 +28,7 @@ abstract class ScreenShareWatching {
   Future<void> setWatchingScreenShare(String participantIdentity, bool watch);
 }
 
-class MatrixLivekitVoipStream implements VoipStream {
+class MatrixLivekitVoipStream implements VoipStream, FaceTrackableStream {
   TrackPublication publication;
   String userId;
 
@@ -277,6 +278,18 @@ class MatrixLivekitVoipStream implements VoipStream {
       return VideoTrackRenderer(track, key: ObjectKey(track));
     }
 
+    return null;
+  }
+
+  /// The camera's track, mirrored exactly when [buildVideoRenderer]'s
+  /// renderer shows it mirrored.
+  @override
+  FaceVideoSource? get faceVideoSource {
+    if (publication.source != TrackSource.camera) return null;
+    if (publication.track case VideoTrack track) {
+      return FaceVideoSource(track.mediaStreamTrack,
+          mirrored: shouldMirrorVideoTrack(track));
+    }
     return null;
   }
 

@@ -107,3 +107,7 @@ void publishDemoLog(String Function() read) {
     });
   }
 }
+
+/// Lets whoever drives the demonstration start the tracking: outside the
+/// browser it starts at once.
+void publishDemoStart(void Function() start) {}

@@ -1,0 +1,506 @@
+import 'dart:ui';
+
+import 'package:fake_async/fake_async.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:rooster/client/components/face_tracking/face_anchor.dart';
+import 'package:rooster/client/components/face_tracking/face_tracker.dart';
+import 'package:rooster/client/components/face_tracking/face_tracking_engine.dart';
+
+typedef _Eyes = ({Offset rightEye, Offset leftEye});
+
+const _frameSize = Size(640, 480);
+
+/// A face looking at the camera, eyes 60 pixels apart, drifting right.
+_Eyes _face(Duration t) {
+  final x = 260 + t.inMilliseconds / 50;
+  return (rightEye: Offset(x, 200), leftEye: Offset(x + 60, 200));
+}
+
+/// A test video: where the face is at each moment, or null while it is out
+/// of the picture. Its frames are what a detector would see: the face is
+/// found when both eyes are inside the crop it was asked to look at.
+class _Video implements FaceFrameSource {
+  _Video(this.engine, this.faceAt);
+
+  final _Engine engine;
+  final _Eyes? Function(Duration t) faceAt;
+  bool onScreen = true;
+  int grabs = 0;
+  int discarded = 0;
+  final crops = <FaceCrop>[];
+
+  /// When each frame was grabbed, by its frame code.
+  final grabbedAt = <int, Duration>{};
+
+  @override
+  Future<FaceFrame?> grab() async {
+    grabs++;
+    if (!onScreen) return null;
+    grabbedAt[grabs] = engine.now();
+    return _Frame(this, faceAt(engine.now()), grabs);
+  }
+}
+
+class _Frame implements FaceFrame {
+  _Frame(this.video, this.eyes, this.code);
+
+  final _Video video;
+  final _Eyes? eyes;
+  final int code;
+
+  @override
+  Size get size => _frameSize;
+
+  @override
+  FaceCut cut(FaceCrop crop, {required bool readFrameCode}) {
+    video.crops.add(crop);
+    final engine = video.engine;
+    return _Cut(this, crop, readFrameCode, engine.now() + engine.cutTime);
+  }
+
+  @override
+  void discard() => video.discarded++;
+}
+
+class _Cut implements FaceCut {
+  _Cut(this.frame, this.crop, this.readFrameCode, this.readyAt);
+
+  final _Frame frame;
+  final FaceCrop crop;
+  final bool readFrameCode;
+
+  /// When the cut is ready to be read: a browser cuts on the GPU, later.
+  final Duration readyAt;
+
+  @override
+  Future<FaceDetection> detect() async {
+    final engine = frame.video.engine;
+    engine.asked++;
+    expect(engine.asked, lessThanOrEqualTo(engine.engine.asked));
+    // One detection after the other, each once its cut is ready; the
+    // answer takes [answerTime] more to come back.
+    final now = engine.now();
+    var start = readyAt > now ? readyAt : now;
+    if (engine.busyUntil > start) start = engine.busyUntil;
+    engine.busyUntil = start + engine.detectTime;
+    await Future<void>.delayed(engine.busyUntil + engine.answerTime - now);
+    engine.asked--;
+    if (engine.fail) throw StateError('the worker died');
+    final eyes = frame.eyes;
+    final seen = eyes != null &&
+        crop.source.contains(eyes.rightEye) &&
+        crop.source.contains(eyes.leftEye);
+    Offset toInput(Offset p) => (p - crop.source.topLeft) * crop.scale;
+    return FaceDetection(
+      eyes: seen
+          ? (rightEye: toInput(eyes.rightEye), leftEye: toInput(eyes.leftEye))
+          : null,
+      frameCode: readFrameCode ? frame.code : null,
+    );
+  }
+
+  @override
+  void discard() => frame.video.discarded++;
+}
+
+class _Engine {
+  _Engine(this.async, {int lookahead = 16, int inFlight = 2, int asked = 4})
+      : engine = FaceTrackingEngine(
+            lookahead: lookahead,
+            inFlight: inFlight,
+            asked: asked,
+            clock: () => async.elapsed);
+
+  final FakeAsync async;
+  final FaceTrackingEngine engine;
+  Duration detectTime = const Duration(milliseconds: 6);
+  Duration cutTime = Duration.zero;
+  Duration answerTime = Duration.zero;
+  Duration busyUntil = Duration.zero;
+  int asked = 0;
+  bool fail = false;
+
+  Duration now() => async.elapsed;
+
+  /// Starts a tracker on a video, keeping every observation with its time.
+  (_Video, FaceTracker, List<(Duration, FaceObservation)>) track(
+      _Eyes? Function(Duration t) faceAt,
+      {bool readFrameCode = false,
+      bool onScreen = true}) {
+    final video = _Video(this, faceAt)..onScreen = onScreen;
+    final tracker = engine.track(video, readFrameCode: readFrameCode);
+    final seen = <(Duration, FaceObservation)>[];
+    tracker.observation.addListener(
+        () => seen.add((async.elapsed, tracker.observation.value!)));
+    return (video, tracker, seen);
+  }
+}
+
+void main() {
+  group('FaceSearchAndFollow', () {
+    test('searches the whole frame, its longer side shrunk to 320', () {
+      final crop = FaceSearchAndFollow().next(_frameSize);
+
+      expect(crop.source, Offset.zero & _frameSize);
+      expect(crop.scale, 0.5);
+      // YuNet's grid needs sides in multiples of 32: the rest is black.
+      expect(crop.input, const Size(320, 256));
+    });
+
+    test('a portrait frame is searched upright too', () {
+      final crop = FaceSearchAndFollow().next(const Size(720, 1280));
+
+      expect(crop.scale, 0.25);
+      expect(crop.input, const Size(192, 320));
+    });
+
+    test('follows a face found with a square around it', () {
+      final follow = FaceSearchAndFollow();
+      final search = follow.next(_frameSize);
+      final anchor = follow.found(search, (
+        rightEye: const Offset(150, 100),
+        leftEye: const Offset(180, 100),
+      ));
+
+      // Eyes 60 pixels apart in the frame, at (300, 200) and (360, 200).
+      expect(
+        anchor,
+        FaceAnchor.fromEyes(
+          rightEye: const Offset(300, 200),
+          leftEye: const Offset(360, 200),
+        ),
+      );
+      final square = follow.next(_frameSize);
+      expect(square.input, const Size(128, 128));
+      expect(square.source.width, closeTo(300, 1e-9));
+      expect(square.source.height, closeTo(300, 1e-9));
+      // Centred 0.35 eye distances below the middle of the eyes.
+      expect(square.source.center.dx, closeTo(330, 1e-9));
+      expect(square.source.center.dy, closeTo(221, 1e-9));
+      expect(square.scale, closeTo(128 / 300, 1e-12));
+    });
+
+    test('the square turns with a tilted head', () {
+      final follow = FaceSearchAndFollow();
+      follow.found(follow.next(_frameSize), (
+        rightEye: const Offset(150, 100),
+        leftEye: const Offset(150, 130),
+      ));
+
+      // Eyes one above the other, the face turned a quarter clockwise:
+      // "below the eyes" is to the left of the picture.
+      expect(follow.next(_frameSize).source.center.dx, closeTo(279, 1e-9));
+      expect(follow.next(_frameSize).source.center.dy, closeTo(230, 1e-9));
+    });
+
+    test('the square is cut on whole pixels, as the browser cuts frames', () {
+      final follow = FaceSearchAndFollow();
+      follow.found(follow.next(_frameSize), (
+        rightEye: const Offset(150.3, 100.2),
+        leftEye: const Offset(180.6, 100.9),
+      ));
+      final square = follow.next(_frameSize);
+
+      for (final side in [
+        square.source.left,
+        square.source.top,
+        square.source.width,
+        square.source.height,
+      ]) {
+        expect(side, side.roundToDouble());
+      }
+      expect(square.scale, 128 / square.source.width);
+    });
+
+    test('a point of the square comes back to the frame', () {
+      final follow = FaceSearchAndFollow();
+      follow.found(follow.next(_frameSize),
+          (rightEye: const Offset(150, 100), leftEye: const Offset(180, 100)));
+      final square = follow.next(_frameSize);
+
+      expect(square.toFrame(Offset.zero), square.source.topLeft);
+      expect(square.toFrame(const Offset(128, 128)).dx,
+          closeTo(square.source.right, 1e-9));
+    });
+
+    test('an empty square means no face, and the next frame is a search', () {
+      final follow = FaceSearchAndFollow();
+      follow.found(follow.next(_frameSize),
+          (rightEye: const Offset(150, 100), leftEye: const Offset(180, 100)));
+
+      expect(follow.found(follow.next(_frameSize), null), isNull);
+      expect(follow.next(_frameSize).source, Offset.zero & _frameSize);
+    });
+
+    test('a tiny face still gets a square a detector can see', () {
+      final follow = FaceSearchAndFollow();
+      follow.found(follow.next(_frameSize),
+          (rightEye: const Offset(150, 100), leftEye: const Offset(152, 100)));
+
+      expect(follow.next(_frameSize).source.width,
+          FaceSearchAndFollow.smallestSquare);
+    });
+  });
+
+  group('FaceTrackingEngine', () {
+    test('puts the anchor on the face, from the frame it analysed', () {
+      fakeAsync((async) {
+        final engine = _Engine(async);
+        final (video, tracker, seen) = engine.track(_face, readFrameCode: true);
+
+        async.elapse(const Duration(seconds: 1));
+
+        expect(seen, isNotEmpty);
+        final observation = tracker.observation.value!;
+        expect(observation.videoSize, _frameSize);
+        // The face drifts: the anchor is where it was when that very frame
+        // was grabbed.
+        final eyes = _face(video.grabbedAt[observation.frameCode]!);
+        final expected =
+            FaceAnchor.fromEyes(rightEye: eyes.rightEye, leftEye: eyes.leftEye);
+        final anchor = observation.anchor!;
+        expect((anchor.center - expected.center).distance, lessThan(1e-6));
+        expect(anchor.width, closeTo(expected.width, 1e-6));
+        tracker.dispose();
+      });
+    });
+
+    test('follows the face once found: only the first frame is a search', () {
+      fakeAsync((async) {
+        final engine = _Engine(async);
+        final (video, tracker, _) = engine.track(_face);
+
+        async.elapse(const Duration(seconds: 1));
+
+        expect(video.crops.first.input, const Size(320, 256));
+        expect(video.crops.skip(1).map((c) => c.input).toSet(),
+            {const Size(128, 128)});
+        tracker.dispose();
+      });
+    });
+
+    test(
+        'says "no face" within half a second of the face leaving, and '
+        'anchors again when it comes back', () {
+      fakeAsync((async) {
+        final engine = _Engine(async);
+        const left = Duration(seconds: 2), back = Duration(seconds: 3);
+        final (_, tracker, seen) =
+            engine.track((t) => t >= left && t < back ? null : _face(t));
+
+        async.elapse(const Duration(seconds: 4));
+
+        final gone = seen.firstWhere((s) => s.$1 > left && s.$2.anchor == null);
+        expect(gone.$1 - left,
+            lessThanOrEqualTo(const Duration(milliseconds: 500)));
+        expect(
+            seen.where((s) => s.$1 > gone.$1 && s.$1 < back),
+            everyElement(predicate<(Duration, FaceObservation)>(
+                (s) => s.$2.anchor == null)));
+        final again =
+            seen.firstWhere((s) => s.$1 > back && s.$2.anchor != null);
+        expect(again.$1 - back,
+            lessThanOrEqualTo(const Duration(milliseconds: 500)));
+        expect(
+            seen.where((s) => s.$1 > again.$1),
+            everyElement(predicate<(Duration, FaceObservation)>(
+                (s) => s.$2.anchor != null)));
+        tracker.dispose();
+      });
+    });
+
+    test('a face that never comes is "no face", over and over', () {
+      fakeAsync((async) {
+        final engine = _Engine(async);
+        final (video, tracker, seen) = engine.track((_) => null);
+
+        async.elapse(const Duration(seconds: 1));
+
+        expect(seen.length, greaterThanOrEqualTo(10));
+        expect(seen.map((s) => s.$2.anchor), everyElement(isNull));
+        expect(video.crops.map((c) => c.input).toSet(), {const Size(320, 256)});
+        tracker.dispose();
+      });
+    });
+
+    test('one engine serves eight videos, each at 10 to 15 frames a second',
+        () {
+      fakeAsync((async) {
+        final engine = _Engine(async);
+        final runs = [for (var i = 0; i < 8; i++) engine.track(_face)];
+
+        async.elapse(const Duration(seconds: 3));
+
+        for (final (_, tracker, seen) in runs) {
+          final perSecond = seen.length / 3;
+          expect(perSecond, inInclusiveRange(10, 15));
+          tracker.dispose();
+        }
+      });
+    });
+
+    test('a slow detector shares itself fairly', () {
+      fakeAsync((async) {
+        final engine = _Engine(async)
+          ..detectTime = const Duration(milliseconds: 40);
+        final runs = [for (var i = 0; i < 4; i++) engine.track(_face)];
+
+        async.elapse(const Duration(seconds: 4));
+
+        final counts = [for (final (_, _, seen) in runs) seen.length];
+        // 25 detections a second, shared out among four.
+        expect(counts.reduce((a, b) => a + b), inInclusiveRange(98, 101));
+        expect(
+            counts.reduce((a, b) => a > b ? a : b) -
+                counts.reduce((a, b) => a < b ? a : b),
+            lessThanOrEqualTo(1));
+        for (final (_, tracker, _) in runs) {
+          tracker.dispose();
+        }
+      });
+    });
+
+    test('grabs a frame only when it is nearly its turn', () {
+      fakeAsync((async) {
+        final engine = _Engine(async);
+        final (video, tracker, seen) = engine.track(_face);
+
+        async.elapse(const Duration(seconds: 1));
+
+        expect(video.grabs, inInclusiveRange(14, 16));
+        expect(video.grabs - seen.length, lessThanOrEqualTo(2));
+        tracker.dispose();
+      });
+    });
+
+    test('cuts the next frames while one is detected, when cuts are slow', () {
+      // A browser cuts on the GPU, and a cut is read 20 ms after it was
+      // asked for: one after the other, eight videos would get 3.6 frames
+      // a second each.
+      for (final (lookahead, enough) in [(1, false), (3, true)]) {
+        fakeAsync((async) {
+          final engine = _Engine(async, lookahead: lookahead)
+            ..detectTime = const Duration(milliseconds: 8)
+            ..cutTime = const Duration(milliseconds: 20);
+          final runs = [
+            for (var i = 0; i < 8; i++) engine.track(_face, readFrameCode: true)
+          ];
+
+          async.elapse(const Duration(seconds: 3));
+
+          for (final (video, tracker, seen) in runs) {
+            expect(seen.length / 3 >= 10, enough,
+                reason: 'lookahead $lookahead');
+            // No frame waits more than a few detections.
+            for (final (time, observation) in seen) {
+              final age = time - video.grabbedAt[observation.frameCode]!;
+              expect(age, lessThanOrEqualTo(const Duration(milliseconds: 60)));
+            }
+            tracker.dispose();
+          }
+        });
+      }
+    });
+
+    test('a slow trip to the GPU and back does not slow a video down', () {
+      // A cut read 100 ms after it was asked for: waiting for each result
+      // before the next frame, a video gets 9.5 frames a second.
+      for (final (inFlight, atLeast) in [(1, 9.0), (2, 14.0)]) {
+        fakeAsync((async) {
+          final engine = _Engine(async, inFlight: inFlight)
+            ..cutTime = const Duration(milliseconds: 100)
+            ..detectTime = const Duration(milliseconds: 5);
+          final (video, tracker, seen) =
+              engine.track(_face, readFrameCode: true);
+
+          async.elapse(const Duration(seconds: 3));
+
+          final perSecond = seen.length / 3;
+          expect(perSecond, greaterThanOrEqualTo(atLeast));
+          expect(perSecond, lessThanOrEqualTo(inFlight == 1 ? 10 : 15));
+          // The face drifts and is still found in every frame: the square
+          // cut before the last result still holds it.
+          expect(seen.map((s) => s.$2.anchor), everyElement(isNotNull));
+          tracker.dispose();
+        });
+      }
+    });
+
+    test('asks for the next detections before the answers come back', () {
+      // Each answer takes 9 ms to come back: asking for one detection at a
+      // time, eight videos would get under 10 frames a second each.
+      for (final (asked, enough) in [(1, false), (4, true)]) {
+        fakeAsync((async) {
+          final engine = _Engine(async, asked: asked)
+            ..detectTime = const Duration(milliseconds: 4)
+            ..answerTime = const Duration(milliseconds: 9)
+            ..cutTime = const Duration(milliseconds: 40);
+          final runs = [for (var i = 0; i < 8; i++) engine.track(_face)];
+
+          async.elapse(const Duration(seconds: 3));
+
+          for (final (_, tracker, seen) in runs) {
+            expect(seen.length / 3 >= 12, enough, reason: 'asked $asked');
+            expect(seen.map((s) => s.$2.anchor), everyElement(isNotNull));
+            tracker.dispose();
+          }
+        });
+      }
+    });
+
+    test('a video not on screen is not tracked, until it is', () {
+      fakeAsync((async) {
+        final engine = _Engine(async);
+        final (video, tracker, seen) = engine.track(_face, onScreen: false);
+
+        async.elapse(const Duration(seconds: 1));
+        expect(seen, isEmpty);
+        expect(video.crops, isEmpty);
+
+        video.onScreen = true;
+        async.elapse(const Duration(seconds: 1));
+        expect(seen, isNotEmpty);
+        tracker.dispose();
+      });
+    });
+
+    test('a tracker disposed stops looking, even mid-detection', () {
+      fakeAsync((async) {
+        final engine = _Engine(async)
+          ..detectTime = const Duration(milliseconds: 40);
+        final (video, tracker, seen) = engine.track(_face);
+
+        async.elapse(const Duration(milliseconds: 20));
+        tracker.dispose();
+        async.elapse(const Duration(seconds: 1));
+
+        expect(seen, isEmpty);
+        expect(video.grabs, 1);
+        expect(video.discarded, 0, reason: 'the cut was being detected');
+        expect(engine.engine.trackers, 0);
+      });
+    });
+
+    test('a detector that fails is reported once, and tried again', () {
+      fakeAsync((async) {
+        final errors = <FlutterErrorDetails>[];
+        final previous = FlutterError.onError;
+        FlutterError.onError = errors.add;
+        addTearDown(() => FlutterError.onError = previous);
+        final engine = _Engine(async)..fail = true;
+        final (video, tracker, seen) = engine.track(_face);
+
+        async.elapse(const Duration(seconds: 1));
+        expect(errors, hasLength(1));
+        expect(seen, isEmpty);
+
+        engine.fail = false;
+        async.elapse(const Duration(seconds: 1));
+        expect(seen, isNotEmpty);
+        expect(video.grabs, greaterThan(20));
+        tracker.dispose();
+      });
+    });
+  });
+}

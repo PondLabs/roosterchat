@@ -323,28 +323,32 @@ class _VideoTrackRendererState extends State<VideoTrackRenderer> {
     }
   }
 
-  bool _shouldMirror() {
-    // off for screen share
-    if (widget.track.source == TrackSource.screenShareVideo) return false;
-    // on
-    if (widget.mirrorMode == VideoViewMirrorMode.mirror) return true;
-    // auto
-    if (widget.mirrorMode == VideoViewMirrorMode.auto) {
-      final track = widget.track;
-      if (track is LocalVideoTrack) {
-        final settings = track.mediaStreamTrack.getSettings();
-        final facingMode = settings['facingMode'];
-        if (facingMode != null) {
-          return facingMode == 'user';
-        }
-        final options = track.currentOptions;
-        if (options is CameraCaptureOptions) {
-          // mirror if front camera
-          return options.cameraPosition == CameraPosition.front;
-        }
+  bool _shouldMirror() => shouldMirrorVideoTrack(widget.track, mirrorMode: widget.mirrorMode);
+}
+
+// ROOSTER: the rule [VideoTrackRenderer] mirrors a video by, callable without
+// the widget, so a face tracker draws over a mirrored video the same way the
+// renderer shows it (docs/adr/0006-face-tracking.md).
+bool shouldMirrorVideoTrack(VideoTrack track, {VideoViewMirrorMode mirrorMode = VideoViewMirrorMode.auto}) {
+  // off for screen share
+  if (track.source == TrackSource.screenShareVideo) return false;
+  // on
+  if (mirrorMode == VideoViewMirrorMode.mirror) return true;
+  // auto
+  if (mirrorMode == VideoViewMirrorMode.auto) {
+    if (track is LocalVideoTrack) {
+      final settings = track.mediaStreamTrack.getSettings();
+      final facingMode = settings['facingMode'];
+      if (facingMode != null) {
+        return facingMode == 'user';
+      }
+      final options = track.currentOptions;
+      if (options is CameraCaptureOptions) {
+        // mirror if front camera
+        return options.cameraPosition == CameraPosition.front;
       }
     }
-    // default to false
-    return false;
   }
+  // default to false
+  return false;
 }

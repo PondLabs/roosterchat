@@ -22,6 +22,9 @@ rooster/web/e2ee.worker.dart.js.deps
 rooster/web/e2ee.worker.dart.js
 # built by rooster/scripts/prepare-web.sh from rust/audio_dsp
 rooster/web/audio_dsp.wasm
+# fetched by rooster/scripts/fetch-onnxruntime-web.sh (prepare-web.sh)
+rooster/web/face_tracking/ort.wasm.bundle.min.mjs
+rooster/web/face_tracking/ort-wasm-simd-threaded.wasm
 third_party/**/.dart_tool/
 third_party/**/pubspec.lock
 

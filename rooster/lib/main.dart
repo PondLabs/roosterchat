@@ -156,13 +156,22 @@ void main(List<String> args) async {
 }
 
 // The licence page only knows Dart packages; these are Rust crates linked
-// into the voice DSP, whose licences ask to ship their notice.
-void _registerNativeLicenses() {
+// into the voice DSP, whose licences ask to ship their notice, and the face
+// tracking's model and, in the browser, the engine that runs it
+// (docs/adr/0006-face-tracking.md).
+@visibleForTesting
+void registerNativeLicenses({bool web = BuildConfig.WEB}) {
   LicenseRegistry.addLicense(() async* {
     yield LicenseEntryWithLineBreaks(['DeepFilterNet'],
         await rootBundle.loadString('assets/licenses/deep_filter_MIT.txt'));
     yield LicenseEntryWithLineBreaks(['nnnoiseless', 'RNNoise'],
         await rootBundle.loadString('assets/licenses/nnnoiseless_BSD.txt'));
+    yield LicenseEntryWithLineBreaks(['YuNet'],
+        await rootBundle.loadString('assets/licenses/yunet_MIT.txt'));
+    if (web) {
+      yield LicenseEntryWithLineBreaks(['ONNX Runtime Web'],
+          await rootBundle.loadString('assets/licenses/onnxruntime_MIT.txt'));
+    }
   });
 }
 
@@ -177,7 +186,7 @@ void appMain() async {
     }
 
     ensureBindingInit();
-    _registerNativeLicenses();
+    registerNativeLicenses();
 
     // The first thing someone who clicked Rooster sees is the loading window,
     // so they know it opened. On Windows the runner's lock already says

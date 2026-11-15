@@ -49,6 +49,25 @@ class RTCVideoRenderer extends ValueNotifier<RTCVideoValue>
 
   static int _textureCounter = 1;
 
+  // ROOSTER: the renderers initialized and not disposed, for
+  // [videoElementShowing].
+  static final _live = <RTCVideoRenderer>{};
+
+  /// ROOSTER: the video element showing the video track [trackId], so a
+  /// face tracker reads the frames the app is drawing; null when no
+  /// renderer has it on screen (docs/adr/0006-face-tracking.md).
+  static web.HTMLVideoElement? videoElementShowing(String trackId) {
+    for (final renderer in _live) {
+      final element = renderer.findHtmlView();
+      final stream = element?.srcObject as web.MediaStream?;
+      if (stream == null) continue;
+      for (final track in stream.getVideoTracks().toDart) {
+        if (track.id == trackId) return element;
+      }
+    }
+    return null;
+  }
+
   web.MediaStream? _videoStream;
 
   web.MediaStream? _audioStream;
@@ -228,6 +247,7 @@ class RTCVideoRenderer extends ValueNotifier<RTCVideoValue>
 
   @override
   Future<void> dispose() async {
+    _live.remove(this); // ROOSTER
     _srcObject = null;
     for (var s in _subscriptions) {
       s.cancel();
@@ -320,6 +340,7 @@ class RTCVideoRenderer extends ValueNotifier<RTCVideoValue>
 
   @override
   Future<void> initialize() async {
+    _live.add(this); // ROOSTER
     bool isVisible = useHtmlElementView;
     if (isVisible) {
       web_ui.platformViewRegistry.registerViewFactory(viewType, (int viewId) {

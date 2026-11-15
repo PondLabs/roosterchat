@@ -54,11 +54,17 @@ compared with the reference of that very frame, whatever the delay.
 Build the demonstration, run it in Chrome, measure the log:
 
 ```sh
-cd rooster && flutter build web --release -t lib/face_tracking_demo_main.dart --dart-define PLATFORM=web
+cd rooster && ./scripts/fetch-onnxruntime-web.sh
+flutter build web --release -t lib/face_tracking_demo_main.dart --dart-define PLATFORM=web
 cd .. && NODE_PATH=<folder with playwright-core> node tools/face_tracking/capture_web.mjs \
   --build rooster/build/web --media <test videos> --out <folder> --query "tracker=device&tiles=8"
-python3 -m tools.face_tracking.measure --media <test videos> <folder>/anchors.jsonl --min-r42 90
+python3 -m tools.face_tracking.measure --media <test videos> <folder>/anchors.jsonl --min-r42 90 --max-lost 0.5
 ```
+
+`capture_web.mjs` also keeps every request the page made (`requests.txt`)
+and the worker's detection times (`detections.json`); `--record` films the
+page. With `start=manual` in the query the videos play for a few seconds
+before tracking starts, and `requests.txt` marks the moment.
 
 `measure.py` prints, for each video: R4.2, the share of analysed frames
 whose plaque centre is within a quarter of the eye distance of the
