@@ -160,6 +160,18 @@ void main() {
   });
 
   group('clocks that disagree', () {
+    test('the steady clock reads the wall once, then counts time gone by', () {
+      var wall = DateTime.utc(2026, 11, 15, 20);
+      var gone = const Duration(seconds: 3);
+      final now = steadyClock(wall: () => wall, elapsed: () => gone);
+      expect(now(), DateTime.utc(2026, 11, 15, 20));
+      gone += const Duration(seconds: 7);
+      wall = wall.subtract(const Duration(minutes: 5));
+      expect(now(), DateTime.utc(2026, 11, 15, 20, 0, 7));
+      final real = steadyClock();
+      expect(real().difference(DateTime.now()).inSeconds.abs(), 0);
+    });
+
     test('every client counts down on the host\'s clock', () {
       play(3, (m) {
         m.skew('p1', const Duration(hours: 3));

@@ -46,6 +46,25 @@ Random _secureRandom() {
   }
 }
 
+/// A clock that reads [wall] once, when made, and then adds the time
+/// [elapsed] says has gone by since: a wall clock set back or forward
+/// later (by the user, or by a time sync) does not stretch or cut a
+/// deadline. [elapsed] defaults to a [Stopwatch] started now; pass another
+/// source of steady time where a test runs on fake time.
+DateTime Function() steadyClock({
+  DateTime Function() wall = DateTime.now,
+  Duration Function()? elapsed,
+}) {
+  final start = wall();
+  var since = elapsed;
+  if (since == null) {
+    final watch = Stopwatch()..start();
+    since = () => watch.elapsed;
+  }
+  final from = since();
+  return () => start.add(since!() - from);
+}
+
 /// This client's match.
 ///
 /// The screens read [state] and the plaques ([plaqueOf]), listen to this,
@@ -68,7 +87,7 @@ class WhoMatch extends ChangeNotifier {
     Random? random,
     DateTime Function()? now,
   })  : _random = random ?? _secureRandom(),
-        now = now ?? DateTime.now {
+        now = now ?? steadyClock() {
     session.addListener(_onSession);
     custody.addListener(_onCustody);
     _directSub = session.direct.listen(_onDirect);
@@ -85,7 +104,8 @@ class WhoMatch extends ChangeNotifier {
   /// The plaques of the session. Not ours to dispose.
   final PlaqueCustody custody;
 
-  /// This machine's clock. The deadlines are on the host's: see [hostNow].
+  /// This machine's clock, [steadyClock] by default. The deadlines are on
+  /// the host's: see [hostNow].
   final DateTime Function() now;
 
   /// Draws the turns' order, who writes for whom and a theme nobody
@@ -282,11 +302,24 @@ class WhoMatch extends ChangeNotifier {
         ..deadline = ours(_state.deadline)
         ..tallyDeadline = ours(_state.tallyDeadline);
       _offset = 0;
+      _roster = _sessionRoster;
       _apply(publish: true);
       return;
     }
-    _apply();
+    // Someone new hears the state the session last sent, with the time it
+    // was sent then: a fresh one tells them how far our clock is from
+    // theirs, before they may have to take the seat over.
+    final roster = _sessionRoster;
+    final joined = !_roster.containsAll(roster);
+    _roster = roster;
+    _apply(publish: joined);
   }
+
+  /// Everyone in the session, as the host last saw it.
+  Set<String> _roster = {};
+
+  Set<String> get _sessionRoster =>
+      {...session.snapshot.players, ...session.snapshot.spectators};
 
   void _onCustody() {
     if (_disposed) return;
@@ -439,8 +472,9 @@ class WhoMatch extends ChangeNotifier {
           _passTurn();
           return true;
         }
-        if (s.active.length < 2) {
-          // One player has not guessed: their rescue, whoever asks now.
+        if (s.active.length < 2 && s.answers.isEmpty) {
+          // One player has not guessed: their rescue, whoever asks now. A
+          // count with answers given closes first: it may be a guess.
           _rescue();
           return true;
         }
