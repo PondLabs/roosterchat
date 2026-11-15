@@ -46,7 +46,9 @@
 /// asked twice at once by two widgets. Read `attempt=2` as "sent again or
 /// identical on the wire", not as a proven retry. A body streamed with no
 /// known length tells nothing apart, so such a request is always attempt 1
-/// and nothing is kept for it.
+/// and nothing is kept for it. A span remembers at most
+/// [SpeedLog.maxRememberedRequests] requests; past that, a request it has
+/// not seen is attempt 1 and is not remembered.
 library;
 
 import 'dart:async';
@@ -260,7 +262,11 @@ class SpeedSpan {
   int _nextAttempt(String request) {
     if (isFinished) return 1;
     final key = _attemptHash.convert(utf8.encode(request)).toString();
-    return _attempts.update(key, (n) => n + 1, ifAbsent: () => 1);
+    final seen = _attempts[key];
+    if (seen != null) return _attempts[key] = seen + 1;
+    // Past the cap a new request is attempt 1 and is not remembered.
+    if (_attempts.length < SpeedLog.maxRememberedRequests) _attempts[key] = 1;
+    return 1;
   }
 
   /// How many distinct requests the span remembers for attempt numbering
@@ -347,6 +353,9 @@ class SpeedLog {
   static const maxOperations = 16;
 
   static const maxStepsPerSpan = 64;
+
+  /// Distinct requests an open span remembers for attempt numbering.
+  static const maxRememberedRequests = 256;
   static const maxOpenSpans = 64;
 
   /// How long a finished span waits for the batch that holds its last

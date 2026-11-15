@@ -356,6 +356,31 @@ void main() {
     expect(log.requests.toList().map((r) => r.attempt), [1, 1, 1, 1]);
   });
 
+  test('an open span remembers a bounded number of requests', () async {
+    final quick = SpeedHttpClient(
+      inner: MockClient((_) async => http.Response('{}', 200)),
+      hosts: HostClassifier(homeserver: () => base),
+      log: log,
+    );
+    Uri sync(int i) => base.resolve('/_matrix/client/v3/sync?since=s$i');
+    final span = log.startSpan('sync');
+    await span.run(() async {
+      for (var i = 0; i < 5000; i++) {
+        await quick.get(sync(i));
+      }
+      // Remembered before the cap: still counted. Past it: attempt 1.
+      await quick.get(sync(0));
+      await quick.get(sync(4999));
+    });
+
+    expect(span.rememberedRequests, SpeedLog.maxRememberedRequests);
+    final attempts = log.requests.toList().map((r) => r.attempt).toList();
+    expect(attempts.sublist(attempts.length - 2), [2, 1]);
+    expect(attempts.sublist(0, attempts.length - 2), everyElement(1));
+    span.finish();
+    expect(span.rememberedRequests, 0);
+  });
+
   test('a body of unknown length is attempt 1 each time', () async {
     handler = (request) async {
       await request.drain<void>();
