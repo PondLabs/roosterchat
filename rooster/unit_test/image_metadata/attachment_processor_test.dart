@@ -198,6 +198,13 @@ void main() {
       ("photo.jpg", "image/jpeg"),
     ),
     (
+      "a JPEG named .png and typed as a JPEG",
+      fixture("gps_xmp.jpg"),
+      "photo.png",
+      "image/jpeg",
+      ("photo.jpg", "image/jpeg"),
+    ),
+    (
       "a JPEG named .jpeg",
       fixture("gps_xmp.jpg"),
       "photo.jpeg",
