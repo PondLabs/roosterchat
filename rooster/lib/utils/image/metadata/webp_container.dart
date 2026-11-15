@@ -7,9 +7,9 @@ import 'package:rooster/utils/image/metadata/image_container.dart';
 /// A WebP read as its RIFF chunks, up to the length the RIFF header gives.
 ///
 /// Kept by [withoutMetadata]: VP8, VP8L, VP8X (its EXIF and XMP flags
-/// corrected), ALPH, ANIM, ANMF and ICCP, so an animation stays one. Every
-/// other chunk goes (EXIF, XMP, unknown chunks), and so does anything after
-/// the RIFF length.
+/// corrected), ALPH, ANIM, ANMF (with only its ALPH, VP8 and VP8L inside)
+/// and ICCP, so an animation stays one. Every other chunk goes (EXIF, XMP,
+/// unknown chunks), and so does anything after the RIFF length.
 class WebpContainer implements ImageContainer {
   WebpContainer._(this._chunks,
       {required this.orientation, required bool exifPrefixed})
@@ -32,6 +32,9 @@ class WebpContainer implements ImageContainer {
     "VP8 ", "VP8L", "VP8X", "ALPH", "ANIM", "ANMF", "ICCP", //
   };
 
+  /// What an ANMF holds after its 16-byte header: the frame's image data.
+  static const _keepInFrame = {"ALPH", "VP8 ", "VP8L"};
+
   static const _flagExif = 0x08;
   static const _flagXmp = 0x04;
 
@@ -41,10 +44,10 @@ class WebpContainer implements ImageContainer {
       String.fromCharCodes(bytes, 8, 12) == "WEBP";
 
   /// Parses [bytes], or returns null when they are not a complete WebP: the
-  /// RIFF length runs past the end, a chunk runs past the RIFF length, the
-  /// first chunk is not VP8, VP8L or VP8X, or an extended (VP8X) file's last
-  /// chunk has no padding byte, which its rewrite could have to add, one
-  /// byte more than the original.
+  /// RIFF length runs past the end, a chunk runs past the RIFF length (or a
+  /// chunk inside an ANMF past the ANMF), the first chunk is not VP8, VP8L
+  /// or VP8X, or an extended (VP8X) file's last chunk has no padding byte,
+  /// which its rewrite could have to add, one byte more than the original.
   static WebpContainer? parse(Uint8List bytes) {
     if (!matches(bytes)) return null;
     final data = ByteData.sublistView(bytes);
@@ -74,7 +77,11 @@ class WebpContainer implements ImageContainer {
       }
       if (extended && end > riffEnd) return null;
 
-      if (_keep.contains(type)) {
+      if (type == "ANMF") {
+        final frame = _frame(bytes, pos, pos + 8 + size, min(end, riffEnd));
+        if (frame == null) return null;
+        chunks.add(frame);
+      } else if (_keep.contains(type)) {
         chunks.add(Uint8List.sublistView(bytes, pos, min(end, riffEnd)));
       } else if (type == "EXIF" && extended && orientation == null) {
         final exif = Uint8List.sublistView(bytes, pos + 8, pos + 8 + size);
@@ -90,6 +97,42 @@ class WebpContainer implements ImageContainer {
     return WebpContainer._(chunks,
         orientation: orientation ?? exifOrientationNormal,
         exifPrefixed: exifPrefixed);
+  }
+
+  /// The ANMF chunk that runs from [start] to [end], and to [padded] with
+  /// its padding byte, with only its frame header and its ALPH, VP8 and
+  /// VP8L chunks: its size corrected and its padding byte added when a
+  /// chunk left. Null when it is shorter than its header or a chunk inside
+  /// runs past it.
+  static Uint8List? _frame(Uint8List bytes, int start, int end, int padded) {
+    const header = 8 + 16; // chunk header, then the frame's own header
+    if (end - start < header) return null;
+    final data = ByteData.sublistView(bytes);
+    final kept = <(int, int)>[];
+    var pos = start + header;
+    while (pos < end) {
+      if (pos + 8 > end) return null;
+      final size = data.getUint32(pos + 4, Endian.little);
+      if (pos + 8 + size > end) return null;
+      final next = pos + 8 + size + (size & 1);
+      if (_keepInFrame.contains(String.fromCharCodes(bytes, pos, pos + 4))) {
+        kept.add((pos, min(next, end)));
+      }
+      pos = next;
+    }
+    final length = header + kept.fold<int>(0, (n, r) => n + r.$2 - r.$1);
+    if (length == end - start) {
+      return Uint8List.sublistView(bytes, start, padded);
+    }
+    final out = BytesBuilder(copy: false)
+      ..add(Uint8List.sublistView(bytes, start, start + header));
+    for (final (from, to) in kept) {
+      out.add(Uint8List.sublistView(bytes, from, to));
+    }
+    if (length.isOdd) out.addByte(0);
+    final frame = out.takeBytes();
+    ByteData.sublistView(frame).setUint32(4, length - 8, Endian.little);
+    return frame;
   }
 
   @override

@@ -464,6 +464,46 @@ void main() {
         await expectNoMetadata(result.bytes!, orientation: 1);
       }
     });
+
+    test("loses an unknown chunk inside a frame", () async {
+      // Some text after the first frame's image data, inside its ANMF.
+      final text = "Jane Example at home".codeUnits;
+      final inner = [
+        ..."XMP ".codeUnits, text.length, 0, 0, 0, ...text, //
+      ];
+      final input = _webpFile([
+        for (final (type, payload) in chunks)
+          if (type == "ANMF" && identical(payload, frames[0]))
+            (type, [...payload, ...inner])
+          else
+            (type, payload),
+      ]);
+      expect(_contains(input, "Jane Example at home"), isTrue);
+
+      final result = removeMetadataByRewrite(input)!;
+      expect(result.outcome, MetadataRemovalOutcome.rewritten);
+      final out = result.bytes!;
+      expect(out, removeMetadataByRewrite(fixture("animated_exif.webp"))!.bytes,
+          reason: "the frame comes out as it would without the chunk");
+      await expectNoMetadata(out, orientation: 6);
+      for (final (type, payload) in _webpChunks(out)) {
+        if (type != "ANMF") continue;
+        final inside = _riffChunks(Uint8List.sublistView(payload, 16));
+        for (final (subtype, _) in inside) {
+          expect({"ALPH", "VP8 ", "VP8L"}, contains(subtype));
+        }
+      }
+
+      final before = await render(input);
+      final after = await render(out);
+      expect(before, hasLength(3));
+      expect(after, hasLength(before.length), reason: "same frames");
+      for (var i = 0; i < before.length; i++) {
+        expect(after[i].$1, before[i].$1, reason: "frame $i width");
+        expect(after[i].$2, before[i].$2, reason: "frame $i height");
+        expect(after[i].$3, before[i].$3, reason: "frame $i pixels");
+      }
+    });
   });
 
   test("GIF and BMP are left as they are", () {
