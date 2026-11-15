@@ -75,6 +75,8 @@ class WebpContainer implements ImageContainer {
       } else if (type == "EXIF" && extended && orientation == null) {
         final exif = Uint8List.sublistView(bytes, pos + 8, pos + 8 + size);
         orientation = readExifOrientation(exif);
+        // An IFD0 cut short: the minimal EXIF could outgrow it.
+        if (orientation == null) return null;
         exifPrefixed = hasExifPrefix(exif);
       }
       pos = end;

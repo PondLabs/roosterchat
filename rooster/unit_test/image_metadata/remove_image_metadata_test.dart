@@ -323,6 +323,54 @@ void main() {
       expect(result.mimeType, "image/jpeg");
       await expectNoMetadata(result.bytes!, orientation: 1);
     });
+
+    group("an Exif whose IFD is cut short", () {
+      // One Orientation entry (6) without the 4-byte offset of the next IFD:
+      // 4 bytes shorter than the minimal block a rewrite would write back,
+      // so a rewrite would come out larger than the original.
+      final tiff = Uint8List.sublistView(minimalOrientationTiff(6), 0, 22);
+
+      test("is not read", () {
+        expect(readTiffOrientation(tiff), isNull);
+        expect(readExifOrientation(tiff), isNull);
+      });
+
+      test("makes a JPEG a re-encode", () async {
+        final clean = removeMetadataByRewrite(fixture("gps_xmp.jpg"))!.bytes!;
+        final input = Uint8List.fromList([
+          0xFF, 0xD8, 0xFF, 0xE1, 0, 2 + 6 + tiff.length, //
+          ..."Exif\u0000\u0000".codeUnits, ...tiff,
+          ...clean.sublist(2),
+        ]);
+        expect((await render(input)).single.$1, 48,
+            reason: "the engine reads this Exif and draws the picture turned");
+        expect(parseImageContainer(input), isNull);
+
+        final result = await removeImageMetadata(input);
+        expect(result.outcome, MetadataRemovalOutcome.reencoded);
+        expect(result.mimeType, "image/jpeg");
+        await expectNoMetadata(result.bytes!, orientation: 1);
+        final decoded = img.decodeJpg(result.bytes!)!;
+        expect((decoded.width, decoded.height), (48, 64));
+      });
+
+      test("makes a PNG a re-encode", () async {
+        final png = img.encodePng(img.Image(width: 8, height: 6));
+        const afterIhdr = 8 + 12 + 13;
+        final input = Uint8List.fromList([
+          ...png.sublist(0, afterIhdr),
+          ..._pngChunk("eXIf", tiff),
+          ...png.sublist(afterIhdr),
+        ]);
+        expect(walkPng(input).$1, ["IHDR", "eXIf", "IDAT", "IEND"]);
+        expect(parseImageContainer(input), isNull);
+
+        final result = await removeImageMetadata(input);
+        expect(result.outcome, MetadataRemovalOutcome.reencoded);
+        expect(result.mimeType, "image/png");
+        await expectNoMetadata(result.bytes!, orientation: 1);
+      });
+    });
   });
 
   test("GIF and BMP are left as they are", () {
@@ -359,4 +407,22 @@ int _indexOf(Uint8List haystack, String needle) {
     return i;
   }
   return -1;
+}
+
+/// A PNG chunk with its length and CRC, written here rather than with the
+/// code under test.
+Uint8List _pngChunk(String type, List<int> payload) {
+  final body = [...latin1.encode(type), ...payload];
+  var crc = 0xFFFFFFFF;
+  for (final b in body) {
+    crc ^= b;
+    for (var k = 0; k < 8; k++) {
+      crc = crc & 1 != 0 ? 0xEDB88320 ^ (crc >> 1) : crc >> 1;
+    }
+  }
+  crc ^= 0xFFFFFFFF;
+  final out = ByteData(12 + payload.length)..setUint32(0, payload.length);
+  final bytes = out.buffer.asUint8List()..setAll(4, body);
+  out.setUint32(8 + payload.length, crc);
+  return bytes;
 }

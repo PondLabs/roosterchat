@@ -92,6 +92,8 @@ class JpegContainer implements ImageContainer {
             _startsWith(bytes, payloadStart, end, _exif)) {
           orientation = readTiffOrientation(
               Uint8List.sublistView(bytes, payloadStart + _exif.length, end));
+          // An IFD0 cut short: the minimal Exif could outgrow it.
+          if (orientation == null) return null;
         }
       } else if (marker == 0xE2) {
         if (_startsWith(bytes, payloadStart, end, _iccProfile)) {

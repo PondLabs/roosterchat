@@ -68,6 +68,8 @@ class PngContainer implements ImageContainer {
       } else if (type == "eXIf" && orientation == null) {
         final exif = Uint8List.sublistView(bytes, pos + 8, end - 4);
         orientation = readExifOrientation(exif);
+        // An IFD0 cut short: the minimal eXIf could outgrow it.
+        if (orientation == null) return null;
         exifPrefixed = hasExifPrefix(exif);
       }
       pos = end;

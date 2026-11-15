@@ -12,7 +12,11 @@ const int _typeShort = 3;
 /// Returns 1 to 8, or [exifOrientationNormal] when the block is malformed,
 /// has no such tag, or holds a value outside 1 to 8: that is how decoders
 /// draw such a picture, so it is what the rewrite has to keep.
-int readTiffOrientation(Uint8List tiff) {
+///
+/// Returns null when IFD0 does not fit in the block (its entries and the
+/// 4-byte offset of the next IFD): such a block can be shorter than the one
+/// a rewrite writes back, so its file counts as one that does not parse.
+int? readTiffOrientation(Uint8List tiff) {
   if (tiff.length < 8) return exifOrientationNormal;
   final Endian endian;
   if (tiff[0] == 0x49 && tiff[1] == 0x49) {
@@ -25,11 +29,12 @@ int readTiffOrientation(Uint8List tiff) {
   final data = ByteData.sublistView(tiff);
   if (data.getUint16(2, endian) != 42) return exifOrientationNormal;
   final ifd = data.getUint32(4, endian);
-  if (ifd < 8 || ifd + 2 > tiff.length) return exifOrientationNormal;
+  if (ifd < 8) return exifOrientationNormal;
+  if (ifd + 2 > tiff.length) return null;
   final count = data.getUint16(ifd, endian);
+  if (ifd + 2 + count * 12 + 4 > tiff.length) return null;
   for (var i = 0; i < count; i++) {
     final entry = ifd + 2 + i * 12;
-    if (entry + 12 > tiff.length) break;
     if (data.getUint16(entry, endian) != _orientationTag) continue;
     if (data.getUint16(entry + 2, endian) != _typeShort) break;
     final value = data.getUint16(entry + 8, endian);
@@ -52,8 +57,9 @@ bool hasExifPrefix(Uint8List exif) =>
     exif[5] == 0;
 
 /// Reads the orientation from an Exif payload, with or without the
-/// `Exif\0\0` prefix.
-int readExifOrientation(Uint8List exif) => readTiffOrientation(
+/// `Exif\0\0` prefix. Null, as in [readTiffOrientation], when IFD0 does
+/// not fit.
+int? readExifOrientation(Uint8List exif) => readTiffOrientation(
     hasExifPrefix(exif) ? Uint8List.sublistView(exif, 6) : exif);
 
 /// [minimalOrientationTiff], behind the `Exif\0\0` prefix when [prefixed]:
