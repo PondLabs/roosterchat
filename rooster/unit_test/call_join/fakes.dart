@@ -139,10 +139,14 @@ class FakeHost implements CallJoinHost<FakeLivekitRoom> {
   @override
   bool get canWriteMembership => allowed;
 
+  /// Thrown by [selectOutputDevice] when set.
+  Object? outputError;
+
   @override
   Future<void> selectOutputDevice() async {
     journal.add('output_device');
     await outputGate.passed;
+    if (outputError != null) throw outputError!;
     journal.add('output_device_done');
   }
 

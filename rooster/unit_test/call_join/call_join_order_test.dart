@@ -277,4 +277,15 @@ void main() {
     expect(journal.entries, contains('membership_clear'));
     expect(host.room.disposed, isTrue);
   });
+
+  test('picking the speakers fails the join, as before, with nothing written',
+      () async {
+    host.outputError = StateError('no audio device');
+
+    await expectLater(join().run(), throwsStateError);
+    await settle();
+
+    expect(journal.entries, isNot(contains('membership_write')));
+    expect(journal.entries, isNot(contains('connect')));
+  });
 }

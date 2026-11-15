@@ -128,9 +128,12 @@ class CallJoin<S> {
             ? Future.value()
             : outside.run(leavePrevious)));
     // Awaited before the connection: joining while this is still running
-    // leaves the call on whatever device the system chose.
-    final output = _quiet(
-        trace.time(SpeedStep.outputDevice, () => host.selectOutputDevice()));
+    // leaves the call on whatever device the system chose. Its error fails
+    // the join there, as before; not left failing unheard if a step below
+    // fails first.
+    final output =
+        trace.time(SpeedStep.outputDevice, () => host.selectOutputDevice());
+    output.ignore();
 
     final openIdRequest = trace.time(
         SpeedStep.openIdToken, () => host.openIdToken().timeout(_bound));
