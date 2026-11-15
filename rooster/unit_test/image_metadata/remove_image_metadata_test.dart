@@ -273,6 +273,21 @@ void main() {
     ], adobe);
   });
 
+  test("an animated WebP's VP8X flags say what is left", () {
+    // VP8X flags: 0x10 alpha, 0x08 EXIF, 0x04 XMP, 0x02 animation.
+    for (final file in ["animated_exif.webp", "animated_exif_prefixed.webp"]) {
+      final original = fixture(file);
+      expect(String.fromCharCodes(original, 12, 16), "VP8X");
+      expect(original[20], 0x0E, reason: "$file: animation, EXIF and XMP");
+
+      final out = removeMetadataByRewrite(original)!.bytes!;
+      expect(String.fromCharCodes(out, 12, 16), "VP8X");
+      expect(walkWebp(out).$1, contains("EXIF"),
+          reason: "$file: the minimal EXIF carries orientation 6");
+      expect(out[20], 0x0A, reason: "$file: animation and EXIF, no XMP");
+    }
+  });
+
   test("a PNG keeps its transparency", () async {
     final out = removeMetadataByRewrite(fixture("text_exif.png"))!.bytes!;
     final (_, _, pixels) = (await render(out)).single;
