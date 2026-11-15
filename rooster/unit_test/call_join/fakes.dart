@@ -86,8 +86,12 @@ class FakeLivekitRoom implements LivekitJoinRoom {
     journal.add('connected');
   }
 
+  /// Open unless a test closes it: a permission prompt nobody answers.
+  Gate microphoneGate = Gate()..open();
+
   @override
   Future<JoinMicrophone> openMicrophone(lk.AudioCaptureOptions options) async {
+    await microphoneGate.passed;
     journal.add('microphone_open');
     final microphone = FakeMicrophone(journal);
     microphones.add(microphone);

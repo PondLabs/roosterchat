@@ -190,6 +190,19 @@ void main() {
         reason: 'every step of the join is on the fixed list');
   });
 
+  test(
+      'a microphone that never opens is unavailable once the window ends, '
+      'and the span closes', () async {
+    final host = FakeHost(journal);
+    host.room.microphoneGate = Gate();
+
+    final span = await joinAndWait(host);
+
+    expect(span.isFinished, isTrue);
+    expect(log.openSpans, isEmpty);
+    expect(stepsOf(span)['microphone_published']?.available, isFalse);
+  });
+
   test('a LiveKit Cloud SFU that reports no region', () async {
     final host = FakeHost(journal);
     host.room.prepare.open();

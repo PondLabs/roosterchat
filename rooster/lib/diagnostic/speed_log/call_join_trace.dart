@@ -26,7 +26,8 @@ import 'package:rooster/diagnostic/speed_log/speed_names.dart';
 /// - `sfu_region_other` when the SFU reports a region (its name is not
 ///   kept), or `sfu_region` unavailable when it reports none;
 /// - `microphone_published`: from connected to the microphone published, or
-///   unavailable when it was not (denied, no device, muted join);
+///   unavailable when it was not (denied, no device) or not within
+///   [remoteAudioWindow];
 /// - `first_remote_audio`: from connected to someone else first heard,
 ///   unavailable when nobody spoke within [remoteAudioWindow].
 ///
@@ -42,13 +43,16 @@ class CallJoinTrace {
   final SpeedSpan span;
 
   /// How long after connecting someone has to speak for
-  /// `first_remote_audio` to be timed.
+  /// `first_remote_audio` to be timed, and the microphone has to be
+  /// published for `microphone_published` (a permission prompt nobody
+  /// answers must not keep the span open).
   final Duration remoteAudioWindow;
 
   bool _microphoneSettled = false;
   bool _remoteSettled = false;
   StreamSubscription<void>? _remote;
   Timer? _remoteTimer;
+  Timer? _microphoneTimer;
 
   /// Runs [body] in the span: its requests are recorded with the span's id.
   Future<T> run<T>(Future<T> Function() body) => span.run(body);
@@ -80,15 +84,20 @@ class CallJoinTrace {
     // adds nothing, and the step is written unavailable instead.
     final done = Completer<void>();
     span.time(SpeedStep.microphonePublished, () => done.future);
-    published.then((ok) => ok, onError: (Object _) => false).then((ok) {
+    void settle(bool ok) {
+      if (_microphoneSettled) return;
+      _microphoneSettled = true;
+      _microphoneTimer?.cancel();
       if (ok) {
         done.complete();
       } else {
         span.unavailable(SpeedStep.microphonePublished);
       }
-      _microphoneSettled = true;
       _finishWhenSettled();
-    });
+    }
+
+    published.then((ok) => ok, onError: (Object _) => false).then(settle);
+    _microphoneTimer = Timer(remoteAudioWindow, () => settle(false));
   }
 
   /// Waits for someone else to be heard ([speaking]), for
@@ -112,6 +121,7 @@ class CallJoinTrace {
   void failed() {
     _remote?.cancel();
     _remoteTimer?.cancel();
+    _microphoneTimer?.cancel();
     span.finish(outcome: SpeedOutcome.failed);
   }
 
