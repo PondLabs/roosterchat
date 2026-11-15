@@ -279,10 +279,12 @@ class MatrixLivekitBackend implements CallJoinHost<MatrixLivekitVoipSession> {
   bool get isWeb => kIsWeb;
 
   @override
-  MatrixLivekitVoipSession createSession(LivekitJoinRoom joined) {
+  MatrixLivekitVoipSession createSession(
+      LivekitJoinRoom joined, Future<void> microphonePublished) {
     final lkRoom = joined as LkJoinRoom;
     return MatrixLivekitVoipSession(room, lkRoom.room,
-        keyProvider: lkRoom.keyProvider);
+        keyProvider: lkRoom.keyProvider,
+        microphonePublished: microphonePublished);
   }
 
   String get _ownMembershipKey =>

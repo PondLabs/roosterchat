@@ -54,13 +54,14 @@ class _HeartbeatHost extends FakeHost {
   Timer? heartbeat;
 
   @override
-  FakeLivekitRoom createSession(LivekitJoinRoom room) {
+  FakeLivekitRoom createSession(
+      LivekitJoinRoom room, Future<void> microphonePublished) {
     heartbeat = Timer.periodic(const Duration(milliseconds: 20), (_) {
       client.put(Uri.parse('${_HttpHost.homeserver}/_matrix/client/v3/rooms/'
           '${Uri.encodeComponent(roomId)}/state/'
           'org.matrix.msc3401.call.member/key'));
     });
-    return super.createSession(room);
+    return super.createSession(room, microphonePublished);
   }
 }
 

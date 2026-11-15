@@ -55,8 +55,11 @@ abstract class CallJoinHost<S> {
 
   bool get isWeb;
 
-  /// The session of the call, over [room] once connected.
-  S createSession(LivekitJoinRoom room);
+  /// The session of the call, over [room] once connected. The join is
+  /// still publishing the microphone until [microphonePublished] completes
+  /// (it never fails): the session's mute and deafen wait for it, so they
+  /// act on that microphone instead of opening a second one.
+  S createSession(LivekitJoinRoom room, Future<void> microphonePublished);
 }
 
 /// One voice join, in the order the people in the call see it: the previous
@@ -238,7 +241,7 @@ class CallJoin<S> {
       trace.listenForRemoteAudio(
           room.events.where((event) => event == JoinRoomEvent.remoteSpeaking));
 
-      return outside.run(() => host.createSession(room));
+      return outside.run(() => host.createSession(room, published));
     } catch (_) {
       // Don't leave a membership for a call we never got into, nor a room
       // that keeps its connectivity listener and timers alive (issue #48).

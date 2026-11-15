@@ -126,6 +126,9 @@ class FakeHost implements CallJoinHost<FakeLivekitRoom> {
   Gate outputGate = Gate()..open();
   Gate membershipGate = Gate()..open();
 
+  /// What the join handed the session (see [createSession]).
+  Future<void>? microphonePublished;
+
   /// Replaces the OpenID request (the speed log test sends a real one).
   Future<matrix.OpenIdCredentials> Function()? openId;
 
@@ -193,8 +196,10 @@ class FakeHost implements CallJoinHost<FakeLivekitRoom> {
   bool get isWeb => web;
 
   @override
-  FakeLivekitRoom createSession(LivekitJoinRoom room) {
+  FakeLivekitRoom createSession(
+      LivekitJoinRoom room, Future<void> microphonePublished) {
     journal.add('session');
+    this.microphonePublished = microphonePublished;
     return room as FakeLivekitRoom;
   }
 }
