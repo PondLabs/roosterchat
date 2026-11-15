@@ -126,7 +126,8 @@ void main() {
       final encoder = FakeEncoder();
       final prepared =
           await fakePreparer(engine, encoder: encoder).prepare(bytes);
-      expect(engine.calls.single.targetWidth, 64, reason: label);
+      expect(engine.calls.single.targetWidth, blurhashSourceSide,
+          reason: label);
       expect(encoder.requests.single.maxSide, isNull, reason: label);
       expect(prepared!.thumbnail, isNull, reason: label);
       expect(prepared.blurhash, isNotNull, reason: label);

@@ -40,7 +40,11 @@ import 'package:rooster/utils/image/image_header.dart';
 import 'package:rooster/utils/image/preparation/thumbnail_encoder.dart';
 
 export 'package:rooster/utils/image/preparation/thumbnail_encoder.dart'
-    show PreparedThumbnail, ThumbnailEncoder;
+    show
+        PreparedThumbnail,
+        ThumbnailEncoder,
+        blurhashSourceSide,
+        thumbnailJpegQuality;
 
 /// A thumbnail is at most this many pixels on its long side.
 const int thumbnailMaxSide = 800;

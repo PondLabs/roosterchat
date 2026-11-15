@@ -109,7 +109,8 @@ void main() {
     expect((info["w"], info["h"]), (1000, 80));
     expect(info.containsKey("thumbnail_info"), isFalse);
     expect(harness.sdkImagePasses, 0);
-    expect(engine.decodes, [(64, null)], reason: "only for the blurhash");
+    expect(engine.decodes, [(blurhashSourceSide, null)],
+        reason: "only for the blurhash");
   });
 
   test("the preparation started at attach is the one Send uses", () async {

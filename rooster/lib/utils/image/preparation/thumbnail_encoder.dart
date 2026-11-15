@@ -8,7 +8,7 @@ import 'package:rooster/utils/image/preparation/thumbnail_encoder_native.dart'
 const int thumbnailJpegQuality = 80;
 
 /// The long side of the small copy a blurhash is computed from.
-const int blurhashSourceSide = 64;
+const int blurhashSourceSide = 32;
 
 /// Pixels decoded once by the engine, handed to a [ThumbnailEncoder].
 class ThumbnailRequest {
