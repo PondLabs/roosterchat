@@ -418,7 +418,6 @@ class _VoipRoomViewState extends State<VoipRoomView> {
 
     // The spinner is drawn before the join's work starts.
     await SchedulerBinding.instance.endOfFrame;
-    if (!mounted) return;
 
     if (withoutEntranceSound) EntranceSoundGate.instance.skipNextJoin(roomId);
 
