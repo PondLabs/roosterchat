@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/diagnostic/speed_log/request_record.dart';
@@ -41,8 +40,7 @@ class TextSendTrace {
   static const frameTimeout = Duration(seconds: 2);
 
   /// Waits for the end of the next frame drawn; false when none can be
-  /// observed. Tests replace it.
-  @visibleForTesting
+  /// observed. Only tests replace it.
   static Future<bool> Function() nextFrameDrawn = _schedulerFrame;
 
   /// The trace the current code runs in (see [send]).
