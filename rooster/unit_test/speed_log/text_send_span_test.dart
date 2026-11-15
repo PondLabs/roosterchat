@@ -27,6 +27,9 @@ void main() {
         () => Future.delayed(const Duration(milliseconds: 5), () => true);
     transport = FakeTransport();
     client = await fakeAccount('text_send_test', transport);
+    // Only the send talks to the server while it runs: the SDK's sync loop
+    // stops after the round in flight.
+    client.getMatrixClient().backgroundSync = false;
     await client.getMatrixClient().oneShotSync();
     room = await plainRoom(client);
     SpeedLog.instance.requests.clear();
