@@ -197,7 +197,6 @@ class MatrixLivekitBackend {
           "Selected focus JWT does not use HTTPS", errorCallFocusNotHttps);
     }
 
-    Log.d("Received token from homeserver: ${token}");
     final uri = Uri.parse(selectedFocus.toString() + "/sfu/get");
 
     final body = {

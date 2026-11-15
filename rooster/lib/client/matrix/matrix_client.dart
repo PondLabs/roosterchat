@@ -25,7 +25,9 @@ import 'package:rooster/config/build_config.dart';
 import 'package:rooster/config/global_config.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/diagnostic/diagnostics.dart';
+import 'package:rooster/diagnostic/speed_log/host_class.dart';
 import 'package:rooster/main.dart';
+import 'package:rooster/utils/network/speed_http_client.dart';
 import 'package:rooster/utils/notifying_list.dart';
 import 'package:rooster/utils/notifying_list_filter.dart';
 import 'package:rooster/utils/stored_stream_controller.dart';
@@ -436,8 +438,14 @@ class MatrixClient extends Client {
   bool isLoggedIn() => _matrixClient.isLogged();
 
   matrix.Client _createMatrixClient(String name, matrix.DatabaseApi database) {
-    var client = matrix.Client(
+    late final matrix.Client client;
+    client = matrix.Client(
       name,
+      // Every request of the account goes through our client, which records
+      // its timings in the speed log without content (lib/diagnostic/speed_log).
+      httpClient: SpeedHttpClient(
+        hosts: HostClassifier(homeserver: () => client.homeserver),
+      ),
       verificationMethods: {
         KeyVerificationMethod.emoji,
         KeyVerificationMethod.numbers,
