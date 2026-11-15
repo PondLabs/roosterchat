@@ -270,8 +270,12 @@ class SpeedSpan {
   }
 
   /// How many distinct requests the span remembers for attempt numbering
-  /// (0 once finished). Read by tests; the hashes themselves stay private.
+  /// (0 once finished). Read by tests.
   int get rememberedRequests => _attempts.length;
+
+  /// The keys the span keeps for attempt numbering, for tests that check
+  /// they hold nothing of the request in clear. Nothing else reads them.
+  Iterable<String> get debugAttemptKeys => List.unmodifiable(_attempts.keys);
 
   static final Random _random = Random.secure();
 

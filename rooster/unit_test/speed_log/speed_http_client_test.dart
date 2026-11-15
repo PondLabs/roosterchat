@@ -356,6 +356,48 @@ void main() {
     expect(log.requests.toList().map((r) => r.attempt), [1, 1, 1, 1]);
   });
 
+  test('the keys an open span keeps hold no URL, id or host', () async {
+    final hs = Uri.parse('https://secret-host.example');
+    final quick = SpeedHttpClient(
+      inner: MockClient((_) async => http.Response('{}', 200)),
+      hosts: HostClassifier(homeserver: () => hs),
+      log: log,
+    );
+    final urls = [
+      hs.resolve('/_matrix/client/v3/rooms/!secretRoom:secret-host.example'
+          '/send/m.room.message/secretTxn'),
+      hs.resolve('/_matrix/client/v3/profile/@secretAlice:secret-host.example'),
+      hs.resolve('/_matrix/media/v3/upload?filename=secret-holiday.jpg'),
+    ];
+    final span = log.startSpan('text_send');
+    await span.run(() async {
+      for (final url in urls) {
+        await quick.put(url, body: '{}');
+      }
+    });
+
+    final keys = span.debugAttemptKeys.toList();
+    print('keys kept by the open span: $keys');
+    expect(keys, hasLength(urls.length));
+    for (final key in keys) {
+      expect(key, matches(RegExp(r'^[0-9a-f]{64}$')));
+      for (final part in [
+        'secret',
+        'secret-host.example',
+        'secretRoom',
+        'secretTxn',
+        'secretAlice',
+        'holiday',
+        'PUT',
+        for (final url in urls) '$url',
+      ]) {
+        expect(key, isNot(contains(part)), reason: part);
+      }
+    }
+    span.finish();
+    expect(span.debugAttemptKeys, isEmpty);
+  });
+
   test('an open span remembers a bounded number of requests', () async {
     final quick = SpeedHttpClient(
       inner: MockClient((_) async => http.Response('{}', 200)),
