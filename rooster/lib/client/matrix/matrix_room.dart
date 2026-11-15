@@ -50,6 +50,7 @@ import 'package:rooster/client/timeline_events/timeline_event_message.dart';
 import 'package:rooster/client/timeline_events/timeline_event_sticker.dart';
 import 'package:rooster/config/build_config.dart';
 import 'package:rooster/debug/log.dart';
+import 'package:rooster/diagnostic/speed_log/text_send_trace.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/utils/image_utils.dart';
 import 'package:rooster/utils/mime.dart';
@@ -669,11 +670,21 @@ class MatrixRoom extends Room {
 
       event["m.mentions"] = mentions;
 
-      var id = await _matrixRoom.sendEvent(event,
-          inReplyTo: replyingTo,
-          editEventId: replaceEvent?.eventId,
-          threadLastEventId: threadLastEventId,
-          threadRootEventId: threadRootEventId);
+      // The SDK makes the same transaction id when given none; ours lets the
+      // speed log see the local echo (docs/speed-log.md).
+      final txid = _matrixRoom.client.generateUniqueTransactionId();
+      final trace = TextSendTrace.current?..sending(_matrixRoom, txid);
+      String? id;
+      try {
+        id = await _matrixRoom.sendEvent(event,
+            txid: txid,
+            inReplyTo: replyingTo,
+            editEventId: replaceEvent?.eventId,
+            threadLastEventId: threadLastEventId,
+            threadRootEventId: threadRootEventId);
+      } finally {
+        trace?.sent(ok: id != null);
+      }
 
       if (id != null) {
         var event = await _matrixRoom.getEventById(id);

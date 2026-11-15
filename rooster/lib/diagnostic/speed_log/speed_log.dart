@@ -42,6 +42,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:rooster/diagnostic/speed_log/request_record.dart';
 import 'package:rooster/diagnostic/speed_log/ring_buffer.dart';
+import 'package:rooster/diagnostic/speed_log/speed_names.dart';
 
 /// Reports the duration of each UI frame drawn while it is listened to.
 abstract class FrameSource {
@@ -100,10 +101,10 @@ class SpanStep {
 /// One user-visible operation under a random local id, made of named steps
 /// timed on the speed log's monotonic clock.
 class SpeedSpan {
-  SpeedSpan._(this._log, String name)
+  SpeedSpan._(this._log, String name, Duration? startedAt)
       : name = _identifier(name),
         id = _randomId(),
-        startedAt = _log.now();
+        startedAt = startedAt ?? _log.now();
 
   final SpeedLog _log;
   final String name;
@@ -136,6 +137,9 @@ class SpeedSpan {
 
   Duration get _elapsed => _log.now() - startedAt;
 
+  /// Time since the span started, on the log's clock.
+  Duration get elapsed => _elapsed;
+
   /// A step from the previous mark (or the span's start) to now.
   void mark(String step, {Map<String, num> values = const {}}) {
     final now = _elapsed;
@@ -159,13 +163,20 @@ class SpeedSpan {
   void unavailable(String step) =>
       _add(SpanStep(_identifier(step), _elapsed, null, const {}));
 
+  /// A step measured another way on the log's clock, such as a request read
+  /// from the log: [start] counts from the span's start, a null [duration]
+  /// is unavailable.
+  void addStep(String step, Duration start, Duration? duration,
+          {Map<String, num> values = const {}}) =>
+      _add(SpanStep(_identifier(step), start, duration, values));
+
   /// Runs [body] so the requests it makes, through any async gap, are
   /// recorded with this span's id and numbered as attempts.
   R run<R>(R Function() body) =>
       runZoned(body, zoneValues: {SpeedLog._spanKey: this});
 
   /// Closes the span and moves it to the log. Later calls do nothing.
-  void finish({String outcome = 'ok'}) {
+  void finish({String outcome = SpeedOutcome.ok}) {
     if (isFinished) return;
     duration = _elapsed;
     this.outcome = _identifier(outcome);
@@ -246,11 +257,15 @@ class SpeedLog {
   /// Spans not finished yet, oldest first.
   List<SpeedSpan> get openSpans => List.unmodifiable(_open);
 
-  SpeedSpan startSpan(String name) {
-    final span = SpeedSpan._(this, name);
+  /// Opens a span named [name], from now or from [startedAt] (an earlier
+  /// [now]) when the operation began before it was known to need one.
+  SpeedSpan startSpan(String name, {Duration? startedAt}) {
+    final span = SpeedSpan._(this, name, startedAt);
     if (_open.isEmpty) _frames.listen(_onFrame);
     // A span nobody finishes must not hold memory forever.
-    if (_open.length >= maxOpenSpans) _open.first.finish(outcome: 'abandoned');
+    if (_open.length >= maxOpenSpans) {
+      _open.first.finish(outcome: SpeedOutcome.abandoned);
+    }
     _open.add(span);
     return span;
   }
