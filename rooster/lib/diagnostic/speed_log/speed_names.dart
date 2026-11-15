@@ -11,6 +11,10 @@ abstract final class SpeedOperation {
 
   /// One round of the sync loop, from its request to the next one.
   static const sync = 'sync';
+
+  /// Preparing an attached picture to be sent (size, thumbnail, blurhash),
+  /// from the request to the result (`ImagePreparer`).
+  static const imagePrepare = 'image_prepare';
 }
 
 /// Step names.
@@ -52,6 +56,17 @@ abstract final class SpeedStep {
 
   /// The round failed: from the last step to the error being reported.
   static const error = 'error';
+
+  // image_prepare (queue_wait: waiting for one of the two preparation slots)
+  /// Reading the size and orientation from the file header.
+  static const header = 'header';
+
+  /// The one engine decode, at thumbnail size or smaller.
+  static const decode = 'decode';
+
+  /// The thumbnail and blurhash, in the background (native) or by the
+  /// browser's canvas (web).
+  static const encode = 'encode';
 }
 
 /// Names of the numbers on steps.
@@ -59,6 +74,16 @@ abstract final class SpeedValue {
   static const attempt = 'attempt';
   static const status = 'status';
   static const retryAfterMs = 'retry_after_ms';
+
+  /// A size in bytes (the file, a thumbnail).
+  static const bytes = 'bytes';
+
+  /// A picture's size in pixels.
+  static const width = 'width';
+  static const height = 'height';
+
+  /// How many frames a decoded picture has (more than 1: animated).
+  static const frames = 'frames';
 }
 
 /// Span outcomes.
