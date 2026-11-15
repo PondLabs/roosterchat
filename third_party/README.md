@@ -14,10 +14,13 @@ back to their origin; we change them here.
 | `flutter_vodozemac` | https://pub.dev/packages/flutter_vodozemac | `0.5.0` (2026-10) + the `windows-arm64` cargokit target |
 | `media_kit_libs_windows_video` | https://pub.dev/packages/media_kit_libs_windows_video | `1.0.11` (2026-10) + arm64 libmpv and ANGLE |
 | `three_js_angle_renderer` | https://pub.dev/packages/three_js_angle_renderer (MIT) | `0.0.1` (2026-11) + the tone-mapping program check |
+| `matrix-dart-sdk` | https://github.com/commetchat/matrix-dart-sdk (branch `upstream-v6.1.1`, AGPL-3.0) | `58e0bd24c6a2d74d727dc92a24dc076144fae43b` (2026-03-09), complete and unchanged |
 
 `example/`, `test/`, `testfiles/`, `.github/` and git metadata were dropped
-from the copies. Local changes are marked with `// ROOSTER:` comments in Dart
-and C++ and listed in `docs/voice-audio-processing.md`.
+from the copies, except in `matrix-dart-sdk`, which keeps everything but
+`.git` so its own tests run and it matches the pub cache checkout file for
+file. Local changes are marked with `// ROOSTER:` comments in Dart and C++
+and listed in `docs/voice-audio-processing.md`.
 
 `three_js_angle_renderer` (Sunny Side Putt's 3D renderer) decided on every
 draw whether a material's program had to change by comparing the tone
@@ -162,3 +165,12 @@ media-kit's own `libmpv-win32-video-cmake` (20241021, aarch64) and ANGLE from
 the fork behind media-kit/media-kit#1436 (Carapacik's v1.1.0, built from
 chromium/8059), both pinned by SHA-256. The x64 inputs are upstream's,
 unchanged.
+
+`matrix-dart-sdk` is the Matrix SDK (`package:matrix`) the app and
+`matrix_dart_sdk_drift_db` use, copied from the commit `pubspec.lock`
+resolved (`58e0bd24c6a2d74d727dc92a24dc076144fae43b`, the
+`upstream-v6.1.1` branch of the commetchat fork) with no line changed.
+Every later change to it is marked with a `// ROOSTER` comment, so a
+`diff -r -x .git` against that commit shows only our changes. Git stores
+`lib/msc_extensions/msc_1236_widgets/src/widget.dart` with LF line endings
+where upstream has CRLF (`* text=auto`); compare with `--strip-trailing-cr`.

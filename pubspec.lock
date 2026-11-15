@@ -1352,13 +1352,11 @@ packages:
     source: hosted
     version: "0.13.0"
   matrix:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      path: "."
-      ref: "upstream-v6.1.1"
-      resolved-ref: "58e0bd24c6a2d74d727dc92a24dc076144fae43b"
-      url: "https://github.com/commetchat/matrix-dart-sdk.git"
-    source: git
+      path: "third_party/matrix-dart-sdk"
+      relative: true
+    source: path
     version: "6.1.1"
   matrix_dart_sdk_drift_db:
     dependency: transitive
