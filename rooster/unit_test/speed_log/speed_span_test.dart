@@ -125,8 +125,9 @@ void main() {
     });
     expect(seen, same(span));
     expect(SpeedLog.currentSpan, isNull);
-    expect(SpeedLog.nextAttempt(span, 'PUT /send'), 1);
-    expect(SpeedLog.nextAttempt(span, 'PUT /send'), 2);
-    expect(SpeedLog.nextAttempt(null, 'PUT /send'), 1);
+    expect(SpeedLog.nextAttempt(span, 'PUT /send/t1'), 1);
+    expect(SpeedLog.nextAttempt(span, 'PUT /send/t1'), 2);
+    expect(SpeedLog.nextAttempt(span, 'PUT /send/t2'), 1);
+    expect(SpeedLog.nextAttempt(null, 'PUT /send/t1'), 1);
   });
 }

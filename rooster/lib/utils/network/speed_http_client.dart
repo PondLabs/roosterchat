@@ -46,7 +46,10 @@ class SpeedHttpClient extends http.BaseClient {
       method: request.method,
       route: route,
       hostClass: _hosts.classify(request.url),
-      attempt: SpeedLog.nextAttempt(span, '${request.method} $route'),
+      // The same request sent again counts as a new attempt; a different
+      // one of the same route does not. Hashed by the span, never kept.
+      attempt: SpeedLog.nextAttempt(span,
+          '${request.method} ${request.url} ${request.contentLength ?? ''}'),
       operationId: span?.id,
     );
 

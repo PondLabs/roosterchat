@@ -22,11 +22,23 @@
 /// code (`[a-z][a-z0-9_]*`, at most 40 characters), never text from a
 /// message, a file or a person; any other name is written as `invalid_name`.
 /// Step values are numbers only (sizes, counts).
+///
+/// Attempts: inside a span, a request is attempt 1 the first time it is
+/// sent, and 2, 3... each time the same request is sent again (the SDK's
+/// retry of a send reuses its transaction id). "The same request" means the
+/// same method, full URL (path and query) and body length, so two different
+/// requests of one route, such as a file and its thumbnail to
+/// `POST /_matrix/media/v3/upload` or two `sendToDevice` with their own
+/// transaction ids, are each attempt 1. The span keeps only a salted hash of
+/// each request (the salt is random per span), never its URL, and forgets
+/// them all in [SpeedSpan.finish]. Outside a span every request is attempt 1.
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:rooster/diagnostic/speed_log/request_record.dart';
 import 'package:rooster/diagnostic/speed_log/ring_buffer.dart';
@@ -105,7 +117,12 @@ class SpeedSpan {
   final List<SpanStep> steps = [];
   Duration? _lastMark;
   Duration? _longestFrame;
+
+  /// How many times each request was sent in the span, by a salted hash of
+  /// the request (see [_nextAttempt]). Emptied by [finish].
   final Map<String, int> _attempts = {};
+  late final Hmac _attemptHash = Hmac(
+      sha256, List.generate(16, (_) => _random.nextInt(256), growable: false));
 
   /// Set by [finish].
   Duration? duration;
@@ -152,6 +169,7 @@ class SpeedSpan {
     if (isFinished) return;
     duration = _elapsed;
     this.outcome = _identifier(outcome);
+    _attempts.clear();
     _log._close(this);
   }
 
@@ -167,9 +185,18 @@ class SpeedSpan {
     if (_longestFrame == null || frame > _longestFrame!) _longestFrame = frame;
   }
 
-  /// The attempt number of the next request with this [key] in the span.
-  int _nextAttempt(String key) =>
-      _attempts.update(key, (n) => n + 1, ifAbsent: () => 1);
+  /// The attempt number of [request] (what identifies a request, see the
+  /// library doc) in the span. Only its salted hash is kept, and nothing at
+  /// all once the span is finished.
+  int _nextAttempt(String request) {
+    if (isFinished) return 1;
+    final key = _attemptHash.convert(utf8.encode(request)).toString();
+    return _attempts.update(key, (n) => n + 1, ifAbsent: () => 1);
+  }
+
+  /// How many distinct requests the span remembers for attempt numbering
+  /// (0 once finished). Read by tests; the hashes themselves stay private.
+  int get rememberedRequests => _attempts.length;
 
   static final Random _random = Random.secure();
 
@@ -231,10 +258,13 @@ class SpeedLog {
   /// The span the current code runs in (see [SpeedSpan.run]).
   static SpeedSpan? get currentSpan => Zone.current[_spanKey] as SpeedSpan?;
 
-  /// The attempt number for a request with [key] (method and route) in
-  /// [span]: 1, 2, 3... per span, 1 outside one.
-  static int nextAttempt(SpeedSpan? span, String key) =>
-      span?._nextAttempt(key) ?? 1;
+  /// The attempt number of [request] in [span]: 1 the first time, 2, 3...
+  /// each time the same [request] comes again, 1 outside a span. [request]
+  /// is whatever identifies one request: `SpeedHttpClient` passes the
+  /// method, full URL and body length. It may hold ids, because the span
+  /// keeps only a salted hash of it (see the library doc).
+  static int nextAttempt(SpeedSpan? span, String request) =>
+      span?._nextAttempt(request) ?? 1;
 
   void recordRequest(RequestRecord record) => requests.add(record);
 

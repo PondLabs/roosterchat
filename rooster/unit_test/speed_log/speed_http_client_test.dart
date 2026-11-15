@@ -246,4 +246,63 @@ void main() {
     expect(jsonEncode(records.map((r) => r.route).toList()),
         isNot(contains('!r:hs')));
   });
+
+  test('different requests of one route are each attempt 1', () async {
+    handler = (request) async {
+      await request.drain<void>();
+      request.response.write('{}');
+      await request.response.close();
+    };
+    final span = log.startSpan('file_send');
+    await span.run(() async {
+      // The file, then its thumbnail: two uploads, no retry.
+      await client.post(
+          base.resolve('/_matrix/media/v3/upload?filename=photo.jpg'),
+          body: Uint8List(2048));
+      await client.post(
+          base.resolve('/_matrix/media/v3/upload?filename=thumb.jpg'),
+          body: Uint8List(128));
+      // Two to-device messages with different transaction ids.
+      await client.put(
+          base.resolve('/_matrix/client/v3/sendToDevice/m.room.encrypted/t1'),
+          body: '{}');
+      await client.put(
+          base.resolve('/_matrix/client/v3/sendToDevice/m.room.encrypted/t2'),
+          body: '{}');
+    });
+    span.finish();
+    expect(log.requests.toList().map((r) => r.attempt), [1, 1, 1, 1]);
+  });
+
+  test(
+      'the same request sent again is attempt 2, and the span forgets it '
+      'when it finishes', () async {
+    handler = (request) async {
+      await request.drain<void>();
+      request.response.write('{}');
+      await request.response.close();
+    };
+    final span = log.startSpan('file_send');
+    Future<void> upload() =>
+        client.post(base.resolve('/_matrix/media/v3/upload?filename=photo.jpg'),
+            body: Uint8List(2048));
+    Future<void> toDevice() => client.put(
+        base.resolve('/_matrix/client/v3/sendToDevice/m.room.encrypted/t1'),
+        body: '{}');
+    await span.run(() async {
+      await upload();
+      await toDevice();
+      await upload();
+      await toDevice();
+    });
+    expect(log.requests.toList().map((r) => r.attempt), [1, 1, 2, 2]);
+    expect(span.rememberedRequests, 2);
+
+    span.finish();
+    expect(span.rememberedRequests, 0);
+    // A request still running in the finished span's zone counts as 1.
+    await span.run(upload);
+    expect(log.requests.toList().last.attempt, 1);
+    expect(span.rememberedRequests, 0);
+  });
 }
