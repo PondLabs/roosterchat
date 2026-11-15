@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show HttpException, SocketException, TlsException;
 
 import 'package:http/http.dart' as http;
 import 'package:rooster/diagnostic/speed_log/host_class.dart';
 import 'package:rooster/diagnostic/speed_log/request_record.dart';
 import 'package:rooster/diagnostic/speed_log/route_template.dart';
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
+import 'package:rooster/diagnostic/speed_log/speed_names.dart';
 import 'package:rooster/utils/network/xhr_upload_stub.dart'
     if (dart.library.js_interop) 'package:rooster/utils/network/xhr_upload_web.dart';
 
@@ -39,23 +41,29 @@ class SpeedHttpClient extends http.BaseClient {
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
-    final route = routeTemplate(request.url);
+    final hostClass = _hosts.classify(request.url);
     final span = SpeedLog.currentSpan;
     final entry = _Entry(
       log: _log,
       method: request.method,
-      route: route,
-      hostClass: _hosts.classify(request.url),
+      route: routeTemplate(request.url, hostClass),
+      hostClass: hostClass,
       // The same request sent again counts as a new attempt; a different
-      // one of the same route does not. Hashed by the span, never kept.
-      attempt: SpeedLog.nextAttempt(span,
-          '${request.method} ${request.url} ${request.contentLength ?? ''}'),
+      // one of the same route does not. Hashed by the span, never kept. A
+      // body of unknown length cannot be told from another: attempt 1.
+      attempt: request.contentLength == null
+          ? 1
+          : SpeedLog.nextAttempt(span,
+              '${request.method} ${request.url} ${request.contentLength}'),
       operationId: span?.id,
     );
 
     final http.StreamedResponse response;
     try {
-      if (xhrUploadAvailable && isMediaUploadRoute(route)) {
+      // Chosen by the API's words whatever the host's class, as before the
+      // route of other hosts was reduced to placeholders.
+      if (xhrUploadAvailable &&
+          isMediaUploadRoute(routeTemplate(request.url))) {
         entry.bytesUp = request.contentLength ?? 0;
         response = await sendByXhr(
           request,
@@ -66,7 +74,7 @@ class SpeedHttpClient extends http.BaseClient {
         response = await _inner.send(_ObservedRequest(request, entry));
       }
     } catch (error) {
-      entry.finish(error: error.runtimeType.toString());
+      entry.finish(error: speedErrorName(error));
       rethrow;
     }
 
@@ -115,6 +123,17 @@ class SpeedHttpClient extends http.BaseClient {
     }
   }
 }
+
+/// The fixed name of [error] in the speed log (see [SpeedError]).
+String speedErrorName(Object error) => switch (error) {
+      http.RequestAbortedException() => SpeedError.aborted,
+      TimeoutException() => SpeedError.timeout,
+      SocketException() => SpeedError.socket,
+      TlsException() => SpeedError.tls,
+      HttpException() => SpeedError.http,
+      http.ClientException() => SpeedError.client,
+      _ => SpeedError.other,
+    };
 
 /// A request being recorded.
 class _Entry {
@@ -199,12 +218,17 @@ class _ObservedRequest extends http.BaseRequest implements http.Abortable {
 
   @override
   http.ByteStream finalize() {
+    final body = _original.finalize();
+    // Some requests write their headers and length while finalizing: a
+    // MultipartRequest sets its content-type and boundary there.
+    headers.addAll(_original.headers);
+    contentLength = _original.contentLength;
     super.finalize();
     // On the web a fetch reads the whole body before sending it: the end of
     // this stream is not a hand-over there.
     final boundary = xhrUploadAvailable ? null : 'transport';
     return http.ByteStream(_observe(
-      _original.finalize(),
+      body,
       onData: (chunk) => _entry.bytesUp += chunk.length,
       onEnd: (error) {
         if (error == null && boundary != null && _entry.bytesUp > 0) {
@@ -217,7 +241,7 @@ class _ObservedRequest extends http.BaseRequest implements http.Abortable {
 
 /// [source], passed through event by event with pause and cancel forwarded,
 /// so it is pulled no faster than its listener takes it. [onEnd] runs once:
-/// with null when it ends, the error's type when it fails, `cancelled` when
+/// with null when it ends, the error's name when it fails, `cancelled` when
 /// the listener stops early.
 Stream<List<int>> _observe(
   Stream<List<int>> source, {
@@ -242,7 +266,7 @@ Stream<List<int>> _observe(
           controller.add(chunk);
         },
         onError: (Object error, StackTrace stack) {
-          end(error.runtimeType.toString());
+          end(speedErrorName(error));
           controller.addError(error, stack);
         },
         onDone: () {
@@ -254,7 +278,7 @@ Stream<List<int>> _observe(
     onPause: () => subscription.pause(),
     onResume: () => subscription.resume(),
     onCancel: () {
-      end('cancelled');
+      end(SpeedError.cancelled);
       return subscription.cancel();
     },
   );

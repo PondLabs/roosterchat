@@ -33,8 +33,10 @@ class RequestRecord {
   final String route;
   final HostClass hostClass;
 
-  /// 1 for the first request of this method and route in its span, 2 for the
-  /// next... Always 1 outside a span.
+  /// 1 the first time this request is sent in its span, 2, 3... each time
+  /// the same request (same method, full URL and body length) is sent again
+  /// in that span. Always 1 outside a span. The rule and the cases where
+  /// different requests come out as 2 are in the doc of `speed_log.dart`.
   final int attempt;
 
   /// The id of the span the request was made in, if any.
@@ -43,9 +45,10 @@ class RequestRecord {
   /// The HTTP status, null when no response came.
   final int? status;
 
-  /// The type of the error when no response came or its body failed
-  /// (`SocketException`, `TimeoutException`), or `cancelled` when the body
-  /// was abandoned. Never the error's message, which can hold the URL.
+  /// Why no response came or its body failed, as one of the fixed names of
+  /// `SpeedError` (`socket`, `timeout`...; `cancelled` when the body was
+  /// abandoned). Never the error's message, which can hold the URL, nor its
+  /// runtime type.
   final String? error;
 
   final int bytesUp;

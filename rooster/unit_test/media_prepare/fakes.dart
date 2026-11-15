@@ -8,7 +8,8 @@ import 'package:rooster/utils/image/preparation/thumbnail_encoder.dart';
 
 class NoFrames implements FrameSource {
   @override
-  void listen(void Function(Duration frame) onFrame) {}
+  void listen(Duration Function() clock,
+      void Function(List<FrameSample> batch) onBatch) {}
   @override
   void cancel() {}
 }

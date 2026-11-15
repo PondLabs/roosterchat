@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
+import 'package:rooster/diagnostic/speed_log/speed_report.dart';
 import 'package:rooster/utils/image/preparation/image_preparation.dart';
 
 import 'fakes.dart';
@@ -171,5 +172,29 @@ void main() {
     expect(span.steps[1].values, {"bytes": 400 * 1000});
     expect(span.steps[2].values, {"width": 800, "height": 600, "frames": 1});
     expect(span.steps[3].values, {"bytes": 10, "width": 800, "height": 600});
+  });
+
+  test("the speed report shows the image_prepare span and its steps by name",
+      () async {
+    final log = SpeedLog(frames: NoFrames());
+    await fakePreparer(FakeEngine(width: 4032, height: 3024), log: log)
+        .prepare(fakeJpegHeader(4032, 3024));
+    final report = buildSpeedReport(log);
+    // ignore: avoid_print
+    print(report);
+    expect(report, isNot(contains("invalid_name")));
+    expect(report, contains("image_prepare"));
+    for (final name in [
+      "queue_wait",
+      "header",
+      "decode",
+      "encode",
+      "bytes",
+      "width",
+      "height",
+      "frames",
+    ]) {
+      expect(report, contains(name), reason: name);
+    }
   });
 }

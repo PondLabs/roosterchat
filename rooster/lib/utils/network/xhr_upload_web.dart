@@ -27,10 +27,8 @@ Future<http.StreamedResponse> sendByXhr(
   request.headers.forEach((name, value) => xhr.setRequestHeader(name, value));
 
   final done = Completer<http.StreamedResponse>();
-  void fail(String why) {
-    if (!done.isCompleted) {
-      done.completeError(http.ClientException(why, request.url));
-    }
+  void fail(http.ClientException error) {
+    if (!done.isCompleted) done.completeError(error);
   }
 
   xhr.upload.onload = ((web.Event _) => onUploadLoad()).toJS;
@@ -49,8 +47,11 @@ Future<http.StreamedResponse> sendByXhr(
       reasonPhrase: xhr.statusText,
     ));
   }).toJS;
-  xhr.onerror = ((web.Event _) => fail('XMLHttpRequest error.')).toJS;
-  xhr.onabort = ((web.Event _) => fail('XMLHttpRequest aborted.')).toJS;
+  xhr.onerror = ((web.Event _) =>
+      fail(http.ClientException('XMLHttpRequest error.', request.url))).toJS;
+  // As the fetch client does when the request's abortTrigger completes.
+  xhr.onabort =
+      ((web.Event _) => fail(http.RequestAbortedException(request.url))).toJS;
   if (request case http.Abortable(:final abortTrigger?)) {
     unawaited(abortTrigger.whenComplete(() => xhr.abort()));
   }
