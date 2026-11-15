@@ -530,15 +530,11 @@ class WhoMatch extends ChangeNotifier {
   }
 
   /// The turn goes to the next player still asking, a lap more when the
-  /// order starts over. With one player left, or past the lap limit, the
-  /// rescue.
+  /// order starts over; past the lap limit, the rescue. With one player
+  /// left, the next step of [MatchPhase.asking] starts the rescue.
   void _passTurn() {
     final s = _state;
     final active = s.active;
-    if (active.length < 2) {
-      _rescue();
-      return;
-    }
     var next = s.turn, lap = s.lap;
     for (var step = 0; step < s.order.length; step++) {
       next++;
