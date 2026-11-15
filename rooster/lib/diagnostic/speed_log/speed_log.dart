@@ -38,6 +38,13 @@
 /// transaction ids, are each attempt 1. The span keeps only a salted hash of
 /// each request (the salt is random per span), never its URL, and forgets
 /// them all in [SpeedSpan.finish]. Outside a span every request is attempt 1.
+///
+/// The rule cannot see the body, so different requests that share method,
+/// URL and body length also come out as attempt 2: two encrypted uploads of
+/// one size (the SDK names every encrypted file `crypt`), two
+/// `read_markers` for different events of the same id length, or one GET
+/// asked twice at once by two widgets. Read `attempt=2` as "sent again or
+/// identical on the wire", not as a proven retry.
 library;
 
 import 'dart:async';
