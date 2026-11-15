@@ -72,6 +72,32 @@ void main() {
       });
     });
 
+    test('a later answer does not give the count more time', () {
+      play(4, (m) {
+        final [a, b, _] = m.state.responders;
+        m[a].answer(no);
+        m.run();
+        final closes = m.now + 5000;
+        m.seconds(3);
+        m[b].answer(no);
+        m.run();
+        expect(m.state.tallyDeadline, closes);
+        m.seconds(2);
+        expect(m.state.last?.counts, {no: 2});
+      });
+    });
+
+    test('one got it of two who could answer is a yes', () {
+      play(3, (m) {
+        final asker = m.asker!;
+        m[m.state.responders.first].answer(gotIt);
+        m.seconds(5);
+        expect(m.state.last?.outcome, TallyOutcome.yes);
+        expect(m.state.guessed, isEmpty);
+        expect(m.asker, asker);
+      });
+    });
+
     test('closes when everyone answered', () {
       play(4, (m) {
         m.answerAll(no, by: (id) => id == m.state.responders.last ? yes : no);
