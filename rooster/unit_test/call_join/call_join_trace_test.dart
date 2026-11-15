@@ -45,6 +45,25 @@ class _HttpHost extends FakeHost {
   }
 }
 
+/// A host whose session sends a request from a timer, as the real session's
+/// membership heartbeat does, for as long as the call lasts.
+class _HeartbeatHost extends FakeHost {
+  _HeartbeatHost(super.journal, this.client);
+
+  final http.Client client;
+  Timer? heartbeat;
+
+  @override
+  FakeLivekitRoom createSession(LivekitJoinRoom room) {
+    heartbeat = Timer.periodic(const Duration(milliseconds: 20), (_) {
+      client.put(Uri.parse('${_HttpHost.homeserver}/_matrix/client/v3/rooms/'
+          '${Uri.encodeComponent(roomId)}/state/'
+          'org.matrix.msc3401.call.member/key'));
+    });
+    return super.createSession(room);
+  }
+}
+
 void main() {
   late SpeedLog log;
   late Journal journal;
@@ -180,5 +199,33 @@ void main() {
         throwsStateError);
 
     expect(log.spans.toList().single.outcome, 'failed');
+  });
+
+  test(
+      "the session's requests and the previous call's hang up are not the "
+      "join's", () async {
+    final client = recorded(MockClient((_) async => http.Response('{}', 200)));
+    final host = _HeartbeatHost(journal, client);
+    addTearDown(() => host.heartbeat?.cancel());
+
+    await CallJoin(
+            host: host,
+            tokens: fakeTokenService(journal),
+            log: log,
+            remoteAudioWindow: const Duration(milliseconds: 10))
+        .run(
+            leavePrevious: () => client.put(
+                Uri.parse('${_HttpHost.homeserver}/_matrix/client/v3/rooms/'
+                    '${Uri.encodeComponent('!other:example.org')}/state/'
+                    'org.matrix.msc3401.call.member/key')));
+    // Some heartbeats of the call, after the span ended.
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+
+    final span = log.spans.toList().single;
+    final requests = log.requests.toList();
+    expect(requests.length, greaterThanOrEqualTo(3),
+        reason: 'the hang up and a few heartbeats');
+    expect(requests.where((r) => r.operationId == span.id), isEmpty);
+    expect(requests.every((r) => r.operationId == null), isTrue);
   });
 }

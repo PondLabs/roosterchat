@@ -105,18 +105,25 @@ class CallJoin<S> {
           "Not allowed to send the call membership", errorCallNoPermission);
     }
     final trace = CallJoinTrace(log, remoteAudioWindow: remoteAudioWindow);
+    // The previous call's hang up and the new session run here, outside the
+    // span: their requests (and the session's timers, for the whole call)
+    // are not the join's.
+    final outside = Zone.current;
     try {
-      return await trace.run(() => _join(trace, leavePrevious));
+      return await trace.run(() => _join(trace, outside, leavePrevious));
     } catch (_) {
       trace.failed();
       rethrow;
     }
   }
 
-  Future<S> _join(
-      CallJoinTrace trace, Future<void> Function()? leavePrevious) async {
-    final leaving = _quiet(trace.time(SpeedStep.leavePrevious,
-        () => leavePrevious?.call() ?? Future.value()));
+  Future<S> _join(CallJoinTrace trace, Zone outside,
+      Future<void> Function()? leavePrevious) async {
+    final leaving = _quiet(trace.time(
+        SpeedStep.leavePrevious,
+        () => leavePrevious == null
+            ? Future.value()
+            : outside.run(leavePrevious)));
     // Awaited before the connection: joining while this is still running
     // leaves the call on whatever device the system chose.
     final output = _quiet(
@@ -231,7 +238,7 @@ class CallJoin<S> {
       trace.listenForRemoteAudio(
           room.events.where((event) => event == JoinRoomEvent.remoteSpeaking));
 
-      return host.createSession(room);
+      return outside.run(() => host.createSession(room));
     } catch (_) {
       // Don't leave a membership for a call we never got into, nor a room
       // that keeps its connectivity listener and timers alive (issue #48).
