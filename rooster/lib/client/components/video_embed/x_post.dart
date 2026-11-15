@@ -47,6 +47,16 @@ class XPost {
   XMedia? get video =>
       media.where((m) => m.type != XMediaType.photo).firstOrNull;
 
+  /// What a cell of this post's media grid draws for [item], one of
+  /// [media]: a photo at [XPhotoSize.medium] when it is the post's only
+  /// item, else at [XPhotoSize.small]; a video's or GIF's poster as it is.
+  /// The X card and the warm-up both ask here, so they load the same image.
+  Uri? cellImageUrl(XMedia item) {
+    if (item.type != XMediaType.photo) return item.thumbnailUrl;
+    final size = media.length == 1 ? XPhotoSize.medium : XPhotoSize.small;
+    return size.of(item.url);
+  }
+
   /// Null when [json] is not a status (missing author or url).
   static XPost? fromFxJson(Map<String, dynamic> json) {
     final author = json['author'];
@@ -89,6 +99,29 @@ class XPost {
 }
 
 enum XMediaType { photo, video, gif }
+
+/// The sizes pbs.twimg.com serves a photo at, picked by the `name` query
+/// parameter: [small] is 680 px on its long side, [medium] 1200, [large]
+/// 2048 and [orig] the upload itself (often 4096). fxtwitter hands out
+/// [orig], about 2 MB and 39 MB decoded for a 3840x2560 photo, far more
+/// than a grid cell needs. See docs/x-posts.md.
+enum XPhotoSize {
+  small,
+  medium,
+  large,
+  orig;
+
+  /// [url] at this size when it is a photo on `pbs.twimg.com/media/`, with
+  /// its other parameters (such as `format=jpg`) kept. Any other URL
+  /// (avatars, video posters, other sites) comes back as it is.
+  Uri of(Uri url) {
+    if (url.host != 'pbs.twimg.com' || !url.path.startsWith('/media/')) {
+      return url;
+    }
+    return url
+        .replace(queryParameters: {...url.queryParameters, 'name': this.name});
+  }
+}
 
 class XMedia {
   final XMediaType type;

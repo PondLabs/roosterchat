@@ -18,9 +18,11 @@ The status JSON is cached per status id in the provider, so the card, its video 
 
 ## Media
 
-- **Photos:** one photo keeps its shape. Two to four photos show in X's grid. Tapping a photo opens the lightbox with every photo.
+- **Photos:** one photo keeps its shape. Two to four photos show in X's grid. Since 2026-11-12 X allows 20 photos and videos per post; a post with more than four shows its first four, the fourth dimmed under a "+N" with the count of the rest (the official embed shows six with no count, x.com a sideways strip). Tapping a photo, or the "+N", opens the lightbox with every photo, on the photo tapped.
 - **Video or GIF:** the thumbnail with a play button. Play opens the MP4 in the video dialog, the same player as an X video link had before.
-- **Quoted post:** a nested card laid out like X's official embed (`platform.twitter.com/embed/Tweet.html`): author and text, then every photo, video and GIF of the quote edge to edge. One item keeps its shape (cropped at 300 px tall). Two sit side by side, three are one tall item next to two stacked, four are a 2x2; two to four always fill a 16:9 box. A photo opens the lightbox with the quote's photos, a video or GIF plays in the video dialog, anywhere else opens the quote. Until October 2026 the quote showed only its first item, so the second photo of a quote went missing.
+- **Quoted post:** a nested card laid out like X's official embed (`platform.twitter.com/embed/Tweet.html`): author and text, then every photo, video and GIF of the quote edge to edge. One item keeps its shape (cropped at 300 px tall). Two sit side by side, three are one tall item next to two stacked, four are a 2x2; two to four always fill a 16:9 box. A photo opens the lightbox with the quote's photos, a video or GIF plays in the video dialog, anywhere else opens the quote. Until October 2026 the quote showed only its first item, so the second photo of a quote went missing. A quote with more than four items shows its first four in the same 16:9 box, the fourth under "+N". When the fourth and every hidden item are photos, the "+N" opens the lightbox on the fourth; when a video or GIF is among them it opens the quote on X instead, since the lightbox pages photos only.
+- **Sizes:** fxtwitter hands out each photo at `name=orig`, the upload itself: about 2 MB for a 3840x2560 photo, and 39 MB once decoded, so four cells took more than Flutter's 100 MB image cache. `pbs.twimg.com` serves every photo at other sizes too, picked by the `name` parameter: `small` (680 px on the long side), `medium` (1200), `large` (2048). `XPhotoSize` rewrites only `pbs.twimg.com/media/` URLs, keeping their other parameters. Grid cells draw `small`, a post's only photo `medium`, and the lightbox `large`, with the cell's copy shown until it loads (`UrlPreviewImage.full`, `Lightbox.galleryThumbnails`). Avatars, video and GIF posters (which answer every `name` with the same file) and other sites' photos (Instagram's are signed URLs) are used as they are. The warm-up loads exactly what the card draws (`UrlPreviewComponent.cardImages`).
+- **Lightbox:** pages with the arrows on screen or on the keyboard, says which photo it shows ("4 / 11"), downloads the photos on either side, and gives each photo its own shape as soon as it is stepped to (from the post's width and height), before it has loaded.
 
 ## Fallback
 
@@ -28,7 +30,8 @@ If the fetch fails (fxtwitter down, a private or deleted post), the link goes th
 
 ## Limitations
 
-- A post with both photos and a video shows only the photos. A quoted post shows both.
+- A post with both photos and a video shows only the photos, and its "+N" counts only photos, the ones the lightbox can show. A quoted post shows both. With 20 items a post, mixed posts will be more common; drawing the main card's media like the quote's is the next step.
+- The lightbox cannot be swiped from photo to photo; the arrows do it. A swipe would compete with its zoom and drag gestures.
 - The card shows no polls, community notes, reply context or link cards.
 - fxtwitter is a third-party service. When it stops answering, posts fall back to the plain preview.
 
@@ -39,4 +42,4 @@ curl -s -H 'Origin: https://example.com' -D - -o /dev/null \
   https://api.fxtwitter.com/SpaceX/status/1732824684683784516 | grep -i access-control
 ```
 
-The test fixture `rooster/unit_test/fixtures/x_status_fxtwitter.json` is SpaceX's video post with Ellen's Oscars selfie set as its quote. Both are trimmed from real replies. `x_status_quote_photos_fxtwitter.json` is a real quote post whose quoted post has two photos (rsa quoting TIDAL), trimmed.
+The test fixture `rooster/unit_test/fixtures/x_status_fxtwitter.json` is SpaceX's video post with Ellen's Oscars selfie set as its quote. Both are trimmed from real replies. `x_status_quote_photos_fxtwitter.json` is a real quote post whose quoted post has two photos (rsa quoting TIDAL), trimmed. `x_status_eleven_photos_fxtwitter.json` is the post that announced the 20-photo limit, with 11 photos, trimmed.
