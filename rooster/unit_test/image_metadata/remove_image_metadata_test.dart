@@ -429,7 +429,88 @@ void main() {
       expect(readTiffOrientation(Uint8List(4)), 1);
       expect(readTiffOrientation(Uint8List.fromList("II*\u0000".codeUnits)), 1);
     });
+
+    // Odd blocks the engine reads in its own way: the rewrite has to keep
+    // the picture drawn as the original is. Each is (name, block, the
+    // orientation the engine applies).
+    final odd = [
+      for (final little in [false, true]) ...[
+        for (final count in [0, 2, 0xFFFFFFFF])
+          (
+            "count $count",
+            _tiff(little: little, entries: [(0x0112, 3, count, 6)]),
+            1
+          ),
+        for (final magic in [0, 43, 0x2A00])
+          ("magic $magic", _tiff(little: little, magic: magic), 6),
+        (
+          "a LONG Orientation before a SHORT one",
+          _tiff(
+              little: little, entries: [(0x0112, 4, 1, 6), (0x0112, 3, 1, 8)]),
+          8
+        ),
+        (
+          "an Orientation of 9 before an 8",
+          _tiff(
+              little: little, entries: [(0x0112, 3, 1, 9), (0x0112, 3, 1, 8)]),
+          8
+        ),
+      ],
+    ];
+
+    test("is read as the engine reads it", () {
+      for (final (name, block, orientation) in odd) {
+        expect(readTiffOrientation(block), orientation, reason: name);
+      }
+    });
+
+    test("a JPEG with an odd block is drawn as the original", () async {
+      final clean = removeMetadataByRewrite(fixture("gps_xmp.jpg"))!.bytes!;
+      for (final (name, block, orientation) in odd) {
+        final input = Uint8List.fromList([
+          0xFF, 0xD8, 0xFF, 0xE1, 0, 2 + 6 + block.length, //
+          ..."Exif\u0000\u0000".codeUnits, ...block,
+          ...clean.sublist(2),
+        ]);
+        final result = removeMetadataByRewrite(input)!;
+        expect(result.outcome, MetadataRemovalOutcome.rewritten, reason: name);
+        expect(result.bytes!.length, lessThanOrEqualTo(input.length),
+            reason: name);
+        await expectNoMetadata(result.bytes!, orientation: orientation);
+        final (w, h, _) = (await render(input)).single;
+        expect((w, h), orientation == 1 ? (64, 48) : (48, 64),
+            reason: "$name: the engine applies $orientation");
+        final (outW, outH, _) = (await render(result.bytes!)).single;
+        expect((outW, outH), (w, h), reason: name);
+      }
+    });
   });
+}
+
+/// A TIFF block whose IFD0 right after the header holds [entries] as (tag,
+/// type, count, value), with the 4-byte offset of the next IFD: written
+/// here rather than with the code under test.
+Uint8List _tiff(
+    {bool little = false,
+    int magic = 42,
+    List<(int, int, int, int)> entries = const [(0x0112, 3, 1, 6)]}) {
+  final e = little ? Endian.little : Endian.big;
+  final d = ByteData(8 + 2 + entries.length * 12 + 4)
+    ..setUint8(0, little ? 0x49 : 0x4D)
+    ..setUint8(1, little ? 0x49 : 0x4D)
+    ..setUint16(2, magic, e)
+    ..setUint32(4, 8, e)
+    ..setUint16(8, entries.length, e);
+  for (var i = 0; i < entries.length; i++) {
+    final (tag, type, count, value) = entries[i];
+    final at = 10 + i * 12;
+    d
+      ..setUint16(at, tag, e)
+      ..setUint16(at + 2, type, e)
+      ..setUint32(at + 4, count, e)
+      ..setUint16(at + 8, value, e);
+  }
+  return d.buffer.asUint8List();
 }
 
 int _indexOf(Uint8List haystack, String needle) {
