@@ -68,7 +68,9 @@ void main() {
     final echo = span.steps[1];
     final answer = span.steps.last;
     expect(echo.start, span.steps.first.duration);
-    expect(request.start, greaterThanOrEqualTo(echo.start));
+    // The echo is the pending message, shown before the request leaves;
+    // not the sent one the SDK shows after the answer.
+    expect(echo.start + echo.duration!, lessThanOrEqualTo(request.start));
     expect(
         answer.start, greaterThanOrEqualTo(request.start + request.duration!));
     expect(
