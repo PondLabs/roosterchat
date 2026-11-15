@@ -123,11 +123,46 @@ void main() {
         final id = m.state.questionId;
         m.answerAll(yes);
         expect(m.state.question, 2);
-        final late = m.state.responders.first;
+        final late = m.state.responders.firstWhere((p) => p != m.sim.host.id);
+        final sent = m.sim.call.delivered.length;
         m.sim[late].session
             .sendTo([m.sim.host.id], {'who': 'answer', 'a': 'no', 'q': id});
         m.run();
+        expect(m.sim.call.delivered.length, greaterThan(sent));
         expect(m.state.answers, isEmpty);
+        // The same answer for the current question counts.
+        m.sim[late].session.sendTo([m.sim.host.id],
+            {'who': 'answer', 'a': 'no', 'q': m.state.questionId});
+        m.run();
+        expect(m.state.answers, {late: no});
+      });
+    });
+
+    test('everyone sees the answers and when the count closes', () {
+      play(4, (m) {
+        final other = m.state.responders.firstWhere((p) => p != m.sim.host.id);
+        m[other].answer(sortOf);
+        m.run();
+        for (final match in m.matches.values) {
+          expect(match.state.answers, {other: sortOf});
+          expect(match.state.tallyDeadline, m.state.tallyDeadline);
+        }
+      });
+    });
+
+    test('the answer of who leaves is dropped, and its 5 s with it', () {
+      play(5, (m) {
+        final [a, b, ...] =
+            m.state.responders.where((p) => p != m.sim.host.id).toList();
+        m[a].answer(no);
+        m[b].answer(yes);
+        m.run();
+        m.vanish(a);
+        expect(m.state.answers, {b: yes});
+        expect(m.state.tallyDeadline, isNotNull);
+        m.vanish(b);
+        expect(m.state.answers, isEmpty);
+        expect(m.state.tallyDeadline, isNull);
       });
     });
 

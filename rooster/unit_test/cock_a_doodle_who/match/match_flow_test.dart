@@ -128,6 +128,74 @@ void main() {
     });
   });
 
+  group('who may do what', () {
+    test('only the host tells an author whose plaque they write', () {
+      play(3, (m) {
+        m.host.hostStart();
+        m.run();
+        final owner = m['p1'].writingFor;
+        m.sim['p2'].session
+            .sendTo(['p1'], {'who': 'write', 'r': m.state.round, 'o': 'x9'});
+        m.run();
+        expect(m['p1'].writingFor, owner);
+      });
+    });
+
+    test('a spectator asks for no swap', () {
+      play(3,
+          settings: MatchSettings(mode: MatchMode.deck, theme: DeckTheme.jobs),
+          (m) {
+        final watcher = m.addSpectator('s9');
+        m.host.hostStart();
+        m.run();
+        m.expectPhase(MatchPhase.look);
+        watcher.askSwap(m.state.order.first);
+        m.run();
+        expect(m.state.swapped, isEmpty);
+        m[m.state.order.last].askSwap(m.state.order.first);
+        m.run();
+        expect(m.state.swapped, {m.state.order.first});
+      });
+    });
+  });
+
+  group('clocks that disagree', () {
+    test('every client counts down on the host\'s clock', () {
+      play(3, (m) {
+        m.skew('p1', const Duration(hours: 3));
+        m.skew('p2', const Duration(seconds: -40));
+        m.host.hostStart();
+        m.run();
+        m.writeAll();
+        m.expectPhase(MatchPhase.look);
+        m.seconds(4);
+        for (final id in ['p1', 'p2']) {
+          expect(m[id].hostNow, m.now);
+          expect(m[id].state.deadline! - m.now, 6000);
+        }
+      });
+    });
+
+    test('a new host whose clock is 3 h behind keeps the time left', () {
+      play(3, (m) {
+        m.skew('p1', const Duration(hours: -3));
+        m.host.hostStart();
+        m.run();
+        m.writeAll();
+        m.seconds(4);
+        m.vanish('p0');
+        expect(m.sim.host.id, 'p1');
+        expect((m['p1'].state.deadline! - m['p1'].hostNow - 6000).abs(),
+            lessThanOrEqualTo(2000));
+        m.seconds(5.9);
+        m.expectPhase(MatchPhase.look);
+        m.seconds(0.1);
+        m.expectPhase(MatchPhase.asking);
+        expect(m['p2'].state.deadline! - m['p2'].hostNow, 30000);
+      });
+    });
+  });
+
   group('the host changes mid-round', () {
     test('the same phase, order, points and clock', () {
       play(4, (m) {
@@ -222,6 +290,30 @@ void main() {
       }
       expect(m.sim.leaks(), isEmpty);
     }
+
+    test('the points of every round add up', () {
+      play(3, settings: MatchSettings(rounds: 2), (m) {
+        m.host.hostStart();
+        m.run();
+        final sums = <String, int>{};
+        for (var r = 1; r <= 2; r++) {
+          m.toQuestions();
+          // Two of three guess in the first lap: someone guesses twice.
+          m.answerAll(gotIt);
+          m.answerAll(gotIt);
+          for (final MapEntry(:key, :value) in m.state.roundPoints.entries) {
+            sums[key] = (sums[key] ?? 0) + value;
+          }
+          m.seconds(30);
+          if (r == 1) m.seconds(10);
+        }
+        m.expectPhase(MatchPhase.finished);
+        expect(sums.values, contains(16));
+        for (final MapEntry(:key, :value) in m.state.points.entries) {
+          expect(value, sums[key] ?? 0);
+        }
+      });
+    });
 
     test('Homemade, from the lobby to the final result', () {
       play(4, (m) {

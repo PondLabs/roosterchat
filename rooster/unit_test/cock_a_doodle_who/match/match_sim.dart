@@ -94,6 +94,31 @@ class MatchSim {
     return this[id];
   }
 
+  /// Someone enters the call and watches the session.
+  WhoMatch addSpectator(String id) {
+    final app = sim.enter(id);
+    run();
+    app.session.join(asPlayer: false);
+    run();
+    _attach(app);
+    run();
+    return this[id];
+  }
+
+  /// [id]'s machine clock is [ahead] of the others' from now on.
+  void skew(String id, Duration ahead) {
+    matches.remove(id)!.dispose();
+    final app = sim[id];
+    final match = matches[id] = WhoMatch(
+      session: app.session,
+      custody: app.custody,
+      random: Random(app.seed),
+      now: () => _clock.now().add(ahead),
+    );
+    match.addListener(() => _track(app));
+    run();
+  }
+
   /// [id]'s client is gone without a word.
   void vanish(String id) {
     matches.remove(id)!.dispose();
