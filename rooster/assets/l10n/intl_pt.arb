@@ -592,6 +592,7 @@
   "labelAppQuickSwitcherRecentActivity": "Atividade recente",
   "promptAttachmentProcessingSendOriginal": "Enviar original (mantém os metadados)",
   "labelAttachmentMetadataNotRemoved": "Não foi possível remover os metadados desta imagem. Para anexá-la como está, ative \"Enviar original\".",
+  "labelAttachmentAnimationNotKept": "A animação não foi mantida: só o primeiro quadro será anexado. Para anexá-la como está, ative \"Enviar original\".",
   "labelImageContainsLocationInfo": "Aviso: esta imagem contém metadados de localização",
   "promptChatAddFile": "Adicionar arquivo",
   "ActivityJoinPill_text": "{host} iniciou {activity}",
