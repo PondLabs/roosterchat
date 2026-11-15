@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:build/build.dart';
+import 'package:dart_style/dart_style.dart';
 
 import '../utils/emoji/unicode_emoji_data.dart';
 
@@ -71,6 +72,9 @@ class UnicodeEmojiBuilder implements Builder {
 
     outputBuffer.write("}");
 
-    await buildStep.writeAsString(outputId, outputBuffer.toString());
+    // Written the way `dart format` writes it, so that formatting the
+    // project after the codegen has nothing left to change.
+    await buildStep.writeAsString(
+        outputId, DartFormatter().format(outputBuffer.toString()));
   }
 }
