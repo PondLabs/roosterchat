@@ -11,8 +11,10 @@ enum MetadataRemovalOutcome {
   rewritten,
 
   /// The container did not parse, so the picture was decoded and encoded
-  /// again without metadata (JPEG at quality 90; PNG for a PNG or for a
-  /// picture with transparency).
+  /// again without metadata: PNG for a PNG or for a picture with
+  /// transparency, otherwise JPEG at the first of
+  /// [metadataFallbackJpegQualities] that is no larger than the original
+  /// (the last one when none is).
   reencoded,
 
   /// A format with nothing to remove (GIF, BMP): the bytes are unchanged.
@@ -27,7 +29,10 @@ enum MetadataRemovalOutcome {
 /// isolates.
 class MetadataRemoval {
   const MetadataRemoval(this.outcome,
-      {this.bytes, this.mimeType, this.animationLost = false});
+      {this.bytes,
+      this.mimeType,
+      this.animationLost = false,
+      this.jpegQuality});
 
   final MetadataRemovalOutcome outcome;
 
@@ -42,10 +47,34 @@ class MetadataRemoval {
   /// The picture was animated and [bytes] hold only its first frame: a
   /// re-encode keeps one frame.
   final bool animationLost;
+
+  /// The JPEG quality [bytes] were encoded at, when the picture was
+  /// re-encoded as a JPEG; null otherwise.
+  final int? jpegQuality;
 }
 
-/// JPEG quality of the re-encode a picture falls back to.
-const int metadataFallbackJpegQuality = 90;
+/// JPEG qualities the re-encode tries in order, stopping at the first whose
+/// output is no larger than the original file. When none is, the output at
+/// the last one is sent all the same: never the original, which still holds
+/// its metadata.
+const List<int> metadataFallbackJpegQualities = [90, 80, 70];
+
+/// Picks the JPEG a re-encode sends: [encode] is called with each of
+/// [metadataFallbackJpegQualities] in turn until its output is at most
+/// [originalLength] bytes, and the last output is kept when none fits.
+/// Returns the quality used and its output, or null when [encode] returns
+/// null. Pure; [encode] does the work, so a test can count the encodings.
+(int, Uint8List)? pickFallbackJpeg(
+    int originalLength, Uint8List? Function(int quality) encode) {
+  (int, Uint8List)? picked;
+  for (final quality in metadataFallbackJpegQualities) {
+    final bytes = encode(quality);
+    if (bytes == null) return null;
+    picked = (quality, bytes);
+    if (bytes.length <= originalLength) break;
+  }
+  return picked;
+}
 
 /// Removes metadata without decoding: GIF and BMP come back untouched, a
 /// JPEG, PNG or WebP that parses comes back rewritten (see
@@ -84,16 +113,19 @@ Future<MetadataRemoval> removeImageMetadata(Uint8List bytes) async {
   return reencoded ?? const MetadataRemoval(MetadataRemovalOutcome.failed);
 }
 
-/// Straight-alpha RGBA pixels of a picture's first frame, as shown, and how
-/// many frames the picture has.
+/// Straight-alpha RGBA pixels of a picture's first frame, as shown, how
+/// many frames the picture has, and the size of the file they came from.
 class _Pixels {
   const _Pixels(this.width, this.height, this.rgba,
-      {required this.asPng, required this.frames});
+      {required this.asPng,
+      required this.frames,
+      required this.originalLength});
   final int width;
   final int height;
   final Uint8List rgba;
   final bool asPng;
   final int frames;
+  final int originalLength;
 }
 
 Future<_Pixels?> _decodeWithEngine(Uint8List bytes) async {
@@ -114,7 +146,7 @@ Future<_Pixels?> _decodeWithEngine(Uint8List bytes) async {
       if (rgba[i] != 0xFF) asPng = true;
     }
     return _Pixels(image.width, image.height, rgba,
-        asPng: asPng, frames: codec.frameCount);
+        asPng: asPng, frames: codec.frameCount, originalLength: bytes.length);
   } catch (_) {
     return null;
   } finally {
@@ -131,19 +163,30 @@ MetadataRemoval? _encodeWithoutMetadata(_Pixels pixels) {
       bytesOffset: pixels.rgba.offsetInBytes,
       numChannels: 4,
       order: img.ChannelOrder.rgba);
-  final encoded = pixels.asPng
-      ? img.encodePng(image)
-      : img.encodeJpg(image,
-          quality: metadataFallbackJpegQuality, chroma: img.JpegChroma.yuv420);
-
   // The encoder writes no metadata it is not given, but the output goes
   // through the same allowlist as a parsed file all the same.
-  final container = parseImageContainer(encoded);
-  if (container == null) return null;
+  Uint8List? clean(Uint8List encoded) =>
+      parseImageContainer(encoded)?.withoutMetadata();
+
+  // A PNG has no quality to step down: it is encoded once, whatever its
+  // size. A JPEG is encoded from the same pixels at each step it needs.
+  if (pixels.asPng) {
+    final bytes = clean(img.encodePng(image));
+    if (bytes == null) return null;
+    return MetadataRemoval(MetadataRemovalOutcome.reencoded,
+        bytes: bytes, mimeType: "image/png", animationLost: pixels.frames > 1);
+  }
+  final picked = pickFallbackJpeg(
+      pixels.originalLength,
+      (quality) => clean(img.encodeJpg(image,
+          quality: quality, chroma: img.JpegChroma.yuv420)));
+  if (picked == null) return null;
+  final (quality, bytes) = picked;
   return MetadataRemoval(MetadataRemovalOutcome.reencoded,
-      bytes: container.withoutMetadata(),
-      mimeType: container.mimeType,
-      animationLost: pixels.frames > 1);
+      bytes: bytes,
+      mimeType: "image/jpeg",
+      animationLost: pixels.frames > 1,
+      jpegQuality: quality);
 }
 
 bool _isGif(Uint8List bytes) =>
