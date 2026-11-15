@@ -191,6 +191,30 @@ void main() {
     expect(log.requests.toList().single.bytesUp, chunks * chunkSize);
   });
 
+  test('a MultipartRequest arrives with its content-type, as without us',
+      () async {
+    final seen = <String?>[];
+    handler = (request) async {
+      seen.add(request.headers.value('content-type'));
+      await request.drain<void>();
+      request.response.write('{}');
+      await request.response.close();
+    };
+    // The multipart content-type, with its boundary, is set in finalize().
+    http.MultipartRequest multipart() =>
+        http.MultipartRequest('POST', base.resolve('/_matrix/media/v3/upload'))
+          ..fields['a'] = 'b';
+
+    final plain = http.Client();
+    await (await plain.send(multipart())).stream.drain<void>();
+    plain.close();
+    await (await client.send(multipart())).stream.drain<void>();
+
+    expect(seen[0], startsWith('multipart/form-data; boundary='));
+    expect(seen[1], startsWith('multipart/form-data; boundary='));
+    expect(log.requests.toList().single.bytesUp, greaterThan(0));
+  });
+
   test('a 429 records retry_after_ms', () async {
     handler = (request) async {
       await request.drain<void>();

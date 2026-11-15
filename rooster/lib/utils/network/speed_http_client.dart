@@ -199,12 +199,17 @@ class _ObservedRequest extends http.BaseRequest implements http.Abortable {
 
   @override
   http.ByteStream finalize() {
+    final body = _original.finalize();
+    // Some requests write their headers and length while finalizing: a
+    // MultipartRequest sets its content-type and boundary there.
+    headers.addAll(_original.headers);
+    contentLength = _original.contentLength;
     super.finalize();
     // On the web a fetch reads the whole body before sending it: the end of
     // this stream is not a hand-over there.
     final boundary = xhrUploadAvailable ? null : 'transport';
     return http.ByteStream(_observe(
-      _original.finalize(),
+      body,
       onData: (chunk) => _entry.bytesUp += chunk.length,
       onEnd: (error) {
         if (error == null && boundary != null && _entry.bytesUp > 0) {
