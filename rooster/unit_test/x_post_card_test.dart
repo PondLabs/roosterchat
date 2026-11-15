@@ -6,8 +6,11 @@ import 'package:rooster/client/components/url_preview/url_preview_component.dart
 import 'package:rooster/client/components/video_embed/providers/twitter_provider.dart';
 import 'package:rooster/client/components/video_embed/x_post.dart';
 import 'package:rooster/ui/molecules/url_preview_widget.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart' as intl;
+import 'package:rooster/generated/intl/messages_all.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:rooster/client/components/video_embed/video_embed_info.dart';
@@ -27,6 +30,40 @@ final _fixture =
 final _quotePhotosFixture =
     File('unit_test/fixtures/x_status_quote_photos_fxtwitter.json')
         .readAsStringSync();
+
+// Jonah Katz's announcement that X allows 20 photos a post, with 11 of
+// them, trimmed from a real api.fxtwitter.com reply (2026-11-14).
+final _elevenPhotosFixture =
+    File('unit_test/fixtures/x_status_eleven_photos_fxtwitter.json')
+        .readAsStringSync();
+
+/// A picture told apart by [name], so a test can ask which copy of a photo
+/// (the grid's or the lightbox's) a widget was given.
+class _NamedImage extends ImageProvider<_NamedImage> {
+  const _NamedImage(this.name, this.image);
+
+  final String name;
+  final ui.Image image;
+
+  @override
+  Future<_NamedImage> obtainKey(ImageConfiguration configuration) =>
+      SynchronousFuture<_NamedImage>(this);
+
+  @override
+  ImageStreamCompleter loadImage(
+          _NamedImage key, ImageDecoderCallback decode) =>
+      OneFrameImageStreamCompleter(
+          SynchronousFuture<ImageInfo>(ImageInfo(image: key.image)));
+
+  @override
+  bool operator ==(Object other) => other is _NamedImage && other.name == name;
+
+  @override
+  int get hashCode => name.hashCode;
+
+  @override
+  String toString() => '_NamedImage($name)';
+}
 
 Widget _testApp(Widget child) => MaterialApp(
       theme: ThemeData.light().copyWith(
@@ -382,10 +419,92 @@ void main() {
 
       final lightbox = tester.widget<Lightbox>(find.byType(Lightbox));
       expect(lightbox.gallery, [
-        imagesByUrl['https://pbs.twimg.com/media/q0.jpg'],
-        imagesByUrl['https://pbs.twimg.com/media/q1.jpg'],
+        imagesByUrl['https://pbs.twimg.com/media/q0.jpg?name=large'],
+        imagesByUrl['https://pbs.twimg.com/media/q1.jpg?name=large'],
       ]);
+      expect(
+          lightbox.galleryThumbnails,
+          [
+            imagesByUrl['https://pbs.twimg.com/media/q0.jpg?name=small'],
+            imagesByUrl['https://pbs.twimg.com/media/q1.jpg?name=small'],
+          ],
+          reason: 'the cells\' copies, shown while the large ones load');
       expect(lightbox.initialIndex, 1);
+    });
+
+    testWidgets('the cells draw small copies, a lone photo a medium one',
+        (tester) async {
+      List<ImageProvider> drawn() => [
+            for (final image
+                in tester.widgetList<Image>(inQuote(find.byType(Image))))
+              image.image,
+          ];
+
+      await pumpCard(tester, quoting([photo(0), photo(1)]));
+      expect(drawn(), [
+        imagesByUrl['https://pbs.twimg.com/media/q0.jpg?name=small'],
+        imagesByUrl['https://pbs.twimg.com/media/q1.jpg?name=small'],
+      ]);
+
+      await pumpCard(tester, quoting([photo(0)]));
+      expect(drawn(),
+          [imagesByUrl['https://pbs.twimg.com/media/q0.jpg?name=medium']]);
+    });
+
+    XMedia gif(int i) => XMedia(
+          type: XMediaType.gif,
+          url: Uri.parse('https://video.twimg.com/q$i.mp4'),
+          thumbnailUrl:
+              Uri.parse('https://pbs.twimg.com/tweet_video_thumb/q$i.jpg'),
+        );
+
+    testWidgets('six photos: a 2x2 grid, "+2" opening the fourth of six',
+        (tester) async {
+      await pumpCard(tester, quoting([for (var i = 0; i < 6; i++) photo(i)]));
+
+      expect(inQuote(find.byType(Image)), findsNWidgets(4));
+      expect(find.text('+2'), findsOneWidget);
+      final media = tester.getRect(find.byKey(const ValueKey('x-quote-media')));
+      expect(media.width / media.height, closeTo(16 / 9, 0.01),
+          reason: 'the same 16:9 box as four');
+
+      await tester.tap(find.byKey(const ValueKey('x-quote-more')));
+      await tester.pumpAndSettle();
+
+      final lightbox = tester.widget<Lightbox>(find.byType(Lightbox));
+      expect(lightbox.gallery, hasLength(6));
+      expect(lightbox.initialIndex, 3);
+      expect(lightbox.gallery![5],
+          imagesByUrl['https://pbs.twimg.com/media/q5.jpg?name=large']);
+    });
+
+    testWidgets('a hidden GIF makes the "+N" open the post instead',
+        (tester) async {
+      final semantics = tester.ensureSemantics();
+      await pumpCard(tester,
+          quoting([photo(0), photo(1), photo(2), photo(3), photo(4), gif(5)]));
+
+      expect(find.text('+2'), findsOneWidget);
+      expect(find.bySemanticsLabel('Open the post to see 2 more items'),
+          findsOneWidget,
+          reason: 'the lightbox pages photos only, so it could not show the '
+              'GIF the count promises');
+      expect(find.bySemanticsLabel('Show 2 more photos'), findsNothing);
+      semantics.dispose();
+    });
+
+    testWidgets('a video under the "+N" makes it open the post too',
+        (tester) async {
+      final semantics = tester.ensureSemantics();
+      await pumpCard(
+          tester, quoting([photo(0), photo(1), photo(2), gif(3), photo(4)]));
+
+      expect(find.text('+1'), findsOneWidget);
+      expect(find.byKey(const ValueKey('x-quote-play-3')), findsNothing,
+          reason: 'the dimmed cell is one button: the count');
+      expect(find.bySemanticsLabel('Open the post to see 1 more item'),
+          findsOneWidget);
+      semantics.dispose();
     });
 
     testWidgets('a quoted video shows its poster and plays its MP4',
@@ -466,6 +585,198 @@ void main() {
 
       expect(find.text('The quoted post'), findsOneWidget);
       expect(find.byKey(const ValueKey('x-quote-media')), findsNothing);
+    });
+  });
+
+  group('photo sizes', () {
+    String sized(XPhotoSize size, String url) =>
+        size.of(Uri.parse(url)).toString();
+
+    test('a photo is asked at the size its place needs', () {
+      const orig = 'https://pbs.twimg.com/media/HW8UTKLW4AEsitH.jpg?name=orig';
+      expect(sized(XPhotoSize.small, orig),
+          'https://pbs.twimg.com/media/HW8UTKLW4AEsitH.jpg?name=small');
+      expect(sized(XPhotoSize.large, orig),
+          'https://pbs.twimg.com/media/HW8UTKLW4AEsitH.jpg?name=large');
+      expect(sized(XPhotoSize.medium, 'https://pbs.twimg.com/media/a.jpg'),
+          'https://pbs.twimg.com/media/a.jpg?name=medium',
+          reason: 'a link without a size gets one');
+    });
+
+    test('the other parameters stay, and sizing twice changes nothing', () {
+      final url = XPhotoSize.small.of(Uri.parse(
+          'https://pbs.twimg.com/media/HW8cftTXoAAvBsO?format=jpg&name=orig'));
+      expect(url.queryParameters, {'format': 'jpg', 'name': 'small'});
+      expect(XPhotoSize.small.of(url), url);
+    });
+
+    test('only photos on pbs.twimg.com/media are sized', () {
+      for (final url in [
+        // An avatar, a video's poster, the video, an Instagram photo whose
+        // signature a changed query would break.
+        'https://pbs.twimg.com/profile_images/1/CTmTaIi5_200x200.jpg',
+        'https://pbs.twimg.com/ext_tw_video_thumb/1/pu/img/A-6jgWg.jpg',
+        'https://video.twimg.com/ext_tw_video/1/pu/vid/avc1/1920x1080/K2N.mp4',
+        'https://scontent.cdninstagram.com/v/t51.jpg?stp=dst-jpg&oh=00_AY&oe=6',
+      ]) {
+        expect(sized(XPhotoSize.small, url), url);
+      }
+    });
+  });
+
+  test('parses all eleven photos of a post with more than four', () {
+    final json =
+        jsonDecode(_elevenPhotosFixture)['tweet'] as Map<String, dynamic>;
+    final post = XPost.fromFxJson(json)!;
+
+    expect(post.handle, 'dinkin_flickaa');
+    expect(post.photos, hasLength(11));
+    expect(post.photos.first.url.path, '/media/HW8UTKLW4AEsitH.jpg');
+    expect(post.photos.last.url.path, '/media/HW8cftTXoAAvBsO.jpg');
+    expect(post.photos.last.aspectRatio, closeTo(2731 / 4096, 0.001),
+        reason: 'the last one is upright');
+    expect(
+        post.cellImageUrl(post.photos.first)?.queryParameters['name'], 'small');
+  });
+
+  test('a grid cell draws a small photo, or a medium one when it is alone', () {
+    XMedia photo(String id) => XMedia(
+        type: XMediaType.photo,
+        url: Uri.parse('https://pbs.twimg.com/media/$id.jpg?name=orig'));
+    final poster =
+        Uri.parse('https://pbs.twimg.com/ext_tw_video_thumb/1/v.jpg');
+    final video = XMedia(
+        type: XMediaType.video,
+        url: Uri.parse('https://video.twimg.com/v.mp4'),
+        thumbnailUrl: poster);
+    final alone = XPost(
+        url: Uri.parse('https://x.com/a/status/1'),
+        authorName: 'a',
+        handle: 'a',
+        media: [photo('one')]);
+    final two = XPost(
+        url: Uri.parse('https://x.com/a/status/2'),
+        authorName: 'a',
+        handle: 'a',
+        media: [photo('one'), video]);
+
+    expect(alone.cellImageUrl(alone.media.single)?.queryParameters['name'],
+        'medium');
+    expect(two.cellImageUrl(two.media.first)?.queryParameters['name'], 'small');
+    expect(two.cellImageUrl(video), poster);
+  });
+
+  group('a post with more photos than the grid holds', () {
+    late ui.Image picture;
+
+    // One image provider per photo and size, told apart by name.
+    List<UrlPreviewImage> photos(int count) => [
+          for (var i = 0; i < count; i++)
+            UrlPreviewImage(
+              _NamedImage('cell-$i', picture),
+              aspectRatio: 1.5,
+              full: _NamedImage('full-$i', picture),
+            ),
+        ];
+
+    Future<List<UrlPreviewImage>> pumpCard(WidgetTester tester, int count,
+        {double textScale = 1, Size size = const Size(900, 1000)}) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      picture = (await tester
+          .runAsync(() => createTestImage(width: 600, height: 400)))!;
+      final images = photos(count);
+      final uri = Uri.parse('https://x.com/dinkin_flickaa/status/1');
+      await tester.pumpWidget(_testApp(MediaQuery(
+        data: MediaQueryData(
+            size: size, textScaler: TextScaler.linear(textScale)),
+        child: UrlPreviewWidget(UrlPreviewData(
+          uri,
+          type: UrlDestinationType.image,
+          image: images.first.image,
+          images: images,
+          xPost: XPost(
+              url: uri, authorName: 'Jonah Katz', handle: 'dinkin_flickaa'),
+        )),
+      )));
+      await tester.pump();
+      return images;
+    }
+
+    Finder hiddenCount() =>
+        find.byKey(const ValueKey('media-grid-hidden-count'));
+
+    testWidgets('four photos fill the grid with nothing over them',
+        (tester) async {
+      await pumpCard(tester, 4);
+
+      expect(find.byType(Image), findsNWidgets(4));
+      expect(hiddenCount(), findsNothing);
+    });
+
+    for (final (count, badge) in const [(5, '+1'), (11, '+7'), (20, '+16')]) {
+      testWidgets('$count photos show four, the fourth under "$badge"',
+          (tester) async {
+        await pumpCard(tester, count);
+
+        expect(find.byType(Image), findsNWidgets(4),
+            reason: 'only the four cells download; the rest wait for the '
+                'lightbox');
+        expect(
+            find.byKey(const ValueKey('url-preview-photo-3')), findsOneWidget);
+        expect(find.byKey(const ValueKey('url-preview-photo-4')), findsNothing);
+        expect(hiddenCount(), findsOneWidget);
+        expect(
+            find.descendant(
+                of: find.byKey(const ValueKey('url-preview-photo-3')),
+                matching: find.text(badge)),
+            findsOneWidget);
+      });
+    }
+
+    testWidgets('the "+7" opens the lightbox on the fourth of all eleven',
+        (tester) async {
+      final images = await pumpCard(tester, 11);
+
+      await tester.tap(find.text('+7'));
+      await tester.pumpAndSettle();
+
+      final lightbox = tester.widget<Lightbox>(find.byType(Lightbox));
+      expect(lightbox.initialIndex, 3);
+      expect(lightbox.gallery, [for (final photo in images) photo.full],
+          reason: 'the lightbox shows the large copies');
+      expect(
+          lightbox.galleryThumbnails, [for (final photo in images) photo.image],
+          reason: 'with the cells\' small copies while they load');
+      expect(lightbox.galleryAspectRatios, List.filled(11, 1.5));
+      expect(find.text('4 / 11'), findsOneWidget);
+    });
+
+    testWidgets('a screen reader hears what the cells hold', (tester) async {
+      final semantics = tester.ensureSemantics();
+      await pumpCard(tester, 11);
+
+      expect(find.bySemanticsLabel('Photo 1 of 11'), findsOneWidget);
+      expect(find.bySemanticsLabel('Show 7 more photos'), findsOneWidget);
+      expect(find.bySemanticsLabel('+7'), findsNothing,
+          reason: 'the badge is read as a sentence, not as a sign');
+      semantics.dispose();
+    });
+
+    testWidgets('in Portuguese, with larger text, on a phone', (tester) async {
+      await initializeMessages('pt');
+      intl.Intl.defaultLocale = 'pt';
+      addTearDown(() => intl.Intl.defaultLocale = null);
+      final semantics = tester.ensureSemantics();
+
+      await pumpCard(tester, 20, textScale: 1.3, size: const Size(360, 700));
+
+      expect(tester.takeException(), isNull, reason: 'nothing overflows');
+      expect(find.text('+16'), findsOneWidget);
+      expect(find.bySemanticsLabel('Mostrar mais 16 fotos'), findsOneWidget);
+      expect(find.bySemanticsLabel('Foto 2 de 20'), findsOneWidget);
+      semantics.dispose();
     });
   });
 }

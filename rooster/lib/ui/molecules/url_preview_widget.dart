@@ -55,6 +55,33 @@ class UrlPreviewWidget extends StatefulWidget {
           desc: "Shown at the bottom of the window when a video from a link "
               "preview could not be opened");
 
+  static String labelMediaGridHiddenCount(int howMany) =>
+      intl.Intl.message("+$howMany",
+          name: "labelMediaGridHiddenCount",
+          args: [howMany],
+          desc: "Over the last cell of a link preview's photo grid, which "
+              "shows four photos at most: how many more the post has");
+
+  static String promptMediaGridShowMorePhotos(int howMany) =>
+      intl.Intl.plural(howMany,
+          one: "Show 1 more photo",
+          other: "Show $howMany more photos",
+          name: "promptMediaGridShowMorePhotos",
+          args: [howMany],
+          desc: "Read by screen readers for the last cell of a link "
+              "preview's photo grid, which opens the image viewer on the "
+              "photos that did not fit in the grid");
+
+  static String promptXQuoteOpenForMore(int howMany) =>
+      intl.Intl.plural(howMany,
+          one: "Open the post to see 1 more item",
+          other: "Open the post to see $howMany more items",
+          name: "promptXQuoteOpenForMore",
+          args: [howMany],
+          desc: "Read by screen readers for the last cell of a quoted X "
+              "post's media grid when what did not fit includes videos: "
+              "it opens the post on X, where every photo and video is");
+
   @override
   State<UrlPreviewWidget> createState() => _UrlPreviewWidgetState();
 }
@@ -537,7 +564,8 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
       child: InkWell(
         onTap: widget.data?.type != UrlDestinationType.video
             ? () {
-                Lightbox.show(context, image: widget.data!.image);
+                Lightbox.show(context,
+                    image: photos.firstOrNull?.full ?? widget.data!.image);
               }
             : null,
         child: Image(
@@ -623,12 +651,16 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
 
   /// X's layout: 2 photos side by side, 3 as one large photo next to two
   /// stacked ones, 4 as a 2x2. Cells are cropped squares; each opens in the
-  /// lightbox on tap, like multi-image room messages. The lightbox pages
-  /// through every photo, including those an Instagram carousel has past
-  /// the fourth.
+  /// lightbox on tap, like multi-image room messages. A post with more
+  /// (X allows 20, an Instagram carousel has up to 20) shows its first four,
+  /// the fourth dimmed under "+N"; the lightbox pages through every photo.
   Widget _buildPhotoGrid() {
-    final photos = widget.data!.images.take(4).toList();
-    final gallery = [for (final photo in widget.data!.images) photo.image];
+    final all = widget.data!.images;
+    final photos = all.take(4).toList();
+    final hidden = all.length - photos.length;
+    // Only the last cell carries the count of what did not fit.
+    Widget cell(int index, double size) => _photoCell(all, index, size,
+        hidden: index == photos.length - 1 ? hidden : 0);
 
     return LayoutBuilder(builder: (context, constraints) {
       const gap = _photoGridGap;
@@ -642,14 +674,14 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _photoCell(photos[0], gallery, 0, large),
+            cell(0, large),
             const SizedBox(width: gap),
             Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _photoCell(photos[1], gallery, 1, small),
+                cell(1, small),
                 const SizedBox(height: gap),
-                _photoCell(photos[2], gallery, 2, small),
+                cell(2, small),
               ],
             ),
           ],
@@ -657,12 +689,12 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
       }
 
       final rows = photos.length <= 2 ? 1 : 2;
-      final cell = min(
+      final side = min(
           (constraints.maxWidth - gap) / 2,
           rows == 1
               ? constraints.maxHeight
               : (constraints.maxHeight - gap) / 2);
-      if (cell <= 0) return const SizedBox.shrink();
+      if (side <= 0) return const SizedBox.shrink();
 
       return Column(
         mainAxisSize: MainAxisSize.min,
@@ -673,10 +705,10 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _photoCell(photos[row * 2], gallery, row * 2, cell),
+                cell(row * 2, side),
                 if (row * 2 + 1 < photos.length) ...[
                   const SizedBox(width: gap),
-                  _photoCell(photos[row * 2 + 1], gallery, row * 2 + 1, cell),
+                  cell(row * 2 + 1, side),
                 ],
               ],
             ),
@@ -686,26 +718,73 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
     });
   }
 
-  Widget _photoCell(UrlPreviewImage photo, List<ImageProvider> gallery,
-      int index, double size) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(4),
-      child: InkWell(
-        onTap: () => Lightbox.show(
-          context,
-          image: photo.image,
-          gallery: gallery,
-          initialIndex: index,
+  /// Cell [index] of the grid over [photos], [size] square. [hidden] is how
+  /// many photos did not fit, which the last cell shows over itself.
+  Widget _photoCell(List<UrlPreviewImage> photos, int index, double size,
+      {int hidden = 0}) {
+    final photo = photos[index];
+    return Semantics(
+      button: true,
+      label: hidden > 0
+          ? UrlPreviewWidget.promptMediaGridShowMorePhotos(hidden)
+          : Lightbox.labelPhotoPosition(index + 1, photos.length),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: InkWell(
+          key: ValueKey('url-preview-photo-$index'),
+          onTap: () => Lightbox.show(
+            context,
+            image: photo.full,
+            gallery: [for (final photo in photos) photo.full],
+            galleryThumbnails: [for (final photo in photos) photo.image],
+            galleryAspectRatios: [
+              for (final photo in photos) photo.aspectRatio
+            ],
+            initialIndex: index,
+          ),
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image(
+                  image: photo.image,
+                  filterQuality: FilterQuality.medium,
+                  fit: BoxFit.cover,
+                  frameBuilder: _fadeIn,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+                if (hidden > 0) _hiddenCount(hidden),
+              ],
+            ),
+          ),
         ),
-        child: SizedBox(
-          width: size,
-          height: size,
-          child: Image(
-            image: photo.image,
-            filterQuality: FilterQuality.medium,
-            fit: BoxFit.cover,
-            frameBuilder: _fadeIn,
-            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+      ),
+    );
+  }
+
+  /// The dimmed "+N" over a grid's last cell, for the [hidden] items past
+  /// it. Its text scales down to fit a small cell.
+  Widget _hiddenCount(int hidden) {
+    return ExcludeSemantics(
+      child: ColoredBox(
+        key: const ValueKey('media-grid-hidden-count'),
+        color: Colors.black.withValues(alpha: 0.55),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                UrlPreviewWidget.labelMediaGridHiddenCount(hidden),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 30,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -1058,14 +1137,54 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
 
   /// The official embed's media grid: one item at its own shape, two side by
   /// side, three as one tall item next to two stacked, four as a 2x2; two to
-  /// four always fill a 16:9 box. X allows four items per post.
+  /// four always fill a 16:9 box. A post with more (X allows 20) shows its
+  /// first four, the fourth dimmed under "+N". Cells draw small copies of
+  /// the photos and the lightbox large ones.
   Widget _xQuoteMedia(XPost quote) {
     final media = quote.media.take(4).toList();
+    final hidden = quote.media.length - media.length;
     final photos = quote.photos;
-    final gallery = [for (final photo in photos) _networkImage(photo.url)];
+    final cells = [
+      for (final photo in photos) _networkImage(quote.cellImageUrl(photo)!)
+    ];
+    final gallery = [
+      for (final photo in photos) _networkImage(XPhotoSize.large.of(photo.url))
+    ];
 
-    Widget cell(int i) => _xQuoteCell(quote, media[i], gallery,
-        galleryIndex: photos.indexOf(media[i]), index: i);
+    void openPhoto(int galleryIndex) => Lightbox.show(
+          context,
+          image: gallery[galleryIndex],
+          gallery: gallery,
+          galleryThumbnails: cells,
+          galleryAspectRatios: [for (final photo in photos) photo.aspectRatio],
+          initialIndex: galleryIndex,
+        );
+
+    Widget cell(int i) {
+      final item = media[i];
+      final galleryIndex = photos.indexOf(item);
+      final picture = _xQuotePicture(
+          quote, item, galleryIndex >= 0 ? cells[galleryIndex] : null);
+      if (hidden > 0 && i == media.length - 1) {
+        return _xQuoteOverflowCell(quote, picture,
+            from: i,
+            hidden: hidden,
+            onOpenPhoto:
+                galleryIndex >= 0 ? () => openPhoto(galleryIndex) : null);
+      }
+      if (item.type == XMediaType.photo) {
+        return Semantics(
+          button: true,
+          label: Lightbox.labelPhotoPosition(galleryIndex + 1, photos.length),
+          child: InkWell(
+            key: ValueKey('x-quote-photo-$i'),
+            onTap: () => openPhoto(galleryIndex),
+            child: picture,
+          ),
+        );
+      }
+      return _xQuoteVideoCell(quote, item, picture, index: i);
+    }
 
     Widget row(List<int> items) => Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1124,35 +1243,55 @@ class _UrlPreviewWidgetState extends State<UrlPreviewWidget> {
     );
   }
 
-  /// One photo or video of the quoted post, cropped to its cell.
-  Widget _xQuoteCell(XPost quote, XMedia media, List<ImageProvider> gallery,
-      {required int galleryIndex, required int index}) {
-    final thumbnail = media.thumbnailUrl;
-    final picture = thumbnail == null
-        ? ColoredBox(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest)
-        : Image(
-            image: media.type == XMediaType.photo && galleryIndex >= 0
-                ? gallery[galleryIndex]
-                : _networkImage(thumbnail),
-            fit: BoxFit.cover,
-            filterQuality: FilterQuality.medium,
-            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-          );
-
-    if (media.type == XMediaType.photo) {
-      return InkWell(
-        key: ValueKey('x-quote-photo-$index'),
-        onTap: () => Lightbox.show(
-          context,
-          image: gallery[galleryIndex],
-          gallery: gallery,
-          initialIndex: galleryIndex,
-        ),
-        child: picture,
-      );
+  /// One photo or video poster of the quoted post, cropped to its cell. A
+  /// photo is drawn from [photo], the copy the lightbox's gallery also uses
+  /// while its large one loads.
+  Widget _xQuotePicture(XPost quote, XMedia media, ImageProvider? photo) {
+    final poster =
+        media.type == XMediaType.photo ? null : quote.cellImageUrl(media);
+    final image = photo ?? (poster == null ? null : _networkImage(poster));
+    if (image == null) {
+      return ColoredBox(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest);
     }
+    return Image(
+      image: image,
+      fit: BoxFit.cover,
+      filterQuality: FilterQuality.medium,
+      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+    );
+  }
 
+  /// The last cell of a quote's grid when its media does not all fit: the
+  /// item dimmed under "+N" for the [hidden] items past it. When this item
+  /// and every hidden one are photos, it opens the lightbox on this one,
+  /// the rest a step away. When a video or GIF is among them the lightbox
+  /// could not reach it, so it opens the post on X instead.
+  Widget _xQuoteOverflowCell(XPost quote, Widget picture,
+      {required int from, required int hidden, VoidCallback? onOpenPhoto}) {
+    final onlyPhotos = onOpenPhoto != null &&
+        quote.media.skip(from).every((m) => m.type == XMediaType.photo);
+    return Semantics(
+      button: true,
+      label: onlyPhotos
+          ? UrlPreviewWidget.promptMediaGridShowMorePhotos(hidden)
+          : UrlPreviewWidget.promptXQuoteOpenForMore(hidden),
+      child: InkWell(
+        key: const ValueKey('x-quote-more'),
+        onTap: onlyPhotos
+            ? onOpenPhoto
+            : () => LinkUtils.open(quote.url, context: context),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [picture, _hiddenCount(hidden)],
+        ),
+      ),
+    );
+  }
+
+  /// A video or GIF of the quoted post: its poster with a play button.
+  Widget _xQuoteVideoCell(XPost quote, XMedia media, Widget picture,
+      {required int index}) {
     final duration = media.duration;
     return Stack(
       fit: StackFit.expand,

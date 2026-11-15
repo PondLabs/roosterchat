@@ -35,7 +35,7 @@ A single photo's embed page carries no post data. It sends `"contextJSON":null` 
 
 `InstagramMedia.fromEmbedPage` reads that markup when the JSON is missing. It takes the widest `srcset` copy up to 1080 pixels wide, because `src` is the original and can be 4000 pixels across. A carousel (`GraphSidecar`) does carry the JSON. Its photos are the `display_url` of each `edge_sidecar_to_children` node, and a video slide shows as its cover.
 
-`InstagramProvider.resolvePost` turns either form into a `PhotoPost`, the same shape an X status with photos has. The preview shows the photo, or a grid of the first four photos with every photo in the lightbox. The title is `@username` and the text is the caption. The photo URLs are signed like the video's (`oe=`), but a preview loads them once, and they load without cookies or a Referer.
+`InstagramProvider.resolvePost` turns either form into a `PhotoPost`, the same shape an X status with photos has. The preview shows the photo, or a grid of the first four photos with every photo in the lightbox; a carousel with more has the fourth dimmed under a "+N" with the count of the rest. The title is `@username` and the text is the caption. The photo URLs are signed like the video's (`oe=`), but a preview loads them once, and they load without cookies or a Referer.
 
 On web, where the page cannot be read, a `/p/` link stays an official embed card titled "Instagram Post", because it may hold photos or a video.
 
