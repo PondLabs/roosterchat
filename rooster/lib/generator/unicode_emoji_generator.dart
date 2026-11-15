@@ -3,8 +3,13 @@ import 'dart:io';
 
 import 'package:build/build.dart';
 import 'package:dart_style/dart_style.dart';
+import 'package:pub_semver/pub_semver.dart';
 
 import '../utils/emoji/unicode_emoji_data.dart';
+
+/// The language version `dart format` uses for this project: the lower bound
+/// of `environment: sdk:` in pubspec.yaml. Raise it with that bound.
+final _languageVersion = Version(3, 6, 0);
 
 class UnicodeEmojiBuilder implements Builder {
   @override
@@ -75,6 +80,8 @@ class UnicodeEmojiBuilder implements Builder {
     // Written the way `dart format` writes it, so that formatting the
     // project after the codegen has nothing left to change.
     await buildStep.writeAsString(
-        outputId, DartFormatter().format(outputBuffer.toString()));
+        outputId,
+        DartFormatter(languageVersion: _languageVersion)
+            .format(outputBuffer.toString()));
   }
 }
