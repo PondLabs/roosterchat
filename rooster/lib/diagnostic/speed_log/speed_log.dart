@@ -7,21 +7,27 @@
 /// - An operation (a text send, a voice join...) is a [SpeedSpan]:
 ///
 ///   ```dart
-///   final span = SpeedLog.instance.startSpan('text_send');
-///   await span.run(() async {          // requests inside are linked to it
-///     span.mark('echo_painted');        // a step from the last mark to now
-///     await span.time('request', () => room.sendTextEvent(text));
-///     span.unavailable('server_queue'); // cannot be timed from app code
+///   final span = SpeedLog.instance.startSpan(SpeedOperation.textSend);
+///   await span.run(() async {       // requests inside are linked to it
+///     span.mark(SpeedStep.echo);     // a step from the last mark to now
+///     await span.time(SpeedStep.request, () => room.sendTextEvent(text));
+///     span.unavailable(SpeedStep.answer); // cannot be timed from app code
 ///   });
-///   span.finish();                      // or finish(outcome: 'failed')
+///   span.finish();                   // or finish(outcome: SpeedOutcome.failed)
 ///   ```
 ///
 /// - `buildSpeedReport` (`speed_report.dart`) turns the log into text.
 ///
-/// Span, step and outcome names must be fixed identifiers written in the
-/// code (`[a-z][a-z0-9_]*`, at most 40 characters), never text from a
-/// message, a file or a person; any other name is written as `invalid_name`.
-/// Step values are numbers only (sizes, counts).
+/// Names are a fixed list, in `speed_names.dart` and nowhere else: span
+/// names in `SpeedOperation.all`, steps in `SpeedStep.all`, the names of
+/// numbers on steps in `SpeedValue.all`, outcomes in `SpeedOutcome.all`.
+/// Any other name, even one shaped like them, is written `invalid_name`, so
+/// text from a message, a file or a person never reaches the report. To add
+/// a name: a constant in its class there, and the same constant in that
+/// class's `all`. Merging a branch that added names too: keep both sides'
+/// entries in each `all`. `SpeedOperation.all` plus `invalid_name` must fit
+/// in [SpeedLog.maxOperations] (`speed_names_test.dart` checks). Step values
+/// are numbers only (sizes, counts).
 ///
 /// Attempts: inside a span, a request is attempt 1 the first time it is
 /// sent, and 2, 3... each time the same request is sent again (the SDK's
@@ -130,7 +136,7 @@ class SpanStep {
 /// timed on the speed log's monotonic clock.
 class SpeedSpan {
   SpeedSpan._(this._log, String name, Duration? startedAt)
-      : name = _identifier(name),
+      : name = _listed(name, SpeedOperation.all),
         id = _randomId(),
         startedAt = startedAt ?? _log.now();
 
@@ -176,7 +182,7 @@ class SpeedSpan {
     final now = _elapsed;
     final from = _lastMark ?? Duration.zero;
     _lastMark = now;
-    _add(SpanStep(_identifier(step), from, now - from, values));
+    _add(SpanStep(step, from, now - from, values));
   }
 
   /// A step that lasts as long as [body]. Steps timed this way may overlap.
@@ -186,20 +192,20 @@ class SpeedSpan {
     try {
       return await body();
     } finally {
-      _add(SpanStep(_identifier(step), from, _elapsed - from, values));
+      _add(SpanStep(step, from, _elapsed - from, values));
     }
   }
 
   /// A step that exists but cannot be timed from app code.
   void unavailable(String step) =>
-      _add(SpanStep(_identifier(step), _elapsed, null, const {}));
+      _add(SpanStep(step, _elapsed, null, const {}));
 
   /// A step measured another way on the log's clock, such as a request read
   /// from the log: [start] counts from the span's start, a null [duration]
   /// is unavailable.
   void addStep(String step, Duration start, Duration? duration,
           {Map<String, num> values = const {}}) =>
-      _add(SpanStep(_identifier(step), start, duration, values));
+      _add(SpanStep(step, start, duration, values));
 
   /// Runs [body] so the requests it makes, through any async gap, are
   /// recorded with this span's id and numbered as attempts.
@@ -210,16 +216,17 @@ class SpeedSpan {
   void finish({String outcome = SpeedOutcome.ok}) {
     if (isFinished) return;
     duration = _elapsed;
-    this.outcome = _identifier(outcome);
+    this.outcome = _listed(outcome, SpeedOutcome.all);
     _attempts.clear();
     _log._close(this);
   }
 
   void _add(SpanStep step) {
     if (steps.length >= SpeedLog.maxStepsPerSpan) return;
-    steps.add(SpanStep(step.name, step.start, step.duration, {
+    steps.add(
+        SpanStep(_listed(step.name, SpeedStep.all), step.start, step.duration, {
       for (final value in step.values.entries)
-        _identifier(value.key): value.value,
+        _listed(value.key, SpeedValue.all): value.value,
     }));
   }
 
@@ -256,20 +263,18 @@ class SpeedSpan {
   static String _randomId() => List.generate(
       8, (_) => _random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
 
-  static final RegExp _fixedIdentifier = RegExp(r'^[a-z][a-z0-9_]{0,39}$');
-
-  /// [name] if it looks like a constant from the code, else `invalid_name`:
-  /// a name built from content would carry that content into the report.
-  static String _identifier(String name) =>
-      _fixedIdentifier.hasMatch(name) ? name : 'invalid_name';
+  /// [name] if it is on the fixed list [names], else `invalid_name`: a name
+  /// built from content would carry that content into the report.
+  static String _listed(String name, Set<String> names) =>
+      names.contains(name) ? name : invalidSpeedName;
 }
 
 /// Finished spans, the newest [perOperation] of each operation (span name)
 /// in a [RingBuffer] of its own, so a frequent operation (a sync round every
 /// 30 s) never pushes a rare one (a text send) out. At most [maxOperations]
-/// operations are kept; spans of any further name are dropped. Names are
-/// constants from the code, so that bound is never reached in practice and
-/// the memory stays fixed.
+/// operations are kept; spans of any further name are dropped. Span names
+/// come from the fixed list (`SpeedOperation.all`, with `invalid_name`),
+/// which fits in that bound, so the memory stays fixed.
 class FinishedSpans {
   FinishedSpans({required this.perOperation, required this.maxOperations});
 

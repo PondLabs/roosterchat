@@ -322,7 +322,7 @@ void main() {
       request.response.write('{}');
       await request.response.close();
     };
-    final span = log.startSpan('file_send');
+    final span = log.startSpan('text_send');
     await span.run(() async {
       // The file, then its thumbnail: two uploads, no retry.
       await client.post(
@@ -351,7 +351,7 @@ void main() {
       request.response.write('{}');
       await request.response.close();
     };
-    final span = log.startSpan('file_send');
+    final span = log.startSpan('text_send');
     Future<void> upload() =>
         client.post(base.resolve('/_matrix/media/v3/upload?filename=photo.jpg'),
             body: Uint8List(2048));

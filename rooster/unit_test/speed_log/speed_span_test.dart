@@ -37,7 +37,7 @@ void main() {
     span.mark('echo_painted');
     await span.time('request', () async {
       await Future<void>.delayed(const Duration(milliseconds: 50));
-    }, values: {'bytes': 120});
+    }, values: {'status': 200});
     span.finish();
 
     final echo = span.steps[0];
@@ -48,7 +48,7 @@ void main() {
     expect(request.name, 'request');
     expect(request.start, greaterThanOrEqualTo(echo.duration!));
     expect(request.duration!.inMilliseconds, greaterThanOrEqualTo(50));
-    expect(request.values, {'bytes': 120});
+    expect(request.values, {'status': 200});
     expect(
         span.duration, greaterThanOrEqualTo(request.start + request.duration!));
     expect(log.spans.toList(), [span]);
@@ -57,12 +57,12 @@ void main() {
 
   test('a step that cannot be timed is unavailable, not guessed', () {
     final log = SpeedLog(frames: _FakeFrames());
-    final span = log.startSpan('voice_join')..unavailable('server_queue');
+    final span = log.startSpan('text_send')..unavailable('answer');
     span.finish();
 
     expect(span.steps.single.available, isFalse);
     expect(span.steps.single.duration, isNull);
-    expect(buildSpeedReport(log), contains('  server_queue unavailable'));
+    expect(buildSpeedReport(log), contains('  answer unavailable'));
   });
 
   test('each span gets a different random id', () {
