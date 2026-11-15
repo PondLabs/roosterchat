@@ -46,7 +46,9 @@ String buildSpeedReport(SpeedLog log) {
   final open = log.openSpans;
   out
     ..writeln()
-    ..writeln('spans (${log.spans.length} finished, ${open.length} open):');
+    ..writeln('spans (${log.spans.length} finished, newest '
+        '${log.spans.perOperation} of each operation kept, '
+        '${open.length} open):');
   for (final span in [...log.spans.toList(), ...open]) {
     out.writeln(_span(span));
     for (final step in span.steps) {

@@ -24,7 +24,9 @@ attempt number, bytes up and down, time to headers, total, a 429's
 rate from there to the answer. A request made inside a span carries the
 span's random id (`op=`).
 
-**Spans**, the newest 256 finished ones and those still open. A span is
+**Spans**, the newest 256 finished ones of each operation (each span name
+has its own buffer, so a sync round every 30 s never pushes a text send
+out; at most 16 operations) and those still open. A span is
 one operation under a random local id, made of named steps on a monotonic
 clock, with an outcome and the longest UI frame drawn while it was open.
 Every span, step, value and outcome name is a constant in
@@ -97,7 +99,7 @@ requests (2, newest 512 kept):
 +0.561s PUT /_matrix/client/v3/rooms/{roomId}/send/{eventType}/{txnId} homeserver status=429 attempt=1 op=8e7f3b06b47dbfbd up=0 down=78 headers=0.2ms total=1.5ms retry_after_ms=30
 +0.595s PUT /_matrix/client/v3/rooms/{roomId}/send/{eventType}/{txnId} homeserver status=200 attempt=2 op=8e7f3b06b47dbfbd up=57 down=22 headers=0.6ms total=0.8ms handed_over=0.3ms(transport) to_answer=0.3ms up_rate=194kB/s
 
-spans (1 finished, 1 open):
+spans (1 finished, newest 256 of each operation kept, 1 open):
 +0.556s text_send op=8e7f3b06b47dbfbd total=44ms outcome=ok longest_frame=unavailable
   send +0.0ms 1.1ms
   echo +1.1ms 1.8ms

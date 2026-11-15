@@ -222,21 +222,73 @@ class SpeedSpan {
       _fixedIdentifier.hasMatch(name) ? name : 'invalid_name';
 }
 
-/// The in-memory speed log: the newest requests and finished spans, in two
-/// [RingBuffer]s of fixed size. Always on; nothing leaves the device.
+/// Finished spans, the newest [perOperation] of each operation (span name)
+/// in a [RingBuffer] of its own, so a frequent operation (a sync round every
+/// 30 s) never pushes a rare one (a text send) out. At most [maxOperations]
+/// operations are kept; spans of any further name are dropped. Names are
+/// constants from the code, so that bound is never reached in practice and
+/// the memory stays fixed.
+class FinishedSpans {
+  FinishedSpans({required this.perOperation, required this.maxOperations});
+
+  final int perOperation;
+  final int maxOperations;
+  final Map<String, RingBuffer<(int, SpeedSpan)>> _byOperation = {};
+  int _added = 0;
+
+  /// The operations that have spans, in the order they first finished one.
+  Iterable<String> get operations => _byOperation.keys;
+
+  void add(SpeedSpan span) {
+    var buffer = _byOperation[span.name];
+    if (buffer == null) {
+      if (_byOperation.length >= maxOperations) return;
+      buffer = _byOperation[span.name] = RingBuffer(perOperation);
+    }
+    buffer.add((_added++, span));
+  }
+
+  int get length =>
+      _byOperation.values.fold(0, (sum, buffer) => sum + buffer.length);
+
+  /// Every kept span, oldest finished first.
+  List<SpeedSpan> toList() {
+    final all = [for (final buffer in _byOperation.values) ...buffer.toList()]
+      ..sort((a, b) => a.$1.compareTo(b.$1));
+    return [for (final (_, span) in all) span];
+  }
+
+  void clear() {
+    _byOperation.clear();
+    _added = 0;
+  }
+
+  /// Slots allocated across the buffers, for tests that check it never
+  /// grows past [perOperation] times [maxOperations].
+  int get debugStorageSize => _byOperation.values
+      .fold(0, (sum, buffer) => sum + buffer.debugStorage.length);
+}
+
+/// The in-memory speed log: the newest requests in a [RingBuffer] and the
+/// newest finished spans of each operation in [FinishedSpans], all of fixed
+/// size. Always on; nothing leaves the device.
 class SpeedLog {
   SpeedLog({
     int requestCapacity = 512,
-    int spanCapacity = 256,
     FrameSource? frames,
     Duration Function()? clock,
   })  : requests = RingBuffer(requestCapacity),
-        spans = RingBuffer(spanCapacity),
+        spans = FinishedSpans(
+            perOperation: spansPerOperation, maxOperations: maxOperations),
         _frames = frames ?? SchedulerFrameSource(),
         _clock = clock ?? (Stopwatch()..start()).elapsedFrom;
 
   /// The log of the app. Tests make their own.
   static final SpeedLog instance = SpeedLog();
+
+  /// Finished spans kept per operation, and how many operations.
+  static const spansPerOperation = 256;
+  static const maxOperations = 16;
 
   static const maxStepsPerSpan = 64;
   static const maxOpenSpans = 64;
@@ -244,8 +296,8 @@ class SpeedLog {
 
   final RingBuffer<RequestRecord> requests;
 
-  /// Finished spans, oldest first.
-  final RingBuffer<SpeedSpan> spans;
+  /// Finished spans, the newest of each operation.
+  final FinishedSpans spans;
 
   final FrameSource _frames;
   final Duration Function() _clock;
