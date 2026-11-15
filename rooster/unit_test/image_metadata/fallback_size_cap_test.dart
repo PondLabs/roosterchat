@@ -10,6 +10,9 @@ import 'package:rooster/utils/image/metadata/remove_image_metadata.dart';
 
 import 'remove_image_metadata_test.dart' show expectNoMetadata, fixture;
 
+/// The JPEG qualities the fallback steps through, as decided for it.
+const _steps = [90, 80, 70];
+
 /// The picture as the engine hands it to the fallback: straight RGBA.
 Future<img.Image> enginePixels(Uint8List bytes) async {
   final codec = await ui.instantiateImageCodec(bytes);
@@ -74,7 +77,7 @@ Future<(Uint8List, Uint8List)> fittingFirstAt(int fits) async {
     expect(parseImageContainer(input), isNull);
     final pixels = await enginePixels(input);
     var ok = true;
-    for (final quality in metadataFallbackJpegQualities) {
+    for (final quality in _steps) {
       final size = fallbackAt(pixels, quality).length;
       if (quality == fits) {
         ok = size <= input.length;
@@ -126,8 +129,12 @@ void main() {
     });
   });
 
+  test("the steps are the owner's: 90, then 80, then 70", () {
+    expect(metadataFallbackJpegQualities, _steps);
+  });
+
   group("the fallback's size", () {
-    for (final fits in metadataFallbackJpegQualities) {
+    for (final fits in _steps) {
       test("is the output at quality $fits when that is the first to fit",
           () async {
         final (input, expected) = await fittingFirstAt(fits);
@@ -148,7 +155,7 @@ void main() {
       // re-encode is larger than it at every quality.
       final input = fixture("truncated_decodable.jpg");
       final pixels = await enginePixels(input);
-      for (final quality in metadataFallbackJpegQualities) {
+      for (final quality in _steps) {
         expect(fallbackAt(pixels, quality).length, greaterThan(input.length),
             reason: "quality $quality does not fit");
       }
