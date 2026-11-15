@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -20,8 +21,13 @@ import 'package:rooster/client/components/face_tracking/replay_face_tracker.dart
 /// tracker that repeats the reference points) or `device` (this device's
 /// tracker), `?shift=` (eye distances to move the replayed anchors by) and
 /// `?start=manual` (the videos play, and tracking waits for the page's
-/// `faceTrackingStart()`). See tools/face_tracking/README.md.
-void main() {
+/// `faceTrackingStart()`). Outside the browser the same settings come in the `FACE_TRACKING_DEMO`
+/// environment variable, and the videos are played from `.y4m` files by a
+/// local video track (demo/demo_video_native.dart). See
+/// tools/face_tracking/README.md.
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await prepareDemoWindow();
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
     home: Scaffold(backgroundColor: Colors.black, body: FaceTrackingDemo()),
@@ -34,6 +40,10 @@ class _Tile {
   final String name;
   final DemoVideo video;
   FaceTracker? tracker;
+
+  int analysed = 0;
+  int analysedBefore = 0;
+  int handedBefore = 0;
 }
 
 class FaceTrackingDemo extends StatefulWidget {
@@ -48,6 +58,7 @@ class _FaceTrackingDemoState extends State<FaceTrackingDemo>
   final _log = FaceTrackingLog();
   final _tiles = <_Tile>[];
   Object? _error;
+  Timer? _counting;
 
   // Ticks on every frame the interface draws, tracker or no tracker.
   late final Ticker _frames = createTicker((_) => _log.frame());
@@ -61,7 +72,7 @@ class _FaceTrackingDemoState extends State<FaceTrackingDemo>
   }
 
   Future<void> _open() async {
-    final query = Uri.base.queryParameters;
+    final query = demoSettings();
     final media = query['media'] ?? 'media/';
     final names =
         (query['videos'] ?? 'front,glasses,turn,near_far,leave').split(',');
@@ -92,10 +103,12 @@ class _FaceTrackingDemoState extends State<FaceTrackingDemo>
         tracker.observation.addListener(() {
           final observation = tracker.observation.value;
           if (observation != null) _log.anchor(tile.name, observation, tile: i);
+          tile.analysed++;
         });
         if (!mounted) return tracker.dispose();
         setState(() => tile.tracker = tracker);
       }
+      _counting = Timer.periodic(const Duration(seconds: 1), (_) => _count());
     }
 
     if (query['start'] == 'manual') {
@@ -106,8 +119,27 @@ class _FaceTrackingDemoState extends State<FaceTrackingDemo>
     }
   }
 
+  /// Prints, once a second, how many frames each tile's tracker was handed
+  /// and how many it analysed: frames reach the tracker on their own path,
+  /// the anchor log only has the analysed ones.
+  void _count() {
+    for (final (i, tile) in _tiles.indexed) {
+      final tracker = tile.tracker;
+      final handed = tracker == null ? null : framesHandedOver(tracker);
+      if (handed == null) continue;
+      // Not translated: a log line for whoever measures.
+      debugPrint('face tracking demo: tile $i (${tile.name}): '
+          '${handed - tile.handedBefore} frames handed to the tracker, '
+          '${tile.analysed - tile.analysedBefore} analysed in the last second');
+      tile
+        ..handedBefore = handed
+        ..analysedBefore = tile.analysed;
+    }
+  }
+
   @override
   void dispose() {
+    _counting?.cancel();
     _frames.dispose();
     for (final tile in _tiles) {
       tile.tracker?.dispose();

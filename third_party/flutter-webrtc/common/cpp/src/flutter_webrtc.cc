@@ -1437,6 +1437,120 @@ void FlutterWebRTC::HandleMethodCall(
         GetValue<EncodableMap>(*method_call.arguments());
     const std::string track_id = findString(params, "trackId");
     result->Success(EncodableValue(rooster_music_tracks_.Stop(track_id)));
+  } else if (method_call.method_name().compare("roosterTapVideoTrack") == 0) {
+    // ROOSTER: hand every frame of a video track, as the renderers showing it
+    // get it, to a face tracker, see rooster_face_tap.h. `ctx` and `frame`
+    // are the tracker's handle and the address of rooster_face_frame, as
+    // pointer-sized ints.
+    if (!method_call.arguments()) {
+      result->Error("Bad Arguments", "Null arguments received");
+      return;
+    }
+    const EncodableMap params =
+        GetValue<EncodableMap>(*method_call.arguments());
+    const std::string track_id = findString(params, "trackId");
+    const int64_t ctx = findLongInt(params, "ctx");
+    const int64_t frame = findLongInt(params, "frame");
+    if (track_id.empty() || ctx <= 0 || frame <= 0) {
+      result->Error("Bad Arguments", "trackId, ctx and frame are required");
+      return;
+    }
+    RoosterFaceTaps::Instance().Add(
+        track_id, reinterpret_cast<void*>(static_cast<uintptr_t>(ctx)),
+        reinterpret_cast<RoosterFaceTaps::FrameFn>(
+            static_cast<uintptr_t>(frame)));
+    result->Success(EncodableValue(true));
+  } else if (method_call.method_name().compare("roosterUntapVideoTrack") ==
+             0) {
+    // ROOSTER: once this returns the tracker's handle is no longer used.
+    if (!method_call.arguments()) {
+      result->Error("Bad Arguments", "Null arguments received");
+      return;
+    }
+    const EncodableMap params =
+        GetValue<EncodableMap>(*method_call.arguments());
+    const int64_t ctx = findLongInt(params, "ctx");
+    result->Success(EncodableValue(RoosterFaceTaps::Instance().Remove(
+        reinterpret_cast<void*>(static_cast<uintptr_t>(ctx)))));
+  } else if (method_call.method_name().compare(
+                 "roosterCreateFileVideoTrack") == 0) {
+    // ROOSTER: a local video track playing a .y4m file over and over, see
+    // rooster_file_video_source.h. For measuring face tracking without a
+    // camera. Answers like getUserMedia, plus the file's size, frame rate
+    // and number of frames.
+    if (!method_call.arguments()) {
+      result->Error("Bad Arguments", "Null arguments received");
+      return;
+    }
+    const EncodableMap params =
+        GetValue<EncodableMap>(*method_call.arguments());
+    const std::string path = findString(params, "path");
+    std::string error;
+    std::unique_ptr<RoosterFileVideoFeeder> feeder =
+        RoosterFileVideoFeeder::Open(path, &error);
+    if (!feeder) {
+      result->Error("roosterCreateFileVideoTrack", error);
+      return;
+    }
+    EnsureWebRTCInitialized();
+    if (!factory_) {
+      result->Error("roosterCreateFileVideoTrack", "WebRTC is not initialized");
+      return;
+    }
+    const std::string source_label = "rooster_file_" + GenerateUUID();
+    scoped_refptr<RTCVideoSource> source = factory_->CreateCustomVideoSource(
+        source_label.c_str(), RTCMediaConstraints::Create());
+    if (!source.get()) {
+      result->Error("roosterCreateFileVideoTrack",
+                    "no custom video source in this libwebrtc");
+      return;
+    }
+    const std::string track_id = GenerateUUID();
+    scoped_refptr<RTCVideoTrack> track =
+        factory_->CreateVideoTrack(source, track_id.c_str());
+    const std::string stream_id = GenerateUUID();
+    scoped_refptr<RTCMediaStream> stream =
+        factory_->CreateStream(stream_id.c_str());
+    stream->AddTrack(track);
+    local_streams_[stream_id] = stream;
+    local_tracks_[track_id] = track;
+
+    const RoosterY4mHeader header = feeder->header();
+    const int64_t frames = feeder->frames();
+    feeder->Start(source);
+    rooster_file_video_tracks_.Add(track_id, std::move(feeder));
+
+    EncodableMap info;
+    info[EncodableValue("id")] = EncodableValue(track_id);
+    info[EncodableValue("label")] = EncodableValue(track_id);
+    info[EncodableValue("kind")] = EncodableValue(track->kind().std_string());
+    info[EncodableValue("enabled")] = EncodableValue(track->enabled());
+    EncodableList video_tracks;
+    video_tracks.push_back(EncodableValue(info));
+
+    EncodableMap response;
+    response[EncodableValue("streamId")] = EncodableValue(stream_id);
+    response[EncodableValue("audioTracks")] = EncodableValue(EncodableList());
+    response[EncodableValue("videoTracks")] = EncodableValue(video_tracks);
+    response[EncodableValue("width")] = EncodableValue(header.width);
+    response[EncodableValue("height")] = EncodableValue(header.height);
+    response[EncodableValue("fps")] = EncodableValue(
+        static_cast<double>(header.fps_num) / header.fps_den);
+    response[EncodableValue("frames")] = EncodableValue(frames);
+    result->Success(EncodableValue(response));
+  } else if (method_call.method_name().compare("roosterStopFileVideoTrack") ==
+             0) {
+    // ROOSTER: stops the file's pacing thread; the track itself is released
+    // by the usual mediaStreamDispose.
+    if (!method_call.arguments()) {
+      result->Error("Bad Arguments", "Null arguments received");
+      return;
+    }
+    const EncodableMap params =
+        GetValue<EncodableMap>(*method_call.arguments());
+    const std::string track_id = findString(params, "trackId");
+    result->Success(
+        EncodableValue(rooster_file_video_tracks_.Stop(track_id)));
   } else {
     if (HandleFrameCryptorMethodCall(method_call, std::move(result), &result)) {
       return;

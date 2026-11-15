@@ -172,3 +172,16 @@ the element showing a track, or null when none is on screen. The one in
 moves the rule that mirrors a camera out of the widget, as
 `shouldMirrorVideoTrack`, so a camera stream says "mirrored" exactly when
 its renderer mirrors it.
+
+`flutter-webrtc` hands the frames of a video to Rooster's face tracking on the
+desktop (docs/adr/0006-face-tracking.md). `roosterTapVideoTrack` registers a
+tracker's handle and the address of `rooster_face_frame` (rust/face_tracking)
+for a track id, and every `FlutterVideoRenderer` showing that track passes
+each frame's I420 planes to it from `OnFrame`, before drawing it
+(`common/cpp/include/rooster_face_tap.h`); `roosterUntapVideoTrack` returns
+once no call with that handle is running. `roosterCreateFileVideoTrack` plays
+a `.y4m` file into a local track through `CreateCustomVideoSource`, so face
+tracking is measured on test videos without a camera
+(`common/cpp/include/rooster_file_video_source.h`). Marked `// ROOSTER` in
+`flutter_video_renderer.{h,cc}` and `flutter_webrtc.{h,cc}`; nothing is wired
+on Windows yet, though the shared code builds there.

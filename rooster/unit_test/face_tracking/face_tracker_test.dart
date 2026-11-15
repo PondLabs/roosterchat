@@ -31,7 +31,11 @@ class _Platform implements FaceTrackerPlatform {
 }
 
 void main() {
+  // Linux tracks faces when its Rust library is there: here it is not.
+  setUp(() => LinuxFaceTracker.debugNative = () => null);
+
   tearDown(() {
+    LinuxFaceTracker.debugNative = null;
     debugDefaultTargetPlatformOverride = null;
     FaceTracker.debugPlatform = null;
   });
@@ -63,10 +67,12 @@ void main() {
   // The browser's file tracks faces and only compiles for the web: it is
   // measured in Chrome with the demonstration (tools/face_tracking/).
   test('every platform file stands for a platform of its own', () {
+    expect(linuxFaceTracker, isA<LinuxFaceTracker>());
     final names = platforms.values
-        .map((platform) => (platform as UnavailableFaceTracker).platform);
+        .whereType<UnavailableFaceTracker>()
+        .map((platform) => platform.platform);
 
-    expect(names, ['Android', 'Linux', 'macOS', 'Windows']);
+    expect(names, ['Android', 'macOS', 'Windows']);
   });
 
   test('a platform Rooster does not ship for does not track', () {

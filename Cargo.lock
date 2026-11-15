@@ -432,6 +432,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af9673d8203fcb076b19dfd17e38b3d4ae9f44959416ea532ce72415a6020365"
 
 [[package]]
+name = "face_tracking"
+version = "0.1.0"
+dependencies = [
+ "tract-onnx",
+]
+
+[[package]]
 name = "filetime"
 version = "0.2.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1290,6 +1297,7 @@ dependencies = [
  "audio_dsp",
  "base64",
  "dj_audio",
+ "face_tracking",
  "flutter_rust_bridge",
  "libc",
  "serde",
