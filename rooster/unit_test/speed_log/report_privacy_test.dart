@@ -117,6 +117,33 @@ void main() {
         Uri.parse(
             'https://secret-sfu.example/secretPath/${Uri.encodeComponent(file)}?secretQuery=1')
       ),
+      // Segments shaped like an unstable prefix (`word.mscN`) away from
+      // `unstable`: a file name or a key, not a fixed word.
+      (
+        'GET',
+        Uri.parse('https://secret-files.example/shared/secret.holiday.msc1')
+      ),
+      (
+        'GET',
+        at(['_matrix', 'client', 'v3', 'profile', user, 'alice.secret.msc7'])
+      ),
+      (
+        'GET',
+        at([
+          '_matrix',
+          'client',
+          'v3',
+          'room_keys',
+          'keys',
+          room,
+          'secret.msc42'
+        ])
+      ),
+      // A real unstable prefix, right after `unstable`, is kept.
+      (
+        'POST',
+        at(['_matrix', 'client', 'unstable', 'org.matrix.msc3575', 'sync'])
+      ),
     ];
     for (final (method, url) in requests) {
       final request = http.Request(method, url)..headers.addAll(token);
@@ -141,6 +168,9 @@ void main() {
       'timeout',
       '30000',
       '.jpg',
+      '.msc1',
+      '.msc7',
+      '.msc42',
     ]) {
       expect(report.toLowerCase(), isNot(contains(word)), reason: word);
     }
@@ -156,6 +186,9 @@ void main() {
       'GET /_matrix/client/v1/media/download/{serverName}/{mediaId}/{fileName} homeserver',
       'GET /_matrix/client/v3/sync homeserver',
       'GET /{param}/{param} other',
+      'GET /_matrix/client/v3/profile/{userId}/{param} homeserver',
+      'GET /_matrix/client/v3/room_keys/keys/{roomId}/{param} homeserver',
+      'POST /_matrix/client/unstable/org.matrix.msc3575/sync homeserver',
     ]) {
       expect(report, contains(line));
     }

@@ -67,7 +67,9 @@ const Map<String, String> _sigils = {
   '#': 'roomAlias',
 };
 
-/// An unstable-prefix segment such as `org.matrix.msc3916`.
+/// An unstable-prefix segment such as `org.matrix.msc3916`. Kept only right
+/// after `unstable`: anywhere else a segment of that shape may be a file
+/// name or a key (`alice.holiday.msc1`).
 final RegExp _unstablePrefix = RegExp(r'^[a-z]+(\.[a-z0-9_]+)*\.msc[0-9]+$');
 
 /// The path of [url] with every segment that is not a fixed word replaced
@@ -75,8 +77,11 @@ final RegExp _unstablePrefix = RegExp(r'^[a-z]+(\.[a-z0-9_]+)*\.msc[0-9]+$');
 String routeTemplate(Uri url) {
   final out = <String>[];
   var pending = const <String>[];
+  String? previous;
   for (final segment in url.pathSegments) {
     if (segment.isEmpty) continue;
+    final afterUnstable = previous == 'unstable';
+    previous = segment;
     if (pending.isNotEmpty) {
       out.add('{${pending.first}}');
       pending = pending.sublist(1);
@@ -85,7 +90,8 @@ String routeTemplate(Uri url) {
     final sigil = _sigils[segment[0]];
     if (sigil != null) {
       out.add('{$sigil}');
-    } else if (_words.contains(segment) || _unstablePrefix.hasMatch(segment)) {
+    } else if (_words.contains(segment) ||
+        (afterUnstable && _unstablePrefix.hasMatch(segment))) {
       out.add(segment);
       pending = _paramsAfter[segment] ?? const [];
     } else {
