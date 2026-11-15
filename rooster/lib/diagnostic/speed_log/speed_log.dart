@@ -37,16 +37,35 @@ library;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:ui' show FramePhase;
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:rooster/diagnostic/speed_log/frame_clock.dart'
+    if (dart.library.js_interop) 'package:rooster/diagnostic/speed_log/frame_clock_web.dart';
 import 'package:rooster/diagnostic/speed_log/request_record.dart';
 import 'package:rooster/diagnostic/speed_log/ring_buffer.dart';
 import 'package:rooster/diagnostic/speed_log/speed_names.dart';
 
-/// Reports the duration of each UI frame drawn while it is listened to.
+/// One UI frame: when its work ran, from [start] (build start) to [end]
+/// (raster finish), on the speed log's clock, and how long it took from
+/// vsync to raster finish.
+class FrameSample {
+  FrameSample(this.start, this.end, [Duration? duration])
+      : duration = duration ?? end - start;
+
+  final Duration start;
+  final Duration end;
+  final Duration duration;
+}
+
+/// Reports the UI frames drawn while it is listened to.
 abstract class FrameSource {
-  void listen(void Function(Duration frame) onFrame);
+  /// From now on, hands [onBatch] the frames drawn, in the batches the
+  /// engine reports them in (about one a second in release, so a frame can
+  /// arrive after the span it was drawn in has closed), timed on [clock].
+  void listen(
+      Duration Function() clock, void Function(List<FrameSample>) onBatch);
   void cancel();
 }
 
@@ -57,7 +76,8 @@ class SchedulerFrameSource implements FrameSource {
   TimingsCallback? _callback;
 
   @override
-  void listen(void Function(Duration frame) onFrame) {
+  void listen(
+      Duration Function() clock, void Function(List<FrameSample>) onBatch) {
     final SchedulerBinding binding;
     try {
       binding = SchedulerBinding.instance;
@@ -65,9 +85,17 @@ class SchedulerFrameSource implements FrameSource {
       return;
     }
     final callback = _callback = (List<FrameTiming> timings) {
-      for (final timing in timings) {
-        onFrame(timing.totalSpan);
-      }
+      // From the engine's clock to the log's: both are monotonic, so the
+      // offset between them read now holds for every frame of the batch.
+      final offset = clock() - Duration(microseconds: frameClockMicros());
+      Duration at(FrameTiming timing, FramePhase phase) =>
+          Duration(microseconds: timing.timestampInMicroseconds(phase)) +
+          offset;
+      onBatch([
+        for (final timing in timings)
+          FrameSample(at(timing, FramePhase.buildStart),
+              at(timing, FramePhase.rasterFinish), timing.totalSpan),
+      ]);
     };
     binding.addTimingsCallback(callback);
   }
@@ -131,8 +159,11 @@ class SpeedSpan {
 
   bool get isFinished => duration != null;
 
-  /// The longest UI frame drawn while the span was open; null when no frame
-  /// was reported (the report says `unavailable`).
+  /// The longest UI frame drawn while the span was open (its work and the
+  /// span's overlap); null when no frame was reported (the report says
+  /// `unavailable`). Frames arrive in batches: after [finish] it can still
+  /// grow, until the log stops waiting for the span's frames
+  /// ([SpeedLog.frameWait]).
   Duration? get longestFrame => _longestFrame;
 
   Duration get _elapsed => _log.now() - startedAt;
@@ -192,8 +223,19 @@ class SpeedSpan {
     }));
   }
 
-  void _frame(Duration frame) {
-    if (_longestFrame == null || frame > _longestFrame!) _longestFrame = frame;
+  /// When the span ended, on the log's clock; null while it is open.
+  Duration? get _endedAt => duration == null ? null : startedAt + duration!;
+
+  void _frames(List<FrameSample> batch) {
+    final end = _endedAt;
+    for (final frame in batch) {
+      if (frame.end <= startedAt || (end != null && frame.start >= end)) {
+        continue;
+      }
+      if (_longestFrame == null || frame.duration > _longestFrame!) {
+        _longestFrame = frame.duration;
+      }
+    }
   }
 
   /// The attempt number of [request] (what identifies a request, see the
@@ -292,6 +334,10 @@ class SpeedLog {
 
   static const maxStepsPerSpan = 64;
   static const maxOpenSpans = 64;
+
+  /// How long a finished span waits for the batch that holds its last
+  /// frames, when no frame drawn after it is reported first.
+  static const frameWait = Duration(seconds: 3);
   static final Object _spanKey = Object();
 
   final RingBuffer<RequestRecord> requests;
@@ -303,6 +349,10 @@ class SpeedLog {
   final Duration Function() _clock;
   final List<SpeedSpan> _open = [];
 
+  /// Finished spans whose last frames may still come (see [frameWait]).
+  final List<SpeedSpan> _waitingForFrames = [];
+  bool _listening = false;
+
   /// Monotonic time since the log started.
   Duration now() => _clock();
 
@@ -313,7 +363,10 @@ class SpeedLog {
   /// [now]) when the operation began before it was known to need one.
   SpeedSpan startSpan(String name, {Duration? startedAt}) {
     final span = SpeedSpan._(this, name, startedAt);
-    if (_open.isEmpty) _frames.listen(_onFrame);
+    if (!_listening) {
+      _listening = true;
+      _frames.listen(now, _onFrames);
+    }
     // A span nobody finishes must not hold memory forever.
     if (_open.length >= maxOpenSpans) {
       _open.first.finish(outcome: SpeedOutcome.abandoned);
@@ -335,16 +388,34 @@ class SpeedLog {
 
   void recordRequest(RequestRecord record) => requests.add(record);
 
-  void _onFrame(Duration frame) {
-    for (final span in _open) {
-      span._frame(frame);
+  void _onFrames(List<FrameSample> batch) {
+    for (final span in [..._open, ..._waitingForFrames]) {
+      span._frames(batch);
     }
+    // Frames come in order: one drawn after a span means all of the span's
+    // frames are in.
+    _waitingForFrames.removeWhere(
+        (span) => batch.any((frame) => frame.start >= span._endedAt!));
+    _stopWaiting();
   }
 
   void _close(SpeedSpan span) {
     _open.remove(span);
     spans.add(span);
-    if (_open.isEmpty) _frames.cancel();
+    _waitingForFrames.add(span);
+    if (_waitingForFrames.length > maxOpenSpans) _waitingForFrames.removeAt(0);
+    _stopWaiting();
+  }
+
+  /// Drops the spans that waited [frameWait] for their frames, and stops
+  /// listening when no span is left to take frames.
+  void _stopWaiting() {
+    final now = this.now();
+    _waitingForFrames.removeWhere((span) => now - span._endedAt! > frameWait);
+    if (_listening && _open.isEmpty && _waitingForFrames.isEmpty) {
+      _listening = false;
+      _frames.cancel();
+    }
   }
 }
 
