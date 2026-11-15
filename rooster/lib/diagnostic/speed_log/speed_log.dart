@@ -42,6 +42,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:rooster/diagnostic/speed_log/request_record.dart';
 import 'package:rooster/diagnostic/speed_log/ring_buffer.dart';
+import 'package:rooster/diagnostic/speed_log/speed_names.dart';
 
 /// Reports the duration of each UI frame drawn while it is listened to.
 abstract class FrameSource {
@@ -100,10 +101,10 @@ class SpanStep {
 /// One user-visible operation under a random local id, made of named steps
 /// timed on the speed log's monotonic clock.
 class SpeedSpan {
-  SpeedSpan._(this._log, String name)
+  SpeedSpan._(this._log, String name, Duration? startedAt)
       : name = _identifier(name),
         id = _randomId(),
-        startedAt = _log.now();
+        startedAt = startedAt ?? _log.now();
 
   final SpeedLog _log;
   final String name;
@@ -136,6 +137,9 @@ class SpeedSpan {
 
   Duration get _elapsed => _log.now() - startedAt;
 
+  /// Time since the span started, on the log's clock.
+  Duration get elapsed => _elapsed;
+
   /// A step from the previous mark (or the span's start) to now.
   void mark(String step, {Map<String, num> values = const {}}) {
     final now = _elapsed;
@@ -159,13 +163,20 @@ class SpeedSpan {
   void unavailable(String step) =>
       _add(SpanStep(_identifier(step), _elapsed, null, const {}));
 
+  /// A step measured another way on the log's clock, such as a request read
+  /// from the log: [start] counts from the span's start, a null [duration]
+  /// is unavailable.
+  void addStep(String step, Duration start, Duration? duration,
+          {Map<String, num> values = const {}}) =>
+      _add(SpanStep(_identifier(step), start, duration, values));
+
   /// Runs [body] so the requests it makes, through any async gap, are
   /// recorded with this span's id and numbered as attempts.
   R run<R>(R Function() body) =>
       runZoned(body, zoneValues: {SpeedLog._spanKey: this});
 
   /// Closes the span and moves it to the log. Later calls do nothing.
-  void finish({String outcome = 'ok'}) {
+  void finish({String outcome = SpeedOutcome.ok}) {
     if (isFinished) return;
     duration = _elapsed;
     this.outcome = _identifier(outcome);
@@ -211,21 +222,73 @@ class SpeedSpan {
       _fixedIdentifier.hasMatch(name) ? name : 'invalid_name';
 }
 
-/// The in-memory speed log: the newest requests and finished spans, in two
-/// [RingBuffer]s of fixed size. Always on; nothing leaves the device.
+/// Finished spans, the newest [perOperation] of each operation (span name)
+/// in a [RingBuffer] of its own, so a frequent operation (a sync round every
+/// 30 s) never pushes a rare one (a text send) out. At most [maxOperations]
+/// operations are kept; spans of any further name are dropped. Names are
+/// constants from the code, so that bound is never reached in practice and
+/// the memory stays fixed.
+class FinishedSpans {
+  FinishedSpans({required this.perOperation, required this.maxOperations});
+
+  final int perOperation;
+  final int maxOperations;
+  final Map<String, RingBuffer<(int, SpeedSpan)>> _byOperation = {};
+  int _added = 0;
+
+  /// The operations that have spans, in the order they first finished one.
+  Iterable<String> get operations => _byOperation.keys;
+
+  void add(SpeedSpan span) {
+    var buffer = _byOperation[span.name];
+    if (buffer == null) {
+      if (_byOperation.length >= maxOperations) return;
+      buffer = _byOperation[span.name] = RingBuffer(perOperation);
+    }
+    buffer.add((_added++, span));
+  }
+
+  int get length =>
+      _byOperation.values.fold(0, (sum, buffer) => sum + buffer.length);
+
+  /// Every kept span, oldest finished first.
+  List<SpeedSpan> toList() {
+    final all = [for (final buffer in _byOperation.values) ...buffer.toList()]
+      ..sort((a, b) => a.$1.compareTo(b.$1));
+    return [for (final (_, span) in all) span];
+  }
+
+  void clear() {
+    _byOperation.clear();
+    _added = 0;
+  }
+
+  /// Slots allocated across the buffers, for tests that check it never
+  /// grows past [perOperation] times [maxOperations].
+  int get debugStorageSize => _byOperation.values
+      .fold(0, (sum, buffer) => sum + buffer.debugStorage.length);
+}
+
+/// The in-memory speed log: the newest requests in a [RingBuffer] and the
+/// newest finished spans of each operation in [FinishedSpans], all of fixed
+/// size. Always on; nothing leaves the device.
 class SpeedLog {
   SpeedLog({
     int requestCapacity = 512,
-    int spanCapacity = 256,
     FrameSource? frames,
     Duration Function()? clock,
   })  : requests = RingBuffer(requestCapacity),
-        spans = RingBuffer(spanCapacity),
+        spans = FinishedSpans(
+            perOperation: spansPerOperation, maxOperations: maxOperations),
         _frames = frames ?? SchedulerFrameSource(),
         _clock = clock ?? (Stopwatch()..start()).elapsedFrom;
 
   /// The log of the app. Tests make their own.
   static final SpeedLog instance = SpeedLog();
+
+  /// Finished spans kept per operation, and how many operations.
+  static const spansPerOperation = 256;
+  static const maxOperations = 16;
 
   static const maxStepsPerSpan = 64;
   static const maxOpenSpans = 64;
@@ -233,8 +296,8 @@ class SpeedLog {
 
   final RingBuffer<RequestRecord> requests;
 
-  /// Finished spans, oldest first.
-  final RingBuffer<SpeedSpan> spans;
+  /// Finished spans, the newest of each operation.
+  final FinishedSpans spans;
 
   final FrameSource _frames;
   final Duration Function() _clock;
@@ -246,11 +309,15 @@ class SpeedLog {
   /// Spans not finished yet, oldest first.
   List<SpeedSpan> get openSpans => List.unmodifiable(_open);
 
-  SpeedSpan startSpan(String name) {
-    final span = SpeedSpan._(this, name);
+  /// Opens a span named [name], from now or from [startedAt] (an earlier
+  /// [now]) when the operation began before it was known to need one.
+  SpeedSpan startSpan(String name, {Duration? startedAt}) {
+    final span = SpeedSpan._(this, name, startedAt);
     if (_open.isEmpty) _frames.listen(_onFrame);
     // A span nobody finishes must not hold memory forever.
-    if (_open.length >= maxOpenSpans) _open.first.finish(outcome: 'abandoned');
+    if (_open.length >= maxOpenSpans) {
+      _open.first.finish(outcome: SpeedOutcome.abandoned);
+    }
     _open.add(span);
     return span;
   }

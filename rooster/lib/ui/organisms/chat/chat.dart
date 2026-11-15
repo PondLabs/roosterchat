@@ -17,6 +17,7 @@ import 'package:rooster/client/timeline_events/timeline_event_message.dart';
 import 'package:rooster/client/timeline_events/timeline_event_sticker.dart';
 
 import 'package:rooster/debug/log.dart';
+import 'package:rooster/diagnostic/speed_log/text_send_trace.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/organisms/attachment_processor/attachment_processor.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
@@ -240,6 +241,9 @@ class ChatState extends State<Chat> {
   }
 
   void sendMessage(String message, {Client? overrideClient}) async {
+    // The speed log times a text message from here (docs/speed-log.md).
+    final sendPressed = TextSendTrace.now();
+
     // Whatever the composer hasn't fetched yet starts now, before the message
     // is processed, encrypted and sent.
     previewPrefetcher.prefetch(context, room, message);
@@ -307,30 +311,42 @@ class ChatState extends State<Chat> {
 
     var component = targetRoom.client.getComponent<CommandComponent>();
 
-    if (component?.isExecutable(message) == true) {
+    final isCommand = component?.isExecutable(message) == true;
+    final trace = isCommand
+        ? null
+        : TextSendTrace.forComposer(
+            sendPressed: sendPressed,
+            message: message,
+            hasAttachments: processedAttachments.isNotEmpty);
+
+    if (isCommand) {
       doCommand(component, message);
     } else if (isThread) {
-      targetThread!.sendMessage(
-          threadRootEventId: widget.threadId!,
-          room: targetRoom,
-          message: message,
-          inReplyTo: interactionType == EventInteractionType.reply
-              ? interactingEvent
-              : null,
-          replaceEvent: interactionType == EventInteractionType.edit
-              ? interactingEvent
-              : null,
-          processedAttachments: processedAttachments);
+      TextSendTrace.send(
+          trace,
+          () => targetThread!.sendMessage(
+              threadRootEventId: widget.threadId!,
+              room: targetRoom,
+              message: message,
+              inReplyTo: interactionType == EventInteractionType.reply
+                  ? interactingEvent
+                  : null,
+              replaceEvent: interactionType == EventInteractionType.edit
+                  ? interactingEvent
+                  : null,
+              processedAttachments: processedAttachments));
     } else {
-      targetRoom.sendMessage(
-          message: message,
-          inReplyTo: interactionType == EventInteractionType.reply
-              ? interactingEvent
-              : null,
-          replaceEvent: interactionType == EventInteractionType.edit
-              ? interactingEvent
-              : null,
-          processedAttachments: processedAttachments);
+      TextSendTrace.send(
+          trace,
+          () => targetRoom.sendMessage(
+              message: message,
+              inReplyTo: interactionType == EventInteractionType.reply
+                  ? interactingEvent
+                  : null,
+              replaceEvent: interactionType == EventInteractionType.edit
+                  ? interactingEvent
+                  : null,
+              processedAttachments: processedAttachments));
     }
 
     typingIndicators?.setTypingStatus(false);

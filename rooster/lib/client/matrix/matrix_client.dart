@@ -26,12 +26,14 @@ import 'package:rooster/config/global_config.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/diagnostic/diagnostics.dart';
 import 'package:rooster/diagnostic/speed_log/host_class.dart';
+import 'package:rooster/diagnostic/speed_log/sync_trace.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/utils/network/speed_http_client.dart';
 import 'package:rooster/utils/notifying_list.dart';
 import 'package:rooster/utils/notifying_list_filter.dart';
 import 'package:rooster/utils/stored_stream_controller.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
 import 'package:rooster/client/client.dart';
@@ -111,9 +113,14 @@ class MatrixClient extends Client {
       ? const matrix.NativeImplementationsDummy()
       : NativeImplementationsCustom(compute);
 
+  /// The speed log's `sync` spans of this account (docs/speed-log.md).
+  late final SyncSpeedTrace _syncSpeedTrace;
+
   MatrixClient({
     required String identifier,
     required matrix.DatabaseApi database,
+    // Only tests pass one: a fake server under the speed log's client.
+    http.Client? transport,
   }) {
     if (preferences.developerMode.value) {
       matrix.Logs().level = matrix.Level.verbose;
@@ -122,7 +129,8 @@ class MatrixClient extends Client {
     }
 
     _id = identifier;
-    _matrixClient = _createMatrixClient(identifier, database);
+    _matrixClient = _createMatrixClient(identifier, database, transport);
+    _syncSpeedTrace = SyncSpeedTrace(_matrixClient.onSyncStatus.stream);
 
     self = ErrorProfile();
 
@@ -437,13 +445,15 @@ class MatrixClient extends Client {
   @override
   bool isLoggedIn() => _matrixClient.isLogged();
 
-  matrix.Client _createMatrixClient(String name, matrix.DatabaseApi database) {
+  matrix.Client _createMatrixClient(
+      String name, matrix.DatabaseApi database, http.Client? transport) {
     late final matrix.Client client;
     client = matrix.Client(
       name,
       // Every request of the account goes through our client, which records
       // its timings in the speed log without content (lib/diagnostic/speed_log).
       httpClient: SpeedHttpClient(
+        inner: transport,
         hosts: HostClassifier(homeserver: () => client.homeserver),
       ),
       verificationMethods: {
@@ -764,6 +774,7 @@ class MatrixClient extends Client {
   @override
   Future<void> close({bool closeDatabase = true}) async {
     getComponent<MatrixUserPresenceComponent>()?.dispose();
+    await _syncSpeedTrace.dispose();
     await _matrixClient.dispose(closeDatabase: closeDatabase);
   }
 
