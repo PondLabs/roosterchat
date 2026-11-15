@@ -38,6 +38,16 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
           "metadata; nothing is attached unless the person turns on the "
           "\"Send original (keeps metadata)\" switch");
 
+  String get labelAttachmentAnimationNotKept => Intl.message(
+      "The animation wasn't kept: only its first frame will be attached. To attach it as it is, turn on \"Send original\".",
+      name: "labelAttachmentAnimationNotKept",
+      desc: "Shown in the dialog that previews a file before it is attached, "
+          "when an animated image could not be read well enough to remove "
+          "its metadata without decoding it: the picture without metadata "
+          "is only its first frame. \"Add File\" attaches that frame; the "
+          "\"Send original (keeps metadata)\" switch attaches the file as "
+          "it is");
+
   String get labelImageContainsLocationInfo => Intl.message(
       "Warning: This image contains location metadata",
       name: "labelImageContainsLocationInfo",
@@ -62,6 +72,13 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
   /// The image's metadata could not be removed: it is attached only as it
   /// is, through "Send original".
   bool metadataRemovalFailed = false;
+
+  /// Whether [processImage] kept only the first frame of an animation.
+  bool animationLost = false;
+
+  /// The image without metadata, held back while the dialog says its
+  /// animation was not kept; the next "Add File" attaches it.
+  PendingFileAttachment? withoutAnimation;
 
   FocusNode focusNode = FocusNode();
 
@@ -171,6 +188,12 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
                         child: tiamat.Text.error(
                             labelAttachmentMetadataNotRemoved),
                       ),
+                    if (withoutAnimation != null && !sendOriginalFile)
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child:
+                            tiamat.Text.label(labelAttachmentAnimationNotKept),
+                      ),
                     if (sendOriginalFile || !canProcessData)
                       buildMetadataDisplay(),
                     buildConfirmButton(),
@@ -223,6 +246,9 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
     } else if (metadataRemovalFailed) {
       // Only "Send original" attaches this file now.
       return;
+    } else if (withoutAnimation != null) {
+      // The warning has been shown: attach the first frame.
+      Navigator.of(context).pop(withoutAnimation);
     } else {
       setState(() {
         processing = true;
@@ -233,6 +259,13 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
         setState(() {
           processing = false;
           metadataRemovalFailed = true;
+        });
+        return;
+      }
+      if (animationLost) {
+        setState(() {
+          processing = false;
+          withoutAnimation = file;
         });
         return;
       }
@@ -270,12 +303,20 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
     }
     final bytes = result.bytes;
     if (bytes == null) return null;
+    animationLost = result.animationLost;
 
     final mime = result.mimeType ?? attachment.mimeType!;
     var name = attachment.name;
-    if (mime != attachment.mimeType) {
-      // A re-encode changed the format: the name follows it.
-      final extension = mime == "image/png" ? "png" : "jpg";
+    final named = Mime.fromExtenstion(
+            path.extension(name ?? "").replaceFirst(".", "").toLowerCase()) ==
+        mime;
+    final extension =
+        mime == "image/jpeg" ? "jpg" : Mime.extensionFromMime(mime);
+    if (!named &&
+        extension != null &&
+        (name != null || mime != attachment.mimeType)) {
+      // A re-encode changed the format, or the name never matched it (a
+      // GIF named .png): the name follows the type.
       final rawName = path.basenameWithoutExtension(name ?? "untitled");
       name = "$rawName.$extension";
     }

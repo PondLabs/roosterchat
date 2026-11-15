@@ -3940,6 +3940,12 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelAttachmentAnimationNotKept": "The animation wasn't kept: only its first frame will be attached. To attach it as it is, turn on \"Send original\".",
+  "@labelAttachmentAnimationNotKept": {
+    "description": "Shown in the dialog that previews a file before it is attached, when an animated image could not be read well enough to remove its metadata without decoding it: the picture without metadata is only its first frame. \"Add File\" attaches that frame; the \"Send original (keeps metadata)\" switch attaches the file as it is",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelImageContainsLocationInfo": "Warning: This image contains location metadata",
   "@labelImageContainsLocationInfo": {
     "description": "Warning over an image about to be sent whose metadata says where it was taken",

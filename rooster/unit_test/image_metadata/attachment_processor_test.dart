@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart' as intl;
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/generated/intl/messages_all.dart';
@@ -10,6 +11,8 @@ import 'package:rooster/ui/organisms/attachment_processor/attachment_processor.d
 import 'package:rooster/utils/image/metadata/remove_image_metadata.dart';
 import 'package:tiamat/config/style/theme_extensions.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
+
+import 'remove_image_metadata_test.dart' show expectNoMetadata;
 
 Uint8List fixture(String name) =>
     File('unit_test/fixtures/image_metadata/$name').readAsBytesSync();
@@ -74,7 +77,7 @@ void main() {
 
   const notRemovedEn = "Couldn't remove this image's metadata. "
       "To attach it as it is, turn on \"Send original\".";
-  const notRemovedPt = "Não deu para remover os metadados desta imagem. "
+  const notRemovedPt = "Não foi possível remover os metadados desta imagem. "
       "Para anexá-la como está, ative \"Enviar original\".";
 
   Future<void> checkUndecodable(WidgetTester tester,
@@ -165,7 +168,112 @@ void main() {
     expect(dialog.result!.mimeType, "image/jpeg");
   });
 
-  testWidgets("a WebP that comes back a JPEG is named like one",
+  for (final (label, bytes, name, mime, expected) in [
+    (
+      "a GIF named .png",
+      img.encodeGif(img.Image(width: 8, height: 8)),
+      "anim.png",
+      "image/png",
+      ("anim.gif", "image/gif"),
+    ),
+    (
+      "a GIF named .jpg",
+      img.encodeGif(img.Image(width: 8, height: 8)),
+      "anim.jpg",
+      "image/jpeg",
+      ("anim.gif", "image/gif"),
+    ),
+    (
+      "a BMP named .png",
+      img.encodeBmp(img.Image(width: 8, height: 8)),
+      "pic.png",
+      "image/png",
+      ("pic.bmp", "image/bmp"),
+    ),
+    (
+      "a JPEG named .png",
+      fixture("gps_xmp.jpg"),
+      "photo.png",
+      "image/png",
+      ("photo.jpg", "image/jpeg"),
+    ),
+    (
+      "a JPEG named .png and typed as a JPEG",
+      fixture("gps_xmp.jpg"),
+      "photo.png",
+      "image/jpeg",
+      ("photo.jpg", "image/jpeg"),
+    ),
+    (
+      "a JPEG named .jpeg",
+      fixture("gps_xmp.jpg"),
+      "photo.jpeg",
+      "image/jpeg",
+      ("photo.jpeg", "image/jpeg"),
+    ),
+  ]) {
+    testWidgets("$label is named like its type", (tester) async {
+      final dialog = await openDialog(
+          tester,
+          PendingFileAttachment(
+              name: name, data: bytes, size: bytes.length, mimeType: mime));
+
+      await tester.tap(find.text("Add File"));
+      await waitFor(tester, () => dialog.closed);
+
+      expect((dialog.result!.name, dialog.result!.mimeType), expected);
+    });
+  }
+
+  const animationLostEn = "The animation wasn't kept: only its first frame "
+      "will be attached. To attach it as it is, turn on \"Send original\".";
+  const animationLostPt = "A animação não foi mantida: só o primeiro quadro "
+      "será anexado. Para anexá-la como está, ative \"Enviar original\".";
+
+  Future<void> checkAnimationLost(WidgetTester tester,
+      {required String addFile, required String animationLost}) async {
+    // The animated fixture cut short: it does not parse, and the engine
+    // still decodes its 3 frames, of which the re-encode keeps one.
+    final webp = fixture("animated_exif.webp");
+    final cut = webp.sublist(0, webp.length - 100);
+    final dialog = await openDialog(
+        tester,
+        PendingFileAttachment(
+            name: "party.webp",
+            data: cut,
+            size: cut.length,
+            mimeType: "image/webp"));
+    expect(find.text(animationLost), findsNothing);
+
+    await tester.tap(find.text(addFile));
+    await waitFor(tester, () => find.text(animationLost).evaluate().isNotEmpty);
+    expect(find.text(animationLost), findsOneWidget);
+    expect(dialog.closed, isFalse, reason: "the warning is read first");
+
+    await tester.tap(find.text(addFile));
+    await waitFor(tester, () => dialog.closed, tries: 10);
+    expect(dialog.closed, isTrue);
+    expect(dialog.result!.name, "party.jpg");
+    expect(dialog.result!.mimeType, "image/jpeg");
+    await expectNoMetadata(dialog.result!.data!, orientation: 1);
+  }
+
+  testWidgets("an animation the fallback flattens is attached after a warning",
+      (tester) async {
+    await checkAnimationLost(tester,
+        addFile: "Add File", animationLost: animationLostEn);
+  });
+
+  testWidgets("the same in Portuguese, with the animation warning",
+      (tester) async {
+    await initializeMessages("pt");
+    intl.Intl.defaultLocale = "pt";
+    addTearDown(() => intl.Intl.defaultLocale = null);
+    await checkAnimationLost(tester,
+        addFile: "Adicionar arquivo", animationLost: animationLostPt);
+  });
+
+  testWidgets("\"Send original\" after the warning sends the animation",
       (tester) async {
     final webp = fixture("animated_exif.webp");
     final cut = webp.sublist(0, webp.length - 100);
@@ -178,9 +286,16 @@ void main() {
             mimeType: "image/webp"));
 
     await tester.tap(find.text("Add File"));
-    await waitFor(tester, () => dialog.closed);
+    await waitFor(
+        tester, () => find.text(animationLostEn).evaluate().isNotEmpty);
+    await tester.tap(find.byType(tiamat.Switch));
+    await tester.pumpAndSettle();
+    expect(find.text(animationLostEn), findsNothing);
+    await tester.tap(find.text("Add File"));
+    await tester.pumpAndSettle();
 
-    expect(dialog.result!.name, "party.jpg");
-    expect(dialog.result!.mimeType, "image/jpeg");
+    expect(dialog.closed, isTrue);
+    expect(dialog.result!.data, cut);
+    expect(dialog.result!.name, "party.webp");
   });
 }

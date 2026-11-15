@@ -9,9 +9,12 @@ const int _typeShort = 3;
 /// Reads the Orientation tag (0x0112) from IFD0 of a TIFF block, the body
 /// of an Exif segment after its `Exif\0\0` prefix.
 ///
-/// Returns 1 to 8, or [exifOrientationNormal] when the block is malformed,
-/// has no such tag, or holds a value outside 1 to 8: that is how decoders
-/// draw such a picture, so it is what the rewrite has to keep.
+/// Read the way Flutter's engine reads it, since the rewrite has to keep the
+/// picture drawn as the original is: the header's magic number (42) is not
+/// checked, and the first Orientation entry that is a SHORT with a count of
+/// 1 and a value from 1 to 8 counts; any other Orientation entry is passed
+/// over. Returns [exifOrientationNormal] when the block is malformed or has
+/// no such entry.
 ///
 /// Returns null when IFD0 does not fit in the block (its entries and the
 /// 4-byte offset of the next IFD): such a block can be shorter than the one
@@ -27,7 +30,6 @@ int? readTiffOrientation(Uint8List tiff) {
     return exifOrientationNormal;
   }
   final data = ByteData.sublistView(tiff);
-  if (data.getUint16(2, endian) != 42) return exifOrientationNormal;
   final ifd = data.getUint32(4, endian);
   if (ifd < 8) return exifOrientationNormal;
   if (ifd + 2 > tiff.length) return null;
@@ -36,9 +38,10 @@ int? readTiffOrientation(Uint8List tiff) {
   for (var i = 0; i < count; i++) {
     final entry = ifd + 2 + i * 12;
     if (data.getUint16(entry, endian) != _orientationTag) continue;
-    if (data.getUint16(entry + 2, endian) != _typeShort) break;
+    if (data.getUint16(entry + 2, endian) != _typeShort) continue;
+    if (data.getUint32(entry + 4, endian) != 1) continue;
     final value = data.getUint16(entry + 8, endian);
-    return value >= 1 && value <= 8 ? value : exifOrientationNormal;
+    if (value >= 1 && value <= 8) return value;
   }
   return exifOrientationNormal;
 }

@@ -26,7 +26,8 @@ enum MetadataRemovalOutcome {
 /// The result of removing a picture's metadata. Plain data, so it crosses
 /// isolates.
 class MetadataRemoval {
-  const MetadataRemoval(this.outcome, {this.bytes, this.mimeType});
+  const MetadataRemoval(this.outcome,
+      {this.bytes, this.mimeType, this.animationLost = false});
 
   final MetadataRemovalOutcome outcome;
 
@@ -37,6 +38,10 @@ class MetadataRemoval {
   /// The MIME type of [bytes]. After a re-encode it can differ from the
   /// input's (a WebP comes out as JPEG or PNG).
   final String? mimeType;
+
+  /// The picture was animated and [bytes] hold only its first frame: a
+  /// re-encode keeps one frame.
+  final bool animationLost;
 }
 
 /// JPEG quality of the re-encode a picture falls back to.
@@ -79,13 +84,16 @@ Future<MetadataRemoval> removeImageMetadata(Uint8List bytes) async {
   return reencoded ?? const MetadataRemoval(MetadataRemovalOutcome.failed);
 }
 
-/// Straight-alpha RGBA pixels of a picture's first frame, as shown.
+/// Straight-alpha RGBA pixels of a picture's first frame, as shown, and how
+/// many frames the picture has.
 class _Pixels {
-  const _Pixels(this.width, this.height, this.rgba, {required this.asPng});
+  const _Pixels(this.width, this.height, this.rgba,
+      {required this.asPng, required this.frames});
   final int width;
   final int height;
   final Uint8List rgba;
   final bool asPng;
+  final int frames;
 }
 
 Future<_Pixels?> _decodeWithEngine(Uint8List bytes) async {
@@ -105,7 +113,8 @@ Future<_Pixels?> _decodeWithEngine(Uint8List bytes) async {
     for (var i = 3; !asPng && i < rgba.length; i += 4) {
       if (rgba[i] != 0xFF) asPng = true;
     }
-    return _Pixels(image.width, image.height, rgba, asPng: asPng);
+    return _Pixels(image.width, image.height, rgba,
+        asPng: asPng, frames: codec.frameCount);
   } catch (_) {
     return null;
   } finally {
@@ -132,7 +141,9 @@ MetadataRemoval? _encodeWithoutMetadata(_Pixels pixels) {
   final container = parseImageContainer(encoded);
   if (container == null) return null;
   return MetadataRemoval(MetadataRemovalOutcome.reencoded,
-      bytes: container.withoutMetadata(), mimeType: container.mimeType);
+      bytes: container.withoutMetadata(),
+      mimeType: container.mimeType,
+      animationLost: pixels.frames > 1);
 }
 
 bool _isGif(Uint8List bytes) =>
