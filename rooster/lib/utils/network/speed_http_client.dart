@@ -39,13 +39,13 @@ class SpeedHttpClient extends http.BaseClient {
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
-    final route = routeTemplate(request.url);
+    final hostClass = _hosts.classify(request.url);
     final span = SpeedLog.currentSpan;
     final entry = _Entry(
       log: _log,
       method: request.method,
-      route: route,
-      hostClass: _hosts.classify(request.url),
+      route: routeTemplate(request.url, hostClass),
+      hostClass: hostClass,
       // The same request sent again counts as a new attempt; a different
       // one of the same route does not. Hashed by the span, never kept.
       attempt: SpeedLog.nextAttempt(span,
@@ -55,7 +55,10 @@ class SpeedHttpClient extends http.BaseClient {
 
     final http.StreamedResponse response;
     try {
-      if (xhrUploadAvailable && isMediaUploadRoute(route)) {
+      // Chosen by the API's words whatever the host's class, as before the
+      // route of other hosts was reduced to placeholders.
+      if (xhrUploadAvailable &&
+          isMediaUploadRoute(routeTemplate(request.url))) {
         entry.bytesUp = request.contentLength ?? 0;
         response = await sendByXhr(
           request,

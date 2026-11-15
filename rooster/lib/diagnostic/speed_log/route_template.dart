@@ -8,7 +8,14 @@
 /// The query string, the host and the scheme are never part of it. Unknown
 /// words fall to a placeholder, so a new API leaks nothing, it only reads
 /// less well until its words are added here.
+///
+/// On a host of class [HostClass.other] (a GIF site, a link preview, any
+/// page) the API's words mean nothing: every segment is `{param}`, except
+/// the Matrix well-known lookup (`/.well-known/matrix/...`), which reads as
+/// on the homeserver.
 library;
+
+import 'package:rooster/diagnostic/speed_log/host_class.dart';
 
 /// The fixed words kept as they are.
 const Set<String> _words = {
@@ -73,8 +80,19 @@ const Map<String, String> _sigils = {
 final RegExp _unstablePrefix = RegExp(r'^[a-z]+(\.[a-z0-9_]+)*\.msc[0-9]+$');
 
 /// The path of [url] with every segment that is not a fixed word replaced
-/// by a placeholder. Never contains the query, the host or an id.
-String routeTemplate(Uri url) {
+/// by a placeholder. Never contains the query, the host or an id. [host] is
+/// the class of the URL's host (see the library doc).
+String routeTemplate(Uri url, [HostClass host = HostClass.homeserver]) {
+  if (host == HostClass.other) {
+    final segments = [
+      for (final s in url.pathSegments)
+        if (s.isNotEmpty) s
+    ];
+    final wellKnown = segments.length >= 2 &&
+        segments[0] == '.well-known' &&
+        segments[1] == 'matrix';
+    if (!wellKnown) return '/${segments.map((_) => '{param}').join('/')}';
+  }
   final out = <String>[];
   var pending = const <String>[];
   String? previous;

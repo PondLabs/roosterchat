@@ -139,6 +139,17 @@ void main() {
           'secret.msc42'
         ])
       ),
+      // Another site: none of its words, even the API's, are kept...
+      (
+        'GET',
+        Uri.parse(
+            'https://secret-site.example/user/alice/account/password/reset')
+      ),
+      // ...but the Matrix well-known lookup of a server name still reads.
+      (
+        'GET',
+        Uri.parse('https://secret-site.example/.well-known/matrix/client')
+      ),
       // A real unstable prefix, right after `unstable`, is kept.
       (
         'POST',
@@ -171,6 +182,9 @@ void main() {
       '.msc1',
       '.msc7',
       '.msc42',
+      'account',
+      'password',
+      'reset',
     ]) {
       expect(report.toLowerCase(), isNot(contains(word)), reason: word);
     }
@@ -189,6 +203,8 @@ void main() {
       'GET /_matrix/client/v3/profile/{userId}/{param} homeserver',
       'GET /_matrix/client/v3/room_keys/keys/{roomId}/{param} homeserver',
       'POST /_matrix/client/unstable/org.matrix.msc3575/sync homeserver',
+      'GET /{param}/{param}/{param}/{param}/{param} other',
+      'GET /.well-known/matrix/client other',
     ]) {
       expect(report, contains(line));
     }
