@@ -232,6 +232,8 @@ class ChatState extends State<Chat> {
     setState(() {
       attachments.add(attachment);
     });
+    // Ready by the time Send is pressed, in the usual case.
+    attachment.startImagePreparation();
   }
 
   void removeAttachment(PendingFileAttachment attachment) {
@@ -535,6 +537,7 @@ class ChatState extends State<Chat> {
           setState(() {
             attachments.add(processedAttachment);
           });
+          processedAttachment.startImagePreparation();
         }
       }
     }
