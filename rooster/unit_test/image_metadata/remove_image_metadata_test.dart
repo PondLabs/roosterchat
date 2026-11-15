@@ -389,6 +389,25 @@ void main() {
         expect((decoded.width, decoded.height), (48, 64));
       });
 
+      test("makes an animated WebP a re-encode", () async {
+        final input = _webpFile([
+          for (final (type, payload)
+              in _webpChunks(fixture("animated_exif.webp")))
+            if (type == "EXIF")
+              ("EXIF", tiff)
+            else if (type != "XMP ")
+              (type, payload),
+        ]);
+        expect(walkWebp(input).$1,
+            ["VP8X", "ANIM", "ANMF", "ANMF", "ANMF", "EXIF"]);
+        expect(parseImageContainer(input), isNull);
+
+        final result = await removeImageMetadata(input);
+        expect(result.outcome, MetadataRemovalOutcome.reencoded);
+        expect(result.mimeType, "image/jpeg");
+        await expectNoMetadata(result.bytes!, orientation: 1);
+      });
+
       test("makes a PNG a re-encode", () async {
         final png = img.encodePng(img.Image(width: 8, height: 6));
         const afterIhdr = 8 + 12 + 13;
@@ -405,6 +424,45 @@ void main() {
         expect(result.mimeType, "image/png");
         await expectNoMetadata(result.bytes!, orientation: 1);
       });
+    });
+  });
+
+  group("an extended WebP", () {
+    final chunks = _webpChunks(fixture("animated_exif.webp"));
+    final frames = [
+      for (final (type, payload) in chunks)
+        if (type == "ANMF") payload,
+    ];
+
+    test("whose last chunk has no padding byte goes to the fallback", () async {
+      // VP8X, ANIM, the minimal EXIF before the frames, and a last frame
+      // of odd length: the rewrite would have to add the padding byte the
+      // original left out, one byte more than the input.
+      expect(frames[0].length.isEven, isTrue);
+      final odd = Uint8List.sublistView(frames[0], 0, frames[0].length - 1);
+      List<(String, List<int>)> file() => [
+            for (final (type, payload) in chunks)
+              if (type == "VP8X" || type == "ANIM") (type, payload),
+            ("EXIF", minimalOrientationTiff(6)),
+            ("ANMF", frames[1]),
+            ("ANMF", frames[2]),
+            ("ANMF", odd),
+          ];
+      final padded = _webpFile(file());
+      final unpadded = _webpFile(file(), padLast: false);
+      expect(unpadded.length, padded.length - 1);
+
+      final rewritten = removeMetadataByRewrite(padded)!;
+      expect(rewritten.outcome, MetadataRemovalOutcome.rewritten);
+      expect(rewritten.bytes!.length, lessThanOrEqualTo(padded.length));
+
+      expect(parseImageContainer(unpadded), isNull);
+      expect(removeMetadataByRewrite(unpadded), isNull);
+      final result = await removeImageMetadata(unpadded);
+      expect(result.outcome, isNot(MetadataRemovalOutcome.rewritten));
+      if (result.bytes != null) {
+        await expectNoMetadata(result.bytes!, orientation: 1);
+      }
     });
   });
 
@@ -485,6 +543,51 @@ void main() {
       }
     });
   });
+}
+
+/// The chunks of a RIFF body (from its first chunk) as (type, payload).
+List<(String, Uint8List)> _riffChunks(Uint8List b) {
+  final data = ByteData.sublistView(b);
+  final out = <(String, Uint8List)>[];
+  var pos = 0;
+  while (pos + 8 <= b.length) {
+    final size = data.getUint32(pos + 4, Endian.little);
+    out.add((
+      String.fromCharCodes(b, pos, pos + 4),
+      Uint8List.sublistView(b, pos + 8, pos + 8 + size)
+    ));
+    pos += 8 + size + (size & 1);
+  }
+  return out;
+}
+
+/// The chunks of a WebP as (type, payload).
+List<(String, Uint8List)> _webpChunks(Uint8List b) =>
+    _riffChunks(Uint8List.sublistView(
+        b, 12, 8 + ByteData.sublistView(b).getUint32(4, Endian.little)));
+
+/// Writes a WebP from chunks. [padLast] false leaves out the padding byte
+/// of an odd last chunk.
+Uint8List _webpFile(List<(String, List<int>)> chunks, {bool padLast = true}) {
+  final out = BytesBuilder()
+    ..add("RIFF".codeUnits)
+    ..add([0, 0, 0, 0])
+    ..add("WEBP".codeUnits);
+  for (var i = 0; i < chunks.length; i++) {
+    final (type, payload) = chunks[i];
+    out
+      ..add(type.codeUnits)
+      ..add((ByteData(4)..setUint32(0, payload.length, Endian.little))
+          .buffer
+          .asUint8List())
+      ..add(payload);
+    if (payload.length.isOdd && (padLast || i < chunks.length - 1)) {
+      out.addByte(0);
+    }
+  }
+  final b = out.takeBytes();
+  ByteData.sublistView(b).setUint32(4, b.length - 8, Endian.little);
+  return b;
 }
 
 /// A TIFF block whose IFD0 right after the header holds [entries] as (tag,
