@@ -216,10 +216,14 @@ class _PendingAttachmentStatusState extends State<PendingAttachmentStatus> {
     final style = Theme.of(context).textTheme.bodySmall?.copyWith(color: color);
     final shown = PendingAttachmentStatus.describe(send);
     final detail = shown.detail;
+    // The size, the count and the clock are short and always whole; the
+    // stage takes the rest of the width and wraps onto a second line (the
+    // sentence of a failure is long, a third longer in Portuguese).
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, 4, 0, 2),
       child: Row(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Icon(shown.icon, size: 14, color: color),
           const SizedBox(width: 4),
@@ -227,17 +231,17 @@ class _PendingAttachmentStatusState extends State<PendingAttachmentStatus> {
             child: Text(shown.label,
                 key: const ValueKey("pending-file-stage"),
                 style: style,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis),
           ),
           if (detail != null) ...[
             const SizedBox(width: 8),
-            Flexible(
-              child: Text(detail,
-                  key: const ValueKey("pending-file-size"),
-                  style: style?.copyWith(
-                      fontFeatures: const [FontFeature.tabularFigures()]),
-                  overflow: TextOverflow.ellipsis),
-            ),
+            Text(detail,
+                key: const ValueKey("pending-file-size"),
+                style: style?.copyWith(
+                    fontFeatures: const [FontFeature.tabularFigures()]),
+                maxLines: 1,
+                softWrap: false),
           ],
           const SizedBox(width: 8),
           Text(PendingAttachmentStatus.clock(send.elapsed),
