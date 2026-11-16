@@ -203,6 +203,10 @@ Changes since the copy:
   again during a long upload is not marked failed.
 - `Client.sendClock` (`lib/src/client.dart`): the clock the upload loop
   reads and waits by, given by tests.
+- `Client._handleRoomEvents` (`lib/src/client.dart`): a timeline event
+  that comes back under a transaction id lets go of the file kept to send
+  that message again (`Room.forgetFileSend`): it reached the room, even
+  when our `PUT /send` failed.
 - `Event.sendAgain` (`lib/src/event.dart`): a file message whose event
   carries its uploads' address (`url`, or `file` in an encrypted room) is
   sent again as that event, under the same transaction id, with no upload.

@@ -2974,6 +2974,13 @@ class Client extends MatrixApi {
         final timelineEvent = Event.fromMatrixEvent(event, room);
         switch (type) {
           case EventUpdateType.timeline:
+            // A message that reached the room under a transaction id: // ROOSTER
+            // the file kept to send it again is let go (the server may // ROOSTER
+            // have it although our PUT /send failed). // ROOSTER
+            final txid = timelineEvent.transactionId; // ROOSTER
+            if (txid != null && timelineEvent.eventId != txid) { // ROOSTER
+              room.forgetFileSend(txid); // ROOSTER
+            } // ROOSTER
             onTimelineEvent.add(timelineEvent);
             if (prevBatch != null &&
                 timelineEvent.senderId != userID &&

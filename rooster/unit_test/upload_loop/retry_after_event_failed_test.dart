@@ -130,4 +130,41 @@ void main() {
     expect(send.stage, AttachmentSendStage.sent);
     await client.close();
   });
+
+  test(
+      'PUT /send failed but the event reached the room (its echo comes by '
+      'sync): the room lets go of the file, its thumbnail and its uploads',
+      () async {
+    final transport = LoopTransport()..failSends = 1;
+    final (mx, room) = await loopClient(
+        'loop_echo_after_failure', transport, ManualSendClock());
+    final (send, sending) = startSend(room);
+    expect(await sending, isNull);
+    final txid = send.transactionId!;
+    expect(room.sendingFilePlaceholders, contains(txid));
+    expect(room.sendingFileUploads[txid], isNotEmpty);
+
+    await mx.database.transaction(() => mx.handleSync(matrix.SyncUpdate(
+          nextBatch: 'echo',
+          rooms: matrix.RoomsUpdate(join: {
+            roomId: matrix.JoinedRoomUpdate(
+                timeline: matrix.TimelineUpdate(events: [
+              matrix.MatrixEvent(
+                type: matrix.EventTypes.Message,
+                senderId: mx.userID!,
+                eventId: '\$delivered',
+                originServerTs: DateTime.now(),
+                content:
+                    Map<String, dynamic>.from(transport.events.single.body),
+                unsigned: {'transaction_id': txid},
+              ),
+            ])),
+          }),
+        )));
+
+    expect(room.sendingFilePlaceholders, isNot(contains(txid)));
+    expect(room.sendingFileThumbnails, isNot(contains(txid)));
+    expect(room.sendingFileUploads, isNot(contains(txid)));
+    await mx.dispose(closeDatabase: true);
+  });
 }
