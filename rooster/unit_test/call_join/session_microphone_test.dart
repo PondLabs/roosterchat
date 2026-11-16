@@ -4,7 +4,8 @@
 // second capture, and the join then published its own beside it. The
 // session's mute and deafen now wait for the join's microphone.
 //
-// The real MatrixLivekitVoipSession over fakes of LiveKit and Matrix (as in
+// The real MatrixLivekitVoipSession, made by MatrixLivekitBackend as the
+// join makes it, over fakes of LiveKit and Matrix (as in
 // voice_health/livekit_session_voice_health_test.dart): no WebSocket, no
 // WebRTC.
 import 'dart:async';
@@ -18,7 +19,10 @@ import 'package:rooster/client/components/profile/profile_component.dart';
 import 'package:rooster/client/components/voip/audio_processing/audio_processing_manager.dart';
 import 'package:rooster/client/components/voip/audio_processing/audio_processing_manager_stub.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
+import 'package:rooster/client/matrix/components/voip_room/livekit_join_room.dart';
+import 'package:rooster/client/matrix/components/voip_room/matrix_livekit_backend.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_livekit_voip_session.dart';
+import 'package:rooster/client/matrix/components/voip_room/matrix_livekit_voip_stream.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -114,6 +118,52 @@ class _Participant implements lk.LocalParticipant {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// Someone else in the call, speaking into their microphone.
+class _RemotePublication
+    implements lk.RemoteTrackPublication<lk.RemoteAudioTrack> {
+  _RemotePublication(this.participant);
+
+  @override
+  final lk.RemoteParticipant participant;
+
+  @override
+  final String sid = 'TR_bob_mic';
+
+  @override
+  final lk.TrackType kind = lk.TrackType.AUDIO;
+
+  @override
+  final lk.TrackSource source = lk.TrackSource.microphone;
+
+  @override
+  final String name = 'microphone';
+
+  @override
+  final bool muted = false;
+
+  @override
+  final bool subscribed = true;
+
+  @override
+  final lk.RemoteAudioTrack? track = null;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _RemoteParticipant implements lk.RemoteParticipant {
+  @override
+  final String identity = '@bob:example.org:BOB';
+
+  @override
+  late final Map<String, lk.RemoteTrackPublication> trackPublications = {
+    'TR_bob_mic': _RemotePublication(this)
+  };
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 class _Listener implements lk.EventsListener<lk.RoomEvent> {
   @override
   Future<void> Function() on<E>(FutureOr<void> Function(E) then,
@@ -138,7 +188,7 @@ class _Room implements lk.Room {
 
   @override
   UnmodifiableMapView<String, lk.RemoteParticipant> get remoteParticipants =>
-      UnmodifiableMapView({});
+      UnmodifiableMapView({'@bob:example.org:BOB': _RemoteParticipant()});
 
   @override
   lk.EventsListener<lk.RoomEvent> createListener({bool synchronized = false}) =>
@@ -227,7 +277,7 @@ void main() {
 
   late FakeWebrtcChannel webrtc;
   late _Participant participant;
-  late Completer<void> published;
+  late Completer<bool> published;
   late MatrixLivekitVoipSession session;
 
   setUpAll(() async {
@@ -242,9 +292,10 @@ void main() {
     (webrtc = FakeWebrtcChannel()).install();
     participant = _Participant();
     published = Completer();
-    // What the join hands over while the microphone is still opening.
-    session = MatrixLivekitVoipSession(_MatrixRoom(), _Room(participant),
-        microphonePublished: published.future);
+    // What the join hands over while the microphone is still opening, made
+    // the way the join makes it.
+    session = MatrixLivekitBackend(_MatrixRoom())
+        .createSession(LkJoinRoom(_Room(participant)), published.future);
   });
 
   tearDown(() {
@@ -256,8 +307,13 @@ void main() {
   Future<void> joinPublishes() async {
     participant.publish(await lk.LocalAudioTrack.create(
         const lk.AudioCaptureOptions(noiseSuppression: true)));
-    published.complete();
+    published.complete(true);
   }
+
+  /// Bob's stream: someone else in the call.
+  MatrixLivekitVoipStream others() => session.streams
+      .whereType<MatrixLivekitVoipStream>()
+      .singleWhere((s) => s.userId == '@bob:example.org');
 
   test('an unmute while the microphone opens publishes one microphone',
       () async {
@@ -302,10 +358,61 @@ void main() {
     expect(participant.publications, hasLength(1));
     expect(participant.publications.single.muted, isTrue);
     expect(participant.capturesOpened, 0);
+
+    // The mute from before deafening is the microphone's once published
+    // (open), not the "muted" shown while nothing was published yet.
+    await session.setDeafened(false);
+    expect(session.isDeafened, isFalse);
+    expect(participant.publications.single.muted, isFalse,
+        reason: 'undeafening opens the microphone the join published');
+  });
+
+  test(
+      'a microphone that never opens: deafening takes at once, the mute '
+      'waits for it', () async {
+    expect(others().listenerDeafened, isFalse);
+
+    var deafenDone = false;
+    unawaited(session.setDeafened(true).then((_) => deafenDone = true));
+    var muteDone = false;
+    unawaited(session.setMicrophoneMute(true).then((_) => muteDone = true));
+    await pumpEventQueue();
+
+    expect(session.isDeafened, isTrue, reason: 'the button shows it now');
+    expect(others().listenerDeafened, isTrue,
+        reason: 'the others are silent now');
+    expect(muteDone, isFalse, reason: 'the mute still waits');
+    expect(deafenDone, isFalse);
+    expect(participant.publications, isEmpty);
+    expect(participant.capturesOpened, 0);
+
+    // Undeafening while it still waits brings the others back at once.
+    unawaited(session.setDeafened(false));
+    await pumpEventQueue();
+    expect(session.isDeafened, isFalse);
+    expect(others().listenerDeafened, isFalse);
+
+    await joinPublishes();
+    await pumpEventQueue();
+    expect(muteDone, isTrue, reason: 'the mute went through once it opened');
+    expect(deafenDone, isTrue);
+    expect(session.isDeafened, isFalse, reason: 'the last thing asked for');
+    expect(participant.publications, hasLength(1));
+    expect(participant.capturesOpened, 0);
+  });
+
+  test('a microphone future that fails: mute and deafen still work', () async {
+    published.completeError(StateError('the publish failed'));
+
+    await session.setMicrophoneMute(true);
+    await session.setDeafened(true);
+    expect(session.isDeafened, isTrue);
+    await session.setDeafened(false);
+    expect(session.isDeafened, isFalse);
   });
 
   test('a join that published nothing still lets the mute through', () async {
-    published.complete();
+    published.complete(false);
 
     await session.setMicrophoneMute(false);
 
