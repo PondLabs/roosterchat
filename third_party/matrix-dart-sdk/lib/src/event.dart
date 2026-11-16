@@ -453,7 +453,12 @@ class Event extends MatrixEvent {
       // Its uploads went through and the event failed: the event carries // ROOSTER
       // their address (and in an encrypted room their key), and only the // ROOSTER
       // event is sent again, as it was, under the same transaction id. // ROOSTER
-      if (content['url'] is String || content['file'] is Map) { // ROOSTER
+      // An upload that went in the clear is not reused once the room // ROOSTER
+      // encrypts files: the file goes up again, encrypted. // ROOSTER
+      final encryptsFiles = // ROOSTER
+          room.encrypted && room.client.fileEncryptionEnabled; // ROOSTER
+      if (content['file'] is Map || // ROOSTER
+          (content['url'] is String && !encryptsFiles)) { // ROOSTER
         final id = await room.sendEvent( // ROOSTER
           Map<String, dynamic>.from(content), // ROOSTER
           type: type, // ROOSTER

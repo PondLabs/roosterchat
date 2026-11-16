@@ -42,6 +42,10 @@ class LoopTransport extends FakeTransport {
 
   final List<Uint8List> uploads = [];
   final List<String> uploadUris = [];
+
+  /// The body of each accepted upload, by its address in lower case (as
+  /// the SDK writes it in the event).
+  final Map<String, Uint8List> uploadsByUri = {};
   int open = 0;
   int mostOpen = 0;
   final List<({String type, String txid, Map<String, dynamic> body})> events =
@@ -97,6 +101,7 @@ class LoopTransport extends FakeTransport {
   http.StreamedResponse accept(Uint8List body) {
     final uri = 'mxc://fakeServer.notExisting/u${uploads.length}';
     uploadUris.add(uri);
+    uploadsByUri[uri.toLowerCase()] = body;
     return json(200, {'content_uri': uri});
   }
 }

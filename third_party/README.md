@@ -206,4 +206,6 @@ Changes since the copy:
 - `Event.sendAgain` (`lib/src/event.dart`): a file message whose event
   carries its uploads' address (`url`, or `file` in an encrypted room) is
   sent again as that event, under the same transaction id, with no upload.
+  Not when the room now encrypts files and the event has a `url` (an
+  upload in the clear): the file then goes up again, encrypted.
   `Event.cancelSend` lets go of the file and the parts kept for it.

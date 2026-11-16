@@ -78,10 +78,16 @@ Future<String?> retryMatrixFile(matrix.Event event, AttachmentSend? send) {
   return _follow(event.room, send, event.eventId, event.sendAgain);
 }
 
-/// Whether [event], a file message, already has its upload's address: the
-/// `url`, or the encrypted file's `file` in an encrypted room.
-bool isUploadedFileEvent(matrix.Event event) =>
-    event.content['url'] is String || event.content['file'] is Map;
+/// Whether [event], a file message, can be sent again as it is: it has its
+/// upload's address, the encrypted file's `file` in an encrypted room. A
+/// `url` (an upload in the clear) counts only while the room does not
+/// encrypt files: once it does, the file must go up again, encrypted.
+bool isUploadedFileEvent(matrix.Event event) {
+  if (event.content['file'] is Map) return true;
+  final room = event.room;
+  return event.content['url'] is String &&
+      !(room.encrypted && room.client.fileEncryptionEnabled);
+}
 
 /// Runs [sendFile], the SDK's send of the file under [txid], keeping
 /// [send]'s stage: the SDK shows its pending event as soon as it has the
