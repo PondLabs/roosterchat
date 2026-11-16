@@ -36,7 +36,8 @@ out) and those still open. At most 16 operations are kept: the names of
 `speed_names.dart` fit, and a span of any further operation is dropped and
 counted (`N dropped` in the report's `spans (...)` line). A span is one
 operation under a random local id, made of named steps on a monotonic
-clock, with an outcome (`ok`, `failed`, `incomplete`, `abandoned`) and the
+clock, with an outcome (`ok`, `failed`, `incomplete`, `abandoned`,
+`cancelled`) and the
 longest UI frame drawn while it was open.
 
 ### Names: a fixed list
@@ -112,8 +113,29 @@ thumbnail and a blurhash, from the request to the result.
 | `decode` | the header | the one engine decode, at thumbnail size or smaller, or at full size when the header could not be read; values `width`, `height` (as decoded) and `frames` (more than 1: animated) |
 | `encode` | the decode | the thumbnail and blurhash, in the background (native) or by the browser's canvas (web); values `bytes`, `width`, `height` of the thumbnail when one was made |
 
-Outcome `ok`, or `failed` when the engine cannot decode the file (it is
-then sent as a plain file).
+Outcome `ok`, `failed` when the engine cannot decode the file (it is
+then sent as a plain file), or `cancelled` when the attachment was removed
+from the composer before Send (it left the queue, or its result was thrown
+away).
+
+### `file_send`
+
+`file_send`, a file sent from the composer, from it being attached to the
+server's answer for its event (`file_send_trace.dart`). Steps start at
+Send unless the table says otherwise.
+
+| Step | From | To |
+|---|---|---|
+| `attached` | the file attached to the composer | Send; value `bytes` (the file's size) when known |
+| `preview_painted` | Send | the end of the first frame drawn after the local picture (or video poster) was decoded; unavailable when no frame came |
+| `prepared` | Send | the files handed to the Matrix SDK; values `bytes`, `thumbnail_bytes`, `width`, `height` |
+| `echo` | the hand-over | the room's pending event entering the timeline |
+| `upload` | the `POST /upload` leaves | its response headers, one per upload (the file, its thumbnail, a new attempt); values `bytes` (sent), `attempt`, `status` |
+| `request` | the event's `PUT /send` leaves | its response headers; values `attempt`, `status` |
+| `retry` | the same `PUT /send` sent again | its response headers; same values |
+| `confirmed` | Send | the SDK returns the event's id, or gives up |
+
+Outcome `ok`, or `failed` when the file did not reach the room.
 
 ### `voice_join`
 
