@@ -7,6 +7,7 @@ import 'package:rooster/client/components/gif/gif_component.dart';
 import 'package:rooster/client/components/polls/poll_component.dart';
 import 'package:rooster/config/build_config.dart';
 import 'package:rooster/config/layout_config.dart';
+import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/config/platform_utils.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
@@ -20,6 +21,7 @@ import 'package:rooster/ui/molecules/overlapping_panels.dart';
 import 'package:rooster/ui/molecules/poll_creator.dart';
 import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_reply.dart';
 import 'package:rooster/ui/organisms/attachment_processor/attachment_processor.dart';
+import 'package:rooster/ui/organisms/attachment_processor/picked_files.dart';
 import 'package:rooster/ui/molecules/emoji_picker.dart';
 import 'package:rooster/ui/molecules/emoticon_picker.dart';
 import 'package:rooster/ui/molecules/gif_picker.dart';
@@ -31,7 +33,6 @@ import 'package:rooster/utils/autofill_utils.dart';
 import 'package:rooster/utils/clipboard/pasted_files.dart';
 import 'package:rooster/utils/debounce.dart';
 import 'package:rooster/utils/event_bus.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 
 import 'package:flutter/material.dart';
@@ -335,6 +336,33 @@ class MessageInputState extends State<MessageInput> {
   /// Web: a screenshot pasted while typing becomes an attachment.
   late final void Function() stopListeningForPastedFiles;
 
+  /// The server's limit on an uploaded file, once known: a file over it is
+  /// refused before it is read.
+  int? maxUploadBytes;
+
+  Future<int?> uploadLimit() async {
+    final room = widget.room;
+    final limit = room is MatrixRoom ? await room.maxUploadBytes() : null;
+    return maxUploadBytes = limit;
+  }
+
+  /// A file of [bytes] over the server's [limit]: refused, unread.
+  void refuseFile(int bytes, int limit) {
+    if (!mounted) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(content: Text(messageFileOverUploadLimit(bytes, limit))));
+  }
+
+  /// Whether [file] of the gallery fits the limit, by its length (read
+  /// from the file system on native), before its bytes are read.
+  Future<bool> galleryFileFits(XFile file) async {
+    final limit = maxUploadBytes ?? await uploadLimit();
+    final bytes = await file.length();
+    if (fitsUploadLimit(bytes, limit)) return true;
+    refuseFile(bytes, limit!);
+    return false;
+  }
+
   @override
   void initState() {
     controller = RichTextEditingController(
@@ -349,7 +377,11 @@ class MessageInputState extends State<MessageInput> {
     textFocus = FocusNode(onKeyEvent: onKey);
     textFocus.addListener(onTextFocusChanged);
     stopListeningForPastedFiles = listenForPastedFiles(
-        accept: () => textFocus.hasFocus, onFiles: onFilesPasted);
+        accept: () => textFocus.hasFocus,
+        onFiles: onFilesPasted,
+        maxBytes: () => maxUploadBytes,
+        onRefused: refuseFile);
+    unawaited(uploadLimit());
 
     preferencesSubscription =
         preferences.onSettingChanged.listen((_) => setState(() {}));
@@ -1757,6 +1789,7 @@ class MessageInputState extends State<MessageInput> {
               var picker = ImagePicker();
               var result = await picker.pickMultiImage();
               for (var file in result) {
+                if (!await galleryFileFits(file)) continue;
                 var data = await file.readAsBytes();
                 await handlePickedAttachment(PendingFileAttachment(
                     name: file.name,
@@ -1769,17 +1802,11 @@ class MessageInputState extends State<MessageInput> {
           icon: Icons.attach_file,
           label: promptChatAttachFile,
           execute: () async {
-            FilePickerResult? result = await FilePicker.platform.pickFiles(
-                type: FileType.any, withData: true, allowMultiple: true);
-            if (result == null) return;
-
-            for (var file in result.files) {
-              var attachment = PendingFileAttachment(
-                  name: file.name,
-                  path: PlatformUtils.isWeb ? null : file.path,
-                  data: file.bytes,
-                  size: file.bytes?.length);
-
+            // Paths and sizes, not bytes: a file over the server's limit
+            // is refused before it is read.
+            final attachments = await pickFileAttachments(
+                maxBytes: await uploadLimit(), onRefused: refuseFile);
+            for (final attachment in attachments) {
               await handlePickedAttachment(attachment);
             }
           }),
@@ -1791,6 +1818,7 @@ class MessageInputState extends State<MessageInput> {
               var picker = ImagePicker();
               var result = await picker.pickMultipleMedia();
               for (var file in result) {
+                if (!await galleryFileFits(file)) continue;
                 var data = await file.readAsBytes();
                 await handlePickedAttachment(PendingFileAttachment(
                     name: file.name,
@@ -1806,7 +1834,7 @@ class MessageInputState extends State<MessageInput> {
             execute: () async {
               var picker = ImagePicker();
               var file = await picker.pickImage(source: ImageSource.camera);
-              if (file == null) return;
+              if (file == null || !await galleryFileFits(file)) return;
 
               var data = await file.readAsBytes();
               await handlePickedAttachment(PendingFileAttachment(
@@ -2012,12 +2040,15 @@ class MessageInputState extends State<MessageInput> {
   }
 
   Future<void> readImageFromClipboard() async {
-    var image = await Pasteboard.image;
-    if (image == null) {
-      return;
-    }
-
-    await attachPasted(PendingFileAttachment(data: image, size: image.length));
+    // Its size checked before the attachment dialog decodes it.
+    PendingFileAttachment? pasted;
+    await pasteNativeImage(
+        readImage: () => Pasteboard.image,
+        maxBytes: maxUploadBytes ?? await uploadLimit(),
+        onImage: (image) =>
+            pasted = PendingFileAttachment(data: image, size: image.length),
+        onRefused: refuseFile);
+    if (pasted != null) await attachPasted(pasted!);
   }
 
   Future<void> onFilesPasted(List<PastedFile> files) async {
