@@ -161,6 +161,10 @@ void main() {
         'GET',
         at(['_matrix', 'client', 'unstable', 'unstable', 'alice.holiday.msc1'])
       ),
+      // After `unstable`, but under a second segment that is not one of
+      // the Matrix APIs (client, media, federation).
+      ('GET', at(['_matrix', 'alice', 'unstable', 'secret.beach.msc9'])),
+      ('GET', at(['_matrix', 'sync', 'unstable', 'gull.beach.msc10'])),
       // Another site: none of its words, even the API's, are kept...
       (
         'GET',
@@ -172,10 +176,19 @@ void main() {
         'GET',
         Uri.parse('https://secret-site.example/.well-known/matrix/client')
       ),
-      // A real unstable prefix, right after `unstable`, is kept.
+      // A real unstable prefix, right after `unstable` of a Matrix API,
+      // is kept.
       (
         'POST',
         at(['_matrix', 'client', 'unstable', 'org.matrix.msc3575', 'sync'])
+      ),
+      (
+        'GET',
+        at(['_matrix', 'media', 'unstable', 'org.matrix.msc3916', 'config'])
+      ),
+      (
+        'GET',
+        at(['_matrix', 'federation', 'unstable', 'org.matrix.msc3083', 'v1'])
       ),
     ];
     for (final (method, url) in requests) {
@@ -204,6 +217,10 @@ void main() {
       '.msc1',
       '.msc7',
       '.msc42',
+      'beach',
+      'gull',
+      '.msc9',
+      '.msc10',
       'account',
       'password',
       'reset',
@@ -225,6 +242,10 @@ void main() {
       'GET /_matrix/client/v3/profile/{userId}/{param} homeserver',
       'GET /_matrix/client/v3/room_keys/keys/{roomId}/{param} homeserver',
       'POST /_matrix/client/unstable/org.matrix.msc3575/sync homeserver',
+      'GET /_matrix/media/unstable/org.matrix.msc3916/config homeserver',
+      'GET /_matrix/federation/unstable/org.matrix.msc3083/v1 homeserver',
+      'GET /_matrix/{param}/unstable/{param} homeserver',
+      'GET /_matrix/sync/unstable/{param} homeserver',
       'GET /{param}/{param}/{param}/{param}/{param} other',
       'GET /.well-known/matrix/client other',
       'GET /{param}/{param} other',
