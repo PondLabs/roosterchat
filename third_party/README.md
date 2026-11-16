@@ -185,3 +185,5 @@ Changes since the copy:
 
 - `scripts/*.sh` are executable again (mode 755), as in the fork; the copy
   had lost the mode.
+- `test/html_to_text_test.dart` expects a link's text without the 🔗 prefix,
+  as the fork's `lib/src/utils/html_to_text.dart` writes it (2 cases).
