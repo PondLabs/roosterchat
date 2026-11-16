@@ -96,19 +96,43 @@ void main() {
     }, createFile: files.create);
   });
 
+  test(
+      "a BMP from attach to Send: one decode, at full size, and the event "
+      "goes as the PNG made from it", () async {
+    final bmp = _screenshotBmp();
+    final decodes = <(int?, int?)>[];
+    final preparer = ImagePreparer(
+        codecFactory: (bytes, {targetWidth, targetHeight}) {
+          decodes.add((targetWidth, targetHeight));
+          return engineImageCodec(bytes,
+              targetWidth: targetWidth, targetHeight: targetHeight);
+        },
+        log: SpeedLog(frames: NoFrames()));
+    final attachment =
+        PendingFileAttachment(name: "shot.bmp", data: bmp, size: bmp.length);
+    expect(attachment.mimeType, "image/bmp");
+
+    await attachment.startImagePreparation(preparer: preparer); // attached
+    final prepared = (await attachment.imagePreparation(preparer: preparer))!;
+    final processed =
+        (await matrixFilesForAttachment(attachment, preparer: preparer))!;
+
+    expect(decodes, [(null, null)], reason: "one decode, at full size");
+    expect(processed.file.mimeType, "image/png");
+    expect(processed.file.name, "shot.bmp");
+    expect(identical(processed.file.bytes, prepared.png), isTrue,
+        reason: "the PNG the preparation made");
+    expect(processed.file.bytes.sublist(0, 8),
+        [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+    expect((processed.file.info["w"], processed.file.info["h"]), (1600, 1000));
+    final png = img.decodePng(processed.file.bytes)!;
+    expect((png.width, png.height), (1600, 1000));
+    expect(png.getPixel(100, 50).r, 40, reason: "the first bar");
+  });
+
   test("a thumbnail no smaller than the file sent is left out", () async {
     // A flat screenshot: 4.8 MB as BMP, a few kB once sent as PNG.
-    final picture = img.Image(width: 1600, height: 1000);
-    img.fill(picture, color: img.ColorRgb8(245, 245, 245));
-    for (var i = 0; i < 12; i++) {
-      img.fillRect(picture,
-          x1: 60,
-          y1: 40 + i * 70,
-          x2: 900 + i * 40,
-          y2: 70 + i * 70,
-          color: img.ColorRgb8(40, 40, 60));
-    }
-    final bmp = img.encodeBmp(picture);
+    final bmp = _screenshotBmp();
     final attachment =
         PendingFileAttachment(name: "shot.bmp", data: bmp, size: bmp.length);
     final processed = (await matrixFilesForAttachment(attachment,
@@ -144,6 +168,21 @@ class _FailingEncoder implements ThumbnailEncoder {
   @override
   Future<ThumbnailResult> encode(ThumbnailRequest request) =>
       Future.error(StateError("encoder unavailable"));
+}
+
+/// A flat screenshot, 1600 by 1000: 4.8 MB as BMP, a few kB as PNG.
+Uint8List _screenshotBmp() {
+  final picture = img.Image(width: 1600, height: 1000);
+  img.fill(picture, color: img.ColorRgb8(245, 245, 245));
+  for (var i = 0; i < 12; i++) {
+    img.fillRect(picture,
+        x1: 60,
+        y1: 40 + i * 70,
+        x2: 900 + i * 40,
+        y2: 70 + i * 70,
+        color: img.ColorRgb8(40, 40, 60));
+  }
+  return img.encodeBmp(picture);
 }
 
 /// Files that live in the test: [create] makes a [File] for a path in
