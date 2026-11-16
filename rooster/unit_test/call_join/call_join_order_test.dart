@@ -188,16 +188,18 @@ void main() {
   test(
       'the session gets a future that completes once the microphone is '
       'published', () async {
-    host.room.connectGate = Gate();
-    final joining = join().run();
-    await settle();
-    host.room.connectGate.open();
-    await joining;
+    host.room.microphoneGate = Gate();
+    await join().run();
 
+    var completed = false;
+    unawaited(host.microphonePublished!.then((_) => completed = true));
+    await settle();
+    expect(journal.entries, contains('session'));
+    expect(completed, isFalse, reason: 'the capture is still opening');
+
+    host.room.microphoneGate.open();
     await host.microphonePublished;
-    expect(journal.before('session', 'microphone_published'), isTrue,
-        reason: 'handed over before the publish finished');
-    expect(journal.entries, contains('microphone_published'));
+    expect(journal.before('session', 'microphone_published'), isTrue);
   });
 
   test("in a phone's browser the microphone still opens before the membership",
