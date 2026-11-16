@@ -38,7 +38,7 @@ class CancelTransport extends LoopTransport {
     }
     if (!holdUploads ||
         request.method != 'POST' ||
-        !request.url.path.endsWith('/upload')) {
+        !LoopTransport.isMediaUpload(request)) {
       return super.send(request);
     }
     seen.add('POST /upload');
