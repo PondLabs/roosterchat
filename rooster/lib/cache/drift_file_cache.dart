@@ -61,11 +61,20 @@ class DriftFileCache implements FileCache {
 
     Log.i("Found: ${removeFiles.length}/$total files for cleaning");
 
-    for (var file in removeFiles) {
-      _cleanFile(file);
-    }
-
-    var removedIds = removeFiles.map((e) => e.id).toList();
+    // Only the entries whose file is gone: one that could not be deleted
+    // (in use, on Windows) keeps its entry, for a later clean or logout
+    // to find, instead of staying on disk unknown to the cache.
+    final removedIds = (await Future.wait(removeFiles.map((entry) async {
+      try {
+        await _cleanFile(entry);
+        return entry.id;
+      } on FileSystemException catch (error) {
+        Log.w("Could not delete a cached file: ${error.osError?.message}");
+        return null;
+      }
+    })))
+        .nonNulls
+        .toList();
     await (db.delete(db.fileCacheEntry)
           ..where((tbl) => tbl.id.isIn(removedIds)))
         .go();
@@ -77,7 +86,43 @@ class DriftFileCache implements FileCache {
       return;
     }
 
-    await file.delete();
+    await deleteFile(file);
+  }
+
+  /// Deletes a cached [file]. Only tests replace it (a file in use).
+  Future<void> deleteFile(File file) => file.delete();
+
+  /// Writes a cached [file]. Only tests replace it (a write that stops).
+  Future<void> writeBytes(File file, Uint8List bytes) =>
+      file.writeAsBytes(bytes);
+
+  /// Writes [bytes] to a new file and gives it the entry [identifier]. A
+  /// write or an entry that fails takes the file with it: no file stays
+  /// on disk without its entry.
+  Future<Uri> _store(String identifier, Uint8List bytes) async {
+    var path = await generateTempFilePath();
+    if (BuildConfig.DEBUG) path += "_${Uri.encodeComponent(identifier)}";
+    final db = await get();
+    var file = File(path);
+    try {
+      await file.create(recursive: true);
+      await writeBytes(file, bytes);
+
+      var entry = FileCacheEntryCompanion.insert(
+          id: identifier,
+          path: path,
+          lastAccessedTimestamp: DateTime.now().millisecondsSinceEpoch);
+      await db.into(db.fileCacheEntry).insertOnConflictUpdate(entry);
+    } catch (_) {
+      try {
+        if (await file.exists()) await file.delete();
+      } on FileSystemException {
+        // Nothing more to do: the error below is what matters.
+      }
+      rethrow;
+    }
+
+    return file.uri;
   }
 
   @override
@@ -124,22 +169,7 @@ class DriftFileCache implements FileCache {
     var existing = await getFile(identifier);
     if (existing != null) return existing;
 
-    var bytes = await getter();
-    var path = await generateTempFilePath();
-    if (BuildConfig.DEBUG) path += "_${Uri.encodeComponent(identifier)}";
-
-    var file = File(path);
-    await file.create(recursive: true);
-    await file.writeAsBytes(bytes);
-
-    var entry = FileCacheEntryCompanion.insert(
-        id: identifier,
-        path: path,
-        lastAccessedTimestamp: DateTime.now().millisecondsSinceEpoch);
-    final db = await get();
-    await db.into(db.fileCacheEntry).insertOnConflictUpdate(entry);
-
-    return file.uri;
+    return _store(identifier, await getter());
   }
 
   /// How stale an entry's access time may get before a read writes it
@@ -207,23 +237,8 @@ class DriftFileCache implements FileCache {
   }
 
   @override
-  Future<Uri> putFile(String identifier, Uint8List bytes) async {
-    var path = await generateTempFilePath();
-    if (BuildConfig.DEBUG) path += "_${Uri.encodeComponent(identifier)}";
-    final db = await get();
-    var file = File(path);
-    await file.create(recursive: true);
-    await file.writeAsBytes(bytes);
-
-    var entry = FileCacheEntryCompanion.insert(
-        id: identifier,
-        path: path,
-        lastAccessedTimestamp: DateTime.now().millisecondsSinceEpoch);
-
-    await db.into(db.fileCacheEntry).insertOnConflictUpdate(entry);
-
-    return file.uri;
-  }
+  Future<Uri> putFile(String identifier, Uint8List bytes) =>
+      _store(identifier, bytes);
 
   Future<DriftFileCacheDatabase> get() async {
     if (database != null) {
