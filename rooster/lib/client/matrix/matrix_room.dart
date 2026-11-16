@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'dart:ui';
 import 'package:collection/collection.dart';
 import 'package:rooster/client/components/component_registry.dart';
 import 'package:rooster/client/components/direct_messages/direct_message_component.dart';
@@ -19,6 +18,7 @@ import 'package:rooster/client/matrix/components/emoticon/matrix_room_emoticon_c
 import 'package:rooster/client/matrix/components/read_receipts/matrix_read_receipt_component.dart';
 import 'package:rooster/client/matrix/components/user_presence/matrix_user_presence.dart';
 import 'package:rooster/client/matrix/matrix_attachment.dart';
+import 'package:rooster/client/matrix/media/matrix_attachment_files.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_member.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
@@ -52,7 +52,6 @@ import 'package:rooster/config/build_config.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/diagnostic/speed_log/text_send_trace.dart';
 import 'package:rooster/main.dart';
-import 'package:rooster/utils/image_utils.dart';
 import 'package:rooster/utils/mime.dart';
 import 'package:flutter/material.dart';
 import 'package:html/dom.dart' as html_dom;
@@ -524,81 +523,11 @@ class MatrixRoom extends Room {
     return processed.nonNulls.toList();
   }
 
+  /// The files to send for [attachment], reusing its picture's
+  /// preparation (see `media/matrix_attachment_files.dart`).
   Future<MatrixProcessedAttachment?> processAttachment(
-      PendingFileAttachment attachment) async {
-    await attachment.resolve();
-    if (attachment.data == null) return null;
-
-    if (attachment.mimeType == "image/bmp") {
-      var img = MemoryImage(attachment.data!);
-      var image = await ImageUtils.imageProviderToImage(img);
-      var bytes = await image.toByteData(format: ImageByteFormat.png);
-      attachment.data = bytes!.buffer.asUint8List();
-      attachment.mimeType = "image/png";
-    }
-
-    var fileExtension = attachment.mimeType != null
-        ? Mime.extensionFromMime(attachment.mimeType!)
-        : null;
-    if (fileExtension == null) {
-      fileExtension = "";
-    } else {
-      fileExtension = ".${fileExtension}";
-    }
-
-    try {
-      if (Mime.imageTypes.contains(attachment.mimeType)) {
-        await decodeImageFromList(attachment.data!);
-
-        final name = attachment.name ?? "unknown${fileExtension}";
-
-        return MatrixProcessedAttachment(await matrix.MatrixImageFile.create(
-            bytes: attachment.data!,
-            name: name,
-            mimeType: attachment.mimeType,
-            nativeImplementations:
-                (client as MatrixClient).nativeImplentations));
-      }
-    } catch (error, stack) {
-      // This image is probably corrupt, since it has a mime type we should be able to display,
-      // But we can't decode the image. Just clear the mime type so clients dont try to display this bad file
-      attachment.mimeType = 'application/octet-stream';
-      Log.onError(error, stack);
-    }
-
-    matrix.MatrixImageFile? thumbnailImageFile;
-    if (attachment.thumbnailFile != null) {
-      var decodedImage = await decodeImageFromList(attachment.thumbnailFile!);
-
-      thumbnailImageFile = matrix.MatrixImageFile(
-          bytes: attachment.thumbnailFile!,
-          width: decodedImage.width,
-          height: decodedImage.height,
-          mimeType: attachment.thumbnailMime,
-          name: "thumbnail");
-    }
-
-    final name = attachment.name ?? "Unknown${fileExtension}";
-
-    if (Mime.videoTypes.contains(attachment.mimeType)) {
-      return MatrixProcessedAttachment(
-        matrix.MatrixVideoFile(
-          bytes: attachment.data!,
-          name: name,
-          mimeType: attachment.mimeType,
-          width: attachment.dimensions?.width.toInt(),
-          height: attachment.dimensions?.height.toInt(),
-          duration: attachment.length?.inMilliseconds,
-        ),
-        thumbnailFile: thumbnailImageFile,
-      );
-    }
-
-    return MatrixProcessedAttachment(
-        matrix.MatrixFile(
-            bytes: attachment.data!, name: name, mimeType: attachment.mimeType),
-        thumbnailFile: thumbnailImageFile);
-  }
+          PendingFileAttachment attachment) =>
+      matrixFilesForAttachment(attachment);
 
   @override
   Future<TimelineEvent?> sendMessage(

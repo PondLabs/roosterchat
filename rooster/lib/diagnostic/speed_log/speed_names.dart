@@ -20,13 +20,17 @@ abstract final class SpeedOperation {
   /// One round of the sync loop, from its request to the next one.
   static const sync = 'sync';
 
+  /// Preparing an attached picture to be sent (size, thumbnail, blurhash),
+  /// from the request to the result (`ImagePreparer`).
+  static const imagePrepare = 'image_prepare';
+
   /// A voice join, from the join starting to the microphone published and
   /// the first remote audio (see `call_join_trace.dart`).
   static const voiceJoin = 'voice_join';
 
   /// Every span name. With [invalidSpeedName], at most
   /// `SpeedLog.maxOperations` (the finished spans keep that many).
-  static const all = {textSend, sync, voiceJoin};
+  static const all = {textSend, sync, imagePrepare, voiceJoin};
 }
 
 /// Step names.
@@ -68,6 +72,17 @@ abstract final class SpeedStep {
 
   /// The round failed: from the last step to the error being reported.
   static const error = 'error';
+
+  // image_prepare (queue_wait: waiting for one of the two preparation slots)
+  /// Reading the size and orientation from the file header.
+  static const header = 'header';
+
+  /// The one engine decode, at thumbnail size or smaller.
+  static const decode = 'decode';
+
+  /// The thumbnail and blurhash, in the background (native) or by the
+  /// browser's canvas (web).
+  static const encode = 'encode';
 
   // voice_join (timed steps may overlap: the join runs some side by side)
   /// The call being left hanging up.
@@ -144,6 +159,9 @@ abstract final class SpeedStep {
     cleanUp,
     nextRequest,
     error,
+    header,
+    decode,
+    encode,
     leavePrevious,
     outputDevice,
     foci,
@@ -171,8 +189,26 @@ abstract final class SpeedValue {
   static const status = 'status';
   static const retryAfterMs = 'retry_after_ms';
 
+  /// A size in bytes (the file, a thumbnail).
+  static const bytes = 'bytes';
+
+  /// A picture's size in pixels.
+  static const width = 'width';
+  static const height = 'height';
+
+  /// How many frames a decoded picture has (more than 1: animated).
+  static const frames = 'frames';
+
   /// Every name of a number on a step.
-  static const all = {attempt, status, retryAfterMs};
+  static const all = {
+    attempt,
+    status,
+    retryAfterMs,
+    bytes,
+    width,
+    height,
+    frames,
+  };
 }
 
 /// Span outcomes.

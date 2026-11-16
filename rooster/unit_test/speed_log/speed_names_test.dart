@@ -39,11 +39,15 @@ void main() {
     expect(send.outcome, 'failed');
   });
 
-  test('the names the text send and sync spans use are on the list', () {
-    expect(SpeedOperation.all, {'text_send', 'sync', 'voice_join'});
+  test(
+      'the names the text send, sync, image_prepare and voice_join spans use '
+      'are on the list', () {
+    expect(SpeedOperation.all,
+        {'text_send', 'sync', 'image_prepare', 'voice_join'});
     expect(SpeedStep.all, {
       'send', 'echo', 'echo_painted', 'queue_wait', 'request', 'retry', //
       'answer', 'response', 'processing', 'clean_up', 'next_request', 'error',
+      'header', 'decode', 'encode', // image_prepare (and queue_wait)
       // voice_join
       'leave_previous', 'output_device', 'foci', 'openid_token', 'sfu_token',
       'sfu_livekit_cloud', 'sfu_self_hosted', 'microphone_early',
@@ -51,7 +55,10 @@ void main() {
       'connect', 'microphone_options', 'microphone_open', 'sfu_region',
       'sfu_region_other', 'microphone_published', 'first_remote_audio',
     });
-    expect(SpeedValue.all, {'attempt', 'status', 'retry_after_ms'});
+    expect(SpeedValue.all, {
+      'attempt', 'status', 'retry_after_ms', //
+      'bytes', 'width', 'height', 'frames', // image_prepare
+    });
     expect(SpeedOutcome.all, {'ok', 'failed', 'incomplete', 'abandoned'});
   });
 

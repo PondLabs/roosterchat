@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:rooster/cache/file_provider.dart';
+import 'package:rooster/utils/image/preparation/image_preparation.dart';
 import 'package:rooster/utils/mime.dart';
 import 'package:flutter/material.dart';
 
@@ -42,6 +43,42 @@ class PendingFileAttachment {
         mimeType = mime.lookupMimeType(file.path, headerBytes: data);
       }
     }
+  }
+
+  Future<ImagePreparation?>? _imagePreparation;
+  Uint8List? _preparedData;
+
+  /// Starts preparing the picture to be sent (size, thumbnail, blurhash;
+  /// see `image_preparation.dart`), in the background, so Send finds it
+  /// ready. Called when the file is attached; does nothing for a file that
+  /// is not a picture or cannot be read.
+  Future<void> startImagePreparation({ImagePreparer? preparer}) async {
+    // Only a picture is read now: a video or an archive picked by path
+    // stays on disk until Send, as before.
+    if (!Mime.imageTypes.contains(mimeType)) return;
+    try {
+      await resolve();
+    } catch (_) {
+      // Locked or gone for now: nothing is prepared, and Send reads the
+      // file again and reports what it finds, as it did before.
+      return;
+    }
+    await imagePreparation(preparer: preparer);
+  }
+
+  /// The preparation of the file's current bytes: the one already started
+  /// when they have not changed since, else a new one. Null for a file
+  /// that is not a picture, and for a picture the engine cannot decode.
+  Future<ImagePreparation?> imagePreparation({ImagePreparer? preparer}) {
+    final data = this.data;
+    if (data == null || !Mime.imageTypes.contains(mimeType)) {
+      return Future.value(null);
+    }
+    if (_imagePreparation == null || !identical(_preparedData, data)) {
+      _preparedData = data;
+      _imagePreparation = (preparer ?? ImagePreparer.instance).prepare(data);
+    }
+    return _imagePreparation!;
   }
 
   ImageProvider? getAsImage() {
