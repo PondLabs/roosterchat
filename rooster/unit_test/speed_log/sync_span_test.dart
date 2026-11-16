@@ -20,6 +20,31 @@ class _NoFrames implements FrameSource {
   void cancel() {}
 }
 
+/// Counts how often the log starts listening for frames, and hands it a
+/// frame drawn now whenever [draw] is called.
+class _CountingFrames implements FrameSource {
+  int listens = 0;
+  Duration Function()? _clock;
+  void Function(List<FrameSample> batch)? _onBatch;
+
+  @override
+  void listen(Duration Function() clock,
+      void Function(List<FrameSample> batch) onBatch) {
+    listens++;
+    _clock = clock;
+    _onBatch = onBatch;
+  }
+
+  @override
+  void cancel() => _onBatch = null;
+
+  void draw() {
+    final now = _clock?.call();
+    if (now == null) return;
+    _onBatch?.call([FrameSample(now, now + const Duration(milliseconds: 4))]);
+  }
+}
+
 List<String> _names(SpeedSpan span) => [for (final s in span.steps) s.name];
 
 void main() {
@@ -85,6 +110,34 @@ void main() {
 
     void report(matrix.SyncStatus status, {double? progress}) =>
         statuses.add(matrix.SyncStatusUpdate(status, progress: progress));
+
+    test('1000 rounds of one account listen for frames once', () {
+      var now = Duration.zero;
+      final frames = _CountingFrames();
+      final log = SpeedLog(frames: frames, clock: () => now);
+      final statuses = StreamController<matrix.SyncStatusUpdate>(sync: true);
+      SyncSpeedTrace(statuses.stream, log: log);
+
+      for (var i = 0; i < 1000; i++) {
+        for (final status in [
+          matrix.SyncStatus.waitingForResponse,
+          matrix.SyncStatus.processing,
+          matrix.SyncStatus.cleaningUp,
+          matrix.SyncStatus.finished,
+        ]) {
+          statuses.add(matrix.SyncStatusUpdate(status));
+          now += const Duration(milliseconds: 10);
+          // Frames drawn all along, so the log never waits for any.
+          frames.draw();
+        }
+        // Past the log's wait for a closed span's frames.
+        now += SpeedLog.frameWait * 2;
+        frames.draw();
+      }
+
+      expect(log.spans.length, SpeedLog.spansPerOperation);
+      expect(frames.listens, 1);
+    });
 
     test('a fake sync for a local echo does not end the wait for a response',
         () {

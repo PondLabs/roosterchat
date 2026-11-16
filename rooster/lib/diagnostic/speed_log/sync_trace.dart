@@ -37,8 +37,11 @@ class SyncSpeedTrace {
   void _onStatus(matrix.SyncStatusUpdate update) {
     switch (update.status) {
       case matrix.SyncStatus.waitingForResponse:
-        _close(next: true);
+        // The new round opens before the last one closes, so the log always
+        // has an open span and keeps its frame listener between rounds.
+        final previous = _span;
         _span = _log.startSpan(SpeedOperation.sync);
+        _close(previous, next: true);
         _stage = _Stage.waitingForResponse;
         _outcome = SpeedOutcome.incomplete;
       case matrix.SyncStatus.processing:
@@ -72,10 +75,9 @@ class SyncSpeedTrace {
     return true;
   }
 
-  void _close({required bool next}) {
-    final span = _span;
+  /// Closes [span], the round [_stage] and [_outcome] describe.
+  void _close(SpeedSpan? span, {required bool next}) {
     if (span == null) return;
-    _span = null;
     if (next) {
       span.mark(SpeedStep.nextRequest);
       span.finish(outcome: _outcome);
@@ -92,7 +94,9 @@ class SyncSpeedTrace {
   /// unavailable; one still going, as abandoned.
   Future<void> dispose() async {
     await _subscription.cancel();
-    _close(next: false);
+    final span = _span;
+    _span = null;
+    _close(span, next: false);
   }
 }
 
