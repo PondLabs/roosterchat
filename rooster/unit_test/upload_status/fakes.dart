@@ -67,6 +67,27 @@ class StopsTaking extends http.BaseClient {
   }
 }
 
+/// An in-memory transport on a slow line that is still alive: it takes one
+/// piece of the body every [every], and answers once it has it all.
+class TakesSlowly extends http.BaseClient {
+  TakesSlowly(this.every);
+
+  final Duration every;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    final result = Completer<http.StreamedResponse>();
+    late StreamSubscription<List<int>> body;
+    body = request.finalize().listen((piece) {
+      body.pause(Future<void>.delayed(every));
+    }, onDone: () {
+      result.complete(
+          _answer(200, jsonEncode({'content_uri': 'mxc://hs.example/a'})));
+    });
+    return result.future;
+  }
+}
+
 /// A transport that never even reads the body: a connection that never
 /// opens.
 class NeverListens extends http.BaseClient {

@@ -155,6 +155,26 @@ void main() {
     });
   }
 
+  test(
+      'a slow line that takes a piece every 20 s is never cut: the 30 s '
+      'start again with each byte taken, and there is no total limit', () {
+    fakeAsync((time) {
+      Object? outcome;
+      send(TakesSlowly(const Duration(seconds: 20)), _uploadOf(5 * 64 * 1024),
+          (o) => outcome = o);
+      time.elapse(const Duration(seconds: 70));
+      expect(outcome, isNull, reason: 'still going after 70 s');
+      expect(progress.sending, isTrue);
+      expect(progress.sentBytes, 4 * 64 * 1024);
+      time.elapse(const Duration(seconds: 25));
+      expect(outcome, isNull);
+      time.elapse(const Duration(seconds: 10));
+      expect(outcome, 200);
+      expect(progress.failedAttempts, 0);
+      expect(log.requests.toList().single.error, isNull);
+    });
+  });
+
   test('connecting counts: no byte taken in 30 s ends the upload', () {
     fakeAsync((time) {
       Object? outcome;
