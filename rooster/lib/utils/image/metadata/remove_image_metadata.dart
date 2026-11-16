@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:rooster/utils/image/metadata/image_container.dart';
 import 'package:rooster/utils/image/metadata/png_container.dart';
+import 'package:rooster/utils/image/metadata/rgba_transfer.dart';
 
 /// How a picture's metadata was dealt with.
 enum MetadataRemovalOutcome {
@@ -122,7 +123,8 @@ Future<MetadataRemoval?> _encodeInBackground(FallbackPixels pixels) =>
 
 /// Straight-alpha RGBA pixels of a picture's first frame, as shown, how
 /// many frames the picture has, and the size of the file they came from:
-/// what the fallback's background encode is given.
+/// what the fallback's background encode is given. The pixels are packed
+/// to cross into the isolate without a copy (see [PackedRgba]).
 class FallbackPixels {
   const FallbackPixels(this.width, this.height, this.rgba,
       {required this.asPng,
@@ -130,7 +132,7 @@ class FallbackPixels {
       required this.originalLength});
   final int width;
   final int height;
-  final Uint8List rgba;
+  final PackedRgba rgba;
   final bool asPng;
   final int frames;
   final int originalLength;
@@ -159,7 +161,8 @@ Future<FallbackPixels?> _decodeWithEngine(Uint8List bytes) async {
     for (var i = 3; !asPng && i < rgba.length; i += 4) {
       if (rgba[i] != 0xFF) asPng = true;
     }
-    return FallbackPixels(image.width, image.height, rgba,
+    // The engine's buffer is not referenced past this point.
+    return FallbackPixels(image.width, image.height, PackedRgba(rgba),
         asPng: asPng, frames: codec.frameCount, originalLength: bytes.length);
   } catch (_) {
     return null;
@@ -176,13 +179,7 @@ Future<FallbackPixels?> _decodeWithEngine(Uint8List bytes) async {
 /// a test passes its own to count the encodings.
 MetadataRemoval? encodeFallback(FallbackPixels pixels,
     {FallbackJpegEncoder encodeJpeg = _encodeJpeg}) {
-  final image = img.Image.fromBytes(
-      width: pixels.width,
-      height: pixels.height,
-      bytes: pixels.rgba.buffer,
-      bytesOffset: pixels.rgba.offsetInBytes,
-      numChannels: 4,
-      order: img.ChannelOrder.rgba);
+  final image = rgbaImage(pixels.rgba.unpack(), pixels.width, pixels.height);
   // The encoder writes no metadata it is not given, but the output goes
   // through the same allowlist as a parsed file all the same.
   Uint8List? clean(Uint8List encoded) =>
@@ -205,6 +202,48 @@ MetadataRemoval? encodeFallback(FallbackPixels pixels,
       mimeType: "image/jpeg",
       animationLost: pixels.frames > 1,
       jpegQuality: quality);
+}
+
+/// An `img.Image` whose pixels are [rgba] itself, straight RGBA [width] by
+/// [height]. `img.Image.fromBytes` copies them row by row: a second copy of
+/// a photo's pixels (48 MB at 12 MP) the encoder does not need. Copied all
+/// the same when [rgba] does not span its whole buffer, which the image's
+/// `buffer` would then misread.
+img.Image rgbaImage(Uint8List rgba, int width, int height) {
+  if (rgba.offsetInBytes != 0 ||
+      rgba.lengthInBytes != rgba.buffer.lengthInBytes) {
+    return img.Image.fromBytes(
+        width: width,
+        height: height,
+        bytes: rgba.buffer,
+        bytesOffset: rgba.offsetInBytes,
+        numChannels: 4,
+        order: img.ChannelOrder.rgba);
+  }
+  return img.Image(width: 1, height: 1, numChannels: 4)
+    ..data = _RgbaData(width, height, rgba);
+}
+
+/// 8-bit, 4-channel image data over [_rgba], without a copy: the `image`
+/// package's own class, its size and pixels taken from here.
+class _RgbaData extends img.ImageDataUint8 {
+  _RgbaData(this._width, this._height, this._rgba) : super.palette(0, 0, null);
+
+  final int _width;
+  final int _height;
+  final Uint8List _rgba;
+
+  @override
+  int get width => _width;
+
+  @override
+  int get height => _height;
+
+  @override
+  int get numChannels => 4;
+
+  @override
+  Uint8List get data => _rgba;
 }
 
 bool _isGif(Uint8List bytes) =>
