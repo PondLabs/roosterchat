@@ -196,10 +196,15 @@ class MatrixVoipRoomComponent
     final joining = _joining;
     if (joining != null) return joining;
     final hangUp = Completer<void>();
+    // One voice channel at a time: a join of another channel still running
+    // is hung up before this one starts (see CallManager.joinStarted).
+    final joinEnded = clientManager?.callManager.joinStarted(
+        client: client, roomId: room.identifier, hangUp: () => _hangUp(hangUp));
     final join = _joinCall(hangUp);
     _joining = join;
     _hangUpJoining = hangUp;
     join.whenComplete(() {
+      joinEnded?.call();
       if (identical(_joining, join)) {
         _joining = null;
         _hangUpJoining = null;
@@ -215,11 +220,22 @@ class MatrixVoipRoomComponent
   /// after this is a new one: its membership waits for the old one's to be
   /// cleared, 10 s at most, and an old join that takes longer leaves the
   /// new membership alone (`CallMembershipWrites.superseded`).
-  void hangUpJoin() {
+  ///
+  /// With [join], only if that is the join still running: a page closing
+  /// hangs up the join it asked for, not a later one.
+  void hangUpJoin([Future<VoipSession?>? join]) {
     final hangUp = _hangUpJoining;
     if (hangUp == null) return;
-    _joining = null;
-    _hangUpJoining = null;
+    if (join != null && !identical(join, _joining)) return;
+    _hangUp(hangUp);
+  }
+
+  void _hangUp(Completer<void> hangUp) {
+    if (hangUp.isCompleted) return;
+    if (identical(_hangUpJoining, hangUp)) {
+      _joining = null;
+      _hangUpJoining = null;
+    }
     hangUp.complete();
   }
 

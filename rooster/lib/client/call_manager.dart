@@ -91,11 +91,12 @@ class CallManager {
     currentSessions.add(event);
 
     // The join path leaves the other channels before it starts this one,
-    // but two joins close together each look around before either has
-    // registered. This is the backstop: whatever else is live when a
-    // session the user is actually in appears, goes. A call that is merely
-    // ringing is not one they are in, and must not empty the room they are
-    // standing in.
+    // and hangs up their joins still running (joinStarted). This is the
+    // backstop: whatever else is live when a session the user is actually
+    // in appears, goes. Sessions only, not joins: a join hung up just as it
+    // got in can still start its session, and must not take the newer join
+    // down with it. A call that is merely ringing is not one they are in,
+    // and must not empty the room they are standing in.
     if (event.state != VoipState.incoming) {
       leaveOtherCalls(client: event.client, roomId: event.roomId)
           .catchError((Object e, StackTrace s) {
@@ -183,6 +184,43 @@ class CallManager {
               session.state != VoipState.incoming &&
               session.state != VoipState.ended)
           .toList();
+
+  /// The voice joins still running, which a join of another voice channel
+  /// hangs up (see [joinStarted]).
+  final List<_JoinInFlight> _joins = [];
+
+  /// A voice join of [roomId] on [client] is starting. Every join of another
+  /// voice channel still running is hung up first, with the `hangUp` it gave
+  /// here: it would otherwise get in after this one, and its session
+  /// starting would leave this call (the backstop in
+  /// [onClientSessionStarted]). With [accountsAreSeparatePeople], only this
+  /// account's joins.
+  ///
+  /// [hangUp] hangs this join up in turn. Call what this returns once the
+  /// join is done, whether it got in or not.
+  void Function() joinStarted({
+    required Client client,
+    required String roomId,
+    required void Function() hangUp,
+  }) {
+    final others = _joins
+        .where((join) =>
+            !(join.client == client && join.roomId == roomId) &&
+            (!accountsAreSeparatePeople || join.client == client))
+        .toList();
+    for (final other in others) {
+      _joins.remove(other);
+      Log.i("Hanging up a join to join another voice channel");
+      try {
+        other.hangUp();
+      } catch (e, s) {
+        Log.onError(e, s, content: "Could not hang up a voice join");
+      }
+    }
+    final join = _JoinInFlight(client, roomId, hangUp);
+    _joins.add(join);
+    return () => _joins.remove(join);
+  }
 
   /// Ends every voice session [callsToLeave] names.
   ///
@@ -491,4 +529,13 @@ class CallManager {
     }
     return player;
   }
+}
+
+/// A voice join still running (see [CallManager.joinStarted]).
+class _JoinInFlight {
+  _JoinInFlight(this.client, this.roomId, this.hangUp);
+
+  final Client client;
+  final String roomId;
+  final void Function() hangUp;
 }

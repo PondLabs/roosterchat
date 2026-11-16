@@ -9,8 +9,6 @@ import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/matrix/components/voip_room/call_join.dart';
 import 'package:rooster/client/matrix/components/voip_room/call_membership_writes.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_voip_room_component.dart';
-import 'package:rooster/client/matrix/matrix_client.dart';
-import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
 import 'package:test/test.dart';
 
@@ -29,56 +27,6 @@ class _Homeserver {
   Completer<void>? clearGate;
 
   bool holds(String stateKey) => memberships[stateKey]?.isNotEmpty ?? false;
-}
-
-class _Sdk implements matrix.Client {
-  _Sdk(this.server);
-  final _Homeserver server;
-
-  @override
-  String? get userID => _me;
-
-  @override
-  String? get deviceID => _device;
-
-  @override
-  Future<String> setRoomStateWithKey(String roomId, String eventType,
-      String stateKey, Map<String, Object?> body) async {
-    server.requests.add(body.isEmpty ? 'clear' : 'write');
-    if (body.isEmpty) {
-      final gate = server.clearGate;
-      server.clearGate = null;
-      await gate?.future;
-    }
-    server.memberships[stateKey] = body;
-    return '\$event';
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-class _Client implements MatrixClient {
-  _Client(this.matrixClient);
-
-  @override
-  final matrix.Client matrixClient;
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-class _Room implements MatrixRoom {
-  _Room(this.matrixRoom);
-
-  @override
-  final matrix.Room matrixRoom;
-
-  @override
-  String get identifier => matrixRoom.id;
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 /// A join's Matrix side whose membership write lands on [server].
@@ -114,17 +62,19 @@ void main() {
     // A room of its own per test: what CallMembershipWrites holds is
     // shared by every test of the file.
     final roomId = '!stale-${rooms++}:example.org';
-    sdkRoom = matrix.Room(id: roomId, client: _Sdk(server));
-    sdkRoom.states[matrix.EventTypes.RoomPowerLevels] = {
-      '': matrix.StrippedStateEvent(
-          type: matrix.EventTypes.RoomPowerLevels,
-          stateKey: '',
-          senderId: _me,
-          content: {
-            'users': {_me: 100}
-          }),
-    };
-    voip = MatrixVoipRoomComponent(_Client(sdkRoom.client), _Room(sdkRoom));
+    final sdk = FakeSdkClient()
+      ..setState = (stateKey, body) async {
+        server.requests.add(body.isEmpty ? 'clear' : 'write');
+        if (body.isEmpty) {
+          final gate = server.clearGate;
+          server.clearGate = null;
+          await gate?.future;
+        }
+        server.memberships[stateKey] = body;
+      };
+    final room = FakeMatrixRoom(roomId, sdk);
+    sdkRoom = room.matrixRoom;
+    voip = MatrixVoipRoomComponent(FakeMatrixClient(sdk), room);
     journal = Journal();
     host = _Host(journal, server)..roomId = roomId;
     // The join's own room is ended at the end, so its claim is given back.

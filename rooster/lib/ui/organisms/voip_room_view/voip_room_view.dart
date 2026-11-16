@@ -7,7 +7,9 @@ import 'package:rooster/client/components/voip/audio_processing/audio_processing
 import 'package:rooster/client/components/voip/media_capture_support.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip_room/voip_room_component.dart';
+import 'package:rooster/client/matrix/components/voip_room/call_join.dart';
 import 'package:rooster/client/matrix/components/voip_room/call_warm_up.dart';
+import 'package:rooster/client/matrix/components/voip_room/matrix_voip_room_component.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/live_media_indicator.dart';
@@ -106,6 +108,10 @@ class _VoipRoomViewState extends State<VoipRoomView> {
   late List<String> participants;
   bool joining = false;
   late List<StreamSubscription> subs;
+
+  /// The join this page asked for, while it runs: closing the page hangs it
+  /// up (see [dispose]).
+  Future<VoipSession?>? _join;
 
   /// What the people in the call say about themselves (live, camera, muted,
   /// deafened, DJ), from the list the sidebar shows them in: someone
@@ -209,6 +215,13 @@ class _VoipRoomViewState extends State<VoipRoomView> {
   void dispose() {
     for (var sub in subs) {
       sub.cancel();
+    }
+    // Left the page before the join was done: it is hung up, and takes back
+    // the membership it sent. A call already joined goes on.
+    final join = _join;
+    final voip = widget.voip;
+    if (join != null && voip is MatrixVoipRoomComponent) {
+      voip.hangUpJoin(join);
     }
     super.dispose();
   }
@@ -442,18 +455,26 @@ class _VoipRoomViewState extends State<VoipRoomView> {
 
     if (withoutEntranceSound) EntranceSoundGate.instance.skipNextJoin(roomId);
 
+    final join = widget.voip.joinCall();
+    _join = join;
     try {
-      final session = await widget.voip.joinCall();
+      final session = await join;
       if (session == null && withoutEntranceSound) {
         EntranceSoundGate.instance.cancelSkip(roomId);
       }
 
-      if (session != null) {
+      if (session != null && mounted) {
         setState(() {
           currentSession = session;
           joining = false;
         });
       }
+    } on CallJoinHungUp {
+      // Hung up on purpose: this page closed, or another voice channel was
+      // joined meanwhile. Nothing failed, so nothing to retry.
+      Log.i("Voice join hung up");
+      if (withoutEntranceSound) EntranceSoundGate.instance.cancelSkip(roomId);
+      if (mounted) setState(() => joining = false);
     } catch (e, s) {
       Log.onError(e, s);
       if (withoutEntranceSound) EntranceSoundGate.instance.cancelSkip(roomId);
@@ -471,6 +492,8 @@ class _VoipRoomViewState extends State<VoipRoomView> {
       if (retry == true && mounted && !joining) {
         joinRoomCall(withoutEntranceSound: withoutEntranceSound);
       }
+    } finally {
+      if (identical(_join, join)) _join = null;
     }
   }
 
