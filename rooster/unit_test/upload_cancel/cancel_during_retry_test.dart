@@ -30,6 +30,19 @@ void _thumbnailRefusedThenHeld(LoopTransport transport, Completer<void> hold) {
   };
 }
 
+/// A file that counts how often it is encrypted.
+class _CountedFile extends matrix.MatrixFile {
+  _CountedFile(Uint8List bytes) : super(bytes: bytes, name: 'a.bin');
+
+  int encrypts = 0;
+
+  @override
+  Future<matrix.EncryptedFile> encrypt() {
+    encrypts++;
+    return super.encrypt();
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   tearDown(() => AttachmentSends.instance.clear());
@@ -72,8 +85,8 @@ void main() {
     final retry = room.retrySend(room.convertEvent(failed));
     await until(() => transport.open == 1);
     // The menu was opened on the failed message: its Cancel.
-    await room.cancelSend(room.convertEvent(failed));
     final shownAfterCancel = echoes.length;
+    await room.cancelSend(room.convertEvent(failed));
     hold.complete();
     await retry;
     await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -90,6 +103,40 @@ void main() {
     expect(await goneFrom(room.matrixRoom, txid), isTrue);
     expect(AttachmentSends.instance.all, isEmpty);
     await client.close();
+  });
+
+  test(
+      'in an encrypted room: Cancel while the file is being prepared: it is '
+      'never encrypted nor uploaded',
+      skip: skipWithoutVodozemac, () async {
+    final transport = OnlyUsTransport();
+    final (mx, room) = await cryptoClient('cancel_before_encrypting', transport,
+        encrypted: true);
+    final config = Completer<void>();
+    var configAsked = false;
+    transport.onConfig = () async {
+      configAsked = true;
+      await config.future;
+    };
+    final echoes = <matrix.Event>[];
+    mx.onTimelineEvent.stream.listen(echoes.add);
+    final file = _CountedFile(Uint8List.fromList(List.filled(fileBytes, 1)));
+    const txid = 'txid_before_encrypting';
+
+    final sending = room.sendFileEvent(file, txid: txid);
+    await until(() => configAsked);
+    await echoes.lastWhere((e) => e.eventId == txid).cancelSend();
+    config.complete();
+    expect(await sending, isNull);
+
+    print('cancel before encrypting: encrypted ${file.encrypts} time(s), '
+        'uploads ${transport.uploads.length}, events '
+        '${transport.events.length}');
+    expect(file.encrypts, 0);
+    expect(transport.uploads, isEmpty);
+    expect(transport.events, isEmpty);
+    expect(await goneFrom(room, txid), isTrue);
+    await mx.dispose(closeDatabase: true);
   });
 
   test(

@@ -39,8 +39,9 @@ void main() {
     expect(pendingOf(echoes, txid).status.isSending, isTrue);
     expect(room.canCancelSend(txid), isTrue);
 
-    await pendingOf(echoes, txid).cancelSend();
+    // Counted from before the tap: nothing of it is shown after.
     final shownBefore = echoes.length;
+    await pendingOf(echoes, txid).cancelSend();
     transport.holdConfig!.complete();
     expect(await sending, isNull);
     await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -71,9 +72,9 @@ void main() {
     final txid = send.transactionId!;
     expect(room.canCancelSend(txid), isTrue);
 
+    final shownBefore = echoes.length;
     transport.cancelledAt = Stopwatch()..start();
     await pendingOf(echoes, txid).cancelSend();
-    final shownBefore = echoes.length;
     expect(await sending, isNull);
     await until(() => transport.aborts.length == 2);
     // Everything the loop could wait for, and more.
@@ -155,8 +156,8 @@ void main() {
         pendingOf(echoes, 'txn_first').cancelSend(), throwsException);
     expect(room.canCancelSend('txn_second'), isTrue);
 
-    await pendingOf(echoes, 'txn_second').cancelSend();
     final shownBefore = echoes.length;
+    await pendingOf(echoes, 'txn_second').cancelSend();
     expect(await second.timeout(const Duration(seconds: 5)), isNull,
         reason: 'out of the queue before the send in front ends');
     expect(room.sendingQueue, hasLength(1));
@@ -175,6 +176,26 @@ void main() {
         isEmpty);
     expect(await mx.database.getEventById('txn_second', room), isNull);
     expect(room.sendingQueue, isEmpty);
+    await mx.dispose(closeDatabase: true);
+  });
+
+  test(
+      'a text cancelled before its request leaves, with nothing in front of '
+      'it in the queue: no PUT /send', () async {
+    final transport = CancelTransport();
+    final (mx, room) =
+        await loopClient('cancel_text_at_head', transport, ManualSendClock());
+
+    final sending =
+        room.sendEvent({'msgtype': 'm.text', 'body': 'text'}, txid: 'txn_text');
+    expect(room.cancelSending('txn_text'), isTrue);
+    expect(await sending, isNull);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    print('text cancelled at the head of the queue: events '
+        '${transport.events.length}');
+    expect(transport.events, isEmpty);
+    expect(await mx.database.getEventById('txn_text', room), isNull);
     await mx.dispose(closeDatabase: true);
   });
 }

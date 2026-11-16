@@ -1061,7 +1061,6 @@ class Room {
       // Kept: a retry describes the same thumbnail it may reuse. // ROOSTER
       if (thumbnail != null) sendingFileThumbnails[txid] = thumbnail; // ROOSTER
     }
-    _stopIfSendCancelled(txid); // ROOSTER
 
     // Check media config of the server before sending the file. Stop if the
     // Media config is unreachable or the file is bigger than the given maxsize.
@@ -1078,6 +1077,7 @@ class Room {
       await show(); // ROOSTER
       rethrow;
     }
+    // Cancelled while it was prepared: not encrypted for nothing. // ROOSTER
     _stopIfSendCancelled(txid); // ROOSTER
 
     MatrixFile? uploadThumbnail = // ROOSTER: never in the clear when
@@ -1191,7 +1191,6 @@ class Room {
       },
       if (extraContent != null) ...extraContent,
     };
-    _stopIfSendCancelled(txid); // ROOSTER: the last check before the event
     final eventId = await sendEvent(
       content,
       txid: txid,
@@ -1241,6 +1240,7 @@ class Room {
     void Function()? beforeRequest, // ROOSTER
   }) async {
     txid ??= client.generateUniqueTransactionId();
+    // At the head of the room's queue, and before each attempt. // ROOSTER
     _stopIfSendCancelled(txid); // ROOSTER
     // Read together with whether it is encrypted, below: an encrypted // ROOSTER
     // event never points to a file that went up in the clear. // ROOSTER
@@ -1425,7 +1425,6 @@ class Room {
           (_) => sendingQueue.first.future, // ROOSTER
         ); // ROOSTER
       } // ROOSTER
-      _stopIfSendCancelled(messageID); // ROOSTER: at the head of the queue
     } on SendCancelledException { // ROOSTER
       return _sendCancelled(completer, messageID); // ROOSTER
     } // ROOSTER
