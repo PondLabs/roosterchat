@@ -151,6 +151,10 @@ class FakeLivekitRoom implements LivekitJoinRoom {
     disposed = true;
     journal.add('room_disposed');
   }
+
+  /// Completed by a test when the session over this room has ended (see
+  /// [FakeHost.sessionEnded]).
+  final Completer<void> ended = Completer();
 }
 
 /// What [FakeLivekitRoom.connect] throws for a token it refuses.
@@ -285,6 +289,9 @@ class FakeHost implements CallJoinHost<FakeLivekitRoom> {
     this.microphonePublished = microphonePublished;
     return room as FakeLivekitRoom;
   }
+
+  @override
+  Future<void> sessionEnded(FakeLivekitRoom session) => session.ended.future;
 }
 
 /// A token service whose `/sfu/get` answers [sfu], after [gate] if given,

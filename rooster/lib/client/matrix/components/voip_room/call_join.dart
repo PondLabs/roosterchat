@@ -60,6 +60,9 @@ abstract class CallJoinHost<S> {
   /// (it never fails): the session's mute and deafen wait for it, so they
   /// act on that microphone instead of opening a second one.
   S createSession(LivekitJoinRoom room, Future<void> microphonePublished);
+
+  /// Completes once [session] has ended (hung up, its membership cleared).
+  Future<void> sessionEnded(S session);
 }
 
 /// One voice join, in the order the people in the call see it: the previous
@@ -274,6 +277,14 @@ class CallJoin<S> {
 
       final session = outside.run(() => host.createSession(room, published));
       membershipSettled.complete();
+      // Once the session has ended this join holds our membership no more:
+      // an earlier join of the room, hung up, whose write lands after that,
+      // clears what it wrote instead of leaving it with no session.
+      final kept = claim;
+      void release(_) => CallMembershipWrites.release(joinKey, kept);
+      outside
+          .run(() => host.sessionEnded(session))
+          .then(release, onError: release);
       return session;
     } catch (_) {
       // Don't leave a membership for a call we never got into, nor a room

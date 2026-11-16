@@ -296,6 +296,13 @@ class MatrixLivekitBackend implements CallJoinHost<MatrixLivekitVoipSession> {
         microphonePublished: microphonePublished);
   }
 
+  @override
+  Future<void> sessionEnded(MatrixLivekitVoipSession session) async {
+    while (session.state != VoipState.ended) {
+      await session.onStateChanged.first;
+    }
+  }
+
   String get _ownMembershipKey =>
       "_${room.client.self!.identifier}_${room.matrixRoom.client.deviceID!}_m.call";
 

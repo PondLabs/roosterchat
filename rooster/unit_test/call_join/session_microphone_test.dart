@@ -278,6 +278,7 @@ void main() {
   late FakeWebrtcChannel webrtc;
   late _Participant participant;
   late Completer<bool> published;
+  late MatrixLivekitBackend backend;
   late MatrixLivekitVoipSession session;
 
   setUpAll(() async {
@@ -294,8 +295,9 @@ void main() {
     published = Completer();
     // What the join hands over while the microphone is still opening, made
     // the way the join makes it.
-    session = MatrixLivekitBackend(_MatrixRoom())
-        .createSession(LkJoinRoom(_Room(participant)), published.future);
+    backend = MatrixLivekitBackend(_MatrixRoom());
+    session =
+        backend.createSession(LkJoinRoom(_Room(participant)), published.future);
   });
 
   tearDown(() {
@@ -410,6 +412,19 @@ void main() {
     await session.setDeafened(false);
     expect(session.isDeafened, isFalse);
   });
+
+  test('the backend tells the join once the session has ended', () async {
+    var ended = false;
+    unawaited(backend.sessionEnded(session).then((_) => ended = true));
+    await joinPublishes();
+    await pumpEventQueue();
+    expect(ended, isFalse, reason: 'still in the call');
+
+    await session.hangUpCall().timeout(const Duration(seconds: 40));
+    await pumpEventQueue();
+    expect(session.state, VoipState.ended);
+    expect(ended, isTrue);
+  }, timeout: const Timeout(Duration(seconds: 60)));
 
   test('a join that published nothing still lets the mute through', () async {
     published.complete(false);
