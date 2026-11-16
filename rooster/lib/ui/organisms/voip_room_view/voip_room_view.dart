@@ -7,6 +7,7 @@ import 'package:rooster/client/components/voip/audio_processing/audio_processing
 import 'package:rooster/client/components/voip/media_capture_support.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip_room/voip_room_component.dart';
+import 'package:rooster/client/matrix/components/voip_room/call_warm_up.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/live_media_indicator.dart';
@@ -16,6 +17,7 @@ import 'package:rooster/ui/layout/bento.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/organisms/call_view/call.dart';
 import 'package:rooster/ui/organisms/dj/vinyl_disc.dart';
+import 'package:rooster/ui/organisms/voip_room_view/warm_up_on_rest.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -77,6 +79,12 @@ class VoipRoomView extends StatefulWidget {
   /// microphone does, for a few seconds at most); it is not fetched at
   /// startup. It opens no microphone. Only tests replace it.
   static void Function() prefetchVoiceDsp = _prefetchVoiceDsp;
+
+  /// Fetches what a join of [voip]'s call needs before the click: when the
+  /// page opens, and when the pointer or focus rests on Join (see
+  /// `CallWarmUp`). It opens no microphone and connects nothing. Only tests
+  /// replace it.
+  static void Function(VoipRoomComponent voip) warmUpCall = CallWarmUp.warm;
 
   static void _prefetchVoiceDsp() {
     if (!kIsWeb) return;
@@ -140,6 +148,7 @@ class _VoipRoomViewState extends State<VoipRoomView> {
     fetchNewMembers();
     updateCallUrl();
     VoipRoomView.prefetchVoiceDsp();
+    _warmUp();
     WidgetsBinding.instance.addPostFrameCallback((_) => _takeJoinRequest());
     widget.voip.clearStaleOwnMembership().catchError((e, s) {
       Log.onError(e, s);
@@ -162,6 +171,15 @@ class _VoipRoomViewState extends State<VoipRoomView> {
         Log.onError(e, s, content: "Could not fetch $participant");
       });
     }
+  }
+
+  /// Only where Join is shown, and not while we are in this call.
+  void _warmUp() {
+    if (!supportsMediaCapture || !widget.voip.canJoinCall) return;
+    if (currentSession != null && currentSession!.state != VoipState.ended) {
+      return;
+    }
+    VoipRoomView.warmUpCall(widget.voip);
   }
 
   void _takeJoinRequest() {
@@ -290,13 +308,16 @@ class _VoipRoomViewState extends State<VoipRoomView> {
                   VoipRoomView.messageVoiceNeedsSecurePage))
         else if (widget.voip.canJoinCall)
           Center(
-            child: tiamat.Button(
-              isLoading: joining,
-              text: CommonStrings.promptJoin,
-              // Shift+click joins without the entrance sound.
-              onTap: () => joinRoomCall(
-                  withoutEntranceSound:
-                      HardwareKeyboard.instance.isShiftPressed),
+            child: WarmUpOnRest(
+              onRest: _warmUp,
+              child: tiamat.Button(
+                isLoading: joining,
+                text: CommonStrings.promptJoin,
+                // Shift+click joins without the entrance sound.
+                onTap: () => joinRoomCall(
+                    withoutEntranceSound:
+                        HardwareKeyboard.instance.isShiftPressed),
+              ),
             ),
           )
         else

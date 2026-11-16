@@ -132,7 +132,25 @@ The join reaches LiveKit only through `LivekitJoinRoom`
 (`livekit_join_room.dart`, real over `lk.Room`), so tests drive it with a
 fake room. `/sfu/get` goes through one long-lived client per account
 (`CallTokenService`), closed at logout, so later joins reuse its
-connection. On the web the DSP's wasm is fetched when a voice channel's
+connection, kept idle up to 55 s (`dart:io` keeps 15 s).
+
+Before the click (`CallWarmUp` in `voip_room/call_warm_up.dart`): when a
+voice channel's page opens, or the pointer or keyboard focus rests 150 ms
+on a join button (the page's Join, Who's around's "Join call"), the app
+opens the token service's connection with a `GET /healthz` (any answer
+will do, an error is ignored: in a browser the service may not allow the
+origin) and fetches the account's OpenID token and that room's call token.
+`CallTokenService` holds both in memory only, never on disk, in
+preferences or in a log, until 60 s before they lapse: the OpenID token
+by its `expires_in`, one for every channel; the call token by its JWT's
+own `exp`, one per room (a JWT without one is never held). One request at
+a time asks for each, and a logout drops them. The join uses what is held
+and sends neither request then; a held call token the SFU refuses is
+dropped, asked for again and connected with, once. A warm-up that fails
+shows nothing, and a join that shared its failed request sends its own.
+Nothing opens the microphone, makes a LiveKit room or connects before the
+click, and a member who may not join, or a service that is not HTTPS,
+gets no token. On the web the DSP's wasm is fetched when a voice channel's
 page opens. Each join is a `voice_join` span in the speed log
 (`diagnostic/speed_log/call_join_trace.dart`): every step with its
 duration, the SFU's host class and region, the microphone published and
@@ -242,6 +260,7 @@ without LiveKit still hang up (`lostConnectionTimeout`).
 | Inside the real WebRTC (Linux): the app's recording stream killed mid-capture stays dead on its own (WebRTC does not notice), and the reopen repair brings the voice back within 3 dB | `native_noise_loop.sh` ("a microphone whose recording died is heard again"; pacmd on PulseAudio, pw-cli on PipeWire) | integration-test |
 | In Chrome: a worker that traps on every block or hangs keeps the microphone going out (it was -120 dB) and stops the frame counter; a suspended context is resumed; an ended capture is refused | `web_health_loop.mjs` | ci `voice-dsp` |
 | A join keeps the order others see (previous clear, membership, connect, microphone) while the tokens, speakers and microphone run beside it; `prepareConnection` waits only for LiveKit Cloud; no membership power, no request; `/sfu/get` reuses one connection until logout; the `voice_join` span | `unit_test/call_join/` | ci `test` |
+| Before the click: opening a page or resting on Join fetches the OpenID token and the room's call token once (one OpenID request for ten openings, one `/sfu/get` per room), held until 60 s before they lapse and dropped at logout; the join then sends neither; a refused held token is asked for again once; a failed warm-up or `/healthz` (CORS in a browser) shows nothing and does not stop the join; no microphone or connection before the click | `call_warm_up_test.dart`, `call_warm_up_server_test.dart`, `warm_up_on_rest_test.dart` | ci `test` |
 | The vendored changes and the session's calls are still there | `check_contracts.py` | ci `voice-dsp` |
 
 Measured on 2026-09-26: the native scenario gives "before: 1.00 s/s at

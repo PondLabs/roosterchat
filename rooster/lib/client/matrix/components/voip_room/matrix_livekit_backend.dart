@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:rooster/client/matrix/components/voip_room/call_join.dart';
 import 'package:rooster/client/matrix/components/voip_room/call_token_service.dart';
+import 'package:rooster/client/matrix/components/voip_room/call_warm_up.dart';
 import 'package:rooster/client/matrix/components/voip_room/livekit_join_room.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/matrix/components/voip_room/matrix_call_membership.dart';
@@ -186,6 +187,12 @@ class MatrixLivekitBackend implements CallJoinHost<MatrixLivekitVoipSession> {
     }
     return session;
   }
+
+  /// Fetches what a join needs before the click (see [CallWarmUp]).
+  Future<void> warmUp() => CallWarmUp(
+        host: this,
+        tokens: CallTokenService.forClient(room.matrixRoom.client),
+      ).run();
 
   @override
   bool get canWriteMembership => room.matrixRoom
