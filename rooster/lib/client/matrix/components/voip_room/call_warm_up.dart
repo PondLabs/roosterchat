@@ -14,7 +14,8 @@ import 'package:rooster/debug/log.dart';
 /// any answer will do), and asks for the account's OpenID token and this
 /// room's call token (`/sfu/get`), which [CallTokenService] holds in memory
 /// for the join that follows. Each is asked for only when none is held, so
-/// opening a channel again sends no new token request.
+/// opening a channel again sends no new token request, and while the
+/// room's call token is held it does not fetch the well-known either.
 ///
 /// It talks only to the token service the account's homeserver names in
 /// its well-known: the room's oldest call membership names the call's
@@ -37,6 +38,9 @@ class CallWarmUp {
       // A member who may not join gets no tokens: the join stops before it
       // would use them.
       if (!host.canWriteMembership || tokens.isClosed) return;
+      // Held already: the join needs nothing more, not even the
+      // well-known (nor the OpenID token, which only buys a call token).
+      if (tokens.holdsGrant(host.roomId, host.deviceId)) return;
       final homeserver = await host.homeserverFocus();
       if (homeserver == null) return;
       final room = host.roomFocus();

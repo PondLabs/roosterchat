@@ -159,7 +159,8 @@ the click (no `/healthz`, no OpenID token, no `/sfu/get`) and the join
 asks for everything then. The two are compared as services, not as look-alike
 hosts (`CallWarmUp.sameService`): the same scheme, host and port (a missing
 port is the scheme's default), the same path without its trailing slashes,
-and the same user info, query and fragment. On the web the DSP's wasm is fetched when a voice channel's
+and the same user info, query and fragment. While the room's call token is held,
+opening the page again fetches nothing, not even the well-known. On the web the DSP's wasm is fetched when a voice channel's
 page opens. Each join is a `voice_join` span in the speed log
 (`diagnostic/speed_log/call_join_trace.dart`): every step with its
 duration, the connect split into the WebSocket, the join's answer and the

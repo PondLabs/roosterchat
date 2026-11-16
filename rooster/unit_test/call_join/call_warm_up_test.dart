@@ -145,6 +145,24 @@ void main() {
     expect(service.count('GET /healthz'), 1);
   });
 
+  test(
+      'ten warm-ups of a room whose tokens are held fetch the well-known '
+      'once', () async {
+    final start = service.now;
+    for (var i = 0; i < 10; i++) {
+      await warmUp();
+    }
+    expect(journal.count('well_known'), 1);
+    expect(journal.count('openid'), 1);
+    expect(service.requests, ['GET /healthz', 'POST /sfu/get']);
+
+    // Once the call token has less than 60 s left, it is fetched again.
+    service.now = start.add(service.jwtLife - const Duration(seconds: 59));
+    await warmUp();
+    expect(journal.count('well_known'), 2);
+    expect(service.count('POST /sfu/get'), 2);
+  });
+
   test('the OpenID token is asked for again with less than 60 s left',
       () async {
     final start = service.now;
