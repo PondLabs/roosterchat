@@ -69,6 +69,26 @@ void main() {
     }
   }
 
+  /// What [future] gave, after a [flush]. Fails the test when it is still
+  /// running then, rather than wait for it: on the test's clock an await
+  /// that never ends hangs the run instead of timing out.
+  Future<T> done<T>(WidgetTester tester, Future<T> future) async {
+    var finished = false;
+    Object? error;
+    T? value;
+    future.then((v) {
+      value = v;
+      finished = true;
+    }, onError: (Object e) {
+      error = e;
+      finished = true;
+    });
+    await flush(tester);
+    expect(finished, isTrue, reason: 'still running');
+    if (error != null) throw error!;
+    return value as T;
+  }
+
   /// Opens the page and clicks Join: the join starts on the next frame.
   Future<void> openAndJoin(WidgetTester tester) async {
     await tester.pumpWidget(app(VoipRoomView(voip)));
@@ -132,9 +152,7 @@ void main() {
     channel();
     await tester.pumpWidget(app(VoipRoomView(voip)));
     await tester.pump();
-    final joining = voip.joinCall();
-    await flush(tester);
-    final session = await joining as FakeVoipSession;
+    final session = await done(tester, voip.joinCall()) as FakeVoipSession;
 
     await tester.pumpWidget(app(const Text('Home')));
     await tester.pump();
@@ -179,13 +197,10 @@ void main() {
     final joining = voip.joinCall();
     // It waits for the old join, 10 s at most, on the test's clock.
     await tester.pump(const Duration(seconds: 11));
-    await flush(tester);
-    final session = await joining as FakeVoipSession;
+    final session = await done(tester, joining) as FakeVoipSession;
     expect(host.membership, isTrue);
 
-    final hangingUp = session.hangUpCall();
-    await flush(tester);
-    await hangingUp;
+    await done(tester, session.hangUpCall());
     expect(host.membership, isFalse);
 
     oldWrite.open();
