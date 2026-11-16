@@ -435,7 +435,9 @@ class _VoipRoomViewState extends State<VoipRoomView> {
   joinRoomCall({bool withoutEntranceSound = false}) async {
     // No capture on this origin (an http page): nothing to join with.
     if (!supportsMediaCapture) return;
-    final roomId = widget.voip.room.identifier;
+    // Kept: the join, and a failure's dialog, outlive this page.
+    final voip = widget.voip;
+    final roomId = voip.room.identifier;
     setState(() {
       joining = true;
     });
@@ -448,7 +450,7 @@ class _VoipRoomViewState extends State<VoipRoomView> {
     try {
       // Goes on if the page closes meanwhile: someone who clicks Join and
       // walks to a text channel still ends up in the call.
-      final session = await widget.voip.joinCall();
+      final session = await voip.joinCall();
       if (session == null && withoutEntranceSound) {
         EntranceSoundGate.instance.cancelSkip(roomId);
       }
@@ -469,18 +471,56 @@ class _VoipRoomViewState extends State<VoipRoomView> {
       Log.onError(e, s);
       if (withoutEntranceSound) EntranceSoundGate.instance.cancelSkip(roomId);
 
-      if (!mounted) return;
-      setState(() {
-        joining = false;
-      });
+      if (mounted) {
+        setState(() {
+          joining = false;
+        });
+      }
 
-      final retry = await AdaptiveDialog.confirmation(context,
-          title: VoipRoomView.errorCallJoinFailed,
-          prompt: e is CallJoinException ? e.message : e.toString(),
-          confirmationText: CommonStrings.promptRetry,
-          cancelText: CommonStrings.promptClose);
-      if (retry == true && mounted && !joining) {
-        joinRoomCall(withoutEntranceSound: withoutEntranceSound);
+      // Said also once this page has closed, over whatever page is open.
+      final retry = await _askToRetry(mounted ? context : null, e);
+      if (!retry) return;
+      if (mounted) {
+        if (!joining) joinRoomCall(withoutEntranceSound: withoutEntranceSound);
+      } else {
+        unawaited(_joinWithoutPage(voip, withoutEntranceSound));
+      }
+    }
+  }
+
+  /// Asks whether to try [error]'s join again, in [context], else over the
+  /// app's current page. False when there is no page to ask on.
+  static Future<bool> _askToRetry(BuildContext? context, Object error) async {
+    final over = context ?? navigator.currentContext;
+    if (over == null || !over.mounted) return false;
+    final retry = await AdaptiveDialog.confirmation(over,
+        title: VoipRoomView.errorCallJoinFailed,
+        prompt: error is CallJoinException ? error.message : error.toString(),
+        confirmationText: CommonStrings.promptRetry,
+        cancelText: CommonStrings.promptClose);
+    return retry == true;
+  }
+
+  /// Tries [voip]'s join again from the dialog of a join whose page had
+  /// closed: through the room's component, not the page that is gone, and
+  /// asking again if it fails again.
+  static Future<void> _joinWithoutPage(
+      VoipRoomComponent voip, bool withoutEntranceSound) async {
+    final roomId = voip.room.identifier;
+    if (withoutEntranceSound) EntranceSoundGate.instance.skipNextJoin(roomId);
+    try {
+      final session = await voip.joinCall();
+      if (session == null && withoutEntranceSound) {
+        EntranceSoundGate.instance.cancelSkip(roomId);
+      }
+    } on CallJoinHungUp {
+      Log.i("Voice join hung up");
+      if (withoutEntranceSound) EntranceSoundGate.instance.cancelSkip(roomId);
+    } catch (e, s) {
+      Log.onError(e, s);
+      if (withoutEntranceSound) EntranceSoundGate.instance.cancelSkip(roomId);
+      if (await _askToRetry(null, e)) {
+        await _joinWithoutPage(voip, withoutEntranceSound);
       }
     }
   }

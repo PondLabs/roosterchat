@@ -57,7 +57,10 @@ void main() {
         FakeBackend(SessionHost(host, client), fakeTokenService(journal));
   }
 
+  /// The app, with its navigator: a failed join's dialog shows over
+  /// whatever page is open, also once the channel's page has closed.
   Widget app(Widget body) => MaterialApp(
+        navigatorKey: navigator,
         theme: ThemeData(platform: TargetPlatform.linux)
             .copyWith(extensions: const [ThemeSettings()]),
         home: Scaffold(body: body),
@@ -149,6 +152,57 @@ void main() {
 
     expect(errorDialog, findsOneWidget);
     expect(host.membership, isFalse);
+  });
+
+  testWidgets(
+      'the page closed, then the join fails: the dialog shows over the page '
+      'open now, and Retry joins again without the page', (tester) async {
+    channel();
+    host.room
+      ..connectGate = Gate()
+      ..connectError = StateError('no SFU');
+    await openAndJoin(tester);
+    await tester.pumpWidget(app(const Text('Home')));
+    await flush(tester);
+    expect(errorDialog, findsNothing, reason: 'nothing failed yet');
+
+    host.room.connectGate.open();
+    await flush(tester);
+    expect(errorDialog, findsOneWidget);
+    expect(host.membership, isFalse);
+    expect(tester.takeException(), isNull);
+
+    host.room = FakeLivekitRoom(journal);
+    // The dialog's opening animation.
+    await tester.pump(const Duration(seconds: 1));
+    await tester.tap(find.text(CommonStrings.promptRetry));
+    await flush(tester);
+    // The dialog's closing animation.
+    await tester.pump(const Duration(seconds: 1));
+    await flush(tester);
+    expect(errorDialog, findsNothing);
+    expect(voip.currentSession?.state, VoipState.connected);
+    expect(host.membership, isTrue);
+    expect(tester.takeException(), isNull);
+    unawaited(voip.currentSession!.hangUpCall());
+    await flush(tester);
+  });
+
+  testWidgets(
+      'the page closed, then the join is hung up (another channel joined): '
+      'no dialog', (tester) async {
+    channel();
+    host.room.connectGate = Gate();
+    await openAndJoin(tester);
+    await tester.pumpWidget(app(const Text('Home')));
+    await flush(tester);
+
+    voip.hangUpJoin();
+    host.room.connectGate.open();
+    await flush(tester);
+    expect(errorDialog, findsNothing);
+    expect(host.membership, isFalse);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('leaving the page once the call is joined does not leave it',
