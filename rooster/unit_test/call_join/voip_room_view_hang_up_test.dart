@@ -145,6 +145,21 @@ void main() {
   });
 
   testWidgets(
+      "the call's server answering after the page closed is not an error",
+      (tester) async {
+    channel();
+    final answer = Completer<List<Uri>>();
+    (voip.backend as FakeBackend).fociAnswer = answer.future;
+    await tester.pumpWidget(app(VoipRoomView(voip)));
+    await tester.pump();
+
+    await tester.pumpWidget(app(const Text('Home')));
+    answer.complete([Uri.parse('https://jwt.example.org')]);
+    await flush(tester);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
       "T3.2's INVERSE 8 through the page: the old join's write is in flight "
       'past the 10 s when the page closes, a new join gets in and its call '
       'is left, then the old write lands: no membership, no session',

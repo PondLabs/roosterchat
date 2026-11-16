@@ -204,7 +204,9 @@ class _VoipRoomViewState extends State<VoipRoomView> {
 
   void updateCallUrl() {
     widget.voip.getCallServerUrl().then((url) {
-      if (mounted) print("Call url: ${url}");
+      // The page may have closed while the well-known was fetched.
+      if (!mounted) return;
+      print("Call url: ${url}");
       setState(() {
         callServerUrl = url;
       });

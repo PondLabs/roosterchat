@@ -538,8 +538,11 @@ class FakeBackend implements MatrixLivekitBackend {
               remoteAudioWindow: const Duration(milliseconds: 1))
           .run(leavePrevious: leavePrevious, hangUp: hangUp);
 
+  /// What [getFociUrl] answers, when set; else [host]'s.
+  Future<List<Uri>>? fociAnswer;
+
   @override
-  Future<List<Uri>> getFociUrl() => host.foci();
+  Future<List<Uri>> getFociUrl() => fociAnswer ?? host.foci();
 
   @override
   Future<void> warmUp() async {}
