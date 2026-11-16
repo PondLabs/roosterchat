@@ -298,6 +298,39 @@ void main() {
   });
 
   testWidgets(
+      'the clock of a failed file stops when it failed, Retry restarts it',
+      (tester) async {
+    var now = Duration.zero;
+    AttachmentSend.clock = () => now;
+    final send = AttachmentSend(
+        roomKey: 'a:!room',
+        attachment: PendingFileAttachment(
+            name: 'notes.pdf',
+            data: blackJpeg(4, 4),
+            mimeType: 'application/pdf'));
+    now = const Duration(seconds: 5);
+    send.failed();
+    await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: PendingAttachmentStatus(send))));
+    expect(find.text('0:05'), findsOneWidget);
+
+    // Ten minutes later something rebuilds the message.
+    now = const Duration(minutes: 10, seconds: 5);
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: Padding(
+                padding: const EdgeInsets.all(1),
+                child: PendingAttachmentStatus(send)))));
+    expect(find.text('0:05'), findsOneWidget);
+
+    send.retrying();
+    now += const Duration(seconds: 3);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('0:03'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
       'ten photos attached, five removed before Send: the five left are '
       'sent, each with its own size, and the removed ones never decoded',
       (tester) async {

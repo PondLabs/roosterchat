@@ -235,7 +235,11 @@ class AttachmentSend extends ChangeNotifier {
   /// When Send was pressed for it, or "Retry" after it failed.
   Duration startedAt;
 
-  Duration get elapsed => clock() - startedAt;
+  /// When it was sent or failed: its clock stops there.
+  Duration? _endedAt;
+
+  /// Time from [startedAt] to now, or to when it was sent or failed.
+  Duration get elapsed => (_endedAt ?? clock()) - startedAt;
 
   AttachmentSendStage _stage = AttachmentSendStage.preparing;
   AttachmentSendStage get stage => _stage;
@@ -348,6 +352,7 @@ class AttachmentSend extends ChangeNotifier {
   void retrying() {
     if (_stage != AttachmentSendStage.failed) return;
     startedAt = clock();
+    _endedAt = null;
     _stage = AttachmentSendStage.uploading;
     notifyListeners();
   }
@@ -368,6 +373,7 @@ class AttachmentSend extends ChangeNotifier {
   void _set(AttachmentSendStage stage) {
     if (_stage == stage || isFinished) return;
     _stage = stage;
+    if (isFinished) _endedAt = clock();
     notifyListeners();
   }
 }

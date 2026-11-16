@@ -65,7 +65,18 @@ class _PendingAttachmentStatusState extends State<PendingAttachmentStatus> {
   void initState() {
     super.initState();
     widget.send.addListener(_changed);
-    _tick = Timer.periodic(const Duration(seconds: 1), (_) => _changed());
+    _ticking();
+  }
+
+  /// The clock moves each second until the file is sent or fails (its
+  /// time stops there), and again after a Retry.
+  void _ticking() {
+    if (widget.send.isFinished) {
+      _tick?.cancel();
+      _tick = null;
+    } else {
+      _tick ??= Timer.periodic(const Duration(seconds: 1), (_) => _changed());
+    }
   }
 
   @override
@@ -74,15 +85,13 @@ class _PendingAttachmentStatusState extends State<PendingAttachmentStatus> {
     if (old.send != widget.send) {
       old.send.removeListener(_changed);
       widget.send.addListener(_changed);
+      _ticking();
     }
   }
 
   void _changed() {
     if (!mounted) return;
-    if (widget.send.isFinished) {
-      _tick?.cancel();
-      _tick = null;
-    }
+    _ticking();
     setState(() {});
   }
 

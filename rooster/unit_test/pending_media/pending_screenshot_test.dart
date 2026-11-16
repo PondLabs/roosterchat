@@ -85,7 +85,8 @@ void main() {
       AttachmentSends.instance
         ..add(preparing)
         ..add(failed);
-      failed.failed();
+      now = const Duration(seconds: 1);
+      failed.failed(); // its clock stops at 0:01
       now = const Duration(seconds: 2);
 
       final key = GlobalKey();
@@ -114,7 +115,8 @@ void main() {
           findsOneWidget);
       expect(find.text(PendingAttachmentStatus.labelPendingFileFailed),
           findsOneWidget);
-      expect(find.text('0:02'), findsNWidgets(2));
+      expect(find.text('0:02'), findsOneWidget);
+      expect(find.text('0:01'), findsOneWidget);
       final slot =
           tester.getSize(find.byKey(const ValueKey("pending-file-slot")));
       expect(slot.width, closeTo(266.67, 0.01));
