@@ -96,6 +96,9 @@ class Room extends DisposableChangeNotifier with EventsEmittable<RoomEvent> {
   String? get serverRegion => _serverRegion;
   String? _serverRegion;
 
+  // ROOSTER: when each step of [connect] is done (see Engine.onConnectStep).
+  set onConnectStep(void Function(ConnectStep step)? report) => engine.onConnectStep = report;
+
   E2EEManager? get e2eeManager => _e2eeManager;
 
   E2EEManager? _e2eeManager;

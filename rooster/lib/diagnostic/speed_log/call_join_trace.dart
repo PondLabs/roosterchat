@@ -21,6 +21,8 @@ import 'package:rooster/diagnostic/speed_log/speed_names.dart';
 ///   awaited or finishes;
 /// - `membership_clear_wait`: waiting for the previous call's clear;
 /// - `membership_write`, `connect`;
+/// - `connect_websocket`, `connect_join_response`, `connect_media`: inside
+///   `connect`, the attempt that ran last ([connectSteps]);
 /// - `microphone_options`, `microphone_open`: the capture prepared during
 ///   the connection;
 /// - `sfu_region_other` when the SFU reports a region (its name is not
@@ -60,6 +62,27 @@ class CallJoinTrace {
   /// A step that lasts as long as [body].
   Future<T> time<T>(String step, Future<T> Function() body) =>
       span.time(step, body);
+
+  /// The moments of one LiveKit connection attempt, for [connectSteps].
+  ConnectAttempt connectAttempt() => ConnectAttempt._(span);
+
+  /// The connect in three steps, from [attempt]: the WebSocket, the join's
+  /// answer and the media connection. A step whose moments did not both
+  /// come (a room that reports none, a connection that failed first) is
+  /// unavailable.
+  void connectSteps(ConnectAttempt attempt) {
+    void step(String name, Duration? from, Duration? to) {
+      if (from == null || to == null || to < from) {
+        span.unavailable(name);
+      } else {
+        span.addStep(name, from, to - from);
+      }
+    }
+
+    step(SpeedStep.connectWebsocket, attempt._started, attempt._websocket);
+    step(SpeedStep.connectJoinResponse, attempt._websocket, attempt._joined);
+    step(SpeedStep.connectMedia, attempt._joined, attempt._media);
+  }
 
   /// Records the SFU's host class: LiveKit Cloud or anything else.
   void sfuHost({required bool livekitCloud}) => _instant(
@@ -142,4 +165,31 @@ class CallJoinTrace {
 
   /// A step with no duration of its own: when something became known.
   void _instant(String step) => span.time(step, () async {});
+}
+
+/// When each part of one LiveKit connection attempt was done, on the span's
+/// clock ([CallJoinTrace.connectAttempt]): told by LiveKit as it goes.
+class ConnectAttempt {
+  ConnectAttempt._(this._span) : _started = _span.elapsed;
+
+  final SpeedSpan _span;
+  Duration _started;
+  Duration? _websocket;
+  Duration? _joined;
+  Duration? _media;
+
+  /// The attempt starts again (LiveKit trying another region): what the
+  /// earlier one reported is dropped.
+  void started() {
+    _started = _span.elapsed;
+    _websocket = null;
+    _joined = null;
+    _media = null;
+  }
+
+  void websocketOpen() => _websocket = _span.elapsed;
+
+  void joinAnswered() => _joined = _span.elapsed;
+
+  void mediaConnected() => _media = _span.elapsed;
 }

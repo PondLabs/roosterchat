@@ -3,13 +3,16 @@
 // remote audio, unavailable when nobody speaks. A join without a held token
 // lists its requests by route under the span.
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:collection/collection.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/matrix/components/voip_room/call_join.dart';
 import 'package:rooster/client/matrix/components/voip_room/call_token_service.dart';
+import 'package:rooster/client/matrix/components/voip_room/call_warm_up.dart';
 import 'package:rooster/client/matrix/components/voip_room/livekit_join_room.dart';
 import 'package:rooster/diagnostic/speed_log/host_class.dart';
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
@@ -254,5 +257,147 @@ void main() {
         reason: 'the hang up and a few heartbeats');
     expect(requests.where((r) => r.operationId == span.id), isEmpty);
     expect(requests.every((r) => r.operationId == null), isTrue);
+  });
+
+  group('the connect in three steps', () {
+    const all = [
+      lk.ConnectStep.started,
+      lk.ConnectStep.signalConnected,
+      lk.ConnectStep.joinResponse,
+      lk.ConnectStep.primaryConnected,
+    ];
+    const parts = [
+      'connect_websocket',
+      'connect_join_response',
+      'connect_media',
+    ];
+
+    test(
+        'each step timed inside the connect, and together no longer than '
+        'it', () async {
+      final host = FakeHost(journal)..room.attemptSteps = [all];
+
+      final span = await joinAndWait(host);
+      final steps = stepsOf(span);
+
+      final connect = steps['connect']!;
+      var sum = Duration.zero;
+      for (final part in parts) {
+        final step = steps[part];
+        expect(step?.available, isTrue, reason: '$part has a duration');
+        expect(step!.duration!, greaterThan(Duration.zero), reason: part);
+        expect(step.start, greaterThanOrEqualTo(connect.start), reason: part);
+        expect(step.start + step.duration!,
+            lessThanOrEqualTo(connect.start + connect.duration!),
+            reason: part);
+        sum += step.duration!;
+      }
+      expect(sum, lessThanOrEqualTo(connect.duration!));
+      expect(
+          steps['connect_join_response']!.start,
+          steps['connect_websocket']!.start +
+              steps['connect_websocket']!.duration!);
+      final report = buildSpeedReport(log);
+      // ignore: avoid_print
+      print(report);
+      expect(report, isNot(contains('invalid_name')));
+    });
+
+    test('a room that reports nothing: the three unavailable, the join done',
+        () async {
+      final host = FakeHost(journal);
+
+      final span = await joinAndWait(host);
+      final steps = stepsOf(span);
+
+      expect(span.outcome, 'ok');
+      expect(steps['connect']?.available, isTrue);
+      for (final part in parts) {
+        expect(steps[part]?.available, isFalse, reason: part);
+      }
+    });
+
+    test(
+        'a connection that fails after the WebSocket: the rest unavailable, '
+        'the join failed', () async {
+      final host = FakeHost(journal)
+        ..room.attemptSteps = [
+          [lk.ConnectStep.started, lk.ConnectStep.signalConnected]
+        ]
+        ..room.connectError = StateError('no join answer');
+
+      await expectLater(
+          CallJoin(host: host, tokens: fakeTokenService(journal), log: log)
+              .run(),
+          throwsStateError);
+
+      final span = log.spans.toList().single;
+      final steps = stepsOf(span);
+      expect(span.outcome, 'failed');
+      expect(steps['connect_websocket']?.available, isTrue);
+      expect(steps['connect_join_response']?.available, isFalse);
+      expect(steps['connect_media']?.available, isFalse);
+    });
+
+    test("a region's second attempt inside one connect: only its own moments",
+        () async {
+      final host = FakeHost(journal)
+        ..room.attemptSteps = [
+          [
+            lk.ConnectStep.started,
+            lk.ConnectStep.signalConnected,
+            lk.ConnectStep.joinResponse,
+            // LiveKit tries the next region: the engine starts again.
+            lk.ConnectStep.started,
+            lk.ConnectStep.signalConnected,
+          ]
+        ];
+
+      final span = await joinAndWait(host);
+      final steps = stepsOf(span);
+
+      final connect = steps['connect']!;
+      expect(steps['connect_websocket']?.available, isTrue);
+      expect(steps['connect_websocket']!.start - connect.start,
+          greaterThanOrEqualTo(host.room.stepGap * 4),
+          reason: 'from the second start');
+      expect(steps['connect_join_response']?.available, isFalse,
+          reason: "the first attempt's answer is not the second's");
+      expect(steps['connect_media']?.available, isFalse);
+    });
+
+    test(
+        'a held token the SFU refuses: the steps are those of the connect '
+        'that completed, none of the refused one', () async {
+      final jwts = <String>[];
+      final tokens = CallTokenService(client: MockClient((request) async {
+        if (request.url.path != '/sfu/get') return http.Response('', 200);
+        jwts.add(jwtUntil(DateTime.now().add(const Duration(minutes: 10)),
+            id: 'g${jwts.length + 1}'));
+        return http.Response(
+            jsonEncode({'url': 'wss://sfu.example.org', 'jwt': jwts.last}),
+            200);
+      }));
+      final host = FakeHost(journal);
+      // The call token, held since the page opened.
+      await CallWarmUp(host: host, tokens: tokens).run();
+      host.room
+        ..refusedTokens.add(jwts.single)
+        ..attemptSteps = [
+          all.sublist(0, 3),
+          [lk.ConnectStep.started, lk.ConnectStep.signalConnected],
+        ];
+
+      final span = await joinAndWait(host, tokens: tokens);
+      final steps = stepsOf(span);
+
+      expect(host.room.connectTokens, jwts, reason: 'refused, then a new one');
+      expect(jwts, hasLength(2));
+      expect(span.outcome, 'ok');
+      expect(steps['connect_websocket']?.available, isTrue);
+      expect(steps['connect_join_response']?.available, isFalse,
+          reason: "the refused connect's answer is not the second's");
+      expect(steps['connect_media']?.available, isFalse);
+    });
   });
 }

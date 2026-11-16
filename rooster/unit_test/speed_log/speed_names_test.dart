@@ -85,7 +85,8 @@ void main() {
       'leave_previous', 'output_device', 'foci', 'openid_token', 'sfu_token',
       'sfu_livekit_cloud', 'sfu_self_hosted', 'microphone_early',
       'prepare_connection', 'membership_clear_wait', 'membership_write',
-      'connect', 'microphone_options', 'microphone_open', 'sfu_region',
+      'connect', 'connect_websocket', 'connect_join_response', //
+      'connect_media', 'microphone_options', 'microphone_open', 'sfu_region',
       'sfu_region_other', 'microphone_published', 'first_remote_audio',
     });
     expect(SpeedValue.all, {

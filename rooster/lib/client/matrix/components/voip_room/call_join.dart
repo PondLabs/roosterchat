@@ -244,7 +244,7 @@ class CallJoin<S> {
       write = trace.time(
           SpeedStep.membershipWrite, () => host.writeMembership(foci));
       connection = trace.time(SpeedStep.connect,
-          () => _connect(room, focus, first, askOpenId, hangUp));
+          () => _connect(trace, room, focus, first, askOpenId, hangUp));
       // Both to their end, also when one fails first (Future.wait reports
       // the first error once every future has finished).
       await Future.wait([write, connection]);
@@ -307,23 +307,43 @@ class CallJoin<S> {
   /// Connects [room] with [first]. A held call token the SFU refuses
   /// (expired or revoked since it was fetched) is dropped, and the join asks
   /// for a new one and connects again, once.
+  ///
+  /// The connect's steps in the span are those of the last connect: a
+  /// refused one's moments are not the next one's.
   Future<void> _connect(
+      CallJoinTrace trace,
       LivekitJoinRoom room,
       Uri focus,
       HeldGrant first,
       Future<matrix.OpenIdCredentials> Function() openId,
       _HangUp hangUp) async {
+    late ConnectAttempt attempt;
+    Future<void> connect(SfuGrant grant) {
+      final moments = attempt = trace.connectAttempt();
+      return room.connect(grant.url, grant.jwt,
+          onStep: (step) => switch (step) {
+                lk.ConnectStep.started => moments.started(),
+                lk.ConnectStep.signalConnected => moments.websocketOpen(),
+                lk.ConnectStep.joinResponse => moments.joinAnswered(),
+                lk.ConnectStep.primaryConnected => moments.mediaConnected(),
+              });
+    }
+
     try {
-      await room.connect(first.grant.url, first.grant.jwt);
-    } catch (e) {
-      if (!first.held || !room.refusedToken(e)) rethrow;
-      Log.i("Voice join: the SFU refused a held call token, asking again");
-      tokens.forgetGrant(focus, roomId: host.roomId, deviceId: host.deviceId);
-      hangUp.check();
-      final again = await tokens.sfuGrant(focus,
-          roomId: host.roomId, deviceId: host.deviceId, openId: openId);
-      hangUp.check();
-      await room.connect(again.grant.url, again.grant.jwt);
+      try {
+        await connect(first.grant);
+      } catch (e) {
+        if (!first.held || !room.refusedToken(e)) rethrow;
+        Log.i("Voice join: the SFU refused a held call token, asking again");
+        tokens.forgetGrant(focus, roomId: host.roomId, deviceId: host.deviceId);
+        hangUp.check();
+        final again = await tokens.sfuGrant(focus,
+            roomId: host.roomId, deviceId: host.deviceId, openId: openId);
+        hangUp.check();
+        await connect(again.grant);
+      }
+    } finally {
+      trace.connectSteps(attempt);
     }
   }
 

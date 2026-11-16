@@ -94,10 +94,23 @@ class FakeLivekitRoom implements LivekitJoinRoom {
   /// Tokens [connect] refuses, as an SFU refuses an expired one.
   final Set<String> refusedTokens = {};
 
+  /// What each [connect], in order, reports to its `onStep`, each
+  /// [stepGap] after the one before; a connect past the list reports
+  /// nothing, as a room without LiveKit's hooks.
+  List<List<lk.ConnectStep>> attemptSteps = [];
+  Duration stepGap = const Duration(milliseconds: 20);
+
   @override
-  Future<void> connect(String url, String token) async {
+  Future<void> connect(String url, String token,
+      {void Function(lk.ConnectStep step)? onStep}) async {
     journal.add('connect');
+    final attempt = connectTokens.length;
     connectTokens.add(token);
+    for (final step
+        in attempt < attemptSteps.length ? attemptSteps[attempt] : const []) {
+      await Future<void>.delayed(stepGap);
+      onStep?.call(step);
+    }
     await connectGate.passed;
     if (refusedTokens.contains(token)) {
       journal.add('connect_refused');
