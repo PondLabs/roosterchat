@@ -99,6 +99,22 @@ void main() {
     }
   });
 
+  test(
+      'logged out while a write is going to disk: nothing of it stays, and '
+      'the key can be written again', () async {
+    final first = own.write('mxc://hs/1', Uint8List(100));
+    await own.clear();
+    await first;
+    final db = cache.database!;
+    expect(filesIn(dir), 0, reason: 'the write that ended after logout');
+    expect(await db.select(db.fileCacheEntry).get(), isEmpty);
+
+    await own.write('mxc://hs/1', Uint8List(100));
+    expect(filesIn(dir), 1);
+    await own.clear();
+    expect(filesIn(dir), 0);
+  });
+
   test('a fake cache sees each key written once', () async {
     final files = TempFileCache();
     final cache = FileOwnMediaCache('account', files);
