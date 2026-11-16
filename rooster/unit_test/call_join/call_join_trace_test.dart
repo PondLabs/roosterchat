@@ -404,6 +404,29 @@ void main() {
     });
 
     test(
+        "a region's second attempt that reports nothing more: none of the "
+        "first attempt's steps", () async {
+      final host = FakeHost(journal)
+        ..room.attemptSteps = [
+          [
+            lk.ConnectStep.started,
+            lk.ConnectStep.signalConnected,
+            lk.ConnectStep.joinResponse,
+            lk.ConnectStep.started,
+          ]
+        ];
+
+      final span = await joinAndWait(host);
+      final steps = stepsOf(span);
+
+      expect(span.outcome, 'ok');
+      for (final part in parts) {
+        expect(steps[part]?.available, isFalse,
+            reason: "$part: the first attempt's moments are not the second's");
+      }
+    });
+
+    test(
         'a held token the SFU refuses: the steps are those of the connect '
         'that completed, none of the refused one', () async {
       final jwts = <String>[];
