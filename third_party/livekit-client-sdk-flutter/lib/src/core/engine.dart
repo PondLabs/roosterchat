@@ -130,18 +130,18 @@ class Engine extends Disposable with EventsEmittable<EngineEvent> {
   bool _isClosed = false;
 
   // ROOSTER: told when each step of [connect] is done, for the app's own
-  // timings. It only reports: nothing waits for it, and what it throws is
-  // dropped.
-  void Function(ConnectStep step)? onConnectStep;
+  // ROOSTER: timings. It only reports: nothing waits for it, and what it
+  // ROOSTER: throws is dropped.
+  void Function(ConnectStep step)? onConnectStep; // ROOSTER
 
   // ROOSTER: see [onConnectStep].
-  void _reportConnectStep(ConnectStep step) {
-    try {
-      onConnectStep?.call(step);
-    } catch (e) {
-      logger.warning('onConnectStep threw: $e');
-    }
-  }
+  void _reportConnectStep(ConnectStep step) { // ROOSTER
+    try { // ROOSTER
+      onConnectStep?.call(step); // ROOSTER
+    } catch (e) { // ROOSTER
+      logger.warning('onConnectStep threw: $e'); // ROOSTER
+    } // ROOSTER
+  } // ROOSTER
 
   bool get isClosed => _isClosed;
 
