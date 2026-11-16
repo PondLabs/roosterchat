@@ -176,6 +176,12 @@ void main() {
         'GET',
         Uri.parse('https://secret-site.example/.well-known/matrix/client')
       ),
+      // The call token service: the warm-up's `GET /healthz` and the
+      // join's `POST /sfu/get` read as such there...
+      ('GET', Uri.parse('https://jwt.secret-host.net/healthz')),
+      ('POST', Uri.parse('https://jwt.secret-host.net/sfu/get')),
+      // ...and on another site, `healthz` is a segment like any other.
+      ('GET', Uri.parse('https://secret-other.example/healthz')),
       // A real unstable prefix, right after `unstable` of a Matrix API,
       // is kept.
       (
@@ -191,6 +197,8 @@ void main() {
         at(['_matrix', 'federation', 'unstable', 'org.matrix.msc3083', 'v1'])
       ),
     ];
+    HostClassifier.register(
+        Uri.parse('https://jwt.secret-host.net'), HostClass.tokenService);
     for (final (method, url) in requests) {
       final request = http.Request(method, url)..headers.addAll(token);
       if (method != 'GET') request.body = 'secret body text';
@@ -252,6 +260,9 @@ void main() {
       'GET /unstable/{param} homeserver',
       'GET /_matrix/client/v3/rooms/{roomId}/{param} homeserver',
       'GET /_matrix/client/unstable/unstable/{param} homeserver',
+      'GET /healthz token_service',
+      'POST /sfu/get token_service',
+      'GET /{param} other',
     ]) {
       expect(report, contains(line));
     }

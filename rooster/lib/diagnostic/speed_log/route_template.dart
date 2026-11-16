@@ -2,7 +2,8 @@
 /// template, such as `PUT /_matrix/client/v3/rooms/{roomId}/send/{eventType}/{txnId}`.
 ///
 /// A path segment is kept only when it is one of the fixed words of the
-/// Matrix, LiveKit and well-known APIs below. Every other segment becomes a
+/// Matrix, LiveKit, call token service (`/sfu/get`, `/healthz`) and
+/// well-known APIs below. Every other segment becomes a
 /// placeholder named after the word before it (`rooms/{roomId}`), or after
 /// its sigil (`!` room, `@` user, `$` event, `#` alias), or `{param}`.
 /// The query string, the host and the scheme are never part of it. Unknown
@@ -36,7 +37,7 @@ const Set<String> _words = {
   'search', 'user_directory', 'openid', 'request_token', 'voip',
   'turnServer', 'download', 'thumbnail', 'config', 'preview_url', 'create',
   'hierarchy', 'mutual_rooms', 'auth_metadata', 'sfu', 'get', 'rtc',
-  'validate', 'twirp', 'livekit.RoomService',
+  'validate', 'twirp', 'livekit.RoomService', 'healthz',
 };
 
 /// The names of the segments that follow a word, in order.
