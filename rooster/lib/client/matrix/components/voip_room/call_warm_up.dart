@@ -14,7 +14,14 @@ import 'package:rooster/debug/log.dart';
 /// any answer will do), and asks for the account's OpenID token and this
 /// room's call token (`/sfu/get`), which [CallTokenService] holds in memory
 /// for the join that follows. Each is asked for only when none is held, so
-/// opening a channel again sends no new token request.
+/// opening a channel again sends no new token request, and while the
+/// room's call token is held it does not fetch the well-known either.
+///
+/// It talks only to the token service the account's homeserver names in
+/// its well-known: the room's oldest call membership names the call's
+/// service, and any member of the room writes it. When that names another
+/// service, nothing is sent before the click, and the join asks for
+/// everything then.
 ///
 /// It opens no microphone, no camera and no LiveKit connection, and
 /// nothing it does is shown: an error is logged (never a token) and the
@@ -31,9 +38,16 @@ class CallWarmUp {
       // A member who may not join gets no tokens: the join stops before it
       // would use them.
       if (!host.canWriteMembership || tokens.isClosed) return;
-      final foci = await host.foci();
-      if (foci.isEmpty) return;
-      final focus = foci.first;
+      // Held already: the join needs nothing more, not even the
+      // well-known (nor the OpenID token, which only buys a call token).
+      if (tokens.holdsGrant(host.roomId, host.deviceId)) return;
+      final homeserver = await host.homeserverFocus();
+      if (homeserver == null) return;
+      final room = host.roomFocus();
+      if (room != null && !sameService(room, homeserver)) return;
+      // The service the join will use, as it names it: the token is held
+      // under that name.
+      final focus = room ?? homeserver;
       // The OpenID token goes only where a join would send it.
       CallJoin.checkFocus(focus);
       // Beside the tokens, not before them. Never fails.
@@ -52,6 +66,24 @@ class CallWarmUp {
       // request.
       Log.d("Voice warm-up: no tokens ahead (${e.runtimeType})");
     }
+  }
+
+  /// Whether [a] and [b] name the same token service: the same scheme,
+  /// host and port (a port left out is the scheme's default), the same
+  /// path once dot segments and trailing slashes are dropped, and the same
+  /// user info, query and fragment. Host names compare without case. Not a
+  /// likeness of hosts: `jwt.example.org` is not `jwt.example.org.evil`.
+  static bool sameService(Uri a, Uri b) {
+    String path(Uri uri) =>
+        uri.normalizePath().path.replaceFirst(RegExp(r'/+$'), '');
+    return a.host.isNotEmpty &&
+        a.scheme.toLowerCase() == b.scheme.toLowerCase() &&
+        a.host.toLowerCase() == b.host.toLowerCase() &&
+        a.port == b.port &&
+        a.userInfo == b.userInfo &&
+        path(a) == path(b) &&
+        a.query == b.query &&
+        a.fragment == b.fragment;
   }
 
   /// Warms [voip]'s call, when it is a Matrix voice channel (the only kind

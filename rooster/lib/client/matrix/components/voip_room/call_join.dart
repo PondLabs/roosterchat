@@ -24,8 +24,18 @@ abstract class CallJoinHost<S> {
   /// Hands WebRTC the speakers the user picked.
   Future<void> selectOutputDevice();
 
-  /// The call's token services, the one to use first.
+  /// The call's token services, the one to use first: the one the room's
+  /// oldest call membership names ([roomFocus]), else the homeserver's
+  /// ([homeserverFocus]).
   Future<List<Uri>> foci();
+
+  /// The call token service the account's homeserver names in its
+  /// well-known, or null. Fetches the well-known.
+  Future<Uri?> homeserverFocus();
+
+  /// The call token service the room's oldest call membership names, or
+  /// null. Read from the room's state: no request.
+  Uri? roomFocus();
 
   Future<matrix.OpenIdCredentials> openIdToken();
 

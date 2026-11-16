@@ -167,6 +167,8 @@ class FakeHost implements CallJoinHost<FakeLivekitRoom> {
       : room = FakeLivekitRoom(journal);
 
   final Journal journal;
+
+  /// The token service the account's homeserver names in its well-known.
   final String focus;
 
   /// The room [createRoom] hands out next. A test replaces it to join again.
@@ -198,10 +200,31 @@ class FakeHost implements CallJoinHost<FakeLivekitRoom> {
     journal.add('output_device_done');
   }
 
+  /// The token service the room's oldest call membership names, when
+  /// set; else the join uses [focus], the homeserver's.
+  String? roomFocusUrl;
+
   @override
   Future<List<Uri>> foci() async {
     journal.add('foci');
-    return [Uri.parse(focus)];
+    final room = roomFocus();
+    return [
+      if (room != null) room,
+      if (room != Uri.parse(focus)) Uri.parse(focus)
+    ];
+  }
+
+  /// Writes `well_known`: the real one fetches it.
+  @override
+  Future<Uri?> homeserverFocus() async {
+    journal.add('well_known');
+    return Uri.parse(focus);
+  }
+
+  @override
+  Uri? roomFocus() {
+    final room = roomFocusUrl;
+    return room == null ? null : Uri.parse(room);
   }
 
   @override

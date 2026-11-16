@@ -90,13 +90,16 @@ class CallTokenService {
   bool get isClosed => _closed;
 
   /// Asks the service at [focus] for a place in the call, with [body] (our
-  /// device, the room and an OpenID token, see `CallJoin`).
-  Future<SfuGrant> requestSfu(Uri focus, Map<String, Object?> body) async {
+  /// device, the room and an OpenID token, see `CallJoin`), waiting
+  /// [within] at most.
+  Future<SfuGrant> requestSfu(Uri focus, Map<String, Object?> body,
+      {Duration within = timeout}) async {
     if (_closed) throw StateError("The call token service was closed");
+    _checkLeft(within);
     HostClassifier.register(focus, HostClass.tokenService);
     final uri = Uri.parse("$focus/sfu/get");
     final result =
-        await _client.post(uri, body: jsonEncode(body)).timeout(timeout);
+        await _client.post(uri, body: jsonEncode(body)).timeout(within);
     if (result.statusCode != 200) {
       throw CallJoinException(
           "Failed to get sfu! HTTP Error ${result.statusCode}",
@@ -138,24 +141,25 @@ class CallTokenService {
   /// The account's OpenID token: the one held while it has more than
   /// [margin] left, or else one asked for with [request], sharing a request
   /// already running. [ahead] is for the warm-up: a join that shares a
-  /// request made ahead which fails sends its own.
+  /// request made ahead which fails sends its own (see [_share]).
   Future<matrix.OpenIdCredentials> openId(
       Future<matrix.OpenIdCredentials> Function() request,
       {bool ahead = false}) async {
     if (_closed) throw StateError("The call token service was closed");
     final held = _openId;
     if (held != null && held.usable(_now())) return held.value;
+    final deadline = _now().add(timeout);
+    var within = timeout;
     final pending = _openIdRequest;
     if (pending != null) {
-      try {
-        return await pending.future;
-      } catch (_) {
-        if (ahead || !pending.ahead) rethrow;
-      }
+      final shared = await _share(pending, ahead: ahead, deadline: deadline);
+      if (shared != null) return shared;
+      within = _left(deadline);
+      _checkLeft(within);
     }
     final started = _now();
     final mine = _Pending(
-        request().timeout(timeout).then((credentials) {
+        request().timeout(within).then((credentials) {
           if (!_closed) {
             _openId = _Held(credentials,
                 started.add(Duration(seconds: credentials.expiresIn)));
@@ -199,15 +203,17 @@ class CallTokenService {
     if (held != null && held.usable(_now())) {
       return (grant: held.value, held: true);
     }
+    final deadline = _now().add(timeout);
+    var within = () => timeout;
     final pending = _grantRequests[key];
     if (pending != null) {
-      try {
-        return (grant: await pending.future, held: true);
-      } catch (_) {
-        if (ahead || !pending.ahead) rethrow;
-      }
+      final shared = await _share(pending, ahead: ahead, deadline: deadline);
+      if (shared != null) return (grant: shared, held: true);
+      // What is left once the OpenID token is there.
+      within = () => _left(deadline);
     }
-    final mine = _Pending(_requestGrant(key, focus, roomId, deviceId, openId),
+    final mine = _Pending(
+        _requestGrant(key, focus, roomId, deviceId, openId, within),
         ahead: ahead);
     _grantRequests[key] = mine;
     mine.future.whenComplete(() {
@@ -221,19 +227,23 @@ class CallTokenService {
       Uri focus,
       String roomId,
       String deviceId,
-      Future<matrix.OpenIdCredentials> Function() openId) async {
+      Future<matrix.OpenIdCredentials> Function() openId,
+      Duration Function() within) async {
     final credentials = await openId();
     final SfuGrant grant;
     try {
-      grant = await requestSfu(focus, {
-        "device_id": deviceId,
-        "room": roomId,
-        "openid_token": {
-          "matrix_server_name": credentials.matrixServerName,
-          "access_token": credentials.accessToken,
-          "expires_in": credentials.expiresIn,
-        }
-      });
+      grant = await requestSfu(
+          focus,
+          {
+            "device_id": deviceId,
+            "room": roomId,
+            "openid_token": {
+              "matrix_server_name": credentials.matrixServerName,
+              "access_token": credentials.accessToken,
+              "expires_in": credentials.expiresIn,
+            }
+          },
+          within: within());
     } catch (_) {
       // The service may have refused the OpenID token held: the next try
       // asks for a new one.
@@ -243,6 +253,36 @@ class CallTokenService {
     final expires = grant.expires;
     if (!_closed && expires != null) _grants[key] = _Held(grant, expires);
     return grant;
+  }
+
+  /// What [pending] gives, or null when the caller is to send its own
+  /// request: a join ([ahead] false) sharing a request made ahead that
+  /// failed before [deadline]. A join waits for it until [deadline] at
+  /// most, 15 s ([timeout]) from its own start: one that never answers
+  /// fails the join then, as the join's own request would, rather than
+  /// 15 s after the warm-up sent it and then 15 s more for the join's own.
+  Future<T?> _share<T>(_Pending<T> pending,
+      {required bool ahead, required DateTime deadline}) async {
+    if (ahead) return pending.future;
+    try {
+      return await pending.future.timeout(_left(deadline));
+    } catch (_) {
+      if (!pending.ahead || _left(deadline) <= Duration.zero) rethrow;
+      return null;
+    }
+  }
+
+  /// How long is left until [deadline], [timeout] at most.
+  Duration _left(DateTime deadline) {
+    final left = deadline.difference(_now());
+    return left > timeout ? timeout : left;
+  }
+
+  /// Fails a request that has no time left before it is sent.
+  static void _checkLeft(Duration within) {
+    if (within <= Duration.zero) {
+      throw TimeoutException("No time left for the request", within);
+    }
   }
 
   /// Drops the call token held for room [roomId] at [focus]: the SFU

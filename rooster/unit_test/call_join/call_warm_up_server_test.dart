@@ -108,6 +108,53 @@ void main() {
     expect(journal.entries, contains('connected'));
   });
 
+  test(
+      "a room whose oldest membership names a service the homeserver's "
+      'well-known does not: nothing before the click, everything on it',
+      () async {
+    // The service the room's membership names: counted apart.
+    final foreign = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => foreign.close(force: true));
+    final seen = <String>[];
+    foreign.listen((request) async {
+      seen.add('${request.method} ${request.uri.path}');
+      await request.drain<void>();
+      request.response
+        ..headers.contentType = ContentType.json
+        ..write(jsonEncode({
+          'url': 'wss://sfu.example.org',
+          'jwt': jwtUntil(DateTime.now().add(const Duration(hours: 1)))
+        }));
+      await request.response.close();
+    });
+    final journal = Journal();
+    final tokens = CallTokenService();
+    addTearDown(tokens.close);
+    final channel = host(journal)
+      ..roomFocusUrl = 'http://127.0.0.1:${foreign.port}';
+
+    // The page opens, then the pointer rests on Join.
+    await CallWarmUp(host: channel, tokens: tokens).run();
+    await CallWarmUp(host: channel, tokens: tokens).run();
+    report('foreign service, before the click');
+    expect(routes, isEmpty, reason: 'no OpenID request, nothing to our own');
+    expect(seen, isEmpty, reason: 'no /healthz, no /sfu/get');
+
+    await CallJoin(
+            host: channel,
+            tokens: tokens,
+            log: SpeedLog(),
+            remoteAudioWindow: const Duration(milliseconds: 1))
+        .run();
+    report('foreign service, after the click');
+    // ignore: avoid_print
+    print('[foreign service] it saw: $seen');
+    expect(count(_openIdRoute), 1);
+    expect(seen, ['POST /sfu/get']);
+    expect(channel.room.connectTokens, hasLength(1));
+    expect(journal.entries, contains('connected'));
+  });
+
   test('ten openings in a row: one OpenID request, one /sfu/get per room',
       () async {
     final journal = Journal();
@@ -125,10 +172,18 @@ void main() {
     expect(count('GET /healthz'), 1);
   });
 
-  test('the token service connection is kept idle for 55 s', () async {
+  test(
+      'the token service, as the app makes it, keeps its connection idle for '
+      '55 s', () async {
+    // The HttpClient each account's service sends through: dart:io's own
+    // keeps an idle connection 15 s.
+    final created = _Created();
+    final tokens =
+        HttpOverrides.runWithHttpOverrides(CallTokenService.new, created);
+    addTearDown(tokens.close);
+    expect(created.clients.map((c) => c.idleTimeout),
+        [const Duration(seconds: 55)]);
     expect(CallTokenService.idleTimeout, const Duration(seconds: 55));
-    expect(keepAliveIoClient(CallTokenService.idleTimeout).idleTimeout,
-        const Duration(seconds: 55));
   });
 
   test(
@@ -158,4 +213,16 @@ void main() {
     expect(short.toSet(), hasLength(2), reason: 'closed while idle');
     expect(long.toSet(), hasLength(1), reason: 'kept while idle');
   });
+}
+
+/// Writes down every dart:io HttpClient made while it is in force.
+class _Created extends HttpOverrides {
+  final clients = <HttpClient>[];
+
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    final client = super.createHttpClient(context);
+    clients.add(client);
+    return client;
+  }
 }

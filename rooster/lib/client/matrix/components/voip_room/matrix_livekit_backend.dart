@@ -85,19 +85,22 @@ class MatrixLivekitBackend implements CallJoinHost<MatrixLivekitVoipSession> {
 
   Future<List<Uri>> getFociUrl() async {
     final selectedFocus = findSelectedFocus();
+    final fociUrl = await homeserverFocus();
+    return [
+      if (selectedFocus != null) selectedFocus,
+      if (fociUrl != null && selectedFocus != fociUrl) fociUrl,
+    ];
+  }
 
+  /// The first LiveKit service of the well-known's
+  /// `org.matrix.msc4143.rtc_foci`, or null.
+  @override
+  Future<Uri?> homeserverFocus() async {
     var wellKnown = await _wellKnown();
     final livekitJwtServiceUrl = wellKnown
         .additionalProperties["org.matrix.msc4143.rtc_foci"] as List<dynamic>?;
 
-    if (livekitJwtServiceUrl == null) {
-      return [
-        if (selectedFocus != null) selectedFocus,
-      ];
-    }
-
-    Uri? fociUrl;
-    for (var focus in livekitJwtServiceUrl) {
+    for (var focus in livekitJwtServiceUrl ?? const []) {
       Log.d("Focus: ${focus}");
       final data = focus as Map<String, dynamic>;
       if (data["type"] != "livekit") {
@@ -105,18 +108,13 @@ class MatrixLivekitBackend implements CallJoinHost<MatrixLivekitVoipSession> {
       }
 
       final url = data["livekit_service_url"] as String;
-      fociUrl = Uri.parse(url);
-
-      return [
-        if (selectedFocus != null) selectedFocus,
-        if (selectedFocus != fociUrl) fociUrl,
-      ];
+      return Uri.parse(url);
     }
-
-    return [
-      if (selectedFocus != null) selectedFocus,
-    ];
+    return null;
   }
+
+  @override
+  Uri? roomFocus() => findSelectedFocus();
 
   Uri? findSelectedFocus() {
     final states =

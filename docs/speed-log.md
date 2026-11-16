@@ -166,7 +166,7 @@ side, so timed steps may overlap; each has its own start.
 | `membership_write` | writing our call membership |
 | `connect` | the LiveKit connection |
 | `connect_websocket` | inside `connect`: from the attempt starting to the signal WebSocket open |
-| `connect_join_response` | inside `connect`: from the WebSocket open to the SFU's answer to the join |
+| `connect_join_response` | inside `connect`: from the WebSocket open to the SFU's answer to the join, including LiveKit making the two media connections (peer connections) with it, which it does before it tells the answer |
 | `connect_media` | inside `connect`: from the join answered to the media connection (the primary peer connection) connected |
 | `microphone_options` | the microphone's capture options (the DSP's bounded wait included) |
 | `microphone_open` | opening the microphone capture during the connection |
@@ -198,7 +198,11 @@ strings, tokens or keys: not in memory, not in a log line, not in the
 report. Routes are kept only as templates and hosts only as a class; an
 unstable prefix (`org.matrix.msc3575`) is kept only right after
 `/_matrix/client/unstable/`, `/_matrix/media/unstable/` or
-`/_matrix/federation/unstable/`. A span remembers which requests it already
+`/_matrix/federation/unstable/`. A template keeps only the fixed words of
+`route_template.dart` (the Matrix, LiveKit and call token service APIs:
+the warm-up's `GET /healthz` reads as such), and on a host of class
+`other` not even those: every segment there is `{param}`, but for the
+Matrix well-known lookup. A span remembers which requests it already
 sent only as hashes salted per span, forgotten when it finishes. The
 transaction id that lets the text span see its echo stays in a local
 variable of the send and is only compared with the echo's. Every name in
