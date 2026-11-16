@@ -123,8 +123,8 @@ void main() {
     final failed = echoes.lastWhere((e) => e.eventId == txid);
     expect(failed.status.isError, isTrue);
     expect(send.stage, AttachmentSendStage.failed);
-    expect(room.matrixRoom.sendingFilePlaceholders, isNot(contains(txid)),
-        reason: 'the SDK let the file go after it tried the event');
+    expect(room.matrixRoom.sendingFileUploads[txid], isNotEmpty,
+        reason: 'the SDK keeps the uploads of a failed event for a retry');
     final uploads = transport.uploads;
     final firstTry = transport.sends.last;
     expect(uploads, greaterThan(0));
@@ -229,7 +229,7 @@ void main() {
 
     transport.failSends = false;
     final sendsBefore = transport.sends.length;
-    await resendUploadedFile(failed, send);
+    await retryMatrixFile(failed, send);
 
     final again = transport.sends.skip(sendsBefore).toList();
     print('encrypted retry: ${again.map((s) => '${s.type} ${s.body.keys}')}');

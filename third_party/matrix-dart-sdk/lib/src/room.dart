@@ -32,6 +32,8 @@ import 'package:matrix/src/utils/markdown.dart';
 import 'package:matrix/src/utils/marked_unread.dart';
 import 'package:matrix/src/utils/space_child.dart';
 
+export 'package:matrix/src/utils/file_upload_loop.dart'; // ROOSTER
+
 /// max PDU size for server to accept the event with some buffer incase the server adds unsigned data f.ex age
 /// https://spec.matrix.org/v1.9/client-server-api/#size-limits
 const int maxPDUSize = 60000;
@@ -829,6 +831,19 @@ class Room {
   final Map<String, MatrixFile> sendingFilePlaceholders = {};
   final Map<String, MatrixImageFile> sendingFileThumbnails = {};
 
+  /// The parts of each file message being sent that went up, by // ROOSTER
+  /// transaction id: kept until its event is sent or the send is // ROOSTER
+  /// cancelled, so that a retry uploads only what did not. // ROOSTER
+  final sendingFileUploads = // ROOSTER
+      <String, Map<FileSendPart, UploadedFilePart>>{}; // ROOSTER
+
+  /// Lets go of what is kept to send the file message [txid] again. // ROOSTER
+  void forgetFileSend(String txid) { // ROOSTER
+    sendingFilePlaceholders.remove(txid); // ROOSTER
+    sendingFileThumbnails.remove(txid); // ROOSTER
+    sendingFileUploads.remove(txid); // ROOSTER
+  } // ROOSTER
+
   /// Sends a [file] to this room after uploading it. Returns the mxc uri of
   /// the uploaded file. If [waitUntilSent] is true, the future will wait until
   /// the message event has received the server. Otherwise the future will only
@@ -862,7 +877,39 @@ class Room {
     if (thumbnail != null) {
       sendingFileThumbnails[txid] = thumbnail;
     }
+    // Being sent: its pending event, read again during a long upload, is // ROOSTER
+    // not taken for one that was lost (see the `Event` constructor). // ROOSTER
+    sendingQueueEventsByTxId.add(txid); // ROOSTER
+    try { // ROOSTER
+      return await _sendFileEvent( // ROOSTER
+        file, // ROOSTER
+        txid: txid, // ROOSTER
+        inReplyTo: inReplyTo, // ROOSTER
+        editEventId: editEventId, // ROOSTER
+        shrinkImageMaxDimension: shrinkImageMaxDimension, // ROOSTER
+        thumbnail: thumbnail, // ROOSTER
+        extraContent: extraContent, // ROOSTER
+        threadRootEventId: threadRootEventId, // ROOSTER
+        threadLastEventId: threadLastEventId, // ROOSTER
+        displayPendingEvent: displayPendingEvent, // ROOSTER
+      ); // ROOSTER
+    } finally { // ROOSTER
+      sendingQueueEventsByTxId.remove(txid); // ROOSTER
+    } // ROOSTER
+  } // ROOSTER
 
+  Future<String?> _sendFileEvent( // ROOSTER
+    MatrixFile file, { // ROOSTER
+    required String txid, // ROOSTER
+    Event? inReplyTo, // ROOSTER
+    String? editEventId, // ROOSTER
+    int? shrinkImageMaxDimension, // ROOSTER
+    MatrixImageFile? thumbnail, // ROOSTER
+    Map<String, dynamic>? extraContent, // ROOSTER
+    String? threadRootEventId, // ROOSTER
+    String? threadLastEventId, // ROOSTER
+    required bool displayPendingEvent, // ROOSTER
+  }) async { // ROOSTER
     // Create a fake Event object as a placeholder for the uploading file:
     final syncUpdate = SyncUpdate(
       nextBatch: '',
@@ -902,7 +949,9 @@ class Room {
     );
     await _handleFakeSync(syncUpdate);
 
-    MatrixFile uploadFile = file; // ignore: omit_local_variable_types
+    // In an encrypted room only the encrypted file is ever uploaded. // ROOSTER
+    MatrixFile? uploadFile = // ROOSTER
+        encrypted && client.fileEncryptionEnabled ? null : file; // ROOSTER
     // computing the thumbnail in case we can
     if (file is MatrixImageFile &&
         (thumbnail == null || shrinkImageMaxDimension != null)) {
@@ -926,6 +975,8 @@ class Room {
       if (thumbnail != null && file.size < thumbnail.size) {
         thumbnail = null; // in this case, the thumbnail is not usefull
       }
+      // Kept: a retry describes the same thumbnail it may reuse. // ROOSTER
+      if (thumbnail != null) sendingFileThumbnails[txid] = thumbnail; // ROOSTER
     }
 
     // Check media config of the server before sending the file. Stop if the
@@ -944,59 +995,68 @@ class Room {
       rethrow;
     }
 
-    MatrixFile? uploadThumbnail =
-        thumbnail; // ignore: omit_local_variable_types
-    EncryptedFile? encryptedFile;
-    EncryptedFile? encryptedThumbnail;
-    if (encrypted && client.fileEncryptionEnabled) {
+    MatrixFile? uploadThumbnail = // ROOSTER: never in the clear when
+        encrypted && client.fileEncryptionEnabled ? null : thumbnail; // ROOSTER
+    // A part that went up before is reused as it went: its address and, // ROOSTER
+    // in an encrypted room, the same key and hash (file_upload_loop.dart). // ROOSTER
+    // Decided here, once: the upload does not look at what is kept again. // ROOSTER
+    final encryptFiles = encrypted && client.fileEncryptionEnabled; // ROOSTER
+    final kept = keptFileParts( // ROOSTER
+      this, // ROOSTER
+      txid, // ROOSTER
+      encrypted: encryptFiles, // ROOSTER
+      hasThumbnail: thumbnail != null, // ROOSTER
+    ); // ROOSTER
+    final keptFile = kept[FileSendPart.file]; // ROOSTER
+    final keptThumbnail = kept[FileSendPart.thumbnail]; // ROOSTER
+    EncryptedFile? encryptedFile = keptFile?.encryptedFile; // ROOSTER
+    EncryptedFile? encryptedThumbnail = keptThumbnail?.encryptedFile; // ROOSTER
+    if (encryptFiles) { // ROOSTER
       syncUpdate.rooms!.join!.values.first.timeline!.events!.first
           .unsigned![fileSendingStatusKey] = FileSendingStatus.encrypting.name;
       await _handleFakeSync(syncUpdate);
-      encryptedFile = await file.encrypt();
-      uploadFile = encryptedFile.toMatrixFile();
+      if (keptFile == null) { // ROOSTER
+        encryptedFile = await file.encrypt(); // ROOSTER: indented
+        uploadFile = encryptedFile.toMatrixFile(); // ROOSTER: indented
+      } // ROOSTER
 
-      if (thumbnail != null) {
+      if (thumbnail != null && keptThumbnail == null) { // ROOSTER
         encryptedThumbnail = await thumbnail.encrypt();
         uploadThumbnail = encryptedThumbnail.toMatrixFile();
       }
     }
-    Uri? uploadResp, thumbnailUploadResp;
-
-    final timeoutDate = DateTime.now().add(client.sendTimelineEventTimeout);
 
     syncUpdate.rooms!.join!.values.first.timeline!.events!.first
         .unsigned![fileSendingStatusKey] = FileSendingStatus.uploading.name;
-    while (uploadResp == null ||
-        (uploadThumbnail != null && thumbnailUploadResp == null)) {
-      try {
-        uploadResp = await client.uploadContent(
-          uploadFile.bytes,
-          filename: uploadFile.name,
-          contentType: uploadFile.mimeType,
-        );
-        thumbnailUploadResp = uploadThumbnail != null
-            ? await client.uploadContent(
-                uploadThumbnail.bytes,
-                filename: uploadThumbnail.name,
-                contentType: uploadThumbnail.mimeType,
-              )
-            : null;
-      } on MatrixException catch (_) {
-        syncUpdate.rooms!.join!.values.first.timeline!.events!.first
-            .unsigned![messageSendingStatusKey] = EventStatus.error.intValue;
-        await _handleFakeSync(syncUpdate);
-        rethrow;
-      } catch (_) {
-        if (DateTime.now().isAfter(timeoutDate)) {
-          syncUpdate.rooms!.join!.values.first.timeline!.events!.first
-              .unsigned![messageSendingStatusKey] = EventStatus.error.intValue;
-          await _handleFakeSync(syncUpdate);
-          rethrow;
-        }
-        Logs().v('Send File into room failed. Try again...');
-        await Future.delayed(Duration(seconds: 1));
-      }
-    }
+    await _handleFakeSync(syncUpdate); // ROOSTER: the stage is published
+    // The file and its thumbnail go up together, each tried again by // ROOSTER
+    // itself; one that went up stays kept when the other fails. // ROOSTER
+    final List<Uri> uris; // ROOSTER
+    try { // ROOSTER
+      uris = await uploadFileParts( // ROOSTER
+        this, // ROOSTER
+        txid, // ROOSTER
+        { // ROOSTER
+          FileSendPart.file: // ROOSTER
+              FilePartSend(keptFile, uploadFile, encryptedFile), // ROOSTER
+          if (thumbnail != null) // ROOSTER
+            FileSendPart.thumbnail: FilePartSend( // ROOSTER
+              keptThumbnail, // ROOSTER
+              uploadThumbnail, // ROOSTER
+              encryptedThumbnail, // ROOSTER
+            ), // ROOSTER
+        }, // ROOSTER
+        encrypted: encryptFiles, // ROOSTER
+      ); // ROOSTER
+    } catch (_) { // ROOSTER
+      syncUpdate.rooms!.join!.values.first.timeline!.events!.first // ROOSTER
+          .unsigned![messageSendingStatusKey] = // ROOSTER
+          EventStatus.error.intValue; // ROOSTER
+      await _handleFakeSync(syncUpdate); // ROOSTER
+      rethrow; // ROOSTER
+    } // ROOSTER
+    final uploadResp = uris.first; // ROOSTER
+    final thumbnailUploadResp = thumbnail != null ? uris.last : null; // ROOSTER
 
     // Send event
     final content = <String, dynamic>{
@@ -1055,8 +1115,9 @@ class Room {
       threadLastEventId: threadLastEventId,
       displayPendingEvent: displayPendingEvent,
     );
-    sendingFilePlaceholders.remove(txid);
-    sendingFileThumbnails.remove(txid);
+    // A failed event keeps the file and its uploads: a retry sends only // ROOSTER
+    // the event (`Event.sendAgain`). // ROOSTER
+    if (eventId != null) forgetFileSend(txid); // ROOSTER
     return eventId;
   }
 
