@@ -1,7 +1,8 @@
 // A voice channel's page and the join it asked for. Leaving the page before
-// the join is done hangs the join up: it takes back the membership it sent,
-// and no session comes of it. A join hung up (by the page, or by a join of
-// another channel) is not a failure: no "Could not join the call" dialog.
+// the join is done does not stop it: someone who clicks Join and walks to a
+// text channel still ends up in the call. A join hung up (another voice
+// channel joined, or the call left) is not a failure: no "Could not join
+// the call" dialog.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -100,24 +101,27 @@ void main() {
   final errorDialog = find.text(VoipRoomView.errorCallJoinFailed);
 
   testWidgets(
-      'leaving the page while the join connects hangs the join up: its '
-      'membership is taken back, no session, no dialog', (tester) async {
+      'leaving the page while the join connects: the join goes on and ends '
+      'connected, with nothing thrown', (tester) async {
     channel();
     host.room.connectGate = Gate();
     await openAndJoin(tester);
     expect(journal.entries, containsAll(['membership_written', 'connect']));
 
     await tester.pumpWidget(app(const Text('Home')));
+    await flush(tester);
     host.room.connectGate.open();
     await flush(tester);
 
-    expect(journal.entries, contains('membership_clear'));
-    expect(host.membership, isFalse);
-    expect(journal.entries, isNot(contains('session')));
-    expect(host.room.disposed, isTrue);
-    expect(voip.currentSession, isNull);
+    expect(journal.entries, contains('session'));
+    expect(journal.entries, isNot(contains('membership_clear')));
+    expect(host.membership, isTrue);
+    expect(voip.currentSession?.state, VoipState.connected);
     expect(errorDialog, findsNothing);
-    expect(tester.takeException(), isNull);
+    expect(tester.takeException(), isNull,
+        reason: 'the session arriving does not set the closed page state');
+    unawaited(voip.currentSession!.hangUpCall());
+    await flush(tester);
   });
 
   testWidgets(
@@ -175,42 +179,5 @@ void main() {
     answer.complete([Uri.parse('https://jwt.example.org')]);
     await flush(tester);
     expect(tester.takeException(), isNull);
-  });
-
-  testWidgets(
-      "T3.2's INVERSE 8 through the page: the old join's write is in flight "
-      'past the 10 s when the page closes, a new join gets in and its call '
-      'is left, then the old write lands: no membership, no session',
-      (tester) async {
-    channel();
-    final oldWrite = Gate();
-    host.membershipGate = oldWrite;
-    await openAndJoin(tester);
-    expect(journal.entries, containsAll(['membership_write', 'connected']));
-
-    // Leaving the page hangs the join up; its write is still in flight.
-    await tester.pumpWidget(app(const Text('Home')));
-    await flush(tester);
-
-    host.membershipGate = Gate()..open();
-    host.room = FakeLivekitRoom(journal);
-    final joining = voip.joinCall();
-    // It waits for the old join, 10 s at most, on the test's clock.
-    await tester.pump(const Duration(seconds: 11));
-    final session = await done(tester, joining) as FakeVoipSession;
-    expect(host.membership, isTrue);
-
-    await done(tester, session.hangUpCall());
-    expect(host.membership, isFalse);
-
-    oldWrite.open();
-    await flush(tester);
-
-    expect(journal.lastIndexOf('membership_clear'),
-        greaterThan(journal.lastIndexOf('membership_written')),
-        reason: 'the old join cleared its late write');
-    expect(host.membership, isFalse, reason: 'no membership without session');
-    expect(journal.count('session'), 1);
-    expect(voip.currentSession?.state ?? VoipState.ended, VoipState.ended);
   });
 }
