@@ -6,6 +6,8 @@ import 'package:rooster/debug/log.dart';
 import 'package:rooster/diagnostic/speed_log/request_record.dart';
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
 import 'package:rooster/diagnostic/speed_log/speed_names.dart';
+import 'package:rooster/utils/network/speed_http_client.dart'
+    show speedErrorName;
 
 /// The `text_send` span of one text message, in the app's [SpeedLog]: from
 /// Send in the composer to the server's answer. See `docs/speed-log.md`.
@@ -61,14 +63,15 @@ class TextSendTrace {
 
   /// Runs [measure], one of the room's calls into its trace, so that a
   /// failure in the speed log never stops the send: the error is dropped
-  /// and the app's log gets a fixed line with its type (the message could
-  /// hold the text being sent).
+  /// and the app's log gets a fixed line with its fixed name from
+  /// [speedErrorName] (the message could hold the text being sent, and the
+  /// runtime type reads `minified:xx` in a web release build).
   static void guard(void Function() measure) {
     try {
       measure();
     } catch (error) {
       Log.w('Speed log: a text send step was not timed '
-          '(${error.runtimeType})');
+          '(${speedErrorName(error)})');
     }
   }
 
