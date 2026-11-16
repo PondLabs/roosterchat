@@ -6,6 +6,9 @@ const int exifOrientationNormal = 1;
 const int _orientationTag = 0x0112;
 const int _typeShort = 3;
 
+/// The pointer from IFD0 to the Exif sub-IFD.
+const int _exifIfdTag = 0x8769;
+
 /// Reads the Orientation tag (0x0112) from IFD0 of a TIFF block, the body
 /// of an Exif segment after its `Exif\0\0` prefix.
 ///
@@ -16,9 +19,17 @@ const int _typeShort = 3;
 /// over. Returns [exifOrientationNormal] when the block is malformed or has
 /// no such entry.
 ///
-/// Returns null when IFD0 does not fit in the block (its entries and the
-/// 4-byte offset of the next IFD): such a block can be shorter than the one
-/// a rewrite writes back, so its file counts as one that does not parse.
+/// Returns null, so the file counts as one that does not parse and goes to
+/// the fallback (which draws it with the engine), when the block cannot be
+/// read the way the engine reads it:
+/// - IFD0 does not fit in the block (its entries and the 4-byte offset of
+///   the next IFD): such a block can be shorter than the one a rewrite
+///   writes back;
+/// - IFD0 starts inside the 8-byte header, where the engine still looks
+///   for an orientation;
+/// - IFD0 points (tag 0x8769) to an Exif sub-IFD that holds an Orientation
+///   tag, which the engine applies too, or that does not fit in the block.
+///   A camera's sub-IFD (exposure, dates) holds none and is passed over.
 int? readTiffOrientation(Uint8List tiff) {
   if (tiff.length < 8) return exifOrientationNormal;
   final Endian endian;
@@ -31,19 +42,40 @@ int? readTiffOrientation(Uint8List tiff) {
   }
   final data = ByteData.sublistView(tiff);
   final ifd = data.getUint32(4, endian);
-  if (ifd < 8) return exifOrientationNormal;
+  if (ifd < 8) return null;
   if (ifd + 2 > tiff.length) return null;
   final count = data.getUint16(ifd, endian);
   if (ifd + 2 + count * 12 + 4 > tiff.length) return null;
+  int? orientation;
   for (var i = 0; i < count; i++) {
     final entry = ifd + 2 + i * 12;
-    if (data.getUint16(entry, endian) != _orientationTag) continue;
+    final tag = data.getUint16(entry, endian);
+    if (tag == _exifIfdTag) {
+      final subIfd = data.getUint32(entry + 8, endian);
+      if (!_subIfdHasNoOrientation(data, subIfd, endian)) return null;
+      continue;
+    }
+    if (orientation != null || tag != _orientationTag) continue;
     if (data.getUint16(entry + 2, endian) != _typeShort) continue;
     if (data.getUint32(entry + 4, endian) != 1) continue;
     final value = data.getUint16(entry + 8, endian);
-    if (value >= 1 && value <= 8) return value;
+    if (value >= 1 && value <= 8) orientation = value;
   }
-  return exifOrientationNormal;
+  return orientation ?? exifOrientationNormal;
+}
+
+/// Whether the Exif sub-IFD at [offset] fits in the block and holds no
+/// Orientation entry, of any type.
+bool _subIfdHasNoOrientation(ByteData data, int offset, Endian endian) {
+  if (offset + 2 > data.lengthInBytes) return false;
+  final count = data.getUint16(offset, endian);
+  if (offset + 2 + count * 12 > data.lengthInBytes) return false;
+  for (var i = 0; i < count; i++) {
+    if (data.getUint16(offset + 2 + i * 12, endian) == _orientationTag) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /// Whether an Exif payload starts with the `Exif\0\0` prefix. JPEG APP1
