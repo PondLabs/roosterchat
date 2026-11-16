@@ -50,6 +50,14 @@ class TextSendTrace {
   /// observed. Only tests replace it.
   static Future<bool> Function() nextFrameDrawn = _schedulerFrame;
 
+  /// The events entering [room]'s timeline, where the echo is looked for.
+  /// Only tests replace it.
+  static Stream<matrix.Event> Function(matrix.Room room) timelineEvents =
+      _clientTimelineEvents;
+
+  static Stream<matrix.Event> _clientTimelineEvents(matrix.Room room) =>
+      room.client.onTimelineEvent.stream;
+
   /// The trace the current code runs in (see [send]).
   static TextSendTrace? get current => Zone.current[_key] as TextSendTrace?;
 
@@ -123,7 +131,7 @@ class TextSendTrace {
     final ahead = [for (final waiting in room.sendingQueue) waiting.future];
     Future.wait(ahead).then((_) => _queueFreeAt = span.elapsed);
 
-    _echo = room.client.onTimelineEvent.stream.listen((event) {
+    _echo = timelineEvents(room).listen((event) {
       if (event.roomId != room.id || event.eventId != txid) return;
       _echo?.cancel();
       _echo = null;
@@ -144,9 +152,11 @@ class TextSendTrace {
   /// [frameTimeout] has passed.
   Future<void> finish() async {
     await _painting;
-    if (span.isFinished) return;
+    // Before anything else: a span closed from outside (too many open)
+    // still stops looking for its echo.
     await _echo?.cancel();
     _echo = null;
+    if (span.isFinished) return;
     _addSteps();
     span.finish(
         outcome: _failed || _answeredAt == null

@@ -1,6 +1,8 @@
 @TestOn('vm')
 library;
 
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/matrix/matrix_client.dart';
@@ -184,6 +186,32 @@ void main() {
     expect(trace.calls, ['sending', 'sent']);
     expect(transport.seen, [_sendRoute]);
     expect(sent, isNotNull, reason: 'the send returns the sent event');
+  });
+
+  test('a span closed from outside stops listening for its echo on finish',
+      () async {
+    var listening = 0;
+    final events = StreamController<matrix.Event>.broadcast(
+        onListen: () => listening++, onCancel: () => listening--);
+    TextSendTrace.timelineEvents = (_) => events.stream;
+    addTearDown(() {
+      TextSendTrace.timelineEvents =
+          (room) => room.client.onTimelineEvent.stream;
+      events.close();
+    });
+    final trace = TextSendTrace.forComposer(
+        sendPressed: TextSendTrace.now(),
+        message: 'Never echoed',
+        hasAttachments: false)!;
+
+    trace.sending(room.matrixRoom, 'txid-never-echoed');
+    expect(listening, 1);
+    // Closed by the log (too many open spans) before the send finishes.
+    trace.span.finish(outcome: SpeedOutcome.abandoned);
+    await trace.finish();
+
+    expect(listening, 0);
+    expect(trace.span.outcome, SpeedOutcome.abandoned);
   });
 
   test('a message with attachments or no text is not a text send', () {
