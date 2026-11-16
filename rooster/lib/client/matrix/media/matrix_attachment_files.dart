@@ -88,7 +88,11 @@ Future<MatrixProcessedAttachment?> matrixFilesForAttachment(
   final bytes = attachment.data!;
 
   if (prepared != null) {
-    final thumbnail = prepared.thumbnail;
+    // A thumbnail that saves nothing (a flat screenshot sent as PNG can be
+    // smaller than it) is left out, as the SDK did.
+    final thumbnail = (prepared.thumbnail?.bytes.length ?? 0) < bytes.length
+        ? prepared.thumbnail
+        : null;
     if (thumbnail == null) {
       return MatrixProcessedAttachment(PreparedImageFile(
         bytes: bytes,
