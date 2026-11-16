@@ -150,6 +150,30 @@ void main() {
       });
     }
 
+    for (final (fits, encoded) in [
+      (90, [90]),
+      (80, [90, 80]),
+    ]) {
+      test(
+          "on the real path, a file that fits at $fits is encoded at "
+          "$encoded only", () async {
+        final (input, expected) = await fittingFirstAt(fits);
+        final qualities = <int>[];
+        // The fallback's own encode, run here so the encoder can count.
+        final result = await removeImageMetadata(input,
+            encodeInBackground: (pixels) async =>
+                encodeFallback(pixels, encodeJpeg: (image, quality) {
+                  qualities.add(quality);
+                  return img.encodeJpg(image,
+                      quality: quality, chroma: img.JpegChroma.yuv420);
+                }));
+
+        expect(qualities, encoded);
+        expect(result.jpegQuality, fits);
+        expect(result.bytes, expected);
+      });
+    }
+
     test("is the output at quality 70 when even that is larger", () async {
       // The truncated JPEG with Exif: 70% of a progressive file, so its
       // re-encode is larger than it at every quality.

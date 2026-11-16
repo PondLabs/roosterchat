@@ -98,8 +98,13 @@ MetadataRemoval? removeMetadataByRewrite(Uint8List bytes) {
 /// Removes a picture's metadata for the attach dialog: by container rewrite
 /// in the background when the file parses, and otherwise by letting the
 /// engine decode it (as it would be shown, orientation applied) and
-/// encoding the pixels again in the background.
-Future<MetadataRemoval> removeImageMetadata(Uint8List bytes) async {
+/// encoding the pixels again in the background with [encodeFallback].
+///
+/// [encodeInBackground] replaces that background encode in tests (to
+/// count the encodings, or to see what crosses into the isolate).
+Future<MetadataRemoval> removeImageMetadata(Uint8List bytes,
+    {Future<MetadataRemoval?> Function(FallbackPixels pixels)?
+        encodeInBackground}) async {
   final rewritten = await compute<Uint8List, MetadataRemoval?>(
       removeMetadataByRewrite, bytes);
   if (rewritten != null) return rewritten;
@@ -108,15 +113,18 @@ Future<MetadataRemoval> removeImageMetadata(Uint8List bytes) async {
   if (decoded == null) {
     return const MetadataRemoval(MetadataRemovalOutcome.failed);
   }
-  final reencoded =
-      await compute<_Pixels, MetadataRemoval?>(_encodeWithoutMetadata, decoded);
+  final reencoded = await (encodeInBackground ?? _encodeInBackground)(decoded);
   return reencoded ?? const MetadataRemoval(MetadataRemovalOutcome.failed);
 }
 
+Future<MetadataRemoval?> _encodeInBackground(FallbackPixels pixels) =>
+    compute<FallbackPixels, MetadataRemoval?>(encodeFallback, pixels);
+
 /// Straight-alpha RGBA pixels of a picture's first frame, as shown, how
-/// many frames the picture has, and the size of the file they came from.
-class _Pixels {
-  const _Pixels(this.width, this.height, this.rgba,
+/// many frames the picture has, and the size of the file they came from:
+/// what the fallback's background encode is given.
+class FallbackPixels {
+  const FallbackPixels(this.width, this.height, this.rgba,
       {required this.asPng,
       required this.frames,
       required this.originalLength});
@@ -128,7 +136,13 @@ class _Pixels {
   final int originalLength;
 }
 
-Future<_Pixels?> _decodeWithEngine(Uint8List bytes) async {
+/// Encodes [image] as a JPEG at [quality].
+typedef FallbackJpegEncoder = Uint8List Function(img.Image image, int quality);
+
+Uint8List _encodeJpeg(img.Image image, int quality) =>
+    img.encodeJpg(image, quality: quality, chroma: img.JpegChroma.yuv420);
+
+Future<FallbackPixels?> _decodeWithEngine(Uint8List bytes) async {
   ui.Codec? codec;
   ui.Image? image;
   try {
@@ -145,7 +159,7 @@ Future<_Pixels?> _decodeWithEngine(Uint8List bytes) async {
     for (var i = 3; !asPng && i < rgba.length; i += 4) {
       if (rgba[i] != 0xFF) asPng = true;
     }
-    return _Pixels(image.width, image.height, rgba,
+    return FallbackPixels(image.width, image.height, rgba,
         asPng: asPng, frames: codec.frameCount, originalLength: bytes.length);
   } catch (_) {
     return null;
@@ -155,7 +169,13 @@ Future<_Pixels?> _decodeWithEngine(Uint8List bytes) async {
   }
 }
 
-MetadataRemoval? _encodeWithoutMetadata(_Pixels pixels) {
+/// The fallback's encode, on whatever isolate calls it: the pixels as a
+/// PNG, or as a JPEG at the first of [metadataFallbackJpegQualities] that
+/// fits (see [pickFallbackJpeg]), each step encoded only when the one
+/// before did not fit. [encodeJpeg] is `img.encodeJpg` with 4:2:0 chroma;
+/// a test passes its own to count the encodings.
+MetadataRemoval? encodeFallback(FallbackPixels pixels,
+    {FallbackJpegEncoder encodeJpeg = _encodeJpeg}) {
   final image = img.Image.fromBytes(
       width: pixels.width,
       height: pixels.height,
@@ -177,9 +197,7 @@ MetadataRemoval? _encodeWithoutMetadata(_Pixels pixels) {
         bytes: bytes, mimeType: "image/png", animationLost: pixels.frames > 1);
   }
   final picked = pickFallbackJpeg(
-      pixels.originalLength,
-      (quality) => clean(img.encodeJpg(image,
-          quality: quality, chroma: img.JpegChroma.yuv420)));
+      pixels.originalLength, (quality) => clean(encodeJpeg(image, quality)));
   if (picked == null) return null;
   final (quality, bytes) = picked;
   return MetadataRemoval(MetadataRemovalOutcome.reencoded,
