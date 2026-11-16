@@ -50,6 +50,7 @@ import 'package:rooster/client/timeline_events/timeline_event_message.dart';
 import 'package:rooster/client/timeline_events/timeline_event_sticker.dart';
 import 'package:rooster/config/build_config.dart';
 import 'package:rooster/debug/log.dart';
+import 'package:rooster/client/matrix/media/matrix_file_send.dart';
 import 'package:rooster/diagnostic/speed_log/text_send_trace.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/utils/mime.dart';
@@ -538,21 +539,25 @@ class MatrixRoom extends Room {
       String? threadLastEventId,
       Map<String, dynamic>? fileExtraContent,
       List<ProcessedAttachment>? processedAttachments}) async {
-    matrix.Event? replyingTo;
+    // The event replied to is the one already held, not looked up again
+    // before the reply's echo. An own message still pending is held under
+    // its transaction id, which is no event id: it is looked up as before.
+    final matrix.Event? replyingTo = switch (inReplyTo) {
+      null => null,
+      MatrixTimelineEvent held
+          when !held.event.status.isSending && !held.event.status.isError =>
+        held.event,
+      _ => await _matrixRoom.getEventById(inReplyTo.eventId),
+    };
 
-    if (inReplyTo != null) {
-      replyingTo = await _matrixRoom.getEventById(inReplyTo.eventId);
-    }
-
-    if (processedAttachments != null) {
-      Future.wait(
-          processedAttachments.whereType<MatrixProcessedAttachment>().map((e) {
-        return _matrixRoom.sendFileEvent(e.file,
-            threadLastEventId: threadLastEventId,
-            threadRootEventId: threadRootEventId,
-            extraContent: fileExtraContent,
-            thumbnail: e.thumbnailFile);
-      }));
+    // Each file goes on its own, its failure caught and shown on its
+    // pending message (see media/matrix_file_send.dart).
+    for (final file in processedAttachments ?? const <ProcessedAttachment>[]) {
+      if (file is! MatrixProcessedAttachment) continue;
+      unawaited(sendMatrixFile(_matrixRoom, file,
+          threadLastEventId: threadLastEventId,
+          threadRootEventId: threadRootEventId,
+          extraContent: fileExtraContent));
     }
 
     if (message != null && message.trim().isNotEmpty) {
@@ -967,11 +972,20 @@ class MatrixRoom extends Room {
   Future<void> cancelSend(TimelineEvent event) async {
     final mxEvent = event as MatrixTimelineEvent;
     await mxEvent.event.cancelSend();
+    // A file sent from the composer: no longer shown, its bytes let go.
+    final send = AttachmentSends.instance.byTransaction(localId, event.eventId);
+    if (send != null) AttachmentSends.instance.remove(send);
   }
 
   @override
   Future<void> retrySend(TimelineEvent event) async {
     final mxEvent = event as MatrixTimelineEvent;
+    final send = AttachmentSends.instance.byTransaction(localId, event.eventId);
+    if (send != null && mxEvent.event.status.isError) {
+      // Its stage follows the new attempt, and a failure shows again.
+      await retryMatrixFile(mxEvent.event, send);
+      return;
+    }
     await mxEvent.event.sendAgain();
   }
 

@@ -3421,6 +3421,30 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelPendingFilePreparing": "Preparing",
+  "@labelPendingFilePreparing": {
+    "description": "Under a file just sent from the composer, while the app gets it ready to upload (reads it, makes the picture's thumbnail)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPendingFileUploading": "Uploading",
+  "@labelPendingFileUploading": {
+    "description": "Under a file just sent from the composer, while it is uploaded to the server",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPendingFileSendingEvent": "Sending",
+  "@labelPendingFileSendingEvent": {
+    "description": "Under a file just sent from the composer, once it is uploaded and the message that shows it is being sent to the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPendingFileFailed": "Couldn't send",
+  "@labelPendingFileFailed": {
+    "description": "Under a file sent from the composer that did not reach the room",
+    "type": "text",
+    "placeholders": {}
+  },
   "messagePlaceholderSticker": "{user} sent a sticker",
   "@messagePlaceholderSticker": {
     "description": "Message body for when a user sends a sticker",

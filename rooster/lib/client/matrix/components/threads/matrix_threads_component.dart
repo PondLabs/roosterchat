@@ -170,13 +170,14 @@ class MatrixThreadsComponent implements ThreadsComponent<MatrixClient> {
         processedAttachments: processedAttachments,
         threadRootEventId: threadRootEventId) as MatrixTimelineEvent?;
 
-    if (room.timeline != null) {
+    // Null when only files were sent: they reach the thread on their own.
+    if (newMessage != null && room.timeline != null) {
       var index = room.timeline!.events
           .indexWhere((element) => element.eventId == threadRootEventId);
 
       (room.timeline as MatrixTimeline)
           .matrixTimeline!
-          .addAggregatedEvent(newMessage!.event);
+          .addAggregatedEvent(newMessage.event);
 
       if (index != -1) {
         room.timeline!.notifyChanged(index);

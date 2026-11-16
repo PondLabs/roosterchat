@@ -16,6 +16,7 @@ import 'package:flutter/painting.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/matrix/matrix_attachment.dart';
+import 'package:rooster/client/matrix/media/matrix_file_send.dart';
 import 'package:rooster/utils/image/image_header.dart';
 import 'package:rooster/utils/image/preparation/image_preparation.dart';
 import 'package:rooster/utils/image_utils.dart';
@@ -54,12 +55,22 @@ class PreparedImageFile extends matrix.MatrixFile {
 /// (the one started when it was attached, or one started now), or the
 /// file as it is when it is not a picture. A picture the engine cannot
 /// decode goes as `application/octet-stream`, so no client tries to draw
-/// it. Null when the file cannot be read.
+/// it. Null when the file cannot be read. An attachment sent from the
+/// composer (its [PendingFileAttachment.sending] set) comes back as a
+/// [TrackedMatrixAttachment], so the room keeps its stage.
 Future<MatrixProcessedAttachment?> matrixFilesForAttachment(
     PendingFileAttachment attachment,
     {ImagePreparer? preparer}) async {
   await attachment.resolve();
   if (attachment.data == null) return null;
+  attachment.sending?.fileRead();
+
+  final send = attachment.sending;
+  MatrixProcessedAttachment processed(matrix.MatrixFile file,
+          {matrix.MatrixImageFile? thumbnailFile}) =>
+      send == null
+          ? MatrixProcessedAttachment(file, thumbnailFile: thumbnailFile)
+          : TrackedMatrixAttachment(file, send, thumbnailFile: thumbnailFile);
 
   ImagePreparation? prepared;
   final isImage = Mime.imageTypes.contains(attachment.mimeType);
@@ -94,7 +105,7 @@ Future<MatrixProcessedAttachment?> matrixFilesForAttachment(
         ? prepared.thumbnail
         : null;
     if (thumbnail == null) {
-      return MatrixProcessedAttachment(PreparedImageFile(
+      return processed(PreparedImageFile(
         bytes: bytes,
         name: name,
         mimeType: attachment.mimeType,
@@ -103,7 +114,7 @@ Future<MatrixProcessedAttachment?> matrixFilesForAttachment(
         blurhash: prepared.blurhash,
       ));
     }
-    return MatrixProcessedAttachment(
+    return processed(
       matrix.MatrixImageFile(
         bytes: bytes,
         name: name,
@@ -139,7 +150,7 @@ Future<MatrixProcessedAttachment?> matrixFilesForAttachment(
   }
 
   if (Mime.videoTypes.contains(attachment.mimeType)) {
-    return MatrixProcessedAttachment(
+    return processed(
       matrix.MatrixVideoFile(
         bytes: bytes,
         name: name,
@@ -152,7 +163,7 @@ Future<MatrixProcessedAttachment?> matrixFilesForAttachment(
     );
   }
 
-  return MatrixProcessedAttachment(
+  return processed(
       matrix.MatrixFile(
           bytes: bytes, name: name, mimeType: attachment.mimeType),
       thumbnailFile: thumbnailImageFile);

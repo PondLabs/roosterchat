@@ -45,7 +45,17 @@ import 'package:tiamat/tiamat.dart' as tiamat;
 import '../../client/attachment.dart';
 import '../../client/components/emoticon/emoticon.dart';
 
-enum MessageInputSendResult { success, unhandled }
+enum MessageInputSendResult {
+  /// Sent: the composer clears its text.
+  success,
+
+  /// Not sent: the composer keeps its text.
+  unhandled,
+
+  /// The chat sends it once a question is answered, and clears the text
+  /// itself then: the composer keeps it meanwhile.
+  pending,
+}
 
 class AttachmentPicker {
   IconData icon;

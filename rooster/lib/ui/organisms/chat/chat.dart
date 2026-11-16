@@ -19,20 +19,24 @@ import 'package:rooster/client/timeline_events/timeline_event_sticker.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/diagnostic/speed_log/text_send_trace.dart';
 import 'package:rooster/main.dart';
+import 'package:rooster/ui/molecules/message_input.dart';
 import 'package:rooster/ui/organisms/attachment_processor/attachment_processor.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/organisms/chat/chat_view.dart';
+import 'package:rooster/ui/organisms/chat/composer_send.dart';
 import 'package:rooster/ui/organisms/chat/dropped_files.dart';
 import 'package:rooster/ui/organisms/chat/url_preview_prefetcher.dart';
 import 'package:rooster/utils/debounce.dart';
 import 'package:rooster/utils/error_utils.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:desktop_drop/desktop_drop.dart';
-import 'package:exif/exif.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:tiamat/tiamat.dart' as tiamat;
+
+export 'package:rooster/ui/organisms/chat/composer_send.dart'
+    show EventInteractionType;
 
 class Chat extends StatefulWidget {
   const Chat(this.room, {this.threadId, this.isBubble = false, super.key});
@@ -41,11 +45,6 @@ class Chat extends StatefulWidget {
   final bool isBubble;
   @override
   State<Chat> createState() => ChatState();
-}
-
-enum EventInteractionType {
-  reply,
-  edit,
 }
 
 class ChatState extends State<Chat> {
@@ -229,139 +228,135 @@ class ChatState extends State<Chat> {
       }
     }
 
+    _attach(attachment);
+  }
+
+  /// Puts [attachment] in the composer and starts what Send needs from it,
+  /// so it is ready by the time Send is pressed, in the usual case: its
+  /// picture's preparation and the location question's answer.
+  void _attach(PendingFileAttachment attachment) {
+    attachment.attachedAt ??= TextSendTrace.now();
     setState(() {
       attachments.add(attachment);
     });
-    // Ready by the time Send is pressed, in the usual case.
     attachment.startImagePreparation();
+    attachment.locationCheck();
   }
 
   void removeAttachment(PendingFileAttachment attachment) {
     setState(() {
       attachments.remove(attachment);
     });
+    // Out of the preparation queue, or its preparation thrown away.
+    attachment.discard();
   }
 
-  void sendMessage(String message, {Client? overrideClient}) async {
-    // The speed log times a text message from here (docs/speed-log.md).
+  /// Send: copies what the message is (see [ComposerSend]) and sends it.
+  ///
+  /// When every file's location answer is known and none has one, the
+  /// composer is cleared and the text sent before this returns
+  /// ([MessageInputSendResult.success]). Otherwise the composer keeps its
+  /// text and files ([MessageInputSendResult.pending]) while the answer is
+  /// read and the question asked: declined, nothing is sent; accepted, the
+  /// message goes as it was when Send was pressed.
+  MessageInputSendResult sendMessage(String message, {Client? overrideClient}) {
+    // The speed log times a send from here (docs/speed-log.md).
     final sendPressed = TextSendTrace.now();
 
     // Whatever the composer hasn't fetched yet starts now, before the message
     // is processed, encrypted and sent.
     previewPrefetcher.prefetch(context, room, message);
 
-    setState(() {
-      processing = true;
-    });
-
-    List<ProcessedAttachment> processedAttachments;
     var targetRoom = room;
-    var targetThread = threadsComponent;
+    var targetThreads = threadsComponent;
+    if (overrideClient != null) {
+      final newRoom = overrideClient.getRoom(room.identifier);
+      if (newRoom == null) {
+        Log.e("Failed to find correct room to send event for override "
+            "client. Cancelling");
+        return MessageInputSendResult.unhandled;
+      }
+      targetRoom = newRoom;
+      targetThreads = newRoom.client.getComponent<ThreadsComponent>();
+      Log.d("Overriding room for client: ${overrideClient}");
+    }
+
+    final send = ComposerSend(
+      chatRoom: room,
+      room: targetRoom,
+      threads: targetThreads,
+      threadId: threadId,
+      message: message,
+      attachments: attachments,
+      interactionType: interactionType,
+      interactingEvent: interactingEvent,
+      sendPressed: sendPressed,
+    );
+
+    if (send.attachments.every((file) => file.hasLocation == false)) {
+      _send(send);
+      return MessageInputSendResult.success;
+    }
+    _askThenSend(send);
+    return MessageInputSendResult.pending;
+  }
+
+  /// Reads the files' location answers that are not known yet and asks
+  /// about each file that has one, then sends [send] or, declined, leaves
+  /// the composer as it is.
+  Future<void> _askThenSend(ComposerSend send) async {
+    setState(() => processing = true);
     try {
-      for (var file in attachments) {
-        await file.resolve();
-        // A file picked earlier that cannot be read now (moved, deleted):
-        // nothing to look at, and processAttachments skips it too.
-        var data = file.data;
-        if (data == null) continue;
-        var exif = await readExifFromBytes(data);
-
-        if (exif.keys.any((e) => e.toLowerCase().contains("gps"))) {
-          // ignore: use_build_context_synchronously
-          var fileName = file.name;
-          var confirmation = await AdaptiveDialog.confirmation(context,
-              title: fileName ?? labelChatFileFallbackName,
-              confirmationText: promptChatSendFile,
-              cancelText: promptChatDontSendFile,
-              dangerous: true,
-              prompt: messageChatFileHasLocation(
-                  fileName ?? labelChatFileFallbackName));
-
-          if (confirmation != true) {
-            return;
-          }
-        }
+      for (final file in send.attachments) {
+        if (!await file.locationCheck()) continue;
+        if (!mounted) return;
+        final fileName = file.name ?? labelChatFileFallbackName;
+        final confirmation = await AdaptiveDialog.confirmation(context,
+            title: fileName,
+            confirmationText: promptChatSendFile,
+            cancelText: promptChatDontSendFile,
+            dangerous: true,
+            prompt: messageChatFileHasLocation(fileName));
+        if (confirmation != true) return;
       }
-
-      if (overrideClient != null) {
-        var newRoom = overrideClient.getRoom(targetRoom.identifier);
-        if (newRoom != null) {
-          targetRoom = newRoom;
-          targetThread = targetRoom.client.getComponent<ThreadsComponent>();
-          Log.d("Overriding room for client: ${overrideClient}");
-        } else {
-          Log.e(
-              "Failed to find correct room to send event for override client. Cancelling");
-
-          return;
-        }
-      }
-
-      processedAttachments = await targetRoom.processAttachments(attachments);
     } catch (e, s) {
-      // The composer stays usable: it was left faded and dead for the rest
-      // of the visit when anything above threw.
+      // The composer stays usable, with its text and files.
       Log.onError(e, s, content: "Could not prepare the message to send");
       return;
     } finally {
-      if (mounted) {
-        setState(() {
-          processing = false;
-        });
+      if (mounted) setState(() => processing = false);
+    }
+    if (mounted) setMessageInputText.add("");
+    _send(send);
+  }
+
+  /// Sends [send] (or runs it as a command) and clears what it took from
+  /// the composer.
+  void _send(ComposerSend send) {
+    final commands = send.room.client.getComponent<CommandComponent>();
+    if (commands?.isExecutable(send.message) == true) {
+      // As before: the command runs, and the files attached are dropped.
+      doCommand(commands, send);
+      for (final file in send.attachments) {
+        file.discard();
       }
-    }
-
-    var component = targetRoom.client.getComponent<CommandComponent>();
-
-    final isCommand = component?.isExecutable(message) == true;
-    final trace = isCommand
-        ? null
-        : TextSendTrace.forComposer(
-            sendPressed: sendPressed,
-            message: message,
-            hasAttachments: processedAttachments.isNotEmpty);
-
-    if (isCommand) {
-      doCommand(component, message);
-    } else if (isThread) {
-      TextSendTrace.send(
-          trace,
-          () => targetThread!.sendMessage(
-              threadRootEventId: widget.threadId!,
-              room: targetRoom,
-              message: message,
-              inReplyTo: interactionType == EventInteractionType.reply
-                  ? interactingEvent
-                  : null,
-              replaceEvent: interactionType == EventInteractionType.edit
-                  ? interactingEvent
-                  : null,
-              processedAttachments: processedAttachments));
     } else {
-      TextSendTrace.send(
-          trace,
-          () => targetRoom.sendMessage(
-              message: message,
-              inReplyTo: interactionType == EventInteractionType.reply
-                  ? interactingEvent
-                  : null,
-              replaceEvent: interactionType == EventInteractionType.edit
-                  ? interactingEvent
-                  : null,
-              processedAttachments: processedAttachments));
+      send.send();
     }
 
+    if (!mounted) return;
     typingIndicators?.setTypingStatus(false);
     setInteractingEvent(null);
-    clearAttachments();
-    setMessageInputText.add("");
+    setState(() {
+      attachments.removeWhere(send.attachments.contains);
+    });
   }
 
   Future<void> doCommand(
-      CommandComponent<Client>? component, String message) async {
+      CommandComponent<Client>? component, ComposerSend send) async {
     try {
-      await component?.executeCommand(message, room,
-          interactingEvent: interactingEvent, type: interactionType);
+      await component?.executeCommand(send.message, send.chatRoom,
+          interactingEvent: send.interactingEvent, type: send.interactionType);
     } catch (error, trace) {
       Log.onError(error, trace);
       if (mounted)
@@ -400,12 +395,6 @@ class ChatState extends State<Chat> {
           break;
         default:
       }
-    });
-  }
-
-  void clearAttachments() {
-    setState(() {
-      attachments.clear();
     });
   }
 
@@ -533,12 +522,7 @@ class ChatState extends State<Chat> {
                       attachment: attachment,
                     ));
 
-        if (processedAttachment != null) {
-          setState(() {
-            attachments.add(processedAttachment);
-          });
-          processedAttachment.startImagePreparation();
-        }
+        if (processedAttachment != null) _attach(processedAttachment);
       }
     }
   }
