@@ -22,7 +22,9 @@
 /// names in `SpeedOperation.all`, steps in `SpeedStep.all`, the names of
 /// numbers on steps in `SpeedValue.all`, outcomes in `SpeedOutcome.all`.
 /// Any other name, even one shaped like them, is written `invalid_name`, so
-/// text from a message, a file or a person never reaches the report. To add
+/// text from a message, a file or a person never reaches the report. On a
+/// step, the numbers under unlisted names are dropped and `invalid_name`
+/// holds how many there were. To add
 /// a name: a constant in its class there, and the same constant in that
 /// class's `all`. Merging a branch that added names too: keep both sides'
 /// entries in each `all`. `SpeedOperation.all` plus `invalid_name` must fit
@@ -234,10 +236,21 @@ class SpeedSpan {
 
   void _add(SpanStep step) {
     if (steps.length >= SpeedLog.maxStepsPerSpan) return;
+    // A value under an unlisted name is dropped; `invalid_name` counts how
+    // many there were, so two of them do not read as one.
+    final values = <String, num>{};
+    var unlisted = 0;
+    for (final value in step.values.entries) {
+      if (SpeedValue.all.contains(value.key)) {
+        values[value.key] = value.value;
+      } else {
+        unlisted++;
+      }
+    }
     steps.add(
         SpanStep(_listed(step.name, SpeedStep.all), step.start, step.duration, {
-      for (final value in step.values.entries)
-        _listed(value.key, SpeedValue.all): value.value,
+      if (unlisted > 0) invalidSpeedName: unlisted,
+      ...values,
     }));
   }
 

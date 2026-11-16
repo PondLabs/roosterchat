@@ -39,6 +39,29 @@ void main() {
     expect(send.outcome, 'failed');
   });
 
+  test('unlisted value names on one step are counted, not merged', () {
+    final log = SpeedLog(frames: _NoFrames());
+    final span = log.startSpan(SpeedOperation.textSend)
+      ..mark(SpeedStep.request, values: {
+        'alice': 7,
+        'bob': 9,
+        SpeedValue.status: 200,
+      })
+      ..mark(SpeedStep.answer, values: {'carol': 5})
+      ..finish();
+
+    // The values of unlisted names are dropped: invalid_name says how many
+    // there were.
+    expect(span.steps[0].values, {invalidSpeedName: 2, SpeedValue.status: 200});
+    expect(span.steps[1].values, {invalidSpeedName: 1});
+    final report = buildSpeedReport(log);
+    expect(report, contains(' invalid_name=2 status=200\n'));
+    expect(report, contains(' invalid_name=1\n'));
+    for (final word in ['alice', 'bob', 'carol', '=7', '=9', '=5']) {
+      expect(report, isNot(contains(word)), reason: word);
+    }
+  });
+
   test(
       'the names the text send, sync, image_prepare and voice_join spans use '
       'are on the list', () {
