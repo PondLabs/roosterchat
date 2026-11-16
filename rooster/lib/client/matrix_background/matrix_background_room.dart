@@ -8,6 +8,7 @@ import 'package:rooster/client/components/direct_messages/direct_message_compone
 import 'package:rooster/client/components/emoticon/emoticon.dart';
 import 'package:rooster/client/components/room_component.dart';
 import 'package:rooster/client/matrix/matrix_peer.dart';
+import 'package:rooster/client/matrix/media/matrix_attachment_files.dart';
 import 'package:rooster/client/matrix_background/matrix_background_client.dart';
 import 'package:rooster/client/matrix_background/matrix_background_events.dart';
 import 'package:rooster/client/matrix_background/matrix_background_member.dart';
@@ -16,6 +17,7 @@ import 'package:rooster/client/permissions.dart';
 import 'package:rooster/client/role.dart';
 import 'package:rooster/client/timeline_events/timeline_event.dart';
 import 'package:rooster/debug/log.dart';
+import 'package:rooster/utils/image/preparation/image_preparation.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter/src/foundation/key.dart';
 import 'package:flutter/src/painting/image_provider.dart';
@@ -35,13 +37,17 @@ class MatrixBackgroundRoom implements Room {
   List<NonPreloadRoomStateData> nonPreloadState;
   late List<matrix.BasicEvent> _stateEvents;
 
+  /// Prepares the pictures sent from here: the app's own when null.
+  final ImagePreparer? _imagePreparer;
+
   MatrixBackgroundRoom(
     this.backgroundClient, {
     required this.roomId,
     required this.data,
     required this.preloadState,
     required this.nonPreloadState,
-  }) {
+    ImagePreparer? imagePreparer,
+  }) : _imagePreparer = imagePreparer {
     Log.d("Created background room with data: ${data.content}");
 
     _stateEvents = List.empty(growable: true);
@@ -366,10 +372,16 @@ class MatrixBackgroundRoom implements Room {
   @override
   Permissions get permissions => throw UnimplementedError();
 
+  /// The same files the app's own rooms send: each picture's one
+  /// preparation (size, thumbnail and blurhash from a single reduced
+  /// decode; see `media/matrix_attachment_files.dart`), nothing decoded
+  /// here. A file that cannot be read is left out.
   @override
   Future<List<ProcessedAttachment>> processAttachments(
-      List<PendingFileAttachment> attachments) {
-    throw UnimplementedError();
+      List<PendingFileAttachment> attachments) async {
+    final processed = await Future.wait(attachments.map((attachment) =>
+        matrixFilesForAttachment(attachment, preparer: _imagePreparer)));
+    return processed.nonNulls.toList();
   }
 
   PushRule get pushRule => throw UnimplementedError();
