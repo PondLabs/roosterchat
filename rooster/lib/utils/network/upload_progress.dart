@@ -140,6 +140,10 @@ class UploadProgress extends ChangeNotifier implements UploadListener {
   /// Why the last attempt failed, null when none did.
   UploadProblem? get problem => _problem;
 
+  /// An attempt failed and no upload has gone through since: the SDK is
+  /// sending the message's files again.
+  bool get retrying => _problem != null;
+
   @override
   void uploadStarted(int bodyBytes) {
     _bodyBytes = bodyBytes;

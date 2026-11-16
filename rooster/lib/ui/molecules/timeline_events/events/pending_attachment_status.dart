@@ -104,7 +104,7 @@ class PendingAttachmentStatus extends StatefulWidget {
             icon: Icons.cloud_upload_outlined
           );
         }
-        final label = upload.failedAttempts > 0
+        final label = upload.retrying
             ? labelPendingFileRetrying
             : !upload.started && send.encrypting
                 ? labelPendingFileEncrypting
