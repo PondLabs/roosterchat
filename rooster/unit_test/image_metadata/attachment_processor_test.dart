@@ -13,6 +13,7 @@ import 'package:rooster/utils/image/metadata/remove_image_metadata.dart';
 import 'package:tiamat/config/style/theme_extensions.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
+import 'fallback_size_cap_test.dart' show enginePixels, fallbackAt;
 import 'remove_image_metadata_test.dart'
     show animatedWebpWithInFirstFrame, expectNoMetadata, riffChunk;
 
@@ -152,6 +153,26 @@ void main() {
     expect(dialog.closed, isTrue);
     expect(dialog.result!.data, original);
     expect(dialog.result!.name, "gps_exif.jpg");
+    expect(dialog.result!.mimeType, "image/jpeg");
+  });
+
+  testWidgets(
+      "\"Add File\" attaches the truncated JPEG re-encoded at quality 70, "
+      "the step it ends at", (tester) async {
+    final attachment = jpeg("truncated_decodable.jpg");
+    expect(attachment.data, hasLength(2792));
+    // No step fits in its 2,792 bytes: the fallback ends at quality 70.
+    final expected = (await tester.runAsync(
+        () async => fallbackAt(await enginePixels(attachment.data!), 70)))!;
+    final dialog = await openDialog(tester, attachment);
+
+    await tester.tap(find.text("Add File"));
+    await waitFor(tester, () => dialog.closed);
+
+    expect(dialog.closed, isTrue);
+    expect(dialog.result!.data, expected);
+    expect(dialog.result!.size, expected.length);
+    expect(dialog.result!.name, "truncated_decodable.jpg");
     expect(dialog.result!.mimeType, "image/jpeg");
   });
 
