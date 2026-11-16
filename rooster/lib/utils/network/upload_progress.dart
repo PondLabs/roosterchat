@@ -122,6 +122,7 @@ class UploadProgress extends ChangeNotifier implements UploadListener {
   _Upload? _direct;
   int _keptBytes = 0;
   int _failedAttempts = 0;
+  DateTime? _serverWaitsUntil;
 
   /// A listener for one more request of this message.
   UploadListener request() => _Upload(this);
@@ -173,6 +174,16 @@ class UploadProgress extends ChangeNotifier implements UploadListener {
   /// sending it again.
   bool get retrying => problem != null;
 
+  /// When the server said it takes the file again (a `retry_after_ms` too
+  /// long to wait for by itself), if it did.
+  DateTime? get serverWaitsUntil => _serverWaitsUntil;
+
+  /// The server answered a failed upload with a wait until [until].
+  void serverAskedToWait(DateTime until) {
+    _serverWaitsUntil = until;
+    notifyListeners();
+  }
+
   /// "Retry": [bytes] went up before and are not sent again.
   void partsKept(int bytes) {
     _keptBytes = bytes;
@@ -220,6 +231,7 @@ class UploadProgress extends ChangeNotifier implements UploadListener {
     _direct = null;
     _keptBytes = 0;
     _failedAttempts = 0;
+    _serverWaitsUntil = null;
     notifyListeners();
   }
 }

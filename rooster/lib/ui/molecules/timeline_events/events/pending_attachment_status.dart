@@ -65,6 +65,16 @@ class PendingAttachmentStatus extends StatefulWidget {
               "placeholder is the file's size, such as '48 MB'",
           examples: const {"size": "48 MB"});
 
+  static String labelPendingFileServerAskedToWait(String time) =>
+      Intl.message("The server is busy. You can retry at $time",
+          name: "labelPendingFileServerAskedToWait",
+          args: [time],
+          desc: "Under a file that could not be sent because the server asked "
+              "the app to wait longer than it waits by itself. The "
+              "placeholder is the time of day from which Retry can work, "
+              "such as '14:32'",
+          examples: const {"time": "14:32"});
+
   static String labelPendingFileUploadCount(String sent, String total) =>
       Intl.message("$sent of $total",
           name: "labelPendingFileUploadCount",
@@ -83,9 +93,11 @@ class PendingAttachmentStatus extends StatefulWidget {
       };
 
   /// What the line says for [send]: the stage (with the upload's own state
-  /// while it uploads), and the size or the count beside it.
+  /// while it uploads), and the size or the count beside it. A time of day
+  /// is written by [timeOfDay] (24-hour digits when not given).
   static ({String label, String? detail, IconData icon}) describe(
-      AttachmentSend send) {
+      AttachmentSend send,
+      {String Function(DateTime time)? timeOfDay}) {
     final bytes = send.fileBytes;
     final size = bytes == null ? null : TextUtils.readableFileSize(bytes);
     final upload = send.upload;
@@ -130,6 +142,16 @@ class PendingAttachmentStatus extends StatefulWidget {
           icon: Icons.send_rounded
         );
       case AttachmentSendStage.failed:
+        final waitsUntil = upload.serverWaitsUntil;
+        if (waitsUntil != null) {
+          final time = timeOfDay?.call(waitsUntil) ??
+              DateFormat.Hm().format(waitsUntil.toLocal());
+          return (
+            label: labelPendingFileServerAskedToWait(time),
+            detail: size,
+            icon: Icons.schedule_rounded
+          );
+        }
         if (upload.problem == UploadProblem.serverTooSlow && size != null) {
           return (
             label: labelPendingFileServerTooSlow(size),
@@ -214,7 +236,11 @@ class _PendingAttachmentStatusState extends State<PendingAttachmentStatus> {
     final failed = send.stage == AttachmentSendStage.failed;
     final color = failed ? colors.error : colors.onSurfaceVariant;
     final style = Theme.of(context).textTheme.bodySmall?.copyWith(color: color);
-    final shown = PendingAttachmentStatus.describe(send);
+    final shown = PendingAttachmentStatus.describe(send,
+        timeOfDay: (time) => MaterialLocalizations.of(context).formatTimeOfDay(
+            TimeOfDay.fromDateTime(time.toLocal()),
+            alwaysUse24HourFormat:
+                MediaQuery.alwaysUse24HourFormatOf(context)));
     final detail = shown.detail;
     // The size, the count and the clock are short and always whole; the
     // stage takes the rest of the width and wraps onto a second line (the

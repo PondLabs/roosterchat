@@ -118,7 +118,15 @@ Future<String?> _follow(matrix.Room room, AttachmentSend? send, String txid,
     return id;
   } catch (error, stack) {
     // The upload or the event failed for good: the SDK marked its pending
-    // event as failed, and the message shows it.
+    // event as failed, and the message shows it, with when the server
+    // takes it again if it said.
+    final retryAfterMs =
+        error is matrix.MatrixException ? error.retryAfterMs : null;
+    if (retryAfterMs != null) {
+      send?.upload.serverAskedToWait(room.client.sendClock
+          .now()
+          .add(Duration(milliseconds: retryAfterMs)));
+    }
     Log.onError(error, stack, content: "Could not send a file");
     send?.failed();
     return null;

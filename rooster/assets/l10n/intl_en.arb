@@ -3473,6 +3473,16 @@
       }
     }
   },
+  "labelPendingFileServerAskedToWait": "The server is busy. You can retry at {time}",
+  "@labelPendingFileServerAskedToWait": {
+    "description": "Under a file that could not be sent because the server asked the app to wait longer than it waits by itself. The placeholder is the time of day from which Retry can work, such as '14:32'",
+    "type": "text",
+    "placeholders": {
+      "time": {
+        "example": "14:32"
+      }
+    }
+  },
   "labelPendingFileUploadCount": "{sent} of {total}",
   "@labelPendingFileUploadCount": {
     "description": "Under a file being uploaded: how much of it the connection has taken so far, such as '3.1 MB of 48 MB'",
