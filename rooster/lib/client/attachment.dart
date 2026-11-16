@@ -73,9 +73,18 @@ class PendingFileAttachment {
     return _hasLocation = exif.keys.any((e) => e.toLowerCase().contains("gps"));
   }
 
-  Future<void> resolve() async {
-    if (data != null) return;
+  Future<void>? _reading;
 
+  /// Reads the file into [data] when only its path is known. One read at
+  /// a time: a call while the file is being read (Send pressed while the
+  /// attachment is still read) waits for that read instead of starting
+  /// another, so the picture is read and prepared once.
+  Future<void> resolve() {
+    if (data != null) return Future.value();
+    return _reading ??= _read().whenComplete(() => _reading = null);
+  }
+
+  Future<void> _read() async {
     if (path != null) {
       var file = File(path!);
       if (await file.exists()) {

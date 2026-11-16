@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -64,6 +65,37 @@ void main() {
     }, createFile: files.create);
   });
 
+  test(
+      "Send pressed while the attached file is still being read: one read, "
+      "one decode", () async {
+    final gate = Completer<void>();
+    final files = _Files({"/photos/big.jpg": fakeJpegHeader(4000, 3000)})
+      ..gate = gate.future;
+    final engine = FakeEngine(width: 4000, height: 3000);
+    final preparer = fakePreparer(engine);
+    await IOOverrides.runZoned(() async {
+      final attachment =
+          PendingFileAttachment(name: "big.jpg", path: "/photos/big.jpg");
+      // Attached: the read starts, and takes its time.
+      final attached = attachment.startImagePreparation(preparer: preparer);
+      await pumpEventQueue();
+      expect(files.reads, 1);
+
+      // Send, while the read is still going.
+      final sent = matrixFilesForAttachment(attachment, preparer: preparer);
+      await pumpEventQueue();
+      gate.complete();
+      await attached;
+      final processed = (await sent)!;
+
+      expect(files.reads, 1, reason: "read once");
+      expect(engine.calls, hasLength(1), reason: "decoded once");
+      expect(identical(processed.file.bytes, attachment.data), isTrue);
+      expect(
+          (processed.file.info["w"], processed.file.info["h"]), (4000, 3000));
+    }, createFile: files.create);
+  });
+
   test("a thumbnail no smaller than the file sent is left out", () async {
     // A flat screenshot: 4.8 MB as BMP, a few kB once sent as PNG.
     final picture = img.Image(width: 1600, height: 1000);
@@ -115,13 +147,14 @@ class _FailingEncoder implements ThumbnailEncoder {
 }
 
 /// Files that live in the test: [create] makes a [File] for a path in
-/// [contents], whose read throws while [failing]. [reads] counts the reads
-/// tried.
+/// [contents], whose read throws while [failing] and waits for [gate] when
+/// it is set. [reads] counts the reads tried.
 class _Files {
   _Files(this.contents);
 
   final Map<String, Uint8List> contents;
   bool failing = false;
+  Future<void>? gate;
   int reads = 0;
 
   File create(String path) => _File(this, path);
@@ -141,6 +174,7 @@ class _File implements File {
   @override
   Future<Uint8List> readAsBytes() async {
     _files.reads++;
+    await _files.gate;
     if (_files.failing) {
       throw FileSystemException("Cannot read", path);
     }
