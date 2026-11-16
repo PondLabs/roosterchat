@@ -12,7 +12,8 @@ import '../speed_log/fake_account.dart';
 
 /// The SDK's fake homeserver with uploads answered (any file name), held
 /// back while [holdUploads] is pending, or refused (403) with
-/// [failUploads]; each sent event's content is kept.
+/// [failUploads]; each sent event's content is kept; an event looked up by
+/// id is not found (404), as a homeserver answers for an id it never gave.
 class MediaTransport extends FakeTransport {
   Completer<void>? holdUploads;
   bool failUploads = false;
@@ -36,6 +37,11 @@ class MediaTransport extends FakeTransport {
       return _json(200, {
         'content_uri': 'mxc://fakeServer.notExisting/u${uploadSizes.length}'
       });
+    }
+    if (request.method == 'GET' && path.contains('/event/')) {
+      // An event the fake server does not have: what a homeserver answers.
+      seen.add('${request.method} ${routeTemplate(request.url)}');
+      return _json(404, {'errcode': 'M_NOT_FOUND', 'error': 'Event not found'});
     }
     if (request.method == 'PUT' && path.contains('/send/m.room.message/')) {
       final body = await request.finalize().toBytes();

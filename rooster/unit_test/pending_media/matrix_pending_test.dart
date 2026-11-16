@@ -347,6 +347,28 @@ void main() {
     expect(relates['m.in_reply_to'], {'event_id': r'$held'});
   });
 
+  test(
+      'a reply to an own message still pending looks its target up, never '
+      'replying to a transaction id', () async {
+    final pending = matrix.Event(
+      eventId: 'm1700000000000.0',
+      senderId: mx.userID!,
+      type: matrix.EventTypes.Message,
+      content: {'msgtype': 'm.text', 'body': 'not sent yet'},
+      originServerTs: DateTime.now(),
+      status: matrix.EventStatus.sending,
+      room: room.matrixRoom,
+    );
+
+    await room.sendMessage(
+        message: 'answer', inReplyTo: room.convertEvent(pending));
+
+    expect(transport.seen.where((r) => r.startsWith('GET ')), isNotEmpty,
+        reason: 'looked up as before');
+    final relates = transport.sentEvents.single['m.relates_to'] as Map?;
+    expect(relates?['m.in_reply_to'], isNot({'event_id': pending.eventId}));
+  });
+
   test('a file send is a file_send span, without a name of its own', () async {
     final photo = PendingFileAttachment(
         name: 'secret-name.jpg', data: blackJpeg(400, 300))

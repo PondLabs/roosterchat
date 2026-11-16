@@ -540,10 +540,13 @@ class MatrixRoom extends Room {
       Map<String, dynamic>? fileExtraContent,
       List<ProcessedAttachment>? processedAttachments}) async {
     // The event replied to is the one already held, not looked up again
-    // before the reply's echo.
+    // before the reply's echo. An own message still pending is held under
+    // its transaction id, which is no event id: it is looked up as before.
     final matrix.Event? replyingTo = switch (inReplyTo) {
       null => null,
-      MatrixTimelineEvent held => held.event,
+      MatrixTimelineEvent held
+          when !held.event.status.isSending && !held.event.status.isError =>
+        held.event,
       _ => await _matrixRoom.getEventById(inReplyTo.eventId),
     };
 
