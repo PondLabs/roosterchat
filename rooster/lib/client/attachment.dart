@@ -219,8 +219,8 @@ class AttachmentSend extends ChangeNotifier {
   /// Its `file_send` span in the speed log.
   final FileSendTrace? trace;
 
-  /// When Send was pressed for it.
-  final Duration startedAt;
+  /// When Send was pressed for it, or "Retry" after it failed.
+  Duration startedAt;
 
   Duration get elapsed => clock() - startedAt;
 
@@ -323,6 +323,15 @@ class AttachmentSend extends ChangeNotifier {
 
   /// Uploaded: its event is being sent.
   void uploaded() => _set(AttachmentSendStage.sending);
+
+  /// "Retry" on its failed message: it is being uploaded again, its time
+  /// counted from now.
+  void retrying() {
+    if (_stage != AttachmentSendStage.failed) return;
+    startedAt = clock();
+    _stage = AttachmentSendStage.uploading;
+    notifyListeners();
+  }
 
   void sent() {
     _set(AttachmentSendStage.sent);

@@ -969,11 +969,20 @@ class MatrixRoom extends Room {
   Future<void> cancelSend(TimelineEvent event) async {
     final mxEvent = event as MatrixTimelineEvent;
     await mxEvent.event.cancelSend();
+    // A file sent from the composer: no longer shown, its bytes let go.
+    final send = AttachmentSends.instance.byTransaction(localId, event.eventId);
+    if (send != null) AttachmentSends.instance.remove(send);
   }
 
   @override
   Future<void> retrySend(TimelineEvent event) async {
     final mxEvent = event as MatrixTimelineEvent;
+    final send = AttachmentSends.instance.byTransaction(localId, event.eventId);
+    if (send != null && mxEvent.event.status.isError) {
+      // Its stage follows the new attempt, and a failure shows again.
+      await retryMatrixFile(mxEvent.event, send);
+      return;
+    }
     await mxEvent.event.sendAgain();
   }
 

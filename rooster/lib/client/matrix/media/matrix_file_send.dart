@@ -35,7 +35,6 @@ Future<String?> sendMatrixFile(
 }) async {
   final send = attachment is TrackedMatrixAttachment ? attachment.send : null;
   final txid = room.client.generateUniqueTransactionId();
-  StreamSubscription<matrix.Event>? pending;
   if (send != null) {
     final file = attachment.file;
     send.trace?.handedOver(
@@ -45,9 +44,35 @@ Future<String?> sendMatrixFile(
       height: file.info['h'] as int?,
     );
     send.handedOver(txid);
-    // The SDK shows its pending event as soon as it has the file, and shows
-    // it again with the upload's address once uploaded, before the event
-    // is sent.
+  }
+  return _follow(
+      room,
+      send,
+      txid,
+      () => room.sendFileEvent(attachment.file,
+          txid: txid,
+          threadLastEventId: threadLastEventId,
+          threadRootEventId: threadRootEventId,
+          extraContent: extraContent,
+          thumbnail: attachment.thumbnailFile));
+}
+
+/// "Retry" on [event], a file that failed, which [send] follows: its stage
+/// goes back to uploading, and it is sent again as the SDK does it. Never
+/// throws, like [sendMatrixFile].
+Future<String?> retryMatrixFile(matrix.Event event, AttachmentSend send) {
+  send.retrying();
+  return _follow(event.room, send, event.eventId, event.sendAgain);
+}
+
+/// Runs [sendFile], the SDK's send of the file under [txid], keeping
+/// [send]'s stage: the SDK shows its pending event as soon as it has the
+/// file, and shows it again with the upload's address once uploaded,
+/// before the event is sent.
+Future<String?> _follow(matrix.Room room, AttachmentSend? send, String txid,
+    Future<String?> Function() sendFile) async {
+  StreamSubscription<matrix.Event>? pending;
+  if (send != null) {
     pending = room.client.onTimelineEvent.stream.listen((event) {
       if (event.roomId != room.id || event.eventId != txid) return;
       send.echo();
@@ -57,16 +82,11 @@ Future<String?> sendMatrixFile(
     });
   }
 
-  Future<String?> sendFile() => room.sendFileEvent(attachment.file,
-      txid: txid,
-      threadLastEventId: threadLastEventId,
-      threadRootEventId: threadRootEventId,
-      extraContent: extraContent,
-      thumbnail: attachment.thumbnailFile);
-
   try {
     final trace = send?.trace;
-    final id = await (trace == null ? sendFile() : trace.run(sendFile));
+    final id = await (trace == null || trace.span.isFinished
+        ? sendFile()
+        : trace.run(sendFile));
     if (id == null) {
       send?.failed();
     } else {

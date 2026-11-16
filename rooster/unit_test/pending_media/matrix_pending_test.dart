@@ -132,6 +132,72 @@ void main() {
     await events.cancel();
   });
 
+  /// A photo sent while uploads are refused: its send, failed, and its
+  /// pending event.
+  Future<(AttachmentSend, matrix.Event, List<matrix.Event>)>
+      failedPhoto() async {
+    transport.failUploads = true;
+    final echoes = <matrix.Event>[];
+    mx.onTimelineEvent.stream.listen(echoes.add);
+    composerSend(room, attachments: [
+      PendingFileAttachment(name: 'photo.jpg', data: blackJpeg(400, 300))
+    ]).send();
+    final send = AttachmentSends.instance.all.single;
+    await until(() => send.isFinished);
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    final failed = echoes.lastWhere((e) => e.eventId == send.transactionId);
+    expect(failed.status.isError, isTrue);
+    expect(send.stage, AttachmentSendStage.failed);
+    return (send, failed, echoes);
+  }
+
+  test(
+      '"Retry" on a failed file: its stage goes back to uploading, and it '
+      'leaves the list once sent', () async {
+    final (send, failed, echoes) = await failedPhoto();
+    final txid = send.transactionId!;
+
+    // The message menu's "Retry" (timeline_event_menu.dart).
+    transport.failUploads = false;
+    transport.holdUploads = Completer();
+    final before = echoes.length;
+    final retry = room.retrySend(room.convertEvent(failed));
+    await until(() => echoes
+        .skip(before)
+        .any((e) => e.eventId == txid && e.status.isSending));
+    expect(AttachmentSends.instance.byTransaction(room.localId, txid), send);
+    expect(send.stage, AttachmentSendStage.uploading,
+        reason: 'not the failure under a message being sent');
+
+    transport.holdUploads!.complete();
+    await retry;
+    expect(transport.sentEvents, hasLength(1));
+    expect(send.stage, AttachmentSendStage.sent);
+    expect(AttachmentSends.instance.all, isEmpty,
+        reason: 'sent: its bytes are let go');
+  });
+
+  test('"Retry" refused again: failed again, and no unhandled error', () async {
+    final (send, failed, _) = await failedPhoto();
+    final unhandled = <Object>[];
+    await runZonedGuarded(() => room.retrySend(room.convertEvent(failed)),
+        (error, _) => unhandled.add(error));
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(unhandled, isEmpty);
+    expect(send.stage, AttachmentSendStage.failed);
+    expect(AttachmentSends.instance.all, [send]);
+  });
+
+  test('"Cancel" on a failed file takes it off the list', () async {
+    final (send, failed, _) = await failedPhoto();
+    await room.cancelSend(room.convertEvent(failed));
+    expect(AttachmentSends.instance.all, isEmpty);
+    expect(
+        AttachmentSends.instance
+            .byTransaction(room.localId, send.transactionId!),
+        isNull);
+  });
+
   test('a file that cannot be read any more fails where the chat shows it',
       () async {
     final gone = PendingFileAttachment(
