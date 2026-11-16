@@ -146,9 +146,11 @@ class PendingAttachmentStatus extends StatefulWidget {
         if (waitsUntil != null) {
           final time = timeOfDay?.call(waitsUntil) ??
               DateFormat.Hm().format(waitsUntil.toLocal());
+          // The sentence alone, as "took too long": beside the size its
+          // time would be cut on a phone.
           return (
             label: labelPendingFileServerAskedToWait(time),
-            detail: size,
+            detail: null,
             icon: Icons.schedule_rounded
           );
         }
