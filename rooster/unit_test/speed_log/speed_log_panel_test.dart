@@ -38,7 +38,7 @@ SpeedLog _log() {
 
   final sync = log.startSpan(SpeedOperation.sync);
   now += const Duration(milliseconds: 30000);
-  sync.mark(SpeedStep.response);
+  sync.mark(SpeedStep.serverWait);
   sync.finish();
   return log;
 }

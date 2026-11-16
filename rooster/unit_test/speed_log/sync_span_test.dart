@@ -8,6 +8,7 @@ import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
 import 'package:rooster/diagnostic/speed_log/speed_names.dart';
 import 'package:rooster/diagnostic/speed_log/speed_report.dart';
+import 'package:rooster/diagnostic/speed_log/speed_summary.dart';
 import 'package:rooster/diagnostic/speed_log/sync_trace.dart';
 
 import 'fake_account.dart';
@@ -51,8 +52,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
-      'each sync of an account is a span: request, response, processing, '
-      'clean-up, next request', () async {
+      'each sync of an account is a span: server wait, processing, clean-up, '
+      'client work, next request', () async {
     // Logged in, the SDK's sync loop runs on its own, as in the app; the
     // fake server holds each long poll for 50 ms.
     final client = await fakeAccount('sync_span_test', FakeTransport());
@@ -70,19 +71,34 @@ void main() {
     final round = rounds().last;
     expect(round.outcome, SpeedOutcome.ok);
     expect(_names(round), [
-      SpeedStep.response,
+      SpeedStep.serverWait,
+      SpeedStep.processing,
+      SpeedStep.cleanUp,
+      SpeedStep.clientWork,
+      SpeedStep.nextRequest,
+    ]);
+    SpanStep step(String name) =>
+        round.steps.singleWhere((s) => s.name == name);
+    // The steps follow each other from the request to the next one.
+    var end = Duration.zero;
+    for (final name in [
+      SpeedStep.serverWait,
       SpeedStep.processing,
       SpeedStep.cleanUp,
       SpeedStep.nextRequest,
-    ]);
-    // The steps follow each other from the request to the next one.
-    var end = Duration.zero;
-    for (final step in round.steps) {
-      expect(step.start, end, reason: step.name);
-      end = step.start + step.duration!;
+    ]) {
+      expect(step(name).start, end, reason: name);
+      end = step(name).start + step(name).duration!;
     }
     expect(round.duration, greaterThanOrEqualTo(end));
-    // The long poll is the response step.
+    // The client's work spans processing and clean-up.
+    final clientWork = step(SpeedStep.clientWork);
+    expect(clientWork.start, step(SpeedStep.processing).start);
+    expect(
+        clientWork.duration,
+        step(SpeedStep.processing).duration! +
+            step(SpeedStep.cleanUp).duration!);
+    // The long poll is the server wait step.
     expect(round.steps.first.duration,
         greaterThanOrEqualTo(const Duration(milliseconds: 50)));
 
@@ -139,6 +155,48 @@ void main() {
       expect(frames.listens, 1);
     });
 
+    test(
+        "the summary times the client's work apart from the server's "
+        '30 s wait', () {
+      var now = Duration.zero;
+      final log = SpeedLog(frames: _NoFrames(), clock: () => now);
+      final statuses = StreamController<matrix.SyncStatusUpdate>(sync: true);
+      SyncSpeedTrace(statuses.stream, log: log);
+      void report(matrix.SyncStatus status, Duration after) {
+        now += after;
+        statuses.add(matrix.SyncStatusUpdate(status));
+      }
+
+      // 20 rounds of an idle account: the server holds each request 30 s,
+      // then the client takes 3, 6... 60 ms (a third processing, the rest
+      // cleaning up).
+      for (var i = 1; i <= 20; i++) {
+        report(matrix.SyncStatus.waitingForResponse, Duration.zero);
+        report(matrix.SyncStatus.processing, const Duration(seconds: 30));
+        report(matrix.SyncStatus.cleaningUp, Duration(milliseconds: i));
+        report(matrix.SyncStatus.finished, Duration(milliseconds: 2 * i));
+        now += const Duration(milliseconds: 1);
+      }
+      report(matrix.SyncStatus.waitingForResponse, Duration.zero);
+
+      final sync = summarizeSpeedLog(log).single;
+      expect(sync.ok, 20);
+      Percentiles timing(String step) =>
+          sync.steps.singleWhere((s) => s.name == step).timing!;
+      expect(timing(SpeedStep.serverWait).p50, const Duration(seconds: 30));
+      expect(
+          timing(SpeedStep.clientWork).p50, const Duration(milliseconds: 30));
+      expect(
+          timing(SpeedStep.clientWork).p95, const Duration(milliseconds: 57));
+      expect(
+          timing(SpeedStep.processing).p95, const Duration(milliseconds: 19));
+      expect(timing(SpeedStep.cleanUp).p95, const Duration(milliseconds: 38));
+
+      final text = buildSpeedReport(log);
+      expect(text, contains('  server_wait n=20 p50=30000ms p95=30000ms\n'));
+      expect(text, contains('  client_work n=20 p50=30ms p95=57ms\n'));
+    });
+
     test('a fake sync for a local echo does not end the wait for a response',
         () {
       report(matrix.SyncStatus.waitingForResponse);
@@ -148,7 +206,7 @@ void main() {
 
       report(matrix.SyncStatus.processing);
       report(matrix.SyncStatus.processing, progress: 1);
-      expect(_names(log.openSpans.single), [SpeedStep.response]);
+      expect(_names(log.openSpans.single), [SpeedStep.serverWait]);
     });
 
     test('a failed round is failed and keeps its back-off as next request', () {
@@ -160,7 +218,7 @@ void main() {
       final failed = log.spans.toList().single;
       expect(failed.outcome, SpeedOutcome.failed);
       expect(_names(failed),
-          [SpeedStep.response, SpeedStep.error, SpeedStep.nextRequest]);
+          [SpeedStep.serverWait, SpeedStep.error, SpeedStep.nextRequest]);
     });
 
     test('a round dropped before clean-up is incomplete', () {

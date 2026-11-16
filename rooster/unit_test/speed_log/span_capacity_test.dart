@@ -24,7 +24,7 @@ void main() {
     for (var i = 0; i < 300; i++) {
       final round = log.startSpan(SpeedOperation.sync);
       now += const Duration(seconds: 30);
-      round.mark(SpeedStep.response);
+      round.mark(SpeedStep.serverWait);
       round.finish();
     }
 

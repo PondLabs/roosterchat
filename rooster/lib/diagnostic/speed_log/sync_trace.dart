@@ -11,9 +11,13 @@ import 'package:rooster/diagnostic/speed_log/speed_names.dart';
 /// The span starts when the request leaves (`waitingForResponse`), and its
 /// steps end at:
 ///
-/// - `response`: the response arrived (`processing`, the first one);
+/// - `server_wait`: the response arrived (`processing`, the first one): the
+///   server's wait, up to 30 s of long poll on an idle account;
 /// - `processing`: it was handled (`cleaningUp`);
 /// - `clean_up`: the round finished (`finished`);
+/// - `client_work`: `processing` and `clean_up` together, what the client
+///   did with the response, so its p50 and p95 read without the long poll
+///   that fills the span's total;
 /// - `next_request`: the next round's request left, which closes the span,
 ///   so its total is one whole round, a retry's back-off included.
 ///
@@ -48,14 +52,15 @@ class SyncSpeedTrace {
         // The rooms of any sync, a fake one included, report a progress;
         // the round reports its response without one.
         if (update.progress == null) {
-          _advance(
-              _Stage.waitingForResponse, _Stage.processing, SpeedStep.response);
+          _advance(_Stage.waitingForResponse, _Stage.processing,
+              SpeedStep.serverWait);
         }
       case matrix.SyncStatus.cleaningUp:
         _advance(_Stage.processing, _Stage.cleaningUp, SpeedStep.processing);
       case matrix.SyncStatus.finished:
         if (_advance(_Stage.cleaningUp, _Stage.done, SpeedStep.cleanUp)) {
           _outcome = SpeedOutcome.ok;
+          _clientWork();
         }
       case matrix.SyncStatus.error:
         final span = _span;
@@ -65,6 +70,25 @@ class SyncSpeedTrace {
           _outcome = SpeedOutcome.failed;
         }
     }
+  }
+
+  /// From the end of `server_wait` to the end of `clean_up`, just marked.
+  void _clientWork() {
+    final span = _span;
+    if (span == null) return;
+    Duration? end(String name) {
+      for (final step in span.steps) {
+        if (step.name == name && step.duration != null) {
+          return step.start + step.duration!;
+        }
+      }
+      return null;
+    }
+
+    final from = end(SpeedStep.serverWait);
+    final to = end(SpeedStep.cleanUp);
+    if (from == null || to == null) return;
+    span.addStep(SpeedStep.clientWork, from, to - from);
   }
 
   bool _advance(_Stage from, _Stage to, String step) {

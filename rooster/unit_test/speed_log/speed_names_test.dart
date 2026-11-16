@@ -46,7 +46,8 @@ void main() {
         {'text_send', 'sync', 'image_prepare', 'voice_join'});
     expect(SpeedStep.all, {
       'send', 'echo', 'echo_painted', 'queue_wait', 'request', 'retry', //
-      'answer', 'response', 'processing', 'clean_up', 'next_request', 'error',
+      'answer', 'server_wait', 'processing', 'clean_up', 'client_work', //
+      'next_request', 'error',
       'header', 'decode', 'encode', // image_prepare (and queue_wait)
       // voice_join
       'leave_previous', 'output_device', 'foci', 'openid_token', 'sfu_token',
