@@ -55,11 +55,17 @@ void main() {
     server.holdNextSend = hold.future;
     final echoes = <matrix.Event>[];
     final events = mx.onTimelineEvent.stream.listen(echoes.add);
+    // A text in front, its PUT /send held: the photo's event waits in the
+    // room's queue, where it can still be cancelled. Once its own request
+    // has left the server may have it, and Cancel does nothing (T2.7).
+    final inFront = room.sendMessage(message: 'in front');
+    await until(() => room.matrixRoom.sendingQueue.length == 1);
     composerSend(room, attachments: [
       PendingFileAttachment(name: 'photo.jpg', data: fakeJpegHeader(4032, 3024))
     ]).send();
     final send = AttachmentSends.instance.all.single;
     await until(() => send.stage == AttachmentSendStage.sending);
+    await until(() => room.matrixRoom.sendingQueue.length == 2);
     await ownMediaOnDisk(files, client.identifier, 2);
     final pending = echoes.lastWhere(
         (e) => e.eventId == send.transactionId && e.content['url'] is String);
@@ -69,6 +75,7 @@ void main() {
 
     // Whatever the SDK still does with the send, nothing comes back.
     hold.complete();
+    await inFront;
     await settle();
     await events.cancel();
     expect(files.files.keys.where((k) => k.startsWith('own_media/')), isEmpty);
