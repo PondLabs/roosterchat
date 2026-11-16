@@ -25,27 +25,33 @@ class MatrixMxcImage extends LODImageProvider {
     Event? matrixEvent,
   }) : super(
           id: "$identifier-$doThumbnail-$doFullres-$thumbnailHeight-$fullResHeight",
-          loadThumbnail: (doThumbnail == null || doThumbnail == true)
-              ? () => retryUntilOnline<Uint8List?>(
-                  client,
-                  () => loadMatrixThumbnail(
-                        client,
-                        identifier,
-                        matrixEvent,
-                        cache: cache,
-                      ))
-              : null,
-          loadFullRes: (doFullres == null || doFullres == true)
-              ? () => retryUntilOnline<Uint8List?>(
-                  client,
-                  () => loadMatrixFullRes(
-                        client,
-                        identifier,
-                        matrixEvent,
-                        cache: cache,
-                      ))
-              : null,
-        );
+        ) {
+    if (doThumbnail == null || doThumbnail == true) {
+      loadThumbnail = () => retryUntilOnline<Uint8List?>(
+          client,
+          () => loadMatrixThumbnail(
+                client,
+                identifier,
+                matrixEvent,
+                cache: cache,
+                cached: _cachedThumbnail,
+              ));
+    }
+    if (doFullres == null || doFullres == true) {
+      loadFullRes = () => retryUntilOnline<Uint8List?>(
+          client,
+          () => loadMatrixFullRes(
+                client,
+                identifier,
+                matrixEvent,
+                cache: cache,
+              ));
+    }
+  }
+
+  /// Where [hasCachedThumbnail] found the thumbnail, so that loading it
+  /// asks the cache nothing more.
+  Uri? _cachedThumbnail;
 
   static String getThumbnailIdentifier(Uri uri) {
     return "matrix_thumbnail-$uri";
@@ -77,24 +83,23 @@ class MatrixMxcImage extends LODImageProvider {
     }
   }
 
+  /// [cached]: where the thumbnail is in the file cache, when that is
+  /// already known.
   static Future<Uint8List?> loadMatrixThumbnail(
     Client client,
     Uri uri,
     Event? matrixEvent, {
     bool cache = true,
+    Uri? cached,
   }) async {
     var identifier = getThumbnailIdentifier(uri);
 
     final own = await readOwnMedia(client, matrixEvent, thumbnail: true);
     if (own != null) return own;
 
-    if (await fileCache?.hasFile(identifier) == true) {
-      var cacheUri = await fileCache?.getFile(identifier);
-
-      if (cacheUri != null) {
-        return File.fromUri(cacheUri).readAsBytes();
-      }
-    }
+    final hit = await _readCached(cached) ??
+        await _readCached(await fileCache?.getFile(identifier));
+    if (hit != null) return hit;
 
     Uint8List? bytes;
     if (matrixEvent != null) {
@@ -141,13 +146,8 @@ class MatrixMxcImage extends LODImageProvider {
     final own = await readOwnMedia(client, matrixEvent);
     if (own != null) return own;
 
-    if (await fileCache?.hasFile(identifier) == true) {
-      var cacheUri = await fileCache?.getFile(identifier);
-
-      if (cacheUri != null) {
-        return File.fromUri(cacheUri).readAsBytes();
-      }
-    }
+    final hit = await _readCached(await fileCache?.getFile(identifier));
+    if (hit != null) return hit;
 
     Uint8List? bytes;
     if (matrixEvent != null) {
@@ -167,10 +167,24 @@ class MatrixMxcImage extends LODImageProvider {
     return null;
   }
 
+  /// The bytes of the cached file at [uri]; null when there is none or it
+  /// cannot be read.
+  static Future<Uint8List?> _readCached(Uri? uri) async {
+    if (uri == null) return null;
+    try {
+      return await File.fromUri(uri).readAsBytes();
+    } on FileSystemException {
+      return null;
+    }
+  }
+
+  /// One lookup in the file cache, whose answer loading the thumbnail
+  /// then uses.
   @override
   Future<bool> hasCachedThumbnail() async {
     var id = getThumbnailIdentifier(identifier);
-    return await fileCache?.hasFile(id) == true;
+    _cachedThumbnail = await fileCache?.getFile(id);
+    return _cachedThumbnail != null;
   }
 
   @override

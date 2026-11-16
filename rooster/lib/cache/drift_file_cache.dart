@@ -142,18 +142,33 @@ class DriftFileCache implements FileCache {
     return file.uri;
   }
 
+  /// How stale an entry's access time may get before a read writes it
+  /// again: a hit is then one query, and [clean] (5 days) still sees
+  /// every entry read in the last hour as used.
+  static const accessTimeSlack = Duration(hours: 1);
+
+  /// One query: the entry, then its file on disk. An entry whose file is
+  /// gone is forgotten.
   @override
   Future<Uri?> getFile(String identifier) async {
-    if (!await hasFile(identifier)) return null;
-
     var entry = await _getByFileId(identifier);
     if (entry == null) return null;
-    //var lastAccess = DateTime.fromMillisecondsSinceEpoch(entry!.lastAccessedTimestamp).toLocal().toString();
-    final db = await get();
-    db.into(db.fileCacheEntry).insertOnConflictUpdate(entry.copyWith(
-        lastAccessedTimestamp: DateTime.now().millisecondsSinceEpoch));
 
+    final db = await get();
     var file = File(entry.path);
+    if (!await file.exists()) {
+      (db.delete(db.fileCacheEntry)..where((tbl) => tbl.id.equals(entry.id)))
+          .go();
+      return null;
+    }
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - entry.lastAccessedTimestamp > accessTimeSlack.inMilliseconds) {
+      // An update, never an insert: an entry removed meanwhile stays
+      // removed.
+      (db.update(db.fileCacheEntry)..where((tbl) => tbl.id.equals(entry.id)))
+          .write(FileCacheEntryCompanion(lastAccessedTimestamp: Value(now)));
+    }
 
     return file.uri;
   }
