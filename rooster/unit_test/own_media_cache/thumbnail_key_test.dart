@@ -57,7 +57,7 @@ void main() {
     final data = fakeJpegHeader(4032, 3024);
     final event = await sendPhoto(
         client, room, PendingFileAttachment(name: 'photo.jpg', data: data));
-    await settle();
+    await ownMediaOnDisk(files, client.identifier, 2);
 
     final prefix = 'own_media/${client.identifier}/';
     final thumbnailSize = event.thumbnailInfoMap['size'] as int;

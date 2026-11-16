@@ -140,7 +140,7 @@ class MatrixClient extends Client {
     // Logged out here or by the homeserver: nothing sent stays behind.
     _matrixClient.onLoginStateChanged.stream
         .where((state) => state == matrix.LoginState.loggedOut)
-        .listen((_) => _ownMedia.clear());
+        .listen((_) => _clearOwnMedia());
     _syncSpeedTrace = SyncSpeedTrace(_matrixClient.onSyncStatus.stream);
 
     self = ErrorProfile();
@@ -508,7 +508,16 @@ class MatrixClient extends Client {
     try {
       await _matrixClient.logout();
     } finally {
+      await _clearOwnMedia();
+    }
+  }
+
+  /// Never throws: logging out goes on whatever is left on disk.
+  Future<void> _clearOwnMedia() async {
+    try {
       await _ownMedia.clear();
+    } catch (error, stack) {
+      Log.onError(error, stack, content: "Could not clear the sent files");
     }
   }
 

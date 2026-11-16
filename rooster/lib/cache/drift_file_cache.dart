@@ -98,9 +98,18 @@ class DriftFileCache implements FileCache {
       Expression<bool> Function($FileCacheEntryTable tbl) where) async {
     final db = await get();
     final entries = await (db.select(db.fileCacheEntry)..where(where)).get();
-    await (db.delete(db.fileCacheEntry)..where(where)).go();
     for (final entry in entries) {
-      await _cleanFile(entry);
+      try {
+        await _cleanFile(entry);
+      } on FileSystemException catch (error) {
+        // In use (Windows): its entry stays, for clean() to take later, and
+        // the others go.
+        Log.w("Could not delete a cached file: ${error.osError?.message}");
+        continue;
+      }
+      await (db.delete(db.fileCacheEntry)
+            ..where((tbl) => tbl.id.equals(entry.id)))
+          .go();
     }
   }
 

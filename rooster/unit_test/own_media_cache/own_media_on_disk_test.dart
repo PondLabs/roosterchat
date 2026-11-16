@@ -73,6 +73,32 @@ void main() {
     expect((await own.read('mxc://hs/1'))!.length, 100);
   });
 
+  test(
+      'a file in use while logging out stays alone, with its entry; the '
+      'others go, and nothing throws', () async {
+    for (var i = 1; i <= 3; i++) {
+      await own.write('mxc://hs/$i', Uint8List(100));
+    }
+    final held = (await cache.getFile('${own.prefix}mxc://hs/2'))!;
+    final handle = File.fromUri(held).openSync(mode: FileMode.append);
+    try {
+      await own.clear();
+    } finally {
+      handle.closeSync();
+    }
+
+    final db = cache.database!;
+    final rows = await db.select(db.fileCacheEntry).get();
+    if (Platform.isWindows) {
+      // Windows refuses to delete a file that is open.
+      expect(filesIn(dir), 1);
+      expect(rows.map((r) => r.path), [held.toFilePath()]);
+    } else {
+      expect(filesIn(dir), 0);
+      expect(rows, isEmpty);
+    }
+  });
+
   test('a fake cache sees each key written once', () async {
     final files = TempFileCache();
     final cache = FileOwnMediaCache('account', files);

@@ -149,5 +149,14 @@ Future<Uint8List?> timelineFileData(MatrixRoom room, matrix.Event event) {
   return (message.attachments!.single as FileAttachment).file.getFileData();
 }
 
+/// Waits (real time) until [files] holds [count] entries of [account]'s
+/// own media: the send does not wait for them to reach the disk.
+Future<void> ownMediaOnDisk(TempFileCache files, String account, int count) =>
+    until(() =>
+        files.files.keys
+            .where((k) => k.startsWith('own_media/$account/'))
+            .length ==
+        count);
+
 /// Waits a little for writes nobody awaits (the image provider's).
 Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 50));

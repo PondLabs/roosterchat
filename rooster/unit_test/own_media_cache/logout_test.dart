@@ -44,7 +44,7 @@ void main() {
         room,
         PendingFileAttachment(
             name: 'photo.jpg', data: fakeJpegHeader(4032, 3024)));
-    await settle();
+    if (files != null) await ownMediaOnDisk(files!, client.identifier, 2);
   }
 
   setUp(() {
