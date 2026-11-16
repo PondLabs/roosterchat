@@ -77,7 +77,7 @@ class DriftFileCache implements FileCache {
       return;
     }
 
-    file.delete();
+    await file.delete();
   }
 
   @override
