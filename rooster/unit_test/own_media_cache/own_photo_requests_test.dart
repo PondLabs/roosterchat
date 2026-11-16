@@ -1,7 +1,10 @@
 @TestOn('vm')
 library;
 
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rooster/cache/own_media_cache.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
@@ -48,6 +51,8 @@ void main() {
         ImagePreparer.instance = appPreparer;
         AttachmentSends.instance.clear();
         await client.close();
+        // The web's map lives for the session: the next test starts empty.
+        OwnMediaMemory.instance.removeAccount(client.identifier);
         await files?.close();
         fileCache = null;
       });
@@ -108,6 +113,31 @@ void main() {
         expect(event.senderId, client.getMatrixClient().userID);
         expect(event.status, isNot(matrix.EventStatus.sending));
       });
+
+      if (platform == 'web') {
+        test('once the map lets the photo go, showing it asks again', () async {
+          final data = fakeJpegHeader(4032, 3024);
+          final event = await sendPhoto(client, room,
+              PendingFileAttachment(name: 'photo.jpg', data: data));
+          // Another account sends 64 MB after it: the photo is the oldest.
+          final memory = OwnMediaMemory.instance;
+          final other = MemoryOwnMediaCache('another account', memory);
+          for (var i = 0; i < 4; i++) {
+            await other.write('mxc://hs/$i', Uint8List(16 * 1024 * 1024));
+          }
+          expect(memory.bytes, lessThanOrEqualTo(memory.limitBytes));
+          server.mediaRequests.clear();
+
+          final picture = timelinePicture(room, event);
+          await server.countingDownloads(() async {
+            await picture.loadThumbnail!.call();
+            await picture.loadFullRes!.call();
+          });
+          expect(server.mediaRequests, hasLength(2),
+              reason: 'the thumbnail and the full picture, from the network');
+          await other.clear();
+        });
+      }
     });
   }
 }
