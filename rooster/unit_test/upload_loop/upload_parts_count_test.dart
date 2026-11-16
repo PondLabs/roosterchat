@@ -55,6 +55,23 @@ void main() {
     expect(progress.retrying, isFalse);
   });
 
+  test('a part that went up keeps counting when the other one fails', () {
+    final progress = UploadProgress()..expectedBytes = 1200;
+    progress.request()
+      ..uploadStarted(1000)
+      ..uploadSent(1000)
+      ..uploadAnswered(200, matrixError: false);
+    progress.request()
+      ..uploadStarted(200)
+      ..uploadFailed(SpeedError.http);
+    expect(progress.sentBytes, 1000, reason: 'the file is not sent again');
+    progress.request()
+      ..uploadStarted(200)
+      ..uploadSent(50);
+    expect(progress.sentBytes, 1050);
+    expect(progress.totalBytes, 1200);
+  });
+
   test('"Retry" with a part kept: it counts as sent, not uploaded again', () {
     final progress = UploadProgress()..expectedBytes = 1200;
     progress
