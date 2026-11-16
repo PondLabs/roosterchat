@@ -106,7 +106,8 @@ void main() {
     await cache.write('k', Uint8List(3));
     await Future.wait(
         [cache.write('j', Uint8List(3)), cache.write('j', Uint8List(3))]);
-    expect(files.writes, {'own_media/account/k': 1, 'own_media/account/j': 1});
+    expect(
+        files.putCounts, {'own_media/account/k': 1, 'own_media/account/j': 1});
     await files.close();
   });
 }
