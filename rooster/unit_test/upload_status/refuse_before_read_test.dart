@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:cross_file/cross_file.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rooster/utils/clipboard/pasted_file.dart';
@@ -32,6 +33,7 @@ class _FakePicker extends FilePicker {
   final List<PlatformFile> files;
   bool? withData;
   bool? withReadStream;
+  int opens = 0;
 
   @override
   Future<FilePickerResult?> pickFiles({
@@ -48,10 +50,23 @@ class _FakePicker extends FilePicker {
     bool lockParentWindow = false,
     bool readSequential = false,
   }) async {
+    opens++;
     this.withData = withData;
     this.withReadStream = withReadStream;
     return FilePickerResult(files);
   }
+}
+
+/// A photo from the gallery whose bytes fail the test when read.
+class _UnreadPhoto extends XFile {
+  _UnreadPhoto(int bytes) : super.fromData(Uint8List(bytes), name: 'big.jpg');
+
+  @override
+  Future<Uint8List> readAsBytes() => throw StateError('the photo was read');
+
+  @override
+  Stream<Uint8List> openRead([int? start, int? end]) =>
+      throw StateError('the photo was read');
 }
 
 void main() {
@@ -69,7 +84,11 @@ void main() {
     final refused = <(int, int)>[];
 
     final attached = await pickFileAttachments(
-        maxBytes: limit,
+        maxBytes: () async {
+          expect(picker.opens, 1,
+              reason: 'the picker opens before the limit is asked');
+          return limit;
+        },
         onRefused: (bytes, max) => refused.add((bytes, max)),
         web: false);
 
@@ -104,7 +123,7 @@ void main() {
     final refused = <int>[];
 
     final attached = await pickFileAttachments(
-        maxBytes: limit,
+        maxBytes: () async => limit,
         onRefused: (bytes, _) => refused.add(bytes),
         web: true);
 
@@ -122,7 +141,9 @@ void main() {
       _Unread(reads, name: 'big.mkv', size: 60 * 1000 * 1000, path: '/v/big'),
     ]);
     final attached = await pickFileAttachments(
-        maxBytes: null, onRefused: (_, __) => fail('refused'), web: false);
+        maxBytes: () async => null,
+        onRefused: (_, __) => fail('refused'),
+        web: false);
     expect(attached.single.path, '/v/big');
     expect(reads, isEmpty);
   });
@@ -152,6 +173,21 @@ void main() {
         onImage: decoded.add,
         onRefused: (_, __) => fail('refused'));
     expect(decoded, [small]);
+  });
+
+  test(
+      'gallery and camera: a photo over the limit is refused by its length, '
+      'before its bytes are read', () async {
+    final refused = <int>[];
+    expect(
+        await pickedFileFits(_UnreadPhoto(limit + 1),
+            maxBytes: limit, onRefused: (bytes, _) => refused.add(bytes)),
+        isFalse);
+    expect(refused, [limit + 1]);
+    expect(
+        await pickedFileFits(_UnreadPhoto(10),
+            maxBytes: limit, onRefused: (_, __) => fail('refused')),
+        isTrue);
   });
 
   testWidgets('the refusal names both sizes', (tester) async {

@@ -7,7 +7,6 @@ import 'package:rooster/client/components/gif/gif_component.dart';
 import 'package:rooster/client/components/polls/poll_component.dart';
 import 'package:rooster/config/build_config.dart';
 import 'package:rooster/config/layout_config.dart';
-import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/config/platform_utils.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
@@ -342,8 +341,17 @@ class MessageInputState extends State<MessageInput> {
 
   Future<int?> uploadLimit() async {
     final room = widget.room;
-    final limit = room is MatrixRoom ? await room.maxUploadBytes() : null;
+    final limit = room == null ? null : await uploadLimitOf(room);
     return maxUploadBytes = limit;
+  }
+
+  /// The limit a paste is checked against: a paste cannot wait for it, so
+  /// the one known now. When none is known yet (the first ask failed or
+  /// has not answered), it is asked again for the next paste.
+  int? pasteLimit() {
+    final known = maxUploadBytes;
+    if (known == null) unawaited(uploadLimit());
+    return known;
   }
 
   /// A file of [bytes] over the server's [limit]: refused, unread.
@@ -355,13 +363,8 @@ class MessageInputState extends State<MessageInput> {
 
   /// Whether [file] of the gallery fits the limit, by its length (read
   /// from the file system on native), before its bytes are read.
-  Future<bool> galleryFileFits(XFile file) async {
-    final limit = maxUploadBytes ?? await uploadLimit();
-    final bytes = await file.length();
-    if (fitsUploadLimit(bytes, limit)) return true;
-    refuseFile(bytes, limit!);
-    return false;
-  }
+  Future<bool> galleryFileFits(XFile file) async => pickedFileFits(file,
+      maxBytes: maxUploadBytes ?? await uploadLimit(), onRefused: refuseFile);
 
   @override
   void initState() {
@@ -379,7 +382,7 @@ class MessageInputState extends State<MessageInput> {
     stopListeningForPastedFiles = listenForPastedFiles(
         accept: () => textFocus.hasFocus,
         onFiles: onFilesPasted,
-        maxBytes: () => maxUploadBytes,
+        maxBytes: pasteLimit,
         onRefused: refuseFile);
     unawaited(uploadLimit());
 
@@ -1805,7 +1808,7 @@ class MessageInputState extends State<MessageInput> {
             // Paths and sizes, not bytes: a file over the server's limit
             // is refused before it is read.
             final attachments = await pickFileAttachments(
-                maxBytes: await uploadLimit(), onRefused: refuseFile);
+                maxBytes: uploadLimit, onRefused: refuseFile);
             for (final attachment in attachments) {
               await handlePickedAttachment(attachment);
             }

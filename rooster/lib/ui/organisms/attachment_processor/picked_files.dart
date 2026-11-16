@@ -6,11 +6,36 @@ library;
 
 import 'dart:typed_data';
 
+import 'package:cross_file/cross_file.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:rooster/client/attachment.dart';
+import 'package:rooster/client/matrix/matrix_room.dart';
+import 'package:rooster/client/room.dart';
 import 'package:rooster/config/platform_utils.dart';
 import 'package:rooster/utils/text_utils.dart';
+
+/// The server's limit on an uploaded file in [room] (`m.upload.size`), or
+/// null when it is not known. A test replaces it: its rooms are not
+/// Matrix rooms.
+Future<int?> Function(Room room) uploadLimitOf = _serverUploadLimit;
+
+Future<int?> _serverUploadLimit(Room room) async =>
+    room is MatrixRoom ? await room.maxUploadBytes() : null;
+
+/// Whether [file], from the gallery or the camera, fits [maxBytes], by its
+/// length (read from the file system on native), before its bytes are
+/// read. One over it goes to [onRefused] with its size.
+Future<bool> pickedFileFits(
+  XFile file, {
+  required int? maxBytes,
+  required void Function(int bytes, int maxBytes) onRefused,
+}) async {
+  final bytes = await file.length();
+  if (fitsUploadLimit(bytes, maxBytes)) return true;
+  onRefused(bytes, maxBytes!);
+  return false;
+}
 
 /// Whether a file of [bytes] may be sent under [maxBytes] (null: the limit
 /// is not known, and the server checks).
@@ -34,10 +59,13 @@ String labelFileOverUploadLimit(String size, String limit) => Intl.message(
 
 /// Asks the picker for files, as paths and sizes on native and as the
 /// browser's `File`s (size known, bytes read on demand) on the web, never
-/// their bytes, and makes attachments of those within [maxBytes]. Each
-/// one over it goes to [onRefused] with its size, unread.
+/// their bytes, and makes attachments of those within the limit
+/// [maxBytes] gives. Each one over it goes to [onRefused] with its size,
+/// unread. The picker opens first and the limit is asked after: on the
+/// web a dialog opened after a network wait can lose the click that asked
+/// for it.
 Future<List<PendingFileAttachment>> pickFileAttachments({
-  required int? maxBytes,
+  required Future<int?> Function() maxBytes,
   required void Function(int bytes, int maxBytes) onRefused,
   bool? web,
 }) async {
@@ -49,7 +77,7 @@ Future<List<PendingFileAttachment>> pickFileAttachments({
       allowMultiple: true);
   if (result == null) return const [];
   return admitPickedFiles(result.files,
-      maxBytes: maxBytes, onRefused: onRefused, web: web);
+      maxBytes: await maxBytes(), onRefused: onRefused, web: web);
 }
 
 /// [files] as attachments, checked by size first. On native a file is
