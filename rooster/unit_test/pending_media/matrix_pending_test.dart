@@ -2,6 +2,9 @@
 library;
 
 import 'dart:async';
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:matrix/matrix.dart' as matrix;
@@ -9,10 +12,13 @@ import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/components/threads/thread_component.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
+import 'package:rooster/client/matrix/media/matrix_file_send.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_message.dart';
 import 'package:rooster/diagnostic/speed_log/file_send_trace.dart';
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
 import 'package:rooster/diagnostic/speed_log/speed_names.dart';
+import 'package:rooster/ui/molecules/timeline_events/events/pending_attachment_status.dart';
+import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_attachments.dart';
 import 'package:rooster/ui/organisms/chat/composer_send.dart';
 import 'package:rooster/utils/image/preparation/image_preparation.dart';
 
@@ -246,6 +252,66 @@ void main() {
       }
     });
   }
+
+  for (final withPoster in [true, false]) {
+    test(
+        'a pending video shows ${withPoster ? 'its poster' : 'an empty slot'} '
+        'at its size, not a file', () async {
+      transport.holdUploads = Completer();
+      final poster = blackJpeg(320, 180);
+      final video = PendingFileAttachment(
+          name: 'clip.mp4', data: Uint8List(2000), mimeType: 'video/mp4')
+        ..dimensions = const Size(1280, 720);
+      if (withPoster) {
+        video
+          ..thumbnailFile = poster
+          ..thumbnailMime = 'image/jpeg';
+      }
+      final echoes = <matrix.Event>[];
+      final events = mx.onTimelineEvent.stream.listen(echoes.add);
+      composerSend(room, attachments: [video]).send();
+      final send = AttachmentSends.instance.all.single;
+      await until(() => send.echoed);
+
+      final pending = echoes.lastWhere((e) => e.eventId == send.transactionId);
+      final message = room.convertEvent(pending) as MatrixTimelineEventMessage;
+      final shown = message.attachments!.single as PendingVideoAttachment;
+      expect((shown.width, shown.height), (1280.0, 720.0));
+      expect(shown.poster, withPoster ? localPicture(poster) : isNull);
+
+      transport.holdUploads!.complete();
+      await until(() => send.isFinished);
+      await events.cancel();
+    });
+  }
+
+  testWidgets('the timeline draws a pending video in a slot of its size',
+      (tester) async {
+    final poster = blackJpeg(32, 18);
+    for (final image in [localPicture(poster), null]) {
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+              body: Align(
+                  alignment: Alignment.topLeft,
+                  child: TimelineEventViewAttachments(
+                      previewMedia: true,
+                      attachments: [
+                        PendingVideoAttachment(
+                            MemoryFileProvider(Uint8List(4), 'clip.mp4'),
+                            name: 'clip.mp4',
+                            mimeType: 'video/mp4',
+                            poster: image,
+                            width: 1280,
+                            height: 720)
+                      ])))));
+      final slot = find.byType(PendingPictureSlot);
+      expect(slot, findsOneWidget);
+      expect(tester.getSize(slot).height, 200);
+      expect(tester.getSize(slot).width, closeTo(200 * 1280 / 720, 0.01));
+      expect(find.descendant(of: slot, matching: find.byType(Image)),
+          image == null ? findsNothing : findsOneWidget);
+    }
+  });
 
   test('a file that cannot be read any more fails where the chat shows it',
       () async {
