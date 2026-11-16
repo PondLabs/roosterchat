@@ -74,45 +74,19 @@ class MxcFileProvider implements FileProvider {
     if (event != null) {
       var file = await event!.downloadAndDecryptAttachment(
         downloadCallback: (url) async {
-          var request = http.Request("GET", url);
-          request.headers
-              .addAll({'authorization': 'Bearer ${client.accessToken}'});
-          final response = await http.Client().send(request);
-
-          List<int> downloadedBytes = response.contentLength != null
-              ? Uint8List(response.contentLength!)
-              : [];
-
-          int downloaded = 0;
-          if (response.statusCode != 200) {
-            throw Exception("Unexpected response: ${response.statusCode}");
-          }
-
           var lastUpdatedProgress = DateTime.now();
-
-          var data = response.stream.listen(
-            (event) {
-              if (response.contentLength != null) {
-                downloadedBytes.setAll(downloaded, event);
-              } else {
-                downloadedBytes.addAll(event);
-              }
-              downloaded += event.length;
-
-              var now = DateTime.now();
-              if (now.difference(lastUpdatedProgress).inMilliseconds > 16) {
-                lastUpdatedProgress = now;
-
-                fileDownloadProgress.add(
-                    DownloadProgress(downloaded, response.contentLength ?? -1));
-              }
-            },
-            cancelOnError: true,
-          ).asFuture();
-
-          await data;
-
-          return Uint8List.fromList(downloadedBytes);
+          final bytes =
+              await downloadMedia(client, url, onProgress: (downloaded, total) {
+            var now = DateTime.now();
+            if (now.difference(lastUpdatedProgress).inMilliseconds > 16) {
+              lastUpdatedProgress = now;
+              fileDownloadProgress
+                  .add(DownloadProgress(downloaded, total ?? -1));
+            }
+          });
+          fileDownloadProgress
+              .add(DownloadProgress(bytes.length, bytes.length));
+          return bytes;
         },
       );
       bytes = file.bytes;
@@ -132,4 +106,66 @@ class MxcFileProvider implements FileProvider {
   @override
   Stream<DownloadProgress>? get onProgressChanged =>
       fileDownloadProgress.stream;
+}
+
+/// The server answered a media download with [statusCode] instead of 200.
+class MediaDownloadException implements Exception {
+  MediaDownloadException(this.statusCode);
+
+  final int statusCode;
+
+  /// Whether asking again can get another answer: the server's own
+  /// trouble (5xx), a request timeout or too many requests. Any other
+  /// answer (a 404) would come again.
+  bool get retryable =>
+      statusCode >= 500 || statusCode == 408 || statusCode == 429;
+
+  @override
+  String toString() => "MediaDownloadException: $statusCode";
+}
+
+/// Downloads [url] (a media download or thumbnail URL of [client]'s
+/// homeserver) through [client]'s HTTP client: the account's, which the
+/// speed log counts and which keeps its connections open between
+/// downloads. Throws [MediaDownloadException] for any answer but 200.
+///
+/// The body is read once into a buffer of the announced size, which is
+/// what is returned; without a size, the pieces are gathered and joined
+/// once. [onProgress] gets the bytes read so far and the announced size.
+Future<Uint8List> downloadMedia(matrix.Client client, Uri url,
+    {void Function(int downloaded, int? total)? onProgress}) async {
+  final request = http.Request("GET", url);
+  request.headers['authorization'] = 'Bearer ${client.accessToken}';
+  final response = await client.httpClient.send(request);
+  if (response.statusCode != 200) {
+    try {
+      // Read to its end, so the connection can carry the next request.
+      await response.stream.drain<void>();
+    } catch (_) {}
+    throw MediaDownloadException(response.statusCode);
+  }
+
+  final total = response.contentLength;
+  Uint8List? buffer = total != null ? Uint8List(total) : null;
+  BytesBuilder? pieces = buffer == null ? BytesBuilder(copy: false) : null;
+  var downloaded = 0;
+  await for (final chunk in response.stream) {
+    if (buffer != null && downloaded + chunk.length > buffer.length) {
+      // More than announced: gathered from here on.
+      pieces = BytesBuilder(copy: false)
+        ..add(Uint8List.sublistView(buffer, 0, downloaded));
+      buffer = null;
+    }
+    if (buffer != null) {
+      buffer.setRange(downloaded, downloaded + chunk.length, chunk);
+    } else {
+      pieces!.add(chunk);
+    }
+    downloaded += chunk.length;
+    onProgress?.call(downloaded, total);
+  }
+  if (buffer == null) return pieces!.takeBytes();
+  return downloaded == buffer.length
+      ? buffer
+      : Uint8List.sublistView(buffer, 0, downloaded);
 }
