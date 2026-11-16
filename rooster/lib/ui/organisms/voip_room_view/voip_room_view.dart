@@ -447,10 +447,11 @@ class _VoipRoomViewState extends State<VoipRoomView> {
 
     if (withoutEntranceSound) EntranceSoundGate.instance.skipNextJoin(roomId);
 
+    // Goes on if the page closes meanwhile: someone who clicks Join and
+    // walks to a text channel still ends up in the call.
+    final join = voip.joinCall();
     try {
-      // Goes on if the page closes meanwhile: someone who clicks Join and
-      // walks to a text channel still ends up in the call.
-      final session = await voip.joinCall();
+      final session = await join;
       if (session == null && withoutEntranceSound) {
         EntranceSoundGate.instance.cancelSkip(roomId);
       }
@@ -478,6 +479,8 @@ class _VoipRoomViewState extends State<VoipRoomView> {
       }
 
       // Said also once this page has closed, over whatever page is open.
+      // Once per join: a page opened again waits for the same one.
+      if (!_firstToReport(join)) return;
       final retry = await _askToRetry(mounted ? context : null, e);
       if (!retry) return;
       if (mounted) {
@@ -486,6 +489,17 @@ class _VoipRoomViewState extends State<VoipRoomView> {
         unawaited(_joinWithoutPage(voip, withoutEntranceSound));
       }
     }
+  }
+
+  /// The joins whose failure has been shown.
+  static final Expando<bool> _reported = Expando();
+
+  /// Whether [join]'s failure is still to be shown: one dialog for a join,
+  /// whichever pages waited for it.
+  static bool _firstToReport(Future<VoipSession?> join) {
+    if (_reported[join] == true) return false;
+    _reported[join] = true;
+    return true;
   }
 
   /// Asks whether to try [error]'s join again, in [context], else over the
@@ -508,8 +522,9 @@ class _VoipRoomViewState extends State<VoipRoomView> {
       VoipRoomComponent voip, bool withoutEntranceSound) async {
     final roomId = voip.room.identifier;
     if (withoutEntranceSound) EntranceSoundGate.instance.skipNextJoin(roomId);
+    final join = voip.joinCall();
     try {
-      final session = await voip.joinCall();
+      final session = await join;
       if (session == null && withoutEntranceSound) {
         EntranceSoundGate.instance.cancelSkip(roomId);
       }
@@ -519,7 +534,7 @@ class _VoipRoomViewState extends State<VoipRoomView> {
     } catch (e, s) {
       Log.onError(e, s);
       if (withoutEntranceSound) EntranceSoundGate.instance.cancelSkip(roomId);
-      if (await _askToRetry(null, e)) {
+      if (_firstToReport(join) && await _askToRetry(null, e)) {
         await _joinWithoutPage(voip, withoutEntranceSound);
       }
     }

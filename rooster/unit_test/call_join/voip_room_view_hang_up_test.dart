@@ -189,6 +189,29 @@ void main() {
   });
 
   testWidgets(
+      'the page closed, opened again and Join clicked again, then the join '
+      'fails: one dialog, for the one join', (tester) async {
+    channel();
+    host.room
+      ..connectGate = Gate()
+      ..connectError = StateError('no SFU');
+    await openAndJoin(tester);
+    await tester.pumpWidget(app(const Text('Home')));
+    await flush(tester);
+    await tester.pumpWidget(app(VoipRoomView(voip)));
+    await tester.pump();
+    await tester.tap(find.text(CommonStrings.promptJoin));
+    await flush(tester);
+    expect(journal.count('connect'), 1, reason: 'the same join');
+
+    host.room.connectGate.open();
+    await flush(tester);
+    await tester.pump(const Duration(seconds: 1));
+    expect(errorDialog, findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
       'the page closed, then the join is hung up (another channel joined): '
       'no dialog', (tester) async {
     channel();
