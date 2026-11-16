@@ -295,6 +295,15 @@ abstract final class SpeedError {
   /// Anything else.
   static const other = 'other';
 
+  /// A media upload ended because the connection took no byte of its body
+  /// for `UploadLimits.stall` (30 s).
+  static const uploadStalled = 'upload_stalled';
+
+  /// A media upload ended because no answer came in time after its last
+  /// byte (`UploadLimits.answerWait`: at least 150 s, and at least the
+  /// body's time at 100 kB/s).
+  static const uploadNoAnswer = 'upload_no_answer';
+
   static const all = {
     aborted,
     cancelled,
@@ -304,5 +313,7 @@ abstract final class SpeedError {
     http,
     client,
     other,
+    uploadStalled,
+    uploadNoAnswer,
   };
 }

@@ -8,15 +8,20 @@ import 'package:web/web.dart' as web;
 /// Whether uploads can go through `XMLHttpRequest` here: only on the web.
 const bool xhrUploadAvailable = true;
 
-/// Sends [request] through an `XMLHttpRequest`, whose `upload.onload` tells
-/// when the browser has sent the whole body (`fetch` has no such event).
-/// The body is the bytes the request already holds, handed over as they
-/// are. [onHeaders] runs when the response headers arrive, [onUploadLoad]
-/// when the body has gone. The response is whole when returned.
+/// Sends [request] through an `XMLHttpRequest`, whose `upload.onprogress`
+/// counts what the browser has sent of the body and `upload.onload` tells
+/// when it has sent all of it (`fetch` has neither). The body is the bytes
+/// the request already holds, handed over as they are. [onHeaders] runs
+/// when the response headers arrive, [onUploadProgress] with the bytes
+/// sent so far, [onUploadLoad] when the body has gone. [abort], like the
+/// request's own `abortTrigger`, aborts it. The response is whole when
+/// returned.
 Future<http.StreamedResponse> sendByXhr(
   http.BaseRequest request, {
   required void Function() onHeaders,
+  required void Function(int sentBytes) onUploadProgress,
   required void Function() onUploadLoad,
+  Future<void>? abort,
 }) async {
   final Uint8List body = request is http.Request
       ? request.bodyBytes
@@ -31,6 +36,9 @@ Future<http.StreamedResponse> sendByXhr(
     if (!done.isCompleted) done.completeError(error);
   }
 
+  // A listener on the upload set before send(), or the browser fires none.
+  xhr.upload.onprogress = ((web.ProgressEvent event) =>
+      onUploadProgress(event.loaded.toInt())).toJS;
   xhr.upload.onload = ((web.Event _) => onUploadLoad()).toJS;
   xhr.onreadystatechange = ((web.Event _) {
     if (xhr.readyState == web.XMLHttpRequest.HEADERS_RECEIVED) onHeaders();
@@ -55,6 +63,7 @@ Future<http.StreamedResponse> sendByXhr(
   if (request case http.Abortable(:final abortTrigger?)) {
     unawaited(abortTrigger.whenComplete(() => xhr.abort()));
   }
+  if (abort != null) unawaited(abort.whenComplete(() => xhr.abort()));
 
   xhr.send(body.toJS);
   return done.future;
