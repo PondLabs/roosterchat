@@ -8,11 +8,13 @@ import 'package:intl/intl.dart' as intl;
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/generated/intl/messages_all.dart';
 import 'package:rooster/ui/organisms/attachment_processor/attachment_processor.dart';
+import 'package:rooster/utils/image/metadata/exif_orientation.dart';
 import 'package:rooster/utils/image/metadata/remove_image_metadata.dart';
 import 'package:tiamat/config/style/theme_extensions.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
-import 'remove_image_metadata_test.dart' show expectNoMetadata;
+import 'remove_image_metadata_test.dart'
+    show animatedWebpWithInFirstFrame, expectNoMetadata, riffChunk;
 
 Uint8List fixture(String name) =>
     File('unit_test/fixtures/image_metadata/$name').readAsBytesSync();
@@ -273,6 +275,29 @@ void main() {
         addFile: "Adicionar arquivo", animationLost: animationLostPt);
   });
 
+  for (final (label, inner) in [
+    ("an EXIF", riffChunk("EXIF", minimalOrientationTiff(6))),
+    ("an ANMF", riffChunk("ANMF", animatedFirstFramePayload())),
+  ]) {
+    testWidgets("an animation with $label inside a frame gets the warning",
+        (tester) async {
+      final webp = animatedWebpWithInFirstFrame(inner);
+      final dialog = await openDialog(
+          tester,
+          PendingFileAttachment(
+              name: "party.webp",
+              data: webp,
+              size: webp.length,
+              mimeType: "image/webp"));
+
+      await tester.tap(find.text("Add File"));
+      await waitFor(
+          tester, () => find.text(animationLostEn).evaluate().isNotEmpty);
+      expect(find.text(animationLostEn), findsOneWidget);
+      expect(dialog.closed, isFalse, reason: "the warning is read first");
+    });
+  }
+
   testWidgets("\"Send original\" after the warning sends the animation",
       (tester) async {
     final webp = fixture("animated_exif.webp");
@@ -298,4 +323,17 @@ void main() {
     expect(dialog.result!.data, cut);
     expect(dialog.result!.name, "party.webp");
   });
+}
+
+/// The first frame's ANMF payload of the animated fixture.
+List<int> animatedFirstFramePayload() {
+  final webp = fixture("animated_exif.webp");
+  final data = ByteData.sublistView(webp);
+  var pos = 12;
+  while (String.fromCharCodes(webp, pos, pos + 4) != "ANMF") {
+    final size = data.getUint32(pos + 4, Endian.little);
+    pos += 8 + size + (size & 1);
+  }
+  final size = data.getUint32(pos + 4, Endian.little);
+  return webp.sublist(pos + 8, pos + 8 + size);
 }

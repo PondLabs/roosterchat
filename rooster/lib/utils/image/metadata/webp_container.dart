@@ -35,6 +35,12 @@ class WebpContainer implements ImageContainer {
   /// What an ANMF holds after its 16-byte header: the frame's image data.
   static const _keepInFrame = {"ALPH", "VP8 ", "VP8L"};
 
+  /// Chunks the engine reads as the file's own when they follow a frame's
+  /// image data inside its ANMF: an EXIF there sets the orientation, an
+  /// ANMF adds a frame. Taking them out would change the picture, so a
+  /// file with one does not parse and goes to the fallback.
+  static const _readByEngineInFrame = {"EXIF", "ANMF"};
+
   static const _flagExif = 0x08;
   static const _flagXmp = 0x04;
 
@@ -45,7 +51,8 @@ class WebpContainer implements ImageContainer {
 
   /// Parses [bytes], or returns null when they are not a complete WebP: the
   /// RIFF length runs past the end, a chunk runs past the RIFF length (or a
-  /// chunk inside an ANMF past the ANMF), the first chunk is not VP8, VP8L
+  /// chunk inside an ANMF past the ANMF), an ANMF holds an EXIF or an ANMF
+  /// (the engine reads them; see [_frame]), the first chunk is not VP8, VP8L
   /// or VP8X, or an extended (VP8X) file's last chunk has no padding byte,
   /// which its rewrite could have to add, one byte more than the original.
   static WebpContainer? parse(Uint8List bytes) {
@@ -102,8 +109,8 @@ class WebpContainer implements ImageContainer {
   /// The ANMF chunk that runs from [start] to [end], and to [padded] with
   /// its padding byte, with only its frame header and its ALPH, VP8 and
   /// VP8L chunks: its size corrected and its padding byte added when a
-  /// chunk left. Null when it is shorter than its header or a chunk inside
-  /// runs past it.
+  /// chunk left. Null when it is shorter than its header, a chunk inside
+  /// runs past it, or it holds an EXIF or an ANMF.
   static Uint8List? _frame(Uint8List bytes, int start, int end, int padded) {
     const header = 8 + 16; // chunk header, then the frame's own header
     if (end - start < header) return null;
@@ -115,8 +122,11 @@ class WebpContainer implements ImageContainer {
       final size = data.getUint32(pos + 4, Endian.little);
       if (pos + 8 + size > end) return null;
       final next = pos + 8 + size + (size & 1);
-      if (_keepInFrame.contains(String.fromCharCodes(bytes, pos, pos + 4))) {
+      final type = String.fromCharCodes(bytes, pos, pos + 4);
+      if (_keepInFrame.contains(type)) {
         kept.add((pos, min(next, end)));
+      } else if (_readByEngineInFrame.contains(type)) {
+        return null;
       }
       pos = next;
     }

@@ -592,6 +592,76 @@ void main() {
         expect(after[i].$3, before[i].$3, reason: "frame $i pixels");
       }
     });
+
+    // The engine reads what follows a frame's image data as chunks of the
+    // file: an EXIF there turns the picture, an ANMF adds a frame.
+    for (final (label, inner) in [
+      ("an EXIF", riffChunk("EXIF", minimalOrientationTiff(6))),
+      ("an ANMF", riffChunk("ANMF", frames[0])),
+    ]) {
+      test("$label inside a frame sends the animation to the fallback",
+          () async {
+        final input = animatedWebpWithInFirstFrame(inner);
+        expect(parseImageContainer(input), isNull);
+        final drawn = await render(input);
+        expect(drawn.length, greaterThan(1));
+
+        final result = await removeImageMetadata(input);
+        expect(result.outcome, MetadataRemovalOutcome.reencoded);
+        expect(result.animationLost, isTrue);
+        await expectNoMetadata(result.bytes!, orientation: 1);
+        final (w, h, _) = (await render(result.bytes!)).single;
+        expect((w, h), (drawn.first.$1, drawn.first.$2));
+      });
+    }
+
+    test("a chunk inside a frame that runs past the frame does not parse", () {
+      final text = "Jane Example".codeUnits;
+      final input = animatedWebpWithInFirstFrame(
+          riffChunk("XMP ", text, size: text.length + 50));
+      expect(parseImageContainer(input), isNull);
+      expect(removeMetadataByRewrite(input), isNull);
+    });
+
+    test(
+        "an unknown chunk before an odd-sized image chunk: the frame gets "
+        "its padding byte back", () async {
+      // The first frame's VP8L is 439 bytes; here it ends its ANMF without
+      // the padding byte, so the ANMF is odd and the last chunk of a file
+      // with no EXIF. Taking the XMP out leaves the frame odd: without a
+      // padding byte added, the file does not read back.
+      final head = frames[0].sublist(0, 16);
+      final (type, image) = _riffChunks(frames[0].sublist(16)).single;
+      expect((type, image.length.isOdd), ("VP8L", true));
+      final imageChunk = riffChunk(type, image, pad: false);
+      List<(String, List<int>)> file(List<int> lastFrame) => [
+            for (final (type, payload) in chunks)
+              if (type == "VP8X" || type == "ANIM") (type, payload),
+            ("ANMF", frames[1]),
+            ("ANMF", frames[2]),
+            ("ANMF", lastFrame),
+          ];
+      final input = _webpFile(file([
+        ...head,
+        ...riffChunk("XMP ", "Jane Example!".codeUnits),
+        ...imageChunk,
+      ]));
+      final plain = _webpFile(file([...head, ...imageChunk]));
+
+      final result = removeMetadataByRewrite(input)!;
+      expect(result.outcome, MetadataRemovalOutcome.rewritten);
+      final out = result.bytes!;
+      expect(out.length, lessThanOrEqualTo(input.length));
+      expect(parseImageContainer(out), isNotNull, reason: "reads back");
+      await expectNoMetadata(out, orientation: 1);
+      final before = await render(plain);
+      final after = await render(out);
+      expect(after, hasLength(3));
+      for (var i = 0; i < before.length; i++) {
+        expect((after[i].$1, after[i].$2), (before[i].$1, before[i].$2));
+        expect(after[i].$3, before[i].$3, reason: "frame $i pixels");
+      }
+    });
   });
 
   test("GIF and BMP are left as they are", () {
@@ -742,6 +812,33 @@ Uint8List _tiff(
       ..setUint16(at + 8, value, e);
   }
   return d.buffer.asUint8List();
+}
+
+/// One RIFF chunk: its header, [payload] and, when [pad] and the payload
+/// is odd, its padding byte. [size] overrides the size its header gives.
+List<int> riffChunk(String type, List<int> payload,
+        {bool pad = true, int? size}) =>
+    [
+      ...type.codeUnits,
+      ...(ByteData(4)..setUint32(0, size ?? payload.length, Endian.little))
+          .buffer
+          .asUint8List(),
+      ...payload,
+      if (pad && payload.length.isOdd) 0,
+    ];
+
+/// The animated fixture (3 frames, orientation 6) with [inner] after the
+/// image data in its first frame's ANMF.
+Uint8List animatedWebpWithInFirstFrame(List<int> inner) {
+  final chunks = _webpChunks(fixture("animated_exif.webp"));
+  final first = chunks.firstWhere((c) => c.$1 == "ANMF").$2;
+  return _webpFile([
+    for (final (type, payload) in chunks)
+      if (identical(payload, first))
+        (type, [...payload, ...inner])
+      else
+        (type, payload),
+  ]);
 }
 
 /// A TIFF block whose IFD0 holds an Exif sub-IFD pointer (0x8769, first)
