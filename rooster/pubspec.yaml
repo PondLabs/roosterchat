@@ -231,6 +231,9 @@ dependency_overrides:
 dev_dependencies:
   drift_dev: ^2.28.0
   build_runner: ^2.4.11
+  # The emoji generator formats its output (lib/generator/).
+  dart_style: ^2.3.8
+  pub_semver: ^2.2.0
   flutter_launcher_icons: ^0.13.1
   msix: ^3.7.0
   pubspec_dependency_sorter: ^1.0.4
