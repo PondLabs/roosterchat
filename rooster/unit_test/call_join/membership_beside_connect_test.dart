@@ -191,7 +191,10 @@ void main() {
       await nothingLeft(room);
     });
 
-    test('before anything others see was sent: nothing is written', () async {
+    test(
+        'while the previous call hangs up: nothing is written, and a '
+        "phone's browser does not open the microphone", () async {
+      host.phoneBrowser = true;
       final hangUp = Completer<void>();
       final leaving = Gate();
       final room = host.room;
@@ -201,6 +204,27 @@ void main() {
       await settle();
       hangUp.complete();
       leaving.open();
+      await expectLater(joining, throwsA(isA<CallJoinHungUp>()));
+
+      expect(journal.entries, isNot(contains('microphone_open')),
+          reason: 'no capture, nor its prompt, after the hang up');
+      expect(journal.entries, isNot(contains('membership_write')));
+      expect(journal.entries, isNot(contains('connect')));
+      await nothingLeft(room);
+    });
+
+    test('while waiting for the previous clear: nothing is written', () async {
+      final hangUp = Completer<void>();
+      final clear = Completer<void>();
+      final room = host.room;
+      // The previous call's clear, still in flight after its hang up.
+      CallMembershipWrites.clearing(host.membershipKey, clear.future);
+
+      final joining = join().run(hangUp: hangUp.future);
+      await settle();
+      expect(journal.entries, contains('sfu_get'));
+      hangUp.complete();
+      clear.complete();
       await expectLater(joining, throwsA(isA<CallJoinHungUp>()));
 
       expect(journal.entries, isNot(contains('membership_write')));
