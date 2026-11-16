@@ -22,6 +22,11 @@ class CallMembershipWrites {
     return write;
   }
 
+  /// The key a join's outcome is registered under (see `CallJoin`): our
+  /// membership's [stateKey] is the same in every room, so a join in one
+  /// room must not wait for a join in another.
+  static String joinKey(String roomId, String stateKey) => "$roomId $stateKey";
+
   /// Waits for a clear of [stateKey] that is still in flight. Bounded: a
   /// request that never lands must not stop the user from joining.
   static Future<void> settled(String stateKey,

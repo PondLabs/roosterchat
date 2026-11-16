@@ -185,8 +185,9 @@ class FakeHost implements CallJoinHost<FakeLivekitRoom> {
   @override
   String get deviceId => 'DEVICE';
 
+  /// Another room of the same account keeps the same [membershipKey].
   @override
-  String get roomId => '!room:example.org';
+  String roomId = '!room:example.org';
 
   @override
   String get membershipKey => '_@me:example.org_DEVICE_m.call';

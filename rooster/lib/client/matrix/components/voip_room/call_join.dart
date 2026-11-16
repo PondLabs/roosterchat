@@ -225,9 +225,16 @@ class CallJoin<S> {
       }
 
       // A clear from the previous call may still be in flight, and would
-      // erase what we write now (issue #48).
-      await trace.time(SpeedStep.membershipClearWait,
-          () => CallMembershipWrites.settled(host.membershipKey));
+      // erase what we write now (issue #48). So may an earlier join of this
+      // room's, hung up (see below).
+      final joinKey =
+          CallMembershipWrites.joinKey(host.roomId, host.membershipKey);
+      await trace.time(
+          SpeedStep.membershipClearWait,
+          () => Future.wait([
+                CallMembershipWrites.settled(host.membershipKey),
+                CallMembershipWrites.settled(joinKey),
+              ]));
 
       if (early.track == null && early.retry) {
         preparedMicrophone = _prepareMicrophone(trace, room);
@@ -235,11 +242,10 @@ class CallJoin<S> {
 
       // Hung up before anything others see was sent: nothing is.
       hangUp.check();
-      // A join after this one (a quick rejoin) writes our membership only
-      // once this one has kept it or cleared it: a clear of ours landing
-      // after that write would erase it.
-      CallMembershipWrites.clearing(
-          host.membershipKey, membershipSettled.future);
+      // A join of this room after this one (a quick rejoin) writes our
+      // membership only once this one has kept it or cleared it: a clear of
+      // ours landing after that write would erase it.
+      CallMembershipWrites.clearing(joinKey, membershipSettled.future);
       write = trace.time(
           SpeedStep.membershipWrite, () => host.writeMembership(foci));
       connection = trace.time(

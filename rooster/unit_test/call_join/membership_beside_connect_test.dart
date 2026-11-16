@@ -275,7 +275,7 @@ void main() {
   test("a failed join's clear is one a quick rejoin waits for", () async {
     final clear = Completer<void>();
     host.room.connectError = StateError('no SFU');
-    final key = host.membershipKey;
+    final key = CallMembershipWrites.joinKey(host.roomId, host.membershipKey);
     // Held in flight, as a slow homeserver would.
     host.clearMembershipOverride = () => clear.future;
 
@@ -298,5 +298,32 @@ void main() {
     await expectLater(failing, throwsStateError);
     await settle();
     expect(settled, isTrue);
+  });
+
+  test(
+      "a join in another room does not wait for this room's join, which is "
+      'still connecting', () async {
+    host.room.connectGate = Gate();
+    final joining = join().run();
+    unawaited(joining.then((_) {}, onError: (_) {}));
+    await settle();
+    expect(journal.entries, contains('connect'));
+
+    final otherJournal = Journal();
+    // Same account and device: the same state key, in another room.
+    final other = FakeHost(otherJournal)..roomId = '!other:example.org';
+    final otherJoin = CallJoin(
+            host: other,
+            tokens: fakeTokenService(otherJournal),
+            log: SpeedLog(),
+            remoteAudioWindow: const Duration(milliseconds: 1))
+        .run();
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(otherJournal.entries, containsAll(['membership_write', 'connect']),
+        reason: 'not held up by the join in the first room');
+    await otherJoin;
+
+    host.room.connectGate.open();
+    await joining;
   });
 }
