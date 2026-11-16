@@ -986,11 +986,26 @@ class MatrixRoom extends Room {
   /// and never uploaded (the app was restarted since it failed): the SDK
   /// would take the message away and throw, and a failed send is never
   /// hidden. The message stays failed; "Cancel" takes it away.
+  ///
+  /// A second "Retry" on a message already being sent again does nothing:
+  /// two sends of one message would race over what the first one kept.
   @override
   Future<void> retrySend(TimelineEvent event) async {
     final mxEvent = event as MatrixTimelineEvent;
     final mx = mxEvent.event;
-    final send = AttachmentSends.instance.byTransaction(localId, event.eventId);
+    if (!_retrying.add(mx.eventId)) return;
+    try {
+      await _retrySend(mx);
+    } finally {
+      _retrying.remove(mx.eventId);
+    }
+  }
+
+  /// The messages "Retry" is sending again, by id.
+  final Set<String> _retrying = {};
+
+  Future<void> _retrySend(matrix.Event mx) async {
+    final send = AttachmentSends.instance.byTransaction(localId, mx.eventId);
     if (mx.status.isError && _fileMessageTypes.contains(mx.messageType)) {
       if (!_matrixRoom.sendingFilePlaceholders.containsKey(mx.eventId) &&
           !isUploadedFileEvent(mx)) {

@@ -3,6 +3,8 @@
 // thumbnail) goes up by itself, the parts together; a part is kept once it
 // went up, and is tried again by itself a bounded number of times.
 
+import 'dart:typed_data';
+
 import 'package:matrix/matrix.dart';
 
 /// The time the file send loop reads and waits by. Tests give the client
@@ -29,7 +31,8 @@ class UploadedFilePart {
   /// The bytes that went up.
   final int bytes;
 
-  /// The file's encryption, null for a part sent in the clear.
+  /// The file's encryption (its key, iv and hash; not its bytes), null
+  /// for a part sent in the clear.
   final EncryptedFile? encryptedFile;
 }
 
@@ -94,21 +97,33 @@ Map<FileSendPart, UploadedFilePart> keptFileParts(
   return Map.of(kept);
 }
 
-/// Uploads the [parts] of the file message [txid] in [room] together (each
-/// file to upload, and its encryption, if any), and gives their addresses
-/// in the same order. A part kept from before is not uploaded again; one
-/// that goes up is kept at once. When a part fails for good, the others
-/// still finish and are kept, and then its error is thrown.
+/// What [uploadFileParts] does with one part of a file message, decided
+/// once, before any upload: reuse [kept], or upload [upload], which in an
+/// encrypted room is the part encrypted as [encryptedFile].
+class FilePartSend {
+  const FilePartSend(this.kept, this.upload, this.encryptedFile);
+
+  final UploadedFilePart? kept;
+  final MatrixFile? upload;
+  final EncryptedFile? encryptedFile;
+}
+
+/// Uploads the [parts] of the file message [txid] in [room] together, and
+/// gives their addresses in the same order. A part kept from before is
+/// reused as [parts] says, never looked up again; one that goes up is kept
+/// at once. When a part fails for good, the others still finish and are
+/// kept, and then its error is thrown. With [encrypted], a part without its
+/// encryption is never uploaded: the clear bytes cannot reach the server.
 Future<List<Uri>> uploadFileParts(
   Room room,
   String txid,
-  Map<FileSendPart, (MatrixFile, EncryptedFile?)> parts,
-) =>
+  Map<FileSendPart, FilePartSend> parts, {
+  required bool encrypted,
+}) =>
     Future.wait(
       [
-        for (final MapEntry(key: part, value: (upload, encryptedFile))
-            in parts.entries)
-          _uploadFilePart(room, txid, part, upload, encryptedFile),
+        for (final MapEntry(key: part, value: send) in parts.entries)
+          _uploadFilePart(room, txid, part, send, encrypted: encrypted),
       ],
       eagerError: false,
     );
@@ -117,11 +132,16 @@ Future<Uri> _uploadFilePart(
   Room room,
   String txid,
   FileSendPart part,
-  MatrixFile upload,
-  EncryptedFile? encryptedFile,
-) async {
-  final kept = room.sendingFileUploads[txid]?[part];
+  FilePartSend send, {
+  required bool encrypted,
+}) async {
+  final kept = send.kept;
   if (kept != null) return kept.uri;
+  final upload = send.upload;
+  final encryptedFile = send.encryptedFile;
+  if (upload == null || (encrypted && encryptedFile == null)) {
+    throw StateError('A part of a file message has nothing safe to upload');
+  }
   final client = room.client;
   final clock = client.sendClock;
   for (var retries = 0;; retries++) {
@@ -138,7 +158,16 @@ Future<Uri> _uploadFilePart(
             UploadedFilePart(
           uri,
           bytes: upload.bytes.length,
-          encryptedFile: encryptedFile,
+          // What a reuse needs: the key, the iv and the hash, not the
+          // encrypted bytes, which went up already.
+          encryptedFile: encryptedFile == null
+              ? null
+              : EncryptedFile(
+                  data: Uint8List(0),
+                  k: encryptedFile.k,
+                  iv: encryptedFile.iv,
+                  sha256: encryptedFile.sha256,
+                ),
         );
       }
       return uri;

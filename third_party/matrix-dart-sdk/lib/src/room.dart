@@ -949,7 +949,9 @@ class Room {
     );
     await _handleFakeSync(syncUpdate);
 
-    MatrixFile uploadFile = file; // ignore: omit_local_variable_types
+    // In an encrypted room only the encrypted file is ever uploaded. // ROOSTER
+    MatrixFile? uploadFile = // ROOSTER
+        encrypted && client.fileEncryptionEnabled ? null : file; // ROOSTER
     // computing the thumbnail in case we can
     if (file is MatrixImageFile &&
         (thumbnail == null || shrinkImageMaxDimension != null)) {
@@ -993,10 +995,11 @@ class Room {
       rethrow;
     }
 
-    MatrixFile? uploadThumbnail =
-        thumbnail; // ignore: omit_local_variable_types
+    MatrixFile? uploadThumbnail = // ROOSTER: never in the clear when
+        encrypted && client.fileEncryptionEnabled ? null : thumbnail; // ROOSTER
     // A part that went up before is reused as it went: its address and, // ROOSTER
     // in an encrypted room, the same key and hash (file_upload_loop.dart). // ROOSTER
+    // Decided here, once: the upload does not look at what is kept again. // ROOSTER
     final encryptFiles = encrypted && client.fileEncryptionEnabled; // ROOSTER
     final kept = keptFileParts( // ROOSTER
       this, // ROOSTER
@@ -1030,11 +1033,21 @@ class Room {
     // itself; one that went up stays kept when the other fails. // ROOSTER
     final List<Uri> uris; // ROOSTER
     try { // ROOSTER
-      uris = await uploadFileParts(this, txid, { // ROOSTER
-        FileSendPart.file: (uploadFile, encryptedFile), // ROOSTER
-        if (uploadThumbnail != null) // ROOSTER
-          FileSendPart.thumbnail: (uploadThumbnail, encryptedThumbnail), // ROOSTER
-      }); // ROOSTER
+      uris = await uploadFileParts( // ROOSTER
+        this, // ROOSTER
+        txid, // ROOSTER
+        { // ROOSTER
+          FileSendPart.file: // ROOSTER
+              FilePartSend(keptFile, uploadFile, encryptedFile), // ROOSTER
+          if (thumbnail != null) // ROOSTER
+            FileSendPart.thumbnail: FilePartSend( // ROOSTER
+              keptThumbnail, // ROOSTER
+              uploadThumbnail, // ROOSTER
+              encryptedThumbnail, // ROOSTER
+            ), // ROOSTER
+        }, // ROOSTER
+        encrypted: encryptFiles, // ROOSTER
+      ); // ROOSTER
     } catch (_) { // ROOSTER
       syncUpdate.rooms!.join!.values.first.timeline!.events!.first // ROOSTER
           .unsigned![messageSendingStatusKey] = // ROOSTER
@@ -1043,7 +1056,7 @@ class Room {
       rethrow; // ROOSTER
     } // ROOSTER
     final uploadResp = uris.first; // ROOSTER
-    final thumbnailUploadResp = uploadThumbnail != null ? uris.last : null; // ROOSTER
+    final thumbnailUploadResp = thumbnail != null ? uris.last : null; // ROOSTER
 
     // Send event
     final content = <String, dynamic>{

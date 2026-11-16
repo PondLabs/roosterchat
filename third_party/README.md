@@ -193,8 +193,11 @@ Changes since the copy:
   at most twice, after 2 s and 8 s, waits for a `retry_after_ms` of up to
   8 s, is not tried again after running for more than 60 s, and ends the
   send on a size, permission or authentication error. A part that went up
-  is kept with its key and hash (`Room.sendingFileUploads`) until the event
-  is sent or the send is cancelled, so a retry uploads only what did not.
+  is kept with its key and hash (`Room.sendingFileUploads`; not its
+  encrypted bytes) until the event is sent or the send is cancelled, so a
+  retry uploads only what did not. What to reuse is decided once per send
+  (`FilePartSend`), and in an encrypted room the file to upload is only
+  ever the encrypted one: a part without its encryption is never uploaded.
   The `uploading` stage is published, and the message stays in
   `sendingQueueEventsByTxId` for the whole send, so its pending event read
   again during a long upload is not marked failed.

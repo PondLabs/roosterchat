@@ -1,6 +1,7 @@
 @TestOn('vm')
 library;
 
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -83,4 +84,50 @@ void main() {
       await client.close();
     });
   }
+
+  test(
+      'a second "Retry" on a message whose first Retry is still running '
+      'sends nothing: 1 PUT /send, not 2', () async {
+    final transport = LoopTransport()..failSends = 1;
+    final client = await fakeAccount('loop_second_retry', transport);
+    final mx = client.getMatrixClient();
+    mx.backgroundSync = false;
+    await mx.oneShotSync();
+    final room = await plainRoom(client);
+    final echoes = <matrix.Event>[];
+    mx.onTimelineEvent.stream.listen(echoes.add);
+    final send = AttachmentSend(roomKey: room.localId, attachment: null);
+    AttachmentSends.instance.add(send);
+    final file = matrix.MatrixFile(
+        bytes: Uint8List.fromList(List.filled(fileBytes, 1)), name: 'a.bin');
+    expect(
+        await sendMatrixFile(
+            room.matrixRoom, TrackedMatrixAttachment(file, send)),
+        isNull);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final failed = echoes.lastWhere((e) => e.eventId == send.transactionId);
+    final uploads = transport.uploads.length;
+    final sendsBefore = transport.events.length;
+
+    // The first Retry's event is held on its way to the server.
+    final answer = Completer<void>();
+    transport.holdNextSend = answer.future;
+    final first = room.retrySend(room.convertEvent(failed));
+    await until(() => transport.events.length == sendsBefore + 1);
+    // Retry pressed again on the same failed message.
+    final second = room.retrySend(room.convertEvent(failed));
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    answer.complete();
+    await first;
+    await second;
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    print('second Retry while the first runs: PUT /send '
+        '${transport.events.length - sendsBefore}, new uploads '
+        '${transport.uploads.length - uploads}');
+    expect(transport.events.length - sendsBefore, 1);
+    expect(transport.uploads, hasLength(uploads));
+    expect(send.stage, AttachmentSendStage.sent);
+    await client.close();
+  });
 }
