@@ -5,6 +5,7 @@
 // a membership a join of the room holds.
 import 'dart:async';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/matrix/components/voip_room/call_join.dart';
 import 'package:rooster/client/matrix/components/voip_room/call_membership_writes.dart';
@@ -199,6 +200,24 @@ void main() {
       second.complete();
       await settle();
       expect(settled, isTrue);
+    });
+
+    test(
+        'a clear that never lands holds up only the writes of its own 10 s, '
+        'not those after a later clear', () {
+      fakeAsync((async) {
+        const stuckKey = '_@me:example.org_STUCK_m.call';
+        CallMembershipWrites.clearing(stuckKey, Completer<void>().future);
+        async.elapse(const Duration(seconds: 11));
+
+        final later = Completer<void>();
+        CallMembershipWrites.clearing(stuckKey, later.future);
+        later.complete();
+        var settled = false;
+        CallMembershipWrites.settled(stuckKey).then((_) => settled = true);
+        async.elapse(const Duration(milliseconds: 100));
+        expect(settled, isTrue, reason: 'the stuck clear had its 10 s');
+      });
     });
 
     test('a clear that fails still orders the writes, and does not fail them',

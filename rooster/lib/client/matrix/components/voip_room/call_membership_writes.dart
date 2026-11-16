@@ -9,18 +9,25 @@ class CallMembershipWrites {
 
   static final Map<String, Future<void>> _pending = {};
 
+  /// How long a write waits for a clear, at most, from when the clear was
+  /// sent: a request that never lands must not stop the user from joining.
+  static const waitAtMost = Duration(seconds: 10);
+
   /// Registers a clear of [stateKey] that later writes have to wait for,
   /// after any registered before it that is still in flight: a slow clear
-  /// must not be forgotten because a quicker one came after it. Returns
-  /// [write] unchanged, so the caller still sees its result.
+  /// must not be forgotten because a quicker one came after it. Each is
+  /// waited for [waitAtMost] from when it was registered, so one that never
+  /// lands holds up the writes of those 10 s only, not every later one.
+  /// Returns [write] unchanged, so the caller still sees its result.
   static Future<T> clearing<T>(String stateKey, Future<T> write) {
     // Never fails: waiting for this only orders the writes, the caller deals
     // with the error.
     final settled = write.then<void>((_) {}, onError: (_) {});
     final previous = _pending[stateKey];
-    final done = previous == null
-        ? settled
-        : Future.wait([previous, settled]).then<void>((_) {});
+    final done = (previous == null
+            ? settled
+            : Future.wait([previous, settled]).then<void>((_) {}))
+        .timeout(waitAtMost, onTimeout: () {});
     _pending[stateKey] = done;
     done.whenComplete(() {
       if (identical(_pending[stateKey], done)) _pending.remove(stateKey);
@@ -69,7 +76,7 @@ class CallMembershipWrites {
   /// Waits for a clear of [stateKey] that is still in flight. Bounded: a
   /// request that never lands must not stop the user from joining.
   static Future<void> settled(String stateKey,
-      {Duration timeout = const Duration(seconds: 10)}) async {
+      {Duration timeout = waitAtMost}) async {
     if (_pending[stateKey] == null) return;
     try {
       await _allSettled(stateKey).timeout(timeout);
