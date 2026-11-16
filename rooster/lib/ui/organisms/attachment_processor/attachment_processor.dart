@@ -44,7 +44,8 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
       desc: "Shown in the dialog that previews a file before it is attached, "
           "when an animated image could not be read well enough to remove "
           "its metadata without decoding it: the picture without metadata "
-          "is only its first frame. \"Add File\" attaches that frame; the "
+          "is only its first frame. The button below it, now \"Attach first "
+          "frame\", attaches that frame; the "
           "\"Send original (keeps metadata)\" switch attaches the file as "
           "it is");
 
@@ -58,6 +59,14 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
       name: "promptChatAddFile",
       desc: "Button at the bottom of the dialog that previews a file before "
           "it is attached to a message: attaches it");
+
+  String get promptAttachmentAttachFirstFrame => Intl.message(
+      "Attach first frame",
+      name: "promptAttachmentAttachFirstFrame",
+      desc: "Button at the bottom of the dialog that previews a file before "
+          "it is attached, in place of \"Add File\" once the dialog has said "
+          "an animation was not kept: attaches the animation's first frame, "
+          "without its metadata");
 
   Map<String, IfdTag>? exifData;
   late IconData icon;
@@ -235,7 +244,10 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
 
   Widget buildConfirmButton() {
     return tiamat.Button(
-      text: promptChatAddFile,
+      // After the warning, the next tap attaches the first frame alone.
+      text: withoutAnimation != null && !sendOriginalFile
+          ? promptAttachmentAttachFirstFrame
+          : promptChatAddFile,
       onTap: submit,
     );
   }

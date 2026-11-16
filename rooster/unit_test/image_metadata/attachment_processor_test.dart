@@ -233,7 +233,9 @@ void main() {
       "será anexado. Para anexá-la como está, ative \"Enviar original\".";
 
   Future<void> checkAnimationLost(WidgetTester tester,
-      {required String addFile, required String animationLost}) async {
+      {required String addFile,
+      required String animationLost,
+      required String attachFirstFrame}) async {
     // The animated fixture cut short: it does not parse, and the engine
     // still decodes its 3 frames, of which the re-encode keeps one.
     final webp = fixture("animated_exif.webp");
@@ -251,8 +253,11 @@ void main() {
     await waitFor(tester, () => find.text(animationLost).evaluate().isNotEmpty);
     expect(find.text(animationLost), findsOneWidget);
     expect(dialog.closed, isFalse, reason: "the warning is read first");
+    // The button now says what the second tap attaches.
+    expect(find.text(addFile), findsNothing);
+    expect(find.text(attachFirstFrame), findsOneWidget);
 
-    await tester.tap(find.text(addFile));
+    await tester.tap(find.text(attachFirstFrame));
     await waitFor(tester, () => dialog.closed, tries: 10);
     expect(dialog.closed, isTrue);
     expect(dialog.result!.name, "party.jpg");
@@ -263,7 +268,9 @@ void main() {
   testWidgets("an animation the fallback flattens is attached after a warning",
       (tester) async {
     await checkAnimationLost(tester,
-        addFile: "Add File", animationLost: animationLostEn);
+        addFile: "Add File",
+        animationLost: animationLostEn,
+        attachFirstFrame: "Attach first frame");
   });
 
   testWidgets("the same in Portuguese, with the animation warning",
@@ -272,7 +279,9 @@ void main() {
     intl.Intl.defaultLocale = "pt";
     addTearDown(() => intl.Intl.defaultLocale = null);
     await checkAnimationLost(tester,
-        addFile: "Adicionar arquivo", animationLost: animationLostPt);
+        addFile: "Adicionar arquivo",
+        animationLost: animationLostPt,
+        attachFirstFrame: "Anexar o primeiro quadro");
   });
 
   for (final (label, inner) in [
@@ -316,6 +325,7 @@ void main() {
     await tester.tap(find.byType(tiamat.Switch));
     await tester.pumpAndSettle();
     expect(find.text(animationLostEn), findsNothing);
+    expect(find.text("Attach first frame"), findsNothing);
     await tester.tap(find.text("Add File"));
     await tester.pumpAndSettle();
 

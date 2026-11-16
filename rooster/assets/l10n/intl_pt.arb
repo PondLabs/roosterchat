@@ -607,6 +607,7 @@
   "labelAttachmentAnimationNotKept": "A animação não foi mantida: só o primeiro quadro será anexado. Para anexá-la como está, ative \"Enviar original\".",
   "labelImageContainsLocationInfo": "Aviso: esta imagem contém metadados de localização",
   "promptChatAddFile": "Adicionar arquivo",
+  "promptAttachmentAttachFirstFrame": "Anexar o primeiro quadro",
   "labelFileOverUploadLimit": "Este arquivo tem {size}, acima do limite de {limit} deste servidor, e não pode ser enviado.",
   "ActivityJoinPill_text": "{host} iniciou {activity}",
   "ActivityJoinPill_join": "Entrar",
