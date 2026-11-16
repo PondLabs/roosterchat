@@ -1,0 +1,170 @@
+@TestOn('vm')
+library;
+
+import 'dart:async';
+import 'dart:typed_data';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:matrix/matrix.dart' as matrix;
+import 'package:rooster/client/attachment.dart';
+import 'package:rooster/client/matrix/media/matrix_file_send.dart';
+
+import '../speed_log/fake_account.dart';
+import 'loop_fakes.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  tearDown(() => AttachmentSends.instance.clear());
+
+  http.StreamedResponse unknown() =>
+      json(500, {'errcode': 'M_UNKNOWN', 'error': 'Try later'});
+  http.StreamedResponse forbidden() =>
+      json(403, {'errcode': 'M_FORBIDDEN', 'error': 'Not now'});
+  for (final (name, failure, restarted) in [
+    ('500 M_UNKNOWN', unknown, false),
+    ('403 M_FORBIDDEN', forbidden, false),
+    // The app was restarted: the SDK no longer holds the file, and the
+    // failed event alone says where its uploads are.
+    ('500 M_UNKNOWN, after a restart', unknown, true),
+  ]) {
+    test(
+        '"Retry" on a file whose PUT /send failed ($name) after its '
+        'uploads: 0 new uploads, 1 event under the same transaction id',
+        () async {
+      final transport = LoopTransport()
+        ..failSends = 1
+        ..sendFailure = failure;
+      final client =
+          await fakeAccount('loop_retry_${name.hashCode}', transport);
+      final mx = client.getMatrixClient();
+      mx.backgroundSync = false;
+      await mx.oneShotSync();
+      final room = await plainRoom(client);
+      final echoes = <matrix.Event>[];
+      mx.onTimelineEvent.stream.listen(echoes.add);
+
+      final send = AttachmentSend(roomKey: room.localId, attachment: null);
+      AttachmentSends.instance.add(send);
+      final file = matrix.MatrixFile(
+          bytes: Uint8List.fromList(List.filled(fileBytes, 1)), name: 'a.bin');
+      final thumbnail = matrix.MatrixImageFile(
+          bytes: Uint8List.fromList(List.filled(thumbnailBytes, 2)),
+          name: 'a.jpg',
+          mimeType: 'image/jpeg');
+      expect(
+          await sendMatrixFile(room.matrixRoom,
+              TrackedMatrixAttachment(file, send, thumbnailFile: thumbnail)),
+          isNull);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final txid = send.transactionId!;
+      final failed = echoes.lastWhere((e) => e.eventId == txid);
+      expect(failed.status.isError, isTrue);
+      final uploads = transport.uploads.length;
+      final first = transport.events.single;
+      final seenBefore = transport.seen.length;
+      if (restarted) room.matrixRoom.forgetFileSend(txid);
+
+      await room.retrySend(room.convertEvent(failed));
+      await until(() => send.isFinished);
+
+      final again = transport.events.skip(1).toList();
+      final routes = transport.seen.skip(seenBefore).toList();
+      print('retry after PUT /send $name: uploads before $uploads, after '
+          '${transport.uploads.length}; requests of the retry: $routes');
+      expect(uploads, 2);
+      expect(transport.uploads, hasLength(uploads), reason: 'no new upload');
+      expect(again, hasLength(1));
+      expect(again.single.txid, txid);
+      expect(again.single.body['url'], first.body['url']);
+      expect(again.single.body['info'], first.body['info']);
+      expect(send.stage, AttachmentSendStage.sent);
+      expect(room.matrixRoom.sendingFileUploads, isEmpty);
+      await client.close();
+    });
+  }
+
+  test(
+      'a second "Retry" on a message whose first Retry is still running '
+      'sends nothing: 1 PUT /send, not 2', () async {
+    final transport = LoopTransport()..failSends = 1;
+    final client = await fakeAccount('loop_second_retry', transport);
+    final mx = client.getMatrixClient();
+    mx.backgroundSync = false;
+    await mx.oneShotSync();
+    final room = await plainRoom(client);
+    final echoes = <matrix.Event>[];
+    mx.onTimelineEvent.stream.listen(echoes.add);
+    final send = AttachmentSend(roomKey: room.localId, attachment: null);
+    AttachmentSends.instance.add(send);
+    final file = matrix.MatrixFile(
+        bytes: Uint8List.fromList(List.filled(fileBytes, 1)), name: 'a.bin');
+    expect(
+        await sendMatrixFile(
+            room.matrixRoom, TrackedMatrixAttachment(file, send)),
+        isNull);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final failed = echoes.lastWhere((e) => e.eventId == send.transactionId);
+    final uploads = transport.uploads.length;
+    final sendsBefore = transport.events.length;
+
+    // The first Retry's event is held on its way to the server.
+    final answer = Completer<void>();
+    transport.holdNextSend = answer.future;
+    final first = room.retrySend(room.convertEvent(failed));
+    await until(() => transport.events.length == sendsBefore + 1);
+    // Retry pressed again on the same failed message.
+    final second = room.retrySend(room.convertEvent(failed));
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    answer.complete();
+    await first;
+    await second;
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    print('second Retry while the first runs: PUT /send '
+        '${transport.events.length - sendsBefore}, new uploads '
+        '${transport.uploads.length - uploads}');
+    expect(transport.events.length - sendsBefore, 1);
+    expect(transport.uploads, hasLength(uploads));
+    expect(send.stage, AttachmentSendStage.sent);
+    await client.close();
+  });
+
+  test(
+      'PUT /send failed but the event reached the room (its echo comes by '
+      'sync): the room lets go of the file, its thumbnail and its uploads',
+      () async {
+    final transport = LoopTransport()..failSends = 1;
+    final (mx, room) = await loopClient(
+        'loop_echo_after_failure', transport, ManualSendClock());
+    final (send, sending) = startSend(room);
+    expect(await sending, isNull);
+    final txid = send.transactionId!;
+    expect(room.sendingFilePlaceholders, contains(txid));
+    expect(room.sendingFileUploads[txid], isNotEmpty);
+
+    await mx.database.transaction(() => mx.handleSync(matrix.SyncUpdate(
+          nextBatch: 'echo',
+          rooms: matrix.RoomsUpdate(join: {
+            roomId: matrix.JoinedRoomUpdate(
+                timeline: matrix.TimelineUpdate(events: [
+              matrix.MatrixEvent(
+                type: matrix.EventTypes.Message,
+                senderId: mx.userID!,
+                eventId: '\$delivered',
+                originServerTs: DateTime.now(),
+                content:
+                    Map<String, dynamic>.from(transport.events.single.body),
+                unsigned: {'transaction_id': txid},
+              ),
+            ])),
+          }),
+        )));
+
+    expect(room.sendingFilePlaceholders, isNot(contains(txid)));
+    expect(room.sendingFileThumbnails, isNot(contains(txid)));
+    expect(room.sendingFileUploads, isNot(contains(txid)));
+    await mx.dispose(closeDatabase: true);
+  });
+}

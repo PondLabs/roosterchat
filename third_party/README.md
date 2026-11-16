@@ -181,3 +181,35 @@ Every later change to it is marked with a `// ROOSTER` comment, so a
 `diff -r -x .git` against that commit shows only our changes. Git stores
 `lib/msc_extensions/msc_1236_widgets/src/widget.dart` with LF line endings
 where upstream has CRLF (`* text=auto`); compare with `--strip-trailing-cr`.
+Changes since the copy:
+
+- `scripts/*.sh` are executable again (mode 755), as in the fork; the copy
+  had lost the mode.
+- `test/html_to_text_test.dart` expects a link's text without the 🔗 prefix,
+  as the fork's `lib/src/utils/html_to_text.dart` writes it (2 cases).
+- The upload loop of `Room.sendFileEvent` (`lib/src/room.dart`, with the
+  rules in the new `lib/src/utils/file_upload_loop.dart`): the file and its
+  thumbnail upload together; each part that fails is tried again by itself
+  at most twice, after 2 s and 8 s, waits for a `retry_after_ms` of up to
+  8 s, is not tried again after running for more than 60 s, and ends the
+  send on a size, permission or authentication error. A part that went up
+  is kept with its key and hash (`Room.sendingFileUploads`; not its
+  encrypted bytes) until the event is sent or the send is cancelled, so a
+  retry uploads only what did not. What to reuse is decided once per send
+  (`FilePartSend`), and in an encrypted room the file to upload is only
+  ever the encrypted one: a part without its encryption is never uploaded.
+  The `uploading` stage is published, and the message stays in
+  `sendingQueueEventsByTxId` for the whole send, so its pending event read
+  again during a long upload is not marked failed.
+- `Client.sendClock` (`lib/src/client.dart`): the clock the upload loop
+  reads and waits by, given by tests.
+- `Client._handleRoomEvents` (`lib/src/client.dart`): a timeline event
+  that comes back under a transaction id lets go of the file kept to send
+  that message again (`Room.forgetFileSend`): it reached the room, even
+  when our `PUT /send` failed.
+- `Event.sendAgain` (`lib/src/event.dart`): a file message whose event
+  carries its uploads' address (`url`, or `file` in an encrypted room) is
+  sent again as that event, under the same transaction id, with no upload.
+  Not when the room now encrypts files and the event has a `url` (an
+  upload in the clear): the file then goes up again, encrypted.
+  `Event.cancelSend` lets go of the file and the parts kept for it.
