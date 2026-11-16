@@ -33,4 +33,27 @@ void main() {
     await attachment.resolve(); // what Send does
     expect(attachment.data, hasLength(2 * 1000 * 1000));
   });
+
+  test("a picture that cannot be read when attached: no error, Send reads it",
+      () async {
+    final bytes = File("unit_test/fixtures/image_metadata/orientation_6.jpg")
+        .readAsBytesSync();
+    final file = File("${dir.path}/photo.jpg")..writeAsBytesSync(bytes);
+    final lock = file.openSync(mode: FileMode.append)
+      ..lockSync(FileLock.exclusive);
+    final attachment =
+        PendingFileAttachment(name: "photo.jpg", path: file.path);
+
+    // chat.dart does not wait for this future: it must not end in error.
+    await expectLater(
+        attachment.startImagePreparation(preparer: preparer()), completes);
+    expect(attachment.data, isNull);
+
+    lock
+      ..unlockSync()
+      ..closeSync();
+    await attachment.resolve(); // Send, once the file can be read
+    final prepared = await attachment.imagePreparation(preparer: preparer());
+    expect((prepared!.width, prepared.height), (48, 64));
+  });
 }

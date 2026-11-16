@@ -56,7 +56,13 @@ class PendingFileAttachment {
     // Only a picture is read now: a video or an archive picked by path
     // stays on disk until Send, as before.
     if (!Mime.imageTypes.contains(mimeType)) return;
-    await resolve();
+    try {
+      await resolve();
+    } catch (_) {
+      // Locked or gone for now: nothing is prepared, and Send reads the
+      // file again and reports what it finds, as it did before.
+      return;
+    }
     await imagePreparation(preparer: preparer);
   }
 
