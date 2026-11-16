@@ -150,7 +150,9 @@ abstract final class SpeedStep {
   /// signal WebSocket open.
   static const connectWebsocket = 'connect_websocket';
 
-  /// From the WebSocket open to the SFU's answer to the join.
+  /// From the WebSocket open to the SFU's answer to the join, and LiveKit
+  /// making the two media connections (peer connections) with it: it tells
+  /// the answer once they are made.
   static const connectJoinResponse = 'connect_join_response';
 
   /// From the join answered to the media connection (the primary peer

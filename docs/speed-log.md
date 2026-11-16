@@ -166,7 +166,7 @@ side, so timed steps may overlap; each has its own start.
 | `membership_write` | writing our call membership |
 | `connect` | the LiveKit connection |
 | `connect_websocket` | inside `connect`: from the attempt starting to the signal WebSocket open |
-| `connect_join_response` | inside `connect`: from the WebSocket open to the SFU's answer to the join |
+| `connect_join_response` | inside `connect`: from the WebSocket open to the SFU's answer to the join, including LiveKit making the two media connections (peer connections) with it, which it does before it tells the answer |
 | `connect_media` | inside `connect`: from the join answered to the media connection (the primary peer connection) connected |
 | `microphone_options` | the microphone's capture options (the DSP's bounded wait included) |
 | `microphone_open` | opening the microphone capture during the connection |

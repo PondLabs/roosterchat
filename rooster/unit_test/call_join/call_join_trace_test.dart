@@ -459,5 +459,36 @@ void main() {
           reason: "the refused connect's answer is not the second's");
       expect(steps['connect_media']?.available, isFalse);
     });
+
+    test(
+        'a held token the SFU refuses after its connect told all three '
+        'steps, and a second connect that tells nothing: no step of the '
+        'refused one is left', () async {
+      final jwts = <String>[];
+      final tokens = CallTokenService(client: MockClient((request) async {
+        if (request.url.path != '/sfu/get') return http.Response('', 200);
+        jwts.add(jwtUntil(DateTime.now().add(const Duration(minutes: 10)),
+            id: 'g${jwts.length + 1}'));
+        return http.Response(
+            jsonEncode({'url': 'wss://sfu.example.org', 'jwt': jwts.last}),
+            200);
+      }));
+      final host = FakeHost(journal);
+      await CallWarmUp(host: host, tokens: tokens).run();
+      host.room
+        ..refusedTokens.add(jwts.single)
+        ..attemptSteps = [all];
+
+      final span = await joinAndWait(host, tokens: tokens);
+      final steps = stepsOf(span);
+
+      expect(host.room.connectTokens, hasLength(2));
+      expect(span.outcome, 'ok');
+      for (final part in parts) {
+        expect(steps[part]?.available, isFalse,
+            reason: "$part: the refused connect's moments are not the "
+                "second's");
+      }
+    });
   });
 }
