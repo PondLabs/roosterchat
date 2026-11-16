@@ -161,11 +161,17 @@ class TimelineEventMenu {
     bool canDeleteEvent = false;
     bool canEndPoll = false;
 
-    // Only on a message that failed: on one still being sent, "Cancel"
-    // would hide a message that still goes out, and there is nothing to
-    // retry yet.
+    // "Retry" only on a message that failed. "Cancel" also on one being
+    // sent until its event's request leaves (a file preparing or
+    // uploading, a text waiting in the room's queue): after that the
+    // server may have it, and if that send fails it is a failed message.
     bool canRetrySend = event.status == TimelineEventStatus.error;
-    bool canCancelSend = event.status == TimelineEventStatus.error;
+    final pending = event;
+    bool canCancelSend = event.status == TimelineEventStatus.error ||
+        (event.status == TimelineEventStatus.sending &&
+            pending is MatrixTimelineEvent &&
+            pending.event.room
+                .canCancelSend(pending.event.transactionId ?? pending.eventId));
     bool canFavoriteGif = false;
     bool canUnfavoriteGif = false;
 

@@ -120,6 +120,9 @@ Future<String?> _follow(matrix.Room room, AttachmentSend? send, String txid,
     final id =
         await (send == null ? traced() : runForUpload(send.upload, traced));
     if (id == null) {
+      // Cancelled by the user: timed as such, and gone from the chat.
+      if (room.isSendCancelled(txid))
+        send?.trace?.finish(ok: false, cancelled: true);
       send?.failed();
     } else {
       send?.sent();

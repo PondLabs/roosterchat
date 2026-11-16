@@ -120,6 +120,7 @@ class TextSendTrace {
   Future<void>? _painting;
   StreamSubscription<matrix.Event>? _echo;
   bool _failed = false;
+  bool _cancelled = false;
 
   /// [room] is handed the text with the transaction id [txid]. Only the
   /// first call counts.
@@ -149,6 +150,9 @@ class TextSendTrace {
     if (!ok) _failed = true;
   }
 
+  /// The user cancelled the send before its request left.
+  void cancelled() => _cancelled = true;
+
   /// Adds the steps and closes the span, once the echo's frame is drawn or
   /// [frameTimeout] has passed.
   Future<void> finish() async {
@@ -160,9 +164,11 @@ class TextSendTrace {
     if (span.isFinished) return;
     _addSteps();
     span.finish(
-        outcome: _failed || _answeredAt == null
-            ? SpeedOutcome.failed
-            : SpeedOutcome.ok);
+        outcome: _cancelled
+            ? SpeedOutcome.cancelled
+            : _failed || _answeredAt == null
+                ? SpeedOutcome.failed
+                : SpeedOutcome.ok);
   }
 
   void _addSteps() {

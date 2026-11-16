@@ -334,8 +334,9 @@ void main() {
           };
 
       final onSending = menuOf(sending);
-      expect(entries(onSending).keys,
-          isNot(contains(onSending.promptCancelEventSend)));
+      // Its upload is held: its event's request has not left (T2.7).
+      expect(
+          entries(onSending).keys, contains(onSending.promptCancelEventSend));
       expect(entries(onSending).keys,
           isNot(contains(onSending.promptRetryEventSend)));
 

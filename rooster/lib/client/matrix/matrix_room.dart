@@ -618,7 +618,10 @@ class MatrixRoom extends Room {
             threadLastEventId: threadLastEventId,
             threadRootEventId: threadRootEventId);
       } finally {
-        TextSendTrace.guard(() => trace?.sent(ok: id != null));
+        TextSendTrace.guard(() {
+          trace?.sent(ok: id != null);
+          if (_matrixRoom.isSendCancelled(txid)) trace?.cancelled();
+        });
       }
 
       if (id != null) {
@@ -968,10 +971,17 @@ class MatrixRoom extends Room {
     }
   }
 
+  /// "Cancel" on a message that failed, or that is being sent and whose
+  /// event's request has not left: a file stops in its preparation or its
+  /// uploads (the one in flight is aborted), a text leaves the room's
+  /// queue, and the message is taken away. Once its event's request has
+  /// left the server may have it: nothing changes.
   @override
   Future<void> cancelSend(TimelineEvent event) async {
     final mxEvent = event as MatrixTimelineEvent;
-    await mxEvent.event.cancelSend();
+    final mx = mxEvent.event;
+    if (!_matrixRoom.canCancelSend(mx.transactionId ?? mx.eventId)) return;
+    await mx.cancelSend();
     // A file sent from the composer: no longer shown, its bytes let go.
     final send = AttachmentSends.instance.byTransaction(localId, event.eventId);
     if (send != null) AttachmentSends.instance.remove(send);

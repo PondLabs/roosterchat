@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
+import 'package:matrix/matrix.dart' show currentUploadCancel;
 import 'package:rooster/diagnostic/speed_log/host_class.dart';
 import 'package:rooster/diagnostic/speed_log/request_record.dart';
 import 'package:rooster/diagnostic/speed_log/route_template.dart';
@@ -32,7 +33,9 @@ import 'package:rooster/utils/network/xhr_upload_stub.dart'
 /// A media upload runs under [UploadLimits] (no total limit; 30 s without
 /// the connection taking a byte; after the last byte, the answer's wait)
 /// and reports to the [UploadListener] of its zone ([runForUpload]), the
-/// pending message it belongs to. It retries nothing: `matrix.Client`
+/// pending message it belongs to. When that message's send is cancelled
+/// (`currentUploadCancel`, the SDK's zone value), the request is aborted,
+/// on the web the `XMLHttpRequest`. It retries nothing: `matrix.Client`
 /// wraps it in its own timeout client, which limits only the time between
 /// pieces of the response body.
 class SpeedHttpClient extends http.BaseClient {
@@ -74,7 +77,8 @@ class SpeedHttpClient extends http.BaseClient {
     // Chosen by the API's words whatever the host's class, as before the
     // route of other hosts was reduced to placeholders.
     final upload = isMediaUploadRoute(routeTemplate(request.url))
-        ? _UploadWatch(request.contentLength, currentUploadListener)
+        ? _UploadWatch(request.contentLength, currentUploadListener,
+            cancel: currentUploadCancel(), url: request.url)
         : null;
     final http.StreamedResponse response;
     try {
@@ -233,10 +237,18 @@ class _Entry {
 /// report after its end is ignored, so the listener hears of each request
 /// once: answered, or failed with the limit or error that ended it.
 class _UploadWatch {
-  _UploadWatch(this._bodyBytes, this._listener) {
+  _UploadWatch(this._bodyBytes, this._listener,
+      {Future<void>? cancel, required Uri url}) {
     _listener?.uploadStarted(_bodyBytes ?? 0);
     // Connecting counts as not taking a byte.
     _arm(UploadLimits.stall, SpeedError.uploadStalled);
+    // The send it belongs to was cancelled: the request is aborted, and
+    // ends as aborted even if an answer still comes.
+    cancel?.then((_) {
+      if (_ended) return;
+      failed(SpeedError.aborted);
+      _stop(http.RequestAbortedException(url));
+    });
   }
 
   final int? _bodyBytes;
@@ -248,9 +260,15 @@ class _UploadWatch {
   bool _handedOver = false;
   bool _ended = false;
 
-  /// Completes when a limit ends the upload: the transport's request is
-  /// aborted then.
+  /// Completes when a limit ends the upload, or its send is cancelled: the
+  /// transport's request is aborted then.
   Future<void> get aborted => _abort.future;
+
+  /// Aborts the transport's request, and the upload fails with [error].
+  void _stop(Object error) {
+    if (!_abort.isCompleted) _abort.complete();
+    if (!_limited.isCompleted) _limited.completeError(error);
+  }
 
   /// [sending], or the limit's [UploadTimeoutException] if one ends the
   /// upload first. A response that comes after that is let go.
@@ -306,8 +324,7 @@ class _UploadWatch {
     _timer?.cancel();
     _timer = Timer(limit, () {
       failed(name);
-      _abort.complete();
-      _limited.completeError(UploadTimeoutException(name, limit));
+      _stop(UploadTimeoutException(name, limit));
     });
   }
 }
