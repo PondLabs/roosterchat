@@ -50,6 +50,11 @@ const _uploadCancelKey = #matrixUploadCancel;
 Future<void>? currentUploadCancel() =>
     Zone.current[_uploadCancelKey] as Future<void>?;
 
+/// Runs [upload] so that the HTTP client aborts its request when [cancel]
+/// completes (see [currentUploadCancel]).
+R runCancellableUpload<R>(Future<void> cancel, R Function() upload) =>
+    runZoned(upload, zoneValues: {_uploadCancelKey: cancel});
+
 /// Runs [run] until the send of the message [txid] in [room] is cancelled:
 /// then [SendCancelledException] is thrown at once, and the future [run]
 /// was given completes, so what it started can stop. Throws at once when
@@ -252,13 +257,13 @@ Future<Uri> _uploadFilePart(
       uri = await untilSendCancelled(
         room,
         txid,
-        (cancelled) => runZoned(
+        (cancelled) => runCancellableUpload(
+          cancelled,
           () => client.uploadContent(
             upload.bytes,
             filename: upload.name,
             contentType: upload.mimeType,
           ),
-          zoneValues: {_uploadCancelKey: cancelled},
         ),
       );
     } catch (error) {
