@@ -125,10 +125,18 @@ void main() {
     expect(count('GET /healthz'), 1);
   });
 
-  test('the token service connection is kept idle for 55 s', () async {
+  test(
+      'the token service, as the app makes it, keeps its connection idle for '
+      '55 s', () async {
+    // The HttpClient each account's service sends through: dart:io's own
+    // keeps an idle connection 15 s.
+    final created = _Created();
+    final tokens =
+        HttpOverrides.runWithHttpOverrides(CallTokenService.new, created);
+    addTearDown(tokens.close);
+    expect(created.clients.map((c) => c.idleTimeout),
+        [const Duration(seconds: 55)]);
     expect(CallTokenService.idleTimeout, const Duration(seconds: 55));
-    expect(keepAliveIoClient(CallTokenService.idleTimeout).idleTimeout,
-        const Duration(seconds: 55));
   });
 
   test(
@@ -158,4 +166,16 @@ void main() {
     expect(short.toSet(), hasLength(2), reason: 'closed while idle');
     expect(long.toSet(), hasLength(1), reason: 'kept while idle');
   });
+}
+
+/// Writes down every dart:io HttpClient made while it is in force.
+class _Created extends HttpOverrides {
+  final clients = <HttpClient>[];
+
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    final client = super.createHttpClient(context);
+    clients.add(client);
+    return client;
+  }
 }
