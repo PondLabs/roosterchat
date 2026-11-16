@@ -190,17 +190,26 @@ class MatrixVoipRoomComponent
   }
 
   Future<VoipSession?> _joinCall() async {
-    // Leaving is memoised, so this only waits for a hang up already running:
-    // two overlapping sessions fought over the membership state (issue #48).
-    await currentSession?.hangUpCall();
+    // Run by the join beside its token requests, and finished before it
+    // writes our membership or connects.
+    Future<void> leavePrevious() async {
+      final previous = currentSession;
+      await Future.wait([
+        // Leaving is memoised, so this only waits for a hang up already
+        // running: two overlapping sessions fought over the membership state
+        // (issue #48).
+        if (previous != null) previous.hangUpCall(),
+        // One voice channel at a time. Walking into another room's channel
+        // leaves the one being stood in, and before the join rather than
+        // after, so the two are never both live and never both claim a
+        // membership.
+        if (clientManager != null)
+          clientManager!.callManager
+              .leaveOtherCalls(client: client, roomId: room.identifier),
+      ]);
+    }
 
-    // One voice channel at a time. Walking into another room's channel
-    // leaves the one being stood in, and before the join rather than after,
-    // so the two are never both live and never both claim a membership.
-    await clientManager?.callManager
-        .leaveOtherCalls(client: client, roomId: room.identifier);
-
-    currentSession = await backend.join();
+    currentSession = await backend.join(leavePrevious: leavePrevious);
     currentSession?.onStateChanged.listen(onStateChanged);
     return currentSession;
   }

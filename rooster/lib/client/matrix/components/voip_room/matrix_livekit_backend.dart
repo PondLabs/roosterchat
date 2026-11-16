@@ -1,6 +1,8 @@
 import 'dart:convert';
 
-import 'package:rooster/client/matrix/components/voip_room/call_membership_writes.dart';
+import 'package:rooster/client/matrix/components/voip_room/call_join.dart';
+import 'package:rooster/client/matrix/components/voip_room/call_token_service.dart';
+import 'package:rooster/client/matrix/components/voip_room/livekit_join_room.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/matrix/components/voip_room/matrix_call_membership.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
@@ -11,16 +13,16 @@ import 'package:rooster/client/matrix/components/voip_room/livekit_microphone.da
 import 'package:rooster/client/matrix/components/voip_room/matrix_livekit_voip_session.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_voip_room_component.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
+import 'package:rooster/client/matrix/matrix_room_permissions.dart';
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:matrix/matrix.dart';
 
-class MatrixLivekitBackend {
+class MatrixLivekitBackend implements CallJoinHost<MatrixLivekitVoipSession> {
   MatrixRoom room;
   lk.Room? livekitRoom;
   MatrixLivekitBackend(this.room);
@@ -68,7 +70,9 @@ class MatrixLivekitBackend {
     }
     final uri =
         base.replace(path: "/.well-known/matrix/client").normalizePath();
-    final response = await http.get(uri).timeout(const Duration(seconds: 10));
+    // Through the account's client, so it is in the speed log.
+    final response =
+        await client.httpClient.get(uri).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       throw CallJoinException(
           "The homeserver's well-known answered HTTP ${response.statusCode}",
@@ -164,67 +168,81 @@ class MatrixLivekitBackend {
     return null;
   }
 
-  Future<VoipSession?> join() async {
-    // Awaited: joining while this is still running leaves the call on
-    // whatever device the system chose.
+  /// Joins the call. [leavePrevious] hangs up the call we are in; it runs
+  /// beside the token requests (see [CallJoin]).
+  Future<VoipSession?> join({Future<void> Function()? leavePrevious}) async {
+    final session = await CallJoin<MatrixLivekitVoipSession>(
+      host: this,
+      tokens: CallTokenService.forClient(room.matrixRoom.client),
+    ).run(leavePrevious: leavePrevious);
+    livekitRoom = session.livekitRoom;
+    // In the browser the pick only reaches LiveKit's own audio elements.
+    if (kIsWeb) {
+      session.applyAudioOutput().catchError((Object e, StackTrace s) {
+        Log.onError(e, s, content: "Could not use the picked speakers");
+      });
+    }
+    return session;
+  }
+
+  @override
+  bool get canWriteMembership => room.matrixRoom
+      .canChangeState(MatrixVoipRoomComponent.callMemberStateEvent);
+
+  @override
+  Future<void> selectOutputDevice() async {
     await WebrtcDefaultDevices.selectOutputDevice();
+  }
 
-    final fociUrl = await getFociUrl();
+  @override
+  Future<List<Uri>> foci() => getFociUrl();
 
-    if (fociUrl.isEmpty) {
-      throw CallJoinException(
-          "Failed to find a valid LiveKit service", errorCallNoLivekitService);
-    }
+  @override
+  Future<matrix.OpenIdCredentials> openIdToken() => room.matrixRoom.client
+      .requestOpenIdToken(room.matrixRoom.client.userID!, {});
 
-    final selectedFocus = fociUrl.first;
-    Log.d("Got Foci Url: ${fociUrl}");
+  @override
+  String get deviceId => room.matrixRoom.client.deviceID!;
 
-    // Bounded: the Join button is disabled while this runs, so a request
-    // that never answers left no way to try again.
-    final token = await room.matrixRoom.client.requestOpenIdToken(
-        room.matrixRoom.client.userID!,
-        {}).timeout(const Duration(seconds: 15));
+  @override
+  String get roomId => room.matrixRoom.id;
 
-    // A remote service must be HTTPS: the OpenID-backed requests leave
-    // this device. A loopback service (a developer's local stack, and the
-    // integration one) is trusted by its address.
-    final focusLoopback = selectedFocus.host == "localhost" ||
-        selectedFocus.host.startsWith("127.") ||
-        selectedFocus.host == "::1" ||
-        selectedFocus.host == "[::1]";
-    if (selectedFocus.scheme != "https" && !focusLoopback) {
-      throw CallJoinException(
-          "Selected focus JWT does not use HTTPS", errorCallFocusNotHttps);
-    }
+  @override
+  String get membershipKey => _ownMembershipKey;
 
-    final uri = Uri.parse(selectedFocus.toString() + "/sfu/get");
+  @override
+  Future<void> writeMembership(List<Uri> foci) =>
+      room.matrixRoom.client.setRoomStateWithKey(room.matrixRoom.id,
+          MatrixVoipRoomComponent.callMemberStateEvent, _ownMembershipKey, {
+        "application": "m.call",
+        "call_id": "",
+        "device_id": room.matrixRoom.client.deviceID!,
+        "expires": 14400000,
+        "foci_preferred": foci
+            .map((e) => {
+                  "type": "livekit",
+                  "livekit_alias": room.identifier,
+                  "livekit_service_url": e.toString()
+                })
+            .toList(),
+        "focus_active": {
+          "focus_selection": "oldest_membership",
+          "type": "livekit"
+        },
+        "scope": "m.room",
+        // Rewritten while we share our screen or camera (issue #9).
+        MatrixCallMembership.liveMediaKey: <String>[],
+      });
 
-    final body = {
-      "device_id": room.matrixRoom.client.deviceID!,
-      "room": room.matrixRoom.id,
-      "openid_token": {
-        "matrix_server_name": token.matrixServerName,
-        "access_token": token.accessToken,
-        "expires_in": token.expiresIn,
-      }
-    };
+  @override
+  Future<void> clearMembership() => room.matrixRoom.client.setRoomStateWithKey(
+      room.matrixRoom.id,
+      MatrixVoipRoomComponent.callMemberStateEvent,
+      _ownMembershipKey, {});
 
-    var result = await http
-        .post(uri, body: jsonEncode(body))
-        .timeout(const Duration(seconds: 15));
-    if (result.statusCode != 200) {
-      throw CallJoinException(
-          "Failed to get sfu! HTTP Error ${result.statusCode}",
-          errorCallSfuHttp(result.statusCode));
-    }
-
-    var data = jsonDecode(result.body) as Map<String, dynamic>;
-
-    final sfuUrl = data["url"];
-    Log.d("Got sfu: ${sfuUrl}");
-    final jwt = data["jwt"];
+  @override
+  Future<LivekitJoinRoom> createRoom() async {
     lk.E2EEOptions? e2eeOptions;
-
     MatrixLivekitEncryptionKeyProvider? provider;
 
     if (room.isE2EE) {
@@ -248,119 +266,29 @@ class MatrixLivekitBackend {
 
     // The previous call's room is disposed when it hangs up.
     livekitRoom = null;
-    final lkRoom = lk.Room(roomOptions: roomOptions);
+    return LkJoinRoom(lk.Room(roomOptions: roomOptions), keyProvider: provider);
+  }
 
-    // Local, not a field: two joins can overlap (two views of one room).
-    var wroteMembership = false;
-    lk.LocalAudioTrack? earlyMicrophone;
-    try {
-      return await _connect(lkRoom, sfuUrl, jwt, fociUrl, provider,
-          onMembershipWritten: () => wroteMembership = true,
-          onMicrophoneOpened: (track) => earlyMicrophone = track);
-    } catch (_) {
-      // Don't leave a membership for a call we never got into, nor a room
-      // that keeps its connectivity listener and timers alive (issue #48).
-      // The membership first: it is what other people see.
-      provider?.dispose();
-      if (wroteMembership) {
-        try {
-          await room.matrixRoom.client.setRoomStateWithKey(
-              room.matrixRoom.id,
-              MatrixVoipRoomComponent.callMemberStateEvent,
-              _ownMembershipKey, {});
-        } catch (e, s) {
-          Log.onError(e, s, content: "Could not clear call membership");
-        }
-      }
-      await lkRoom.dispose();
-      // Nor a microphone opened ahead of a room that never connected,
-      // capturing with nothing left that could stop it.
-      try {
-        await earlyMicrophone?.stop();
-      } catch (e, s) {
-        Log.onError(e, s, content: "Could not close the microphone");
-      }
-      rethrow;
-    }
+  @override
+  Future<lk.AudioCaptureOptions> microphoneOptions() => _microphoneOptions();
+
+  @override
+  bool get mobileBrowser => Layout.isMobileBrowser;
+
+  @override
+  bool get isWeb => kIsWeb;
+
+  @override
+  MatrixLivekitVoipSession createSession(
+      LivekitJoinRoom joined, Future<void> microphonePublished) {
+    final lkRoom = joined as LkJoinRoom;
+    return MatrixLivekitVoipSession(room, lkRoom.room,
+        keyProvider: lkRoom.keyProvider,
+        microphonePublished: microphonePublished);
   }
 
   String get _ownMembershipKey =>
       "_${room.client.self!.identifier}_${room.matrixRoom.client.deviceID!}_m.call";
-
-  Future<VoipSession> _connect(lk.Room lkRoom, String sfuUrl, String jwt,
-      List<Uri> fociUrl, MatrixLivekitEncryptionKeyProvider? provider,
-      {required void Function() onMembershipWritten,
-      required void Function(lk.LocalAudioTrack track)
-          onMicrophoneOpened}) async {
-    // In a phone's browser, before anything of the call plays: see
-    // openMicrophoneBeforePlayback. Before the membership too, so nobody is
-    // told we are in while a permission prompt is still up.
-    final early = await openMicrophoneBeforePlayback(
-        needed: Layout.isMobileBrowser, options: _microphoneOptions);
-    final earlyTrack = early.track;
-    if (earlyTrack != null) onMicrophoneOpened(earlyTrack);
-
-    await lkRoom.prepareConnection(sfuUrl, jwt);
-
-    // A clear from the previous call may still be in flight, and would
-    // erase what we write now (issue #48).
-    await CallMembershipWrites.settled(_ownMembershipKey);
-
-    onMembershipWritten();
-    await room.matrixRoom.client.setRoomStateWithKey(room.matrixRoom.id,
-        MatrixVoipRoomComponent.callMemberStateEvent, _ownMembershipKey, {
-      "application": "m.call",
-      "call_id": "",
-      "device_id": room.matrixRoom.client.deviceID!,
-      "expires": 14400000,
-      "foci_preferred": fociUrl
-          .map((e) => {
-                "type": "livekit",
-                "livekit_alias": room.identifier,
-                "livekit_service_url": e.toString()
-              })
-          .toList(),
-      "focus_active": {
-        "focus_selection": "oldest_membership",
-        "type": "livekit"
-      },
-      "scope": "m.room",
-      // Rewritten while we share our screen or camera (issue #9).
-      MatrixCallMembership.liveMediaKey: <String>[],
-    });
-
-    // The session subscribes to tracks itself, so screen shares only play
-    // for people who opt in to watching them (issue #50).
-    await lkRoom.connect(sfuUrl, jwt,
-        connectOptions: const lk.ConnectOptions(autoSubscribe: false));
-
-    if (earlyTrack != null) {
-      // Not awaited either, and handed over: from here a publish that
-      // fails closes it itself.
-      _publishMicrophone(lkRoom, earlyTrack);
-    } else if (early.retry) {
-      final micOptions = await _microphoneOptions();
-      lkRoom.localParticipant
-          ?.setMicrophoneEnabled(true, audioCaptureOptions: micOptions)
-          .catchError((Object e, StackTrace s) {
-        // Not awaited on purpose (joining muted is still joining), but a
-        // denied microphone must not end up as an unhandled error.
-        Log.onError(e, s, content: "Could not enable the microphone");
-        return null;
-      });
-    }
-
-    final session =
-        MatrixLivekitVoipSession(room, lkRoom, keyProvider: provider);
-    livekitRoom = lkRoom;
-    // In the browser the pick only reaches LiveKit's own audio elements.
-    if (kIsWeb) {
-      session.applyAudioOutput().catchError((Object e, StackTrace s) {
-        Log.onError(e, s, content: "Could not use the picked speakers");
-      });
-    }
-    return session;
-  }
 
   /// A room microphone's capture options, for the default device.
   Future<lk.AudioCaptureOptions> _microphoneOptions() async {
@@ -373,27 +301,5 @@ class MatrixLivekitBackend {
       noiseSuppressionPreference: preferences.voipNoiseSuppression.value,
       deviceId: device,
     );
-  }
-
-  /// Publishes a microphone that was opened ahead of the room. Never fails:
-  /// joining without a microphone is still joining.
-  Future<void> _publishMicrophone(
-      lk.Room lkRoom, lk.LocalAudioTrack track) async {
-    try {
-      final participant = lkRoom.localParticipant;
-      if (participant == null) {
-        await track.stop();
-        return;
-      }
-      await participant.publishAudioTrack(track);
-    } catch (e, s) {
-      Log.onError(e, s, content: "Could not enable the microphone");
-      try {
-        // The room went away meanwhile: nothing else would stop it.
-        await track.stop();
-      } catch (e, s) {
-        Log.onError(e, s, content: "Could not close the microphone");
-      }
-    }
   }
 }

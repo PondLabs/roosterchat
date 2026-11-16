@@ -1737,6 +1737,12 @@
     "type": "text",
     "placeholders": {}
   },
+  "errorCallNoPermission": "Your role in this channel does not let you join its calls",
+  "@errorCallNoPermission": {
+    "description": "Why joining a voice channel's call failed, shown under 'Could not join the call': the user's power level in the room does not allow the call membership event, so nobody would see them in the call. Nothing was sent",
+    "type": "text",
+    "placeholders": {}
+  },
   "errorCallNoLivekitService": "Failed to find a valid LiveKit service",
   "@errorCallNoLivekitService": {
     "description": "Why joining a voice channel's call failed, shown under 'Could not join the call': the homeserver names no LiveKit service to hold calls. LiveKit is a name",

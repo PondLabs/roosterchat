@@ -108,6 +108,36 @@ it; mutes never wait on it. While a microphone that went missing is being
 published again, the mute button shows what the user chose (not muted),
 not "muted".
 
+## Joining
+
+The join (`CallJoin` in `voip_room/call_join.dart`) keeps the order the
+people in the call see: the previous call's membership cleared, ours
+written, the LiveKit connection, the microphone published. What nobody
+else sees runs beside it:
+
+- the previous call hangs up while the speakers are picked and the OpenID
+  and `/sfu/get` tokens are asked for; our membership is written only once
+  that hang up and any clear of ours still in flight are done (issue #48);
+- `prepareConnection` is awaited only for a LiveKit Cloud SFU, whose region
+  the connection then uses; for any other SFU it is skipped on native and
+  not waited for on the web;
+- the microphone's options and capture are prepared during the connection
+  and published once it is up. A phone's browser opens the microphone
+  before the membership, as before (`openMicrophoneBeforePlayback`), and
+  the DSP's wait stays bounded at 8 s;
+- a member whose power level does not allow the membership event is told
+  before anything is sent.
+
+The join reaches LiveKit only through `LivekitJoinRoom`
+(`livekit_join_room.dart`, real over `lk.Room`), so tests drive it with a
+fake room. `/sfu/get` goes through one long-lived client per account
+(`CallTokenService`), closed at logout, so later joins reuse its
+connection. On the web the DSP's wasm is fetched when a voice channel's
+page opens. Each join is a `voice_join` span in the speed log
+(`diagnostic/speed_log/call_join_trace.dart`): every step with its
+duration, the SFU's host class and region, the microphone published and
+the first remote audio, `unavailable` when nobody speaks within 30 s.
+
 ## Connection status and losing the internet
 
 The call panel's top row (`ui/molecules/call_connection_status.dart`) says
@@ -211,6 +241,7 @@ without LiveKit still hang up (`lostConnectionTimeout`).
 | One NaN, infinity or huge sample (and a whole NaN block) leaves the voice as it was a second later; state that went bad is rebuilt; state that keeps going bad gives suppression up, not the voice; NaN parameters do not stick; RNNoise taking over keeps the voice | `rust/audio_dsp/tests/non_finite.rs` | ci `test` |
 | Inside the real WebRTC (Linux): the app's recording stream killed mid-capture stays dead on its own (WebRTC does not notice), and the reopen repair brings the voice back within 3 dB | `native_noise_loop.sh` ("a microphone whose recording died is heard again"; pacmd on PulseAudio, pw-cli on PipeWire) | integration-test |
 | In Chrome: a worker that traps on every block or hangs keeps the microphone going out (it was -120 dB) and stops the frame counter; a suspended context is resumed; an ended capture is refused | `web_health_loop.mjs` | ci `voice-dsp` |
+| A join keeps the order others see (previous clear, membership, connect, microphone) while the tokens, speakers and microphone run beside it; `prepareConnection` waits only for LiveKit Cloud; no membership power, no request; `/sfu/get` reuses one connection until logout; the `voice_join` span | `unit_test/call_join/` | ci `test` |
 | The vendored changes and the session's calls are still there | `check_contracts.py` | ci `voice-dsp` |
 
 Measured on 2026-09-26: the native scenario gives "before: 1.00 s/s at

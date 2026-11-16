@@ -257,6 +257,7 @@
   "errorSoundboardNeedsDesktopApp": "Adicionar sons requer o aplicativo para computador",
   "labelMediaVideoBy": "por {author}",
   "labelVoipCallError": "Erro na chamada",
+  "errorCallNoPermission": "Seu cargo neste canal não permite entrar nas chamadas dele",
   "errorCallNoLivekitService": "Não foi possível encontrar um serviço LiveKit válido",
   "errorCallFocusNotHttps": "O serviço JWT do foco selecionado não usa HTTPS",
   "errorCallSfuHttp": "Não foi possível obter o SFU. Erro HTTP {status}",
