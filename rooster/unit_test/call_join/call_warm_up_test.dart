@@ -329,11 +329,10 @@ void main() {
     const web = bool.fromEnvironment('dart.library.js_interop');
     final base = Uri.base;
     final focus = web
-        ? base.replace(
+        ? Uri(
+            scheme: base.scheme,
             host: base.host == '127.0.0.1' ? 'localhost' : '127.0.0.1',
-            path: '',
-            query: null,
-            fragment: null)
+            port: base.port)
         : Uri.parse('http://127.0.0.1:9');
     final real = http.Client();
     addTearDown(real.close);
