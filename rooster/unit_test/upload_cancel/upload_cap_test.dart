@@ -60,6 +60,9 @@ void main() {
         echoes.any((e) =>
             e.eventId == after.$1.transactionId &&
             e.fileSendingStatus == matrix.FileSendingStatus.uploading));
+    // Its parts are in the line for a slot by now.
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(transport.open, 4);
     final txid = waiting.$1.transactionId!;
     await echoes.lastWhere((e) => e.eventId == txid).cancelSend();
     expect(await waiting.$2, isNull);

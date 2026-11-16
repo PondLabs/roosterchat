@@ -1240,8 +1240,6 @@ class Room {
     void Function()? beforeRequest, // ROOSTER
   }) async {
     txid ??= client.generateUniqueTransactionId();
-    // At the head of the room's queue, and before each attempt. // ROOSTER
-    _stopIfSendCancelled(txid); // ROOSTER
     // Read together with whether it is encrypted, below: an encrypted // ROOSTER
     // event never points to a file that went up in the clear. // ROOSTER
     if (uploadedInTheClear && encrypted && client.fileEncryptionEnabled) { // ROOSTER

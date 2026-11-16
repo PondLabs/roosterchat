@@ -215,10 +215,10 @@ Changes since the copy:
   `Event.cancelSend` lets go of the file and the parts kept for it.
 - Cancel of a message being sent (`Room.cancelSending`, `lib/src/room.dart`
   and `lib/src/event.dart`): a flag per transaction id, kept for good, that
-  the upload loop checks before each attempt, during its waits and before
-  the event, and that `Room.sendEvent` checks at the head of the room's
-  queue (a message cancelled while it waits leaves the queue at once) and
-  right before each `PUT /send`. Each upload runs in a zone whose
+  `Room.sendFileEvent` checks before the encryption, the upload loop before
+  each attempt and during its waits, and `Room.sendEvent` while the message
+  waits in the room's queue (it leaves the queue at once) and right before
+  each `PUT /send`. Each upload runs in a zone whose
   `currentUploadCancel()` the app's HTTP client uses to abort the request
   in flight. From the first `PUT /send` on, the server may have the event:
   `Room.canCancelSend` is false and `Event.cancelSend` throws without
