@@ -9,28 +9,39 @@ class CallMembershipWrites {
 
   static final Map<String, Future<void>> _pending = {};
 
-  /// How long a write waits for a clear, at most, from when the clear was
-  /// sent: a request that never lands must not stop the user from joining.
+  /// Each of [_pending], waited for [waitAtMost] at most from when it was
+  /// registered: what the clear registered after it waits for.
+  static final Map<String, Future<void>> _asPrevious = {};
+
+  /// How long a write waits for the clears in flight, at most: a request
+  /// that never lands must not stop the user from joining.
   static const waitAtMost = Duration(seconds: 10);
 
   /// Registers a clear of [stateKey] that later writes have to wait for,
   /// after any registered before it that is still in flight: a slow clear
-  /// must not be forgotten because a quicker one came after it. Each is
-  /// waited for [waitAtMost] from when it was registered, so one that never
-  /// lands holds up the writes of those 10 s only, not every later one.
-  /// Returns [write] unchanged, so the caller still sees its result.
+  /// must not be forgotten because a quicker one came after it. That
+  /// earlier one is waited for [waitAtMost] from when it was registered,
+  /// so one that never lands holds up the writes of those 10 s only, not
+  /// every later one. This clear itself is waited for until it lands (a
+  /// write bounds its own wait, see [settled]): a slow one landing after a
+  /// later write would erase it. Returns [write] unchanged, so the caller
+  /// still sees its result.
   static Future<T> clearing<T>(String stateKey, Future<T> write) {
     // Never fails: waiting for this only orders the writes, the caller deals
     // with the error.
     final settled = write.then<void>((_) {}, onError: (_) {});
-    final previous = _pending[stateKey];
-    final done = (previous == null
-            ? settled
-            : Future.wait([previous, settled]).then<void>((_) {}))
-        .timeout(waitAtMost, onTimeout: () {});
+    final previous = _asPrevious[stateKey];
+    final done = previous == null
+        ? settled
+        : Future.wait([previous, settled]).then<void>((_) {});
+    final asPrevious = done.timeout(waitAtMost, onTimeout: () {});
     _pending[stateKey] = done;
+    _asPrevious[stateKey] = asPrevious;
     done.whenComplete(() {
-      if (identical(_pending[stateKey], done)) _pending.remove(stateKey);
+      if (identical(_pending[stateKey], done)) {
+        _pending.remove(stateKey);
+        _asPrevious.remove(stateKey);
+      }
     });
     return write;
   }

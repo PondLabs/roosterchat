@@ -220,6 +220,47 @@ void main() {
       });
     });
 
+    /// A clear of our membership that lands 15 s after it was sent, and a
+    /// join started [joinAfter] after it. Whether the join, in the call at
+    /// the end, kept its membership.
+    bool keptPastLateClear(FakeAsync async, Duration joinAfter) {
+      final journal = Journal();
+      final host = FakeHost(journal)..roomId = '!late-${joinAfter.inSeconds}';
+      final landed = Completer<void>();
+      CallMembershipWrites.clearing(host.membershipKey, landed.future);
+      Timer(const Duration(seconds: 15), () {
+        host.membership = false;
+        landed.complete();
+      });
+      async.elapse(joinAfter);
+      Object? session;
+      CallJoin<FakeLivekitRoom>(
+              host: host,
+              tokens: fakeTokenService(journal),
+              log: SpeedLog(),
+              remoteAudioWindow: const Duration(milliseconds: 1))
+          .run()
+          .then((s) => session = s);
+      async.elapse(const Duration(seconds: 30));
+      expect(session, isNotNull);
+      final kept = host.membership;
+      host.room.ended.complete();
+      async.elapse(const Duration(seconds: 1));
+      return kept;
+    }
+
+    test(
+        'a clear that lands 15 s after it was sent: a join started 9 s or '
+        '11 s after it writes once it has landed, and keeps its membership',
+        () {
+      fakeAsync((async) {
+        expect(keptPastLateClear(async, const Duration(seconds: 9)), isTrue);
+      });
+      fakeAsync((async) {
+        expect(keptPastLateClear(async, const Duration(seconds: 11)), isTrue);
+      });
+    });
+
     test('a clear that fails still orders the writes, and does not fail them',
         () async {
       final failing = Completer<void>();
