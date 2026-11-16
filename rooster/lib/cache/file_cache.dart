@@ -18,6 +18,13 @@ abstract class FileCache {
 
   Future<void> clean();
 
+  /// Forgets [identifier] and deletes its file.
+  Future<void> removeFile(String identifier);
+
+  /// Forgets every identifier that starts with [prefix] and deletes their
+  /// files.
+  Future<void> removeFilesStartingWith(String prefix);
+
   static FileCache? getFileCacheInstance() {
     return getFileCacheImplementation();
   }

@@ -81,6 +81,30 @@ class DriftFileCache implements FileCache {
   }
 
   @override
+  Future<void> removeFile(String identifier) =>
+      _remove((tbl) => tbl.id.equals(identifier));
+
+  @override
+  Future<void> removeFilesStartingWith(String prefix) {
+    // LIKE with its wildcards escaped: the prefix is matched as it is.
+    final pattern = prefix
+        .replaceAll(r'\', r'\\')
+        .replaceAll('%', r'\%')
+        .replaceAll('_', r'\_');
+    return _remove((tbl) => tbl.id.like('$pattern%', escapeChar: r'\'));
+  }
+
+  Future<void> _remove(
+      Expression<bool> Function($FileCacheEntryTable tbl) where) async {
+    final db = await get();
+    final entries = await (db.select(db.fileCacheEntry)..where(where)).get();
+    await (db.delete(db.fileCacheEntry)..where(where)).go();
+    for (final entry in entries) {
+      await _cleanFile(entry);
+    }
+  }
+
+  @override
   Future<void> close() async {
     return await database?.close();
   }

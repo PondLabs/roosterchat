@@ -28,6 +28,8 @@ import 'package:rooster/diagnostic/diagnostics.dart';
 import 'package:rooster/diagnostic/speed_log/host_class.dart';
 import 'package:rooster/diagnostic/speed_log/sync_trace.dart';
 import 'package:rooster/main.dart';
+import 'package:rooster/cache/own_media_cache.dart';
+import 'package:rooster/client/matrix/media/own_media.dart';
 import 'package:rooster/utils/network/speed_http_client.dart';
 import 'package:rooster/utils/notifying_list.dart';
 import 'package:rooster/utils/notifying_list_filter.dart';
@@ -116,6 +118,9 @@ class MatrixClient extends Client {
   /// The speed log's `sync` spans of this account (docs/speed-log.md).
   late final SyncSpeedTrace _syncSpeedTrace;
 
+  /// What this account sent from this device (lib/cache/own_media_cache.dart).
+  late final OwnMediaCache _ownMedia;
+
   MatrixClient({
     required String identifier,
     required matrix.DatabaseApi database,
@@ -130,6 +135,12 @@ class MatrixClient extends Client {
 
     _id = identifier;
     _matrixClient = _createMatrixClient(identifier, database, transport);
+    _ownMedia = OwnMediaCache.forAccount(identifier, files: fileCache);
+    attachOwnMedia(_matrixClient, _ownMedia);
+    // Logged out here or by the homeserver: nothing sent stays behind.
+    _matrixClient.onLoginStateChanged.stream
+        .where((state) => state == matrix.LoginState.loggedOut)
+        .listen((_) => _ownMedia.clear());
     _syncSpeedTrace = SyncSpeedTrace(_matrixClient.onSyncStatus.stream);
 
     self = ErrorProfile();
@@ -492,9 +503,13 @@ class MatrixClient extends Client {
   }
 
   @override
-  Future<void> logout() {
+  Future<void> logout() async {
     preferences.removeRegisteredMatrixClient(_matrixClient.clientName);
-    return _matrixClient.logout();
+    try {
+      await _matrixClient.logout();
+    } finally {
+      await _ownMedia.clear();
+    }
   }
 
   Future<void> _postLoginSuccess() async {
