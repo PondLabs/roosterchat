@@ -72,6 +72,39 @@ Future<String?> retryMatrixFile(matrix.Event event, AttachmentSend send) {
   return _follow(event.room, send, event.eventId, event.sendAgain);
 }
 
+/// Whether [event], a file message, already has its upload's address: the
+/// `url`, or the encrypted file's `file` in an encrypted room.
+bool isUploadedFileEvent(matrix.Event event) =>
+    event.content['url'] is String || event.content['file'] is Map;
+
+/// "Retry" on [event], a file whose upload went through and whose event
+/// failed, which [send] follows when it is known: the same content is sent
+/// again under the same transaction id, with no new upload. In an
+/// encrypted room the content holds the encrypted file (`file`, with its
+/// key), and the room encrypts the event as it does any other. Never
+/// throws, like [sendMatrixFile].
+Future<String?> resendUploadedFile(
+    matrix.Event event, AttachmentSend? send) async {
+  send?.retrying();
+  send?.uploaded();
+  try {
+    final id = await event.room.sendEvent(
+        Map<String, dynamic>.from(event.content),
+        type: event.type,
+        txid: event.transactionId ?? event.eventId);
+    if (id == null) {
+      send?.failed();
+    } else {
+      send?.sent();
+    }
+    return id;
+  } catch (error, stack) {
+    Log.onError(error, stack, content: "Could not send a file again");
+    send?.failed();
+    return null;
+  }
+}
+
 /// Runs [sendFile], the SDK's send of the file under [txid], keeping
 /// [send]'s stage: the SDK shows its pending event as soon as it has the
 /// file, and shows it again with the upload's address once uploaded,
