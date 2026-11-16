@@ -181,3 +181,7 @@ Every later change to it is marked with a `// ROOSTER` comment, so a
 `diff -r -x .git` against that commit shows only our changes. Git stores
 `lib/msc_extensions/msc_1236_widgets/src/widget.dart` with LF line endings
 where upstream has CRLF (`* text=auto`); compare with `--strip-trailing-cr`.
+Changes since the copy:
+
+- `scripts/*.sh` are executable again (mode 755), as in the fork; the copy
+  had lost the mode.
