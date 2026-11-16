@@ -62,11 +62,11 @@ Future<lk.AudioCaptureOptions> prepareMicrophoneCaptureOptions({
 
 /// What opening a room's microphone ahead of the room came to (see
 /// [openMicrophoneBeforePlayback]).
-class EarlyMicrophone {
+class EarlyMicrophone<T extends Object> {
   const EarlyMicrophone({this.track, this.retry = true});
 
   /// The microphone, open, for the room to publish once it is connected.
-  final lk.LocalAudioTrack? track;
+  final T? track;
 
   /// Whether the room still has to open one itself once connected: it was
   /// not opened ahead here, or not in time. False once one was tried and
@@ -95,26 +95,44 @@ class EarlyMicrophone {
 /// Waits at most [limit] for it: a permission prompt nobody answers must
 /// not keep the user out of the call. One that opens after that is closed
 /// again, and the room opens its own once connected, as it always did.
-Future<EarlyMicrophone> openMicrophoneBeforePlayback({
+Future<EarlyMicrophone<lk.LocalAudioTrack>> openMicrophoneBeforePlayback({
   required bool needed,
   required Future<lk.AudioCaptureOptions> Function() options,
   Duration limit = const Duration(seconds: 30),
-}) async {
-  if (!needed) return const EarlyMicrophone();
+}) =>
+    openBeforePlayback<lk.LocalAudioTrack>(
+        needed: needed,
+        options: options,
+        open: lk.LocalAudioTrack.create,
+        stop: (track) => track.stop(),
+        limit: limit);
 
-  final opening = options().then(lk.LocalAudioTrack.create);
+/// [openMicrophoneBeforePlayback] for any kind of capture: [open] opens one
+/// with the options, [stop] closes one that opened too late. The voice join
+/// opens it through its LiveKit interface (`LivekitJoinRoom`).
+Future<EarlyMicrophone<T>> openBeforePlayback<T extends Object>({
+  required bool needed,
+  required Future<lk.AudioCaptureOptions> Function() options,
+  required Future<T> Function(lk.AudioCaptureOptions options) open,
+  required Future<void> Function(T track) stop,
+  Duration limit = const Duration(seconds: 30),
+}) async {
+  if (!needed) return EarlyMicrophone<T>();
+
+  final opening = options().then(open);
   try {
-    return EarlyMicrophone(track: await opening.timeout(limit), retry: false);
+    return EarlyMicrophone<T>(
+        track: await opening.timeout(limit), retry: false);
   } on TimeoutException {
     Log.w("Voice: the microphone did not open in ${limit.inSeconds} s; "
         "joining without waiting for it");
     opening.then<void>((track) async {
-      await track.stop();
+      await stop(track);
     }, onError: (Object _) {});
-    return const EarlyMicrophone();
+    return EarlyMicrophone<T>();
   } catch (e, s) {
     Log.onError(e, s, content: "Could not enable the microphone");
-    return const EarlyMicrophone(retry: false);
+    return EarlyMicrophone<T>(retry: false);
   }
 }
 

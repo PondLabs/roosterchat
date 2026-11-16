@@ -24,9 +24,13 @@ abstract final class SpeedOperation {
   /// from the request to the result (`ImagePreparer`).
   static const imagePrepare = 'image_prepare';
 
+  /// A voice join, from the join starting to the microphone published and
+  /// the first remote audio (see `call_join_trace.dart`).
+  static const voiceJoin = 'voice_join';
+
   /// Every span name. With [invalidSpeedName], at most
   /// `SpeedLog.maxOperations` (the finished spans keep that many).
-  static const all = {textSend, sync, imagePrepare};
+  static const all = {textSend, sync, imagePrepare, voiceJoin};
 }
 
 /// Step names.
@@ -80,6 +84,67 @@ abstract final class SpeedStep {
   /// browser's canvas (web).
   static const encode = 'encode';
 
+  // voice_join (timed steps may overlap: the join runs some side by side)
+  /// The call being left hanging up.
+  static const leavePrevious = 'leave_previous';
+
+  /// The picked speakers handed to WebRTC.
+  static const outputDevice = 'output_device';
+
+  /// Finding the call's token service (the well-known).
+  static const foci = 'foci';
+
+  /// The OpenID token from the homeserver.
+  static const openIdToken = 'openid_token';
+
+  /// `POST /sfu/get` to the call token service.
+  static const sfuToken = 'sfu_token';
+
+  /// The SFU is LiveKit Cloud: when that became known, no duration.
+  static const sfuLivekitCloud = 'sfu_livekit_cloud';
+
+  /// The SFU is not LiveKit Cloud: when that became known, no duration.
+  static const sfuSelfHosted = 'sfu_self_hosted';
+
+  /// A phone's browser opening the microphone before the membership.
+  static const microphoneEarly = 'microphone_early';
+
+  /// LiveKit's DNS, TLS and region warm-up, when awaited or finished.
+  static const prepareConnection = 'prepare_connection';
+
+  /// Waiting for the previous call's clear of our membership.
+  static const membershipClearWait = 'membership_clear_wait';
+
+  /// Writing our call membership.
+  static const membershipWrite = 'membership_write';
+
+  /// The LiveKit connection.
+  static const connect = 'connect';
+
+  /// The microphone's capture options (the DSP's bounded wait included).
+  static const microphoneOptions = 'microphone_options';
+
+  /// Opening the microphone capture during the connection.
+  static const microphoneOpen = 'microphone_open';
+
+  /// The SFU's region, unavailable when it reports none.
+  static const sfuRegion = 'sfu_region';
+
+  /// The SFU reported a region: when it became known, no duration. Its name
+  /// is never kept: it is the server's text, and a self-hosted SFU can put
+  /// anything there (a host name). LiveKit's client code names no regions
+  /// (`region_url_provider.dart` takes them from the server), so there is
+  /// no checked list of Cloud regions to keep by name.
+  static const sfuRegionOther = 'sfu_region_other';
+
+  /// From connected to the microphone published; unavailable when it was
+  /// not.
+  static const microphonePublished = 'microphone_published';
+
+  /// From connected to someone else first heard; unavailable when nobody
+  /// spoke in time.
+  static const firstRemoteAudio = 'first_remote_audio';
+
   /// Every step name.
   static const all = {
     send,
@@ -97,6 +162,24 @@ abstract final class SpeedStep {
     header,
     decode,
     encode,
+    leavePrevious,
+    outputDevice,
+    foci,
+    openIdToken,
+    sfuToken,
+    sfuLivekitCloud,
+    sfuSelfHosted,
+    microphoneEarly,
+    prepareConnection,
+    membershipClearWait,
+    membershipWrite,
+    connect,
+    microphoneOptions,
+    microphoneOpen,
+    sfuRegion,
+    sfuRegionOther,
+    microphonePublished,
+    firstRemoteAudio,
   };
 }
 

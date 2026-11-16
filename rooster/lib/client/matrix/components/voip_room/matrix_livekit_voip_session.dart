@@ -141,10 +141,13 @@ class MatrixLivekitVoipSession
 
   MatrixLivekitVoipSession(this.room, this.livekitRoom,
       {this.keyProvider,
+      Future<void>? microphonePublished,
       @visibleForTesting DateTime Function()? now,
       @visibleForTesting DateTime Function()? serverNow})
       : _now = now ?? DateTime.now,
-        _serverNow = serverNow ?? HomeserverClock.instance.now {
+        _serverNow = serverNow ?? HomeserverClock.instance.now,
+        _joinMicrophone =
+            microphonePublished?.catchError((Object _) {}) ?? Future.value() {
     // Our membership was written just before this, so this is a moment
     // after we joined: what we count from if it is gone before we see it.
     _startedAt = _serverNow();
@@ -1726,8 +1729,14 @@ class MatrixLivekitVoipSession
         deviceId: WebrtcDefaultDevices.getDefaultMicrophoneId,
       );
 
+  /// The join publishing our microphone (see `CallJoin`). A mute or deafen
+  /// waits for it: one sent to LiveKit before it found no microphone, opened
+  /// a second capture, and the join then published its own beside it.
+  final Future<void> _joinMicrophone;
+
   @override
   Future<void> setMicrophoneMute(bool state) async {
+    await _joinMicrophone;
     // As in Discord, unmuting while deafened undeafens too (DeafenRule).
     if (!state && _isDeafened) {
       _deafen.unmute();
@@ -1760,6 +1769,9 @@ class MatrixLivekitVoipSession
 
   @override
   Future<void> setDeafened(bool state) async {
+    // Before reading the mute: it is only known once the join's microphone
+    // is published.
+    await _joinMicrophone;
     if (state) {
       _deafen.deafen(micMuted: isMicrophoneMuted);
       await _applyDeafened(micMuted: true);
@@ -1771,6 +1783,7 @@ class MatrixLivekitVoipSession
   }
 
   Future<void> _applyDeafened({required bool micMuted}) async {
+    await _joinMicrophone;
     _microphoneWanted = !micMuted;
     await livekitRoom.localParticipant?.setMicrophoneEnabled(!micMuted,
         audioCaptureOptions: await _micOptions(enabling: !micMuted));
