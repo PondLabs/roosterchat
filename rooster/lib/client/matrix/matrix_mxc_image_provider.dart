@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:rooster/client/matrix/extensions/matrix_client_extensions.dart';
+import 'package:rooster/client/matrix/media/own_media.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/utils/mime.dart';
@@ -84,6 +85,9 @@ class MatrixMxcImage extends LODImageProvider {
   }) async {
     var identifier = getThumbnailIdentifier(uri);
 
+    final own = await readOwnMedia(client, matrixEvent, thumbnail: true);
+    if (own != null) return own;
+
     if (await fileCache?.hasFile(identifier) == true) {
       var cacheUri = await fileCache?.getFile(identifier);
 
@@ -115,7 +119,11 @@ class MatrixMxcImage extends LODImageProvider {
     }
 
     if (bytes != null && cache) {
-      fileCache?.putFile(identifier, bytes);
+      // A pending event's "thumbnail" is the whole file the SDK still holds
+      // (Event.downloadAndDecryptAttachment): never kept as the thumbnail.
+      if (matrixEvent?.status.isSending != true) {
+        fileCache?.putFile(identifier, bytes);
+      }
       return bytes;
     }
 
@@ -129,6 +137,9 @@ class MatrixMxcImage extends LODImageProvider {
     bool cache = true,
   }) async {
     var identifier = getIdentifier(uri);
+
+    final own = await readOwnMedia(client, matrixEvent);
+    if (own != null) return own;
 
     if (await fileCache?.hasFile(identifier) == true) {
       var cacheUri = await fileCache?.getFile(identifier);

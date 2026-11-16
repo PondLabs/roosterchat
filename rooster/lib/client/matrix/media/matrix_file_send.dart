@@ -15,6 +15,7 @@ import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/cache/file_provider.dart';
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/matrix/matrix_attachment.dart';
+import 'package:rooster/client/matrix/media/own_media.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/utils/mime.dart';
 import 'package:rooster/utils/network/upload_progress.dart';
@@ -92,22 +93,24 @@ bool isUploadedFileEvent(matrix.Event event) {
 /// Runs [sendFile], the SDK's send of the file under [txid], keeping
 /// [send]'s stage: the SDK shows its pending event as soon as it has the
 /// file, and shows it again with the upload's address once uploaded,
-/// before the event is sent.
+/// before the event is sent. Then its bytes go into the account's own
+/// media ([keepOwnMedia]), followed or not.
 Future<String?> _follow(matrix.Room room, AttachmentSend? send, String txid,
     Future<String?> Function() sendFile) async {
-  StreamSubscription<matrix.Event>? pending;
-  if (send != null) {
-    pending = room.client.onTimelineEvent.stream.listen((event) {
-      if (event.roomId != room.id || event.eventId != txid) return;
-      send.echo();
-      if (event.fileSendingStatus == matrix.FileSendingStatus.encrypting) {
-        send.encryptingFile();
-      }
-      if (event.content['url'] is String || event.content['file'] is Map) {
-        send.uploaded();
-      }
-    });
-  }
+  var kept = false;
+  final pending = room.client.onTimelineEvent.stream.listen((event) {
+    if (event.roomId != room.id || event.eventId != txid) return;
+    send?.echo();
+    if (event.fileSendingStatus == matrix.FileSendingStatus.encrypting) {
+      send?.encryptingFile();
+    }
+    if (event.content['url'] is String || event.content['file'] is Map) {
+      send?.uploaded();
+      // Before the event is sent, so the timeline never asks for it.
+      if (!kept) unawaited(keepOwnMedia(room, event));
+      kept = true;
+    }
+  });
 
   try {
     final trace = send?.trace;
@@ -120,6 +123,7 @@ Future<String?> _follow(matrix.Room room, AttachmentSend? send, String txid,
       send?.failed();
     } else {
       send?.sent();
+      ownMediaSent(room.client, txid);
     }
     return id;
   } catch (error, stack) {
@@ -137,7 +141,7 @@ Future<String?> _follow(matrix.Room room, AttachmentSend? send, String txid,
     send?.failed();
     return null;
   } finally {
-    await pending?.cancel();
+    await pending.cancel();
   }
 }
 
