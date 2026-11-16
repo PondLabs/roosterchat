@@ -95,6 +95,11 @@ void main() {
     });
     expect(SpeedOutcome.all,
         {'ok', 'failed', 'incomplete', 'abandoned', 'cancelled'});
+    expect(SpeedError.all, {
+      'aborted', 'cancelled', 'timeout', 'socket', 'tls', 'http', 'client',
+      'other', //
+      'upload_stalled', 'upload_no_answer', // a media upload's time limits
+    });
   });
 
   test('every listed name is a fixed identifier, and the operations fit', () {
