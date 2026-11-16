@@ -212,13 +212,17 @@ class FakeHost implements CallJoinHost<FakeLivekitRoom> {
   /// set; else the join uses [focus], the homeserver's.
   String? roomFocusUrl;
 
+  /// Whether the homeserver's well-known names [focus]; when false it
+  /// names no call token service.
+  bool wellKnownNamesService = true;
+
   @override
   Future<List<Uri>> foci() async {
     journal.add('foci');
     final room = roomFocus();
     return [
       if (room != null) room,
-      if (room != Uri.parse(focus)) Uri.parse(focus)
+      if (wellKnownNamesService && room != Uri.parse(focus)) Uri.parse(focus)
     ];
   }
 
@@ -226,7 +230,7 @@ class FakeHost implements CallJoinHost<FakeLivekitRoom> {
   @override
   Future<Uri?> homeserverFocus() async {
     journal.add('well_known');
-    return Uri.parse(focus);
+    return wellKnownNamesService ? Uri.parse(focus) : null;
   }
 
   @override

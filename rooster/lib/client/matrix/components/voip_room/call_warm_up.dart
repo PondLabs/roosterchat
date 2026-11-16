@@ -40,7 +40,15 @@ class CallWarmUp {
       if (!host.canWriteMembership || tokens.isClosed) return;
       // Held already: the join needs nothing more, not even the
       // well-known (nor the OpenID token, which only buys a call token).
-      if (tokens.holdsGrant(host.roomId, host.deviceId)) return;
+      // Where the room's membership names the service, only its token as
+      // the membership writes it: the one the join looks up. One held under
+      // another spelling of the same service would leave the join to ask.
+      final named = host.roomFocus();
+      final held = named == null
+          ? tokens.holdsGrant(host.roomId, host.deviceId)
+          : tokens.holdsGrantFrom(named,
+              roomId: host.roomId, deviceId: host.deviceId);
+      if (held) return;
       final homeserver = await host.homeserverFocus();
       if (homeserver == null) return;
       final room = host.roomFocus();

@@ -516,6 +516,41 @@ void main() {
       expect(service.count('POST /sfu/get'), 1);
     });
 
+    test(
+        'a well-known that names no service: nothing before the click, not '
+        "even for the service the room's membership names", () async {
+      host
+        ..wellKnownNamesService = false
+        ..roomFocusUrl = 'https://jwt.elsewhere.example';
+      await warmUp();
+      await warmUp();
+      expect(journal.count('well_known'), 2);
+      expect(journal.count('openid'), 0, reason: 'no OpenID token sent');
+      expect(service.requests, isEmpty, reason: 'no /healthz, no /sfu/get');
+
+      final room = await join();
+      expect(journal.count('openid'), 1);
+      expect(service.requests, ['POST /sfu/get']);
+      expect(room.connectTokens, [service.jwts.single]);
+    });
+
+    test(
+        'warmed before the membership named the service, which it then '
+        'spells another way: warmed again, and the click sends no /sfu/get',
+        () async {
+      // Any path: the service's trailing slash doubles the one after it.
+      int grants() =>
+          service.requests.where((r) => r.endsWith('/sfu/get')).length;
+      await warmUp();
+      host.roomFocusUrl = 'https://jwt.example.org/';
+      await warmUp();
+      expect(grants(), 2, reason: 'fetched again under the name the join uses');
+
+      await join();
+      expect(grants(), 2, reason: 'none at the click');
+      expect(journal.count('openid'), 1);
+    });
+
     test('the same service: scheme, host, port, path, nothing else', () {
       bool same(String a, String b) =>
           CallWarmUp.sameService(Uri.parse(a), Uri.parse(b));
@@ -565,13 +600,17 @@ void main() {
     Duration? failsAfter(
         {Duration? openedBefore,
         bool tokenService = false,
-        bool homeserver = true}) {
+        bool homeserver = true,
+        Duration? openIdAfter}) {
       Duration? waited;
       fakeAsync((async) {
         final start = DateTime.utc(2026, 11, 16, 12);
         final silent = FakeHost(Journal());
         if (!homeserver) {
           silent.openId = () => Completer<matrix.OpenIdCredentials>().future;
+        } else if (openIdAfter != null) {
+          silent.openId =
+              () => Future.delayed(openIdAfter, () => FakeHost.credentials);
         }
         final tokens = CallTokenService(
             client: MockClient((request) async {
@@ -613,6 +652,17 @@ void main() {
       expect(failsAfter(openedBefore: const Duration(seconds: 2)),
           const Duration(seconds: 15));
       expect(failsAfter(openedBefore: const Duration(seconds: 14)),
+          const Duration(seconds: 15));
+    });
+
+    test(
+        'the page opened 2 s before the click, the OpenID token in 4 s and a '
+        'silent token service: the join fails 15 s after the click, not 17',
+        () {
+      expect(
+          failsAfter(
+              openedBefore: const Duration(seconds: 2),
+              openIdAfter: const Duration(seconds: 4)),
           const Duration(seconds: 15));
     });
 
