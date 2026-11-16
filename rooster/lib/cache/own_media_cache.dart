@@ -29,6 +29,10 @@ abstract class OwnMediaCache {
   /// The bytes kept under [key], or null.
   Future<Uint8List?> read(String key);
 
+  /// The file holding [key]'s bytes (native), once written; null when there
+  /// is none (the web keeps no files).
+  Future<Uri?> fileOf(String key);
+
   /// Forgets everything this account kept.
   Future<void> clear();
 }
@@ -86,6 +90,9 @@ class MemoryOwnMediaCache implements OwnMediaCache {
   Future<Uint8List?> read(String key) async => memory.get(account, key);
 
   @override
+  Future<Uri?> fileOf(String key) async => null;
+
+  @override
   Future<void> clear() async => memory.removeAccount(account);
 }
 
@@ -98,21 +105,38 @@ class FileOwnMediaCache implements OwnMediaCache {
   final String account;
   final FileCache files;
   final Map<String, Uint8List> _writing = {};
+  final Map<String, Future<void>> _writes = {};
   int _clears = 0;
 
   String get prefix => 'own_media/$account/';
 
   @override
-  Future<void> write(String key, Uint8List bytes) async {
+  Future<void> write(String key, Uint8List bytes) {
     _writing[key] = bytes;
-    final clears = _clears;
-    try {
-      await files.putFile(prefix + key, bytes);
-      // Logged out while it was being written: not kept.
-      if (clears != _clears) await files.removeFile(prefix + key);
-    } finally {
+    final write = _write(key, bytes);
+    _writes[key] = write;
+    return write.whenComplete(() {
       if (identical(_writing[key], bytes)) _writing.remove(key);
+      if (identical(_writes[key], write)) _writes.remove(key);
+    });
+  }
+
+  Future<void> _write(String key, Uint8List bytes) async {
+    final clears = _clears;
+    await files.putFile(prefix + key, bytes);
+    // Logged out while it was being written: not kept.
+    if (clears != _clears) await files.removeFile(prefix + key);
+  }
+
+  @override
+  Future<Uri?> fileOf(String key) async {
+    try {
+      await _writes[key];
+    } catch (_) {
+      // The write failed: there is no file.
+      return null;
     }
+    return files.getFile(prefix + key);
   }
 
   @override

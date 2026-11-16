@@ -18,11 +18,21 @@ class MxcFileProvider implements FileProvider {
 
   MxcFileProvider(this.client, this.uri, {this.event});
 
+  /// Whether [uri] is [event]'s own file, the one its own media keeps.
+  bool get _isEventFile => event != null && event!.attachmentMxcUrl == uri;
+
   StreamController<DownloadProgress> fileDownloadProgress =
       StreamController.broadcast();
 
   @override
   Future<Uri?> resolve({String? savePath}) async {
+    // Sent from this device: its own file, never copied under the key every
+    // account shares, which logging out would leave behind.
+    if (_isEventFile) {
+      final own = await ownMediaFile(client, event);
+      if (own != null) return own;
+    }
+
     var cached = await fileCache?.getFile(fileIdentifier);
     if (cached != null) {
       return cached;
@@ -51,7 +61,7 @@ class MxcFileProvider implements FileProvider {
     Uint8List? bytes;
 
     // Sent from this device: the bytes it still holds.
-    if (event != null && event!.attachmentMxcUrl == uri) {
+    if (_isEventFile) {
       final own = await readOwnMedia(client, event);
       if (own != null) return own;
     }

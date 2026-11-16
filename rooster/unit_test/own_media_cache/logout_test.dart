@@ -4,9 +4,11 @@ library;
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/cache/own_media_cache.dart';
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
+import 'package:rooster/client/matrix/matrix_mxc_file_provider.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/utils/image/preparation/image_preparation.dart';
@@ -26,6 +28,7 @@ void main() {
   late MatrixClient client;
   late MatrixRoom room;
   TempFileCache? files;
+  matrix.Event? sent;
 
   Future<void> signIn({required bool native}) async {
     files = native ? TempFileCache() : null;
@@ -36,7 +39,7 @@ void main() {
     mx.backgroundSync = false;
     await mx.oneShotSync();
     room = await plainRoom(client);
-    await sendPhoto(
+    sent = await sendPhoto(
         client,
         room,
         PendingFileAttachment(
@@ -73,6 +76,26 @@ void main() {
         files!.files.keys,
         unorderedEquals(
             ['matrix-mxc://hs/received', 'own_media/another/mxc://hs/1']));
+  });
+
+  test(
+      'native: a sent file opened as a file is the own media\'s, and '
+      'nothing of it is left after logout', () async {
+    await signIn(native: true);
+    final event = sent!;
+    final own = 'own_media/${client.identifier}/${event.attachmentMxcUrl}';
+    final mx = client.getMatrixClient();
+
+    final resolved =
+        await MxcFileProvider(mx, event.attachmentMxcUrl!, event: event)
+            .resolve();
+    expect(resolved, files!.files[own]!.uri,
+        reason: 'the own media\'s file, not a copy under the shared key');
+    expect(files!.files.keys, isNot(contains('${event.attachmentMxcUrl}')));
+
+    await client.logout();
+    expect(files!.files.keys, isEmpty);
+    expect(server.mediaRequests, isEmpty);
   });
 
   test('web: logout removes the account\'s own media from the map', () async {

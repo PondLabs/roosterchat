@@ -55,14 +55,24 @@ Future<void> keepOwnMedia(matrix.Room room, matrix.Event pending) async {
 /// it) from the account's own media, when [event] is one of the account's
 /// and the file is there. Null otherwise, and on any error.
 Future<Uint8List?> readOwnMedia(matrix.Client client, matrix.Event? event,
-    {bool thumbnail = false}) async {
+        {bool thumbnail = false}) =>
+    _lookUp(client, event, thumbnail, (cache, key) => cache.read(key));
+
+/// Where [event]'s file of the account's own media is on disk (native), as
+/// [readOwnMedia] finds it. Null on the web, and whenever [readOwnMedia]
+/// would be.
+Future<Uri?> ownMediaFile(matrix.Client client, matrix.Event? event) =>
+    _lookUp(client, event, false, (cache, key) => cache.fileOf(key));
+
+Future<T?> _lookUp<T>(matrix.Client client, matrix.Event? event, bool thumbnail,
+    Future<T?> Function(OwnMediaCache, String) get) async {
   if (event == null || event.senderId != client.userID) return null;
   final cache = ownMediaOf(client);
   if (cache == null) return null;
   try {
     final mxc = event.attachmentOrThumbnailMxcUrl(getThumbnail: thumbnail);
     if (mxc == null) return null;
-    return await cache.read(mxc.toString());
+    return await get(cache, mxc.toString());
   } catch (error, stack) {
     Log.onError(error, stack, content: "Could not read a sent file");
     return null;
