@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
@@ -10,6 +11,25 @@ import 'package:rooster/diagnostic/speed_log/speed_report.dart';
 import 'package:rooster/diagnostic/speed_log/text_send_trace.dart';
 
 import 'fake_account.dart';
+
+/// A measurement that throws in both of the room's calls.
+class _ThrowingTrace extends TextSendTrace {
+  _ThrowingTrace(super.span) : super.forTest();
+
+  final List<String> calls = [];
+
+  @override
+  void sending(matrix.Room room, String txid) {
+    calls.add('sending');
+    throw StateError('sending');
+  }
+
+  @override
+  void sent({required bool ok}) {
+    calls.add('sent');
+    throw StateError('sent');
+  }
+}
 
 const _sendRoute =
     'PUT /_matrix/client/v3/rooms/{roomId}/send/{eventType}/{txnId}';
@@ -150,6 +170,20 @@ void main() {
     expect(painted.available, isFalse);
     expect(span.steps.singleWhere((s) => s.name == SpeedStep.echo).available,
         isTrue);
+  });
+
+  test('a measurement that throws never stops the send', () async {
+    final trace =
+        _ThrowingTrace(SpeedLog.instance.startSpan(SpeedOperation.textSend));
+    Object? sent;
+
+    await TextSendTrace.send(trace, () async {
+      return sent = await room.sendMessage(message: 'Sent all the same');
+    });
+
+    expect(trace.calls, ['sending', 'sent']);
+    expect(transport.seen, [_sendRoute]);
+    expect(sent, isNotNull, reason: 'the send returns the sent event');
   });
 
   test('a message with attachments or no text is not a text send', () {
