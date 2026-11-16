@@ -213,3 +213,25 @@ Changes since the copy:
   Not when the room now encrypts files and the event has a `url` (an
   upload in the clear): the file then goes up again, encrypted.
   `Event.cancelSend` lets go of the file and the parts kept for it.
+- Cancel of a message being sent (`Room.cancelSending`, `lib/src/room.dart`
+  and `lib/src/event.dart`): a flag per transaction id, kept for good, that
+  the upload loop checks before each attempt, during its waits and before
+  the event, and that `Room.sendEvent` checks at the head of the room's
+  queue (a message cancelled while it waits leaves the queue at once) and
+  right before each `PUT /send`. Each upload runs in a zone whose
+  `currentUploadCancel()` the app's HTTP client uses to abort the request
+  in flight. From the first `PUT /send` on, the server may have the event:
+  `Room.canCancelSend` is false and `Event.cancelSend` throws without
+  taking the message away. A cancelled send shows nothing again and takes
+  its pending event out of the database and the timelines
+  (`Room.dropUnsentEvent`, what `Event.cancelSend` did before, moved).
+  `Event.sendAgain` sends no cancelled message.
+- At most four upload requests of file messages at once per client
+  (`maxUploadsAtOnce` in `lib/src/utils/file_upload_loop.dart`), across
+  messages, in the order they came.
+- A file message whose uploads went up in the clear is not sent once its
+  room encrypts files (`uploadedInTheClear` of `Room.sendEvent`, read with
+  the event's own encryption in `_sendContent`): the send fails, and a
+  retry uploads the file again, encrypted.
+- `FileSendRequestCredentials` keeps the thread a file message goes to,
+  and `Event.sendAgain` passes it on when the file is uploaded again.
