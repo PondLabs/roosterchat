@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:rooster/cache/own_media_cache.dart';
 import 'package:rooster/client/matrix/extensions/matrix_client_extensions.dart';
 import 'package:rooster/client/matrix/matrix_mxc_file_provider.dart';
 import 'package:rooster/client/matrix/media/own_media.dart';
@@ -202,7 +203,17 @@ class MatrixMxcImage extends LODImageProvider {
       // A pending event's "thumbnail" is the whole file the SDK still holds
       // (Event.downloadAndDecryptAttachment): never kept as the thumbnail.
       if (matrixEvent?.status.isSending != true) {
-        fileCache?.putFile(identifier, bytes);
+        final own = ownMediaCacheFor(client, matrixEvent);
+        if (own == null) {
+          fileCache?.putFile(identifier, bytes);
+        } else if (!serverThumbnail) {
+          // Under the key the own media reads it by. The homeserver's
+          // scaled thumbnail has no key of its own there: not kept.
+          _keepOwn(
+              own,
+              matrixEvent!.attachmentOrThumbnailMxcUrl(getThumbnail: true),
+              bytes);
+        }
       }
       return bytes;
     }
@@ -241,11 +252,25 @@ class MatrixMxcImage extends LODImageProvider {
     trace?.downloaded(bytes.length);
 
     if (cache) {
-      fileCache?.putFile(identifier, bytes);
+      final own = ownMediaCacheFor(client, matrixEvent);
+      if (own == null) {
+        fileCache?.putFile(identifier, bytes);
+      } else {
+        _keepOwn(own, matrixEvent!.attachmentMxcUrl, bytes);
+      }
       return bytes;
     }
 
     return null;
+  }
+
+  /// Keeps [bytes] of the account's own [mxc] in its own media again (the
+  /// cache's clean took them). Never throws: the picture is shown anyway.
+  static void _keepOwn(OwnMediaCache own, Uri? mxc, Uint8List bytes) {
+    if (mxc == null) return;
+    own.write(mxc.toString(), bytes).catchError((Object error, StackTrace s) {
+      Log.onError(error, s, content: "Could not keep an own file again");
+    });
   }
 
   /// The bytes of the cached file at [uri]; null when there is none or it

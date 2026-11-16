@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:rooster/cache/file_provider.dart';
+import 'package:rooster/cache/own_media_cache.dart';
 import 'package:rooster/client/matrix/extensions/matrix_client_extensions.dart';
 import 'package:rooster/client/matrix/media/own_media.dart';
 import 'package:rooster/debug/log.dart';
@@ -31,6 +32,16 @@ class MxcFileProvider implements FileProvider {
     if (_isEventFile) {
       final own = await ownMediaFile(client, event);
       if (own != null) return own;
+
+      // The account's own file, no longer there (the cache's clean): from
+      // the network, and kept in the account's own media again.
+      final ownMedia = ownMediaCacheFor(client, event);
+      if (ownMedia != null) {
+        final bytes = await getFileData();
+        if (bytes == null) return null;
+        await ownMedia.write(fileIdentifier, bytes);
+        return ownMedia.fileOf(fileIdentifier);
+      }
     }
 
     var cached = await fileCache?.getFile(fileIdentifier);
@@ -107,6 +118,14 @@ class MxcFileProvider implements FileProvider {
   Stream<DownloadProgress>? get onProgressChanged =>
       fileDownloadProgress.stream;
 }
+
+/// The account's own media ([ownMediaOf]) when [event] is one of the
+/// account's own: what is downloaded for it is kept there, per account
+/// and cleared on logout, never under the keys every account shares.
+OwnMediaCache? ownMediaCacheFor(matrix.Client client, matrix.Event? event) =>
+    event != null && event.senderId == client.userID
+        ? ownMediaOf(client)
+        : null;
 
 /// The server answered a media download with [statusCode] instead of 200.
 class MediaDownloadException implements Exception {
