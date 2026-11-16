@@ -9,8 +9,10 @@ import 'package:rooster/client/matrix_background/matrix_background_direct_messag
 import 'package:rooster/client/matrix_background/matrix_background_room.dart';
 import 'package:rooster/client/room_preview.dart';
 import 'package:rooster/debug/log.dart';
+import 'package:rooster/diagnostic/speed_log/host_class.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/utils/notifying_list.dart';
+import 'package:rooster/utils/network/speed_http_client.dart';
 import 'package:rooster/utils/notifying_list_filter.dart';
 import 'package:rooster/utils/stored_stream_controller.dart';
 import 'package:flutter/src/widgets/framework.dart';
@@ -38,7 +40,18 @@ class MatrixBackgroundClient implements Client {
 
   late final List<Component<MatrixBackgroundClient>> componentsInternal;
 
-  MatrixBackgroundClient({required this.databaseId}) {
+  /// Under the speed log's client: the platform's own when null.
+  final http.Client? _transport;
+
+  /// Opens the account's database: the app's own when null.
+  final Future<matrix.DatabaseApi> Function()? _openDatabase;
+
+  MatrixBackgroundClient({
+    required this.databaseId,
+    http.Client? transport,
+    Future<matrix.DatabaseApi> Function()? openDatabase,
+  })  : _transport = transport,
+        _openDatabase = openDatabase {
     componentsInternal = [
       MatrixBackgroundClientDirectMessagesComponent(this),
     ];
@@ -93,25 +106,27 @@ class MatrixBackgroundClient implements Client {
     Log.i(
         "Using shared database isolate: ${preferences.useSharedIsolateInBackgroundTasks.value}");
 
-    final db = await getMatrixDatabase(databaseId,
-        onDatabaseIsolate: preferences.useSharedIsolateInBackgroundTasks.value,
-        readOnly: true);
+    final db = await (_openDatabase?.call() ??
+        getMatrixDatabase(databaseId,
+            onDatabaseIsolate:
+                preferences.useSharedIsolateInBackgroundTasks.value,
+            readOnly: true));
 
     if (db is MatrixSdkDriftDatabase) {
       database = db;
     }
 
     final account = await database.getClient(databaseId);
-    Log.i("Got client info: ${account}");
+    // The account holds the access and refresh tokens and the encryption
+    // account: none of its values go to the log.
+    Log.i(account == null
+        ? "Background client: no stored account"
+        : "Background client: stored account found");
 
-    var homeserver = Uri.parse(account!['homeserver_url']);
-    var accessToken = account['token'];
-    deviceId = account['device_id'];
-
-    api = matrix.MatrixApi(
-      httpClient: http.Client(),
-      homeserver: homeserver,
-      accessToken: accessToken,
+    deviceId = account!['device_id'];
+    connect(
+      homeserver: Uri.parse(account['homeserver_url']),
+      accessToken: account['token'],
     );
 
     accountData = await database.db.select(database.db.accountData).get();
@@ -123,6 +138,20 @@ class MatrixBackgroundClient implements Client {
 
     nonPreloadRoomStates =
         await database.db.select(database.db.nonPreloadRoomState).get();
+  }
+
+  /// Points [api] at [homeserver]. Every request goes through
+  /// [SpeedHttpClient], as the app's own accounts' do, so it is recorded in
+  /// this process's speed log without content (lib/diagnostic/speed_log).
+  void connect({required Uri homeserver, String? accessToken}) {
+    api = matrix.MatrixApi(
+      httpClient: SpeedHttpClient(
+        inner: _transport,
+        hosts: HostClassifier(homeserver: () => homeserver),
+      ),
+      homeserver: homeserver,
+      accessToken: accessToken,
+    );
   }
 
   @override

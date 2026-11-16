@@ -12,7 +12,11 @@ whole log as text.
 Code: `rooster/lib/diagnostic/speed_log/` (the log, spans, names, report,
 summary, the text, sync and voice join spans) and
 `rooster/lib/utils/network/speed_http_client.dart` (the HTTP client under
-every `matrix.Client`). The picture span is in
+every `matrix.Client`, and under the `MatrixApi` of Android's background
+client, which fetches the events of push notifications). The background
+client runs in its own isolate (the Firebase or UnifiedPush handler, or
+the background service), so its requests go to that isolate's log, which
+the panel does not show. The picture span is in
 `rooster/lib/utils/image/preparation/image_preparation.dart`. The panel is
 `rooster/lib/ui/pages/settings/categories/developer/speed_log_panel.dart`.
 
