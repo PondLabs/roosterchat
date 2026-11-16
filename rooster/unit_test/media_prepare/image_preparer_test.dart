@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
+import 'package:rooster/diagnostic/speed_log/speed_names.dart';
 import 'package:rooster/diagnostic/speed_log/speed_report.dart';
 import 'package:rooster/utils/image/preparation/image_preparation.dart';
+import 'package:rooster/utils/image/preparation/thumbnail_encoder.dart';
 
 import 'fakes.dart';
 
@@ -160,6 +162,26 @@ void main() {
     expect(log.spans.toList().single.outcome, "failed");
   });
 
+  test(
+      "the thumbnail encoder failing: the picture is still prepared, and its "
+      "span ends encode_failed", () async {
+    final log = SpeedLog(frames: NoFrames());
+    final prepared = await ImagePreparer(
+      codecFactory: FakeEngine(width: 4032, height: 3024).codec,
+      encoder: _FailingEncoder(),
+      log: log,
+    ).prepare(fakeJpegHeader(4032, 3024));
+
+    expect((prepared!.width, prepared.height), (4032, 3024));
+    expect(prepared.thumbnail, isNull);
+    final span = log.spans.toList().single;
+    expect(span.outcome, SpeedOutcome.encodeFailed);
+    expect(span.outcome, "encode_failed");
+    expect(SpeedOutcome.all, contains(span.outcome));
+    expect(span.steps.last.name, "encode");
+    expect(buildSpeedReport(log), contains("encode_failed"));
+  });
+
   test("each preparation is a span with its steps and sizes", () async {
     final log = SpeedLog(frames: NoFrames());
     await fakePreparer(FakeEngine(width: 4032, height: 3024), log: log)
@@ -197,4 +219,10 @@ void main() {
       expect(report, contains(name), reason: name);
     }
   });
+}
+
+class _FailingEncoder implements ThumbnailEncoder {
+  @override
+  Future<ThumbnailResult> encode(ThumbnailRequest request) =>
+      Future.error(StateError("encoder unavailable"));
 }

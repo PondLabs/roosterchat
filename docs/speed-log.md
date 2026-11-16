@@ -45,7 +45,7 @@ out) and those still open. At most 16 operations are kept: the names of
 counted (`N dropped` in the report's `spans (...)` line). A span is one
 operation under a random local id, made of named steps on a monotonic
 clock, with an outcome (`ok`, `failed`, `incomplete`, `abandoned`,
-`cancelled`) and the
+`cancelled`, `encode_failed`) and the
 longest UI frame drawn while it was open.
 
 ### Names: a fixed list
@@ -122,9 +122,10 @@ thumbnail and a blurhash, from the request to the result.
 | `encode` | the decode | the thumbnail and blurhash, in the background (native) or by the browser's canvas (web); values `bytes`, `width`, `height` of the thumbnail when one was made |
 
 Outcome `ok`, `failed` when the engine cannot decode the file (it is
-then sent as a plain file), or `cancelled` when the attachment was removed
-from the composer before Send (it left the queue, or its result was thrown
-away).
+then sent as a plain file), `encode_failed` when the thumbnail encoder
+failed (the picture is sent with its size, without a thumbnail and a
+blurhash), or `cancelled` when the attachment was removed from the
+composer before Send (it left the queue, or its result was thrown away).
 
 ### `file_send`
 

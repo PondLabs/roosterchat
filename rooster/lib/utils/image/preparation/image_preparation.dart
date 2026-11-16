@@ -27,7 +27,8 @@
 /// the others wait their turn. A [PreparationCancel] drops a preparation
 /// nobody needs any more (an attachment removed before Send): out of the
 /// queue before its turn, or its result thrown away once it has started. Each preparation is an `image_prepare` span
-/// in the speed log, with its steps and sizes (no names, no content).
+/// in the speed log, with its steps and sizes (no names, no content), and
+/// the outcome `encode_failed` when the thumbnail encoder failed.
 library;
 
 import 'dart:async';
@@ -166,8 +167,12 @@ class ImagePreparer {
         return null;
       }
       span.finish(
-          outcome: result == null ? SpeedOutcome.failed : SpeedOutcome.ok);
-      return result;
+          outcome: switch (result) {
+        null => SpeedOutcome.failed,
+        (_, encodeFailed: true) => SpeedOutcome.encodeFailed,
+        _ => SpeedOutcome.ok,
+      });
+      return result?.$1;
     } catch (_) {
       span.finish(outcome: SpeedOutcome.failed);
       return null;
@@ -201,7 +206,8 @@ class ImagePreparer {
     }
   }
 
-  Future<ImagePreparation?> _prepare(
+  /// The preparation, and whether its thumbnail encoder failed.
+  Future<(ImagePreparation, {bool encodeFailed})?> _prepare(
       Uint8List bytes, SpeedSpan span, PreparationCancel? cancel) async {
     final header = readImageHeader(bytes);
     span.mark(SpeedStep.header, values: {SpeedValue.bytes: bytes.length});
@@ -244,6 +250,7 @@ class ImagePreparer {
     final thumbnail = frames <= 1 && wantsThumbnail(width, height);
 
     ThumbnailResult encoded;
+    var encodeFailed = false;
     try {
       encoded = await _encoder.encode(ThumbnailRequest(
         rgba: rgba,
@@ -256,6 +263,7 @@ class ImagePreparer {
       // The picture decoded: it still goes as a picture, with its size,
       // only without a thumbnail and a blurhash.
       encoded = const ThumbnailResult();
+      encodeFailed = true;
     }
     span.mark(SpeedStep.encode, values: {
       if (encoded.thumbnail != null) ...{
@@ -265,13 +273,16 @@ class ImagePreparer {
       },
     });
 
-    return ImagePreparation(
-      width: width,
-      height: height,
-      frames: frames,
-      mimeType: header?.mimeType,
-      blurhash: encoded.blurhash,
-      thumbnail: encoded.thumbnail,
+    return (
+      ImagePreparation(
+        width: width,
+        height: height,
+        frames: frames,
+        mimeType: header?.mimeType,
+        blurhash: encoded.blurhash,
+        thumbnail: encoded.thumbnail,
+      ),
+      encodeFailed: encodeFailed,
     );
   }
 

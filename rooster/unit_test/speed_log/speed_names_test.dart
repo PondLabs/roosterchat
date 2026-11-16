@@ -94,8 +94,10 @@ void main() {
       'bytes', 'width', 'height', 'frames', // image_prepare
       'thumbnail_bytes', // file_send
     });
-    expect(SpeedOutcome.all,
-        {'ok', 'failed', 'incomplete', 'abandoned', 'cancelled'});
+    expect(SpeedOutcome.all, {
+      'ok', 'failed', 'incomplete', 'abandoned', 'cancelled', //
+      'encode_failed', // image_prepare
+    });
     expect(SpeedError.all, {
       'aborted', 'cancelled', 'timeout', 'socket', 'tls', 'http', 'client',
       'other', //
