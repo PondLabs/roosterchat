@@ -4477,6 +4477,14 @@
       "name": {}
     }
   },
+  "messageChatFileMetadataUnreadable": "Couldn't read the metadata of file '{name}': it may hold location data. Are you sure you want to send?",
+  "@messageChatFileMetadataUnreadable": {
+    "description": "Asked before sending a file whose metadata could not be read, so it may say where the file was taken, with the file's name",
+    "type": "text",
+    "placeholders": {
+      "name": {}
+    }
+  },
   "errorChatDropNotAttached": "Could not attach {files}: folders and unreadable files can't be uploaded.",
   "@errorChatDropNotAttached": {
     "description": "When files dropped on the chat could not be attached, with their names separated by commas",

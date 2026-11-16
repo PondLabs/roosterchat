@@ -13,6 +13,19 @@ import 'package:flutter/scheduler.dart';
 
 import 'package:mime/mime.dart' as mime;
 
+/// What a file's metadata says about where it was taken.
+enum LocationAnswer {
+  /// Nothing: no location in its metadata, or no metadata (a file that is
+  /// not a picture has none the reader knows). Sent without a question.
+  none,
+
+  /// Its metadata holds GPS tags.
+  found,
+
+  /// It has metadata the reader could not read: it may hold a location.
+  unreadable,
+}
+
 abstract class Attachment {
   late String? name;
 }
@@ -44,20 +57,21 @@ class PendingFileAttachment {
   /// Its send from the composer, once Send was pressed.
   AttachmentSend? sending;
 
-  Future<bool>? _location;
-  bool? _hasLocation;
+  Future<LocationAnswer>? _location;
+  LocationAnswer? _locationAnswer;
 
-  /// Whether the file's metadata says where it was taken (GPS tags): the
-  /// question asked before sending it. Read once, from the bytes in memory
-  /// or from the file on disk, which the Exif reader reads only as far as
-  /// it needs (12 bytes for a format that cannot hold Exif). Started when
-  /// the file is attached, so Send usually finds the answer known.
-  Future<bool> locationCheck() => _location ??= _readLocation();
+  /// What the file's metadata says about where it was taken (GPS tags):
+  /// Send asks before sending a file whose answer is not
+  /// [LocationAnswer.none]. Read once, from the bytes in memory or from the
+  /// file on disk, which the Exif reader reads only as far as it needs (12
+  /// bytes for a format that cannot hold Exif). Started when the file is
+  /// attached, so Send usually finds the answer known.
+  Future<LocationAnswer> locationCheck() => _location ??= _readLocation();
 
   /// [locationCheck]'s answer, null until it is known.
-  bool? get hasLocation => _hasLocation;
+  LocationAnswer? get location => _locationAnswer;
 
-  Future<bool> _readLocation() async {
+  Future<LocationAnswer> _readLocation() async {
     Map<String, IfdTag> exif = const {};
     try {
       final data = this.data;
@@ -67,10 +81,15 @@ class PendingFileAttachment {
         exif = await readExifFromFile(File(path!));
       }
     } catch (_) {
-      // Metadata the reader cannot make sense of says nothing about where
-      // the file was taken; the file is sent as before.
+      // Metadata the reader cannot make sense of may still say where the
+      // file was taken, to another reader: Send asks, as it does for a
+      // location.
+      return _locationAnswer = LocationAnswer.unreadable;
     }
-    return _hasLocation = exif.keys.any((e) => e.toLowerCase().contains("gps"));
+    return _locationAnswer =
+        exif.keys.any((e) => e.toLowerCase().contains("gps"))
+            ? LocationAnswer.found
+            : LocationAnswer.none;
   }
 
   Future<void>? _reading;

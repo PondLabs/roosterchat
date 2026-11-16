@@ -674,6 +674,7 @@
   "promptChatSendFile": "Enviar arquivo",
   "promptChatDontSendFile": "Não enviar",
   "messageChatFileHasLocation": "O arquivo “{name}” tem dados de localização. Tem certeza de que quer enviar?",
+  "messageChatFileMetadataUnreadable": "Não foi possível ler os metadados do arquivo “{name}”: eles podem ter dados de localização. Tem certeza de que quer enviar?",
   "errorChatDropNotAttached": "Não foi possível anexar {files}: pastas e arquivos ilegíveis não podem ser enviados.",
   "labelChatDropNotAttachedTitle": "Não anexado",
   "sendEncryptedMessagePrompt": "Enviar uma mensagem criptografada",
