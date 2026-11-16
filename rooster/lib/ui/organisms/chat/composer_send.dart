@@ -93,6 +93,7 @@ class ComposerSend {
   void _sendFile(PendingFileAttachment attachment) {
     final send = AttachmentSend(
       roomKey: room.localId,
+      chatKey: chatRoom.localId,
       threadId: threadId,
       attachment: attachment,
       trace: FileSendTrace.start(

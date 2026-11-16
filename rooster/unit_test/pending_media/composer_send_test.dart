@@ -265,6 +265,39 @@ void main() {
   });
 
   testWidgets(
+      'a file sent as the other account shows in the chat Send was pressed '
+      'in, its failure too', (tester) async {
+    final otherAccount = FakeClient('b');
+    FakeRoom(otherAccount, room.identifier, preparer: preparer);
+    await tester.pumpWidget(chatApp(room));
+    await attachPhoto(tester);
+    // A file that is gone by the time Send reads it: it fails before the
+    // room has a pending event. Its location answer is read off the test's
+    // fake time.
+    final gone = PendingFileAttachment(
+        name: 'gone.zip', path: 'unit_test/fixtures/no_such_file.zip');
+    await tester.runAsync(() => gone.locationCheck());
+    chatState(tester).addAttachment(gone);
+    await tester.pump();
+
+    chatState(tester).sendMessage('from b', overrideClient: otherAccount);
+    await tester.pump(const Duration(milliseconds: 20));
+    expect(AttachmentSends.instance.all.map((s) => s.roomKey).toSet(),
+        {'b:!room'});
+    expect(find.byKey(_slot), findsOneWidget);
+    expect(find.byType(PendingAttachmentStatus), findsNWidgets(2));
+
+    for (var i = 0; i < 5; i++) {
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(find.text(PendingAttachmentStatus.labelPendingFileFailed),
+        findsOneWidget);
+    await closeChat(tester);
+  });
+
+  testWidgets(
       'ten photos attached, five removed before Send: the five left are '
       'sent, each with its own size, and the removed ones never decoded',
       (tester) async {

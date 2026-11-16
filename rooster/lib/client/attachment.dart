@@ -192,16 +192,20 @@ enum AttachmentSendStage {
 }
 
 /// One file sent from the composer, from Send until the server answers or
-/// it fails. The chat shows it from [attachedTo] until the room's own
-/// pending event takes over ([echoed]); that event then finds it by
-/// [transactionId] to show its stage and time.
+/// it fails. The chat Send was pressed in ([chatKey], [threadId]) shows
+/// it until the room's own pending event takes over ([echoed]) there; that
+/// event finds it by [transactionId] to show its stage and time. When the
+/// pending event does not show in that chat (a thread's, or the other
+/// account's room), the chat keeps showing it until it is sent.
 class AttachmentSend extends ChangeNotifier {
   AttachmentSend({
     required this.roomKey,
+    String? chatKey,
     this.threadId,
     required this.attachment,
     this.trace,
-  }) : startedAt = clock() {
+  })  : chatKey = chatKey ?? roomKey,
+        startedAt = clock() {
     _showFile();
   }
 
@@ -211,7 +215,16 @@ class AttachmentSend extends ChangeNotifier {
 
   /// [Room.localId] of the room it goes to.
   final String roomKey;
+
+  /// [Room.localId] of the chat Send was pressed in: [roomKey], or the same
+  /// room in the other account when a prefix picked that one.
+  final String chatKey;
   final String? threadId;
+
+  /// Whether the room's own pending event shows in the chat it was sent
+  /// from. It does not in a thread's chat (the SDK's pending event has no
+  /// thread relation) nor for a message sent as the other account.
+  bool get echoShownInItsChat => threadId == null && chatKey == roomKey;
 
   /// Its file, until the room's pending event shows it: then it is let go.
   PendingFileAttachment? attachment;
@@ -244,9 +257,13 @@ class AttachmentSend extends ChangeNotifier {
   /// The size to reserve for it, when known.
   Size? size;
 
-  bool get isPicture => Mime.imageTypes.contains(attachment?.mimeType);
+  /// Its file's type and name, kept once the file is let go.
+  String? mimeType;
+  String? name;
 
-  bool get isVideo => Mime.videoTypes.contains(attachment?.mimeType);
+  bool get isPicture => Mime.imageTypes.contains(mimeType);
+
+  bool get isVideo => Mime.videoTypes.contains(mimeType);
 
   bool get isFinished =>
       _stage == AttachmentSendStage.sent ||
@@ -255,6 +272,8 @@ class AttachmentSend extends ChangeNotifier {
   void _showFile() {
     final file = attachment;
     if (file == null) return;
+    mimeType = file.mimeType;
+    name = file.name;
     if (Mime.imageTypes.contains(file.mimeType)) {
       preview = file.data;
       size = pictureSizeOf(file.data) ?? size;
@@ -372,13 +391,14 @@ class AttachmentSends extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The files the chat of [roomKey] (and [threadId]) shows itself: those
-  /// whose pending event is not in the timeline yet.
-  List<AttachmentSend> inComposerOf(String roomKey, String? threadId) => [
+  /// The files the chat of [chatKey] (and [threadId]) shows itself: those
+  /// sent from it whose pending event is not in its timeline (yet, or at
+  /// all), until they are sent.
+  List<AttachmentSend> inComposerOf(String chatKey, String? threadId) => [
         for (final send in _sends)
-          if (send.roomKey == roomKey &&
+          if (send.chatKey == chatKey &&
               send.threadId == threadId &&
-              !send.echoed &&
+              (!send.echoed || !send.echoShownInItsChat) &&
               send.stage != AttachmentSendStage.sent)
             send
       ];

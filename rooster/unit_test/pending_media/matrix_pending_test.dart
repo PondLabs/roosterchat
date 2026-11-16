@@ -6,11 +6,14 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/attachment.dart';
+import 'package:rooster/client/components/threads/thread_component.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_message.dart';
+import 'package:rooster/diagnostic/speed_log/file_send_trace.dart';
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
 import 'package:rooster/diagnostic/speed_log/speed_names.dart';
+import 'package:rooster/ui/organisms/chat/composer_send.dart';
 import 'package:rooster/utils/image/preparation/image_preparation.dart';
 
 import '../media_prepare/fakes.dart';
@@ -197,6 +200,52 @@ void main() {
             .byTransaction(room.localId, send.transactionId!),
         isNull);
   });
+
+  for (final fails in [false, true]) {
+    test(
+        'a file sent in a thread stays in the chat of that thread '
+        '${fails ? 'when its upload is refused' : 'while it uploads'}, '
+        'until sent', () async {
+      if (fails) {
+        transport.failUploads = true;
+      } else {
+        transport.holdUploads = Completer();
+      }
+      ComposerSend(
+        chatRoom: room,
+        room: room,
+        threads: client.getComponent<ThreadsComponent>(),
+        threadId: r'$root',
+        message: '',
+        attachments: [
+          PendingFileAttachment(name: 'photo.jpg', data: blackJpeg(400, 300))
+        ],
+        interactionType: null,
+        interactingEvent: null,
+        sendPressed: FileSendTrace.now(),
+      ).send();
+      final send = AttachmentSends.instance.all.single;
+      await until(() => fails ? send.isFinished : send.echoed);
+      expect(send.echoed, isTrue);
+
+      // The SDK's pending event has no thread relation, so the thread's
+      // timeline does not show it: the thread's chat keeps the file.
+      expect(AttachmentSends.instance.inComposerOf(room.localId, r'$root'),
+          [send]);
+      expect(send.isPicture, isTrue, reason: 'still drawn as a picture');
+      expect(send.preview, isNotNull);
+      expect(
+          AttachmentSends.instance.inComposerOf(room.localId, null), isEmpty);
+      if (fails) {
+        expect(send.stage, AttachmentSendStage.failed);
+      } else {
+        transport.holdUploads!.complete();
+        await until(() => send.isFinished);
+        expect(AttachmentSends.instance.inComposerOf(room.localId, r'$root'),
+            isEmpty);
+      }
+    });
+  }
 
   test('a file that cannot be read any more fails where the chat shows it',
       () async {
