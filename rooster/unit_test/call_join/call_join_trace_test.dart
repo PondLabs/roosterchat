@@ -68,6 +68,24 @@ class _HeartbeatHost extends FakeHost {
   }
 }
 
+/// A host whose room, as an encrypted room's does, listens while it is
+/// made (the key provider's sync listener) and sends a key to the call's
+/// members whenever [members] fires, for the whole call.
+class _EncryptedHost extends FakeHost {
+  _EncryptedHost(super.journal, this.client);
+
+  final http.Client client;
+  final StreamController<void> members = StreamController.broadcast();
+
+  @override
+  Future<LivekitJoinRoom> createRoom() async {
+    members.stream.listen((_) => client
+        .put(Uri.parse('${_HttpHost.homeserver}/_matrix/client/v3/sendToDevice/'
+            'io.element.call.encryption_keys/txn')));
+    return super.createRoom();
+  }
+}
+
 void main() {
   late SpeedLog log;
   late Journal journal;
@@ -257,6 +275,25 @@ void main() {
         reason: 'the hang up and a few heartbeats');
     expect(requests.where((r) => r.operationId == span.id), isEmpty);
     expect(requests.every((r) => r.operationId == null), isTrue);
+  });
+
+  test(
+      "an encrypted room's key sends after the span ended are not the "
+      "join's", () async {
+    final client = recorded(MockClient((_) async => http.Response('{}', 200)));
+    final host = _EncryptedHost(journal, client);
+    addTearDown(host.members.close);
+
+    final span = await joinAndWait(host);
+    expect(span.isFinished, isTrue);
+    host.members
+      ..add(null)
+      ..add(null);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    final requests = log.requests.toList();
+    expect(requests, hasLength(2), reason: 'two key sends, during the call');
+    expect(requests.where((r) => r.operationId == span.id), isEmpty);
   });
 
   group('the connect in three steps', () {

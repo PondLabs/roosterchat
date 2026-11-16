@@ -119,9 +119,9 @@ class CallJoin<S> {
           "Not allowed to send the call membership", errorCallNoPermission);
     }
     final trace = CallJoinTrace(log, remoteAudioWindow: remoteAudioWindow);
-    // The previous call's hang up and the new session run here, outside the
-    // span: their requests (and the session's timers, for the whole call)
-    // are not the join's.
+    // The previous call's hang up, the LiveKit room and the new session run
+    // here, outside the span: their requests (and the session's timers, for
+    // the whole call) are not the join's.
     final outside = Zone.current;
     try {
       return await trace
@@ -176,7 +176,9 @@ class CallJoin<S> {
     trace.sfuHost(livekitCloud: cloud);
 
     await output;
-    final room = await host.createRoom();
+    // Outside the span too: an encrypted room's key provider starts
+    // listening here, and its key sends last as long as the call.
+    final room = await outside.run(host.createRoom);
 
     final joinKey =
         CallMembershipWrites.joinKey(host.roomId, host.membershipKey);
