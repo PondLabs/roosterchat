@@ -12,10 +12,12 @@ import 'dart:convert';
 import 'package:fake_async/fake_async.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/matrix/components/voip_room/call_join.dart';
 import 'package:rooster/client/matrix/components/voip_room/call_token_service.dart';
 import 'package:rooster/client/matrix/components/voip_room/call_warm_up.dart';
+import 'package:rooster/client/matrix/components/voip_room/livekit_join_room.dart';
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
 import 'package:test/test.dart';
 
@@ -230,6 +232,44 @@ void main() {
     expect(journal.entries, contains('connected'));
     expect(service.tokens.holdsGrant(host.roomId, host.deviceId), isTrue,
         reason: 'the new one is held');
+  });
+
+  group("the SFU's answer when it checks the held token", () {
+    /// Joins with the held token, which the SFU's validation answers with
+    /// [status] (as LiveKit reports it: `NotAllowed` from 400 up).
+    Future<_ValidatedRoom> joinAnswered(int status) async {
+      await warmUp();
+      final room = _ValidatedRoom(journal, status);
+      host.room = room;
+      await CallJoin(
+              host: host,
+              tokens: service.tokens,
+              log: SpeedLog(),
+              remoteAudioWindow: const Duration(milliseconds: 1))
+          .run()
+          .then((_) {}, onError: (Object _) {});
+      return room;
+    }
+
+    for (final status in [401, 403]) {
+      test('$status: a new token and a second connect', () async {
+        final room = await joinAnswered(status);
+        expect(service.count('POST /sfu/get'), 2);
+        expect(room.connectTokens, hasLength(2));
+        expect(journal.entries, contains('connected'));
+      });
+    }
+
+    for (final status in [500, 503, 400, 404]) {
+      test('$status: no new token, no second connect, the join fails',
+          () async {
+        final room = await joinAnswered(status);
+        expect(service.count('POST /sfu/get'), 1);
+        expect(room.connectTokens, hasLength(1));
+        expect(journal.entries, isNot(contains('connected')));
+        expect(room.disposed, isTrue);
+      });
+    }
   });
 
   test('a refusal of the new token too fails the join: one retry only',
@@ -610,4 +650,28 @@ class _Routing extends http.BaseClient {
       rethrow;
     }
   }
+}
+
+/// A LiveKit room whose first connect fails as LiveKit's does when its
+/// check of the token over HTTP answers [status], and which tells a refused
+/// token as the real room does.
+class _ValidatedRoom extends FakeLivekitRoom {
+  _ValidatedRoom(super.journal, this.status);
+
+  final int status;
+
+  @override
+  Future<void> connect(String url, String token,
+      {void Function(lk.ConnectStep step)? onStep}) async {
+    journal.add('connect');
+    connectTokens.add(token);
+    if (connectTokens.length == 1) {
+      throw lk.ConnectException('validation answered $status',
+          reason: lk.ConnectionErrorReason.NotAllowed, statusCode: status);
+    }
+    journal.add('connected');
+  }
+
+  @override
+  bool refusedToken(Object error) => LkJoinRoom.refusesToken(error);
 }

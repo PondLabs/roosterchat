@@ -84,12 +84,17 @@ class LkJoinRoom implements LivekitJoinRoom {
     }
   }
 
-  /// LiveKit checks the token over HTTP when the WebSocket fails, and
-  /// reports a 4xx answer as `NotAllowed`.
   @override
-  bool refusedToken(Object error) =>
+  bool refusedToken(Object error) => refusesToken(error);
+
+  /// LiveKit checks the token over HTTP when the WebSocket fails, and
+  /// reports any answer from 400 up as `NotAllowed`, a server error
+  /// included. Only 401 and 403 say the token itself was refused: another
+  /// one is worth a second try, a server that fails is not.
+  static bool refusesToken(Object error) =>
       error is lk.ConnectException &&
-      error.reason == lk.ConnectionErrorReason.NotAllowed;
+      error.reason == lk.ConnectionErrorReason.NotAllowed &&
+      (error.statusCode == 401 || error.statusCode == 403);
 
   @override
   Future<JoinMicrophone> openMicrophone(lk.AudioCaptureOptions options) async =>
