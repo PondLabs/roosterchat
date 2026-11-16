@@ -6,8 +6,10 @@ import 'dart:typed_data';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:http/http.dart' as http;
+import 'package:rooster/client/attachment.dart';
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
 import 'package:rooster/diagnostic/speed_log/speed_names.dart';
+import 'package:rooster/ui/molecules/timeline_events/events/pending_attachment_status.dart';
 import 'package:rooster/utils/network/speed_http_client.dart';
 import 'package:rooster/utils/network/upload_progress.dart';
 import 'package:test/test.dart';
@@ -83,6 +85,42 @@ void main() {
       expect(record.error, isNull);
       expect(record.status, 200);
       expect(record.bytesUp, 8 * 1000 * 1000);
+    });
+  });
+
+  test(
+      "the message's line reads the count while the bytes go out, then "
+      '"Waiting for the server" until the answer, never a count at its total',
+      () {
+    fakeAsync((time) {
+      const bytes = 8 * 1000 * 1000;
+      final send = AttachmentSend(roomKey: 'a:!room', attachment: null)
+        ..handedOver('t1', bytes: bytes, uploadBytes: bytes);
+      final lines = <String>[];
+      void note() {
+        final shown = PendingAttachmentStatus.describe(send);
+        final line = '${shown.label} | ${shown.detail}';
+        if (lines.isEmpty || lines.last != line) lines.add(line);
+      }
+
+      send.upload.addListener(note);
+      final client = SpeedHttpClient(
+          inner: TakesAll(answerAfter: const Duration(seconds: 40)), log: log);
+      runForUpload(send.upload, () => client.send(_uploadOf(bytes)))
+          .then((r) => r.stream.drain<void>());
+      time.elapse(const Duration(seconds: 41));
+
+      final uploading = PendingAttachmentStatus.labelPendingFileUploading;
+      final waiting = PendingAttachmentStatus.labelPendingFileWaitingForServer;
+      final counts = lines
+          .where((l) => l.startsWith('$uploading | ') && l.contains(' of '));
+      expect(counts.length, greaterThan(10), reason: lines.take(3).join(' / '));
+      expect(counts.first, contains(' of 7.63 MB'));
+      expect(lines.where((l) => l.contains('7.63 MB of 7.63 MB')), isEmpty);
+      expect(lines.indexWhere((l) => l.startsWith(waiting)),
+          greaterThan(lines.lastIndexOf(counts.last)));
+      expect(lines.where((l) => l.startsWith(waiting)).toSet(),
+          {'$waiting | 7.63 MB'});
     });
   });
 

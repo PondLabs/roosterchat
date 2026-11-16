@@ -109,12 +109,14 @@ class PendingAttachmentStatus extends StatefulWidget {
             : !upload.started && send.encrypting
                 ? labelPendingFileEncrypting
                 : labelPendingFileUploading;
+        final sent = TextUtils.readableFileSize(upload.sentBytes);
+        final total = TextUtils.readableFileSize(upload.totalBytes);
         return (
           label: label,
-          detail: upload.sending
-              ? labelPendingFileUploadCount(
-                  TextUtils.readableFileSize(upload.sentBytes),
-                  TextUtils.readableFileSize(upload.totalBytes))
+          // The last bytes round to the total: the size alone then, never
+          // a count that reads as done before it is.
+          detail: upload.sending && sent != total
+              ? labelPendingFileUploadCount(sent, total)
               : size,
           icon: label == labelPendingFileEncrypting
               ? Icons.lock_outline_rounded
