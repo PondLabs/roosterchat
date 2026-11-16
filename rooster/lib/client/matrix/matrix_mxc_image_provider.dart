@@ -20,6 +20,7 @@ class MatrixMxcImage extends LODImageProvider {
     bool? doThumbnail,
     bool? doFullres,
     bool cache = true,
+    bool serverThumbnail = false,
     super.autoLoadFullRes,
     super.thumbnailHeight,
     super.fullResHeight,
@@ -36,6 +37,7 @@ class MatrixMxcImage extends LODImageProvider {
                 matrixEvent,
                 cache: cache,
                 cached: _cachedThumbnail,
+                serverThumbnail: serverThumbnail,
               ));
     }
     if (doFullres == null || doFullres == true) {
@@ -53,6 +55,40 @@ class MatrixMxcImage extends LODImageProvider {
   /// Where [hasCachedThumbnail] found the thumbnail, so that loading it
   /// asks the cache nothing more.
   Uri? _cachedThumbnail;
+
+  /// The size asked of the homeserver for a picture's thumbnail when the
+  /// sender gave none, scaled to fit (never cropped: the bubble shows the
+  /// whole picture). The bubble is at most 500 x 200 (logical pixels,
+  /// `message_attachment.dart`): a 4:3 photo is 267 x 200 there, 800 x 600
+  /// at a phone's 3x; a portrait one 150 x 200, 450 x 600. Synapse makes
+  /// this size ahead (`thumbnail_sizes` default), so it is not resized on
+  /// demand.
+  static const serverThumbnailWidth = 800;
+  static const serverThumbnailHeight = 600;
+
+  /// Above this size a still picture with no sender's thumbnail is shown
+  /// from the homeserver's thumbnail.
+  static const serverThumbnailAbove = 300 * 1000;
+
+  /// The still picture types the homeserver scales into a still thumbnail
+  /// that shows the same. Not GIF nor WebP: an animation's thumbnail is a
+  /// still.
+  static const serverThumbnailTypes = {'image/jpeg', 'image/png', 'image/bmp'};
+
+  /// Whether [event]'s picture is shown from a thumbnail the homeserver
+  /// scales: it has no sender's thumbnail, is not encrypted (the server
+  /// cannot read it), is a still JPEG, PNG or BMP, and is larger than
+  /// [serverThumbnailAbove] or of unknown size. The whole file then loads
+  /// when the picture is opened, or when the thumbnail cannot be had.
+  static bool asksServerThumbnail(Event event) {
+    if (event.hasThumbnail || event.isAttachmentEncrypted) return false;
+    if (!serverThumbnailTypes
+        .contains(event.attachmentMimetype.toLowerCase())) {
+      return false;
+    }
+    final size = event.infoMap['size'];
+    return size is! int || size > serverThumbnailAbove;
+  }
 
   static String getThumbnailIdentifier(Uri uri) {
     return "matrix_thumbnail-$uri";
@@ -98,13 +134,15 @@ class MatrixMxcImage extends LODImageProvider {
   }
 
   /// [cached]: where the thumbnail is in the file cache, when that is
-  /// already known.
+  /// already known. [serverThumbnail]: the homeserver's scaled thumbnail
+  /// of [matrixEvent]'s picture ([asksServerThumbnail]).
   static Future<Uint8List?> loadMatrixThumbnail(
     Client client,
     Uri uri,
     Event? matrixEvent, {
     bool cache = true,
     Uri? cached,
+    bool serverThumbnail = false,
   }) async {
     var identifier = getThumbnailIdentifier(uri);
 
@@ -116,7 +154,21 @@ class MatrixMxcImage extends LODImageProvider {
     if (hit != null) return hit;
 
     Uint8List? bytes;
-    if (matrixEvent != null) {
+    if (serverThumbnail && matrixEvent != null) {
+      try {
+        bytes = await downloadMedia(
+            client,
+            await uri.getThumbnailUri(client,
+                width: serverThumbnailWidth,
+                height: serverThumbnailHeight,
+                method: ThumbnailMethod.scale));
+      } on MediaDownloadException catch (error) {
+        if (error.retryable) rethrow;
+        // No thumbnail to be had (a 404, a type it does not scale): the
+        // whole picture, kept as itself, never as the thumbnail.
+        return loadMatrixFullRes(client, uri, matrixEvent, cache: cache);
+      }
+    } else if (matrixEvent != null) {
       var data = await matrixEvent.downloadAndDecryptAttachment(
         getThumbnail: true,
         downloadCallback: (url) => downloadMedia(client, url),
