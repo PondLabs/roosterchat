@@ -189,7 +189,10 @@ class CallJoin<S> {
     await output;
     final room = await host.createRoom();
 
+    final joinKey =
+        CallMembershipWrites.joinKey(host.roomId, host.membershipKey);
     // Local, not fields: two joins can overlap (two views of one room).
+    Object? claim;
     Future<void>? write;
     Future<void>? connection;
     // Done once this join has kept its membership or cleared it.
@@ -227,8 +230,6 @@ class CallJoin<S> {
       // A clear from the previous call may still be in flight, and would
       // erase what we write now (issue #48). So may an earlier join of this
       // room's, hung up (see below).
-      final joinKey =
-          CallMembershipWrites.joinKey(host.roomId, host.membershipKey);
       await trace.time(
           SpeedStep.membershipClearWait,
           () => Future.wait([
@@ -246,6 +247,9 @@ class CallJoin<S> {
       // membership only once this one has kept it or cleared it: a clear of
       // ours landing after that write would erase it.
       CallMembershipWrites.clearing(joinKey, membershipSettled.future);
+      // That wait is bounded: an earlier join that outlasts it leaves this
+      // one's membership alone.
+      claim = CallMembershipWrites.claim(joinKey);
       write = trace.time(
           SpeedStep.membershipWrite, () => host.writeMembership(foci));
       connection = trace.time(
@@ -284,13 +288,19 @@ class CallJoin<S> {
       // The membership first: it is what other people see. Only once its
       // write has settled, even a write that failed (its request may still
       // have landed): a clear sent before could land first.
-      if (write != null) {
+      if (write != null && claim != null) {
         await _settledOf(write);
-        try {
-          await host.clearMembership();
-        } catch (e, s) {
-          Log.onError(e, s, content: "Could not clear call membership");
+        if (CallMembershipWrites.superseded(joinKey, claim)) {
+          // A later join of this room wrote it since, and holds it.
+          Log.i("Voice join undone: our membership is a later join's now");
+        } else {
+          try {
+            await host.clearMembership();
+          } catch (e, s) {
+            Log.onError(e, s, content: "Could not clear call membership");
+          }
         }
+        CallMembershipWrites.release(joinKey, claim);
       }
       if (!membershipSettled.isCompleted) membershipSettled.complete();
       if (connection != null) await _settledOf(connection);

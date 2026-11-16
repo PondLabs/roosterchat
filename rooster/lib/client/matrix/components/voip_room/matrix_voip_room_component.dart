@@ -202,8 +202,9 @@ class MatrixVoipRoomComponent
 
   /// Hangs up a join still running: it takes back what it sent and fails
   /// with [CallJoinHungUp], and no session comes of it. A join asked for
-  /// after this is a new one, whose membership waits for the old one's to be
-  /// cleared.
+  /// after this is a new one: its membership waits for the old one's to be
+  /// cleared, 10 s at most, and an old join that takes longer leaves the
+  /// new membership alone (`CallMembershipWrites.superseded`).
   void hangUpJoin() {
     final hangUp = _hangUpJoining;
     if (hangUp == null) return;

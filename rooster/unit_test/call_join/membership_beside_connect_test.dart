@@ -326,4 +326,66 @@ void main() {
     host.room.connectGate.open();
     await joining;
   });
+
+  test(
+      'hung up, joined again, and the old join outlasts the 10 s the new one '
+      'waits for it: the old one leaves the new membership alone', () async {
+    host.room.connectGate = Gate();
+    final first = host.room;
+    final hangUp = Completer<void>();
+    final firstJoin = join().run(hangUp: hangUp.future);
+    unawaited(firstJoin.then((_) {}, onError: (_) {}));
+    await settle();
+    expect(host.membership, isTrue, reason: 'the old write landed');
+
+    hangUp.complete();
+    final second = FakeLivekitRoom(journal);
+    host.room = second;
+    final session = await join().run();
+    expect(journal.count('membership_write'), 2,
+        reason: 'the new join wrote after waiting 10 s at most');
+
+    // The old connection only ends now, past the new join's wait.
+    first.connectGate.open();
+    await expectLater(firstJoin, throwsA(isA<CallJoinHungUp>()));
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    expect(session, same(second));
+    expect(journal.count('session'), 1);
+    expect(journal.entries, isNot(contains('membership_clear')),
+        reason: 'the new join holds the membership');
+    expect(host.membership, isTrue);
+    expect(first.disposed, isTrue);
+    expect(second.disposed, isFalse);
+  }, timeout: const Timeout(Duration(seconds: 30)));
+
+  group('who may clear the membership of a join', () {
+    const key = '!room:example.org _@me:example.org_DEVICE_m.call';
+
+    test('not a join that a later one of the same room has superseded', () {
+      final old = CallMembershipWrites.claim(key);
+      final later = CallMembershipWrites.claim(key);
+      expect(CallMembershipWrites.superseded(key, old), isTrue);
+      expect(CallMembershipWrites.superseded(key, later), isFalse);
+      CallMembershipWrites.release(key, later);
+    });
+
+    test('again once that later join failed and gave its claim back', () {
+      final old = CallMembershipWrites.claim(key);
+      final later = CallMembershipWrites.claim(key);
+      CallMembershipWrites.release(key, later);
+      expect(CallMembershipWrites.superseded(key, old), isFalse,
+          reason: 'nobody else holds it: a late write of the old one is '
+              'cleared');
+      CallMembershipWrites.release(key, old);
+    });
+
+    test("a join in another room doesn't count", () {
+      final here = CallMembershipWrites.claim(key);
+      final there = CallMembershipWrites.claim('!other:example.org x');
+      expect(CallMembershipWrites.superseded(key, here), isFalse);
+      CallMembershipWrites.release(key, here);
+      CallMembershipWrites.release('!other:example.org x', there);
+    });
+  });
 }
