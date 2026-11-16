@@ -24,7 +24,7 @@ void main() {
     for (var i = 0; i < 300; i++) {
       final round = log.startSpan(SpeedOperation.sync);
       now += const Duration(seconds: 30);
-      round.mark(SpeedStep.response);
+      round.mark(SpeedStep.serverWait);
       round.finish();
     }
 
@@ -37,6 +37,32 @@ void main() {
     expect(report, contains('text_send ok=1/1 p50=120ms p95=120ms'));
     expect(report, contains('text_send op=${send.id} total=120ms'));
     expect(log.spans.toList().first, send, reason: 'oldest first');
+  });
+
+  test('past the most operations, spans of a new one are dropped and counted',
+      () {
+    final log = SpeedLog(frames: _NoFrames(), operationLimit: 2);
+    log.startSpan(SpeedOperation.textSend).finish();
+    log.startSpan(SpeedOperation.sync).finish();
+    expect(buildSpeedReport(log), isNot(contains('dropped')));
+
+    log.startSpan(SpeedOperation.voiceJoin).finish();
+    log.startSpan(SpeedOperation.voiceJoin).finish();
+    log.startSpan(SpeedOperation.imagePrepare).finish();
+    log.startSpan(SpeedOperation.textSend).finish();
+
+    expect(
+        log.spans.operations, [SpeedOperation.textSend, SpeedOperation.sync]);
+    expect(log.spans.length, 3);
+    expect(log.spans.dropped, 3);
+    expect(
+        buildSpeedReport(log),
+        contains('spans (3 finished, newest ${SpeedLog.spansPerOperation} of '
+            'each operation kept, 0 open, 3 dropped: more than 2 '
+            'operations):'));
+
+    log.spans.clear();
+    expect(log.spans.dropped, 0);
   });
 
   test('the finished spans take a fixed amount of memory', () {

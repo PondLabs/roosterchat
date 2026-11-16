@@ -604,7 +604,8 @@ class MatrixRoom extends Room {
       // The SDK makes the same transaction id when given none; ours lets the
       // speed log see the local echo (docs/speed-log.md).
       final txid = _matrixRoom.client.generateUniqueTransactionId();
-      final trace = TextSendTrace.current?..sending(_matrixRoom, txid);
+      final trace = TextSendTrace.current;
+      TextSendTrace.guard(() => trace?.sending(_matrixRoom, txid));
       String? id;
       try {
         id = await _matrixRoom.sendEvent(event,
@@ -614,7 +615,7 @@ class MatrixRoom extends Room {
             threadLastEventId: threadLastEventId,
             threadRootEventId: threadRootEventId);
       } finally {
-        trace?.sent(ok: id != null);
+        TextSendTrace.guard(() => trace?.sent(ok: id != null));
       }
 
       if (id != null) {

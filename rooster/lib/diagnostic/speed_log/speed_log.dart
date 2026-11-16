@@ -22,7 +22,9 @@
 /// names in `SpeedOperation.all`, steps in `SpeedStep.all`, the names of
 /// numbers on steps in `SpeedValue.all`, outcomes in `SpeedOutcome.all`.
 /// Any other name, even one shaped like them, is written `invalid_name`, so
-/// text from a message, a file or a person never reaches the report. To add
+/// text from a message, a file or a person never reaches the report. On a
+/// step, the numbers under unlisted names are dropped and `invalid_name`
+/// holds how many there were. To add
 /// a name: a constant in its class there, and the same constant in that
 /// class's `all`. Merging a branch that added names too: keep both sides'
 /// entries in each `all`. `SpeedOperation.all` plus `invalid_name` must fit
@@ -234,10 +236,21 @@ class SpeedSpan {
 
   void _add(SpanStep step) {
     if (steps.length >= SpeedLog.maxStepsPerSpan) return;
+    // A value under an unlisted name is dropped; `invalid_name` counts how
+    // many there were, so two of them do not read as one.
+    final values = <String, num>{};
+    var unlisted = 0;
+    for (final value in step.values.entries) {
+      if (SpeedValue.all.contains(value.key)) {
+        values[value.key] = value.value;
+      } else {
+        unlisted++;
+      }
+    }
     steps.add(
         SpanStep(_listed(step.name, SpeedStep.all), step.start, step.duration, {
-      for (final value in step.values.entries)
-        _listed(value.key, SpeedValue.all): value.value,
+      if (unlisted > 0) invalidSpeedName: unlisted,
+      ...values,
     }));
   }
 
@@ -291,9 +304,10 @@ class SpeedSpan {
 /// Finished spans, the newest [perOperation] of each operation (span name)
 /// in a [RingBuffer] of its own, so a frequent operation (a sync round every
 /// 30 s) never pushes a rare one (a text send) out. At most [maxOperations]
-/// operations are kept; spans of any further name are dropped. Span names
-/// come from the fixed list (`SpeedOperation.all`, with `invalid_name`),
-/// which fits in that bound, so the memory stays fixed.
+/// operations are kept; spans of any further name are dropped and counted
+/// in [dropped], which the report shows. Span names come from the fixed
+/// list (`SpeedOperation.all`, with `invalid_name`), which fits in that
+/// bound, so the memory stays fixed.
 class FinishedSpans {
   FinishedSpans({required this.perOperation, required this.maxOperations});
 
@@ -301,6 +315,11 @@ class FinishedSpans {
   final int maxOperations;
   final Map<String, RingBuffer<(int, SpeedSpan)>> _byOperation = {};
   int _added = 0;
+  int _dropped = 0;
+
+  /// Spans dropped because [maxOperations] other operations already had
+  /// spans.
+  int get dropped => _dropped;
 
   /// The operations that have spans, in the order they first finished one.
   Iterable<String> get operations => _byOperation.keys;
@@ -308,7 +327,10 @@ class FinishedSpans {
   void add(SpeedSpan span) {
     var buffer = _byOperation[span.name];
     if (buffer == null) {
-      if (_byOperation.length >= maxOperations) return;
+      if (_byOperation.length >= maxOperations) {
+        _dropped++;
+        return;
+      }
       buffer = _byOperation[span.name] = RingBuffer(perOperation);
     }
     buffer.add((_added++, span));
@@ -327,6 +349,7 @@ class FinishedSpans {
   void clear() {
     _byOperation.clear();
     _added = 0;
+    _dropped = 0;
   }
 
   /// Slots allocated across the buffers, for tests that check it never
@@ -339,13 +362,16 @@ class FinishedSpans {
 /// newest finished spans of each operation in [FinishedSpans], all of fixed
 /// size. Always on; nothing leaves the device.
 class SpeedLog {
+  /// [operationLimit] is [maxOperations] but in tests of what happens past
+  /// it.
   SpeedLog({
     int requestCapacity = 512,
     FrameSource? frames,
     Duration Function()? clock,
+    int operationLimit = maxOperations,
   })  : requests = RingBuffer(requestCapacity),
         spans = FinishedSpans(
-            perOperation: spansPerOperation, maxOperations: maxOperations),
+            perOperation: spansPerOperation, maxOperations: operationLimit),
         _frames = frames ?? SchedulerFrameSource(),
         _clock = clock ?? (Stopwatch()..start()).elapsedFrom;
 
@@ -364,6 +390,13 @@ class SpeedLog {
 
   /// How long a finished span waits for the batch that holds its last
   /// frames, when no frame drawn after it is reported first.
+  ///
+  /// Limit on the web: the engine hands over its pending frames only when
+  /// it draws another one (`frame_timing_recorder.dart`, at most every
+  /// 100 ms). A span that closes while the screen stays still can wait
+  /// longer than this for that frame; once another span closes past the
+  /// wait, it is dropped and loses its last frames. Its `longest_frame` is
+  /// then smaller than the real one, or `unavailable`, never larger.
   static const frameWait = Duration(seconds: 3);
   static final Object _spanKey = Object();
 

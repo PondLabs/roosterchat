@@ -2,16 +2,20 @@ import 'dart:async';
 
 import 'package:flutter/scheduler.dart';
 import 'package:matrix/matrix.dart' as matrix;
+import 'package:rooster/debug/log.dart';
 import 'package:rooster/diagnostic/speed_log/request_record.dart';
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
 import 'package:rooster/diagnostic/speed_log/speed_names.dart';
+import 'package:rooster/utils/network/speed_http_client.dart'
+    show speedErrorName;
 
 /// The `text_send` span of one text message, in the app's [SpeedLog]: from
 /// Send in the composer to the server's answer. See `docs/speed-log.md`.
 ///
 /// The composer starts it ([forComposer]) and runs the room's send in it
 /// ([send]); the room reports when it hands the text to the SDK ([sending])
-/// and when the SDK returns ([sent]). The steps:
+/// and when the SDK returns ([sent]), each through [guard], so the
+/// measurement can never stop the send. The steps:
 ///
 /// - `send`: Send to the hand-over (the composer and the room's own work);
 /// - `echo`: the hand-over to the local echo entering the timeline;
@@ -29,6 +33,9 @@ import 'package:rooster/diagnostic/speed_log/speed_names.dart';
 class TextSendTrace {
   TextSendTrace._(this.span);
 
+  /// Only for tests that replace what the room's calls do.
+  TextSendTrace.forTest(this.span);
+
   final SpeedSpan span;
 
   static SpeedLog get _log => SpeedLog.instance;
@@ -43,8 +50,30 @@ class TextSendTrace {
   /// observed. Only tests replace it.
   static Future<bool> Function() nextFrameDrawn = _schedulerFrame;
 
+  /// The events entering [room]'s timeline, where the echo is looked for.
+  /// Only tests replace it.
+  static Stream<matrix.Event> Function(matrix.Room room) timelineEvents =
+      _clientTimelineEvents;
+
+  static Stream<matrix.Event> _clientTimelineEvents(matrix.Room room) =>
+      room.client.onTimelineEvent.stream;
+
   /// The trace the current code runs in (see [send]).
   static TextSendTrace? get current => Zone.current[_key] as TextSendTrace?;
+
+  /// Runs [measure], one of the room's calls into its trace, so that a
+  /// failure in the speed log never stops the send: the error is dropped
+  /// and the app's log gets a fixed line with its fixed name from
+  /// [speedErrorName] (the message could hold the text being sent, and the
+  /// runtime type reads `minified:xx` in a web release build).
+  static void guard(void Function() measure) {
+    try {
+      measure();
+    } catch (error) {
+      Log.w('Speed log: a text send step was not timed '
+          '(${speedErrorName(error)})');
+    }
+  }
 
   /// The moment Send is pressed, on the speed log's clock.
   static Duration now() => _log.now();
@@ -103,7 +132,7 @@ class TextSendTrace {
     final ahead = [for (final waiting in room.sendingQueue) waiting.future];
     Future.wait(ahead).then((_) => _queueFreeAt = span.elapsed);
 
-    _echo = room.client.onTimelineEvent.stream.listen((event) {
+    _echo = timelineEvents(room).listen((event) {
       if (event.roomId != room.id || event.eventId != txid) return;
       _echo?.cancel();
       _echo = null;
@@ -124,9 +153,11 @@ class TextSendTrace {
   /// [frameTimeout] has passed.
   Future<void> finish() async {
     await _painting;
-    if (span.isFinished) return;
+    // Before anything else: a span closed from outside (too many open)
+    // still stops looking for its echo.
     await _echo?.cancel();
     _echo = null;
+    if (span.isFinished) return;
     _addSteps();
     span.finish(
         outcome: _failed || _answeredAt == null
