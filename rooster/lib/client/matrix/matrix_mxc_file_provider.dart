@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:rooster/cache/file_provider.dart';
 import 'package:rooster/client/matrix/extensions/matrix_client_extensions.dart';
+import 'package:rooster/client/matrix/media/own_media.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:matrix/matrix.dart' as matrix;
@@ -17,11 +18,21 @@ class MxcFileProvider implements FileProvider {
 
   MxcFileProvider(this.client, this.uri, {this.event});
 
+  /// Whether [uri] is [event]'s own file, the one its own media keeps.
+  bool get _isEventFile => event != null && event!.attachmentMxcUrl == uri;
+
   StreamController<DownloadProgress> fileDownloadProgress =
       StreamController.broadcast();
 
   @override
   Future<Uri?> resolve({String? savePath}) async {
+    // Sent from this device: its own file, never copied under the key every
+    // account shares, which logging out would leave behind.
+    if (_isEventFile) {
+      final own = await ownMediaFile(client, event);
+      if (own != null) return own;
+    }
+
     var cached = await fileCache?.getFile(fileIdentifier);
     if (cached != null) {
       return cached;
@@ -48,6 +59,12 @@ class MxcFileProvider implements FileProvider {
 
   Future<Uint8List?> getFileData() async {
     Uint8List? bytes;
+
+    // Sent from this device: the bytes it still holds.
+    if (_isEventFile) {
+      final own = await readOwnMedia(client, event);
+      if (own != null) return own;
+    }
 
     var cached = await fileCache?.getFile(fileIdentifier);
     if (cached != null) {
