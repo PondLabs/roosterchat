@@ -223,8 +223,12 @@ abstract final class SpeedOutcome {
   /// disposed).
   static const abandoned = 'abandoned';
 
+  /// Dropped by the app before its end: a picture's preparation for an
+  /// attachment removed before Send.
+  static const cancelled = 'cancelled';
+
   /// Every outcome.
-  static const all = {ok, failed, incomplete, abandoned};
+  static const all = {ok, failed, incomplete, abandoned, cancelled};
 }
 
 /// What a request's `error=` says: the kind of failure, by a fixed name.

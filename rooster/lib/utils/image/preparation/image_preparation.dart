@@ -24,7 +24,9 @@
 ///    native, the browser's canvas on the web.
 ///
 /// At most [ImagePreparer.maxConcurrent] (2) files are prepared at a time;
-/// the others wait their turn. Each preparation is an `image_prepare` span
+/// the others wait their turn. A [PreparationCancel] drops a preparation
+/// nobody needs any more (an attachment removed before Send): out of the
+/// queue before its turn, or its result thrown away once it has started. Each preparation is an `image_prepare` span
 /// in the speed log, with its steps and sizes (no names, no content).
 library;
 
@@ -102,6 +104,24 @@ Future<ui.Codec> engineImageCodec(Uint8List bytes,
         targetHeight: targetHeight,
         allowUpscaling: false);
 
+/// Drops one preparation: [cancel] takes it out of the queue when it has
+/// not started, and makes it end with null, without its thumbnail being
+/// encoded, when it has.
+class PreparationCancel {
+  bool _cancelled = false;
+  void Function()? _leaveQueue;
+
+  bool get isCancelled => _cancelled;
+
+  void cancel() {
+    if (_cancelled) return;
+    _cancelled = true;
+    final leave = _leaveQueue;
+    _leaveQueue = null;
+    leave?.call();
+  }
+}
+
 /// Prepares pictures, at most [maxConcurrent] at a time.
 class ImagePreparer {
   ImagePreparer({
@@ -129,13 +149,22 @@ class ImagePreparer {
   int get running => _running;
 
   /// Prepares [bytes]; null when the engine cannot decode them (the file
-  /// is then sent as a plain file, as before). Never throws.
-  Future<ImagePreparation?> prepare(Uint8List bytes) async {
+  /// is then sent as a plain file, as before), and when [cancel] dropped
+  /// it. Never throws.
+  Future<ImagePreparation?> prepare(Uint8List bytes,
+      {PreparationCancel? cancel}) async {
     final span = _log.startSpan(SpeedOperation.imagePrepare);
-    await _acquire();
+    if (!await _acquire(cancel)) {
+      span.finish(outcome: SpeedOutcome.cancelled);
+      return null;
+    }
     span.mark(SpeedStep.queueWait);
     try {
-      final result = await _prepare(bytes, span);
+      final result = await _prepare(bytes, span, cancel);
+      if (cancel?.isCancelled == true) {
+        span.finish(outcome: SpeedOutcome.cancelled);
+        return null;
+      }
       span.finish(
           outcome: result == null ? SpeedOutcome.failed : SpeedOutcome.ok);
       return result;
@@ -147,26 +176,33 @@ class ImagePreparer {
     }
   }
 
-  Future<void> _acquire() {
+  /// Waits for a slot: true once it has one, false when [cancel] dropped
+  /// the preparation first (it never takes a slot then).
+  Future<bool> _acquire(PreparationCancel? cancel) {
+    if (cancel?.isCancelled == true) return Future.value(false);
     if (_running < maxConcurrent) {
       _running++;
-      return Future.value();
+      return Future.value(true);
     }
-    final turn = Completer<void>();
+    final turn = Completer<bool>();
     _waiting.add(turn);
-    return turn.future;
+    cancel?._leaveQueue = () {
+      if (_waiting.remove(turn)) turn.complete(false);
+    };
+    return turn.future.whenComplete(() => cancel?._leaveQueue = null);
   }
 
   void _release() {
     if (_waiting.isNotEmpty) {
       // The slot passes straight to the next one: [_running] stays.
-      _waiting.removeFirst().complete();
+      _waiting.removeFirst().complete(true);
     } else {
       _running--;
     }
   }
 
-  Future<ImagePreparation?> _prepare(Uint8List bytes, SpeedSpan span) async {
+  Future<ImagePreparation?> _prepare(
+      Uint8List bytes, SpeedSpan span, PreparationCancel? cancel) async {
     final header = readImageHeader(bytes);
     span.mark(SpeedStep.header, values: {SpeedValue.bytes: bytes.length});
 
@@ -192,7 +228,9 @@ class ImagePreparer {
     }
 
     final decoded = await _decode(bytes, targetWidth, targetHeight);
-    if (decoded == null) return null;
+    // Dropped while it decoded: the codec and image are already disposed,
+    // and nothing is encoded.
+    if (decoded == null || cancel?.isCancelled == true) return null;
     final (rgba, drawnWidth, drawnHeight, frames) = decoded;
     span.mark(SpeedStep.decode, values: {
       SpeedValue.width: drawnWidth,

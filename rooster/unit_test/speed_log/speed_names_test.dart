@@ -59,7 +59,8 @@ void main() {
       'attempt', 'status', 'retry_after_ms', //
       'bytes', 'width', 'height', 'frames', // image_prepare
     });
-    expect(SpeedOutcome.all, {'ok', 'failed', 'incomplete', 'abandoned'});
+    expect(SpeedOutcome.all,
+        {'ok', 'failed', 'incomplete', 'abandoned', 'cancelled'});
   });
 
   test('every listed name is a fixed identifier, and the operations fit', () {

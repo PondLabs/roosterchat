@@ -47,6 +47,8 @@ class PendingFileAttachment {
 
   Future<ImagePreparation?>? _imagePreparation;
   Uint8List? _preparedData;
+  PreparationCancel? _cancelPreparation;
+  bool _discarded = false;
 
   /// Starts preparing the picture to be sent (size, thumbnail, blurhash;
   /// see `image_preparation.dart`), in the background, so Send finds it
@@ -71,14 +73,28 @@ class PendingFileAttachment {
   /// that is not a picture, and for a picture the engine cannot decode.
   Future<ImagePreparation?> imagePreparation({ImagePreparer? preparer}) {
     final data = this.data;
-    if (data == null || !Mime.imageTypes.contains(mimeType)) {
+    if (_discarded || data == null || !Mime.imageTypes.contains(mimeType)) {
       return Future.value(null);
     }
     if (_imagePreparation == null || !identical(_preparedData, data)) {
+      _cancelPreparation?.cancel();
+      final cancel = _cancelPreparation = PreparationCancel();
       _preparedData = data;
-      _imagePreparation = (preparer ?? ImagePreparer.instance).prepare(data);
+      _imagePreparation =
+          (preparer ?? ImagePreparer.instance).prepare(data, cancel: cancel);
     }
     return _imagePreparation!;
+  }
+
+  /// The attachment was taken out of the composer before Send: its
+  /// preparation leaves the queue, or its result is thrown away, and none
+  /// is started again.
+  void discard() {
+    _discarded = true;
+    _cancelPreparation?.cancel();
+    _cancelPreparation = null;
+    _imagePreparation = null;
+    _preparedData = null;
   }
 
   ImageProvider? getAsImage() {

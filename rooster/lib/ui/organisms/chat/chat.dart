@@ -240,6 +240,8 @@ class ChatState extends State<Chat> {
     setState(() {
       attachments.remove(attachment);
     });
+    // Out of the preparation queue, or its preparation thrown away.
+    attachment.discard();
   }
 
   void sendMessage(String message, {Client? overrideClient}) async {
