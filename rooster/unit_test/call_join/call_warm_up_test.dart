@@ -428,6 +428,78 @@ void main() {
     expect(service.requests, isEmpty);
   });
 
+  group("a room whose oldest membership names another token service", () {
+    test('the warm-up sends nothing, and the join asks for everything',
+        () async {
+      host.roomFocusUrl = 'https://jwt.elsewhere.example';
+      await warmUp();
+      await warmUp();
+      expect(journal.count('openid'), 0);
+      expect(service.requests, isEmpty, reason: 'no /healthz, no /sfu/get');
+      expect(service.tokens.holdsGrant(host.roomId, host.deviceId), isFalse);
+
+      final room = await join();
+      expect(journal.count('openid'), 1);
+      expect(service.requests, ['POST /sfu/get']);
+      expect(room.connectTokens, [service.jwts.single]);
+      expect(journal.entries, contains('connected'));
+    });
+
+    test(
+        "the homeserver's service written another way is the same: warmed "
+        'as before, under the name the join uses', () async {
+      host.roomFocusUrl = 'HTTPS://JWT.example.org:443';
+      await warmUp();
+      expect(journal.count('openid'), 1);
+      expect(service.requests, ['GET /healthz', 'POST /sfu/get']);
+
+      await join();
+      expect(journal.count('openid'), 1, reason: 'the join used what is held');
+      expect(service.count('POST /sfu/get'), 1);
+    });
+
+    test('the same service: scheme, host, port, path, nothing else', () {
+      bool same(String a, String b) =>
+          CallWarmUp.sameService(Uri.parse(a), Uri.parse(b));
+      const home = 'https://jwt.example.org';
+      for (final alike in [
+        home,
+        '$home/',
+        '$home//',
+        'https://jwt.example.org:443',
+        'https://JWT.Example.ORG',
+        'HTTPS://jwt.example.org',
+      ]) {
+        expect(same(alike, home), isTrue, reason: alike);
+        expect(same(home, alike), isTrue, reason: alike);
+      }
+      expect(
+          same('http://jwt.example.org:80/', 'http://jwt.example.org'), isTrue);
+      expect(same('$home/livekit/jwt/', '$home/livekit/jwt'), isTrue);
+      expect(same('$home/livekit/./jwt', '$home/livekit/jwt'), isTrue);
+      for (final other in [
+        'https://jwt.example.org.evil.example',
+        'https://evil-jwt.example.org',
+        'https://example.org',
+        'https://other.example.org',
+        'https://jwt.example.org:8443',
+        'http://jwt.example.org',
+        'http://jwt.example.org:443',
+        'wss://jwt.example.org',
+        '$home/livekit',
+        'https://user@jwt.example.org',
+        '$home?next=1',
+        '$home#x',
+        'jwt.example.org',
+      ]) {
+        expect(same(other, home), isFalse, reason: other);
+        expect(same(home, other), isFalse, reason: other);
+      }
+      expect(same('$home/livekit', '$home/livekit/jwt'), isFalse);
+      expect(same('/sfu', '/sfu'), isFalse, reason: 'no host');
+    });
+  });
+
   group('a server that never answers, on a fake clock', () {
     /// How long after the click the join fails, when the page opened
     /// [openedBefore] the click (or never), with [tokenService] and

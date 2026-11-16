@@ -108,6 +108,53 @@ void main() {
     expect(journal.entries, contains('connected'));
   });
 
+  test(
+      "a room whose oldest membership names a service the homeserver's "
+      'well-known does not: nothing before the click, everything on it',
+      () async {
+    // The service the room's membership names: counted apart.
+    final foreign = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => foreign.close(force: true));
+    final seen = <String>[];
+    foreign.listen((request) async {
+      seen.add('${request.method} ${request.uri.path}');
+      await request.drain<void>();
+      request.response
+        ..headers.contentType = ContentType.json
+        ..write(jsonEncode({
+          'url': 'wss://sfu.example.org',
+          'jwt': jwtUntil(DateTime.now().add(const Duration(hours: 1)))
+        }));
+      await request.response.close();
+    });
+    final journal = Journal();
+    final tokens = CallTokenService();
+    addTearDown(tokens.close);
+    final channel = host(journal)
+      ..roomFocusUrl = 'http://127.0.0.1:${foreign.port}';
+
+    // The page opens, then the pointer rests on Join.
+    await CallWarmUp(host: channel, tokens: tokens).run();
+    await CallWarmUp(host: channel, tokens: tokens).run();
+    report('foreign service, before the click');
+    expect(routes, isEmpty, reason: 'no OpenID request, nothing to our own');
+    expect(seen, isEmpty, reason: 'no /healthz, no /sfu/get');
+
+    await CallJoin(
+            host: channel,
+            tokens: tokens,
+            log: SpeedLog(),
+            remoteAudioWindow: const Duration(milliseconds: 1))
+        .run();
+    report('foreign service, after the click');
+    // ignore: avoid_print
+    print('[foreign service] it saw: $seen');
+    expect(count(_openIdRoute), 1);
+    expect(seen, ['POST /sfu/get']);
+    expect(channel.room.connectTokens, hasLength(1));
+    expect(journal.entries, contains('connected'));
+  });
+
   test('ten openings in a row: one OpenID request, one /sfu/get per room',
       () async {
     final journal = Journal();
