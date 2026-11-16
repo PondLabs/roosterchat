@@ -1,8 +1,10 @@
 /// Sends one file's event through the Matrix SDK and keeps its
 /// [AttachmentSend] up to date: the transaction id is ours, so the app
 /// knows which pending event is which, and the stages the SDK does not
-/// publish are read from its own pending event. A failure is caught here
-/// and shown on the message, never left as an unhandled error.
+/// publish are read from its own pending event. Its uploads report to it
+/// through a zone value around the SDK's send ([runForUpload]), so it
+/// shows the real count and the wait for the server. A failure is caught
+/// here and shown on the message, never left as an unhandled error.
 library;
 
 import 'dart:async';
@@ -15,6 +17,7 @@ import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/matrix/matrix_attachment.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/utils/mime.dart';
+import 'package:rooster/utils/network/upload_progress.dart';
 
 /// A file to send that the composer follows (its [send]).
 class TrackedMatrixAttachment extends MatrixProcessedAttachment {
@@ -37,13 +40,17 @@ Future<String?> sendMatrixFile(
   final txid = room.client.generateUniqueTransactionId();
   if (send != null) {
     final file = attachment.file;
+    final thumbnailBytes = attachment.thumbnailFile?.bytes.length;
     send.trace?.handedOver(
       bytes: file.bytes.length,
-      thumbnailBytes: attachment.thumbnailFile?.bytes.length,
+      thumbnailBytes: thumbnailBytes,
       width: file.info['w'] as int?,
       height: file.info['h'] as int?,
     );
-    send.handedOver(txid);
+    // Encryption keeps the size (AES-CTR): these are the bytes uploaded.
+    send.handedOver(txid,
+        bytes: file.bytes.length,
+        uploadBytes: file.bytes.length + (thumbnailBytes ?? 0));
   }
   return _follow(
       room,
@@ -58,8 +65,8 @@ Future<String?> sendMatrixFile(
 }
 
 /// "Retry" on [event], a file that failed, which [send] follows: its stage
-/// goes back to uploading, and it is sent again as the SDK does it. Never
-/// throws, like [sendMatrixFile].
+/// goes back to uploading, and it is sent again as the SDK does it, from
+/// the bytes the room still holds. Never throws, like [sendMatrixFile].
 Future<String?> retryMatrixFile(matrix.Event event, AttachmentSend send) {
   send.retrying();
   return _follow(event.room, send, event.eventId, event.sendAgain);
@@ -76,6 +83,9 @@ Future<String?> _follow(matrix.Room room, AttachmentSend? send, String txid,
     pending = room.client.onTimelineEvent.stream.listen((event) {
       if (event.roomId != room.id || event.eventId != txid) return;
       send.echo();
+      if (event.fileSendingStatus == matrix.FileSendingStatus.encrypting) {
+        send.encryptingFile();
+      }
       if (event.content['url'] is String || event.content['file'] is Map) {
         send.uploaded();
       }
@@ -84,9 +94,11 @@ Future<String?> _follow(matrix.Room room, AttachmentSend? send, String txid,
 
   try {
     final trace = send?.trace;
-    final id = await (trace == null || trace.span.isFinished
+    Future<String?> traced() => trace == null || trace.span.isFinished
         ? sendFile()
-        : trace.run(sendFile));
+        : trace.run(sendFile);
+    final id =
+        await (send == null ? traced() : runForUpload(send.upload, traced));
     if (id == null) {
       send?.failed();
     } else {

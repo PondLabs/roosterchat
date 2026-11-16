@@ -7,6 +7,7 @@ import 'package:rooster/diagnostic/speed_log/file_send_trace.dart';
 import 'package:rooster/utils/image/image_header.dart';
 import 'package:rooster/utils/image/preparation/image_preparation.dart';
 import 'package:rooster/utils/mime.dart';
+import 'package:rooster/utils/network/upload_progress.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
@@ -179,6 +180,8 @@ enum AttachmentSendStage {
   preparing,
 
   /// Handed to the room: encrypted (in an encrypted room) and uploaded.
+  /// Its [AttachmentSend.upload] says how far: encrypting, the count while
+  /// the connection takes bytes, waiting for the server, retrying.
   uploading,
 
   /// Uploaded; its event is being sent.
@@ -265,6 +268,19 @@ class AttachmentSend extends ChangeNotifier {
   String? mimeType;
   String? name;
 
+  /// Its file's size in bytes, when known: shown at every stage.
+  int? fileBytes;
+
+  /// Its uploads, as the HTTP client reports them while the SDK sends it
+  /// (`runForUpload` around the send). Apart from this object's own
+  /// listeners, so a count does not rebuild every chat's list.
+  final UploadProgress upload = UploadProgress();
+
+  bool _encrypting = false;
+
+  /// The room is encrypting it (an encrypted room), before its upload.
+  bool get encrypting => _encrypting;
+
   bool get isPicture => Mime.imageTypes.contains(mimeType);
 
   bool get isVideo => Mime.videoTypes.contains(mimeType);
@@ -278,6 +294,7 @@ class AttachmentSend extends ChangeNotifier {
     if (file == null) return;
     mimeType = file.mimeType;
     name = file.name;
+    fileBytes = file.size ?? file.data?.length ?? fileBytes;
     if (Mime.imageTypes.contains(file.mimeType)) {
       preview = file.data;
       size = pictureSizeOf(file.data) ?? size;
@@ -328,10 +345,20 @@ class AttachmentSend extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Handed to the room under [transactionId].
-  void handedOver(String transactionId) {
+  /// Handed to the room under [transactionId]: [bytes] of file, and
+  /// [uploadBytes] to upload with its thumbnail.
+  void handedOver(String transactionId, {int? bytes, int? uploadBytes}) {
     _transactionId = transactionId;
+    fileBytes = bytes ?? fileBytes;
+    upload.expectedBytes = uploadBytes ?? bytes ?? fileBytes;
     _set(AttachmentSendStage.uploading);
+  }
+
+  /// The room said it is encrypting the file.
+  void encryptingFile() {
+    if (_encrypting || _stage != AttachmentSendStage.uploading) return;
+    _encrypting = true;
+    notifyListeners();
   }
 
   /// The room's pending event for it is in the timeline: the chat's own
@@ -354,6 +381,8 @@ class AttachmentSend extends ChangeNotifier {
     startedAt = clock();
     _endedAt = null;
     _stage = AttachmentSendStage.uploading;
+    _encrypting = false;
+    upload.reset();
     notifyListeners();
   }
 
@@ -429,6 +458,13 @@ class AttachmentSends extends ChangeNotifier {
       remove(send);
     }
   }
+}
+
+/// "Retry" on a file message whose file this device no longer holds (the
+/// app was restarted since): the message stays as it is, failed, and the
+/// person is told to attach the file again.
+class AttachmentNoLongerHeld implements Exception {
+  const AttachmentNoLongerHeld();
 }
 
 class FileAttachment implements Attachment {

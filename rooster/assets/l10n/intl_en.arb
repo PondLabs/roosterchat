@@ -3445,6 +3445,47 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelPendingFileEncrypting": "Encrypting",
+  "@labelPendingFileEncrypting": {
+    "description": "Under a file just sent from the composer in an encrypted room, while the app encrypts it before uploading",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPendingFileWaitingForServer": "Waiting for the server",
+  "@labelPendingFileWaitingForServer": {
+    "description": "Under a file being sent, once every byte of it has gone out and the server has not answered yet",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPendingFileRetrying": "Retrying",
+  "@labelPendingFileRetrying": {
+    "description": "Under a file being sent, when its upload failed and the app uploads it again by itself",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPendingFileServerTooSlow": "The server took too long with this {size} file",
+  "@labelPendingFileServerTooSlow": {
+    "description": "Under a file that could not be sent because the server (or a proxy in front of it) gave up waiting before answering. The placeholder is the file's size, such as '48 MB'",
+    "type": "text",
+    "placeholders": {
+      "size": {
+        "example": "48 MB"
+      }
+    }
+  },
+  "labelPendingFileUploadCount": "{sent} of {total}",
+  "@labelPendingFileUploadCount": {
+    "description": "Under a file being uploaded: how much of it the connection has taken so far, such as '3.1 MB of 48 MB'",
+    "type": "text",
+    "placeholders": {
+      "sent": {
+        "example": "3.1 MB"
+      },
+      "total": {
+        "example": "48 MB"
+      }
+    }
+  },
   "messagePlaceholderSticker": "{user} sent a sticker",
   "@messagePlaceholderSticker": {
     "description": "Message body for when a user sends a sticker",
@@ -3580,6 +3621,12 @@
   "promptRetryEventSend": "Retry",
   "@promptRetryEventSend": {
     "description": "When a message failed to send, this prompts to retry sending the event",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRetryFileNoLongerHeld": "This file is no longer on this device. Attach it again to send it.",
+  "@messageRetryFileNoLongerHeld": {
+    "description": "Shown after 'Retry' on a file message that failed to send, when the app was restarted since and no longer has the file",
     "type": "text",
     "placeholders": {}
   },
@@ -3987,6 +4034,19 @@
     "description": "Button at the bottom of the dialog that previews a file before it is attached to a message: attaches it",
     "type": "text",
     "placeholders": {}
+  },
+  "labelFileOverUploadLimit": "This file is {size}, over this server's limit of {limit}, so it can't be sent.",
+  "@labelFileOverUploadLimit": {
+    "description": "Shown when a file picked or pasted to send is larger than the server accepts. The placeholders are sizes, such as '60 MB' and '50 MB'",
+    "type": "text",
+    "placeholders": {
+      "size": {
+        "example": "60 MB"
+      },
+      "limit": {
+        "example": "50 MB"
+      }
+    }
   },
   "ActivityJoinPill_text": "{host} started {activity}",
   "@ActivityJoinPill_text": {

@@ -4,10 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/utils/common_strings.dart';
+import 'package:rooster/utils/network/upload_progress.dart';
+import 'package:rooster/utils/text_utils.dart';
 
-/// A pending file's stage and the time since Send, under its picture: in
-/// the chat's own slot while it is prepared, then under the room's pending
-/// event. A failed one says so (premise: no failed send is hidden), and
+/// A pending file's stage, its size and the time since Send, under its
+/// picture: in the chat's own slot while it is prepared, then under the
+/// room's pending event. While the connection takes bytes the size is the
+/// real count ("3.1 MB of 48 MB"); once every byte is handed over the line
+/// reads "Waiting for the server", never a count resting at its total. A
+/// failed one says so (premise: no failed send is hidden), and
 /// [onDismiss], when given, takes it away.
 class PendingAttachmentStatus extends StatefulWidget {
   const PendingAttachmentStatus(this.send, {this.onDismiss, super.key});
@@ -35,6 +40,39 @@ class PendingAttachmentStatus extends StatefulWidget {
       desc: "Under a file sent from the composer that did not reach the "
           "room");
 
+  static String get labelPendingFileEncrypting => Intl.message("Encrypting",
+      name: "labelPendingFileEncrypting",
+      desc: "Under a file just sent from the composer in an encrypted room, "
+          "while the app encrypts it before uploading");
+
+  static String get labelPendingFileWaitingForServer =>
+      Intl.message("Waiting for the server",
+          name: "labelPendingFileWaitingForServer",
+          desc: "Under a file being sent, once every byte of it has gone out "
+              "and the server has not answered yet");
+
+  static String get labelPendingFileRetrying => Intl.message("Retrying",
+      name: "labelPendingFileRetrying",
+      desc: "Under a file being sent, when its upload failed and the app "
+          "uploads it again by itself");
+
+  static String labelPendingFileServerTooSlow(String size) =>
+      Intl.message("The server took too long with this $size file",
+          name: "labelPendingFileServerTooSlow",
+          args: [size],
+          desc: "Under a file that could not be sent because the server (or a "
+              "proxy in front of it) gave up waiting before answering. The "
+              "placeholder is the file's size, such as '48 MB'",
+          examples: const {"size": "48 MB"});
+
+  static String labelPendingFileUploadCount(String sent, String total) =>
+      Intl.message("$sent of $total",
+          name: "labelPendingFileUploadCount",
+          args: [sent, total],
+          desc: "Under a file being uploaded: how much of it the connection "
+              "has taken so far, such as '3.1 MB of 48 MB'",
+          examples: const {"sent": "3.1 MB", "total": "48 MB"});
+
   static String stageLabel(AttachmentSendStage stage) => switch (stage) {
         AttachmentSendStage.preparing => labelPendingFilePreparing,
         AttachmentSendStage.uploading => labelPendingFileUploading,
@@ -43,6 +81,67 @@ class PendingAttachmentStatus extends StatefulWidget {
           labelPendingFileSendingEvent,
         AttachmentSendStage.failed => labelPendingFileFailed,
       };
+
+  /// What the line says for [send]: the stage (with the upload's own state
+  /// while it uploads), and the size or the count beside it.
+  static ({String label, String? detail, IconData icon}) describe(
+      AttachmentSend send) {
+    final bytes = send.fileBytes;
+    final size = bytes == null ? null : TextUtils.readableFileSize(bytes);
+    final upload = send.upload;
+    switch (send.stage) {
+      case AttachmentSendStage.preparing:
+        return (
+          label: labelPendingFilePreparing,
+          detail: size,
+          icon: Icons.hourglass_top_rounded
+        );
+      case AttachmentSendStage.uploading:
+        if (upload.waitingForServer) {
+          return (
+            label: labelPendingFileWaitingForServer,
+            detail: size,
+            icon: Icons.cloud_upload_outlined
+          );
+        }
+        final label = upload.failedAttempts > 0
+            ? labelPendingFileRetrying
+            : !upload.started && send.encrypting
+                ? labelPendingFileEncrypting
+                : labelPendingFileUploading;
+        return (
+          label: label,
+          detail: upload.sending
+              ? labelPendingFileUploadCount(
+                  TextUtils.readableFileSize(upload.sentBytes),
+                  TextUtils.readableFileSize(upload.totalBytes))
+              : size,
+          icon: label == labelPendingFileEncrypting
+              ? Icons.lock_outline_rounded
+              : Icons.upload_rounded
+        );
+      case AttachmentSendStage.sending:
+      case AttachmentSendStage.sent:
+        return (
+          label: labelPendingFileSendingEvent,
+          detail: size,
+          icon: Icons.send_rounded
+        );
+      case AttachmentSendStage.failed:
+        if (upload.problem == UploadProblem.serverTooSlow && size != null) {
+          return (
+            label: labelPendingFileServerTooSlow(size),
+            detail: null,
+            icon: Icons.error_outline_rounded
+          );
+        }
+        return (
+          label: labelPendingFileFailed,
+          detail: size,
+          icon: Icons.error_outline_rounded
+        );
+    }
+  }
 
   /// [elapsed] as a clock: `0:07`, `12:30`, `1:02:03`.
   static String clock(Duration elapsed) {
@@ -65,6 +164,7 @@ class _PendingAttachmentStatusState extends State<PendingAttachmentStatus> {
   void initState() {
     super.initState();
     widget.send.addListener(_changed);
+    widget.send.upload.addListener(_changed);
     _ticking();
   }
 
@@ -84,7 +184,9 @@ class _PendingAttachmentStatusState extends State<PendingAttachmentStatus> {
     super.didUpdateWidget(old);
     if (old.send != widget.send) {
       old.send.removeListener(_changed);
+      old.send.upload.removeListener(_changed);
       widget.send.addListener(_changed);
+      widget.send.upload.addListener(_changed);
       _ticking();
     }
   }
@@ -99,6 +201,7 @@ class _PendingAttachmentStatusState extends State<PendingAttachmentStatus> {
   void dispose() {
     _tick?.cancel();
     widget.send.removeListener(_changed);
+    widget.send.upload.removeListener(_changed);
     super.dispose();
   }
 
@@ -109,29 +212,31 @@ class _PendingAttachmentStatusState extends State<PendingAttachmentStatus> {
     final failed = send.stage == AttachmentSendStage.failed;
     final color = failed ? colors.error : colors.onSurfaceVariant;
     final style = Theme.of(context).textTheme.bodySmall?.copyWith(color: color);
+    final shown = PendingAttachmentStatus.describe(send);
+    final detail = shown.detail;
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, 4, 0, 2),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-              switch (send.stage) {
-                AttachmentSendStage.preparing => Icons.hourglass_top_rounded,
-                AttachmentSendStage.uploading => Icons.upload_rounded,
-                AttachmentSendStage.sending ||
-                AttachmentSendStage.sent =>
-                  Icons.send_rounded,
-                AttachmentSendStage.failed => Icons.error_outline_rounded,
-              },
-              size: 14,
-              color: color),
+          Icon(shown.icon, size: 14, color: color),
           const SizedBox(width: 4),
           Flexible(
-            child: Text(PendingAttachmentStatus.stageLabel(send.stage),
+            child: Text(shown.label,
                 key: const ValueKey("pending-file-stage"),
                 style: style,
                 overflow: TextOverflow.ellipsis),
           ),
+          if (detail != null) ...[
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(detail,
+                  key: const ValueKey("pending-file-size"),
+                  style: style?.copyWith(
+                      fontFeatures: const [FontFeature.tabularFigures()]),
+                  overflow: TextOverflow.ellipsis),
+            ),
+          ],
           const SizedBox(width: 8),
           Text(PendingAttachmentStatus.clock(send.elapsed),
               key: const ValueKey("pending-file-clock"),
