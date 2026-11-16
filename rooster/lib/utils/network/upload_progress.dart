@@ -40,9 +40,13 @@ final _listenerKey = Object();
 R runForUpload<R>(UploadListener listener, R Function() body) =>
     runZoned(body, zoneValues: {_listenerKey: listener});
 
-/// The listener of the uploads made here, if any.
-UploadListener? get currentUploadListener =>
-    Zone.current[_listenerKey] as UploadListener?;
+/// The listener of an upload leaving here, if any. Asked once per request:
+/// an [UploadProgress] gives each request its own, so the uploads of one
+/// message that run together (its file and its thumbnail) are told apart.
+UploadListener? get currentUploadListener {
+  final listener = Zone.current[_listenerKey] as UploadListener?;
+  return listener is UploadProgress ? listener.request() : listener;
+}
 
 /// The time limits of a media upload, as starting values that the speed log
 /// revises. There is no limit on the total time: a large file on a slow
@@ -101,113 +105,180 @@ enum UploadProblem {
 
 /// The uploads of one message, as its pending line shows them: the real
 /// count while the connection takes bytes, then the wait for the server.
-/// Counts are over the message's uploads together (its file, then its
-/// thumbnail), against [expectedBytes] when the owner knows it.
+/// Counts are over the message's uploads together (its file and its
+/// thumbnail, which go up at the same time), against [expectedBytes] when
+/// the owner knows it.
+///
+/// Each request reports to its own listener ([request]). A part that went
+/// up counts as sent; a part that failed counts nothing, and the SDK tries
+/// it again by itself. A request of the same size as one that went up
+/// before is that part sent again, and takes its place. The listener's own
+/// methods report one request at a time.
 class UploadProgress extends ChangeNotifier implements UploadListener {
   /// The bytes of every upload of the message together, when known.
   int? expectedBytes;
 
-  int _doneBytes = 0;
-  int? _bodyBytes;
-  int _sentBytes = 0;
-  bool _handedOver = false;
+  final List<_Upload> _uploads = [];
+  _Upload? _direct;
+  int _keptBytes = 0;
   int _failedAttempts = 0;
-  UploadProblem? _problem;
+
+  /// A listener for one more request of this message.
+  UploadListener request() => _Upload(this);
+
+  Iterable<_Upload> get _open =>
+      _uploads.where((u) => u.state == _UploadState.open);
+
+  Iterable<_Upload> get _done =>
+      _uploads.where((u) => u.state == _UploadState.done);
+
+  Iterable<_Upload> get _failed =>
+      _uploads.where((u) => u.state == _UploadState.failed);
 
   /// A request is open, its body not all taken yet.
-  bool get sending =>
-      _bodyBytes != null && !_handedOver && _sentBytes < _bodyBytes!;
+  bool get sending => _open.any((u) => u.sending);
 
-  /// The last byte was handed over and no answer has come yet. Also true
-  /// while the connection holds the last piece it took: never a count
-  /// resting at its total.
+  /// Every open request has handed over its last byte (or the connection
+  /// holds it) and no answer has come yet: never a count resting at its
+  /// total.
   bool get waitingForServer =>
-      _bodyBytes != null && (_handedOver || _sentBytes >= _bodyBytes!);
+      _open.isNotEmpty && _open.every((u) => !u.sending);
 
-  /// The uploads have started: a request left at least once.
-  bool get started => _bodyBytes != null || _doneBytes > 0;
+  /// The uploads have started: a request left at least once, or parts went
+  /// up before a Retry.
+  bool get started => _uploads.isNotEmpty || _keptBytes > 0;
 
-  /// Bytes taken by the connection, the finished uploads included.
-  int get sentBytes => _doneBytes + _sentBytes;
+  /// Bytes taken by the connection, the parts that went up included.
+  int get sentBytes =>
+      _keptBytes +
+      _done.fold<int>(0, (sum, u) => sum + u.body) +
+      _open.fold<int>(0, (sum, u) => sum + u.sent);
 
   /// What [sentBytes] counts towards.
-  int get totalBytes =>
-      math.max(expectedBytes ?? 0, _doneBytes + (_bodyBytes ?? 0));
+  int get totalBytes => math.max(
+      expectedBytes ?? 0,
+      _keptBytes +
+          _done.fold<int>(0, (sum, u) => sum + u.body) +
+          _open.fold<int>(0, (sum, u) => sum + u.body));
 
-  /// Upload attempts that failed so far: the SDK tries again after one.
+  /// Upload attempts that failed so far: the SDK tries a part again after
+  /// one.
   int get failedAttempts => _failedAttempts;
 
-  /// Why the last attempt failed, null when none did.
-  UploadProblem? get problem => _problem;
+  /// Why the last attempt failed, null when every part that failed has
+  /// gone up since.
+  UploadProblem? get problem => _failed.lastOrNull?.problem;
 
-  /// An attempt failed and no upload has gone through since: the SDK is
-  /// sending the message's files again.
-  bool get retrying => _problem != null;
+  /// An attempt failed and its part has not gone up since: the SDK is
+  /// sending it again.
+  bool get retrying => problem != null;
+
+  /// "Retry": [bytes] went up before and are not sent again.
+  void partsKept(int bytes) {
+    _keptBytes = bytes;
+    notifyListeners();
+  }
+
+  void _changed() => notifyListeners();
+
+  void _started(_Upload upload) {
+    // The same part sent again takes the place of its earlier upload.
+    _uploads.removeWhere((u) =>
+        u != upload && u.state == _UploadState.done && u.body == upload.body);
+    if (!_uploads.contains(upload)) _uploads.add(upload);
+    notifyListeners();
+  }
+
+  void _ended(_Upload upload) {
+    // A part's earlier failure is answered by this attempt.
+    _uploads.removeWhere((u) =>
+        u != upload && u.state == _UploadState.failed && u.body == upload.body);
+    if (upload.state == _UploadState.failed) _failedAttempts++;
+    notifyListeners();
+  }
+
+  @override
+  void uploadStarted(int bodyBytes) =>
+      (_direct = _Upload(this)).uploadStarted(bodyBytes);
+
+  @override
+  void uploadSent(int sentBytes) => _direct?.uploadSent(sentBytes);
+
+  @override
+  void uploadHandedOver() => _direct?.uploadHandedOver();
+
+  @override
+  void uploadAnswered(int status, {required bool matrixError}) =>
+      _direct?.uploadAnswered(status, matrixError: matrixError);
+
+  @override
+  void uploadFailed(String error) => _direct?.uploadFailed(error);
+
+  /// "Retry" on the failed message: counted from nothing again.
+  void reset() {
+    _uploads.clear();
+    _direct = null;
+    _keptBytes = 0;
+    _failedAttempts = 0;
+    notifyListeners();
+  }
+}
+
+enum _UploadState { idle, open, done, failed }
+
+/// One request of a message's uploads.
+class _Upload implements UploadListener {
+  _Upload(this._owner);
+
+  final UploadProgress _owner;
+  _UploadState state = _UploadState.idle;
+  int body = 0;
+  int sent = 0;
+  bool handedOver = false;
+  UploadProblem? problem;
+
+  bool get sending => !handedOver && sent < body;
 
   @override
   void uploadStarted(int bodyBytes) {
-    _bodyBytes = bodyBytes;
-    _sentBytes = 0;
-    _handedOver = false;
-    notifyListeners();
+    if (state != _UploadState.idle) return;
+    state = _UploadState.open;
+    body = bodyBytes;
+    _owner._started(this);
   }
 
   @override
   void uploadSent(int sentBytes) {
-    if (_bodyBytes == null) return;
-    _sentBytes = sentBytes;
-    notifyListeners();
+    if (state != _UploadState.open) return;
+    sent = sentBytes;
+    _owner._changed();
   }
 
   @override
   void uploadHandedOver() {
-    if (_bodyBytes == null) return;
-    _handedOver = true;
-    notifyListeners();
+    if (state != _UploadState.open) return;
+    handedOver = true;
+    _owner._changed();
   }
 
   @override
   void uploadAnswered(int status, {required bool matrixError}) {
-    final body = _bodyBytes ?? 0;
-    _bodyBytes = null;
-    _sentBytes = 0;
-    _handedOver = false;
     if (status >= 200 && status < 300) {
-      _doneBytes += body;
-      _problem = null;
+      _end(null);
     } else {
-      _attemptFailed(
-          matrixError ? UploadProblem.other : UploadProblem.serverTooSlow);
+      _end(matrixError ? UploadProblem.other : UploadProblem.serverTooSlow);
     }
-    notifyListeners();
   }
 
   @override
-  void uploadFailed(String error) {
-    _bodyBytes = null;
-    _sentBytes = 0;
-    _handedOver = false;
-    _attemptFailed(error == SpeedError.uploadNoAnswer
-        ? UploadProblem.serverTooSlow
-        : UploadProblem.other);
-    notifyListeners();
-  }
+  void uploadFailed(String error) => _end(error == SpeedError.uploadNoAnswer
+      ? UploadProblem.serverTooSlow
+      : UploadProblem.other);
 
-  /// The SDK sends every file of the message again after a failure.
-  void _attemptFailed(UploadProblem problem) {
-    _failedAttempts++;
-    _doneBytes = 0;
-    _problem = problem;
-  }
-
-  /// "Retry" on the failed message: counted from nothing again.
-  void reset() {
-    _doneBytes = 0;
-    _bodyBytes = null;
-    _sentBytes = 0;
-    _handedOver = false;
-    _failedAttempts = 0;
-    _problem = null;
-    notifyListeners();
+  void _end(UploadProblem? problem) {
+    if (state != _UploadState.open) return;
+    state = problem == null ? _UploadState.done : _UploadState.failed;
+    this.problem = problem;
+    _owner._ended(this);
   }
 }

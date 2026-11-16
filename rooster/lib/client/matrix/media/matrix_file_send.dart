@@ -64,11 +64,17 @@ Future<String?> sendMatrixFile(
           thumbnail: attachment.thumbnailFile));
 }
 
-/// "Retry" on [event], a file that failed, which [send] follows: its stage
-/// goes back to uploading, and it is sent again as the SDK does it, from
-/// the bytes the room still holds. Never throws, like [sendMatrixFile].
-Future<String?> retryMatrixFile(matrix.Event event, AttachmentSend send) {
-  send.retrying();
+/// "Retry" on [event], a file that failed, which [send] follows when it is
+/// known: its stage goes back to uploading, and the SDK sends it again
+/// (`Event.sendAgain`) under the same transaction id. Its parts that went
+/// up are not uploaded again, and when all did (the event has their
+/// address) only the event is sent. Never throws, like [sendMatrixFile].
+Future<String?> retryMatrixFile(matrix.Event event, AttachmentSend? send) {
+  if (send != null) {
+    send.retrying();
+    final kept = event.room.sendingFileUploads[event.eventId]?.values;
+    send.upload.partsKept(kept?.fold<int>(0, (sum, p) => sum + p.bytes) ?? 0);
+  }
   return _follow(event.room, send, event.eventId, event.sendAgain);
 }
 
@@ -76,34 +82,6 @@ Future<String?> retryMatrixFile(matrix.Event event, AttachmentSend send) {
 /// `url`, or the encrypted file's `file` in an encrypted room.
 bool isUploadedFileEvent(matrix.Event event) =>
     event.content['url'] is String || event.content['file'] is Map;
-
-/// "Retry" on [event], a file whose upload went through and whose event
-/// failed, which [send] follows when it is known: the same content is sent
-/// again under the same transaction id, with no new upload. In an
-/// encrypted room the content holds the encrypted file (`file`, with its
-/// key), and the room encrypts the event as it does any other. Never
-/// throws, like [sendMatrixFile].
-Future<String?> resendUploadedFile(
-    matrix.Event event, AttachmentSend? send) async {
-  send?.retrying();
-  send?.uploaded();
-  try {
-    final id = await event.room.sendEvent(
-        Map<String, dynamic>.from(event.content),
-        type: event.type,
-        txid: event.transactionId ?? event.eventId);
-    if (id == null) {
-      send?.failed();
-    } else {
-      send?.sent();
-    }
-    return id;
-  } catch (error, stack) {
-    Log.onError(error, stack, content: "Could not send a file again");
-    send?.failed();
-    return null;
-  }
-}
 
 /// Runs [sendFile], the SDK's send of the file under [txid], keeping
 /// [send]'s stage: the SDK shows its pending event as soon as it has the

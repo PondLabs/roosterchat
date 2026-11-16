@@ -187,3 +187,20 @@ Changes since the copy:
   had lost the mode.
 - `test/html_to_text_test.dart` expects a link's text without the 🔗 prefix,
   as the fork's `lib/src/utils/html_to_text.dart` writes it (2 cases).
+- The upload loop of `Room.sendFileEvent` (`lib/src/room.dart`, with the
+  rules in the new `lib/src/utils/file_upload_loop.dart`): the file and its
+  thumbnail upload together; each part that fails is tried again by itself
+  at most twice, after 2 s and 8 s, waits for a `retry_after_ms` of up to
+  8 s, is not tried again after running for more than 60 s, and ends the
+  send on a size, permission or authentication error. A part that went up
+  is kept with its key and hash (`Room.sendingFileUploads`) until the event
+  is sent or the send is cancelled, so a retry uploads only what did not.
+  The `uploading` stage is published, and the message stays in
+  `sendingQueueEventsByTxId` for the whole send, so its pending event read
+  again during a long upload is not marked failed.
+- `Client.sendClock` (`lib/src/client.dart`): the clock the upload loop
+  reads and waits by, given by tests.
+- `Event.sendAgain` (`lib/src/event.dart`): a file message whose event
+  carries its uploads' address (`url`, or `file` in an encrypted room) is
+  sent again as that event, under the same transaction id, with no upload.
+  `Event.cancelSend` lets go of the file and the parts kept for it.

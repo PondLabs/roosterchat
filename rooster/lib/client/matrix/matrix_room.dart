@@ -977,10 +977,10 @@ class MatrixRoom extends Room {
     if (send != null) AttachmentSends.instance.remove(send);
   }
 
-  /// A failed file whose upload went through (its content has the upload's
-  /// `url`, or `file` in an encrypted room) is sent again as that event,
-  /// with no new upload: the SDK lets the file go once it tried the event,
-  /// even when the event failed.
+  /// "Retry" on a failed message. A file is sent again by the SDK
+  /// (`Event.sendAgain`): the parts that went up are not uploaded again,
+  /// and when all did (its content has their `url`, or `file` in an
+  /// encrypted room) only the event is sent, under the same transaction id.
   ///
   /// Throws [AttachmentNoLongerHeld] for a file this device no longer holds
   /// and never uploaded (the app was restarted since it failed): the SDK
@@ -991,19 +991,16 @@ class MatrixRoom extends Room {
     final mxEvent = event as MatrixTimelineEvent;
     final mx = mxEvent.event;
     final send = AttachmentSends.instance.byTransaction(localId, event.eventId);
-    if (mx.status.isError &&
-        _fileMessageTypes.contains(mx.messageType) &&
-        !_matrixRoom.sendingFilePlaceholders.containsKey(mx.eventId)) {
-      if (!isUploadedFileEvent(mx)) throw const AttachmentNoLongerHeld();
-      await resendUploadedFile(mx, send);
-      return;
-    }
-    if (send != null && mxEvent.event.status.isError) {
+    if (mx.status.isError && _fileMessageTypes.contains(mx.messageType)) {
+      if (!_matrixRoom.sendingFilePlaceholders.containsKey(mx.eventId) &&
+          !isUploadedFileEvent(mx)) {
+        throw const AttachmentNoLongerHeld();
+      }
       // Its stage follows the new attempt, and a failure shows again.
-      await retryMatrixFile(mxEvent.event, send);
+      await retryMatrixFile(mx, send);
       return;
     }
-    await mxEvent.event.sendAgain();
+    await mx.sendAgain();
   }
 
   /// The message types the SDK sends again from the file it holds

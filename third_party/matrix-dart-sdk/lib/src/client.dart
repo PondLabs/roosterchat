@@ -116,6 +116,9 @@ class Client extends MatrixApi {
 
   final Duration sendTimelineEventTimeout;
 
+  /// The time the upload loop of `Room.sendFileEvent` reads and waits by. // ROOSTER
+  final SendClock sendClock; // ROOSTER
+
   /// The timeout until a typing indicator gets removed automatically.
   final Duration typingIndicatorTimeout;
 
@@ -190,6 +193,7 @@ class Client extends MatrixApi {
     Filter? syncFilter,
     Duration defaultNetworkRequestTimeout = const Duration(seconds: 35),
     this.sendTimelineEventTimeout = const Duration(minutes: 1),
+    this.sendClock = const SendClock(), // ROOSTER
     this.customImageResizer,
     this.shareKeysWith = ShareKeysWith.crossVerifiedIfEnabled,
     this.enableDehydratedDevices = false,
