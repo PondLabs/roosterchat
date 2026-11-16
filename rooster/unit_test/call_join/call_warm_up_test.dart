@@ -9,6 +9,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:matrix/matrix.dart' as matrix;
@@ -425,6 +426,76 @@ void main() {
     await warmUp();
     expect(journal.count('openid'), 0);
     expect(service.requests, isEmpty);
+  });
+
+  group('a server that never answers, on a fake clock', () {
+    /// How long after the click the join fails, when the page opened
+    /// [openedBefore] the click (or never), with [tokenService] and
+    /// [homeserver] (the OpenID request) never answering when false.
+    Duration? failsAfter(
+        {Duration? openedBefore,
+        bool tokenService = false,
+        bool homeserver = true}) {
+      Duration? waited;
+      fakeAsync((async) {
+        final start = DateTime.utc(2026, 11, 16, 12);
+        final silent = FakeHost(Journal());
+        if (!homeserver) {
+          silent.openId = () => Completer<matrix.OpenIdCredentials>().future;
+        }
+        final tokens = CallTokenService(
+            client: MockClient((request) async {
+              if (!tokenService) await Completer<void>().future;
+              return http.Response(
+                  jsonEncode({
+                    'url': 'wss://sfu.example.org',
+                    'jwt': jwtUntil(start.add(const Duration(hours: 1)))
+                  }),
+                  200);
+            }),
+            now: () => start.add(async.elapsed));
+        if (openedBefore != null) {
+          unawaited(CallWarmUp(host: silent, tokens: tokens).run());
+          async.elapse(openedBefore);
+        }
+        final clicked = async.elapsed;
+        CallJoin(
+                host: silent,
+                tokens: tokens,
+                log: SpeedLog(),
+                remoteAudioWindow: const Duration(milliseconds: 1))
+            .run()
+            .then((_) {}, onError: (Object _) {
+          waited = async.elapsed - clicked;
+        });
+        async.elapse(const Duration(minutes: 2));
+      });
+      return waited;
+    }
+
+    test('a silent token service fails the join 15 s after the click', () {
+      expect(failsAfter(), const Duration(seconds: 15));
+    });
+
+    test(
+        'a silent token service fails the join 15 s after the click when the '
+        'page opened 2 s before it, not 28 s', () {
+      expect(failsAfter(openedBefore: const Duration(seconds: 2)),
+          const Duration(seconds: 15));
+      expect(failsAfter(openedBefore: const Duration(seconds: 14)),
+          const Duration(seconds: 15));
+    });
+
+    test(
+        'a silent OpenID request fails the join 15 s after the click when the '
+        'page opened 2 s before it', () {
+      expect(
+          failsAfter(
+              openedBefore: const Duration(seconds: 2),
+              tokenService: true,
+              homeserver: false),
+          const Duration(seconds: 15));
+    });
   });
 }
 
