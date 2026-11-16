@@ -365,6 +365,74 @@ void main() {
     expect(second.disposed, isFalse);
   }, timeout: const Timeout(Duration(seconds: 30)));
 
+  /// What the session of a join does when it is hung up: it clears our
+  /// membership (MatrixLivekitVoipSession.clearRoomCallState) and ends.
+  Future<void> sessionHangsUp(FakeLivekitRoom session) async {
+    journal.add('session_hung_up');
+    await host.clearMembership();
+    session.ended.complete();
+    await settle();
+  }
+
+  test(
+      'the old join hung up with its write in flight, the room joined again '
+      'and that session hung up, then the old write lands: it is cleared',
+      () async {
+    final oldWrite = Gate();
+    host.membershipGate = oldWrite;
+    final hangUp = Completer<void>();
+    final oldJoin = join().run(hangUp: hangUp.future);
+    unawaited(oldJoin.then((_) {}, onError: (_) {}));
+    await settle();
+    expect(journal.entries, containsAll(['membership_write', 'connected']));
+    hangUp.complete();
+
+    // The new join waits 10 s for the old one, then writes and gets in.
+    host.membershipGate = Gate()..open();
+    host.room = FakeLivekitRoom(journal);
+    final session = await join().run();
+    expect(host.membership, isTrue);
+
+    await sessionHangsUp(session);
+    expect(host.membership, isFalse);
+
+    // Applied by the homeserver only now, more than 10 s late.
+    oldWrite.open();
+    await expectLater(oldJoin, throwsA(isA<CallJoinHungUp>()));
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    expect(journal.lastIndexOf('membership_clear'),
+        greaterThan(journal.lastIndexOf('membership_written')));
+    expect(host.membership, isFalse,
+        reason: 'no membership is left with no session');
+  }, timeout: const Timeout(Duration(seconds: 30)));
+
+  test(
+      'the old join hung up with its write in flight, a new join that fails '
+      'and clears, then the old write lands: it is cleared', () async {
+    final oldWrite = Gate();
+    host.membershipGate = oldWrite;
+    final hangUp = Completer<void>();
+    final oldJoin = join().run(hangUp: hangUp.future);
+    unawaited(oldJoin.then((_) {}, onError: (_) {}));
+    await settle();
+    expect(journal.entries, contains('membership_write'));
+    hangUp.complete();
+
+    // The new join waits 10 s for the old one, writes, fails and clears.
+    host.membershipGate = Gate()..open();
+    host.room = FakeLivekitRoom(journal)..connectError = StateError('no SFU');
+    await expectLater(join().run(), throwsStateError);
+    expect(host.membership, isFalse);
+
+    oldWrite.open();
+    await expectLater(oldJoin, throwsA(isA<CallJoinHungUp>()));
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    expect(host.membership, isFalse,
+        reason: 'the failed join gave its claim back, so the old one clears');
+  }, timeout: const Timeout(Duration(seconds: 30)));
+
   group('who may clear the membership of a join', () {
     const key = '!room:example.org _@me:example.org_DEVICE_m.call';
 

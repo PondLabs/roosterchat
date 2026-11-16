@@ -111,6 +111,13 @@ publish that failed is stopped; and the local participant's lookup by source
 no longer falls back to a publication without a source (it took the DJ
 booth's music for the microphone). See
 `docs/voice-call-health.md`.
+`Room.onConnectStep` (`lib/src/core/room.dart`, set on the engine in
+`lib/src/core/engine.dart`, with the `ConnectStep` enum in
+`lib/src/types/other.dart`) tells the app when each step of a
+connect is done (the attempt started, the WebSocket open, the join answered,
+the primary peer connection connected), for the `voice_join` timings in
+`docs/speed-log.md`. It only reports: the order, the timeouts and what the
+SDK does are unchanged.
 
 `deep_filter` is libDF, DeepFilterNet's Rust library, which the voice DSP
 (`rust/audio_dsp/src/dfn.rs`) suppresses noise with; crates.io only has an

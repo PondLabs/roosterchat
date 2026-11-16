@@ -18,8 +18,10 @@ abstract class LivekitJoinRoom {
 
   /// Connects to the SFU. Nothing is subscribed by itself: the session
   /// subscribes to tracks, so screen shares only play for people who opt in
-  /// to watching them (issue #50).
-  Future<void> connect(String url, String token);
+  /// to watching them (issue #50). [onStep] is told when each step of the
+  /// connection is done, while it runs (see `Room.onConnectStep`).
+  Future<void> connect(String url, String token,
+      {void Function(lk.ConnectStep step)? onStep});
 
   /// Whether [error], thrown by [connect], is the SFU refusing the token
   /// (an expired or revoked one): the join then asks for a new token, once.
@@ -70,8 +72,17 @@ class LkJoinRoom implements LivekitJoinRoom {
       room.prepareConnection(url, token);
 
   @override
-  Future<void> connect(String url, String token) => room.connect(url, token,
-      connectOptions: const lk.ConnectOptions(autoSubscribe: false));
+  Future<void> connect(String url, String token,
+      {void Function(lk.ConnectStep step)? onStep}) async {
+    room.onConnectStep = onStep;
+    try {
+      await room.connect(url, token,
+          connectOptions: const lk.ConnectOptions(autoSubscribe: false));
+    } finally {
+      // Not told of the reconnects that follow.
+      room.onConnectStep = null;
+    }
+  }
 
   /// LiveKit checks the token over HTTP when the WebSocket fails, and
   /// reports a 4xx answer as `NotAllowed`.

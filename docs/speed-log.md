@@ -161,6 +161,9 @@ side, so timed steps may overlap; each has its own start.
 | `membership_clear_wait` | waiting for the previous call's clear of our membership |
 | `membership_write` | writing our call membership |
 | `connect` | the LiveKit connection |
+| `connect_websocket` | inside `connect`: from the attempt starting to the signal WebSocket open |
+| `connect_join_response` | inside `connect`: from the WebSocket open to the SFU's answer to the join |
+| `connect_media` | inside `connect`: from the join answered to the media connection (the primary peer connection) connected |
 | `microphone_options` | the microphone's capture options (the DSP's bounded wait included) |
 | `microphone_open` | opening the microphone capture during the connection |
 | `sfu_region` | unavailable: the SFU reported no region |
@@ -168,9 +171,17 @@ side, so timed steps may overlap; each has its own start.
 | `microphone_published` | from connected to the microphone published; unavailable when it was not (denied, no device) or not within 30 s |
 | `first_remote_audio` | from connected to someone else first heard; unavailable when nobody spoke within 30 s |
 
-The span says whether the SFU reported a region (`sfu_region_other`) or not
-(`sfu_region` unavailable), never which: the region is the server's own
-text, and a self-hosted SFU can put anything there. Outcome `ok` once the
+The three `connect_*` steps come from LiveKit itself (`Room.onConnectStep`,
+a hook in our copy of the SDK) and are those of the connection attempt that
+ran last: when LiveKit tries another region, or the join connects again
+after the SFU refused a held call token, the earlier attempt's moments are
+dropped. A step whose moments did not both come (the connection failed
+before) is `unavailable`. Together they fit inside `connect`, which also
+holds what LiveKit does before and between its attempts.
+
+The span says only whether the SFU reported a region (`sfu_region_other`)
+or not (`sfu_region` unavailable), never which: the region is the server's
+own text, and a self-hosted SFU can put anything there. Outcome `ok` once the
 microphone and the remote audio are settled, or `failed` when the join
 failed.
 

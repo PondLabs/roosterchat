@@ -146,6 +146,17 @@ abstract final class SpeedStep {
   /// The LiveKit connection.
   static const connect = 'connect';
 
+  /// Inside [connect], the attempt that ran last: from its start to the
+  /// signal WebSocket open.
+  static const connectWebsocket = 'connect_websocket';
+
+  /// From the WebSocket open to the SFU's answer to the join.
+  static const connectJoinResponse = 'connect_join_response';
+
+  /// From the join answered to the media connection (the primary peer
+  /// connection) connected.
+  static const connectMedia = 'connect_media';
+
   /// The microphone's capture options (the DSP's bounded wait included).
   static const microphoneOptions = 'microphone_options';
 
@@ -205,6 +216,9 @@ abstract final class SpeedStep {
     membershipClearWait,
     membershipWrite,
     connect,
+    connectWebsocket,
+    connectJoinResponse,
+    connectMedia,
     microphoneOptions,
     microphoneOpen,
     sfuRegion,

@@ -116,4 +116,21 @@ void main() {
     voip.joined.complete(null);
     await tester.pump();
   });
+
+  testWidgets(
+      'the page closed in the frame of the click: the join still starts, once',
+      (tester) async {
+    await tester.pumpWidget(app(VoipRoomView(voip)));
+    await tester.pump();
+
+    await tester.tap(find.text(CommonStrings.promptJoin));
+    // Another page, drawn in the very frame the join waits for.
+    await tester.pumpWidget(app(const Text('Home')));
+    await tester.pump();
+    expect(voip.joins, 1, reason: 'the click was taken: the call is joined');
+
+    voip.joined.complete(null);
+    await tester.pump();
+    expect(voip.joins, 1);
+  });
 }

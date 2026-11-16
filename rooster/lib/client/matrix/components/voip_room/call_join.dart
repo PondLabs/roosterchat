@@ -60,6 +60,9 @@ abstract class CallJoinHost<S> {
   /// (it never fails): the session's mute and deafen wait for it, so they
   /// act on that microphone instead of opening a second one.
   S createSession(LivekitJoinRoom room, Future<void> microphonePublished);
+
+  /// Completes once [session] has ended (hung up, its membership cleared).
+  Future<void> sessionEnded(S session);
 }
 
 /// One voice join, in the order the people in the call see it: the previous
@@ -119,9 +122,9 @@ class CallJoin<S> {
           "Not allowed to send the call membership", errorCallNoPermission);
     }
     final trace = CallJoinTrace(log, remoteAudioWindow: remoteAudioWindow);
-    // The previous call's hang up and the new session run here, outside the
-    // span: their requests (and the session's timers, for the whole call)
-    // are not the join's.
+    // The previous call's hang up, the LiveKit room and the new session run
+    // here, outside the span: their requests (and the session's timers, for
+    // the whole call) are not the join's.
     final outside = Zone.current;
     try {
       return await trace
@@ -176,7 +179,9 @@ class CallJoin<S> {
     trace.sfuHost(livekitCloud: cloud);
 
     await output;
-    final room = await host.createRoom();
+    // Outside the span too: an encrypted room's key provider starts
+    // listening here, and its key sends last as long as the call.
+    final room = await outside.run(host.createRoom);
 
     final joinKey =
         CallMembershipWrites.joinKey(host.roomId, host.membershipKey);
@@ -244,7 +249,7 @@ class CallJoin<S> {
       write = trace.time(
           SpeedStep.membershipWrite, () => host.writeMembership(foci));
       connection = trace.time(SpeedStep.connect,
-          () => _connect(room, focus, first, askOpenId, hangUp));
+          () => _connect(trace, room, focus, first, askOpenId, hangUp));
       // Both to their end, also when one fails first (Future.wait reports
       // the first error once every future has finished).
       await Future.wait([write, connection]);
@@ -272,6 +277,14 @@ class CallJoin<S> {
 
       final session = outside.run(() => host.createSession(room, published));
       membershipSettled.complete();
+      // Once the session has ended this join holds our membership no more:
+      // an earlier join of the room, hung up, whose write lands after that,
+      // clears what it wrote instead of leaving it with no session.
+      final kept = claim;
+      void release(_) => CallMembershipWrites.release(joinKey, kept);
+      outside
+          .run(() => host.sessionEnded(session))
+          .then(release, onError: release);
       return session;
     } catch (_) {
       // Don't leave a membership for a call we never got into, nor a room
@@ -307,23 +320,43 @@ class CallJoin<S> {
   /// Connects [room] with [first]. A held call token the SFU refuses
   /// (expired or revoked since it was fetched) is dropped, and the join asks
   /// for a new one and connects again, once.
+  ///
+  /// The connect's steps in the span are those of the last connect: a
+  /// refused one's moments are not the next one's.
   Future<void> _connect(
+      CallJoinTrace trace,
       LivekitJoinRoom room,
       Uri focus,
       HeldGrant first,
       Future<matrix.OpenIdCredentials> Function() openId,
       _HangUp hangUp) async {
+    late ConnectAttempt attempt;
+    Future<void> connect(SfuGrant grant) {
+      final moments = attempt = trace.connectAttempt();
+      return room.connect(grant.url, grant.jwt,
+          onStep: (step) => switch (step) {
+                lk.ConnectStep.started => moments.started(),
+                lk.ConnectStep.signalConnected => moments.websocketOpen(),
+                lk.ConnectStep.joinResponse => moments.joinAnswered(),
+                lk.ConnectStep.primaryConnected => moments.mediaConnected(),
+              });
+    }
+
     try {
-      await room.connect(first.grant.url, first.grant.jwt);
-    } catch (e) {
-      if (!first.held || !room.refusedToken(e)) rethrow;
-      Log.i("Voice join: the SFU refused a held call token, asking again");
-      tokens.forgetGrant(focus, roomId: host.roomId, deviceId: host.deviceId);
-      hangUp.check();
-      final again = await tokens.sfuGrant(focus,
-          roomId: host.roomId, deviceId: host.deviceId, openId: openId);
-      hangUp.check();
-      await room.connect(again.grant.url, again.grant.jwt);
+      try {
+        await connect(first.grant);
+      } catch (e) {
+        if (!first.held || !room.refusedToken(e)) rethrow;
+        Log.i("Voice join: the SFU refused a held call token, asking again");
+        tokens.forgetGrant(focus, roomId: host.roomId, deviceId: host.deviceId);
+        hangUp.check();
+        final again = await tokens.sfuGrant(focus,
+            roomId: host.roomId, deviceId: host.deviceId, openId: openId);
+        hangUp.check();
+        await connect(again.grant);
+      }
+    } finally {
+      trace.connectSteps(attempt);
     }
   }
 

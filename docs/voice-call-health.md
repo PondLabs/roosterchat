@@ -153,8 +153,18 @@ click, and a member who may not join, or a service that is not HTTPS,
 gets no token. On the web the DSP's wasm is fetched when a voice channel's
 page opens. Each join is a `voice_join` span in the speed log
 (`diagnostic/speed_log/call_join_trace.dart`): every step with its
-duration, the SFU's host class and region, the microphone published and
-the first remote audio, `unavailable` when nobody speaks within 30 s.
+duration, the connect split into the WebSocket, the join's answer and the
+media connection (told by our copy of LiveKit), the SFU's host class,
+whether the SFU reported a region (never which one), the microphone
+published and the first remote audio, `unavailable` when nobody speaks
+within 30 s.
+
+A join holds our membership from its write until it is undone or, once it
+got in, until its session ends (`CallMembershipWrites`): an earlier join
+of the room, hung up, whose write lands only after that clears it, so no
+membership is left with no session. While the join's microphone is still
+opening, a deafen silences the others at once; the microphone's own mute
+waits for it.
 
 ## Connection status and losing the internet
 
