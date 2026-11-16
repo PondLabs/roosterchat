@@ -72,8 +72,10 @@ void main() {
   test(
       'the names the text send, sync, image_prepare and voice_join spans use '
       'are on the list', () {
-    expect(SpeedOperation.all,
-        {'text_send', 'sync', 'image_prepare', 'voice_join', 'file_send'});
+    expect(SpeedOperation.all, {
+      'text_send', 'sync', 'image_prepare', 'voice_join', 'file_send', //
+      'media_show',
+    });
     expect(SpeedStep.all, {
       'send', 'echo', 'echo_painted', 'queue_wait', 'request', 'retry', //
       'answer', 'server_wait', 'processing', 'clean_up', 'client_work', //
@@ -88,11 +90,14 @@ void main() {
       'connect', 'connect_websocket', 'connect_join_response', //
       'connect_media', 'microphone_options', 'microphone_open', 'sfu_region',
       'sfu_region_other', 'microphone_published', 'first_remote_audio',
+      // media_show (and decode)
+      'cache_hit', 'cache_miss', 'download', 'first_paint',
     });
     expect(SpeedValue.all, {
       'attempt', 'status', 'retry_after_ms', //
       'bytes', 'width', 'height', 'frames', // image_prepare
       'thumbnail_bytes', // file_send
+      'level', // media_show
     });
     expect(SpeedOutcome.all,
         {'ok', 'failed', 'incomplete', 'abandoned', 'cancelled'});

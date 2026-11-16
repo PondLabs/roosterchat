@@ -4,6 +4,7 @@ import 'package:rooster/client/matrix/extensions/matrix_client_extensions.dart';
 import 'package:rooster/client/matrix/matrix_mxc_file_provider.dart';
 import 'package:rooster/client/matrix/media/own_media.dart';
 import 'package:rooster/debug/log.dart';
+import 'package:rooster/diagnostic/speed_log/media_show_trace.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/utils/mime.dart';
 import 'package:matrix/matrix.dart';
@@ -27,6 +28,8 @@ class MatrixMxcImage extends LODImageProvider {
     Event? matrixEvent,
   }) : super(
           id: "$identifier-$doThumbnail-$doFullres-$thumbnailHeight-$fullResHeight",
+          // A chat's picture (it has an event), not an avatar.
+          traceShows: matrixEvent != null,
         ) {
     if (doThumbnail == null || doThumbnail == true) {
       loadThumbnail = () => loadWithRetries<Uint8List?>(
@@ -146,12 +149,15 @@ class MatrixMxcImage extends LODImageProvider {
   }) async {
     var identifier = getThumbnailIdentifier(uri);
 
-    final own = await readOwnMedia(client, matrixEvent, thumbnail: true);
-    if (own != null) return own;
-
-    final hit = await _readCached(cached) ??
+    final trace = MediaShowTrace.current;
+    final hit = await readOwnMedia(client, matrixEvent, thumbnail: true) ??
+        await _readCached(cached) ??
         await _readCached(await fileCache?.getFile(identifier));
-    if (hit != null) return hit;
+    if (hit != null) {
+      trace?.cacheHit(hit.length);
+      return hit;
+    }
+    trace?.cacheMiss();
 
     Uint8List? bytes;
     if (serverThumbnail && matrixEvent != null) {
@@ -190,6 +196,8 @@ class MatrixMxcImage extends LODImageProvider {
       bytes = response.data;
     }
 
+    if (bytes != null) trace?.downloaded(bytes.length);
+
     if (bytes != null && cache) {
       // A pending event's "thumbnail" is the whole file the SDK still holds
       // (Event.downloadAndDecryptAttachment): never kept as the thumbnail.
@@ -210,11 +218,14 @@ class MatrixMxcImage extends LODImageProvider {
   }) async {
     var identifier = getIdentifier(uri);
 
-    final own = await readOwnMedia(client, matrixEvent);
-    if (own != null) return own;
-
-    final hit = await _readCached(await fileCache?.getFile(identifier));
-    if (hit != null) return hit;
+    final trace = MediaShowTrace.current;
+    final hit = await readOwnMedia(client, matrixEvent) ??
+        await _readCached(await fileCache?.getFile(identifier));
+    if (hit != null) {
+      trace?.cacheHit(hit.length);
+      return hit;
+    }
+    trace?.cacheMiss();
 
     Uint8List? bytes;
     if (matrixEvent != null) {
@@ -227,6 +238,7 @@ class MatrixMxcImage extends LODImageProvider {
       var response = await client.getContentFromUri(uri);
       bytes = response.data;
     }
+    trace?.downloaded(bytes.length);
 
     if (cache) {
       fileCache?.putFile(identifier, bytes);

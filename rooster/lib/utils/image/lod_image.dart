@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:rooster/diagnostic/speed_log/media_show_trace.dart';
 import 'package:rooster/utils/mime.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -21,8 +22,13 @@ class LODImageProvider extends ImageProvider<String> {
       this.thumbnailHeight,
       required this.id,
       this.fullResHeight,
+      this.traceShows = false,
       this.autoLoadFullRes = true});
   String id;
+
+  /// Each level shown is a `media_show` span in the speed log
+  /// ([MediaShowTrace]): a chat's pictures, not avatars nor emojis.
+  final bool traceShows;
   String? blurhash;
   String? get mimeType => completer?.mimeType;
   bool autoLoadFullRes;
@@ -72,6 +78,7 @@ class LODImageProvider extends ImageProvider<String> {
         thumbnailHeight: thumbnailHeight,
         fullResHeight: fullResHeight,
         autoLoadFullres: autoLoadFullRes,
+        traceShows: traceShows,
         // Failed: out of the image cache, so the next display of this
         // picture starts over instead of finding the failure.
         onFailed: () => PaintingBinding.instance.imageCache.evict(key));
@@ -130,6 +137,9 @@ class LODImageCompleter extends ImageStreamCompleter {
   /// Called when loading failed with no picture to show.
   void Function()? onFailed;
 
+  /// See [LODImageProvider.traceShows].
+  bool traceShows;
+
   LODImageCompleter(
       {this.blurhash,
       required this.callback,
@@ -141,6 +151,7 @@ class LODImageCompleter extends ImageStreamCompleter {
       this.onLODChanged,
       this.fullResHeight,
       this.onFailed,
+      this.traceShows = false,
       this.autoLoadFullres = true}) {
     loadImages();
   }
@@ -223,9 +234,15 @@ class LODImageCompleter extends ImageStreamCompleter {
   /// reported to the stream ([_failed]).
   Future<void> _load(LODImageType type, Future<Uint8List?> Function() load,
       int? height) async {
+    final trace = traceShows
+        ? MediaShowTrace.start(thumbnail: type == LODImageType.thumbnail)
+        : null;
     try {
-      var bytes = await load();
-      if (bytes == null) return;
+      var bytes = trace == null ? await load() : await trace.run(load);
+      if (bytes == null) {
+        trace?.dropped();
+        return;
+      }
 
       mimeType = Mime.lookupType("", data: bytes);
       var codec = await callback(
@@ -234,9 +251,13 @@ class LODImageCompleter extends ImageStreamCompleter {
           return TargetImageSize(height: height);
         },
       );
+      trace?.decoded();
 
+      final painted = hasListeners;
       await _setCodec(type, codec);
+      trace?.shown(painted: painted);
     } catch (error, stack) {
+      trace?.failed();
       _failed(type, error, stack);
     }
   }
