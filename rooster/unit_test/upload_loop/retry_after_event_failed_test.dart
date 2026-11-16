@@ -4,6 +4,7 @@ library;
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/matrix/media/matrix_file_send.dart';
@@ -16,15 +17,16 @@ void main() {
 
   tearDown(() => AttachmentSends.instance.clear());
 
-  for (final (name, failure) in [
-    (
-      '500 M_UNKNOWN',
-      () => json(500, {'errcode': 'M_UNKNOWN', 'error': 'Try later'})
-    ),
-    (
-      '403 M_FORBIDDEN',
-      () => json(403, {'errcode': 'M_FORBIDDEN', 'error': 'Not now'})
-    ),
+  http.StreamedResponse unknown() =>
+      json(500, {'errcode': 'M_UNKNOWN', 'error': 'Try later'});
+  http.StreamedResponse forbidden() =>
+      json(403, {'errcode': 'M_FORBIDDEN', 'error': 'Not now'});
+  for (final (name, failure, restarted) in [
+    ('500 M_UNKNOWN', unknown, false),
+    ('403 M_FORBIDDEN', forbidden, false),
+    // The app was restarted: the SDK no longer holds the file, and the
+    // failed event alone says where its uploads are.
+    ('500 M_UNKNOWN, after a restart', unknown, true),
   ]) {
     test(
         '"Retry" on a file whose PUT /send failed ($name) after its '
@@ -61,6 +63,7 @@ void main() {
       final uploads = transport.uploads.length;
       final first = transport.events.single;
       final seenBefore = transport.seen.length;
+      if (restarted) room.matrixRoom.forgetFileSend(txid);
 
       await room.retrySend(room.convertEvent(failed));
       await until(() => send.isFinished);
