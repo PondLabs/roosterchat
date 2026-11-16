@@ -406,6 +406,7 @@ class Event extends MatrixEvent {
     }
 
     await room.client.database.removeEvent(eventId, room.id);
+    room.forgetFileSend(eventId); // ROOSTER: its file and uploads let go
 
     if (room.lastEvent != null && room.lastEvent!.eventId == eventId) {
       final redactedBecause = Event.fromMatrixEvent(
@@ -449,6 +450,23 @@ class Event extends MatrixEvent {
       MessageTypes.Audio,
       MessageTypes.File,
     }.contains(messageType)) {
+      // Its uploads went through and the event failed: the event carries // ROOSTER
+      // their address (and in an encrypted room their key), and only the // ROOSTER
+      // event is sent again, as it was, under the same transaction id. // ROOSTER
+      // An upload that went in the clear is not reused once the room // ROOSTER
+      // encrypts files: the file goes up again, encrypted. // ROOSTER
+      final encryptsFiles = // ROOSTER
+          room.encrypted && room.client.fileEncryptionEnabled; // ROOSTER
+      if (content['file'] is Map || // ROOSTER
+          (content['url'] is String && !encryptsFiles)) { // ROOSTER
+        final id = await room.sendEvent( // ROOSTER
+          Map<String, dynamic>.from(content), // ROOSTER
+          type: type, // ROOSTER
+          txid: txid ?? transactionId ?? eventId, // ROOSTER
+        ); // ROOSTER
+        if (id != null) room.forgetFileSend(eventId); // ROOSTER
+        return id; // ROOSTER
+      } // ROOSTER
       final file = room.sendingFilePlaceholders[eventId];
       if (file == null) {
         await cancelSend();

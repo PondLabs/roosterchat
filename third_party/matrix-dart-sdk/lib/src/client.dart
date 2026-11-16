@@ -116,6 +116,9 @@ class Client extends MatrixApi {
 
   final Duration sendTimelineEventTimeout;
 
+  /// The time the upload loop of `Room.sendFileEvent` reads and waits by. // ROOSTER
+  final SendClock sendClock; // ROOSTER
+
   /// The timeout until a typing indicator gets removed automatically.
   final Duration typingIndicatorTimeout;
 
@@ -190,6 +193,7 @@ class Client extends MatrixApi {
     Filter? syncFilter,
     Duration defaultNetworkRequestTimeout = const Duration(seconds: 35),
     this.sendTimelineEventTimeout = const Duration(minutes: 1),
+    this.sendClock = const SendClock(), // ROOSTER
     this.customImageResizer,
     this.shareKeysWith = ShareKeysWith.crossVerifiedIfEnabled,
     this.enableDehydratedDevices = false,
@@ -2970,6 +2974,13 @@ class Client extends MatrixApi {
         final timelineEvent = Event.fromMatrixEvent(event, room);
         switch (type) {
           case EventUpdateType.timeline:
+            // A message that reached the room under a transaction id: // ROOSTER
+            // the file kept to send it again is let go (the server may // ROOSTER
+            // have it although our PUT /send failed). // ROOSTER
+            final txid = timelineEvent.transactionId; // ROOSTER
+            if (txid != null && timelineEvent.eventId != txid) { // ROOSTER
+              room.forgetFileSend(txid); // ROOSTER
+            } // ROOSTER
             onTimelineEvent.add(timelineEvent);
             if (prevBatch != null &&
                 timelineEvent.senderId != userID &&
