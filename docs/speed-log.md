@@ -109,7 +109,7 @@ thumbnail and a blurhash, from the request to the result.
 |---|---|---|
 | `queue_wait` | the request | one of the two preparation slots is free |
 | `header` | the slot | the size and orientation read from the file header; value `bytes` (the file's size) |
-| `decode` | the header | the one engine decode, at thumbnail size or smaller; values `width`, `height` (as decoded) and `frames` (more than 1: animated) |
+| `decode` | the header | the one engine decode, at thumbnail size or smaller, or at full size when the header could not be read; values `width`, `height` (as decoded) and `frames` (more than 1: animated) |
 | `encode` | the decode | the thumbnail and blurhash, in the background (native) or by the browser's canvas (web); values `bytes`, `width`, `height` of the thumbnail when one was made |
 
 Outcome `ok`, or `failed` when the engine cannot decode the file (it is
