@@ -5,6 +5,7 @@
 // the older one up as it starts (CallManager.joinStarted).
 import 'dart:async';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rooster/client/call_manager.dart';
 import 'package:rooster/client/client_manager.dart';
@@ -152,6 +153,59 @@ void main() {
     expect(a.host.room.disposed, isTrue);
     expect(calls.currentSessions, isEmpty);
     expect(a.voip.currentSession, isNull);
+  });
+
+  test(
+      "T3.2's INVERSE 8 by a switch of voice channel: A's write is still in "
+      'flight when B is joined; A again, past the 10 s, gets in and is '
+      'left; then the old write lands: no membership, no session', () {
+    fakeAsync((async) {
+      // Made in the clock's zone, so their gates run on it.
+      final a = channel();
+      final b = channel();
+      final oldWrite = Gate();
+      a.host.membershipGate = oldWrite;
+      Object? firstError;
+      a.voip.joinCall().then<void>((_) {}, onError: (Object e) {
+        firstError = e;
+      });
+      async.elapse(const Duration(milliseconds: 10));
+      expect(a.journal.entries, containsAll(['membership_write', 'connected']));
+
+      // Joining B hangs A's join up; its write is still in flight.
+      VoipSession? sessionB;
+      b.voip.joinCall().then<void>((s) => sessionB = s);
+      async.elapse(const Duration(milliseconds: 100));
+      expect(sessionB, isNotNull);
+      expect(firstError, isNull, reason: 'A waits for its write');
+
+      // Back to A: a new join, which leaves B and waits for the old one.
+      a.host.membershipGate = Gate()..open();
+      a.host.room = FakeLivekitRoom(a.journal);
+      VoipSession? sessionA;
+      a.voip.joinCall().then<void>((s) => sessionA = s);
+      async.elapse(const Duration(seconds: 9));
+      expect(sessionA, isNull, reason: 'waits for the old join, 10 s at most');
+      async.elapse(const Duration(seconds: 2));
+      expect(sessionA, isNotNull);
+      expect(sessionB!.state, VoipState.ended);
+      expect(b.host.membership, isFalse);
+      expect(a.host.membership, isTrue);
+
+      sessionA!.hangUpCall();
+      async.elapse(const Duration(milliseconds: 100));
+      expect(a.host.membership, isFalse);
+
+      oldWrite.open();
+      async.elapse(const Duration(milliseconds: 100));
+      expect(firstError, isA<CallJoinHungUp>());
+      expect(a.journal.lastIndexOf('membership_clear'),
+          greaterThan(a.journal.lastIndexOf('membership_written')),
+          reason: 'the old join cleared its late write');
+      expect(a.host.membership, isFalse, reason: 'no membership, no session');
+      expect(a.journal.count('session'), 1);
+      expect(calls.currentSessions, isEmpty);
+    });
   });
 
   test("a join of the same channel is not hung up: it is the same join",
