@@ -139,7 +139,7 @@ class MatrixClient extends Client {
     _id = identifier;
     _matrixClient = _createMatrixClient(identifier, database, transport);
     _ownMedia = OwnMediaCache.forAccount(identifier, files: fileCache);
-    attachOwnMedia(_matrixClient, _ownMedia);
+    _ownMediaListeners.add(attachOwnMedia(_matrixClient, _ownMedia));
     // Logged out here or by the homeserver: nothing sent stays behind.
     _ownMediaListeners.add(_matrixClient.onLoginStateChanged.stream
         .where((state) => state == matrix.LoginState.loggedOut)

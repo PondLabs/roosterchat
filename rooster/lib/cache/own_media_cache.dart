@@ -33,6 +33,9 @@ abstract class OwnMediaCache {
   /// is none (the web keeps no files).
   Future<Uri?> fileOf(String key);
 
+  /// Forgets [key].
+  Future<void> remove(String key);
+
   /// Forgets everything this account kept.
   Future<void> clear();
 }
@@ -64,6 +67,8 @@ class OwnMediaMemory {
 
   Uint8List? get(String account, String key) => _entries[(account, key)];
 
+  void remove(String account, String key) => _remove((account, key));
+
   void removeAccount(String account) {
     for (final id in _entries.keys.where((id) => id.$1 == account).toList()) {
       _remove(id);
@@ -91,6 +96,9 @@ class MemoryOwnMediaCache implements OwnMediaCache {
 
   @override
   Future<Uri?> fileOf(String key) async => null;
+
+  @override
+  Future<void> remove(String key) async => memory.remove(account, key);
 
   @override
   Future<void> clear() async => memory.removeAccount(account);
@@ -157,6 +165,17 @@ class FileOwnMediaCache implements OwnMediaCache {
       Log.w("Own media gone from the file cache: ${error.osError?.message}");
       return null;
     }
+  }
+
+  @override
+  Future<void> remove(String key) async {
+    try {
+      await _writes[key];
+    } catch (_) {
+      // The write failed: whatever it left goes below.
+    }
+    _writing.remove(key);
+    await files.removeFile(prefix + key);
   }
 
   @override

@@ -9,19 +9,50 @@
 /// media received (`matrix-<mxc>` in the file cache), in the same place.
 library;
 
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/cache/own_media_cache.dart';
 import 'package:rooster/debug/log.dart';
 
-final Expando<OwnMediaCache> _ownMedia = Expando('own media');
+/// An account's own media, and what it holds for the sends in progress.
+class _OwnMedia {
+  _OwnMedia(this.cache);
 
-/// Gives [client] its account's own media.
-void attachOwnMedia(matrix.Client client, OwnMediaCache cache) =>
-    _ownMedia[client] = cache;
+  final OwnMediaCache cache;
 
-OwnMediaCache? ownMediaOf(matrix.Client client) => _ownMedia[client];
+  /// The keys written for a send not yet sent, by transaction id.
+  final Map<String, List<String>> pending = {};
+
+  /// The sends taken away ("Cancel"), by transaction id.
+  final Set<String> cancelled = {};
+}
+
+final Expando<_OwnMedia> _ownMedia = Expando('own media');
+
+/// Gives [client] its account's own media. A send taken away after its
+/// upload takes its files out of it: the listener for that is returned,
+/// for the account to cancel when it closes.
+StreamSubscription<String> attachOwnMedia(
+    matrix.Client client, OwnMediaCache cache) {
+  final own = _ownMedia[client] = _OwnMedia(cache);
+  return client.onCancelSendEvent.stream.listen((txid) async {
+    own.cancelled.add(txid);
+    final keys = own.pending.remove(txid) ?? const [];
+    try {
+      await Future.wait(keys.map(cache.remove));
+    } catch (error, stack) {
+      Log.onError(error, stack, content: "Could not forget a cancelled file");
+    }
+  });
+}
+
+OwnMediaCache? ownMediaOf(matrix.Client client) => _ownMedia[client]?.cache;
+
+/// The send under [txid] reached the room: its files stay.
+void ownMediaSent(matrix.Client client, String txid) =>
+    _ownMedia[client]?.pending.remove(txid);
 
 /// Keeps the files of [pending], a file event this device is sending in
 /// [room], as soon as the SDK shows it with its upload's address (still
@@ -30,21 +61,27 @@ OwnMediaCache? ownMediaOf(matrix.Client client) => _ownMedia[client];
 /// one the event announces (its size), never the whole file in its place.
 /// Never throws.
 Future<void> keepOwnMedia(matrix.Room room, matrix.Event pending) async {
-  final cache = ownMediaOf(room.client);
-  if (cache == null) return;
+  final own = _ownMedia[room.client];
+  if (own == null) return;
   final txid = pending.eventId;
+  if (own.cancelled.contains(txid)) return;
   final file = room.sendingFilePlaceholders[txid];
   final mxc = pending.attachmentMxcUrl;
   if (file == null || mxc == null) return;
   final thumbnail = room.sendingFileThumbnails[txid];
   final thumbnailMxc = pending.hasThumbnail ? pending.thumbnailMxcUrl : null;
+  final files = {
+    mxc.toString(): file.bytes,
+    if (thumbnail != null &&
+        thumbnailMxc != null &&
+        pending.thumbnailInfoMap['size'] == thumbnail.bytes.length)
+      thumbnailMxc.toString(): thumbnail.bytes,
+  };
+  own.pending[txid] = files.keys.toList();
   try {
     await Future.wait([
-      cache.write(mxc.toString(), file.bytes),
-      if (thumbnail != null &&
-          thumbnailMxc != null &&
-          pending.thumbnailInfoMap['size'] == thumbnail.bytes.length)
-        cache.write(thumbnailMxc.toString(), thumbnail.bytes),
+      for (final MapEntry(:key, :value) in files.entries)
+        own.cache.write(key, value),
     ]);
   } catch (error, stack) {
     Log.onError(error, stack, content: "Could not keep a sent file");

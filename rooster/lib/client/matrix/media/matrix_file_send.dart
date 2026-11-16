@@ -139,6 +139,7 @@ Future<String?> _follow(matrix.Room room, AttachmentSend? send, String txid,
       send?.failed();
     } else {
       send?.sent();
+      ownMediaSent(room.client, txid);
     }
     return id;
   } catch (error, stack) {
