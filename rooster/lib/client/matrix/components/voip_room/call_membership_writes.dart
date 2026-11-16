@@ -48,8 +48,9 @@ class CallMembershipWrites {
     return latest != null && !identical(latest, claim);
   }
 
-  /// A join undone gives its [claim] back once its clear is done: an
-  /// earlier join still running may then clear what it wrote.
+  /// A join undone gives its [claim] back once its clear is done, and a
+  /// join that got in once its session has ended: an earlier join still
+  /// running may then clear what it wrote.
   static void release(String joinKey, Object claim) {
     if (identical(_claims[joinKey], claim)) _claims.remove(joinKey);
   }
