@@ -551,6 +551,18 @@ void main() {
       expect(journal.count('openid'), 1);
     });
 
+    test(
+        "the membership names the homeserver's service and its token is "
+        'held: a second warm-up fetches nothing, not even the well-known',
+        () async {
+      host.roomFocusUrl = 'https://jwt.example.org';
+      await warmUp();
+      await warmUp();
+      expect(journal.count('well_known'), 1);
+      expect(journal.count('openid'), 1);
+      expect(service.count('POST /sfu/get'), 1);
+    });
+
     test('the same service: scheme, host, port, path, nothing else', () {
       bool same(String a, String b) =>
           CallWarmUp.sameService(Uri.parse(a), Uri.parse(b));
