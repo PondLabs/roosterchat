@@ -71,7 +71,10 @@ class LODImageProvider extends ImageProvider<String> {
         hasCachedThumbnail: hasCachedThumbnail,
         thumbnailHeight: thumbnailHeight,
         fullResHeight: fullResHeight,
-        autoLoadFullres: autoLoadFullRes);
+        autoLoadFullres: autoLoadFullRes,
+        // Failed: out of the image cache, so the next display of this
+        // picture starts over instead of finding the failure.
+        onFailed: () => PaintingBinding.instance.imageCache.evict(key));
     return completer!;
   }
 
@@ -124,6 +127,9 @@ class LODImageCompleter extends ImageStreamCompleter {
   Future? fullResLoading = null;
   Future? thumbnailLoading = null;
 
+  /// Called when loading failed with no picture to show.
+  void Function()? onFailed;
+
   LODImageCompleter(
       {this.blurhash,
       required this.callback,
@@ -134,6 +140,7 @@ class LODImageCompleter extends ImageStreamCompleter {
       this.thumbnailHeight,
       this.onLODChanged,
       this.fullResHeight,
+      this.onFailed,
       this.autoLoadFullres = true}) {
     loadImages();
   }
@@ -176,24 +183,11 @@ class LODImageCompleter extends ImageStreamCompleter {
     if (currentlyLoadedImage == LODImageType.thumbnail) return;
     if (currentlyLoadedImage == LODImageType.fullres) return;
 
-    thumbnailLoading = () async {
-      var bytes = await loadThumbnail!.call();
-      if (bytes == null) return;
-
-      mimeType = Mime.lookupType("", data: bytes);
-
-      var codec = await callback(
-        await ImmutableBuffer.fromUint8List(bytes),
-        getTargetSize: (intrinsicWidth, intrinsicHeight) {
-          return TargetImageSize(height: thumbnailHeight);
-        },
-      );
-
-      await _setCodec(LODImageType.thumbnail, codec);
-    }();
-
-    await thumbnailLoading;
-    thumbnailLoading = null;
+    final loading = thumbnailLoading =
+        _load(LODImageType.thumbnail, loadThumbnail!, thumbnailHeight);
+    await loading;
+    // Cleared, failed or not: the next fetch asks again.
+    if (identical(thumbnailLoading, loading)) thumbnailLoading = null;
     onLODChanged?.call();
   }
 
@@ -218,24 +212,53 @@ class LODImageCompleter extends ImageStreamCompleter {
       return;
     }
 
-    fullResLoading = () async {
-      var bytes = await loadFullRes!.call();
+    final loading = fullResLoading =
+        _load(LODImageType.fullres, loadFullRes!, fullResHeight);
+    await loading;
+    if (identical(fullResLoading, loading)) fullResLoading = null;
+    onLODChanged?.call();
+  }
+
+  /// Loads and shows one level of the picture. Never throws: a failure is
+  /// reported to the stream ([_failed]).
+  Future<void> _load(LODImageType type, Future<Uint8List?> Function() load,
+      int? height) async {
+    try {
+      var bytes = await load();
       if (bytes == null) return;
 
       mimeType = Mime.lookupType("", data: bytes);
       var codec = await callback(
         await ImmutableBuffer.fromUint8List(bytes),
         getTargetSize: (intrinsicWidth, intrinsicHeight) {
-          return TargetImageSize(height: fullResHeight);
+          return TargetImageSize(height: height);
         },
       );
 
-      await _setCodec(LODImageType.fullres, codec);
-    }();
+      await _setCodec(type, codec);
+    } catch (error, stack) {
+      _failed(type, error, stack);
+    }
+  }
 
-    await fullResLoading;
-    fullResLoading = null;
-    onLODChanged?.call();
+  /// Loading [type] failed. With a picture shown, or the other level still
+  /// loading, nothing changes; otherwise the stream gets the error (the
+  /// failed state) and [onFailed] is called.
+  void _failed(LODImageType type, Object error, StackTrace stack) {
+    if (currentlyLoadedImage == LODImageType.thumbnail ||
+        currentlyLoadedImage == LODImageType.fullres) {
+      return;
+    }
+    final other =
+        type == LODImageType.thumbnail ? fullResLoading : thumbnailLoading;
+    if (other != null) return;
+    onFailed?.call();
+    reportError(
+      context: ErrorDescription('loading a picture'),
+      exception: error,
+      stack: stack,
+      silent: true,
+    );
   }
 
   Future<void> _setCodec(LODImageType type, Codec codec) async {

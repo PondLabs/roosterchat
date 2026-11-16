@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:rooster/client/matrix/extensions/matrix_client_extensions.dart';
+import 'package:rooster/client/matrix/matrix_mxc_file_provider.dart';
 import 'package:rooster/client/matrix/media/own_media.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
@@ -27,7 +28,7 @@ class MatrixMxcImage extends LODImageProvider {
           id: "$identifier-$doThumbnail-$doFullres-$thumbnailHeight-$fullResHeight",
         ) {
     if (doThumbnail == null || doThumbnail == true) {
-      loadThumbnail = () => retryUntilOnline<Uint8List?>(
+      loadThumbnail = () => loadWithRetries<Uint8List?>(
           client,
           () => loadMatrixThumbnail(
                 client,
@@ -38,7 +39,7 @@ class MatrixMxcImage extends LODImageProvider {
               ));
     }
     if (doFullres == null || doFullres == true) {
-      loadFullRes = () => retryUntilOnline<Uint8List?>(
+      loadFullRes = () => loadWithRetries<Uint8List?>(
           client,
           () => loadMatrixFullRes(
                 client,
@@ -61,24 +62,37 @@ class MatrixMxcImage extends LODImageProvider {
     return "matrix-$uri";
   }
 
-  static Future<T> retryUntilOnline<T>(
-      Client client, Future<T> callback()) async {
-    try {
-      var value = await callback();
-      return value;
-    } catch (error, trace) {
-      if (error is SocketException) {
-        while (true) {
-          var result = await client.onSyncStatus.stream.first;
+  /// How many times a picture is asked for before it shows as failed.
+  static const maxAttempts = 3;
 
-          if (result.status == SyncStatus.finished) {
-            var result = await callback();
-            return result;
-          }
+  /// The wait before attempt [attempt] (2, 3...) after an answer that was
+  /// not the picture. Only tests change it.
+  static Duration Function(int attempt) retryDelay =
+      (attempt) => Duration(seconds: attempt - 1);
+
+  /// [load], asked again up to [maxAttempts] times in all: offline
+  /// (native: a socket error), once a sync gets through; after any other
+  /// failure (the web's network errors among them), after [retryDelay].
+  /// An answer that would come again (a 404) is not asked again. The last
+  /// error is thrown: the picture then shows as failed, until it is shown
+  /// again.
+  static Future<T> loadWithRetries<T>(
+      Client client, Future<T> Function() load) async {
+    for (var attempt = 1;; attempt++) {
+      try {
+        return await load();
+      } catch (error, trace) {
+        final again = error is! MediaDownloadException || error.retryable;
+        if (attempt >= maxAttempts || !again) {
+          Log.onError(error, trace, content: "Could not load a picture");
+          rethrow;
         }
-      } else {
-        Log.onError(error, trace);
-        throw UnimplementedError();
+        if (error is SocketException) {
+          await client.onSyncStatus.stream
+              .firstWhere((sync) => sync.status == SyncStatus.finished);
+        } else {
+          await Future<void>.delayed(retryDelay(attempt + 1));
+        }
       }
     }
   }
@@ -105,6 +119,7 @@ class MatrixMxcImage extends LODImageProvider {
     if (matrixEvent != null) {
       var data = await matrixEvent.downloadAndDecryptAttachment(
         getThumbnail: true,
+        downloadCallback: (url) => downloadMedia(client, url),
       );
 
       String mime = matrixEvent.thumbnailMimetype;
@@ -151,7 +166,9 @@ class MatrixMxcImage extends LODImageProvider {
 
     Uint8List? bytes;
     if (matrixEvent != null) {
-      var data = await matrixEvent.downloadAndDecryptAttachment();
+      var data = await matrixEvent.downloadAndDecryptAttachment(
+        downloadCallback: (url) => downloadMedia(client, url),
+      );
 
       bytes = data.bytes;
     } else {
