@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/scheduler.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/debug/log.dart';
@@ -32,8 +31,7 @@ import 'package:rooster/diagnostic/speed_log/speed_names.dart';
 class TextSendTrace {
   TextSendTrace._(this.span);
 
-  /// For tests that replace what the room's calls do.
-  @visibleForTesting
+  /// Only for tests that replace what the room's calls do.
   TextSendTrace.forTest(this.span);
 
   final SpeedSpan span;

@@ -291,9 +291,10 @@ class SpeedSpan {
 /// Finished spans, the newest [perOperation] of each operation (span name)
 /// in a [RingBuffer] of its own, so a frequent operation (a sync round every
 /// 30 s) never pushes a rare one (a text send) out. At most [maxOperations]
-/// operations are kept; spans of any further name are dropped. Span names
-/// come from the fixed list (`SpeedOperation.all`, with `invalid_name`),
-/// which fits in that bound, so the memory stays fixed.
+/// operations are kept; spans of any further name are dropped and counted
+/// in [dropped], which the report shows. Span names come from the fixed
+/// list (`SpeedOperation.all`, with `invalid_name`), which fits in that
+/// bound, so the memory stays fixed.
 class FinishedSpans {
   FinishedSpans({required this.perOperation, required this.maxOperations});
 
@@ -301,6 +302,11 @@ class FinishedSpans {
   final int maxOperations;
   final Map<String, RingBuffer<(int, SpeedSpan)>> _byOperation = {};
   int _added = 0;
+  int _dropped = 0;
+
+  /// Spans dropped because [maxOperations] other operations already had
+  /// spans.
+  int get dropped => _dropped;
 
   /// The operations that have spans, in the order they first finished one.
   Iterable<String> get operations => _byOperation.keys;
@@ -308,7 +314,10 @@ class FinishedSpans {
   void add(SpeedSpan span) {
     var buffer = _byOperation[span.name];
     if (buffer == null) {
-      if (_byOperation.length >= maxOperations) return;
+      if (_byOperation.length >= maxOperations) {
+        _dropped++;
+        return;
+      }
       buffer = _byOperation[span.name] = RingBuffer(perOperation);
     }
     buffer.add((_added++, span));
@@ -327,6 +336,7 @@ class FinishedSpans {
   void clear() {
     _byOperation.clear();
     _added = 0;
+    _dropped = 0;
   }
 
   /// Slots allocated across the buffers, for tests that check it never
@@ -339,13 +349,16 @@ class FinishedSpans {
 /// newest finished spans of each operation in [FinishedSpans], all of fixed
 /// size. Always on; nothing leaves the device.
 class SpeedLog {
+  /// [operationLimit] is [maxOperations] but in tests of what happens past
+  /// it.
   SpeedLog({
     int requestCapacity = 512,
     FrameSource? frames,
     Duration Function()? clock,
+    int operationLimit = maxOperations,
   })  : requests = RingBuffer(requestCapacity),
         spans = FinishedSpans(
-            perOperation: spansPerOperation, maxOperations: maxOperations),
+            perOperation: spansPerOperation, maxOperations: operationLimit),
         _frames = frames ?? SchedulerFrameSource(),
         _clock = clock ?? (Stopwatch()..start()).elapsedFrom;
 
