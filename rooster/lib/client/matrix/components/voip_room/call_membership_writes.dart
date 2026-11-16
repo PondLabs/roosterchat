@@ -9,12 +9,18 @@ class CallMembershipWrites {
 
   static final Map<String, Future<void>> _pending = {};
 
-  /// Registers a clear of [stateKey] that later writes have to wait for.
-  /// Returns [write] unchanged, so the caller still sees its result.
+  /// Registers a clear of [stateKey] that later writes have to wait for,
+  /// after any registered before it that is still in flight: a slow clear
+  /// must not be forgotten because a quicker one came after it. Returns
+  /// [write] unchanged, so the caller still sees its result.
   static Future<T> clearing<T>(String stateKey, Future<T> write) {
     // Never fails: waiting for this only orders the writes, the caller deals
     // with the error.
-    final done = write.then<void>((_) {}, onError: (_) {});
+    final settled = write.then<void>((_) {}, onError: (_) {});
+    final previous = _pending[stateKey];
+    final done = previous == null
+        ? settled
+        : Future.wait([previous, settled]).then<void>((_) {});
     _pending[stateKey] = done;
     done.whenComplete(() {
       if (identical(_pending[stateKey], done)) _pending.remove(stateKey);
@@ -48,6 +54,11 @@ class CallMembershipWrites {
     return latest != null && !identical(latest, claim);
   }
 
+  /// Whether a join of [joinKey] holds our membership: it is writing it,
+  /// or its session is live. A clear of a membership left behind (see
+  /// `clearStaleOwnMembership`) leaves it alone then.
+  static bool claimed(String joinKey) => _claims.containsKey(joinKey);
+
   /// A join undone gives its [claim] back once its clear is done, and a
   /// join that got in once its session has ended: an earlier join still
   /// running may then clear what it wrote.
@@ -59,12 +70,23 @@ class CallMembershipWrites {
   /// request that never lands must not stop the user from joining.
   static Future<void> settled(String stateKey,
       {Duration timeout = const Duration(seconds: 10)}) async {
-    final pending = _pending[stateKey];
-    if (pending == null) return;
+    if (_pending[stateKey] == null) return;
     try {
-      await pending.timeout(timeout);
+      await _allSettled(stateKey).timeout(timeout);
     } catch (_) {
       // Logged where the clear was issued.
+    }
+  }
+
+  /// Done once no clear of [stateKey] is in flight, also one registered
+  /// while this waits.
+  static Future<void> _allSettled(String stateKey) async {
+    Future<void>? waited;
+    for (var pending = _pending[stateKey];
+        pending != null && !identical(pending, waited);
+        pending = _pending[stateKey]) {
+      waited = pending;
+      await pending;
     }
   }
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:rooster/client/matrix/components/voip_room/call_join.dart';
+import 'package:rooster/client/matrix/components/voip_room/call_membership_writes.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_call_membership.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip_room/voip_room_component.dart';
@@ -136,7 +137,11 @@ class MatrixVoipRoomComponent
     final stale = [
       for (var entry in state.entries)
         if (entry.value.content.isNotEmpty &&
-            _isOwnDeviceMembership(entry.value))
+            _isOwnDeviceMembership(entry.value) &&
+            // Not one a join of this room is writing or holds: the join has
+            // no session yet, but that membership is not left behind.
+            !CallMembershipWrites.claimed(
+                CallMembershipWrites.joinKey(backend.roomId, entry.key)))
           entry.key,
     ];
 
@@ -151,13 +156,18 @@ class MatrixVoipRoomComponent
     Log.i(
         "Clearing ${stale.length} stale call membership(s) in ${room.identifier}");
 
+    // Registered as a clear: a join that starts meanwhile writes our
+    // membership only once this has landed, or it would erase it.
     await Future.wait([
       for (var stateKey in stale)
-        client.matrixClient.setRoomStateWithKey(
-          room.identifier,
-          callMemberStateEvent,
+        CallMembershipWrites.clearing(
           stateKey,
-          {},
+          client.matrixClient.setRoomStateWithKey(
+            room.identifier,
+            callMemberStateEvent,
+            stateKey,
+            {},
+          ),
         ),
     ]);
   }
