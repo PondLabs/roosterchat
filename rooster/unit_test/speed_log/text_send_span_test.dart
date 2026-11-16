@@ -174,6 +174,30 @@ void main() {
         isTrue);
   });
 
+  test('a send behind another in the room waits there in queue_wait', () async {
+    final release = Completer<void>();
+    transport.holdNextSend = release.future;
+    final first = sendText('First');
+    // The first send's PUT has left and is held by the server.
+    while (!transport.seen.contains(_sendRoute)) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    final second = sendText('Second, queued behind it');
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    release.complete();
+
+    final queued = await second;
+    final ahead = await first;
+
+    Duration queueWait(SpeedSpan span) =>
+        span.steps.singleWhere((s) => s.name == SpeedStep.queueWait).duration!;
+    expect(queueWait(ahead), Duration.zero);
+    expect(queueWait(queued),
+        greaterThanOrEqualTo(const Duration(milliseconds: 30)));
+    expect(queued.outcome, SpeedOutcome.ok);
+    print(buildSpeedReport(SpeedLog.instance));
+  });
+
   test('a measurement that throws never stops the send', () async {
     final trace =
         _ThrowingTrace(SpeedLog.instance.startSpan(SpeedOperation.textSend));
