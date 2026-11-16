@@ -213,7 +213,9 @@ void main() {
       await nothingLeft(room);
     });
 
-    test('while waiting for the previous clear: nothing is written', () async {
+    test(
+        'while waiting for the previous clear: nothing is written, and the '
+        'microphone is not opened', () async {
       final hangUp = Completer<void>();
       final clear = Completer<void>();
       final room = host.room;
@@ -227,6 +229,10 @@ void main() {
       clear.complete();
       await expectLater(joining, throwsA(isA<CallJoinHungUp>()));
 
+      expect(journal.entries, isNot(contains('microphone_options')));
+      expect(journal.entries, isNot(contains('microphone_open')),
+          reason: "no capture, nor a browser's permission prompt, after the "
+              'hang up');
       expect(journal.entries, isNot(contains('membership_write')));
       expect(journal.entries, isNot(contains('connect')));
       await nothingLeft(room);

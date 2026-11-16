@@ -237,12 +237,14 @@ class CallJoin<S> {
                 CallMembershipWrites.settled(joinKey),
               ]));
 
+      // Hung up before anything others see was sent: nothing is, and no
+      // capture is opened (in a browser, nor its permission prompt).
+      hangUp.check();
+
       if (early.track == null && early.retry) {
         preparedMicrophone = _prepareMicrophone(trace, room);
       }
 
-      // Hung up before anything others see was sent: nothing is.
-      hangUp.check();
       // A join of this room after this one (a quick rejoin) writes our
       // membership only once this one has kept it or cleared it: a clear of
       // ours landing after that write would erase it.
