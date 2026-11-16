@@ -32,7 +32,11 @@ rate from there to the answer. A request made inside a span carries the
 span's random id (`op=`). An error is one fixed name, never its message
 or type: `aborted`, `cancelled`, `timeout`, `socket`, `tls`, `http`,
 `client` (any other `ClientException`, the web's network errors among
-them) or `other`.
+them) or `other`. A media upload ended by one of its time limits says
+which: `upload_stalled` (the connection took no byte of the body for
+30 s) or `upload_no_answer` (no answer after the last byte, waited for at
+least 150 s and at least the body's time at 100 kB/s; there is no limit
+on the total).
 
 **Spans**, the newest 256 finished ones of each operation (each span name
 has its own buffer, so a sync round every 30 s never pushes a text send

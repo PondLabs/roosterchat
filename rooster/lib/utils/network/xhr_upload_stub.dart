@@ -6,6 +6,8 @@ const bool xhrUploadAvailable = false;
 Future<http.StreamedResponse> sendByXhr(
   http.BaseRequest request, {
   required void Function() onHeaders,
+  required void Function(int sentBytes) onUploadProgress,
   required void Function() onUploadLoad,
+  Future<void>? abort,
 }) =>
     throw UnsupportedError('XMLHttpRequest exists only on the web');

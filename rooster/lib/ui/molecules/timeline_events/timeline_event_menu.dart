@@ -1,3 +1,4 @@
+import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/components/emoticon/dynamic_emoticon_pack.dart';
 import 'package:rooster/client/components/emoticon/emoticon.dart';
 import 'package:rooster/client/components/emoticon/emoticon_component.dart';
@@ -17,6 +18,7 @@ import 'package:rooster/client/timeline_events/timeline_event_encrypted.dart';
 import 'package:rooster/client/timeline_events/timeline_event_message.dart';
 import 'package:rooster/client/timeline_events/timeline_event_sticker.dart';
 import 'package:rooster/config/layout_config.dart';
+import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/code_block.dart';
 import 'package:rooster/ui/molecules/emoji_picker.dart';
@@ -93,6 +95,12 @@ class TimelineEventMenu {
         name: "promptRetryEventSend",
       );
 
+  String get messageRetryFileNoLongerHeld => Intl.message(
+      "This file is no longer on this device. Attach it again to send it.",
+      name: "messageRetryFileNoLongerHeld",
+      desc: "Shown after 'Retry' on a file message that failed to send, when "
+          "the app was restarted since and no longer has the file");
+
   String get promptEndPoll => Intl.message(
         "End Poll",
         desc: "Prompt the user to end a poll",
@@ -153,8 +161,11 @@ class TimelineEventMenu {
     bool canDeleteEvent = false;
     bool canEndPoll = false;
 
-    bool canRetrySend = event.status != TimelineEventStatus.synced;
-    bool canCancelSend = event.status != TimelineEventStatus.synced;
+    // Only on a message that failed: on one still being sent, "Cancel"
+    // would hide a message that still goes out, and there is nothing to
+    // retry yet.
+    bool canRetrySend = event.status == TimelineEventStatus.error;
+    bool canCancelSend = event.status == TimelineEventStatus.error;
     bool canFavoriteGif = false;
     bool canUnfavoriteGif = false;
 
@@ -317,7 +328,17 @@ class TimelineEventMenu {
           name: promptRetryEventSend,
           icon: Icons.refresh,
           action: (BuildContext context) {
-            timeline.room.retrySend(event);
+            final messenger = ScaffoldMessenger.maybeOf(context);
+            timeline.room
+                .retrySend(event)
+                .catchError((Object error, StackTrace stack) {
+              if (error is AttachmentNoLongerHeld) {
+                messenger?.showSnackBar(
+                    SnackBar(content: Text(messageRetryFileNoLongerHeld)));
+              } else {
+                Log.onError(error, stack, content: "Could not retry a send");
+              }
+            });
             onActionFinished?.call();
           },
         ),
