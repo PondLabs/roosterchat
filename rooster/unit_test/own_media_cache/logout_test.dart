@@ -29,6 +29,7 @@ void main() {
   late MatrixRoom room;
   TempFileCache? files;
   matrix.Event? sent;
+  var closed = false;
 
   Future<void> signIn({required bool native}) async {
     files = native ? TempFileCache() : null;
@@ -56,7 +57,8 @@ void main() {
   tearDown(() async {
     ImagePreparer.instance = appPreparer;
     AttachmentSends.instance.clear();
-    await client.close();
+    if (!closed) await client.close();
+    closed = false;
     await files?.close();
     fileCache = null;
   });
@@ -118,5 +120,16 @@ void main() {
     await client.getMatrixClient().logout();
     await settle();
     expect(files!.files.keys, isEmpty);
+  });
+
+  test('a closed account no longer listens for its logout', () async {
+    await signIn(native: true);
+    final mx = client.getMatrixClient();
+    await client.close();
+    closed = true;
+    mx.onLoginStateChanged.add(matrix.LoginState.loggedOut);
+    await settle();
+    expect(files!.files.keys.where((k) => k.startsWith('own_media/')),
+        hasLength(2));
   });
 }

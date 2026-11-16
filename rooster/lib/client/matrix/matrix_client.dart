@@ -121,6 +121,9 @@ class MatrixClient extends Client {
   /// What this account sent from this device (lib/cache/own_media_cache.dart).
   late final OwnMediaCache _ownMedia;
 
+  /// What the own media listens to on the SDK client, cancelled in close().
+  final List<StreamSubscription<Object?>> _ownMediaListeners = [];
+
   MatrixClient({
     required String identifier,
     required matrix.DatabaseApi database,
@@ -138,9 +141,9 @@ class MatrixClient extends Client {
     _ownMedia = OwnMediaCache.forAccount(identifier, files: fileCache);
     attachOwnMedia(_matrixClient, _ownMedia);
     // Logged out here or by the homeserver: nothing sent stays behind.
-    _matrixClient.onLoginStateChanged.stream
+    _ownMediaListeners.add(_matrixClient.onLoginStateChanged.stream
         .where((state) => state == matrix.LoginState.loggedOut)
-        .listen((_) => _clearOwnMedia());
+        .listen((_) => _clearOwnMedia()));
     _syncSpeedTrace = SyncSpeedTrace(_matrixClient.onSyncStatus.stream);
 
     self = ErrorProfile();
@@ -798,6 +801,9 @@ class MatrixClient extends Client {
   @override
   Future<void> close({bool closeDatabase = true}) async {
     getComponent<MatrixUserPresenceComponent>()?.dispose();
+    for (final listener in _ownMediaListeners) {
+      await listener.cancel();
+    }
     await _syncSpeedTrace.dispose();
     await _matrixClient.dispose(closeDatabase: closeDatabase);
   }
