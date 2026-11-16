@@ -43,8 +43,15 @@ class MatrixBackgroundClient implements Client {
   /// Under the speed log's client: the platform's own when null.
   final http.Client? _transport;
 
-  MatrixBackgroundClient({required this.databaseId, http.Client? transport})
-      : _transport = transport {
+  /// Opens the account's database: the app's own when null.
+  final Future<matrix.DatabaseApi> Function()? _openDatabase;
+
+  MatrixBackgroundClient({
+    required this.databaseId,
+    http.Client? transport,
+    Future<matrix.DatabaseApi> Function()? openDatabase,
+  })  : _transport = transport,
+        _openDatabase = openDatabase {
     componentsInternal = [
       MatrixBackgroundClientDirectMessagesComponent(this),
     ];
@@ -99,16 +106,22 @@ class MatrixBackgroundClient implements Client {
     Log.i(
         "Using shared database isolate: ${preferences.useSharedIsolateInBackgroundTasks.value}");
 
-    final db = await getMatrixDatabase(databaseId,
-        onDatabaseIsolate: preferences.useSharedIsolateInBackgroundTasks.value,
-        readOnly: true);
+    final db = await (_openDatabase?.call() ??
+        getMatrixDatabase(databaseId,
+            onDatabaseIsolate:
+                preferences.useSharedIsolateInBackgroundTasks.value,
+            readOnly: true));
 
     if (db is MatrixSdkDriftDatabase) {
       database = db;
     }
 
     final account = await database.getClient(databaseId);
-    Log.i("Got client info: ${account}");
+    // The account holds the access and refresh tokens and the encryption
+    // account: none of its values go to the log.
+    Log.i(account == null
+        ? "Background client: no stored account"
+        : "Background client: stored account found");
 
     deviceId = account!['device_id'];
     connect(
