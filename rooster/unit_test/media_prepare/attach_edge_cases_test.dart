@@ -7,8 +7,10 @@ import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/matrix/media/matrix_attachment_files.dart';
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
 import 'package:rooster/utils/image/preparation/image_preparation.dart';
+import 'package:rooster/utils/image/preparation/thumbnail_encoder.dart';
 
 import 'fakes.dart';
+import 'pictures.dart';
 
 /// Attaching files the preparation must leave alone or survive.
 void main() {
@@ -84,4 +86,27 @@ void main() {
         reason: "an m.image the SDK makes no thumbnail for");
     expect((processed.file.info["w"], processed.file.info["h"]), (1600, 1000));
   });
+
+  test("the thumbnail encoder failing: still a picture, without a thumbnail",
+      () async {
+    final jpeg = largeJpegWithExifOf(
+        File("unit_test/fixtures/image_metadata/orientation_6.jpg")
+            .readAsBytesSync());
+    final attachment =
+        PendingFileAttachment(name: "p.jpg", data: jpeg, size: jpeg.length);
+    final processed = (await matrixFilesForAttachment(attachment,
+        preparer: ImagePreparer(
+            encoder: _FailingEncoder(), log: SpeedLog(frames: NoFrames()))))!;
+
+    expect(processed.file.msgType, "m.image");
+    expect(processed.file.mimeType, "image/jpeg");
+    expect(processed.thumbnailFile, isNull);
+    expect((processed.file.info["w"], processed.file.info["h"]), (1500, 2000));
+  });
+}
+
+class _FailingEncoder implements ThumbnailEncoder {
+  @override
+  Future<ThumbnailResult> encode(ThumbnailRequest request) =>
+      Future.error(StateError("encoder unavailable"));
 }

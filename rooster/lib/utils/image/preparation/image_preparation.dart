@@ -82,7 +82,8 @@ class ImagePreparation {
   final String? blurhash;
 
   /// Null for a picture sent without one: at most [thumbnailMaxSide] on
-  /// its long side, smaller than [thumbnailMinSourceBytes], or animated.
+  /// its long side, smaller than [thumbnailMinSourceBytes], animated, or
+  /// when the encoder failed (the blurhash is then null too).
   final PreparedThumbnail? thumbnail;
 
   bool get animated => frames > 1;
@@ -204,13 +205,20 @@ class ImagePreparer {
         : asDrawn(header, drawnWidth, drawnHeight);
     final thumbnail = frames <= 1 && wantsThumbnail(width, height);
 
-    final encoded = await _encoder.encode(ThumbnailRequest(
-      rgba: rgba,
-      width: drawnWidth,
-      height: drawnHeight,
-      maxSide: thumbnail ? thumbnailMaxSide : null,
-      mayHaveAlpha: header?.mimeType != "image/jpeg",
-    ));
+    ThumbnailResult encoded;
+    try {
+      encoded = await _encoder.encode(ThumbnailRequest(
+        rgba: rgba,
+        width: drawnWidth,
+        height: drawnHeight,
+        maxSide: thumbnail ? thumbnailMaxSide : null,
+        mayHaveAlpha: header?.mimeType != "image/jpeg",
+      ));
+    } catch (_) {
+      // The picture decoded: it still goes as a picture, with its size,
+      // only without a thumbnail and a blurhash.
+      encoded = const ThumbnailResult();
+    }
     span.mark(SpeedStep.encode, values: {
       if (encoded.thumbnail != null) ...{
         SpeedValue.bytes: encoded.thumbnail!.bytes.length,
