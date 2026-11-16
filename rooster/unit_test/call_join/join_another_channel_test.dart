@@ -208,6 +208,25 @@ void main() {
     });
   });
 
+  test(
+      "a join refused for want of permission leaves the other channel's "
+      'join alone', () async {
+    final a = channel();
+    final b = channel();
+    b.host.room.connectGate = Gate();
+    final joiningB = b.voip.joinCall();
+    await settle();
+    a.host.allowed = false;
+    await expectLater(a.voip.joinCall(), throwsA(isA<CallJoinException>()));
+
+    b.host.room.connectGate.open();
+    final sessionB = await joiningB;
+    expect(sessionB, isNotNull);
+    expect(b.host.membership, isTrue);
+    expect(calls.currentSessions, [sessionB]);
+    await leaveAll();
+  });
+
   test("a join of the same channel is not hung up: it is the same join",
       () async {
     final a = channel();

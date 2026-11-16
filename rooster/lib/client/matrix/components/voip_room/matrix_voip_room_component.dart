@@ -196,11 +196,17 @@ class MatrixVoipRoomComponent
     final joining = _joining;
     if (joining != null) return joining;
     final hangUp = Completer<void>();
-    // One voice channel at a time: a join of another channel still running
-    // is hung up before this one starts (see CallManager.joinStarted).
-    final joinEnded = clientManager?.callManager.joinStarted(
-        client: client, roomId: room.identifier, hangUp: () => _hangUp(hangUp));
-    final join = _joinCall(hangUp);
+    void Function()? joinEnded;
+    final join = _joinCall(hangUp, allowed: () {
+      // One voice channel at a time: a join of another channel still
+      // running is hung up as this one starts (see
+      // CallManager.joinStarted). Only once this one may go ahead: a join
+      // refused for want of permission leaves the other alone.
+      joinEnded = clientManager?.callManager.joinStarted(
+          client: client,
+          roomId: room.identifier,
+          hangUp: () => _hangUp(hangUp));
+    });
     _joining = join;
     _hangUpJoining = hangUp;
     join.whenComplete(() {
@@ -246,10 +252,13 @@ class MatrixVoipRoomComponent
     await backend.warmUp();
   }
 
-  Future<VoipSession?> _joinCall(Completer<void> hangUp) async {
-    // Run by the join beside its token requests, and finished before it
-    // writes our membership or connects.
+  /// [allowed] runs once the join may go ahead, before it leaves anything.
+  Future<VoipSession?> _joinCall(Completer<void> hangUp,
+      {required void Function() allowed}) async {
+    // Run by the join beside its token requests, once it is allowed, and
+    // finished before it writes our membership or connects.
     Future<void> leavePrevious() async {
+      allowed();
       final previous = currentSession;
       await Future.wait([
         // Leaving is memoised, so this only waits for a hang up already
