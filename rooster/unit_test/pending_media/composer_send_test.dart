@@ -153,6 +153,36 @@ void main() {
     await closeChat(tester);
   });
 
+  testWidgets(
+      'a file attached while the location question is open stays in the '
+      'composer: only what Send copied goes', (tester) async {
+    final gps = File('unit_test/fixtures/image_metadata/gps_exif.jpg')
+        .readAsBytesSync();
+    await tester.pumpWidget(chatApp(room));
+    final photo = PendingFileAttachment(name: 'beach.jpg', data: gps);
+    chatState(tester).addAttachment(photo);
+    await tester.pump();
+
+    await typeAndSend(tester, 'where I was');
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text(chatState(tester).promptChatSendFile), findsOneWidget);
+
+    // Dropped on the window (or pasted) while the question is open.
+    final late =
+        PendingFileAttachment(name: 'late.jpg', data: blackJpeg(400, 300));
+    chatState(tester).addAttachment(late);
+    await tester.pump();
+
+    await tester.tap(find.text(chatState(tester).promptChatSendFile));
+    await tester.pump(const Duration(seconds: 5));
+
+    expect(sent.map((m) => m.message).nonNulls, ['where I was']);
+    expect([for (final m in sent) ...m.files.map((f) => f.file.name)],
+        ['beach.jpg']);
+    expect(chatState(tester).attachments, [late]);
+    await closeChat(tester);
+  });
+
   testWidgets('a command typed with a file attached runs as before',
       (tester) async {
     final commands = FakeCommands();
