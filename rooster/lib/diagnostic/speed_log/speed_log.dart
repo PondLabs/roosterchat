@@ -390,6 +390,13 @@ class SpeedLog {
 
   /// How long a finished span waits for the batch that holds its last
   /// frames, when no frame drawn after it is reported first.
+  ///
+  /// Limit on the web: the engine hands over its pending frames only when
+  /// it draws another one (`frame_timing_recorder.dart`, at most every
+  /// 100 ms). A span that closes while the screen stays still can wait
+  /// longer than this for that frame; once another span closes past the
+  /// wait, it is dropped and loses its last frames. Its `longest_frame` is
+  /// then smaller than the real one, or `unavailable`, never larger.
   static const frameWait = Duration(seconds: 3);
   static final Object _spanKey = Object();
 
