@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:rooster/client/attachment.dart';
+import 'package:rooster/utils/common_strings.dart';
 
 /// A pending file's stage and the time since Send, under its picture: in
 /// the chat's own slot while it is prepared, then under the room's pending
@@ -14,38 +15,33 @@ class PendingAttachmentStatus extends StatefulWidget {
   final AttachmentSend send;
   final VoidCallback? onDismiss;
 
-  static String get labelPreparing => Intl.message("Preparing",
+  static String get labelPendingFilePreparing => Intl.message("Preparing",
       name: "labelPendingFilePreparing",
       desc: "Under a file just sent from the composer, while the app gets it "
           "ready to upload (reads it, makes the picture's thumbnail)");
 
-  static String get labelUploading => Intl.message("Uploading",
+  static String get labelPendingFileUploading => Intl.message("Uploading",
       name: "labelPendingFileUploading",
       desc: "Under a file just sent from the composer, while it is uploaded "
           "to the server");
 
-  static String get labelSendingEvent => Intl.message("Sending",
+  static String get labelPendingFileSendingEvent => Intl.message("Sending",
       name: "labelPendingFileSendingEvent",
       desc: "Under a file just sent from the composer, once it is uploaded "
           "and the message that shows it is being sent to the room");
 
-  static String get labelFailed => Intl.message("Couldn't send",
+  static String get labelPendingFileFailed => Intl.message("Couldn't send",
       name: "labelPendingFileFailed",
       desc: "Under a file sent from the composer that did not reach the "
           "room");
 
-  static String get promptDismiss => Intl.message("Dismiss",
-      name: "promptPendingFileDismiss",
-      desc: "Tooltip of the button that takes away a file that could not "
-          "be sent");
-
   static String stageLabel(AttachmentSendStage stage) => switch (stage) {
-        AttachmentSendStage.preparing => labelPreparing,
-        AttachmentSendStage.uploading => labelUploading,
+        AttachmentSendStage.preparing => labelPendingFilePreparing,
+        AttachmentSendStage.uploading => labelPendingFileUploading,
         AttachmentSendStage.sending ||
         AttachmentSendStage.sent =>
-          labelSendingEvent,
-        AttachmentSendStage.failed => labelFailed,
+          labelPendingFileSendingEvent,
+        AttachmentSendStage.failed => labelPendingFileFailed,
       };
 
   /// [elapsed] as a clock: `0:07`, `12:30`, `1:02:03`.
@@ -134,7 +130,7 @@ class _PendingAttachmentStatusState extends State<PendingAttachmentStatus> {
                   fontFeatures: const [FontFeature.tabularFigures()])),
           if (failed && widget.onDismiss != null)
             IconButton(
-              tooltip: PendingAttachmentStatus.promptDismiss,
+              tooltip: CommonStrings.promptDismiss,
               visualDensity: VisualDensity.compact,
               iconSize: 16,
               onPressed: widget.onDismiss,

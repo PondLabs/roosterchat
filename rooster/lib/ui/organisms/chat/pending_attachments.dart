@@ -26,7 +26,7 @@ class PendingAttachmentsView extends StatelessWidget {
         if (sends.isEmpty) return const SizedBox.shrink();
         return ConstrainedBox(
           constraints: BoxConstraints(
-              maxHeight: MediaQuery.sizeOf(context).height * 0.4),
+              maxHeight: MediaQuery.sizeOf(context).height * 0.5),
           child: SingleChildScrollView(
             reverse: true,
             child: Column(

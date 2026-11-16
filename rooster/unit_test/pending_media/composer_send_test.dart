@@ -83,7 +83,8 @@ void main() {
     final size = tester.getSize(slot);
     expect(size.height, 200);
     expect(size.width, closeTo(200 * 400 / 300, 0.01));
-    expect(find.text(PendingAttachmentStatus.labelPreparing), findsOneWidget);
+    expect(find.text(PendingAttachmentStatus.labelPendingFilePreparing),
+        findsOneWidget);
     expect(find.text('0:00'), findsOneWidget);
     expect(composerText(tester), '');
     expect(chatState(tester).attachments, isEmpty);
