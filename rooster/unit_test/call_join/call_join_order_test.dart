@@ -44,8 +44,8 @@ void main() {
   };
 
   test(
-      'others see the previous clear, our membership, the connection, '
-      'then the microphone', () async {
+      'others see the previous clear, our membership and the connection '
+      'side by side, then the microphone', () async {
     final hangUp = Gate();
     final joining = join().run(leavePrevious: () async {
       await hangUp.passed;
@@ -56,12 +56,13 @@ void main() {
     await joining;
     await settle();
 
-    expect(journal.only(visible), [
-      'previous_clear',
-      'membership_write',
-      'connect',
-      'microphone_published',
-    ]);
+    final seen = journal.only(visible);
+    expect(seen.first, 'previous_clear');
+    expect(
+        seen.sublist(1, 3), unorderedEquals(['membership_write', 'connect']));
+    expect(seen.last, 'microphone_published');
+    expect(
+        journal.before('membership_written', 'microphone_published'), isTrue);
   });
 
   group('switching channels', () {
