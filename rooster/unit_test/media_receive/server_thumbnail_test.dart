@@ -6,7 +6,6 @@ import 'dart:async';
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
-import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
