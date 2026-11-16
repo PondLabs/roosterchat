@@ -28,9 +28,13 @@ abstract final class SpeedOperation {
   /// the first remote audio (see `call_join_trace.dart`).
   static const voiceJoin = 'voice_join';
 
+  /// A file sent from the composer, from it being attached to the server's
+  /// answer for its event (see `file_send_trace.dart`).
+  static const fileSend = 'file_send';
+
   /// Every span name. With [invalidSpeedName], at most
   /// `SpeedLog.maxOperations` (the finished spans keep that many).
-  static const all = {textSend, sync, imagePrepare, voiceJoin};
+  static const all = {textSend, sync, imagePrepare, voiceJoin, fileSend};
 }
 
 /// Step names.
@@ -83,6 +87,22 @@ abstract final class SpeedStep {
   /// The thumbnail and blurhash, in the background (native) or by the
   /// browser's canvas (web).
   static const encode = 'encode';
+
+  // file_send (echo, request and retry as in text_send)
+  /// From the file being attached to Send.
+  static const attached = 'attached';
+
+  /// From Send to the first frame drawn with the local picture.
+  static const previewPainted = 'preview_painted';
+
+  /// From Send to the files being handed to the Matrix SDK.
+  static const prepared = 'prepared';
+
+  /// One `POST /upload`: from leaving to its response headers.
+  static const upload = 'upload';
+
+  /// From Send to the SDK returning the event's id, or giving up.
+  static const confirmed = 'confirmed';
 
   // voice_join (timed steps may overlap: the join runs some side by side)
   /// The call being left hanging up.
@@ -162,6 +182,11 @@ abstract final class SpeedStep {
     header,
     decode,
     encode,
+    attached,
+    previewPainted,
+    prepared,
+    upload,
+    confirmed,
     leavePrevious,
     outputDevice,
     foci,
@@ -199,6 +224,9 @@ abstract final class SpeedValue {
   /// How many frames a decoded picture has (more than 1: animated).
   static const frames = 'frames';
 
+  /// The size in bytes of a picture's thumbnail.
+  static const thumbnailBytes = 'thumbnail_bytes';
+
   /// Every name of a number on a step.
   static const all = {
     attempt,
@@ -208,6 +236,7 @@ abstract final class SpeedValue {
     width,
     height,
     frames,
+    thumbnailBytes,
   };
 }
 

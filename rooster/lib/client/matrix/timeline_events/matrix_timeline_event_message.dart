@@ -7,6 +7,7 @@ import 'package:rooster/client/matrix/matrix_mxc_file_provider.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/matrix/matrix_room_permissions.dart';
+import 'package:rooster/client/matrix/media/matrix_file_send.dart';
 import 'package:rooster/client/matrix/matrix_timeline.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_mixin_reactions.dart';
@@ -34,6 +35,10 @@ class MatrixTimelineEventMessage extends MatrixTimelineEvent
 
   @override
   late List<Attachment>? attachments;
+
+  /// The event is a file still being sent from this device, shown from
+  /// its own bytes ([localPendingAttachment]).
+  bool _localFile = false;
 
   @override
   bool get editable => true;
@@ -64,7 +69,8 @@ class MatrixTimelineEventMessage extends MatrixTimelineEvent
       var file = e.content["file"] is Map<String, dynamic>
           ? e.content['file'] as Map<String, dynamic>
           : null;
-      if (e.content.containsKey("url") == false &&
+      if (!_localFile &&
+          e.content.containsKey("url") == false &&
           (file?.containsKey("url") != true)) {
         return e.plaintextBody;
       }
@@ -148,6 +154,15 @@ class MatrixTimelineEventMessage extends MatrixTimelineEvent
   }
 
   List<Attachment>? _parseAnyAttachments() {
+    // Still being sent from here: the picture (or the video's poster) from
+    // the bytes already held, before the upload and while it runs, not a
+    // file name and not a download.
+    final local = localPendingAttachment(event);
+    if (local != null) {
+      _localFile = true;
+      return [local];
+    }
+
     String filename = event.content.containsKey("filename")
         ? event.content["filename"] as String
         : event.body;

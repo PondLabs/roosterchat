@@ -16,6 +16,7 @@ import 'package:rooster/client/timeline_events/timeline_event_unknown.dart';
 import 'package:rooster/config/platform_utils.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/molecules/read_indicator.dart';
+import 'package:rooster/ui/molecules/timeline_events/events/pending_attachment_status.dart';
 import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_attachments.dart';
 import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_reactions.dart';
 import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_reply.dart';
@@ -182,10 +183,12 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
         return child;
       },
       attachments: attachments != null
-          ? TimelineEventViewAttachments(
-              attachments: attachments!,
-              previewMedia: widget.previewMedia,
-            )
+          ? withPendingStatus(
+              TimelineEventViewAttachments(
+                attachments: attachments!,
+                previewMedia: widget.previewMedia,
+              ),
+              room)
           : null,
       readReceipts: room != null
           ? ReadIndicator(
@@ -360,6 +363,26 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
                 true
             : previewComponent?.shouldGetPreviewsInRoom(room) == true) &&
         event.getLinks(timeline: timeline)?.isEmpty == false;
+  }
+
+  /// [attachments] with the stage and time of the file under them while
+  /// it is being sent from this device (see `AttachmentSend`).
+  Widget withPendingStatus(Widget attachments, Room? room) {
+    final event = this.event;
+    if (room == null ||
+        event == null ||
+        (event.status != TimelineEventStatus.sending &&
+            event.status != TimelineEventStatus.error)) {
+      return attachments;
+    }
+    final send =
+        AttachmentSends.instance.byTransaction(room.localId, event.eventId);
+    if (send == null) return attachments;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [attachments, PendingAttachmentStatus(send)],
+    );
   }
 
   /// A reply to one of our messages, which Discord highlights since it

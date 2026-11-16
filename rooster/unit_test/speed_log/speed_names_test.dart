@@ -43,11 +43,13 @@ void main() {
       'the names the text send, sync, image_prepare and voice_join spans use '
       'are on the list', () {
     expect(SpeedOperation.all,
-        {'text_send', 'sync', 'image_prepare', 'voice_join'});
+        {'text_send', 'sync', 'image_prepare', 'voice_join', 'file_send'});
     expect(SpeedStep.all, {
       'send', 'echo', 'echo_painted', 'queue_wait', 'request', 'retry', //
       'answer', 'response', 'processing', 'clean_up', 'next_request', 'error',
       'header', 'decode', 'encode', // image_prepare (and queue_wait)
+      // file_send (and echo, request, retry)
+      'attached', 'preview_painted', 'prepared', 'upload', 'confirmed',
       // voice_join
       'leave_previous', 'output_device', 'foci', 'openid_token', 'sfu_token',
       'sfu_livekit_cloud', 'sfu_self_hosted', 'microphone_early',
@@ -58,6 +60,7 @@ void main() {
     expect(SpeedValue.all, {
       'attempt', 'status', 'retry_after_ms', //
       'bytes', 'width', 'height', 'frames', // image_prepare
+      'thumbnail_bytes', // file_send
     });
     expect(SpeedOutcome.all,
         {'ok', 'failed', 'incomplete', 'abandoned', 'cancelled'});
