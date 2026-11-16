@@ -62,7 +62,8 @@ void main() {
     final prefix = 'own_media/${client.identifier}/';
     final thumbnailSize = event.thumbnailInfoMap['size'] as int;
     // The thumbnail uploaded is the one the preparation made (10 bytes).
-    expect(server.uploadSizes, [data.length, thumbnailSize]);
+    expect(server.uploadSizes, unorderedEquals([data.length, thumbnailSize]),
+        reason: 'the file and its thumbnail can go up together');
     expect(files.sizes, {
       '$prefix${event.attachmentMxcUrl}': data.length,
       '$prefix${event.thumbnailMxcUrl}': thumbnailSize,
