@@ -42,23 +42,26 @@ void main() {
       () async {
     final bytes = File("unit_test/fixtures/image_metadata/orientation_6.jpg")
         .readAsBytesSync();
-    final file = File("${dir.path}/photo.jpg")..writeAsBytesSync(bytes);
-    final lock = file.openSync(mode: FileMode.append)
-      ..lockSync(FileLock.exclusive);
-    final attachment =
-        PendingFileAttachment(name: "photo.jpg", path: file.path);
+    // A file whose read fails, made by the test rather than by the system
+    // (a lock does not stop a read on Linux or macOS), so the read fails
+    // the same way on all three.
+    final files = _Files({"/photos/photo.jpg": bytes})..failing = true;
+    await IOOverrides.runZoned(() async {
+      final attachment =
+          PendingFileAttachment(name: "photo.jpg", path: "/photos/photo.jpg");
 
-    // chat.dart does not wait for this future: it must not end in error.
-    await expectLater(
-        attachment.startImagePreparation(preparer: preparer()), completes);
-    expect(attachment.data, isNull);
+      // chat.dart does not wait for this future: it must not end in error.
+      await expectLater(
+          attachment.startImagePreparation(preparer: preparer()), completes);
+      expect(files.reads, 1, reason: "the read was tried, and failed");
+      expect(attachment.data, isNull);
 
-    lock
-      ..unlockSync()
-      ..closeSync();
-    await attachment.resolve(); // Send, once the file can be read
-    final prepared = await attachment.imagePreparation(preparer: preparer());
-    expect((prepared!.width, prepared.height), (48, 64));
+      files.failing = false;
+      await attachment.resolve(); // Send, once the file can be read
+      expect(files.reads, 2);
+      final prepared = await attachment.imagePreparation(preparer: preparer());
+      expect((prepared!.width, prepared.height), (48, 64));
+    }, createFile: files.create);
   });
 
   test("a thumbnail no smaller than the file sent is left out", () async {
@@ -109,4 +112,42 @@ class _FailingEncoder implements ThumbnailEncoder {
   @override
   Future<ThumbnailResult> encode(ThumbnailRequest request) =>
       Future.error(StateError("encoder unavailable"));
+}
+
+/// Files that live in the test: [create] makes a [File] for a path in
+/// [contents], whose read throws while [failing]. [reads] counts the reads
+/// tried.
+class _Files {
+  _Files(this.contents);
+
+  final Map<String, Uint8List> contents;
+  bool failing = false;
+  int reads = 0;
+
+  File create(String path) => _File(this, path);
+}
+
+class _File implements File {
+  _File(this._files, this.path);
+
+  final _Files _files;
+
+  @override
+  final String path;
+
+  @override
+  Future<bool> exists() async => _files.contents.containsKey(path);
+
+  @override
+  Future<Uint8List> readAsBytes() async {
+    _files.reads++;
+    if (_files.failing) {
+      throw FileSystemException("Cannot read", path);
+    }
+    // A new list for every read, as a real file gives.
+    return Uint8List.fromList(_files.contents[path]!);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
