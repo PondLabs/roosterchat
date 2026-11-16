@@ -88,13 +88,27 @@ class FakeLivekitRoom implements LivekitJoinRoom {
     journal.add('prepared');
   }
 
+  /// The tokens [connect] was given, in order.
+  final List<String> connectTokens = [];
+
+  /// Tokens [connect] refuses, as an SFU refuses an expired one.
+  final Set<String> refusedTokens = {};
+
   @override
   Future<void> connect(String url, String token) async {
     journal.add('connect');
+    connectTokens.add(token);
     await connectGate.passed;
+    if (refusedTokens.contains(token)) {
+      journal.add('connect_refused');
+      throw const TokenRefused();
+    }
     if (connectError != null) throw connectError!;
     journal.add('connected');
   }
+
+  @override
+  bool refusedToken(Object error) => error is TokenRefused;
 
   /// Open unless a test closes it: a permission prompt nobody answers.
   Gate microphoneGate = Gate()..open();
@@ -124,6 +138,11 @@ class FakeLivekitRoom implements LivekitJoinRoom {
     disposed = true;
     journal.add('room_disposed');
   }
+}
+
+/// What [FakeLivekitRoom.connect] throws for a token it refuses.
+class TokenRefused implements Exception {
+  const TokenRefused();
 }
 
 class FakeHost implements CallJoinHost<FakeLivekitRoom> {
@@ -225,8 +244,14 @@ class FakeHost implements CallJoinHost<FakeLivekitRoom> {
     membership = false;
   }
 
+  /// How many LiveKit rooms [createRoom] handed out.
+  int roomsCreated = 0;
+
   @override
-  Future<LivekitJoinRoom> createRoom() async => room;
+  Future<LivekitJoinRoom> createRoom() async {
+    roomsCreated++;
+    return room;
+  }
 
   @override
   Future<lk.AudioCaptureOptions> microphoneOptions() async {
@@ -260,6 +285,15 @@ CallTokenService fakeTokenService(Journal journal,
             await gate?.passed;
             return http.Response(jsonEncode({'url': sfu, 'jwt': 'jwt'}), 200);
           }));
+}
+
+/// A JWT (unsigned: nothing here checks it) whose `exp` is [expires], and
+/// [id] to tell it from another.
+String jwtUntil(DateTime expires, {String id = 'jwt'}) {
+  String part(Map<String, Object?> json) =>
+      base64Url.encode(utf8.encode(jsonEncode(json))).replaceAll('=', '');
+  return '${part({'alg': 'none'})}.'
+      '${part({'exp': expires.millisecondsSinceEpoch ~/ 1000, 'jti': id})}.sig';
 }
 
 /// Lets every pending microtask and timer at zero run.

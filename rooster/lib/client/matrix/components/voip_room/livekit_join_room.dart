@@ -10,9 +10,6 @@ import 'package:rooster/client/matrix/components/voip_room/matrix_livekit_encryp
 /// that opens no WebSocket and no WebRTC. [LkJoinRoom] is the real one, over
 /// `lk.Room`; once the join succeeds the call session takes that `lk.Room`
 /// over ([LkJoinRoom.room]).
-///
-/// The membership beside the connection and the warm-up before the click
-/// (the tasks after this one) are meant to build on the same interface.
 abstract class LivekitJoinRoom {
   /// Warms the way to the SFU at [url]: DNS and TLS and, for a LiveKit Cloud
   /// address with a [token], the choice of the nearest region, which
@@ -23,6 +20,10 @@ abstract class LivekitJoinRoom {
   /// subscribes to tracks, so screen shares only play for people who opt in
   /// to watching them (issue #50).
   Future<void> connect(String url, String token);
+
+  /// Whether [error], thrown by [connect], is the SFU refusing the token
+  /// (an expired or revoked one): the join then asks for a new token, once.
+  bool refusedToken(Object error);
 
   /// Opens a microphone capture with [options], not published yet. This is
   /// where a browser asks for permission.
@@ -71,6 +72,13 @@ class LkJoinRoom implements LivekitJoinRoom {
   @override
   Future<void> connect(String url, String token) => room.connect(url, token,
       connectOptions: const lk.ConnectOptions(autoSubscribe: false));
+
+  /// LiveKit checks the token over HTTP when the WebSocket fails, and
+  /// reports a 4xx answer as `NotAllowed`.
+  @override
+  bool refusedToken(Object error) =>
+      error is lk.ConnectException &&
+      error.reason == lk.ConnectionErrorReason.NotAllowed;
 
   @override
   Future<JoinMicrophone> openMicrophone(lk.AudioCaptureOptions options) async =>

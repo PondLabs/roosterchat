@@ -147,10 +147,15 @@ class CallJoin<S> {
         trace.time(SpeedStep.outputDevice, () => host.selectOutputDevice());
     output.ignore();
 
-    final openIdRequest = trace.time(
-        SpeedStep.openIdToken, () => host.openIdToken().timeout(_bound));
+    // Asked for only when no call token of this room is held: a held one
+    // (fetched ahead, see CallWarmUp) needs no OpenID token. The OpenID
+    // token itself may be held too (CallTokenService).
+    Future<matrix.OpenIdCredentials> askOpenId() => trace.time(
+        SpeedStep.openIdToken, () => tokens.openId(host.openIdToken));
+    final openIdRequest =
+        tokens.holdsGrant(host.roomId, host.deviceId) ? null : askOpenId();
     // Not left failing unheard when the foci below throw first.
-    openIdRequest.ignore();
+    openIdRequest?.ignore();
     final foci = await trace.time(SpeedStep.foci, host.foci);
     if (foci.isEmpty) {
       throw CallJoinException("Failed to find a valid LiveKit service",
@@ -158,31 +163,15 @@ class CallJoin<S> {
     }
     final focus = foci.first;
     Log.d("Got Foci Url: $foci");
-    final openId = await openIdRequest;
+    checkFocus(focus);
 
-    // A remote service must be HTTPS: the OpenID-backed requests leave
-    // this device. A loopback service (a developer's local stack, and the
-    // integration one) is trusted by its address.
-    final focusLoopback = focus.host == "localhost" ||
-        focus.host.startsWith("127.") ||
-        focus.host == "::1" ||
-        focus.host == "[::1]";
-    if (focus.scheme != "https" && !focusLoopback) {
-      throw CallJoinException("Selected focus JWT does not use HTTPS",
-          MatrixLivekitBackend.errorCallFocusNotHttps);
-    }
-
-    final grant = await trace.time(
+    final first = await trace.time(
         SpeedStep.sfuToken,
-        () => tokens.requestSfu(focus, {
-              "device_id": host.deviceId,
-              "room": host.roomId,
-              "openid_token": {
-                "matrix_server_name": openId.matrixServerName,
-                "access_token": openId.accessToken,
-                "expires_in": openId.expiresIn,
-              }
-            }));
+        () => tokens.sfuGrant(focus,
+            roomId: host.roomId,
+            deviceId: host.deviceId,
+            openId: () => openIdRequest ?? askOpenId()));
+    final grant = first.grant;
     final cloud = isLivekitCloud(Uri.parse(grant.url));
     trace.sfuHost(livekitCloud: cloud);
 
@@ -254,8 +243,8 @@ class CallJoin<S> {
       claim = CallMembershipWrites.claim(joinKey);
       write = trace.time(
           SpeedStep.membershipWrite, () => host.writeMembership(foci));
-      connection = trace.time(
-          SpeedStep.connect, () => room.connect(grant.url, grant.jwt));
+      connection = trace.time(SpeedStep.connect,
+          () => _connect(room, focus, first, askOpenId, hangUp));
       // Both to their end, also when one fails first (Future.wait reports
       // the first error once every future has finished).
       await Future.wait([write, connection]);
@@ -315,7 +304,43 @@ class CallJoin<S> {
     }
   }
 
-  static const _bound = Duration(seconds: 15);
+  /// Connects [room] with [first]. A held call token the SFU refuses
+  /// (expired or revoked since it was fetched) is dropped, and the join asks
+  /// for a new one and connects again, once.
+  Future<void> _connect(
+      LivekitJoinRoom room,
+      Uri focus,
+      HeldGrant first,
+      Future<matrix.OpenIdCredentials> Function() openId,
+      _HangUp hangUp) async {
+    try {
+      await room.connect(first.grant.url, first.grant.jwt);
+    } catch (e) {
+      if (!first.held || !room.refusedToken(e)) rethrow;
+      Log.i("Voice join: the SFU refused a held call token, asking again");
+      tokens.forgetGrant(focus, roomId: host.roomId, deviceId: host.deviceId);
+      hangUp.check();
+      final again = await tokens.sfuGrant(focus,
+          roomId: host.roomId, deviceId: host.deviceId, openId: openId);
+      hangUp.check();
+      await room.connect(again.grant.url, again.grant.jwt);
+    }
+  }
+
+  /// Throws unless [focus], the call token service, may be sent our OpenID
+  /// token: a remote service must be HTTPS, since the OpenID-backed
+  /// requests leave this device. A loopback service (a developer's local
+  /// stack, and the integration one) is trusted by its address.
+  static void checkFocus(Uri focus) {
+    final focusLoopback = focus.host == "localhost" ||
+        focus.host.startsWith("127.") ||
+        focus.host == "::1" ||
+        focus.host == "[::1]";
+    if (focus.scheme != "https" && !focusLoopback) {
+      throw CallJoinException("Selected focus JWT does not use HTTPS",
+          MatrixLivekitBackend.errorCallFocusNotHttps);
+    }
+  }
 
   /// Whether [sfu] is LiveKit Cloud, as LiveKit's own `isCloudUrl` (not
   /// exported) tells.

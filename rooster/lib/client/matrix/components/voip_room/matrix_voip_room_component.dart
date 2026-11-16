@@ -213,6 +213,13 @@ class MatrixVoipRoomComponent
     hangUp.complete();
   }
 
+  /// Fetches what a join needs before the click (see `CallWarmUp`):
+  /// nothing while we are in this room's call or joining it.
+  Future<void> warmUp() async {
+    if (_hasActiveSession || _joining != null) return;
+    await backend.warmUp();
+  }
+
   Future<VoipSession?> _joinCall(Completer<void> hangUp) async {
     // Run by the join beside its token requests, and finished before it
     // writes our membership or connects.
