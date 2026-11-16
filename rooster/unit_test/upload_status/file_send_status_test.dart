@@ -53,9 +53,18 @@ class _Uploads extends FakeTransport {
   }
 }
 
+/// The upload loop's clock with no wait: its new attempts go at once.
+class _NoWait extends matrix.SendClock {
+  const _NoWait();
+
+  @override
+  Future<void> delay(Duration duration) async {}
+}
+
 /// A logged-in `matrix.Client` on [transport] under our HTTP client, whose
-/// send loops give up after [giveUpAfter] (they decide by the real clock),
-/// and a plain room it has joined.
+/// event send loop gives up after [giveUpAfter] (it decides by the real
+/// clock) and whose upload loop does not wait, and a plain room it has
+/// joined.
 Future<(matrix.Client, matrix.Room)> _plainClient(
     String name, http.Client transport, SpeedLog log,
     {Duration giveUpAfter = const Duration(milliseconds: 100)}) async {
@@ -72,7 +81,8 @@ Future<(matrix.Client, matrix.Room)> _plainClient(
           log: log,
           hosts: HostClassifier(
               homeserver: () => Uri.parse('https://fakeServer.notExisting'))),
-      sendTimelineEventTimeout: giveUpAfter);
+      sendTimelineEventTimeout: giveUpAfter,
+      sendClock: const _NoWait());
   FakeMatrixApi.client = mx;
   await mx.checkHomeserver(Uri.parse('https://fakeServer.notExisting'),
       checkWellKnown: false);
