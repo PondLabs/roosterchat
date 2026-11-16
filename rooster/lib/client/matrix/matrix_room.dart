@@ -977,9 +977,19 @@ class MatrixRoom extends Room {
     if (send != null) AttachmentSends.instance.remove(send);
   }
 
+  /// Throws [AttachmentNoLongerHeld] for a file this device no longer holds
+  /// (the app was restarted since it failed): the SDK would take the
+  /// message away and throw, and a failed send is never hidden. The
+  /// message stays failed; "Cancel" takes it away.
   @override
   Future<void> retrySend(TimelineEvent event) async {
     final mxEvent = event as MatrixTimelineEvent;
+    final mx = mxEvent.event;
+    if (mx.status.isError &&
+        _fileMessageTypes.contains(mx.messageType) &&
+        !_matrixRoom.sendingFilePlaceholders.containsKey(mx.eventId)) {
+      throw const AttachmentNoLongerHeld();
+    }
     final send = AttachmentSends.instance.byTransaction(localId, event.eventId);
     if (send != null && mxEvent.event.status.isError) {
       // Its stage follows the new attempt, and a failure shows again.
@@ -987,6 +997,26 @@ class MatrixRoom extends Room {
       return;
     }
     await mxEvent.event.sendAgain();
+  }
+
+  /// The message types the SDK sends again from the file it holds
+  /// (`Event.sendAgain`).
+  static const _fileMessageTypes = {
+    matrix.MessageTypes.Image,
+    matrix.MessageTypes.Video,
+    matrix.MessageTypes.Audio,
+    matrix.MessageTypes.File,
+  };
+
+  /// The server's limit on an uploaded file's size (`m.upload.size`), or
+  /// null when it sets none or cannot be asked. The SDK keeps the answer
+  /// for days, so this usually makes no request.
+  Future<int?> maxUploadBytes() async {
+    try {
+      return (await _matrixRoom.client.getConfig()).mUploadSize;
+    } catch (_) {
+      return null; // Not known: the server still checks.
+    }
   }
 
   @override
