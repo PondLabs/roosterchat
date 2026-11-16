@@ -39,6 +39,36 @@ void main() {
     expect(send.outcome, 'failed');
   });
 
+  test('unlisted value names on one step are counted, not merged', () {
+    final log = SpeedLog(frames: _NoFrames());
+    final span = log.startSpan(SpeedOperation.textSend)
+      ..mark(SpeedStep.request, values: {
+        'alice': 70001,
+        'bob': 90002,
+        SpeedValue.status: 200,
+      })
+      ..mark(SpeedStep.answer, values: {'carol': 50003})
+      ..finish();
+
+    // The values of unlisted names are dropped: invalid_name says how many
+    // there were.
+    expect(span.steps[0].values, {invalidSpeedName: 2, SpeedValue.status: 200});
+    expect(span.steps[1].values, {invalidSpeedName: 1});
+    final report = buildSpeedReport(log);
+    expect(report, contains(' invalid_name=2 status=200\n'));
+    expect(report, contains(' invalid_name=1\n'));
+    for (final word in ['alice', 'bob', 'carol']) {
+      expect(report, isNot(contains(word)), reason: word);
+    }
+    // The dropped values, in any line but the span's own: its random id
+    // (`op=`) is hexadecimal and could hold any digits.
+    final lines =
+        report.split('\n').where((line) => !line.contains('op=')).join('\n');
+    for (final value in ['70001', '90002', '50003']) {
+      expect(lines, isNot(contains(value)), reason: value);
+    }
+  });
+
   test(
       'the names the text send, sync, image_prepare and voice_join spans use '
       'are on the list', () {
@@ -46,7 +76,8 @@ void main() {
         {'text_send', 'sync', 'image_prepare', 'voice_join'});
     expect(SpeedStep.all, {
       'send', 'echo', 'echo_painted', 'queue_wait', 'request', 'retry', //
-      'answer', 'response', 'processing', 'clean_up', 'next_request', 'error',
+      'answer', 'server_wait', 'processing', 'clean_up', 'client_work', //
+      'next_request', 'error',
       'header', 'decode', 'encode', // image_prepare (and queue_wait)
       // voice_join
       'leave_previous', 'output_device', 'foci', 'openid_token', 'sfu_token',

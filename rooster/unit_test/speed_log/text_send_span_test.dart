@@ -1,7 +1,10 @@
 @TestOn('vm')
 library;
 
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
@@ -10,6 +13,25 @@ import 'package:rooster/diagnostic/speed_log/speed_report.dart';
 import 'package:rooster/diagnostic/speed_log/text_send_trace.dart';
 
 import 'fake_account.dart';
+
+/// A measurement that throws in both of the room's calls.
+class _ThrowingTrace extends TextSendTrace {
+  _ThrowingTrace(super.span) : super.forTest();
+
+  final List<String> calls = [];
+
+  @override
+  void sending(matrix.Room room, String txid) {
+    calls.add('sending');
+    throw StateError('sending');
+  }
+
+  @override
+  void sent({required bool ok}) {
+    calls.add('sent');
+    throw StateError('sent');
+  }
+}
 
 const _sendRoute =
     'PUT /_matrix/client/v3/rooms/{roomId}/send/{eventType}/{txnId}';
@@ -150,6 +172,70 @@ void main() {
     expect(painted.available, isFalse);
     expect(span.steps.singleWhere((s) => s.name == SpeedStep.echo).available,
         isTrue);
+  });
+
+  test('a send behind another in the room waits there in queue_wait', () async {
+    final release = Completer<void>();
+    transport.holdNextSend = release.future;
+    final first = sendText('First');
+    // The first send's PUT has left and is held by the server.
+    while (!transport.seen.contains(_sendRoute)) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    final second = sendText('Second, queued behind it');
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    release.complete();
+
+    final queued = await second;
+    final ahead = await first;
+
+    Duration queueWait(SpeedSpan span) =>
+        span.steps.singleWhere((s) => s.name == SpeedStep.queueWait).duration!;
+    expect(queueWait(ahead), Duration.zero);
+    expect(queueWait(queued),
+        greaterThanOrEqualTo(const Duration(milliseconds: 30)));
+    expect(queued.outcome, SpeedOutcome.ok);
+    print(buildSpeedReport(SpeedLog.instance));
+  });
+
+  test('a measurement that throws never stops the send', () async {
+    final trace =
+        _ThrowingTrace(SpeedLog.instance.startSpan(SpeedOperation.textSend));
+    Object? sent;
+
+    await TextSendTrace.send(trace, () async {
+      return sent = await room.sendMessage(message: 'Sent all the same');
+    });
+
+    expect(trace.calls, ['sending', 'sent']);
+    expect(transport.seen, [_sendRoute]);
+    expect(sent, isNotNull, reason: 'the send returns the sent event');
+  });
+
+  test('a span closed from outside stops listening for its echo on finish',
+      () async {
+    var listening = 0;
+    final events = StreamController<matrix.Event>.broadcast(
+        onListen: () => listening++, onCancel: () => listening--);
+    TextSendTrace.timelineEvents = (_) => events.stream;
+    addTearDown(() {
+      TextSendTrace.timelineEvents =
+          (room) => room.client.onTimelineEvent.stream;
+      events.close();
+    });
+    final trace = TextSendTrace.forComposer(
+        sendPressed: TextSendTrace.now(),
+        message: 'Never echoed',
+        hasAttachments: false)!;
+
+    trace.sending(room.matrixRoom, 'txid-never-echoed');
+    expect(listening, 1);
+    // Closed by the log (too many open spans) before the send finishes.
+    trace.span.finish(outcome: SpeedOutcome.abandoned);
+    await trace.finish();
+
+    expect(listening, 0);
+    expect(trace.span.outcome, SpeedOutcome.abandoned);
   });
 
   test('a message with attachments or no text is not a text send', () {

@@ -48,7 +48,9 @@ String buildSpeedReport(SpeedLog log) {
     ..writeln()
     ..writeln('spans (${log.spans.length} finished, newest '
         '${log.spans.perOperation} of each operation kept, '
-        '${open.length} open):');
+        '${open.length} open'
+        '${log.spans.dropped > 0 ? ', ${log.spans.dropped} dropped: more '
+            'than ${log.spans.maxOperations} operations' : ''}):');
   for (final span in [...log.spans.toList(), ...open]) {
     out.writeln(_span(span));
     for (final step in span.steps) {

@@ -58,14 +58,19 @@ abstract final class SpeedStep {
   static const answer = 'answer';
 
   // sync
-  /// From the sync request to its response (the long poll included).
-  static const response = 'response';
+  /// From the sync request to its response: the server's wait, the long
+  /// poll included (up to 30 s when nothing happens).
+  static const serverWait = 'server_wait';
 
   /// Handling the response: rooms, events, the database.
   static const processing = 'processing';
 
   /// Device keys, encryption and the to-device queue after processing.
   static const cleanUp = 'clean_up';
+
+  /// What the client did with the response: processing and clean-up
+  /// together, without the server's wait.
+  static const clientWork = 'client_work';
 
   /// From the end of the round to the next sync request leaving.
   static const nextRequest = 'next_request';
@@ -154,9 +159,10 @@ abstract final class SpeedStep {
     request,
     retry,
     answer,
-    response,
+    serverWait,
     processing,
     cleanUp,
+    clientWork,
     nextRequest,
     error,
     header,

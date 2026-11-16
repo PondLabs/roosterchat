@@ -13,17 +13,26 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// The transport under the speed log's client in these tests: the SDK's
 /// [FakeMatrixApi], with the next [throttleSends] `PUT /send` answered by a
-/// 429 carrying [retryAfterMs]. Every request it sees is kept in [seen] as
-/// its method and route template.
+/// 429 carrying [retryAfterMs], and the next `PUT /send` held until
+/// [holdNextSend] completes. Every request it sees is kept in [seen] as its
+/// method and route template.
 class FakeTransport extends http.BaseClient {
   final FakeMatrixApi _api = FakeMatrixApi();
   final List<String> seen = [];
   int throttleSends = 0;
   int retryAfterMs = 20;
+  Future<void>? holdNextSend;
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     seen.add('${request.method} ${routeTemplate(request.url)}');
+    final hold = holdNextSend;
+    if (hold != null &&
+        request.method == 'PUT' &&
+        request.url.path.contains('/send/')) {
+      holdNextSend = null;
+      await hold;
+    }
     if (request.method == 'PUT' &&
         request.url.path.contains('/send/') &&
         throttleSends > 0) {

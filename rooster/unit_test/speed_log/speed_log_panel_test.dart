@@ -19,8 +19,10 @@ class _NoFrames implements FrameSource {
 }
 
 /// A log on a clock the test moves by hand: 20 text sends of 10, 20... 200
-/// ms whose request took 1, 2... 20 ms, one that failed, one sync and one
-/// operation of a kind this panel has never heard of.
+/// ms whose request took 1, 2... 20 ms, one that failed, one sync of 30 s,
+/// and a third operation, one voice join of 450 ms whose connection took
+/// 300 ms. The panel has no list of operations: it shows whatever the log
+/// holds, so the voice join must appear like the other two.
 SpeedLog _log() {
   var now = Duration.zero;
   final log = SpeedLog(frames: _NoFrames(), clock: () => now);
@@ -38,8 +40,15 @@ SpeedLog _log() {
 
   final sync = log.startSpan(SpeedOperation.sync);
   now += const Duration(milliseconds: 30000);
-  sync.mark(SpeedStep.response);
+  sync.mark(SpeedStep.serverWait);
   sync.finish();
+
+  final join = log.startSpan(SpeedOperation.voiceJoin);
+  now += const Duration(milliseconds: 150);
+  join.mark(SpeedStep.membershipWrite);
+  now += const Duration(milliseconds: 300);
+  join.mark(SpeedStep.connect);
+  join.finish();
   return log;
 }
 
@@ -47,7 +56,7 @@ void main() {
   test('p50 and p95 are by nearest rank over the spans that ended ok', () {
     final summary = summarizeSpeedLog(_log());
 
-    expect(summary.map((o) => o.name), ['sync', 'text_send']);
+    expect(summary.map((o) => o.name), ['sync', 'text_send', 'voice_join']);
     final send = summary[1];
     expect(send.finished, 21);
     expect(send.ok, 20);
@@ -88,13 +97,23 @@ void main() {
     await tester.tap(find.text(SpeedLogPanel.labelDeveloperSpeedLog));
     await tester.pumpAndSettle();
 
-    // Every operation in the log, the one it has never heard of included.
-    for (final name in ['text_send', 'sync', 'request']) {
+    // The three operations in the log and a step of each, by their names.
+    for (final name in [
+      'text_send',
+      'sync',
+      'voice_join',
+      'request',
+      'server_wait',
+      'connect',
+    ]) {
       expect(find.text(name), findsOneWidget, reason: name);
     }
     expect(find.text('p50 100 ms · p95 190 ms'), findsOneWidget);
     expect(find.text('p50 10 ms · p95 19 ms'), findsOneWidget);
     expect(find.text('p50 30000 ms · p95 30000 ms'), findsNWidgets(2));
+    // The voice join's total and its connect step.
+    expect(find.text('p50 450 ms · p95 450 ms'), findsOneWidget);
+    expect(find.text('p50 300 ms · p95 300 ms'), findsOneWidget);
     expect(find.text('20 samples'), findsNWidgets(2));
     expect(find.text('20 not timed'), findsOneWidget);
 
@@ -105,6 +124,8 @@ void main() {
     expect(copied, contains('text_send ok=20/21 p50=100ms p95=190ms'));
     expect(copied, contains('  request n=20 p50=10ms p95=19ms'));
     expect(copied, contains('  echo_painted n=0 unavailable=20'));
+    expect(copied, contains('voice_join ok=1/1 p50=450ms p95=450ms'));
+    expect(copied, contains('  connect n=1 p50=300ms p95=300ms'));
     expect(find.text(SpeedLogPanel.messageDeveloperSpeedReportCopied),
         findsOneWidget);
 
