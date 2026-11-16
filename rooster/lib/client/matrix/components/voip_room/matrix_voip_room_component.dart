@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:rooster/client/matrix/components/voip_room/call_join.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_call_membership.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip_room/voip_room_component.dart';
@@ -177,19 +178,42 @@ class MatrixVoipRoomComponent
   /// two LiveKit sessions whose membership writes overwrote each other.
   Future<VoipSession?>? _joining;
 
+  /// Completed to hang up [_joining].
+  Completer<void>? _hangUpJoining;
+
   @override
   Future<VoipSession?> joinCall() {
     final joining = _joining;
     if (joining != null) return joining;
-    final join = _joinCall();
+    final hangUp = Completer<void>();
+    final join = _joinCall(hangUp);
     _joining = join;
+    _hangUpJoining = hangUp;
     join.whenComplete(() {
-      if (identical(_joining, join)) _joining = null;
-    });
+      if (identical(_joining, join)) {
+        _joining = null;
+        _hangUpJoining = null;
+      }
+      // The caller gets the join's error; this copy of it is not left
+      // unhandled.
+    }).ignore();
     return join;
   }
 
-  Future<VoipSession?> _joinCall() async {
+  /// Hangs up a join still running: it takes back what it sent and fails
+  /// with [CallJoinHungUp], and no session comes of it. A join asked for
+  /// after this is a new one: its membership waits for the old one's to be
+  /// cleared, 10 s at most, and an old join that takes longer leaves the
+  /// new membership alone (`CallMembershipWrites.superseded`).
+  void hangUpJoin() {
+    final hangUp = _hangUpJoining;
+    if (hangUp == null) return;
+    _joining = null;
+    _hangUpJoining = null;
+    hangUp.complete();
+  }
+
+  Future<VoipSession?> _joinCall(Completer<void> hangUp) async {
     // Run by the join beside its token requests, and finished before it
     // writes our membership or connects.
     Future<void> leavePrevious() async {
@@ -209,7 +233,14 @@ class MatrixVoipRoomComponent
       ]);
     }
 
-    currentSession = await backend.join(leavePrevious: leavePrevious);
+    final session =
+        await backend.join(leavePrevious: leavePrevious, hangUp: hangUp.future);
+    if (hangUp.isCompleted) {
+      // Hung up after the join was done but before it got here.
+      await session?.hangUpCall();
+      throw const CallJoinHungUp();
+    }
+    currentSession = session;
     currentSession?.onStateChanged.listen(onStateChanged);
     return currentSession;
   }

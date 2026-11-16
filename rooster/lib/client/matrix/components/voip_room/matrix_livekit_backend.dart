@@ -169,12 +169,14 @@ class MatrixLivekitBackend implements CallJoinHost<MatrixLivekitVoipSession> {
   }
 
   /// Joins the call. [leavePrevious] hangs up the call we are in; it runs
-  /// beside the token requests (see [CallJoin]).
-  Future<VoipSession?> join({Future<void> Function()? leavePrevious}) async {
+  /// beside the token requests. [hangUp] completing hangs up the join itself
+  /// (see [CallJoin.run]).
+  Future<VoipSession?> join(
+      {Future<void> Function()? leavePrevious, Future<void>? hangUp}) async {
     final session = await CallJoin<MatrixLivekitVoipSession>(
       host: this,
       tokens: CallTokenService.forClient(room.matrixRoom.client),
-    ).run(leavePrevious: leavePrevious);
+    ).run(leavePrevious: leavePrevious, hangUp: hangUp);
     livekitRoom = session.livekitRoom;
     // In the browser the pick only reaches LiveKit's own audio elements.
     if (kIsWeb) {

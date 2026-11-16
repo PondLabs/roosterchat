@@ -25,8 +25,18 @@ class Journal {
     return i;
   }
 
+  /// Where [entry] happened last.
+  int lastIndexOf(String entry) {
+    final i = entries.lastIndexOf(entry);
+    if (i < 0) throw StateError('"$entry" never happened: $entries');
+    return i;
+  }
+
   /// Whether [first] happened before [then].
   bool before(String first, String then) => indexOf(first) < indexOf(then);
+
+  /// How many times [entry] happened.
+  int count(String entry) => entries.where((e) => e == entry).length;
 
   /// Only [names], in the order they happened.
   List<String> only(Set<String> names) =>
@@ -122,7 +132,9 @@ class FakeHost implements CallJoinHost<FakeLivekitRoom> {
 
   final Journal journal;
   final String focus;
-  final FakeLivekitRoom room;
+
+  /// The room [createRoom] hands out next. A test replaces it to join again.
+  FakeLivekitRoom room;
 
   bool allowed = true;
   bool phoneBrowser = false;
@@ -173,20 +185,45 @@ class FakeHost implements CallJoinHost<FakeLivekitRoom> {
   @override
   String get deviceId => 'DEVICE';
 
+  /// Another room of the same account keeps the same [membershipKey].
   @override
-  String get roomId => '!room:example.org';
+  String roomId = '!room:example.org';
 
   @override
   String get membershipKey => '_@me:example.org_DEVICE_m.call';
+
+  /// Whether the homeserver holds our membership: set when a write lands,
+  /// unset when a clear does.
+  bool membership = false;
+
+  /// Thrown by [writeMembership] when set, after [membershipGate].
+  Object? membershipError;
+
+  /// Whether the write reached the homeserver before [membershipError]: an
+  /// answer lost on the way back (a timeout) still wrote it.
+  bool membershipLandsBeforeError = false;
 
   @override
   Future<void> writeMembership(List<Uri> foci) async {
     journal.add('membership_write');
     await membershipGate.passed;
+    final error = membershipError;
+    if (error == null || membershipLandsBeforeError) {
+      membership = true;
+      journal.add('membership_written');
+    }
+    if (error != null) throw error;
   }
 
+  /// Awaited by [clearMembership] before it lands, when set.
+  Future<void> Function()? clearMembershipOverride;
+
   @override
-  Future<void> clearMembership() async => journal.add('membership_clear');
+  Future<void> clearMembership() async {
+    journal.add('membership_clear');
+    await clearMembershipOverride?.call();
+    membership = false;
+  }
 
   @override
   Future<LivekitJoinRoom> createRoom() async => room;

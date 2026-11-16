@@ -63,7 +63,8 @@ abstract class CallJoinHost<S> {
 }
 
 /// One voice join, in the order the people in the call see it: the previous
-/// call's membership cleared, ours written, the connection, the microphone.
+/// call's membership cleared, then ours written and the connection side by
+/// side, then the microphone.
 ///
 /// What nobody else sees runs beside the rest instead of before it:
 ///
@@ -76,6 +77,13 @@ abstract class CallJoinHost<S> {
 /// - the microphone's options and capture are prepared during the
 ///   connection, and published once it is up (a phone's browser opens it
 ///   before the membership, as before).
+///
+/// The membership write and the connection start together and are both
+/// awaited to their end before the join is done or undone. If either fails,
+/// or the join is hung up meanwhile, the other is undone too: the membership
+/// is cleared only once its write has settled, since a clear sent while the
+/// write is in flight can land first and leave the membership behind (issue
+/// #48). The microphone is published only once both have succeeded.
 ///
 /// Every step is timed in a `voice_join` span ([CallJoinTrace]).
 class CallJoin<S> {
@@ -100,8 +108,11 @@ class CallJoin<S> {
               "the call. Nothing was sent");
 
   /// Joins: [leavePrevious] hangs up the call we are in, and is only called
-  /// once the join is allowed.
-  Future<S> run({Future<void> Function()? leavePrevious}) async {
+  /// once the join is allowed. When [hangUp] completes before the join is
+  /// done, the join takes back what it sent and fails with [CallJoinHungUp]:
+  /// no session and no membership come of it.
+  Future<S> run(
+      {Future<void> Function()? leavePrevious, Future<void>? hangUp}) async {
     // Before anything starts, the previous call's hang up included.
     if (!host.canWriteMembership) {
       throw CallJoinException(
@@ -113,7 +124,8 @@ class CallJoin<S> {
     // are not the join's.
     final outside = Zone.current;
     try {
-      return await trace.run(() => _join(trace, outside, leavePrevious));
+      return await trace
+          .run(() => _join(trace, outside, leavePrevious, _HangUp(hangUp)));
     } catch (_) {
       trace.failed();
       rethrow;
@@ -121,7 +133,7 @@ class CallJoin<S> {
   }
 
   Future<S> _join(CallJoinTrace trace, Zone outside,
-      Future<void> Function()? leavePrevious) async {
+      Future<void> Function()? leavePrevious, _HangUp hangUp) async {
     final leaving = _quiet(trace.time(
         SpeedStep.leavePrevious,
         () => leavePrevious == null
@@ -177,12 +189,19 @@ class CallJoin<S> {
     await output;
     final room = await host.createRoom();
 
+    final joinKey =
+        CallMembershipWrites.joinKey(host.roomId, host.membershipKey);
     // Local, not fields: two joins can overlap (two views of one room).
-    var wroteMembership = false;
+    Object? claim;
+    Future<void>? write;
+    Future<void>? connection;
+    // Done once this join has kept its membership or cleared it.
+    final membershipSettled = Completer<void>();
     JoinMicrophone? earlyMicrophone;
     Future<JoinMicrophone?>? preparedMicrophone;
     try {
       await leaving;
+      hangUp.check();
 
       // In a phone's browser, before anything of the call plays: see
       // openMicrophoneBeforePlayback. Before the membership too, so nobody
@@ -209,20 +228,38 @@ class CallJoin<S> {
       }
 
       // A clear from the previous call may still be in flight, and would
-      // erase what we write now (issue #48).
-      await trace.time(SpeedStep.membershipClearWait,
-          () => CallMembershipWrites.settled(host.membershipKey));
+      // erase what we write now (issue #48). So may an earlier join of this
+      // room's, hung up (see below).
+      await trace.time(
+          SpeedStep.membershipClearWait,
+          () => Future.wait([
+                CallMembershipWrites.settled(host.membershipKey),
+                CallMembershipWrites.settled(joinKey),
+              ]));
+
+      // Hung up before anything others see was sent: nothing is, and no
+      // capture is opened (in a browser, nor its permission prompt).
+      hangUp.check();
 
       if (early.track == null && early.retry) {
         preparedMicrophone = _prepareMicrophone(trace, room);
       }
 
-      wroteMembership = true;
-      await trace.time(
+      // A join of this room after this one (a quick rejoin) writes our
+      // membership only once this one has kept it or cleared it: a clear of
+      // ours landing after that write would erase it.
+      CallMembershipWrites.clearing(joinKey, membershipSettled.future);
+      // That wait is bounded: an earlier join that outlasts it leaves this
+      // one's membership alone.
+      claim = CallMembershipWrites.claim(joinKey);
+      write = trace.time(
           SpeedStep.membershipWrite, () => host.writeMembership(foci));
-
-      await trace.time(
+      connection = trace.time(
           SpeedStep.connect, () => room.connect(grant.url, grant.jwt));
+      // Both to their end, also when one fails first (Future.wait reports
+      // the first error once every future has finished).
+      await Future.wait([write, connection]);
+      hangUp.check();
       trace.connected(room.serverRegion);
 
       final toPublish = early.track;
@@ -244,18 +281,31 @@ class CallJoin<S> {
       trace.listenForRemoteAudio(
           room.events.where((event) => event == JoinRoomEvent.remoteSpeaking));
 
-      return outside.run(() => host.createSession(room, published));
+      final session = outside.run(() => host.createSession(room, published));
+      membershipSettled.complete();
+      return session;
     } catch (_) {
       // Don't leave a membership for a call we never got into, nor a room
       // that keeps its connectivity listener and timers alive (issue #48).
-      // The membership first: it is what other people see.
-      if (wroteMembership) {
-        try {
-          await host.clearMembership();
-        } catch (e, s) {
-          Log.onError(e, s, content: "Could not clear call membership");
+      // The membership first: it is what other people see. Only once its
+      // write has settled, even a write that failed (its request may still
+      // have landed): a clear sent before could land first.
+      if (write != null && claim != null) {
+        await _settledOf(write);
+        if (CallMembershipWrites.superseded(joinKey, claim)) {
+          // A later join of this room wrote it since, and holds it.
+          Log.i("Voice join undone: our membership is a later join's now");
+        } else {
+          try {
+            await host.clearMembership();
+          } catch (e, s) {
+            Log.onError(e, s, content: "Could not clear call membership");
+          }
         }
+        CallMembershipWrites.release(joinKey, claim);
       }
+      if (!membershipSettled.isCompleted) membershipSettled.complete();
+      if (connection != null) await _settledOf(connection);
       await room.dispose();
       // Nor a microphone opened ahead of a room that never connected,
       // capturing with nothing left that could stop it.
@@ -312,10 +362,37 @@ class CallJoin<S> {
     }
   }
 
+  /// Done when [future] is, whether it failed or not (its error is the
+  /// join's to report, not this wait's).
+  static Future<void> _settledOf(Future<void> future) =>
+      future.then((_) {}, onError: (_) {});
+
   /// [future], with its error logged rather than thrown: what runs beside
   /// the join must not fail it, nor fail unheard when the join fails first.
   static Future<void> _quiet(Future<void> future) =>
       future.catchError((Object e, StackTrace s) {
         Log.onError(e, s, content: "Voice join: a step beside the join failed");
       });
+}
+
+/// The join was hung up before it was done: what it had sent was taken back.
+class CallJoinHungUp implements Exception {
+  const CallJoinHungUp();
+
+  @override
+  String toString() => "CallJoinHungUp: the join was hung up";
+}
+
+/// Whether a join was hung up ([CallJoin.run]'s `hangUp`).
+class _HangUp {
+  _HangUp(Future<void>? hangUp) {
+    hangUp?.then((_) => _hungUp = true, onError: (_) => _hungUp = true);
+  }
+
+  bool _hungUp = false;
+
+  /// Stops the join if it was hung up.
+  void check() {
+    if (_hungUp) throw const CallJoinHungUp();
+  }
 }
