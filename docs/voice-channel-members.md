@@ -57,6 +57,19 @@ its screen share (`MatrixCallMembership.supersededBy`,
 unmuted. A device that is offline stays listed until its delayed leave or
 window ends; the list shows a person once either way.
 
+**Joining.** Our membership is written while LiveKit connects, not before
+(`CallJoin` in `client/matrix/components/voip_room/call_join.dart`), after
+the previous call's clear and, in a phone's browser, after the microphone
+opens. Others still see the membership before our microphone: it is only
+published once both the write and the connection succeeded. The join waits
+for both to end. If either fails, or the join is hung up meanwhile
+(`MatrixVoipRoomComponent.hangUpJoin`), the room is let go and the
+membership is cleared, only once its write has settled: a clear sent while
+the write is in flight could land first and leave us listed (issue #48). A
+join started right after waits for that clear before writing its own
+membership (`CallMembershipWrites`), and a hung up join never hands over a
+session.
+
 ## Clicking, right-clicking and dragging someone
 
 Each person under a voice channel in the sidebar
@@ -122,6 +135,7 @@ directly. Clients other than Rooster ignore the message.
 | A rewrite waits its turn, is covered by a write going out anyway, is retried when it fails, and does nothing once stopped | `unit_test/call_membership_publisher_test.dart` |
 | A mute is published without delayed events, marked unguarded, and guarded with them; unguarded badges show while they are kept written, go 90 minutes after the last write with no event, and their owner stays listed | `unit_test/call_membership_keepalive_test.dart`, `unit_test/voice_channel_member_list_test.dart` ("Badges of a member without a delayed leave"), `unit_test/matrix_call_membership_test.dart` |
 | Badges show in the sidebar row and on the channel's page before joining; a full channel lists seven and opens the rest from "and N more", whoever is live among the seven | `unit_test/voice_channel_sidebar_row_test.dart`, `unit_test/voice_channel_page_badges_test.dart` |
+| The membership write and the LiveKit connection run together; the microphone is published only once both succeeded; a write or a connection that fails, times out or is hung up leaves no membership and no session, the clear goes only after the write has ended, and a quick rejoin writes after that clear | `unit_test/call_join/membership_beside_connect_test.dart`, `unit_test/call_join/voip_room_component_hang_up_test.dart` |
 | Joining without a microphone advertises muted even without delayed events or a track event; stopping a screen share during a full reconnect clears LIVE from the membership people outside the call read | `unit_test/call_membership_keepalive_test.dart`, `unit_test/screen_share_stop_test.dart` |
 | An older device cannot overwrite the current join's voice state, regardless of state-key order; deafening and undeafening are published, and a sync refreshes the open sidebar before joining | `unit_test/voice_channel_member_list_test.dart`, `unit_test/voice_channel_sidebar_row_test.dart`, `unit_test/call_membership_keepalive_test.dart` |
 
