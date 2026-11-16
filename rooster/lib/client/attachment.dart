@@ -53,6 +53,9 @@ class PendingFileAttachment {
   /// ready. Called when the file is attached; does nothing for a file that
   /// is not a picture or cannot be read.
   Future<void> startImagePreparation({ImagePreparer? preparer}) async {
+    // Only a picture is read now: a video or an archive picked by path
+    // stays on disk until Send, as before.
+    if (!Mime.imageTypes.contains(mimeType)) return;
     await resolve();
     await imagePreparation(preparer: preparer);
   }
