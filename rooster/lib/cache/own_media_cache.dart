@@ -112,6 +112,9 @@ class FileOwnMediaCache implements OwnMediaCache {
 
   @override
   Future<void> write(String key, Uint8List bytes) {
+    // An address is uploaded once: the same key holds the same bytes.
+    final writing = _writes[key];
+    if (writing != null) return writing;
     _writing[key] = bytes;
     final write = _write(key, bytes);
     _writes[key] = write;
@@ -123,6 +126,9 @@ class FileOwnMediaCache implements OwnMediaCache {
 
   Future<void> _write(String key, Uint8List bytes) async {
     final clears = _clears;
+    // Kept already (the event sent again after it failed): writing it again
+    // would leave the first file on disk with no entry.
+    if (await files.hasFile(prefix + key)) return;
     await files.putFile(prefix + key, bytes);
     // Logged out while it was being written: not kept.
     if (clears != _clears) await files.removeFile(prefix + key);

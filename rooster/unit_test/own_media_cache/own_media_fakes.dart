@@ -78,8 +78,12 @@ class TempFileCache implements FileCache {
   Future<Uri?> getFile(String identifier) async =>
       await hasFile(identifier) ? files[identifier]!.uri : null;
 
+  /// How many times each identifier was written.
+  final Map<String, int> writes = {};
+
   @override
   Future<Uri> putFile(String identifier, Uint8List bytes) async {
+    writes[identifier] = (writes[identifier] ?? 0) + 1;
     final file = File('${_dir.path}/${_next++}');
     await file.writeAsBytes(bytes);
     files[identifier] = file;
