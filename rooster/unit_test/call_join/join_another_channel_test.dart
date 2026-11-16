@@ -132,6 +132,28 @@ void main() {
     await leaveAll();
   });
 
+  test(
+      'leaving the call while a join still connects hangs the join up: its '
+      'membership is taken back, and no session comes of it', () async {
+    final a = channel();
+    a.host.room.connectGate = Gate();
+    final joining = a.voip.joinCall();
+    unawaited(joining.then((_) {}, onError: (_) {}));
+    await settle();
+    expect(a.host.membership, isTrue, reason: 'written beside the connect');
+
+    await calls.disconnect();
+    a.host.room.connectGate.open();
+    await expectLater(joining, throwsA(isA<CallJoinHungUp>()));
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    expect(a.host.membership, isFalse);
+    expect(a.journal.entries, isNot(contains('session')));
+    expect(a.host.room.disposed, isTrue);
+    expect(calls.currentSessions, isEmpty);
+    expect(a.voip.currentSession, isNull);
+  });
+
   test("a join of the same channel is not hung up: it is the same join",
       () async {
     final a = channel();

@@ -203,23 +203,26 @@ class CallManager {
     required String roomId,
     required void Function() hangUp,
   }) {
-    final others = _joins
-        .where((join) =>
-            !(join.client == client && join.roomId == roomId) &&
-            (!accountsAreSeparatePeople || join.client == client))
-        .toList();
-    for (final other in others) {
-      _joins.remove(other);
-      Log.i("Hanging up a join to join another voice channel");
+    _hangUpJoins(_joins.where((join) =>
+        !(join.client == client && join.roomId == roomId) &&
+        (!accountsAreSeparatePeople || join.client == client)));
+    final join = _JoinInFlight(client, roomId, hangUp);
+    _joins.add(join);
+    return () => _joins.remove(join);
+  }
+
+  /// Hangs up [joins]: each takes back what it sent, and fails with
+  /// `CallJoinHungUp`, which shows no error.
+  void _hangUpJoins(Iterable<_JoinInFlight> joins) {
+    for (final join in joins.toList()) {
+      _joins.remove(join);
+      Log.i("Hanging up a voice join");
       try {
-        other.hangUp();
+        join.hangUp();
       } catch (e, s) {
         Log.onError(e, s, content: "Could not hang up a voice join");
       }
     }
-    final join = _JoinInFlight(client, roomId, hangUp);
-    _joins.add(join);
-    return () => _joins.remove(join);
   }
 
   /// Ends every voice session [callsToLeave] names.
@@ -244,9 +247,13 @@ class CallManager {
   }
 
   /// Leaves every call the user is in, for the disconnect control outside
-  /// the window. A call that is only ringing is not one they are in: it goes
-  /// on ringing rather than being declined on their behalf.
+  /// the window, and hangs up a join still running: it takes its
+  /// membership back, and no session comes of it. A call that is only
+  /// ringing is not one they are in: it goes on ringing rather than being
+  /// declined on their behalf.
   Future<void> disconnect() async {
+    _hangUpJoins(_joins);
+
     final calls = currentSessions
         .where((session) =>
             session.state != VoipState.incoming &&
