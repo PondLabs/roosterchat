@@ -18,6 +18,8 @@ void main() {
   final appDelay = MatrixMxcImage.retryDelay;
   late List<String> downloads;
   late int status;
+  late Map<String, String> headers;
+  late List<Duration> askedAt;
   late matrix.Client client;
   late matrix.Event event;
 
@@ -26,12 +28,17 @@ void main() {
     MatrixMxcImage.retryDelay = (_) => const Duration(milliseconds: 1);
     downloads = [];
     status = 500;
+    headers = {};
+    askedAt = [];
+    final clock = Stopwatch()..start();
     client = mediaClient(MockClient((request) async {
       if (request.url.path.contains('/media/download/')) {
         downloads.add(request.url.path);
+        askedAt.add(clock.elapsed);
         if (status != 200) {
           return http.Response(
-              '{"errcode": "M_UNKNOWN", "error": "Try later"}', status);
+              '{"errcode": "M_UNKNOWN", "error": "Try later"}', status,
+              headers: headers);
         }
         return http.Response.bytes(pngPicture(), 200);
       }
@@ -103,6 +110,31 @@ void main() {
 
   test('a 404 is not asked again', () async {
     status = 404;
+    expect(await show(picture()), isFalse);
+    expect(downloads, hasLength(1));
+  });
+
+  test('a 429 with Retry-After: 1 is asked again after that second', () async {
+    status = 429;
+    headers = {'retry-after': '1'};
+    final image = picture();
+    expect(await show(image), isFalse);
+    final waits = [
+      for (var i = 1; i < askedAt.length; i++) askedAt[i] - askedAt[i - 1]
+    ];
+    // ignore: avoid_print
+    print('429 with Retry-After: 1: ${askedAt.length} requests, waits '
+        '${waits.map((w) => '${w.inMilliseconds} ms').toList()}');
+    expect(downloads, hasLength(MatrixMxcImage.maxAttempts));
+    for (final wait in waits) {
+      expect(wait, greaterThanOrEqualTo(const Duration(milliseconds: 950)));
+    }
+  });
+
+  test('a 429 with Retry-After: 30 is not asked again in this display',
+      () async {
+    status = 429;
+    headers = {'retry-after': '30'};
     expect(await show(picture()), isFalse);
     expect(downloads, hasLength(1));
   });

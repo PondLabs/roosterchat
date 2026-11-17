@@ -119,10 +119,16 @@ class MatrixMxcImage extends LODImageProvider {
   static Duration Function(int attempt) retryDelay =
       (attempt) => Duration(seconds: attempt - 1);
 
+  /// The longest wait a 429 can ask for and still be asked again in the
+  /// same display; past it the picture shows as failed, and the next
+  /// display asks again.
+  static const longestRetryAfter = Duration(seconds: 10);
+
   /// [load], asked up to [attempts] times in all: offline (native: a
   /// socket error), again once a sync gets through, as before at least
   /// once; after any other failure (the web's network errors among them),
-  /// after [retryDelay]. An answer that would come again (a 404) is not
+  /// after [retryDelay], or the wait a 429 asked for (one over
+  /// [longestRetryAfter] is not asked again). An answer that would come again (a 404) is not
   /// asked again ([worthAskingAgain]). The last error is thrown: the
   /// picture then shows as failed.
   static Future<T> loadWithRetries<T>(Client client, Future<T> Function() load,
@@ -133,7 +139,10 @@ class MatrixMxcImage extends LODImageProvider {
       } catch (error, trace) {
         final offline = error is SocketException;
         final limit = offline ? max(attempts, 2) : attempts;
-        if (attempt >= limit || !(offline || worthAskingAgain(error))) {
+        final asked = error is MediaDownloadException ? error.retryAfter : null;
+        if (attempt >= limit ||
+            !(offline || worthAskingAgain(error)) ||
+            (asked != null && asked > longestRetryAfter)) {
           Log.onError(error, trace, content: "Could not load a picture");
           rethrow;
         }
@@ -141,7 +150,10 @@ class MatrixMxcImage extends LODImageProvider {
           await client.onSyncStatus.stream
               .firstWhere((sync) => sync.status == SyncStatus.finished);
         } else {
-          await Future<void>.delayed(retryDelay(attempt + 1));
+          final delay = retryDelay(attempt + 1);
+          // A 429 that says how long: at least that.
+          await Future<void>.delayed(
+              asked != null && asked > delay ? asked : delay);
         }
       }
     }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:rooster/cache/file_provider.dart';
@@ -129,9 +130,13 @@ OwnMediaCache? ownMediaCacheFor(matrix.Client client, matrix.Event? event) =>
 
 /// The server answered a media download with [statusCode] instead of 200.
 class MediaDownloadException implements Exception {
-  MediaDownloadException(this.statusCode);
+  MediaDownloadException(this.statusCode, {this.retryAfter});
 
   final int statusCode;
+
+  /// How long a 429 asked to wait (its `Retry-After` header, or the
+  /// `retry_after_ms` of its body), when it said.
+  final Duration? retryAfter;
 
   /// Whether asking again can get another answer: the server's own
   /// trouble (5xx), a request timeout or too many requests. Any other
@@ -157,11 +162,15 @@ Future<Uint8List> downloadMedia(matrix.Client client, Uri url,
   request.headers['authorization'] = 'Bearer ${client.accessToken}';
   final response = await client.httpClient.send(request);
   if (response.statusCode != 200) {
+    var body = const <int>[];
     try {
       // Read to its end, so the connection can carry the next request.
-      await response.stream.drain<void>();
+      body = await response.stream.toBytes();
     } catch (_) {}
-    throw MediaDownloadException(response.statusCode);
+    throw MediaDownloadException(response.statusCode,
+        retryAfter: response.statusCode == 429
+            ? _retryAfter(response.headers['retry-after'], body)
+            : null);
   }
 
   final total = response.contentLength;
@@ -187,4 +196,20 @@ Future<Uint8List> downloadMedia(matrix.Client client, Uri url,
   return downloaded == buffer.length
       ? buffer
       : Uint8List.sublistView(buffer, 0, downloaded);
+}
+
+/// A 429's wait: the `Retry-After` header in seconds, else the Matrix
+/// body's `retry_after_ms`; null when neither says (an HTTP date is not
+/// read).
+Duration? _retryAfter(String? header, List<int> body) {
+  final seconds = int.tryParse(header?.trim() ?? '');
+  if (seconds != null && seconds >= 0) return Duration(seconds: seconds);
+  try {
+    final json = jsonDecode(utf8.decode(body));
+    final ms = json is Map ? json['retry_after_ms'] : null;
+    if (ms is int && ms >= 0) return Duration(milliseconds: ms);
+  } catch (_) {
+    // Not JSON: no wait said.
+  }
+  return null;
 }
