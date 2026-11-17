@@ -333,6 +333,17 @@ failed.
 
 A step the app cannot time is written `unavailable`, never guessed.
 
+## Counted in the integration tests
+
+`rooster/integration_test/speed/request_counts_test.dart` sends a text and
+a photo and joins a voice call against the CI's Synapse and LiveKit, and
+reads the requests of each from the speed log, by the operation's span
+(`op=`) or from a moment on: one count per route (method and template),
+the numbers the speed work pinned in unit tests, each with its task in a
+comment. Routes no unit test fixes are printed, not asserted. Without the
+homeserver (and LiveKit, for the call) it skips with a reason. It reads
+what the report already holds: no id, URL or text.
+
 ## What is never recorded
 
 No message text, file names, user, room or event ids, URLs, hosts, query
