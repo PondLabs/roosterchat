@@ -109,14 +109,14 @@ void main() {
         await cryptoClient('cancel_then_refused', transport, encrypted: true);
     final echoes = <matrix.Event>[];
     mx.onTimelineEvent.stream.listen(echoes.add);
-    transport.hold = Completer<void>();
+    final hold = transport.hold = Completer<void>();
 
     final sending = room
         .sendEvent({'msgtype': 'm.text', 'body': 'hello'}, txid: 'txn_refused');
     await until(() => transport.held);
     final shownBefore = echoes.length;
     await echoes.lastWhere((e) => e.eventId == 'txn_refused').cancelSend();
-    transport.hold!.complete();
+    hold.complete();
     final id = await sending;
     await Future<void>.delayed(const Duration(milliseconds: 100));
 
@@ -134,11 +134,42 @@ void main() {
     expect(transport.events, isEmpty);
     await mx.dispose(closeDatabase: true);
   });
+
+  test(
+      'a text cancelled while its encryption waits on the server, which then '
+      'answers: the encrypted event never leaves',
+      skip: skipWithoutVodozemac, () async {
+    final transport = _HeldMembers(answer: true);
+    final (mx, room) = await cryptoClient('cancel_while_encrypting', transport,
+        encrypted: true);
+    final echoes = <matrix.Event>[];
+    mx.onTimelineEvent.stream.listen(echoes.add);
+    final hold = transport.hold = Completer<void>();
+
+    final sending = room.sendEvent({'msgtype': 'm.text', 'body': 'hello'},
+        txid: 'txn_encrypting');
+    await until(() => transport.held);
+    await echoes.lastWhere((e) => e.eventId == 'txn_encrypting').cancelSend();
+    hold.complete();
+    final id = await sending;
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    print('encrypted text cancelled during its encryption: id $id, PUT /send '
+        '${transport.events.length}, stored '
+        '${await mx.database.getEventById('txn_encrypting', room) != null}');
+    expect(id, isNull);
+    expect(transport.events, isEmpty);
+    expect(await mx.database.getEventById('txn_encrypting', room), isNull);
+    await mx.dispose(closeDatabase: true);
+  });
 }
 
 /// [OnlyUsTransport] whose next members request waits for [hold], then is
-/// refused for good (403 `M_FORBIDDEN`).
+/// refused for good (403 `M_FORBIDDEN`), or answered with [answer].
 class _HeldMembers extends OnlyUsTransport {
+  _HeldMembers({this.answer = false});
+
+  final bool answer;
   Completer<void>? hold;
   bool held = false;
 
@@ -149,7 +180,9 @@ class _HeldMembers extends OnlyUsTransport {
         request.method == 'GET' &&
         request.url.path.endsWith('/members')) {
       held = true;
+      hold = null;
       await waiting.future;
+      if (answer) return super.send(request);
       return json(403, {'errcode': 'M_FORBIDDEN', 'error': 'Not a member'});
     }
     return super.send(request);
