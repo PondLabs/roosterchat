@@ -14,8 +14,6 @@ import 'package:rooster/utils/image/preparation/image_preparation.dart';
 
 import 'stream_fakes.dart';
 
-/// A file attached by its path is sent from disk on native: read in pieces
-/// as the connection takes them, to a real server on 127.0.0.1.
 /// A preparer that cannot decode the picture: it is sent as a plain file,
 /// from the bytes it was read into.
 class _CannotDecode extends ImagePreparer {
@@ -25,6 +23,8 @@ class _CannotDecode extends ImagePreparer {
       null;
 }
 
+/// A file attached by its path is sent from disk on native: read in pieces
+/// as the connection takes them, to a real server on 127.0.0.1.
 void main() {
   late Directory folder;
   setUp(() async => folder = await testFolder());
@@ -219,5 +219,33 @@ void main() {
     expect(bigVideo, isA<matrix.MatrixVideoFile>());
     expect(bigVideo.source, isA<DiskFileSource>());
     expect(fromBytes.source, isNull);
+  });
+  test(
+      "the room refuses a file over the server's limit by its source's "
+      'length, before any read of it is asked for', () async {
+    final server = await LocalUploadServer.start();
+    final transport = LocalUploadTransport(server)..uploadLimit = 1000;
+    final (mx, room) =
+        await streamClient('guard_room_limit', transport, encrypted: false);
+    final source = CountingSource(4000);
+
+    Object? error;
+    try {
+      await room.sendFileEvent(
+          matrix.MatrixFile(bytes: Uint8List(0), name: 'a.bin')
+            ..source = source);
+    } catch (e) {
+      error = e;
+    }
+
+    print('4000 bytes over a 1000 byte limit: error ${error.runtimeType}, '
+        'reads asked ${source.reads}, uploads ${server.uploads.length}');
+    expect(error, isA<matrix.FileTooBigMatrixException>());
+    expect(source.reads, 0);
+    expect(server.uploads, isEmpty);
+    expect(transport.events, isEmpty);
+    await mx.dispose(closeDatabase: true);
+    transport.closeConnections();
+    await server.close();
   });
 }

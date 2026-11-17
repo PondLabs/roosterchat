@@ -376,3 +376,74 @@ Future<void> until(bool Function() done) async {
   }
   if (!done()) throw StateError('Waited 10 s for nothing');
 }
+
+/// A read of [length] bytes of 7s, whole and with no encryption to give,
+/// or ending after half of them with [failure] (the file changed).
+class SourceRead implements matrix.FileSendRead {
+  SourceRead(this.length, {this.failure});
+
+  final int length;
+  @override
+  final Object? failure;
+  @override
+  bool complete = false;
+
+  @override
+  Stream<List<int>> get bytes async* {
+    if (failure != null) {
+      yield Uint8List(length ~/ 2)..fillRange(0, length ~/ 2, 7);
+      throw failure!;
+    }
+    yield Uint8List(length)..fillRange(0, length, 7);
+    complete = true;
+  }
+
+  @override
+  matrix.EncryptedFile? get encryption => null;
+
+  @override
+  Future<void> close() async {}
+}
+
+/// A file to send that counts the reads it was asked for. Its encrypted
+/// reads give no key ([SourceRead.encryption] is null); with [changes],
+/// every read ends short, the file having changed.
+class CountingSource implements matrix.FileSendSource {
+  CountingSource(this.length, {this.changes = false});
+
+  @override
+  final int length;
+  final bool changes;
+  int reads = 0;
+
+  matrix.FileSendRead _read() {
+    reads++;
+    return SourceRead(length,
+        failure: changes
+            ? const matrix.FileSourceChangedException('the file is shorter')
+            : null);
+  }
+
+  @override
+  matrix.FileSendRead read() => _read();
+
+  @override
+  matrix.FileSendRead readEncrypted() => _read();
+}
+
+/// [LoopTransport] whose upload, when the body it reads fails, fails as a
+/// connection does: with its own error, not the body's.
+class ConnectionFails extends LoopTransport {
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    if (request.method == 'POST' && LoopTransport.isMediaUpload(request)) {
+      try {
+        await request.finalize().drain<void>();
+      } catch (_) {
+        throw http.ClientException('Connection closed', request.url);
+      }
+      return json(200, {'content_uri': 'mxc://fakeServer.notExisting/whole'});
+    }
+    return super.send(request);
+  }
+}
