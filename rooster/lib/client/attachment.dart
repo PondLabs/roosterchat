@@ -6,6 +6,7 @@ import 'package:rooster/cache/file_provider.dart';
 import 'package:rooster/diagnostic/speed_log/file_send_trace.dart';
 import 'package:rooster/utils/image/image_header.dart';
 import 'package:rooster/utils/image/metadata/exif_block.dart';
+import 'package:rooster/utils/image/metadata/exif_gps.dart';
 import 'package:rooster/utils/image/preparation/image_preparation.dart';
 import 'package:rooster/utils/mime.dart';
 import 'package:rooster/utils/network/upload_progress.dart';
@@ -97,33 +98,44 @@ class PendingFileAttachment {
       return _locationAnswer = LocationAnswer.found;
     }
     // The reader can give up without an error and find nothing in a block
-    // another reader reads (behind a long segment, after the tables, past
-    // an odd-sized WebP chunk), or read the start of a block cut short
-    // before its GPS. Both are asked about: in doubt, Send asks.
-    final block = await _exifBlock();
-    if (block == ExifBlock.cut || (block == ExifBlock.whole && exif.isEmpty)) {
-      return _locationAnswer = LocationAnswer.unreadable;
+    // that is there (behind a long segment, after a scan, past an odd-sized
+    // WebP chunk, in a HEIF of a brand it does not know), or stop at a first
+    // block and miss a second. Every block is looked into for a GPS
+    // pointer; one cut short, or that cannot be read, is asked about: in
+    // doubt, Send asks.
+    final blocks = await _exifBlocks();
+    var answer = blocks.cut ? LocationAnswer.unreadable : LocationAnswer.none;
+    for (final block in blocks.whole) {
+      switch (readExifGps(block)) {
+        case ExifGps.found:
+          return _locationAnswer = LocationAnswer.found;
+        case ExifGps.unreadable:
+          answer = LocationAnswer.unreadable;
+        case ExifGps.none:
+      }
     }
-    return _locationAnswer = LocationAnswer.none;
+    return _locationAnswer = answer;
   }
 
-  /// The file's Exif block (see [findExifBlock]). A file that is there but
-  /// cannot be looked into counts as one with a block cut short; one that
-  /// is gone has nothing to send.
-  Future<ExifBlock> _exifBlock() async {
+  /// The file's Exif blocks (see [findExifBlocks]). A file that is there
+  /// but cannot be looked into counts as one with a block cut short; one
+  /// that is gone has nothing to send.
+  Future<ExifBlocks> _exifBlocks() async {
     final data = this.data;
-    if (data != null) return findExifBlock(bytesReader(data));
-    if (path == null || !await File(path!).exists()) return ExifBlock.none;
+    if (data != null) return findExifBlocks(bytesReader(data));
+    if (path == null || !await File(path!).exists()) {
+      return const ExifBlocks([]);
+    }
     RandomAccessFile? file;
     try {
       file = await File(path!).open();
       final opened = file;
-      return await findExifBlock((offset, length) async {
+      return await findExifBlocks((offset, length) async {
         await opened.setPosition(offset);
         return opened.read(length);
       });
     } catch (_) {
-      return ExifBlock.cut;
+      return const ExifBlocks([], cut: true);
     } finally {
       await file?.close();
     }

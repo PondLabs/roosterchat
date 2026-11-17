@@ -10,28 +10,37 @@ ByteReader bytesReader(Uint8List bytes) =>
         : Uint8List.sublistView(bytes, offset,
             offset + length > bytes.length ? bytes.length : offset + length);
 
-/// What a file holds of an Exif block.
-enum ExifBlock {
-  /// None: not a JPEG, PNG or WebP, or one without an Exif block.
-  none,
+/// The Exif blocks a file holds.
+class ExifBlocks {
+  const ExifBlocks(this.whole, {this.cut = false});
 
-  /// A whole Exif block.
-  whole,
+  /// Each whole block: the TIFF block, after the `Exif\0\0` of a JPEG
+  /// segment, and as stored in a PNG or WebP chunk (with the prefix some
+  /// writers add).
+  final List<Uint8List> whole;
 
-  /// An Exif block cut short by the end of the file, or a walk that broke
-  /// before the end (a segment or chunk running past the file, bytes where
-  /// a marker should be), where a block could hide past the break.
-  cut,
+  /// A block cut short by the end of the file, or one the walk could not
+  /// take out (larger than [maxExifBlock]), or a walk that broke before the
+  /// end (a segment or chunk running past the file, bytes where a marker
+  /// should be), where a block could hide past the break.
+  final bool cut;
 }
 
-/// The Exif block of a JPEG, PNG or WebP, found by walking its segment or
-/// chunk headers (only those are read, through [read]): an APP1 `Exif`
-/// segment before the first scan, a PNG `eXIf` chunk, a WebP `EXIF` chunk
-/// (each chunk followed by its padding byte when its size is odd).
+/// The largest Exif block taken out of a file. A JPEG's is at most 64 kB;
+/// a larger one elsewhere counts as cut.
+const int maxExifBlock = 4 << 20;
+
+/// The Exif blocks of a JPEG, PNG or WebP, found by walking its segment or
+/// chunk headers through
+/// [read]: every APP1 `Exif` segment up to the EOI (the scans read through
+/// for the markers between them), every PNG `eXIf` chunk up to IEND, every
+/// WebP `EXIF` chunk up to the end of the file (each chunk followed by its
+/// padding byte when its size is odd, and past the end the RIFF declares).
 ///
-/// This is not a reader: it says the block is there, for when the Exif
-/// reader found nothing in it, and whether it is whole.
-Future<ExifBlock> findExifBlock(ByteReader read) async {
+/// This is not a reader: it takes the blocks out, for when the Exif reader
+/// found nothing in them (see `readExifGps`), and says whether one may be
+/// missing.
+Future<ExifBlocks> findExifBlocks(ByteReader read) async {
   final head = await read(0, 12);
   if (head.length >= 3 && head[0] == 0xFF && head[1] == 0xD8) {
     return _jpegExif(read);
@@ -46,74 +55,148 @@ Future<ExifBlock> findExifBlock(ByteReader read) async {
       String.fromCharCodes(head, 8, 12) == "WEBP") {
     return _webpExif(read);
   }
-  return ExifBlock.none;
+  return const ExifBlocks([]);
 }
 
-/// Whole when the file has a byte at [end] - 1, the block's last.
-Future<ExifBlock> _ends(ByteReader read, int end) async =>
-    (await read(end - 1, 1)).isEmpty ? ExifBlock.cut : ExifBlock.whole;
+/// The [size] bytes at [offset], null when the file ends before their last
+/// or they are more than [maxExifBlock].
+Future<Uint8List?> _whole(ByteReader read, int offset, int size) async {
+  if (size > maxExifBlock) return null;
+  if (size <= 0) return Uint8List(0);
+  final bytes = await read(offset, size);
+  return bytes.length < size ? null : bytes;
+}
 
-Future<ExifBlock> _jpegExif(ByteReader read) async {
-  var pos = 2;
-  while (true) {
-    final header = await read(pos, 10);
-    if (header.length < 2 || header[0] != 0xFF) return ExifBlock.cut;
-    var at = 1;
-    // Fill bytes: any number of 0xFF before the marker.
-    while (at < header.length && header[at] == 0xFF) {
-      at++;
+/// [ByteReader] through a window of 64 kB, for a walk that looks at every
+/// byte (a JPEG's scans and fill bytes): one read per window.
+class _Window {
+  _Window(this._read);
+
+  final ByteReader _read;
+  Uint8List _bytes = Uint8List(0);
+  int _start = 0;
+
+  /// Whether the window holds [count] bytes from [pos], read when it does
+  /// not: false when the file ends first.
+  Future<bool> _load(int pos, [int count = 1]) async {
+    if (pos >= _start && pos + count <= _start + _bytes.length) return true;
+    _start = pos;
+    _bytes = await _read(pos, 64 << 10);
+    return _bytes.length >= count;
+  }
+
+  /// The byte at [pos], null past the end of the file.
+  Future<int?> at(int pos) async =>
+      await _load(pos) ? _bytes[pos - _start] : null;
+
+  /// The first position from [pos] that does not hold 0xFF, null when the
+  /// file ends first.
+  Future<int?> pastFill(int pos) async {
+    while (await _load(pos)) {
+      final bytes = _bytes;
+      for (var i = pos - _start; i < bytes.length; i++) {
+        if (bytes[i] != 0xFF) return _start + i;
+      }
+      pos = _start + bytes.length;
     }
-    if (at >= header.length) {
-      pos += at - 1; // keep one 0xFF to start the next read
-      continue;
+    return null;
+  }
+
+  /// Where the entropy-coded data from [pos] ends: the first 0xFF followed
+  /// by neither 0x00 (a stuffed byte) nor a restart marker, which is passed
+  /// over. Null when the file ends first.
+  Future<int?> markerAfter(int pos) async {
+    while (await _load(pos, 2)) {
+      final bytes = _bytes;
+      var i = pos - _start;
+      for (; i + 1 < bytes.length; i++) {
+        if (bytes[i] != 0xFF) continue;
+        final next = bytes[i + 1];
+        if (next != 0x00 && (next < 0xD0 || next > 0xD7)) return _start + i;
+        i++;
+      }
+      pos = _start + i; // the window's last byte, with the next window
     }
-    final marker = header[at];
-    final start = pos + at + 1;
-    if (marker == 0xDA || marker == 0xD9) return ExifBlock.none; // SOS, EOI
-    if (marker == 0x01 || (marker >= 0xD0 && marker <= 0xD7)) {
-      pos = start; // TEM, RSTn: no length
-      continue;
-    }
-    final segment = await read(start, 8);
-    if (segment.length < 2) return ExifBlock.cut;
-    final length = segment[0] << 8 | segment[1];
-    if (length < 2) return ExifBlock.cut;
-    if (marker == 0xE1 &&
-        segment.length >= 6 &&
-        String.fromCharCodes(segment, 2, 6) == "Exif") {
-      return _ends(read, start + length);
-    }
-    pos = start + length;
+    return null;
   }
 }
 
-Future<ExifBlock> _pngExif(ByteReader read) async {
+Future<ExifBlocks> _jpegExif(ByteReader read) async {
+  final window = _Window(read);
+  final blocks = <Uint8List>[];
+  var pos = 2;
+  while (true) {
+    if (await window.at(pos) != 0xFF) return ExifBlocks(blocks, cut: true);
+    // Fill bytes: any number of 0xFF before the marker.
+    final at = await window.pastFill(pos + 1);
+    if (at == null) return ExifBlocks(blocks, cut: true);
+    final marker = (await window.at(at))!;
+    final start = at + 1;
+    if (marker == 0xD9) return ExifBlocks(blocks); // EOI
+    if (marker == 0x01) {
+      pos = start; // TEM: no length
+      continue;
+    }
+    if (marker >= 0xD0 && marker <= 0xD7) {
+      pos = start; // RSTn: no length, entropy-coded data after it
+    } else {
+      final segment = await read(start, 8);
+      if (segment.length < 2) return ExifBlocks(blocks, cut: true);
+      final length = segment[0] << 8 | segment[1];
+      if (length < 2) return ExifBlocks(blocks, cut: true);
+      pos = start + length;
+      if (marker == 0xE1 &&
+          segment.length >= 6 &&
+          String.fromCharCodes(segment, 2, 6) == "Exif") {
+        final block = await _whole(read, start + 8, length - 8);
+        if (block == null) return ExifBlocks(blocks, cut: true);
+        blocks.add(block);
+      }
+      if (marker != 0xDA) continue;
+    }
+    // After SOS or RSTn, entropy-coded data up to the next marker.
+    final end = await window.markerAfter(pos);
+    if (end == null) return ExifBlocks(blocks); // the file ends in it
+    pos = end;
+  }
+}
+
+Future<ExifBlocks> _pngExif(ByteReader read) async {
+  final blocks = <Uint8List>[];
   var pos = 8;
   while (true) {
     final header = await read(pos, 8);
-    if (header.isEmpty) return ExifBlock.none; // the end, between chunks
-    if (header.length < 8) return ExifBlock.cut;
+    if (header.isEmpty) return ExifBlocks(blocks); // the end, between chunks
+    if (header.length < 8) return ExifBlocks(blocks, cut: true);
     final length = ByteData.sublistView(header).getUint32(0);
     final type = String.fromCharCodes(header, 4, 8);
-    if (type == "eXIf") return _ends(read, pos + 8 + length);
-    if (type == "IEND") return ExifBlock.none;
+    if (type == "eXIf") {
+      final block = await _whole(read, pos + 8, length);
+      if (block == null) return ExifBlocks(blocks, cut: true);
+      blocks.add(block);
+    }
+    if (type == "IEND") return ExifBlocks(blocks);
     pos += 12 + length;
   }
 }
 
-Future<ExifBlock> _webpExif(ByteReader read) async {
+Future<ExifBlocks> _webpExif(ByteReader read) async {
   final riff = await read(4, 4);
   final end = 8 + ByteData.sublistView(riff).getUint32(0, Endian.little);
+  final blocks = <Uint8List>[];
   var pos = 12;
-  while (pos < end) {
+  // To the end of the file: readers find an EXIF past the end the RIFF
+  // declares.
+  while (true) {
     final header = await read(pos, 8);
-    // The RIFF length runs past the file.
-    if (header.length < 8) return ExifBlock.cut;
+    // The end of the file: cut when the RIFF runs past it.
+    if (header.length < 8) return ExifBlocks(blocks, cut: pos < end);
     final size = ByteData.sublistView(header).getUint32(4, Endian.little);
     if (String.fromCharCodes(header, 0, 4) == "EXIF") {
-      return _ends(read, pos + 8 + size);
+      final block = await _whole(read, pos + 8, size);
+      if (block == null) return ExifBlocks(blocks, cut: true);
+      blocks.add(block);
     }
     pos += 8 + size + (size & 1);
   }
-  return ExifBlock.none;
 }
