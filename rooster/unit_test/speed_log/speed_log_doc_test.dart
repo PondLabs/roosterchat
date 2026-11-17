@@ -59,6 +59,8 @@ void main() {
       SpeedStep.request,
       SpeedStep.retry,
       SpeedStep.answer,
+      SpeedStep.keyRequest,
+      SpeedStep.outboundSession,
     });
     expect(_tableNames(doc, '`sync`, one round'), {
       SpeedStep.serverWait,

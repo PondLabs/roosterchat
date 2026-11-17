@@ -80,6 +80,7 @@ void main() {
       'send', 'echo', 'echo_painted', 'queue_wait', 'request', 'retry', //
       'answer', 'server_wait', 'processing', 'clean_up', 'client_work', //
       'next_request', 'error',
+      'key_request', 'outbound_session', // text_send in an encrypted room
       'header', 'decode', 'encode', // image_prepare (and queue_wait)
       // file_send (and echo, request, retry)
       'attached', 'preview_painted', 'prepared', 'upload', 'confirmed',
@@ -98,6 +99,7 @@ void main() {
       'bytes', 'width', 'height', 'frames', // image_prepare
       'thumbnail_bytes', // file_send
       'level', // media_show
+      'session_created', 'key_requests', // text_send
     });
     expect(SpeedOutcome.all, {
       'ok', 'failed', 'incomplete', 'abandoned', 'cancelled', //

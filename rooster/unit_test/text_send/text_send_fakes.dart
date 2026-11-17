@@ -28,25 +28,32 @@ Future<MatrixRoom> joinedRoom(MatrixClient client,
   await mx.database.transaction(() => mx.handleSync(matrix.SyncUpdate(
         nextBatch: encrypted ? 'encrypted' : 'plain',
         rooms: matrix.RoomsUpdate(join: {
-          fakeRoomId: matrix.JoinedRoomUpdate(state: [
-            matrix.MatrixEvent(
-              type: matrix.EventTypes.RoomMember,
-              stateKey: mx.userID,
-              senderId: mx.userID!,
-              eventId: '\$join',
-              originServerTs: DateTime.now(),
-              content: {'membership': 'join'},
-            ),
-            if (encrypted)
-              matrix.MatrixEvent(
-                type: matrix.EventTypes.Encryption,
-                stateKey: '',
-                senderId: mx.userID!,
-                eventId: '\$encryption',
-                originServerTs: DateTime.now(),
-                content: {'algorithm': matrix.AlgorithmTypes.megolmV1AesSha2},
-              ),
-          ]),
+          fakeRoomId: matrix.JoinedRoomUpdate(
+              // As a homeserver's sync says it: who is in the room is
+              // counted, the list itself is asked for (`GET /members`).
+              summary: matrix.RoomSummary.fromJson(
+                  {'m.joined_member_count': 1, 'm.invited_member_count': 0}),
+              state: [
+                matrix.MatrixEvent(
+                  type: matrix.EventTypes.RoomMember,
+                  stateKey: mx.userID,
+                  senderId: mx.userID!,
+                  eventId: '\$join',
+                  originServerTs: DateTime.now(),
+                  content: {'membership': 'join'},
+                ),
+                if (encrypted)
+                  matrix.MatrixEvent(
+                    type: matrix.EventTypes.Encryption,
+                    stateKey: '',
+                    senderId: mx.userID!,
+                    eventId: '\$encryption',
+                    originServerTs: DateTime.now(),
+                    content: {
+                      'algorithm': matrix.AlgorithmTypes.megolmV1AesSha2
+                    },
+                  ),
+              ]),
         }),
       )));
   // The Rooster client adds the room on the SDK's onSync event.
