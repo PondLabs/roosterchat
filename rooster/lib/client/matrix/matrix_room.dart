@@ -575,16 +575,7 @@ class MatrixRoom extends Room implements RoomSendPreparation {
       String? threadLastEventId,
       Map<String, dynamic>? fileExtraContent,
       List<ProcessedAttachment>? processedAttachments}) async {
-    // The event replied to is the one already held, not looked up again
-    // before the reply's echo. An own message still pending is held under
-    // its transaction id, which is no event id: it is looked up as before.
-    final matrix.Event? replyingTo = switch (inReplyTo) {
-      null => null,
-      MatrixTimelineEvent held
-          when !held.event.status.isSending && !held.event.status.isError =>
-        held.event,
-      _ => await _matrixRoom.getEventById(inReplyTo.eventId),
-    };
+    final replyingTo = await _replyTarget(inReplyTo);
 
     // Each file goes on its own, its failure caught and shown on its
     // pending message (see media/matrix_file_send.dart).
@@ -667,6 +658,53 @@ class MatrixRoom extends Room implements RoomSendPreparation {
     }
 
     return null;
+  }
+
+  /// The event a reply goes to: the one already held, not looked up again
+  /// before the reply's echo. An own message still being sent is held
+  /// under its transaction id, which is no event id: the reply waits for
+  /// the server's id. One that failed or was cancelled never reached the
+  /// server, and the reply goes without the relation.
+  Future<matrix.Event?> _replyTarget(TimelineEvent? inReplyTo) async {
+    if (inReplyTo == null) return null;
+    if (inReplyTo is! MatrixTimelineEvent) {
+      return _matrixRoom.getEventById(inReplyTo.eventId);
+    }
+    final held = inReplyTo.event;
+    if (held.status.isError) return null;
+    if (!held.status.isSending) return held;
+    return _onceSent(held.transactionId ?? held.eventId);
+  }
+
+  /// The own message [txid] as the server took it, once its send ends;
+  /// null when it failed, was cancelled, or ended before this was asked.
+  Future<matrix.Event?> _onceSent(String txid) async {
+    final done = Completer<matrix.Event?>();
+    void end(matrix.Event? event) {
+      if (!done.isCompleted) done.complete(event);
+    }
+
+    final listening = [
+      _matrixRoom.client.onTimelineEvent.stream.listen((event) {
+        if (event.roomId != _matrixRoom.id ||
+            (event.transactionId ?? event.eventId) != txid) {
+          return;
+        }
+        if (event.status.isSent) end(event);
+        if (event.status.isError) end(null);
+      }),
+      _matrixRoom.onSendCancelled.listen((cancelled) {
+        if (cancelled == txid) end(null);
+      }),
+    ];
+    if (!_matrixRoom.sendingQueueEventsByTxId.contains(txid)) end(null);
+    try {
+      return await done.future;
+    } finally {
+      for (final subscription in listening) {
+        await subscription.cancel();
+      }
+    }
   }
 
   TimelineEvent convertEvent(matrix.Event event, {matrix.Timeline? timeline}) {
