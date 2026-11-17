@@ -1246,6 +1246,9 @@ class Room {
     void Function()? beforeRequest, // ROOSTER
   }) async {
     txid ??= client.generateUniqueTransactionId();
+    // Each attempt starts with the cancel: the event's encryption can take // ROOSTER
+    // long, or fail and be tried again (no network). // ROOSTER
+    _stopIfSendCancelled(txid); // ROOSTER
     // Read together with whether it is encrypted, below: an encrypted // ROOSTER
     // event never points to a file that went up in the clear. // ROOSTER
     if (uploadedInTheClear && encrypted && client.fileEncryptionEnabled) { // ROOSTER
@@ -1459,7 +1462,9 @@ class Room {
           }, // ROOSTER
         );
       } catch (e, s) {
-        if (e is SendCancelledException) { // ROOSTER
+        // Cancelled while an attempt that did not reach the server ran: // ROOSTER
+        // nothing of it is shown again, not even its failure. // ROOSTER
+        if (e is SendCancelledException || isSendCancelled(messageID)) { // ROOSTER
           return _sendCancelled(completer, messageID); // ROOSTER
         } // ROOSTER
         if (e is MatrixException &&
@@ -1491,7 +1496,15 @@ class Room {
         } else {
           Logs()
               .w('Problem while sending message: $e Try again in 1 seconds...');
-          await Future.delayed(Duration(seconds: 1));
+          try { // ROOSTER: a cancel ends the wait at once
+            await untilSendCancelled( // ROOSTER
+              this, // ROOSTER
+              messageID, // ROOSTER
+              (_) => Future.delayed(Duration(seconds: 1)), // ROOSTER
+            ); // ROOSTER
+          } on SendCancelledException { // ROOSTER
+            return _sendCancelled(completer, messageID); // ROOSTER
+          } // ROOSTER
         }
       }
     }
