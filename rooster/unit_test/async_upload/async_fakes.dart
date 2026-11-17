@@ -34,6 +34,7 @@ class AsyncTransport extends OnlyUsTransport {
   Future<http.StreamedResponse?> Function(Uint8List body, int attempt)? onPut;
   int pendingLimit = 5;
   bool holdPuts = false;
+  bool failRedacts = false;
   Completer<void> releasePuts = Completer<void>();
 
   final List<String> log = [];
@@ -132,6 +133,9 @@ class AsyncTransport extends OnlyUsTransport {
     }
     if (request.method == 'PUT' && path.contains('/redact/')) {
       log.add('PUT redact');
+      if (failRedacts) {
+        return json(500, {'errcode': 'M_UNKNOWN', 'error': 'Try later'});
+      }
     }
     return super.send(request);
   }
