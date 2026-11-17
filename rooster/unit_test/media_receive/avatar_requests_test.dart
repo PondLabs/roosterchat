@@ -75,6 +75,56 @@ void main() {
     }, timeout: const Timeout(Duration(seconds: 60)));
   }
 
+  test(
+      'an avatar that failed: fetching its thumbnail again and a new widget '
+      'of it ask nothing more', () async {
+    final requests = <String>[];
+    final client = mediaClient(MockClient((request) async {
+      if (request.url.path.contains('/thumbnail/')) {
+        requests.add(request.url.path);
+        return http.Response('{"errcode": "M_UNKNOWN"}', 500,
+            headers: {'content-type': 'application/json'});
+      }
+      return http.Response('{"versions": ["v1.11"]}', 200);
+    }), Uri.parse('https://hs.example'));
+    MatrixMxcImage avatar() =>
+        MatrixMxcImage(Uri.parse('mxc://hs.example/one'), client,
+            doThumbnail: true,
+            autoLoadFullRes: false,
+            doFullres: false,
+            thumbnailHeight: 86);
+
+    /// Shows [image] until it fails; the errors its listener got.
+    Future<int> showUntilFailed(MatrixMxcImage image) async {
+      var errors = 0;
+      final stream = image.resolve(ImageConfiguration.empty);
+      final listener =
+          ImageStreamListener((_, __) {}, onError: (_, __) => errors++);
+      stream.addListener(listener);
+      final clock = Stopwatch()..start();
+      while (errors == 0 && clock.elapsed < const Duration(seconds: 5)) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      stream.removeListener(listener);
+      return errors;
+    }
+
+    final first = avatar();
+    expect(await showUntilFailed(first), 1);
+    expect(requests, hasLength(1));
+
+    // What a space's colour scheme does with its avatar.
+    await first.fetchThumbnail();
+    expect(requests, hasLength(1), reason: 'fetchThumbnail asked again');
+
+    // A new widget of the same avatar gets the failure, with no request.
+    expect(await showUntilFailed(avatar()), 1);
+    // ignore: avoid_print
+    print('avatar 500: requests after the first display, fetchThumbnail '
+        'and a new widget: ${requests.length}');
+    expect(requests, hasLength(1));
+  });
+
   test('an answer that would come again is not asked again', () {
     matrix.MatrixException answered(int status) => matrix.MatrixException(
         http.Response('{"errcode": "M_UNKNOWN", "error": "x"}', status,
