@@ -159,7 +159,7 @@ class MatrixMxcImage extends LODImageProvider {
   /// socket error), again once a sync gets through, as before at least
   /// once; after any other failure (the web's network errors among them),
   /// after [retryDelay], or the wait a 429 asked for (one over
-  /// [longestRetryAfter] is not asked again). An answer that would come again (a 404) is not
+  /// [longestRetryAfter], or one not understood, is not asked again). An answer that would come again (a 404) is not
   /// asked again ([worthAskingAgain]). The last error is thrown: the
   /// picture then shows as failed.
   static Future<T> loadWithRetries<T>(Client client, Future<T> Function() load,
@@ -171,8 +171,11 @@ class MatrixMxcImage extends LODImageProvider {
         final offline = error is SocketException;
         final limit = offline ? max(attempts, 2) : attempts;
         final asked = error is MediaDownloadException ? error.retryAfter : null;
+        final unknownWait =
+            error is MediaDownloadException && error.retryAfterUnreadable;
         if (attempt >= limit ||
             !(offline || worthAskingAgain(error)) ||
+            unknownWait ||
             (asked != null && asked > longestRetryAfter)) {
           Log.onError(error, trace, content: "Could not load a picture");
           rethrow;
