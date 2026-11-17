@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:rooster/client/matrix/components/voip_room/call_join.dart';
+import 'package:rooster/client/matrix/components/voip_room/call_membership_writes.dart';
 import 'package:rooster/client/matrix/components/voip_room/matrix_call_membership.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip_room/voip_room_component.dart';
@@ -136,7 +137,11 @@ class MatrixVoipRoomComponent
     final stale = [
       for (var entry in state.entries)
         if (entry.value.content.isNotEmpty &&
-            _isOwnDeviceMembership(entry.value))
+            _isOwnDeviceMembership(entry.value) &&
+            // Not one a join of this room is writing or holds: the join has
+            // no session yet, but that membership is not left behind.
+            !CallMembershipWrites.claimed(
+                CallMembershipWrites.joinKey(backend.roomId, entry.key)))
           entry.key,
     ];
 
@@ -151,13 +156,18 @@ class MatrixVoipRoomComponent
     Log.i(
         "Clearing ${stale.length} stale call membership(s) in ${room.identifier}");
 
+    // Registered as a clear: a join that starts meanwhile writes our
+    // membership only once this has landed, or it would erase it.
     await Future.wait([
       for (var stateKey in stale)
-        client.matrixClient.setRoomStateWithKey(
-          room.identifier,
-          callMemberStateEvent,
+        CallMembershipWrites.clearing(
           stateKey,
-          {},
+          client.matrixClient.setRoomStateWithKey(
+            room.identifier,
+            callMemberStateEvent,
+            stateKey,
+            {},
+          ),
         ),
     ]);
   }
@@ -186,10 +196,21 @@ class MatrixVoipRoomComponent
     final joining = _joining;
     if (joining != null) return joining;
     final hangUp = Completer<void>();
-    final join = _joinCall(hangUp);
+    void Function()? joinEnded;
+    final join = _joinCall(hangUp, allowed: () {
+      // One voice channel at a time: a join of another channel still
+      // running is hung up as this one starts (see
+      // CallManager.joinStarted). Only once this one may go ahead: a join
+      // refused for want of permission leaves the other alone.
+      joinEnded = clientManager?.callManager.joinStarted(
+          client: client,
+          roomId: room.identifier,
+          hangUp: () => _hangUp(hangUp));
+    });
     _joining = join;
     _hangUpJoining = hangUp;
     join.whenComplete(() {
+      joinEnded?.call();
       if (identical(_joining, join)) {
         _joining = null;
         _hangUpJoining = null;
@@ -205,11 +226,22 @@ class MatrixVoipRoomComponent
   /// after this is a new one: its membership waits for the old one's to be
   /// cleared, 10 s at most, and an old join that takes longer leaves the
   /// new membership alone (`CallMembershipWrites.superseded`).
-  void hangUpJoin() {
+  ///
+  /// With [join], only if that is the join still running: a page closing
+  /// hangs up the join it asked for, not a later one.
+  void hangUpJoin([Future<VoipSession?>? join]) {
     final hangUp = _hangUpJoining;
     if (hangUp == null) return;
-    _joining = null;
-    _hangUpJoining = null;
+    if (join != null && !identical(join, _joining)) return;
+    _hangUp(hangUp);
+  }
+
+  void _hangUp(Completer<void> hangUp) {
+    if (hangUp.isCompleted) return;
+    if (identical(_hangUpJoining, hangUp)) {
+      _joining = null;
+      _hangUpJoining = null;
+    }
     hangUp.complete();
   }
 
@@ -220,10 +252,13 @@ class MatrixVoipRoomComponent
     await backend.warmUp();
   }
 
-  Future<VoipSession?> _joinCall(Completer<void> hangUp) async {
-    // Run by the join beside its token requests, and finished before it
-    // writes our membership or connects.
+  /// [allowed] runs once the join may go ahead, before it leaves anything.
+  Future<VoipSession?> _joinCall(Completer<void> hangUp,
+      {required void Function() allowed}) async {
+    // Run by the join beside its token requests, once it is allowed, and
+    // finished before it writes our membership or connects.
     Future<void> leavePrevious() async {
+      allowed();
       final previous = currentSession;
       await Future.wait([
         // Leaving is memoised, so this only waits for a hang up already

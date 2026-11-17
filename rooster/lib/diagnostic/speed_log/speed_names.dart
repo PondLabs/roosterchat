@@ -32,9 +32,20 @@ abstract final class SpeedOperation {
   /// answer for its event (see `file_send_trace.dart`).
   static const fileSend = 'file_send';
 
+  /// A picture of a chat shown at one level (thumbnail or full), from its
+  /// load starting to its first frame drawn (see `media_show_trace.dart`).
+  static const mediaShow = 'media_show';
+
   /// Every span name. With [invalidSpeedName], at most
   /// `SpeedLog.maxOperations` (the finished spans keep that many).
-  static const all = {textSend, sync, imagePrepare, voiceJoin, fileSend};
+  static const all = {
+    textSend,
+    sync,
+    imagePrepare,
+    voiceJoin,
+    fileSend,
+    mediaShow,
+  };
 }
 
 /// Step names.
@@ -183,6 +194,19 @@ abstract final class SpeedStep {
   /// spoke in time.
   static const firstRemoteAudio = 'first_remote_audio';
 
+  // media_show (and decode)
+  /// The picture's bytes were on this device (the file cache, own media).
+  static const cacheHit = 'cache_hit';
+
+  /// Nothing on this device: the homeserver is asked.
+  static const cacheMiss = 'cache_miss';
+
+  /// From the miss to the bytes from the homeserver.
+  static const download = 'download';
+
+  /// From the start to the end of the first frame drawn with the picture.
+  static const firstPaint = 'first_paint';
+
   /// Every step name.
   static const all = {
     send,
@@ -227,6 +251,10 @@ abstract final class SpeedStep {
     sfuRegionOther,
     microphonePublished,
     firstRemoteAudio,
+    cacheHit,
+    cacheMiss,
+    download,
+    firstPaint,
   };
 }
 
@@ -249,6 +277,9 @@ abstract final class SpeedValue {
   /// The size in bytes of a picture's thumbnail.
   static const thumbnailBytes = 'thumbnail_bytes';
 
+  /// Which level of a picture is shown: 1 the thumbnail, 2 the full one.
+  static const level = 'level';
+
   /// Every name of a number on a step.
   static const all = {
     attempt,
@@ -259,6 +290,7 @@ abstract final class SpeedValue {
     height,
     frames,
     thumbnailBytes,
+    level,
   };
 }
 

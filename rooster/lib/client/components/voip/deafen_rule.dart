@@ -26,6 +26,13 @@ class DeafenRule {
     return _mutedUnderneath;
   }
 
+  /// A mute asked for while deafened (the microphone is already off): it
+  /// is what undeafening goes back to. Without this the microphone opened
+  /// again on undeafening, though the user had muted it meanwhile.
+  void mute() {
+    if (_deafened) _mutedUnderneath = true;
+  }
+
   /// Unmuting while deafened undeafens too, and the microphone opens whatever
   /// it was before deafening: the user asked to be heard.
   void unmute() {

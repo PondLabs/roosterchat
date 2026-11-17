@@ -146,6 +146,28 @@ Send unless the table says otherwise.
 
 Outcome `ok`, or `failed` when the file did not reach the room.
 
+### `media_show`
+
+`media_show`, a picture of a chat (an attachment, a video's poster) shown
+at one level, from its load starting to the end of the first frame drawn
+with it (`media_show_trace.dart`). A picture that has a thumbnail makes one
+span for the thumbnail and, when opened, one for the full picture; one
+already decoded in memory loads nothing and makes none. Value `level` is 1
+for the thumbnail (the sender's, or the one the homeserver scales for a
+large still picture that has none), 2 for the full picture.
+
+| Step | From | To |
+|---|---|---|
+| `cache_hit` | the start | the bytes read from this device (the file cache, or the account's own media); values `bytes`, `level` |
+| `cache_miss` | the start | this device has nothing; value `level` |
+| `download` | the miss | the bytes from the homeserver, after any new attempts; value `bytes`. Its requests are under the span (`/download/` or `/thumbnail/` in the route) |
+| `decode` | the bytes | the engine's decode |
+| `first_paint` | the start | the end of the first frame drawn with the picture; unavailable when nothing listens to the picture or no frame comes within 2 s |
+
+Outcome `ok`, `failed` when no picture came (after the new attempts, or
+the engine could not decode it), or `cancelled` when there was nothing to
+show at that level.
+
 ### `voice_join`
 
 `voice_join`, a voice join, from the join starting to the microphone

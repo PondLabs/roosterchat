@@ -308,7 +308,11 @@ class MatrixLivekitBackend implements CallJoinHost<MatrixLivekitVoipSession> {
   Future<lk.AudioCaptureOptions> _microphoneOptions() async {
     var device = await WebrtcDefaultDevices.getDefaultMicrophoneId();
 
-    print("Using default device: ${device}");
+    // Whether one was picked, never its id: a device id stays the same
+    // across sessions, which makes it a way to tell this machine.
+    Log.d(device == null
+        ? "Voice: the microphone is the system's default"
+        : "Voice: the microphone is the one picked in the settings");
 
     return prepareMicrophoneCaptureOptions(
       dsp: AudioProcessingManager.instance,

@@ -174,10 +174,14 @@ class MatrixTimelineEventMessage extends MatrixTimelineEvent
       Attachment? attachment;
 
       if (Mime.imageTypes.contains(event.attachmentMimetype)) {
+        // A large still picture without the sender's thumbnail: the
+        // homeserver's, and the whole file when opened.
+        final serverThumbnail = MatrixMxcImage.asksServerThumbnail(event);
         attachment = ImageAttachment(
             MatrixMxcImage(event.attachmentMxcUrl!, mx,
                 blurhash: event.attachmentBlurhash,
-                doThumbnail: event.hasThumbnail,
+                doThumbnail: event.hasThumbnail || serverThumbnail,
+                serverThumbnail: serverThumbnail,
                 doFullres: true,
                 thumbnailHeight: event.thumbnailHeight != null
                     ? min(700, event.thumbnailHeight!.toInt())
@@ -188,7 +192,7 @@ class MatrixTimelineEventMessage extends MatrixTimelineEvent
                         ? min(1440, event.attachmentHeight!.toInt())
                         : 1440)
                     : null,
-                autoLoadFullRes: !event.hasThumbnail,
+                autoLoadFullRes: !event.hasThumbnail && !serverThumbnail,
                 matrixEvent: event),
             MxcFileProvider(mx, event.attachmentMxcUrl!, event: event),
             mimeType: event.attachmentMimetype,
