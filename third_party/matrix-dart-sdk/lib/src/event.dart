@@ -404,44 +404,22 @@ class Event extends MatrixEvent {
     if (status.isSent) {
       throw Exception('Can only delete events which are not sent yet!');
     }
-
-    await room.client.database.removeEvent(eventId, room.id);
-    room.forgetFileSend(eventId); // ROOSTER: its file and uploads let go
-
-    if (room.lastEvent != null && room.lastEvent!.eventId == eventId) {
-      final redactedBecause = Event.fromMatrixEvent(
-        MatrixEvent(
-          type: EventTypes.Redaction,
-          content: {'redacts': eventId},
-          redacts: eventId,
-          senderId: senderId,
-          eventId: '${eventId}_cancel_send',
-          originServerTs: DateTime.now(),
-        ),
-        room,
-      );
-
-      await room.client.handleSync(
-        SyncUpdate(
-          nextBatch: '',
-          rooms: RoomsUpdate(
-            join: {
-              room.id: JoinedRoomUpdate(
-                timeline: TimelineUpdate(
-                  events: [redactedBecause],
-                ),
-              ),
-            },
-          ),
-        ),
-      );
-    }
-    room.client.onCancelSendEvent.add(eventId);
+    // A message still being sent stops first. Once its event's request // ROOSTER
+    // has left the server may have it: it is not taken away. // ROOSTER
+    if (!room.cancelSending(transactionId ?? eventId)) { // ROOSTER
+      throw Exception('The event may have reached the server'); // ROOSTER
+    } // ROOSTER
+    // ROOSTER: what followed is in there now, unchanged.
+    await room.dropUnsentEvent(eventId, senderId: senderId); // ROOSTER
   }
 
   /// Try to send this event again. Only works with events of status -1.
   Future<String?> sendAgain({String? txid}) async {
     if (!status.isError) return null;
+    // A cancelled message is never sent again. // ROOSTER
+    if (room.isSendCancelled(txid ?? transactionId ?? eventId)) { // ROOSTER
+      return null; // ROOSTER
+    } // ROOSTER
 
     // Retry sending a file:
     if ({
@@ -463,6 +441,7 @@ class Event extends MatrixEvent {
           Map<String, dynamic>.from(content), // ROOSTER
           type: type, // ROOSTER
           txid: txid ?? transactionId ?? eventId, // ROOSTER
+          uploadedInTheClear: content['file'] is! Map, // ROOSTER
         ); // ROOSTER
         if (id != null) room.forgetFileSend(eventId); // ROOSTER
         return id; // ROOSTER
@@ -485,6 +464,8 @@ class Event extends MatrixEvent {
         editEventId: credentials.editEventId,
         shrinkImageMaxDimension: credentials.shrinkImageMaxDimension,
         extraContent: credentials.extraContent,
+        threadRootEventId: credentials.threadRootEventId, // ROOSTER
+        threadLastEventId: credentials.threadLastEventId, // ROOSTER
       );
     }
 

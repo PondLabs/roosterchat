@@ -213,3 +213,30 @@ Changes since the copy:
   Not when the room now encrypts files and the event has a `url` (an
   upload in the clear): the file then goes up again, encrypted.
   `Event.cancelSend` lets go of the file and the parts kept for it.
+- Cancel of a message being sent (`Room.cancelSending`, `lib/src/room.dart`
+  and `lib/src/event.dart`): a flag per transaction id, kept for good, that
+  `Room.sendFileEvent` checks before the encryption, the upload loop before
+  each attempt and during its waits, and `Room.sendEvent` while the message
+  waits in the room's queue (it leaves the queue at once) and right before
+  each `PUT /send`. Each upload runs in a zone whose
+  `currentUploadCancel()` the app's HTTP client uses to abort the request
+  in flight. From the first `PUT /send` on, the server may have the event:
+  `Room.canCancelSend` is false and `Event.cancelSend` throws without
+  taking the message away; once the server has taken it, it stays so for
+  good, even from an event object read before. The one-second wait
+  between attempts of an event ends on a cancel, and an attempt that
+  fails after its message was cancelled shows nothing. A cancelled send shows nothing again and takes
+  its pending event out of the database and the timelines
+  (`Room.dropUnsentEvent`, what `Event.cancelSend` did before, moved,
+  with the removal from the database after the fake redaction, which
+  would otherwise store the event again).
+  `Event.sendAgain` sends no cancelled message.
+- At most four upload requests of file messages at once per client
+  (`maxUploadsAtOnce` in `lib/src/utils/file_upload_loop.dart`), across
+  messages, in the order they came.
+- A file message whose uploads went up in the clear is not sent once its
+  room encrypts files (`uploadedInTheClear` of `Room.sendEvent`, read with
+  the event's own encryption in `_sendContent`): the send fails, and a
+  retry uploads the file again, encrypted.
+- `FileSendRequestCredentials` keeps the thread a file message goes to,
+  and `Event.sendAgain` passes it on when the file is uploaded again.

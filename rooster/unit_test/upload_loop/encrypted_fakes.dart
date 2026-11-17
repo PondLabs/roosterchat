@@ -42,8 +42,15 @@ class OnlyUsTransport extends LoopTransport {
   Completer<void>? holdSend;
   int sendsArrived = 0;
 
+  /// Runs before the media config request is answered, when set.
+  Future<void> Function()? onConfig;
+
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final config = onConfig;
+    if (config != null && request.url.path.endsWith('/media/config')) {
+      await config();
+    }
     if (request.method == 'PUT' && request.url.path.contains('/send/')) {
       sendsArrived++;
       final hold = holdSend;

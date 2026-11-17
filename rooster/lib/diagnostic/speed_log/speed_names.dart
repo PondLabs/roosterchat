@@ -306,8 +306,9 @@ abstract final class SpeedOutcome {
   /// disposed).
   static const abandoned = 'abandoned';
 
-  /// Dropped by the app before its end: a picture's preparation for an
-  /// attachment removed before Send.
+  /// Dropped before its end: a picture's preparation for an attachment
+  /// removed before Send, or a file or text send the user cancelled
+  /// before its event's request left.
   static const cancelled = 'cancelled';
 
   /// Every outcome.

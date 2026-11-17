@@ -62,7 +62,7 @@ class LoopTransport extends FakeTransport {
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     final path = request.url.pathSegments;
-    if (request.method == 'POST' && request.url.path.endsWith('/upload')) {
+    if (request.method == 'POST' && isMediaUpload(request)) {
       seen.add('${request.method} ${routeTemplate(request.url)}');
       final body = await request.finalize().toBytes();
       uploads.add(body);
@@ -97,9 +97,15 @@ class LoopTransport extends FakeTransport {
     return super.send(request);
   }
 
+  /// Whether [request] uploads media (`POST /upload`), not keys.
+  static bool isMediaUpload(http.BaseRequest request) =>
+      request.url.path.contains('/media/') &&
+      request.url.path.endsWith('/upload');
+
   /// The answer of an accepted upload of [body].
   http.StreamedResponse accept(Uint8List body) {
-    final uri = 'mxc://fakeServer.notExisting/u${uploads.length}';
+    // One address per answer, also for uploads that arrived together.
+    final uri = 'mxc://fakeServer.notExisting/u${uploadUris.length + 1}';
     uploadUris.add(uri);
     uploadsByUri[uri.toLowerCase()] = body;
     return json(200, {'content_uri': uri});

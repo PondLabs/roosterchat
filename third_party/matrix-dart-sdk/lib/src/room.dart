@@ -844,6 +844,79 @@ class Room {
     sendingFileUploads.remove(txid); // ROOSTER
   } // ROOSTER
 
+  /// The messages whose send was cancelled, by transaction id: none of // ROOSTER
+  /// them is sent any more, whichever send of it runs or starts later. // ROOSTER
+  final _cancelledSends = <String>{}; // ROOSTER
+  final _onSendCancelled = // ROOSTER
+      StreamController<String>.broadcast(sync: true); // ROOSTER
+
+  /// The messages whose event request (`PUT /send`) has left and whose // ROOSTER
+  /// send has not ended, by transaction id, with how many sends of each: // ROOSTER
+  /// the server may have them already. // ROOSTER
+  final _sendRequestsLeft = <String, int>{}; // ROOSTER
+
+  /// The messages the server took, by transaction id: never cancellable // ROOSTER
+  /// again, even from an event object read before (a menu opened during // ROOSTER
+  /// the upload). One string per message sent from this device. // ROOSTER
+  final _sentSends = <String>{}; // ROOSTER
+
+  /// The transaction id of each message cancelled, as it is. // ROOSTER
+  Stream<String> get onSendCancelled => _onSendCancelled.stream; // ROOSTER
+
+  /// Whether the send of the message [txid] was cancelled. // ROOSTER
+  bool isSendCancelled(String txid) => _cancelledSends.contains(txid); // ROOSTER
+
+  /// Whether the message [txid] can still be cancelled: its event's // ROOSTER
+  /// request has not left (once it has, the server may have it) and the // ROOSTER
+  /// server did not take it. // ROOSTER
+  bool canCancelSend(String txid) => // ROOSTER
+      !_sendRequestsLeft.containsKey(txid) && !_sentSends.contains(txid); // ROOSTER
+
+  /// Cancels the send of the message [txid]: a file stops in its // ROOSTER
+  /// preparation or uploads (the request in flight is aborted), a text // ROOSTER
+  /// leaves the room's queue, and the event is never sent. False, and // ROOSTER
+  /// nothing changes, once its event's request has left. // ROOSTER
+  bool cancelSending(String txid) { // ROOSTER
+    if (!canCancelSend(txid)) return false; // ROOSTER
+    if (_cancelledSends.add(txid)) _onSendCancelled.add(txid); // ROOSTER
+    return true; // ROOSTER
+  } // ROOSTER
+
+  /// Takes the unsent event [eventId] away: from the database, the room's // ROOSTER
+  /// last event and the open timelines (`Event.cancelSend`). // ROOSTER
+  Future<void> dropUnsentEvent(String eventId, {String? senderId}) async { // ROOSTER
+    forgetFileSend(eventId); // ROOSTER: its file and uploads let go
+    if (lastEvent != null && lastEvent!.eventId == eventId) { // ROOSTER
+      final redactedBecause = Event.fromMatrixEvent( // ROOSTER
+        MatrixEvent( // ROOSTER
+          type: EventTypes.Redaction, // ROOSTER
+          content: {'redacts': eventId}, // ROOSTER
+          redacts: eventId, // ROOSTER
+          senderId: senderId ?? client.userID!, // ROOSTER
+          eventId: '${eventId}_cancel_send', // ROOSTER
+          originServerTs: DateTime.now(), // ROOSTER
+        ), // ROOSTER
+        this, // ROOSTER
+      ); // ROOSTER
+      await client.handleSync( // ROOSTER
+        SyncUpdate( // ROOSTER
+          nextBatch: '', // ROOSTER
+          rooms: RoomsUpdate( // ROOSTER
+            join: { // ROOSTER
+              id: JoinedRoomUpdate( // ROOSTER
+                timeline: TimelineUpdate(events: [redactedBecause]), // ROOSTER
+              ), // ROOSTER
+            }, // ROOSTER
+          ), // ROOSTER
+        ), // ROOSTER
+      ); // ROOSTER
+    } // ROOSTER
+    // Last: the redaction above stores the event again, redacted, when // ROOSTER
+    // the room still holds it as its last event. // ROOSTER
+    await client.database.removeEvent(eventId, id); // ROOSTER
+    client.onCancelSendEvent.add(eventId); // ROOSTER
+  } // ROOSTER
+
   /// Sends a [file] to this room after uploading it. Returns the mxc uri of
   /// the uploaded file. If [waitUntilSent] is true, the future will wait until
   /// the message event has received the server. Otherwise the future will only
@@ -893,9 +966,18 @@ class Room {
         threadLastEventId: threadLastEventId, // ROOSTER
         displayPendingEvent: displayPendingEvent, // ROOSTER
       ); // ROOSTER
+    } on SendCancelledException { // ROOSTER
+      return null; // ROOSTER
     } finally { // ROOSTER
       sendingQueueEventsByTxId.remove(txid); // ROOSTER
+      // Cancelled: whatever was shown meanwhile is taken away again. // ROOSTER
+      if (isSendCancelled(txid)) await dropUnsentEvent(txid); // ROOSTER
     } // ROOSTER
+  } // ROOSTER
+
+  /// Stops the send of the message [txid] when it was cancelled. // ROOSTER
+  void _stopIfSendCancelled(String txid) { // ROOSTER
+    if (isSendCancelled(txid)) throw const SendCancelledException(); // ROOSTER
   } // ROOSTER
 
   Future<String?> _sendFileEvent( // ROOSTER
@@ -910,6 +992,7 @@ class Room {
     String? threadLastEventId, // ROOSTER
     required bool displayPendingEvent, // ROOSTER
   }) async { // ROOSTER
+    _stopIfSendCancelled(txid); // ROOSTER
     // Create a fake Event object as a placeholder for the uploading file:
     final syncUpdate = SyncUpdate(
       nextBatch: '',
@@ -938,6 +1021,8 @@ class Room {
                       editEventId: editEventId,
                       shrinkImageMaxDimension: shrinkImageMaxDimension,
                       extraContent: extraContent,
+                      threadRootEventId: threadRootEventId, // ROOSTER
+                      threadLastEventId: threadLastEventId, // ROOSTER
                     ).toJson(),
                   },
                 ),
@@ -947,7 +1032,13 @@ class Room {
         },
       ),
     );
-    await _handleFakeSync(syncUpdate);
+    // Shown while it is not cancelled: a cancelled message never comes // ROOSTER
+    // back (see [dropUnsentEvent]). // ROOSTER
+    Future<void> show() async { // ROOSTER
+      if (!isSendCancelled(txid)) await _handleFakeSync(syncUpdate); // ROOSTER
+    } // ROOSTER
+
+    await show(); // ROOSTER
 
     // In an encrypted room only the encrypted file is ever uploaded. // ROOSTER
     MatrixFile? uploadFile = // ROOSTER
@@ -991,9 +1082,11 @@ class Room {
       Logs().d('Config error while sending file', e);
       syncUpdate.rooms!.join!.values.first.timeline!.events!.first
           .unsigned![messageSendingStatusKey] = EventStatus.error.intValue;
-      await _handleFakeSync(syncUpdate);
+      await show(); // ROOSTER
       rethrow;
     }
+    // Cancelled while it was prepared: not encrypted for nothing. // ROOSTER
+    _stopIfSendCancelled(txid); // ROOSTER
 
     MatrixFile? uploadThumbnail = // ROOSTER: never in the clear when
         encrypted && client.fileEncryptionEnabled ? null : thumbnail; // ROOSTER
@@ -1014,7 +1107,7 @@ class Room {
     if (encryptFiles) { // ROOSTER
       syncUpdate.rooms!.join!.values.first.timeline!.events!.first
           .unsigned![fileSendingStatusKey] = FileSendingStatus.encrypting.name;
-      await _handleFakeSync(syncUpdate);
+      await show(); // ROOSTER
       if (keptFile == null) { // ROOSTER
         encryptedFile = await file.encrypt(); // ROOSTER: indented
         uploadFile = encryptedFile.toMatrixFile(); // ROOSTER: indented
@@ -1028,7 +1121,7 @@ class Room {
 
     syncUpdate.rooms!.join!.values.first.timeline!.events!.first
         .unsigned![fileSendingStatusKey] = FileSendingStatus.uploading.name;
-    await _handleFakeSync(syncUpdate); // ROOSTER: the stage is published
+    await show(); // ROOSTER: the stage is published
     // The file and its thumbnail go up together, each tried again by // ROOSTER
     // itself; one that went up stays kept when the other fails. // ROOSTER
     final List<Uri> uris; // ROOSTER
@@ -1052,7 +1145,7 @@ class Room {
       syncUpdate.rooms!.join!.values.first.timeline!.events!.first // ROOSTER
           .unsigned![messageSendingStatusKey] = // ROOSTER
           EventStatus.error.intValue; // ROOSTER
-      await _handleFakeSync(syncUpdate); // ROOSTER
+      await show(); // ROOSTER
       rethrow; // ROOSTER
     } // ROOSTER
     final uploadResp = uris.first; // ROOSTER
@@ -1114,6 +1207,8 @@ class Room {
       threadRootEventId: threadRootEventId,
       threadLastEventId: threadLastEventId,
       displayPendingEvent: displayPendingEvent,
+      // Refused if the room encrypts files by the time the event goes. // ROOSTER
+      uploadedInTheClear: !encryptFiles, // ROOSTER
     );
     // A failed event keeps the file and its uploads: a retry sends only // ROOSTER
     // the event (`Event.sendAgain`). // ROOSTER
@@ -1149,8 +1244,18 @@ class Room {
     String type,
     Map<String, dynamic> content, {
     String? txid,
+    bool uploadedInTheClear = false, // ROOSTER
+    void Function()? beforeRequest, // ROOSTER
   }) async {
     txid ??= client.generateUniqueTransactionId();
+    // Each attempt starts with the cancel: the event's encryption can take // ROOSTER
+    // long, or fail and be tried again (no network). // ROOSTER
+    _stopIfSendCancelled(txid); // ROOSTER
+    // Read together with whether it is encrypted, below: an encrypted // ROOSTER
+    // event never points to a file that went up in the clear. // ROOSTER
+    if (uploadedInTheClear && encrypted && client.fileEncryptionEnabled) { // ROOSTER
+      throw const ClearUploadInEncryptedRoomException(); // ROOSTER
+    } // ROOSTER
 
     final mustEncrypt = encrypted && client.encryptionEnabled;
 
@@ -1159,6 +1264,7 @@ class Room {
             .encryptGroupMessagePayload(id, content, type: type)
         : content;
 
+    beforeRequest?.call(); // ROOSTER: the last moment it can be cancelled
     return await client.sendMessage(
       id,
       sendMessageContent.containsKey('ciphertext')
@@ -1205,6 +1311,10 @@ class Room {
     /// the sync event. Using this can display a different sort order of events
     /// as the sync event does replace but not relocate the pending event.
     bool displayPendingEvent = true,
+
+    /// The file message's uploads went up in the clear: it fails when the // ROOSTER
+    /// room encrypts files by the time its request leaves. // ROOSTER
+    bool uploadedInTheClear = false, // ROOSTER
   }) async {
     // Create new transaction id
     final String messageID;
@@ -1309,16 +1419,29 @@ class Room {
     // we need to add the transaction ID to the set of events that are currently queued to be sent
     // even before the fake sync is called, so that the event constructor can check if the event is in the sending state
     sendingQueueEventsByTxId.add(messageID);
-    if (displayPendingEvent) await _handleFakeSync(syncUpdate);
+    if (displayPendingEvent && !isSendCancelled(messageID)) { // ROOSTER
+      await _handleFakeSync(syncUpdate); // ROOSTER: indented
+    } // ROOSTER
     final completer = Completer();
     sendingQueue.add(completer);
-    while (sendingQueue.first != completer) {
-      await sendingQueue.first.future;
-    }
+    // Cancelled while it waits: it leaves the queue at once, and the send // ROOSTER
+    // in front goes on. // ROOSTER
+    try { // ROOSTER
+      while (sendingQueue.first != completer) { // ROOSTER: indented
+        await untilSendCancelled( // ROOSTER
+          this, // ROOSTER
+          messageID, // ROOSTER
+          (_) => sendingQueue.first.future, // ROOSTER
+        ); // ROOSTER
+      } // ROOSTER
+    } on SendCancelledException { // ROOSTER
+      return _sendCancelled(completer, messageID); // ROOSTER
+    } // ROOSTER
 
     final timeoutDate = DateTime.now().add(client.sendTimelineEventTimeout);
     // Send the text and on success, store and display a *sent* event.
     String? res;
+    var requestLeft = false; // ROOSTER
 
     while (res == null) {
       try {
@@ -1326,8 +1449,26 @@ class Room {
           type,
           content,
           txid: messageID,
+          uploadedInTheClear: uploadedInTheClear, // ROOSTER
+          beforeRequest: () { // ROOSTER
+            // Checked each attempt; from the first request on, the // ROOSTER
+            // server may have it and it cannot be cancelled. // ROOSTER
+            _stopIfSendCancelled(messageID); // ROOSTER
+            if (requestLeft) return; // ROOSTER
+            requestLeft = true; // ROOSTER
+            _sendRequestsLeft.update( // ROOSTER
+              messageID, // ROOSTER
+              (sends) => sends + 1, // ROOSTER
+              ifAbsent: () => 1, // ROOSTER
+            ); // ROOSTER
+          }, // ROOSTER
         );
       } catch (e, s) {
+        // Cancelled while an attempt that did not reach the server ran: // ROOSTER
+        // nothing of it is shown again, not even its failure. // ROOSTER
+        if (e is SendCancelledException || isSendCancelled(messageID)) { // ROOSTER
+          return _sendCancelled(completer, messageID); // ROOSTER
+        } // ROOSTER
         if (e is MatrixException &&
             e.retryAfterMs != null &&
             !DateTime.now()
@@ -1339,6 +1480,7 @@ class Room {
           await Future.delayed(Duration(milliseconds: e.retryAfterMs!));
         } else if (e is MatrixException ||
             e is EventTooLarge ||
+            e is ClearUploadInEncryptedRoomException || // ROOSTER
             DateTime.now().isAfter(timeoutDate)) {
           Logs().w('Problem while sending message', e, s);
           syncUpdate.rooms!.join!.values.first.timeline!.events!.first
@@ -1347,6 +1489,7 @@ class Room {
           completer.complete();
           sendingQueue.remove(completer);
           sendingQueueEventsByTxId.remove(messageID);
+          if (requestLeft) _sendRequestEnded(messageID); // ROOSTER
           if (e is EventTooLarge ||
               (e is MatrixException && e.error == MatrixError.M_FORBIDDEN)) {
             rethrow;
@@ -1355,7 +1498,15 @@ class Room {
         } else {
           Logs()
               .w('Problem while sending message: $e Try again in 1 seconds...');
-          await Future.delayed(Duration(seconds: 1));
+          try { // ROOSTER: a cancel ends the wait at once
+            await untilSendCancelled( // ROOSTER
+              this, // ROOSTER
+              messageID, // ROOSTER
+              (_) => Future.delayed(Duration(seconds: 1)), // ROOSTER
+            ); // ROOSTER
+          } on SendCancelledException { // ROOSTER
+            return _sendCancelled(completer, messageID); // ROOSTER
+          } // ROOSTER
         }
       }
     }
@@ -1366,8 +1517,30 @@ class Room {
     completer.complete();
     sendingQueue.remove(completer);
     sendingQueueEventsByTxId.remove(messageID);
+    _sentSends.add(messageID); // ROOSTER: before the request is let go
+    if (requestLeft) _sendRequestEnded(messageID); // ROOSTER
     return res;
   }
+
+  /// A send of the message [txid] whose request had left ended. // ROOSTER
+  void _sendRequestEnded(String txid) { // ROOSTER
+    final sends = _sendRequestsLeft[txid] ?? 1; // ROOSTER
+    if (sends <= 1) { // ROOSTER
+      _sendRequestsLeft.remove(txid); // ROOSTER
+    } else { // ROOSTER
+      _sendRequestsLeft[txid] = sends - 1; // ROOSTER
+    } // ROOSTER
+  } // ROOSTER
+
+  /// The message [txid], queued under [completer], was cancelled before // ROOSTER
+  /// its request left: it leaves the queue and the timeline, unsent. // ROOSTER
+  Future<String?> _sendCancelled(Completer completer, String txid) async { // ROOSTER
+    if (!completer.isCompleted) completer.complete(); // ROOSTER
+    sendingQueue.remove(completer); // ROOSTER
+    sendingQueueEventsByTxId.remove(txid); // ROOSTER
+    await dropUnsentEvent(txid); // ROOSTER
+    return null; // ROOSTER
+  } // ROOSTER
 
   /// Call the Matrix API to join this room if the user is not already a member.
   /// If this room is intended to be a direct chat, the direct chat flag will

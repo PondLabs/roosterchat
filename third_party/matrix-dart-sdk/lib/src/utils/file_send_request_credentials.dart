@@ -21,12 +21,17 @@ class FileSendRequestCredentials {
   final String? editEventId;
   final int? shrinkImageMaxDimension;
   final Map<String, dynamic>? extraContent;
+  // The thread it goes to: a retry sends it there again. // ROOSTER
+  final String? threadRootEventId; // ROOSTER
+  final String? threadLastEventId; // ROOSTER
 
   const FileSendRequestCredentials({
     this.inReplyTo,
     this.editEventId,
     this.shrinkImageMaxDimension,
     this.extraContent,
+    this.threadRootEventId, // ROOSTER
+    this.threadLastEventId, // ROOSTER
   });
 
   factory FileSendRequestCredentials.fromJson(Map<String, dynamic> json) =>
@@ -35,6 +40,8 @@ class FileSendRequestCredentials {
         editEventId: json['edit_event_id'],
         shrinkImageMaxDimension: json['shrink_image_max_dimension'],
         extraContent: json['extra_content'],
+        threadRootEventId: json['thread_root_event_id'], // ROOSTER
+        threadLastEventId: json['thread_last_event_id'], // ROOSTER
       );
 
   Map<String, dynamic> toJson() => {
@@ -43,5 +50,9 @@ class FileSendRequestCredentials {
         if (shrinkImageMaxDimension != null)
           'shrink_image_max_dimension': shrinkImageMaxDimension,
         if (extraContent != null) 'extra_content': extraContent,
+        if (threadRootEventId != null) // ROOSTER
+          'thread_root_event_id': threadRootEventId, // ROOSTER
+        if (threadLastEventId != null) // ROOSTER
+          'thread_last_event_id': threadLastEventId, // ROOSTER
       };
 }

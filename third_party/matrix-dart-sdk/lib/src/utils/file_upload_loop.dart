@@ -3,6 +3,8 @@
 // thumbnail) goes up by itself, the parts together; a part is kept once it
 // went up, and is tried again by itself a bounded number of times.
 
+import 'dart:async';
+import 'dart:collection';
 import 'dart:typed_data';
 
 import 'package:matrix/matrix.dart';
@@ -19,6 +21,106 @@ class SendClock {
 
 /// A part of a file message.
 enum FileSendPart { file, thumbnail }
+
+/// Thrown inside a send that was cancelled (`Room.cancelSending`): the send
+/// stops there, and nothing more of it reaches the server.
+class SendCancelledException implements Exception {
+  const SendCancelledException();
+
+  @override
+  String toString() => 'SendCancelledException: the send was cancelled';
+}
+
+/// Thrown before the event of a file message whose parts went up in the
+/// clear when its room now encrypts files: an encrypted event never points
+/// to an upload in the clear. A retry uploads the file again, encrypted.
+class ClearUploadInEncryptedRoomException implements Exception {
+  const ClearUploadInEncryptedRoomException();
+
+  @override
+  String toString() => 'ClearUploadInEncryptedRoomException: the room '
+      'encrypts files now and the file went up in the clear';
+}
+
+const _uploadCancelKey = #matrixUploadCancel;
+
+/// The cancel of the upload running in this zone, null outside the upload
+/// of a part of a file message: it completes when that message's send is
+/// cancelled, and the HTTP client aborts the request then.
+Future<void>? currentUploadCancel() =>
+    Zone.current[_uploadCancelKey] as Future<void>?;
+
+/// Runs [upload] so that the HTTP client aborts its request when [cancel]
+/// completes (see [currentUploadCancel]).
+R runCancellableUpload<R>(Future<void> cancel, R Function() upload) =>
+    runZoned(upload, zoneValues: {_uploadCancelKey: cancel});
+
+/// Runs [run] until the send of the message [txid] in [room] is cancelled:
+/// then [SendCancelledException] is thrown at once, and the future [run]
+/// was given completes, so what it started can stop. Throws at once when
+/// the send was cancelled before.
+Future<T> untilSendCancelled<T>(
+  Room room,
+  String txid,
+  Future<T> Function(Future<void> cancelled) run,
+) async {
+  if (room.isSendCancelled(txid)) throw const SendCancelledException();
+  final cancelled = Completer<void>();
+  final listening = room.onSendCancelled.listen((cancelledTxid) {
+    if (cancelledTxid == txid && !cancelled.isCompleted) cancelled.complete();
+  });
+  try {
+    return await Future.any([
+      run(cancelled.future),
+      cancelled.future.then<T>((_) => throw const SendCancelledException()),
+    ]);
+  } finally {
+    await listening.cancel();
+  }
+}
+
+/// The most upload requests of file messages a client has open at once,
+/// across messages: a file and its thumbnail are two.
+const maxUploadsAtOnce = 4;
+
+/// A client's upload requests: how many are open, and the parts waiting
+/// for one to end, in the order they came.
+class _UploadSlots {
+  int open = 0;
+  final waiting = Queue<Completer<void>>();
+
+  /// An upload ended: the first part waiting takes its slot.
+  void give() {
+    if (waiting.isNotEmpty) {
+      waiting.removeFirst().complete();
+    } else {
+      open--;
+    }
+  }
+}
+
+final _uploadSlots = Expando<_UploadSlots>();
+
+/// Takes one of the upload slots of [room]'s client for the message
+/// [txid], waiting for its turn; a cancel while it waits leaves the line.
+Future<_UploadSlots> _takeUploadSlot(Room room, String txid) async {
+  final slots = _uploadSlots[room.client] ??= _UploadSlots();
+  if (room.isSendCancelled(txid)) throw const SendCancelledException();
+  if (slots.open < maxUploadsAtOnce) {
+    slots.open++;
+    return slots;
+  }
+  final turn = Completer<void>();
+  slots.waiting.add(turn);
+  try {
+    await untilSendCancelled(room, txid, (_) => turn.future);
+  } catch (_) {
+    // Handed the slot just as the cancel came: it goes to the next.
+    if (!slots.waiting.remove(turn)) slots.give();
+    rethrow;
+  }
+  return slots;
+}
 
 /// A part of a file message that went up: its address, its size and, in
 /// an encrypted room, the key and hash its event carries. A retry of the
@@ -145,33 +247,28 @@ Future<Uri> _uploadFilePart(
   final client = room.client;
   final clock = client.sendClock;
   for (var retries = 0;; retries++) {
+    // At most [maxUploadsAtOnce] at once; the time of an attempt counts
+    // from its start, not from its wait for a slot.
+    final slots = await _takeUploadSlot(room, txid);
     final started = clock.now();
+    final Uri uri;
     try {
-      final uri = await client.uploadContent(
-        upload.bytes,
-        filename: upload.name,
-        contentType: upload.mimeType,
+      // A cancel aborts the request in flight (see [currentUploadCancel]).
+      uri = await untilSendCancelled(
+        room,
+        txid,
+        (cancelled) => runCancellableUpload(
+          cancelled,
+          () => client.uploadContent(
+            upload.bytes,
+            filename: upload.name,
+            contentType: upload.mimeType,
+          ),
+        ),
       );
-      // Not kept for a message no longer being sent (cancelled).
-      if (room.sendingFilePlaceholders.containsKey(txid)) {
-        room.sendingFileUploads.putIfAbsent(txid, () => {})[part] =
-            UploadedFilePart(
-          uri,
-          bytes: upload.bytes.length,
-          // What a reuse needs: the key, the iv and the hash, not the
-          // encrypted bytes, which went up already.
-          encryptedFile: encryptedFile == null
-              ? null
-              : EncryptedFile(
-                  data: Uint8List(0),
-                  k: encryptedFile.k,
-                  iv: encryptedFile.iv,
-                  sha256: encryptedFile.sha256,
-                ),
-        );
-      }
-      return uri;
     } catch (error) {
+      slots.give();
+      if (error is SendCancelledException) rethrow;
       final wait = fileUploadRetryWait(
         error,
         retries: retries,
@@ -179,7 +276,29 @@ Future<Uri> _uploadFilePart(
       );
       if (wait == null) rethrow;
       Logs().v('Upload of a file part failed. Trying again in $wait');
-      await clock.delay(wait);
+      await untilSendCancelled(room, txid, (_) => clock.delay(wait));
+      continue;
     }
+    slots.give();
+    // Not kept for a message no longer being sent (cancelled).
+    if (room.sendingFilePlaceholders.containsKey(txid) &&
+        !room.isSendCancelled(txid)) {
+      room.sendingFileUploads.putIfAbsent(txid, () => {})[part] =
+          UploadedFilePart(
+        uri,
+        bytes: upload.bytes.length,
+        // What a reuse needs: the key, the iv and the hash, not the
+        // encrypted bytes, which went up already.
+        encryptedFile: encryptedFile == null
+            ? null
+            : EncryptedFile(
+                data: Uint8List(0),
+                k: encryptedFile.k,
+                iv: encryptedFile.iv,
+                sha256: encryptedFile.sha256,
+              ),
+      );
+    }
+    return uri;
   }
 }

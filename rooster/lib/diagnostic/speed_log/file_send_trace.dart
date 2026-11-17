@@ -96,8 +96,8 @@ class FileSendTrace {
   R run<R>(R Function() body) => span.run(body);
 
   /// Adds the steps and closes the span: [ok] is false when the file did
-  /// not reach the room.
-  void finish({required bool ok}) {
+  /// not reach the room, and [cancelled] when the user cancelled it.
+  void finish({required bool ok, bool cancelled = false}) {
     if (span.isFinished) return;
     final end = span.elapsed;
 
@@ -138,7 +138,12 @@ class FileSendTrace {
     }
 
     span.addStep(SpeedStep.confirmed, _sendAt, end - _sendAt);
-    span.finish(outcome: ok ? SpeedOutcome.ok : SpeedOutcome.failed);
+    span.finish(
+        outcome: cancelled
+            ? SpeedOutcome.cancelled
+            : ok
+                ? SpeedOutcome.ok
+                : SpeedOutcome.failed);
   }
 
   /// Whether [request] uploads media (`POST /upload`).
