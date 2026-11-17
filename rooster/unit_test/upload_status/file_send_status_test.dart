@@ -269,7 +269,13 @@ void main() {
       expect(send.stage, AttachmentSendStage.sent);
       final uploads =
           transport.seen.where((r) => r == 'POST /_matrix/media/v3/upload');
-      final others = transport.seen.where((r) => !uploads.contains(r));
+      // The fake homeserver reserves no mxc: one refused reservation, and
+      // the photo goes upload first (async_photo_send.dart).
+      final reserve =
+          transport.seen.where((r) => r == 'POST /_matrix/media/v1/create');
+      expect(reserve, hasLength(1));
+      final others = transport.seen
+          .where((r) => !uploads.contains(r) && !reserve.contains(r));
       expect(uploads, isNotEmpty);
       expect(others, hasLength(1));
       expect(others.single, startsWith('PUT '));
