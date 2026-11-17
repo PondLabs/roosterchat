@@ -151,6 +151,44 @@ Send unless the table says otherwise.
 
 Outcome `ok`, or `failed` when the file did not reach the room.
 
+#### A file sent from disk, and the browser's bound
+
+On native, a file over 8 MiB attached by its path (not a picture) is not
+read at Send: the Matrix SDK reads it from disk at each upload attempt, in
+pieces of 256 KiB that are read only as the connection takes them, and in
+an encrypted room encrypts each piece in an isolate of its own
+(`lib/client/matrix/media/disk_file_source_io.dart`). Its `upload` step and
+request line are those of any upload; `prepared` has its size. No name is
+new: a file that changed on disk while it went up ends its request with
+the error the transport gives (`other`, `client` or `aborted`), and the
+message says why.
+
+What this costs, measured on the Windows development machine (16 GB) on
+2026-11-17, each run its own test process, median of 3
+(`unit_test/upload_stream/memory_measure_test.dart`, to a server on
+127.0.0.1):
+
+| Sent | Peak of the process | Over 1 MB | Longest the main isolate went without a timer |
+|---|---|---|---|
+| 1 MB, from disk | 327.7 MB | | 24 ms |
+| 200 MB, from disk | 327.7 MB | +0.0 MB | 19 ms |
+| 200 MB, from disk, encrypted room | 336.8 MB | +9.1 MB | 25 ms |
+
+The browser has no paths: a picked file is read into memory when it is
+attached, and sent from those bytes. Its bound, measured in Chrome with a
+50 MB file read as the app admits it and uploaded through our HTTP client
+(`XMLHttpRequest`), median of 3
+(`unit_test/upload_stream/web_upload_memory_test.dart`):
+
+| Sent | JS heap growth | Longest task of the page's thread |
+|---|---|---|
+| 50 MB, in the clear | 100.2 MB (2.0 times the file) | 61 ms (1 long task) |
+
+The file is held twice while it is read: its pieces, then the one buffer
+they are joined into. An encrypted room adds the encrypted copy (not
+measured here: the test page has no vodozemac). The web's own way is the
+next step of this work.
+
 ### `media_show`
 
 `media_show`, a picture of a chat (an attachment, a video's poster) shown
