@@ -7,7 +7,10 @@
 /// pieces of [BrowserFileSource.piece] bytes, encrypts each with a new key
 /// (AES-256-CTR and SHA-256, `file_cipher.dart`, on the page's thread: the
 /// web has no isolates) and adds it to a `Blob` the browser keeps, which is
-/// what goes up. Memory grows by a piece, not by the file.
+/// what goes up. The JS heap holds a piece at a time, but the browser keeps
+/// the whole encrypted copy, outside the JS heap, until the send ends: the
+/// process grows by about the file (`docs/speed-log.md`). In the clear it
+/// does not grow.
 ///
 /// A file changed, moved or deleted since it was picked is not readable
 /// any more (the browser's `NotReadableError`): its read ends with
@@ -161,7 +164,8 @@ class BrowserFileRead extends Stream<List<int>>
     }
     var out = web.Blob();
     await for (final piece in _pieces()) {
-      // The browser keeps what was encrypted; one piece is held here.
+      // The browser keeps what was encrypted, outside the JS heap, until
+      // the send ends; one piece is held here.
       out = web.Blob(<JSAny>[out, piece.toJS].toJS);
     }
     if (_closed) throw StateError('The read of the file was closed');
