@@ -120,7 +120,7 @@ class RoomNameLocalizations extends matrix.MatrixDefaultLocalizations {
   String get unknownUser => labelRoomNameUnknownUser;
 }
 
-class MatrixRoom extends Room {
+class MatrixRoom extends Room implements RoomSendPreparation {
   // Why a notification was not shown, in the notification debugger
   // (Developer settings).
 
@@ -529,6 +529,42 @@ class MatrixRoom extends Room {
   Future<MatrixProcessedAttachment?> processAttachment(
           PendingFileAttachment attachment) =>
       matrixFilesForAttachment(attachment);
+
+  /// Readies an encrypted room's outbound session ahead of a send: the
+  /// SDK's own preparation, the one it runs on a typing notice and that
+  /// every send runs anyway (load the session, rotate it when due, create
+  /// it and share its key when missing), only earlier. Keys for a device
+  /// that appeared since are still sent by the send itself. Only tests
+  /// replace it, to count preparations without vodozemac.
+  static Future<void> Function(matrix.Room room) prepareOutboundSession =
+      _prepareOutboundSessionWithSdk;
+
+  static Future<void> _prepareOutboundSessionWithSdk(matrix.Room room) async {
+    final encryption = room.client.encryption;
+    if (encryption == null || !room.client.encryptionEnabled) return;
+    await encryption.keyManager.prepareOutboundGroupSession(room.id);
+  }
+
+  /// The preparation in flight, shared by every trigger in this room.
+  Future<void>? _preparingSession;
+
+  /// Starts [prepareOutboundSession] in an encrypted room, unless one is in
+  /// flight. The SDK makes the session once even when its own preparation
+  /// (on a typing notice) or a send asks at the same time: they wait for
+  /// the same creation, so no message leaves before the session is ready.
+  @override
+  void prepareToSend() {
+    if (!_matrixRoom.encrypted || _preparingSession != null) return;
+    // In a microtask, so a preparation that ends at once still clears the
+    // one in flight after it was set.
+    _preparingSession =
+        Future.microtask(() => prepareOutboundSession(_matrixRoom))
+            .catchError((Object _) {
+      // The send prepares the session again, and reports its own failure.
+      // The error's text can hold the room's id: not logged.
+      Log.w('Could not prepare the encryption session ahead of a send');
+    }).whenComplete(() => _preparingSession = null);
+  }
 
   @override
   Future<TimelineEvent?> sendMessage(

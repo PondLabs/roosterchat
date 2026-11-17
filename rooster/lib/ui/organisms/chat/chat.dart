@@ -248,6 +248,14 @@ class ChatState extends State<Chat> {
     });
     attachment.startImagePreparation();
     attachment.locationCheck();
+    prepareToSend();
+  }
+
+  /// Readies what the room's next send needs (an encrypted room's session),
+  /// on the first input into an empty composer and when a file is
+  /// attached, whether or not typing notices are on. Never on focus.
+  void prepareToSend() {
+    if (room case RoomSendPreparation room) room.prepareToSend();
   }
 
   void removeAttachment(PendingFileAttachment attachment) {

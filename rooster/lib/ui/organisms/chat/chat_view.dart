@@ -124,6 +124,7 @@ class ChatView extends StatelessWidget {
           return state.sendMessage(message, overrideClient: overrideClient);
         },
         onTextUpdated: state.onInputTextUpdated,
+        onInputStarted: state.prepareToSend,
         addAttachment: state.addAttachment,
         removeAttachment: state.removeAttachment,
         size: MediaQuery.sizeOf(context).mobile ? 40 : 35,
