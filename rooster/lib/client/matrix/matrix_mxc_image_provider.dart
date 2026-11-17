@@ -194,10 +194,13 @@ class MatrixMxcImage extends LODImageProvider {
   }
 
   /// Whether asking again after [error] can get another answer: not after
-  /// the homeserver answered with a 4xx other than 408 and 429 (the
+  /// a file that came whole and could not be read
+  /// ([MediaUnreadableException]), nor after the homeserver answered
+  /// with a 4xx other than 408 and 429 (the
   /// download's [MediaDownloadException], or the SDK's [MatrixException]
   /// of an avatar's request).
   static bool worthAskingAgain(Object error) {
+    if (error is MediaUnreadableException) return false;
     // The SDK makes its error from the body alone (`MatrixApi`'s
     // `MatrixException.fromJson`, no response): its errcode says.
     if (error is MatrixException && error.response == null) {
@@ -280,10 +283,8 @@ class MatrixMxcImage extends LODImageProvider {
         return loadMatrixFullRes(client, uri, matrixEvent, cache: cache);
       }
     } else if (matrixEvent != null) {
-      var data = await matrixEvent.downloadAndDecryptAttachment(
-        getThumbnail: true,
-        downloadCallback: (url) => downloadMedia(client, url),
-      );
+      var data =
+          await _downloadAttachment(client, matrixEvent, getThumbnail: true);
 
       String mime = matrixEvent.thumbnailMimetype;
 
@@ -344,9 +345,7 @@ class MatrixMxcImage extends LODImageProvider {
 
     Uint8List? bytes;
     if (matrixEvent != null) {
-      var data = await matrixEvent.downloadAndDecryptAttachment(
-        downloadCallback: (url) => downloadMedia(client, url),
-      );
+      var data = await _downloadAttachment(client, matrixEvent);
 
       bytes = data.bytes;
     } else {
@@ -366,6 +365,29 @@ class MatrixMxcImage extends LODImageProvider {
     }
 
     return null;
+  }
+
+  /// [event]'s file (or its thumbnail), downloaded through [client] and
+  /// decrypted by the SDK. A failure after the whole file came (it does
+  /// not decrypt, its hash does not match) is thrown as
+  /// [MediaUnreadableException]: downloading it again would get the same
+  /// bytes. Nothing is shown of it either way.
+  static Future<MatrixFile> _downloadAttachment(Client client, Event event,
+      {bool getThumbnail = false}) async {
+    var downloaded = false;
+    try {
+      return await event.downloadAndDecryptAttachment(
+        getThumbnail: getThumbnail,
+        downloadCallback: (url) async {
+          final bytes = await downloadMedia(client, url);
+          downloaded = true;
+          return bytes;
+        },
+      );
+    } catch (error, trace) {
+      if (!downloaded) rethrow;
+      Error.throwWithStackTrace(MediaUnreadableException(error), trace);
+    }
   }
 
   /// Keeps [bytes] of the account's own [mxc] in its own media again (the
@@ -406,4 +428,16 @@ class MatrixMxcImage extends LODImageProvider {
 
   @override
   int get hashCode => identifier.hashCode;
+}
+
+/// A picture's file came whole and could not be read: it does not decrypt,
+/// or its hash does not match ([error], the SDK's). Downloading it again
+/// would get the same bytes.
+class MediaUnreadableException implements Exception {
+  MediaUnreadableException(this.error);
+
+  final Object error;
+
+  @override
+  String toString() => "MediaUnreadableException: $error";
 }
