@@ -62,6 +62,19 @@ class RoomVisibilityRestricted implements RoomVisibility {
 
 enum PushRule { notify, mentionsOnly, dontNotify }
 
+/// A room that can ready what its next send needs before Send is pressed:
+/// in an encrypted Matrix room, the outbound session. The composer calls
+/// [prepareToSend] on the first input into an empty composer and when a
+/// file is attached, not when it gains focus (that happens on every room
+/// open). Kept apart from [Room] so a room that has nothing to prepare need
+/// not implement it.
+abstract interface class RoomSendPreparation {
+  /// Starts readying the next send, if this room needs anything; returns at
+  /// once. A call while one is in flight joins it. Never fails and never
+  /// sends a message.
+  void prepareToSend();
+}
+
 /// The Room object should only be used for rooms which the user is a member of.
 /// Rooms which the user has not joined should be represented with a RoomPreview
 abstract class Room {

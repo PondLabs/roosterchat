@@ -91,6 +91,7 @@ class MessageInput extends StatefulWidget {
       this.attachments,
       this.addAttachment,
       this.onTextUpdated,
+      this.onInputStarted,
       this.removeAttachment,
       this.typingIndicatorWidget,
       this.availibleEmoticons,
@@ -146,6 +147,10 @@ class MessageInput extends StatefulWidget {
   final Future<void> Function(FavoriteGif gif)? sendFavoriteGif;
   final void Function(bool focused)? onFocusChanged;
   final Function(String currentText)? onTextUpdated;
+
+  /// Text went into an empty composer: a keystroke, a paste, or any text
+  /// put in it. Not when it gains focus, nor when it is emptied.
+  final void Function()? onInputStarted;
   final void Function()? cancelReply;
   final void Function()? editLastMessage;
   final Client? Function(String input)? findOverrideClient;
@@ -316,6 +321,7 @@ class MessageInputState extends State<MessageInput> {
     // Everything this made, released: the chat subtree is rebuilt on every
     // room switch, and these kept each old composer alive.
     controller.removeListener(controllerListener);
+    controller.removeListener(watchInputStart);
     controller.dispose();
     textFocus.removeListener(onTextFocusChanged);
     textFocus.dispose();
@@ -371,6 +377,8 @@ class MessageInputState extends State<MessageInput> {
     controller = RichTextEditingController(
         client: widget.client, room: widget.room, text: widget.initialText);
     controller.addListener(controllerListener);
+    composerEmpty = controller.text.isEmpty;
+    controller.addListener(watchInputStart);
     keyboardFocusSubscription =
         widget.focusKeyboard?.listen((_) => onKeyboardFocusRequested());
 
@@ -768,6 +776,19 @@ class MessageInputState extends State<MessageInput> {
   }
 
   TextSelection? prevSelection;
+
+  /// Whether the composer held no text at its last change.
+  bool composerEmpty = true;
+
+  /// Tells [MessageInput.onInputStarted] when text goes into an empty
+  /// composer. A controller listener sees every change, the composer
+  /// cleared by Send among them, which no `onChanged` reports; a selection
+  /// change (focus) leaves the text as it was.
+  void watchInputStart() {
+    final empty = controller.text.isEmpty;
+    if (composerEmpty && !empty) widget.onInputStarted?.call();
+    composerEmpty = empty;
+  }
 
   void controllerListener() {
     if (PlatformUtils.isAndroid) {

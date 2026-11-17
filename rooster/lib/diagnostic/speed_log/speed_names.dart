@@ -72,6 +72,14 @@ abstract final class SpeedStep {
   /// From the last response headers to the SDK returning the send.
   static const answer = 'answer';
 
+  /// A key request the send made (`/keys/query`, `/keys/claim`,
+  /// `/sendToDevice`): from leaving to its response headers.
+  static const keyRequest = 'key_request';
+
+  /// An encrypted room's outbound session, no duration: whether the send
+  /// made it and how many key requests it made.
+  static const outboundSession = 'outbound_session';
+
   // sync
   /// From the sync request to its response: the server's wait, the long
   /// poll included (up to 30 s when nothing happens).
@@ -216,6 +224,8 @@ abstract final class SpeedStep {
     request,
     retry,
     answer,
+    keyRequest,
+    outboundSession,
     serverWait,
     processing,
     cleanUp,
@@ -280,6 +290,13 @@ abstract final class SpeedValue {
   /// Which level of a picture is shown: 1 the thumbnail, 2 the full one.
   static const level = 'level';
 
+  /// 1 when a text waited for its outbound session to be made, 0 when one
+  /// was ready (or loaded from this device).
+  static const sessionCreated = 'session_created';
+
+  /// How many key requests a text send made.
+  static const keyRequests = 'key_requests';
+
   /// Every name of a number on a step.
   static const all = {
     attempt,
@@ -291,6 +308,8 @@ abstract final class SpeedValue {
     frames,
     thumbnailBytes,
     level,
+    sessionCreated,
+    keyRequests,
   };
 }
 

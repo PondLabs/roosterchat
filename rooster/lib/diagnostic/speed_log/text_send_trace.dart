@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/scheduler.dart';
+import 'package:matrix/encryption/utils/outbound_group_session.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/diagnostic/speed_log/request_record.dart';
@@ -25,7 +26,14 @@ import 'package:rooster/utils/network/speed_http_client.dart'
 /// - `request`, then `retry` for each new attempt: one per `PUT /send` the
 ///   span made, from leaving to its response headers, with `attempt`,
 ///   `status` and a 429's `retry_after_ms`;
-/// - `answer`: the last response headers to the SDK returning.
+/// - `answer`: the last response headers to the SDK returning;
+/// - `key_request`: one per key request the span made (`/keys/query`,
+///   `/keys/claim`, `/sendToDevice`), like `request`;
+/// - `outbound_session`, in an encrypted room: no duration, with
+///   `session_created` (1 when no session was ready at the hand-over and
+///   the message waited for one to be made, by the send or by a
+///   preparation still running; 0 when one was ready or was loaded from
+///   this device) and `key_requests` (how many).
 ///
 /// Requests come from the log by the span's id, so the trace holds no URL;
 /// the transaction id given to [sending] is only compared with the echo's
@@ -112,6 +120,18 @@ class TextSendTrace {
     return finished.future;
   }
 
+  /// The room handed the text, kept until the span finishes to read its
+  /// outbound session once more; the session's id is never kept.
+  matrix.Room? _room;
+
+  /// The room's outbound session at the hand-over, compared by identity.
+  Object? _sessionAtHandOver;
+
+  /// When the speed log started (its first request), on the wall clock a
+  /// session's creation time is written on: a session made before it was
+  /// loaded from this device's storage.
+  DateTime? _logStartedWall;
+
   Duration? _handedOver;
   Duration? _echoAt;
   Duration? _paintedAt;
@@ -128,6 +148,11 @@ class TextSendTrace {
     if (_handedOver != null || span.isFinished) return;
     final handedOver = _handedOver = span.elapsed;
     span.addStep(SpeedStep.send, Duration.zero, handedOver);
+    if (room.encrypted) {
+      _room = room;
+      _logStartedWall = DateTime.now().subtract(_log.now());
+      _sessionAtHandOver = _outboundSession(room);
+    }
 
     // Our send waits behind the room's earlier ones (the SDK's queue).
     final ahead = [for (final waiting in room.sendingQueue) waiting.future];
@@ -215,7 +240,62 @@ class TextSendTrace {
       span.addStep(SpeedStep.answer, from,
           answeredAt > from ? answeredAt - from : Duration.zero);
     }
+
+    _addKeySteps(handedOver);
   }
+
+  /// The key requests the span made, and in an encrypted room whether its
+  /// session was made for this send.
+  void _addKeySteps(Duration handedOver) {
+    var keyRequests = 0;
+    for (final request in _log.requests.toList()) {
+      if (request.operationId != span.id || !isKeyRequest(request)) continue;
+      keyRequests++;
+      span.addStep(SpeedStep.keyRequest, request.startedAt - span.startedAt,
+          request.timeToHeaders,
+          values: {
+            SpeedValue.attempt: request.attempt,
+            if (request.status != null) SpeedValue.status: request.status!,
+          });
+    }
+
+    final room = _room;
+    final atHandOver = _sessionAtHandOver;
+    _room = null;
+    _sessionAtHandOver = null;
+    if (room == null) return;
+    // Like the room's calls ([guard]): reading the session never fails
+    // the span.
+    final bool created;
+    try {
+      final session = _outboundSession(room);
+      created = session != null &&
+          !identical(session, atHandOver) &&
+          !session.creationTime.isBefore(_logStartedWall!);
+    } catch (error) {
+      Log.w('Speed log: the session of a text send was not read '
+          '(${speedErrorName(error)})');
+      return;
+    }
+    span.addStep(SpeedStep.outboundSession, handedOver, Duration.zero, values: {
+      SpeedValue.sessionCreated: created ? 1 : 0,
+      SpeedValue.keyRequests: keyRequests,
+    });
+  }
+
+  /// [room]'s outbound session as the SDK holds it in memory, if any.
+  static OutboundGroupSession? _outboundSession(matrix.Room room) =>
+      room.client.encryption?.keyManager.getOutboundGroupSession(room.id);
+
+  /// Whether [request] is one of the key requests a send in an encrypted
+  /// room can make: device keys, one-time keys, or room keys sent to
+  /// devices.
+  static bool isKeyRequest(RequestRecord request) =>
+      (request.method == 'POST' &&
+          (request.route.endsWith('/keys/query') ||
+              request.route.endsWith('/keys/claim'))) ||
+      (request.method == 'PUT' &&
+          request.route.endsWith('/sendToDevice/{eventType}/{txnId}'));
 
   /// Whether [request] sends a room event (`PUT /send`).
   static bool isSendRequest(RequestRecord request) =>

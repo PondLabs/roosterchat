@@ -3703,6 +3703,12 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelPendingMessageStillSending": "Still sending",
+  "@labelPendingMessageStillSending": {
+    "description": "Tooltip and screen reader label of the small clock shown on the user's own message when sending it takes over a second",
+    "type": "text",
+    "placeholders": {}
+  },
   "typingUsers": "{howMany,plural, =1{{user1} is typing…}=2{{user1} and {user2} are typing…}other{Several people are typing…}}",
   "@typingUsers": {
     "description": "Text to display which users are currently typing. Exactly three people have their own message, typingThreeUsers",
