@@ -7,14 +7,19 @@ CC0 1.0 like this script. See README.md for what each file holds.
 
 Needs Pillow with WebP support. Run from anywhere:
     python3 unit_test/fixtures/image_metadata/generate.py
+With the argument `heif`, writes only the HEIF files, which need no Pillow.
 """
 
 import io
 import os
 import struct
+import sys
 import zlib
 
-from PIL import Image, ImageDraw, PngImagePlugin
+try:
+    from PIL import Image, ImageDraw, PngImagePlugin
+except ImportError:  # enough for `generate.py heif`
+    Image = ImageDraw = PngImagePlugin = None
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 W, H = 64, 48
@@ -410,6 +415,81 @@ def main():
     sof = full.index(b"\xff\xc2")
     write("truncated_undecodable.jpg", full[:sof])
 
+    heif_files()
+
+
+# --- HEIF ---------------------------------------------------------------
+
+
+def box(kind, payload):
+    return struct.pack(">I", 8 + len(payload)) + kind + payload
+
+
+def full_box(kind, version, payload):
+    return box(kind, struct.pack(">I", version << 24) + payload)
+
+
+def heif(brand, exif, iloc_version, infe_version):
+    """A HEIF whose major brand is `brand`, with a picture item and an Exif
+    item that describes it, in the boxes libheif writes. The picture item's
+    data is a stand-in: the boxes are right, the picture does not decode.
+    `iloc_version` 2 places the items from a base offset, with extent
+    indexes; `infe_version` 3 gives them 32-bit ids."""
+    compatible = b"".join(b for b in (b"mif1", b"miaf") if b != brand) + brand
+    ftyp = box(b"ftyp", brand + b"\0\0\0\0" + compatible)
+    hdlr = full_box(b"hdlr", 0, b"\0" * 4 + b"pict" + b"\0" * 13)
+    pitm = full_box(b"pitm", 0, struct.pack(">H", 1))
+    ids = ">H" if infe_version == 2 else ">I"
+
+    def infe(item, kind):
+        return full_box(b"infe", infe_version, struct.pack(ids, item) + b"\0\0" + kind + b"\0")
+
+    iinf = full_box(
+        b"iinf",
+        0 if infe_version == 2 else 1,
+        struct.pack(ids, 2) + infe(1, b"hvc1") + infe(2, b"Exif"),
+    )
+    iref = full_box(b"iref", 0, box(b"cdsc", struct.pack(">HHH", 2, 1, 1)))
+    picture = b"\0" * 32
+    item = struct.pack(">I", 6) + b"Exif\0\0" + exif
+
+    def iloc(mdat_at):
+        based = iloc_version == 2
+        # Offsets and lengths in 4 bytes; base offsets and extent indexes
+        # too when based.
+        out = bytes([0x44, 0x44 if based else 0x00])
+        item_id = ">H" if iloc_version < 2 else ">I"
+        out += struct.pack(item_id, 2)
+        base = mdat_at if based else 0
+        places = ((1, mdat_at, len(picture)), (2, mdat_at + len(picture), len(item)))
+        for n, offset, length in places:
+            out += struct.pack(item_id, n)
+            if iloc_version > 0:
+                out += struct.pack(">H", 0)  # construction method 0: the file
+            out += struct.pack(">H", 0)  # data reference index
+            if based:
+                out += struct.pack(">I", base)
+            out += struct.pack(">H", 1)  # one extent
+            if based:
+                out += struct.pack(">I", 0)  # extent index
+            out += struct.pack(">II", offset - base, length)
+        return full_box(b"iloc", iloc_version, out)
+
+    def meta(mdat_at):
+        return full_box(b"meta", 0, hdlr + pitm + iloc(mdat_at) + iinf + iref)
+
+    mdat_at = len(ftyp) + len(meta(0)) + 8
+    return ftyp + meta(mdat_at) + box(b"mdat", picture + item)
+
+
+def heif_files():
+    write("exif_mif1.heic", heif(b"mif1", tiff(orientation=6), 0, 2))
+    write("exif_heix.heic", heif(b"heix", tiff(orientation=6), 1, 2))
+    write("exif_no_gps.heic", heif(b"mif1", tiff(orientation=6, gps=False), 2, 3))
+
 
 if __name__ == "__main__":
-    main()
+    if sys.argv[1:] == ["heif"]:
+        heif_files()
+    else:
+        main()

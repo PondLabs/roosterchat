@@ -25,3 +25,7 @@ script again gives the same bytes.
 | `animated_exif_prefixed.webp` | The same with `Exif\0\0` before the TIFF, as Pillow writes it |
 | `truncated_decodable.jpg` | A progressive 256 by 192 JPEG with Exif, cut after 70% of its bytes: no EOI, still decodes |
 | `truncated_undecodable.jpg` | The same file cut before its frame header: does not decode |
+| `exif_mif1.heic`, `exif_heix.heic` | HEIF boxes only (the picture item's data is a stand-in, it does not decode), of major brand `mif1` and `heix`: an Exif item with orientation 6 and GPS, placed by `iloc` version 0 and 1 |
+| `exif_no_gps.heic` | The same of brand `mif1` with an Exif item without GPS, 32-bit item ids (`infe` version 3) and an `iloc` version 2 with base offsets and extent indexes |
+
+The HEIF files need no Pillow: `generate.py heif` writes only them.

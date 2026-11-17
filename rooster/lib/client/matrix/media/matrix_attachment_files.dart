@@ -17,6 +17,8 @@
 /// On native, a file over [streamFromDiskAbove] attached by its path (not a
 /// picture, which is prepared from its bytes) is not read here: the SDK
 /// reads it from disk at each upload, in pieces (`disk_file_source.dart`).
+/// In a browser, such a file is attached with its `File` as its source
+/// (`browser_files.dart`), which the SDK sends from in the same way.
 library;
 
 import 'dart:typed_data';
@@ -192,15 +194,19 @@ Future<MatrixProcessedAttachment?> matrixFilesForAttachment(
 }
 
 /// A file attached by its path over this size is sent from disk, never
-/// read whole (native). One within it is read and sent from memory, as
+/// read whole (native), and one picked, pasted or dropped in a browser
+/// from its `File`. One within it is read and sent from memory, as
 /// before: it goes into the account's own media (`own_media.dart`).
 const int streamFromDiskAbove = 8 * 1024 * 1024;
 
 /// Where [attachment]'s file is read from at each upload, when it is sent
 /// from disk: a file attached by its path, not read yet, not a picture,
-/// over [streamFromDiskAbove]. Null otherwise, and on the web.
+/// over [streamFromDiskAbove]; or the browser's `File` it was attached
+/// with. Null otherwise.
 Future<matrix.FileSendSource?> _diskSourceOf(
     PendingFileAttachment attachment) async {
+  final attached = attachment.source;
+  if (attached != null) return attached;
   final path = attachment.path;
   if (attachment.data != null ||
       path == null ||
