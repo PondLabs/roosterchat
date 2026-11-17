@@ -191,8 +191,11 @@ void main() {
         hasLength(1));
     expect(keyRequests(span), isEmpty);
     expect(span.steps.where((s) => s.name == SpeedStep.keyRequest), isEmpty);
-    expect(session.values,
-        {SpeedValue.sessionCreated: 0, SpeedValue.keyRequests: 0});
+    expect(session.values, {
+      SpeedValue.sessionCreated: 0,
+      SpeedValue.sessionWaited: 0,
+      SpeedValue.keyRequests: 0
+    });
     expect(span.outcome, SpeedOutcome.ok);
   });
 
@@ -216,9 +219,13 @@ void main() {
         hasLength(listed.length));
     expect(session.values, {
       SpeedValue.sessionCreated: 1,
+      SpeedValue.sessionWaited: 0,
       SpeedValue.keyRequests: listed.length,
     });
-    expect(report, contains('session_created=1 key_requests=${listed.length}'));
+    expect(
+        report,
+        contains('session_created=1 session_waited=0 '
+            'key_requests=${listed.length}'));
     // Fixed names and numbers: no room, user or device id in the report's
     // spans and requests.
     for (final id in ['!1234', '@test', 'GHTYAJCE', 'OTHERDEVICE']) {
@@ -247,12 +254,19 @@ void main() {
         .length;
     expect(roomKeySends, 1, reason: 'one session, its key shared once');
     expect(server.keysHeld, 1);
-    // The message waited for the session the preparation was making.
+    // The message waited for the session the preparation was making: it
+    // says so by its own name, not as a session the send made.
     expect(
         span.steps
             .singleWhere((s) => s.name == SpeedStep.outboundSession)
             .values,
-        {SpeedValue.sessionCreated: 1, SpeedValue.keyRequests: 0});
+        {
+          SpeedValue.sessionCreated: 0,
+          SpeedValue.sessionWaited: 1,
+          SpeedValue.keyRequests: 0
+        });
+    expect(buildSpeedReport(SpeedLog.instance),
+        contains('session_created=0 session_waited=1 key_requests=0'));
     expect(span.outcome, SpeedOutcome.ok);
   });
 }

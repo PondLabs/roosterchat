@@ -545,8 +545,9 @@ class MatrixRoom extends Room implements RoomSendPreparation {
     await encryption.keyManager.prepareOutboundGroupSession(room.id);
   }
 
-  /// The preparation in flight, shared by every trigger in this room.
-  Future<void>? _preparingSession;
+  /// The preparation in flight, shared by every trigger in this room:
+  /// true once it readied the session, false when it failed.
+  Future<bool>? _preparingSession;
 
   /// Starts [prepareOutboundSession] in an encrypted room, unless one is in
   /// flight. The SDK makes the session once even when its own preparation
@@ -559,10 +560,11 @@ class MatrixRoom extends Room implements RoomSendPreparation {
     // one in flight after it was set.
     _preparingSession =
         Future.microtask(() => prepareOutboundSession(_matrixRoom))
-            .catchError((Object _) {
+            .then((_) => true, onError: (Object _) {
       // The send prepares the session again, and reports its own failure.
       // The error's text can hold the room's id: not logged.
       Log.w('Could not prepare the encryption session ahead of a send');
+      return false;
     }).whenComplete(() => _preparingSession = null);
   }
 
@@ -635,7 +637,9 @@ class MatrixRoom extends Room implements RoomSendPreparation {
       // speed log see the local echo (docs/speed-log.md).
       final txid = _matrixRoom.client.generateUniqueTransactionId();
       final trace = TextSendTrace.current;
-      TextSendTrace.guard(() => trace?.sending(_matrixRoom, txid));
+      final preparation = _preparingSession;
+      TextSendTrace.guard(
+          () => trace?.sending(_matrixRoom, txid, preparation: preparation));
       String? id;
       try {
         id = await _matrixRoom.sendEvent(event,

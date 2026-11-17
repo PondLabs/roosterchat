@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rooster/client/attachment.dart';
+import 'package:rooster/client/client.dart';
+import 'package:rooster/client/components/account_switch_prefix/account_switch_prefix.dart';
+import 'package:rooster/client/room.dart';
 import 'package:rooster/client/components/typing_indicators/typing_indicator_component.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
@@ -52,7 +55,7 @@ void main() {
     }))!;
     final preparer = fakePreparer(FakeEngine(width: 400, height: 300));
     ImagePreparer.instance = preparer;
-    final chatRoom = PreparingRoom(FakeClient('a'), '!room',
+    final chatRoom = PreparingRoom(FakeClient('a'), fakeRoomId,
         preparer: preparer, target: room, typing: typing);
     await tester.pumpWidget(chatApp(chatRoom));
     await tester.pump();
@@ -165,6 +168,58 @@ void main() {
     await close(tester, plain);
   });
 
+  testWidgets(
+      'a prefix that sends as another account readies the room of that '
+      "account, not the chat's", (tester) async {
+    final (clientA, chatRoom) = await openChat(tester, encrypted: true);
+    final clientB = (await tester.runAsync(() async {
+      final client = await fakeAccount(
+          'session_preparation_other_${accounts++}', FakeTransport());
+      final mx = client.getMatrixClient();
+      mx.backgroundSync = false;
+      await mx.oneShotSync();
+      await joinedRoom(client, encrypted: true);
+      return client;
+    }))!;
+    (chatRoom.client as FakeClient).components[AccountSwitchPrefix] =
+        _Prefix('+b ', clientB);
+    await tester.showKeyboard(composer());
+
+    for (final text in ['+', '+b', '+b ', '+b hello']) {
+      await tester.enterText(composer(), text);
+      await tester.pump();
+    }
+
+    print("prepared for: ${spy.accounts}; the chat's account "
+        '${clientA.getMatrixClient().clientName}, the sender '
+        '${clientB.getMatrixClient().clientName}');
+    expect(spy.accounts, [clientB.getMatrixClient().clientName]);
+    spy.finish();
+    await tester.pump();
+    await close(tester, clientA);
+    await tester.runAsync(clientB.close);
+  });
+
+  testWidgets(
+      "a first keystroke that only looks like a prefix readies the chat's "
+      'room once it is plain text', (tester) async {
+    final (clientA, chatRoom) = await openChat(tester, encrypted: true);
+    (chatRoom.client as FakeClient).components[AccountSwitchPrefix] =
+        _Prefix('+b ', null);
+    await tester.showKeyboard(composer());
+
+    await tester.enterText(composer(), '+');
+    await tester.pump();
+    expect(spy.count, 0, reason: 'who sends is not known yet');
+    await tester.enterText(composer(), '+1');
+    await tester.pump();
+
+    expect(spy.accounts, [clientA.getMatrixClient().clientName]);
+    spy.finish();
+    await tester.pump();
+    await close(tester, clientA);
+  });
+
   group('MatrixRoom.prepareToSend', () {
     late MatrixClient client;
 
@@ -224,4 +279,31 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 10));
     });
   });
+}
+
+/// The account prefix [prefix]: text that starts with it is sent as
+/// [other] (a fake that knows no other account when null).
+class _Prefix implements AccountSwitchPrefix<Client> {
+  _Prefix(this.prefix, this.other);
+
+  final String prefix;
+  final Client? other;
+
+  @override
+  (Client, String)? getPrefixedAccount(String string, Room currentRoom) =>
+      other != null && string.startsWith(prefix) ? (other!, prefix) : null;
+
+  @override
+  bool isPossiblyUsingPrefix(String currentText) =>
+      currentText.startsWith(prefix) || prefix.startsWith(currentText);
+
+  @override
+  String? get clientPrefix => prefix;
+
+  @override
+  String removePrefix(String string, Room currentRoom) =>
+      string.startsWith(prefix) ? string.substring(prefix.length) : string;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

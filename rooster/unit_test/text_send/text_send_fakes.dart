@@ -62,18 +62,21 @@ Future<MatrixRoom> joinedRoom(MatrixClient client,
 }
 
 /// Replaces [MatrixRoom.prepareOutboundSession] for one test: each
-/// preparation is counted in [rooms] (by room id) and lasts until [finish].
+/// preparation is counted in [rooms] (by room id), with the account it
+/// ran for in [accounts] (by client name), and lasts until [finish].
 class PreparationSpy {
   PreparationSpy() {
     _app = MatrixRoom.prepareOutboundSession;
     MatrixRoom.prepareOutboundSession = (room) {
       rooms.add(room.id);
+      accounts.add(room.client.clientName);
       return (_running = Completer<void>()).future;
     };
   }
 
   late final Future<void> Function(matrix.Room) _app;
   final List<String> rooms = [];
+  final List<String> accounts = [];
   Completer<void>? _running;
 
   int get count => rooms.length;
