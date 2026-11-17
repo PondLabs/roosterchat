@@ -21,6 +21,7 @@ import 'package:rooster/diagnostic/speed_log/text_send_trace.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/molecules/message_input.dart';
 import 'package:rooster/ui/organisms/attachment_processor/attachment_processor.dart';
+import 'package:rooster/ui/organisms/attachment_processor/picked_files.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/organisms/chat/chat_view.dart';
 import 'package:rooster/ui/organisms/chat/composer_send.dart';
@@ -522,11 +523,17 @@ class ChatState extends State<Chat> {
       return;
     }
     final skipped = <String>[];
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    // A file over the server's limit is refused unread, as one picked.
+    final limit = await limitWithin(uploadLimitOf(room));
     final dropped = await attachmentsFromDroppedFiles(event.files,
+        maxBytes: limit,
+        onRefused: (bytes, limit) => messenger?.showSnackBar(
+            SnackBar(content: Text(messageFileOverUploadLimit(bytes, limit)))),
         onSkipped: (name, error) {
-      Log.w("Could not attach dropped file $name: $error");
-      skipped.add(name);
-    });
+          Log.w("Could not attach dropped file $name: $error");
+          skipped.add(name);
+        });
     if (skipped.isNotEmpty && mounted) {
       AdaptiveDialog.showError(context,
           errorChatDropNotAttached(skipped.join(", ")), StackTrace.current,
