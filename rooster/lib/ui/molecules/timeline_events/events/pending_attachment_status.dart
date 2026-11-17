@@ -30,6 +30,15 @@ class PendingAttachmentStatus extends StatefulWidget {
           "the photo itself is still uploading: stops the upload and takes "
           "the message back");
 
+  static String get labelPhotoUploadInterrupted => Intl.message(
+      "A photo didn't finish uploading before Rooster closed. The others "
+      "won't see it",
+      name: "labelPhotoUploadInterrupted",
+      desc: "In the chat, in place of a photo of yours whose upload had not "
+          "finished when the app closed: its message was taken back from the "
+          "room, and the photo can't be sent again from here (attach it "
+          "again)");
+
   static String get labelPhotoLeftInRoom => Intl.message(
       "The photo didn't upload, and this message couldn't be deleted",
       name: "labelPhotoLeftInRoom",

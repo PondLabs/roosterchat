@@ -265,4 +265,6 @@ Changes since the copy:
   event was sent while its uploads run: `Room.canCancelSend` is true for
   it until they end, so its cancel stops them. `Room.showFileMessage`
   shows a file message of this device, being sent or failed, without
-  sending anything, keeping its file as `sendFileEvent` does.
+  sending anything, keeping its file as `sendFileEvent` does;
+  `Room.showFailedMessage` shows a failed message with any content and
+  keeps nothing (a photo whose upload the app's closing cut short).

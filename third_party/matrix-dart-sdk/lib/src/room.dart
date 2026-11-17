@@ -905,15 +905,41 @@ class Room {
     sendingFilePlaceholders[txid] = file; // ROOSTER
     if (thumbnail != null) sendingFileThumbnails[txid] = thumbnail; // ROOSTER
     if (!failed) sendingQueueEventsByTxId.add(txid); // ROOSTER
-    final status = failed ? EventStatus.error : EventStatus.sending; // ROOSTER
-    final event = MatrixEvent( // ROOSTER
-      content: { // ROOSTER
+    await _showLocalMessage( // ROOSTER
+      txid, // ROOSTER
+      { // ROOSTER
         'msgtype': file.msgType, // ROOSTER
         'body': file.name, // ROOSTER
         'filename': file.name, // ROOSTER
         'info': file.info, // ROOSTER
         if (extraContent != null) ...extraContent, // ROOSTER
       }, // ROOSTER
+      failed ? EventStatus.error : EventStatus.sending, // ROOSTER
+      FileSendRequestCredentials( // ROOSTER
+        extraContent: extraContent, // ROOSTER
+        threadRootEventId: threadRootEventId, // ROOSTER
+        threadLastEventId: threadLastEventId, // ROOSTER
+      ).toJson(), // ROOSTER
+    ); // ROOSTER
+  } // ROOSTER
+
+  /// Shows a failed message of this device with [content] in the timeline // ROOSTER
+  /// under [txid], keeping nothing to send it again and sending nothing: // ROOSTER
+  /// a send the app can only report. // ROOSTER
+  Future<void> showFailedMessage( // ROOSTER
+    String txid, // ROOSTER
+    Map<String, dynamic> content, // ROOSTER
+  ) => // ROOSTER
+      _showLocalMessage(txid, content, EventStatus.error, const {}); // ROOSTER
+
+  Future<void> _showLocalMessage( // ROOSTER
+    String txid, // ROOSTER
+    Map<String, dynamic> content, // ROOSTER
+    EventStatus status, // ROOSTER
+    Map<String, dynamic> unsigned, // ROOSTER
+  ) async { // ROOSTER
+    final event = MatrixEvent( // ROOSTER
+      content: content, // ROOSTER
       type: EventTypes.Message, // ROOSTER
       eventId: txid, // ROOSTER
       senderId: client.userID!, // ROOSTER
@@ -921,11 +947,7 @@ class Room {
       unsigned: { // ROOSTER
         messageSendingStatusKey: status.intValue, // ROOSTER
         'transaction_id': txid, // ROOSTER
-        ...FileSendRequestCredentials( // ROOSTER
-          extraContent: extraContent, // ROOSTER
-          threadRootEventId: threadRootEventId, // ROOSTER
-          threadLastEventId: threadLastEventId, // ROOSTER
-        ).toJson(), // ROOSTER
+        ...unsigned, // ROOSTER
       }, // ROOSTER
     ); // ROOSTER
     await _handleFakeSync( // ROOSTER

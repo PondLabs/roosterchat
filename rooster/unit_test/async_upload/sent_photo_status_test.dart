@@ -19,6 +19,7 @@ import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/matrix/media/async_photo_send.dart';
+import 'package:rooster/client/matrix/media/interrupted_photo_uploads.dart';
 import 'package:rooster/client/matrix/media/matrix_file_send.dart';
 import 'package:rooster/generated/intl/messages_all.dart';
 import 'package:rooster/ui/molecules/timeline_events/events/pending_attachment_status.dart';
@@ -209,6 +210,71 @@ void main() {
       expect(cut, isEmpty);
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(seconds: 2));
+    });
+  }
+
+  for (final locale in ['en', 'pt']) {
+    testWidgets(
+        'the failed message of a photo cut short by the app closing says so, '
+        'whole at 280 and 320 px ($locale)', (tester) async {
+      late MatrixClient client;
+      late MatrixRoom room;
+      late matrix.Event item;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          const MethodChannel('FlutterWebRTC.Event'), (_) async => null);
+      await tester.runAsync(() async {
+        await _loadFont('Roboto', ['assets/font/roboto/Roboto-Regular.ttf']);
+        await _loadFont('NunitoSans', [
+          'assets/font/nunito/NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf'
+        ]);
+        await initializeMessages(locale);
+        client =
+            await fakeAccount('interrupted_item_$locale', AsyncTransport());
+        final mx = client.getMatrixClient();
+        mx.backgroundSync = false;
+        room = await plainRoom(client);
+        await room.matrixRoom.showFailedMessage('interrupted', {
+          'msgtype': 'm.notice',
+          'body': 'fallback',
+          interruptedPhotoKey: r'$photo',
+        });
+        item =
+            (await mx.database.getEventById('interrupted', room.matrixRoom))!;
+      });
+      intl.Intl.defaultLocale = locale;
+      addTearDown(() => intl.Intl.defaultLocale = null);
+      expect(item.status, matrix.EventStatus.error);
+
+      final said = locale == 'pt'
+          ? 'Uma foto não terminou de subir antes de o Rooster fechar. Os '
+              'outros não vão vê-la'
+          : "A photo didn't finish uploading before Rooster closed. The "
+              "others won't see it";
+      for (final width in [280.0, 320.0]) {
+        await tester.pumpWidget(MaterialApp(
+          theme: ThemeDark.theme,
+          home: Scaffold(
+              body: Align(
+                  alignment: Alignment.topLeft,
+                  child: SizedBox(
+                      width: width,
+                      child: TimelineEventViewMessage(
+                          key: ValueKey(width),
+                          room: room,
+                          initialEvent: room.convertEvent(item),
+                          initialIndex: 0,
+                          overrideShowSender: true,
+                          previewMedia: true)))),
+        ));
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+        expect(find.text(said), findsOneWidget);
+        expect(find.text('fallback'), findsNothing);
+      }
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 2));
+      await tester.runAsync(() => client.close());
     });
   }
 }

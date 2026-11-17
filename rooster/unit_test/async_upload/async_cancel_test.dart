@@ -10,6 +10,7 @@ import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/matrix/media/async_photo_send.dart';
 import 'package:rooster/client/matrix/media/matrix_file_send.dart';
+import 'package:rooster/client/matrix/media/own_media.dart';
 import 'package:rooster/diagnostic/speed_log/file_send_trace.dart';
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
 import 'package:rooster/diagnostic/speed_log/speed_names.dart';
@@ -117,6 +118,34 @@ void main() {
     expect(asyncPhotoSendOf(mxRoom, id), isNull);
     expect(mxRoom.sendingFilePlaceholders[id], isNull);
     expect(AttachmentSends.instance.all, isEmpty);
+  });
+
+  test(
+      'the own media gets the photo once it is up, never while it goes up '
+      'or when its upload fails', () async {
+    final mx = client.getMatrixClient();
+    final own = ownMediaOf(mx)!;
+    transport.holdPuts = true;
+    final attachment = photo();
+    final sending = sendAttachment(mxRoom, attachment);
+    final sent = await sentWhileUploading(attachment);
+    final key = sent.attachmentMxcUrl.toString();
+    expect(await readOwnMedia(mx, sent), attachment.file.bytes,
+        reason: 'from memory while it goes up');
+    expect(await own.read(key), isNull);
+
+    transport.releasePuts.complete();
+    expect(await sending, isNotNull);
+    expect(await own.read(key), attachment.file.bytes);
+    expect(await own.read(sent.thumbnailMxcUrl.toString()),
+        attachment.thumbnailFile!.bytes);
+
+    transport.onPut = (body, _) async => json(403, {'errcode': 'M_FORBIDDEN'});
+    transport.holdPuts = false;
+    final failing = photo(seed: 2);
+    expect(await sendAttachment(mxRoom, failing), isNull);
+    expect(await own.read('mxc://fakeserver.notexisting/r3'), isNull);
+    expect(await own.read('mxc://fakeserver.notexisting/r4'), isNull);
   });
 
   test(

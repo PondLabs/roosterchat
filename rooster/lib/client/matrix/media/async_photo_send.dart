@@ -30,6 +30,7 @@ import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/matrix/matrix_attachment.dart';
 import 'package:rooster/client/matrix/media/file_cipher.dart';
+import 'package:rooster/client/matrix/media/interrupted_photo_uploads.dart';
 import 'package:rooster/client/matrix/media/matrix_file_send.dart';
 import 'package:rooster/client/matrix/media/own_media.dart';
 import 'package:rooster/client/matrix/media/reserved_media.dart';
@@ -114,6 +115,11 @@ AsyncPhotoSend? asyncPhotoSendOfEvent(matrix.Event event) {
 /// not be taken back: in the room, pointing at media that never came. By
 /// transaction id and event id.
 final _leftInRoom = Expando<Set<String>>('photo messages left in the room');
+
+/// [ids] (a photo message's transaction id and event id) are of a photo
+/// message whose upload failed and that is still in the room.
+void markPhotoLeftInRoom(matrix.Client client, Iterable<String> ids) =>
+    (_leftInRoom[client] ??= {}).addAll(ids);
 
 /// Whether [event] is one of this device's photo messages whose upload
 /// failed and that is still in the room (its redaction failed): its sender
@@ -394,91 +400,94 @@ class AsyncPhotoSend extends ChangeNotifier {
       extraContent: extraContent,
     );
 
-    // Its bytes go into the account's own media as the event shows with
-    // their address, before it is sent: the timeline never asks for them.
-    final keeping = <Future<void>>[];
-    final shown = client.onTimelineEvent.stream.listen((event) {
-      if (event.roomId != room.id ||
-          event.eventId != txid ||
-          keeping.isNotEmpty) {
-        return;
+    // While it goes up the timeline shows the photo from memory; it goes
+    // into the account's own media only once it is up, so a send the app's
+    // closing cuts short leaves no picture the others never get.
+    final files = {
+      fileMxc.toString(): file.bytes,
+      if (thumbnail != null && thumbnailMxc != null)
+        thumbnailMxc.toString(): thumbnail.bytes,
+    };
+    holdUploadingMedia(client, files);
+    try {
+      final String? id;
+      try {
+        id = await _traced(() => room.sendEvent(content,
+            txid: txid,
+            threadRootEventId: threadRootEventId,
+            threadLastEventId: threadLastEventId,
+            // Refused if the room encrypts files by the time it goes.
+            uploadedInTheClear: !encrypt));
+      } catch (error, stack) {
+        Log.onError(error, stack, content: "Could not send a photo's event");
+        return _failed(txid, null);
       }
-      keeping.add(keepOwnMedia(room, event));
-    });
-    final String? id;
-    try {
-      id = await _traced(() => room.sendEvent(content,
-          txid: txid,
-          threadRootEventId: threadRootEventId,
-          threadLastEventId: threadLastEventId,
-          // Refused if the room encrypts files by the time it goes.
-          uploadedInTheClear: !encrypt));
-    } catch (error, stack) {
-      Log.onError(error, stack, content: "Could not send a photo's event");
-      return _failed(txid, null);
-    } finally {
-      await shown.cancel();
-    }
-    if (id == null) {
-      // Cancelled before its request left: the SDK took it away.
-      if (room.isSendCancelled(txid)) return _cancelledBeforeEvent(txid);
-      return _failed(txid, null);
-    }
+      if (id == null) {
+        // Cancelled before its request left: the SDK took it away.
+        if (room.isSendCancelled(txid)) return _cancelledBeforeEvent(txid);
+        return _failed(txid, null);
+      }
 
-    eventId = id;
-    room.uploadsAfterEvent(txid);
-    send?.trace?.eventSent();
-    _set(AsyncPhotoState.uploading);
-    await Future.wait(keeping);
+      eventId = id;
+      room.uploadsAfterEvent(txid);
+      send?.trace?.eventSent();
+      _set(AsyncPhotoState.uploading);
+      // In the database before any byte goes up: an opening after the app
+      // closed during the upload takes the message back.
+      await photoUploadStarted(room, txid, id);
 
-    try {
-      Future<void> upload(Uri mxc, matrix.FileSendPart part,
-              matrix.MatrixFile clear, matrix.EncryptedFile? encrypted) =>
-          matrix.runUploadToReserved(
-              mxc,
-              () => matrix.uploadFileParts(
-                    room,
-                    txid,
-                    {
-                      part: matrix.FilePartSend(
-                          null, encrypted?.toMatrixFile() ?? clear, encrypted),
-                    },
-                    encrypted: encrypt,
-                  ));
-      Future<void> uploads() => Future.wait([
-            // The thumbnail first: the others see a picture sooner.
-            if (thumbnail != null && thumbnailMxc != null)
-              upload(thumbnailMxc, matrix.FileSendPart.thumbnail, thumbnail,
-                  encryptedThumbnail),
-            upload(fileMxc, matrix.FileSendPart.file, file, encryptedFile),
-          ], eagerError: false);
-      await _traced(
-          () => send == null ? uploads() : runForUpload(send.upload, uploads));
-    } catch (error, stack) {
+      try {
+        Future<void> upload(Uri mxc, matrix.FileSendPart part,
+                matrix.MatrixFile clear, matrix.EncryptedFile? encrypted) =>
+            matrix.runUploadToReserved(
+                mxc,
+                () => matrix.uploadFileParts(
+                      room,
+                      txid,
+                      {
+                        part: matrix.FilePartSend(null,
+                            encrypted?.toMatrixFile() ?? clear, encrypted),
+                      },
+                      encrypted: encrypt,
+                    ));
+        Future<void> uploads() => Future.wait([
+              // The thumbnail first: the others see a picture sooner.
+              if (thumbnail != null && thumbnailMxc != null)
+                upload(thumbnailMxc, matrix.FileSendPart.thumbnail, thumbnail,
+                    encryptedThumbnail),
+              upload(fileMxc, matrix.FileSendPart.file, file, encryptedFile),
+            ], eagerError: false);
+        await _traced(() =>
+            send == null ? uploads() : runForUpload(send.upload, uploads));
+      } catch (error, stack) {
+        room.uploadsAfterEventEnded(txid);
+        release();
+        if (error is matrix.SendCancelledException ||
+            room.isSendCancelled(txid)) {
+          return _cancelledAfterEvent(txid, id);
+        }
+        final retryAfterMs =
+            error is matrix.MatrixException ? error.retryAfterMs : null;
+        if (retryAfterMs != null) {
+          send?.upload.serverAskedToWait(
+              client.sendClock.now().add(Duration(milliseconds: retryAfterMs)));
+        }
+        Log.onError(error, stack, content: "Could not upload a photo");
+        return _failed(txid, id);
+      }
+
       room.uploadsAfterEventEnded(txid);
       release();
-      if (error is matrix.SendCancelledException ||
-          room.isSendCancelled(txid)) {
-        return _cancelledAfterEvent(txid, id);
-      }
-      final retryAfterMs =
-          error is matrix.MatrixException ? error.retryAfterMs : null;
-      if (retryAfterMs != null) {
-        send?.upload.serverAskedToWait(
-            client.sendClock.now().add(Duration(milliseconds: retryAfterMs)));
-      }
-      Log.onError(error, stack, content: "Could not upload a photo");
-      return _failed(txid, id);
+      await keepUploadedMedia(client, files);
+      await photoUploadEnded(client, txid);
+      _sendsOf(client).remove(txid);
+      room.forgetFileSend(txid);
+      _set(AsyncPhotoState.done);
+      send?.sent();
+      return id;
+    } finally {
+      releaseUploadingMedia(client, files.keys);
     }
-
-    room.uploadsAfterEventEnded(txid);
-    release();
-    _sendsOf(client).remove(txid);
-    room.forgetFileSend(txid);
-    ownMediaSent(client, txid);
-    _set(AsyncPhotoState.done);
-    send?.sent();
-    return id;
   }
 
   /// Takes the sent message [id] back: true when the server took the
@@ -500,6 +509,7 @@ class AsyncPhotoSend extends ChangeNotifier {
     final client = room.client;
     send?.trace?.finish(ok: false, cancelled: true);
     if (await _takeBack(id)) {
+      await photoUploadEnded(client, txid);
       _sendsOf(client).remove(txid);
       room.forgetFileSend(txid);
       _set(AsyncPhotoState.cancelled);
@@ -516,9 +526,10 @@ class AsyncPhotoSend extends ChangeNotifier {
   Future<String?> _failed(String txid, String? id, {bool? takenBack}) async {
     final client = room.client;
     final sends = _sendsOf(client)..remove(txid);
-    if (id != null && !(takenBack ?? await _takeBack(id))) {
+    final left = id != null && !(takenBack ?? await _takeBack(id));
+    if (left) {
       // Still in the room: its sender is told under it.
-      (_leftInRoom[client] ??= {}).addAll([txid, id]);
+      markPhotoLeftInRoom(client, [txid, id]);
       notifyListeners();
     }
     // An unsent event that failed: gone, the failed message stands for it.
@@ -535,6 +546,12 @@ class AsyncPhotoSend extends ChangeNotifier {
         extraContent: extraContent,
         threadRootEventId: threadRootEventId,
         threadLastEventId: threadLastEventId);
+    // Off the list of uploads the next opening settles, unless its message
+    // is still in the room: that opening tries to take it back again.
+    if (id != null) {
+      await photoUploadEnded(client, txid,
+          failedMessageId: left ? failed : null);
+    }
     return null;
   }
 }

@@ -7,6 +7,7 @@ import 'package:rooster/client/components/threads/thread_component.dart';
 import 'package:rooster/client/components/url_preview/url_preview_component.dart';
 import 'package:rooster/client/components/user_color/user_color_component.dart';
 import 'package:rooster/client/matrix/media/async_photo_send.dart';
+import 'package:rooster/client/matrix/media/interrupted_photo_uploads.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event.dart';
 import 'package:rooster/client/timeline_events/timeline_event.dart';
 import 'package:rooster/client/timeline_events/timeline_event_encrypted.dart';
@@ -346,6 +347,14 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
 
     if (didContentChange) {
       var content = event.buildFormattedContent(timeline: widget.timeline);
+      // The failed message left for a photo whose upload the app's closing
+      // cut short says so in the reader's language.
+      final Object shown = event;
+      if (shown is MatrixTimelineEvent &&
+          isInterruptedPhotoMessage(shown.event)) {
+        content = Text(PendingAttachmentStatus.labelPhotoUploadInterrupted,
+            key: const ValueKey("interrupted-photo-upload"));
+      }
 
       if (content == null) {
         formattedContent = null;

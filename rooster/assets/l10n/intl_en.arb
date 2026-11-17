@@ -3427,6 +3427,12 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelPhotoUploadInterrupted": "A photo didn't finish uploading before Rooster closed. The others won't see it",
+  "@labelPhotoUploadInterrupted": {
+    "description": "In the chat, in place of a photo of yours whose upload had not finished when the app closed: its message was taken back from the room, and the photo can't be sent again from here (attach it again)",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelPhotoLeftInRoom": "The photo didn't upload, and this message couldn't be deleted",
   "@labelPhotoLeftInRoom": {
     "description": "Under a photo message of yours that is in the room but whose photo never finished uploading, when the app could not take the message back: the others see it without its picture",

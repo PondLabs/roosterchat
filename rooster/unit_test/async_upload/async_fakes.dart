@@ -39,6 +39,9 @@ class AsyncTransport extends OnlyUsTransport {
   /// the client counts it as partway.
   bool holdPartway = false;
   bool failRedacts = false;
+
+  /// The id of each event a redaction was asked for.
+  final List<String> redacted = [];
   Completer<void> releasePuts = Completer<void>();
 
   final List<String> log = [];
@@ -156,6 +159,8 @@ class AsyncTransport extends OnlyUsTransport {
     }
     if (request.method == 'PUT' && path.contains('/redact/')) {
       log.add('PUT redact');
+      final segments = request.url.pathSegments;
+      redacted.add(segments[segments.indexOf('redact') + 1]);
       if (failRedacts) {
         return json(500, {'errcode': 'M_UNKNOWN', 'error': 'Try later'});
       }

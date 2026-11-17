@@ -51,6 +51,7 @@ import 'package:rooster/client/timeline_events/timeline_event_sticker.dart';
 import 'package:rooster/config/build_config.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/client/matrix/media/async_photo_send.dart';
+import 'package:rooster/client/matrix/media/interrupted_photo_uploads.dart';
 import 'package:rooster/client/matrix/media/matrix_file_send.dart';
 import 'package:rooster/diagnostic/speed_log/text_send_trace.dart';
 import 'package:rooster/main.dart';
@@ -1065,6 +1066,9 @@ class MatrixRoom extends Room implements RoomSendPreparation {
   final Set<String> _retrying = {};
 
   Future<void> _retrySend(matrix.Event mx) async {
+    // The failed message of a photo the app's closing cut short: nothing
+    // to send again, its bytes are gone.
+    if (isInterruptedPhotoMessage(mx)) return;
     // A photo whose asynchronous upload failed: a new event, under a new
     // transaction id, to new reservations.
     final photo = asyncPhotoSendOf(_matrixRoom, mx.eventId);
