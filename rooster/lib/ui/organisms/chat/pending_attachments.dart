@@ -4,8 +4,9 @@ import 'package:rooster/ui/molecules/timeline_events/events/pending_attachment_s
 import 'package:rooster/utils/mime.dart';
 
 /// The files sent from this chat that its timeline does not show as the
-/// room's pending events: not yet, or not at all (a thread's chat, a
-/// message sent as the other account). Each is in a slot of its picture's
+/// room's pending events: not yet (in a thread's chat, until the file is
+/// uploaded), or not at all (a message sent as the other account). Each
+/// is in a slot of its picture's
 /// size (its local picture, or the slot alone until the bytes are read),
 /// with its stage and time, from the frame Send is pressed in. Each gives
 /// way to the room's pending event once that is in this chat's timeline,

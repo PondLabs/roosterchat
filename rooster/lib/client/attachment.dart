@@ -286,8 +286,9 @@ enum AttachmentSendStage {
 /// it fails. The chat Send was pressed in ([chatKey], [threadId]) shows
 /// it until the room's own pending event takes over ([echoed]) there; that
 /// event finds it by [transactionId] to show its stage and time. When the
-/// pending event does not show in that chat (a thread's, or the other
-/// account's room), the chat keeps showing it until it is sent.
+/// pending event does not show in that chat (a thread's, until the
+/// thread's list shows it; the other account's room), the chat keeps
+/// showing it until it is sent.
 class AttachmentSend extends ChangeNotifier {
   AttachmentSend({
     required this.roomKey,
@@ -313,9 +314,24 @@ class AttachmentSend extends ChangeNotifier {
   final String? threadId;
 
   /// Whether the room's own pending event shows in the chat it was sent
-  /// from. It does not in a thread's chat (the SDK's pending event has no
-  /// thread relation) nor for a message sent as the other account.
-  bool get echoShownInItsChat => threadId == null && chatKey == roomKey;
+  /// from. It does not for a message sent as the other account; in a
+  /// thread's chat, only once the thread's list shows it (the SDK's
+  /// pending event gets its thread relation when the file is uploaded).
+  bool get echoShownInItsChat =>
+      chatKey == roomKey && (threadId == null || _threadLists.isNotEmpty);
+
+  /// The open thread timelines whose list shows its pending event.
+  final Set<Object> _threadLists = {};
+
+  /// [list], a thread's timeline, shows its pending event.
+  void shownInThreadList(Object list) {
+    if (_threadLists.add(list)) notifyListeners();
+  }
+
+  /// [list] no longer shows it (closed, or the event left it).
+  void notShownInThreadList(Object list) {
+    if (_threadLists.remove(list)) notifyListeners();
+  }
 
   /// Its file, until the room's pending event shows it: then it is let go.
   PendingFileAttachment? attachment;

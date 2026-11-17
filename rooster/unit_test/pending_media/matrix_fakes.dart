@@ -17,6 +17,12 @@ import '../speed_log/fake_account.dart';
 class MediaTransport extends FakeTransport {
   Completer<void>? holdUploads;
   bool failUploads = false;
+
+  /// Each `PUT /send` of a message waits for it while it is set.
+  Completer<void>? holdSends;
+
+  /// Each `PUT /send` of a message is refused (403) while it is set.
+  bool refuseSends = false;
   final List<int> uploadSizes = [];
   final List<Map<String, dynamic>> sentEvents = [];
 
@@ -46,6 +52,10 @@ class MediaTransport extends FakeTransport {
     if (request.method == 'PUT' && path.contains('/send/m.room.message/')) {
       final body = await request.finalize().toBytes();
       sentEvents.add(jsonDecode(utf8.decode(body)) as Map<String, dynamic>);
+      await holdSends?.future;
+      if (refuseSends) {
+        return _json(403, {'errcode': 'M_FORBIDDEN', 'error': 'Not allowed'});
+      }
       return super.send(http.Request(request.method, request.url)
         ..headers.addAll(request.headers)
         ..bodyBytes = body);
