@@ -163,6 +163,23 @@ void main() {
     await otherMx.dispose(closeDatabase: true);
   });
 
+  test(
+      'the second mxc of a photo is asked for only once the first is '
+      'granted, also after the homeserver has granted some', () async {
+    await sendAttachment(room, photo());
+    expect(transport.creates, 2);
+    // The next photo's first reservation is refused: no second one waits
+    // on the homeserver for it.
+    transport.onCreate =
+        (call) => call == 3 ? json(429, {'errcode': 'M_LIMIT_EXCEEDED'}) : null;
+    transport.log.clear();
+    expect(await sendAttachment(room, photo(seed: 2)), isNotNull);
+    expect(transport.creates, 3);
+    expect(transport.log.first, 'POST create');
+    expect(transport.log.where((r) => r == 'POST create'), hasLength(1));
+    expect(transport.pending, isEmpty);
+  });
+
   test('a video and a plain file are uploaded first, without a reservation',
       () async {
     for (final file in [

@@ -42,12 +42,9 @@ import 'package:rooster/utils/network/upload_progress.dart';
 /// of asking.
 const maxOpenPhotoReservations = 4;
 
-/// What one account knows of its homeserver's reservations for photos:
-/// whether it has granted one (the two of a photo are then asked for
-/// together; before, one after the other, so a homeserver without them is
-/// asked once per photo at most), and how many are open.
+/// What one account knows of its homeserver's reservations for photos,
+/// and how many are open.
 class _PhotoReservations extends MediaReservations {
-  bool granted = false;
   int open = 0;
 }
 
@@ -58,8 +55,11 @@ _PhotoReservations _reservationsOf(matrix.Client client) =>
     _reservations[client] ??= _PhotoReservations();
 
 /// [count] mxcs for a photo (the file's, then its thumbnail's), or null to
-/// upload first: none granted, or [maxOpenPhotoReservations] would be
-/// passed. Those granted count as open until [_release].
+/// upload first: one refused, or [maxOpenPhotoReservations] would be
+/// passed. Each is asked for once the one before it was granted, so a
+/// refusal leaves none of the photo's waiting on the homeserver, and a
+/// homeserver without reservations is asked once per photo at most. Those
+/// granted count as open until [_release].
 Future<List<Uri>?> _reserve(matrix.Client client, int count) async {
   final reservations = _reservationsOf(client);
   if (reservations.unsupported ||
@@ -68,27 +68,17 @@ Future<List<Uri>?> _reserve(matrix.Client client, int count) async {
   }
   // Taken before asking: photos sent together count each other.
   reservations.open += count;
-  final List<Uri?> granted;
-  if (reservations.granted) {
-    granted = await Future.wait([
-      for (var i = 0; i < count; i++)
-        reservations.reserve(client, what: "a photo")
-    ]);
-  } else {
-    granted = [await reservations.reserve(client, what: "a photo")];
-    if (granted.first != null) {
-      reservations.granted = true;
-      for (var i = 1; i < count; i++) {
-        granted.add(await reservations.reserve(client, what: "a photo"));
-      }
+  final granted = <Uri>[];
+  for (var i = 0; i < count; i++) {
+    final mxc = await reservations.reserve(client, what: "a photo");
+    if (mxc == null) {
+      // One granted before this refusal expires unused on the homeserver.
+      reservations.open -= count;
+      return null;
     }
+    granted.add(mxc);
   }
-  if (granted.contains(null)) {
-    // Any granted here expires unused on the homeserver.
-    reservations.open -= count;
-    return null;
-  }
-  return granted.cast<Uri>();
+  return granted;
 }
 
 void _release(matrix.Client client, int count) {
