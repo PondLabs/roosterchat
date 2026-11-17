@@ -367,6 +367,76 @@ void main() {
       mp4.setRange(16, 24, 'isomiso2'.codeUnits);
       expect((await findExifBlocks(bytesReader(mp4))).whole, isEmpty);
     });
+
+    group('an iloc built to cost', () {
+      List<int> be(int value, int size) =>
+          [for (var i = size - 1; i >= 0; i--) value >> (8 * i) & 0xFF];
+      List<int> box(String type, List<int> body) =>
+          [...be(8 + body.length, 4), ...type.codeUnits, ...body];
+      List<int> fullBox(String type, int version, List<int> body) =>
+          box(type, [version, 0, 0, 0, ...body]);
+      // A HEIF of brand mif1 whose meta holds an Exif item (id 1) and the
+      // iloc [items] (version 1), followed by [after].
+      Uint8List heif(List<int> items, {List<int> after = const []}) => cat([
+            box('ftyp', [...'mif1'.codeUnits, 0, 0, 0, 0, ...'mif1'.codeUnits]),
+            fullBox('meta', 0, [
+              ...fullBox('iinf', 0, [
+                ...be(1, 2),
+                ...fullBox(
+                    'infe', 2, [...be(1, 2), 0, 0, ...'Exif'.codeUnits, 0]),
+              ]),
+              ...fullBox('iloc', 1, items),
+            ]),
+            after,
+          ]);
+
+      test('extents of fields of size 0: unreadable, at once', () async {
+        // The review's: 256 items of 65,535 extents that take no byte.
+        final bytes = heif([
+          0x00, 0x00, // offset, length, base and index sizes: all 0
+          ...be(256, 2),
+          for (var n = 1; n <= 256; n++) ...[
+            ...be(n, 2),
+            0,
+            0,
+            0,
+            0,
+            0xFF,
+            0xFF
+          ],
+        ]);
+        final watch = Stopwatch()..start();
+        expect((await findExifBlocks(bytesReader(bytes))).cut, isTrue);
+        expect(watch.elapsed, lessThan(const Duration(milliseconds: 200)));
+        expect(await answer(bytes), LocationAnswer.unreadable);
+      });
+
+      test('more extents or items than the box holds: unreadable', () async {
+        for (final items in [
+          [0x44, 0x00, ...be(1, 2), ...be(1, 2), 0, 0, 0, 0, ...be(1000, 2)],
+          [0x44, 0x00, ...be(60000, 2), ...be(1, 2), 0, 0, 0, 0, ...be(1, 2)],
+        ]) {
+          expect((await findExifBlocks(bytesReader(heif(items)))).cut, isTrue);
+        }
+      });
+
+      test('an Exif item of more than maxExifBlock in all: cut, not read',
+          () async {
+        // Two extents of 3 MB each, over the same bytes of the file.
+        const length = 3 << 20;
+        Uint8List build(int offset) => heif([
+              0x44, 0x00, ...be(1, 2), // offset and length in 4 bytes, one item
+              ...be(1, 2), 0, 0, 0, 0, ...be(2, 2),
+              ...be(offset, 4), ...be(length, 4),
+              ...be(offset, 4), ...be(length, 4),
+            ], after: Uint8List(length));
+        // The extents over the zeros at the end: a whole item, read twice.
+        final bytes = build(build(0).length - length);
+        final blocks = await findExifBlocks(bytesReader(bytes));
+        expect(blocks.cut, isTrue);
+        expect(blocks.whole, isEmpty);
+      });
+    });
   });
 
   group('a GPS pointer in the Exif sub-IFD', () {

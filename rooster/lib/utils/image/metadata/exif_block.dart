@@ -288,7 +288,7 @@ Future<ExifBlocks> _heifExif(ByteReader read, Uint8List head) async {
 /// `iinf`, where they are from `iloc`.
 Future<ExifBlocks> _heifItems(ByteReader read, Uint8List meta) async {
   final exifItems = <int>{};
-  var places = <int, (int, List<(int, int)>)>{};
+  (int, int)? iloc;
   for (final (type, body, end) in _boxes(meta, 4, meta.length)) {
     if (type == "iinf") {
       final count = _uint(meta, body, 1) == 0 ? 2 : 4;
@@ -303,14 +303,22 @@ Future<ExifBlocks> _heifItems(ByteReader read, Uint8List meta) async {
         }
       }
     } else if (type == "iloc") {
-      places = _itemLocations(meta, body);
+      iloc = (body, end);
     }
   }
+  // Read after iinf, which can come after it: only the Exif items' places
+  // are kept.
+  final places = iloc == null
+      ? const <int, (int, List<(int, int)>)>{}
+      : _itemLocations(meta, iloc.$1, iloc.$2, exifItems);
   final blocks = <Uint8List>[];
   for (final item in exifItems) {
     // In the file (construction method 0), in extents of a known length.
     final (method, extents) = places[item] ?? (-1, const <(int, int)>[]);
     if (method != 0 || extents.isEmpty) return ExifBlocks(blocks, cut: true);
+    // At most maxExifBlock in all, however many extents hold it.
+    final size = extents.fold(0, (size, extent) => size + extent.$2);
+    if (size > maxExifBlock) return ExifBlocks(blocks, cut: true);
     final data = BytesBuilder(copy: false);
     for (final (offset, length) in extents) {
       final bytes = length == 0 ? null : await _whole(read, offset, length);
@@ -326,42 +334,64 @@ Future<ExifBlocks> _heifItems(ByteReader read, Uint8List meta) async {
   return ExifBlocks(blocks);
 }
 
-/// Big-endian fields of [b], read one after another from [at].
+/// Big-endian fields of [b], read one after another from [at] up to [end].
 class _Fields {
-  _Fields(this.b, this.at);
+  _Fields(this.b, this.at, this.end);
 
   final Uint8List b;
   int at;
+  final int end;
 
   int next(int size) {
+    if (at + size > end) throw const _Malformed();
     final value = _uint(b, at, size);
     at += size;
     return value;
   }
+
+  /// Whether [count] records of [size] bytes each fit in what is left:
+  /// a record that takes no byte never fits, so a count read from the file
+  /// cannot make records out of nothing.
+  bool fits(int count, int size) =>
+      count == 0 || (size > 0 && count * size <= end - at);
 }
 
-/// The items an `iloc` box (its body at [at] in [b]) places, by id: their
-/// construction method and their extents, as (file offset, length).
-Map<int, (int, List<(int, int)>)> _itemLocations(Uint8List b, int at) {
-  final fields = _Fields(b, at);
+/// The places an `iloc` box (its body from [at] to [end] in [b]) gives the
+/// items of [wanted], by id: their construction method and their extents,
+/// as (file offset, length). Every item is checked to fit in the box.
+Map<int, (int, List<(int, int)>)> _itemLocations(
+    Uint8List b, int at, int end, Set<int> wanted) {
+  final fields = _Fields(b, at, end);
   final version = fields.next(4) >> 24;
   final sizes = fields.next(2);
   final offsetSize = sizes >> 12, lengthSize = sizes >> 8 & 0xF;
   final baseSize = sizes >> 4 & 0xF, indexSize = version > 0 ? sizes & 0xF : 0;
   final id = version < 2 ? 2 : 4;
+  final extentSize = indexSize + offsetSize + lengthSize;
+  final count = fields.next(id);
+  // An item takes its id, method, data reference, base and extent count.
+  if (!fields.fits(count, id + (version > 0 ? 2 : 0) + 4 + baseSize)) {
+    throw const _Malformed();
+  }
   final places = <int, (int, List<(int, int)>)>{};
-  for (var count = fields.next(id); count > 0; count--) {
+  for (var i = 0; i < count; i++) {
     final item = fields.next(id);
     final method = version > 0 ? fields.next(2) & 0xF : 0;
     fields.next(2); // data_reference_index
     final base = fields.next(baseSize);
-    final extents = <(int, int)>[];
-    for (var n = fields.next(2); n > 0; n--) {
+    final extents = fields.next(2);
+    if (!fields.fits(extents, extentSize)) throw const _Malformed();
+    if (!wanted.contains(item)) {
+      fields.at += extents * extentSize;
+      continue;
+    }
+    final list = <(int, int)>[];
+    for (var n = 0; n < extents; n++) {
       fields.next(indexSize);
       final offset = fields.next(offsetSize);
-      extents.add((base + offset, fields.next(lengthSize)));
+      list.add((base + offset, fields.next(lengthSize)));
     }
-    places[item] = (method, extents);
+    places[item] = (method, list);
   }
   return places;
 }
