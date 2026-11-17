@@ -21,7 +21,7 @@ import 'stream_fakes.dart';
 class _CannotDecode extends ImagePreparer {
   @override
   Future<ImagePreparation?> prepare(Uint8List bytes,
-          {PreparationCancel? cancel}) async =>
+          {PreparationCancel? cancel, bool reduce = false}) async =>
       null;
 }
 
