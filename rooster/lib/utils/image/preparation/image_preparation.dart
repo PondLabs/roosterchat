@@ -17,20 +17,26 @@
 ///    (`readImageHeader`), no decode;
 /// 2. decodes once with the engine (`ui.instantiateImageCodec`), already at
 ///    the thumbnail's size ([thumbnailMaxSide] on the long side), or at the
-///    blurhash's ([blurhashSourceSide]) when no thumbnail is due; a BMP at
+///    blurhash's ([blurhashSourceSide]) when no thumbnail is due, or at the
+///    reduced photo's ([photoMaxSide]) for a photo to reduce; a BMP at
 ///    full size, and the engine encodes that decode as the PNG it is sent
 ///    as ([ImagePreparation.png]); the codec and image are disposed right
 ///    after the pixels are read;
 /// 3. encodes the thumbnail (JPEG at quality 80, PNG with transparency)
 ///    and the blurhash with [ThumbnailEncoder]: a background isolate on
-///    native, the browser's canvas on the web.
+///    native, the browser's canvas on the web. A photo to reduce (`reduce`,
+///    a JPEG over [photoMaxSide] on its long side) is encoded there too, as
+///    a JPEG at [photoJpegQuality] without metadata
+///    ([ImagePreparation.reduced]), and its thumbnail made from it. Any
+///    other picture is never encoded again: it is sent as attached.
 ///
 /// At most [ImagePreparer.maxConcurrent] (2) files are prepared at a time;
 /// the others wait their turn. A [PreparationCancel] drops a preparation
 /// nobody needs any more (an attachment removed before Send): out of the
 /// queue before its turn, or its result thrown away once it has started. Each preparation is an `image_prepare` span
 /// in the speed log, with its steps and sizes (no names, no content), and
-/// the outcome `encode_failed` when the thumbnail encoder failed.
+/// the outcome `encode_failed` when the thumbnail encoder failed. The
+/// encoder's step is `reduce` instead of `encode` for a reduced photo.
 library;
 
 import 'dart:async';
@@ -47,8 +53,11 @@ import 'package:rooster/utils/image/preparation/thumbnail_encoder.dart';
 export 'package:rooster/utils/image/preparation/thumbnail_encoder.dart'
     show
         PreparedThumbnail,
+        ReducedPhoto,
         ThumbnailEncoder,
         blurhashSourceSide,
+        photoJpegQuality,
+        photoMaxSide,
         thumbnailJpegQuality;
 
 /// A thumbnail is at most this many pixels on its long side.
@@ -69,6 +78,7 @@ class ImagePreparation {
     this.blurhash,
     this.thumbnail,
     this.png,
+    this.reduced,
   });
 
   /// The size the picture is shown at: the header's, with the sides
@@ -98,7 +108,22 @@ class ImagePreparation {
   /// engine could not encode it.
   final Uint8List? png;
 
+  /// The photo reduced for sending (see [photoReducedSize]), when it was
+  /// asked for and the encoder made it; null for any other picture. Sent
+  /// in place of the attached bytes when it is smaller than them.
+  final ReducedPhoto? reduced;
+
   bool get animated => frames > 1;
+}
+
+/// The size a picture with [header] is sent at when photos are reduced:
+/// a JPEG larger than [photoMaxSide] on its long side, scaled to it, as
+/// displayed (orientation applied). Null for any other picture, which is
+/// sent at its own size and never encoded again.
+(int, int)? photoReducedSize(ImageHeader header) {
+  if (header.mimeType != "image/jpeg") return null;
+  if (max(header.width, header.height) <= photoMaxSide) return null;
+  return fitWithin(header.width, header.height, photoMaxSide);
 }
 
 /// Makes the engine's codec for [bytes], decoding at [targetWidth] or
@@ -160,9 +185,10 @@ class ImagePreparer {
 
   /// Prepares [bytes]; null when the engine cannot decode them (the file
   /// is then sent as a plain file, as before), and when [cancel] dropped
-  /// it. Never throws.
+  /// it. With [reduce], a photo larger than [photoMaxSide] is also
+  /// reduced ([ImagePreparation.reduced]). Never throws.
   Future<ImagePreparation?> prepare(Uint8List bytes,
-      {PreparationCancel? cancel}) async {
+      {PreparationCancel? cancel, bool reduce = false}) async {
     final span = _log.startSpan(SpeedOperation.imagePrepare);
     if (!await _acquire(cancel)) {
       span.finish(outcome: SpeedOutcome.cancelled);
@@ -170,7 +196,7 @@ class ImagePreparer {
     }
     span.mark(SpeedStep.queueWait);
     try {
-      final result = await _prepare(bytes, span, cancel);
+      final result = await _prepare(bytes, span, cancel, reduce: reduce);
       if (cancel?.isCancelled == true) {
         span.finish(outcome: SpeedOutcome.cancelled);
         return null;
@@ -217,7 +243,8 @@ class ImagePreparer {
 
   /// The preparation, and whether its thumbnail encoder failed.
   Future<(ImagePreparation, {bool encodeFailed})?> _prepare(
-      Uint8List bytes, SpeedSpan span, PreparationCancel? cancel) async {
+      Uint8List bytes, SpeedSpan span, PreparationCancel? cancel,
+      {required bool reduce}) async {
     final header = readImageHeader(bytes);
     span.mark(SpeedStep.header, values: {SpeedValue.bytes: bytes.length});
 
@@ -237,11 +264,18 @@ class ImagePreparer {
             bytes.length >= 2 &&
             bytes[0] == 0x42 && // B
             bytes[1] == 0x4D); // M
+    // A photo to reduce is decoded at the reduced size: the photo, its
+    // thumbnail and its blurhash all come from that one decode.
+    final reduceTo =
+        reduce && header != null && photoReducedSize(header) != null
+            ? photoMaxSide
+            : null;
     if (header != null && !asPng) {
       final long = max(header.width, header.height);
-      final side = wantsThumbnail(header.width, header.height)
-          ? thumbnailMaxSide
-          : min(blurhashSourceSide, long);
+      final side = reduceTo ??
+          (wantsThumbnail(header.width, header.height)
+              ? thumbnailMaxSide
+              : min(blurhashSourceSide, long));
       if (side < long) {
         if (header.width >= header.height) {
           targetWidth = side;
@@ -276,6 +310,7 @@ class ImagePreparer {
         height: drawnHeight,
         maxSide: thumbnail ? thumbnailMaxSide : null,
         mayHaveAlpha: header?.mimeType != "image/jpeg",
+        reduceTo: reduceTo,
       ));
     } catch (_) {
       // The picture decoded: it still goes as a picture, with its size,
@@ -283,13 +318,23 @@ class ImagePreparer {
       encoded = const ThumbnailResult();
       encodeFailed = true;
     }
-    span.mark(SpeedStep.encode, values: {
-      if (encoded.thumbnail != null) ...{
-        SpeedValue.bytes: encoded.thumbnail!.bytes.length,
-        SpeedValue.width: encoded.thumbnail!.width,
-        SpeedValue.height: encoded.thumbnail!.height,
-      },
-    });
+    if (reduceTo != null) {
+      span.mark(SpeedStep.reduce, values: {
+        if (encoded.reduced case final reduced?) ...{
+          SpeedValue.bytes: reduced.bytes.length,
+          SpeedValue.width: reduced.width,
+          SpeedValue.height: reduced.height,
+        },
+      });
+    } else {
+      span.mark(SpeedStep.encode, values: {
+        if (encoded.thumbnail != null) ...{
+          SpeedValue.bytes: encoded.thumbnail!.bytes.length,
+          SpeedValue.width: encoded.thumbnail!.width,
+          SpeedValue.height: encoded.thumbnail!.height,
+        },
+      });
+    }
 
     return (
       ImagePreparation(
@@ -300,6 +345,7 @@ class ImagePreparer {
         blurhash: encoded.blurhash,
         thumbnail: encoded.thumbnail,
         png: png,
+        reduced: encoded.reduced,
       ),
       encodeFailed: encodeFailed,
     );

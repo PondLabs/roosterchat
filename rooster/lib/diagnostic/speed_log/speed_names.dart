@@ -112,6 +112,10 @@ abstract final class SpeedStep {
   /// browser's canvas (web).
   static const encode = 'encode';
 
+  /// In place of [encode] for a photo reduced for sending: the reduced
+  /// photo (JPEG), its thumbnail and blurhash, the same way.
+  static const reduce = 'reduce';
+
   // file_send (echo, request and retry as in text_send)
   /// From the file being attached to Send.
   static const attached = 'attached';
@@ -235,6 +239,7 @@ abstract final class SpeedStep {
     header,
     decode,
     encode,
+    reduce,
     attached,
     previewPainted,
     prepared,

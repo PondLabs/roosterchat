@@ -81,7 +81,7 @@ void main() {
       'answer', 'server_wait', 'processing', 'clean_up', 'client_work', //
       'next_request', 'error',
       'key_request', 'outbound_session', // text_send in an encrypted room
-      'header', 'decode', 'encode', // image_prepare (and queue_wait)
+      'header', 'decode', 'encode', 'reduce', // image_prepare (and queue_wait)
       // file_send (and echo, request, retry)
       'attached', 'preview_painted', 'prepared', 'upload', 'confirmed',
       // voice_join

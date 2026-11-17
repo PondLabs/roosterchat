@@ -8,6 +8,11 @@
 /// `MatrixImageFile` with its size and blurhash, the thumbnail beside it;
 /// one without goes as a [PreparedImageFile], an `m.image` that is not a
 /// `MatrixImageFile`, which the SDK sends as it is.
+///
+/// A photo the preparation reduced ([ImagePreparation.reduced]) goes as
+/// that reduced JPEG, with its size, when it is smaller than the attached
+/// bytes (the photo with its metadata removed); otherwise the attached
+/// bytes go.
 library;
 
 import 'package:matrix/matrix.dart' as matrix;
@@ -90,9 +95,17 @@ Future<MatrixProcessedAttachment?> matrixFilesForAttachment(
   final name = attachment.name ??
       (prepared != null ? "unknown" : "Unknown") +
           (extension == null ? "" : ".$extension");
-  final bytes = attachment.data!;
+  var bytes = attachment.data!;
 
   if (prepared != null) {
+    var (width, height) = (prepared.width, prepared.height);
+    var mimeType = attachment.mimeType;
+    final reduced = prepared.reduced;
+    if (reduced != null && reduced.bytes.length < bytes.length) {
+      bytes = reduced.bytes;
+      (width, height) = (reduced.width, reduced.height);
+      mimeType = "image/jpeg";
+    }
     // A thumbnail that saves nothing (a flat screenshot sent as PNG can be
     // smaller than it) is left out, as the SDK did.
     final thumbnail = (prepared.thumbnail?.bytes.length ?? 0) < bytes.length
@@ -102,9 +115,9 @@ Future<MatrixProcessedAttachment?> matrixFilesForAttachment(
       return processed(PreparedImageFile(
         bytes: bytes,
         name: name,
-        mimeType: attachment.mimeType,
-        width: prepared.width,
-        height: prepared.height,
+        mimeType: mimeType,
+        width: width,
+        height: height,
         blurhash: prepared.blurhash,
       ));
     }
@@ -112,9 +125,9 @@ Future<MatrixProcessedAttachment?> matrixFilesForAttachment(
       matrix.MatrixImageFile(
         bytes: bytes,
         name: name,
-        mimeType: attachment.mimeType,
-        width: prepared.width,
-        height: prepared.height,
+        mimeType: mimeType,
+        width: width,
+        height: height,
         blurhash: prepared.blurhash,
       ),
       thumbnailFile: matrix.MatrixImageFile(
