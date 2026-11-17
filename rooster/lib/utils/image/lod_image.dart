@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:rooster/diagnostic/speed_log/media_show_trace.dart';
 import 'package:rooster/utils/mime.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -21,8 +22,20 @@ class LODImageProvider extends ImageProvider<String> {
       this.thumbnailHeight,
       required this.id,
       this.fullResHeight,
+      this.traceShows = false,
+      this.forgetsFailures = false,
       this.autoLoadFullRes = true});
   String id;
+
+  /// A load that failed is forgotten: the picture leaves the image cache,
+  /// and the next display, or [fetchThumbnail] / [fetchFullRes], asks
+  /// again (a chat's pictures). Otherwise it stays failed for the session
+  /// (avatars, emojis), so a list shown again asks nothing.
+  final bool forgetsFailures;
+
+  /// Each level shown is a `media_show` span in the speed log
+  /// ([MediaShowTrace]): a chat's pictures, not avatars nor emojis.
+  final bool traceShows;
   String? blurhash;
   String? get mimeType => completer?.mimeType;
   bool autoLoadFullRes;
@@ -71,7 +84,14 @@ class LODImageProvider extends ImageProvider<String> {
         hasCachedThumbnail: hasCachedThumbnail,
         thumbnailHeight: thumbnailHeight,
         fullResHeight: fullResHeight,
-        autoLoadFullres: autoLoadFullRes);
+        autoLoadFullres: autoLoadFullRes,
+        traceShows: traceShows,
+        forgetsFailures: forgetsFailures,
+        // Failed: out of the image cache, so the next display of this
+        // picture starts over instead of finding the failure.
+        onFailed: forgetsFailures
+            ? () => PaintingBinding.instance.imageCache.evict(key)
+            : null);
     return completer!;
   }
 
@@ -124,6 +144,18 @@ class LODImageCompleter extends ImageStreamCompleter {
   Future? fullResLoading = null;
   Future? thumbnailLoading = null;
 
+  /// Called when loading failed with no picture to show.
+  void Function()? onFailed;
+
+  /// See [LODImageProvider.traceShows].
+  bool traceShows;
+
+  /// See [LODImageProvider.forgetsFailures].
+  bool forgetsFailures;
+
+  /// Loading failed, and is not asked again ([forgetsFailures] false).
+  bool _gaveUp = false;
+
   LODImageCompleter(
       {this.blurhash,
       required this.callback,
@@ -134,6 +166,9 @@ class LODImageCompleter extends ImageStreamCompleter {
       this.thumbnailHeight,
       this.onLODChanged,
       this.fullResHeight,
+      this.onFailed,
+      this.traceShows = false,
+      this.forgetsFailures = false,
       this.autoLoadFullres = true}) {
     loadImages();
   }
@@ -172,28 +207,16 @@ class LODImageCompleter extends ImageStreamCompleter {
   }
 
   Future<void> _loadThumbnail() async {
+    if (_gaveUp) return;
     if (thumbnailLoading != null) return thumbnailLoading;
     if (currentlyLoadedImage == LODImageType.thumbnail) return;
     if (currentlyLoadedImage == LODImageType.fullres) return;
 
-    thumbnailLoading = () async {
-      var bytes = await loadThumbnail!.call();
-      if (bytes == null) return;
-
-      mimeType = Mime.lookupType("", data: bytes);
-
-      var codec = await callback(
-        await ImmutableBuffer.fromUint8List(bytes),
-        getTargetSize: (intrinsicWidth, intrinsicHeight) {
-          return TargetImageSize(height: thumbnailHeight);
-        },
-      );
-
-      await _setCodec(LODImageType.thumbnail, codec);
-    }();
-
-    await thumbnailLoading;
-    thumbnailLoading = null;
+    final loading = thumbnailLoading =
+        _load(LODImageType.thumbnail, loadThumbnail!, thumbnailHeight);
+    await loading;
+    // Cleared, failed or not: the next fetch asks again.
+    if (identical(thumbnailLoading, loading)) thumbnailLoading = null;
     onLODChanged?.call();
   }
 
@@ -206,6 +229,7 @@ class LODImageCompleter extends ImageStreamCompleter {
   }
 
   Future<void> _loadFullRes() async {
+    if (_gaveUp) return;
     if (fullResLoading != null) {
       return fullResLoading;
     }
@@ -218,24 +242,64 @@ class LODImageCompleter extends ImageStreamCompleter {
       return;
     }
 
-    fullResLoading = () async {
-      var bytes = await loadFullRes!.call();
-      if (bytes == null) return;
+    final loading = fullResLoading =
+        _load(LODImageType.fullres, loadFullRes!, fullResHeight);
+    await loading;
+    if (identical(fullResLoading, loading)) fullResLoading = null;
+    onLODChanged?.call();
+  }
+
+  /// Loads and shows one level of the picture. Never throws: a failure is
+  /// reported to the stream ([_failed]).
+  Future<void> _load(LODImageType type, Future<Uint8List?> Function() load,
+      int? height) async {
+    final trace = traceShows
+        ? MediaShowTrace.start(thumbnail: type == LODImageType.thumbnail)
+        : null;
+    try {
+      var bytes = trace == null ? await load() : await trace.run(load);
+      if (bytes == null) {
+        trace?.dropped();
+        return;
+      }
 
       mimeType = Mime.lookupType("", data: bytes);
       var codec = await callback(
         await ImmutableBuffer.fromUint8List(bytes),
         getTargetSize: (intrinsicWidth, intrinsicHeight) {
-          return TargetImageSize(height: fullResHeight);
+          return TargetImageSize(height: height);
         },
       );
+      trace?.decoded();
 
-      await _setCodec(LODImageType.fullres, codec);
-    }();
+      final painted = hasListeners;
+      await _setCodec(type, codec);
+      trace?.shown(painted: painted);
+    } catch (error, stack) {
+      trace?.failed();
+      _failed(type, error, stack);
+    }
+  }
 
-    await fullResLoading;
-    fullResLoading = null;
-    onLODChanged?.call();
+  /// Loading [type] failed. With a picture shown, or the other level still
+  /// loading, nothing changes; otherwise the stream gets the error (the
+  /// failed state) and [onFailed] is called.
+  void _failed(LODImageType type, Object error, StackTrace stack) {
+    if (currentlyLoadedImage == LODImageType.thumbnail ||
+        currentlyLoadedImage == LODImageType.fullres) {
+      return;
+    }
+    final other =
+        type == LODImageType.thumbnail ? fullResLoading : thumbnailLoading;
+    if (other != null) return;
+    if (!forgetsFailures) _gaveUp = true;
+    onFailed?.call();
+    reportError(
+      context: ErrorDescription('loading a picture'),
+      exception: error,
+      stack: stack,
+      silent: true,
+    );
   }
 
   Future<void> _setCodec(LODImageType type, Codec codec) async {

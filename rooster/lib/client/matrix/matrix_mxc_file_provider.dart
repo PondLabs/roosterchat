@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:rooster/cache/file_provider.dart';
+import 'package:rooster/cache/own_media_cache.dart';
 import 'package:rooster/client/matrix/extensions/matrix_client_extensions.dart';
 import 'package:rooster/client/matrix/media/own_media.dart';
 import 'package:rooster/debug/log.dart';
@@ -31,6 +33,16 @@ class MxcFileProvider implements FileProvider {
     if (_isEventFile) {
       final own = await ownMediaFile(client, event);
       if (own != null) return own;
+
+      // The account's own file, no longer there (the cache's clean): from
+      // the network, and kept in the account's own media again.
+      final ownMedia = ownMediaCacheFor(client, event);
+      if (ownMedia != null) {
+        final bytes = await getFileData();
+        if (bytes == null) return null;
+        await ownMedia.write(fileIdentifier, bytes);
+        return ownMedia.fileOf(fileIdentifier);
+      }
     }
 
     var cached = await fileCache?.getFile(fileIdentifier);
@@ -74,45 +86,19 @@ class MxcFileProvider implements FileProvider {
     if (event != null) {
       var file = await event!.downloadAndDecryptAttachment(
         downloadCallback: (url) async {
-          var request = http.Request("GET", url);
-          request.headers
-              .addAll({'authorization': 'Bearer ${client.accessToken}'});
-          final response = await http.Client().send(request);
-
-          List<int> downloadedBytes = response.contentLength != null
-              ? Uint8List(response.contentLength!)
-              : [];
-
-          int downloaded = 0;
-          if (response.statusCode != 200) {
-            throw Exception("Unexpected response: ${response.statusCode}");
-          }
-
           var lastUpdatedProgress = DateTime.now();
-
-          var data = response.stream.listen(
-            (event) {
-              if (response.contentLength != null) {
-                downloadedBytes.setAll(downloaded, event);
-              } else {
-                downloadedBytes.addAll(event);
-              }
-              downloaded += event.length;
-
-              var now = DateTime.now();
-              if (now.difference(lastUpdatedProgress).inMilliseconds > 16) {
-                lastUpdatedProgress = now;
-
-                fileDownloadProgress.add(
-                    DownloadProgress(downloaded, response.contentLength ?? -1));
-              }
-            },
-            cancelOnError: true,
-          ).asFuture();
-
-          await data;
-
-          return Uint8List.fromList(downloadedBytes);
+          final bytes =
+              await downloadMedia(client, url, onProgress: (downloaded, total) {
+            var now = DateTime.now();
+            if (now.difference(lastUpdatedProgress).inMilliseconds > 16) {
+              lastUpdatedProgress = now;
+              fileDownloadProgress
+                  .add(DownloadProgress(downloaded, total ?? -1));
+            }
+          });
+          fileDownloadProgress
+              .add(DownloadProgress(bytes.length, bytes.length));
+          return bytes;
         },
       );
       bytes = file.bytes;
@@ -132,4 +118,98 @@ class MxcFileProvider implements FileProvider {
   @override
   Stream<DownloadProgress>? get onProgressChanged =>
       fileDownloadProgress.stream;
+}
+
+/// The account's own media ([ownMediaOf]) when [event] is one of the
+/// account's own: what is downloaded for it is kept there, per account
+/// and cleared on logout, never under the keys every account shares.
+OwnMediaCache? ownMediaCacheFor(matrix.Client client, matrix.Event? event) =>
+    event != null && event.senderId == client.userID
+        ? ownMediaOf(client)
+        : null;
+
+/// The server answered a media download with [statusCode] instead of 200.
+class MediaDownloadException implements Exception {
+  MediaDownloadException(this.statusCode, {this.retryAfter});
+
+  final int statusCode;
+
+  /// How long a 429 asked to wait (its `Retry-After` header, or the
+  /// `retry_after_ms` of its body), when it said.
+  final Duration? retryAfter;
+
+  /// Whether asking again can get another answer: the server's own
+  /// trouble (5xx), a request timeout or too many requests. Any other
+  /// answer (a 404) would come again.
+  bool get retryable =>
+      statusCode >= 500 || statusCode == 408 || statusCode == 429;
+
+  @override
+  String toString() => "MediaDownloadException: $statusCode";
+}
+
+/// Downloads [url] (a media download or thumbnail URL of [client]'s
+/// homeserver) through [client]'s HTTP client: the account's, which the
+/// speed log counts and which keeps its connections open between
+/// downloads. Throws [MediaDownloadException] for any answer but 200.
+///
+/// The body is read once into a buffer of the announced size, which is
+/// what is returned; without a size, the pieces are gathered and joined
+/// once. [onProgress] gets the bytes read so far and the announced size.
+Future<Uint8List> downloadMedia(matrix.Client client, Uri url,
+    {void Function(int downloaded, int? total)? onProgress}) async {
+  final request = http.Request("GET", url);
+  request.headers['authorization'] = 'Bearer ${client.accessToken}';
+  final response = await client.httpClient.send(request);
+  if (response.statusCode != 200) {
+    var body = const <int>[];
+    try {
+      // Read to its end, so the connection can carry the next request.
+      body = await response.stream.toBytes();
+    } catch (_) {}
+    throw MediaDownloadException(response.statusCode,
+        retryAfter: response.statusCode == 429
+            ? _retryAfter(response.headers['retry-after'], body)
+            : null);
+  }
+
+  final total = response.contentLength;
+  Uint8List? buffer = total != null ? Uint8List(total) : null;
+  BytesBuilder? pieces = buffer == null ? BytesBuilder(copy: false) : null;
+  var downloaded = 0;
+  await for (final chunk in response.stream) {
+    if (buffer != null && downloaded + chunk.length > buffer.length) {
+      // More than announced: gathered from here on.
+      pieces = BytesBuilder(copy: false)
+        ..add(Uint8List.sublistView(buffer, 0, downloaded));
+      buffer = null;
+    }
+    if (buffer != null) {
+      buffer.setRange(downloaded, downloaded + chunk.length, chunk);
+    } else {
+      pieces!.add(chunk);
+    }
+    downloaded += chunk.length;
+    onProgress?.call(downloaded, total);
+  }
+  if (buffer == null) return pieces!.takeBytes();
+  return downloaded == buffer.length
+      ? buffer
+      : Uint8List.sublistView(buffer, 0, downloaded);
+}
+
+/// A 429's wait: the `Retry-After` header in seconds, else the Matrix
+/// body's `retry_after_ms`; null when neither says (an HTTP date is not
+/// read).
+Duration? _retryAfter(String? header, List<int> body) {
+  final seconds = int.tryParse(header?.trim() ?? '');
+  if (seconds != null && seconds >= 0) return Duration(seconds: seconds);
+  try {
+    final json = jsonDecode(utf8.decode(body));
+    final ms = json is Map ? json['retry_after_ms'] : null;
+    if (ms is int && ms >= 0) return Duration(milliseconds: ms);
+  } catch (_) {
+    // Not JSON: no wait said.
+  }
+  return null;
 }
