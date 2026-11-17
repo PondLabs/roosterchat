@@ -235,8 +235,9 @@ void main() {
     ));
 
     // Opening the channel's page fetches what a join needs (T3.3,
-    // acceptance 1; T6.11, acceptance 3): one OpenID token, one /sfu/get
-    // and one GET /healthz to the call token service the well-known names.
+    // acceptance 1, unit_test/call_join/call_warm_up_server_test.dart): one
+    // OpenID token, one /sfu/get and one GET /healthz to the call token
+    // service the well-known names.
     // The channel is new, so no membership names another service.
     final opened = SpeedLog.instance.now();
     EventBus.doOpenRoom(channel.identifier, clientId: client.identifier);
