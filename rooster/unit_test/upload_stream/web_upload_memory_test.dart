@@ -109,4 +109,45 @@ void main() {
     expect(received['bytes'], bytes);
     expect(received['sha256'], sha256Hex);
   }, skip: skipWithoutServer, timeout: const Timeout(Duration(minutes: 3)));
+
+  // The test page runs the development compiler, whose pointycastle is
+  // about 35 times slower than a release build's: the heap is what this
+  // measures here, the cipher's time is measured on a release build.
+  test(
+      'web, encrypted room: a 16 MiB file is encrypted in pieces into a '
+      'Blob; heap', () async {
+    const bytes = 16 * mib;
+    final (file, _) = await pageFile(bytes);
+    final source = BrowserFileSource(file);
+    await resetServer();
+    await Future<void>.delayed(const Duration(seconds: 2));
+    eval('''
+      window.__heapStart = performance.memory.usedJSHeapSize;
+      window.__heapPeak = window.__heapStart;
+      window.__sampler = setInterval(() => {
+        window.__heapPeak =
+            Math.max(window.__heapPeak, performance.memory.usedJSHeapSize);
+      }, 10);
+      0''');
+    final watch = Stopwatch()..start();
+    final reading = source.readEncrypted();
+    final response = await uploadRead(reading, bytes);
+    await reading.close();
+    watch.stop();
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    eval('clearInterval(window.__sampler); 0');
+    final growth =
+        jsNumber('window.__heapPeak') - jsNumber('window.__heapStart');
+    final received = (await serverUploads()).single;
+    print('WEB_MEASURE_ENCRYPTED mib=16 '
+        'heap_growth_mb=${(growth / mib).toStringAsFixed(1)} '
+        'largest_read_kib=${source.largestRead ~/ 1024} '
+        'total_ms=${watch.elapsedMilliseconds} '
+        'server_bytes=${received['bytes']}');
+    expect(response.statusCode, 200);
+    expect(reading.complete, isTrue);
+    expect(received['bytes'], bytes);
+    expect(growth, lessThan(bytes / 2),
+        reason: 'the file is never held whole, encrypted or not');
+  }, skip: skipWithoutServer, timeout: const Timeout(Duration(minutes: 3)));
 }
