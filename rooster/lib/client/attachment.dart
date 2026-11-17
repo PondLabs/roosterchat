@@ -58,6 +58,12 @@ class PendingFileAttachment {
   /// Its send from the composer, once Send was pressed.
   AttachmentSend? sending;
 
+  /// A photo (a JPEG) larger than `photoMaxSide` is sent reduced to it
+  /// (see `ImagePreparation.reduced`). Set by the attach dialog on the file
+  /// it attaches with its metadata removed; off for "Send original", which
+  /// sends the exact bytes, and for a file attached any other way.
+  bool reducePhoto = false;
+
   Future<LocationAnswer>? _location;
   LocationAnswer? _locationAnswer;
 
@@ -179,8 +185,8 @@ class PendingFileAttachment {
       _cancelPreparation?.cancel();
       final cancel = _cancelPreparation = PreparationCancel();
       _preparedData = data;
-      _imagePreparation =
-          (preparer ?? ImagePreparer.instance).prepare(data, cancel: cancel);
+      _imagePreparation = (preparer ?? ImagePreparer.instance)
+          .prepare(data, cancel: cancel, reduce: reducePhoto);
     }
     return _imagePreparation!;
   }

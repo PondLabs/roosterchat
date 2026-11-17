@@ -4045,6 +4045,15 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelAttachmentPhotoReduced": "This photo will be sent at {width} × {height} pixels. To send it at full size, turn on \"Send original\".",
+  "@labelAttachmentPhotoReduced": {
+    "description": "Shown in the dialog that previews a photo before it is attached, when the photo is larger than what is sent by default: the width and height (in pixels, already formatted as numbers) it will be sent at. The \"Send original (keeps metadata)\" switch above it sends the photo at its own size",
+    "type": "text",
+    "placeholders": {
+      "width": {},
+      "height": {}
+    }
+  },
   "promptChatAddFile": "Add File",
   "@promptChatAddFile": {
     "description": "Button at the bottom of the dialog that previews a file before it is attached to a message: attaches it",

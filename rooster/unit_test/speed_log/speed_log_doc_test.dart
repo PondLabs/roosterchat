@@ -75,6 +75,7 @@ void main() {
       SpeedStep.header,
       SpeedStep.decode,
       SpeedStep.encode,
+      SpeedStep.reduce,
     });
     expect(_tableNames(doc, '`voice_join`, a voice join'), {
       SpeedStep.leavePrevious,
