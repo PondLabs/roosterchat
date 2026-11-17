@@ -198,4 +198,31 @@ void main() {
     expect(await mx.database.getEventById('txn_text', room), isNull);
     await mx.dispose(closeDatabase: true);
   });
+
+  test(
+      'cancelled by the room alone during the upload: the send itself takes '
+      'away the event it showed', () async {
+    final transport = CancelTransport()..holdUploads = true;
+    final (mx, room) =
+        await loopClient('cancel_room_alone', transport, ManualSendClock());
+    final cancelled = <String>[];
+    mx.onCancelSendEvent.stream.listen(cancelled.add);
+
+    final (send, sending) = startSend(room);
+    await until(() => transport.open == 2);
+    final txid = send.transactionId!;
+    expect(await mx.database.getEventById(txid, room), isNotNull,
+        reason: 'shown and stored while it uploads');
+
+    // No caller takes the event away: only the flag is set.
+    expect(room.cancelSending(txid), isTrue);
+    expect(await sending, isNull);
+
+    print('cancelled by the room alone: stored '
+        '${await mx.database.getEventById(txid, room) != null}, cancel '
+        'events $cancelled');
+    expect(await goneFrom(room, txid), isTrue);
+    expect(cancelled, contains(txid));
+    await mx.dispose(closeDatabase: true);
+  });
 }

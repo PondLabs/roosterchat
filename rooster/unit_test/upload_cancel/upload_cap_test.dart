@@ -89,4 +89,30 @@ void main() {
     expect(transport.mostOpen, 4);
     await mx.dispose(closeDatabase: true);
   });
+
+  test(
+      'six messages whose uploads are refused for good give every slot back: '
+      'four can open after', () async {
+    final transport = CancelTransport()
+      ..onUpload = (_, __) async =>
+          json(403, {'errcode': 'M_FORBIDDEN', 'error': 'Not now'});
+    final (mx, room) =
+        await loopClient('cap_failures', transport, ManualSendClock());
+
+    final failed = [for (var i = 0; i < 6; i++) startSend(room)];
+    final ids = await Future.wait(failed.map((s) => s.$2))
+        .timeout(const Duration(seconds: 10));
+    expect(ids, everyElement(isNull));
+    expect(transport.uploads, hasLength(12));
+
+    transport
+      ..onUpload = null
+      ..holdUploads = true;
+    final again = [startSend(room), startSend(room)];
+    await until(() => transport.open == 4);
+    print('after 12 refused uploads: ${transport.open} open at once');
+    transport.releaseUploads.complete();
+    await Future.wait(again.map((s) => s.$2));
+    await mx.dispose(closeDatabase: true);
+  });
 }
