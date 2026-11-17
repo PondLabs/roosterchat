@@ -69,6 +69,36 @@ void main() {
   }, timeout: const Timeout(Duration(minutes: 5)));
 
   test(
+      'a message still going up from disk does not hand out its file as '
+      'empty bytes', () async {
+    final (file, _) = await writeTestFile(folder, 'pending.bin', 9 * mib);
+    final server = await LocalUploadServer.start()
+      ..holdAfter = 1 * mib;
+    final transport = LocalUploadTransport(server);
+    final (mx, room) =
+        await streamClient('stream_pending', transport, encrypted: false);
+
+    final (send, processed) = await attachByPath(file);
+    final sending = sendMatrixFile(room, processed);
+    await server.held.first;
+    final pending =
+        (await mx.database.getEventById(send.transactionId!, room))!;
+    Object? given;
+    try {
+      given = await pending.downloadAndDecryptAttachment();
+    } catch (error) {
+      given = error;
+    }
+    server.release();
+    print('pending from disk: asked for its file, got ${given.runtimeType}');
+    expect(given, isNot(isA<matrix.MatrixFile>()));
+    expect(await sending, isNotNull);
+    await mx.dispose(closeDatabase: true);
+    transport.closeConnections();
+    await server.close();
+  });
+
+  test(
       "a file over the server's limit is refused before it is read: 0 bytes "
       'read, nothing uploaded', () async {
     final (file, _) = await writeTestFile(folder, 'over.bin', 20 * mib);

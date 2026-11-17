@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/matrix/media/file_cipher.dart';
@@ -146,11 +147,55 @@ void main() {
     await mx.dispose(closeDatabase: true);
   });
 
+  test(
+      'an upload answered before its file was read is not the one the event '
+      'points to: the next attempt goes up whole, and its key and hash are '
+      "the event's",
+      skip: skipWithoutVodozemac, () async {
+    final (file, hash) = await writeTestFile(folder, 'early.bin', 9 * mib);
+    final transport = _AnswersEarlyOnce();
+    final clock = ManualSendClock();
+    final (mx, room) = await streamClient('stream_answered_early', transport,
+        encrypted: true, clock: clock);
+
+    final (_, processed) = await attachByPath(file);
+    final sending = sendMatrixFile(room, processed);
+    await until(() => clock.waiting);
+    clock.advance(const Duration(seconds: 2));
+    final id = await sending;
+
+    final event = await decryptSent(mx, room, transport.events.single);
+    final fileInfo = event.content['file'] as Map<String, dynamic>;
+    print('answered early: the event points to ${fileInfo['url']} (early '
+        'answer ${transport.earlyUri}), waits ${clock.waits}');
+    expect(id, isNotNull);
+    expect(fileInfo['url'], isNot(transport.earlyUri));
+    expect(sha256Hex((await decryptUpload(fileInfo, transport.uploads.last))!),
+        hash);
+    await mx.dispose(closeDatabase: true);
+  });
+
   test('a file read from its source cannot be encrypted whole', () async {
     final file = matrix.MatrixFile(bytes: Uint8List(0), name: 'a.bin')
       ..source = _NoSource();
     expect(file.encrypt, throwsStateError);
   });
+}
+
+/// Answers the first upload at once, before reading a byte of it.
+class _AnswersEarlyOnce extends OnlyUsTransport {
+  String? earlyUri;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    if (earlyUri == null &&
+        request.method == 'POST' &&
+        LoopTransport.isMediaUpload(request)) {
+      earlyUri = 'mxc://fakeServer.notExisting/early';
+      return json(200, {'content_uri': earlyUri});
+    }
+    return super.send(request);
+  }
 }
 
 class _NoSource implements matrix.FileSendSource {
