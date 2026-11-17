@@ -1,6 +1,8 @@
 @TestOn('vm')
 library;
 
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:matrix/matrix.dart' as matrix;
@@ -97,4 +99,59 @@ void main() {
     expect(transport.events, isEmpty);
     await mx.dispose(closeDatabase: true);
   });
+
+  test(
+      'a text cancelled while its encryption waits on the server, which then '
+      'refuses for good: not shown as failed, not stored',
+      skip: skipWithoutVodozemac, () async {
+    final transport = _HeldMembers();
+    final (mx, room) =
+        await cryptoClient('cancel_then_refused', transport, encrypted: true);
+    final echoes = <matrix.Event>[];
+    mx.onTimelineEvent.stream.listen(echoes.add);
+    transport.hold = Completer<void>();
+
+    final sending = room
+        .sendEvent({'msgtype': 'm.text', 'body': 'hello'}, txid: 'txn_refused');
+    await until(() => transport.held);
+    final shownBefore = echoes.length;
+    await echoes.lastWhere((e) => e.eventId == 'txn_refused').cancelSend();
+    transport.hold!.complete();
+    final id = await sending;
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    final shownAgain = echoes
+        .skip(shownBefore)
+        .where((e) => e.eventId == 'txn_refused')
+        .map((e) => e.status)
+        .toList();
+    print('encrypted text cancelled, then its members request refused: id '
+        '$id, shown again $shownAgain, stored '
+        '${await mx.database.getEventById('txn_refused', room) != null}');
+    expect(id, isNull);
+    expect(shownAgain, isEmpty);
+    expect(await mx.database.getEventById('txn_refused', room), isNull);
+    expect(transport.events, isEmpty);
+    await mx.dispose(closeDatabase: true);
+  });
+}
+
+/// [OnlyUsTransport] whose next members request waits for [hold], then is
+/// refused for good (403 `M_FORBIDDEN`).
+class _HeldMembers extends OnlyUsTransport {
+  Completer<void>? hold;
+  bool held = false;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final waiting = hold;
+    if (waiting != null &&
+        request.method == 'GET' &&
+        request.url.path.endsWith('/members')) {
+      held = true;
+      await waiting.future;
+      return json(403, {'errcode': 'M_FORBIDDEN', 'error': 'Not a member'});
+    }
+    return super.send(request);
+  }
 }
