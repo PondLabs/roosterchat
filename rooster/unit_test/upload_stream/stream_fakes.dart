@@ -55,7 +55,8 @@ int patternByte(int offset, int seed) =>
 Future<(File, String)> writeTestFile(Directory folder, String name, int bytes,
     {int seed = 1}) async {
   final file = File('${folder.path}${Platform.pathSeparator}$name');
-  final out = file.openWrite();
+  // Each piece written before the next is made: the writer holds one.
+  final out = await file.open(mode: FileMode.write);
   final digest = _HexDigest();
   final hash = sha256.startChunkedConversion(digest);
   for (var start = 0; start < bytes; start += mib) {
@@ -64,7 +65,7 @@ Future<(File, String)> writeTestFile(Directory folder, String name, int bytes,
       piece[i] = patternByte(start + i, seed);
     }
     hash.add(piece);
-    out.add(piece);
+    await out.writeFrom(piece);
   }
   hash.close();
   await out.close();
