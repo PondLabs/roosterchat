@@ -192,12 +192,12 @@ runs none of it.
 The browser has no paths: a picked file is read into memory when it is
 attached, and sent from those bytes. Its bound, measured in Chrome with a
 50 MB file read as the app admits it and uploaded through our HTTP client
-(`XMLHttpRequest`), six runs (three in development, three in review)
+(`XMLHttpRequest`), seven runs (four in development, three in review)
 (`unit_test/upload_stream/web_upload_memory_test.dart`):
 
 | Sent | JS heap growth | Longest task of the page's thread |
 |---|---|---|
-| 50 MB, in the clear | 99.9 to 101.3 MB (2.0 times the file) | 58 to 113 ms (1 long task per run) |
+| 50 MB, in the clear | 99.9 to 101.3 MB (2.0 times the file) | 58 to 118 ms (1 long task per run) |
 
 The file is held twice while it is read: its pieces, then the one buffer
 they are joined into. An encrypted room adds the encrypted copy (not
