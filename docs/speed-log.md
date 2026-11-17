@@ -163,6 +163,16 @@ new: a file that changed on disk while it went up ends its request with
 the error the transport gives (`other`, `client` or `aborted`), and the
 message says why.
 
+What a send from disk checks, to tell that the file changed since it was
+attached: its size and its modification time when each attempt opens it
+and again after its last byte is read, and that no byte follows the last
+one; a read that comes up short ends it at once. What it cannot see: on
+Windows, a program that writes over a part not read yet, keeping the
+size, and does not close the file before the read ends leaves the time as
+it was. That send ends as sent, with the old bytes before the write and
+the new ones after it. The event's hash still matches what the server
+stored: it is the hash of what went up.
+
 What this costs, measured on the Windows development machine (16 GB) on
 2026-11-17, each run its own test process, median of 3
 (`unit_test/upload_stream/memory_measure_test.dart`, to a server on
