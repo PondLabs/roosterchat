@@ -269,7 +269,10 @@ List<(String, int, int)> _boxes(Uint8List b, int from, int to) {
 
 Future<ExifBlocks> _heifExif(ByteReader read, Uint8List head) async {
   final ftypSize = _uint(head, 0, 4);
-  final ftyp = await read(0, ftypSize > 4096 ? 0 : ftypSize);
+  // A thousand brands and more: not walked, and asked about, since the
+  // Exif reader may still read it.
+  if (ftypSize > 4096) return const ExifBlocks([], cut: true);
+  final ftyp = await read(0, ftypSize);
   if (ftyp.length < 16 || ftyp.length < ftypSize) return const ExifBlocks([]);
   final brands = {
     for (var at = 8; at + 4 <= ftypSize; at += at == 8 ? 8 : 4)

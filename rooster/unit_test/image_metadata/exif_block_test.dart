@@ -439,6 +439,24 @@ void main() {
       expect(await answer(noGps), LocationAnswer.none);
     });
 
+    test('an ftyp of more than 4 kB: unreadable', () async {
+      // mif1's own ftyp grown with 1,250 more brands.
+      final ftypSize = 24 + 5000;
+      final big = cat([
+        [
+          ftypSize >> 24,
+          ftypSize >> 16 & 0xFF,
+          ftypSize >> 8 & 0xFF,
+          ftypSize & 0xFF
+        ],
+        Uint8List.sublistView(mif1, 4, 24),
+        Uint8List(5000),
+        Uint8List.sublistView(mif1, 24),
+      ]);
+      expect((await findExifBlocks(bytesReader(big))).cut, isTrue);
+      expect(await answer(big), LocationAnswer.unreadable);
+    });
+
     test('a video (no HEIF brand) is not walked', () async {
       final mp4 = Uint8List.fromList(mif1)..setRange(8, 12, 'isom'.codeUnits);
       mp4.setRange(16, 24, 'isomiso2'.codeUnits);
