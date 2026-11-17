@@ -53,9 +53,6 @@ extension TrailingSlash on Uri {
       : this;
 }
 
-/// Represents a Matrix client to communicate with a
-/// [Matrix](https://matrix.org) homeserver and is the entry point for this
-/// SDK.
 const _reservedUploadKey = #matrixReservedUpload; // ROOSTER
 
 /// Runs [upload] so that [Client.uploadContent] within it, through any // ROOSTER
@@ -70,6 +67,9 @@ R runUploadToReserved<R>(Uri mxc, R Function() upload) => // ROOSTER
 Uri? currentReservedUpload() => // ROOSTER
     Zone.current[_reservedUploadKey] as Uri?; // ROOSTER
 
+/// Represents a Matrix client to communicate with a
+/// [Matrix](https://matrix.org) homeserver and is the entry point for this
+/// SDK.
 class Client extends MatrixApi {
   int? _id;
 
