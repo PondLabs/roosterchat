@@ -369,6 +369,80 @@ void main() {
     });
   });
 
+  group('a GPS pointer in the Exif sub-IFD', () {
+    // IFD0 points to the Exif sub-IFD (0x8769) at [sub], which points to
+    // the GPS IFD: some writers put the GPS pointer there, and the Exif
+    // reader finds it.
+    // With [interop], the sub-IFD points instead to an Interop IFD (0xA005)
+    // that holds the GPS pointer.
+    Uint8List subIfdGps(Endian endian,
+        {int sub = 26, bool interop = false, int interopAt = 44}) {
+      final d = ByteData(62)
+        ..setUint16(0, endian == Endian.little ? 0x4949 : 0x4D4D)
+        ..setUint16(2, 42, endian)
+        ..setUint32(4, 8, endian);
+      void ifd(int at, int tag, int value) => d
+        ..setUint16(at, 1, endian)
+        ..setUint16(at + 2, tag, endian)
+        ..setUint16(at + 4, 4, endian) // LONG
+        ..setUint32(at + 6, 1, endian)
+        ..setUint32(at + 10, value, endian)
+        ..setUint32(at + 14, 0, endian); // no next IFD
+      ifd(8, 0x8769, sub);
+      if (interop) {
+        ifd(26, 0xA005, interopAt);
+        ifd(44, 0x8825, 0);
+        return d.buffer.asUint8List();
+      }
+      ifd(26, 0x8825, 44);
+      d
+        ..setUint16(44, 1, endian)
+        ..setUint16(46, 0x0000, endian) // GPSVersionID
+        ..setUint16(48, 1, endian) // BYTE
+        ..setUint32(50, 4, endian)
+        ..setUint8(54, 2)
+        ..setUint8(55, 3);
+      return d.buffer.asUint8List();
+    }
+
+    Uint8List exifSegment(Uint8List tiff) =>
+        segment(0xE1, [...'Exif'.codeUnits, 0, 0, ...tiff]);
+
+    for (final (name, endian) in [('II', Endian.little), ('MM', Endian.big)]) {
+      test('$name, behind an APP2 of 5,000 bytes: the location question',
+          () async {
+        final app1 = exifSegment(subIfdGps(endian));
+        expect(await readerSeesGps(cat([soi, app1, plain.sublist(2)])), isTrue,
+            reason: 'the Exif reader finds it when nothing hides it');
+        final hidden =
+            cat([soi, segment(0xE2, Uint8List(4998)), app1, plain.sublist(2)]);
+        expect(await readerSeesGps(hidden), isFalse);
+        expect(await answer(hidden), LocationAnswer.found);
+      });
+
+      test(
+          '$name, a sub-IFD pointer that is zero, points back or past the '
+          'block: unreadable', () {
+        expect(readExifGps(subIfdGps(endian)), ExifGps.found);
+        for (final sub in [0, 8, 4, 4000]) {
+          expect(readExifGps(subIfdGps(endian, sub: sub)), ExifGps.unreadable,
+              reason: 'sub-IFD at $sub');
+        }
+      });
+
+      test(
+          '$name, a GPS pointer in the Interop IFD is found; a broken '
+          'pointer to it is passed over', () {
+        expect(readExifGps(subIfdGps(endian, interop: true)), ExifGps.found);
+        for (final at in [0, 26, 4000]) {
+          expect(readExifGps(subIfdGps(endian, interop: true, interopAt: at)),
+              ExifGps.none,
+              reason: 'Interop IFD at $at');
+        }
+      });
+    }
+  });
+
   group('readExifGps', () {
     Uint8List withIfd1(int entryTag, {int? ifd1}) {
       // The minimal block (IFD0: the orientation), its next-IFD offset
