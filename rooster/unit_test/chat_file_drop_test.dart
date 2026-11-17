@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:intl/intl.dart' as intl;
+import 'package:path/path.dart' as p;
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/generated/intl/messages_all.dart';
 import 'package:rooster/ui/atoms/drag_drop_file_target.dart';
@@ -75,7 +76,8 @@ void main() {
     dir = Directory.systemTemp.createTempSync('chat_drop');
     files = [
       for (final name in ['notes.txt', 'archive.zip', 'tool.exe', 'NOEXT'])
-        (File('${dir.path}/$name')..writeAsBytesSync([1, 2, 3, 4])).path,
+        // The platform's own separator: XFile.name splits the path by it.
+        (File(p.join(dir.path, name))..writeAsBytesSync([1, 2, 3, 4])).path,
     ];
   });
 
@@ -163,7 +165,7 @@ void main() {
   });
 
   test('a folder in the drop is left out, not the end of the drop', () async {
-    final folder = Directory('${dir.path}/folder')..createSync();
+    final folder = Directory(p.join(dir.path, 'folder'))..createSync();
     final skipped = <String>[];
 
     final attachments = await attachmentsFromDroppedFiles(
