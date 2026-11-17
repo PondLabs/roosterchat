@@ -152,6 +152,58 @@ Send unless the table says otherwise.
 
 Outcome `ok`, or `failed` when the file did not reach the room.
 
+#### A file sent from disk, and the browser's bound
+
+On native, a file over 8 MiB attached by its path (not a picture) is not
+read at Send: the Matrix SDK reads it from disk at each upload attempt, in
+pieces of 256 KiB that are read only as the connection takes them, and in
+an encrypted room encrypts each piece in an isolate of its own
+(`lib/client/matrix/media/disk_file_source_io.dart`). Its `upload` step and
+request line are those of any upload; `prepared` has its size. No name is
+new: a file that changed on disk while it went up ends its request with
+the error the transport gives (`other`, `client` or `aborted`), and the
+message says why.
+
+What a send from disk checks, to tell that the file changed since it was
+attached: its size and its modification time when each attempt opens it
+and again after its last byte is read, and that no byte follows the last
+one; a read that comes up short ends it at once. What it cannot see: on
+Windows, a program that writes over a part not read yet, keeping the
+size, and does not close the file before the read ends leaves the time as
+it was. That send ends as sent, with the old bytes before the write and
+the new ones after it. The event's hash still matches what the server
+stored: it is the hash of what went up.
+
+What this costs, measured on the Windows development machine (16 GB) on
+2026-11-17, each run its own test process, median of 3
+(`unit_test/upload_stream/memory_measure_test.dart`, to a server on
+127.0.0.1):
+
+| Sent | Peak of the process | Over 1 MB | Longest the main isolate went without a timer | Time to send |
+|---|---|---|---|---|
+| 1 MB, from disk | 328.7 MB | | 26 ms | 0.1 s |
+| 200 MB, from disk | 325.0 MB | none (-3.7 MB) | 31 ms | 3.3 s |
+| 200 MB, from disk, encrypted room | 336.9 MB | +8.2 MB | 32 ms | 10.0 s |
+
+In the encrypted room the cipher (pointycastle's AES-CTR and SHA-256, pure
+Dart) sets the pace, about 20 MB/s in this test process; the main isolate
+runs none of it.
+
+The browser has no paths: a picked file is read into memory when it is
+attached, and sent from those bytes. Its bound, measured in Chrome with a
+50 MB file read as the app admits it and uploaded through our HTTP client
+(`XMLHttpRequest`), seven runs (four in development, three in review)
+(`unit_test/upload_stream/web_upload_memory_test.dart`):
+
+| Sent | JS heap growth | Longest task of the page's thread |
+|---|---|---|
+| 50 MB, in the clear | 99.9 to 101.3 MB (2.0 times the file) | 58 to 118 ms (1 long task per run) |
+
+The file is held twice while it is read: its pieces, then the one buffer
+they are joined into. An encrypted room adds the encrypted copy (not
+measured here: the test page has no vodozemac). The web's own way is the
+next step of this work.
+
 ### `media_show`
 
 `media_show`, a picture of a chat (an attachment, a video's poster) shown

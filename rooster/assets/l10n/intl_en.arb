@@ -3483,6 +3483,12 @@
       }
     }
   },
+  "labelPendingFileChanged": "The file was changed or deleted",
+  "@labelPendingFileChanged": {
+    "description": "Under a file that could not be sent because, while it was being sent from this device's disk, the file was deleted, cut short or written to. Attaching it again sends it",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelPendingFileUploadCount": "{sent} of {total}",
   "@labelPendingFileUploadCount": {
     "description": "Under a file being uploaded: how much of it the connection has taken so far, such as '3.1 MB of 48 MB'",

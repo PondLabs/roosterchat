@@ -75,6 +75,13 @@ class PendingAttachmentStatus extends StatefulWidget {
               "such as '14:32'",
           examples: const {"time": "14:32"});
 
+  static String get labelPendingFileChanged =>
+      Intl.message("The file was changed or deleted",
+          name: "labelPendingFileChanged",
+          desc: "Under a file that could not be sent because, while it was "
+              "being sent from this device's disk, the file was deleted, cut "
+              "short or written to. Attaching it again sends it");
+
   static String labelPendingFileUploadCount(String sent, String total) =>
       Intl.message("$sent of $total",
           name: "labelPendingFileUploadCount",
@@ -152,6 +159,13 @@ class PendingAttachmentStatus extends StatefulWidget {
             label: labelPendingFileServerAskedToWait(time),
             detail: null,
             icon: Icons.schedule_rounded
+          );
+        }
+        if (upload.problem == UploadProblem.fileChanged) {
+          return (
+            label: labelPendingFileChanged,
+            detail: null,
+            icon: Icons.error_outline_rounded
           );
         }
         if (upload.problem == UploadProblem.serverTooSlow && size != null) {

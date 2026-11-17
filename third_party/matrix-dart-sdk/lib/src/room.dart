@@ -32,6 +32,7 @@ import 'package:matrix/src/utils/markdown.dart';
 import 'package:matrix/src/utils/marked_unread.dart';
 import 'package:matrix/src/utils/space_child.dart';
 
+export 'package:matrix/src/utils/file_send_source.dart'; // ROOSTER
 export 'package:matrix/src/utils/file_upload_loop.dart'; // ROOSTER
 
 /// max PDU size for server to accept the event with some buffer incase the server adds unsigned data f.ex age
@@ -1075,8 +1076,8 @@ class Room {
     try {
       final mediaConfig = await client.getConfig();
       final maxMediaSize = mediaConfig.mUploadSize;
-      if (maxMediaSize != null && maxMediaSize < file.bytes.lengthInBytes) {
-        throw FileTooBigMatrixException(file.bytes.lengthInBytes, maxMediaSize);
+      if (maxMediaSize != null && maxMediaSize < file.size) { // ROOSTER
+        throw FileTooBigMatrixException(file.size, maxMediaSize); // ROOSTER
       }
     } catch (e) {
       Logs().d('Config error while sending file', e);
@@ -1108,7 +1109,8 @@ class Room {
       syncUpdate.rooms!.join!.values.first.timeline!.events!.first
           .unsigned![fileSendingStatusKey] = FileSendingStatus.encrypting.name;
       await show(); // ROOSTER
-      if (keptFile == null) { // ROOSTER
+      // A file read from its source is encrypted by each upload. // ROOSTER
+      if (keptFile == null && file.source == null) { // ROOSTER
         encryptedFile = await file.encrypt(); // ROOSTER: indented
         uploadFile = encryptedFile.toMatrixFile(); // ROOSTER: indented
       } // ROOSTER
@@ -1124,14 +1126,18 @@ class Room {
     await show(); // ROOSTER: the stage is published
     // The file and its thumbnail go up together, each tried again by // ROOSTER
     // itself; one that went up stays kept when the other fails. // ROOSTER
-    final List<Uri> uris; // ROOSTER
+    final List<UploadedFilePart> parts; // ROOSTER
     try { // ROOSTER
-      uris = await uploadFileParts( // ROOSTER
+      parts = await uploadFileParts( // ROOSTER
         this, // ROOSTER
         txid, // ROOSTER
         { // ROOSTER
-          FileSendPart.file: // ROOSTER
-              FilePartSend(keptFile, uploadFile, encryptedFile), // ROOSTER
+          FileSendPart.file: FilePartSend( // ROOSTER
+            keptFile, // ROOSTER
+            uploadFile, // ROOSTER
+            encryptedFile, // ROOSTER
+            source: file.source, // ROOSTER
+          ), // ROOSTER
           if (thumbnail != null) // ROOSTER
             FileSendPart.thumbnail: FilePartSend( // ROOSTER
               keptThumbnail, // ROOSTER
@@ -1148,8 +1154,12 @@ class Room {
       await show(); // ROOSTER
       rethrow; // ROOSTER
     } // ROOSTER
-    final uploadResp = uris.first; // ROOSTER
-    final thumbnailUploadResp = thumbnail != null ? uris.last : null; // ROOSTER
+    final uploadResp = parts.first.uri; // ROOSTER
+    final thumbnailUploadResp = thumbnail != null ? parts.last.uri : null; // ROOSTER
+    // The key and hash of the bytes that went up, read at the upload for // ROOSTER
+    // a file read from its source. // ROOSTER
+    encryptedFile = parts.first.encryptedFile; // ROOSTER
+    if (thumbnail != null) encryptedThumbnail = parts.last.encryptedFile; // ROOSTER
 
     // Send event
     final content = <String, dynamic>{
