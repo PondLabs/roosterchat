@@ -5,6 +5,7 @@ import 'package:exif/exif.dart';
 import 'package:rooster/cache/file_provider.dart';
 import 'package:rooster/diagnostic/speed_log/file_send_trace.dart';
 import 'package:rooster/utils/image/image_header.dart';
+import 'package:rooster/utils/image/metadata/exif_block.dart';
 import 'package:rooster/utils/image/preparation/image_preparation.dart';
 import 'package:rooster/utils/mime.dart';
 import 'package:rooster/utils/network/upload_progress.dart';
@@ -86,10 +87,40 @@ class PendingFileAttachment {
       // location.
       return _locationAnswer = LocationAnswer.unreadable;
     }
-    return _locationAnswer =
-        exif.keys.any((e) => e.toLowerCase().contains("gps"))
-            ? LocationAnswer.found
-            : LocationAnswer.none;
+    if (exif.keys.any((e) => e.toLowerCase().contains("gps"))) {
+      return _locationAnswer = LocationAnswer.found;
+    }
+    // The reader can give up without an error and find nothing in a block
+    // another reader reads (behind a long segment, after the tables, past
+    // an odd-sized WebP chunk), or read the start of a block cut short
+    // before its GPS. Both are asked about: in doubt, Send asks.
+    final block = await _exifBlock();
+    if (block == ExifBlock.cut || (block == ExifBlock.whole && exif.isEmpty)) {
+      return _locationAnswer = LocationAnswer.unreadable;
+    }
+    return _locationAnswer = LocationAnswer.none;
+  }
+
+  /// The file's Exif block (see [findExifBlock]). A file that is there but
+  /// cannot be looked into counts as one with a block cut short; one that
+  /// is gone has nothing to send.
+  Future<ExifBlock> _exifBlock() async {
+    final data = this.data;
+    if (data != null) return findExifBlock(bytesReader(data));
+    if (path == null || !await File(path!).exists()) return ExifBlock.none;
+    RandomAccessFile? file;
+    try {
+      file = await File(path!).open();
+      final opened = file;
+      return await findExifBlock((offset, length) async {
+        await opened.setPosition(offset);
+        return opened.read(length);
+      });
+    } catch (_) {
+      return ExifBlock.cut;
+    } finally {
+      await file?.close();
+    }
   }
 
   Future<void>? _reading;

@@ -7,9 +7,12 @@ import 'dart:typed_data';
 import 'package:exif/exif.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:rooster/client/attachment.dart';
+import 'package:rooster/utils/image/metadata/remove_image_metadata.dart';
 import 'package:rooster/utils/image/preparation/image_preparation.dart';
 
+import '../image_metadata/remove_image_metadata_test.dart' show riffChunk;
 import '../media_prepare/fakes.dart';
 import 'chat_harness.dart';
 
@@ -28,6 +31,68 @@ void main() {
   // The photo cut short inside its Exif: the reader stops with an error.
   final unreadable = Uint8List.sublistView(gps, 0, 40);
   final plain = blackJpeg(400, 300);
+  // A readable Exif with no location: the orientation alone.
+  final orientationOnly = removeMetadataByRewrite(
+          File('unit_test/fixtures/image_metadata/orientation_6.jpg')
+              .readAsBytesSync())!
+      .bytes!;
+
+  // The fixture's segments: SOI, APP0 JFIF, APP1 Exif, then COM, APP2 and
+  // the DQT tables before the frame.
+  final segments = _jpegSegments(gps);
+  final soi = Uint8List.sublistView(gps, 0, 2);
+  final (_, app0Start, app0End) = segments.firstWhere((s) => s.$1 == 0xE0);
+  final (_, app1Start, app1End) = segments.firstWhere((s) => s.$1 == 0xE1);
+  final app0 = Uint8List.sublistView(gps, app0Start, app0End);
+  final app1 = Uint8List.sublistView(gps, app1Start, app1End);
+  final afterApp1 = Uint8List.sublistView(gps, app1End);
+  final afterDqt = segments.lastWhere((s) => s.$1 == 0xDB).$3;
+  final tiff = Uint8List.sublistView(app1, 10);
+  Uint8List cat(List<List<int>> parts) =>
+      Uint8List.fromList([for (final p in parts) ...p]);
+  // A segment of [length] (its length field), [head] first, zeros after.
+  Uint8List segment(int marker, int length, [List<int> head = const []]) =>
+      Uint8List(2 + length)
+        ..[0] = 0xFF
+        ..[1] = marker
+        ..[2] = length >> 8
+        ..[3] = length & 0xFF
+        ..setRange(4, 4 + head.length, head);
+  final icc = [...'ICC_PROFILE'.codeUnits, 0];
+
+  // Files that hold the fixture's whole Exif, GPS and all, where the Exif
+  // reader gives up without an error and finds nothing (the review's
+  // probes), and the photo cut inside its IFD0, before the GPS pointer:
+  // each gets the question.
+  final hidden = <(String, Uint8List)>[
+    (
+      'an APP2 of 5,000 bytes before the Exif',
+      cat([soi, segment(0xE2, 5000, icc), app1, afterApp1])
+    ),
+    (
+      'JFIF, an APP2 of 5,000 bytes, then the Exif',
+      cat([soi, app0, segment(0xE2, 5000, icc), app1, afterApp1])
+    ),
+    (
+      'a comment of 5,000 bytes before the Exif',
+      cat([soi, segment(0xFE, 5000), app1, afterApp1])
+    ),
+    (
+      'the Exif after the quantisation tables',
+      cat([
+        soi,
+        app0,
+        Uint8List.sublistView(gps, app1End, afterDqt),
+        app1,
+        Uint8List.sublistView(gps, afterDqt),
+      ])
+    ),
+    (
+      'a WebP whose odd-sized image chunk comes before the EXIF',
+      _webpWith(tiff)
+    ),
+    ('the photo cut inside its IFD0', Uint8List.sublistView(gps, 0, 100)),
+  ];
 
   setUp(() {
     sent.clear();
@@ -55,6 +120,47 @@ void main() {
     expect(await readExifFromBytes(plain), isEmpty);
     expect((await readExifFromBytes(gps)).keys.any((k) => k.contains('GPS')),
         isTrue);
+    expect(
+        (await readExifFromBytes(orientationOnly)).keys, ['Image Orientation']);
+  });
+
+  test(
+      'the hidden files hold the GPS block, and the Exif reader finds no '
+      'location in them', () async {
+    for (final (label, bytes) in hidden) {
+      final read = await readExifFromBytes(bytes);
+      if (bytes.length == 100) {
+        // Cut before its GPS pointer: the camera tags, nothing more.
+        expect(read.keys.any((k) => k.contains('GPS')), isFalse);
+        continue;
+      }
+      expect(read, isEmpty, reason: label);
+      if (bytes[0] == 0xFF) {
+        // Another reader still finds the location.
+        expect(img.decodeJpgExif(bytes)!.gpsIfd.keys, isNotEmpty,
+            reason: label);
+      }
+    }
+  });
+
+  test('every hidden file is answered unreadable, from memory and disk',
+      () async {
+    for (final (i, (label, bytes)) in hidden.indexed) {
+      expect(
+          await PendingFileAttachment(name: 'a', data: bytes).locationCheck(),
+          LocationAnswer.unreadable,
+          reason: label);
+      final path = '${dir.path}/hidden$i';
+      File(path).writeAsBytesSync(bytes);
+      expect(await PendingFileAttachment(name: 'a', path: path).locationCheck(),
+          LocationAnswer.unreadable,
+          reason: '$label, on disk');
+    }
+    for (final bytes in [plain, orientationOnly]) {
+      expect(
+          await PendingFileAttachment(name: 'a', data: bytes).locationCheck(),
+          LocationAnswer.none);
+    }
   });
 
   for (final dropped in [false, true]) {
@@ -105,6 +211,13 @@ void main() {
         unreadable,
         LocationAnswer.unreadable
       ),
+      for (final (i, (hiddenLabel, bytes)) in hidden.indexed)
+        (
+          'with its Exif hidden from the reader ($hiddenLabel)',
+          'hidden$i.jpg',
+          bytes,
+          LocationAnswer.unreadable
+        ),
     ]) {
       testWidgets(
           '$how, a photo $label: Send asks; declined, nothing goes; '
@@ -145,21 +258,78 @@ void main() {
       }, timeout: const Timeout(Duration(minutes: 1)));
     }
 
-    testWidgets('$how, a photo with no Exif goes without a question',
-        (tester) async {
-      await tester.pumpWidget(chatApp(room));
-      final file = await attach(tester, 'black.jpg', plain);
-      expect(file.location, LocationAnswer.none);
+    for (final (label, bytes) in [
+      ('no Exif', plain),
+      ('a readable Exif without a location', orientationOnly),
+    ]) {
+      testWidgets('$how, a photo with $label goes without a question',
+          (tester) async {
+        await tester.pumpWidget(chatApp(room));
+        final file = await attach(tester, 'black.jpg', bytes);
+        expect(file.location, LocationAnswer.none);
 
-      await typeAndSend(tester, 'look');
-      expect(sent.first.message, 'look',
-          reason: 'sent at once, with no question');
-      expect(find.text(chatState(tester).promptChatDontSendFile), findsNothing);
-      await settle(tester);
-      expect([for (final m in sent) ...m.files.map((f) => f.file.name)],
-          ['black.jpg']);
+        await typeAndSend(tester, 'look');
+        expect(sent.first.message, 'look',
+            reason: 'sent at once, with no question');
+        expect(
+            find.text(chatState(tester).promptChatDontSendFile), findsNothing);
+        await settle(tester);
+        expect([for (final m in sent) ...m.files.map((f) => f.file.name)],
+            ['black.jpg']);
 
-      await closeChat(tester);
-    }, timeout: const Timeout(Duration(minutes: 1)));
+        await closeChat(tester);
+      }, timeout: const Timeout(Duration(minutes: 1)));
+    }
   }
+}
+
+/// The segments of a JPEG up to its first scan, as (marker, start, end).
+List<(int, int, int)> _jpegSegments(Uint8List b) {
+  final out = <(int, int, int)>[];
+  var pos = 2;
+  while (b[pos + 1] != 0xDA) {
+    final end = pos + 2 + (b[pos + 2] << 8 | b[pos + 3]);
+    out.add((b[pos + 1], pos, end));
+    pos = end;
+  }
+  return out;
+}
+
+/// A still WebP: VP8X (EXIF flag), the animated fixture's first image
+/// chunk (a VP8L of 439 bytes, odd, so its padding byte follows) and an
+/// EXIF chunk holding [tiff].
+Uint8List _webpWith(Uint8List tiff) {
+  final webp = File('unit_test/fixtures/image_metadata/animated_exif.webp')
+      .readAsBytesSync();
+  final data = ByteData.sublistView(webp);
+  var pos = 12;
+  while (String.fromCharCodes(webp, pos, pos + 4) != 'ANMF') {
+    final size = data.getUint32(pos + 4, Endian.little);
+    pos += 8 + size + (size & 1);
+  }
+  // The frame's width and height minus one, 24 bits each, as VP8X has them.
+  final frame = Uint8List.sublistView(webp, pos + 8 + 6, pos + 8 + 12);
+  final image = pos + 8 + 16;
+  final imageSize = data.getUint32(image + 4, Endian.little);
+  // Built while the tests are declared, so checked without expect.
+  if (String.fromCharCodes(webp, image, image + 4) != 'VP8L' ||
+      imageSize.isEven) {
+    throw StateError('the first frame is not an odd-sized VP8L');
+  }
+  final vp8x = Uint8List(10)
+    ..[0] = 0x08 // EXIF
+    ..setRange(4, 10, frame);
+  final body = <int>[
+    ...'WEBP'.codeUnits,
+    ...riffChunk('VP8X', vp8x),
+    ...riffChunk('VP8L', webp.sublist(image + 8, image + 8 + imageSize)),
+    ...riffChunk('EXIF', tiff),
+  ];
+  return Uint8List.fromList([
+    ...'RIFF'.codeUnits,
+    ...(ByteData(4)..setUint32(0, body.length, Endian.little))
+        .buffer
+        .asUint8List(),
+    ...body,
+  ]);
 }
