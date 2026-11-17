@@ -127,10 +127,14 @@ bool isPhotoLeftInRoom(matrix.Event event) {
 
 /// Whether [attachment] goes by asynchronous upload when the homeserver
 /// reserves: a photo held in memory (`m.image`; a file read from disk is
-/// encrypted anew at each attempt, so its key is not known before).
+/// encrypted anew at each attempt, so its key is not known before) sent
+/// from the composer, whose send ([TrackedMatrixAttachment.send]) shows
+/// the upload under the sent message with "Cancel send". Any other photo
+/// (a photo album's) goes upload first: nothing would show it uploading.
 bool sendsByAsyncUpload(MatrixProcessedAttachment attachment) {
   final file = attachment.file;
-  return file.msgType == matrix.MessageTypes.Image &&
+  return attachment is TrackedMatrixAttachment &&
+      file.msgType == matrix.MessageTypes.Image &&
       file.source == null &&
       file.bytes.isNotEmpty;
 }

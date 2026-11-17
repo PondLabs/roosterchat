@@ -180,6 +180,18 @@ void main() {
     expect(transport.pending, isEmpty);
   });
 
+  test(
+      'a photo with no send to show its upload (in a photo album) is '
+      'uploaded first', () async {
+    final tracked = photo();
+    final untracked = MatrixProcessedAttachment(tracked.file,
+        thumbnailFile: tracked.thumbnailFile);
+    expect(sendsByAsyncUpload(untracked), isFalse);
+    expect(await sendMatrixAttachment(room, untracked), isNotNull);
+    expect(transport.log, ['POST upload', 'POST upload', 'PUT send']);
+    expect(transport.creates, 0);
+  });
+
   test('a video and a plain file are uploaded first, without a reservation',
       () async {
     for (final file in [
