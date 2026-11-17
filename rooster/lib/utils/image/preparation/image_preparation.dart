@@ -264,18 +264,21 @@ class ImagePreparer {
             bytes.length >= 2 &&
             bytes[0] == 0x42 && // B
             bytes[1] == 0x4D); // M
-    // A photo to reduce is decoded at the reduced size: the photo, its
-    // thumbnail and its blurhash all come from that one decode.
-    final reduceTo =
-        reduce && header != null && photoReducedSize(header) != null
-            ? photoMaxSide
-            : null;
-    if (header != null && !asPng) {
+    // A photo to reduce is decoded at exactly the size the attach dialog
+    // says it is sent at ([photoReducedSize], both sides given so the
+    // engine does not round one of them its own way): the photo, its
+    // thumbnail and its blurhash all come from that one decode, and the
+    // event's w and h are that size.
+    final reducedSize =
+        reduce && header != null ? photoReducedSize(header) : null;
+    final reduceTo = reducedSize == null ? null : photoMaxSide;
+    if (reducedSize != null) {
+      (targetWidth, targetHeight) = reducedSize;
+    } else if (header != null && !asPng) {
       final long = max(header.width, header.height);
-      final side = reduceTo ??
-          (wantsThumbnail(header.width, header.height)
-              ? thumbnailMaxSide
-              : min(blurhashSourceSide, long));
+      final side = wantsThumbnail(header.width, header.height)
+          ? thumbnailMaxSide
+          : min(blurhashSourceSide, long);
       if (side < long) {
         if (header.width >= header.height) {
           targetWidth = side;

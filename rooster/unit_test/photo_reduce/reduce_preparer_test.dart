@@ -55,7 +55,6 @@ void main() {
     expect(photoReducedSize(jpeg(4032, 3024)), (2560, 1920));
     expect(photoReducedSize(jpeg(4032, 3024, 6)), (1920, 2560));
     expect(photoReducedSize(jpeg(3024, 4032, 8)), (2560, 1920));
-    expect(photoReducedSize(jpeg(2561, 100)), (2560, 100));
     expect(photoReducedSize(jpeg(2560, 1920)), isNull);
     expect(photoReducedSize(jpeg(2000, 1500)), isNull);
     for (final mime in ["image/png", "image/webp", "image/gif", "image/bmp"]) {
@@ -72,7 +71,7 @@ void main() {
     final (prepared, engine, encoder, log) =
         await prepare(fakeJpegHeader(4032, 3024), width: 4032, height: 3024);
     expect(engine.calls.map((c) => (c.targetWidth, c.targetHeight)),
-        [(2560, null)]);
+        [(2560, 1920)]);
     expect(encoder.requests.single.reduceTo, photoMaxSide);
     expect(encoder.requests.single.maxSide, thumbnailMaxSide);
     expect((encoder.requests.single.width, encoder.requests.single.height),
@@ -98,7 +97,7 @@ void main() {
         width: 3024,
         height: 4032);
     expect(engine.calls.map((c) => (c.targetWidth, c.targetHeight)),
-        [(null, 2560)]);
+        [(1920, 2560)]);
     expect((prepared!.reduced!.width, prepared.reduced!.height), (1920, 2560));
   });
 

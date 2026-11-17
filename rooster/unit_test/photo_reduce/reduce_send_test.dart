@@ -91,7 +91,7 @@ void main() {
 
     final (content, uploaded) = await send(await attached(original));
 
-    expect(engine.decodes, [(2560, null)], reason: "one decode, at 2,560");
+    expect(engine.decodes, [(2560, 1920)], reason: "one decode, at 2,560");
     expect(harness.sdkImagePasses, 0);
     final info = content["info"] as Map<String, dynamic>;
     expect((info["w"], info["h"]), (2560, 1920));
@@ -175,7 +175,7 @@ void main() {
       expect((info["w"], info["h"]), (source.$1, source.$2));
       expect(log.spans.toList().single.steps.map((s) => s.name),
           isNot(contains(SpeedStep.reduce)));
-      expect(engine.decodes.single, isNot((2560, null)));
+      expect(engine.decodes.single, isNot((2560, 1920)));
     }
 
     test("a JPEG of 2,000 px", () async {

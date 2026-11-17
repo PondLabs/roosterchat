@@ -73,4 +73,17 @@ void main() {
     expect(tasks.where((t) => t > 100), isEmpty,
         reason: "long tasks (ms): $tasks");
   });
+
+  test("a 3:2 photo lying down: the size the dialog says", skip: skip,
+      () async {
+    final bytes = await canvasPhotoJpeg(3000, 2000);
+    final said = photoReducedSize(readImageHeader(bytes)!);
+    expect(said, (2560, 1707));
+    final prepared = await ImagePreparer(log: SpeedLog(frames: NoFrames()))
+        .prepare(bytes, reduce: true);
+    final reduced = prepared!.reduced!;
+    final header = readImageHeader(reduced.bytes)!;
+    expect((reduced.width, reduced.height), said);
+    expect((header.width, header.height), said);
+  });
 }

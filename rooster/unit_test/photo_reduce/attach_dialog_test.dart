@@ -6,13 +6,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart' as intl;
 import 'package:rooster/client/attachment.dart';
+import 'package:rooster/client/matrix/media/matrix_attachment_files.dart';
+import 'package:rooster/diagnostic/speed_log/speed_log.dart';
 import 'package:rooster/generated/intl/messages_all.dart';
 import 'package:rooster/utils/image/metadata/remove_image_metadata.dart';
+import 'package:rooster/utils/image/preparation/image_preparation.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 import '../image_metadata/attachment_processor_test.dart'
     show openDialog, waitFor;
-import '../media_prepare/fakes.dart' show fakeJpegHeader;
+import '../media_prepare/fakes.dart' show NoFrames, fakeJpegHeader;
+import '../media_prepare/send_harness.dart';
 import 'photos.dart';
 
 /// The attach dialog says the size a photo will be sent at, and attaches
@@ -102,6 +106,52 @@ void main() {
     expect(dialog.result!.data, photo);
     expect(dialog.result!.reducePhoto, isFalse);
   });
+
+  // A 3:2 photo lying down (a 24 MP camera's shape), one standing, and
+  // one whose reduced height is a rounding away from the next pixel: the
+  // size the dialog says is the size the event and the picture sent have.
+  for (final (width, height, said) in [
+    (3000, 2000, "2,560 × 1,707"),
+    (2000, 3000, "1,707 × 2,560"),
+    (2561, 1000, "2,560 × 1,000"),
+  ]) {
+    testWidgets("$width x $height: the dialog says $said, and that is sent",
+        (tester) async {
+      final original = cornerJpeg(width, height);
+      final dialog = await openDialog(tester, attachmentOf(original));
+      final sentence = "This photo will be sent at $said pixels. "
+          "To send it at full size, turn on \"Send original\".";
+      expect(find.text(sentence), findsOneWidget);
+      await tester.tap(find.text("Add File"));
+      await waitFor(tester, () => dialog.closed);
+      final attachment = dialog.result!;
+
+      // Send in the real client: created and closed inside runAsync.
+      final (info, uploaded) = (await tester.runAsync(() async {
+        final harness = await SendHarness.start(Stopwatch()..start());
+        try {
+          final preparer = ImagePreparer(log: SpeedLog(frames: NoFrames()));
+          final processed =
+              (await matrixFilesForAttachment(attachment, preparer: preparer))!;
+          await harness.room.sendFileEvent(processed.file,
+              thumbnail: processed.thumbnailFile);
+          return (
+            harness.transport.sentEvents.single["info"] as Map<String, dynamic>,
+            harness.transport.uploads.first.bytes,
+          );
+        } finally {
+          await harness.dispose();
+        }
+      }))!;
+      final shown = intl.NumberFormat.decimalPattern("en");
+      final eventSize =
+          "${shown.format(info["w"])} × ${shown.format(info["h"])}";
+      expect(eventSize, said, reason: "the event's w and h");
+      final sent = (await tester.runAsync(() => engineDecode(uploaded)))!;
+      expect("${shown.format(sent.$1)} × ${shown.format(sent.$2)}", said,
+          reason: "the picture sent");
+    });
+  }
 
   testWidgets("a photo picked by its path: the size from the file's start",
       (tester) async {
