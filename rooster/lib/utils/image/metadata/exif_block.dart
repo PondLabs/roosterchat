@@ -15,14 +15,15 @@ class ExifBlocks {
   const ExifBlocks(this.whole, {this.cut = false});
 
   /// Each whole block: the TIFF block, after the `Exif\0\0` of a JPEG
-  /// segment, and as stored in a PNG or WebP chunk (with the prefix some
-  /// writers add).
+  /// segment or the offset of a HEIF item, and as stored in a PNG or WebP
+  /// chunk (with the prefix some writers add).
   final List<Uint8List> whole;
 
   /// A block cut short by the end of the file, or one the walk could not
-  /// take out (larger than [maxExifBlock]), or a walk that broke before the
-  /// end (a segment or chunk running past the file, bytes where a marker
-  /// should be), where a block could hide past the break.
+  /// take out (larger than [maxExifBlock], or where a HEIF puts it out of
+  /// reach), or a walk that broke before the end (a segment, chunk or box
+  /// running past the file, bytes where a marker should be), where a block
+  /// could hide past the break.
   final bool cut;
 }
 
@@ -30,12 +31,13 @@ class ExifBlocks {
 /// a larger one elsewhere counts as cut.
 const int maxExifBlock = 4 << 20;
 
-/// The Exif blocks of a JPEG, PNG or WebP, found by walking its segment or
-/// chunk headers through
+/// The Exif blocks of a JPEG, PNG, WebP or HEIF (HEIC or AVIF of any
+/// brand), found by walking its segment, chunk or box headers through
 /// [read]: every APP1 `Exif` segment up to the EOI (the scans read through
 /// for the markers between them), every PNG `eXIf` chunk up to IEND, every
 /// WebP `EXIF` chunk up to the end of the file (each chunk followed by its
-/// padding byte when its size is odd, and past the end the RIFF declares).
+/// padding byte when its size is odd, and past the end the RIFF declares),
+/// and every HEIF item of type `Exif` in the top-level `meta` box.
 ///
 /// This is not a reader: it takes the blocks out, for when the Exif reader
 /// found nothing in them (see `readExifGps`), and says whether one may be
@@ -54,6 +56,9 @@ Future<ExifBlocks> findExifBlocks(ByteReader read) async {
       String.fromCharCodes(head, 0, 4) == "RIFF" &&
       String.fromCharCodes(head, 8, 12) == "WEBP") {
     return _webpExif(read);
+  }
+  if (head.length >= 12 && String.fromCharCodes(head, 4, 8) == "ftyp") {
+    return _heifExif(read, head);
   }
   return const ExifBlocks([]);
 }
@@ -199,4 +204,164 @@ Future<ExifBlocks> _webpExif(ByteReader read) async {
     }
     pos += 8 + size + (size & 1);
   }
+}
+
+/// The brands of a HEIF still or sequence (HEIC, AVIF and the others).
+const _heifBrands = {
+  "mif1", "mif2", "msf1", "miaf", "heic", "heix", "heim", "heis", "hevc", //
+  "hevx", "heif", "avif", "avis",
+};
+
+/// A box, header or field that runs past what holds it.
+class _Malformed implements Exception {
+  const _Malformed();
+}
+
+/// The big-endian unsigned integer of [size] bytes at [at] in [b].
+int _uint(Uint8List b, int at, int size) {
+  if (at < 0 || at + size > b.length) throw const _Malformed();
+  var value = 0;
+  for (var i = 0; i < size; i++) {
+    value = value * 256 + b[at + i];
+  }
+  return value;
+}
+
+/// The boxes in [b] from [from] to [to], as (type, body start, end).
+List<(String, int, int)> _boxes(Uint8List b, int from, int to) {
+  final out = <(String, int, int)>[];
+  var pos = from;
+  while (pos + 8 <= to) {
+    var size = _uint(b, pos, 4);
+    var body = pos + 8;
+    if (size == 1) {
+      size = _uint(b, pos + 8, 8);
+      body = pos + 16;
+    } else if (size == 0) {
+      size = to - pos;
+    }
+    if (size < body - pos || pos + size > to) throw const _Malformed();
+    out.add((String.fromCharCodes(b, pos + 4, pos + 8), body, pos + size));
+    pos += size;
+  }
+  return out;
+}
+
+Future<ExifBlocks> _heifExif(ByteReader read, Uint8List head) async {
+  final ftypSize = _uint(head, 0, 4);
+  final ftyp = await read(0, ftypSize > 4096 ? 0 : ftypSize);
+  if (ftyp.length < 16 || ftyp.length < ftypSize) return const ExifBlocks([]);
+  final brands = {
+    for (var at = 8; at + 4 <= ftypSize; at += at == 8 ? 8 : 4)
+      String.fromCharCodes(ftyp, at, at + 4),
+  };
+  if (brands.intersection(_heifBrands).isEmpty) return const ExifBlocks([]);
+  var pos = ftypSize;
+  while (true) {
+    final header = await read(pos, 16);
+    if (header.isEmpty) return const ExifBlocks([]); // no meta box
+    if (header.length < 8) return const ExifBlocks([], cut: true);
+    var size = _uint(header, 0, 4);
+    var body = 8;
+    if (size == 1 && header.length == 16) {
+      size = _uint(header, 8, 8);
+      body = 16;
+    }
+    final type = String.fromCharCodes(header, 4, 8);
+    // Size 0: the box runs to the end of the file.
+    if (size == 0) return ExifBlocks(const [], cut: type == "meta");
+    if (size < body) return const ExifBlocks([], cut: true);
+    if (type == "meta") {
+      final meta = await _whole(read, pos + body, size - body);
+      if (meta == null) return const ExifBlocks([], cut: true);
+      try {
+        return await _heifItems(read, meta);
+      } on _Malformed {
+        return const ExifBlocks([], cut: true);
+      }
+    }
+    pos += size;
+  }
+}
+
+/// The Exif items of a HEIF `meta` box (its body, [meta]): their ids from
+/// `iinf`, where they are from `iloc`.
+Future<ExifBlocks> _heifItems(ByteReader read, Uint8List meta) async {
+  final exifItems = <int>{};
+  var places = <int, (int, List<(int, int)>)>{};
+  for (final (type, body, end) in _boxes(meta, 4, meta.length)) {
+    if (type == "iinf") {
+      final count = _uint(meta, body, 1) == 0 ? 2 : 4;
+      for (final (type, at, end) in _boxes(meta, body + 4 + count, end)) {
+        final version = _uint(meta, at, 1);
+        if (type != "infe" || version < 2) continue; // no item_type before 2
+        final id = version == 2 ? 2 : 4;
+        final itemType = at + 4 + id + 2;
+        if (itemType + 4 > end) throw const _Malformed();
+        if (String.fromCharCodes(meta, itemType, itemType + 4) == "Exif") {
+          exifItems.add(_uint(meta, at + 4, id));
+        }
+      }
+    } else if (type == "iloc") {
+      places = _itemLocations(meta, body);
+    }
+  }
+  final blocks = <Uint8List>[];
+  for (final item in exifItems) {
+    // In the file (construction method 0), in extents of a known length.
+    final (method, extents) = places[item] ?? (-1, const <(int, int)>[]);
+    if (method != 0 || extents.isEmpty) return ExifBlocks(blocks, cut: true);
+    final data = BytesBuilder(copy: false);
+    for (final (offset, length) in extents) {
+      final bytes = length == 0 ? null : await _whole(read, offset, length);
+      if (bytes == null) return ExifBlocks(blocks, cut: true);
+      data.add(bytes);
+    }
+    // The item starts with the offset of the TIFF header after it.
+    final bytes = data.takeBytes();
+    final tiff = bytes.length < 4 ? -1 : 4 + _uint(bytes, 0, 4);
+    if (tiff < 0 || tiff > bytes.length) return ExifBlocks(blocks, cut: true);
+    blocks.add(Uint8List.sublistView(bytes, tiff));
+  }
+  return ExifBlocks(blocks);
+}
+
+/// Big-endian fields of [b], read one after another from [at].
+class _Fields {
+  _Fields(this.b, this.at);
+
+  final Uint8List b;
+  int at;
+
+  int next(int size) {
+    final value = _uint(b, at, size);
+    at += size;
+    return value;
+  }
+}
+
+/// The items an `iloc` box (its body at [at] in [b]) places, by id: their
+/// construction method and their extents, as (file offset, length).
+Map<int, (int, List<(int, int)>)> _itemLocations(Uint8List b, int at) {
+  final fields = _Fields(b, at);
+  final version = fields.next(4) >> 24;
+  final sizes = fields.next(2);
+  final offsetSize = sizes >> 12, lengthSize = sizes >> 8 & 0xF;
+  final baseSize = sizes >> 4 & 0xF, indexSize = version > 0 ? sizes & 0xF : 0;
+  final id = version < 2 ? 2 : 4;
+  final places = <int, (int, List<(int, int)>)>{};
+  for (var count = fields.next(id); count > 0; count--) {
+    final item = fields.next(id);
+    final method = version > 0 ? fields.next(2) & 0xF : 0;
+    fields.next(2); // data_reference_index
+    final base = fields.next(baseSize);
+    final extents = <(int, int)>[];
+    for (var n = fields.next(2); n > 0; n--) {
+      fields.next(indexSize);
+      final offset = fields.next(offsetSize);
+      extents.add((base + offset, fields.next(lengthSize)));
+    }
+    places[item] = (method, extents);
+  }
+  return places;
 }

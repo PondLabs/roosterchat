@@ -319,6 +319,56 @@ void main() {
     });
   });
 
+  group('a HEIF of a brand the Exif reader does not know', () {
+    final mif1 = fixture('exif_mif1.heic');
+    final heix = fixture('exif_heix.heic');
+    final noGps = fixture('exif_no_gps.heic');
+
+    test('the fixtures hold their Exif where a HEIF reader finds it', () async {
+      for (final file in [mif1, heix]) {
+        expect(await readerSeesGps(file), isFalse,
+            reason: 'the reader does not know the brand');
+        // Under the brand it knows, the Exif reader reads the same boxes.
+        final asHeic = Uint8List.fromList(file)
+          ..setRange(8, 12, 'heic'.codeUnits);
+        expect(await readerSeesGps(asHeic), isTrue);
+      }
+    });
+
+    for (final (brand, file) in [('mif1', mif1), ('heix', heix)]) {
+      test('$brand with GPS: the location question', () async {
+        expect(await answer(file), LocationAnswer.found);
+      });
+
+      test('$brand with its Exif cut short: the unreadable question', () async {
+        final cut = file.sublist(0, file.length - 30);
+        expect((await findExifBlocks(bytesReader(cut))).cut, isTrue);
+        expect(await answer(cut), LocationAnswer.unreadable);
+      });
+
+      test('$brand with an Exif that does not read: the unreadable question',
+          () async {
+        final broken = Uint8List.fromList(file);
+        final at = String.fromCharCodes(broken).indexOf('Exif\x00\x00MM');
+        broken.setRange(at + 6, at + 8, 'XX'.codeUnits);
+        expect(await answer(broken), LocationAnswer.unreadable);
+      });
+    }
+
+    test('without GPS, 32-bit ids and a base offset: no question', () async {
+      final blocks = await findExifBlocks(bytesReader(noGps));
+      expect(blocks.whole, hasLength(1));
+      expect(readExifOrientation(blocks.whole.single), 6);
+      expect(await answer(noGps), LocationAnswer.none);
+    });
+
+    test('a video (no HEIF brand) is not walked', () async {
+      final mp4 = Uint8List.fromList(mif1)..setRange(8, 12, 'isom'.codeUnits);
+      mp4.setRange(16, 24, 'isomiso2'.codeUnits);
+      expect((await findExifBlocks(bytesReader(mp4))).whole, isEmpty);
+    });
+  });
+
   group('readExifGps', () {
     Uint8List withIfd1(int entryTag, {int? ifd1}) {
       // The minimal block (IFD0: the orientation), its next-IFD offset
