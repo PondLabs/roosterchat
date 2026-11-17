@@ -1500,6 +1500,11 @@ class Room {
           sendingQueue.remove(completer);
           sendingQueueEventsByTxId.remove(messageID);
           if (requestLeft) _sendRequestEnded(messageID); // ROOSTER
+          // Cancelled while its failure was stored: what was stored is // ROOSTER
+          // taken away again, and nothing of it stays. // ROOSTER
+          if (isSendCancelled(messageID)) { // ROOSTER
+            return _sendCancelled(completer, messageID); // ROOSTER
+          } // ROOSTER
           if (e is EventTooLarge ||
               (e is MatrixException && e.error == MatrixError.M_FORBIDDEN)) {
             rethrow;
