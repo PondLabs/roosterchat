@@ -5,6 +5,7 @@ import 'package:exif/exif.dart';
 import 'package:rooster/cache/file_provider.dart';
 import 'package:rooster/diagnostic/speed_log/file_send_trace.dart';
 import 'package:rooster/utils/image/image_header.dart';
+import 'package:rooster/utils/image/metadata/exif_block.dart';
 import 'package:rooster/utils/image/preparation/image_preparation.dart';
 import 'package:rooster/utils/mime.dart';
 import 'package:rooster/utils/network/upload_progress.dart';
@@ -12,6 +13,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import 'package:mime/mime.dart' as mime;
+
+/// What a file's metadata says about where it was taken.
+enum LocationAnswer {
+  /// Nothing: no location in its metadata, or no metadata (a file that is
+  /// not a picture has none the reader knows). Sent without a question.
+  none,
+
+  /// Its metadata holds GPS tags.
+  found,
+
+  /// It has metadata the reader could not read: it may hold a location.
+  unreadable,
+}
 
 abstract class Attachment {
   late String? name;
@@ -44,20 +58,21 @@ class PendingFileAttachment {
   /// Its send from the composer, once Send was pressed.
   AttachmentSend? sending;
 
-  Future<bool>? _location;
-  bool? _hasLocation;
+  Future<LocationAnswer>? _location;
+  LocationAnswer? _locationAnswer;
 
-  /// Whether the file's metadata says where it was taken (GPS tags): the
-  /// question asked before sending it. Read once, from the bytes in memory
-  /// or from the file on disk, which the Exif reader reads only as far as
-  /// it needs (12 bytes for a format that cannot hold Exif). Started when
-  /// the file is attached, so Send usually finds the answer known.
-  Future<bool> locationCheck() => _location ??= _readLocation();
+  /// What the file's metadata says about where it was taken (GPS tags):
+  /// Send asks before sending a file whose answer is not
+  /// [LocationAnswer.none]. Read once, from the bytes in memory or from the
+  /// file on disk, which the Exif reader reads only as far as it needs (12
+  /// bytes for a format that cannot hold Exif). Started when the file is
+  /// attached, so Send usually finds the answer known.
+  Future<LocationAnswer> locationCheck() => _location ??= _readLocation();
 
   /// [locationCheck]'s answer, null until it is known.
-  bool? get hasLocation => _hasLocation;
+  LocationAnswer? get location => _locationAnswer;
 
-  Future<bool> _readLocation() async {
+  Future<LocationAnswer> _readLocation() async {
     Map<String, IfdTag> exif = const {};
     try {
       final data = this.data;
@@ -67,15 +82,59 @@ class PendingFileAttachment {
         exif = await readExifFromFile(File(path!));
       }
     } catch (_) {
-      // Metadata the reader cannot make sense of says nothing about where
-      // the file was taken; the file is sent as before.
+      // Metadata the reader cannot make sense of may still say where the
+      // file was taken, to another reader: Send asks, as it does for a
+      // location.
+      return _locationAnswer = LocationAnswer.unreadable;
     }
-    return _hasLocation = exif.keys.any((e) => e.toLowerCase().contains("gps"));
+    if (exif.keys.any((e) => e.toLowerCase().contains("gps"))) {
+      return _locationAnswer = LocationAnswer.found;
+    }
+    // The reader can give up without an error and find nothing in a block
+    // another reader reads (behind a long segment, after the tables, past
+    // an odd-sized WebP chunk), or read the start of a block cut short
+    // before its GPS. Both are asked about: in doubt, Send asks.
+    final block = await _exifBlock();
+    if (block == ExifBlock.cut || (block == ExifBlock.whole && exif.isEmpty)) {
+      return _locationAnswer = LocationAnswer.unreadable;
+    }
+    return _locationAnswer = LocationAnswer.none;
   }
 
-  Future<void> resolve() async {
-    if (data != null) return;
+  /// The file's Exif block (see [findExifBlock]). A file that is there but
+  /// cannot be looked into counts as one with a block cut short; one that
+  /// is gone has nothing to send.
+  Future<ExifBlock> _exifBlock() async {
+    final data = this.data;
+    if (data != null) return findExifBlock(bytesReader(data));
+    if (path == null || !await File(path!).exists()) return ExifBlock.none;
+    RandomAccessFile? file;
+    try {
+      file = await File(path!).open();
+      final opened = file;
+      return await findExifBlock((offset, length) async {
+        await opened.setPosition(offset);
+        return opened.read(length);
+      });
+    } catch (_) {
+      return ExifBlock.cut;
+    } finally {
+      await file?.close();
+    }
+  }
 
+  Future<void>? _reading;
+
+  /// Reads the file into [data] when only its path is known. One read at
+  /// a time: a call while the file is being read (Send pressed while the
+  /// attachment is still read) waits for that read instead of starting
+  /// another, so the picture is read and prepared once.
+  Future<void> resolve() {
+    if (data != null) return Future.value();
+    return _reading ??= _read().whenComplete(() => _reading = null);
+  }
+
+  Future<void> _read() async {
     if (path != null) {
       var file = File(path!);
       if (await file.exists()) {

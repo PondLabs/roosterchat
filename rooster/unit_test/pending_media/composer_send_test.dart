@@ -68,7 +68,7 @@ void main() {
     fakeClock(tester);
     await tester.pumpWidget(chatApp(room));
     final photo = await attachPhoto(tester);
-    expect(photo.hasLocation, isFalse);
+    expect(photo.location, LocationAnswer.none);
     expect(engine.calls, hasLength(1), reason: 'preparing since attached');
 
     await typeAndSend(tester, 'look at this');
@@ -121,7 +121,7 @@ void main() {
     final photo = PendingFileAttachment(name: 'beach.jpg', data: gps);
     chatState(tester).addAttachment(photo);
     await tester.pump();
-    expect(photo.hasLocation, isTrue);
+    expect(photo.location, LocationAnswer.found);
 
     await typeAndSend(tester, 'where I was');
     // The dialog opens (the timeline's spinner never lets pumpAndSettle end).

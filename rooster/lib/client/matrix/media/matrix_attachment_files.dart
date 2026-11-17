@@ -10,16 +10,12 @@
 /// `MatrixImageFile`, which the SDK sends as it is.
 library;
 
-import 'dart:ui';
-
-import 'package:flutter/painting.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/matrix/matrix_attachment.dart';
 import 'package:rooster/client/matrix/media/matrix_file_send.dart';
 import 'package:rooster/utils/image/image_header.dart';
 import 'package:rooster/utils/image/preparation/image_preparation.dart';
-import 'package:rooster/utils/image_utils.dart';
 import 'package:rooster/utils/mime.dart';
 
 /// A picture sent without a thumbnail: `m.image` with its displayed size
@@ -76,13 +72,11 @@ Future<MatrixProcessedAttachment?> matrixFilesForAttachment(
   final isImage = Mime.imageTypes.contains(attachment.mimeType);
   if (isImage) {
     prepared = await attachment.imagePreparation(preparer: preparer);
-    if (prepared != null && attachment.mimeType == "image/bmp") {
-      // Sent as PNG, as before: other clients do not all draw BMP.
-      final image =
-          await ImageUtils.imageProviderToImage(MemoryImage(attachment.data!));
-      final png = await image.toByteData(format: ImageByteFormat.png);
-      image.dispose();
-      attachment.data = png!.buffer.asUint8List();
+    final png = prepared?.png;
+    if (png != null && attachment.mimeType == "image/bmp") {
+      // Sent as PNG, as before: other clients do not all draw BMP. The
+      // preparation made it from its one decode.
+      attachment.data = png;
       attachment.mimeType = "image/png";
     }
   }

@@ -311,8 +311,19 @@ abstract final class SpeedOutcome {
   /// before its event's request left.
   static const cancelled = 'cancelled';
 
+  /// A picture's preparation whose thumbnail encoder failed: the picture
+  /// is sent with its size, without a thumbnail and a blurhash.
+  static const encodeFailed = 'encode_failed';
+
   /// Every outcome.
-  static const all = {ok, failed, incomplete, abandoned, cancelled};
+  static const all = {
+    ok,
+    failed,
+    incomplete,
+    abandoned,
+    cancelled,
+    encodeFailed,
+  };
 }
 
 /// What a request's `error=` says: the kind of failure, by a fixed name.

@@ -99,6 +99,13 @@ class ChatState extends State<Chat> {
       desc: "Asked before sending a file whose metadata says where it was "
           "taken, with the file's name");
 
+  String messageChatFileMetadataUnreadable(String name) => Intl.message(
+      "Couldn't read the metadata of file '$name': it may hold location data. Are you sure you want to send?",
+      name: "messageChatFileMetadataUnreadable",
+      args: [name],
+      desc: "Asked before sending a file whose metadata could not be read, "
+          "so it may say where the file was taken, with the file's name");
+
   String errorChatDropNotAttached(String files) => Intl.message(
       "Could not attach $files: folders and unreadable files can't be uploaded.",
       name: "errorChatDropNotAttached",
@@ -253,7 +260,8 @@ class ChatState extends State<Chat> {
 
   /// Send: copies what the message is (see [ComposerSend]) and sends it.
   ///
-  /// When every file's location answer is known and none has one, the
+  /// When every file's location answer is known and is
+  /// [LocationAnswer.none], the
   /// composer is cleared and the text sent before this returns
   /// ([MessageInputSendResult.success]). Otherwise the composer keeps its
   /// text and files ([MessageInputSendResult.pending]) while the answer is
@@ -293,7 +301,8 @@ class ChatState extends State<Chat> {
       sendPressed: sendPressed,
     );
 
-    if (send.attachments.every((file) => file.hasLocation == false)) {
+    if (send.attachments
+        .every((file) => file.location == LocationAnswer.none)) {
       _send(send);
       return MessageInputSendResult.success;
     }
@@ -302,13 +311,14 @@ class ChatState extends State<Chat> {
   }
 
   /// Reads the files' location answers that are not known yet and asks
-  /// about each file that has one, then sends [send] or, declined, leaves
-  /// the composer as it is.
+  /// about each file that has a location or metadata that could not be
+  /// read, then sends [send] or, declined, leaves the composer as it is.
   Future<void> _askThenSend(ComposerSend send) async {
     setState(() => processing = true);
     try {
       for (final file in send.attachments) {
-        if (!await file.locationCheck()) continue;
+        final location = await file.locationCheck();
+        if (location == LocationAnswer.none) continue;
         if (!mounted) return;
         final fileName = file.name ?? labelChatFileFallbackName;
         final confirmation = await AdaptiveDialog.confirmation(context,
@@ -316,7 +326,9 @@ class ChatState extends State<Chat> {
             confirmationText: promptChatSendFile,
             cancelText: promptChatDontSendFile,
             dangerous: true,
-            prompt: messageChatFileHasLocation(fileName));
+            prompt: location == LocationAnswer.found
+                ? messageChatFileHasLocation(fileName)
+                : messageChatFileMetadataUnreadable(fileName));
         if (confirmation != true) return;
       }
     } catch (e, s) {

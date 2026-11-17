@@ -17,8 +17,10 @@
 ///    (`readImageHeader`), no decode;
 /// 2. decodes once with the engine (`ui.instantiateImageCodec`), already at
 ///    the thumbnail's size ([thumbnailMaxSide] on the long side), or at the
-///    blurhash's ([blurhashSourceSide]) when no thumbnail is due; the codec
-///    and image are disposed right after the pixels are read;
+///    blurhash's ([blurhashSourceSide]) when no thumbnail is due; a BMP at
+///    full size, and the engine encodes that decode as the PNG it is sent
+///    as ([ImagePreparation.png]); the codec and image are disposed right
+///    after the pixels are read;
 /// 3. encodes the thumbnail (JPEG at quality 80, PNG with transparency)
 ///    and the blurhash with [ThumbnailEncoder]: a background isolate on
 ///    native, the browser's canvas on the web.
@@ -27,7 +29,8 @@
 /// the others wait their turn. A [PreparationCancel] drops a preparation
 /// nobody needs any more (an attachment removed before Send): out of the
 /// queue before its turn, or its result thrown away once it has started. Each preparation is an `image_prepare` span
-/// in the speed log, with its steps and sizes (no names, no content).
+/// in the speed log, with its steps and sizes (no names, no content), and
+/// the outcome `encode_failed` when the thumbnail encoder failed.
 library;
 
 import 'dart:async';
@@ -65,6 +68,7 @@ class ImagePreparation {
     this.mimeType,
     this.blurhash,
     this.thumbnail,
+    this.png,
   });
 
   /// The size the picture is shown at: the header's, with the sides
@@ -87,6 +91,12 @@ class ImagePreparation {
   /// its long side, smaller than [thumbnailMinSourceBytes], animated, or
   /// when the encoder failed (the blurhash is then null too).
   final PreparedThumbnail? thumbnail;
+
+  /// A BMP as a PNG, encoded by the engine from the preparation's one
+  /// decode (at full size for a BMP): it is sent as this PNG, since other
+  /// clients do not all draw BMP. Null for any other picture, and when the
+  /// engine could not encode it.
+  final Uint8List? png;
 
   bool get animated => frames > 1;
 }
@@ -166,8 +176,12 @@ class ImagePreparer {
         return null;
       }
       span.finish(
-          outcome: result == null ? SpeedOutcome.failed : SpeedOutcome.ok);
-      return result;
+          outcome: switch (result) {
+        null => SpeedOutcome.failed,
+        (_, encodeFailed: true) => SpeedOutcome.encodeFailed,
+        _ => SpeedOutcome.ok,
+      });
+      return result?.$1;
     } catch (_) {
       span.finish(outcome: SpeedOutcome.failed);
       return null;
@@ -201,7 +215,8 @@ class ImagePreparer {
     }
   }
 
-  Future<ImagePreparation?> _prepare(
+  /// The preparation, and whether its thumbnail encoder failed.
+  Future<(ImagePreparation, {bool encodeFailed})?> _prepare(
       Uint8List bytes, SpeedSpan span, PreparationCancel? cancel) async {
     final header = readImageHeader(bytes);
     span.mark(SpeedStep.header, values: {SpeedValue.bytes: bytes.length});
@@ -213,7 +228,16 @@ class ImagePreparer {
         max(width, height) > thumbnailMaxSide &&
         bytes.length >= thumbnailMinSourceBytes;
     int? targetWidth, targetHeight;
-    if (header != null) {
+    // A BMP is sent as a PNG of all of it: decoded at full size, and the
+    // PNG made from that same decode. Known by its "BM" too when the
+    // header reader does not know its info header (OS/2 2.x, 16 to 39
+    // bytes), which the engine still decodes.
+    final asPng = header?.mimeType == "image/bmp" ||
+        (header == null &&
+            bytes.length >= 2 &&
+            bytes[0] == 0x42 && // B
+            bytes[1] == 0x4D); // M
+    if (header != null && !asPng) {
       final long = max(header.width, header.height);
       final side = wantsThumbnail(header.width, header.height)
           ? thumbnailMaxSide
@@ -227,11 +251,11 @@ class ImagePreparer {
       }
     }
 
-    final decoded = await _decode(bytes, targetWidth, targetHeight);
+    final decoded = await _decode(bytes, targetWidth, targetHeight, png: asPng);
     // Dropped while it decoded: the codec and image are already disposed,
     // and nothing is encoded.
     if (decoded == null || cancel?.isCancelled == true) return null;
-    final (rgba, drawnWidth, drawnHeight, frames) = decoded;
+    final (rgba, drawnWidth, drawnHeight, frames, png) = decoded;
     span.mark(SpeedStep.decode, values: {
       SpeedValue.width: drawnWidth,
       SpeedValue.height: drawnHeight,
@@ -244,6 +268,7 @@ class ImagePreparer {
     final thumbnail = frames <= 1 && wantsThumbnail(width, height);
 
     ThumbnailResult encoded;
+    var encodeFailed = false;
     try {
       encoded = await _encoder.encode(ThumbnailRequest(
         rgba: rgba,
@@ -256,6 +281,7 @@ class ImagePreparer {
       // The picture decoded: it still goes as a picture, with its size,
       // only without a thumbnail and a blurhash.
       encoded = const ThumbnailResult();
+      encodeFailed = true;
     }
     span.mark(SpeedStep.encode, values: {
       if (encoded.thumbnail != null) ...{
@@ -265,21 +291,27 @@ class ImagePreparer {
       },
     });
 
-    return ImagePreparation(
-      width: width,
-      height: height,
-      frames: frames,
-      mimeType: header?.mimeType,
-      blurhash: encoded.blurhash,
-      thumbnail: encoded.thumbnail,
+    return (
+      ImagePreparation(
+        width: width,
+        height: height,
+        frames: frames,
+        mimeType: header?.mimeType,
+        blurhash: encoded.blurhash,
+        thumbnail: encoded.thumbnail,
+        png: png,
+      ),
+      encodeFailed: encodeFailed,
     );
   }
 
-  /// The one decode: the first frame's straight RGBA, its size, and how
-  /// many frames there are. The codec and the image are disposed whatever
-  /// happens.
-  Future<(Uint8List, int, int, int)?> _decode(
-      Uint8List bytes, int? targetWidth, int? targetHeight) async {
+  /// The one decode: the first frame's straight RGBA, its size, how many
+  /// frames there are, and the frame as a PNG when [png] (null when the
+  /// engine could not encode it). The codec and the image are disposed
+  /// whatever happens.
+  Future<(Uint8List, int, int, int, Uint8List?)?> _decode(
+      Uint8List bytes, int? targetWidth, int? targetHeight,
+      {required bool png}) async {
     ui.Codec? codec;
     ui.Image? image;
     try {
@@ -289,11 +321,22 @@ class ImagePreparer {
       final data =
           await image.toByteData(format: ui.ImageByteFormat.rawStraightRgba);
       if (data == null) return null;
+      Uint8List? encoded;
+      if (png) {
+        try {
+          final out = await image.toByteData(format: ui.ImageByteFormat.png);
+          encoded =
+              out?.buffer.asUint8List(out.offsetInBytes, out.lengthInBytes);
+        } catch (_) {
+          // Sent as the BMP it is.
+        }
+      }
       return (
         data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
         image.width,
         image.height,
         codec.frameCount,
+        encoded,
       );
     } catch (_) {
       return null;

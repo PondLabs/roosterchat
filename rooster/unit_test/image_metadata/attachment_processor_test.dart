@@ -8,11 +8,14 @@ import 'package:intl/intl.dart' as intl;
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/generated/intl/messages_all.dart';
 import 'package:rooster/ui/organisms/attachment_processor/attachment_processor.dart';
+import 'package:rooster/utils/image/metadata/exif_orientation.dart';
 import 'package:rooster/utils/image/metadata/remove_image_metadata.dart';
 import 'package:tiamat/config/style/theme_extensions.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
-import 'remove_image_metadata_test.dart' show expectNoMetadata;
+import 'fallback_size_cap_test.dart' show enginePixels, fallbackAt;
+import 'remove_image_metadata_test.dart'
+    show animatedWebpWithInFirstFrame, expectNoMetadata, riffChunk;
 
 Uint8List fixture(String name) =>
     File('unit_test/fixtures/image_metadata/$name').readAsBytesSync();
@@ -153,6 +156,26 @@ void main() {
     expect(dialog.result!.mimeType, "image/jpeg");
   });
 
+  testWidgets(
+      "\"Add File\" attaches the truncated JPEG re-encoded at quality 70, "
+      "the step it ends at", (tester) async {
+    final attachment = jpeg("truncated_decodable.jpg");
+    expect(attachment.data, hasLength(2792));
+    // No step fits in its 2,792 bytes: the fallback ends at quality 70.
+    final expected = (await tester.runAsync(
+        () async => fallbackAt(await enginePixels(attachment.data!), 70)))!;
+    final dialog = await openDialog(tester, attachment);
+
+    await tester.tap(find.text("Add File"));
+    await waitFor(tester, () => dialog.closed);
+
+    expect(dialog.closed, isTrue);
+    expect(dialog.result!.data, expected);
+    expect(dialog.result!.size, expected.length);
+    expect(dialog.result!.name, "truncated_decodable.jpg");
+    expect(dialog.result!.mimeType, "image/jpeg");
+  });
+
   testWidgets("\"Add File\" attaches the rewritten picture", (tester) async {
     final attachment = jpeg("gps_exif.jpg");
     final dialog = await openDialog(tester, attachment);
@@ -231,7 +254,9 @@ void main() {
       "será anexado. Para anexá-la como está, ative \"Enviar original\".";
 
   Future<void> checkAnimationLost(WidgetTester tester,
-      {required String addFile, required String animationLost}) async {
+      {required String addFile,
+      required String animationLost,
+      required String attachFirstFrame}) async {
     // The animated fixture cut short: it does not parse, and the engine
     // still decodes its 3 frames, of which the re-encode keeps one.
     final webp = fixture("animated_exif.webp");
@@ -249,8 +274,11 @@ void main() {
     await waitFor(tester, () => find.text(animationLost).evaluate().isNotEmpty);
     expect(find.text(animationLost), findsOneWidget);
     expect(dialog.closed, isFalse, reason: "the warning is read first");
+    // The button now says what the second tap attaches.
+    expect(find.text(addFile), findsNothing);
+    expect(find.text(attachFirstFrame), findsOneWidget);
 
-    await tester.tap(find.text(addFile));
+    await tester.tap(find.text(attachFirstFrame));
     await waitFor(tester, () => dialog.closed, tries: 10);
     expect(dialog.closed, isTrue);
     expect(dialog.result!.name, "party.jpg");
@@ -261,7 +289,9 @@ void main() {
   testWidgets("an animation the fallback flattens is attached after a warning",
       (tester) async {
     await checkAnimationLost(tester,
-        addFile: "Add File", animationLost: animationLostEn);
+        addFile: "Add File",
+        animationLost: animationLostEn,
+        attachFirstFrame: "Attach first frame");
   });
 
   testWidgets("the same in Portuguese, with the animation warning",
@@ -270,8 +300,33 @@ void main() {
     intl.Intl.defaultLocale = "pt";
     addTearDown(() => intl.Intl.defaultLocale = null);
     await checkAnimationLost(tester,
-        addFile: "Adicionar arquivo", animationLost: animationLostPt);
+        addFile: "Adicionar arquivo",
+        animationLost: animationLostPt,
+        attachFirstFrame: "Anexar o primeiro quadro");
   });
+
+  for (final (label, inner) in [
+    ("an EXIF", riffChunk("EXIF", minimalOrientationTiff(6))),
+    ("an ANMF", riffChunk("ANMF", animatedFirstFramePayload())),
+  ]) {
+    testWidgets("an animation with $label inside a frame gets the warning",
+        (tester) async {
+      final webp = animatedWebpWithInFirstFrame(inner);
+      final dialog = await openDialog(
+          tester,
+          PendingFileAttachment(
+              name: "party.webp",
+              data: webp,
+              size: webp.length,
+              mimeType: "image/webp"));
+
+      await tester.tap(find.text("Add File"));
+      await waitFor(
+          tester, () => find.text(animationLostEn).evaluate().isNotEmpty);
+      expect(find.text(animationLostEn), findsOneWidget);
+      expect(dialog.closed, isFalse, reason: "the warning is read first");
+    });
+  }
 
   testWidgets("\"Send original\" after the warning sends the animation",
       (tester) async {
@@ -291,6 +346,7 @@ void main() {
     await tester.tap(find.byType(tiamat.Switch));
     await tester.pumpAndSettle();
     expect(find.text(animationLostEn), findsNothing);
+    expect(find.text("Attach first frame"), findsNothing);
     await tester.tap(find.text("Add File"));
     await tester.pumpAndSettle();
 
@@ -298,4 +354,17 @@ void main() {
     expect(dialog.result!.data, cut);
     expect(dialog.result!.name, "party.webp");
   });
+}
+
+/// The first frame's ANMF payload of the animated fixture.
+List<int> animatedFirstFramePayload() {
+  final webp = fixture("animated_exif.webp");
+  final data = ByteData.sublistView(webp);
+  var pos = 12;
+  while (String.fromCharCodes(webp, pos, pos + 4) != "ANMF") {
+    final size = data.getUint32(pos + 4, Endian.little);
+    pos += 8 + size + (size & 1);
+  }
+  final size = data.getUint32(pos + 4, Endian.little);
+  return webp.sublist(pos + 8, pos + 8 + size);
 }

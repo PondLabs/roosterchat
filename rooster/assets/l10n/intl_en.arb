@@ -4029,7 +4029,7 @@
   },
   "labelAttachmentAnimationNotKept": "The animation wasn't kept: only its first frame will be attached. To attach it as it is, turn on \"Send original\".",
   "@labelAttachmentAnimationNotKept": {
-    "description": "Shown in the dialog that previews a file before it is attached, when an animated image could not be read well enough to remove its metadata without decoding it: the picture without metadata is only its first frame. \"Add File\" attaches that frame; the \"Send original (keeps metadata)\" switch attaches the file as it is",
+    "description": "Shown in the dialog that previews a file before it is attached, when an animated image could not be read well enough to remove its metadata without decoding it: the picture without metadata is only its first frame. The button below it, now \"Attach first frame\", attaches that frame; the \"Send original (keeps metadata)\" switch attaches the file as it is",
     "type": "text",
     "placeholders": {}
   },
@@ -4042,6 +4042,12 @@
   "promptChatAddFile": "Add File",
   "@promptChatAddFile": {
     "description": "Button at the bottom of the dialog that previews a file before it is attached to a message: attaches it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptAttachmentAttachFirstFrame": "Attach first frame",
+  "@promptAttachmentAttachFirstFrame": {
+    "description": "Button at the bottom of the dialog that previews a file before it is attached, in place of \"Add File\" once the dialog has said an animation was not kept: attaches the animation's first frame, without its metadata",
     "type": "text",
     "placeholders": {}
   },
@@ -4466,6 +4472,14 @@
   "messageChatFileHasLocation": "Location data was detected in file '{name}', are you sure you want to send?",
   "@messageChatFileHasLocation": {
     "description": "Asked before sending a file whose metadata says where it was taken, with the file's name",
+    "type": "text",
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "messageChatFileMetadataUnreadable": "Couldn't read the metadata of file '{name}': it may hold location data. Are you sure you want to send?",
+  "@messageChatFileMetadataUnreadable": {
+    "description": "Asked before sending a file whose metadata could not be read, so it may say where the file was taken, with the file's name",
     "type": "text",
     "placeholders": {
       "name": {}
