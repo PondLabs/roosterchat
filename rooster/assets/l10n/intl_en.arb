@@ -3421,6 +3421,18 @@
     "type": "text",
     "placeholders": {}
   },
+  "promptCancelPhotoUpload": "Cancel send",
+  "@promptCancelPhotoUpload": {
+    "description": "Button under a photo whose message is already in the room while the photo itself is still uploading: stops the upload and takes the message back",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPhotoLeftInRoom": "The photo didn't upload, and this message couldn't be deleted",
+  "@labelPhotoLeftInRoom": {
+    "description": "Under a photo message of yours that is in the room but whose photo never finished uploading, when the app could not take the message back: the others see it without its picture",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelPendingFilePreparing": "Preparing",
   "@labelPendingFilePreparing": {
     "description": "Under a file just sent from the composer, while the app gets it ready to upload (reads it, makes the picture's thumbnail)",

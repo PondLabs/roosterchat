@@ -34,6 +34,10 @@ class AsyncTransport extends OnlyUsTransport {
   Future<http.StreamedResponse?> Function(Uint8List body, int attempt)? onPut;
   int pendingLimit = 5;
   bool holdPuts = false;
+
+  /// A held upload takes only its body's first piece until released, so
+  /// the client counts it as partway.
+  bool holdPartway = false;
   bool failRedacts = false;
   Completer<void> releasePuts = Completer<void>();
 
@@ -88,9 +92,22 @@ class AsyncTransport extends OnlyUsTransport {
       final segments = request.url.pathSegments;
       final mxc = 'mxc://${segments[segments.length - 2]}/${segments.last}'
           .toLowerCase();
-      final body = await request.finalize().toBytes();
-      puts.add(body);
-      log.add('PUT upload ${part(body.length)}');
+      final pieces = StreamIterator(request.finalize());
+      final taken = BytesBuilder(copy: false);
+      Future<Uint8List> rest() async {
+        while (await pieces.moveNext()) {
+          taken.add(pieces.current);
+        }
+        return taken.takeBytes();
+      }
+
+      final expected = request.contentLength;
+      if (holdPuts && holdPartway && expected != null && expected > 65536) {
+        if (await pieces.moveNext()) taken.add(pieces.current);
+      }
+      final early = holdPuts && holdPartway ? null : await rest();
+      final size = early?.length ?? expected ?? 0;
+      log.add('PUT upload ${part(size)}');
       openUploads++;
       mostOpenUploads = math.max(mostOpenUploads, openUploads);
       try {
@@ -101,12 +118,18 @@ class AsyncTransport extends OnlyUsTransport {
               if (!aborted.isCompleted) aborted.complete();
             }));
           }
+          // Counted while held; an aborted one stays counted.
+          puts.add(Uint8List(0));
           await Future.any([aborted.future, releasePuts.future]);
           if (aborted.isCompleted) {
             abortedPuts++;
+            await pieces.cancel();
             throw http.RequestAbortedException(request.url);
           }
+          puts.removeLast();
         }
+        final body = early ?? await rest();
+        puts.add(body);
         final attempt = puts.where((p) => p.length == body.length).length;
         final answer = await onPut?.call(body, attempt);
         if (answer != null && answer.statusCode != 200) return answer;

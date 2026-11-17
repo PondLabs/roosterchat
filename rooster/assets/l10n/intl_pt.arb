@@ -513,6 +513,8 @@
   "labelSoundboardTrimLength": "Duração {length}",
   "labelSoundboardTrimRange": "{start} – {end} de {total} · arraste as bordas para cortar o início ou o fim, e o meio para mover a seleção (máx. {max})",
   "tooltipStreamDebugInfoMove": "Clique para mover para o próximo canto",
+  "promptCancelPhotoUpload": "Cancelar envio",
+  "labelPhotoLeftInRoom": "A foto não subiu, e não foi possível apagar esta mensagem",
   "labelPendingFilePreparing": "Preparando",
   "labelPendingFileUploading": "Enviando arquivo",
   "labelPendingFileSendingEvent": "Enviando mensagem",
