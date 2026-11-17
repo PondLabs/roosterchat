@@ -1,8 +1,9 @@
-/// The encryption of a file's attachment piece by piece, as the Matrix SDK
-/// encrypts one whole (`encryptFile`): AES-256 in counter mode with
-/// vodozemac's counter (`Ctr64BE`), and the SHA-256 of every encrypted
-/// byte. Pure Dart, so it runs in any isolate (see `disk_file_source.dart`,
-/// which runs it in one of its own).
+/// The encryption of a file's attachment piece by piece: AES-256 in
+/// counter mode (pointycastle's `CTRStreamCipher`, which encrypts as
+/// vodozemac's `aes_ctr` does when the counter starts at zero, as the
+/// Matrix spec has it), and the SHA-256 of every encrypted byte. Pure Dart,
+/// so it runs in any isolate (see `disk_file_source.dart`, which runs it in
+/// one of its own).
 library;
 
 import 'dart:convert';
@@ -10,50 +11,8 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
-import 'package:pointycastle/export.dart' show AESEngine, KeyParameter;
-
-/// AES-256-CTR as vodozemac's `aes_ctr` applies it: the iv's first 8
-/// bytes stay as they are, its last 8 are a big-endian count of 16-byte
-/// blocks that wraps at 2^64. [apply] goes on where the last call stopped,
-/// so pieces of any size encrypt as the whole would.
-class AesCtr64 {
-  AesCtr64(Uint8List key, Uint8List iv) : _counter = Uint8List.fromList(iv) {
-    if (key.length != 32 || iv.length != 16) {
-      throw ArgumentError('AES-256-CTR takes a 32-byte key and a 16-byte iv');
-    }
-    _aes.init(true, KeyParameter(key));
-  }
-
-  /// The blocks encrypted in this isolate, every cipher together: a test
-  /// reads it to know where the work was done.
-  static int blocksHere = 0;
-
-  final _aes = AESEngine();
-  final Uint8List _counter;
-  final _keystream = Uint8List(16);
-  int _used = 16;
-
-  /// Encrypts (or decrypts) [bytes] in place.
-  void apply(Uint8List bytes) {
-    for (var i = 0; i < bytes.length; i++) {
-      if (_used == 16) {
-        _aes.processBlock(_counter, 0, _keystream, 0);
-        blocksHere++;
-        _next();
-        _used = 0;
-      }
-      bytes[i] ^= _keystream[_used++];
-    }
-  }
-
-  /// The next block's counter: the low 64 bits, wrapping.
-  void _next() {
-    for (var i = 15; i >= 8; i--) {
-      _counter[i] = (_counter[i] + 1) & 0xff;
-      if (_counter[i] != 0) return;
-    }
-  }
-}
+import 'package:pointycastle/export.dart'
+    show AESEngine, CTRStreamCipher, KeyParameter, ParametersWithIV;
 
 /// A file being encrypted piece by piece, with a new key and iv, and the
 /// hash of what it gave so far.
@@ -61,27 +20,39 @@ class FileCipher {
   FileCipher(Uint8List key, Uint8List iv) : this._(key, iv, _DigestSink());
 
   FileCipher._(this.key, this.iv, this._digest)
-      : _ctr = AesCtr64(key, iv),
-        _hash = sha256.startChunkedConversion(_digest);
+      : _ctr = CTRStreamCipher(AESEngine())
+          ..init(true, ParametersWithIV(KeyParameter(key), iv)),
+        _hash = sha256.startChunkedConversion(_digest) {
+    if (key.length != 32 || iv.length != 16) {
+      throw ArgumentError('AES-256-CTR takes a 32-byte key and a 16-byte iv');
+    }
+  }
 
-  /// A cipher with a random 32-byte key and 16-byte iv, as `encryptFile`
-  /// makes them.
+  /// A cipher with a random 32-byte key and an iv as the Matrix spec asks
+  /// for attachments: 8 random bytes, then the 64-bit counter at zero, so
+  /// it never wraps within a file and every client counts it the same.
   factory FileCipher.random() {
     final random = Random.secure();
     Uint8List bytes(int n) =>
         Uint8List.fromList(List.generate(n, (_) => random.nextInt(256)));
-    return FileCipher(bytes(32), bytes(16));
+    return FileCipher(
+        bytes(32), Uint8List.fromList([...bytes(8), ...List.filled(8, 0)]));
   }
 
   final Uint8List key;
   final Uint8List iv;
-  final AesCtr64 _ctr;
+  final CTRStreamCipher _ctr;
   final _DigestSink _digest;
   final ByteConversionSink _hash;
 
-  /// Encrypts the next piece, in place, and adds it to the hash.
+  /// The bytes this cipher has encrypted.
+  int encryptedBytes = 0;
+
+  /// Encrypts the next piece, in place, and adds it to the hash: the pieces
+  /// go on one after the other, so any sizes encrypt as the whole would.
   void encrypt(Uint8List piece) {
-    _ctr.apply(piece);
+    _ctr.processBytes(piece, 0, piece.length, piece, 0);
+    encryptedBytes += piece.length;
     _hash.add(piece);
   }
 

@@ -1,9 +1,12 @@
 @TestOn('vm')
 library;
 
+import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart' show sha256;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:matrix/matrix.dart' as matrix;
@@ -30,30 +33,48 @@ void main() {
   });
 
   test(
-      "the cipher in pieces gives vodozemac's AES-CTR of the whole, also "
-      'when the counter wraps at 2^64',
+      'the cipher in pieces of any size, across block boundaries, gives the '
+      "cipher of the whole at once, and vodozemac's AES-CTR of the whole",
       skip: skipWithoutVodozemac, () {
     final key = Uint8List.fromList(List.generate(32, (i) => i * 7 + 1));
-    for (final iv in [
-      Uint8List.fromList(List.generate(16, (i) => i * 13 + 5)),
-      // The low 64 bits 16 blocks before they wrap: the high 64 stay.
-      Uint8List.fromList(
-          [...List.filled(8, 0xab), ...List.filled(7, 0xff), 0xf0]),
-    ]) {
-      final plain =
-          Uint8List.fromList(List.generate(300000, (i) => patternByte(i, 3)));
-      final whole = vod.CryptoUtils.aesCtr(input: plain, key: key, iv: iv);
-      final ctr = AesCtr64(key, iv);
-      final pieces = Uint8List.fromList(plain);
-      var start = 0;
-      for (final size in [1000, 17, 1, 70000, 16, 256 * 1024]) {
-        final end = (start + size).clamp(0, pieces.length);
-        ctr.apply(Uint8List.sublistView(pieces, start, end));
-        start = end;
-      }
-      ctr.apply(Uint8List.sublistView(pieces, start));
-      expect(pieces, whole, reason: 'iv $iv');
+    final iv = Uint8List.fromList(
+        [...List.generate(8, (i) => i * 13 + 5), ...List.filled(8, 0)]);
+    final plain =
+        Uint8List.fromList(List.generate(300007, (i) => patternByte(i, 3)));
+    final vodozemac = vod.CryptoUtils.aesCtr(input: plain, key: key, iv: iv);
+    final atOnce = Uint8List.fromList(plain);
+    FileCipher(key, iv).encrypt(atOnce);
+    final inPieces = Uint8List.fromList(plain);
+    final cipher = FileCipher(key, iv);
+    var start = 0;
+    // Pieces that start and end inside a block, one byte, exact blocks.
+    for (final size in [1000, 17, 1, 15, 16, 70001, 33, 256 * 1024]) {
+      final end = (start + size).clamp(0, inPieces.length);
+      cipher.encrypt(Uint8List.sublistView(inPieces, start, end));
+      start = end;
     }
+    cipher.encrypt(Uint8List.sublistView(inPieces, start));
+    expect(cipher.encryptedBytes, plain.length);
+    expect(inPieces, atOnce);
+    expect(atOnce, vodozemac);
+    expect(base64.encode(cipher.finish()),
+        base64.encode(sha256.convert(vodozemac).bytes));
+  });
+
+  test(
+      "a new cipher's iv is as the Matrix spec asks: 8 random bytes, then "
+      'the counter at zero', () {
+    final ivs = [for (var i = 0; i < 20; i++) FileCipher.random()];
+    for (final cipher in ivs) {
+      expect(cipher.key, hasLength(32));
+      expect(cipher.iv, hasLength(16));
+      expect(cipher.iv.sublist(8), List.filled(8, 0));
+      expect(base64.decode(base64.normalize(cipher.ivText)), cipher.iv);
+    }
+    final randomHalves = {
+      for (final c in ivs) base64.encode(c.iv.sublist(0, 8))
+    };
+    expect(randomHalves, hasLength(20), reason: 'a new iv every time');
   });
 
   test(
@@ -67,7 +88,6 @@ void main() {
     final (mx, room) =
         await streamClient('stream_encrypted', transport, encrypted: true);
 
-    final blocksBefore = AesCtr64.blocksHere;
     final (send, processed) = await attachByPath(file);
     final source = sourceOf(processed);
     final id = await sendMatrixFile(room, processed);
@@ -82,7 +102,8 @@ void main() {
     print('encrypted from disk: ${transport.uploads.length} upload(s) of '
         '${upload.length} bytes, $inTheClear in the clear; decrypts with the '
         "event's key and hash: ${decrypted != null && sha256Hex(decrypted) == hash}; "
-        'AES blocks in the test isolate: ${AesCtr64.blocksHere - blocksBefore}; '
+        'encrypted ${source.encryptedBytes} bytes in "${source.encryptedIn}" '
+        '(this test runs in "${Isolate.current.debugName}"); '
         "event 'url' ${event.content['url']}; files open after: "
         '${source.openFiles}');
     expect(id, isNotNull);
@@ -95,8 +116,10 @@ void main() {
     expect(event.content['url'], isNull);
     expect(fileInfo['url'], isA<String>());
     expect((event.content['info'] as Map)['size'], plain.length);
-    // Not one block was encrypted on the isolate that draws the UI.
-    expect(AesCtr64.blocksHere - blocksBefore, 0);
+    // Every byte was encrypted in the cipher's own isolate, not this one.
+    expect(source.encryptedBytes, plain.length);
+    expect(source.encryptedIn, 'file cipher');
+    expect(source.encryptedIn, isNot(Isolate.current.debugName));
     expect(source.openFiles, 0);
     await mx.dispose(closeDatabase: true);
   });

@@ -8,7 +8,6 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/matrix/media/disk_file_source_io.dart';
-import 'package:rooster/client/matrix/media/file_cipher.dart';
 import 'package:rooster/client/matrix/media/matrix_file_send.dart';
 
 import '../upload_loop/encrypted_fakes.dart' show decryptSent;
@@ -45,7 +44,6 @@ void main() {
       processed.file.source ??= await DiskFileSource.at(file.path);
 
       final rssBefore = ProcessInfo.maxRss;
-      final blocksBefore = AesCtr64.blocksHere;
       var longestGap = Duration.zero;
       var last = DateTime.now();
       final ticks = Timer.periodic(const Duration(milliseconds: 16), (_) {
@@ -81,7 +79,8 @@ void main() {
           'peak_rss_mb=${(ProcessInfo.maxRss / mib).toStringAsFixed(1)} '
           'rss_now_mb=${(ProcessInfo.currentRss / mib).toStringAsFixed(1)} '
           'longest_main_isolate_gap_ms=${longestGap.inMilliseconds} '
-          'aes_blocks_on_main=${AesCtr64.blocksHere - blocksBefore} '
+          'encrypted_bytes=${sourceOf(processed).encryptedBytes} '
+          'encrypted_in=${sourceOf(processed).encryptedIn} '
           'seconds=${(watch.elapsedMilliseconds / 1000).toStringAsFixed(1)} '
           'server_bytes=${upload.bytes} same_bytes=$sameBytes '
           'event=${event.type}');

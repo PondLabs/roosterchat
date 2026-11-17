@@ -55,6 +55,11 @@ class DiskFileSource implements matrix.FileSendSource {
   /// Reads whose file is open now.
   int openFiles = 0;
 
+  /// Bytes encrypted for this file, and the isolate that encrypted them,
+  /// as the cipher reports them at the end of each encrypted read.
+  int encryptedBytes = 0;
+  String? encryptedIn;
+
   @override
   matrix.FileSendRead read() => _DiskRead(this, encrypted: false);
 
@@ -166,7 +171,10 @@ class _DiskRead implements matrix.FileSendRead {
     await _checkUnchanged();
     final worker = _worker;
     if (worker != null) {
-      final hash = await worker.finish();
+      final (hash, bytes, isolate) = await worker.finish();
+      _source
+        ..encryptedBytes += bytes
+        ..encryptedIn = isolate;
       encryption = matrix.EncryptedFile(
         data: Uint8List(0),
         k: worker.keyText,
@@ -282,10 +290,13 @@ class _CipherWorker {
     return (reply as TransferableTypedData).materialize().asUint8List();
   }
 
-  /// The SHA-256 of every piece encrypted; the isolate ends.
-  Future<Uint8List> finish() async {
+  /// The SHA-256 of every piece encrypted, how many bytes the cipher
+  /// encrypted, and the name of the isolate it ran in; the isolate ends.
+  Future<(Uint8List, int, String?)> finish() async {
     final reply = await _ask(const _Finish());
-    return (reply as TransferableTypedData).materialize().asUint8List();
+    final (hash, bytes, isolate) =
+        reply as (TransferableTypedData, int, String?);
+    return (hash.materialize().asUint8List(), bytes, isolate);
   }
 
   void stop() {
@@ -314,7 +325,11 @@ void _cipherMain((SendPort, Uint8List, Uint8List) start) {
       cipher.encrypt(piece);
       replies.send(TransferableTypedData.fromList([piece]));
     } else if (message is _Finish) {
-      replies.send(TransferableTypedData.fromList([cipher.finish()]));
+      replies.send((
+        TransferableTypedData.fromList([cipher.finish()]),
+        cipher.encryptedBytes,
+        Isolate.current.debugName,
+      ));
       requests.close();
     }
   });
