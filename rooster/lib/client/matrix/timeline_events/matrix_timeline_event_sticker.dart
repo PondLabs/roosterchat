@@ -16,7 +16,12 @@ class MatrixTimelineEventSticker extends MatrixTimelineEvent
       var file = event.content['file'] as Map<String, dynamic>;
       uri = file['url'];
     }
+    // The thumbnail level only when the sticker has a thumbnail of its
+    // own: without one it would download the same file as the whole
+    // sticker, and fail twice as often.
     stickerImage = MatrixMxcImage(Uri.parse(uri!), client.getMatrixClient(),
+        doThumbnail: event.hasThumbnail &&
+            event.thumbnailMxcUrl != event.attachmentMxcUrl,
         matrixEvent: event);
 
     stickerName = event.body;
