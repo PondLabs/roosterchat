@@ -171,6 +171,11 @@ class MatrixMxcImage extends LODImageProvider {
   /// download's [MediaDownloadException], or the SDK's [MatrixException]
   /// of an avatar's request).
   static bool worthAskingAgain(Object error) {
+    // The SDK makes its error from the body alone (`MatrixApi`'s
+    // `MatrixException.fromJson`, no response): its errcode says.
+    if (error is MatrixException && error.response == null) {
+      return !_sameAnswerAgain.contains(error.errcode);
+    }
     final status = switch (error) {
       MediaDownloadException(:final statusCode) => statusCode,
       MatrixException(:final response?) => response.statusCode,
@@ -179,6 +184,23 @@ class MatrixMxcImage extends LODImageProvider {
     if (status == null) return true;
     return status >= 500 || status == 408 || status == 429;
   }
+
+  /// The errcodes of the 4xx answers that asking again would get again
+  /// (not `M_LIMIT_EXCEEDED`, a 429; nor `M_UNKNOWN`, which a 500 has).
+  static const _sameAnswerAgain = {
+    'M_NOT_FOUND',
+    'M_FORBIDDEN',
+    'M_UNKNOWN_TOKEN',
+    'M_MISSING_TOKEN',
+    'M_UNAUTHORIZED',
+    'M_UNRECOGNIZED',
+    'M_TOO_LARGE',
+    'M_NOT_JSON',
+    'M_BAD_JSON',
+    'M_INVALID_PARAM',
+    'M_MISSING_PARAM',
+    'M_USER_DEACTIVATED',
+  };
 
   /// [cached]: where the thumbnail is in the file cache, when that is
   /// already known. [serverThumbnail]: the homeserver's scaled thumbnail

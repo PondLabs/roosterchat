@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:matrix/matrix.dart' as matrix;
+import 'package:rooster/client/matrix/extensions/matrix_client_extensions.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
 
 import 'media_fakes.dart';
@@ -85,4 +86,53 @@ void main() {
     expect(MatrixMxcImage.worthAskingAgain(answered(502)), isTrue);
     expect(MatrixMxcImage.worthAskingAgain(Exception('network')), isTrue);
   });
+
+  // What an avatar's request really throws: the SDK makes the error from
+  // the body alone (`MatrixException.fromJson`, no response), so the rule
+  // reads its errcode.
+  for (final (status, body, again) in [
+    (404, '{"errcode": "M_NOT_FOUND", "error": "Not found"}', false),
+    (403, '{"errcode": "M_FORBIDDEN", "error": "No"}', false),
+    (401, '{"errcode": "M_UNKNOWN_TOKEN", "error": "Who?"}', false),
+    (429, '{"errcode": "M_LIMIT_EXCEEDED", "retry_after_ms": 1}', true),
+    (500, '{"errcode": "M_UNKNOWN", "error": "Oops"}', true),
+    (504, '{"errcode": "M_NOT_YET_UPLOADED", "error": "Wait"}', true),
+    (502, '<html>Bad gateway</html>', true),
+  ]) {
+    test(
+        'an avatar\'s request answered $status, as the SDK throws it: '
+        '${again ? '3 requests' : '1 request'} in 3 attempts', () async {
+      final requests = <String>[];
+      final client = mediaClient(MockClient((request) async {
+        if (request.url.path.contains('/thumbnail/')) {
+          requests.add(request.url.path);
+          return http.Response(body, status,
+              headers: {'content-type': 'application/json'});
+        }
+        return http.Response('{"versions": ["v1.11"]}', 200);
+      }), Uri.parse('https://hs.example'));
+      Future<void> ask() => client.getContentThumbnailFromUri(
+          Uri.parse('mxc://hs.example/one'), 90, 90);
+
+      Object? thrown;
+      try {
+        await ask();
+      } catch (error) {
+        thrown = error;
+      }
+      if (thrown is matrix.MatrixException) {
+        expect(thrown.response, isNull, reason: 'the shape the SDK throws');
+      }
+      expect(MatrixMxcImage.worthAskingAgain(thrown!), again);
+
+      requests.clear();
+      await expectLater(
+          MatrixMxcImage.loadWithRetries(client, ask, attempts: 3),
+          throwsA(anything));
+      // ignore: avoid_print
+      print('avatar $status (${thrown.runtimeType}): ${requests.length} '
+          'request(s) in 3 attempts');
+      expect(requests, hasLength(again ? 3 : 1));
+    });
+  }
 }
