@@ -28,16 +28,18 @@ Future<List<PendingFileAttachment>> attachmentsFromDroppedFiles(
   final attachments = <PendingFileAttachment>[];
   for (final file in files) {
     try {
+      // Its size first, in a browser too: nothing of a file over the limit
+      // is read.
+      final size = await file.length();
+      if (maxBytes != null && size > maxBytes) {
+        onRefused?.call(size, maxBytes);
+        continue;
+      }
       final fromBrowser = inBrowser
           ? await droppedBrowserFile(file.path, name: file.name)
           : null;
       if (fromBrowser != null) {
         attachments.add(fromBrowser);
-        continue;
-      }
-      final size = await file.length();
-      if (maxBytes != null && size > maxBytes) {
-        onRefused?.call(size, maxBytes);
         continue;
       }
       Uint8List? data;

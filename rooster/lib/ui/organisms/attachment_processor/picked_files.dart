@@ -109,7 +109,7 @@ Future<List<PendingFileAttachment>> pickFileAttachments({
     // In a browser, its own dialog, whose `File`s a large file is sent
     // from (`browser_files.dart`).
     final picked = await pickBrowserFileAttachments(
-        maxBytes: maxBytes, onRefused: onRefused);
+        maxBytes: () => limitWithin(maxBytes()), onRefused: onRefused);
     if (picked != null) return picked;
   }
   final result = await FilePicker.platform.pickFiles(
