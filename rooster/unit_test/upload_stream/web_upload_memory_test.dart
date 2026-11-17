@@ -66,7 +66,10 @@ void main() {
     final admitted = await pickFileAttachments(
         maxBytes: () async => null, onRefused: (_, __) {}, web: true);
     final read = watch.elapsedMilliseconds;
+    expect(admitted.single.data, isNull, reason: 'not read when attached');
     final processed = (await matrixFilesForAttachment(admitted.single))!;
+    expect(processed.file.source, isA<BrowserFileSource>(),
+        reason: "the SDK's file is sent from the browser's File");
     final source = processed.file.source! as BrowserFileSource;
     final reading = source.read();
     final reports = Reports();
@@ -98,7 +101,6 @@ void main() {
         'sent=${reports.sent} status=${response.statusCode} '
         'server_bytes=${received['bytes']} '
         'server_sha256_matches=${received['sha256'] == sha256Hex}');
-    expect(admitted.single.data, isNull);
     expect(processed.file.bytes, isEmpty);
     expect(reads.where((r) => r >= bytes), isEmpty,
         reason: 'no arrayBuffer() (or other read) of the whole file');
