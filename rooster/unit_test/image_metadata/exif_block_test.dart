@@ -636,6 +636,18 @@ void main() {
         }
       });
 
+      test('17 Exif items of 64 bytes, one past the limit: cut, none read',
+          () async {
+        // Well under maxExifBlock and the extent limit: only the number of
+        // items cuts it.
+        final bytes = sameBytes(17, 64);
+        final (blocks, asked) = await walk(bytes);
+        expect(blocks.cut, isTrue);
+        expect(blocks.whole, isEmpty);
+        expect(asked, lessThan(bytes.length + (1 << 20)));
+        expect(await answer(bytes), LocationAnswer.unreadable);
+      });
+
       test('50,000 Exif items of 64 bytes: cut, at once', () async {
         final bytes = sameBytes(50000, 64);
         final watch = Stopwatch()..start();
