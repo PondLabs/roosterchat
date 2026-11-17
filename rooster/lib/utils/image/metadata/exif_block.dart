@@ -72,8 +72,9 @@ Future<Uint8List?> _whole(ByteReader read, int offset, int size) async {
   return bytes.length < size ? null : bytes;
 }
 
-/// [ByteReader] through a window of 64 kB, for a walk that looks at every
-/// byte (a JPEG's scans and fill bytes): one read per window.
+/// [ByteReader] through a window of 64 kB, for walks that look at many
+/// headers or at every byte (a JPEG's scans and fill bytes): one read per
+/// window, and no wait for bytes the window already holds.
 class _Window {
   _Window(this._read);
 
@@ -81,37 +82,35 @@ class _Window {
   Uint8List _bytes = Uint8List(0);
   int _start = 0;
 
-  /// Whether the window holds [count] bytes from [pos], read when it does
-  /// not: false when the file ends first.
-  Future<bool> _load(int pos, [int count = 1]) async {
-    if (pos >= _start && pos + count <= _start + _bytes.length) return true;
+  /// Whether the window holds [count] bytes from [pos].
+  bool holds(int pos, [int count = 1]) =>
+      pos >= _start && pos + count <= _start + _bytes.length;
+
+  /// Reads the window from [pos]: false when the file holds fewer than
+  /// [count] bytes there.
+  Future<bool> load(int pos, [int count = 1]) async {
     _start = pos;
     _bytes = await _read(pos, 64 << 10);
     return _bytes.length >= count;
   }
 
-  /// The byte at [pos], null past the end of the file.
-  Future<int?> at(int pos) async =>
-      await _load(pos) ? _bytes[pos - _start] : null;
+  /// The byte at [pos], which the window holds.
+  int operator [](int pos) => _bytes[pos - _start];
 
-  /// The first position from [pos] that does not hold 0xFF, null when the
-  /// file ends first.
-  Future<int?> pastFill(int pos) async {
-    while (await _load(pos)) {
-      final bytes = _bytes;
-      for (var i = pos - _start; i < bytes.length; i++) {
-        if (bytes[i] != 0xFF) return _start + i;
-      }
-      pos = _start + bytes.length;
-    }
-    return null;
+  /// Up to [count] bytes from [pos], fewer at the end of the file: what
+  /// the window holds once [holds] or [load] said so for [pos].
+  Uint8List view(int pos, int count) {
+    final from = pos - _start;
+    if (from >= _bytes.length) return Uint8List(0);
+    final end = from + count > _bytes.length ? _bytes.length : from + count;
+    return Uint8List.sublistView(_bytes, from, end);
   }
 
   /// Where the entropy-coded data from [pos] ends: the first 0xFF followed
   /// by neither 0x00 (a stuffed byte) nor a restart marker, which is passed
   /// over. Null when the file ends first.
   Future<int?> markerAfter(int pos) async {
-    while (await _load(pos, 2)) {
+    while (holds(pos, 2) || await load(pos, 2)) {
       final bytes = _bytes;
       var i = pos - _start;
       for (; i + 1 < bytes.length; i++) {
@@ -131,11 +130,20 @@ Future<ExifBlocks> _jpegExif(ByteReader read) async {
   final blocks = <Uint8List>[];
   var pos = 2;
   while (true) {
-    if (await window.at(pos) != 0xFF) return ExifBlocks(blocks, cut: true);
-    // Fill bytes: any number of 0xFF before the marker.
-    final at = await window.pastFill(pos + 1);
-    if (at == null) return ExifBlocks(blocks, cut: true);
-    final marker = (await window.at(at))!;
+    // A marker: 0xFF, any number of 0xFF fill bytes, then its code.
+    if (!window.holds(pos) && !await window.load(pos)) {
+      return ExifBlocks(blocks, cut: true);
+    }
+    if (window[pos] != 0xFF) return ExifBlocks(blocks, cut: true);
+    var at = pos + 1;
+    while (true) {
+      if (!window.holds(at) && !await window.load(at)) {
+        return ExifBlocks(blocks, cut: true);
+      }
+      if (window[at] != 0xFF) break;
+      at++;
+    }
+    final marker = window[at];
     final start = at + 1;
     if (marker == 0xD9) return ExifBlocks(blocks); // EOI
     if (marker == 0x01) {
@@ -145,7 +153,8 @@ Future<ExifBlocks> _jpegExif(ByteReader read) async {
     if (marker >= 0xD0 && marker <= 0xD7) {
       pos = start; // RSTn: no length, entropy-coded data after it
     } else {
-      final segment = await read(start, 8);
+      if (!window.holds(start, 8)) await window.load(start, 8);
+      final segment = window.view(start, 8);
       if (segment.length < 2) return ExifBlocks(blocks, cut: true);
       final length = segment[0] << 8 | segment[1];
       if (length < 2) return ExifBlocks(blocks, cut: true);
@@ -167,10 +176,12 @@ Future<ExifBlocks> _jpegExif(ByteReader read) async {
 }
 
 Future<ExifBlocks> _pngExif(ByteReader read) async {
+  final window = _Window(read);
   final blocks = <Uint8List>[];
   var pos = 8;
   while (true) {
-    final header = await read(pos, 8);
+    if (!window.holds(pos, 8)) await window.load(pos, 8);
+    final header = window.view(pos, 8);
     if (header.isEmpty) return ExifBlocks(blocks); // the end, between chunks
     if (header.length < 8) return ExifBlocks(blocks, cut: true);
     final length = ByteData.sublistView(header).getUint32(0);
@@ -186,14 +197,17 @@ Future<ExifBlocks> _pngExif(ByteReader read) async {
 }
 
 Future<ExifBlocks> _webpExif(ByteReader read) async {
-  final riff = await read(4, 4);
+  final window = _Window(read);
+  await window.load(0, 12);
+  final riff = window.view(4, 4);
   final end = 8 + ByteData.sublistView(riff).getUint32(0, Endian.little);
   final blocks = <Uint8List>[];
   var pos = 12;
   // To the end of the file: readers find an EXIF past the end the RIFF
   // declares.
   while (true) {
-    final header = await read(pos, 8);
+    if (!window.holds(pos, 8)) await window.load(pos, 8);
+    final header = window.view(pos, 8);
     // The end of the file: cut when the RIFF runs past it.
     if (header.length < 8) return ExifBlocks(blocks, cut: pos < end);
     final size = ByteData.sublistView(header).getUint32(4, Endian.little);
@@ -256,9 +270,11 @@ Future<ExifBlocks> _heifExif(ByteReader read, Uint8List head) async {
       String.fromCharCodes(ftyp, at, at + 4),
   };
   if (brands.intersection(_heifBrands).isEmpty) return const ExifBlocks([]);
+  final window = _Window(read);
   var pos = ftypSize;
   while (true) {
-    final header = await read(pos, 16);
+    if (!window.holds(pos, 16)) await window.load(pos, 16);
+    final header = window.view(pos, 16);
     if (header.isEmpty) return const ExifBlocks([]); // no meta box
     if (header.length < 8) return const ExifBlocks([], cut: true);
     var size = _uint(header, 0, 4);

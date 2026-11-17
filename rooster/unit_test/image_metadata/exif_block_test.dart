@@ -253,6 +253,65 @@ void main() {
     });
   });
 
+  group('100,000 empty segments, chunks or boxes', () {
+    // Each walk reads its headers through a window: a read per 64 kB, not
+    // one per header, and no wait for a header the window holds.
+    final count = 100000;
+    final png = img.encodePng(img.Image(width: 8, height: 8));
+    for (final (label, bytes) in [
+      (
+        'JPEG comments',
+        cat([
+          soi,
+          for (var i = 0; i < count; i++) [0xFF, 0xFE, 0, 2],
+          plain.sublist(2),
+        ])
+      ),
+      (
+        'JPEG TEM markers',
+        cat([
+          soi,
+          for (var i = 0; i < count; i++) [0xFF, 0x01],
+          plain.sublist(2),
+        ])
+      ),
+      (
+        'PNG chunks',
+        cat([
+          png.sublist(0, 33),
+          for (var i = 0; i < count; i++) pngChunk('tEXt', const []),
+          png.sublist(33),
+        ])
+      ),
+      (
+        'WebP chunks',
+        webp([for (var i = 0; i < count; i++) chunk('JUNK', const [])])
+      ),
+      (
+        'HEIF boxes',
+        cat([
+          [0, 0, 0, 20, ...'ftypmif1'.codeUnits, 0, 0, 0, 0],
+          'mif1'.codeUnits,
+          for (var i = 0; i < count; i++) [0, 0, 0, 8, ...'free'.codeUnits],
+        ])
+      ),
+    ]) {
+      test('$label: a read per 64 kB', () async {
+        var reads = 0;
+        final inner = bytesReader(bytes);
+        final watch = Stopwatch()..start();
+        final blocks = await findExifBlocks((offset, length) {
+          reads++;
+          return inner(offset, length);
+        });
+        expect(blocks.cut, isFalse);
+        expect(blocks.whole, isEmpty);
+        expect(reads, lessThan(bytes.length / (64 << 10) + 10));
+        expect(watch.elapsed, lessThan(const Duration(seconds: 1)));
+      });
+    }
+  });
+
   group('the PNG walk', () {
     for (final (label, bytes) in [
       ('an eXIf before IDAT', png([pngChunk('eXIf', tiff)])),
