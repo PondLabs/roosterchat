@@ -420,6 +420,13 @@ class AttachmentSend extends ChangeNotifier {
     stream.addListener(listener);
   }
 
+  /// Its account logged out: its file and picture are let go.
+  void _letGo() {
+    _stopWatchingPicture();
+    attachment = null;
+    preview = null;
+  }
+
   void _stopWatchingPicture() {
     final listener = _pictureListener;
     _pictureListener = null;
@@ -535,6 +542,20 @@ class AttachmentSends extends ChangeNotifier {
       }
     }
     return null;
+  }
+
+  /// Lets go of every send of the account [clientIdentifier] (the
+  /// [Room.localId]s of its rooms start with it), to its rooms or from its
+  /// chats, and of their files: at logout nothing of what it was sending
+  /// stays in memory.
+  void forgetAccount(String clientIdentifier) {
+    final prefix = '$clientIdentifier:';
+    for (final send in [..._sends]) {
+      if (send.roomKey.startsWith(prefix) || send.chatKey.startsWith(prefix)) {
+        send._letGo();
+        remove(send);
+      }
+    }
   }
 
   /// Every send listed, for tests.

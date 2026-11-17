@@ -39,6 +39,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
+import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/client.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -517,9 +518,11 @@ class MatrixClient extends Client {
   }
 
   /// Never throws: logging out goes on whatever is left on disk. The
-  /// thumbnails the homeserver refused are forgotten with it.
+  /// thumbnails the homeserver refused are forgotten with it, and so are
+  /// the files the account was sending, with their bytes.
   Future<void> _clearOwnMedia() async {
     MatrixMxcImage.forgetNoServerThumbnails(_matrixClient);
+    AttachmentSends.instance.forgetAccount(identifier);
     try {
       await _ownMedia.clear();
     } catch (error, stack) {
