@@ -40,6 +40,16 @@ class AsyncTransport extends OnlyUsTransport {
   bool holdPartway = false;
   bool failRedacts = false;
 
+  /// The mxcs whose content the homeserver holds although nothing went up
+  /// through this transport (it went up before the app closed).
+  final Set<String> alreadyUploaded = {};
+
+  /// When set, every content question is answered with this status.
+  int? downloadStatus;
+
+  /// The mxc of each content question (`GET /download`), in order.
+  final List<String> contentAsked = [];
+
   /// The id of each event a redaction was asked for.
   final List<String> redacted = [];
   Completer<void> releasePuts = Completer<void>();
@@ -153,6 +163,26 @@ class AsyncTransport extends OnlyUsTransport {
       } finally {
         openUploads--;
       }
+    }
+    if (request.method == 'GET' && path.contains('/download/')) {
+      // Whether the media repository has an mxc's content: what an
+      // opening after the app closed asks before taking a photo back.
+      final segments = request.url.pathSegments;
+      final at = segments.indexOf('download');
+      final mxc = 'mxc://${segments[at + 1]}/${segments[at + 2]}'.toLowerCase();
+      contentAsked.add(mxc);
+      final status = downloadStatus;
+      if (status != null) return json(status, {'errcode': 'M_UNKNOWN'});
+      final body = putsByMxc[mxc] ??
+          (alreadyUploaded.contains(mxc) ? Uint8List(fileBytes) : null);
+      if (body != null) {
+        return http.StreamedResponse(Stream.value(body), 200,
+            headers: {'content-type': 'application/octet-stream'});
+      }
+      return json(504, {
+        'errcode': 'M_NOT_YET_UPLOADED',
+        'error': 'Content has not yet been uploaded',
+      });
     }
     if (request.method == 'PUT' && path.contains('/send/')) {
       log.add('PUT send');

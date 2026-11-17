@@ -99,14 +99,19 @@ void main() {
 
   /// The account [name] opened again on the same database and synced.
   Future<(MatrixClient, AsyncTransport)> reopen(String name,
-      {bool failRedacts = false}) async {
+      {bool failRedacts = false,
+      void Function(AsyncTransport)? homeserver,
+      bool redacts = true}) async {
     final transport = AsyncTransport()..failRedacts = failRedacts;
+    homeserver?.call(transport);
     final client = await account(name, transport);
     final mx = client.getMatrixClient();
     await mx.init(waitForFirstSync: false);
     mx.backgroundSync = false;
     await mx.oneShotSync();
-    await until(() => transport.log.contains('PUT redact'));
+    await until(() => redacts
+        ? transport.log.contains('PUT redact')
+        : transport.contentAsked.isNotEmpty);
     return (client, transport);
   }
 
@@ -197,6 +202,54 @@ void main() {
     expect(await interruptedMessages(room, sent.eventId), hasLength(1),
         reason: 'not shown twice');
     expect(await uploadsLeft(mx), isEmpty);
+    await mx.dispose(closeDatabase: true);
+  });
+
+  test(
+      'a photo whose last upload went up before the closing, its end not '
+      'written yet, stays sent: no redaction, no failed message', () async {
+    final name = 'interrupted_${n++}';
+    final sent = await sendAndClose(name);
+    final mxc = sent.attachmentMxcUrl.toString().toLowerCase();
+
+    final (client, transport) = await reopen(name,
+        homeserver: (server) => server.alreadyUploaded.add(mxc),
+        redacts: false);
+    final mx = client.getMatrixClient();
+    final room = mx.getRoomById(roomId)!;
+    await eventually(() async => (await uploadsLeft(mx)).isEmpty);
+    expect(transport.contentAsked, [mxc]);
+    expect(transport.log, isNot(contains('PUT redact')));
+    expect(await interruptedMessages(room, sent.eventId), isEmpty);
+    expect(
+        isPhotoLeftInRoom(
+            (await mx.database.getEventById(sent.eventId, room))!),
+        isFalse);
+    await mx.dispose(closeDatabase: true);
+  });
+
+  test(
+      'when the homeserver cannot say whether the photo is there, nothing '
+      'is taken back now and the next opening asks again', () async {
+    final name = 'interrupted_${n++}';
+    final sent = await sendAndClose(name);
+
+    var (client, transport) = await reopen(name,
+        homeserver: (server) => server.downloadStatus = 500, redacts: false);
+    var mx = client.getMatrixClient();
+    var room = mx.getRoomById(roomId)!;
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(transport.log, isNot(contains('PUT redact')));
+    expect(await interruptedMessages(room, sent.eventId), isEmpty);
+    expect(await uploadsLeft(mx), hasLength(1));
+    await mx.dispose(closeDatabase: true);
+
+    (client, transport) = await reopen(name);
+    mx = client.getMatrixClient();
+    room = mx.getRoomById(roomId)!;
+    await eventually(() async => (await uploadsLeft(mx)).isEmpty);
+    expect(transport.redacted, [sent.eventId]);
+    expect(await interruptedMessages(room, sent.eventId), hasLength(1));
     await mx.dispose(closeDatabase: true);
   });
 }

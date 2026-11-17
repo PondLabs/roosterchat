@@ -478,8 +478,10 @@ class AsyncPhotoSend extends ChangeNotifier {
 
       room.uploadsAfterEventEnded(txid);
       release();
-      await keepUploadedMedia(client, files);
+      // Its end in the database first: an app closed right after it still
+      // finds the photo sent at the next opening.
       await photoUploadEnded(client, txid);
+      await keepUploadedMedia(client, files);
       _sendsOf(client).remove(txid);
       room.forgetFileSend(txid);
       _set(AsyncPhotoState.done);

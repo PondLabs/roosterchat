@@ -5,8 +5,11 @@
 /// list when its upload ends: up, or failed or cancelled and taken back.
 ///
 /// One still on the list when the account opens again was cut short by
-/// the app closing: its message is in the room pointing at media that
-/// never came. It is settled as an upload that failed for good: the
+/// the app closing. The homeserver is asked first whether the photo is
+/// there (its last upload may have gone up before its end was written
+/// down): a photo that is stays sent, and one it cannot tell about waits
+/// for the next opening. Otherwise its message points at media that never
+/// came, and it is settled as an upload that failed for good: the
 /// message is taken back (redacted), its files leave the own media, and a
 /// failed message of this device says the photo did not upload. That one
 /// has no "Retry": the photo's bytes went with the app. A redaction that
@@ -16,6 +19,7 @@ library;
 
 import 'dart:async';
 
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/matrix/media/async_photo_send.dart';
@@ -124,6 +128,30 @@ Future<void> settleInterruptedPhotoUploads(matrix.Client client) async {
   }
 }
 
+/// Whether the homeserver has [mxc]'s content: true when it gives it,
+/// false when it has none (404, or 504 `M_NOT_YET_UPLOADED` for an mxc
+/// reserved and never uploaded, answered at once with `timeout_ms=0`), null
+/// when that cannot be told (no answer, any other status). Only the status
+/// is read: the body is let go.
+Future<bool?> _hasContent(matrix.Client client, Uri mxc) async {
+  try {
+    final download = await mxc.getDownloadUri(client);
+    final request = http.Request(
+        'GET', download.replace(queryParameters: {'timeout_ms': '0'}));
+    request.headers['authorization'] = 'Bearer ${client.accessToken}';
+    final response = await client.httpClient.send(request);
+    unawaited(response.stream.listen(null).cancel());
+    return switch (response.statusCode) {
+      200 => true,
+      404 || 504 => false,
+      _ => null,
+    };
+  } catch (error) {
+    Log.w("Could not ask whether a photo went up: ${error.runtimeType}");
+    return null;
+  }
+}
+
 Future<void> _settle(
     matrix.Client client, _Ledger ledger, Map<String, Object?> entry) async {
   final room = client.getRoomById(entry['room'] as String? ?? '');
@@ -135,9 +163,23 @@ Future<void> _settle(
     return;
   }
 
+  final event = await client.database.getEventById(eventId, room);
+  final fileMxc = event?.attachmentMxcUrl;
+  // Cut short by the closing (no failed message shown yet): the last
+  // upload may have gone up, and only its end not been written down. The
+  // homeserver says whether the photo is there; a photo that is, is sent.
+  if (entry['item'] == null && fileMxc != null) {
+    final uploaded = await _hasContent(client, fileMxc);
+    if (uploaded == null) return; // Not known now: the next opening asks.
+    if (uploaded) {
+      ledger.entries.remove(entry);
+      await _save(client, ledger);
+      return;
+    }
+  }
+
   // Whatever of it the own media holds (opened full size during the
   // upload, say) is a picture the others never get.
-  final event = await client.database.getEventById(eventId, room);
   if (event != null) {
     final keys = <String>[];
     for (final thumbnail in [false, true]) {
