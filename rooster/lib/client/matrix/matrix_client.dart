@@ -29,6 +29,7 @@ import 'package:rooster/diagnostic/speed_log/host_class.dart';
 import 'package:rooster/diagnostic/speed_log/sync_trace.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/cache/own_media_cache.dart';
+import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
 import 'package:rooster/client/matrix/media/own_media.dart';
 import 'package:rooster/utils/network/speed_http_client.dart';
 import 'package:rooster/utils/notifying_list.dart';
@@ -515,8 +516,10 @@ class MatrixClient extends Client {
     }
   }
 
-  /// Never throws: logging out goes on whatever is left on disk.
+  /// Never throws: logging out goes on whatever is left on disk. The
+  /// thumbnails the homeserver refused are forgotten with it.
   Future<void> _clearOwnMedia() async {
+    MatrixMxcImage.forgetNoServerThumbnails(_matrixClient);
     try {
       await _ownMedia.clear();
     } catch (error, stack) {

@@ -1,7 +1,10 @@
 @TestOn('vm')
 library;
 
+import 'dart:async';
 import 'dart:typed_data';
+
+import 'package:flutter/painting.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -102,6 +105,79 @@ void main() {
       'fakeserver.notexisting auth=true download',
       'fakeserver.notexisting auth=true download',
     ]);
+    await mx.dispose(closeDatabase: true);
+  });
+
+  test(
+      'an encrypted picture that comes whole and does not decrypt: one '
+      'download per display, shown as failed',
+      skip: skipWithoutVodozemac, () async {
+    fileCache = null;
+    final appDelay = MatrixMxcImage.retryDelay;
+    MatrixMxcImage.retryDelay = (_) => const Duration(milliseconds: 1);
+    addTearDown(() => MatrixMxcImage.retryDelay = appDelay);
+    final transport = _CipherServer();
+    final (mx, room) = await cryptoClient(
+        'media_receive_undecryptable', transport,
+        encrypted: true);
+    final plain = Uint8List.fromList(List.generate(5000, (i) => i % 251));
+    final encrypted = await matrix.encryptFile(plain);
+    // Not the bytes the event's hash was made of: it cannot be decrypted.
+    transport.cipher = Uint8List.fromList(encrypted.data.reversed.toList());
+    final event = matrix.Event(
+      type: matrix.EventTypes.Message,
+      content: {
+        'msgtype': 'm.image',
+        'body': 'p.jpg',
+        'file': {
+          'url': 'mxc://fakeServer.notExisting/broken',
+          'v': 'v2',
+          'iv': encrypted.iv,
+          'hashes': {'sha256': encrypted.sha256},
+          'key': {
+            'kty': 'oct',
+            'alg': 'A256CTR',
+            'ext': true,
+            'k': encrypted.k,
+            'key_ops': ['encrypt', 'decrypt'],
+          },
+        },
+        'info': {'mimetype': 'image/jpeg', 'size': 2000000},
+      },
+      eventId: '\$broken',
+      senderId: '@someone:fakeServer.notExisting',
+      originServerTs: DateTime.now(),
+      room: room,
+    );
+
+    final perDisplay = <int>[];
+    for (var n = 0; n < 2; n++) {
+      // A new chat view: nothing decoded in memory.
+      PaintingBinding.instance.imageCache.clear();
+      final before = transport.asked.length;
+      final result = Completer<String>();
+      // As the timeline makes an encrypted picture with no thumbnail.
+      final stream = MatrixMxcImage(event.attachmentMxcUrl!, mx,
+              doThumbnail: false,
+              doFullres: true,
+              autoLoadFullRes: true,
+              matrixEvent: event)
+          .resolve(ImageConfiguration.empty);
+      final listener = ImageStreamListener((_, __) {
+        if (!result.isCompleted) result.complete('shown');
+      }, onError: (_, __) {
+        if (!result.isCompleted) result.complete('failed');
+      });
+      stream.addListener(listener);
+      expect(
+          await result.future.timeout(const Duration(seconds: 10)), 'failed');
+      await settle();
+      stream.removeListener(listener);
+      perDisplay.add(transport.asked.length - before);
+    }
+    // ignore: avoid_print
+    print('undecryptable: downloads in displays 1 and 2: $perDisplay');
+    expect(perDisplay, [1, 1]);
     await mx.dispose(closeDatabase: true);
   });
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 import 'package:rooster/cache/file_provider.dart';
 import 'package:rooster/cache/own_media_cache.dart';
@@ -130,13 +131,22 @@ OwnMediaCache? ownMediaCacheFor(matrix.Client client, matrix.Event? event) =>
 
 /// The server answered a media download with [statusCode] instead of 200.
 class MediaDownloadException implements Exception {
-  MediaDownloadException(this.statusCode, {this.retryAfter});
+  MediaDownloadException(this.statusCode,
+      {this.retryAfter, this.retryAfterUnreadable = false});
 
   final int statusCode;
 
-  /// How long a 429 asked to wait (its `Retry-After` header, or the
-  /// `retry_after_ms` of its body), when it said.
+  /// How long a 429 asked to wait (its `Retry-After` header, in seconds or
+  /// as an HTTP date, or the `retry_after_ms` of its body), when it said.
   final Duration? retryAfter;
+
+  /// A 429 said how long to wait in a way that is not understood (not a
+  /// whole number of seconds, an HTTP date or a whole `retry_after_ms`):
+  /// how long to wait is not known.
+  final bool retryAfterUnreadable;
+
+  /// The clock a `Retry-After` date is read against. Only tests change it.
+  static DateTime Function() now = DateTime.now;
 
   /// Whether asking again can get another answer: the server's own
   /// trouble (5xx), a request timeout or too many requests. Any other
@@ -167,10 +177,12 @@ Future<Uint8List> downloadMedia(matrix.Client client, Uri url,
       // Read to its end, so the connection can carry the next request.
       body = await response.stream.toBytes();
     } catch (_) {}
+    final wait = response.statusCode == 429
+        ? _retryAfter(response.headers['retry-after'], body)
+        : null;
     throw MediaDownloadException(response.statusCode,
-        retryAfter: response.statusCode == 429
-            ? _retryAfter(response.headers['retry-after'], body)
-            : null);
+        retryAfter: wait?.wait,
+        retryAfterUnreadable: wait?.unreadable ?? false);
   }
 
   final total = response.contentLength;
@@ -198,18 +210,73 @@ Future<Uint8List> downloadMedia(matrix.Client client, Uri url,
       : Uint8List.sublistView(buffer, 0, downloaded);
 }
 
-/// A 429's wait: the `Retry-After` header in seconds, else the Matrix
-/// body's `retry_after_ms`; null when neither says (an HTTP date is not
-/// read).
-Duration? _retryAfter(String? header, List<int> body) {
-  final seconds = int.tryParse(header?.trim() ?? '');
-  if (seconds != null && seconds >= 0) return Duration(seconds: seconds);
+/// A 429's wait: its `Retry-After` header, a number of seconds or an HTTP
+/// date (RFC 9110, the IMF-fixdate form servers send), else the Matrix
+/// body's `retry_after_ms`. [wait] is null when neither says; [unreadable]
+/// when the one that says is not understood. A wait over a day is a day:
+/// too long either way.
+({Duration? wait, bool unreadable}) _retryAfter(
+    String? header, List<int> body) {
+  const unread = (wait: null, unreadable: true);
+  const day = Duration(days: 1);
+  Duration atMostADay(Duration wait) => wait > day ? day : wait;
+
+  final said = header?.trim() ?? '';
+  if (said.isNotEmpty) {
+    if (RegExp(r'^\d+$').hasMatch(said)) {
+      // Past nine digits, more than a day: no overflow to read.
+      if (said.length > 9) return (wait: day, unreadable: false);
+      return (
+        wait: atMostADay(Duration(seconds: int.parse(said))),
+        unreadable: false
+      );
+    }
+    final date = _httpDate(said);
+    if (date == null) return unread;
+    final wait = date.difference(MediaDownloadException.now());
+    return (
+      wait: wait.isNegative ? Duration.zero : atMostADay(wait),
+      unreadable: false
+    );
+  }
   try {
     final json = jsonDecode(utf8.decode(body));
-    final ms = json is Map ? json['retry_after_ms'] : null;
-    if (ms is int && ms >= 0) return Duration(milliseconds: ms);
+    if (json is! Map || !json.containsKey('retry_after_ms')) {
+      return (wait: null, unreadable: false);
+    }
+    final ms = json['retry_after_ms'];
+    if (ms is! int || ms < 0) return unread;
+    return (
+      wait: Duration(milliseconds: min(ms, day.inMilliseconds)),
+      unreadable: false
+    );
   } catch (_) {
     // Not JSON: no wait said.
+    return (wait: null, unreadable: false);
   }
-  return null;
+}
+
+const _months = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', //
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/// [text] as an HTTP date in the IMF-fixdate form
+/// (`Sun, 06 Nov 1994 08:49:37 GMT`), in UTC; null when it is not one.
+/// Read here rather than by `dart:io`'s `HttpDate`, which the web has not.
+DateTime? _httpDate(String text) {
+  final match = RegExp(r'^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), (\d{2}) '
+          r'([A-Z][a-z]{2}) (\d{4}) (\d{2}):(\d{2}):(\d{2}) GMT$')
+      .firstMatch(text);
+  if (match == null) return null;
+  final month = _months.indexOf(match[3]!) + 1;
+  if (month == 0) return null;
+  final [day, year, hour, minute, second] =
+      [2, 4, 5, 6, 7].map((i) => int.parse(match[i]!)).toList();
+  final date = DateTime.utc(year, month, day, hour, minute, second);
+  // Not a day of that month (31 Feb), or past the clock's 23:59:59.
+  if (date.day != day || date.hour != hour || date.minute != minute) {
+    return null;
+  }
+  return date;
 }

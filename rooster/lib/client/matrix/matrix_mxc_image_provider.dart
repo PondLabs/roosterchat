@@ -2,6 +2,7 @@ import 'dart:collection';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:rooster/cache/own_media_cache.dart';
 import 'package:rooster/client/matrix/extensions/matrix_client_extensions.dart';
 import 'package:rooster/client/matrix/matrix_mxc_file_provider.dart';
@@ -89,11 +90,34 @@ class MatrixMxcImage extends LODImageProvider {
   /// still.
   static const serverThumbnailTypes = {'image/jpeg', 'image/png', 'image/bmp'};
 
-  /// The pictures whose homeserver thumbnail was answered with a 4xx, in
-  /// memory for the session (the oldest out past [_noServerThumbnailLimit]):
-  /// shown again, they go straight to the whole picture.
-  static final LinkedHashSet<String> _noServerThumbnail = LinkedHashSet();
+  /// Per account, the pictures whose homeserver thumbnail was answered
+  /// with a 4xx that would come again (not a 401 or 403, which a token or
+  /// a permission can change), the oldest out past
+  /// [_noServerThumbnailLimit]: shown again, they go straight to the whole
+  /// picture. Only in memory, and forgotten on logout
+  /// ([forgetNoServerThumbnails]).
+  static final Expando<LinkedHashSet<String>> _noServerThumbnail =
+      Expando('no server thumbnail');
   static const _noServerThumbnailLimit = 512;
+
+  /// What [client]'s account remembers of the thumbnails its homeserver
+  /// refused (a copy).
+  @visibleForTesting
+  static Set<String> noServerThumbnailsOf(Client client) =>
+      Set.of(_noServerThumbnail[client] ?? const <String>{});
+
+  /// Forgets the thumbnails [client]'s homeserver refused: its account
+  /// logged out.
+  static void forgetNoServerThumbnails(Client client) =>
+      _noServerThumbnail[client] = null;
+
+  static void _rememberNoServerThumbnail(Client client, Uri uri) {
+    final refused = _noServerThumbnail[client] ??= LinkedHashSet();
+    if (refused.length >= _noServerThumbnailLimit) {
+      refused.remove(refused.first);
+    }
+    refused.add(uri.toString());
+  }
 
   /// Whether [event]'s picture is shown from a thumbnail the homeserver
   /// scales: it has no sender's thumbnail, is not encrypted (the server
@@ -135,7 +159,7 @@ class MatrixMxcImage extends LODImageProvider {
   /// socket error), again once a sync gets through, as before at least
   /// once; after any other failure (the web's network errors among them),
   /// after [retryDelay], or the wait a 429 asked for (one over
-  /// [longestRetryAfter] is not asked again). An answer that would come again (a 404) is not
+  /// [longestRetryAfter], or one not understood, is not asked again). An answer that would come again (a 404) is not
   /// asked again ([worthAskingAgain]). The last error is thrown: the
   /// picture then shows as failed.
   static Future<T> loadWithRetries<T>(Client client, Future<T> Function() load,
@@ -147,8 +171,11 @@ class MatrixMxcImage extends LODImageProvider {
         final offline = error is SocketException;
         final limit = offline ? max(attempts, 2) : attempts;
         final asked = error is MediaDownloadException ? error.retryAfter : null;
+        final unknownWait =
+            error is MediaDownloadException && error.retryAfterUnreadable;
         if (attempt >= limit ||
             !(offline || worthAskingAgain(error)) ||
+            unknownWait ||
             (asked != null && asked > longestRetryAfter)) {
           Log.onError(error, trace, content: "Could not load a picture");
           rethrow;
@@ -167,10 +194,18 @@ class MatrixMxcImage extends LODImageProvider {
   }
 
   /// Whether asking again after [error] can get another answer: not after
-  /// the homeserver answered with a 4xx other than 408 and 429 (the
+  /// a file that came whole and could not be read
+  /// ([MediaUnreadableException]), nor after the homeserver answered
+  /// with a 4xx other than 408 and 429 (the
   /// download's [MediaDownloadException], or the SDK's [MatrixException]
   /// of an avatar's request).
   static bool worthAskingAgain(Object error) {
+    if (error is MediaUnreadableException) return false;
+    // The SDK makes its error from the body alone (`MatrixApi`'s
+    // `MatrixException.fromJson`, no response): its errcode says.
+    if (error is MatrixException && error.response == null) {
+      return !_sameAnswerAgain.contains(error.errcode);
+    }
     final status = switch (error) {
       MediaDownloadException(:final statusCode) => statusCode,
       MatrixException(:final response?) => response.statusCode,
@@ -179,6 +214,23 @@ class MatrixMxcImage extends LODImageProvider {
     if (status == null) return true;
     return status >= 500 || status == 408 || status == 429;
   }
+
+  /// The errcodes of the 4xx answers that asking again would get again
+  /// (not `M_LIMIT_EXCEEDED`, a 429; nor `M_UNKNOWN`, which a 500 has).
+  static const _sameAnswerAgain = {
+    'M_NOT_FOUND',
+    'M_FORBIDDEN',
+    'M_UNKNOWN_TOKEN',
+    'M_MISSING_TOKEN',
+    'M_UNAUTHORIZED',
+    'M_UNRECOGNIZED',
+    'M_TOO_LARGE',
+    'M_NOT_JSON',
+    'M_BAD_JSON',
+    'M_INVALID_PARAM',
+    'M_MISSING_PARAM',
+    'M_USER_DEACTIVATED',
+  };
 
   /// [cached]: where the thumbnail is in the file cache, when that is
   /// already known. [serverThumbnail]: the homeserver's scaled thumbnail
@@ -205,7 +257,7 @@ class MatrixMxcImage extends LODImageProvider {
     // picture, which the cache may hold.
     if (serverThumbnail &&
         matrixEvent != null &&
-        _noServerThumbnail.contains(uri.toString())) {
+        _noServerThumbnail[client]?.contains(uri.toString()) == true) {
       return loadMatrixFullRes(client, uri, matrixEvent, cache: cache);
     }
     trace?.cacheMiss();
@@ -223,18 +275,16 @@ class MatrixMxcImage extends LODImageProvider {
         if (error.retryable) rethrow;
         // No thumbnail to be had (a 404, a type it does not scale): the
         // whole picture, kept as itself, never as the thumbnail; and the
-        // thumbnail not asked again this session.
-        if (_noServerThumbnail.length >= _noServerThumbnailLimit) {
-          _noServerThumbnail.remove(_noServerThumbnail.first);
+        // thumbnail not asked again by this account, unless the refusal
+        // was the token's or a permission's, which can change.
+        if (error.statusCode != 401 && error.statusCode != 403) {
+          _rememberNoServerThumbnail(client, uri);
         }
-        _noServerThumbnail.add(uri.toString());
         return loadMatrixFullRes(client, uri, matrixEvent, cache: cache);
       }
     } else if (matrixEvent != null) {
-      var data = await matrixEvent.downloadAndDecryptAttachment(
-        getThumbnail: true,
-        downloadCallback: (url) => downloadMedia(client, url),
-      );
+      var data =
+          await _downloadAttachment(client, matrixEvent, getThumbnail: true);
 
       String mime = matrixEvent.thumbnailMimetype;
 
@@ -295,9 +345,7 @@ class MatrixMxcImage extends LODImageProvider {
 
     Uint8List? bytes;
     if (matrixEvent != null) {
-      var data = await matrixEvent.downloadAndDecryptAttachment(
-        downloadCallback: (url) => downloadMedia(client, url),
-      );
+      var data = await _downloadAttachment(client, matrixEvent);
 
       bytes = data.bytes;
     } else {
@@ -317,6 +365,29 @@ class MatrixMxcImage extends LODImageProvider {
     }
 
     return null;
+  }
+
+  /// [event]'s file (or its thumbnail), downloaded through [client] and
+  /// decrypted by the SDK. A failure after the whole file came (it does
+  /// not decrypt, its hash does not match) is thrown as
+  /// [MediaUnreadableException]: downloading it again would get the same
+  /// bytes. Nothing is shown of it either way.
+  static Future<MatrixFile> _downloadAttachment(Client client, Event event,
+      {bool getThumbnail = false}) async {
+    var downloaded = false;
+    try {
+      return await event.downloadAndDecryptAttachment(
+        getThumbnail: getThumbnail,
+        downloadCallback: (url) async {
+          final bytes = await downloadMedia(client, url);
+          downloaded = true;
+          return bytes;
+        },
+      );
+    } catch (error, trace) {
+      if (!downloaded) rethrow;
+      Error.throwWithStackTrace(MediaUnreadableException(error), trace);
+    }
   }
 
   /// Keeps [bytes] of the account's own [mxc] in its own media again (the
@@ -357,4 +428,16 @@ class MatrixMxcImage extends LODImageProvider {
 
   @override
   int get hashCode => identifier.hashCode;
+}
+
+/// A picture's file came whole and could not be read: it does not decrypt,
+/// or its hash does not match ([error], the SDK's). Downloading it again
+/// would get the same bytes.
+class MediaUnreadableException implements Exception {
+  MediaUnreadableException(this.error);
+
+  final Object error;
+
+  @override
+  String toString() => "MediaUnreadableException: $error";
 }
