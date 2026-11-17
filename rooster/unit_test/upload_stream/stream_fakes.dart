@@ -123,7 +123,10 @@ class LocalUploadServer {
 
   Uri get uri => Uri.parse('http://127.0.0.1:${_server.port}');
 
-  void release() => _hold?.complete();
+  void release() {
+    final hold = _hold;
+    if (hold != null && !hold.isCompleted) hold.complete();
+  }
 
   Future<void> _handle(HttpRequest request) async {
     final upload = ReceivedUpload();
@@ -324,4 +327,51 @@ String sha256Hex(List<int> bytes) => sha256.convert(bytes).toString();
 /// Deletes [folder] and what is in it.
 Future<void> removeFolder(Directory folder) async {
   if (await folder.exists()) await folder.delete(recursive: true);
+}
+
+/// A transport whose first [breaks] uploads break in the middle: half of
+/// the body is taken, then the connection resets.
+class BreaksMidBody extends OnlyUsTransport {
+  BreaksMidBody(this.breaks);
+
+  int breaks;
+  int attempts = 0;
+  final List<int> takenBeforeBreak = [];
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    if (request.method == 'POST' && LoopTransport.isMediaUpload(request)) {
+      attempts++;
+      if (attempts <= breaks) {
+        final half = (request.contentLength ?? 0) ~/ 2;
+        var taken = 0;
+        final broke = Completer<void>();
+        late StreamSubscription<List<int>> body;
+        body = request.finalize().listen(
+            (chunk) {
+              taken += chunk.length;
+              if (taken >= half && !broke.isCompleted) {
+                unawaited(body.cancel());
+                broke.complete();
+              }
+            },
+            onError: (_) {},
+            onDone: () {
+              if (!broke.isCompleted) broke.complete();
+            });
+        await broke.future;
+        takenBeforeBreak.add(taken);
+        throw const SocketException('Connection reset by peer');
+      }
+    }
+    return super.send(request);
+  }
+}
+
+/// Waits, a few milliseconds at a time, until [done].
+Future<void> until(bool Function() done) async {
+  for (var i = 0; i < 2000 && !done(); i++) {
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
+  if (!done()) throw StateError('Waited 10 s for nothing');
 }

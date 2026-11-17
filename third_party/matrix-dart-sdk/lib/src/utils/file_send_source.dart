@@ -46,7 +46,7 @@ abstract class FileSendRead {
   Object? get failure;
 
   /// Stops reading and closes the file: completes once it is closed. Can
-  /// be called again; [bytes] end with an error when still listened to.
+  /// be called again; [bytes] end there, short, when still listened to.
   Future<void> close();
 }
 

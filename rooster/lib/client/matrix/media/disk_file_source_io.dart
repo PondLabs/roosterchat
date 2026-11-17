@@ -138,9 +138,9 @@ class _DiskRead implements matrix.FileSendRead {
       failure = error is FileSystemException
           ? const matrix.FileSourceChangedException('the file cannot be read')
           : error;
-      await close();
+      // The request fails with it; the file is closed, and so is the body.
       _out.addError(failure!, stack);
-      unawaited(_out.close());
+      await close();
     } finally {
       _pumping = false;
     }
@@ -176,8 +176,8 @@ class _DiskRead implements matrix.FileSendRead {
     }
     if (_closed) return;
     complete = true;
+    // The file is closed, and so is the body: the request's last byte.
     await close();
-    unawaited(_out.close());
   }
 
   Future<void> _checkUnchanged() async {
@@ -214,11 +214,9 @@ class _DiskRead implements matrix.FileSendRead {
     }
     _worker?.stop();
     _worker = null;
-    // Still listened to: the request learns that its body stops here.
-    if (!complete && failure == null && _out.hasListener && !_out.isClosed) {
-      _out.addError(const matrix.FileSourceChangedException('read closed'));
-      unawaited(_out.close());
-    }
+    // Still listened to: the request's body ends here, short of its
+    // length, and the request fails if it was not aborted already.
+    if (!_out.isClosed) unawaited(_out.close());
   }
 }
 
