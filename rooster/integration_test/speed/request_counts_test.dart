@@ -151,13 +151,13 @@ void main() {
     // reserve both mxcs. That cannot be confirmed without running it, so a
     // refused reservation is accepted too, with that path's own counts.
     // On either path, one PUT /send for the photo (T2.4, acceptance 7) and
-    // nothing sent twice: an upload the server answers at once goes once
-    // (T2.6, acceptance 1).
+    // nothing sent again: an upload the server answers at once goes once
+    // (T2.6, acceptance 1). Each path checks the attempt numbers by route.
     final photoRequests = [
       for (final r in requestsOf(span))
         if (_photoRoutes.any((route) => goesTo(r, route))) r
     ]..sort((a, b) => a.startedAt.compareTo(b.startedAt));
-    expect(photoRequests.map((r) => r.attempt), everyElement(1));
+    final attempts = attemptsByRoute(photoRequests, _photoRoutes);
 
     final steps = span.steps.map((s) => s.name).toSet();
     if (steps.contains(SpeedStep.asyncUpload)) {
@@ -174,6 +174,17 @@ void main() {
           photoRequests.take(3).map((r) => r.method), ['POST', 'POST', 'PUT']);
       expect(goesTo(photoRequests[2], sendEvent), isTrue,
           reason: 'the event third, before any upload');
+      // The two reservations are two requests, but the same one on the
+      // wire (POST /media/v1/create, same URL, no body), and the speed
+      // log's attempt rule (docs/speed-log.md, "Attempts") cannot tell them
+      // apart: the second reads attempt 2. Everything else is attempt 1:
+      // the uploads go to different mxcs.
+      expect(attempts, {
+        label(reserveMxc): [1, 2],
+        label(sendEvent): [1],
+        label(uploadToMxc): [1, 1],
+        label(uploadMedia): <int>[],
+      });
     } else {
       // T5.2 (acceptance 4): a refused reservation sends the photo upload
       // first: one reservation asked for (none once the homeserver said it
@@ -191,6 +202,9 @@ void main() {
         label(uploadToMxc): 0,
         label(uploadMedia): 2,
       });
+      // Every request attempt 1: at most one reservation, and the two
+      // POST /upload differ in their body's length (thumbnail and file).
+      expect(attempts.values.expand((a) => a), everyElement(1));
     }
   });
 

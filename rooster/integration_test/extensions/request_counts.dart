@@ -33,6 +33,18 @@ Map<String, int> countRoutes(
         label(route): requests.where((r) => goesTo(r, route)).length,
     };
 
+/// The attempt numbers (`RequestRecord.attempt`) of [requests] to each of
+/// [routes], by [label], in the order of [requests].
+Map<String, List<int>> attemptsByRoute(
+        Iterable<RequestRecord> requests, List<SpeedRoute> routes) =>
+    {
+      for (final route in routes)
+        label(route): [
+          for (final request in requests)
+            if (goesTo(request, route)) request.attempt
+        ],
+    };
+
 /// Every route of [requests], counted: what a scenario prints beside what
 /// it asserts.
 Map<String, int> allRoutes(Iterable<RequestRecord> requests) {
