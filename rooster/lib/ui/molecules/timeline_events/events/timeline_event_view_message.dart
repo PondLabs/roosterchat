@@ -6,6 +6,9 @@ import 'package:rooster/client/components/gif/gif_component.dart';
 import 'package:rooster/client/components/threads/thread_component.dart';
 import 'package:rooster/client/components/url_preview/url_preview_component.dart';
 import 'package:rooster/client/components/user_color/user_color_component.dart';
+import 'package:rooster/client/matrix/media/async_photo_send.dart';
+import 'package:rooster/client/matrix/media/interrupted_photo_uploads.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event.dart';
 import 'package:rooster/client/timeline_events/timeline_event.dart';
 import 'package:rooster/client/timeline_events/timeline_event_encrypted.dart';
 import 'package:rooster/client/timeline_events/timeline_event_feature_reactions.dart';
@@ -344,6 +347,14 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
 
     if (didContentChange) {
       var content = event.buildFormattedContent(timeline: widget.timeline);
+      // The failed message left for a photo whose upload the app's closing
+      // cut short says so in the reader's language.
+      final Object shown = event;
+      if (shown is MatrixTimelineEvent &&
+          isInterruptedPhotoMessage(shown.event)) {
+        content = Text(labelPhotoUploadInterrupted,
+            key: const ValueKey("interrupted-photo-upload"));
+      }
 
       if (content == null) {
         formattedContent = null;
@@ -367,16 +378,38 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
 
   /// [attachments] with the stage and time of the file under them while
   /// it is being sent from this device (see `AttachmentSend`).
+  ///
+  /// A photo sent before its upload (`async_photo_send.dart`) keeps the
+  /// line under its sent message until the photo is up, with "Cancel
+  /// send"; its failed message, left after a failure, shows it failed.
   Widget withPendingStatus(Widget attachments, Room? room) {
     final event = this.event;
-    if (room == null ||
-        event == null ||
-        (event.status != TimelineEventStatus.sending &&
-            event.status != TimelineEventStatus.error)) {
-      return attachments;
+    if (room == null || event == null) return attachments;
+    final mx = event is MatrixTimelineEvent ? event.event : null;
+    final photo = mx == null ? null : asyncPhotoSendOfEvent(mx);
+    if (event.status != TimelineEventStatus.sending &&
+        event.status != TimelineEventStatus.error) {
+      if (mx == null || (photo == null && !isPhotoLeftInRoom(mx))) {
+        return attachments;
+      }
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          attachments,
+          SentPhotoStatus(
+            changes: photo ?? const AlwaysStoppedAnimation(0),
+            uploading: () =>
+                photo != null && photo.uploading ? photo.send : null,
+            leftInRoom: () => isPhotoLeftInRoom(mx),
+            onCancel: () => room.cancelSend(event),
+          ),
+        ],
+      );
     }
     final send =
-        AttachmentSends.instance.byTransaction(room.localId, event.eventId);
+        AttachmentSends.instance.byTransaction(room.localId, event.eventId) ??
+            photo?.send;
     if (send == null) return attachments;
     return Column(
       mainAxisSize: MainAxisSize.min,

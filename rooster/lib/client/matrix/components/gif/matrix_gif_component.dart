@@ -9,6 +9,7 @@ import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/matrix/matrix_timeline.dart';
+import 'package:rooster/client/matrix/media/reserved_media.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event.dart';
 import 'package:rooster/client/timeline_events/timeline_event.dart';
 import 'package:rooster/debug/log.dart';
@@ -145,9 +146,8 @@ class MatrixGifComponent implements GifComponent<MatrixClient> {
   /// again skips the download and the upload, like a favorite does.
   final Map<Uri, Uri> _uploadedGifs = {};
 
-  /// Set once the homeserver turns down reserving an mxc up front, so it
-  /// isn't asked again for every gif.
-  bool _asyncUploadUnsupported = false;
+  /// The homeserver's reservations of an mxc up front, as gifs found them.
+  final MediaReservations _reservations = MediaReservations();
 
   /// Sends the message as soon as the gif has somewhere to live, and uploads
   /// it after. Uploading to the homeserver is the slow part, and it used to
@@ -166,7 +166,7 @@ class MatrixGifComponent implements GifComponent<MatrixClient> {
     var mxc = _uploadedGifs[gif.fullResUrl];
     if (mxc == null) {
       // Neither waits for the other.
-      final reserving = _reserveMxc(client);
+      final reserving = _reservations.reserve(client);
       final bytes = await _downloadGif(client, gif);
       final reserved = await reserving;
 
@@ -177,7 +177,8 @@ class MatrixGifComponent implements GifComponent<MatrixClient> {
         mxc = reserved;
         // Our own copy shows from the cache while it uploads.
         await _cacheLocally(reserved, bytes);
-        upload = _uploadToReserved(client, reserved, bytes, gif.mimeType);
+        upload = uploadToReservedMxc(client, reserved, bytes,
+            filename: "sticker", mimeType: gif.mimeType);
       }
     }
 
@@ -233,47 +234,6 @@ class MatrixGifComponent implements GifComponent<MatrixClient> {
       throw Exception("Could not download gif (${response.statusCode})");
     }
     return response.bodyBytes;
-  }
-
-  /// An mxc to send the message with before the gif is uploaded to it
-  /// (asynchronous uploads, `POST /_matrix/media/v1/create`), or null to
-  /// upload first on a homeserver without them.
-  Future<Uri?> _reserveMxc(matrix.Client client) async {
-    if (_asyncUploadUnsupported) return null;
-    try {
-      return (await client.createContent()).contentUri;
-    } on matrix.MatrixException catch (e) {
-      if (e.error == matrix.MatrixError.M_UNRECOGNIZED ||
-          e.error == matrix.MatrixError.M_NOT_FOUND) {
-        _asyncUploadUnsupported = true;
-      }
-      Log.w("Could not reserve an mxc for a gif, uploading first: $e");
-      return null;
-    } catch (e) {
-      Log.w("Could not reserve an mxc for a gif, uploading first: $e");
-      return null;
-    }
-  }
-
-  /// Retried: once the message is out, a failed upload means a broken image.
-  Future<void> _uploadToReserved(
-      matrix.Client client, Uri mxc, Uint8List bytes, String mimeType) async {
-    for (var attempt = 1;; attempt++) {
-      try {
-        await client.uploadContentToMXC(mxc.host, mxc.pathSegments.first, bytes,
-            filename: "sticker", contentType: mimeType);
-        return;
-      } on matrix.MatrixException catch (e) {
-        // An earlier attempt landed after all.
-        if (e.errcode == "M_CANNOT_OVERWRITE_MEDIA") return;
-        if (attempt >= 3) rethrow;
-        Log.w("Gif upload failed (attempt $attempt): $e");
-      } catch (e) {
-        if (attempt >= 3) rethrow;
-        Log.w("Gif upload failed (attempt $attempt): $e");
-      }
-      await Future.delayed(Duration(seconds: attempt * 2));
-    }
   }
 
   /// Puts the gif where our timeline looks for it first, so the message

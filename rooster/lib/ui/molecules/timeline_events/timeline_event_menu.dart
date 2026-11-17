@@ -10,6 +10,8 @@ import 'package:rooster/client/components/pinned_messages/pinned_messages_compon
 import 'package:rooster/client/components/polls/poll_component.dart';
 import 'package:rooster/client/components/push_notification/notification_content.dart';
 import 'package:rooster/client/components/push_notification/notification_manager.dart';
+import 'package:rooster/client/matrix/media/async_photo_send.dart';
+import 'package:rooster/client/matrix/media/interrupted_photo_uploads.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event.dart';
 import 'package:rooster/client/timeline.dart';
 import 'package:rooster/client/timeline_events/timeline_event.dart';
@@ -165,13 +167,21 @@ class TimelineEventMenu {
     // sent until its event's request leaves (a file preparing or
     // uploading, a text waiting in the room's queue): after that the
     // server may have it, and if that send fails it is a failed message.
-    bool canRetrySend = event.status == TimelineEventStatus.error;
     final pending = event;
+    // Not the failed message of a photo whose upload the app's closing cut
+    // short: its bytes are gone.
+    bool canRetrySend = event.status == TimelineEventStatus.error &&
+        !(pending is MatrixTimelineEvent &&
+            isInterruptedPhotoMessage(pending.event));
+    // A photo sent before its upload also while the photo goes up
+    // (`async_photo_send.dart`): its uploads stop and it is taken back.
     bool canCancelSend = event.status == TimelineEventStatus.error ||
         (event.status == TimelineEventStatus.sending &&
             pending is MatrixTimelineEvent &&
-            pending.event.room
-                .canCancelSend(pending.event.transactionId ?? pending.eventId));
+            pending.event.room.canCancelSend(
+                pending.event.transactionId ?? pending.eventId)) ||
+        (pending is MatrixTimelineEvent &&
+            asyncPhotoSendOfEvent(pending.event)?.uploading == true);
     bool canFavoriteGif = false;
     bool canUnfavoriteGif = false;
 

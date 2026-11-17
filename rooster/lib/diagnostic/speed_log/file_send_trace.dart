@@ -25,6 +25,10 @@ import 'package:rooster/diagnostic/speed_log/text_send_trace.dart';
 /// - `request`, then `retry`: the event's `PUT /send`, as in `text_send`;
 /// - `confirmed`: to the SDK returning the event's id (or giving up).
 ///
+/// A photo says which way it went: `async_upload` (its event first, to
+/// mxcs reserved by `reserve`, one per `POST /create`; then `uploaded`, to
+/// its last upload answered) or `upload_first` (as any other file).
+///
 /// Only fixed names and numbers: no file name, type, room, event or
 /// transaction id. Requests come from the log by the span's id.
 class FileSendTrace {
@@ -92,6 +96,24 @@ class FileSendTrace {
     _echoAt ??= span.elapsed;
   }
 
+  Duration? _eventAt;
+
+  /// A photo goes by asynchronous upload ([async]: its event first), or
+  /// uploads first.
+  void uploadPath({required bool async}) {
+    if (span.isFinished) return;
+    final at = span.elapsed;
+    span.addStep(async ? SpeedStep.asyncUpload : SpeedStep.uploadFirst, at,
+        Duration.zero);
+  }
+
+  /// The event of an asynchronous upload was sent: `confirmed` ends here,
+  /// and `uploaded` when the span finishes.
+  void eventSent() {
+    if (span.isFinished) return;
+    _eventAt ??= span.elapsed;
+  }
+
   /// Runs [body], the SDK's send, so its requests are linked to the span.
   R run<R>(R Function() body) => span.run(body);
 
@@ -122,7 +144,11 @@ class FileSendTrace {
         SpeedValue.attempt: request.attempt,
         if (request.status != null) SpeedValue.status: request.status!,
       };
-      if (isUploadRequest(request)) {
+      if (isReserveRequest(request)) {
+        span.addStep(SpeedStep.reserve, request.startedAt - span.startedAt,
+            request.timeToHeaders,
+            values: values);
+      } else if (isUploadRequest(request)) {
         span.addStep(SpeedStep.upload, request.startedAt - span.startedAt,
             request.timeToHeaders,
             values: {SpeedValue.bytes: request.bytesUp, ...values});
@@ -137,7 +163,11 @@ class FileSendTrace {
       }
     }
 
-    span.addStep(SpeedStep.confirmed, _sendAt, end - _sendAt);
+    final eventAt = _eventAt;
+    span.addStep(SpeedStep.confirmed, _sendAt, (eventAt ?? end) - _sendAt);
+    if (eventAt != null) {
+      span.addStep(SpeedStep.uploaded, _sendAt, end - _sendAt);
+    }
     span.finish(
         outcome: cancelled
             ? SpeedOutcome.cancelled
@@ -146,7 +176,14 @@ class FileSendTrace {
                 : SpeedOutcome.failed);
   }
 
-  /// Whether [request] uploads media (`POST /upload`).
+  /// Whether [request] uploads media: `POST /upload`, or `PUT` to an mxc
+  /// reserved before.
   static bool isUploadRequest(RequestRecord request) =>
-      request.method == 'POST' && request.route.endsWith('/upload');
+      (request.method == 'POST' && request.route.endsWith('/upload')) ||
+      (request.method == 'PUT' &&
+          request.route.endsWith('/upload/{serverName}/{mediaId}'));
+
+  /// Whether [request] reserves an mxc (`POST /create`).
+  static bool isReserveRequest(RequestRecord request) =>
+      request.method == 'POST' && request.route.endsWith('/media/v1/create');
 }

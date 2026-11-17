@@ -7,6 +7,7 @@ import 'package:rooster/client/matrix/matrix_mxc_file_provider.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/matrix/matrix_room_permissions.dart';
+import 'package:rooster/client/matrix/media/interrupted_photo_uploads.dart';
 import 'package:rooster/client/matrix/media/matrix_file_send.dart';
 import 'package:rooster/client/matrix/matrix_timeline.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event.dart';
@@ -43,11 +44,15 @@ class MatrixTimelineEventMessage extends MatrixTimelineEvent
   @override
   bool get editable => true;
 
-  /// The SDK's text for a deleted message is the English "Redacted".
+  /// The SDK's text for a deleted message is the English "Redacted". The
+  /// failed message left for a photo the app's closing cut short says so
+  /// in the app's language (its stored body is English).
   @override
   String? get body => event.redacted
       ? MatrixTimelineEvent.messageTimelineRedactedBody
-      : event.plaintextBody;
+      : isInterruptedPhotoMessage(event)
+          ? labelPhotoUploadInterrupted
+          : event.plaintextBody;
 
   String get formattedBody =>
       event.formattedText != "" ? event.formattedText : event.plaintextBody;
@@ -60,7 +65,9 @@ class MatrixTimelineEventMessage extends MatrixTimelineEvent
   @override
   String get plainTextBody => event.redacted
       ? MatrixTimelineEvent.messageTimelineRedactedBody
-      : event.plaintextBody;
+      : isInterruptedPhotoMessage(event)
+          ? labelPhotoUploadInterrupted
+          : event.plaintextBody;
 
   String _getPlaintextBody({Timeline? timeline}) {
     var e = getDisplayEvent(timeline);

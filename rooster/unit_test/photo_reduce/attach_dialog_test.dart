@@ -9,6 +9,7 @@ import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/matrix/media/matrix_attachment_files.dart';
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
 import 'package:rooster/generated/intl/messages_all.dart';
+import 'package:rooster/utils/image/image_header.dart';
 import 'package:rooster/utils/image/metadata/remove_image_metadata.dart';
 import 'package:rooster/utils/image/preparation/image_preparation.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
@@ -18,6 +19,23 @@ import '../image_metadata/attachment_processor_test.dart'
 import '../media_prepare/fakes.dart' show NoFrames, fakeJpegHeader;
 import '../media_prepare/send_harness.dart';
 import 'photos.dart';
+
+/// [jpeg] with an Exif block whose IFD0 has no Orientation, and whose Exif
+/// sub-IFD (0x8769) holds one: [orientation].
+Uint8List withSubIfdOrientation(Uint8List jpeg, int orientation) =>
+    Uint8List.fromList([
+      ...jpeg.sublist(0, 2),
+      0xFF, 0xE1, 0x00, 0x34, // 2 + 6 + 44
+      0x45, 0x78, 0x69, 0x66, 0x00, 0x00, // "Exif" and two zero bytes
+      0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00, // II*, IFD0 at 8
+      0x01, 0x00, // one entry: the pointer to the sub-IFD at 26
+      0x69, 0x87, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 26, 0, 0, 0,
+      0x00, 0x00, 0x00, 0x00, // no next IFD
+      0x01, 0x00, // sub-IFD: one entry
+      0x12, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, orientation, 0, 0, 0,
+      0x00, 0x00, 0x00, 0x00,
+      ...jpeg.sublist(2),
+    ]);
 
 /// The attach dialog says the size a photo will be sent at, and attaches
 /// it to be reduced, unless "Send original" is on.
@@ -152,6 +170,26 @@ void main() {
           reason: "the picture sent");
     });
   }
+
+  // Orientation 6 only in the Exif sub-IFD, which the header reader does
+  // not take and the engine applies: the dialog says the sides the engine
+  // turns it to, as the encoder sends it (1,707 x 2,560, standing).
+  testWidgets(
+      "an orientation only in the Exif sub-IFD: the sides it is sent "
+      "with", (tester) async {
+    final original = withSubIfdOrientation(cornerJpeg(3000, 2000), 6);
+    expect(readImageHeader(original)!.orientation, 1,
+        reason: "the header reader does not see it");
+    final drawn = (await tester.runAsync(() => engineDecode(original)))!;
+    expect((drawn.$1, drawn.$2), (2000, 3000), reason: "the engine turns it");
+
+    await openDialog(tester, attachmentOf(original));
+    const sentence = "This photo will be sent at 1,707 × 2,560 pixels. "
+        "To send it at full size, turn on \"Send original\".";
+    await waitFor(tester, () => find.text(sentence).evaluate().isNotEmpty,
+        tries: 20);
+    expect(find.text(sentence), findsOneWidget);
+  });
 
   testWidgets("a photo picked by its path: the size from the file's start",
       (tester) async {

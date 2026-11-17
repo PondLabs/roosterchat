@@ -256,3 +256,17 @@ Changes since the copy:
   without a new attempt. `Room.sendFileEvent` checks the server's limit by
   `MatrixFile.size`, and `Event.downloadAndDecryptAttachment` gives no
   file with no bytes for a message still being sent from disk.
+- Photos sent before their upload (the app's
+  `lib/client/matrix/media/async_photo_send.dart`): `runUploadToReserved`
+  (`lib/src/client.dart`) runs the upload loop of a part in a zone where
+  `Client.uploadContent` puts the bytes to an mxc reserved before
+  (`PUT /upload/{serverName}/{mediaId}`, an `M_CANNOT_OVERWRITE_MEDIA`
+  answer counted as an earlier attempt that landed), and
+  `uploadContentStream` refuses to run there. `Room.uploadsAfterEvent`
+  and `uploadsAfterEventEnded` (`lib/src/room.dart`) mark a message whose
+  event was sent while its uploads run: `Room.canCancelSend` is true for
+  it until they end, so its cancel stops them. `Room.showFileMessage`
+  shows a file message of this device, being sent or failed, without
+  sending anything, keeping its file as `sendFileEvent` does;
+  `Room.showFailedMessage` shows a failed message with any content and
+  keeps nothing (a photo whose upload the app's closing cut short).

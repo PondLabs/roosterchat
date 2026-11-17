@@ -126,9 +126,10 @@ class ImagePreparation {
   return fitWithin(header.width, header.height, photoMaxSide);
 }
 
-/// Makes the engine's codec for [bytes], decoding at [targetWidth] or
-/// [targetHeight] when given (one of them, the other follows the aspect
-/// ratio). Replaced in tests to count decodes.
+/// Makes the engine's codec for [bytes], decoding at [targetWidth] and
+/// [targetHeight] when given: a thumbnail asks for one of them (the other
+/// follows the aspect ratio), a photo to reduce for both, its reduced size.
+/// Replaced in tests to count decodes.
 typedef ImageCodecFactory = Future<ui.Codec> Function(Uint8List bytes,
     {int? targetWidth, int? targetHeight});
 
