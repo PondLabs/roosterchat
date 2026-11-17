@@ -12,13 +12,20 @@ import '../upload_loop/loop_fakes.dart';
 /// [OnlyUsTransport] whose room members request fails, as offline: the
 /// text's encryption cannot finish, and the SDK tries again every second.
 class _MembersOffline extends OnlyUsTransport {
+  _MembersOffline({this.offline = true});
+
+  final bool offline;
   int refused = 0;
+  int membersAsked = 0;
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     if (request.method == 'GET' && request.url.path.endsWith('/members')) {
-      refused++;
-      throw http.ClientException('Connection failed', request.url);
+      membersAsked++;
+      if (offline) {
+        refused++;
+        throw http.ClientException('Connection failed', request.url);
+      }
     }
     return super.send(request);
   }
@@ -66,6 +73,28 @@ void main() {
     expect(transport.events, isEmpty);
     expect(shownAgain, isEmpty);
     expect(await mx.database.getEventById('txn_text', room), isNull);
+    await mx.dispose(closeDatabase: true);
+  });
+
+  test(
+      'a text in an encrypted room cancelled before its first attempt is '
+      'not encrypted: no members request, no PUT /send',
+      skip: skipWithoutVodozemac, () async {
+    final transport = _MembersOffline(offline: false);
+    final (mx, room) =
+        await cryptoClient('cancel_before_attempt', transport, encrypted: true);
+    transport.membersAsked = 0;
+
+    final sending = room
+        .sendEvent({'msgtype': 'm.text', 'body': 'hello'}, txid: 'txn_early');
+    expect(room.cancelSending('txn_early'), isTrue);
+    expect(await sending, isNull);
+
+    print('encrypted text cancelled before its first attempt: members '
+        'requests ${transport.membersAsked}, PUT /send '
+        '${transport.events.length}');
+    expect(transport.membersAsked, 0);
+    expect(transport.events, isEmpty);
     await mx.dispose(closeDatabase: true);
   });
 }
