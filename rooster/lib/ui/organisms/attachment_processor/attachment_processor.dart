@@ -5,7 +5,9 @@ import 'package:rooster/debug/log.dart';
 import 'package:rooster/ui/atoms/scaled_safe_area.dart';
 import 'package:rooster/ui/molecules/file_preview.dart';
 import 'package:rooster/ui/molecules/video_player/video_player_controller.dart';
+import 'package:rooster/utils/image/image_header.dart';
 import 'package:rooster/utils/image/metadata/remove_image_metadata.dart';
+import 'package:rooster/utils/image/preparation/image_preparation.dart';
 import 'package:rooster/utils/mime.dart';
 import 'package:exif/exif.dart';
 import 'package:flutter/material.dart';
@@ -55,6 +57,16 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
       desc:
           "Warning over an image about to be sent whose metadata says where it was taken");
 
+  String labelAttachmentPhotoReduced(String width, String height) => Intl.message(
+      "This photo will be sent at $width × $height pixels. To send it at full size, turn on \"Send original\".",
+      name: "labelAttachmentPhotoReduced",
+      args: [width, height],
+      desc: "Shown in the dialog that previews a photo before it is "
+          "attached, when the photo is larger than what is sent by "
+          "default: the width and height (in pixels, already formatted "
+          "as numbers) it will be sent at. The \"Send original (keeps "
+          "metadata)\" switch above it sends the photo at its own size");
+
   String get promptChatAddFile => Intl.message("Add File",
       name: "promptChatAddFile",
       desc: "Button at the bottom of the dialog that previews a file before "
@@ -85,6 +97,11 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
   /// Whether [processImage] kept only the first frame of an animation.
   bool animationLost = false;
 
+  /// The width and height a photo is sent at when it is reduced (see
+  /// [photoReducedSize]); null for a picture sent at its own size, and
+  /// until its header has been read.
+  (int, int)? reducedSize;
+
   /// The image without metadata, held back while the dialog says its
   /// animation was not kept; the next "Add File" attaches it.
   PendingFileAttachment? withoutAnimation;
@@ -96,6 +113,7 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
     icon = Mime.toIcon(widget.attachment.mimeType);
     if (Mime.imageTypes.contains(widget.attachment.mimeType)) {
       loadExif();
+      loadReducedSize();
       canProcessData = true;
 
       if (widget.attachment.mimeType == "image/gif") {
@@ -129,6 +147,31 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
 
       exifData = data;
     });
+  }
+
+  /// Reads the picture's header (from the bytes in memory, or the start of
+  /// the file) for the size it will be sent at.
+  void loadReducedSize() async {
+    final attachment = widget.attachment;
+    Uint8List? head = attachment.data;
+    if (head == null && attachment.path != null) {
+      try {
+        final file = await File(attachment.path!).open();
+        try {
+          // A JPEG's size comes after its metadata segments, rarely more
+          // than a few hundred kilobytes in.
+          head = await file.read(1 << 20);
+        } finally {
+          await file.close();
+        }
+      } catch (_) {
+        return; // Reported when the file is read for "Add File".
+      }
+    }
+    final header = head == null ? null : readImageHeader(head);
+    final size = header == null ? null : photoReducedSize(header);
+    if (size == null || !mounted) return;
+    setState(() => reducedSize = size);
   }
 
   @override
@@ -191,6 +234,16 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
                         padding: const EdgeInsets.all(8.0),
                         child: buildFileProcessingSwitch(),
                       ),
+                    // Only where "Send original" is offered: a GIF (or a
+                    // file named as one) goes as it is.
+                    if (reducedSize != null &&
+                        canProcessData &&
+                        !sendOriginalFile &&
+                        !metadataRemovalFailed)
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: tiamat.Text.label(reducedSizeText(reducedSize!)),
+                      ),
                     if (metadataRemovalFailed && !sendOriginalFile)
                       Padding(
                         padding: const EdgeInsets.all(8.0),
@@ -232,6 +285,12 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
         ),
       ],
     );
+  }
+
+  String reducedSizeText((int, int) size) {
+    final number = NumberFormat.decimalPattern(Intl.getCurrentLocale());
+    return labelAttachmentPhotoReduced(
+        number.format(size.$1), number.format(size.$2));
   }
 
   Widget buildMetadataDisplay() {
@@ -333,8 +392,11 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
       name = "$rawName.$extension";
     }
 
+    // Without its metadata: a photo larger than the default size is sent
+    // reduced (only "Send original" sends it as it is).
     return PendingFileAttachment(
-        name: name, data: bytes, size: bytes.lengthInBytes, mimeType: mime);
+        name: name, data: bytes, size: bytes.lengthInBytes, mimeType: mime)
+      ..reducePhoto = true;
   }
 
   Future<PendingFileAttachment> processVideo() async {

@@ -2,6 +2,7 @@ import 'dart:js_interop';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:rooster/utils/image/metadata/image_container.dart';
 import 'package:rooster/utils/image/preparation/blurhash_rgba.dart';
 import 'package:rooster/utils/image/preparation/thumbnail_encoder.dart';
 // ignore: depend_on_referenced_packages
@@ -12,15 +13,19 @@ ThumbnailEncoder platformThumbnailEncoder() => const CanvasThumbnailEncoder();
 /// Encodes through the browser: the pixels go into an `OffscreenCanvas`
 /// and `convertToBlob` encodes them off the UI thread. `compute` would run
 /// the `image` package's encoder on the UI thread here, since the web has
-/// no isolates. The blurhash comes from a small copy the canvas scales.
+/// no isolates. The blurhash comes from a small copy the canvas scales. A
+/// reduced photo is encoded the same way, and the thumbnail is scaled from
+/// it.
 class CanvasThumbnailEncoder implements ThumbnailEncoder {
   const CanvasThumbnailEncoder();
 
   @override
   Future<ThumbnailResult> encode(ThumbnailRequest request) async {
     final maxSide = request.maxSide;
+    final reduceTo = request.reduceTo;
     // Decoded at the blurhash's size already: nothing for a canvas to do.
     if (maxSide == null &&
+        reduceTo == null &&
         max(request.width, request.height) <= blurhashSourceSide) {
       return ThumbnailResult(
           blurhash:
@@ -42,34 +47,58 @@ class CanvasThumbnailEncoder implements ThumbnailEncoder {
     final blurhash = blurhashOfRgba(Uint8List.sublistView(smallPixels), bw, bh);
     _release(small);
 
+    ReducedPhoto? reduced;
+    if (reduceTo != null) {
+      canvas = _fit(canvas, reduceTo);
+      // The browser writes no metadata either, but the photo goes through
+      // the same allowlist as an attached file all the same.
+      final bytes = parseImageContainer(
+              await _encode(canvas, "image/jpeg", photoJpegQuality))
+          ?.withoutMetadata();
+      if (bytes != null) {
+        reduced = ReducedPhoto(
+            bytes: bytes, width: canvas.width, height: canvas.height);
+      }
+    }
+
     if (maxSide == null) {
       _release(canvas);
-      return ThumbnailResult(blurhash: blurhash);
+      return ThumbnailResult(blurhash: blurhash, reduced: reduced);
     }
 
     final png = request.mayHaveAlpha && hasTransparency(request.rgba);
     final mimeType = png ? "image/png" : "image/jpeg";
-    final (w, h) = fitWithin(request.width, request.height, maxSide);
-    if (w != request.width || h != request.height) {
-      final scaled = _scaled(canvas, w, h);
-      _release(canvas);
-      canvas = scaled;
-    }
-
-    final blob = await canvas
-        .convertToBlob(web.ImageEncodeOptions(
-            type: mimeType, quality: thumbnailJpegQuality / 100))
-        .toDart;
-    final buffer = await blob.arrayBuffer().toDart;
+    canvas = _fit(canvas, maxSide);
+    final (w, h) = (canvas.width, canvas.height);
+    final bytes = await _encode(canvas, mimeType, thumbnailJpegQuality);
     _release(canvas);
     return ThumbnailResult(
       blurhash: blurhash,
+      reduced: reduced,
       thumbnail: PreparedThumbnail(
-          bytes: buffer.toDart.asUint8List(),
-          mimeType: mimeType,
-          width: w,
-          height: h),
+          bytes: bytes, mimeType: mimeType, width: w, height: h),
     );
+  }
+
+  /// [canvas] encoded by the browser, off the UI thread.
+  static Future<Uint8List> _encode(
+      web.OffscreenCanvas canvas, String mimeType, int quality) async {
+    final blob = await canvas
+        .convertToBlob(
+            web.ImageEncodeOptions(type: mimeType, quality: quality / 100))
+        .toDart;
+    final buffer = await blob.arrayBuffer().toDart;
+    return buffer.toDart.asUint8List();
+  }
+
+  /// [canvas] scaled down to at most [maxSide] on its long side (the old
+  /// one released), or [canvas] itself when it already fits.
+  static web.OffscreenCanvas _fit(web.OffscreenCanvas canvas, int maxSide) {
+    final (w, h) = fitWithin(canvas.width, canvas.height, maxSide);
+    if (w == canvas.width && h == canvas.height) return canvas;
+    final scaled = _scaled(canvas, w, h);
+    _release(canvas);
+    return scaled;
   }
 
   static web.OffscreenCanvasRenderingContext2D _context(

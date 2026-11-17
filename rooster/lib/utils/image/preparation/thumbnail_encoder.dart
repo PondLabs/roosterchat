@@ -10,6 +10,13 @@ const int thumbnailJpegQuality = 80;
 /// The long side of the small copy a blurhash is computed from.
 const int blurhashSourceSide = 32;
 
+/// A photo (a JPEG) larger than this on its long side is sent reduced to
+/// it, unless "Send original" is on.
+const int photoMaxSide = 2560;
+
+/// JPEG quality of a reduced photo.
+const int photoJpegQuality = 85;
+
 /// Pixels decoded once by the engine, handed to a [ThumbnailEncoder].
 class ThumbnailRequest {
   const ThumbnailRequest({
@@ -18,6 +25,7 @@ class ThumbnailRequest {
     required this.height,
     required this.maxSide,
     required this.mayHaveAlpha,
+    this.reduceTo,
   });
 
   /// Straight (not premultiplied) RGBA, [width] by [height].
@@ -32,6 +40,25 @@ class ThumbnailRequest {
   /// False for a format without transparency (JPEG): the pixels are not
   /// scanned for it.
   final bool mayHaveAlpha;
+
+  /// When set, the pixels are also encoded as the photo to send: a JPEG at
+  /// [photoJpegQuality], at most this many pixels on its long side, with
+  /// no metadata. The thumbnail is then made from that photo's pixels.
+  final int? reduceTo;
+}
+
+/// A photo reduced for sending: a JPEG without metadata, upright (no
+/// orientation tag), [width] by [height].
+class ReducedPhoto {
+  const ReducedPhoto({
+    required this.bytes,
+    required this.width,
+    required this.height,
+  });
+
+  final Uint8List bytes;
+  final int width;
+  final int height;
 }
 
 /// An encoded thumbnail.
@@ -52,15 +79,20 @@ class PreparedThumbnail {
 }
 
 class ThumbnailResult {
-  const ThumbnailResult({this.thumbnail, this.blurhash});
+  const ThumbnailResult({this.thumbnail, this.blurhash, this.reduced});
 
   /// Null when none was asked for or the encoder could not make one.
   final PreparedThumbnail? thumbnail;
   final String? blurhash;
+
+  /// The photo reduced for sending; null when none was asked for
+  /// ([ThumbnailRequest.reduceTo]).
+  final ReducedPhoto? reduced;
 }
 
 /// Turns decoded pixels into a thumbnail (JPEG at [thumbnailJpegQuality],
-/// PNG when a pixel is not opaque) and a blurhash, away from the UI
+/// PNG when a pixel is not opaque), a blurhash and, when asked, the reduced
+/// photo to send (JPEG at [photoJpegQuality]), away from the UI
 /// thread's heavy work: on native in a background isolate, with the
 /// `image` package (`encodeJpg`, 4:2:0 chroma); on the web through the
 /// browser's canvas encoder.

@@ -608,6 +608,7 @@
   "labelAttachmentMetadataNotRemoved": "Não foi possível remover os metadados desta imagem. Para anexá-la como está, ative \"Enviar original\".",
   "labelAttachmentAnimationNotKept": "A animação não foi mantida: só o primeiro quadro será anexado. Para anexá-la como está, ative \"Enviar original\".",
   "labelImageContainsLocationInfo": "Aviso: esta imagem contém metadados de localização",
+  "labelAttachmentPhotoReduced": "Esta foto será enviada com {width} × {height} pixels. Para enviá-la no tamanho original, ative \"Enviar original\".",
   "promptChatAddFile": "Adicionar arquivo",
   "promptAttachmentAttachFirstFrame": "Anexar o primeiro quadro",
   "labelFileOverUploadLimit": "Este arquivo tem {size}, acima do limite de {limit} deste servidor, e não pode ser enviado.",

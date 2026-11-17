@@ -125,6 +125,7 @@ thumbnail and a blurhash, from the request to the result.
 | `header` | the slot | the size and orientation read from the file header; value `bytes` (the file's size) |
 | `decode` | the header | the one engine decode, at thumbnail size or smaller, or at full size when the header could not be read; values `width`, `height` (as decoded) and `frames` (more than 1: animated) |
 | `encode` | the decode | the thumbnail and blurhash, in the background (native) or by the browser's canvas (web); values `bytes`, `width`, `height` of the thumbnail when one was made |
+| `reduce` | the decode | in place of `encode` for a photo reduced for sending (a JPEG over 2,560 px, decoded at 2,560): the reduced photo, its thumbnail and blurhash, the same way; values `bytes`, `width`, `height` of the reduced photo when one was made |
 
 Outcome `ok`, `failed` when the engine cannot decode the file (it is
 then sent as a plain file), `encode_failed` when the thumbnail encoder
