@@ -2053,6 +2053,12 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelPhotoUploadInterrupted": "A photo didn't finish uploading before Rooster closed. The others won't see it",
+  "@labelPhotoUploadInterrupted": {
+    "description": "In the chat and in the room list's preview, in place of a photo of yours whose upload had not finished when the app closed: its message was taken back from the room, and the photo can't be sent again from here (attach it again)",
+    "type": "text",
+    "placeholders": {}
+  },
   "messageTimelineRedactedBody": "Redacted",
   "@messageTimelineRedactedBody": {
     "description": "Stands in for the text of a message that was deleted (Matrix calls it redacted), such as above a reply to it",
@@ -3424,12 +3430,6 @@
   "promptCancelPhotoUpload": "Cancel send",
   "@promptCancelPhotoUpload": {
     "description": "Button under a photo whose message is already in the room while the photo itself is still uploading: stops the upload and takes the message back",
-    "type": "text",
-    "placeholders": {}
-  },
-  "labelPhotoUploadInterrupted": "A photo didn't finish uploading before Rooster closed. The others won't see it",
-  "@labelPhotoUploadInterrupted": {
-    "description": "In the chat, in place of a photo of yours whose upload had not finished when the app closed: its message was taken back from the room, and the photo can't be sent again from here (attach it again)",
     "type": "text",
     "placeholders": {}
   },

@@ -352,7 +352,7 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
       final Object shown = event;
       if (shown is MatrixTimelineEvent &&
           isInterruptedPhotoMessage(shown.event)) {
-        content = Text(PendingAttachmentStatus.labelPhotoUploadInterrupted,
+        content = Text(labelPhotoUploadInterrupted,
             key: const ValueKey("interrupted-photo-upload"));
       }
 

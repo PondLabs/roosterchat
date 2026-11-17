@@ -16,6 +16,7 @@ library;
 
 import 'dart:async';
 
+import 'package:intl/intl.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/matrix/media/async_photo_send.dart';
 import 'package:rooster/client/matrix/media/own_media.dart';
@@ -32,6 +33,18 @@ const interruptedPhotoKey = 'chat.rooster.interrupted_photo';
 /// app's closing cut short: it says so, and has no "Retry".
 bool isInterruptedPhotoMessage(matrix.Event event) =>
     event.content[interruptedPhotoKey] is String;
+
+/// What that failed message says, in the app's language, wherever it is
+/// shown: the timeline, the room list's preview, the quick switcher. Its
+/// stored body is never shown.
+String get labelPhotoUploadInterrupted => Intl.message(
+    "A photo didn't finish uploading before Rooster closed. The others "
+    "won't see it",
+    name: "labelPhotoUploadInterrupted",
+    desc: "In the chat and in the room list's preview, in place of a photo "
+        "of yours whose upload had not finished when the app closed: its "
+        "message was taken back from the room, and the photo can't be sent "
+        "again from here (attach it again)");
 
 class _Ledger {
   _Ledger(this.entries)
@@ -142,8 +155,8 @@ Future<void> _settle(
     await _save(client, ledger);
     await room.showFailedMessage(item, {
       'msgtype': matrix.MessageTypes.Notice,
-      // Not translated: the timeline shows labelPhotoUploadInterrupted in
-      // its place; this body is never sent.
+      // Not translated: labelPhotoUploadInterrupted is shown in its place
+      // (the timeline, the room's preview); this body is never sent.
       'body': "A photo didn't finish uploading before Rooster closed",
       interruptedPhotoKey: eventId,
     });
