@@ -132,6 +132,22 @@ abstract final class SpeedStep {
   /// From Send to the SDK returning the event's id, or giving up.
   static const confirmed = 'confirmed';
 
+  /// A photo whose event went before its upload, to mxcs reserved before
+  /// (`POST /create`): when that was decided, no duration.
+  static const asyncUpload = 'async_upload';
+
+  /// A photo whose upload went before its event, as every other file: the
+  /// homeserver gave no reservation. When that was decided, no duration.
+  static const uploadFirst = 'upload_first';
+
+  /// One `POST /create` (an mxc reserved): from leaving to its response
+  /// headers.
+  static const reserve = 'reserve';
+
+  /// An asynchronous upload's photo: from Send to its last upload answered,
+  /// or to its send ending without it.
+  static const uploaded = 'uploaded';
+
   // voice_join (timed steps may overlap: the join runs some side by side)
   /// The call being left hanging up.
   static const leavePrevious = 'leave_previous';
@@ -245,6 +261,10 @@ abstract final class SpeedStep {
     prepared,
     upload,
     confirmed,
+    asyncUpload,
+    uploadFirst,
+    reserve,
+    uploaded,
     leavePrevious,
     outputDevice,
     foci,

@@ -50,6 +50,8 @@ import 'package:rooster/client/timeline_events/timeline_event_message.dart';
 import 'package:rooster/client/timeline_events/timeline_event_sticker.dart';
 import 'package:rooster/config/build_config.dart';
 import 'package:rooster/debug/log.dart';
+import 'package:rooster/client/matrix/media/async_photo_send.dart';
+import 'package:rooster/client/matrix/media/interrupted_photo_uploads.dart';
 import 'package:rooster/client/matrix/media/matrix_file_send.dart';
 import 'package:rooster/diagnostic/speed_log/text_send_trace.dart';
 import 'package:rooster/main.dart';
@@ -590,7 +592,7 @@ class MatrixRoom extends Room implements RoomSendPreparation {
     // pending message (see media/matrix_file_send.dart).
     for (final file in processedAttachments ?? const <ProcessedAttachment>[]) {
       if (file is! MatrixProcessedAttachment) continue;
-      unawaited(sendMatrixFile(_matrixRoom, file,
+      unawaited(sendMatrixAttachment(_matrixRoom, file,
           threadLastEventId: threadLastEventId,
           threadRootEventId: threadRootEventId,
           extraContent: fileExtraContent));
@@ -1012,15 +1014,28 @@ class MatrixRoom extends Room implements RoomSendPreparation {
   /// uploads (the one in flight is aborted), a text leaves the room's
   /// queue, and the message is taken away. Once its event's request has
   /// left the server may have it: nothing changes.
+  ///
+  /// A photo sent by asynchronous upload (`async_photo_send.dart`) can
+  /// also be cancelled after its event was sent, while it uploads: its
+  /// uploads stop and the message is taken back (redacted).
   @override
   Future<void> cancelSend(TimelineEvent event) async {
     final mxEvent = event as MatrixTimelineEvent;
     final mx = mxEvent.event;
+    final photo = asyncPhotoSendOfEvent(mx);
+    if (photo != null && photo.uploading) {
+      await photo.cancel();
+      return;
+    }
     if (!_matrixRoom.canCancelSend(mx.transactionId ?? mx.eventId)) return;
     await mx.cancelSend();
     // A file sent from the composer: no longer shown, its bytes let go.
     final send = AttachmentSends.instance.byTransaction(localId, event.eventId);
     if (send != null) AttachmentSends.instance.remove(send);
+    // The failed message left by a photo's asynchronous upload.
+    if (photo != null && photo.failedMessageId == mx.eventId) {
+      await photo.dismiss();
+    }
   }
 
   /// "Retry" on a failed message. A file is sent again by the SDK
@@ -1051,6 +1066,16 @@ class MatrixRoom extends Room implements RoomSendPreparation {
   final Set<String> _retrying = {};
 
   Future<void> _retrySend(matrix.Event mx) async {
+    // The failed message of a photo the app's closing cut short: nothing
+    // to send again, its bytes are gone.
+    if (isInterruptedPhotoMessage(mx)) return;
+    // A photo whose asynchronous upload failed: a new event, under a new
+    // transaction id, to new reservations.
+    final photo = asyncPhotoSendOf(_matrixRoom, mx.eventId);
+    if (photo != null && photo.failedMessageId == mx.eventId) {
+      await photo.retry();
+      return;
+    }
     final send = AttachmentSends.instance.byTransaction(localId, mx.eventId);
     if (mx.status.isError && _fileMessageTypes.contains(mx.messageType)) {
       if (!_matrixRoom.sendingFilePlaceholders.containsKey(mx.eventId) &&

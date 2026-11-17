@@ -27,18 +27,20 @@ class TrackedMatrixAttachment extends MatrixProcessedAttachment {
   final AttachmentSend send;
 }
 
-/// Sends [attachment] in [room] under a new transaction id. Never throws:
-/// the result is the event's id, or null when the file did not reach the
-/// room (its pending event then says so).
+/// Sends [attachment] in [room] under a new transaction id ([txid] when
+/// given: a photo whose mxcs could not be reserved, already shown under
+/// it). Never throws: the result is the event's id, or null when the file
+/// did not reach the room (its pending event then says so).
 Future<String?> sendMatrixFile(
   matrix.Room room,
   MatrixProcessedAttachment attachment, {
+  String? txid,
   String? threadRootEventId,
   String? threadLastEventId,
   Map<String, dynamic>? extraContent,
 }) async {
   final send = attachment is TrackedMatrixAttachment ? attachment.send : null;
-  final txid = room.client.generateUniqueTransactionId();
+  txid ??= room.client.generateUniqueTransactionId();
   if (send != null) {
     final file = attachment.file;
     final thumbnailBytes = attachment.thumbnailFile?.bytes.length;

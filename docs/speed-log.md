@@ -145,12 +145,30 @@ Send unless the table says otherwise.
 | `preview_painted` | Send | the end of the first frame drawn after the local picture (or video poster) was decoded; unavailable when no frame came |
 | `prepared` | Send | the files handed to the Matrix SDK; values `bytes`, `thumbnail_bytes`, `width`, `height` |
 | `echo` | the hand-over | the room's pending event entering the timeline |
-| `upload` | the `POST /upload` leaves | its response headers, one per upload (the file, its thumbnail, a new attempt); values `bytes` (sent), `attempt`, `status` |
+| `upload` | the `POST /upload` (or, for a photo sent before its upload, the `PUT /upload/{serverName}/{mediaId}`) leaves | its response headers, one per upload (the file, its thumbnail, a new attempt); values `bytes` (sent), `attempt`, `status` |
 | `request` | the event's `PUT /send` leaves | its response headers; values `attempt`, `status` |
 | `retry` | the same `PUT /send` sent again | its response headers; same values |
 | `confirmed` | Send | the SDK returns the event's id, or gives up |
+| `async_upload` | when a photo goes by asynchronous upload (its event first) | the same moment: no duration |
+| `upload_first` | when a photo goes upload first, as any other file (no reservation granted) | the same moment: no duration |
+| `reserve` | the `POST /create` that reserves an mxc leaves | its response headers, one per mxc asked for; values `attempt`, `status` |
+| `uploaded` | Send | the last upload of a photo sent before its upload answered, or its send ending without it |
 
-Outcome `ok`, or `failed` when the file did not reach the room.
+Outcome `ok`, or `failed` when the file did not reach the room (for a
+photo sent before its upload, also when its upload failed and its message
+was taken back), or `cancelled`.
+
+#### A photo sent before its upload
+
+A photo held in memory (`m.image`) goes by asynchronous upload when the
+homeserver reserves its mxcs (`lib/client/matrix/media/async_photo_send.dart`):
+`async_upload`, one `reserve` per mxc, then `request` (its event) before
+the `upload` steps of its thumbnail and its file. `confirmed` ends at the
+event's id and `uploaded` at the last upload's answer: the first is when
+the others see the message, the second when they see the picture. A
+photo the homeserver gives no reservation for says `upload_first`, with
+its refused `reserve` (none once the homeserver said it has no such
+endpoint), and its steps are those of any file.
 
 #### A file sent from disk, or from the browser's `File`
 

@@ -871,7 +871,98 @@ class Room {
   /// request has not left (once it has, the server may have it) and the // ROOSTER
   /// server did not take it. // ROOSTER
   bool canCancelSend(String txid) => // ROOSTER
-      !_sendRequestsLeft.containsKey(txid) && !_sentSends.contains(txid); // ROOSTER
+      _uploadsAfterEvent.contains(txid) || // ROOSTER
+      (!_sendRequestsLeft.containsKey(txid) && !_sentSends.contains(txid)); // ROOSTER
+
+  /// The file messages sent before their file went up (an asynchronous // ROOSTER
+  /// upload, to an mxc reserved before), by transaction id, while their // ROOSTER
+  /// uploads run: cancelling one stops its uploads although its event // ROOSTER
+  /// was sent, and the app takes the message back. // ROOSTER
+  final _uploadsAfterEvent = <String>{}; // ROOSTER
+
+  /// The event of the message [txid] was sent and its file goes up now: // ROOSTER
+  /// it can be cancelled until [uploadsAfterEventEnded]. // ROOSTER
+  void uploadsAfterEvent(String txid) => _uploadsAfterEvent.add(txid); // ROOSTER
+
+  /// The uploads of the message [txid] ended: it is sent, or taken back. // ROOSTER
+  void uploadsAfterEventEnded(String txid) => // ROOSTER
+      _uploadsAfterEvent.remove(txid); // ROOSTER
+
+  /// Shows [file] in the timeline as this device's file message [txid], // ROOSTER
+  /// kept as [sendFileEvent] keeps a file it sends (to show it and to send // ROOSTER
+  /// it again), without sending anything: being sent, when its send has // ROOSTER
+  /// not started yet (the send that follows takes it out of the sending // ROOSTER
+  /// queue), or [failed]. // ROOSTER
+  Future<void> showFileMessage( // ROOSTER
+    String txid, // ROOSTER
+    MatrixFile file, { // ROOSTER
+    MatrixImageFile? thumbnail, // ROOSTER
+    bool failed = false, // ROOSTER
+    Map<String, dynamic>? extraContent, // ROOSTER
+    String? threadRootEventId, // ROOSTER
+    String? threadLastEventId, // ROOSTER
+  }) async { // ROOSTER
+    sendingFilePlaceholders[txid] = file; // ROOSTER
+    if (thumbnail != null) sendingFileThumbnails[txid] = thumbnail; // ROOSTER
+    if (!failed) sendingQueueEventsByTxId.add(txid); // ROOSTER
+    await _showLocalMessage( // ROOSTER
+      txid, // ROOSTER
+      { // ROOSTER
+        'msgtype': file.msgType, // ROOSTER
+        'body': file.name, // ROOSTER
+        'filename': file.name, // ROOSTER
+        'info': file.info, // ROOSTER
+        if (extraContent != null) ...extraContent, // ROOSTER
+      }, // ROOSTER
+      failed ? EventStatus.error : EventStatus.sending, // ROOSTER
+      FileSendRequestCredentials( // ROOSTER
+        extraContent: extraContent, // ROOSTER
+        threadRootEventId: threadRootEventId, // ROOSTER
+        threadLastEventId: threadLastEventId, // ROOSTER
+      ).toJson(), // ROOSTER
+    ); // ROOSTER
+  } // ROOSTER
+
+  /// Shows a failed message of this device with [content] in the timeline // ROOSTER
+  /// under [txid], keeping nothing to send it again and sending nothing: // ROOSTER
+  /// a send the app can only report. // ROOSTER
+  Future<void> showFailedMessage( // ROOSTER
+    String txid, // ROOSTER
+    Map<String, dynamic> content, // ROOSTER
+  ) => // ROOSTER
+      _showLocalMessage(txid, content, EventStatus.error, const {}); // ROOSTER
+
+  Future<void> _showLocalMessage( // ROOSTER
+    String txid, // ROOSTER
+    Map<String, dynamic> content, // ROOSTER
+    EventStatus status, // ROOSTER
+    Map<String, dynamic> unsigned, // ROOSTER
+  ) async { // ROOSTER
+    final event = MatrixEvent( // ROOSTER
+      content: content, // ROOSTER
+      type: EventTypes.Message, // ROOSTER
+      eventId: txid, // ROOSTER
+      senderId: client.userID!, // ROOSTER
+      originServerTs: DateTime.now(), // ROOSTER
+      unsigned: { // ROOSTER
+        messageSendingStatusKey: status.intValue, // ROOSTER
+        'transaction_id': txid, // ROOSTER
+        ...unsigned, // ROOSTER
+      }, // ROOSTER
+    ); // ROOSTER
+    await _handleFakeSync( // ROOSTER
+      SyncUpdate( // ROOSTER
+        nextBatch: '', // ROOSTER
+        rooms: RoomsUpdate( // ROOSTER
+          join: { // ROOSTER
+            id: JoinedRoomUpdate( // ROOSTER
+              timeline: TimelineUpdate(events: [event]), // ROOSTER
+            ), // ROOSTER
+          }, // ROOSTER
+        ), // ROOSTER
+      ), // ROOSTER
+    ); // ROOSTER
+  } // ROOSTER
 
   /// Cancels the send of the message [txid]: a file stops in its // ROOSTER
   /// preparation or uploads (the request in flight is aborted), a text // ROOSTER

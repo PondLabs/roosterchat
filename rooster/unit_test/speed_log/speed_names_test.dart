@@ -84,6 +84,7 @@ void main() {
       'header', 'decode', 'encode', 'reduce', // image_prepare (and queue_wait)
       // file_send (and echo, request, retry)
       'attached', 'preview_painted', 'prepared', 'upload', 'confirmed',
+      'async_upload', 'upload_first', 'reserve', 'uploaded', // a photo's path
       // voice_join
       'leave_previous', 'output_device', 'foci', 'openid_token', 'sfu_token',
       'sfu_livekit_cloud', 'sfu_self_hosted', 'microphone_early',

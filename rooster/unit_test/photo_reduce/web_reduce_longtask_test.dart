@@ -31,20 +31,36 @@ void main() {
         reason: "otherwise the observer below proves nothing");
   });
 
-  test("a 4032 x 3024 photo is reduced with no main-thread task over 100 ms",
+  // The longest main-thread task of a run, over 5 runs, by its median: one
+  // run can catch another program's work on a shared machine (one in 13
+  // went to 103 ms, the median of those was 69 ms), the median of 5 does
+  // not, and a reduction that blocks the thread lifts every run.
+  test(
+      "a 4032 x 3024 photo is reduced with no main-thread task over 100 ms "
+      "(the median of 5 runs)",
       skip: skip, () async {
     final bytes = await canvasPhotoJpeg(4032, 3024);
     expect(readImageHeader(bytes)!.width, 4032);
-    final log = SpeedLog(frames: NoFrames());
-    final preparer = ImagePreparer(log: log);
 
-    // Settle anything the canvas left behind before watching.
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-    final observer = LongTaskObserver.start();
-    final watch = Stopwatch()..start();
-    final prepared = await preparer.prepare(bytes, reduce: true);
-    watch.stop();
-    final tasks = await observer.stop();
+    final longest = <double>[];
+    late SpeedLog log;
+    late ImagePreparation? prepared;
+    late List<double> tasks;
+    late Stopwatch watch;
+    for (var run = 0; run < 5; run++) {
+      log = SpeedLog(frames: NoFrames());
+      final preparer = ImagePreparer(log: log);
+      // Settle anything the canvas left behind before watching.
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      final observer = LongTaskObserver.start();
+      watch = Stopwatch()..start();
+      prepared = await preparer.prepare(bytes, reduce: true);
+      watch.stop();
+      tasks = await observer.stop();
+      longest.add(tasks.fold(0.0, (a, b) => a > b ? a : b));
+    }
+    final sorted = [...longest]..sort();
+    final median = sorted[2];
 
     final reduced = prepared!.reduced!;
     final thumbnail = prepared.thumbnail!;
@@ -57,7 +73,9 @@ void main() {
         " ms to ${reduced.width} x ${reduced.height}, "
         "${reduced.bytes.length} bytes; thumbnail ${thumbnail.width} x "
         "${thumbnail.height}; long tasks "
-        "${tasks.map((t) => t.round()).toList()} ms");
+        "${tasks.map((t) => t.round()).toList()} ms; longest task of each "
+        "of 5 runs ${longest.map((t) => t.round()).toList()} ms, median "
+        "${median.round()} ms");
 
     expect(steps.map((s) => s.name), contains(SpeedStep.reduce));
     expect((reduced.width, reduced.height), (2560, 1920));
@@ -70,8 +88,8 @@ void main() {
     expect(reduced.bytes.length, lessThan(bytes.length));
     expect((thumbnail.width, thumbnail.height), (800, 600));
     expect(prepared.blurhash, isNotNull);
-    expect(tasks.where((t) => t > 100), isEmpty,
-        reason: "long tasks (ms): $tasks");
+    expect(median, lessThan(100),
+        reason: "longest task of each run (ms): $longest");
   });
 
   test("a 3:2 photo lying down: the size the dialog says", skip: skip,

@@ -13,12 +13,29 @@ import 'package:rooster/utils/text_utils.dart';
 /// real count ("3.1 MB of 48 MB"); once every byte is handed over the line
 /// reads "Waiting for the server", never a count resting at its total. A
 /// failed one says so (premise: no failed send is hidden), and
-/// [onDismiss], when given, takes it away.
+/// [onDismiss], when given, takes it away. [onCancel], when given, is a
+/// "Cancel send" button while it is not finished: a photo whose message
+/// was sent before its upload (`async_photo_send.dart`).
 class PendingAttachmentStatus extends StatefulWidget {
-  const PendingAttachmentStatus(this.send, {this.onDismiss, super.key});
+  const PendingAttachmentStatus(this.send,
+      {this.onDismiss, this.onCancel, super.key});
 
   final AttachmentSend send;
   final VoidCallback? onDismiss;
+  final VoidCallback? onCancel;
+
+  static String get promptCancelPhotoUpload => Intl.message("Cancel send",
+      name: "promptCancelPhotoUpload",
+      desc: "Button under a photo whose message is already in the room while "
+          "the photo itself is still uploading: stops the upload and takes "
+          "the message back");
+
+  static String get labelPhotoLeftInRoom => Intl.message(
+      "The photo didn't upload, and this message couldn't be deleted",
+      name: "labelPhotoLeftInRoom",
+      desc: "Under a photo message of yours that is in the room but whose "
+          "photo never finished uploading, when the app could not take the "
+          "message back: the others see it without its picture");
 
   static String get labelPendingFilePreparing => Intl.message("Preparing",
       name: "labelPendingFilePreparing",
@@ -261,7 +278,7 @@ class _PendingAttachmentStatusState extends State<PendingAttachmentStatus> {
     // The size, the count and the clock are short and always whole; the
     // stage takes the rest of the width and wraps onto a second line (the
     // sentence of a failure is long, a third longer in Portuguese).
-    return Padding(
+    final line = Padding(
       padding: const EdgeInsets.fromLTRB(0, 4, 0, 2),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -300,6 +317,26 @@ class _PendingAttachmentStatusState extends State<PendingAttachmentStatus> {
             ),
         ],
       ),
+    );
+    final onCancel = widget.onCancel;
+    if (onCancel == null || send.isFinished) return line;
+    // Under the line, which keeps its width for the stage.
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        line,
+        TextButton.icon(
+          key: const ValueKey("pending-file-cancel"),
+          style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              textStyle: Theme.of(context).textTheme.bodySmall),
+          onPressed: onCancel,
+          icon: const Icon(Icons.close_rounded, size: 14),
+          label: Text(PendingAttachmentStatus.promptCancelPhotoUpload),
+        ),
+      ],
     );
   }
 }
@@ -345,4 +382,59 @@ class PendingPictureSlot extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Under a photo message of this device that was sent before its upload
+/// (`async_photo_send.dart`): its send's line ([PendingAttachmentStatus])
+/// with "Cancel send" ([onCancel]) while the photo goes up, and nothing
+/// once it is up. When its upload failed and the message could not be
+/// taken back, that it is still in the room without its picture.
+class SentPhotoStatus extends StatelessWidget {
+  const SentPhotoStatus(
+      {required this.changes,
+      required this.uploading,
+      required this.leftInRoom,
+      required this.onCancel,
+      super.key});
+
+  /// Tells of each change of the photo's send.
+  final Listenable changes;
+
+  /// The send whose line shows while the photo goes up, null otherwise.
+  final AttachmentSend? Function() uploading;
+
+  /// Whether the message is in the room although its photo never went up.
+  final bool Function() leftInRoom;
+
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: changes,
+        builder: (context, _) {
+          if (leftInRoom()) {
+            final color = Theme.of(context).colorScheme.error;
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(0, 4, 0, 2),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.error_outline_rounded, size: 14, color: color),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(PendingAttachmentStatus.labelPhotoLeftInRoom,
+                      key: const ValueKey("sent-photo-left-in-room"),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: color)),
+                ),
+              ]),
+            );
+          }
+          final send = uploading();
+          if (send == null) return const SizedBox.shrink();
+          return PendingAttachmentStatus(send, onCancel: onCancel);
+        },
+      );
 }

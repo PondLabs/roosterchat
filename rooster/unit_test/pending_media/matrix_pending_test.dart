@@ -380,11 +380,14 @@ void main() {
 
     expect(span.name, SpeedOperation.fileSend);
     expect(span.outcome, SpeedOutcome.ok);
+    // The fake homeserver reserves no mxc: the photo goes upload first.
     expect(span.steps.map((s) => s.name), [
       SpeedStep.attached,
       SpeedStep.prepared,
+      SpeedStep.uploadFirst,
       SpeedStep.previewPainted,
       SpeedStep.echo,
+      SpeedStep.reserve,
       SpeedStep.upload,
       SpeedStep.request,
       SpeedStep.confirmed,

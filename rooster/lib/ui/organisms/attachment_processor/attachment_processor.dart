@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/debug/log.dart';
@@ -8,6 +9,7 @@ import 'package:rooster/ui/molecules/video_player/video_player_controller.dart';
 import 'package:rooster/utils/image/image_header.dart';
 import 'package:rooster/utils/image/metadata/remove_image_metadata.dart';
 import 'package:rooster/utils/image/preparation/image_preparation.dart';
+import 'package:rooster/utils/image/preparation/thumbnail_encoder.dart';
 import 'package:rooster/utils/mime.dart';
 import 'package:exif/exif.dart';
 import 'package:flutter/material.dart';
@@ -170,8 +172,39 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
     }
     final header = head == null ? null : readImageHeader(head);
     final size = header == null ? null : photoReducedSize(header);
-    if (size == null || !mounted) return;
+    if (head == null || header == null || size == null || !mounted) return;
     setState(() => reducedSize = size);
+
+    // The sides as the engine turns the photo, which is where the encoder
+    // takes them (`asDrawn`): it also reads an orientation the header
+    // reader does not, one only in the Exif sub-IFD. On the web the engine
+    // says nothing before a decode: the header's size stays.
+    final drawn = await _engineSize(head);
+    if (drawn == null || !mounted) return;
+    final (width, height) = asDrawn(header, drawn.$1, drawn.$2);
+    final turned = fitWithin(width, height, photoMaxSide);
+    if (turned != reducedSize) setState(() => reducedSize = turned);
+  }
+
+  /// The size the engine gives [bytes], orientation applied, read from
+  /// their header without decoding them; null when it cannot say (the
+  /// web, bytes it does not know).
+  static Future<(int, int)?> _engineSize(Uint8List bytes) async {
+    try {
+      final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+      try {
+        final descriptor = await ui.ImageDescriptor.encoded(buffer);
+        try {
+          return (descriptor.width, descriptor.height);
+        } finally {
+          descriptor.dispose();
+        }
+      } finally {
+        buffer.dispose();
+      }
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
