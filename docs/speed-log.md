@@ -152,7 +152,7 @@ Send unless the table says otherwise.
 
 Outcome `ok`, or `failed` when the file did not reach the room.
 
-#### A file sent from disk, and the browser's bound
+#### A file sent from disk, or from the browser's `File`
 
 On native, a file over 8 MiB attached by its path (not a picture) is not
 read at Send: the Matrix SDK reads it from disk at each upload attempt, in
@@ -189,20 +189,47 @@ In the encrypted room the cipher (pointycastle's AES-CTR and SHA-256, pure
 Dart) sets the pace, about 20 MB/s in this test process; the main isolate
 runs none of it.
 
-The browser has no paths: a picked file is read into memory when it is
-attached, and sent from those bytes. Its bound, measured in Chrome with a
-50 MB file read as the app admits it and uploaded through our HTTP client
-(`XMLHttpRequest`), seven runs (four in development, three in review)
-(`unit_test/upload_stream/web_upload_memory_test.dart`):
+In a browser, a file over 8 MiB that is not a picture, picked, pasted or
+dropped, is attached with the browser's `File`, never read into memory
+(`lib/client/matrix/media/browser_file_source.dart`). In a room that does
+not encrypt, `XMLHttpRequest` sends the `File` as it is: the page reads one
+byte of it, to know it can still be read. In an encrypted room each attempt
+reads it in pieces of 256 KiB, encrypts each one with a new key (the same
+`file_cipher.dart` as native, on the page's thread: the web has no
+isolates) and adds it to a `Blob` the browser keeps, which is what goes up.
+A smaller file, and a picture, are read into memory as before. A file the
+browser cannot read any more (changed, moved or deleted since it was
+picked: `NotReadableError`) fails its send as changed, also when the
+browser cut its send for that (Chrome's `ERR_UPLOAD_FILE_CHANGED`): a
+byte read tells that from a network failure.
 
-| Sent | JS heap growth | Longest task of the page's thread |
-|---|---|---|
-| 50 MB, in the clear | 99.9 to 101.3 MB (2.0 times the file) | 58 to 118 ms (1 long task per run) |
+What this costs, measured in Chrome on the same machine on 2026-11-17,
+median of 3, each run its own Chrome, a 50 MB file:
 
-The file is held twice while it is read: its pieces, then the one buffer
-they are joined into. An encrypted room adds the encrypted copy (not
-measured here: the test page has no vodozemac). The web's own way is the
-next step of this work.
+| Sent | JS heap growth | Longest task of the page's thread | Time to send |
+|---|---|---|---|
+| Before: read as the app admitted it, then sent from those bytes | 100.1 MB (99.8 to 100.2; 2.0 times the file) | 81 ms (67 to 114; 1 long task) | 0.3 s |
+| In the clear, as its `File` | 0.8 MB (all three) | no long task (none of 50 ms) | 0.7 s |
+| Encrypted room, in pieces, release build | 49.9 MB at the peak, none kept | no long task | 5.0 s (4.6 to 5.8) |
+
+The first two rows come from
+`unit_test/upload_stream/web_upload_memory_test.dart` (a fake dialog, our
+HTTP client, a server on 127.0.0.1 run by `web_upload_server.dart`), the
+first one on the base the change started from. The page reads 1 byte of
+the file and the server gets its 52,428,800 bytes with the same SHA-256.
+Before, the file was held twice while it was read (its pieces, then the
+one buffer they were joined into), and an encrypted room added the
+encrypted copy, which a test page cannot measure: it has no vodozemac.
+The two times do not compare: before, the test sent to the test page's
+own server; now the fake server reads and hashes every byte.
+
+The last row is the app's encrypted read compiled by dart2js `-O2`, the
+release compiler, in headless Chrome: the test page runs the development
+compiler, whose cipher is about 35 times slower. The cipher sets the pace
+(pointycastle's AES-CTR with SHA-256, about 12.5 MB/s, 25 ms for a piece
+of 256 KiB). The heap's peak is the pieces already given to the `Blob`,
+garbage not collected yet: after a collection the heap is below where it
+started.
 
 ### `media_show`
 

@@ -111,11 +111,13 @@ void main() {
   }, skip: skipWithoutServer, timeout: const Timeout(Duration(minutes: 3)));
 
   // The test page runs the development compiler, whose pointycastle is
-  // about 35 times slower than a release build's: the heap is what this
-  // measures here, the cipher's time is measured on a release build.
+  // about 35 times slower than a release build's and leaves garbage the
+  // heap counts until a collection: the heap printed here varies from run
+  // to run. What holds is what is read at once, a piece; the cipher's time
+  // and heap are measured on a release build (`docs/speed-log.md`).
   test(
       'web, encrypted room: a 16 MiB file is encrypted in pieces into a '
-      'Blob; heap', () async {
+      'Blob, a piece read at a time', () async {
     const bytes = 16 * mib;
     final (file, _) = await pageFile(bytes);
     final source = BrowserFileSource(file);
@@ -147,7 +149,8 @@ void main() {
     expect(response.statusCode, 200);
     expect(reading.complete, isTrue);
     expect(received['bytes'], bytes);
-    expect(growth, lessThan(bytes / 2),
-        reason: 'the file is never held whole, encrypted or not');
+    expect(source.largestRead, BrowserFileSource.piece,
+        reason: 'read a piece at a time, never whole');
+    expect(source.bytesRead, bytes);
   }, skip: skipWithoutServer, timeout: const Timeout(Duration(minutes: 3)));
 }
