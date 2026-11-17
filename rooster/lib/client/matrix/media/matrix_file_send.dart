@@ -43,15 +43,14 @@ Future<String?> sendMatrixFile(
     final file = attachment.file;
     final thumbnailBytes = attachment.thumbnailFile?.bytes.length;
     send.trace?.handedOver(
-      bytes: file.bytes.length,
+      bytes: file.size,
       thumbnailBytes: thumbnailBytes,
       width: file.info['w'] as int?,
       height: file.info['h'] as int?,
     );
     // Encryption keeps the size (AES-CTR): these are the bytes uploaded.
     send.handedOver(txid,
-        bytes: file.bytes.length,
-        uploadBytes: file.bytes.length + (thumbnailBytes ?? 0));
+        bytes: file.size, uploadBytes: file.size + (thumbnailBytes ?? 0));
   }
   return _follow(
       room,
@@ -132,7 +131,8 @@ Future<String?> _follow(matrix.Room room, AttachmentSend? send, String txid,
   } catch (error, stack) {
     // The upload or the event failed for good: the SDK marked its pending
     // event as failed, and the message shows it, with when the server
-    // takes it again if it said.
+    // takes it again if it said, or that its file changed on disk.
+    if (error is matrix.FileSourceChangedException) send?.upload.fileChanged();
     final retryAfterMs =
         error is matrix.MatrixException ? error.retryAfterMs : null;
     if (retryAfterMs != null) {
@@ -160,7 +160,10 @@ Attachment? localPendingAttachment(matrix.Event event) {
   final name = file.name;
   final width = (file.info['w'] as num?)?.toDouble();
   final height = (file.info['h'] as num?)?.toDouble();
-  final provider = MemoryFileProvider(file.bytes, name);
+  final source = file.source;
+  final FileProvider provider = source == null
+      ? MemoryFileProvider(file.bytes, name)
+      : SourceFileProvider(source, name);
 
   if (Mime.imageTypes.contains(mimeType)) {
     return ImageAttachment(localPicture(file.bytes), provider,
@@ -182,6 +185,48 @@ Attachment? localPendingAttachment(matrix.Event event) {
   }
   return FileAttachment(provider,
       name: name, mimeType: mimeType, fileSize: file.size);
+}
+
+/// A pending message's own file sent from disk, read from there when asked
+/// for: a copy is written piece by piece.
+class SourceFileProvider implements FileProvider {
+  SourceFileProvider(this.source, this.name);
+
+  final matrix.FileSendSource source;
+  final String name;
+
+  @override
+  String get fileIdentifier => "source:${identityHashCode(source)}";
+
+  @override
+  Future<Uri?> resolve() async => null;
+
+  @override
+  Future<void> save(String filepath) async {
+    final read = source.read();
+    try {
+      await read.bytes.pipe(File(filepath).openWrite());
+    } finally {
+      await read.close();
+    }
+  }
+
+  @override
+  Stream<DownloadProgress>? get onProgressChanged => null;
+
+  @override
+  Future<Uint8List?> getFileData() async {
+    final read = source.read();
+    try {
+      final bytes = BytesBuilder(copy: false);
+      await for (final piece in read.bytes) {
+        bytes.add(piece);
+      }
+      return bytes.takeBytes();
+    } finally {
+      await read.close();
+    }
+  }
 }
 
 /// A file held in memory: a pending message's own file.

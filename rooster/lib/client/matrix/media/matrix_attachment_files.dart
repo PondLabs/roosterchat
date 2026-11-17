@@ -13,11 +13,18 @@
 /// that reduced JPEG, with its size, when it is smaller than the attached
 /// bytes (the photo with its metadata removed); otherwise the attached
 /// bytes go.
+///
+/// On native, a file over [streamFromDiskAbove] attached by its path (not a
+/// picture, which is prepared from its bytes) is not read here: the SDK
+/// reads it from disk at each upload, in pieces (`disk_file_source.dart`).
 library;
+
+import 'dart:typed_data';
 
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/matrix/matrix_attachment.dart';
+import 'package:rooster/client/matrix/media/disk_file_source.dart';
 import 'package:rooster/client/matrix/media/matrix_file_send.dart';
 import 'package:rooster/utils/image/image_header.dart';
 import 'package:rooster/utils/image/preparation/image_preparation.dart';
@@ -62,9 +69,16 @@ class PreparedImageFile extends matrix.MatrixFile {
 Future<MatrixProcessedAttachment?> matrixFilesForAttachment(
     PendingFileAttachment attachment,
     {ImagePreparer? preparer}) async {
-  await attachment.resolve();
-  if (attachment.data == null) return null;
+  final fromDisk = await _diskSourceOf(attachment);
+  if (fromDisk == null) {
+    await attachment.resolve();
+    if (attachment.data == null) return null;
+  } else {
+    attachment.size = fromDisk.length;
+  }
   attachment.sending?.fileRead();
+  // Read from disk by the SDK, its bytes never held here.
+  T file<T extends matrix.MatrixFile>(T file) => file..source = fromDisk;
 
   final send = attachment.sending;
   MatrixProcessedAttachment processed(matrix.MatrixFile file,
@@ -95,7 +109,8 @@ Future<MatrixProcessedAttachment?> matrixFilesForAttachment(
   final name = attachment.name ??
       (prepared != null ? "unknown" : "Unknown") +
           (extension == null ? "" : ".$extension");
-  var bytes = attachment.data!;
+  // Empty for a file the SDK reads from disk (see [streamFromDiskAbove]).
+  var bytes = attachment.data ?? Uint8List(0);
 
   if (prepared != null) {
     var (width, height) = (prepared.width, prepared.height);
@@ -158,20 +173,40 @@ Future<MatrixProcessedAttachment?> matrixFilesForAttachment(
 
   if (Mime.videoTypes.contains(attachment.mimeType)) {
     return processed(
-      matrix.MatrixVideoFile(
+      file(matrix.MatrixVideoFile(
         bytes: bytes,
         name: name,
         mimeType: attachment.mimeType,
         width: attachment.dimensions?.width.toInt(),
         height: attachment.dimensions?.height.toInt(),
         duration: attachment.length?.inMilliseconds,
-      ),
+      )),
       thumbnailFile: thumbnailImageFile,
     );
   }
 
   return processed(
-      matrix.MatrixFile(
-          bytes: bytes, name: name, mimeType: attachment.mimeType),
+      file(matrix.MatrixFile(
+          bytes: bytes, name: name, mimeType: attachment.mimeType)),
       thumbnailFile: thumbnailImageFile);
+}
+
+/// A file attached by its path over this size is sent from disk, never
+/// read whole (native). One within it is read and sent from memory, as
+/// before: it goes into the account's own media (`own_media.dart`).
+const int streamFromDiskAbove = 8 * 1024 * 1024;
+
+/// Where [attachment]'s file is read from at each upload, when it is sent
+/// from disk: a file attached by its path, not read yet, not a picture,
+/// over [streamFromDiskAbove]. Null otherwise, and on the web.
+Future<matrix.FileSendSource?> _diskSourceOf(
+    PendingFileAttachment attachment) async {
+  final path = attachment.path;
+  if (attachment.data != null ||
+      path == null ||
+      Mime.imageTypes.contains(attachment.mimeType)) {
+    return null;
+  }
+  final source = await diskFileSource(path);
+  return source != null && source.length > streamFromDiskAbove ? source : null;
 }

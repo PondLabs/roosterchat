@@ -36,8 +36,17 @@ class MatrixFile {
   /// Encrypts this file and returns the
   /// encryption information as an [EncryptedFile].
   Future<EncryptedFile> encrypt() async {
+    // Read from its source, it has no bytes here: each upload encrypts // ROOSTER
+    // what it reads (FileSendSource.readEncrypted). // ROOSTER
+    if (source != null) { // ROOSTER
+      throw StateError('A file read from its source'); // ROOSTER
+    } // ROOSTER
     return await encryptFile(bytes);
   }
+
+  /// Where the file is read from at each upload, when it is not held in // ROOSTER
+  /// memory: its [bytes] are then empty (file_send_source.dart). // ROOSTER
+  FileSendSource? source; // ROOSTER
 
   MatrixFile({required this.bytes, required String name, String? mimeType})
       : mimeType = mimeType != null && mimeType.isNotEmpty
@@ -70,7 +79,7 @@ class MatrixFile {
     return MatrixFile(bytes: bytes, name: name, mimeType: mimeType);
   }
 
-  int get size => bytes.length;
+  int get size => source?.length ?? bytes.length; // ROOSTER
 
   String get msgType {
     return msgTypeFromMime(mimeType);

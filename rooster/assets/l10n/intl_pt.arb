@@ -522,6 +522,7 @@
   "labelPendingFileRetrying": "Tentando de novo",
   "labelPendingFileServerTooSlow": "O servidor demorou demais com este arquivo de {size}",
   "labelPendingFileServerAskedToWait": "O servidor está ocupado. Dá para tentar de novo às {time}",
+  "labelPendingFileChanged": "O arquivo foi alterado ou apagado",
   "labelPendingFileUploadCount": "{sent} de {total}",
   "messagePlaceholderSticker": "{user} enviou uma figurinha",
   "labelReactionOnMessage": "Em “{message}”",

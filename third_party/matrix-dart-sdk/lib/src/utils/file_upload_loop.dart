@@ -168,6 +168,8 @@ Duration? fileUploadRetryWait(
   required Duration ranFor,
 }) {
   if (retries >= fileUploadRetryDelays.length) return null;
+  // The file changed on the device: it would fail the same way again.
+  if (error is FileSourceChangedException) return null;
   // Its errcode is not a string: it says nothing to [_endingErrcodes].
   if (error is FileTooBigMatrixException) return null;
   if (error is MatrixException && _endingErrcodes.contains(error.errcode)) {
@@ -201,22 +203,33 @@ Map<FileSendPart, UploadedFilePart> keptFileParts(
 
 /// What [uploadFileParts] does with one part of a file message, decided
 /// once, before any upload: reuse [kept], or upload [upload], which in an
-/// encrypted room is the part encrypted as [encryptedFile].
+/// encrypted room is the part encrypted as [encryptedFile]. A part read
+/// from its [source] (a file on disk) is read anew at each attempt, in an
+/// encrypted room only through [FileSendSource.readEncrypted], and
+/// [upload] then only names it in a room that does not encrypt.
 class FilePartSend {
-  const FilePartSend(this.kept, this.upload, this.encryptedFile);
+  const FilePartSend(this.kept, this.upload, this.encryptedFile, {this.source});
 
   final UploadedFilePart? kept;
   final MatrixFile? upload;
   final EncryptedFile? encryptedFile;
+  final FileSendSource? source;
 }
 
+/// The name and type an encrypted upload goes up with, as
+/// `EncryptedFile.toMatrixFile` gives them.
+const _encryptedUploadName = 'crypt';
+const _encryptedUploadType = 'application/octet-stream';
+
 /// Uploads the [parts] of the file message [txid] in [room] together, and
-/// gives their addresses in the same order. A part kept from before is
-/// reused as [parts] says, never looked up again; one that goes up is kept
-/// at once. When a part fails for good, the others still finish and are
-/// kept, and then its error is thrown. With [encrypted], a part without its
-/// encryption is never uploaded: the clear bytes cannot reach the server.
-Future<List<Uri>> uploadFileParts(
+/// gives what went up (the address, and in an encrypted room the key and
+/// hash of the bytes that went up) in the same order. A part kept from
+/// before is reused as [parts] says, never looked up again; one that goes
+/// up is kept at once. When a part fails for good, the others still finish
+/// and are kept, and then its error is thrown. With [encrypted], a part
+/// without its encryption is never uploaded: the clear bytes cannot reach
+/// the server.
+Future<List<UploadedFilePart>> uploadFileParts(
   Room room,
   String txid,
   Map<FileSendPart, FilePartSend> parts, {
@@ -230,7 +243,7 @@ Future<List<Uri>> uploadFileParts(
       eagerError: false,
     );
 
-Future<Uri> _uploadFilePart(
+Future<UploadedFilePart> _uploadFilePart(
   Room room,
   String txid,
   FileSendPart part,
@@ -238,12 +251,16 @@ Future<Uri> _uploadFilePart(
   required bool encrypted,
 }) async {
   final kept = send.kept;
-  if (kept != null) return kept.uri;
+  if (kept != null) return kept;
   final upload = send.upload;
   final encryptedFile = send.encryptedFile;
-  if (upload == null || (encrypted && encryptedFile == null)) {
+  final source = send.source;
+  if (source == null
+      ? upload == null || (encrypted && encryptedFile == null)
+      : !encrypted && upload == null) {
     throw StateError('A part of a file message has nothing safe to upload');
   }
+  final bytes = source?.length ?? upload!.bytes.length;
   final client = room.client;
   final clock = client.sendClock;
   for (var retries = 0;; retries++) {
@@ -251,54 +268,95 @@ Future<Uri> _uploadFilePart(
     // from its start, not from its wait for a slot.
     final slots = await _takeUploadSlot(room, txid);
     final started = clock.now();
-    final Uri uri;
+    // Read anew from its source at each attempt; in an encrypted room only
+    // encrypted, with a new key.
+    final read = source == null
+        ? null
+        : encrypted
+            ? source.readEncrypted()
+            : source.read();
+    final UploadedFilePart uploaded;
     try {
       // A cancel aborts the request in flight (see [currentUploadCancel]).
-      uri = await untilSendCancelled(
+      final uri = await untilSendCancelled(
         room,
         txid,
         (cancelled) => runCancellableUpload(
           cancelled,
-          () => client.uploadContent(
-            upload.bytes,
-            filename: upload.name,
-            contentType: upload.mimeType,
-          ),
+          () => read == null
+              ? client.uploadContent(
+                  upload!.bytes,
+                  filename: upload.name,
+                  contentType: upload.mimeType,
+                )
+              : client.uploadContentStream(
+                  read.bytes,
+                  bytes,
+                  filename: encrypted ? _encryptedUploadName : upload!.name,
+                  contentType:
+                      encrypted ? _encryptedUploadType : upload!.mimeType,
+                ),
         ),
       );
-    } catch (error) {
+      uploaded = UploadedFilePart(
+        uri,
+        bytes: bytes,
+        encryptedFile: _encryptionOf(read, encryptedFile, encrypted: encrypted),
+      );
+    } catch (error, stack) {
+      // The file is closed before the attempt ends, also when cancelled.
+      await read?.close();
       slots.give();
       if (error is SendCancelledException) rethrow;
+      // A read that failed says why the request did.
+      final cause = read?.failure ?? error;
       final wait = fileUploadRetryWait(
-        error,
+        cause,
         retries: retries,
         ranFor: clock.now().difference(started),
       );
-      if (wait == null) rethrow;
+      if (wait == null) Error.throwWithStackTrace(cause, stack);
       Logs().v('Upload of a file part failed. Trying again in $wait');
       await untilSendCancelled(room, txid, (_) => clock.delay(wait));
       continue;
     }
+    await read?.close();
     slots.give();
     // Not kept for a message no longer being sent (cancelled).
     if (room.sendingFilePlaceholders.containsKey(txid) &&
         !room.isSendCancelled(txid)) {
-      room.sendingFileUploads.putIfAbsent(txid, () => {})[part] =
-          UploadedFilePart(
-        uri,
-        bytes: upload.bytes.length,
-        // What a reuse needs: the key, the iv and the hash, not the
-        // encrypted bytes, which went up already.
-        encryptedFile: encryptedFile == null
-            ? null
-            : EncryptedFile(
-                data: Uint8List(0),
-                k: encryptedFile.k,
-                iv: encryptedFile.iv,
-                sha256: encryptedFile.sha256,
-              ),
-      );
+      room.sendingFileUploads.putIfAbsent(txid, () => {})[part] = uploaded;
     }
-    return uri;
+    return uploaded;
   }
+}
+
+/// The encryption the event of a part that went up carries: the one its
+/// read made of the bytes it read, or [encryptedFile] for a part held in
+/// memory. Only what a reuse needs: the key, the iv and the hash, not the
+/// encrypted bytes, which went up already. Throws when a read did not end
+/// whole (the server answered early) or an encrypted part has no key.
+EncryptedFile? _encryptionOf(
+  FileSendRead? read,
+  EncryptedFile? encryptedFile, {
+  required bool encrypted,
+}) {
+  if (read != null) {
+    if (!read.complete) {
+      throw read.failure ??
+          StateError('The upload was answered before its file was read');
+    }
+    encryptedFile = read.encryption;
+  }
+  if (encrypted && encryptedFile == null) {
+    throw StateError('An encrypted part went up without its key');
+  }
+  return encryptedFile == null
+      ? null
+      : EncryptedFile(
+          data: Uint8List(0),
+          k: encryptedFile.k,
+          iv: encryptedFile.iv,
+          sha256: encryptedFile.sha256,
+        );
 }
