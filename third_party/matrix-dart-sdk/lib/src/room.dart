@@ -885,7 +885,6 @@ class Room {
   /// Takes the unsent event [eventId] away: from the database, the room's // ROOSTER
   /// last event and the open timelines (`Event.cancelSend`). // ROOSTER
   Future<void> dropUnsentEvent(String eventId, {String? senderId}) async { // ROOSTER
-    await client.database.removeEvent(eventId, id); // ROOSTER
     forgetFileSend(eventId); // ROOSTER: its file and uploads let go
     if (lastEvent != null && lastEvent!.eventId == eventId) { // ROOSTER
       final redactedBecause = Event.fromMatrixEvent( // ROOSTER
@@ -912,6 +911,9 @@ class Room {
         ), // ROOSTER
       ); // ROOSTER
     } // ROOSTER
+    // Last: the redaction above stores the event again, redacted, when // ROOSTER
+    // the room still holds it as its last event. // ROOSTER
+    await client.database.removeEvent(eventId, id); // ROOSTER
     client.onCancelSendEvent.add(eventId); // ROOSTER
   } // ROOSTER
 

@@ -173,4 +173,44 @@ void main() {
     expect(await goneFrom(room, txid), isTrue);
     await mx.dispose(closeDatabase: true);
   });
+
+  test(
+      'in an encrypted room: "Retry" and Cancel in the same turn leave '
+      'nothing of the message in the database (probe G, 3 runs)',
+      skip: skipWithoutVodozemac, () async {
+    final left = <String>[];
+    for (var run = 1; run <= 3; run++) {
+      final transport = OnlyUsTransport();
+      var thumbnails = 0;
+      transport.onUpload = (body, attempt) async {
+        if (body.length == thumbnailBytes && ++thumbnails == 1) {
+          return json(403, {'errcode': 'M_FORBIDDEN', 'error': 'Not now'});
+        }
+        return transport.accept(body);
+      };
+      final (mx, room) = await cryptoClient('retry_and_cancel_$run', transport,
+          encrypted: true);
+      final echoes = <matrix.Event>[];
+      mx.onTimelineEvent.stream.listen(echoes.add);
+      final (send, sending) = startSend(room);
+      expect(await sending, isNull);
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      final txid = send.transactionId!;
+      final failed = echoes.lastWhere((e) => e.eventId == txid);
+
+      final retrying = retryMatrixFile(failed, send);
+      await failed.cancelSend();
+      final id = await retrying;
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final stored = await mx.database.getEventById(txid, room);
+      left.add(stored == null
+          ? 'gone'
+          : 'stored (${stored.status.name}, redacted ${stored.redacted})');
+      expect(id, isNull);
+      expect(transport.events, isEmpty);
+      await mx.dispose(closeDatabase: true);
+    }
+    print('Retry and Cancel in the same turn: $left');
+    expect(left, everyElement('gone'));
+  });
 }
