@@ -1,6 +1,7 @@
 @TestOn('vm')
 library;
 
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -221,6 +222,23 @@ void main() {
         expect(blocks.whole, [tiff], reason: 'shift $shift');
         expect(reads, lessThan(80), reason: 'shift $shift');
       }
+    });
+
+    test(
+        'a walk of 4 MB from memory lets the event loop run: on the web it '
+        'shares the interface thread', () async {
+      final bytes = cat([
+        soi,
+        segment(0xDA, [1, 1, 0, 0, 63, 0]),
+        Uint8List(4 << 20),
+        [0xFF, 0xD9],
+      ]);
+      var timerRan = false;
+      Timer.run(() => timerRan = true);
+      bool? ranBeforeTheEnd;
+      await findExifBlocks(bytesReader(bytes))
+          .then((_) => ranBeforeTheEnd = timerRan);
+      expect(ranBeforeTheEnd, isTrue);
     });
 
     test('a JPEG without Exif and a readable Exif without GPS: no question',

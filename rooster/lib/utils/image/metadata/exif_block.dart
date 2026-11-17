@@ -81,6 +81,7 @@ class _Window {
   final ByteReader _read;
   Uint8List _bytes = Uint8List(0);
   int _start = 0;
+  int _loads = 0;
 
   /// Whether the window holds [count] bytes from [pos].
   bool holds(int pos, [int count = 1]) =>
@@ -88,7 +89,12 @@ class _Window {
 
   /// Reads the window from [pos]: false when the file holds fewer than
   /// [count] bytes there.
+  ///
+  /// Every 16 windows (1 MB) the walk lets the event loop run first: on the
+  /// web the bytes are in memory and the walk shares the interface thread,
+  /// which would otherwise wait for a whole photo's walk.
   Future<bool> load(int pos, [int count = 1]) async {
+    if (++_loads % 16 == 0) await Future<void>.delayed(Duration.zero);
     _start = pos;
     _bytes = await _read(pos, 64 << 10);
     return _bytes.length >= count;
