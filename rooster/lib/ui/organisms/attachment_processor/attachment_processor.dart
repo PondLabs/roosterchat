@@ -234,7 +234,10 @@ class _AttachmentProcessorState extends State<AttachmentProcessor> {
                         padding: const EdgeInsets.all(8.0),
                         child: buildFileProcessingSwitch(),
                       ),
+                    // Only where "Send original" is offered: a GIF (or a
+                    // file named as one) goes as it is.
                     if (reducedSize != null &&
+                        canProcessData &&
                         !sendOriginalFile &&
                         !metadataRemovalFailed)
                       Padding(

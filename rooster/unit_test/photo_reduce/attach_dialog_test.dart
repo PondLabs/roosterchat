@@ -166,6 +166,27 @@ void main() {
     expect(find.text(reducedEn), findsOneWidget);
   });
 
+  testWidgets(
+      "a large JPEG named .gif, picked by its path: no size line, since "
+      "the dialog sends it as it is", (tester) async {
+    final dir = Directory.systemTemp.createTempSync("photo_reduce");
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final file = File("${dir.path}/photo.gif")..writeAsBytesSync(photo);
+    final attachment = PendingFileAttachment(
+        name: "photo.gif", path: file.path, size: photo.length);
+    expect(attachment.mimeType, "image/gif");
+    final dialog = await openDialog(tester, attachment);
+    // Time for the header to be read, as for the photo by path above.
+    await waitFor(tester, () => false, tries: 20);
+    expect(find.textContaining("pixels"), findsNothing);
+    expect(find.text("Send original (keeps metadata)"), findsNothing);
+
+    await tester.tap(find.text("Add File"));
+    await tester.pumpAndSettle();
+    expect(identical(dialog.result, attachment), isTrue);
+    expect(dialog.result!.reducePhoto, isFalse);
+  });
+
   testWidgets("no size line for a picture sent at its own size",
       (tester) async {
     // The preview cannot draw a header-only picture; not this test's
