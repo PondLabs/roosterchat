@@ -555,6 +555,7 @@
   "labelTimelineNewMessagesMarker": "Novas mensagens",
   "labelTimelineCollapsedMore": "{howMany,plural, =1{{summary} e mais 1}other{{summary} e mais {howMany}}}",
   "labelTimelineReadReceipts": "Confirmações de leitura",
+  "labelPendingMessageStillSending": "Ainda enviando",
   "typingUsers": "{howMany,plural, =1{{user1} está digitando…}=2{{user1} e {user2} estão digitando…}other{Várias pessoas estão digitando…}}",
   "typingThreeUsers": "{user1}, {user2} e {user3} estão digitando…",
   "messageMediaVideoUnavailable": "Vídeo indisponível. Tente de novo.",

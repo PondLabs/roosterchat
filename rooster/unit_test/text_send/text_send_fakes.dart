@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
 
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/components/room_component.dart';
@@ -7,8 +10,12 @@ import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/member.dart';
 import 'package:rooster/client/room.dart';
+import 'package:rooster/client/timeline.dart';
+import 'package:rooster/client/timeline_events/timeline_event.dart';
+import 'package:rooster/client/timeline_events/timeline_event_message.dart';
 
 import '../pending_media/chat_harness.dart';
+import '../speed_log/fake_account.dart';
 
 /// The room the SDK's fake homeserver answers every send to.
 const fakeRoomId = '!1234:fakeServer.notExisting';
@@ -109,4 +116,67 @@ class PreparingRoom extends FakeRoom implements RoomSendPreparation {
       T == TypingIndicatorComponent && typing != null
           ? typing as T
           : super.getComponent<T>();
+}
+
+/// The fake homeserver with each `PUT /send` refused (403) while [refuse],
+/// and held until [hold] completes while it is set.
+class SendTransport extends FakeTransport {
+  bool refuse = false;
+  Completer<void>? hold;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    if (request.method == 'PUT' && request.url.path.contains('/send/')) {
+      if (refuse) {
+        return http.StreamedResponse(
+            Stream.value(utf8.encode(jsonEncode(
+                {'errcode': 'M_FORBIDDEN', 'error': 'Not allowed'}))),
+            403,
+            headers: {'content-type': 'application/json'},
+            request: request);
+      }
+      await hold?.future;
+    }
+    return super.send(request);
+  }
+}
+
+/// Waits, on real time, until [done] holds (5 s at most).
+Future<void> until(bool Function() done) async {
+  for (var i = 0; i < 500 && !done(); i++) {
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  if (!done()) throw StateError('timed out');
+}
+
+/// Own text messages in [room]'s timeline: [failed] refused by the server,
+/// then [pending] whose `PUT /send` is held by [transport] (so it stays
+/// sending), each sent [gap] after the one before; with [queued], one more
+/// pending behind it in the room's queue.
+Future<Timeline> timelineWithSends(MatrixRoom room, SendTransport transport,
+    {required String failed,
+    required String pending,
+    String? queued,
+    Duration gap = Duration.zero}) async {
+  final timeline = await room.getTimeline();
+  TimelineEvent? own(String body) => timeline.events
+      .where((e) => e is TimelineEventMessage && e.body == body)
+      .firstOrNull;
+
+  transport.refuse = true;
+  // The SDK marks the message failed, then throws the server's error.
+  await room.sendMessage(message: failed).then((_) {}, onError: (_) {});
+  await until(() => own(failed)?.status == TimelineEventStatus.error);
+  transport
+    ..refuse = false
+    ..hold = Completer<void>();
+  await Future<void>.delayed(gap);
+  unawaited(room.sendMessage(message: pending));
+  await until(() => own(pending)?.status == TimelineEventStatus.sending);
+  if (queued != null) {
+    await Future<void>.delayed(gap);
+    unawaited(room.sendMessage(message: queued));
+    await until(() => own(queued)?.status == TimelineEventStatus.sending);
+  }
+  return timeline;
 }
