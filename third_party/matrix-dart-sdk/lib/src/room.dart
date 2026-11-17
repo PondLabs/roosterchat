@@ -855,6 +855,11 @@ class Room {
   /// the server may have them already. // ROOSTER
   final _sendRequestsLeft = <String, int>{}; // ROOSTER
 
+  /// The messages the server took, by transaction id: never cancellable // ROOSTER
+  /// again, even from an event object read before (a menu opened during // ROOSTER
+  /// the upload). One string per message sent from this device. // ROOSTER
+  final _sentSends = <String>{}; // ROOSTER
+
   /// The transaction id of each message cancelled, as it is. // ROOSTER
   Stream<String> get onSendCancelled => _onSendCancelled.stream; // ROOSTER
 
@@ -862,9 +867,10 @@ class Room {
   bool isSendCancelled(String txid) => _cancelledSends.contains(txid); // ROOSTER
 
   /// Whether the message [txid] can still be cancelled: its event's // ROOSTER
-  /// request has not left (once it has, the server may have it). // ROOSTER
+  /// request has not left (once it has, the server may have it) and the // ROOSTER
+  /// server did not take it. // ROOSTER
   bool canCancelSend(String txid) => // ROOSTER
-      !_sendRequestsLeft.containsKey(txid); // ROOSTER
+      !_sendRequestsLeft.containsKey(txid) && !_sentSends.contains(txid); // ROOSTER
 
   /// Cancels the send of the message [txid]: a file stops in its // ROOSTER
   /// preparation or uploads (the request in flight is aborted), a text // ROOSTER
@@ -1496,6 +1502,7 @@ class Room {
     completer.complete();
     sendingQueue.remove(completer);
     sendingQueueEventsByTxId.remove(messageID);
+    _sentSends.add(messageID); // ROOSTER: before the request is let go
     if (requestLeft) _sendRequestEnded(messageID); // ROOSTER
     return res;
   }
