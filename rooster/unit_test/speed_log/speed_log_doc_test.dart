@@ -77,6 +77,20 @@ void main() {
       SpeedStep.encode,
       SpeedStep.reduce,
     });
+    expect(_tableNames(doc, '`file_send`, a file sent'), {
+      SpeedStep.attached,
+      SpeedStep.previewPainted,
+      SpeedStep.prepared,
+      SpeedStep.echo,
+      SpeedStep.upload,
+      SpeedStep.request,
+      SpeedStep.retry,
+      SpeedStep.confirmed,
+      SpeedStep.asyncUpload,
+      SpeedStep.uploadFirst,
+      SpeedStep.reserve,
+      SpeedStep.uploaded,
+    });
     expect(_tableNames(doc, '`voice_join`, a voice join'), {
       SpeedStep.leavePrevious,
       SpeedStep.outputDevice,
