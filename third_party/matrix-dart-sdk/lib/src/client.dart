@@ -56,6 +56,20 @@ extension TrailingSlash on Uri {
 /// Represents a Matrix client to communicate with a
 /// [Matrix](https://matrix.org) homeserver and is the entry point for this
 /// SDK.
+const _reservedUploadKey = #matrixReservedUpload; // ROOSTER
+
+/// Runs [upload] so that [Client.uploadContent] within it, through any // ROOSTER
+/// async gap, uploads to [mxc], reserved before (`createContent`), with // ROOSTER
+/// `PUT /upload/{serverName}/{mediaId}` instead of a new address. The // ROOSTER
+/// upload loop of a file message runs in it unchanged. // ROOSTER
+R runUploadToReserved<R>(Uri mxc, R Function() upload) => // ROOSTER
+    runZoned(upload, zoneValues: {_reservedUploadKey: mxc}); // ROOSTER
+
+/// The reserved mxc an upload in this zone goes to (see // ROOSTER
+/// [runUploadToReserved]), or null. // ROOSTER
+Uri? currentReservedUpload() => // ROOSTER
+    Zone.current[_reservedUploadKey] as Uri?; // ROOSTER
+
 class Client extends MatrixApi {
   int? _id;
 
@@ -1614,8 +1628,19 @@ class Client extends MatrixApi {
     }
 
     contentType ??= lookupMimeType(filename ?? '', headerBytes: file);
-    final mxc = await super
-        .uploadContent(file, filename: filename, contentType: contentType);
+    final reserved = currentReservedUpload(); // ROOSTER
+    final mxc = reserved != null // ROOSTER
+        ? await _uploadToReserved( // ROOSTER
+            reserved, // ROOSTER
+            file, // ROOSTER
+            filename: filename, // ROOSTER
+            contentType: contentType, // ROOSTER
+          ) // ROOSTER
+        : await super.uploadContent( // ROOSTER
+            file, // ROOSTER
+            filename: filename, // ROOSTER
+            contentType: contentType, // ROOSTER
+          ); // ROOSTER
 
     final database = this.database;
     if (file.length <= database.maxFileSize) {
@@ -1628,6 +1653,29 @@ class Client extends MatrixApi {
     return mxc;
   }
 
+  /// Uploads [file] to [mxc], reserved before: an answer that the media // ROOSTER
+  /// is there already (`M_CANNOT_OVERWRITE_MEDIA`) means an earlier // ROOSTER
+  /// attempt of the same bytes landed after all. // ROOSTER
+  Future<Uri> _uploadToReserved( // ROOSTER
+    Uri mxc, // ROOSTER
+    Uint8List file, { // ROOSTER
+    String? filename, // ROOSTER
+    String? contentType, // ROOSTER
+  }) async { // ROOSTER
+    try { // ROOSTER
+      await uploadContentToMXC( // ROOSTER
+        mxc.host, // ROOSTER
+        mxc.pathSegments.first, // ROOSTER
+        file, // ROOSTER
+        filename: filename, // ROOSTER
+        contentType: contentType, // ROOSTER
+      ); // ROOSTER
+    } on MatrixException catch (e) { // ROOSTER
+      if (e.errcode != 'M_CANNOT_OVERWRITE_MEDIA') rethrow; // ROOSTER
+    } // ROOSTER
+    return mxc; // ROOSTER
+  } // ROOSTER
+
   /// Uploads [body], [length] bytes, as its request takes them: the file // ROOSTER
   /// is never held whole (file_send_source.dart). Refused by the server's // ROOSTER
   /// limit before [body] is listened to, so nothing of it is read then. // ROOSTER
@@ -1637,6 +1685,10 @@ class Client extends MatrixApi {
     String? filename, // ROOSTER
     String? contentType, // ROOSTER
   }) async { // ROOSTER
+    // Read from its source, it would go to a new address. // ROOSTER
+    if (currentReservedUpload() != null) { // ROOSTER
+      throw StateError('A reserved mxc takes an upload held in memory'); // ROOSTER
+    } // ROOSTER
     final maxMediaSize = (await getConfig()).mUploadSize; // ROOSTER
     if (maxMediaSize != null && maxMediaSize < length) { // ROOSTER
       throw FileTooBigMatrixException(length, maxMediaSize); // ROOSTER
