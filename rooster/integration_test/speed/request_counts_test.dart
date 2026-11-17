@@ -95,6 +95,9 @@ void main() {
     _print('text, no session yet', first, firstRoutes);
     expect(first.outcome, SpeedOutcome.ok);
     expect(firstRoutes[label(sendEvent)], 1);
+    // key_requests is counted by the same filter over the same span's
+    // requests, so that value cannot fail here; it is printed with the rest.
+    // What can fail is session_created and session_waited.
     final keyRequests = requestsOf(first).where(TextSendTrace.isKeyRequest);
     expect(_session(first), {
       SpeedValue.sessionCreated: 1,
