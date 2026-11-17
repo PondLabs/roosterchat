@@ -514,24 +514,24 @@ void main() {
   });
 
   group('readExifGps', () {
-    Uint8List withIfd1(int entryTag, {int? ifd1}) {
-      // The minimal block (IFD0: the orientation), its next-IFD offset
-      // pointing to an IFD1 of one entry.
+    // The minimal block in [endian] (IFD0: the orientation, or [ifd0Tag]),
+    // its next-IFD offset pointing to an IFD1 of one entry, [entryTag].
+    Uint8List withIfd1(int entryTag,
+        {int? ifd1, Endian endian = Endian.big, int ifd0Tag = 0x0112}) {
       final out = ByteData(26 + 18)
-        ..setUint8(0, 0x4D)
-        ..setUint8(1, 0x4D)
-        ..setUint16(2, 42)
-        ..setUint32(4, 8)
-        ..setUint16(8, 1)
-        ..setUint16(10, 0x0112)
-        ..setUint16(12, 3)
-        ..setUint32(14, 1)
-        ..setUint16(18, 1)
-        ..setUint32(22, ifd1 ?? 26)
-        ..setUint16(26, 1)
-        ..setUint16(28, entryTag)
-        ..setUint16(30, 4)
-        ..setUint32(32, 1);
+        ..setUint16(0, endian == Endian.little ? 0x4949 : 0x4D4D)
+        ..setUint16(2, 42, endian)
+        ..setUint32(4, 8, endian)
+        ..setUint16(8, 1, endian)
+        ..setUint16(10, ifd0Tag, endian)
+        ..setUint16(12, 3, endian)
+        ..setUint32(14, 1, endian)
+        ..setUint16(18, 1, endian)
+        ..setUint32(22, ifd1 ?? 26, endian)
+        ..setUint16(26, 1, endian)
+        ..setUint16(28, entryTag, endian)
+        ..setUint16(30, 4, endian)
+        ..setUint32(32, 1, endian);
       return out.buffer.asUint8List();
     }
 
@@ -540,6 +540,18 @@ void main() {
       expect(readExifGps(withIfd1(0x8825)), ExifGps.found);
       expect(readExifGps(withIfd1(0x0100)), ExifGps.none);
       expect(readExifGps(minimalOrientationTiff(6)), ExifGps.none);
+    });
+
+    test('a little-endian (II) block, as Android writes them, reads the same',
+        () {
+      const ii = Endian.little;
+      expect(readExifGps(withIfd1(0x0100, endian: ii, ifd0Tag: 0x8825)),
+          ExifGps.found,
+          reason: 'GPS in IFD0');
+      expect(readExifGps(withIfd1(0x8825, endian: ii)), ExifGps.found);
+      expect(readExifGps(withIfd1(0x0100, endian: ii)), ExifGps.none);
+      expect(
+          readExifGps(withIfd1(0x8825, endian: ii, ifd1: 4000)), ExifGps.none);
     });
 
     test('an IFD0 that does not fit is unreadable; a later IFD ends there', () {
