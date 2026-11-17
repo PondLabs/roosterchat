@@ -220,6 +220,23 @@ void _tests() {
     });
   });
 
+  test(
+      'an empty file goes up complete, in the clear and encrypted: the '
+      'browser fires no upload.onload for an empty body', () async {
+    final (file, hash) = await pageFile(0, name: 'empty.bin');
+    final source = BrowserFileSource(file);
+    for (final read in [source.read(), source.readEncrypted()]) {
+      final response = await uploadRead(read, 0, query: {'keep': '1'})
+          .timeout(const Duration(seconds: 10));
+      expect(response.statusCode, 200);
+      expect(read.complete, isTrue);
+      await read.close();
+    }
+    final uploads = await serverUploads();
+    expect([for (final u in uploads) u['bytes']], [0, 0]);
+    expect(uploads[0]['sha256'], hash);
+  });
+
   group('encrypted', () {
     // Not a multiple of a piece nor of an AES block.
     const bytes = mib + 5;

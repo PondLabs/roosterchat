@@ -144,6 +144,15 @@ class BrowserFileRead extends Stream<List<int>>
   @override
   Future<web.Blob> blob() async {
     _start();
+    final blob = await _blob();
+    // An empty body has nothing to send, and the browser fires no
+    // `upload.onload` for it ([sent]): it is whole already. Set here, not
+    // when the read is closed, because the SDK asks before it closes it.
+    if (_source.length == 0) sent();
+    return blob;
+  }
+
+  Future<web.Blob> _blob() async {
     if (!encrypted) {
       // One byte, to know the browser can still read it.
       if (_source.length > 0) await _read(0, 1);
