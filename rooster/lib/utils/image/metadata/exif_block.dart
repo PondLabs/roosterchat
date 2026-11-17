@@ -309,8 +309,14 @@ Future<ExifBlocks> _heifExif(ByteReader read, Uint8List head) async {
   }
 }
 
+/// The most Exif items taken out of a HEIF, and the most extents kept for
+/// them in all: more count as cut. A camera writes one item in one extent.
+const int _maxExifItems = 16;
+const int _maxExifExtents = 64;
+
 /// The Exif items of a HEIF `meta` box (its body, [meta]): their ids from
-/// `iinf`, where they are from `iloc`.
+/// `iinf`, where they are from `iloc`. At most [maxExifBlock] in all the
+/// items, checked before any is read.
 Future<ExifBlocks> _heifItems(ByteReader read, Uint8List meta) async {
   final exifItems = <int>{};
   (int, int)? iloc;
@@ -331,21 +337,27 @@ Future<ExifBlocks> _heifItems(ByteReader read, Uint8List meta) async {
       iloc = (body, end);
     }
   }
+  if (exifItems.length > _maxExifItems) return const ExifBlocks([], cut: true);
   // Read after iinf, which can come after it: only the Exif items' places
   // are kept.
   final places = iloc == null
       ? const <int, (int, List<(int, int)>)>{}
       : _itemLocations(meta, iloc.$1, iloc.$2, exifItems);
+  // In the file (construction method 0), in extents of a known length, and
+  // at most maxExifBlock in all the items, however many extents hold them.
+  var size = 0;
+  for (final item in exifItems) {
+    final (method, extents) = places[item] ?? (-1, const <(int, int)>[]);
+    if (method != 0 || extents.isEmpty) return const ExifBlocks([], cut: true);
+    for (final (_, length) in extents) {
+      size += length;
+    }
+  }
+  if (size > maxExifBlock) return const ExifBlocks([], cut: true);
   final blocks = <Uint8List>[];
   for (final item in exifItems) {
-    // In the file (construction method 0), in extents of a known length.
-    final (method, extents) = places[item] ?? (-1, const <(int, int)>[]);
-    if (method != 0 || extents.isEmpty) return ExifBlocks(blocks, cut: true);
-    // At most maxExifBlock in all, however many extents hold it.
-    final size = extents.fold(0, (size, extent) => size + extent.$2);
-    if (size > maxExifBlock) return ExifBlocks(blocks, cut: true);
     final data = BytesBuilder(copy: false);
-    for (final (offset, length) in extents) {
+    for (final (offset, length) in places[item]!.$2) {
       final bytes = length == 0 ? null : await _whole(read, offset, length);
       if (bytes == null) return ExifBlocks(blocks, cut: true);
       data.add(bytes);
@@ -383,7 +395,8 @@ class _Fields {
 
 /// The places an `iloc` box (its body from [at] to [end] in [b]) gives the
 /// items of [wanted], by id: their construction method and their extents,
-/// as (file offset, length). Every item is checked to fit in the box.
+/// as (file offset, length). Every item is checked to fit in the box; more
+/// than [_maxExifExtents] extents kept in all make it malformed.
 Map<int, (int, List<(int, int)>)> _itemLocations(
     Uint8List b, int at, int end, Set<int> wanted) {
   final fields = _Fields(b, at, end);
@@ -399,6 +412,7 @@ Map<int, (int, List<(int, int)>)> _itemLocations(
     throw const _Malformed();
   }
   final places = <int, (int, List<(int, int)>)>{};
+  var kept = 0;
   for (var i = 0; i < count; i++) {
     final item = fields.next(id);
     final method = version > 0 ? fields.next(2) & 0xF : 0;
@@ -410,6 +424,7 @@ Map<int, (int, List<(int, int)>)> _itemLocations(
       fields.at += extents * extentSize;
       continue;
     }
+    if ((kept += extents) > _maxExifExtents) throw const _Malformed();
     final list = <(int, int)>[];
     for (var n = 0; n < extents; n++) {
       fields.next(indexSize);

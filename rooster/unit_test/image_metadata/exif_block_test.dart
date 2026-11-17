@@ -470,15 +470,18 @@ void main() {
           [...be(8 + body.length, 4), ...type.codeUnits, ...body];
       List<int> fullBox(String type, int version, List<int> body) =>
           box(type, [version, 0, 0, 0, ...body]);
-      // A HEIF of brand mif1 whose meta holds an Exif item (id 1) and the
-      // iloc [items] (version 1), followed by [after].
-      Uint8List heif(List<int> items, {List<int> after = const []}) => cat([
+      // A HEIF of brand mif1 whose meta holds [exifItems] Exif items (ids 1
+      // and on) and the iloc [items] (version 1), followed by [after].
+      Uint8List heif(List<int> items,
+              {List<int> after = const [], int exifItems = 1}) =>
+          cat([
             box('ftyp', [...'mif1'.codeUnits, 0, 0, 0, 0, ...'mif1'.codeUnits]),
             fullBox('meta', 0, [
               ...fullBox('iinf', 0, [
-                ...be(1, 2),
-                ...fullBox(
-                    'infe', 2, [...be(1, 2), 0, 0, ...'Exif'.codeUnits, 0]),
+                ...be(exifItems, 2),
+                for (var n = 1; n <= exifItems; n++)
+                  ...fullBox(
+                      'infe', 2, [...be(n, 2), 0, 0, ...'Exif'.codeUnits, 0]),
               ]),
               ...fullBox('iloc', 1, items),
             ]),
@@ -535,6 +538,75 @@ void main() {
         final blocks = await findExifBlocks(bytesReader(bytes));
         expect(blocks.cut, isTrue);
         expect(blocks.whole, isEmpty);
+      });
+
+      // [count] Exif items, each one extent of [length] bytes over the same
+      // bytes at the end of the file: zeros, or [tail] when given.
+      Uint8List sameBytes(int count, int length) {
+        Uint8List build(int offset) => heif([
+              0x44, 0x00, ...be(count, 2), // offset and length in 4 bytes
+              for (var n = 1; n <= count; n++) ...[
+                ...be(n, 2), 0, 0, 0, 0, ...be(1, 2), // one extent
+                ...be(offset, 4), ...be(length, 4),
+              ],
+            ], after: Uint8List(length), exifItems: count);
+        return build(build(0).length - length);
+      }
+
+      /// The blocks of [bytes], and how many bytes the walk asked for.
+      Future<(ExifBlocks, int)> walk(Uint8List bytes) async {
+        var asked = 0;
+        final inner = bytesReader(bytes);
+        final blocks = await findExifBlocks((offset, length) {
+          asked += length;
+          return inner(offset, length);
+        });
+        return (blocks, asked);
+      }
+
+      test(
+          'Exif items over the same bytes, more than maxExifBlock in all: '
+          'cut, none read', () async {
+        // The review's: 64 items over the same 4 MB; and two over 3 MB,
+        // within the number of items.
+        for (final (count, length) in [(64, 4 << 20), (2, 3 << 20)]) {
+          final bytes = sameBytes(count, length);
+          final (blocks, asked) = await walk(bytes);
+          expect(blocks.cut, isTrue, reason: '$count items');
+          expect(blocks.whole, isEmpty, reason: '$count items');
+          expect(asked, lessThan(1 << 20),
+              reason: '$count items: the items are not read');
+          expect(await answer(bytes), LocationAnswer.unreadable);
+        }
+      });
+
+      test('50,000 Exif items of 64 bytes: cut, at once', () async {
+        final bytes = sameBytes(50000, 64);
+        final watch = Stopwatch()..start();
+        final (blocks, asked) = await walk(bytes);
+        expect(blocks.cut, isTrue);
+        expect(watch.elapsed, lessThan(const Duration(milliseconds: 200)));
+        expect(asked, lessThan(bytes.length + (1 << 20)));
+      });
+
+      test('an Exif item of 65,535 extents of 1 byte: cut, at once', () async {
+        Uint8List build(int offset) => heif([
+              0x44, 0x00, ...be(1, 2), // one item
+              ...be(1, 2), 0, 0, 0, 0, ...be(65535, 2),
+              for (var n = 0; n < 65535; n++) ...[
+                ...be(offset + n, 4),
+                0,
+                0,
+                0,
+                1
+              ],
+            ], after: Uint8List(65535));
+        final bytes = build(build(0).length - 65535);
+        final watch = Stopwatch()..start();
+        final (blocks, asked) = await walk(bytes);
+        expect(blocks.cut, isTrue);
+        expect(watch.elapsed, lessThan(const Duration(milliseconds: 200)));
+        expect(asked, lessThan(bytes.length + (1 << 20)));
       });
     });
   });
