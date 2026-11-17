@@ -23,8 +23,15 @@ class LODImageProvider extends ImageProvider<String> {
       required this.id,
       this.fullResHeight,
       this.traceShows = false,
+      this.forgetsFailures = false,
       this.autoLoadFullRes = true});
   String id;
+
+  /// A load that failed is forgotten: the picture leaves the image cache,
+  /// and the next display, or [fetchThumbnail] / [fetchFullRes], asks
+  /// again (a chat's pictures). Otherwise it stays failed for the session
+  /// (avatars, emojis), so a list shown again asks nothing.
+  final bool forgetsFailures;
 
   /// Each level shown is a `media_show` span in the speed log
   /// ([MediaShowTrace]): a chat's pictures, not avatars nor emojis.
@@ -79,9 +86,12 @@ class LODImageProvider extends ImageProvider<String> {
         fullResHeight: fullResHeight,
         autoLoadFullres: autoLoadFullRes,
         traceShows: traceShows,
+        forgetsFailures: forgetsFailures,
         // Failed: out of the image cache, so the next display of this
         // picture starts over instead of finding the failure.
-        onFailed: () => PaintingBinding.instance.imageCache.evict(key));
+        onFailed: forgetsFailures
+            ? () => PaintingBinding.instance.imageCache.evict(key)
+            : null);
     return completer!;
   }
 
@@ -140,6 +150,12 @@ class LODImageCompleter extends ImageStreamCompleter {
   /// See [LODImageProvider.traceShows].
   bool traceShows;
 
+  /// See [LODImageProvider.forgetsFailures].
+  bool forgetsFailures;
+
+  /// Loading failed, and is not asked again ([forgetsFailures] false).
+  bool _gaveUp = false;
+
   LODImageCompleter(
       {this.blurhash,
       required this.callback,
@@ -152,6 +168,7 @@ class LODImageCompleter extends ImageStreamCompleter {
       this.fullResHeight,
       this.onFailed,
       this.traceShows = false,
+      this.forgetsFailures = false,
       this.autoLoadFullres = true}) {
     loadImages();
   }
@@ -190,6 +207,7 @@ class LODImageCompleter extends ImageStreamCompleter {
   }
 
   Future<void> _loadThumbnail() async {
+    if (_gaveUp) return;
     if (thumbnailLoading != null) return thumbnailLoading;
     if (currentlyLoadedImage == LODImageType.thumbnail) return;
     if (currentlyLoadedImage == LODImageType.fullres) return;
@@ -211,6 +229,7 @@ class LODImageCompleter extends ImageStreamCompleter {
   }
 
   Future<void> _loadFullRes() async {
+    if (_gaveUp) return;
     if (fullResLoading != null) {
       return fullResLoading;
     }
@@ -273,6 +292,7 @@ class LODImageCompleter extends ImageStreamCompleter {
     final other =
         type == LODImageType.thumbnail ? fullResLoading : thumbnailLoading;
     if (other != null) return;
+    if (!forgetsFailures) _gaveUp = true;
     onFailed?.call();
     reportError(
       context: ErrorDescription('loading a picture'),

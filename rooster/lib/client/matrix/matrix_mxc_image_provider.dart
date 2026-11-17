@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 import 'package:rooster/cache/own_media_cache.dart';
 import 'package:rooster/client/matrix/extensions/matrix_client_extensions.dart';
@@ -31,10 +32,17 @@ class MatrixMxcImage extends LODImageProvider {
           id: "$identifier-$doThumbnail-$doFullres-$thumbnailHeight-$fullResHeight",
           // A chat's picture (it has an event), not an avatar.
           traceShows: matrixEvent != null,
+          // A chat's picture that failed is asked again when shown again;
+          // an avatar, an emoji or a sticker once per session.
+          forgetsFailures: matrixEvent != null,
         ) {
+    // New attempts are for a chat's pictures only: an avatar that cannot be
+    // had is asked for once, as a member list shows hundreds.
+    final attempts = matrixEvent != null ? maxAttempts : 1;
     if (doThumbnail == null || doThumbnail == true) {
       loadThumbnail = () => loadWithRetries<Uint8List?>(
           client,
+          attempts: attempts,
           () => loadMatrixThumbnail(
                 client,
                 identifier,
@@ -47,6 +55,7 @@ class MatrixMxcImage extends LODImageProvider {
     if (doFullres == null || doFullres == true) {
       loadFullRes = () => loadWithRetries<Uint8List?>(
           client,
+          attempts: attempts,
           () => loadMatrixFullRes(
                 client,
                 identifier,
@@ -110,24 +119,25 @@ class MatrixMxcImage extends LODImageProvider {
   static Duration Function(int attempt) retryDelay =
       (attempt) => Duration(seconds: attempt - 1);
 
-  /// [load], asked again up to [maxAttempts] times in all: offline
-  /// (native: a socket error), once a sync gets through; after any other
-  /// failure (the web's network errors among them), after [retryDelay].
-  /// An answer that would come again (a 404) is not asked again. The last
-  /// error is thrown: the picture then shows as failed, until it is shown
-  /// again.
-  static Future<T> loadWithRetries<T>(
-      Client client, Future<T> Function() load) async {
+  /// [load], asked up to [attempts] times in all: offline (native: a
+  /// socket error), again once a sync gets through, as before at least
+  /// once; after any other failure (the web's network errors among them),
+  /// after [retryDelay]. An answer that would come again (a 404) is not
+  /// asked again ([worthAskingAgain]). The last error is thrown: the
+  /// picture then shows as failed.
+  static Future<T> loadWithRetries<T>(Client client, Future<T> Function() load,
+      {int attempts = maxAttempts}) async {
     for (var attempt = 1;; attempt++) {
       try {
         return await load();
       } catch (error, trace) {
-        final again = error is! MediaDownloadException || error.retryable;
-        if (attempt >= maxAttempts || !again) {
+        final offline = error is SocketException;
+        final limit = offline ? max(attempts, 2) : attempts;
+        if (attempt >= limit || !(offline || worthAskingAgain(error))) {
           Log.onError(error, trace, content: "Could not load a picture");
           rethrow;
         }
-        if (error is SocketException) {
+        if (offline) {
           await client.onSyncStatus.stream
               .firstWhere((sync) => sync.status == SyncStatus.finished);
         } else {
@@ -135,6 +145,20 @@ class MatrixMxcImage extends LODImageProvider {
         }
       }
     }
+  }
+
+  /// Whether asking again after [error] can get another answer: not after
+  /// the homeserver answered with a 4xx other than 408 and 429 (the
+  /// download's [MediaDownloadException], or the SDK's [MatrixException]
+  /// of an avatar's request).
+  static bool worthAskingAgain(Object error) {
+    final status = switch (error) {
+      MediaDownloadException(:final statusCode) => statusCode,
+      MatrixException(:final response?) => response.statusCode,
+      _ => null,
+    };
+    if (status == null) return true;
+    return status >= 500 || status == 408 || status == 429;
   }
 
   /// [cached]: where the thumbnail is in the file cache, when that is
