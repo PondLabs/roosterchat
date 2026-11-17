@@ -7,6 +7,7 @@ import 'package:image/image.dart' as img;
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/matrix/media/matrix_attachment_files.dart';
 import 'package:rooster/diagnostic/speed_log/speed_log.dart';
+import 'package:rooster/utils/image/image_header.dart';
 import 'package:rooster/utils/image/preparation/image_preparation.dart';
 import 'package:rooster/utils/image/preparation/thumbnail_encoder.dart';
 
@@ -130,6 +131,36 @@ void main() {
     expect(png.getPixel(100, 50).r, 40, reason: "the first bar");
   });
 
+  test(
+      "a BMP whose header the header reader does not know (16 bytes, "
+      "OS/2 2.x) is still sent as a PNG, from its one decode", () async {
+    final bmp = _os2Bmp(40, 30);
+    expect(readImageHeader(bmp), isNull);
+    var decodes = 0;
+    final preparer = ImagePreparer(
+        codecFactory: (bytes, {targetWidth, targetHeight}) {
+          decodes++;
+          return engineImageCodec(bytes,
+              targetWidth: targetWidth, targetHeight: targetHeight);
+        },
+        log: SpeedLog(frames: NoFrames()));
+    final attachment =
+        PendingFileAttachment(name: "old.bmp", data: bmp, size: bmp.length);
+    expect(attachment.mimeType, "image/bmp");
+
+    final prepared = (await attachment.imagePreparation(preparer: preparer))!;
+    final processed =
+        (await matrixFilesForAttachment(attachment, preparer: preparer))!;
+
+    expect(decodes, 1);
+    expect(processed.file.mimeType, "image/png");
+    expect(identical(processed.file.bytes, prepared.png), isTrue);
+    final png = img.decodePng(processed.file.bytes)!;
+    expect((png.width, png.height), (40, 30));
+    expect((processed.file.info["w"], processed.file.info["h"]), (40, 30));
+    expect(png.getPixel(3, 0).r, 200, reason: "the top row, red");
+  });
+
   test("a thumbnail no smaller than the file sent is left out", () async {
     // A flat screenshot: 4.8 MB as BMP, a few kB once sent as PNG.
     final bmp = _screenshotBmp();
@@ -168,6 +199,34 @@ class _FailingEncoder implements ThumbnailEncoder {
   @override
   Future<ThumbnailResult> encode(ThumbnailRequest request) =>
       Future.error(StateError("encoder unavailable"));
+}
+
+/// A 24-bit BMP with the 16-byte OS/2 2.x info header (width, height,
+/// planes, bits), bottom-up: the top row red, the rest grey.
+Uint8List _os2Bmp(int width, int height) {
+  final rowSize = (width * 3 + 3) & ~3;
+  const offset = 14 + 16;
+  final out = ByteData(offset + rowSize * height)
+    ..setUint8(0, 0x42) // B
+    ..setUint8(1, 0x4D) // M
+    ..setUint32(2, offset + rowSize * height, Endian.little)
+    ..setUint32(10, offset, Endian.little)
+    ..setUint32(14, 16, Endian.little) // info header size
+    ..setUint32(18, width, Endian.little)
+    ..setUint32(22, height, Endian.little)
+    ..setUint16(26, 1, Endian.little)
+    ..setUint16(28, 24, Endian.little);
+  for (var y = 0; y < height; y++) {
+    final row = offset + (height - 1 - y) * rowSize;
+    for (var x = 0; x < width; x++) {
+      final top = y == 0;
+      out
+        ..setUint8(row + x * 3, top ? 0 : 128) // B
+        ..setUint8(row + x * 3 + 1, top ? 0 : 128) // G
+        ..setUint8(row + x * 3 + 2, top ? 200 : 128); // R
+    }
+  }
+  return out.buffer.asUint8List();
 }
 
 /// A flat screenshot, 1600 by 1000: 4.8 MB as BMP, a few kB as PNG.

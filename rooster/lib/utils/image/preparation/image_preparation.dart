@@ -229,8 +229,14 @@ class ImagePreparer {
         bytes.length >= thumbnailMinSourceBytes;
     int? targetWidth, targetHeight;
     // A BMP is sent as a PNG of all of it: decoded at full size, and the
-    // PNG made from that same decode.
-    final asPng = header?.mimeType == "image/bmp";
+    // PNG made from that same decode. Known by its "BM" too when the
+    // header reader does not know its info header (OS/2 2.x, 16 to 39
+    // bytes), which the engine still decodes.
+    final asPng = header?.mimeType == "image/bmp" ||
+        (header == null &&
+            bytes.length >= 2 &&
+            bytes[0] == 0x42 && // B
+            bytes[1] == 0x4D); // M
     if (header != null && !asPng) {
       final long = max(header.width, header.height);
       final side = wantsThumbnail(header.width, header.height)
