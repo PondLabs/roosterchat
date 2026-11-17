@@ -7,7 +7,6 @@ import 'dart:io';
 
 import 'package:intl/intl.dart' as intl;
 import 'package:path/path.dart' as p;
-import 'package:rooster/client/attachment.dart';
 import 'package:rooster/generated/intl/messages_all.dart';
 import 'package:rooster/ui/atoms/drag_drop_file_target.dart';
 import 'package:rooster/ui/organisms/attachment_processor/picked_files.dart';

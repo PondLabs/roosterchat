@@ -14,7 +14,6 @@ import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/photo_album_room/photo.dart';
 import 'package:rooster/client/components/photo_album_room/photo_album_room_component.dart';
 import 'package:rooster/client/components/photo_album_room/photo_album_timeline.dart';
-import 'package:rooster/client/room.dart';
 import 'package:rooster/generated/intl/messages_all.dart';
 import 'package:rooster/ui/organisms/attachment_processor/picked_files.dart';
 import 'package:rooster/ui/organisms/photo_albums/photo_album_view.dart';

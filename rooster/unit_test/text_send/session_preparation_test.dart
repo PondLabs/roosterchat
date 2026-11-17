@@ -7,7 +7,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/account_switch_prefix/account_switch_prefix.dart';
-import 'package:rooster/client/room.dart';
 import 'package:rooster/client/components/typing_indicators/typing_indicator_component.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
@@ -216,8 +215,7 @@ void main() {
       await joinedRoom(client, encrypted: true);
       return client;
     }))!;
-    (chatRoom.client as FakeClient).components[AccountSwitchPrefix] =
-        _Prefix('+b ', clientB);
+    chatRoom.client.components[AccountSwitchPrefix] = _Prefix('+b ', clientB);
     await tester.showKeyboard(composer());
 
     for (final text in ['+', '+b', '+b ', '+b hello']) {
@@ -239,8 +237,7 @@ void main() {
       "a first keystroke that only looks like a prefix readies the chat's "
       'room once it is plain text', (tester) async {
     final (clientA, chatRoom) = await openChat(tester, encrypted: true);
-    (chatRoom.client as FakeClient).components[AccountSwitchPrefix] =
-        _Prefix('+b ', null);
+    chatRoom.client.components[AccountSwitchPrefix] = _Prefix('+b ', null);
     await tester.showKeyboard(composer());
 
     await tester.enterText(composer(), '+');

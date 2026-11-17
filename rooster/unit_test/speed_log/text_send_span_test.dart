@@ -21,7 +21,7 @@ class _ThrowingTrace extends TextSendTrace {
   final List<String> calls = [];
 
   @override
-  void sending(matrix.Room room, String txid) {
+  void sending(matrix.Room room, String txid, {Future<bool>? preparation}) {
     calls.add('sending');
     throw StateError('sending');
   }
