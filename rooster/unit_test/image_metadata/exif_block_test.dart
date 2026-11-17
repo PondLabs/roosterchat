@@ -580,6 +580,62 @@ void main() {
         }
       });
 
+      test(
+          'lengths and offsets of 8 bytes with the high bit set, negative on '
+          'the VM: cut, none read', () async {
+        const mb4 = 4 << 20;
+        // An iloc of offsets in 4 bytes and lengths in 8 ([sizes] 0x48), or
+        // offsets in 8 and lengths in 4 (0x84), whose Exif items 1 and on
+        // each hold [extents], over 4 MB of zeros at the end of the file.
+        Uint8List build(int sizes, List<List<(int, int)>> items) {
+          Uint8List with4(int offset) => heif([
+                sizes,
+                0x00,
+                ...be(items.length, 2),
+                for (final (n, extents) in items.indexed) ...[
+                  ...be(n + 1, 2),
+                  0,
+                  0,
+                  0,
+                  0,
+                  ...be(extents.length, 2),
+                  for (final (start, length) in extents) ...[
+                    ...be(start < 0 ? start : offset + start, sizes >> 4),
+                    ...be(length, sizes & 0xF),
+                  ],
+                ],
+              ], after: Uint8List(mb4), exifItems: items.length);
+          return with4(with4(0).length - mb4);
+        }
+
+        for (final (label, bytes) in [
+          (
+            "the review's: 63 extents of +4 MB and one of -(62 x 4 MB)",
+            build(0x48, [
+              [for (var i = 0; i < 63; i++) (0, mb4), (0, -62 * mb4)],
+            ])
+          ),
+          (
+            '16 items of +4 MB and -4 MB',
+            build(0x48, [
+              for (var i = 0; i < 16; i++) [(0, mb4), (0, -mb4)],
+            ])
+          ),
+          (
+            'an offset of -1',
+            build(0x84, [
+              [(-1, 64)],
+            ])
+          ),
+        ]) {
+          final (blocks, asked) = await walk(bytes);
+          expect(blocks.cut, isTrue, reason: label);
+          expect(blocks.whole, isEmpty, reason: label);
+          expect(asked, lessThan(1 << 20), reason: '$label: nothing read');
+          expect(await answer(bytes), LocationAnswer.unreadable, reason: label);
+        }
+      });
+
       test('50,000 Exif items of 64 bytes: cut, at once', () async {
         final bytes = sameBytes(50000, 64);
         final watch = Stopwatch()..start();

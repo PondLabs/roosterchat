@@ -345,11 +345,16 @@ Future<ExifBlocks> _heifItems(ByteReader read, Uint8List meta) async {
       : _itemLocations(meta, iloc.$1, iloc.$2, exifItems);
   // In the file (construction method 0), in extents of a known length, and
   // at most maxExifBlock in all the items, however many extents hold them.
+  // A field of 8 bytes with its high bit set reads negative on the VM: such
+  // an offset or length, or a length past maxExifBlock, counts as cut.
   var size = 0;
   for (final item in exifItems) {
     final (method, extents) = places[item] ?? (-1, const <(int, int)>[]);
     if (method != 0 || extents.isEmpty) return const ExifBlocks([], cut: true);
-    for (final (_, length) in extents) {
+    for (final (offset, length) in extents) {
+      if (offset < 0 || length < 0 || length > maxExifBlock) {
+        return const ExifBlocks([], cut: true);
+      }
       size += length;
     }
   }
