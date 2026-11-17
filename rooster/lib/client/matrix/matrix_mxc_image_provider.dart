@@ -2,6 +2,7 @@ import 'dart:collection';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:rooster/cache/own_media_cache.dart';
 import 'package:rooster/client/matrix/extensions/matrix_client_extensions.dart';
 import 'package:rooster/client/matrix/matrix_mxc_file_provider.dart';
@@ -89,11 +90,34 @@ class MatrixMxcImage extends LODImageProvider {
   /// still.
   static const serverThumbnailTypes = {'image/jpeg', 'image/png', 'image/bmp'};
 
-  /// The pictures whose homeserver thumbnail was answered with a 4xx, in
-  /// memory for the session (the oldest out past [_noServerThumbnailLimit]):
-  /// shown again, they go straight to the whole picture.
-  static final LinkedHashSet<String> _noServerThumbnail = LinkedHashSet();
+  /// Per account, the pictures whose homeserver thumbnail was answered
+  /// with a 4xx that would come again (not a 401 or 403, which a token or
+  /// a permission can change), the oldest out past
+  /// [_noServerThumbnailLimit]: shown again, they go straight to the whole
+  /// picture. Only in memory, and forgotten on logout
+  /// ([forgetNoServerThumbnails]).
+  static final Expando<LinkedHashSet<String>> _noServerThumbnail =
+      Expando('no server thumbnail');
   static const _noServerThumbnailLimit = 512;
+
+  /// What [client]'s account remembers of the thumbnails its homeserver
+  /// refused (a copy).
+  @visibleForTesting
+  static Set<String> noServerThumbnailsOf(Client client) =>
+      Set.of(_noServerThumbnail[client] ?? const <String>{});
+
+  /// Forgets the thumbnails [client]'s homeserver refused: its account
+  /// logged out.
+  static void forgetNoServerThumbnails(Client client) =>
+      _noServerThumbnail[client] = null;
+
+  static void _rememberNoServerThumbnail(Client client, Uri uri) {
+    final refused = _noServerThumbnail[client] ??= LinkedHashSet();
+    if (refused.length >= _noServerThumbnailLimit) {
+      refused.remove(refused.first);
+    }
+    refused.add(uri.toString());
+  }
 
   /// Whether [event]'s picture is shown from a thumbnail the homeserver
   /// scales: it has no sender's thumbnail, is not encrypted (the server
@@ -227,7 +251,7 @@ class MatrixMxcImage extends LODImageProvider {
     // picture, which the cache may hold.
     if (serverThumbnail &&
         matrixEvent != null &&
-        _noServerThumbnail.contains(uri.toString())) {
+        _noServerThumbnail[client]?.contains(uri.toString()) == true) {
       return loadMatrixFullRes(client, uri, matrixEvent, cache: cache);
     }
     trace?.cacheMiss();
@@ -245,11 +269,11 @@ class MatrixMxcImage extends LODImageProvider {
         if (error.retryable) rethrow;
         // No thumbnail to be had (a 404, a type it does not scale): the
         // whole picture, kept as itself, never as the thumbnail; and the
-        // thumbnail not asked again this session.
-        if (_noServerThumbnail.length >= _noServerThumbnailLimit) {
-          _noServerThumbnail.remove(_noServerThumbnail.first);
+        // thumbnail not asked again by this account, unless the refusal
+        // was the token's or a permission's, which can change.
+        if (error.statusCode != 401 && error.statusCode != 403) {
+          _rememberNoServerThumbnail(client, uri);
         }
-        _noServerThumbnail.add(uri.toString());
         return loadMatrixFullRes(client, uri, matrixEvent, cache: cache);
       }
     } else if (matrixEvent != null) {

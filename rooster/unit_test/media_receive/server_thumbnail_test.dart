@@ -1,3 +1,4 @@
+// ignore_for_file: invalid_use_of_visible_for_testing_member
 @TestOn('vm')
 library;
 
@@ -192,4 +193,28 @@ void main() {
       <String>[],
     ]);
   });
+
+  for (final (name, logOut) in <(String, Future<void> Function())>[
+    ('logout', () => client.logout()),
+    // A soft logout or a revoked token: the SDK logs out alone.
+    (
+      'the session ended by the homeserver',
+      () async {
+        await client.getMatrixClient().logout();
+        await settle();
+      }
+    ),
+  ]) {
+    test('$name: the account forgets the thumbnails it was refused', () async {
+      server.thumbnailStatus = 404;
+      await show(picture(size: 2000000, media: 'refused'));
+      final mx = client.getMatrixClient();
+      expect(MatrixMxcImage.noServerThumbnailsOf(mx),
+          {'mxc://fakeserver.notexisting/refused'});
+
+      await logOut();
+
+      expect(MatrixMxcImage.noServerThumbnailsOf(mx), isEmpty);
+    });
+  }
 }
