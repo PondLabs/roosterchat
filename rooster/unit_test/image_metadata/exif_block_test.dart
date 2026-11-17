@@ -673,14 +673,53 @@ void main() {
       });
 
       test(
-          '$name, a GPS pointer in the Interop IFD is found; a broken '
-          'pointer to it is passed over', () {
+          '$name, a GPS pointer in the Interop IFD is found; a pointer to it '
+          'that points back is unreadable, one that is zero or past the '
+          'block is passed over', () {
         expect(readExifGps(subIfdGps(endian, interop: true)), ExifGps.found);
-        for (final at in [0, 26, 4000]) {
-          expect(readExifGps(subIfdGps(endian, interop: true, interopAt: at)),
-              ExifGps.none,
+        for (final (at, gps) in [
+          (0, ExifGps.none),
+          (4000, ExifGps.none),
+          (26, ExifGps.unreadable), // the sub-IFD itself
+          (8, ExifGps.unreadable), // IFD0, before it
+        ]) {
+          expect(
+              readExifGps(subIfdGps(endian, interop: true, interopAt: at)), gps,
               reason: 'Interop IFD at $at');
         }
+      });
+
+      test(
+          '$name, GPS in an Interop IFD written before the sub-IFD, behind '
+          'an APP2: the unreadable question', () async {
+        // IFD0 at 8 points to the sub-IFD at 44, which points back to the
+        // Interop IFD at 26, which holds the GPS pointer.
+        final d = ByteData(62)
+          ..setUint16(0, endian == Endian.little ? 0x4949 : 0x4D4D)
+          ..setUint16(2, 42, endian)
+          ..setUint32(4, 8, endian);
+        for (final (at, tag, value) in [
+          (8, 0x8769, 44),
+          (44, 0xA005, 26),
+          (26, 0x8825, 0),
+        ]) {
+          d
+            ..setUint16(at, 1, endian)
+            ..setUint16(at + 2, tag, endian)
+            ..setUint16(at + 4, 4, endian) // LONG
+            ..setUint32(at + 6, 1, endian)
+            ..setUint32(at + 10, value, endian);
+        }
+        final tiff = d.buffer.asUint8List();
+        expect(readExifGps(tiff), ExifGps.unreadable);
+        final hidden = cat([
+          soi,
+          segment(0xE2, Uint8List(4998)),
+          exifSegment(tiff),
+          plain.sublist(2),
+        ]);
+        expect(await readerSeesGps(hidden), isFalse);
+        expect(await answer(hidden), LocationAnswer.unreadable);
       });
     }
   });

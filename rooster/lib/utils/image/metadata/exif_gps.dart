@@ -42,7 +42,7 @@ const int _maxIfds = 8;
 /// the chain after it that does not ends the chain. An Exif sub-IFD that
 /// does not fit, or whose pointer is zero or points back (to its own IFD or
 /// before it), makes the block unreadable unless a GPS pointer is found
-/// elsewhere.
+/// elsewhere; so does an Interop pointer that points back.
 ExifGps readExifGps(Uint8List exif) {
   final tiff = hasExifPrefix(exif) ? Uint8List.sublistView(exif, 6) : exif;
   if (tiff.length < 8) return ExifGps.unreadable;
@@ -95,13 +95,18 @@ ExifGps readExifGps(Uint8List exif) {
         unreadable = true;
       } else {
         if (pointer(sub, subCount, _gpsIfdTag) != null) return ExifGps.found;
-        // The Interop IFD under it is looked into for a GPS pointer too; a
-        // broken pointer to it does not make the block unreadable.
-        final interop = pointer(sub, subCount, _interopIfdTag);
-        final interopCount = interop == null ? null : subEntries(sub, interop);
-        if (interopCount != null &&
-            pointer(interop!, interopCount, _gpsIfdTag) != null) {
-          return ExifGps.found;
+        // The Interop IFD under it is looked into for a GPS pointer too. A
+        // pointer to it that points back makes the block unreadable, as the
+        // sub-IFD's does; one that is zero or past the block is passed over.
+        final interop = pointer(sub, subCount, _interopIfdTag) ?? 0;
+        if (interop != 0 && interop <= sub) {
+          unreadable = true;
+        } else {
+          final interopCount = interop == 0 ? null : entries(interop);
+          if (interopCount != null &&
+              pointer(interop, interopCount, _gpsIfdTag) != null) {
+            return ExifGps.found;
+          }
         }
       }
     }
