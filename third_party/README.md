@@ -222,9 +222,14 @@ Changes since the copy:
   `currentUploadCancel()` the app's HTTP client uses to abort the request
   in flight. From the first `PUT /send` on, the server may have the event:
   `Room.canCancelSend` is false and `Event.cancelSend` throws without
-  taking the message away. A cancelled send shows nothing again and takes
+  taking the message away; once the server has taken it, it stays so for
+  good, even from an event object read before. The one-second wait
+  between attempts of an event ends on a cancel, and an attempt that
+  fails after its message was cancelled shows nothing. A cancelled send shows nothing again and takes
   its pending event out of the database and the timelines
-  (`Room.dropUnsentEvent`, what `Event.cancelSend` did before, moved).
+  (`Room.dropUnsentEvent`, what `Event.cancelSend` did before, moved,
+  with the removal from the database after the fake redaction, which
+  would otherwise store the event again).
   `Event.sendAgain` sends no cancelled message.
 - At most four upload requests of file messages at once per client
   (`maxUploadsAtOnce` in `lib/src/utils/file_upload_loop.dart`), across
