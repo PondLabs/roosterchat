@@ -9,7 +9,12 @@ class PickedPhoto {
   String name;
   final Future<Uint8List> Function() getBytes;
 
-  PickedPhoto({this.filepath, required this.name, required this.getBytes});
+  /// Its size in bytes, read without its bytes, when known: one over the
+  /// server's limit is refused before it is read.
+  final Future<int> Function()? length;
+
+  PickedPhoto(
+      {this.filepath, required this.name, required this.getBytes, this.length});
 }
 
 abstract class PhotoAlbumRoom<R extends Client, T extends Room>

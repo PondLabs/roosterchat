@@ -124,7 +124,7 @@ class ChatView extends StatelessWidget {
           return state.sendMessage(message, overrideClient: overrideClient);
         },
         onTextUpdated: state.onInputTextUpdated,
-        onInputStarted: state.prepareToSend,
+        onInputStarted: state.onInputStarted,
         addAttachment: state.addAttachment,
         removeAttachment: state.removeAttachment,
         size: MediaQuery.sizeOf(context).mobile ? 40 : 35,
@@ -140,10 +140,7 @@ class ChatView extends StatelessWidget {
         sendSticker: state.sendSticker,
         sendGif: state.sendGif,
         sendFavoriteGif: state.sendFavoriteGif,
-        findOverrideClient: (input) => state.room.client
-            .getComponent<AccountSwitchPrefix>()
-            ?.getPrefixedAccount(input, state.room)
-            ?.$1,
+        findOverrideClient: state.findSenderOverride,
         onTapOverrideClient: (overrideClient) {
           EventBus.doOpenRoom(state.room.identifier,
               clientId: overrideClient.identifier);

@@ -315,9 +315,12 @@ abstract final class SpeedValue {
   /// Which level of a picture is shown: 1 the thumbnail, 2 the full one.
   static const level = 'level';
 
-  /// 1 when a text waited for its outbound session to be made, 0 when one
-  /// was ready (or loaded from this device).
+  /// 1 when a text's send made its outbound session, none being ready.
   static const sessionCreated = 'session_created';
+
+  /// 1 when a text only waited for the outbound session a preparation
+  /// still running made (the composer readies it ahead of Send).
+  static const sessionWaited = 'session_waited';
 
   /// How many key requests a text send made.
   static const keyRequests = 'key_requests';
@@ -334,6 +337,7 @@ abstract final class SpeedValue {
     thumbnailBytes,
     level,
     sessionCreated,
+    sessionWaited,
     keyRequests,
   };
 }

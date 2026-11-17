@@ -21,6 +21,7 @@ import 'package:rooster/diagnostic/speed_log/text_send_trace.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/molecules/message_input.dart';
 import 'package:rooster/ui/organisms/attachment_processor/attachment_processor.dart';
+import 'package:rooster/ui/organisms/attachment_processor/picked_files.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/organisms/chat/chat_view.dart';
 import 'package:rooster/ui/organisms/chat/composer_send.dart';
@@ -251,11 +252,53 @@ class ChatState extends State<Chat> {
     prepareToSend();
   }
 
-  /// Readies what the room's next send needs (an encrypted room's session),
-  /// on the first input into an empty composer and when a file is
-  /// attached, whether or not typing notices are on. Never on focus.
+  /// Readies what the next send needs (an encrypted room's session) in the
+  /// room it goes to: the chat's, or the same room of the account a prefix
+  /// picked ([findSenderOverride]). On the first input into an empty
+  /// composer and when a file is attached; never on focus.
   void prepareToSend() {
-    if (room case RoomSendPreparation room) room.prepareToSend();
+    final sender = _sender;
+    final target = sender == null ? room : sender.getRoom(room.identifier);
+    if (target case RoomSendPreparation room) room.prepareToSend();
+  }
+
+  /// The account a prefix in the composer picked to send as, or null.
+  Client? _sender;
+
+  /// Whether the composer's text could still become such a prefix: who
+  /// sends is not known yet.
+  bool _senderUnknown = false;
+
+  /// A preparation asked for and not started until who sends is known.
+  bool _preparationWaits = false;
+
+  /// The first input into an empty composer: the preparation starts once
+  /// the composer has said whose text it is ([findSenderOverride] runs
+  /// right after, in the same turn), so it runs in the room of the account
+  /// that sends.
+  void onInputStarted() {
+    _preparationWaits = true;
+    scheduleMicrotask(_prepareOnceSenderKnown);
+  }
+
+  void _prepareOnceSenderKnown() {
+    if (!_preparationWaits || _senderUnknown) return;
+    _preparationWaits = false;
+    prepareToSend();
+  }
+
+  /// The account the composer's [input] is sent as, when a prefix picks
+  /// another one ([AccountSwitchPrefix]). A new one has its room readied.
+  Client? findSenderOverride(String input) {
+    final prefixes = room.client.getComponent<AccountSwitchPrefix>();
+    final sender = prefixes?.getPrefixedAccount(input, room)?.$1;
+    _senderUnknown = sender == null &&
+        input.isNotEmpty &&
+        (prefixes?.isPossiblyUsingPrefix(input) ?? false);
+    if (sender != null && sender != _sender) _preparationWaits = true;
+    _sender = sender;
+    _prepareOnceSenderKnown();
+    return sender;
   }
 
   void removeAttachment(PendingFileAttachment attachment) {
@@ -522,11 +565,17 @@ class ChatState extends State<Chat> {
       return;
     }
     final skipped = <String>[];
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    // A file over the server's limit is refused unread, as one picked.
+    final limit = await limitWithin(uploadLimitOf(room));
     final dropped = await attachmentsFromDroppedFiles(event.files,
+        maxBytes: limit,
+        onRefused: (bytes, limit) => messenger?.showSnackBar(
+            SnackBar(content: Text(messageFileOverUploadLimit(bytes, limit)))),
         onSkipped: (name, error) {
-      Log.w("Could not attach dropped file $name: $error");
-      skipped.add(name);
-    });
+          Log.w("Could not attach dropped file $name: $error");
+          skipped.add(name);
+        });
     if (skipped.isNotEmpty && mounted) {
       AdaptiveDialog.showError(context,
           errorChatDropNotAttached(skipped.join(", ")), StackTrace.current,

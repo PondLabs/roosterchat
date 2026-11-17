@@ -229,7 +229,9 @@ Changes since the copy:
   its pending event out of the database and the timelines
   (`Room.dropUnsentEvent`, what `Event.cancelSend` did before, moved,
   with the removal from the database after the fake redaction, which
-  would otherwise store the event again).
+  would otherwise store the event again). A message cancelled while
+  `Room.sendEvent` stores its failure (an encryption refused for good) is
+  taken out again once that is stored, so no row of it is left.
   `Event.sendAgain` sends no cancelled message.
 - At most four upload requests of file messages at once per client
   (`maxUploadsAtOnce` in `lib/src/utils/file_upload_loop.dart`), across

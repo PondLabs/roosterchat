@@ -5,9 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rooster/client/attachment.dart';
+import 'package:rooster/client/client.dart';
+import 'package:rooster/client/components/account_switch_prefix/account_switch_prefix.dart';
 import 'package:rooster/client/components/typing_indicators/typing_indicator_component.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
+import 'package:rooster/ui/molecules/message_input.dart';
+import 'package:rooster/utils/clipboard/pasted_file.dart';
 import 'package:rooster/utils/image/preparation/image_preparation.dart';
 
 import '../media_prepare/fakes.dart';
@@ -17,7 +21,9 @@ import 'text_send_fakes.dart';
 
 /// R7: an encrypted room's outbound session is prepared on the first input
 /// into an empty composer and when a file is attached, never on focus, one
-/// preparation in flight per room, typing notices on or off. The
+/// preparation in flight per room, and only while typing notices are on
+/// (the owner's decision of 2026-11-17: off, nothing is readied before
+/// Send, since the key sent ahead tells others as much). The
 /// preparation is [MatrixRoom.prepareOutboundSession], replaced here by a
 /// counter, so these tests need no vodozemac.
 void main() {
@@ -52,7 +58,7 @@ void main() {
     }))!;
     final preparer = fakePreparer(FakeEngine(width: 400, height: 300));
     ImagePreparer.instance = preparer;
-    final chatRoom = PreparingRoom(FakeClient('a'), '!room',
+    final chatRoom = PreparingRoom(FakeClient('a'), fakeRoomId,
         preparer: preparer, target: room, typing: typing);
     await tester.pumpWidget(chatApp(chatRoom));
     await tester.pump();
@@ -142,27 +148,108 @@ void main() {
     await close(tester, client);
   });
 
-  testWidgets(
-      'with typing notices off, the session is prepared all the same; in a '
-      'room without encryption, never', (tester) async {
-    final typing = TypingOff();
-    final (encrypted, _) =
-        await openChat(tester, encrypted: true, typing: typing);
-    await tester.enterText(composer(), 'h');
-    await tester.pump();
-    expect(typing.calls, greaterThan(0),
-        reason: 'the chat asked for a typing notice, which is off');
-    expect(spy.count, 1);
-    spy.finish();
-    await tester.pump();
-    await close(tester, encrypted);
+  for (final on in [false, true]) {
+    testWidgets(
+        'typing notices ${on ? 'on' : 'off'}: typing, a paste and a file '
+        "${on ? 'ready' : 'never ready'} the session before Send",
+        (tester) async {
+      final (client, _) = await openChat(tester, encrypted: true);
+      await tester.runAsync(() => setTypingNotices(client, on));
+      await tester.showKeyboard(composer());
 
+      await tester.enterText(composer(), 'h');
+      await tester.pump();
+      final afterTyping = spy.count;
+      if (on) spy.finish();
+      await tester.pump();
+
+      // A paste: the composer's attachment dialog, then the file.
+      final input = tester.state<MessageInputState>(find.byType(MessageInput));
+      final pasted = input.onFilesPasted([
+        PastedFile(Uint8List(10),
+            name: 'notes.pdf', mimeType: 'application/pdf')
+      ]);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.text('Add File'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await pasted;
+      final afterPaste = spy.count;
+      if (on) spy.finish();
+      await tester.pump();
+
+      await attachFile(tester);
+      final afterFile = spy.count;
+      if (on) spy.finish();
+      await tester.pump();
+
+      print('typing notices ${on ? 'on' : 'off'}: preparations after typing '
+          '$afterTyping, after the paste $afterPaste, after the file '
+          '$afterFile');
+      expect(chatState(tester).attachments, hasLength(2));
+      expect([afterTyping, afterPaste, afterFile], on ? [1, 2, 3] : [0, 0, 0]);
+      await close(tester, client);
+    });
+  }
+
+  testWidgets('in a room without encryption, never', (tester) async {
     final (plain, _) = await openChat(tester, encrypted: false);
     await tester.enterText(composer(), 'h');
     await tester.pump();
     await attachFile(tester);
-    expect(spy.count, 1, reason: 'nothing more in the plain room');
+    expect(spy.count, 0);
     await close(tester, plain);
+  });
+
+  testWidgets(
+      'a prefix that sends as another account readies the room of that '
+      "account, not the chat's", (tester) async {
+    final (clientA, chatRoom) = await openChat(tester, encrypted: true);
+    final clientB = (await tester.runAsync(() async {
+      final client = await fakeAccount(
+          'session_preparation_other_${accounts++}', FakeTransport());
+      final mx = client.getMatrixClient();
+      mx.backgroundSync = false;
+      await mx.oneShotSync();
+      await joinedRoom(client, encrypted: true);
+      return client;
+    }))!;
+    chatRoom.client.components[AccountSwitchPrefix] = _Prefix('+b ', clientB);
+    await tester.showKeyboard(composer());
+
+    for (final text in ['+', '+b', '+b ', '+b hello']) {
+      await tester.enterText(composer(), text);
+      await tester.pump();
+    }
+
+    print("prepared for: ${spy.accounts}; the chat's account "
+        '${clientA.getMatrixClient().clientName}, the sender '
+        '${clientB.getMatrixClient().clientName}');
+    expect(spy.accounts, [clientB.getMatrixClient().clientName]);
+    spy.finish();
+    await tester.pump();
+    await close(tester, clientA);
+    await tester.runAsync(clientB.close);
+  });
+
+  testWidgets(
+      "a first keystroke that only looks like a prefix readies the chat's "
+      'room once it is plain text', (tester) async {
+    final (clientA, chatRoom) = await openChat(tester, encrypted: true);
+    chatRoom.client.components[AccountSwitchPrefix] = _Prefix('+b ', null);
+    await tester.showKeyboard(composer());
+
+    await tester.enterText(composer(), '+');
+    await tester.pump();
+    expect(spy.count, 0, reason: 'who sends is not known yet');
+    await tester.enterText(composer(), '+1');
+    await tester.pump();
+
+    expect(spy.accounts, [clientA.getMatrixClient().clientName]);
+    spy.finish();
+    await tester.pump();
+    await close(tester, clientA);
   });
 
   group('MatrixRoom.prepareToSend', () {
@@ -224,4 +311,31 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 10));
     });
   });
+}
+
+/// The account prefix [prefix]: text that starts with it is sent as
+/// [other] (a fake that knows no other account when null).
+class _Prefix implements AccountSwitchPrefix<Client> {
+  _Prefix(this.prefix, this.other);
+
+  final String prefix;
+  final Client? other;
+
+  @override
+  (Client, String)? getPrefixedAccount(String string, Room currentRoom) =>
+      other != null && string.startsWith(prefix) ? (other!, prefix) : null;
+
+  @override
+  bool isPossiblyUsingPrefix(String currentText) =>
+      currentText.startsWith(prefix) || prefix.startsWith(currentText);
+
+  @override
+  String? get clientPrefix => prefix;
+
+  @override
+  String removePrefix(String string, Room currentRoom) =>
+      string.startsWith(prefix) ? string.substring(prefix.length) : string;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

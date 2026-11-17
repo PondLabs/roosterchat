@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/components/room_component.dart';
 import 'package:rooster/client/components/typing_indicators/typing_indicator_component.dart';
+import 'package:rooster/client/matrix/components/typing_indicators/matrix_typing_indicators_component.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/member.dart';
@@ -61,19 +62,36 @@ Future<MatrixRoom> joinedRoom(MatrixClient client,
   return client.getRoom(fakeRoomId)! as MatrixRoom;
 }
 
+/// Turns [client]'s typing notices [on] or off, for every room, as the
+/// account data a sync brings says it (the setting in the app's settings).
+Future<void> setTypingNotices(MatrixClient client, bool on) async {
+  final mx = client.getMatrixClient();
+  await mx.database.transaction(() => mx.handleSync(matrix.SyncUpdate(
+        nextBatch: on ? 'typing_on' : 'typing_off',
+        accountData: [
+          matrix.BasicEvent(
+              type: MatrixTypingIndicatorsComponent.publicTypingIndicatorKey,
+              content: {'enabled': on}),
+        ],
+      )));
+}
+
 /// Replaces [MatrixRoom.prepareOutboundSession] for one test: each
-/// preparation is counted in [rooms] (by room id) and lasts until [finish].
+/// preparation is counted in [rooms] (by room id), with the account it
+/// ran for in [accounts] (by client name), and lasts until [finish].
 class PreparationSpy {
   PreparationSpy() {
     _app = MatrixRoom.prepareOutboundSession;
     MatrixRoom.prepareOutboundSession = (room) {
       rooms.add(room.id);
+      accounts.add(room.client.clientName);
       return (_running = Completer<void>()).future;
     };
   }
 
   late final Future<void> Function(matrix.Room) _app;
   final List<String> rooms = [];
+  final List<String> accounts = [];
   Completer<void>? _running;
 
   int get count => rooms.length;

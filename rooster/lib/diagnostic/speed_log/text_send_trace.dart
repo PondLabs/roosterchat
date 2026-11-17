@@ -31,9 +31,10 @@ import 'package:rooster/utils/network/speed_http_client.dart'
 ///   `/keys/claim`, `/sendToDevice`), like `request`;
 /// - `outbound_session`, in an encrypted room: no duration, with
 ///   `session_created` (1 when no session was ready at the hand-over and
-///   the message waited for one to be made, by the send or by a
-///   preparation still running; 0 when one was ready or was loaded from
-///   this device) and `key_requests` (how many).
+///   the send made one), `session_waited` (1 when no session was ready and
+///   the message waited for the one a preparation still running made;
+///   both 0 when one was ready or was loaded from this device) and
+///   `key_requests` (how many).
 ///
 /// Requests come from the log by the span's id, so the trace holds no URL;
 /// the transaction id given to [sending] is only compared with the echo's
@@ -142,10 +143,16 @@ class TextSendTrace {
   bool _failed = false;
   bool _cancelled = false;
 
-  /// [room] is handed the text with the transaction id [txid]. Only the
-  /// first call counts.
-  void sending(matrix.Room room, String txid) {
+  /// Whether the preparation running at the hand-over readied the
+  /// session: null when none was running, or until it ends.
+  bool? _preparationReadied;
+
+  /// [room] is handed the text with the transaction id [txid], while
+  /// [preparation] (the room's preparation of its session, true once it
+  /// readied it) runs, when one does. Only the first call counts.
+  void sending(matrix.Room room, String txid, {Future<bool>? preparation}) {
     if (_handedOver != null || span.isFinished) return;
+    preparation?.then((readied) => _preparationReadied = readied);
     final handedOver = _handedOver = span.elapsed;
     span.addStep(SpeedStep.send, Duration.zero, handedOver);
     if (room.encrypted) {
@@ -277,8 +284,12 @@ class TextSendTrace {
           '(${speedErrorName(error)})');
       return;
     }
+    // Made by the preparation that was running, not by the send: the
+    // message only waited for it.
+    final waited = created && _preparationReadied == true;
     span.addStep(SpeedStep.outboundSession, handedOver, Duration.zero, values: {
-      SpeedValue.sessionCreated: created ? 1 : 0,
+      SpeedValue.sessionCreated: created && !waited ? 1 : 0,
+      SpeedValue.sessionWaited: waited ? 1 : 0,
       SpeedValue.keyRequests: keyRequests,
     });
   }

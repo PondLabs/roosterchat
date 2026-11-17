@@ -10,6 +10,7 @@ import 'package:cross_file/cross_file.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:rooster/client/attachment.dart';
+import 'package:rooster/client/components/photo_album_room/photo_album_room_component.dart';
 import 'package:rooster/client/matrix/media/browser_files.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/room.dart';
@@ -23,6 +24,38 @@ Future<int?> Function(Room room) uploadLimitOf = _serverUploadLimit;
 
 Future<int?> _serverUploadLimit(Room room) async =>
     room is MatrixRoom ? await room.maxUploadBytes() : null;
+
+/// How long a picked or dropped file waits for the server's limit before
+/// it is attached with the limit not known (the server still checks).
+const uploadLimitWait = Duration(seconds: 5);
+
+/// [limit], or null (not known) when it has not come within
+/// [uploadLimitWait]: a limit request that never answers does not leave
+/// the file neither attached nor refused.
+Future<int?> limitWithin(Future<int?> limit) => limit
+    .then<int?>((bytes) => bytes)
+    .timeout(uploadLimitWait, onTimeout: () => null);
+
+/// [photos] for a photo album, checked against [maxBytes] by their length
+/// before any of their bytes is read. Each one over it goes to [onRefused]
+/// with its size, unread; one whose length is not known goes on.
+Future<List<PickedPhoto>> admitPickedPhotos(
+  List<PickedPhoto> photos, {
+  required int? maxBytes,
+  required void Function(int bytes, int maxBytes) onRefused,
+}) async {
+  if (maxBytes == null) return photos;
+  final admitted = <PickedPhoto>[];
+  for (final photo in photos) {
+    final bytes = await photo.length?.call();
+    if (bytes != null && !fitsUploadLimit(bytes, maxBytes)) {
+      onRefused(bytes, maxBytes);
+      continue;
+    }
+    admitted.add(photo);
+  }
+  return admitted;
+}
 
 /// Whether [file], from the gallery or the camera, fits [maxBytes], by its
 /// length (read from the file system on native), before its bytes are
@@ -64,7 +97,8 @@ String labelFileOverUploadLimit(String size, String limit) => Intl.message(
 /// [maxBytes] gives. Each one over it goes to [onRefused] with its size,
 /// unread. The picker opens first and the limit is asked after: on the
 /// web a dialog opened after a network wait can lose the click that asked
-/// for it.
+/// for it. A limit that has not come within [uploadLimitWait] is taken as
+/// not known: the files are attached and the server checks.
 Future<List<PendingFileAttachment>> pickFileAttachments({
   required Future<int?> Function() maxBytes,
   required void Function(int bytes, int maxBytes) onRefused,
@@ -75,7 +109,7 @@ Future<List<PendingFileAttachment>> pickFileAttachments({
     // In a browser, its own dialog, whose `File`s a large file is sent
     // from (`browser_files.dart`).
     final picked = await pickBrowserFileAttachments(
-        maxBytes: maxBytes, onRefused: onRefused);
+        maxBytes: () => limitWithin(maxBytes()), onRefused: onRefused);
     if (picked != null) return picked;
   }
   final result = await FilePicker.platform.pickFiles(
@@ -85,7 +119,7 @@ Future<List<PendingFileAttachment>> pickFileAttachments({
       allowMultiple: true);
   if (result == null) return const [];
   return admitPickedFiles(result.files,
-      maxBytes: await maxBytes(), onRefused: onRefused, web: web);
+      maxBytes: await limitWithin(maxBytes()), onRefused: onRefused, web: web);
 }
 
 /// [files] as attachments, checked by size first. On native a file is

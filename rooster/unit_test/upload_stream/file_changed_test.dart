@@ -2,6 +2,7 @@
 library;
 
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart' as intl;
@@ -182,6 +183,43 @@ void main() {
     expect(await retryMatrixFile(failed, send), isNull);
     expect(transport.uploads, isEmpty);
     await expectShownFailure(mx, room, send);
+    await mx.dispose(closeDatabase: true);
+  });
+  test(
+      'a read that fails because the file changed says so, whatever error '
+      'the connection gives: no new attempt, the message says why', () async {
+    final transport = ConnectionFails();
+    final clock = ManualSendClock();
+    final (mx, room) = await loopClient('guard_read_cause', transport, clock);
+    final source = CountingSource(4000, changes: true);
+    final send = AttachmentSend(roomKey: 'test:$roomId', attachment: null);
+
+    final sent = sendMatrixFile(
+        room,
+        TrackedMatrixAttachment(
+            matrix.MatrixFile(bytes: Uint8List(0), name: 'a.bin')
+              ..source = source,
+            send));
+    // Ends, or starts waiting to try again.
+    final ended = await Future.any([
+      sent.then((_) => true),
+      () async {
+        while (!clock.waiting) {
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+        }
+        return false;
+      }(),
+    ]);
+
+    print('a read that failed, the connection closed: ended $ended, waits '
+        '${clock.waits}, reads ${source.reads}, problem '
+        '${send.upload.problem}');
+    expect(ended, isTrue, reason: 'not tried again');
+    expect(clock.waits, isEmpty);
+    expect(source.reads, 1);
+    expect(send.stage, AttachmentSendStage.failed);
+    expect(send.upload.problem, UploadProblem.fileChanged);
+    expect(transport.events, isEmpty);
     await mx.dispose(closeDatabase: true);
   });
 }

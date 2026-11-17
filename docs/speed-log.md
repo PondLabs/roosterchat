@@ -81,15 +81,22 @@ own span), nor is a command.
 | `retry` | the same `PUT /send` sent again | its response headers; same values |
 | `answer` | the last response headers | the SDK returns the send |
 | `key_request` | a key request of the send leaves (`POST /keys/query`, `POST /keys/claim`, `PUT /sendToDevice`) | its response headers; values `attempt`, `status` |
-| `outbound_session` | the hand-over, encrypted rooms only | no duration; values `session_created` (1 when no session was ready at the hand-over and the message waited for one to be made, by the send itself or by a preparation still running; 0 when one was ready or was loaded from this device) and `key_requests` (how many key requests the send made) |
+| `outbound_session` | the hand-over, encrypted rooms only | no duration; values `session_created` (1 when no session was ready at the hand-over and the send made one), `session_waited` (1 when no session was ready and the message waited for the one a preparation still running made; both 0 when one was ready or was loaded from this device) and `key_requests` (how many key requests the send made) |
 
 Outcome `ok`, or `failed` when the SDK gave up (it waits out a 429 up to a
 minute, then marks the message as failed). The time an encrypted room
 spends preparing its session falls between `queue_wait` and `request`
 (not a step of its own); the composer prepares it ahead, on the first
-input and on attaching a file, so `session_created` is usually 0. A
-`key_request` with `session_created=0` is a key shared at the send with
-a device that appeared since. The room calls into the span through a guard:
+input and on attaching or pasting a file, so `session_created` is usually
+0; a message sent while that preparation still runs says
+`session_waited=1`. It does so only while the account sends typing
+notices in that room: a session made ahead sends its key to the others'
+devices, which tells them someone is writing as a typing notice would.
+With the notices off nothing is readied before Send, no key request nor
+`sendToDevice` leaves until then, and the send makes the session itself
+(`session_created=1` when none was ready).
+A `key_request` with `session_created=0` is a key shared at the send
+with a device that appeared since. The room calls into the span through a guard:
 a failure in the measurement is dropped (one fixed line in the app's log)
 and never stops the send.
 

@@ -2,16 +2,56 @@
 // are. The drop arrives from desktop_drop's platform channel, as the desktop
 // sends it, reaches the chat's drop target, and the files become
 // attachments.
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:intl/intl.dart' as intl;
+import 'package:path/path.dart' as p;
+import 'package:rooster/generated/intl/messages_all.dart';
 import 'package:rooster/ui/atoms/drag_drop_file_target.dart';
+import 'package:rooster/ui/organisms/attachment_processor/picked_files.dart';
 import 'package:rooster/ui/organisms/chat/dropped_files.dart';
+import 'package:rooster/utils/event_bus.dart';
+import 'package:rooster/utils/image/preparation/image_preparation.dart';
 import 'package:cross_file/cross_file.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tiamat/config/style/theme_extensions.dart';
+
+import 'media_prepare/fakes.dart';
+import 'pending_media/chat_harness.dart';
+
+/// A dropped file of [size] bytes that fails the test when any of its
+/// bytes is read: only its length may be asked.
+class _Unread extends XFile {
+  _Unread(super.path, this.size);
+
+  final int size;
+  final List<String> reads = [];
+
+  @override
+  Future<int> length() async => size;
+
+  @override
+  Future<Uint8List> readAsBytes() {
+    reads.add('readAsBytes');
+    throw StateError('the bytes of $name were read');
+  }
+
+  @override
+  Stream<Uint8List> openRead([int? start, int? end]) {
+    reads.add('openRead');
+    throw StateError('the bytes of $name were read');
+  }
+
+  @override
+  Future<String> readAsString({Encoding encoding = utf8}) {
+    reads.add('readAsString');
+    throw StateError('the bytes of $name were read');
+  }
+}
 
 /// What desktop_drop's native side sends on a drop at [at].
 Future<void> drop(WidgetTester tester, List<String> paths, Offset at) async {
@@ -35,7 +75,8 @@ void main() {
     dir = Directory.systemTemp.createTempSync('chat_drop');
     files = [
       for (final name in ['notes.txt', 'archive.zip', 'tool.exe', 'NOEXT'])
-        (File('${dir.path}/$name')..writeAsBytesSync([1, 2, 3, 4])).path,
+        // The platform's own separator: XFile.name splits the path by it.
+        (File(p.join(dir.path, name))..writeAsBytesSync([1, 2, 3, 4])).path,
     ];
   });
 
@@ -123,7 +164,7 @@ void main() {
   });
 
   test('a folder in the drop is left out, not the end of the drop', () async {
-    final folder = Directory('${dir.path}/folder')..createSync();
+    final folder = Directory(p.join(dir.path, 'folder'))..createSync();
     final skipped = <String>[];
 
     final attachments = await attachmentsFromDroppedFiles(
@@ -147,6 +188,63 @@ void main() {
     expect(browser.data, hasLength(droppedFileInMemoryLimit + 1));
     expect(browser.path, isNull);
   });
+
+  test(
+      "a file over the server's limit is refused by its length, unread; "
+      'one within it is attached', () async {
+    final big = _Unread('/somewhere/big.mkv', 60 * 1000 * 1000);
+    final refused = <(int, int)>[];
+
+    final attachments = await attachmentsFromDroppedFiles(
+        [big, XFile(files.first)],
+        maxBytes: 50 * 1000 * 1000,
+        onRefused: (bytes, limit) => refused.add((bytes, limit)));
+
+    expect(big.reads, isEmpty, reason: 'not one byte read');
+    expect(refused, [(60 * 1000 * 1000, 50 * 1000 * 1000)]);
+    expect([for (final a in attachments) a.path], [files.first]);
+  });
+
+  for (final locale in ['en', 'pt']) {
+    testWidgets(
+        "a file over the server's limit dropped on the chat is refused "
+        'unread, with the sentence a picked one gets ($locale)',
+        (tester) async {
+      await tester.runAsync(() => initializeMessages(locale));
+      intl.Intl.defaultLocale = locale;
+      final appLimit = uploadLimitOf;
+      final appPreparer = ImagePreparer.instance;
+      addTearDown(() {
+        intl.Intl.defaultLocale = null;
+        uploadLimitOf = appLimit;
+        ImagePreparer.instance = appPreparer;
+      });
+      final preparer = fakePreparer(FakeEngine(width: 400, height: 300));
+      ImagePreparer.instance = preparer;
+      uploadLimitOf = (_) async => 50 * 1000 * 1000;
+      final room = FakeRoom(FakeClient('a'), '!room', preparer: preparer);
+      await tester.pumpWidget(chatApp(room));
+      await tester.pump();
+      final big = _Unread('/somewhere/big.mkv', 60 * 1000 * 1000);
+
+      EventBus.onFileDropped.add(DropDoneDetails(
+          files: [big],
+          localPosition: const Offset(400, 300),
+          globalPosition: const Offset(400, 300)));
+      await tester.pump();
+      await tester.pump();
+
+      final sentence =
+          messageFileOverUploadLimit(60 * 1000 * 1000, 50 * 1000 * 1000);
+      expect(sentence,
+          contains(locale == 'pt' ? 'deste servidor' : "server's limit"));
+      expect(find.text(sentence), findsOneWidget);
+      expect(big.reads, isEmpty);
+      expect(chatState(tester).attachments, isEmpty);
+      await tester.pump(const Duration(seconds: 5));
+      await closeChat(tester);
+    });
+  }
 
   group('a thread open beside the chat', () {
     const chat = Rect.fromLTWH(300, 0, 500, 800);

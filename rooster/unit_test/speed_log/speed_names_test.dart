@@ -100,7 +100,7 @@ void main() {
       'bytes', 'width', 'height', 'frames', // image_prepare
       'thumbnail_bytes', // file_send
       'level', // media_show
-      'session_created', 'key_requests', // text_send
+      'session_created', 'session_waited', 'key_requests', // text_send
     });
     expect(SpeedOutcome.all, {
       'ok', 'failed', 'incomplete', 'abandoned', 'cancelled', //

@@ -372,6 +372,21 @@ class MessageInputState extends State<MessageInput> {
   Future<bool> galleryFileFits(XFile file) async => pickedFileFits(file,
       maxBytes: maxUploadBytes ?? await uploadLimit(), onRefused: refuseFile);
 
+  /// Photos and videos from the gallery or the camera: each one over the
+  /// limit is refused by its length, unread; the others are read and go
+  /// to the attachment dialog.
+  Future<void> attachGalleryFiles(List<XFile> files) async {
+    for (final file in files) {
+      if (!await galleryFileFits(file)) continue;
+      final data = await file.readAsBytes();
+      await handlePickedAttachment(PendingFileAttachment(
+          name: file.name,
+          mimeType: file.mimeType,
+          size: data.lengthInBytes,
+          data: data));
+    }
+  }
+
   @override
   void initState() {
     controller = RichTextEditingController(
@@ -1811,16 +1826,7 @@ class MessageInputState extends State<MessageInput> {
             label: promptChatAttachGallery,
             execute: () async {
               var picker = ImagePicker();
-              var result = await picker.pickMultiImage();
-              for (var file in result) {
-                if (!await galleryFileFits(file)) continue;
-                var data = await file.readAsBytes();
-                await handlePickedAttachment(PendingFileAttachment(
-                    name: file.name,
-                    mimeType: file.mimeType,
-                    size: data.lengthInBytes,
-                    data: data));
-              }
+              await attachGalleryFiles(await picker.pickMultiImage());
             }),
       AttachmentPicker(
           icon: Icons.attach_file,
@@ -1840,16 +1846,7 @@ class MessageInputState extends State<MessageInput> {
             label: promptChatAttachMedia,
             execute: () async {
               var picker = ImagePicker();
-              var result = await picker.pickMultipleMedia();
-              for (var file in result) {
-                if (!await galleryFileFits(file)) continue;
-                var data = await file.readAsBytes();
-                await handlePickedAttachment(PendingFileAttachment(
-                    name: file.name,
-                    mimeType: file.mimeType,
-                    size: data.lengthInBytes,
-                    data: data));
-              }
+              await attachGalleryFiles(await picker.pickMultipleMedia());
             }),
       if (PlatformUtils.isAndroid)
         AttachmentPicker(
@@ -1858,14 +1855,7 @@ class MessageInputState extends State<MessageInput> {
             execute: () async {
               var picker = ImagePicker();
               var file = await picker.pickImage(source: ImageSource.camera);
-              if (file == null || !await galleryFileFits(file)) return;
-
-              var data = await file.readAsBytes();
-              await handlePickedAttachment(PendingFileAttachment(
-                  name: file.name,
-                  mimeType: file.mimeType,
-                  size: data.lengthInBytes,
-                  data: data));
+              if (file != null) await attachGalleryFiles([file]);
             }),
     ];
 

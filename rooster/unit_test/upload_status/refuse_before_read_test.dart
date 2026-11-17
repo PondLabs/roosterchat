@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cross_file/cross_file.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rooster/client/attachment.dart';
 import 'package:rooster/utils/clipboard/pasted_file.dart';
 import 'package:rooster/ui/organisms/attachment_processor/picked_files.dart';
 
@@ -71,6 +74,36 @@ class _UnreadPhoto extends XFile {
 
 void main() {
   const limit = 50 * 1000 * 1000;
+
+  test(
+      'a limit request that never answers: after a few seconds the picked '
+      'file is attached by its path, the limit taken as not known', () {
+    fakeAsync((async) {
+      final reads = <String>[];
+      FilePicker.platform = _FakePicker([
+        _Unread(reads, name: 'notes.pdf', size: 1000, path: '/docs/notes.pdf')
+      ]);
+      List<PendingFileAttachment>? attached;
+      var asked = 0;
+
+      pickFileAttachments(
+              maxBytes: () {
+                asked++;
+                return Completer<int?>().future; // never answers
+              },
+              onRefused: (_, __) => fail('nothing is over a limit not known'),
+              web: false)
+          .then((files) => attached = files);
+      async.elapse(uploadLimitWait - const Duration(milliseconds: 1));
+      expect(asked, 1);
+      expect(attached, isNull, reason: 'still waiting for the limit');
+
+      async.elapse(const Duration(milliseconds: 1));
+      expect(attached?.single.path, '/docs/notes.pdf');
+      expect(reads, isEmpty);
+      expect(uploadLimitWait, lessThanOrEqualTo(const Duration(seconds: 5)));
+    });
+  });
 
   test(
       'native: the picker is asked for paths and sizes; a file over '

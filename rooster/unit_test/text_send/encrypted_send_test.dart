@@ -166,6 +166,56 @@ void main() {
             '${r.method} ${r.route}'
       ];
 
+  /// The key requests the fake server got: device keys, one-time keys and
+  /// room keys sent to devices.
+  List<String> keyRoutes() => [
+        for (final r in server.seen)
+          if (r.endsWith('/keys/query') ||
+              r.endsWith('/keys/claim') ||
+              r.contains('/sendToDevice/'))
+            r
+      ];
+
+  for (final on in [false, true]) {
+    test(
+        'typing notices ${on ? 'on' : 'off'}: what typing, a paste or a file '
+        "asks for ${on ? 'readies the session, its keys sent' : 'sends no key request nor sendToDevice'} "
+        'before Send; Send then sends the message',
+        skip: skip, () async {
+      await setTypingNotices(client, on);
+      server.seen.clear();
+
+      // What the composer calls on the first keystroke, a paste or a file.
+      room.prepareToSend();
+      if (on) {
+        await until(ready);
+      } else {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      }
+      final beforeSend = keyRoutes();
+      final span = await sendText('Hello');
+      final atSend = keyRoutes().skip(beforeSend.length).toList();
+      final session =
+          span.steps.singleWhere((s) => s.name == SpeedStep.outboundSession);
+
+      print('typing notices ${on ? 'on' : 'off'}: key requests before Send '
+          '$beforeSend; at Send $atSend; ${session.values}');
+      expect(server.sends, ['m.room.encrypted']);
+      if (on) {
+        expect(beforeSend,
+            contains(predicate<String>((r) => r.contains('/sendToDevice/'))));
+        expect(atSend, isEmpty);
+        expect(session.values[SpeedValue.sessionCreated], 0);
+      } else {
+        expect(beforeSend, isEmpty);
+        expect(atSend,
+            contains(predicate<String>((r) => r.contains('/sendToDevice/'))),
+            reason: 'Send makes the session and shares its key, as before');
+        expect(session.values[SpeedValue.sessionCreated], 1);
+      }
+    });
+  }
+
   test(
       'with the session prepared ahead (first keystroke): 1 PUT /send and no '
       'key request in the send',
@@ -191,8 +241,11 @@ void main() {
         hasLength(1));
     expect(keyRequests(span), isEmpty);
     expect(span.steps.where((s) => s.name == SpeedStep.keyRequest), isEmpty);
-    expect(session.values,
-        {SpeedValue.sessionCreated: 0, SpeedValue.keyRequests: 0});
+    expect(session.values, {
+      SpeedValue.sessionCreated: 0,
+      SpeedValue.sessionWaited: 0,
+      SpeedValue.keyRequests: 0
+    });
     expect(span.outcome, SpeedOutcome.ok);
   });
 
@@ -216,9 +269,13 @@ void main() {
         hasLength(listed.length));
     expect(session.values, {
       SpeedValue.sessionCreated: 1,
+      SpeedValue.sessionWaited: 0,
       SpeedValue.keyRequests: listed.length,
     });
-    expect(report, contains('session_created=1 key_requests=${listed.length}'));
+    expect(
+        report,
+        contains('session_created=1 session_waited=0 '
+            'key_requests=${listed.length}'));
     // Fixed names and numbers: no room, user or device id in the report's
     // spans and requests.
     for (final id in ['!1234', '@test', 'GHTYAJCE', 'OTHERDEVICE']) {
@@ -247,12 +304,19 @@ void main() {
         .length;
     expect(roomKeySends, 1, reason: 'one session, its key shared once');
     expect(server.keysHeld, 1);
-    // The message waited for the session the preparation was making.
+    // The message waited for the session the preparation was making: it
+    // says so by its own name, not as a session the send made.
     expect(
         span.steps
             .singleWhere((s) => s.name == SpeedStep.outboundSession)
             .values,
-        {SpeedValue.sessionCreated: 1, SpeedValue.keyRequests: 0});
+        {
+          SpeedValue.sessionCreated: 0,
+          SpeedValue.sessionWaited: 1,
+          SpeedValue.keyRequests: 0
+        });
+    expect(buildSpeedReport(SpeedLog.instance),
+        contains('session_created=0 session_waited=1 key_requests=0'));
     expect(span.outcome, SpeedOutcome.ok);
   });
 }

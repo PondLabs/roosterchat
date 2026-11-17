@@ -348,25 +348,52 @@ void main() {
   });
 
   test(
-      'a reply to an own message still pending looks its target up, never '
-      'replying to a transaction id', () async {
-    final pending = matrix.Event(
-      eventId: 'm1700000000000.0',
-      senderId: mx.userID!,
-      type: matrix.EventTypes.Message,
-      content: {'msgtype': 'm.text', 'body': 'not sent yet'},
-      originServerTs: DateTime.now(),
-      status: matrix.EventStatus.sending,
-      room: room.matrixRoom,
-    );
+      "a reply to an own message still being sent waits for the server's "
+      'id: m.in_reply_to never carries the transaction id', () async {
+    final echoes = <matrix.Event>[];
+    mx.onTimelineEvent.stream.listen(echoes.add);
+    transport.holdSends = Completer();
+    final pendingSend = room.sendMessage(message: 'not sent yet');
+    await until(() => echoes.any((e) => e.status.isSending));
+    final pending = echoes.lastWhere((e) => e.status.isSending);
+    final txid = pending.eventId;
+
+    final reply = room.sendMessage(
+        message: 'answer', inReplyTo: room.convertEvent(pending));
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(transport.sentEvents, hasLength(1),
+        reason: 'the reply waits for its target to be sent');
+    transport.holdSends!.complete();
+    await pendingSend;
+    await reply;
+
+    final sentTarget =
+        echoes.lastWhere((e) => e.transactionId == txid && e.status.isSent);
+    final relates = transport.sentEvents.last['m.relates_to'] as Map?;
+    print('reply to an own pending message: transaction id $txid, server id '
+        '${sentTarget.eventId}, m.relates_to $relates');
+    expect(sentTarget.eventId, startsWith(r'$'));
+    expect(relates?['m.in_reply_to'], {'event_id': sentTarget.eventId});
+    expect(transport.sentEvents.last.toString(), isNot(contains(txid)));
+  });
+
+  test(
+      'a reply to an own message that failed goes without the relation, '
+      'never to its transaction id', () async {
+    final echoes = <matrix.Event>[];
+    mx.onTimelineEvent.stream.listen(echoes.add);
+    transport.refuseSends = true;
+    await room.sendMessage(message: 'refused').catchError((Object _) => null);
+    final failed = echoes.lastWhere((e) => e.status.isError);
+    transport.refuseSends = false;
 
     await room.sendMessage(
-        message: 'answer', inReplyTo: room.convertEvent(pending));
+        message: 'answer', inReplyTo: room.convertEvent(failed));
 
-    expect(transport.seen.where((r) => r.startsWith('GET ')), isNotEmpty,
-        reason: 'looked up as before');
-    final relates = transport.sentEvents.single['m.relates_to'] as Map?;
-    expect(relates?['m.in_reply_to'], isNot({'event_id': pending.eventId}));
+    final reply = transport.sentEvents.last;
+    expect(reply['body'], 'answer');
+    expect(reply['m.relates_to'], isNull);
+    expect(reply.toString(), isNot(contains(failed.eventId)));
   });
 
   test('a file send is a file_send span, without a name of its own', () async {

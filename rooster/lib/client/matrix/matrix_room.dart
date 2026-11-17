@@ -16,6 +16,7 @@ import 'package:rooster/client/components/user_color/user_color_component.dart';
 import 'package:rooster/client/matrix/components/calendar_room_component/matrix_calendar_room_component.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_room_emoticon_component.dart';
 import 'package:rooster/client/matrix/components/read_receipts/matrix_read_receipt_component.dart';
+import 'package:rooster/client/matrix/components/typing_indicators/matrix_typing_indicators_component.dart';
 import 'package:rooster/client/matrix/components/user_presence/matrix_user_presence.dart';
 import 'package:rooster/client/matrix/matrix_attachment.dart';
 import 'package:rooster/client/matrix/media/matrix_attachment_files.dart';
@@ -547,24 +548,43 @@ class MatrixRoom extends Room implements RoomSendPreparation {
     await encryption.keyManager.prepareOutboundGroupSession(room.id);
   }
 
-  /// The preparation in flight, shared by every trigger in this room.
-  Future<void>? _preparingSession;
+  /// Whether this account tells the room when it types: the room's own
+  /// setting, else the account's (`MatrixTypingIndicatorsComponent`). Not
+  /// known counts as off.
+  bool get _sendsTypingNotices =>
+      getComponent<MatrixTypingIndicatorsComponent>()
+          ?.typingIndicatorEnabledForRoom ??
+      _client
+          .getComponent<MatrixUserPresenceComponent>()
+          ?.typingIndicatorEnabled ??
+      false;
+
+  /// The preparation in flight, shared by every trigger in this room:
+  /// true once it readied the session, false when it failed.
+  Future<bool>? _preparingSession;
 
   /// Starts [prepareOutboundSession] in an encrypted room, unless one is in
   /// flight. The SDK makes the session once even when its own preparation
   /// (on a typing notice) or a send asks at the same time: they wait for
   /// the same creation, so no message leaves before the session is ready.
+  ///
+  /// Only while this account sends typing notices here: a session made
+  /// ahead sends its key to the others' devices, which tells them as much
+  /// as a typing notice would. With the notices off, the session is made
+  /// at Send, by the send itself.
   @override
   void prepareToSend() {
     if (!_matrixRoom.encrypted || _preparingSession != null) return;
+    if (!_sendsTypingNotices) return;
     // In a microtask, so a preparation that ends at once still clears the
     // one in flight after it was set.
     _preparingSession =
         Future.microtask(() => prepareOutboundSession(_matrixRoom))
-            .catchError((Object _) {
+            .then((_) => true, onError: (Object _) {
       // The send prepares the session again, and reports its own failure.
       // The error's text can hold the room's id: not logged.
       Log.w('Could not prepare the encryption session ahead of a send');
+      return false;
     }).whenComplete(() => _preparingSession = null);
   }
 
@@ -577,16 +597,7 @@ class MatrixRoom extends Room implements RoomSendPreparation {
       String? threadLastEventId,
       Map<String, dynamic>? fileExtraContent,
       List<ProcessedAttachment>? processedAttachments}) async {
-    // The event replied to is the one already held, not looked up again
-    // before the reply's echo. An own message still pending is held under
-    // its transaction id, which is no event id: it is looked up as before.
-    final matrix.Event? replyingTo = switch (inReplyTo) {
-      null => null,
-      MatrixTimelineEvent held
-          when !held.event.status.isSending && !held.event.status.isError =>
-        held.event,
-      _ => await _matrixRoom.getEventById(inReplyTo.eventId),
-    };
+    final replyingTo = await _replyTarget(inReplyTo);
 
     // Each file goes on its own, its failure caught and shown on its
     // pending message (see media/matrix_file_send.dart).
@@ -646,7 +657,9 @@ class MatrixRoom extends Room implements RoomSendPreparation {
       // speed log see the local echo (docs/speed-log.md).
       final txid = _matrixRoom.client.generateUniqueTransactionId();
       final trace = TextSendTrace.current;
-      TextSendTrace.guard(() => trace?.sending(_matrixRoom, txid));
+      final preparation = _preparingSession;
+      TextSendTrace.guard(
+          () => trace?.sending(_matrixRoom, txid, preparation: preparation));
       String? id;
       try {
         id = await _matrixRoom.sendEvent(event,
@@ -669,6 +682,53 @@ class MatrixRoom extends Room implements RoomSendPreparation {
     }
 
     return null;
+  }
+
+  /// The event a reply goes to: the one already held, not looked up again
+  /// before the reply's echo. An own message still being sent is held
+  /// under its transaction id, which is no event id: the reply waits for
+  /// the server's id. One that failed or was cancelled never reached the
+  /// server, and the reply goes without the relation.
+  Future<matrix.Event?> _replyTarget(TimelineEvent? inReplyTo) async {
+    if (inReplyTo == null) return null;
+    if (inReplyTo is! MatrixTimelineEvent) {
+      return _matrixRoom.getEventById(inReplyTo.eventId);
+    }
+    final held = inReplyTo.event;
+    if (held.status.isError) return null;
+    if (!held.status.isSending) return held;
+    return _onceSent(held.transactionId ?? held.eventId);
+  }
+
+  /// The own message [txid] as the server took it, once its send ends;
+  /// null when it failed, was cancelled, or ended before this was asked.
+  Future<matrix.Event?> _onceSent(String txid) async {
+    final done = Completer<matrix.Event?>();
+    void end(matrix.Event? event) {
+      if (!done.isCompleted) done.complete(event);
+    }
+
+    final listening = [
+      _matrixRoom.client.onTimelineEvent.stream.listen((event) {
+        if (event.roomId != _matrixRoom.id ||
+            (event.transactionId ?? event.eventId) != txid) {
+          return;
+        }
+        if (event.status.isSent) end(event);
+        if (event.status.isError) end(null);
+      }),
+      _matrixRoom.onSendCancelled.listen((cancelled) {
+        if (cancelled == txid) end(null);
+      }),
+    ];
+    if (!_matrixRoom.sendingQueueEventsByTxId.contains(txid)) end(null);
+    try {
+      return await done.future;
+    } finally {
+      for (final subscription in listening) {
+        await subscription.cancel();
+      }
+    }
   }
 
   TimelineEvent convertEvent(matrix.Event event, {matrix.Timeline? timeline}) {
