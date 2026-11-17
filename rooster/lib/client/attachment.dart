@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:exif/exif.dart';
+import 'package:matrix/matrix.dart' show FileSendSource;
 import 'package:rooster/cache/file_provider.dart';
 import 'package:rooster/diagnostic/speed_log/file_send_trace.dart';
 import 'package:rooster/utils/image/image_header.dart';
@@ -41,14 +42,24 @@ class PendingFileAttachment {
   String? mimeType;
   int? size;
 
+  /// Where the file is read from at each upload, never held whole here: a
+  /// browser's `File` over `streamFromDiskAbove` (`browser_files.dart`).
+  /// Its [data] and [path] are then null.
+  FileSendSource? source;
+
   Uint8List? thumbnailFile;
   String? thumbnailMime;
   Size? dimensions;
   Duration? length;
 
   PendingFileAttachment(
-      {this.name, this.path, this.data, this.mimeType, this.size}) {
-    assert(path != null || data != null);
+      {this.name,
+      this.path,
+      this.data,
+      this.mimeType,
+      this.size,
+      this.source}) {
+    assert(path != null || data != null || source != null);
 
     mimeType ??= Mime.lookupType(path ?? name ?? "", data: data);
   }

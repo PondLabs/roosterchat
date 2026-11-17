@@ -10,6 +10,7 @@ import 'package:cross_file/cross_file.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:rooster/client/attachment.dart';
+import 'package:rooster/client/matrix/media/browser_files.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/room.dart';
 import 'package:rooster/config/platform_utils.dart';
@@ -70,6 +71,13 @@ Future<List<PendingFileAttachment>> pickFileAttachments({
   bool? web,
 }) async {
   web ??= PlatformUtils.isWeb;
+  if (web) {
+    // In a browser, its own dialog, whose `File`s a large file is sent
+    // from (`browser_files.dart`).
+    final picked = await pickBrowserFileAttachments(
+        maxBytes: maxBytes, onRefused: onRefused);
+    if (picked != null) return picked;
+  }
   final result = await FilePicker.platform.pickFiles(
       type: FileType.any,
       withData: false,

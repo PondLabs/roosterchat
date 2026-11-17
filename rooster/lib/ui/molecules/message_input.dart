@@ -2080,9 +2080,10 @@ class MessageInputState extends State<MessageInput> {
       if (!mounted) return;
       await attachPasted(PendingFileAttachment(
           data: file.data,
+          source: file.source,
           name: file.name,
           mimeType: file.mimeType,
-          size: file.data.length));
+          size: file.size));
     }
   }
 

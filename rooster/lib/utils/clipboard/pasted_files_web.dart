@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:js_interop';
 
+import 'package:rooster/client/matrix/media/browser_files_web.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/utils/clipboard/pasted_file.dart';
 import 'package:web/web.dart' as web;
@@ -35,8 +36,10 @@ void Function() listenForPastedFiles({
   return () => web.document.removeEventListener("paste", listener);
 }
 
-/// The bytes of each of [files] within [maxBytes]: each one over it goes
-/// to [onRefused] by its `File.size`, before `arrayBuffer()` reads it.
+/// Each of [files] within [maxBytes], read into memory, or a large one
+/// that is not a picture left in the browser's `File`
+/// ([browserFileAttachment]): each one over the limit goes to [onRefused]
+/// by its `File.size`, before anything reads it.
 Future<List<PastedFile>> readPastedFiles(
   List<web.File> files, {
   int? maxBytes,
@@ -48,9 +51,13 @@ Future<List<PastedFile>> readPastedFiles(
       onRefused?.call(file.size, maxBytes!);
       continue;
     }
-    read.add(PastedFile((await file.arrayBuffer().toDart).toDart.asUint8List(),
+    final attachment = await browserFileAttachment(file,
         name: file.name.isEmpty ? null : file.name,
-        mimeType: file.type.isEmpty ? null : file.type));
+        mimeType: file.type.isEmpty ? null : file.type);
+    read.add(PastedFile(attachment.data,
+        name: attachment.name,
+        mimeType: attachment.mimeType,
+        source: attachment.source));
   }
   return read;
 }
