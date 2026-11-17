@@ -171,4 +171,25 @@ void main() {
     expect(kinds(), ['thumbnail', 'download']);
     expect(image.completer!.currentlyLoadedImage, isNotNull);
   });
+
+  test(
+      'the thumbnail answered 404: shown again, the file comes from the '
+      'cache and the thumbnail is not asked again', () async {
+    server.thumbnailStatus = 404;
+    final perDisplay = <List<String>>[];
+    for (var n = 0; n < 3; n++) {
+      // A new chat view: a fresh picture, nothing decoded in memory.
+      PaintingBinding.instance.imageCache.clear();
+      server.mediaRequests.clear();
+      await show(picture(size: 2000000, media: 'no_thumbnail'));
+      perDisplay.add(kinds());
+    }
+    // ignore: avoid_print
+    print('thumbnail 404, three displays: $perDisplay');
+    expect(perDisplay, [
+      ['thumbnail', 'download'],
+      <String>[],
+      <String>[],
+    ]);
+  });
 }

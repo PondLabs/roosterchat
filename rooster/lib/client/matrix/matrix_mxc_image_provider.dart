@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -87,6 +88,12 @@ class MatrixMxcImage extends LODImageProvider {
   /// that shows the same. Not GIF nor WebP: an animation's thumbnail is a
   /// still.
   static const serverThumbnailTypes = {'image/jpeg', 'image/png', 'image/bmp'};
+
+  /// The pictures whose homeserver thumbnail was answered with a 4xx, in
+  /// memory for the session (the oldest out past [_noServerThumbnailLimit]):
+  /// shown again, they go straight to the whole picture.
+  static final LinkedHashSet<String> _noServerThumbnail = LinkedHashSet();
+  static const _noServerThumbnailLimit = 512;
 
   /// Whether [event]'s picture is shown from a thumbnail the homeserver
   /// scales: it has no sender's thumbnail, is not encrypted (the server
@@ -194,6 +201,13 @@ class MatrixMxcImage extends LODImageProvider {
       trace?.cacheHit(hit.length);
       return hit;
     }
+    // The homeserver has no thumbnail for it: straight to the whole
+    // picture, which the cache may hold.
+    if (serverThumbnail &&
+        matrixEvent != null &&
+        _noServerThumbnail.contains(uri.toString())) {
+      return loadMatrixFullRes(client, uri, matrixEvent, cache: cache);
+    }
     trace?.cacheMiss();
 
     Uint8List? bytes;
@@ -208,7 +222,12 @@ class MatrixMxcImage extends LODImageProvider {
       } on MediaDownloadException catch (error) {
         if (error.retryable) rethrow;
         // No thumbnail to be had (a 404, a type it does not scale): the
-        // whole picture, kept as itself, never as the thumbnail.
+        // whole picture, kept as itself, never as the thumbnail; and the
+        // thumbnail not asked again this session.
+        if (_noServerThumbnail.length >= _noServerThumbnailLimit) {
+          _noServerThumbnail.remove(_noServerThumbnail.first);
+        }
+        _noServerThumbnail.add(uri.toString());
         return loadMatrixFullRes(client, uri, matrixEvent, cache: cache);
       }
     } else if (matrixEvent != null) {
