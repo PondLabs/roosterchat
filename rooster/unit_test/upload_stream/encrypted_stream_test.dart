@@ -147,33 +147,47 @@ void main() {
     await mx.dispose(closeDatabase: true);
   });
 
-  test(
-      'an upload answered before its file was read is not the one the event '
-      'points to: the next attempt goes up whole, and its key and hash are '
-      "the event's",
-      skip: skipWithoutVodozemac, () async {
-    final (file, hash) = await writeTestFile(folder, 'early.bin', 9 * mib);
-    final transport = _AnswersEarlyOnce();
-    final clock = ManualSendClock();
-    final (mx, room) = await streamClient('stream_answered_early', transport,
-        encrypted: true, clock: clock);
+  for (final encrypted in [false, true]) {
+    test(
+        'an upload answered before its file was read is not the one the '
+        'event points to: the next attempt goes up whole'
+        '${encrypted ? ", and its key and hash are the event's" : ''}',
+        skip: encrypted ? skipWithoutVodozemac : false, () async {
+      final (file, hash) = await writeTestFile(folder, 'early.bin', 9 * mib);
+      final transport = _AnswersEarlyOnce();
+      final clock = ManualSendClock();
+      final (mx, room) = await streamClient(
+          'stream_answered_early_$encrypted', transport,
+          encrypted: encrypted, clock: clock);
 
-    final (_, processed) = await attachByPath(file);
-    final sending = sendMatrixFile(room, processed);
-    await until(() => clock.waiting);
-    clock.advance(const Duration(seconds: 2));
-    final id = await sending;
+      final (_, processed) = await attachByPath(file);
+      final sending = sendMatrixFile(room, processed);
+      await until(() => clock.waiting);
+      clock.advance(const Duration(seconds: 2));
+      final id = await sending;
 
-    final event = await decryptSent(mx, room, transport.events.single);
-    final fileInfo = event.content['file'] as Map<String, dynamic>;
-    print('answered early: the event points to ${fileInfo['url']} (early '
-        'answer ${transport.earlyUri}), waits ${clock.waits}');
-    expect(id, isNotNull);
-    expect(fileInfo['url'], isNot(transport.earlyUri));
-    expect(sha256Hex((await decryptUpload(fileInfo, transport.uploads.last))!),
-        hash);
-    await mx.dispose(closeDatabase: true);
-  });
+      final content = encrypted
+          ? (await decryptSent(mx, room, transport.events.single)).content
+          : transport.events.single.body;
+      final url = encrypted
+          ? (content['file'] as Map<String, dynamic>)['url']
+          : content['url'];
+      print('answered early (encrypted $encrypted): the event points to '
+          '$url (early answer ${transport.earlyUri}), waits ${clock.waits}');
+      expect(id, isNotNull);
+      // The SDK writes the address with its host in lower case.
+      expect('$url'.toLowerCase(), isNot(transport.earlyUri!.toLowerCase()));
+      expect(clock.waits, [const Duration(seconds: 2)]);
+      final upload = transport.uploads.last;
+      expect(
+          sha256Hex(encrypted
+              ? (await decryptUpload(
+                  content['file'] as Map<String, dynamic>, upload))!
+              : upload),
+          hash);
+      await mx.dispose(closeDatabase: true);
+    });
+  }
 
   test('a file read from its source cannot be encrypted whole', () async {
     final file = matrix.MatrixFile(bytes: Uint8List(0), name: 'a.bin')

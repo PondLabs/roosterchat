@@ -1,14 +1,37 @@
 @TestOn('vm')
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/matrix/media/matrix_file_send.dart';
 
 import 'stream_fakes.dart';
+
+/// A transport that takes a first piece of an upload's body, then holds
+/// the rest unread and never lets it go, whatever happens to the request.
+class _KeepsBodyOpen extends OnlyUsTransport {
+  final holding = Completer<void>();
+  StreamSubscription<List<int>>? _body;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    if (request.method == 'POST' && LoopTransport.isMediaUpload(request)) {
+      _body = request.finalize().listen((_) {
+        _body!.pause();
+        if (!holding.isCompleted) holding.complete();
+      }, onError: (_) {});
+      return Completer<http.StreamedResponse>().future;
+    }
+    return super.send(request);
+  }
+
+  Future<void> release() async => _body?.cancel();
+}
 
 void main() {
   late Directory folder;
@@ -100,6 +123,36 @@ void main() {
     expect(room.sendingFilePlaceholders[txid], isNull,
         reason: 'sent: the path is let go');
     expect(source.openFiles, 0);
+    await mx.dispose(closeDatabase: true);
+  });
+
+  test(
+      'Cancel closes the file itself, also when the transport keeps the '
+      'body open after the abort', () async {
+    final (file, _) = await writeTestFile(folder, 'stuck.bin', 9 * mib);
+    final transport = _KeepsBodyOpen();
+    final (mx, room) =
+        await streamClient('stream_cancel_stuck', transport, encrypted: false);
+
+    final (send, processed) = await attachByPath(file);
+    final source = sourceOf(processed);
+    final sending = sendMatrixFile(room, processed);
+    await transport.holding.future;
+    expect(room.cancelSending(send.transactionId!), isTrue);
+    final id = await sending;
+    final openAfter = source.openFiles;
+    Object? deleteError;
+    try {
+      file.deleteSync();
+    } catch (error) {
+      deleteError = error;
+    }
+    print('cancelled with the body kept open: send returned $id, files '
+        'open $openAfter, delete error $deleteError');
+    expect(id, isNull);
+    expect(openAfter, 0);
+    expect(deleteError, isNull);
+    await transport.release();
     await mx.dispose(closeDatabase: true);
   });
 
