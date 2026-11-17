@@ -26,7 +26,8 @@ import 'package:rooster/utils/network/xhr_upload_stub.dart'
 ///   consumed. Its last byte being consumed is the hand-over time.
 /// - Web: a media upload goes through `XMLHttpRequest` instead of [inner]
 ///   (`fetch` reports no upload progress), with the bytes the request
-///   already holds, the count from `upload.onprogress` and the hand-over
+///   already holds, or the `Blob` of a file sent from the browser's `File`
+///   (`BlobBody`), the count from `upload.onprogress` and the hand-over
 ///   time from `upload.onload`. Other requests go through [inner], with the
 ///   hand-over unavailable.
 ///
@@ -57,6 +58,13 @@ class SpeedHttpClient extends http.BaseClient {
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    // Chosen by the API's words whatever the host's class, as before the
+    // route of other hosts was reduced to placeholders.
+    final isUpload = isMediaUploadRoute(routeTemplate(request.url));
+    // A file sent from the browser's `File` goes as its `Blob`, made ready
+    // first: encrypting it is not the connection taking no byte.
+    final prepared =
+        xhrUploadAvailable && isUpload ? await prepareXhrBody(request) : null;
     final hostClass = _hosts.classify(request.url);
     final span = SpeedLog.currentSpan;
     final entry = _Entry(
@@ -74,9 +82,7 @@ class SpeedHttpClient extends http.BaseClient {
       operationId: span?.id,
     );
 
-    // Chosen by the API's words whatever the host's class, as before the
-    // route of other hosts was reduced to placeholders.
-    final upload = isMediaUploadRoute(routeTemplate(request.url))
+    final upload = isUpload
         ? _UploadWatch(request.contentLength, currentUploadListener,
             cancel: currentUploadCancel(), url: request.url)
         : null;
@@ -93,6 +99,7 @@ class SpeedHttpClient extends http.BaseClient {
             upload.handedOver();
           },
           abort: upload.aborted,
+          prepared: prepared,
         ));
       } else {
         final sending =

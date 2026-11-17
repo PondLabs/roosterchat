@@ -4,13 +4,14 @@
 // reported; it used to throw and cancel the rest of the drop silently.
 
 import 'package:rooster/client/attachment.dart';
+import 'package:rooster/client/matrix/media/browser_files.dart';
 import 'package:cross_file/cross_file.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 /// Above this a desktop attachment is read from its path when sent, not held
-/// in memory. The browser has no path to read from later, so it always
-/// holds the bytes.
+/// in memory. In the browser a large file is sent from its `File`
+/// (`browser_files.dart`).
 const int droppedFileInMemoryLimit = 50000000;
 
 Future<List<PendingFileAttachment>> attachmentsFromDroppedFiles(
@@ -21,6 +22,13 @@ Future<List<PendingFileAttachment>> attachmentsFromDroppedFiles(
   final attachments = <PendingFileAttachment>[];
   for (final file in files) {
     try {
+      final fromBrowser = inBrowser
+          ? await droppedBrowserFile(file.path, name: file.name)
+          : null;
+      if (fromBrowser != null) {
+        attachments.add(fromBrowser);
+        continue;
+      }
       final size = await file.length();
       Uint8List? data;
       if (inBrowser || size < droppedFileInMemoryLimit) {

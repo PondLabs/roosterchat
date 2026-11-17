@@ -1,12 +1,21 @@
 import 'dart:typed_data';
 
+import 'package:matrix/matrix.dart' show FileSendSource;
+
 /// A file pasted into the page, a screenshot most of the time.
 class PastedFile {
-  const PastedFile(this.data, {this.name, this.mimeType});
+  const PastedFile(this.data, {this.name, this.mimeType, this.source})
+      : assert(data != null || source != null);
 
-  final Uint8List data;
+  /// Its bytes, or null for a large file sent from the browser's `File`,
+  /// its [source] (`browser_files.dart`).
+  final Uint8List? data;
   final String? name;
   final String? mimeType;
+  final FileSendSource? source;
+
+  /// Its size in bytes.
+  int get size => data?.length ?? source!.length;
 }
 
 /// Whether a pasted file of [bytes] may be sent under [maxBytes] (null: the
