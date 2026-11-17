@@ -62,20 +62,24 @@ void main() {
 
   // Files that hold the fixture's whole Exif, GPS and all, where the Exif
   // reader gives up without an error and finds nothing (the review's
-  // probes), and the photo cut inside its IFD0, before the GPS pointer:
-  // each gets the question.
-  final hidden = <(String, Uint8List)>[
+  // probes): the block is looked into, and they get the location question.
+  // The photo cut inside its IFD0, before the GPS pointer, gets the
+  // unreadable one.
+  final hidden = <(String, Uint8List, LocationAnswer)>[
     (
       'an APP2 of 5,000 bytes before the Exif',
-      cat([soi, segment(0xE2, 5000, icc), app1, afterApp1])
+      cat([soi, segment(0xE2, 5000, icc), app1, afterApp1]),
+      LocationAnswer.found
     ),
     (
       'JFIF, an APP2 of 5,000 bytes, then the Exif',
-      cat([soi, app0, segment(0xE2, 5000, icc), app1, afterApp1])
+      cat([soi, app0, segment(0xE2, 5000, icc), app1, afterApp1]),
+      LocationAnswer.found
     ),
     (
       'a comment of 5,000 bytes before the Exif',
-      cat([soi, segment(0xFE, 5000), app1, afterApp1])
+      cat([soi, segment(0xFE, 5000), app1, afterApp1]),
+      LocationAnswer.found
     ),
     (
       'the Exif after the quantisation tables',
@@ -85,13 +89,19 @@ void main() {
         Uint8List.sublistView(gps, app1End, afterDqt),
         app1,
         Uint8List.sublistView(gps, afterDqt),
-      ])
+      ]),
+      LocationAnswer.found
     ),
     (
       'a WebP whose odd-sized image chunk comes before the EXIF',
-      _webpWith(tiff)
+      _webpWith(tiff),
+      LocationAnswer.found
     ),
-    ('the photo cut inside its IFD0', Uint8List.sublistView(gps, 0, 100)),
+    (
+      'the photo cut inside its IFD0',
+      Uint8List.sublistView(gps, 0, 100),
+      LocationAnswer.unreadable
+    ),
   ];
 
   setUp(() {
@@ -127,7 +137,7 @@ void main() {
   test(
       'the hidden files hold the GPS block, and the Exif reader finds no '
       'location in them', () async {
-    for (final (label, bytes) in hidden) {
+    for (final (label, bytes, _) in hidden) {
       final read = await readExifFromBytes(bytes);
       if (bytes.length == 100) {
         // Cut before its GPS pointer: the camera tags, nothing more.
@@ -143,17 +153,16 @@ void main() {
     }
   });
 
-  test('every hidden file is answered unreadable, from memory and disk',
-      () async {
-    for (final (i, (label, bytes)) in hidden.indexed) {
+  test('every hidden file gets its answer, from memory and disk', () async {
+    for (final (i, (label, bytes, answer)) in hidden.indexed) {
       expect(
           await PendingFileAttachment(name: 'a', data: bytes).locationCheck(),
-          LocationAnswer.unreadable,
+          answer,
           reason: label);
       final path = '${dir.path}/hidden$i';
       File(path).writeAsBytesSync(bytes);
       expect(await PendingFileAttachment(name: 'a', path: path).locationCheck(),
-          LocationAnswer.unreadable,
+          answer,
           reason: '$label, on disk');
     }
     for (final bytes in [plain, orientationOnly]) {
@@ -211,12 +220,12 @@ void main() {
         unreadable,
         LocationAnswer.unreadable
       ),
-      for (final (i, (hiddenLabel, bytes)) in hidden.indexed)
+      for (final (i, (hiddenLabel, bytes, answer)) in hidden.indexed)
         (
           'with its Exif hidden from the reader ($hiddenLabel)',
           'hidden$i.jpg',
           bytes,
-          LocationAnswer.unreadable
+          answer
         ),
     ]) {
       testWidgets(
