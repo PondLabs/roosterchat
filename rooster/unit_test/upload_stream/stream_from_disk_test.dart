@@ -2,6 +2,7 @@
 library;
 
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:matrix/matrix.dart' as matrix;
@@ -9,11 +10,21 @@ import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/matrix/media/disk_file_source_io.dart';
 import 'package:rooster/client/matrix/media/matrix_attachment_files.dart';
 import 'package:rooster/client/matrix/media/matrix_file_send.dart';
+import 'package:rooster/utils/image/preparation/image_preparation.dart';
 
 import 'stream_fakes.dart';
 
 /// A file attached by its path is sent from disk on native: read in pieces
 /// as the connection takes them, to a real server on 127.0.0.1.
+/// A preparer that cannot decode the picture: it is sent as a plain file,
+/// from the bytes it was read into.
+class _CannotDecode extends ImagePreparer {
+  @override
+  Future<ImagePreparation?> prepare(Uint8List bytes,
+          {PreparationCancel? cancel}) async =>
+      null;
+}
+
 void main() {
   late Directory folder;
   setUp(() async => folder = await testFolder());
@@ -152,6 +163,21 @@ void main() {
     await mx.dispose(closeDatabase: true);
     transport.closeConnections();
     await server.close();
+  });
+
+  test(
+      'a picture over the size limit attached by its path is read into '
+      'memory for its preparation, not sent from disk', () async {
+    final (big, _) =
+        await writeTestFile(folder, 'big.png', streamFromDiskAbove + 1);
+    final processed = (await matrixFilesForAttachment(
+        PendingFileAttachment(
+            path: big.path, name: 'big.png', mimeType: 'image/png'),
+        preparer: _CannotDecode()))!;
+    print('picture by path: from disk ${processed.file.source != null}, '
+        '${processed.file.bytes.length} bytes in memory');
+    expect(processed.file.source, isNull);
+    expect(processed.file.bytes.length, streamFromDiskAbove + 1);
   });
 
   test(

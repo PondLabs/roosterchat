@@ -88,6 +88,40 @@ void main() {
   }, timeout: const Timeout(Duration(minutes: 2)));
 
   test(
+      'written to while it goes up, same size and bytes, only its time '
+      'changes: the end of the read sees it, no event, and the message says '
+      'why', () async {
+    final (file, _) = await writeTestFile(folder, 'touched.bin', 48 * mib);
+    final server = await LocalUploadServer.start()
+      ..holdAfter = 2 * mib;
+    final transport = LocalUploadTransport(server);
+    final (mx, room) =
+        await streamClient('stream_touched', transport, encrypted: false);
+
+    final (send, processed) = await attachByPath(file);
+    final source = sourceOf(processed);
+    final sending = sendMatrixFile(room, processed);
+    await server.held.first;
+    await file.setLastModified(DateTime.now().add(const Duration(minutes: 1)));
+    server.release();
+    final id = await sending;
+
+    print('touched: ${source.bytesRead} bytes read of ${source.length}, '
+        '${server.uploads.length} upload(s), ${transport.events.length} '
+        'events');
+    expect(id, isNull);
+    expect(source.bytesRead, source.length,
+        reason: 'the whole file was read: only its end could tell');
+    expect(server.uploads, hasLength(1));
+    expect(transport.events, isEmpty);
+    expect(source.openFiles, 0);
+    await expectShownFailure(mx, room, send);
+    await mx.dispose(closeDatabase: true);
+    transport.closeConnections();
+    await server.close();
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
+  test(
       'deleted while the loop waits to try again: the new attempt finds it '
       'gone and the message says why', () async {
     final (file, _) = await writeTestFile(folder, 'gone.bin', 9 * mib);
