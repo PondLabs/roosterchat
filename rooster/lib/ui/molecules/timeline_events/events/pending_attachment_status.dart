@@ -259,8 +259,10 @@ class _PendingAttachmentStatusState extends State<PendingAttachmentStatus> {
                 MediaQuery.alwaysUse24HourFormatOf(context)));
     final detail = shown.detail;
     // The size, the count and the clock are short and always whole; the
-    // stage takes the rest of the width and wraps onto a second line (the
-    // sentence of a failure is long, a third longer in Portuguese).
+    // stage takes the rest of the width and wraps onto up to three lines
+    // (the sentence of a failure is long, a third longer in Portuguese, and
+    // in a chat 280 px wide the slot's margin and the dismiss button leave
+    // it about 160 px).
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, 4, 0, 2),
       child: Row(
@@ -273,7 +275,7 @@ class _PendingAttachmentStatusState extends State<PendingAttachmentStatus> {
             child: Text(shown.label,
                 key: const ValueKey("pending-file-stage"),
                 style: style,
-                maxLines: 2,
+                maxLines: 3,
                 overflow: TextOverflow.ellipsis),
           ),
           if (detail != null) ...[

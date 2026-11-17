@@ -97,7 +97,8 @@ String labelFileOverUploadLimit(String size, String limit) => Intl.message(
 /// [maxBytes] gives. Each one over it goes to [onRefused] with its size,
 /// unread. The picker opens first and the limit is asked after: on the
 /// web a dialog opened after a network wait can lose the click that asked
-/// for it.
+/// for it. A limit that has not come within [uploadLimitWait] is taken as
+/// not known: the files are attached and the server checks.
 Future<List<PendingFileAttachment>> pickFileAttachments({
   required Future<int?> Function() maxBytes,
   required void Function(int bytes, int maxBytes) onRefused,
@@ -118,7 +119,7 @@ Future<List<PendingFileAttachment>> pickFileAttachments({
       allowMultiple: true);
   if (result == null) return const [];
   return admitPickedFiles(result.files,
-      maxBytes: await maxBytes(), onRefused: onRefused, web: web);
+      maxBytes: await limitWithin(maxBytes()), onRefused: onRefused, web: web);
 }
 
 /// [files] as attachments, checked by size first. On native a file is

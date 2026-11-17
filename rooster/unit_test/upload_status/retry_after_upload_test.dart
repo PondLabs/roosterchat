@@ -11,6 +11,8 @@ import 'package:http/http.dart' as http;
 import 'package:matrix/fake_matrix_api.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/attachment.dart';
+import 'package:rooster/client/matrix/matrix_client.dart';
+import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/matrix/media/matrix_file_send.dart';
 import 'package:rooster/utils/image/preparation/image_preparation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -34,6 +36,9 @@ const _pickledOlmAccount =
 /// event type and body.
 class _SendFails extends FakeTransport {
   bool failSends = false;
+
+  /// The error each `PUT /send` gets while [failSends].
+  ({int status, String errcode}) error = (status: 500, errcode: 'M_UNKNOWN');
   int uploads = 0;
   final List<({String type, String txid, Map<String, dynamic> body})> sends =
       [];
@@ -72,7 +77,8 @@ class _SendFails extends FakeTransport {
           as Map<String, dynamic>;
       sends.add((type: path[at + 1], txid: path[at + 2], body: body));
       if (failSends) {
-        return _json(500, {'errcode': 'M_UNKNOWN', 'error': 'Try later'});
+        return _json(
+            error.status, {'errcode': error.errcode, 'error': 'Try later'});
       }
       return _json(200, {'event_id': '\$sent${sends.length}'});
     }
@@ -149,6 +155,90 @@ void main() {
             e.eventId == '\$sent${transport.sends.length}' && e.status.isSent),
         isTrue,
         reason: 'the message is sent');
+    await client.close();
+  });
+
+  /// A photo sent from the composer of a new account whose `PUT /send`
+  /// is refused with [error], once its upload went through.
+  Future<
+          (
+            _SendFails,
+            MatrixClient,
+            MatrixRoom,
+            AttachmentSend,
+            List<matrix.Event>
+          )>
+      failedAfterUpload(
+          String name, ({int status, String errcode}) error) async {
+    ImagePreparer.instance = fakePreparer(FakeEngine(width: 400, height: 300));
+    final transport = _SendFails()..error = error;
+    final client = await fakeAccount(name, transport);
+    final mx = client.getMatrixClient();
+    mx.backgroundSync = false;
+    await mx.oneShotSync();
+    final room = await plainRoom(client);
+    final echoes = <matrix.Event>[];
+    mx.onTimelineEvent.stream.listen(echoes.add);
+    transport.failSends = true;
+    composerSend(room, attachments: [
+      PendingFileAttachment(name: 'photo.jpg', data: blackJpeg(400, 300))
+    ]).send();
+    final send = AttachmentSends.instance.all.single;
+    await until(() => send.isFinished);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(send.stage, AttachmentSendStage.failed);
+    expect(transport.uploads, greaterThan(0));
+    return (transport, client, room, send, echoes);
+  }
+
+  test(
+      '"Retry" after PUT /send was refused with M_FORBIDDEN (the SDK passes '
+      'the error on): 0 uploads, 1 PUT /send', () async {
+    final (transport, client, room, send, echoes) = await failedAfterUpload(
+        'retry_forbidden', (status: 403, errcode: 'M_FORBIDDEN'));
+    final txid = send.transactionId!;
+    final failed = echoes.lastWhere((e) => e.eventId == txid);
+    expect(failed.status.isError, isTrue);
+    final uploads = transport.uploads;
+    final sendsBefore = transport.sends.length;
+
+    transport.failSends = false;
+    await room.retrySend(room.convertEvent(failed));
+    await until(() => send.isFinished);
+
+    final again = transport.sends.skip(sendsBefore).toList();
+    print('M_FORBIDDEN, then Retry: POST /upload '
+        '${transport.uploads - uploads}, PUT /send ${again.length}');
+    expect(transport.uploads - uploads, 0);
+    expect(again, hasLength(1));
+    expect(again.single.txid, txid);
+    expect(send.stage, AttachmentSendStage.sent);
+    await client.close();
+  });
+
+  test(
+      '"Retry" whose PUT /send fails again: the message stays failed, in '
+      'sight, after each of the two failures', () async {
+    final (transport, client, room, send, echoes) = await failedAfterUpload(
+        'retry_fails_again', (status: 500, errcode: 'M_UNKNOWN'));
+    final txid = send.transactionId!;
+    final stages = <String>[];
+    void note() => stages.add('${send.stage.name}/'
+        '${echoes.lastWhere((e) => e.eventId == txid).status.name}');
+    note();
+
+    await room.retrySend(
+        room.convertEvent(echoes.lastWhere((e) => e.eventId == txid)));
+    await until(() => send.isFinished);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    note();
+
+    print('PUT /send failing twice: $stages; listed '
+        '${AttachmentSends.instance.all.length}');
+    expect(stages, ['failed/error', 'failed/error']);
+    expect(AttachmentSends.instance.all, [send],
+        reason: 'still listed, so the chat shows the failure');
+    expect(transport.sends.where((s) => s.txid == txid), hasLength(2));
     await client.close();
   });
 

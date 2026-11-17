@@ -1,13 +1,18 @@
 @TestOn('vm')
 library;
 
+import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:cross_file/cross_file.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/ui/molecules/message_input.dart';
+import 'package:rooster/ui/organisms/attachment_processor/attachment_processor.dart';
 import 'package:rooster/ui/organisms/attachment_processor/picked_files.dart';
 import 'package:rooster/utils/image/preparation/image_preparation.dart';
 
@@ -24,6 +29,36 @@ class _Unread extends PlatformFile {
   @override
   Stream<List<int>>? get readStream =>
       throw StateError('the stream of $name was read');
+}
+
+/// A photo of the gallery of [size] bytes that fails the test when its
+/// bytes are read: only its length may be asked.
+class _UnreadPhoto extends XFile {
+  _UnreadPhoto(super.path, this.size);
+
+  final int size;
+  final List<String> reads = [];
+
+  @override
+  Future<int> length() async => size;
+
+  @override
+  Future<Uint8List> readAsBytes() {
+    reads.add('readAsBytes');
+    throw StateError('the bytes of $name were read');
+  }
+
+  @override
+  Stream<Uint8List> openRead([int? start, int? end]) {
+    reads.add('openRead');
+    throw StateError('the bytes of $name were read');
+  }
+
+  @override
+  Future<String> readAsString({Encoding encoding = utf8}) {
+    reads.add('readAsString');
+    throw StateError('the bytes of $name were read');
+  }
 }
 
 /// A picker that hands out [files] and notes each time it opens in [log].
@@ -104,6 +139,59 @@ void main() {
     expect(log, ['picker', 'limit']);
     expect(find.text(messageFileOverUploadLimit(60 * 1000 * 1000, limit)),
         findsOneWidget);
+    await settleAndClose(tester);
+  });
+
+  testWidgets(
+      "the gallery and the camera: a photo over the server's limit is "
+      'refused unread, and no attachment dialog opens', (tester) async {
+    uploadLimitOf = (_) async => limit;
+    await tester.pumpWidget(chatApp(room));
+    await tester.pump();
+    final composer = tester.state<MessageInputState>(find.byType(MessageInput));
+    final big = _UnreadPhoto('/photos/big.jpg', 60 * 1000 * 1000);
+
+    await composer.attachGalleryFiles([big]);
+    await tester.pump();
+
+    expect(big.reads, isEmpty);
+    expect(find.text(messageFileOverUploadLimit(60 * 1000 * 1000, limit)),
+        findsOneWidget);
+    expect(find.byType(AttachmentProcessor), findsNothing);
+    await settleAndClose(tester);
+  });
+
+  testWidgets(
+      "a native paste: an image over the server's limit is refused by its "
+      'length, and no attachment dialog opens', (tester) async {
+    uploadLimitOf = (_) async => 10;
+    final image = Uint8List(20);
+    late Directory dir;
+    await tester.runAsync(() async {
+      dir = await Directory.systemTemp.createTemp('native_paste');
+    });
+    addTearDown(() => dir.deleteSync(recursive: true));
+    // What the pasteboard plugin's native side answers: the bytes, or on
+    // Windows a file it wrote them to.
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('pasteboard'), (call) async {
+      if (call.method != 'image') return null;
+      if (!Platform.isWindows) return image;
+      final file = File('${dir.path}${Platform.pathSeparator}paste.png');
+      await file.writeAsBytes(image);
+      return file.path;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('pasteboard'), null));
+    await tester.pumpWidget(chatApp(room));
+    await tester.pump();
+    final composer = tester.state<MessageInputState>(find.byType(MessageInput));
+
+    await tester.runAsync(composer.readImageFromClipboard);
+    await tester.pump();
+
+    expect(find.text(messageFileOverUploadLimit(20, 10)), findsOneWidget);
+    expect(find.byType(AttachmentProcessor), findsNothing);
     await settleAndClose(tester);
   });
 
