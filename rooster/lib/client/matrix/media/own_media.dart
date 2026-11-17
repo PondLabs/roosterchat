@@ -59,7 +59,9 @@ void ownMediaSent(matrix.Client client, String txid) =>
 /// pending, before the event is sent): the bytes come from what the room
 /// holds for its transaction id. The thumbnail is kept only when it is the
 /// one the event announces (its size), never the whole file in its place.
-/// Never throws.
+/// A file sent from disk (its `source` set) is not kept: its bytes are not
+/// in memory, and reading them all again is what sending it from disk
+/// avoids; its thumbnail still is. Never throws.
 Future<void> keepOwnMedia(matrix.Room room, matrix.Event pending) async {
   final own = _ownMedia[room.client];
   if (own == null) return;
@@ -71,12 +73,13 @@ Future<void> keepOwnMedia(matrix.Room room, matrix.Event pending) async {
   final thumbnail = room.sendingFileThumbnails[txid];
   final thumbnailMxc = pending.hasThumbnail ? pending.thumbnailMxcUrl : null;
   final files = {
-    mxc.toString(): file.bytes,
+    if (file.source == null) mxc.toString(): file.bytes,
     if (thumbnail != null &&
         thumbnailMxc != null &&
         pending.thumbnailInfoMap['size'] == thumbnail.bytes.length)
       thumbnailMxc.toString(): thumbnail.bytes,
   };
+  if (files.isEmpty) return;
   own.pending[txid] = files.keys.toList();
   try {
     await Future.wait([

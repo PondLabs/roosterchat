@@ -755,7 +755,10 @@ class Event extends MatrixEvent {
     }
     if (status.isSending) {
       final localFile = room.sendingFilePlaceholders[eventId];
-      if (localFile != null) return localFile;
+      // One read from its source holds no bytes to give. // ROOSTER
+      if (localFile != null && localFile.source == null) { // ROOSTER
+        return localFile; // ROOSTER
+      } // ROOSTER
     }
     final database = room.client.database;
     final mxcUrl = attachmentOrThumbnailMxcUrl(getThumbnail: getThumbnail);

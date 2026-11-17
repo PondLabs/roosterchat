@@ -240,3 +240,17 @@ Changes since the copy:
   retry uploads the file again, encrypted.
 - `FileSendRequestCredentials` keeps the thread a file message goes to,
   and `Event.sendAgain` passes it on when the file is uploaded again.
+- A file sent from disk (`lib/src/utils/file_send_source.dart`): a
+  `MatrixFile` may carry a `FileSendSource` instead of its bytes (its
+  `size` is then the source's length, and `encrypt()` refuses it). The
+  upload loop opens a new read of it at each attempt
+  (`FileSendSource.read`, or `readEncrypted` in an encrypted room, with a
+  new key), sends it as a stream (`Client.uploadContentStream`, which
+  checks the server's limit before reading), closes it before the attempt
+  ends (also on a cancel), and takes the key, iv and hash its event
+  carries from the read that went up (`uploadFileParts` gives
+  `UploadedFilePart`s). A read that ends short, or a file that changed
+  since it was attached, ends the send with `FileSourceChangedException`,
+  without a new attempt. `Room.sendFileEvent` checks the server's limit by
+  `MatrixFile.size`, and `Event.downloadAndDecryptAttachment` gives no
+  file with no bytes for a message still being sent from disk.

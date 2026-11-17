@@ -101,6 +101,10 @@ enum UploadProblem {
   /// Anything else: the connection stopped taking bytes, broke, or the
   /// server refused the file.
   other,
+
+  /// The file sent from disk changed since it was attached: it is gone,
+  /// shorter, longer, or written since. Attaching it again sends it.
+  fileChanged,
 }
 
 /// The uploads of one message, as its pending line shows them: the real
@@ -123,6 +127,7 @@ class UploadProgress extends ChangeNotifier implements UploadListener {
   int _keptBytes = 0;
   int _failedAttempts = 0;
   DateTime? _serverWaitsUntil;
+  bool _fileChanged = false;
 
   /// A listener for one more request of this message.
   UploadListener request() => _Upload(this);
@@ -168,7 +173,8 @@ class UploadProgress extends ChangeNotifier implements UploadListener {
 
   /// Why the last attempt failed, null when every part that failed has
   /// gone up since.
-  UploadProblem? get problem => _failed.lastOrNull?.problem;
+  UploadProblem? get problem =>
+      _fileChanged ? UploadProblem.fileChanged : _failed.lastOrNull?.problem;
 
   /// An attempt failed and its part has not gone up since: the SDK is
   /// sending it again.
@@ -181,6 +187,12 @@ class UploadProgress extends ChangeNotifier implements UploadListener {
   /// The server answered a failed upload with a wait until [until].
   void serverAskedToWait(DateTime until) {
     _serverWaitsUntil = until;
+    notifyListeners();
+  }
+
+  /// The send ended because its file changed on disk.
+  void fileChanged() {
+    _fileChanged = true;
     notifyListeners();
   }
 
@@ -232,6 +244,7 @@ class UploadProgress extends ChangeNotifier implements UploadListener {
     _keptBytes = 0;
     _failedAttempts = 0;
     _serverWaitsUntil = null;
+    _fileChanged = false;
     notifyListeners();
   }
 }

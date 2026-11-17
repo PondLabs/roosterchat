@@ -1628,6 +1628,42 @@ class Client extends MatrixApi {
     return mxc;
   }
 
+  /// Uploads [body], [length] bytes, as its request takes them: the file // ROOSTER
+  /// is never held whole (file_send_source.dart). Refused by the server's // ROOSTER
+  /// limit before [body] is listened to, so nothing of it is read then. // ROOSTER
+  Future<Uri> uploadContentStream( // ROOSTER
+    Stream<List<int>> body, // ROOSTER
+    int length, { // ROOSTER
+    String? filename, // ROOSTER
+    String? contentType, // ROOSTER
+  }) async { // ROOSTER
+    final maxMediaSize = (await getConfig()).mUploadSize; // ROOSTER
+    if (maxMediaSize != null && maxMediaSize < length) { // ROOSTER
+      throw FileTooBigMatrixException(length, maxMediaSize); // ROOSTER
+    } // ROOSTER
+    final requestUri = Uri( // ROOSTER
+      path: '_matrix/media/v3/upload', // ROOSTER
+      queryParameters: {if (filename != null) 'filename': filename}, // ROOSTER
+    ); // ROOSTER
+    final request = FileSendRequest( // ROOSTER
+      'POST', // ROOSTER
+      baseUri!.resolveUri(requestUri), // ROOSTER
+      body, // ROOSTER
+      length, // ROOSTER
+    ); // ROOSTER
+    request.headers['authorization'] = 'Bearer ${bearerToken!}'; // ROOSTER
+    if (contentType != null) request.headers['content-type'] = contentType; // ROOSTER
+    final response = await httpClient.send(request); // ROOSTER
+    final responseBody = await response.stream.toBytes(); // ROOSTER
+    if (response.statusCode != 200) { // ROOSTER
+      unexpectedResponse(response, responseBody); // ROOSTER
+    } // ROOSTER
+    final json = jsonDecode(utf8.decode(responseBody)); // ROOSTER
+    final uri = json['content_uri'] as String; // ROOSTER
+    if (!uri.startsWith('mxc://')) throw Exception('Uri not an mxc URI'); // ROOSTER
+    return Uri.parse(uri); // ROOSTER
+  } // ROOSTER
+
   /// Sends a typing notification and initiates a megolm session, if needed
   @override
   Future<void> setTyping(
