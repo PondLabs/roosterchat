@@ -178,21 +178,25 @@ What this costs, measured on the Windows development machine (16 GB) on
 (`unit_test/upload_stream/memory_measure_test.dart`, to a server on
 127.0.0.1):
 
-| Sent | Peak of the process | Over 1 MB | Longest the main isolate went without a timer |
-|---|---|---|---|
-| 1 MB, from disk | 327.7 MB | | 24 ms |
-| 200 MB, from disk | 327.7 MB | +0.0 MB | 19 ms |
-| 200 MB, from disk, encrypted room | 336.8 MB | +9.1 MB | 25 ms |
+| Sent | Peak of the process | Over 1 MB | Longest the main isolate went without a timer | Time to send |
+|---|---|---|---|---|
+| 1 MB, from disk | 328.7 MB | | 26 ms | 0.1 s |
+| 200 MB, from disk | 325.0 MB | none (-3.7 MB) | 31 ms | 3.3 s |
+| 200 MB, from disk, encrypted room | 336.9 MB | +8.2 MB | 32 ms | 10.0 s |
+
+In the encrypted room the cipher (pointycastle's AES-CTR and SHA-256, pure
+Dart) sets the pace, about 20 MB/s in this test process; the main isolate
+runs none of it.
 
 The browser has no paths: a picked file is read into memory when it is
 attached, and sent from those bytes. Its bound, measured in Chrome with a
 50 MB file read as the app admits it and uploaded through our HTTP client
-(`XMLHttpRequest`), median of 3
+(`XMLHttpRequest`), six runs (three in development, three in review)
 (`unit_test/upload_stream/web_upload_memory_test.dart`):
 
 | Sent | JS heap growth | Longest task of the page's thread |
 |---|---|---|
-| 50 MB, in the clear | 100.2 MB (2.0 times the file) | 61 ms (1 long task) |
+| 50 MB, in the clear | 99.9 to 101.3 MB (2.0 times the file) | 58 to 113 ms (1 long task per run) |
 
 The file is held twice while it is read: its pieces, then the one buffer
 they are joined into. An encrypted room adds the encrypted copy (not
