@@ -8,9 +8,17 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:matrix/matrix.dart' as matrix;
+import 'package:rooster/client/call_manager.dart';
+import 'package:rooster/client/client.dart';
+import 'package:rooster/client/components/room_component.dart';
+import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/matrix/components/voip_room/call_join.dart';
 import 'package:rooster/client/matrix/components/voip_room/call_token_service.dart';
 import 'package:rooster/client/matrix/components/voip_room/livekit_join_room.dart';
+import 'package:rooster/client/matrix/components/voip_room/matrix_livekit_backend.dart';
+import 'package:rooster/client/matrix/matrix_client.dart';
+import 'package:rooster/client/matrix/matrix_room.dart';
+import 'package:rooster/diagnostic/speed_log/speed_log.dart';
 
 /// What happened, in order: `output_device`, `openid`, `sfu_get`,
 /// `membership_write`, `connect`, `connected`...
@@ -204,13 +212,17 @@ class FakeHost implements CallJoinHost<FakeLivekitRoom> {
   /// set; else the join uses [focus], the homeserver's.
   String? roomFocusUrl;
 
+  /// Whether the homeserver's well-known names [focus]; when false it
+  /// names no call token service.
+  bool wellKnownNamesService = true;
+
   @override
   Future<List<Uri>> foci() async {
     journal.add('foci');
     final room = roomFocus();
     return [
       if (room != null) room,
-      if (room != Uri.parse(focus)) Uri.parse(focus)
+      if (wellKnownNamesService && room != Uri.parse(focus)) Uri.parse(focus)
     ];
   }
 
@@ -218,7 +230,7 @@ class FakeHost implements CallJoinHost<FakeLivekitRoom> {
   @override
   Future<Uri?> homeserverFocus() async {
     journal.add('well_known');
-    return Uri.parse(focus);
+    return wellKnownNamesService ? Uri.parse(focus) : null;
   }
 
   @override
@@ -341,3 +353,207 @@ String jwtUntil(DateTime expires, {String id = 'jwt'}) {
 
 /// Lets every pending microtask and timer at zero run.
 Future<void> settle() => Future<void>.delayed(Duration.zero);
+
+/// A voice session over a [FakeLivekitRoom], for what takes a [VoipSession]
+/// (the room component, the call manager). Hanging up clears the membership
+/// the join wrote, as `MatrixLivekitVoipSession` does.
+class FakeVoipSession implements VoipSession {
+  FakeVoipSession(this.host, this.livekitRoom, this.client, {this.calls});
+
+  final FakeHost host;
+  final FakeLivekitRoom livekitRoom;
+  final CallManager? calls;
+
+  @override
+  final Client client;
+
+  @override
+  VoipState state = VoipState.connected;
+
+  final StreamController<void> _stateChanged = StreamController.broadcast();
+
+  @override
+  Stream<void> get onStateChanged => _stateChanged.stream;
+
+  @override
+  Stream<VoipState> get onConnectionStateChanged => const Stream.empty();
+
+  @override
+  String get roomId => host.roomId;
+
+  @override
+  String get roomName => host.roomId;
+
+  @override
+  bool get isDeafened => false;
+
+  @override
+  Future<void> hangUpCall() async {
+    if (state == VoipState.ended) return;
+    host.journal.add('session_hung_up');
+    await host.clearMembership();
+    await livekitRoom.dispose();
+    state = VoipState.ended;
+    _stateChanged.add(null);
+    if (!livekitRoom.ended.isCompleted) livekitRoom.ended.complete();
+    calls?.onSessionEnded(this);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// [inner]'s Matrix side, with [FakeVoipSession]s for sessions: each one
+/// registers with [calls] as it starts, as a real session does.
+class SessionHost implements CallJoinHost<FakeVoipSession> {
+  SessionHost(this.inner, this.client, {this.calls});
+
+  final FakeHost inner;
+  final Client client;
+  final CallManager? calls;
+
+  @override
+  bool get canWriteMembership => inner.canWriteMembership;
+  @override
+  Future<void> selectOutputDevice() => inner.selectOutputDevice();
+  @override
+  Future<List<Uri>> foci() => inner.foci();
+  @override
+  Future<Uri?> homeserverFocus() => inner.homeserverFocus();
+  @override
+  Uri? roomFocus() => inner.roomFocus();
+  @override
+  Future<matrix.OpenIdCredentials> openIdToken() => inner.openIdToken();
+  @override
+  String get deviceId => inner.deviceId;
+  @override
+  String get roomId => inner.roomId;
+  @override
+  String get membershipKey => inner.membershipKey;
+  @override
+  Future<void> writeMembership(List<Uri> foci) => inner.writeMembership(foci);
+  @override
+  Future<void> clearMembership() => inner.clearMembership();
+  @override
+  Future<LivekitJoinRoom> createRoom() => inner.createRoom();
+  @override
+  Future<lk.AudioCaptureOptions> microphoneOptions() =>
+      inner.microphoneOptions();
+  @override
+  bool get mobileBrowser => inner.mobileBrowser;
+  @override
+  bool get isWeb => inner.isWeb;
+
+  @override
+  FakeVoipSession createSession(
+      LivekitJoinRoom room, Future<void> microphonePublished) {
+    final session = FakeVoipSession(
+        inner, inner.createSession(room, microphonePublished), client,
+        calls: calls);
+    calls?.onClientSessionStarted(session);
+    return session;
+  }
+
+  @override
+  Future<void> sessionEnded(FakeVoipSession session) =>
+      session.livekitRoom.ended.future;
+}
+
+/// The SDK's client of our account (`@me:example.org`, device `DEVICE`,
+/// as [FakeHost]): a state write lands through [setState].
+class FakeSdkClient implements matrix.Client {
+  Future<void> Function(String stateKey, Map<String, Object?> body)? setState;
+
+  @override
+  String? get userID => '@me:example.org';
+
+  @override
+  String? get deviceID => 'DEVICE';
+
+  @override
+  Future<String> setRoomStateWithKey(String roomId, String eventType,
+      String stateKey, Map<String, Object?> body) async {
+    await setState?.call(stateKey, body);
+    return '\$event';
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class FakeMatrixClient implements MatrixClient {
+  FakeMatrixClient(this.matrixClient);
+
+  @override
+  final matrix.Client matrixClient;
+
+  @override
+  Room? getRoom(String identifier) => null;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// A voice channel [roomId] where we may write our call membership.
+class FakeMatrixRoom implements MatrixRoom {
+  FakeMatrixRoom(String roomId, matrix.Client client)
+      : matrixRoom = matrix.Room(id: roomId, client: client) {
+    matrixRoom.states[matrix.EventTypes.RoomPowerLevels] = {
+      '': matrix.StrippedStateEvent(
+          type: matrix.EventTypes.RoomPowerLevels,
+          stateKey: '',
+          senderId: '@me:example.org',
+          content: {
+            'users': {'@me:example.org': 100}
+          }),
+    };
+  }
+
+  @override
+  final matrix.Room matrixRoom;
+
+  @override
+  String get identifier => matrixRoom.id;
+
+  @override
+  bool get isE2EE => false;
+
+  @override
+  T? getComponent<T extends RoomComponent>() => null;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// A backend whose joins are [CallJoin]s over [host], a [SessionHost].
+class FakeBackend implements MatrixLivekitBackend {
+  FakeBackend(this.host, this.tokens);
+
+  final SessionHost host;
+  final CallTokenService tokens;
+
+  @override
+  Future<VoipSession?> join(
+          {Future<void> Function()? leavePrevious, Future<void>? hangUp}) =>
+      CallJoin<FakeVoipSession>(
+              host: host,
+              tokens: tokens,
+              log: SpeedLog(),
+              remoteAudioWindow: const Duration(milliseconds: 1))
+          .run(leavePrevious: leavePrevious, hangUp: hangUp);
+
+  /// What [getFociUrl] answers, when set; else [host]'s.
+  Future<List<Uri>>? fociAnswer;
+
+  @override
+  Future<List<Uri>> getFociUrl() => fociAnswer ?? host.foci();
+
+  @override
+  Future<void> warmUp() async {}
+
+  @override
+  String get roomId => host.roomId;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}

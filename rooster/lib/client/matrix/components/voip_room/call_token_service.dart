@@ -188,6 +188,13 @@ class CallTokenService {
         entry.key.endsWith(" $roomId $deviceId") && entry.value.usable(now));
   }
 
+  /// Whether the call token of room [roomId] from the service at [focus],
+  /// spelled as there, is held: what [sfuGrant] would answer without a
+  /// request.
+  bool holdsGrantFrom(Uri focus,
+          {required String roomId, required String deviceId}) =>
+      _grants[_grantKey(focus, roomId, deviceId)]?.usable(_now()) ?? false;
+
   /// The call token of room [roomId] from the service at [focus]: the one
   /// held while its JWT has more than [margin] left, or one asked for with
   /// the OpenID token [openId] gives, sharing a request already running.

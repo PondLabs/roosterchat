@@ -4,6 +4,7 @@ import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/components/component.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip_room/voip_room_component.dart';
+import 'package:rooster/client/matrix/components/voip_room/call_join.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/debug/log.dart';
@@ -60,7 +61,13 @@ class MatrixCallMovesComponent extends Component<MatrixClient> {
             ?.currentSession
             ?.hangUpCall();
       } else {
-        await to.getComponent<VoipRoomComponent>()?.joinCall();
+        try {
+          await to.getComponent<VoipRoomComponent>()?.joinCall();
+        } on CallJoinHungUp {
+          // Another voice channel was joined, or the call left, while this
+          // join ran: nothing failed.
+          Log.i("Our move to ${to.identifier}'s call was hung up");
+        }
       }
       return;
     }

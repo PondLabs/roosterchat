@@ -403,6 +403,31 @@ void main() {
     expect(participant.capturesOpened, 0);
   });
 
+  test(
+      'deafened, then a mute asked for, then undeafened: the microphone '
+      'stays muted', () async {
+    await joinPublishes();
+    await session.setDeafened(true);
+    expect(participant.publications.single.muted, isTrue);
+
+    await session.setMicrophoneMute(true);
+    await session.setDeafened(false);
+
+    expect(session.isDeafened, isFalse);
+    expect(session.isMicrophoneMuted, isTrue);
+    expect(participant.publications.single.muted, isTrue,
+        reason: 'the mute asked for while deafened holds');
+  });
+
+  test(
+      'deafened without a mute, then undeafened: the microphone opens '
+      'again', () async {
+    await joinPublishes();
+    await session.setDeafened(true);
+    await session.setDeafened(false);
+    expect(participant.publications.single.muted, isFalse);
+  });
+
   test('a microphone future that fails: mute and deafen still work', () async {
     published.completeError(StateError('the publish failed'));
 

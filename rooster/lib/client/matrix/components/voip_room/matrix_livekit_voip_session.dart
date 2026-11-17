@@ -1766,6 +1766,8 @@ class MatrixLivekitVoipSession
       await _applyDeafened(micMuted: false);
       return;
     }
+    // Muted while deafened: still muted once undeafened (DeafenRule).
+    if (state) _deafen.mute();
 
     _microphoneWanted = !state;
     await livekitRoom.localParticipant?.setMicrophoneEnabled(!state,
