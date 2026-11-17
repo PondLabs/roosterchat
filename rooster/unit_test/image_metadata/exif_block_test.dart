@@ -486,24 +486,29 @@ void main() {
           ]);
 
       test('extents of fields of size 0: unreadable, at once', () async {
-        // The review's: 256 items of 65,535 extents that take no byte.
-        final bytes = heif([
-          0x00, 0x00, // offset, length, base and index sizes: all 0
-          ...be(256, 2),
-          for (var n = 1; n <= 256; n++) ...[
-            ...be(n, 2),
-            0,
-            0,
-            0,
-            0,
-            0xFF,
-            0xFF
-          ],
-        ]);
-        final watch = Stopwatch()..start();
-        expect((await findExifBlocks(bytesReader(bytes))).cut, isTrue);
-        expect(watch.elapsed, lessThan(const Duration(milliseconds: 200)));
-        expect(await answer(bytes), LocationAnswer.unreadable);
+        // The review's: 256 items of 65,535 extents that take no byte; and
+        // the same with every item the Exif item (id 1), whose places are
+        // kept.
+        for (final exifEveryTime in [false, true]) {
+          final bytes = heif([
+            0x00, 0x00, // offset, length, base and index sizes: all 0
+            ...be(256, 2),
+            for (var n = 1; n <= 256; n++) ...[
+              ...be(exifEveryTime ? 1 : n, 2),
+              0,
+              0,
+              0,
+              0,
+              0xFF,
+              0xFF
+            ],
+          ]);
+          final watch = Stopwatch()..start();
+          expect((await findExifBlocks(bytesReader(bytes))).cut, isTrue);
+          expect(watch.elapsed, lessThan(const Duration(milliseconds: 200)),
+              reason: 'the Exif item every time: $exifEveryTime');
+          expect(await answer(bytes), LocationAnswer.unreadable);
+        }
       });
 
       test('more extents or items than the box holds: unreadable', () async {
