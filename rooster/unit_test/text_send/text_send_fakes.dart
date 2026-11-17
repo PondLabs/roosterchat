@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/components/room_component.dart';
 import 'package:rooster/client/components/typing_indicators/typing_indicator_component.dart';
+import 'package:rooster/client/matrix/components/typing_indicators/matrix_typing_indicators_component.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/member.dart';
@@ -59,6 +60,20 @@ Future<MatrixRoom> joinedRoom(MatrixClient client,
   // The Rooster client adds the room on the SDK's onSync event.
   await Future<void>.delayed(Duration.zero);
   return client.getRoom(fakeRoomId)! as MatrixRoom;
+}
+
+/// Turns [client]'s typing notices [on] or off, for every room, as the
+/// account data a sync brings says it (the setting in the app's settings).
+Future<void> setTypingNotices(MatrixClient client, bool on) async {
+  final mx = client.getMatrixClient();
+  await mx.database.transaction(() => mx.handleSync(matrix.SyncUpdate(
+        nextBatch: on ? 'typing_on' : 'typing_off',
+        accountData: [
+          matrix.BasicEvent(
+              type: MatrixTypingIndicatorsComponent.publicTypingIndicatorKey,
+              content: {'enabled': on}),
+        ],
+      )));
 }
 
 /// Replaces [MatrixRoom.prepareOutboundSession] for one test: each

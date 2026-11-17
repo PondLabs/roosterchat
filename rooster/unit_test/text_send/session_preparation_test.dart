@@ -11,6 +11,8 @@ import 'package:rooster/client/room.dart';
 import 'package:rooster/client/components/typing_indicators/typing_indicator_component.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
+import 'package:rooster/ui/molecules/message_input.dart';
+import 'package:rooster/utils/clipboard/pasted_file.dart';
 import 'package:rooster/utils/image/preparation/image_preparation.dart';
 
 import '../media_prepare/fakes.dart';
@@ -20,7 +22,9 @@ import 'text_send_fakes.dart';
 
 /// R7: an encrypted room's outbound session is prepared on the first input
 /// into an empty composer and when a file is attached, never on focus, one
-/// preparation in flight per room, typing notices on or off. The
+/// preparation in flight per room, and only while typing notices are on
+/// (the owner's decision of 2026-11-17: off, nothing is readied before
+/// Send, since the key sent ahead tells others as much). The
 /// preparation is [MatrixRoom.prepareOutboundSession], replaced here by a
 /// counter, so these tests need no vodozemac.
 void main() {
@@ -145,26 +149,57 @@ void main() {
     await close(tester, client);
   });
 
-  testWidgets(
-      'with typing notices off, the session is prepared all the same; in a '
-      'room without encryption, never', (tester) async {
-    final typing = TypingOff();
-    final (encrypted, _) =
-        await openChat(tester, encrypted: true, typing: typing);
-    await tester.enterText(composer(), 'h');
-    await tester.pump();
-    expect(typing.calls, greaterThan(0),
-        reason: 'the chat asked for a typing notice, which is off');
-    expect(spy.count, 1);
-    spy.finish();
-    await tester.pump();
-    await close(tester, encrypted);
+  for (final on in [false, true]) {
+    testWidgets(
+        'typing notices ${on ? 'on' : 'off'}: typing, a paste and a file '
+        "${on ? 'ready' : 'never ready'} the session before Send",
+        (tester) async {
+      final (client, _) = await openChat(tester, encrypted: true);
+      await tester.runAsync(() => setTypingNotices(client, on));
+      await tester.showKeyboard(composer());
 
+      await tester.enterText(composer(), 'h');
+      await tester.pump();
+      final afterTyping = spy.count;
+      if (on) spy.finish();
+      await tester.pump();
+
+      // A paste: the composer's attachment dialog, then the file.
+      final input = tester.state<MessageInputState>(find.byType(MessageInput));
+      final pasted = input.onFilesPasted([
+        PastedFile(Uint8List(10),
+            name: 'notes.pdf', mimeType: 'application/pdf')
+      ]);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.text('Add File'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await pasted;
+      final afterPaste = spy.count;
+      if (on) spy.finish();
+      await tester.pump();
+
+      await attachFile(tester);
+      final afterFile = spy.count;
+      if (on) spy.finish();
+      await tester.pump();
+
+      print('typing notices ${on ? 'on' : 'off'}: preparations after typing '
+          '$afterTyping, after the paste $afterPaste, after the file '
+          '$afterFile');
+      expect(chatState(tester).attachments, hasLength(2));
+      expect([afterTyping, afterPaste, afterFile], on ? [1, 2, 3] : [0, 0, 0]);
+      await close(tester, client);
+    });
+  }
+
+  testWidgets('in a room without encryption, never', (tester) async {
     final (plain, _) = await openChat(tester, encrypted: false);
     await tester.enterText(composer(), 'h');
     await tester.pump();
     await attachFile(tester);
-    expect(spy.count, 1, reason: 'nothing more in the plain room');
+    expect(spy.count, 0);
     await close(tester, plain);
   });
 

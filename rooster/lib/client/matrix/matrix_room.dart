@@ -16,6 +16,7 @@ import 'package:rooster/client/components/user_color/user_color_component.dart';
 import 'package:rooster/client/matrix/components/calendar_room_component/matrix_calendar_room_component.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_room_emoticon_component.dart';
 import 'package:rooster/client/matrix/components/read_receipts/matrix_read_receipt_component.dart';
+import 'package:rooster/client/matrix/components/typing_indicators/matrix_typing_indicators_component.dart';
 import 'package:rooster/client/matrix/components/user_presence/matrix_user_presence.dart';
 import 'package:rooster/client/matrix/matrix_attachment.dart';
 import 'package:rooster/client/matrix/media/matrix_attachment_files.dart';
@@ -545,6 +546,17 @@ class MatrixRoom extends Room implements RoomSendPreparation {
     await encryption.keyManager.prepareOutboundGroupSession(room.id);
   }
 
+  /// Whether this account tells the room when it types: the room's own
+  /// setting, else the account's (`MatrixTypingIndicatorsComponent`). Not
+  /// known counts as off.
+  bool get _sendsTypingNotices =>
+      getComponent<MatrixTypingIndicatorsComponent>()
+          ?.typingIndicatorEnabledForRoom ??
+      _client
+          .getComponent<MatrixUserPresenceComponent>()
+          ?.typingIndicatorEnabled ??
+      false;
+
   /// The preparation in flight, shared by every trigger in this room:
   /// true once it readied the session, false when it failed.
   Future<bool>? _preparingSession;
@@ -553,9 +565,15 @@ class MatrixRoom extends Room implements RoomSendPreparation {
   /// flight. The SDK makes the session once even when its own preparation
   /// (on a typing notice) or a send asks at the same time: they wait for
   /// the same creation, so no message leaves before the session is ready.
+  ///
+  /// Only while this account sends typing notices here: a session made
+  /// ahead sends its key to the others' devices, which tells them as much
+  /// as a typing notice would. With the notices off, the session is made
+  /// at Send, by the send itself.
   @override
   void prepareToSend() {
     if (!_matrixRoom.encrypted || _preparingSession != null) return;
+    if (!_sendsTypingNotices) return;
     // In a microtask, so a preparation that ends at once still clears the
     // one in flight after it was set.
     _preparingSession =

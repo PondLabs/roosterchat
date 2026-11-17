@@ -87,8 +87,14 @@ Outcome `ok`, or `failed` when the SDK gave up (it waits out a 429 up to a
 minute, then marks the message as failed). The time an encrypted room
 spends preparing its session falls between `queue_wait` and `request`
 (not a step of its own); the composer prepares it ahead, on the first
-input and on attaching a file, so `session_created` is usually 0; a
-message sent while that preparation still runs says `session_waited=1`.
+input and on attaching or pasting a file, so `session_created` is usually
+0; a message sent while that preparation still runs says
+`session_waited=1`. It does so only while the account sends typing
+notices in that room: a session made ahead sends its key to the others'
+devices, which tells them someone is writing as a typing notice would.
+With the notices off nothing is readied before Send, no key request nor
+`sendToDevice` leaves until then, and the send makes the session itself
+(`session_created=1` when none was ready).
 A `key_request` with `session_created=0` is a key shared at the send
 with a device that appeared since. The room calls into the span through a guard:
 a failure in the measurement is dropped (one fixed line in the app's log)

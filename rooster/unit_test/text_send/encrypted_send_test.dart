@@ -166,6 +166,56 @@ void main() {
             '${r.method} ${r.route}'
       ];
 
+  /// The key requests the fake server got: device keys, one-time keys and
+  /// room keys sent to devices.
+  List<String> keyRoutes() => [
+        for (final r in server.seen)
+          if (r.endsWith('/keys/query') ||
+              r.endsWith('/keys/claim') ||
+              r.contains('/sendToDevice/'))
+            r
+      ];
+
+  for (final on in [false, true]) {
+    test(
+        'typing notices ${on ? 'on' : 'off'}: what typing, a paste or a file '
+        "asks for ${on ? 'readies the session, its keys sent' : 'sends no key request nor sendToDevice'} "
+        'before Send; Send then sends the message',
+        skip: skip, () async {
+      await setTypingNotices(client, on);
+      server.seen.clear();
+
+      // What the composer calls on the first keystroke, a paste or a file.
+      room.prepareToSend();
+      if (on) {
+        await until(ready);
+      } else {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      }
+      final beforeSend = keyRoutes();
+      final span = await sendText('Hello');
+      final atSend = keyRoutes().skip(beforeSend.length).toList();
+      final session =
+          span.steps.singleWhere((s) => s.name == SpeedStep.outboundSession);
+
+      print('typing notices ${on ? 'on' : 'off'}: key requests before Send '
+          '$beforeSend; at Send $atSend; ${session.values}');
+      expect(server.sends, ['m.room.encrypted']);
+      if (on) {
+        expect(beforeSend,
+            contains(predicate<String>((r) => r.contains('/sendToDevice/'))));
+        expect(atSend, isEmpty);
+        expect(session.values[SpeedValue.sessionCreated], 0);
+      } else {
+        expect(beforeSend, isEmpty);
+        expect(atSend,
+            contains(predicate<String>((r) => r.contains('/sendToDevice/'))),
+            reason: 'Send makes the session and shares its key, as before');
+        expect(session.values[SpeedValue.sessionCreated], 1);
+      }
+    });
+  }
+
   test(
       'with the session prepared ahead (first keystroke): 1 PUT /send and no '
       'key request in the send',
