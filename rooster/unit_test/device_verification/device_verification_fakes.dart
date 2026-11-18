@@ -47,6 +47,10 @@ class VerificationServer extends FakeTransport {
   /// Every `keys/signatures/upload` body, as the server got it.
   final List<String> signatureUploads = [];
 
+  /// Every `sendToDevice` this device made: its event type, and the users
+  /// and devices it went to.
+  final List<(String, Map<String, Object?>)> toDevice = [];
+
   /// While set, `keys/query` fails with a 500, as a homeserver that is
   /// down or overloaded.
   bool failKeyQueries = false;
@@ -67,6 +71,22 @@ class VerificationServer extends FakeTransport {
           ...(device['signatures'][ownUser] as Map).cast<String, Object?>(),
         };
       }
+      request = http.Request(request.method, request.url)
+        ..headers.addAll(request.headers)
+        ..bodyBytes = bytes;
+    }
+    final segments = request.url.pathSegments;
+    final at = segments.indexOf('sendToDevice');
+    if (request.method == 'PUT' && at >= 0 && segments.length > at + 1) {
+      final bytes = await request.finalize().toBytes();
+      final messages = (jsonDecode(utf8.decode(bytes)) as Map)['messages'];
+      toDevice.add((
+        segments[at + 1],
+        {
+          for (final MapEntry(:key, :value) in (messages as Map).entries)
+            key as String: (value as Map).keys.toList(),
+        }
+      ));
       request = http.Request(request.method, request.url)
         ..headers.addAll(request.headers)
         ..bodyBytes = bytes;

@@ -11,6 +11,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:matrix/encryption/utils/key_verification.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/client_manager.dart';
 import 'package:rooster/client/components/component.dart';
@@ -21,6 +22,7 @@ import 'package:rooster/main.dart';
 import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_message.dart';
 import 'package:rooster/ui/molecules/timeline_events/events/undecrypted_message_line.dart';
 import 'package:rooster/ui/organisms/home_screen/home_screen_view.dart';
+import 'package:rooster/ui/pages/matrix/verification/matrix_verification_page.dart';
 import 'package:rooster/ui/pages/matrix/verification/verify_this_device.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:tiamat/config/style/theme_dark.dart';
@@ -339,6 +341,37 @@ void main() {
     expect(find.byKey(_why), findsNothing);
     expect(find.text(MatrixKeyVerificationComponent.labelDeviceNotVerified),
         findsOneWidget);
+    await close(tester);
+  });
+
+  testWidgets(
+      'verify with another device: the request goes to the other devices of '
+      'this account and the emoji page opens',
+      skip: skipWithoutVodozemac != false, (tester) async {
+    await desktop(tester);
+    await tester.pumpWidget(_app(_Home(manager)));
+    await freshLogin(tester, VerificationServer());
+    await tester.pumpAndSettle();
+    expect(find.byKey(_why), findsOneWidget);
+
+    await tester.tap(find.byKey(_otherDevice));
+    await _settle(
+        tester, () => find.byType(MatrixVerificationPage).evaluate().isNotEmpty,
+        reason: 'the emoji page opens');
+
+    // The SDK sends the request encrypted (`m.room.encrypted`), to the
+    // devices of this account its master key signed. The fake server
+    // claims no one-time key for them, so the encrypted map comes out
+    // empty here; on a homeserver each such device gets the request.
+    expect(server.toDevice, hasLength(1));
+    final (type, to) = server.toDevice.single;
+    expect(type, 'm.room.encrypted');
+    expect(to.keys, [ownUser]);
+    final page = tester
+        .widget<MatrixVerificationPage>(find.byType(MatrixVerificationPage));
+    expect(page.request.userId, ownUser);
+    expect(page.request.deviceId, '*');
+    expect(page.request.state, KeyVerificationState.waitingAccept);
     await close(tester);
   });
 
