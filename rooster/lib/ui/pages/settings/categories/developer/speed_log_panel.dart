@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -63,8 +65,9 @@ class SpeedLogPanel extends StatefulWidget {
   static String get messageDeveloperSpeedReportCopied =>
       Intl.message("Speed report copied",
           name: "messageDeveloperSpeedReportCopied",
-          desc: "Shown after the speed report was copied from Developer "
-              "settings > Speed log");
+          desc: "Shown for 2 seconds on the Copy speed report button in "
+              "Developer settings > Speed log, after the speed report was "
+              "copied");
 
   @override
   State<SpeedLogPanel> createState() => _SpeedLogPanelState();
@@ -72,6 +75,17 @@ class SpeedLogPanel extends StatefulWidget {
 
 class _SpeedLogPanelState extends State<SpeedLogPanel> {
   SpeedLog get log => widget.log ?? SpeedLog.instance;
+
+  /// The button says it copied for 2 s, like a code block's: no SnackBar,
+  /// which needs a Scaffold the settings page does not have.
+  bool _copied = false;
+  Timer? _copiedTimer;
+
+  @override
+  void dispose() {
+    _copiedTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -101,7 +115,9 @@ class _SpeedLogPanelState extends State<SpeedLogPanel> {
           child: Align(
             alignment: AlignmentDirectional.centerStart,
             child: tiamat.Button(
-              text: SpeedLogPanel.promptDeveloperCopySpeedReport,
+              text: _copied
+                  ? SpeedLogPanel.messageDeveloperSpeedReportCopied
+                  : SpeedLogPanel.promptDeveloperCopySpeedReport,
               onTap: _copyReport,
             ),
           ),
@@ -111,10 +127,17 @@ class _SpeedLogPanelState extends State<SpeedLogPanel> {
   }
 
   Future<void> _copyReport() async {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    await Clipboard.setData(ClipboardData(text: buildSpeedReport(log)));
-    messenger?.showSnackBar(SnackBar(
-        content: Text(SpeedLogPanel.messageDeveloperSpeedReportCopied)));
+    try {
+      await Clipboard.setData(ClipboardData(text: buildSpeedReport(log)));
+    } on PlatformException {
+      return;
+    }
+    if (!mounted) return;
+    _copiedTimer?.cancel();
+    setState(() => _copied = true);
+    _copiedTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _copied = false);
+    });
   }
 
   Widget _row(

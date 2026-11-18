@@ -128,6 +128,8 @@ void main() {
     expect(copied, contains('  connect n=1 p50=300ms p95=300ms'));
     expect(find.text(SpeedLogPanel.messageDeveloperSpeedReportCopied),
         findsOneWidget);
+    // The button says so for 2 s.
+    await tester.pump(const Duration(seconds: 2));
 
     // The copied report, for the evidence folder.
     final out = Platform.environment['SPEED_REPORT_OUT'];

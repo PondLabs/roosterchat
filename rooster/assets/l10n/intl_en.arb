@@ -10616,7 +10616,7 @@
   },
   "messageDeveloperSpeedReportCopied": "Speed report copied",
   "@messageDeveloperSpeedReportCopied": {
-    "description": "Shown after the speed report was copied from Developer settings > Speed log",
+    "description": "Shown for 2 seconds on the Copy speed report button in Developer settings > Speed log, after the speed report was copied",
     "type": "text",
     "placeholders": {}
   },
