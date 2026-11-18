@@ -300,6 +300,49 @@ void main() {
   }
 
   testWidgets(
+      'keys not in yet after the login: no prompt until they come, then it '
+      'opens; a failed query later leaves the notice',
+      skip: skipWithoutVodozemac != false, (tester) async {
+    await desktop(tester);
+    await tester.pumpWidget(_app(_Home(manager)));
+    await freshLogin(tester, VerificationServer()..failKeyQueries = true);
+    await tester.pumpAndSettle();
+
+    // The account's keys are unknown: no reason to ask yet.
+    final mx = client.matrixClient;
+    expect(mx.userDeviceKeys[ownUser]?.outdated, isNot(false));
+    expect(component().needed.value, isFalse);
+    expect(find.byKey(_why), findsNothing);
+    expect(manager.alertManager.alerts, isEmpty);
+
+    // The keys come with a later sync: the prompt the login owes opens.
+    server.failKeyQueries = false;
+    await tester.runAsync(() async {
+      await mx.updateUserDeviceKeys();
+      await emptySync(client, 'keys-in');
+    });
+    await tester.pumpAndSettle();
+    expect(find.byKey(_why), findsOneWidget);
+
+    // Later, then a query that fails: what was known stays, so does the
+    // notice, and the prompt does not open again by itself.
+    await tester.tap(find.byKey(_later));
+    await tester.pumpAndSettle();
+    server.failKeyQueries = true;
+    await tester.runAsync(() async {
+      mx.userDeviceKeys[ownUser]!.outdated = true;
+      await mx.updateUserDeviceKeys();
+      await emptySync(client, 'query-failed');
+    });
+    await tester.pumpAndSettle();
+    expect(component().needed.value, isTrue);
+    expect(find.byKey(_why), findsNothing);
+    expect(find.text(MatrixKeyVerificationComponent.labelDeviceNotVerified),
+        findsOneWidget);
+    await close(tester);
+  });
+
+  testWidgets(
       'opening the app on a device still not verified shows the notice, '
       'not the prompt',
       skip: skipWithoutVodozemac != false, (tester) async {

@@ -47,6 +47,10 @@ class VerificationServer extends FakeTransport {
   /// Every `keys/signatures/upload` body, as the server got it.
   final List<String> signatureUploads = [];
 
+  /// While set, `keys/query` fails with a 500, as a homeserver that is
+  /// down or overloaded.
+  bool failKeyQueries = false;
+
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     final path = request.url.path;
@@ -66,6 +70,16 @@ class VerificationServer extends FakeTransport {
       request = http.Request(request.method, request.url)
         ..headers.addAll(request.headers)
         ..bodyBytes = bytes;
+    }
+    if (failKeyQueries &&
+        request.method == 'POST' &&
+        path.endsWith('/keys/query')) {
+      return http.StreamedResponse(
+          Stream.value(utf8.encode(jsonEncode(
+              {'errcode': 'M_UNKNOWN', 'error': 'Internal server error'}))),
+          500,
+          headers: {'content-type': 'application/json'},
+          request: request);
     }
     final response = await super.send(request);
     if (request.method != 'POST' || !path.endsWith('/keys/query')) {
