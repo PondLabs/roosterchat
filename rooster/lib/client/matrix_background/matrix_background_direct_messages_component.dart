@@ -22,14 +22,11 @@ class MatrixBackgroundClientDirectMessagesComponent
   String? getDirectMessagePartnerId(Room room) {
     for (var accountData in client.accountData) {
       if (accountData.type == "m.direct") {
-        Log.i("${accountData.type}");
-        Log.i("account data: ${accountData.content}");
-
+        // m.direct lists people and their rooms: none of it is logged.
         var content = jsonDecode(accountData.content) as Map<String, dynamic>;
         for (var pair in content.entries) {
           var key = pair.key;
           var item = pair.value;
-          Log.i(item);
           var list = item as List<dynamic>;
           if (list.contains(room.identifier)) {
             return key;
@@ -46,12 +43,8 @@ class MatrixBackgroundClientDirectMessagesComponent
     Log.i("Checking if room is direct message");
     for (var accountData in client.accountData) {
       if (accountData.type == "m.direct") {
-        Log.i("${accountData.type}");
-        Log.i("account data: ${accountData.content}");
-
         var content = jsonDecode(accountData.content) as Map<String, dynamic>;
         for (var item in content.values) {
-          Log.i(item);
           var list = item as List<dynamic>;
           if (list.contains(room.identifier)) {
             Log.i("Found room id in account info, this is a direct message");

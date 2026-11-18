@@ -42,7 +42,8 @@ class MatrixBackgroundRoom implements Room {
     required this.preloadState,
     required this.nonPreloadState,
   }) {
-    Log.d("Created background room with data: ${data.content}");
+    // The room data holds the room id and its state: none of it is logged.
+    Log.d("Created background room");
 
     _stateEvents = List.empty(growable: true);
     for (var preload in preloadState) {
@@ -199,7 +200,7 @@ class MatrixBackgroundRoom implements Room {
       try {
         var decrypted = sess.decrypt(cipherText);
 
-        Log.i("Got decrypted: ${decrypted}");
+        Log.i("Decrypted the notification's event");
 
         return matrix.MatrixEvent.fromJson({
           ...jsonDecode(decrypted.plaintext),
@@ -272,7 +273,7 @@ class MatrixBackgroundRoom implements Room {
   Future<TimelineEvent<Client>?> getEvent(String eventId) async {
     var result =
         await backgroundClient.api.getOneRoomEvent(identifier, eventId);
-    Log.i("Received event: ${result}");
+    Log.i("Received event of type ${result.type}");
 
     if (result.type == matrix.EventTypes.Encrypted) {
       result = await tryDecryptEvent(result);
