@@ -3,7 +3,12 @@
 // in place (a local echo the server took, a message decrypted late), a
 // message out (a send cancelled). The view hears each change through the
 // same `MatrixTimeline` callbacks as in the app; no request leaves.
+import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:matrix/matrix.dart' as matrix;
@@ -47,6 +52,28 @@ class _Database implements matrix.DatabaseApi {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// The app's fonts, for [Dm.picture], when a picture is asked for.
+Future<void> useAppFonts() async {
+  if (Platform.environment['T83_EVIDENCE_DIR'] == null) return;
+  Future<void> load(String family, List<String> paths) async {
+    final loader = FontLoader(family);
+    for (final path in paths) {
+      loader.addFont(
+          Future.value(ByteData.sublistView(File(path).readAsBytesSync())));
+    }
+    await loader.load();
+  }
+
+  final flutter = Platform.environment['FLUTTER_ROOT'] ??
+      '${Platform.environment['HOME']}/flutter';
+  await load('Roboto', ['assets/font/roboto/Roboto-Regular.ttf']);
+  await load('NunitoSans',
+      ['assets/font/nunito/NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf']);
+  await load('MaterialIcons', [
+    '$flutter/bin/cache/artifacts/material_fonts/materialicons-regular.otf'
+  ]);
+}
+
 Future<void> setUpDmHarness() async {
   // ignore: invalid_use_of_visible_for_testing_member
   SharedPreferences.setMockInitialValues({});
@@ -85,6 +112,9 @@ class Dm {
   /// more of older messages (so the view never asks for history).
   static Future<Dm> open(WidgetTester tester, List<Line> history) async {
     final dm = Dm();
+    // The call components listen to WebRTC's events, absent here.
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('FlutterWebRTC.Event'), (_) async => null);
     await tester.runAsync(() async {
       dm.client = MatrixClient(identifier: 'sender', database: _Database());
     });
@@ -192,14 +222,90 @@ class Dm {
 
   int indexOf(String body) => sdk.events.indexWhere((e) => e.body == body);
 
+  /// The messages that came in encrypted, by id, as they read once their
+  /// room key arrives.
+  final _sealed = <String, matrix.Event>{};
+
+  /// [line] from someone else in at the bottom, encrypted with a room key
+  /// this device does not have yet: "Failed to decrypt event" until
+  /// [decrypt]. Returns its id.
+  String receiveSealed(Line line) {
+    final plain = say(line);
+    _sealed[plain.eventId] = plain;
+    insert(
+        0,
+        matrix.Event.fromJson({
+          'event_id': plain.eventId,
+          'type': 'm.room.encrypted',
+          'content': {
+            'algorithm': 'm.megolm.v1.aes-sha2',
+            'ciphertext': 'sealed',
+            'session_id': 'late-session',
+            'sender_key': 'their-key',
+            'device_id': 'THEIRPHONE',
+          },
+          'sender': line.sender,
+          'room_id': mx.id,
+          'origin_server_ts': plain.originServerTs.millisecondsSinceEpoch,
+        }, mx));
+    return plain.eventId;
+  }
+
+  /// The room key of [id] arrived: the message is decrypted in place.
+  void decrypt(String id) => replace(
+      sdk.events.indexWhere((e) => e.eventId == id), _sealed.remove(id)!);
+
+  /// The message [body] redacted (deleted) by its sender, in place.
+  void redact(String body) {
+    final index = indexOf(body);
+    final json = sdk.events[index].toJson();
+    json['content'] = <String, Object?>{};
+    json['unsigned'] = {
+      'redacted_because': {
+        'event_id': '\$redaction${_ids++}',
+        'type': 'm.room.redaction',
+        'sender': json['sender'],
+        'redacts': json['event_id'],
+        'content': <String, Object?>{},
+        'origin_server_ts': start.millisecondsSinceEpoch,
+      },
+    };
+    replace(index, matrix.Event.fromJson(json, mx));
+  }
+
   Future<void> show(WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(MaterialApp(
-      theme: ThemeDark.theme,
-      home: Scaffold(body: RoomTimelineWidgetView(timeline: timeline)),
+    await tester.pumpWidget(RepaintBoundary(
+      key: _picture,
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: ThemeDark.theme,
+        home: Scaffold(body: RoomTimelineWidgetView(timeline: timeline)),
+      ),
     ));
     await settle(tester);
+  }
+
+  final _picture = GlobalKey();
+
+  /// Writes the view as drawn now, as `<name>.png`, to the folder in
+  /// `T83_EVIDENCE_DIR`; nothing without it. [useAppFonts] first, for a
+  /// picture with the app's letters rather than the test font's boxes.
+  Future<void> picture(WidgetTester tester, String name) async {
+    final dir = Platform.environment['T83_EVIDENCE_DIR'];
+    if (dir == null) return;
+    final png = await tester.runAsync(() async {
+      final boundary =
+          _picture.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      final image = await boundary.toImage(pixelRatio: 1);
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      return data!.buffer.asUint8List();
+    });
+    final file = File('$dir/$name.png')..writeAsBytesSync(png!);
+    // ignore: avoid_print
+    print('wrote ${file.path} (${png.length} bytes)');
   }
 
   Future<void> close(WidgetTester tester) async {

@@ -18,7 +18,10 @@ const _forgot = Line(me, 'tinha até esquecido que estava quebrado');
 const _broken = Line(me, 'e isso aqui tá podre também]');
 
 void main() {
-  setUpAll(setUpDmHarness);
+  setUpAll(() async {
+    await setUpDmHarness();
+    await useAppFonts();
+  });
   tearDown(() => lifecycle(AppLifecycleState.resumed));
 
   testWidgets(
@@ -55,6 +58,7 @@ void main() {
     dm.confirm(dm.send(_broken));
     await settle(tester);
 
+    await dm.picture(tester, 'conversa-do-print');
     expectHeaders(tester, dm, {
       _reply.body: true,
       _itsoverist.body: false,
