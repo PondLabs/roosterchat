@@ -547,6 +547,16 @@ class KeyManager {
 
     final deviceKeys = await room.getUserDeviceKeys();
     final deviceKeyIds = _getDeviceKeyIdMap(deviceKeys);
+    // How many devices of the room's members the key leaves out (blocked, // ROOSTER
+    // or not cross-signed by their owner: `Client.shareKeysWith`), as a // ROOSTER
+    // count with no ids, so a log tells why someone cannot decrypt. // ROOSTER
+    final leftOut = deviceKeys.where((k) => !k.encryptToDevice).length; // ROOSTER
+    if (leftOut > 0) { // ROOSTER
+      Logs().w( // ROOSTER
+        '[KeyManager] The room key leaves out $leftOut device(s) of the ' // ROOSTER
+        "room's members: blocked, or not cross-signed by their owner", // ROOSTER
+      ); // ROOSTER
+    } // ROOSTER
     deviceKeys.removeWhere((k) => !k.encryptToDevice);
     final outboundGroupSession = vod.GroupSession();
 

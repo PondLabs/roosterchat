@@ -193,4 +193,25 @@ void main() {
     expect(server.encryptedToDeviceTo(_carol), 0);
     expect(carol.getRoom(room.identifier), isNull);
   });
+
+  test(
+      'the policy stays: a device its owner did not cross-sign, when they '
+      'set up cross-signing, gets no key; the log says how many were left '
+      'out, with no ids',
+      skip: vodozemacSkip, () async {
+    server.masterKeys[_bob] = 'B' * 43;
+    final room = await createEncryptedRoom();
+    await inviteAndJoin(room);
+    final logged = matrix.Logs().outputEvents.length;
+    final id = await send(room, 'Not for an unsigned device');
+    expect(await decryptedOn(bob, room.identifier, id), isNull);
+    expect(server.encryptedToDeviceTo(_bob), 0);
+    final lines = [
+      for (final e in matrix.Logs().outputEvents.skip(logged)) e.title,
+    ].where((t) => t.contains('leaves out'));
+    expect(lines, [
+      "[KeyManager] The room key leaves out 1 device(s) of the room's "
+          'members: blocked, or not cross-signed by their owner',
+    ]);
+  });
 }

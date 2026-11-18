@@ -2906,6 +2906,13 @@ class Room {
     await client.userDeviceKeysLoading;
     final deviceKeys = <DeviceKeys>[];
     final users = await requestParticipants();
+    // Who just came in may have no device list yet: it is asked for // ROOSTER
+    // first, so the room key reaches their devices. // ROOSTER
+    await client.updateStaleUserDeviceKeys([ // ROOSTER
+      for (final user in users) // ROOSTER
+        if ([Membership.invite, Membership.join].contains(user.membership)) // ROOSTER
+          user.id, // ROOSTER
+    ]); // ROOSTER
     for (final user in users) {
       final userDeviceKeys = client.userDeviceKeys[user.id]?.deviceKeys.values;
       if ([Membership.invite, Membership.join].contains(user.membership) &&

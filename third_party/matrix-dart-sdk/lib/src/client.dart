@@ -3408,13 +3408,60 @@ class Client extends MatrixApi {
   /// instance and then updated on member changes or sync device changes.
   Set<String>? _trackedUserIds;
 
-  Future<void> updateUserDeviceKeys({Set<String>? additionalUsers}) async {
+  /// When [updateStaleUserDeviceKeys] last asked for a user's devices // ROOSTER
+  /// and the homeserver did not answer for them. // ROOSTER
+  final Map<String, DateTime> _unansweredKeyQueries = {}; // ROOSTER
+
+  /// Brings the device lists of [userIds] up to date before a room key // ROOSTER
+  /// goes out to them: those never queried, or marked outdated by a sync, // ROOSTER
+  /// are queried now, and the caller waits for the answer. A room key // ROOSTER
+  /// shared before it would leave out, for good, the devices of whoever // ROOSTER
+  /// just came in (the sync's own query runs after the sync that brought // ROOSTER
+  /// them, and nothing waits for it). Only those users are queried. One // ROOSTER
+  /// whose homeserver failed is not asked again at each send for 5 min, // ROOSTER
+  /// as in the sync's query, nor one left unanswered for 1 min. // ROOSTER
+  Future<void> updateStaleUserDeviceKeys(Iterable<String> userIds) async { // ROOSTER
+    bool stale(String userId) { // ROOSTER
+      if (_userDeviceKeys[userId]?.outdated == false) return false; // ROOSTER
+      final now = DateTime.now(); // ROOSTER
+      final failure = _keyQueryFailures[userId.domain]; // ROOSTER
+      if (failure != null && // ROOSTER
+          now.subtract(const Duration(minutes: 5)).isBefore(failure)) { // ROOSTER
+        return false; // ROOSTER
+      } // ROOSTER
+      final unanswered = _unansweredKeyQueries[userId]; // ROOSTER
+      return unanswered == null || // ROOSTER
+          now.subtract(const Duration(minutes: 1)).isAfter(unanswered); // ROOSTER
+    } // ROOSTER
+
+    final users = userIds.where(stale).toSet(); // ROOSTER
+    if (users.isEmpty || !isLogged()) return; // ROOSTER
+    await updateUserDeviceKeys( // ROOSTER
+      additionalUsers: users, // ROOSTER
+      onlyAdditionalUsers: true, // ROOSTER
+    ); // ROOSTER
+    for (final userId in users) { // ROOSTER
+      if (stale(userId)) { // ROOSTER
+        _unansweredKeyQueries[userId] = DateTime.now(); // ROOSTER
+      } else { // ROOSTER
+        _unansweredKeyQueries.remove(userId); // ROOSTER
+      } // ROOSTER
+    } // ROOSTER
+  } // ROOSTER
+
+  /// [onlyAdditionalUsers] queries [additionalUsers] alone, not the // ROOSTER
+  /// outdated lists of every tracked user, and drops no one. // ROOSTER
+  Future<void> updateUserDeviceKeys({ // ROOSTER
+    Set<String>? additionalUsers, // ROOSTER
+    bool onlyAdditionalUsers = false, // ROOSTER
+  }) async { // ROOSTER
     try {
       final database = this.database;
       if (!isLogged()) return;
       final dbActions = <Future<dynamic> Function()>[];
-      final trackedUserIds =
-          _trackedUserIds ??= await _getUserIdsInEncryptedRooms();
+      final trackedUserIds = onlyAdditionalUsers // ROOSTER
+          ? (_trackedUserIds ?? <String>{}) // ROOSTER
+          : _trackedUserIds ??= await _getUserIdsInEncryptedRooms(); // ROOSTER
       if (!isLogged()) {
         // For the case we get logged out while `_getUserIdsInEncryptedRooms()`
         // was already started.
@@ -3425,15 +3472,19 @@ class Client extends MatrixApi {
       if (additionalUsers != null) trackedUserIds.addAll(additionalUsers);
 
       // Remove all userIds we no longer need to track the devices of.
-      _userDeviceKeys
-          .removeWhere((String userId, v) => !trackedUserIds.contains(userId));
+      if (!onlyAdditionalUsers) { // ROOSTER
+        _userDeviceKeys.removeWhere( // ROOSTER
+          (String userId, v) => !trackedUserIds.contains(userId), // ROOSTER
+        ); // ROOSTER
+      } // ROOSTER
 
       // Check if there are outdated device key lists. Add it to the set.
       final outdatedLists = <String, List<String>>{};
       for (final userId in (additionalUsers ?? <String>[])) {
         outdatedLists[userId] = [];
       }
-      for (final userId in trackedUserIds) {
+      // The tracked lists are the sync's own query's to update. // ROOSTER
+      for (final userId in onlyAdditionalUsers ? <String>{} : trackedUserIds) { // ROOSTER
         final deviceKeysList =
             _userDeviceKeys[userId] ??= DeviceKeysList(userId, this);
         final failure = _keyQueryFailures[userId.domain];
@@ -3464,7 +3515,10 @@ class Client extends MatrixApi {
             final userKeys =
                 _userDeviceKeys[userId] ??= DeviceKeysList(userId, this);
             final oldKeys = Map<String, DeviceKeys>.from(userKeys.deviceKeys);
-            userKeys.deviceKeys = {};
+            // The new list goes in place whole, once made: a room key // ROOSTER
+            // shared meanwhile (two queries can run at once) never sees a // ROOSTER
+            // list half made. // ROOSTER
+            final newKeys = <String, DeviceKeys>{}; // ROOSTER
             for (final rawDeviceKeyEntry
                 in rawDeviceKeyListEntry.value.entries) {
               final deviceId = rawDeviceKeyEntry.key;
@@ -3528,7 +3582,7 @@ class Client extends MatrixApi {
                     entry.blocked = oldKey.blocked;
                     entry.validSignatures = oldKey.validSignatures;
                   }
-                  userKeys.deviceKeys[deviceId] = entry;
+                  newKeys[deviceId] = entry; // ROOSTER
                   if (deviceId == deviceID &&
                       entry.ed25519Key == fingerprintKey) {
                     // Always trust the own device
@@ -3548,7 +3602,7 @@ class Client extends MatrixApi {
                   // This shouldn't ever happen. The same device ID has gotten
                   // a new public key. So we ignore the update. TODO: ask krille
                   // if we should instead use the new key with unknown verified / blocked status
-                  userKeys.deviceKeys[deviceId] = oldKeys[deviceId]!;
+                  newKeys[deviceId] = oldKeys[deviceId]!; // ROOSTER
                 }
               } else {
                 Logs().w('Invalid device ${entry.userId}:${entry.deviceId}');
@@ -3557,12 +3611,13 @@ class Client extends MatrixApi {
             // delete old/unused entries
             for (final oldDeviceKeyEntry in oldKeys.entries) {
               final deviceId = oldDeviceKeyEntry.key;
-              if (!userKeys.deviceKeys.containsKey(deviceId)) {
+              if (!newKeys.containsKey(deviceId)) { // ROOSTER
                 // we need to remove an old key
                 dbActions
                     .add(() => database.removeUserDeviceKey(userId, deviceId));
               }
             }
+            userKeys.deviceKeys = newKeys; // ROOSTER
             userKeys.outdated = false;
             dbActions
                 .add(() => database.storeUserDeviceKeysInfo(userId, false));

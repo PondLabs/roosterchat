@@ -44,6 +44,10 @@ class FakeHomeserver {
   /// in one sync.
   final Set<String> holdSync = {};
 
+  /// The cross-signing master key of these users, by its public key: a
+  /// user who set up cross-signing. Their devices are signed by none.
+  final Map<String, String> masterKeys = {};
+
   /// A transport for every client of this server: it tells accounts apart
   /// by their access token.
   late final http.Client transport = _Transport(this);
@@ -239,6 +243,15 @@ class FakeHomeserver {
             for (final d in (_devices[userId]?.values ?? const <_Device>[]))
               if (d.keys != null) d.deviceId: d.keys,
           },
+      },
+      'master_keys': {
+        for (final userId in asked.keys)
+          if (masterKeys[userId] case final key?)
+            userId: {
+              'user_id': userId,
+              'usage': ['master'],
+              'keys': {'ed25519:$key': key},
+            },
       },
       'failures': {},
     };
