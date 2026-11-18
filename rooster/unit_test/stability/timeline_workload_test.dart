@@ -90,7 +90,7 @@ Future<Map<String, Object?>> runTimelineWorkload(WidgetTester tester,
   } finally {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.binding.setSurfaceSize(null);
-    await tester.runAsync(() => client.close());
+    await _closeClient(tester, client);
   }
   return {
     'metric': memoryMetric,
@@ -99,6 +99,25 @@ Future<Map<String, Object?>> runTimelineWorkload(WidgetTester tester,
     'display_geometry': displayGeometry,
     'after_cycle_bytes': samples,
   };
+}
+
+/// Closes [client], which was created in the test's fake async zone.
+///
+/// `MatrixClient.close` first awaits a future of the real zone (the cancel
+/// of the speed log's sync subscription) and then the SDK's futures, which
+/// belong to the fake zone the client was created in. Run whole inside
+/// `runAsync`, that second half waits on fake microtasks, which the binding
+/// only flushes after `runAsync` returns, and the test never ends. Each turn
+/// here gives the real zone a moment, after which the binding flushes the
+/// fake microtasks, until the client is closed.
+Future<void> _closeClient(WidgetTester tester, MatrixClient client) async {
+  var closed = false;
+  final closing = client.close().whenComplete(() => closed = true);
+  for (var turn = 0; !closed; turn++) {
+    if (turn == 50) fail('MatrixClient.close() did not finish in 50 turns');
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+  }
+  await closing;
 }
 
 Future<void> prepareWorkload() async {

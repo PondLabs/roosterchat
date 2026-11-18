@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:js_interop';
 
+import 'package:rooster/client/matrix/media/browser_files_web.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/utils/clipboard/pasted_file.dart';
 import 'package:web/web.dart' as web;
@@ -8,6 +9,8 @@ import 'package:web/web.dart' as web;
 void Function() listenForPastedFiles({
   required bool Function() accept,
   required void Function(List<PastedFile> files) onFiles,
+  int? Function()? maxBytes,
+  void Function(int bytes, int maxBytes)? onRefused,
 }) {
   void onPaste(web.ClipboardEvent event) {
     final clipboard = event.clipboardData;
@@ -19,8 +22,13 @@ void Function() listenForPastedFiles({
     ];
     if (files.isEmpty) return;
     event.preventDefault();
-    unawaited(_read(files).then(onFiles).catchError((Object e, StackTrace s) =>
-        Log.onError(e, s, content: "Could not read a pasted file")));
+    unawaited(
+        readPastedFiles(files, maxBytes: maxBytes?.call(), onRefused: onRefused)
+            .then((read) {
+      if (read.isNotEmpty) onFiles(read);
+    }).catchError((Object e, StackTrace s) {
+      Log.onError(e, s, content: "Could not read a pasted file");
+    }));
   }
 
   final listener = onPaste.toJS;
@@ -28,9 +36,28 @@ void Function() listenForPastedFiles({
   return () => web.document.removeEventListener("paste", listener);
 }
 
-Future<List<PastedFile>> _read(List<web.File> files) async => [
-      for (final file in files)
-        PastedFile((await file.arrayBuffer().toDart).toDart.asUint8List(),
-            name: file.name.isEmpty ? null : file.name,
-            mimeType: file.type.isEmpty ? null : file.type),
-    ];
+/// Each of [files] within [maxBytes], read into memory, or a large one
+/// that is not a picture left in the browser's `File`
+/// ([browserFileAttachment]): each one over the limit goes to [onRefused]
+/// by its `File.size`, before anything reads it.
+Future<List<PastedFile>> readPastedFiles(
+  List<web.File> files, {
+  int? maxBytes,
+  void Function(int bytes, int maxBytes)? onRefused,
+}) async {
+  final read = <PastedFile>[];
+  for (final file in files) {
+    if (!pastedFileFits(file.size, maxBytes)) {
+      onRefused?.call(file.size, maxBytes!);
+      continue;
+    }
+    final attachment = await browserFileAttachment(file,
+        name: file.name.isEmpty ? null : file.name,
+        mimeType: file.type.isEmpty ? null : file.type);
+    read.add(PastedFile(attachment.data,
+        name: attachment.name,
+        mimeType: attachment.mimeType,
+        source: attachment.source));
+  }
+  return read;
+}

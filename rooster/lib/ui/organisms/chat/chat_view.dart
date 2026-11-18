@@ -8,6 +8,7 @@ import 'package:rooster/ui/molecules/message_input.dart';
 import 'package:rooster/ui/molecules/room_timeline_widget/room_timeline_widget.dart';
 import 'package:rooster/ui/molecules/typing_indicators_widget.dart';
 import 'package:rooster/ui/organisms/chat/chat.dart';
+import 'package:rooster/ui/organisms/chat/pending_attachments.dart';
 import 'package:rooster/ui/organisms/particle_player/particle_player.dart';
 import 'package:rooster/utils/autofill_utils.dart';
 import 'package:rooster/utils/event_bus.dart';
@@ -50,6 +51,9 @@ class ChatView extends StatelessWidget {
         fit: StackFit.expand,
         children: [timeline(), const ParticlePlayer()],
       )),
+      // Files just sent, until the room's own pending events show them.
+      PendingAttachmentsView(
+          roomKey: state.room.localId, threadId: state.threadId),
       input(context),
     ]);
   }
@@ -117,10 +121,10 @@ class ChatView extends StatelessWidget {
               message = processedText;
             }
           }
-          state.sendMessage(message, overrideClient: overrideClient);
-          return MessageInputSendResult.success;
+          return state.sendMessage(message, overrideClient: overrideClient);
         },
         onTextUpdated: state.onInputTextUpdated,
+        onInputStarted: state.onInputStarted,
         addAttachment: state.addAttachment,
         removeAttachment: state.removeAttachment,
         size: MediaQuery.sizeOf(context).mobile ? 40 : 35,
@@ -136,10 +140,7 @@ class ChatView extends StatelessWidget {
         sendSticker: state.sendSticker,
         sendGif: state.sendGif,
         sendFavoriteGif: state.sendFavoriteGif,
-        findOverrideClient: (input) => state.room.client
-            .getComponent<AccountSwitchPrefix>()
-            ?.getPrefixedAccount(input, state.room)
-            ?.$1,
+        findOverrideClient: state.findSenderOverride,
         onTapOverrideClient: (overrideClient) {
           EventBus.doOpenRoom(state.room.identifier,
               clientId: overrideClient.identifier);

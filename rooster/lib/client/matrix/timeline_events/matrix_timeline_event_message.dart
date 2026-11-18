@@ -7,6 +7,8 @@ import 'package:rooster/client/matrix/matrix_mxc_file_provider.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/matrix/matrix_room_permissions.dart';
+import 'package:rooster/client/matrix/media/interrupted_photo_uploads.dart';
+import 'package:rooster/client/matrix/media/matrix_file_send.dart';
 import 'package:rooster/client/matrix/matrix_timeline.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event_mixin_reactions.dart';
@@ -35,14 +37,22 @@ class MatrixTimelineEventMessage extends MatrixTimelineEvent
   @override
   late List<Attachment>? attachments;
 
+  /// The event is a file still being sent from this device, shown from
+  /// its own bytes ([localPendingAttachment]).
+  bool _localFile = false;
+
   @override
   bool get editable => true;
 
-  /// The SDK's text for a deleted message is the English "Redacted".
+  /// The SDK's text for a deleted message is the English "Redacted". The
+  /// failed message left for a photo the app's closing cut short says so
+  /// in the app's language (its stored body is English).
   @override
   String? get body => event.redacted
       ? MatrixTimelineEvent.messageTimelineRedactedBody
-      : event.plaintextBody;
+      : isInterruptedPhotoMessage(event)
+          ? labelPhotoUploadInterrupted
+          : event.plaintextBody;
 
   String get formattedBody =>
       event.formattedText != "" ? event.formattedText : event.plaintextBody;
@@ -55,7 +65,9 @@ class MatrixTimelineEventMessage extends MatrixTimelineEvent
   @override
   String get plainTextBody => event.redacted
       ? MatrixTimelineEvent.messageTimelineRedactedBody
-      : event.plaintextBody;
+      : isInterruptedPhotoMessage(event)
+          ? labelPhotoUploadInterrupted
+          : event.plaintextBody;
 
   String _getPlaintextBody({Timeline? timeline}) {
     var e = getDisplayEvent(timeline);
@@ -64,7 +76,8 @@ class MatrixTimelineEventMessage extends MatrixTimelineEvent
       var file = e.content["file"] is Map<String, dynamic>
           ? e.content['file'] as Map<String, dynamic>
           : null;
-      if (e.content.containsKey("url") == false &&
+      if (!_localFile &&
+          e.content.containsKey("url") == false &&
           (file?.containsKey("url") != true)) {
         return e.plaintextBody;
       }
@@ -148,6 +161,15 @@ class MatrixTimelineEventMessage extends MatrixTimelineEvent
   }
 
   List<Attachment>? _parseAnyAttachments() {
+    // Still being sent from here: the picture (or the video's poster) from
+    // the bytes already held, before the upload and while it runs, not a
+    // file name and not a download.
+    final local = localPendingAttachment(event);
+    if (local != null) {
+      _localFile = true;
+      return [local];
+    }
+
     String filename = event.content.containsKey("filename")
         ? event.content["filename"] as String
         : event.body;
@@ -159,10 +181,14 @@ class MatrixTimelineEventMessage extends MatrixTimelineEvent
       Attachment? attachment;
 
       if (Mime.imageTypes.contains(event.attachmentMimetype)) {
+        // A large still picture without the sender's thumbnail: the
+        // homeserver's, and the whole file when opened.
+        final serverThumbnail = MatrixMxcImage.asksServerThumbnail(event);
         attachment = ImageAttachment(
             MatrixMxcImage(event.attachmentMxcUrl!, mx,
                 blurhash: event.attachmentBlurhash,
-                doThumbnail: event.hasThumbnail,
+                doThumbnail: event.hasThumbnail || serverThumbnail,
+                serverThumbnail: serverThumbnail,
                 doFullres: true,
                 thumbnailHeight: event.thumbnailHeight != null
                     ? min(700, event.thumbnailHeight!.toInt())
@@ -173,7 +199,7 @@ class MatrixTimelineEventMessage extends MatrixTimelineEvent
                         ? min(1440, event.attachmentHeight!.toInt())
                         : 1440)
                     : null,
-                autoLoadFullRes: !event.hasThumbnail,
+                autoLoadFullRes: !event.hasThumbnail && !serverThumbnail,
                 matrixEvent: event),
             MxcFileProvider(mx, event.attachmentMxcUrl!, event: event),
             mimeType: event.attachmentMimetype,

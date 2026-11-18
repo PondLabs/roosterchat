@@ -6,6 +6,9 @@ import 'package:rooster/client/components/gif/gif_component.dart';
 import 'package:rooster/client/components/threads/thread_component.dart';
 import 'package:rooster/client/components/url_preview/url_preview_component.dart';
 import 'package:rooster/client/components/user_color/user_color_component.dart';
+import 'package:rooster/client/matrix/media/async_photo_send.dart';
+import 'package:rooster/client/matrix/media/interrupted_photo_uploads.dart';
+import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event.dart';
 import 'package:rooster/client/timeline_events/timeline_event.dart';
 import 'package:rooster/client/timeline_events/timeline_event_encrypted.dart';
 import 'package:rooster/client/timeline_events/timeline_event_feature_reactions.dart';
@@ -16,12 +19,14 @@ import 'package:rooster/client/timeline_events/timeline_event_unknown.dart';
 import 'package:rooster/config/platform_utils.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/molecules/read_indicator.dart';
+import 'package:rooster/ui/molecules/timeline_events/events/pending_attachment_status.dart';
 import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_attachments.dart';
 import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_reactions.dart';
 import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_reply.dart';
 import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_sticker.dart';
 import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_thread.dart';
 import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_url_previews.dart';
+import 'package:rooster/ui/molecules/timeline_events/events/undecrypted_message_line.dart';
 import 'package:rooster/ui/molecules/timeline_events/layouts/timeline_event_layout_message.dart';
 import 'package:rooster/ui/molecules/timeline_events/timeline_event_layout.dart';
 import 'package:rooster/ui/molecules/user_list.dart';
@@ -31,7 +36,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' as intl;
 
 import 'package:intl/intl.dart';
-import 'package:tiamat/tiamat.dart' as tiamat;
 
 class TimelineEventViewMessage extends StatefulWidget {
   const TimelineEventViewMessage(
@@ -182,10 +186,12 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
         return child;
       },
       attachments: attachments != null
-          ? TimelineEventViewAttachments(
-              attachments: attachments!,
-              previewMedia: widget.previewMedia,
-            )
+          ? withPendingStatus(
+              TimelineEventViewAttachments(
+                attachments: attachments!,
+                previewMedia: widget.previewMedia,
+              ),
+              room)
           : null,
       readReceipts: room != null
           ? ReadIndicator(
@@ -239,12 +245,32 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
   @override
   void didUpdateWidget(covariant TimelineEventViewMessage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Above the "New messages" line, which moves, a message names its
-    // sender.
-    if (oldWidget.overrideShowSender != widget.overrideShowSender &&
-        widget.timeline != null) {
-      showSender = shouldShowSender(index);
-    }
+    // The timeline builds this message again whenever the messages around
+    // it change (one in or out, the "New messages" line moving): the
+    // header follows the message before it now.
+    if (widget.timeline != null) followNeighbour();
+  }
+
+  /// Moves [index] to where this message is now and works its header out
+  /// against the message before it there. [index] is where the message
+  /// was when last loaded, and every message in below it since has pushed
+  /// it up: reading the header there read another message's, which drew
+  /// someone else's messages under ours without their name.
+  ///
+  /// A message not found under its id (a local echo whose event just
+  /// replaced it) is left as it is: [update] loads it.
+  void followNeighbour() {
+    final events = widget.timeline!.events;
+    bool isHere(int i) =>
+        i >= 0 && i < events.length && events[i].eventId == eventId;
+
+    var at = widget.initialIndex;
+    if (!isHere(at)) at = index;
+    if (!isHere(at)) at = events.indexWhere((e) => e.eventId == eventId);
+    if (at == -1) return;
+
+    index = at;
+    showSender = shouldShowSender(at);
   }
 
   @override
@@ -269,6 +295,11 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
   }
 
   void loadStateFromEvent(TimelineEvent event) {
+    // A message decrypted once its room key came keeps its display id: its
+    // content is built again all the same, in place of "Failed to decrypt
+    // event".
+    final decryptedNow = this.event is TimelineEventEncrypted &&
+        event is! TimelineEventEncrypted;
     this.event = event;
     showSender = shouldShowSender(index);
     var room = widget.room ?? widget.timeline?.room;
@@ -277,7 +308,7 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
 
     if (widget.timeline != null) {
       var did = widget.timeline!.getDisplayId(event);
-      if (did == displayId) {
+      if (did == displayId && !decryptedNow) {
         didContentChange = false;
       }
       displayId = did;
@@ -332,7 +363,8 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
     mentionsSelf = event.mentionsSelf || isReplyToSelf(event);
 
     if (event is TimelineEventEncrypted) {
-      formattedContent = tiamat.Text.error(messageFailedToDecrypt);
+      formattedContent = UndecryptedMessageLine(
+          client: room.client, failedText: messageFailedToDecrypt);
     }
 
     if (event is! TimelineEventMessage) {
@@ -341,6 +373,14 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
 
     if (didContentChange) {
       var content = event.buildFormattedContent(timeline: widget.timeline);
+      // The failed message left for a photo whose upload the app's closing
+      // cut short says so in the reader's language.
+      final Object shown = event;
+      if (shown is MatrixTimelineEvent &&
+          isInterruptedPhotoMessage(shown.event)) {
+        content = Text(labelPhotoUploadInterrupted,
+            key: const ValueKey("interrupted-photo-upload"));
+      }
 
       if (content == null) {
         formattedContent = null;
@@ -360,6 +400,48 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
                 true
             : previewComponent?.shouldGetPreviewsInRoom(room) == true) &&
         event.getLinks(timeline: timeline)?.isEmpty == false;
+  }
+
+  /// [attachments] with the stage and time of the file under them while
+  /// it is being sent from this device (see `AttachmentSend`).
+  ///
+  /// A photo sent before its upload (`async_photo_send.dart`) keeps the
+  /// line under its sent message until the photo is up, with "Cancel
+  /// send"; its failed message, left after a failure, shows it failed.
+  Widget withPendingStatus(Widget attachments, Room? room) {
+    final event = this.event;
+    if (room == null || event == null) return attachments;
+    final mx = event is MatrixTimelineEvent ? event.event : null;
+    final photo = mx == null ? null : asyncPhotoSendOfEvent(mx);
+    if (event.status != TimelineEventStatus.sending &&
+        event.status != TimelineEventStatus.error) {
+      if (mx == null || (photo == null && !isPhotoLeftInRoom(mx))) {
+        return attachments;
+      }
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          attachments,
+          SentPhotoStatus(
+            changes: photo ?? const AlwaysStoppedAnimation(0),
+            uploading: () =>
+                photo != null && photo.uploading ? photo.send : null,
+            leftInRoom: () => isPhotoLeftInRoom(mx),
+            onCancel: () => room.cancelSend(event),
+          ),
+        ],
+      );
+    }
+    final send =
+        AttachmentSends.instance.byTransaction(room.localId, event.eventId) ??
+            photo?.send;
+    if (send == null) return attachments;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [attachments, PendingAttachmentStatus(send)],
+    );
   }
 
   /// A reply to one of our messages, which Discord highlights since it

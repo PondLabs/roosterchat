@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/threads/thread_component.dart';
 import 'package:rooster/client/components/url_preview/url_preview_component.dart';
@@ -148,6 +149,11 @@ class MatrixThreadTimeline implements Timeline {
     for (var sub in subs) {
       sub.cancel();
     }
+    // Closed: the chat's slots show its files again.
+    for (final send in _shownSends) {
+      send.notShownInThreadList(this);
+    }
+    _shownSends.clear();
   }
 
   @override
@@ -274,52 +280,87 @@ class MatrixThreadTimeline implements Timeline {
       return;
     }
 
-    if (index == 0) {
-      events.insert(0, event);
-      onEventAdded.add(0);
-    } else {
+    _insert(index, event);
+  }
+
+  /// Puts [event], at [mainIndex] in the room's timeline, where it goes in
+  /// this thread's.
+  void _insert(int mainIndex, TimelineEvent event) {
+    var newIndex = 0;
+    if (mainIndex != 0) {
       // Theres gotta be a smarter way of doing this but whatever
       var copy = List<TimelineEvent>.from(mainRoomTimeline.events);
       copy.removeWhere((element) => !isEventInThisThread(element));
-
-      var newIndex = copy.indexOf(event);
-      events.insert(newIndex, event);
-      onEventAdded.add(newIndex);
+      newIndex = copy.indexOf(event);
     }
+    events.insert(newIndex, event);
+    _showsSend(event);
+    onEventAdded.add(newIndex);
+  }
+
+  /// Where [event] is in this thread's list: by its id, or by its
+  /// transaction id while it is listed as the pending event it was.
+  int _indexOf(TimelineEvent event) {
+    final index = events.indexWhere((e) => e.eventId == event.eventId);
+    if (index != -1) return index;
+    final txid = _transactionOf(event);
+    return events.indexWhere((e) => e.eventId == txid);
   }
 
   void onMainTimelineEventChanged(int index) {
     var event = mainRoomTimeline.events[index];
-    if (isEventInThisThread(event)) {
-      var originalIndex =
-          events.indexWhere((element) => element.eventId == event.eventId);
-
-      var finalIndex = originalIndex;
-
-      if (finalIndex == -1) {
-        finalIndex = 0;
-      }
-
-      events[finalIndex] = event;
-      if (originalIndex != -1) {
-        onChange.add(finalIndex);
-      }
+    if (!isEventInThisThread(event)) return;
+    final at = _indexOf(event);
+    if (at == -1) {
+      // It joined the thread now: a file's pending event gets its relation
+      // once uploaded. It goes where it belongs; it never takes the place
+      // of another event (or of none, in an empty list).
+      _insert(index, event);
+      return;
     }
+    events[at] = event;
+    _showsSend(event);
+    onChange.add(at);
   }
 
   void onMainTimelineEventRemoved(int index) {
     var event = mainRoomTimeline.events[index];
     if (isEventInThisThread(event)) {
-      var index =
-          events.indexWhere((element) => element.eventId == event.eventId);
+      var index = _indexOf(event);
+      if (index == -1) return;
 
       events.removeAt(index);
-
-      if (index != -1) {
-        onRemove.add(index);
-      }
+      _stopsShowingSend(event);
+      onRemove.add(index);
     }
   }
+
+  /// The files sent from this thread's chat whose pending event this list
+  /// shows: the chat's own slot for each gives way to it, so a file is
+  /// never shown twice.
+  final Set<AttachmentSend> _shownSends = {};
+
+  AttachmentSend? _sendOf(TimelineEvent event) {
+    final send = AttachmentSends.instance
+        .byTransaction(room.localId, _transactionOf(event));
+    return send?.threadId == threadRootId ? send : null;
+  }
+
+  void _showsSend(TimelineEvent event) {
+    final send = _sendOf(event);
+    if (send != null && _shownSends.add(send)) send.shownInThreadList(this);
+  }
+
+  void _stopsShowingSend(TimelineEvent event) {
+    final send = _sendOf(event);
+    if (send != null && _shownSends.remove(send)) {
+      send.notShownInThreadList(this);
+    }
+  }
+
+  static String _transactionOf(TimelineEvent event) =>
+      (event is MatrixTimelineEvent ? event.event.transactionId : null) ??
+      event.eventId;
 
   @override
   bool isEventRedacted(TimelineEvent<Client> event) {

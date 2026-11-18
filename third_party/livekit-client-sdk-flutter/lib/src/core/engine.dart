@@ -129,6 +129,20 @@ class Engine extends Disposable with EventsEmittable<EngineEvent> {
 
   bool _isClosed = false;
 
+  // ROOSTER: told when each step of [connect] is done, for the app's own
+  // ROOSTER: timings. It only reports: nothing waits for it, and what it
+  // ROOSTER: throws is dropped.
+  void Function(ConnectStep step)? onConnectStep; // ROOSTER
+
+  // ROOSTER: see [onConnectStep].
+  void _reportConnectStep(ConnectStep step) { // ROOSTER
+    try { // ROOSTER
+      onConnectStep?.call(step); // ROOSTER
+    } catch (e) { // ROOSTER
+      logger.warning('onConnectStep threw: $e'); // ROOSTER
+    } // ROOSTER
+  } // ROOSTER
+
   bool get isClosed => _isClosed;
 
   bool get isPendingReconnect => reconnectStart != null && reconnectTimeout != null;
@@ -232,6 +246,7 @@ class Engine extends Disposable with EventsEmittable<EngineEvent> {
     FastConnectOptions? fastConnectOptions,
     RegionUrlProvider? regionUrlProvider,
   }) async {
+    _reportConnectStep(ConnectStep.started); // ROOSTER
     this.url = url;
     this.token = token;
     // update new options (if exists)
@@ -254,6 +269,7 @@ class Engine extends Disposable with EventsEmittable<EngineEvent> {
         connectOptions: this.connectOptions,
         roomOptions: this.roomOptions,
       );
+      _reportConnectStep(ConnectStep.signalConnected); // ROOSTER
 
       // wait for join response
       await events.waitFor<EngineJoinResponseEvent>(
@@ -261,6 +277,7 @@ class Engine extends Disposable with EventsEmittable<EngineEvent> {
         onTimeout: () => throw ConnectException('Timed out waiting for SignalJoinResponseEvent',
             reason: ConnectionErrorReason.Timeout),
       );
+      _reportConnectStep(ConnectStep.joinResponse); // ROOSTER
 
       logger.fine('Waiting for engine to connect...');
 
@@ -271,6 +288,7 @@ class Engine extends Disposable with EventsEmittable<EngineEvent> {
         onTimeout: () => throw MediaConnectException(
             'Timed out waiting for PeerConnection to connect, please check your network for ice connectivity'),
       );
+      _reportConnectStep(ConnectStep.primaryConnected); // ROOSTER
       events.emit(const EngineConnectedEvent());
     } catch (error) {
       logger.fine('Connect Error $error');

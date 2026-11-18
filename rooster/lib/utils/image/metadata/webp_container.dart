@@ -1,0 +1,192 @@
+import 'dart:math';
+import 'dart:typed_data';
+
+import 'package:rooster/utils/image/metadata/exif_orientation.dart';
+import 'package:rooster/utils/image/metadata/image_container.dart';
+
+/// A WebP read as its RIFF chunks, up to the length the RIFF header gives.
+///
+/// Kept by [withoutMetadata]: VP8, VP8L, VP8X (its EXIF and XMP flags
+/// corrected), ALPH, ANIM, ANMF (with only its ALPH, VP8 and VP8L inside)
+/// and ICCP, so an animation stays one. Every other chunk goes (EXIF, XMP,
+/// unknown chunks), and so does anything after the RIFF length.
+class WebpContainer implements ImageContainer {
+  WebpContainer._(this._chunks,
+      {required this.orientation, required bool exifPrefixed})
+      : _exifPrefixed = exifPrefixed;
+
+  /// Whether the original EXIF had the `Exif\0\0` prefix.
+  final bool _exifPrefixed;
+
+  /// The chunks to keep, each with its header and its padding byte when
+  /// the original had one.
+  final List<Uint8List> _chunks;
+
+  @override
+  final int orientation;
+
+  @override
+  String get mimeType => "image/webp";
+
+  static const _keep = {
+    "VP8 ", "VP8L", "VP8X", "ALPH", "ANIM", "ANMF", "ICCP", //
+  };
+
+  /// What an ANMF holds after its 16-byte header: the frame's image data.
+  static const _keepInFrame = {"ALPH", "VP8 ", "VP8L"};
+
+  /// Chunks the engine reads as the file's own when they follow a frame's
+  /// image data inside its ANMF: an EXIF there sets the orientation, an
+  /// ANMF adds a frame. Taking them out would change the picture, so a
+  /// file with one does not parse and goes to the fallback.
+  static const _readByEngineInFrame = {"EXIF", "ANMF"};
+
+  static const _flagExif = 0x08;
+  static const _flagXmp = 0x04;
+
+  static bool matches(Uint8List bytes) =>
+      bytes.length >= 12 &&
+      String.fromCharCodes(bytes, 0, 4) == "RIFF" &&
+      String.fromCharCodes(bytes, 8, 12) == "WEBP";
+
+  /// Parses [bytes], or returns null when they are not a complete WebP: the
+  /// RIFF length runs past the end, a chunk runs past the RIFF length (or a
+  /// chunk inside an ANMF past the ANMF), an ANMF holds an EXIF or an ANMF
+  /// (the engine reads them; see [_frame]), the first chunk is not VP8, VP8L
+  /// or VP8X, or an extended (VP8X) file's last chunk has no padding byte,
+  /// which its rewrite could have to add, one byte more than the original.
+  static WebpContainer? parse(Uint8List bytes) {
+    if (!matches(bytes)) return null;
+    final data = ByteData.sublistView(bytes);
+    final riffEnd = 8 + data.getUint32(4, Endian.little);
+    if (riffEnd > bytes.length || riffEnd < 12) return null;
+
+    final chunks = <Uint8List>[];
+    int? orientation;
+    var exifPrefixed = false;
+    var extended = false;
+    var pos = 12;
+    while (pos < riffEnd) {
+      if (pos + 8 > riffEnd) return null;
+      final type = String.fromCharCodes(bytes, pos, pos + 4);
+      final size = data.getUint32(pos + 4, Endian.little);
+      final end = pos + 8 + size + (size & 1);
+      // The last chunk's padding byte is sometimes left out: only a simple
+      // (VP8 or VP8L) file gets away with it, as nothing is added to one.
+      if (pos + 8 + size > riffEnd) return null;
+      if (chunks.isEmpty) {
+        if (type == "VP8X") {
+          if (size < 10) return null;
+          extended = true;
+        } else if (type != "VP8 " && type != "VP8L") {
+          return null;
+        }
+      }
+      if (extended && end > riffEnd) return null;
+
+      if (type == "ANMF") {
+        final frame = _frame(bytes, pos, pos + 8 + size, min(end, riffEnd));
+        if (frame == null) return null;
+        chunks.add(frame);
+      } else if (_keep.contains(type)) {
+        chunks.add(Uint8List.sublistView(bytes, pos, min(end, riffEnd)));
+      } else if (type == "EXIF" && extended && orientation == null) {
+        final exif = Uint8List.sublistView(bytes, pos + 8, pos + 8 + size);
+        orientation = readExifOrientation(exif);
+        // An IFD0 cut short: the minimal EXIF could outgrow it.
+        if (orientation == null) return null;
+        exifPrefixed = hasExifPrefix(exif);
+      }
+      pos = end;
+    }
+    if (chunks.isEmpty) return null;
+
+    return WebpContainer._(chunks,
+        orientation: orientation ?? exifOrientationNormal,
+        exifPrefixed: exifPrefixed);
+  }
+
+  /// The ANMF chunk that runs from [start] to [end], and to [padded] with
+  /// its padding byte, with only its frame header and its ALPH, VP8 and
+  /// VP8L chunks: its size corrected and its padding byte added when a
+  /// chunk left. Null when it is shorter than its header, a chunk inside
+  /// runs past it, or it holds an EXIF or an ANMF.
+  static Uint8List? _frame(Uint8List bytes, int start, int end, int padded) {
+    const header = 8 + 16; // chunk header, then the frame's own header
+    if (end - start < header) return null;
+    final data = ByteData.sublistView(bytes);
+    final kept = <(int, int)>[];
+    var pos = start + header;
+    while (pos < end) {
+      if (pos + 8 > end) return null;
+      final size = data.getUint32(pos + 4, Endian.little);
+      if (pos + 8 + size > end) return null;
+      final next = pos + 8 + size + (size & 1);
+      final type = String.fromCharCodes(bytes, pos, pos + 4);
+      if (_keepInFrame.contains(type)) {
+        kept.add((pos, min(next, end)));
+      } else if (_readByEngineInFrame.contains(type)) {
+        return null;
+      }
+      pos = next;
+    }
+    final length = header + kept.fold<int>(0, (n, r) => n + r.$2 - r.$1);
+    if (length == end - start) {
+      return Uint8List.sublistView(bytes, start, padded);
+    }
+    final out = BytesBuilder(copy: false)
+      ..add(Uint8List.sublistView(bytes, start, start + header));
+    for (final (from, to) in kept) {
+      out.add(Uint8List.sublistView(bytes, from, to));
+    }
+    if (length.isOdd) out.addByte(0);
+    final frame = out.takeBytes();
+    ByteData.sublistView(frame).setUint32(4, length - 8, Endian.little);
+    return frame;
+  }
+
+  @override
+  Uint8List withoutMetadata() {
+    final exif = orientation == exifOrientationNormal
+        ? null
+        : minimalOrientationExif(orientation, prefixed: _exifPrefixed);
+    final out = BytesBuilder(copy: false)
+      ..add(const [0x52, 0x49, 0x46, 0x46]) // RIFF
+      ..add(const [0, 0, 0, 0]) // length, set below
+      ..add(const [0x57, 0x45, 0x42, 0x50]); // WEBP
+
+    for (var i = 0; i < _chunks.length; i++) {
+      final chunk = _chunks[i];
+      if (String.fromCharCodes(chunk, 0, 4) == "VP8X") {
+        final fixed = Uint8List.fromList(chunk);
+        var flags = fixed[8] & ~(_flagExif | _flagXmp);
+        if (exif != null) flags |= _flagExif;
+        fixed[8] = flags;
+        out.add(fixed);
+      } else {
+        out.add(chunk);
+        // Only a simple file's last chunk comes without its padding byte
+        // (see [parse]). Pad it only when another chunk follows, so the
+        // file never grows.
+        if (chunk.length.isOdd && (i < _chunks.length - 1 || exif != null)) {
+          out.addByte(0);
+        }
+      }
+    }
+    // EXIF comes after the image data in an extended file.
+    if (exif != null) {
+      final header = ByteData(8)
+        ..setUint8(0, 0x45) // E
+        ..setUint8(1, 0x58) // X
+        ..setUint8(2, 0x49) // I
+        ..setUint8(3, 0x46) // F
+        ..setUint32(4, exif.length, Endian.little);
+      out.add(header.buffer.asUint8List());
+      out.add(exif);
+    }
+
+    final result = out.takeBytes();
+    ByteData.sublistView(result).setUint32(4, result.length - 8, Endian.little);
+    return result;
+  }
+}

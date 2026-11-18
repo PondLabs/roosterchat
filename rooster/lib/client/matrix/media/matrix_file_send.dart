@@ -1,0 +1,255 @@
+/// Sends one file's event through the Matrix SDK and keeps its
+/// [AttachmentSend] up to date: the transaction id is ours, so the app
+/// knows which pending event is which, and the stages the SDK does not
+/// publish are read from its own pending event. Its uploads report to it
+/// through a zone value around the SDK's send ([runForUpload]), so it
+/// shows the real count and the wait for the server. A failure is caught
+/// here and shown on the message, never left as an unhandled error.
+library;
+
+import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:matrix/matrix.dart' as matrix;
+import 'package:rooster/cache/file_provider.dart';
+import 'package:rooster/client/attachment.dart';
+import 'package:rooster/client/matrix/matrix_attachment.dart';
+import 'package:rooster/client/matrix/media/own_media.dart';
+import 'package:rooster/debug/log.dart';
+import 'package:rooster/utils/mime.dart';
+import 'package:rooster/utils/network/upload_progress.dart';
+
+/// A file to send that the composer follows (its [send]).
+class TrackedMatrixAttachment extends MatrixProcessedAttachment {
+  TrackedMatrixAttachment(super.file, this.send, {super.thumbnailFile});
+
+  final AttachmentSend send;
+}
+
+/// Sends [attachment] in [room] under a new transaction id ([txid] when
+/// given: a photo whose mxcs could not be reserved, already shown under
+/// it). Never throws: the result is the event's id, or null when the file
+/// did not reach the room (its pending event then says so).
+Future<String?> sendMatrixFile(
+  matrix.Room room,
+  MatrixProcessedAttachment attachment, {
+  String? txid,
+  String? threadRootEventId,
+  String? threadLastEventId,
+  Map<String, dynamic>? extraContent,
+}) async {
+  final send = attachment is TrackedMatrixAttachment ? attachment.send : null;
+  txid ??= room.client.generateUniqueTransactionId();
+  if (send != null) {
+    final file = attachment.file;
+    final thumbnailBytes = attachment.thumbnailFile?.bytes.length;
+    send.trace?.handedOver(
+      bytes: file.size,
+      thumbnailBytes: thumbnailBytes,
+      width: file.info['w'] as int?,
+      height: file.info['h'] as int?,
+    );
+    // Encryption keeps the size (AES-CTR): these are the bytes uploaded.
+    send.handedOver(txid,
+        bytes: file.size, uploadBytes: file.size + (thumbnailBytes ?? 0));
+  }
+  return _follow(
+      room,
+      send,
+      txid,
+      () => room.sendFileEvent(attachment.file,
+          txid: txid,
+          threadLastEventId: threadLastEventId,
+          threadRootEventId: threadRootEventId,
+          extraContent: extraContent,
+          thumbnail: attachment.thumbnailFile));
+}
+
+/// "Retry" on [event], a file that failed, which [send] follows when it is
+/// known: its stage goes back to uploading, and the SDK sends it again
+/// (`Event.sendAgain`) under the same transaction id. Its parts that went
+/// up are not uploaded again, and when all did (the event has their
+/// address) only the event is sent. Never throws, like [sendMatrixFile].
+Future<String?> retryMatrixFile(matrix.Event event, AttachmentSend? send) {
+  if (send != null) {
+    send.retrying();
+    final kept = event.room.sendingFileUploads[event.eventId]?.values;
+    send.upload.partsKept(kept?.fold<int>(0, (sum, p) => sum + p.bytes) ?? 0);
+  }
+  return _follow(event.room, send, event.eventId, event.sendAgain);
+}
+
+/// Whether [event], a file message, can be sent again as it is: it has its
+/// upload's address, the encrypted file's `file` in an encrypted room. A
+/// `url` (an upload in the clear) counts only while the room does not
+/// encrypt files: once it does, the file must go up again, encrypted.
+bool isUploadedFileEvent(matrix.Event event) {
+  if (event.content['file'] is Map) return true;
+  final room = event.room;
+  return event.content['url'] is String &&
+      !(room.encrypted && room.client.fileEncryptionEnabled);
+}
+
+/// Runs [sendFile], the SDK's send of the file under [txid], keeping
+/// [send]'s stage: the SDK shows its pending event as soon as it has the
+/// file, and shows it again with the upload's address once uploaded,
+/// before the event is sent. Then its bytes go into the account's own
+/// media ([keepOwnMedia]), followed or not.
+Future<String?> _follow(matrix.Room room, AttachmentSend? send, String txid,
+    Future<String?> Function() sendFile) async {
+  var kept = false;
+  final pending = room.client.onTimelineEvent.stream.listen((event) {
+    if (event.roomId != room.id || event.eventId != txid) return;
+    send?.echo();
+    if (event.fileSendingStatus == matrix.FileSendingStatus.encrypting) {
+      send?.encryptingFile();
+    }
+    if (event.content['url'] is String || event.content['file'] is Map) {
+      send?.uploaded();
+      // Before the event is sent, so the timeline never asks for it.
+      if (!kept) unawaited(keepOwnMedia(room, event));
+      kept = true;
+    }
+  });
+
+  try {
+    final trace = send?.trace;
+    Future<String?> traced() => trace == null || trace.span.isFinished
+        ? sendFile()
+        : trace.run(sendFile);
+    final id =
+        await (send == null ? traced() : runForUpload(send.upload, traced));
+    if (id == null) {
+      // Cancelled by the user: timed as such, and gone from the chat.
+      if (room.isSendCancelled(txid))
+        send?.trace?.finish(ok: false, cancelled: true);
+      send?.failed();
+    } else {
+      send?.sent();
+      ownMediaSent(room.client, txid);
+    }
+    return id;
+  } catch (error, stack) {
+    // The upload or the event failed for good: the SDK marked its pending
+    // event as failed, and the message shows it, with when the server
+    // takes it again if it said, or that its file changed on disk.
+    if (error is matrix.FileSourceChangedException) send?.upload.fileChanged();
+    final retryAfterMs =
+        error is matrix.MatrixException ? error.retryAfterMs : null;
+    if (retryAfterMs != null) {
+      send?.upload.serverAskedToWait(room.client.sendClock
+          .now()
+          .add(Duration(milliseconds: retryAfterMs)));
+    }
+    Log.onError(error, stack, content: "Could not send a file");
+    send?.failed();
+    return null;
+  } finally {
+    await pending.cancel();
+  }
+}
+
+/// The file of [event] while it is still being sent from this device, as
+/// the SDK keeps it ([matrix.Room.sendingFilePlaceholders]): what a pending
+/// event shows instead of downloading anything. Null for any other event.
+Attachment? localPendingAttachment(matrix.Event event) {
+  if (!event.status.isSending && !event.status.isError) return null;
+  final room = event.room;
+  final file = room.sendingFilePlaceholders[event.eventId];
+  if (file == null) return null;
+  final mimeType = file.mimeType;
+  final name = file.name;
+  final width = (file.info['w'] as num?)?.toDouble();
+  final height = (file.info['h'] as num?)?.toDouble();
+  final source = file.source;
+  final FileProvider provider = source == null
+      ? MemoryFileProvider(file.bytes, name)
+      : SourceFileProvider(source, name);
+
+  if (Mime.imageTypes.contains(mimeType)) {
+    return ImageAttachment(localPicture(file.bytes), provider,
+        name: name,
+        mimeType: mimeType,
+        fileSize: file.size,
+        width: width,
+        height: height);
+  }
+  if (Mime.videoTypes.contains(mimeType)) {
+    final poster = room.sendingFileThumbnails[event.eventId];
+    return PendingVideoAttachment(provider,
+        poster: poster == null ? null : localPicture(poster.bytes),
+        name: name,
+        mimeType: mimeType,
+        fileSize: file.size,
+        width: width,
+        height: height);
+  }
+  return FileAttachment(provider,
+      name: name, mimeType: mimeType, fileSize: file.size);
+}
+
+/// A pending message's own file sent from disk, read from there when asked
+/// for: a copy is written piece by piece.
+class SourceFileProvider implements FileProvider {
+  SourceFileProvider(this.source, this.name);
+
+  final matrix.FileSendSource source;
+  final String name;
+
+  @override
+  String get fileIdentifier => "source:${identityHashCode(source)}";
+
+  @override
+  Future<Uri?> resolve() async => null;
+
+  @override
+  Future<void> save(String filepath) async {
+    final read = source.read();
+    try {
+      await read.bytes.pipe(File(filepath).openWrite());
+    } finally {
+      await read.close();
+    }
+  }
+
+  @override
+  Stream<DownloadProgress>? get onProgressChanged => null;
+
+  @override
+  Future<Uint8List?> getFileData() async {
+    final read = source.read();
+    try {
+      final bytes = BytesBuilder(copy: false);
+      await for (final piece in read.bytes) {
+        bytes.add(piece);
+      }
+      return bytes.takeBytes();
+    } finally {
+      await read.close();
+    }
+  }
+}
+
+/// A file held in memory: a pending message's own file.
+class MemoryFileProvider implements FileProvider {
+  MemoryFileProvider(this.bytes, this.name);
+
+  final Uint8List bytes;
+  final String name;
+
+  @override
+  String get fileIdentifier => "memory:${identityHashCode(bytes)}";
+
+  @override
+  Future<Uri?> resolve() async => null;
+
+  @override
+  Future<void> save(String filepath) => File(filepath).writeAsBytes(bytes);
+
+  @override
+  Stream<DownloadProgress>? get onProgressChanged => null;
+
+  @override
+  Future<Uint8List?> getFileData() async => bytes;
+}

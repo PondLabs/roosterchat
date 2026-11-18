@@ -3,9 +3,12 @@ import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:rooster/client/components/activities/activities_component.dart';
 import 'package:rooster/client/components/soundboard/entrance_sound.dart';
+import 'package:rooster/client/components/voip/audio_processing/audio_processing_manager.dart';
 import 'package:rooster/client/components/voip/media_capture_support.dart';
 import 'package:rooster/client/components/voip/voip_session.dart';
 import 'package:rooster/client/components/voip_room/voip_room_component.dart';
+import 'package:rooster/client/matrix/components/voip_room/call_join.dart';
+import 'package:rooster/client/matrix/components/voip_room/call_warm_up.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/live_media_indicator.dart';
@@ -15,8 +18,11 @@ import 'package:rooster/ui/layout/bento.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/organisms/call_view/call.dart';
 import 'package:rooster/ui/organisms/dj/vinyl_disc.dart';
+import 'package:rooster/ui/organisms/voip_room_view/warm_up_on_rest.dart';
 import 'package:rooster/utils/common_strings.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
@@ -69,6 +75,28 @@ class VoipRoomView extends StatefulWidget {
       desc: "Shown on the page of a voice channel that is end-to-end "
           "encrypted, where calls cannot be joined yet");
 
+  /// Runs when a voice channel's page opens. On the web it fetches and
+  /// test-runs the DSP's wasm, so the first call rarely waits for it (the
+  /// microphone does, for a few seconds at most); it is not fetched at
+  /// startup. It opens no microphone. Only tests replace it.
+  static void Function() prefetchVoiceDsp = _prefetchVoiceDsp;
+
+  /// Fetches what a join of [voip]'s call needs before the click: when the
+  /// page opens, and when the pointer or focus rests on Join (see
+  /// `CallWarmUp`). It opens no microphone and connects nothing. Only tests
+  /// replace it.
+  static void Function(VoipRoomComponent voip) warmUpCall = CallWarmUp.warm;
+
+  static void _prefetchVoiceDsp() {
+    if (!kIsWeb) return;
+    AudioProcessingManager.instance
+        .ensureReady()
+        .catchError((Object e, StackTrace s) {
+      Log.onError(e, s, content: "Voice: could not load the DSP");
+      return false;
+    });
+  }
+
   @override
   State<VoipRoomView> createState() => _VoipRoomViewState();
 }
@@ -120,6 +148,8 @@ class _VoipRoomViewState extends State<VoipRoomView> {
 
     fetchNewMembers();
     updateCallUrl();
+    VoipRoomView.prefetchVoiceDsp();
+    _warmUp();
     WidgetsBinding.instance.addPostFrameCallback((_) => _takeJoinRequest());
     widget.voip.clearStaleOwnMembership().catchError((e, s) {
       Log.onError(e, s);
@@ -144,6 +174,15 @@ class _VoipRoomViewState extends State<VoipRoomView> {
     }
   }
 
+  /// Only where Join is shown, and not while we are in this call.
+  void _warmUp() {
+    if (!supportsMediaCapture || !widget.voip.canJoinCall) return;
+    if (currentSession != null && currentSession!.state != VoipState.ended) {
+      return;
+    }
+    VoipRoomView.warmUpCall(widget.voip);
+  }
+
   void _takeJoinRequest() {
     if (!mounted) return;
     // Picks up "Join Without Entrance Sound" from the room's context menu
@@ -160,7 +199,9 @@ class _VoipRoomViewState extends State<VoipRoomView> {
 
   void updateCallUrl() {
     widget.voip.getCallServerUrl().then((url) {
-      if (mounted) print("Call url: ${url}");
+      // The page may have closed while the well-known was fetched.
+      if (!mounted) return;
+      print("Call url: ${url}");
       setState(() {
         callServerUrl = url;
       });
@@ -270,13 +311,16 @@ class _VoipRoomViewState extends State<VoipRoomView> {
                   VoipRoomView.messageVoiceNeedsSecurePage))
         else if (widget.voip.canJoinCall)
           Center(
-            child: tiamat.Button(
-              isLoading: joining,
-              text: CommonStrings.promptJoin,
-              // Shift+click joins without the entrance sound.
-              onTap: () => joinRoomCall(
-                  withoutEntranceSound:
-                      HardwareKeyboard.instance.isShiftPressed),
+            child: WarmUpOnRest(
+              onRest: _warmUp,
+              child: tiamat.Button(
+                isLoading: joining,
+                text: CommonStrings.promptJoin,
+                // Shift+click joins without the entrance sound.
+                onTap: () => joinRoomCall(
+                    withoutEntranceSound:
+                        HardwareKeyboard.instance.isShiftPressed),
+              ),
             ),
           )
         else
@@ -391,44 +435,107 @@ class _VoipRoomViewState extends State<VoipRoomView> {
   joinRoomCall({bool withoutEntranceSound = false}) async {
     // No capture on this origin (an http page): nothing to join with.
     if (!supportsMediaCapture) return;
-    final roomId = widget.voip.room.identifier;
+    // Kept: the join, and a failure's dialog, outlive this page.
+    final voip = widget.voip;
+    final roomId = voip.room.identifier;
     setState(() {
       joining = true;
     });
 
-    // For better UI feedback if program stutters while joining
-    await Future.delayed(Duration(milliseconds: 100));
+    // The spinner is drawn before the join's work starts.
+    await SchedulerBinding.instance.endOfFrame;
 
     if (withoutEntranceSound) EntranceSoundGate.instance.skipNextJoin(roomId);
 
+    // Goes on if the page closes meanwhile: someone who clicks Join and
+    // walks to a text channel still ends up in the call.
+    final join = voip.joinCall();
     try {
-      final session = await widget.voip.joinCall();
+      final session = await join;
       if (session == null && withoutEntranceSound) {
         EntranceSoundGate.instance.cancelSkip(roomId);
       }
 
-      if (session != null) {
+      if (session != null && mounted) {
         setState(() {
           currentSession = session;
           joining = false;
         });
       }
+    } on CallJoinHungUp {
+      // Hung up on purpose: another voice channel was joined meanwhile, or
+      // the call was left. Nothing failed, so nothing to retry.
+      Log.i("Voice join hung up");
+      if (withoutEntranceSound) EntranceSoundGate.instance.cancelSkip(roomId);
+      if (mounted) setState(() => joining = false);
     } catch (e, s) {
       Log.onError(e, s);
       if (withoutEntranceSound) EntranceSoundGate.instance.cancelSkip(roomId);
 
-      if (!mounted) return;
-      setState(() {
-        joining = false;
-      });
+      if (mounted) {
+        setState(() {
+          joining = false;
+        });
+      }
 
-      final retry = await AdaptiveDialog.confirmation(context,
-          title: VoipRoomView.errorCallJoinFailed,
-          prompt: e is CallJoinException ? e.message : e.toString(),
-          confirmationText: CommonStrings.promptRetry,
-          cancelText: CommonStrings.promptClose);
-      if (retry == true && mounted && !joining) {
-        joinRoomCall(withoutEntranceSound: withoutEntranceSound);
+      // Said also once this page has closed, over whatever page is open.
+      // Once per join: a page opened again waits for the same one.
+      if (!_firstToReport(join)) return;
+      final retry = await _askToRetry(mounted ? context : null, e);
+      if (!retry) return;
+      if (mounted) {
+        if (!joining) joinRoomCall(withoutEntranceSound: withoutEntranceSound);
+      } else {
+        unawaited(_joinWithoutPage(voip, withoutEntranceSound));
+      }
+    }
+  }
+
+  /// The joins whose failure has been shown.
+  static final Expando<bool> _reported = Expando();
+
+  /// Whether [join]'s failure is still to be shown: one dialog for a join,
+  /// whichever pages waited for it.
+  static bool _firstToReport(Future<VoipSession?> join) {
+    if (_reported[join] == true) return false;
+    _reported[join] = true;
+    return true;
+  }
+
+  /// Asks whether to try [error]'s join again, in [context], else over the
+  /// app's current page. False when there is no page to ask on.
+  static Future<bool> _askToRetry(BuildContext? context, Object error) async {
+    final over = context ?? navigator.currentContext;
+    if (over == null || !over.mounted) return false;
+    final retry = await AdaptiveDialog.confirmation(over,
+        title: VoipRoomView.errorCallJoinFailed,
+        prompt: error is CallJoinException ? error.message : error.toString(),
+        confirmationText: CommonStrings.promptRetry,
+        cancelText: CommonStrings.promptClose);
+    return retry == true;
+  }
+
+  /// Tries [voip]'s join again from the dialog of a join whose page had
+  /// closed: through the room's component, not the page that is gone, and
+  /// asking again if it fails again.
+  static Future<void> _joinWithoutPage(
+      VoipRoomComponent voip, bool withoutEntranceSound) async {
+    final roomId = voip.room.identifier;
+    if (withoutEntranceSound) EntranceSoundGate.instance.skipNextJoin(roomId);
+    final join = voip.joinCall();
+    try {
+      final session = await join;
+      if (session == null && withoutEntranceSound) {
+        EntranceSoundGate.instance.cancelSkip(roomId);
+      }
+    } on CallJoinHungUp {
+      Log.i("Voice join hung up");
+      if (withoutEntranceSound) EntranceSoundGate.instance.cancelSkip(roomId);
+    } catch (e, s) {
+      Log.onError(e, s);
+      if (withoutEntranceSound) EntranceSoundGate.instance.cancelSkip(roomId);
+      if (_firstToReport(join) && await _askToRetry(null, e)) {
+        await _joinWithoutPage(voip, withoutEntranceSound);
       }
     }
   }

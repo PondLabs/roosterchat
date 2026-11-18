@@ -233,3 +233,12 @@ class ParticipantTrackPermission {
     this.allowedTrackSids,
   );
 }
+
+// ROOSTER: the moments of one connection attempt (`Room.connect`) that the
+// ROOSTER: app times, reported by `Engine.onConnectStep`.
+enum ConnectStep { // ROOSTER
+  started, // ROOSTER: an attempt starts (another region's starts again).
+  signalConnected, // ROOSTER: the signal WebSocket is open.
+  joinResponse, // ROOSTER: the server answered the join.
+  primaryConnected, // ROOSTER: the primary peer connection is connected.
+} // ROOSTER

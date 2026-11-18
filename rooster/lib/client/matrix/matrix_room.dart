@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'dart:ui';
 import 'package:collection/collection.dart';
 import 'package:rooster/client/components/component_registry.dart';
 import 'package:rooster/client/components/direct_messages/direct_message_component.dart';
@@ -17,8 +16,10 @@ import 'package:rooster/client/components/user_color/user_color_component.dart';
 import 'package:rooster/client/matrix/components/calendar_room_component/matrix_calendar_room_component.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_room_emoticon_component.dart';
 import 'package:rooster/client/matrix/components/read_receipts/matrix_read_receipt_component.dart';
+import 'package:rooster/client/matrix/components/typing_indicators/matrix_typing_indicators_component.dart';
 import 'package:rooster/client/matrix/components/user_presence/matrix_user_presence.dart';
 import 'package:rooster/client/matrix/matrix_attachment.dart';
+import 'package:rooster/client/matrix/media/matrix_attachment_files.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_member.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
@@ -50,8 +51,11 @@ import 'package:rooster/client/timeline_events/timeline_event_message.dart';
 import 'package:rooster/client/timeline_events/timeline_event_sticker.dart';
 import 'package:rooster/config/build_config.dart';
 import 'package:rooster/debug/log.dart';
+import 'package:rooster/client/matrix/media/async_photo_send.dart';
+import 'package:rooster/client/matrix/media/interrupted_photo_uploads.dart';
+import 'package:rooster/client/matrix/media/matrix_file_send.dart';
+import 'package:rooster/diagnostic/speed_log/text_send_trace.dart';
 import 'package:rooster/main.dart';
-import 'package:rooster/utils/image_utils.dart';
 import 'package:rooster/utils/mime.dart';
 import 'package:flutter/material.dart';
 import 'package:html/dom.dart' as html_dom;
@@ -119,7 +123,7 @@ class RoomNameLocalizations extends matrix.MatrixDefaultLocalizations {
   String get unknownUser => labelRoomNameUnknownUser;
 }
 
-class MatrixRoom extends Room {
+class MatrixRoom extends Room implements RoomSendPreparation {
   // Why a notification was not shown, in the notification debugger
   // (Developer settings).
 
@@ -523,80 +527,65 @@ class MatrixRoom extends Room {
     return processed.nonNulls.toList();
   }
 
+  /// The files to send for [attachment], reusing its picture's
+  /// preparation (see `media/matrix_attachment_files.dart`).
   Future<MatrixProcessedAttachment?> processAttachment(
-      PendingFileAttachment attachment) async {
-    await attachment.resolve();
-    if (attachment.data == null) return null;
+          PendingFileAttachment attachment) =>
+      matrixFilesForAttachment(attachment);
 
-    if (attachment.mimeType == "image/bmp") {
-      var img = MemoryImage(attachment.data!);
-      var image = await ImageUtils.imageProviderToImage(img);
-      var bytes = await image.toByteData(format: ImageByteFormat.png);
-      attachment.data = bytes!.buffer.asUint8List();
-      attachment.mimeType = "image/png";
-    }
+  /// Readies an encrypted room's outbound session ahead of a send: the
+  /// SDK's own preparation, the one it runs on a typing notice and that
+  /// every send runs anyway (load the session, rotate it when due, create
+  /// it and share its key when missing), only earlier. Keys for a device
+  /// that appeared since are still sent by the send itself. Only tests
+  /// replace it, to count preparations without vodozemac.
+  static Future<void> Function(matrix.Room room) prepareOutboundSession =
+      _prepareOutboundSessionWithSdk;
 
-    var fileExtension = attachment.mimeType != null
-        ? Mime.extensionFromMime(attachment.mimeType!)
-        : null;
-    if (fileExtension == null) {
-      fileExtension = "";
-    } else {
-      fileExtension = ".${fileExtension}";
-    }
+  static Future<void> _prepareOutboundSessionWithSdk(matrix.Room room) async {
+    final encryption = room.client.encryption;
+    if (encryption == null || !room.client.encryptionEnabled) return;
+    await encryption.keyManager.prepareOutboundGroupSession(room.id);
+  }
 
-    try {
-      if (Mime.imageTypes.contains(attachment.mimeType)) {
-        await decodeImageFromList(attachment.data!);
+  /// Whether this account tells the room when it types: the room's own
+  /// setting, else the account's (`MatrixTypingIndicatorsComponent`). Not
+  /// known counts as off.
+  bool get _sendsTypingNotices =>
+      getComponent<MatrixTypingIndicatorsComponent>()
+          ?.typingIndicatorEnabledForRoom ??
+      _client
+          .getComponent<MatrixUserPresenceComponent>()
+          ?.typingIndicatorEnabled ??
+      false;
 
-        final name = attachment.name ?? "unknown${fileExtension}";
+  /// The preparation in flight, shared by every trigger in this room:
+  /// true once it readied the session, false when it failed.
+  Future<bool>? _preparingSession;
 
-        return MatrixProcessedAttachment(await matrix.MatrixImageFile.create(
-            bytes: attachment.data!,
-            name: name,
-            mimeType: attachment.mimeType,
-            nativeImplementations:
-                (client as MatrixClient).nativeImplentations));
-      }
-    } catch (error, stack) {
-      // This image is probably corrupt, since it has a mime type we should be able to display,
-      // But we can't decode the image. Just clear the mime type so clients dont try to display this bad file
-      attachment.mimeType = 'application/octet-stream';
-      Log.onError(error, stack);
-    }
-
-    matrix.MatrixImageFile? thumbnailImageFile;
-    if (attachment.thumbnailFile != null) {
-      var decodedImage = await decodeImageFromList(attachment.thumbnailFile!);
-
-      thumbnailImageFile = matrix.MatrixImageFile(
-          bytes: attachment.thumbnailFile!,
-          width: decodedImage.width,
-          height: decodedImage.height,
-          mimeType: attachment.thumbnailMime,
-          name: "thumbnail");
-    }
-
-    final name = attachment.name ?? "Unknown${fileExtension}";
-
-    if (Mime.videoTypes.contains(attachment.mimeType)) {
-      return MatrixProcessedAttachment(
-        matrix.MatrixVideoFile(
-          bytes: attachment.data!,
-          name: name,
-          mimeType: attachment.mimeType,
-          width: attachment.dimensions?.width.toInt(),
-          height: attachment.dimensions?.height.toInt(),
-          duration: attachment.length?.inMilliseconds,
-        ),
-        thumbnailFile: thumbnailImageFile,
-      );
-    }
-
-    return MatrixProcessedAttachment(
-        matrix.MatrixFile(
-            bytes: attachment.data!, name: name, mimeType: attachment.mimeType),
-        thumbnailFile: thumbnailImageFile);
+  /// Starts [prepareOutboundSession] in an encrypted room, unless one is in
+  /// flight. The SDK makes the session once even when its own preparation
+  /// (on a typing notice) or a send asks at the same time: they wait for
+  /// the same creation, so no message leaves before the session is ready.
+  ///
+  /// Only while this account sends typing notices here: a session made
+  /// ahead sends its key to the others' devices, which tells them as much
+  /// as a typing notice would. With the notices off, the session is made
+  /// at Send, by the send itself.
+  @override
+  void prepareToSend() {
+    if (!_matrixRoom.encrypted || _preparingSession != null) return;
+    if (!_sendsTypingNotices) return;
+    // In a microtask, so a preparation that ends at once still clears the
+    // one in flight after it was set.
+    _preparingSession =
+        Future.microtask(() => prepareOutboundSession(_matrixRoom))
+            .then((_) => true, onError: (Object _) {
+      // The send prepares the session again, and reports its own failure.
+      // The error's text can hold the room's id: not logged.
+      Log.w('Could not prepare the encryption session ahead of a send');
+      return false;
+    }).whenComplete(() => _preparingSession = null);
   }
 
   @override
@@ -608,21 +597,16 @@ class MatrixRoom extends Room {
       String? threadLastEventId,
       Map<String, dynamic>? fileExtraContent,
       List<ProcessedAttachment>? processedAttachments}) async {
-    matrix.Event? replyingTo;
+    final replyingTo = await _replyTarget(inReplyTo);
 
-    if (inReplyTo != null) {
-      replyingTo = await _matrixRoom.getEventById(inReplyTo.eventId);
-    }
-
-    if (processedAttachments != null) {
-      Future.wait(
-          processedAttachments.whereType<MatrixProcessedAttachment>().map((e) {
-        return _matrixRoom.sendFileEvent(e.file,
-            threadLastEventId: threadLastEventId,
-            threadRootEventId: threadRootEventId,
-            extraContent: fileExtraContent,
-            thumbnail: e.thumbnailFile);
-      }));
+    // Each file goes on its own, its failure caught and shown on its
+    // pending message (see media/matrix_file_send.dart).
+    for (final file in processedAttachments ?? const <ProcessedAttachment>[]) {
+      if (file is! MatrixProcessedAttachment) continue;
+      unawaited(sendMatrixAttachment(_matrixRoom, file,
+          threadLastEventId: threadLastEventId,
+          threadRootEventId: threadRootEventId,
+          extraContent: fileExtraContent));
     }
 
     if (message != null && message.trim().isNotEmpty) {
@@ -669,11 +653,27 @@ class MatrixRoom extends Room {
 
       event["m.mentions"] = mentions;
 
-      var id = await _matrixRoom.sendEvent(event,
-          inReplyTo: replyingTo,
-          editEventId: replaceEvent?.eventId,
-          threadLastEventId: threadLastEventId,
-          threadRootEventId: threadRootEventId);
+      // The SDK makes the same transaction id when given none; ours lets the
+      // speed log see the local echo (docs/speed-log.md).
+      final txid = _matrixRoom.client.generateUniqueTransactionId();
+      final trace = TextSendTrace.current;
+      final preparation = _preparingSession;
+      TextSendTrace.guard(
+          () => trace?.sending(_matrixRoom, txid, preparation: preparation));
+      String? id;
+      try {
+        id = await _matrixRoom.sendEvent(event,
+            txid: txid,
+            inReplyTo: replyingTo,
+            editEventId: replaceEvent?.eventId,
+            threadLastEventId: threadLastEventId,
+            threadRootEventId: threadRootEventId);
+      } finally {
+        TextSendTrace.guard(() {
+          trace?.sent(ok: id != null);
+          if (_matrixRoom.isSendCancelled(txid)) trace?.cancelled();
+        });
+      }
 
       if (id != null) {
         var event = await _matrixRoom.getEventById(id);
@@ -682,6 +682,53 @@ class MatrixRoom extends Room {
     }
 
     return null;
+  }
+
+  /// The event a reply goes to: the one already held, not looked up again
+  /// before the reply's echo. An own message still being sent is held
+  /// under its transaction id, which is no event id: the reply waits for
+  /// the server's id. One that failed or was cancelled never reached the
+  /// server, and the reply goes without the relation.
+  Future<matrix.Event?> _replyTarget(TimelineEvent? inReplyTo) async {
+    if (inReplyTo == null) return null;
+    if (inReplyTo is! MatrixTimelineEvent) {
+      return _matrixRoom.getEventById(inReplyTo.eventId);
+    }
+    final held = inReplyTo.event;
+    if (held.status.isError) return null;
+    if (!held.status.isSending) return held;
+    return _onceSent(held.transactionId ?? held.eventId);
+  }
+
+  /// The own message [txid] as the server took it, once its send ends;
+  /// null when it failed, was cancelled, or ended before this was asked.
+  Future<matrix.Event?> _onceSent(String txid) async {
+    final done = Completer<matrix.Event?>();
+    void end(matrix.Event? event) {
+      if (!done.isCompleted) done.complete(event);
+    }
+
+    final listening = [
+      _matrixRoom.client.onTimelineEvent.stream.listen((event) {
+        if (event.roomId != _matrixRoom.id ||
+            (event.transactionId ?? event.eventId) != txid) {
+          return;
+        }
+        if (event.status.isSent) end(event);
+        if (event.status.isError) end(null);
+      }),
+      _matrixRoom.onSendCancelled.listen((cancelled) {
+        if (cancelled == txid) end(null);
+      }),
+    ];
+    if (!_matrixRoom.sendingQueueEventsByTxId.contains(txid)) end(null);
+    try {
+      return await done.future;
+    } finally {
+      for (final subscription in listening) {
+        await subscription.cancel();
+      }
+    }
   }
 
   TimelineEvent convertEvent(matrix.Event event, {matrix.Timeline? timeline}) {
@@ -1022,16 +1069,104 @@ class MatrixRoom extends Room {
     }
   }
 
+  /// "Cancel" on a message that failed, or that is being sent and whose
+  /// event's request has not left: a file stops in its preparation or its
+  /// uploads (the one in flight is aborted), a text leaves the room's
+  /// queue, and the message is taken away. Once its event's request has
+  /// left the server may have it: nothing changes.
+  ///
+  /// A photo sent by asynchronous upload (`async_photo_send.dart`) can
+  /// also be cancelled after its event was sent, while it uploads: its
+  /// uploads stop and the message is taken back (redacted).
   @override
   Future<void> cancelSend(TimelineEvent event) async {
     final mxEvent = event as MatrixTimelineEvent;
-    await mxEvent.event.cancelSend();
+    final mx = mxEvent.event;
+    final photo = asyncPhotoSendOfEvent(mx);
+    if (photo != null && photo.uploading) {
+      await photo.cancel();
+      return;
+    }
+    if (!_matrixRoom.canCancelSend(mx.transactionId ?? mx.eventId)) return;
+    await mx.cancelSend();
+    // A file sent from the composer: no longer shown, its bytes let go.
+    final send = AttachmentSends.instance.byTransaction(localId, event.eventId);
+    if (send != null) AttachmentSends.instance.remove(send);
+    // The failed message left by a photo's asynchronous upload.
+    if (photo != null && photo.failedMessageId == mx.eventId) {
+      await photo.dismiss();
+    }
   }
 
+  /// "Retry" on a failed message. A file is sent again by the SDK
+  /// (`Event.sendAgain`): the parts that went up are not uploaded again,
+  /// and when all did (its content has their `url`, or `file` in an
+  /// encrypted room) only the event is sent, under the same transaction id.
+  ///
+  /// Throws [AttachmentNoLongerHeld] for a file this device no longer holds
+  /// and never uploaded (the app was restarted since it failed): the SDK
+  /// would take the message away and throw, and a failed send is never
+  /// hidden. The message stays failed; "Cancel" takes it away.
+  ///
+  /// A second "Retry" on a message already being sent again does nothing:
+  /// two sends of one message would race over what the first one kept.
   @override
   Future<void> retrySend(TimelineEvent event) async {
     final mxEvent = event as MatrixTimelineEvent;
-    await mxEvent.event.sendAgain();
+    final mx = mxEvent.event;
+    if (!_retrying.add(mx.eventId)) return;
+    try {
+      await _retrySend(mx);
+    } finally {
+      _retrying.remove(mx.eventId);
+    }
+  }
+
+  /// The messages "Retry" is sending again, by id.
+  final Set<String> _retrying = {};
+
+  Future<void> _retrySend(matrix.Event mx) async {
+    // The failed message of a photo the app's closing cut short: nothing
+    // to send again, its bytes are gone.
+    if (isInterruptedPhotoMessage(mx)) return;
+    // A photo whose asynchronous upload failed: a new event, under a new
+    // transaction id, to new reservations.
+    final photo = asyncPhotoSendOf(_matrixRoom, mx.eventId);
+    if (photo != null && photo.failedMessageId == mx.eventId) {
+      await photo.retry();
+      return;
+    }
+    final send = AttachmentSends.instance.byTransaction(localId, mx.eventId);
+    if (mx.status.isError && _fileMessageTypes.contains(mx.messageType)) {
+      if (!_matrixRoom.sendingFilePlaceholders.containsKey(mx.eventId) &&
+          !isUploadedFileEvent(mx)) {
+        throw const AttachmentNoLongerHeld();
+      }
+      // Its stage follows the new attempt, and a failure shows again.
+      await retryMatrixFile(mx, send);
+      return;
+    }
+    await mx.sendAgain();
+  }
+
+  /// The message types the SDK sends again from the file it holds
+  /// (`Event.sendAgain`).
+  static const _fileMessageTypes = {
+    matrix.MessageTypes.Image,
+    matrix.MessageTypes.Video,
+    matrix.MessageTypes.Audio,
+    matrix.MessageTypes.File,
+  };
+
+  /// The server's limit on an uploaded file's size (`m.upload.size`), or
+  /// null when it sets none or cannot be asked. The SDK keeps the answer
+  /// for days, so this usually makes no request.
+  Future<int?> maxUploadBytes() async {
+    try {
+      return (await _matrixRoom.client.getConfig()).mUploadSize;
+    } catch (_) {
+      return null; // Not known: the server still checks.
+    }
   }
 
   @override

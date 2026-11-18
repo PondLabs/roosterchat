@@ -14,10 +14,13 @@ back to their origin; we change them here.
 | `flutter_vodozemac` | https://pub.dev/packages/flutter_vodozemac | `0.5.0` (2026-10) + the `windows-arm64` cargokit target |
 | `media_kit_libs_windows_video` | https://pub.dev/packages/media_kit_libs_windows_video | `1.0.11` (2026-10) + arm64 libmpv and ANGLE |
 | `three_js_angle_renderer` | https://pub.dev/packages/three_js_angle_renderer (MIT) | `0.0.1` (2026-11) + the tone-mapping program check |
+| `matrix-dart-sdk` | https://github.com/commetchat/matrix-dart-sdk (branch `upstream-v6.1.1`, AGPL-3.0) | `58e0bd24c6a2d74d727dc92a24dc076144fae43b` (2026-03-09), complete and unchanged |
 
 `example/`, `test/`, `testfiles/`, `.github/` and git metadata were dropped
-from the copies. Local changes are marked with `// ROOSTER:` comments in Dart
-and C++ and listed in `docs/voice-audio-processing.md`.
+from the copies, except in `matrix-dart-sdk`, which keeps everything but
+`.git` so its own tests run and it matches the pub cache checkout file for
+file. Local changes are marked with `// ROOSTER:` comments in Dart and C++
+and listed in `docs/voice-audio-processing.md`.
 
 `three_js_angle_renderer` (Sunny Side Putt's 3D renderer) decided on every
 draw whether a material's program had to change by comparing the tone
@@ -108,6 +111,13 @@ publish that failed is stopped; and the local participant's lookup by source
 no longer falls back to a publication without a source (it took the DJ
 booth's music for the microphone). See
 `docs/voice-call-health.md`.
+`Room.onConnectStep` (`lib/src/core/room.dart`, set on the engine in
+`lib/src/core/engine.dart`, with the `ConnectStep` enum in
+`lib/src/types/other.dart`) tells the app when each step of a
+connect is done (the attempt started, the WebSocket open, the join answered,
+the primary peer connection connected), for the `voice_join` timings in
+`docs/speed-log.md`. It only reports: the order, the timeouts and what the
+SDK does are unchanged.
 
 `deep_filter` is libDF, DeepFilterNet's Rust library, which the voice DSP
 (`rust/audio_dsp/src/dfn.rs`) suppresses noise with; crates.io only has an
@@ -162,3 +172,118 @@ media-kit's own `libmpv-win32-video-cmake` (20241021, aarch64) and ANGLE from
 the fork behind media-kit/media-kit#1436 (Carapacik's v1.1.0, built from
 chromium/8059), both pinned by SHA-256. The x64 inputs are upstream's,
 unchanged.
+
+`matrix-dart-sdk` is the Matrix SDK (`package:matrix`) the app and
+`matrix_dart_sdk_drift_db` use, copied from the commit `pubspec.lock`
+resolved (`58e0bd24c6a2d74d727dc92a24dc076144fae43b`, the
+`upstream-v6.1.1` branch of the commetchat fork) with no line changed.
+Every later change to it is marked with a `// ROOSTER` comment, so a
+`diff -r -x .git` against that commit shows only our changes. Git stores
+`lib/msc_extensions/msc_1236_widgets/src/widget.dart` with LF line endings
+where upstream has CRLF (`* text=auto`); compare with `--strip-trailing-cr`.
+Changes since the copy:
+
+- `scripts/*.sh` are executable again (mode 755), as in the fork; the copy
+  had lost the mode.
+- `test/html_to_text_test.dart` expects a link's text without the 🔗 prefix,
+  as the fork's `lib/src/utils/html_to_text.dart` writes it (2 cases).
+- The upload loop of `Room.sendFileEvent` (`lib/src/room.dart`, with the
+  rules in the new `lib/src/utils/file_upload_loop.dart`): the file and its
+  thumbnail upload together; each part that fails is tried again by itself
+  at most twice, after 2 s and 8 s, waits for a `retry_after_ms` of up to
+  8 s, is not tried again after running for more than 60 s, and ends the
+  send on a size, permission or authentication error. A part that went up
+  is kept with its key and hash (`Room.sendingFileUploads`; not its
+  encrypted bytes) until the event is sent or the send is cancelled, so a
+  retry uploads only what did not. What to reuse is decided once per send
+  (`FilePartSend`), and in an encrypted room the file to upload is only
+  ever the encrypted one: a part without its encryption is never uploaded.
+  The `uploading` stage is published, and the message stays in
+  `sendingQueueEventsByTxId` for the whole send, so its pending event read
+  again during a long upload is not marked failed.
+- `Client.sendClock` (`lib/src/client.dart`): the clock the upload loop
+  reads and waits by, given by tests.
+- `Client._handleRoomEvents` (`lib/src/client.dart`): a timeline event
+  that comes back under a transaction id lets go of the file kept to send
+  that message again (`Room.forgetFileSend`): it reached the room, even
+  when our `PUT /send` failed.
+- `Event.sendAgain` (`lib/src/event.dart`): a file message whose event
+  carries its uploads' address (`url`, or `file` in an encrypted room) is
+  sent again as that event, under the same transaction id, with no upload.
+  Not when the room now encrypts files and the event has a `url` (an
+  upload in the clear): the file then goes up again, encrypted.
+  `Event.cancelSend` lets go of the file and the parts kept for it.
+- Cancel of a message being sent (`Room.cancelSending`, `lib/src/room.dart`
+  and `lib/src/event.dart`): a flag per transaction id, kept for good, that
+  `Room.sendFileEvent` checks before the encryption, the upload loop before
+  each attempt and during its waits, and `Room.sendEvent` while the message
+  waits in the room's queue (it leaves the queue at once) and right before
+  each `PUT /send`. Each upload runs in a zone whose
+  `currentUploadCancel()` the app's HTTP client uses to abort the request
+  in flight. From the first `PUT /send` on, the server may have the event:
+  `Room.canCancelSend` is false and `Event.cancelSend` throws without
+  taking the message away; once the server has taken it, it stays so for
+  good, even from an event object read before. The one-second wait
+  between attempts of an event ends on a cancel, and an attempt that
+  fails after its message was cancelled shows nothing. A cancelled send shows nothing again and takes
+  its pending event out of the database and the timelines
+  (`Room.dropUnsentEvent`, what `Event.cancelSend` did before, moved,
+  with the removal from the database after the fake redaction, which
+  would otherwise store the event again). A message cancelled while
+  `Room.sendEvent` stores its failure (an encryption refused for good) is
+  taken out again once that is stored, so no row of it is left.
+  `Event.sendAgain` sends no cancelled message.
+- At most four upload requests of file messages at once per client
+  (`maxUploadsAtOnce` in `lib/src/utils/file_upload_loop.dart`), across
+  messages, in the order they came.
+- A file message whose uploads went up in the clear is not sent once its
+  room encrypts files (`uploadedInTheClear` of `Room.sendEvent`, read with
+  the event's own encryption in `_sendContent`): the send fails, and a
+  retry uploads the file again, encrypted.
+- `FileSendRequestCredentials` keeps the thread a file message goes to,
+  and `Event.sendAgain` passes it on when the file is uploaded again.
+- A file sent from disk (`lib/src/utils/file_send_source.dart`): a
+  `MatrixFile` may carry a `FileSendSource` instead of its bytes (its
+  `size` is then the source's length, and `encrypt()` refuses it). The
+  upload loop opens a new read of it at each attempt
+  (`FileSendSource.read`, or `readEncrypted` in an encrypted room, with a
+  new key), sends it as a stream (`Client.uploadContentStream`, which
+  checks the server's limit before reading), closes it before the attempt
+  ends (also on a cancel), and takes the key, iv and hash its event
+  carries from the read that went up (`uploadFileParts` gives
+  `UploadedFilePart`s). A read that ends short, or a file that changed
+  since it was attached, ends the send with `FileSourceChangedException`,
+  without a new attempt. `Room.sendFileEvent` checks the server's limit by
+  `MatrixFile.size`, and `Event.downloadAndDecryptAttachment` gives no
+  file with no bytes for a message still being sent from disk.
+- Photos sent before their upload (the app's
+  `lib/client/matrix/media/async_photo_send.dart`): `runUploadToReserved`
+  (`lib/src/client.dart`) runs the upload loop of a part in a zone where
+  `Client.uploadContent` puts the bytes to an mxc reserved before
+  (`PUT /upload/{serverName}/{mediaId}`, an `M_CANNOT_OVERWRITE_MEDIA`
+  answer counted as an earlier attempt that landed), and
+  `uploadContentStream` refuses to run there. `Room.uploadsAfterEvent`
+  and `uploadsAfterEventEnded` (`lib/src/room.dart`) mark a message whose
+  event was sent while its uploads run: `Room.canCancelSend` is true for
+  it until they end, so its cancel stops them. `Room.showFileMessage`
+  shows a file message of this device, being sent or failed, without
+  sending anything, keeping its file as `sendFileEvent` does;
+  `Room.showFailedMessage` shows a failed message with any content and
+  keeps nothing (a photo whose upload the app's closing cut short).
+- Room keys for who just came in (T8.1): `Room.getUserDeviceKeys`
+  (`lib/src/room.dart`), which every room key share reads, first calls
+  the new `Client.updateStaleUserDeviceKeys` (`lib/src/client.dart`): the
+  invited and joined members whose device list was never queried or is
+  marked outdated are queried, and the share waits for the answer. Before,
+  a message sent before the sync's own query answered (it runs after the
+  sync that brought them in) never reached their devices. A user whose
+  homeserver failed is not asked again for 5 min, nor one left
+  unanswered for 1 min. The share waits for that query 10 s at most
+  (`Client.staleDeviceKeysTimeout`, what the query lets the homeserver
+  wait for other servers), then goes to the devices known; the answer
+  that comes later counts for the next send. `Client.updateUserDeviceKeys` takes
+  `onlyAdditionalUsers` for that query, and puts each parsed device list
+  in place whole. Who gets the key is unchanged (`Client.shareKeysWith`);
+  `KeyManager._createOutboundGroupSession`
+  (`lib/encryption/key_manager.dart`) logs how many devices of the room's
+  members the key leaves out, with no ids.

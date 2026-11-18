@@ -1,0 +1,908 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
+import 'package:exif/exif.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
+import 'package:rooster/utils/image/metadata/exif_orientation.dart';
+import 'package:rooster/utils/image/metadata/image_container.dart';
+import 'package:rooster/utils/image/metadata/remove_image_metadata.dart';
+
+/// The fixtures are made by `unit_test/fixtures/image_metadata/generate.py`;
+/// its README says what each one holds.
+Uint8List fixture(String name) =>
+    File('unit_test/fixtures/image_metadata/$name').readAsBytesSync();
+
+/// Text from the fixtures' metadata. None of it may survive.
+const _personalText = [
+  "Jane Example",
+  "Rooster Test Camera",
+  "Model T-1",
+  "2026:11:14",
+  "Sao Paulo",
+  "Brazil",
+  "Jane's house",
+  "GPSLatitude",
+  "MicroVideoOffset",
+  "ftypmp42",
+  "mdat",
+  "private vendor data",
+];
+
+/// Markers of metadata blocks that must not survive anywhere in the file.
+const _forbiddenText = ["http://ns.adobe.com/xap", "Photoshop 3.0", "MPF"];
+
+/// A fixture that parses, with the orientation it is shown with.
+class _Case {
+  const _Case(this.file, this.orientation, {this.frames = 1});
+  final String file;
+  final int orientation;
+  final int frames;
+}
+
+const _parsedCases = [
+  _Case("gps_exif.jpg", 1),
+  _Case("gps_xmp.jpg", 1),
+  _Case("iptc.jpg", 1),
+  _Case("mpf.jpg", 1),
+  _Case("motion_photo.jpg", 1),
+  _Case("cmyk.jpg", 1),
+  _Case("orientation_3.jpg", 3),
+  _Case("orientation_6.jpg", 6),
+  _Case("orientation_8.jpg", 8),
+  _Case("text_exif.png", 6),
+  _Case("animated_exif.webp", 6, frames: 3),
+  _Case("animated_exif_prefixed.webp", 6, frames: 3),
+];
+
+/// Every frame as the engine draws it, as RGBA bytes with its size.
+Future<List<(int, int, Uint8List)>> render(Uint8List bytes) async {
+  final codec = await ui.instantiateImageCodec(bytes);
+  final frames = <(int, int, Uint8List)>[];
+  for (var i = 0; i < codec.frameCount; i++) {
+    final frame = await codec.getNextFrame();
+    final image = frame.image;
+    final rgba = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    frames.add((image.width, image.height, rgba!.buffer.asUint8List()));
+    image.dispose();
+  }
+  codec.dispose();
+  return frames;
+}
+
+bool _contains(Uint8List haystack, String needle) =>
+    _indexOf(haystack, needle) >= 0;
+
+/// Walks a JPEG on its own (not with the code under test) and returns the
+/// APPn and COM segments as (marker, payload), and where the walk ended.
+(List<(int, Uint8List)>, int) walkJpeg(Uint8List b) {
+  final segments = <(int, Uint8List)>[];
+  expect(b[0] == 0xFF && b[1] == 0xD8, isTrue, reason: "starts with SOI");
+  var pos = 2;
+  while (true) {
+    expect(b[pos], 0xFF, reason: "a marker at $pos");
+    final marker = b[pos + 1];
+    if (marker == 0xD9) return (segments, pos + 2);
+    final length = (b[pos + 2] << 8) | b[pos + 3];
+    final payload = Uint8List.sublistView(b, pos + 4, pos + 2 + length);
+    if ((marker >= 0xE0 && marker <= 0xEF) || marker == 0xFE) {
+      segments.add((marker, payload));
+    }
+    pos += 2 + length;
+    if (marker == 0xDA) {
+      while (!(b[pos] == 0xFF &&
+          b[pos + 1] != 0x00 &&
+          (b[pos + 1] < 0xD0 || b[pos + 1] > 0xD7))) {
+        pos++;
+      }
+    }
+  }
+}
+
+/// Walks PNG chunks on their own; returns the types and where IEND ended.
+(List<String>, int) walkPng(Uint8List b) {
+  final types = <String>[];
+  var pos = 8;
+  while (true) {
+    final length = ByteData.sublistView(b).getUint32(pos);
+    final type = String.fromCharCodes(b, pos + 4, pos + 8);
+    types.add(type);
+    pos += 12 + length;
+    if (type == "IEND") return (types, pos);
+  }
+}
+
+/// Walks RIFF chunks on their own; returns the types and the RIFF end.
+(List<String>, int) walkWebp(Uint8List b) {
+  final data = ByteData.sublistView(b);
+  final end = 8 + data.getUint32(4, Endian.little);
+  final types = <String>[];
+  var pos = 12;
+  while (pos < end) {
+    types.add(String.fromCharCodes(b, pos, pos + 4));
+    final size = data.getUint32(pos + 4, Endian.little);
+    pos += 8 + size + (size & 1);
+  }
+  return (types, end);
+}
+
+const _keptJpegApp = {0xE0, 0xE2, 0xEE};
+const _keptPng = {
+  "IHDR", "PLTE", "IDAT", "IEND", "tRNS", "gAMA", "cHRM", "sRGB", //
+  "iCCP", "cICP", "sBIT", "pHYs", "acTL", "fcTL", "fdAT",
+};
+const _keptWebp = {"VP8 ", "VP8L", "VP8X", "ALPH", "ANIM", "ANMF", "ICCP"};
+
+/// The privacy checks every output has to pass, parsed or re-encoded.
+Future<void> expectNoMetadata(Uint8List out, {required int orientation}) async {
+  final exif = await readExifFromBytes(out);
+  if (orientation == exifOrientationNormal) {
+    expect(exif.keys, isEmpty, reason: "the exif package reads nothing");
+  } else {
+    expect(exif.keys, ["Image Orientation"],
+        reason: "the exif package reads the orientation and nothing else");
+    expect(exif["Image Orientation"]!.values.firstAsInt(), orientation);
+  }
+  for (final text in [..._personalText, ..._forbiddenText]) {
+    expect(_contains(out, text), isFalse, reason: "'$text' is gone");
+  }
+
+  if (out[0] == 0xFF) {
+    final (segments, end) = walkJpeg(out);
+    expect(end, out.length, reason: "the file ends at the first EOI");
+    for (final (marker, payload) in segments) {
+      final id = latin1.decode(payload.sublist(0, payload.length.clamp(0, 12)),
+          allowInvalid: true);
+      if (marker == 0xE1) {
+        expect(orientation, isNot(exifOrientationNormal),
+            reason: "an Exif segment only to carry an orientation");
+        expect(payload.length, 6 + 26, reason: "a minimal Exif");
+        continue;
+      }
+      expect(_keptJpegApp, contains(marker),
+          reason: "APP${marker - 0xE0} / COM is not on the list ($id)");
+      if (marker == 0xE0) {
+        expect(id.startsWith("JFIF\u0000"), isTrue, reason: id);
+        expect(payload.length, 14, reason: "JFIF without a thumbnail");
+        expect(payload[12] | payload[13], 0, reason: "thumbnail is 0 by 0");
+      }
+      if (marker == 0xE2) expect(id, "ICC_PROFILE\u0000");
+      if (marker == 0xEE) expect(id.startsWith("Adobe"), isTrue);
+    }
+  } else if (out[0] == 0x89) {
+    final (types, end) = walkPng(out);
+    expect(end, out.length, reason: "the file ends at IEND");
+    for (final type in types) {
+      if (type == "eXIf" && orientation != exifOrientationNormal) continue;
+      expect(_keptPng, contains(type), reason: "$type is not on the list");
+    }
+  } else {
+    final (types, end) = walkWebp(out);
+    expect(end, out.length, reason: "the file ends at the RIFF length");
+    for (final type in types) {
+      if (type == "EXIF" && orientation != exifOrientationNormal) continue;
+      expect(_keptWebp, contains(type), reason: "$type is not on the list");
+    }
+  }
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  group("a file that parses is rewritten", () {
+    for (final c in _parsedCases) {
+      test(c.file, () async {
+        final original = fixture(c.file);
+        final result = await removeImageMetadata(original);
+
+        expect(result.outcome, MetadataRemovalOutcome.rewritten);
+        expect(result.mimeType, parseImageContainer(original)!.mimeType);
+        final out = result.bytes!;
+        expect(out.length, lessThanOrEqualTo(original.length),
+            reason: "never larger than the original");
+        expect(out.length, lessThan(original.length),
+            reason: "the fixture's metadata took some room");
+        expect(parseImageContainer(original)!.orientation, c.orientation);
+
+        await expectNoMetadata(out, orientation: c.orientation);
+
+        final before = await render(original);
+        final after = await render(out);
+        expect(after.length, c.frames, reason: "same number of frames");
+        expect(after.length, before.length);
+        for (var i = 0; i < before.length; i++) {
+          final (w, h, pixels) = before[i];
+          expect(after[i].$1, w, reason: "frame $i width");
+          expect(after[i].$2, h, reason: "frame $i height");
+          expect(after[i].$3, pixels, reason: "frame $i pixels");
+        }
+      });
+    }
+  });
+
+  test("the fixtures carry what they claim", () async {
+    for (final c in _parsedCases) {
+      final original = fixture(c.file);
+      final readable = (await readExifFromBytes(original)).keys.toSet()
+        ..remove("Image Orientation");
+      final hasText = [..._personalText, ..._forbiddenText]
+          .any((t) => _contains(original, t));
+      expect(readable.isNotEmpty || hasText, isTrue, reason: c.file);
+    }
+    expect(_contains(fixture("gps_xmp.jpg"), "GPSLatitude"), isTrue);
+    expect(_contains(fixture("iptc.jpg"), "Photoshop 3.0"), isTrue);
+    expect(_contains(fixture("mpf.jpg"), "MPF"), isTrue);
+    expect(_contains(fixture("motion_photo.jpg"), "ftypmp42"), isTrue);
+    expect(_contains(fixture("text_exif.png"), "Jane Example"), isTrue);
+  });
+
+  test("the JFIF thumbnail goes and the colour profile stays", () {
+    final original = fixture("gps_exif.jpg");
+    final (before, _) = walkJpeg(original);
+    final jfif = before.firstWhere((s) => s.$1 == 0xE0).$2;
+    expect((jfif[12], jfif[13]), (4, 3), reason: "the fixture has one");
+
+    final out = removeMetadataByRewrite(original)!.bytes!;
+    final (after, _) = walkJpeg(out);
+    expect(after.map((s) => s.$1), [0xE0, 0xE2]);
+    // The test engine draws without colour management, so the pixel check
+    // cannot see a lost profile: compare the profile itself.
+    final icc = before.firstWhere((s) => s.$1 == 0xE2).$2;
+    expect(after[1].$2, icc);
+  });
+
+  test("a CMYK JPEG keeps its Adobe segment as it was", () {
+    // The fixture's APP14 says transform 0, which decoders also assume for
+    // a 4-component JPEG without one, so the pixel check cannot see it go:
+    // compare the segment itself.
+    final original = fixture("cmyk.jpg");
+    final (before, _) = walkJpeg(original);
+    final adobe = [
+      for (final (marker, payload) in before)
+        if (marker == 0xEE) payload,
+    ];
+    expect(adobe, hasLength(1), reason: "the fixture has one");
+
+    final out = removeMetadataByRewrite(original)!.bytes!;
+    final (after, _) = walkJpeg(out);
+    expect([
+      for (final (marker, payload) in after)
+        if (marker == 0xEE) payload,
+    ], adobe);
+  });
+
+  test("an animated WebP's VP8X flags say what is left", () {
+    // VP8X flags: 0x10 alpha, 0x08 EXIF, 0x04 XMP, 0x02 animation.
+    for (final file in ["animated_exif.webp", "animated_exif_prefixed.webp"]) {
+      final original = fixture(file);
+      expect(String.fromCharCodes(original, 12, 16), "VP8X");
+      expect(original[20], 0x0E, reason: "$file: animation, EXIF and XMP");
+
+      final out = removeMetadataByRewrite(original)!.bytes!;
+      expect(String.fromCharCodes(out, 12, 16), "VP8X");
+      expect(walkWebp(out).$1, contains("EXIF"),
+          reason: "$file: the minimal EXIF carries orientation 6");
+      expect(out[20], 0x0A, reason: "$file: animation and EXIF, no XMP");
+    }
+  });
+
+  test("a PNG keeps its transparency", () async {
+    final out = removeMetadataByRewrite(fixture("text_exif.png"))!.bytes!;
+    final (_, _, pixels) = (await render(out)).single;
+    final alphas = {for (var i = 3; i < pixels.length; i += 4) pixels[i]};
+    expect(alphas.length, greaterThan(10));
+    expect(alphas, contains(0));
+  });
+
+  group("a file that does not parse", () {
+    test("is re-encoded when it still decodes", () async {
+      final original = fixture("truncated_decodable.jpg");
+      expect(parseImageContainer(original), isNull);
+      expect(_contains(original, "Jane Example"), isTrue);
+
+      final result = await removeImageMetadata(original);
+      expect(result.outcome, MetadataRemovalOutcome.reencoded);
+      expect(result.mimeType, "image/jpeg");
+      await expectNoMetadata(result.bytes!, orientation: 1);
+      final (w, h, _) = (await render(result.bytes!)).single;
+      expect((w, h), (256, 192));
+    });
+
+    test("fails when it does not decode either", () async {
+      final original = fixture("truncated_undecodable.jpg");
+      expect(parseImageContainer(original), isNull);
+      final result = await removeImageMetadata(original);
+      expect(result.outcome, MetadataRemovalOutcome.failed);
+      expect(result.bytes, isNull);
+    });
+
+    test("a re-encode keeps the picture upright", () async {
+      // The cut progressive JPEG with its Exif swapped for orientation 6:
+      // shown 192 by 256, so stored 192 by 256 after the re-encode.
+      final cut = fixture("truncated_decodable.jpg");
+      final exifLength = (cut[4] << 8) | cut[5];
+      final tiff = minimalOrientationTiff(6);
+      final rotated = Uint8List.fromList([
+        0xFF, 0xD8, 0xFF, 0xE1, 0, 2 + 6 + tiff.length, //
+        ..."Exif\u0000\u0000".codeUnits, ...tiff,
+        ...cut.sublist(4 + exifLength),
+      ]);
+      expect((await render(rotated)).single.$1, 192);
+
+      final result = await removeImageMetadata(rotated);
+      expect(result.outcome, MetadataRemovalOutcome.reencoded);
+      await expectNoMetadata(result.bytes!, orientation: 1);
+      final decoded = img.decodeJpg(result.bytes!)!;
+      expect((decoded.width, decoded.height), (192, 256));
+    });
+
+    test("a PNG cut before IEND comes back a PNG with its transparency",
+        () async {
+      final png = fixture("text_exif.png");
+      final cut = png.sublist(0, _indexOf(png, "IEND") - 4);
+      final result = await removeImageMetadata(cut);
+      expect(result.outcome, MetadataRemovalOutcome.reencoded);
+      expect(result.mimeType, "image/png");
+      await expectNoMetadata(result.bytes!, orientation: 1);
+      final (_, _, pixels) = (await render(result.bytes!)).single;
+      expect(pixels[3], 0, reason: "the left edge stays transparent");
+    });
+
+    test("an opaque WebP cut short comes back a JPEG", () async {
+      final webp = fixture("animated_exif.webp");
+      final result =
+          await removeImageMetadata(webp.sublist(0, webp.length - 100));
+      expect(result.outcome, MetadataRemovalOutcome.reencoded);
+      expect(result.mimeType, "image/jpeg");
+      await expectNoMetadata(result.bytes!, orientation: 1);
+    });
+
+    group("an Exif whose IFD is cut short", () {
+      // One Orientation entry (6) without the 4-byte offset of the next IFD:
+      // 4 bytes shorter than the minimal block a rewrite would write back,
+      // so a rewrite would come out larger than the original.
+      final tiff = Uint8List.sublistView(minimalOrientationTiff(6), 0, 22);
+
+      test("is not read", () {
+        expect(readTiffOrientation(tiff), isNull);
+        expect(readExifOrientation(tiff), isNull);
+      });
+
+      test("makes a JPEG a re-encode", () async {
+        final clean = removeMetadataByRewrite(fixture("gps_xmp.jpg"))!.bytes!;
+        final input = Uint8List.fromList([
+          0xFF, 0xD8, 0xFF, 0xE1, 0, 2 + 6 + tiff.length, //
+          ..."Exif\u0000\u0000".codeUnits, ...tiff,
+          ...clean.sublist(2),
+        ]);
+        expect((await render(input)).single.$1, 48,
+            reason: "the engine reads this Exif and draws the picture turned");
+        expect(parseImageContainer(input), isNull);
+
+        final result = await removeImageMetadata(input);
+        expect(result.outcome, MetadataRemovalOutcome.reencoded);
+        expect(result.mimeType, "image/jpeg");
+        await expectNoMetadata(result.bytes!, orientation: 1);
+        final decoded = img.decodeJpg(result.bytes!)!;
+        expect((decoded.width, decoded.height), (48, 64));
+      });
+
+      test("makes an animated WebP a re-encode", () async {
+        final input = _webpFile([
+          for (final (type, payload)
+              in _webpChunks(fixture("animated_exif.webp")))
+            if (type == "EXIF")
+              ("EXIF", tiff)
+            else if (type != "XMP ")
+              (type, payload),
+        ]);
+        expect(walkWebp(input).$1,
+            ["VP8X", "ANIM", "ANMF", "ANMF", "ANMF", "EXIF"]);
+        expect(parseImageContainer(input), isNull);
+
+        final result = await removeImageMetadata(input);
+        expect(result.outcome, MetadataRemovalOutcome.reencoded);
+        expect(result.mimeType, "image/jpeg");
+        await expectNoMetadata(result.bytes!, orientation: 1);
+      });
+
+      test("makes a PNG a re-encode", () async {
+        final png = img.encodePng(img.Image(width: 8, height: 6));
+        const afterIhdr = 8 + 12 + 13;
+        final input = Uint8List.fromList([
+          ...png.sublist(0, afterIhdr),
+          ..._pngChunk("eXIf", tiff),
+          ...png.sublist(afterIhdr),
+        ]);
+        expect(walkPng(input).$1, ["IHDR", "eXIf", "IDAT", "IEND"]);
+        expect(parseImageContainer(input), isNull);
+
+        final result = await removeImageMetadata(input);
+        expect(result.outcome, MetadataRemovalOutcome.reencoded);
+        expect(result.mimeType, "image/png");
+        await expectNoMetadata(result.bytes!, orientation: 1);
+      });
+    });
+
+    group("an Orientation the engine finds where the rewrite does not look",
+        () {
+      // A JPEG stored 64 by 48 behind [tiff] as its Exif.
+      Uint8List jpegWith(Uint8List tiff) {
+        final clean = removeMetadataByRewrite(fixture("gps_xmp.jpg"))!.bytes!;
+        return Uint8List.fromList([
+          0xFF, 0xD8, 0xFF, 0xE1, 0, 2 + 6 + tiff.length, //
+          ..."Exif\u0000\u0000".codeUnits, ...tiff,
+          ...clean.sublist(2),
+        ]);
+      }
+
+      // Goes to the fallback and comes out drawn as the original is.
+      Future<void> expectDrawnAsOriginal(Uint8List input,
+          {required (int, int) drawn}) async {
+        expect((await render(input)).first.$1, drawn.$1,
+            reason: "the engine applies the hidden orientation");
+        expect(parseImageContainer(input), isNull);
+        final result = await removeImageMetadata(input);
+        expect(result.outcome, MetadataRemovalOutcome.reencoded);
+        await expectNoMetadata(result.bytes!, orientation: 1);
+        final (w, h, _) = (await render(result.bytes!)).single;
+        expect((w, h), drawn);
+      }
+
+      for (final little in [false, true]) {
+        final order = little ? "II" : "MM";
+        test("$order: in the Exif sub-IFD of a JPEG", () async {
+          final tiff = _tiffWithSubIfd(little: little, subIfd: [(0x0112, 6)]);
+          expect(readTiffOrientation(tiff), isNull);
+          await expectDrawnAsOriginal(jpegWith(tiff), drawn: (48, 64));
+        });
+
+        test("$order: in the Exif sub-IFD of a WebP", () async {
+          final tiff = _tiffWithSubIfd(little: little, subIfd: [(0x0112, 6)]);
+          final input = _webpFile([
+            for (final (type, payload)
+                in _webpChunks(fixture("animated_exif.webp")))
+              if (type == "EXIF") ("EXIF", tiff) else (type, payload),
+          ]);
+          final (w, h, _) = (await render(fixture("animated_exif.webp"))).first;
+          await expectDrawnAsOriginal(input, drawn: (w, h));
+        });
+
+        test("$order: an IFD0 offset below 8 in a JPEG", () async {
+          // IFD0 at 0, over the header; Orientation 6 entries after it.
+          final tiff = _tiff(little: little, entries: [
+            for (var i = 0; i < 16; i++) (0x0112, 3, 1, 6),
+          ]);
+          ByteData.sublistView(tiff)
+              .setUint32(4, 0, little ? Endian.little : Endian.big);
+          for (var at = 2; at + 12 <= tiff.length; at += 12) {
+            if (at < 8) continue;
+            ByteData.sublistView(tiff)
+              ..setUint16(at, 0x0112, little ? Endian.little : Endian.big)
+              ..setUint16(at + 2, 3, little ? Endian.little : Endian.big)
+              ..setUint32(at + 4, 1, little ? Endian.little : Endian.big)
+              ..setUint16(at + 8, 6, little ? Endian.little : Endian.big);
+          }
+          expect(readTiffOrientation(tiff), isNull);
+          await expectDrawnAsOriginal(jpegWith(tiff), drawn: (48, 64));
+        });
+
+        test("$order: a camera's Exif sub-IFD without one is still rewritten",
+            () async {
+          // DateTimeOriginal's tag, as a SHORT to keep the block small.
+          final tiff = _tiffWithSubIfd(
+              little: little, ifd0: [(0x0112, 6)], subIfd: [(0x9003, 1)]);
+          expect(readTiffOrientation(tiff), 6);
+          final input = jpegWith(tiff);
+          final result = removeMetadataByRewrite(input)!;
+          expect(result.outcome, MetadataRemovalOutcome.rewritten);
+          final (w, h, _) = (await render(input)).single;
+          expect((w, h), (48, 64));
+          expect((await render(result.bytes!)).single.$1, w);
+        });
+      }
+
+      test("a sub-IFD that runs past the block is not read", () {
+        final tiff = _tiffWithSubIfd(subIfd: [(0x0112, 6)]);
+        expect(readTiffOrientation(Uint8List.sublistView(tiff, 0, 30)), isNull);
+        final far = Uint8List.fromList(tiff);
+        // The pointer's value: past the end of the block.
+        ByteData.sublistView(far).setUint32(18, 400);
+        expect(readTiffOrientation(far), isNull);
+      });
+    });
+  });
+
+  group("an extended WebP", () {
+    final chunks = _webpChunks(fixture("animated_exif.webp"));
+    final frames = [
+      for (final (type, payload) in chunks)
+        if (type == "ANMF") payload,
+    ];
+
+    test("whose last chunk has no padding byte goes to the fallback", () async {
+      // VP8X, ANIM, the minimal EXIF before the frames, and a last frame
+      // of odd length: the rewrite would have to add the padding byte the
+      // original left out, one byte more than the input.
+      expect(frames[0].length.isEven, isTrue);
+      final odd = Uint8List.sublistView(frames[0], 0, frames[0].length - 1);
+      List<(String, List<int>)> file() => [
+            for (final (type, payload) in chunks)
+              if (type == "VP8X" || type == "ANIM") (type, payload),
+            ("EXIF", minimalOrientationTiff(6)),
+            ("ANMF", frames[1]),
+            ("ANMF", frames[2]),
+            ("ANMF", odd),
+          ];
+      final padded = _webpFile(file());
+      final unpadded = _webpFile(file(), padLast: false);
+      expect(unpadded.length, padded.length - 1);
+
+      final rewritten = removeMetadataByRewrite(padded)!;
+      expect(rewritten.outcome, MetadataRemovalOutcome.rewritten);
+      expect(rewritten.bytes!.length, lessThanOrEqualTo(padded.length));
+
+      expect(parseImageContainer(unpadded), isNull);
+      expect(removeMetadataByRewrite(unpadded), isNull);
+      final result = await removeImageMetadata(unpadded);
+      expect(result.outcome, isNot(MetadataRemovalOutcome.rewritten));
+      if (result.bytes != null) {
+        await expectNoMetadata(result.bytes!, orientation: 1);
+      }
+    });
+
+    test("loses an unknown chunk inside a frame", () async {
+      // Some text after the first frame's image data, inside its ANMF.
+      final text = "Jane Example at home".codeUnits;
+      final inner = [
+        ..."XMP ".codeUnits, text.length, 0, 0, 0, ...text, //
+      ];
+      final input = _webpFile([
+        for (final (type, payload) in chunks)
+          if (type == "ANMF" && identical(payload, frames[0]))
+            (type, [...payload, ...inner])
+          else
+            (type, payload),
+      ]);
+      expect(_contains(input, "Jane Example at home"), isTrue);
+
+      final result = removeMetadataByRewrite(input)!;
+      expect(result.outcome, MetadataRemovalOutcome.rewritten);
+      final out = result.bytes!;
+      expect(out, removeMetadataByRewrite(fixture("animated_exif.webp"))!.bytes,
+          reason: "the frame comes out as it would without the chunk");
+      await expectNoMetadata(out, orientation: 6);
+      for (final (type, payload) in _webpChunks(out)) {
+        if (type != "ANMF") continue;
+        final inside = _riffChunks(Uint8List.sublistView(payload, 16));
+        for (final (subtype, _) in inside) {
+          expect({"ALPH", "VP8 ", "VP8L"}, contains(subtype));
+        }
+      }
+
+      final before = await render(input);
+      final after = await render(out);
+      expect(before, hasLength(3));
+      expect(after, hasLength(before.length), reason: "same frames");
+      for (var i = 0; i < before.length; i++) {
+        expect(after[i].$1, before[i].$1, reason: "frame $i width");
+        expect(after[i].$2, before[i].$2, reason: "frame $i height");
+        expect(after[i].$3, before[i].$3, reason: "frame $i pixels");
+      }
+    });
+
+    // The engine reads what follows a frame's image data as chunks of the
+    // file: an EXIF there turns the picture, an ANMF adds a frame.
+    for (final (label, inner) in [
+      ("an EXIF", riffChunk("EXIF", minimalOrientationTiff(6))),
+      ("an ANMF", riffChunk("ANMF", frames[0])),
+    ]) {
+      test("$label inside a frame sends the animation to the fallback",
+          () async {
+        final input = animatedWebpWithInFirstFrame(inner);
+        expect(parseImageContainer(input), isNull);
+        final drawn = await render(input);
+        expect(drawn.length, greaterThan(1));
+
+        final result = await removeImageMetadata(input);
+        expect(result.outcome, MetadataRemovalOutcome.reencoded);
+        expect(result.animationLost, isTrue);
+        await expectNoMetadata(result.bytes!, orientation: 1);
+        final (w, h, _) = (await render(result.bytes!)).single;
+        expect((w, h), (drawn.first.$1, drawn.first.$2));
+      });
+    }
+
+    test("a chunk inside a frame that runs past the frame does not parse", () {
+      final text = "Jane Example".codeUnits;
+      final input = animatedWebpWithInFirstFrame(
+          riffChunk("XMP ", text, size: text.length + 50));
+      expect(parseImageContainer(input), isNull);
+      expect(removeMetadataByRewrite(input), isNull);
+    });
+
+    test(
+        "an unknown chunk before an odd-sized image chunk: the frame gets "
+        "its padding byte back", () async {
+      // The first frame's VP8L is 439 bytes; here it ends its ANMF without
+      // the padding byte, so the ANMF is odd and the last chunk of a file
+      // with no EXIF. Taking the XMP out leaves the frame odd: without a
+      // padding byte added, the file does not read back.
+      final head = frames[0].sublist(0, 16);
+      final (type, image) = _riffChunks(frames[0].sublist(16)).single;
+      expect((type, image.length.isOdd), ("VP8L", true));
+      final imageChunk = riffChunk(type, image, pad: false);
+      List<(String, List<int>)> file(List<int> lastFrame) => [
+            for (final (type, payload) in chunks)
+              if (type == "VP8X" || type == "ANIM") (type, payload),
+            ("ANMF", frames[1]),
+            ("ANMF", frames[2]),
+            ("ANMF", lastFrame),
+          ];
+      final input = _webpFile(file([
+        ...head,
+        ...riffChunk("XMP ", "Jane Example!".codeUnits),
+        ...imageChunk,
+      ]));
+      final plain = _webpFile(file([...head, ...imageChunk]));
+
+      final result = removeMetadataByRewrite(input)!;
+      expect(result.outcome, MetadataRemovalOutcome.rewritten);
+      final out = result.bytes!;
+      expect(out.length, lessThanOrEqualTo(input.length));
+      expect(parseImageContainer(out), isNotNull, reason: "reads back");
+      await expectNoMetadata(out, orientation: 1);
+      final before = await render(plain);
+      final after = await render(out);
+      expect(after, hasLength(3));
+      for (var i = 0; i < before.length; i++) {
+        expect((after[i].$1, after[i].$2), (before[i].$1, before[i].$2));
+        expect(after[i].$3, before[i].$3, reason: "frame $i pixels");
+      }
+    });
+  });
+
+  test("GIF and BMP are left as they are", () {
+    final gif = img.encodeGif(img.Image(width: 4, height: 4));
+    final bmp = img.encodeBmp(img.Image(width: 4, height: 4));
+    for (final bytes in [gif, bmp]) {
+      final result = removeMetadataByRewrite(bytes)!;
+      expect(result.outcome, MetadataRemovalOutcome.untouched);
+      expect(identical(result.bytes, bytes), isTrue);
+    }
+  });
+
+  group("Exif orientation", () {
+    test("the minimal block reads back", () {
+      for (var o = 1; o <= 8; o++) {
+        expect(readTiffOrientation(minimalOrientationTiff(o)), o);
+      }
+    });
+
+    test("a malformed block reads as normal", () {
+      expect(readTiffOrientation(Uint8List(4)), 1);
+      expect(readTiffOrientation(Uint8List.fromList("II*\u0000".codeUnits)), 1);
+    });
+
+    // Odd blocks the engine reads in its own way: the rewrite has to keep
+    // the picture drawn as the original is. Each is (name, block, the
+    // orientation the engine applies).
+    final odd = [
+      for (final little in [false, true]) ...[
+        for (final count in [0, 2, 0xFFFFFFFF])
+          (
+            "count $count",
+            _tiff(little: little, entries: [(0x0112, 3, count, 6)]),
+            1
+          ),
+        for (final magic in [0, 43, 0x2A00])
+          ("magic $magic", _tiff(little: little, magic: magic), 6),
+        (
+          "a LONG Orientation before a SHORT one",
+          _tiff(
+              little: little, entries: [(0x0112, 4, 1, 6), (0x0112, 3, 1, 8)]),
+          8
+        ),
+        (
+          "an Orientation of 9 before an 8",
+          _tiff(
+              little: little, entries: [(0x0112, 3, 1, 9), (0x0112, 3, 1, 8)]),
+          8
+        ),
+      ],
+    ];
+
+    test("is read as the engine reads it", () {
+      for (final (name, block, orientation) in odd) {
+        expect(readTiffOrientation(block), orientation, reason: name);
+      }
+    });
+
+    test("a JPEG with an odd block is drawn as the original", () async {
+      final clean = removeMetadataByRewrite(fixture("gps_xmp.jpg"))!.bytes!;
+      for (final (name, block, orientation) in odd) {
+        final input = Uint8List.fromList([
+          0xFF, 0xD8, 0xFF, 0xE1, 0, 2 + 6 + block.length, //
+          ..."Exif\u0000\u0000".codeUnits, ...block,
+          ...clean.sublist(2),
+        ]);
+        final result = removeMetadataByRewrite(input)!;
+        expect(result.outcome, MetadataRemovalOutcome.rewritten, reason: name);
+        expect(result.bytes!.length, lessThanOrEqualTo(input.length),
+            reason: name);
+        await expectNoMetadata(result.bytes!, orientation: orientation);
+        final (w, h, _) = (await render(input)).single;
+        expect((w, h), orientation == 1 ? (64, 48) : (48, 64),
+            reason: "$name: the engine applies $orientation");
+        final (outW, outH, _) = (await render(result.bytes!)).single;
+        expect((outW, outH), (w, h), reason: name);
+      }
+    });
+  });
+}
+
+/// The chunks of a RIFF body (from its first chunk) as (type, payload).
+List<(String, Uint8List)> _riffChunks(Uint8List b) {
+  final data = ByteData.sublistView(b);
+  final out = <(String, Uint8List)>[];
+  var pos = 0;
+  while (pos + 8 <= b.length) {
+    final size = data.getUint32(pos + 4, Endian.little);
+    out.add((
+      String.fromCharCodes(b, pos, pos + 4),
+      Uint8List.sublistView(b, pos + 8, pos + 8 + size)
+    ));
+    pos += 8 + size + (size & 1);
+  }
+  return out;
+}
+
+/// The chunks of a WebP as (type, payload).
+List<(String, Uint8List)> _webpChunks(Uint8List b) =>
+    _riffChunks(Uint8List.sublistView(
+        b, 12, 8 + ByteData.sublistView(b).getUint32(4, Endian.little)));
+
+/// Writes a WebP from chunks. [padLast] false leaves out the padding byte
+/// of an odd last chunk.
+Uint8List _webpFile(List<(String, List<int>)> chunks, {bool padLast = true}) {
+  final out = BytesBuilder()
+    ..add("RIFF".codeUnits)
+    ..add([0, 0, 0, 0])
+    ..add("WEBP".codeUnits);
+  for (var i = 0; i < chunks.length; i++) {
+    final (type, payload) = chunks[i];
+    out
+      ..add(type.codeUnits)
+      ..add((ByteData(4)..setUint32(0, payload.length, Endian.little))
+          .buffer
+          .asUint8List())
+      ..add(payload);
+    if (payload.length.isOdd && (padLast || i < chunks.length - 1)) {
+      out.addByte(0);
+    }
+  }
+  final b = out.takeBytes();
+  ByteData.sublistView(b).setUint32(4, b.length - 8, Endian.little);
+  return b;
+}
+
+/// A TIFF block whose IFD0 right after the header holds [entries] as (tag,
+/// type, count, value), with the 4-byte offset of the next IFD: written
+/// here rather than with the code under test.
+Uint8List _tiff(
+    {bool little = false,
+    int magic = 42,
+    List<(int, int, int, int)> entries = const [(0x0112, 3, 1, 6)]}) {
+  final e = little ? Endian.little : Endian.big;
+  final d = ByteData(8 + 2 + entries.length * 12 + 4)
+    ..setUint8(0, little ? 0x49 : 0x4D)
+    ..setUint8(1, little ? 0x49 : 0x4D)
+    ..setUint16(2, magic, e)
+    ..setUint32(4, 8, e)
+    ..setUint16(8, entries.length, e);
+  for (var i = 0; i < entries.length; i++) {
+    final (tag, type, count, value) = entries[i];
+    final at = 10 + i * 12;
+    d
+      ..setUint16(at, tag, e)
+      ..setUint16(at + 2, type, e)
+      ..setUint32(at + 4, count, e)
+      ..setUint16(at + 8, value, e);
+  }
+  return d.buffer.asUint8List();
+}
+
+/// One RIFF chunk: its header, [payload] and, when [pad] and the payload
+/// is odd, its padding byte. [size] overrides the size its header gives.
+List<int> riffChunk(String type, List<int> payload,
+        {bool pad = true, int? size}) =>
+    [
+      ...type.codeUnits,
+      ...(ByteData(4)..setUint32(0, size ?? payload.length, Endian.little))
+          .buffer
+          .asUint8List(),
+      ...payload,
+      if (pad && payload.length.isOdd) 0,
+    ];
+
+/// The animated fixture (3 frames, orientation 6) with [inner] after the
+/// image data in its first frame's ANMF.
+Uint8List animatedWebpWithInFirstFrame(List<int> inner) {
+  final chunks = _webpChunks(fixture("animated_exif.webp"));
+  final first = chunks.firstWhere((c) => c.$1 == "ANMF").$2;
+  return _webpFile([
+    for (final (type, payload) in chunks)
+      if (identical(payload, first))
+        (type, [...payload, ...inner])
+      else
+        (type, payload),
+  ]);
+}
+
+/// A TIFF block whose IFD0 holds an Exif sub-IFD pointer (0x8769, first)
+/// and [ifd0], the sub-IFD after it holding [subIfd]; each entry a (tag,
+/// value) SHORT with a count of 1.
+Uint8List _tiffWithSubIfd(
+    {bool little = false,
+    List<(int, int)> ifd0 = const [],
+    required List<(int, int)> subIfd}) {
+  final e = little ? Endian.little : Endian.big;
+  final sub = 8 + 2 + (ifd0.length + 1) * 12 + 4;
+  final d = ByteData(sub + 2 + subIfd.length * 12 + 4)
+    ..setUint8(0, little ? 0x49 : 0x4D)
+    ..setUint8(1, little ? 0x49 : 0x4D)
+    ..setUint16(2, 42, e)
+    ..setUint32(4, 8, e)
+    ..setUint16(8, ifd0.length + 1, e)
+    ..setUint16(10, 0x8769, e)
+    ..setUint16(12, 4, e) // LONG
+    ..setUint32(14, 1, e)
+    ..setUint32(18, sub, e)
+    ..setUint16(sub, subIfd.length, e);
+  void entries(int at, List<(int, int)> list) {
+    for (final (tag, value) in list) {
+      d
+        ..setUint16(at, tag, e)
+        ..setUint16(at + 2, 3, e)
+        ..setUint32(at + 4, 1, e)
+        ..setUint16(at + 8, value, e);
+      at += 12;
+    }
+  }
+
+  entries(22, ifd0);
+  entries(sub + 2, subIfd);
+  return d.buffer.asUint8List();
+}
+
+int _indexOf(Uint8List haystack, String needle) {
+  final pattern = latin1.encode(needle);
+  outer:
+  for (var i = 0; i + pattern.length <= haystack.length; i++) {
+    for (var j = 0; j < pattern.length; j++) {
+      if (haystack[i + j] != pattern[j]) continue outer;
+    }
+    return i;
+  }
+  return -1;
+}
+
+/// A PNG chunk with its length and CRC, written here rather than with the
+/// code under test.
+Uint8List _pngChunk(String type, List<int> payload) {
+  final body = [...latin1.encode(type), ...payload];
+  var crc = 0xFFFFFFFF;
+  for (final b in body) {
+    crc ^= b;
+    for (var k = 0; k < 8; k++) {
+      crc = crc & 1 != 0 ? 0xEDB88320 ^ (crc >> 1) : crc >> 1;
+    }
+  }
+  crc ^= 0xFFFFFFFF;
+  final out = ByteData(12 + payload.length)..setUint32(0, payload.length);
+  final bytes = out.buffer.asUint8List()..setAll(4, body);
+  out.setUint32(8 + payload.length, crc);
+  return bytes;
+}

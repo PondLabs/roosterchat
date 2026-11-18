@@ -9,7 +9,11 @@ enum MatrixCrossSigningMode {
   enableBackup,
   restoreBackup,
   resetCrossSigning,
-  crossSigningOnly
+  crossSigningOnly,
+
+  /// Verifies this device with the recovery key or security phrase: keeps
+  /// the account's keys and backup as they are, and only signs this device.
+  verifyDevice
 }
 
 class MatrixCrossSigningPage extends StatefulWidget {
@@ -40,7 +44,7 @@ class MatrixCrossSigningPageState extends State<MatrixCrossSigningPage> {
   @override
   Widget build(BuildContext context) {
     return MatrixCrossSigningView(
-      state,
+      shownState,
       recoveryKey: bootstrapper?.newSsssKey?.recoveryKey,
       onSetNewSsss: (passphrase) {
         bootstrapper?.newSsss(passphrase);
@@ -83,6 +87,20 @@ class MatrixCrossSigningPageState extends State<MatrixCrossSigningPage> {
     );
   }
 
+  /// Verifying a device never makes new keys: a step that would (no secret
+  /// storage to unlock, or no cross-signing in it) shows as an error.
+  BootstrapState get shownState {
+    if (widget.mode != MatrixCrossSigningMode.verifyDevice) return state;
+    return switch (state) {
+      BootstrapState.askNewSsss ||
+      BootstrapState.askSetupCrossSigning ||
+      BootstrapState.askUnlockSsss ||
+      BootstrapState.askBadSsss =>
+        BootstrapState.error,
+      _ => state,
+    };
+  }
+
   void onBootstrapperUdate(Bootstrap bootstrapper) async {
     if (bootstrapper.state == BootstrapState.done) {
       widget.onComplete?.call();
@@ -102,6 +120,28 @@ class MatrixCrossSigningPageState extends State<MatrixCrossSigningPage> {
           break;
         case BootstrapState.askWipeOnlineKeyBackup:
           bootstrapper.wipeOnlineKeyBackup(false);
+          break;
+        default:
+          break;
+      }
+    }
+
+    if (widget.mode == MatrixCrossSigningMode.verifyDevice) {
+      switch (bootstrapper.state) {
+        case BootstrapState.askWipeSsss:
+          bootstrapper.wipeSsss(false);
+          break;
+        case BootstrapState.askUseExistingSsss:
+          bootstrapper.useExistingSsss(true);
+          break;
+        case BootstrapState.askWipeCrossSigning:
+          bootstrapper.wipeCrossSigning(false);
+          break;
+        case BootstrapState.askWipeOnlineKeyBackup:
+          bootstrapper.wipeOnlineKeyBackup(false);
+          break;
+        case BootstrapState.askSetupOnlineKeyBackup:
+          bootstrapper.askSetupOnlineKeyBackup(false);
           break;
         default:
           break;

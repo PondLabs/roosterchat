@@ -15,6 +15,7 @@ import 'package:rooster/ui/atoms/scaled_safe_area.dart';
 import 'package:rooster/ui/molecules/timeline_events/timeline_event_menu.dart';
 import 'package:rooster/ui/molecules/timeline_events/timeline_event_menu_dialog.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
+import 'package:rooster/ui/organisms/attachment_processor/picked_files.dart';
 import 'package:rooster/ui/organisms/photo_albums/photos_upload_view.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:rooster/utils/text_utils.dart';
@@ -378,6 +379,7 @@ class _PhotoAlbumViewState extends State<PhotoAlbumView> {
           .map((f) => PickedPhoto(
               name: f.name,
               filepath: f.path,
+              length: f.length,
               getBytes: () {
                 return f.readAsBytes();
               }))
@@ -391,6 +393,7 @@ class _PhotoAlbumViewState extends State<PhotoAlbumView> {
           .map((e) => PickedPhoto(
                 filepath: e.path,
                 name: e.name,
+                length: () async => e.size,
                 getBytes: () async {
                   var result = List<int>.empty(growable: true);
                   await for (final data in e.readStream!) {
@@ -406,17 +409,31 @@ class _PhotoAlbumViewState extends State<PhotoAlbumView> {
           .toList();
     }
 
-    AdaptiveDialog.show(context,
-        builder: (_) => PhotosAlbumUploadView(photos, widget.component));
+    await showUploadView(photos);
   }
 
-  void onFileDropped(DropDoneDetails event) {
+  void onFileDropped(DropDoneDetails event) async {
     var f = event.files
         .map((e) => PickedPhoto(
-            filepath: e.path, name: e.name, getBytes: () => e.readAsBytes()))
+            filepath: e.path,
+            name: e.name,
+            length: e.length,
+            getBytes: () => e.readAsBytes()))
         .toList();
+    await showUploadView(f);
+  }
+
+  /// The upload dialog for [photos], those over the server's limit refused
+  /// first, unread, as in a chat.
+  Future<void> showUploadView(List<PickedPhoto> photos) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    photos = await admitPickedPhotos(photos,
+        maxBytes: await limitWithin(uploadLimitOf(widget.component.room)),
+        onRefused: (bytes, limit) => messenger?.showSnackBar(
+            SnackBar(content: Text(messageFileOverUploadLimit(bytes, limit)))));
+    if (photos.isEmpty || !mounted) return;
     AdaptiveDialog.show(context,
-        builder: (_) => PhotosAlbumUploadView(f, widget.component));
+        builder: (_) => PhotosAlbumUploadView(photos, widget.component));
   }
 
   void onChanged(Photo event) {

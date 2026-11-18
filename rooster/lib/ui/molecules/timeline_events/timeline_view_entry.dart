@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/polls/poll_component.dart';
 import 'package:rooster/client/components/read_receipts/read_receipt_component.dart';
@@ -208,6 +211,13 @@ class TimelineViewEntryState extends State<TimelineViewEntry>
     showUnreadMarker = shouldEventShowUnreadMarker(eventIndex);
     highlighted = event.eventId == widget.highlightedEventId;
   }
+
+  /// A file this device is sending from the composer, whose message shows
+  /// its own stage and time (`PendingAttachmentStatus`).
+  bool get sendsWithFileStatus =>
+      AttachmentSends.instance
+          .byTransaction(widget.timeline.room.localId, eventId) !=
+      null;
 
   bool isEventTypeCollapsible(TimelineEventWidgetDisplayType eventType) {
     const collapsibleTypes = [
@@ -468,12 +478,17 @@ class TimelineViewEntryState extends State<TimelineViewEntry>
       return Container();
     }
 
-    if (status == TimelineEventStatus.sending ||
-        status == TimelineEventStatus.error) {
+    // A failed send looks as it always did. A pending one is drawn in full,
+    // with a clock once it has taken over a second; a file sent from the
+    // composer keeps its own look (its stage and time under it).
+    if (status == TimelineEventStatus.error ||
+        (status == TimelineEventStatus.sending && sendsWithFileStatus)) {
       result = Opacity(
         opacity: 0.5,
         child: result,
       );
+    } else if (status == TimelineEventStatus.sending) {
+      result = PendingMessageLook(since: time, child: result);
     }
 
     if (status == TimelineEventStatus.error) {
@@ -735,5 +750,93 @@ class TimelineViewEntryState extends State<TimelineViewEntry>
             .toList(),
       );
     });
+  }
+}
+
+/// An own message still being sent: drawn as it will look once sent, with
+/// a small clock at its end once the send has taken [delay] since [since]
+/// (when it was sent from this device). A quick send shows nothing more; a
+/// slow one never looks delivered. A failed send is not drawn with this.
+class PendingMessageLook extends StatefulWidget {
+  const PendingMessageLook(
+      {required this.since, required this.child, super.key});
+
+  /// How long a send runs before its clock appears.
+  static const delay = Duration(seconds: 1);
+
+  /// The wall clock [since] is read against. Only tests replace it.
+  static DateTime Function() now = DateTime.now;
+
+  final DateTime since;
+  final Widget child;
+
+  static String get labelPendingMessageStillSending =>
+      Intl.message("Still sending",
+          name: "labelPendingMessageStillSending",
+          desc: "Tooltip and screen reader label of the small clock shown on "
+              "the user's own message when sending it takes over a second");
+
+  @override
+  State<PendingMessageLook> createState() => _PendingMessageLookState();
+}
+
+class _PendingMessageLookState extends State<PendingMessageLook> {
+  Timer? _timer;
+  bool _slow = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _schedule();
+  }
+
+  @override
+  void didUpdateWidget(PendingMessageLook oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.since != widget.since) _schedule();
+  }
+
+  void _schedule() {
+    _timer?.cancel();
+    final wait = widget.since
+        .add(PendingMessageLook.delay)
+        .difference(PendingMessageLook.now());
+    _slow = wait <= Duration.zero;
+    if (!_slow) {
+      _timer = Timer(wait, () {
+        if (mounted) setState(() => _slow = true);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // The message stays the Stack's first child, so the clock appearing
+    // does not rebuild it.
+    return Stack(
+      children: [
+        widget.child,
+        if (_slow)
+          Positioned(
+            right: 8,
+            bottom: 2,
+            child: Tooltip(
+              message: PendingMessageLook.labelPendingMessageStillSending,
+              child: Icon(
+                Icons.schedule,
+                key: const ValueKey("pending-message-clock"),
+                size: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+      ],
+    );
   }
 }

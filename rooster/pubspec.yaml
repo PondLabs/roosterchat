@@ -222,9 +222,18 @@ dependency_overrides:
   three_js_angle_renderer:
     path: ../third_party/three_js_angle_renderer
 
+  # The Matrix SDK, copied unchanged from the fork's upstream-v6.1.1 tag
+  # (see third_party/README.md) so the upload loop can be changed in place.
+  # matrix_dart_sdk_drift_db resolves against this copy too.
+  matrix:
+    path: ../third_party/matrix-dart-sdk
+
 dev_dependencies:
   drift_dev: ^2.28.0
   build_runner: ^2.4.11
+  # The emoji generator formats its output (lib/generator/).
+  dart_style: ^2.3.8
+  pub_semver: ^2.2.0
   flutter_launcher_icons: ^0.13.1
   msix: ^3.7.0
   pubspec_dependency_sorter: ^1.0.4

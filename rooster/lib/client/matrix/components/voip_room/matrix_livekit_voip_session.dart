@@ -141,10 +141,16 @@ class MatrixLivekitVoipSession
 
   MatrixLivekitVoipSession(this.room, this.livekitRoom,
       {this.keyProvider,
+      Future<void>? microphonePublished,
       @visibleForTesting DateTime Function()? now,
       @visibleForTesting DateTime Function()? serverNow})
       : _now = now ?? DateTime.now,
-        _serverNow = serverNow ?? HomeserverClock.instance.now {
+        _serverNow = serverNow ?? HomeserverClock.instance.now,
+        // Not catchError: its handler would have to return the future's
+        // own type (a bool, from the join), and throws otherwise.
+        _joinMicrophone =
+            microphonePublished?.then<void>((_) {}, onError: (Object _) {}) ??
+                Future.value() {
     // Our membership was written just before this, so this is a moment
     // after we joined: what we count from if it is gone before we see it.
     _startedAt = _serverNow();
@@ -1625,10 +1631,30 @@ class MatrixLivekitVoipSession
 
   final DeafenRule _deafen = DeafenRule();
 
-  bool get _isDeafened => _deafen.deafened;
+  /// A deafen asked for while the join's microphone may still be opening:
+  /// the others are silent at once, and the microphone follows once it is
+  /// there (see [setDeafened]).
+  bool _deafenWaiting = false;
+
+  bool get _isDeafened => _deafen.deafened || _deafenWaiting;
 
   @override
   bool get isDeafened => _isDeafened;
+
+  /// The others' tracks silenced or heard again, and our own tile marked,
+  /// as [_isDeafened] says.
+  void _applyListening() {
+    for (var stream in _streams) {
+      if (stream is MatrixLivekitVoipStream) {
+        _applyStreamVolume(stream);
+      }
+    }
+
+    final localIdentity = livekitRoom.localParticipant?.identity;
+    if (localIdentity != null) {
+      _setStreamsDeafened(localIdentity, _isDeafened);
+    }
+  }
 
   void _applyStreamVolume(MatrixLivekitVoipStream stream) {
     if (stream.direction == VoipStreamDirection.incoming) {
@@ -1726,14 +1752,22 @@ class MatrixLivekitVoipSession
         deviceId: WebrtcDefaultDevices.getDefaultMicrophoneId,
       );
 
+  /// The join publishing our microphone (see `CallJoin`). A mute or deafen
+  /// waits for it: one sent to LiveKit before it found no microphone, opened
+  /// a second capture, and the join then published its own beside it.
+  final Future<void> _joinMicrophone;
+
   @override
   Future<void> setMicrophoneMute(bool state) async {
+    await _joinMicrophone;
     // As in Discord, unmuting while deafened undeafens too (DeafenRule).
     if (!state && _isDeafened) {
       _deafen.unmute();
       await _applyDeafened(micMuted: false);
       return;
     }
+    // Muted while deafened: still muted once undeafened (DeafenRule).
+    if (state) _deafen.mute();
 
     _microphoneWanted = !state;
     await livekitRoom.localParticipant?.setMicrophoneEnabled(!state,
@@ -1760,6 +1794,18 @@ class MatrixLivekitVoipSession
 
   @override
   Future<void> setDeafened(bool state) async {
+    // What is heard follows at once, also while the join's microphone is
+    // still opening (a permission prompt nobody answers).
+    final wasDeafened = _isDeafened;
+    _deafenWaiting = state;
+    if (_isDeafened != wasDeafened) {
+      _applyListening();
+      _stateChanged.add(());
+    }
+    // Before reading the mute: it is only known once the join's microphone
+    // is published.
+    await _joinMicrophone;
+    _deafenWaiting = false;
     if (state) {
       _deafen.deafen(micMuted: isMicrophoneMuted);
       await _applyDeafened(micMuted: true);
@@ -1771,22 +1817,14 @@ class MatrixLivekitVoipSession
   }
 
   Future<void> _applyDeafened({required bool micMuted}) async {
+    await _joinMicrophone;
     _microphoneWanted = !micMuted;
     await livekitRoom.localParticipant?.setMicrophoneEnabled(!micMuted,
         audioCaptureOptions: await _micOptions(enabling: !micMuted));
     // A noise suppression change made while muted is applied now.
     if (!micMuted) unawaited(_noiseSuppression.update());
 
-    for (var stream in _streams) {
-      if (stream is MatrixLivekitVoipStream) {
-        _applyStreamVolume(stream);
-      }
-    }
-
-    final localIdentity = livekitRoom.localParticipant?.identity;
-    if (localIdentity != null) {
-      _setStreamsDeafened(localIdentity, _isDeafened);
-    }
+    _applyListening();
 
     _broadcastVoiceState();
     // LiveKit tells the room right away; the membership is what people

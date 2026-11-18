@@ -1565,6 +1565,18 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelDeviceNotVerified": "This device is not verified",
+  "@labelDeviceNotVerified": {
+    "description": "Title of the notice in the Home screen's alerts while this device (session) has not been verified with the account's cross-signing",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageDeviceNotVerified": "Encrypted messages won't open here until you verify this device. Tap to verify.",
+  "@messageDeviceNotVerified": {
+    "description": "Under 'This device is not verified' in the Home screen's alerts; tapping the notice opens the ways to verify this device",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelRoomPhotoUploadTask": "Uploading Photos",
   "@labelRoomPhotoUploadTask": {
     "description": "Background task shown while photos picked for a photo album room are being uploaded, with a progress bar",
@@ -1734,6 +1746,12 @@
   "labelVoipCallError": "Call Error",
   "@labelVoipCallError": {
     "description": "Title of the dialog asking, as a call is placed, whether to route it through a fallback server since the homeserver has none",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorCallNoPermission": "Your role in this channel does not let you join its calls",
+  "@errorCallNoPermission": {
+    "description": "Why joining a voice channel's call failed, shown under 'Could not join the call': the user's power level in the room does not allow the call membership event, so nobody would see them in the call. Nothing was sent",
     "type": "text",
     "placeholders": {}
   },
@@ -2044,6 +2062,12 @@
   "messageRoomNotificationPushRules": "Did not pass push rules",
   "@messageRoomNotificationPushRules": {
     "description": "Notification debugger (Developer settings): why a test notification was not shown: the account's notification rules (Matrix push rules) say not to",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPhotoUploadInterrupted": "A photo didn't finish uploading before Rooster closed. The others won't see it",
+  "@labelPhotoUploadInterrupted": {
+    "description": "In the chat and in the room list's preview, in place of a photo of yours whose upload had not finished when the app closed: its message was taken back from the room, and the photo can't be sent again from here (attach it again)",
     "type": "text",
     "placeholders": {}
   },
@@ -3415,6 +3439,99 @@
     "type": "text",
     "placeholders": {}
   },
+  "promptCancelPhotoUpload": "Cancel send",
+  "@promptCancelPhotoUpload": {
+    "description": "Button under a photo whose message is already in the room while the photo itself is still uploading: stops the upload and takes the message back",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPhotoLeftInRoom": "The photo didn't upload, and this message couldn't be deleted",
+  "@labelPhotoLeftInRoom": {
+    "description": "Under a photo message of yours that is in the room but whose photo never finished uploading, when the app could not take the message back: the others see it without its picture",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPendingFilePreparing": "Preparing",
+  "@labelPendingFilePreparing": {
+    "description": "Under a file just sent from the composer, while the app gets it ready to upload (reads it, makes the picture's thumbnail)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPendingFileUploading": "Uploading",
+  "@labelPendingFileUploading": {
+    "description": "Under a file just sent from the composer, while it is uploaded to the server",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPendingFileSendingEvent": "Sending",
+  "@labelPendingFileSendingEvent": {
+    "description": "Under a file just sent from the composer, once it is uploaded and the message that shows it is being sent to the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPendingFileFailed": "Couldn't send",
+  "@labelPendingFileFailed": {
+    "description": "Under a file sent from the composer that did not reach the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPendingFileEncrypting": "Encrypting",
+  "@labelPendingFileEncrypting": {
+    "description": "Under a file just sent from the composer in an encrypted room, while the app encrypts it before uploading",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPendingFileWaitingForServer": "Waiting for the server",
+  "@labelPendingFileWaitingForServer": {
+    "description": "Under a file being sent, once every byte of it has gone out and the server has not answered yet",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPendingFileRetrying": "Retrying",
+  "@labelPendingFileRetrying": {
+    "description": "Under a file being sent, when its upload failed and the app uploads it again by itself",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPendingFileServerTooSlow": "The server took too long with this {size} file",
+  "@labelPendingFileServerTooSlow": {
+    "description": "Under a file that could not be sent because the server (or a proxy in front of it) gave up waiting before answering. The placeholder is the file's size, such as '48 MB'",
+    "type": "text",
+    "placeholders": {
+      "size": {
+        "example": "48 MB"
+      }
+    }
+  },
+  "labelPendingFileServerAskedToWait": "The server is busy. You can retry at {time}",
+  "@labelPendingFileServerAskedToWait": {
+    "description": "Under a file that could not be sent because the server asked the app to wait longer than it waits by itself. The placeholder is the time of day from which Retry can work, such as '14:32'",
+    "type": "text",
+    "placeholders": {
+      "time": {
+        "example": "14:32"
+      }
+    }
+  },
+  "labelPendingFileChanged": "The file was changed or deleted",
+  "@labelPendingFileChanged": {
+    "description": "Under a file that could not be sent because, while it was being sent from this device's disk, the file was deleted, cut short or written to. Attaching it again sends it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPendingFileUploadCount": "{sent} of {total}",
+  "@labelPendingFileUploadCount": {
+    "description": "Under a file being uploaded: how much of it the connection has taken so far, such as '3.1 MB of 48 MB'",
+    "type": "text",
+    "placeholders": {
+      "sent": {
+        "example": "3.1 MB"
+      },
+      "total": {
+        "example": "48 MB"
+      }
+    }
+  },
   "messagePlaceholderSticker": "{user} sent a sticker",
   "@messagePlaceholderSticker": {
     "description": "Message body for when a user sends a sticker",
@@ -3511,6 +3628,12 @@
     "type": "text",
     "placeholders": {}
   },
+  "messageUndecryptedOnUnverifiedDevice": "This device is not verified, so this message can't be opened. Tap to verify.",
+  "@messageUndecryptedOnUnverifiedDevice": {
+    "description": "In the chat, in place of a message that could not be decrypted, when this device has not been verified; tapping it opens the prompt to verify this device",
+    "type": "text",
+    "placeholders": {}
+  },
   "promptPinMessage": "Pin Message",
   "@promptPinMessage": {
     "description": "Label for the menu option to pin a message",
@@ -3550,6 +3673,12 @@
   "promptRetryEventSend": "Retry",
   "@promptRetryEventSend": {
     "description": "When a message failed to send, this prompts to retry sending the event",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRetryFileNoLongerHeld": "This file is no longer on this device. Attach it again to send it.",
+  "@messageRetryFileNoLongerHeld": {
+    "description": "Shown after 'Retry' on a file message that failed to send, when the app was restarted since and no longer has the file",
     "type": "text",
     "placeholders": {}
   },
@@ -3613,6 +3742,12 @@
   "labelTimelineReadReceipts": "Read Receipts",
   "@labelTimelineReadReceipts": {
     "description": "Title of the dialog listing who has read up to a message",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPendingMessageStillSending": "Still sending",
+  "@labelPendingMessageStillSending": {
+    "description": "Tooltip and screen reader label of the small clock shown on the user's own message when sending it takes over a second",
     "type": "text",
     "placeholders": {}
   },
@@ -3928,9 +4063,21 @@
     "type": "text",
     "placeholders": {}
   },
-  "promptAttachmentProcessingSendOriginal": "Send Original",
+  "promptAttachmentProcessingSendOriginal": "Send original (keeps metadata)",
   "@promptAttachmentProcessingSendOriginal": {
-    "description": "Prompt text for the option to send a file in its original state, without any further processing such as removing metadata",
+    "description": "Switch in the dialog that previews a file before it is attached: sends the file exactly as it is, with its metadata (where and when a photo was taken, the camera) left in",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelAttachmentMetadataNotRemoved": "Couldn't remove this image's metadata. To attach it as it is, turn on \"Send original\".",
+  "@labelAttachmentMetadataNotRemoved": {
+    "description": "Shown in the dialog that previews a file before it is attached, when the image could not be read well enough to remove its metadata; nothing is attached unless the person turns on the \"Send original (keeps metadata)\" switch",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelAttachmentAnimationNotKept": "The animation wasn't kept: only its first frame will be attached. To attach it as it is, turn on \"Send original\".",
+  "@labelAttachmentAnimationNotKept": {
+    "description": "Shown in the dialog that previews a file before it is attached, when an animated image could not be read well enough to remove its metadata without decoding it: the picture without metadata is only its first frame. The button below it, now \"Attach first frame\", attaches that frame; the \"Send original (keeps metadata)\" switch attaches the file as it is",
     "type": "text",
     "placeholders": {}
   },
@@ -3940,11 +4087,39 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelAttachmentPhotoReduced": "This photo will be sent at {width} × {height} pixels. To send it at full size, turn on \"Send original\".",
+  "@labelAttachmentPhotoReduced": {
+    "description": "Shown in the dialog that previews a photo before it is attached, when the photo is larger than what is sent by default: the width and height (in pixels, already formatted as numbers) it will be sent at. The \"Send original (keeps metadata)\" switch above it sends the photo at its own size",
+    "type": "text",
+    "placeholders": {
+      "width": {},
+      "height": {}
+    }
+  },
   "promptChatAddFile": "Add File",
   "@promptChatAddFile": {
     "description": "Button at the bottom of the dialog that previews a file before it is attached to a message: attaches it",
     "type": "text",
     "placeholders": {}
+  },
+  "promptAttachmentAttachFirstFrame": "Attach first frame",
+  "@promptAttachmentAttachFirstFrame": {
+    "description": "Button at the bottom of the dialog that previews a file before it is attached, in place of \"Add File\" once the dialog has said an animation was not kept: attaches the animation's first frame, without its metadata",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelFileOverUploadLimit": "This file is {size}, over this server's limit of {limit}, so it can't be sent.",
+  "@labelFileOverUploadLimit": {
+    "description": "Shown when a file picked or pasted to send is larger than the server accepts. The placeholders are sizes, such as '60 MB' and '50 MB'",
+    "type": "text",
+    "placeholders": {
+      "size": {
+        "example": "60 MB"
+      },
+      "limit": {
+        "example": "50 MB"
+      }
+    }
   },
   "ActivityJoinPill_text": "{host} started {activity}",
   "@ActivityJoinPill_text": {
@@ -4354,6 +4529,14 @@
   "messageChatFileHasLocation": "Location data was detected in file '{name}', are you sure you want to send?",
   "@messageChatFileHasLocation": {
     "description": "Asked before sending a file whose metadata says where it was taken, with the file's name",
+    "type": "text",
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "messageChatFileMetadataUnreadable": "Couldn't read the metadata of file '{name}': it may hold location data. Are you sure you want to send?",
+  "@messageChatFileMetadataUnreadable": {
+    "description": "Asked before sending a file whose metadata could not be read, so it may say where the file was taken, with the file's name",
     "type": "text",
     "placeholders": {
       "name": {}
@@ -7612,6 +7795,24 @@
     "type": "text",
     "placeholders": {}
   },
+  "messageRoomUiaApproveOnWebsite": "Your server approves this change on its own website: open it, approve the change, and come back.",
+  "@messageRoomUiaApproveOnWebsite": {
+    "description": "In the dialog where the server asks us to confirm a sensitive change (such as new keys that verify your sessions): the server only takes it once the person approves it on the server's own website, which the button below opens in the browser",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRoomUiaNotApprovedYet": "The server has not seen the approval yet. Approve the change on the website, then try again.",
+  "@messageRoomUiaNotApprovedYet": {
+    "description": "In the dialog where the server asks us to approve a sensitive change on its website: we asked again and the server still waits for that approval",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRoomUiaOpenWebsite": "Open the website",
+  "@promptRoomUiaOpenWebsite": {
+    "description": "Button in the dialog where the server asks us to approve a sensitive change on its own website: opens that website in the browser",
+    "type": "text",
+    "placeholders": {}
+  },
   "promptRoomUiaContinueWithPassword": "Continue with password",
   "@promptRoomUiaContinueWithPassword": {
     "description": "Button in the dialog where the server asks us to sign in again before a sensitive action: confirm with the account's password",
@@ -7799,6 +8000,36 @@
     "placeholders": {
       "emoji": {}
     }
+  },
+  "labelVerifyThisDevice": "Verify this device",
+  "@labelVerifyThisDevice": {
+    "description": "Title of the prompt that asks to verify this device (session), shown after signing in and from the notice in the Home screen",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerifyThisDeviceWhy": "Verify this device to read your encrypted messages. Until then, others won't send it the keys.",
+  "@messageVerifyThisDeviceWhy": {
+    "description": "In the prompt to verify this device: why encrypted messages do not open on a device that has not been verified",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptVerifyWithRecoveryKey": "Use recovery key or security phrase",
+  "@promptVerifyWithRecoveryKey": {
+    "description": "Button in the prompt to verify this device: verify it by typing the account's recovery key or security phrase",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptVerifyWithOtherDevice": "Verify with another device",
+  "@promptVerifyWithOtherDevice": {
+    "description": "Button in the prompt to verify this device: compare emoji with another device where the account is signed in",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptVerifyLater": "Later",
+  "@promptVerifyLater": {
+    "description": "Button in the prompt to verify this device: close it for now; the notice in the Home screen opens it again",
+    "type": "text",
+    "placeholders": {}
   },
   "labelSettingsAppLogs": "Logs",
   "@labelSettingsAppLogs": {
@@ -8387,6 +8618,26 @@
     "description": "Explains what the message backup does",
     "type": "text",
     "placeholders": {}
+  },
+  "messageSettingsSessionsOnAccountPage": "Your server signs sessions out on its own website, which opens in your browser.",
+  "@messageSettingsSessionsOnAccountPage": {
+    "description": "Settings > Security > Sessions: on a server that only lets its own account website sign sessions (devices) out, says that removing one opens that website",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageSettingsSessionsCannotSignOut": "Your server does not let apps sign out your other sessions, so sign out on each device.",
+  "@messageSettingsSessionsCannotSignOut": {
+    "description": "Settings > Security > Sessions: the server neither has an account website nor lets apps sign sessions (devices) out, so there is no remove button",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageSettingsSessionsSignedOut": "{howMany,plural, =1{1 session was signed out.}other{{howMany} sessions were signed out.}}",
+  "@messageSettingsSessionsSignedOut": {
+    "description": "Settings > Security > Sessions: after the list is fetched again, how many sessions (devices) left it, for example after signing them out on the server's website",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
   },
   "labelMatrixCrossSigning": "Cross signing",
   "@labelMatrixCrossSigning": {
@@ -10317,6 +10568,55 @@
   "promptDeveloperReportIssue": "Report Issue",
   "@promptDeveloperReportIssue": {
     "description": "Button on an error in the Logs page that opens a new GitHub issue filled in with the error",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeveloperSpeedLog": "Speed log",
+  "@labelDeveloperSpeedLog": {
+    "description": "Title of the Developer settings section that shows how long sending a message, each sync and other network operations took on this device",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeveloperSpeedLogEmpty": "Nothing timed yet",
+  "@labelDeveloperSpeedLogEmpty": {
+    "description": "In Developer settings > Speed log, before any operation has been timed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeveloperSpeedLogSamples": "{howMany,plural, =1{1 sample}other{{howMany} samples}}",
+  "@labelDeveloperSpeedLogSamples": {
+    "description": "In Developer settings > Speed log: how many timings an operation or one of its steps has",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "labelDeveloperSpeedLogPercentiles": "p50 {p50} ms · p95 {p95} ms",
+  "@labelDeveloperSpeedLogPercentiles": {
+    "description": "In Developer settings > Speed log: the median (p50) and the 95th percentile (p95) of how long an operation or a step took, in milliseconds",
+    "type": "text",
+    "placeholders": {
+      "p50": {},
+      "p95": {}
+    }
+  },
+  "labelDeveloperSpeedLogNotTimed": "{howMany,plural, =1{1 not timed}other{{howMany} not timed}}",
+  "@labelDeveloperSpeedLogNotTimed": {
+    "description": "In Developer settings > Speed log: how many times a step could not be timed by the app (it is left out, not guessed)",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "promptDeveloperCopySpeedReport": "Copy speed report",
+  "@promptDeveloperCopySpeedReport": {
+    "description": "Button in Developer settings > Speed log that copies the speed report, a text with the timings and no message content, to paste into an issue",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageDeveloperSpeedReportCopied": "Speed report copied",
+  "@messageDeveloperSpeedReportCopied": {
+    "description": "Shown for 2 seconds on the Copy speed report button in Developer settings > Speed log, after the speed report was copied",
     "type": "text",
     "placeholders": {}
   },

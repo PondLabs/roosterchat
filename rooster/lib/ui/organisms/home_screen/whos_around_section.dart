@@ -7,6 +7,7 @@ import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/soundboard/entrance_sound.dart';
 import 'package:rooster/client/components/voip_room/voip_room_component.dart';
 import 'package:rooster/client/live_voice_channels.dart';
+import 'package:rooster/client/matrix/components/voip_room/call_warm_up.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/adaptive_context_menu.dart';
@@ -15,6 +16,7 @@ import 'package:rooster/ui/atoms/live_media_indicator.dart';
 import 'package:rooster/ui/atoms/room_text_button.dart';
 import 'package:rooster/ui/organisms/dj/vinyl_disc.dart';
 import 'package:rooster/ui/organisms/home_screen/home_screen_view.dart';
+import 'package:rooster/ui/organisms/voip_room_view/warm_up_on_rest.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -27,6 +29,7 @@ class WhosAroundSection extends StatefulWidget {
     this.onOpen,
     this.onOpenChat,
     this.onJoin,
+    this.onWarmUp,
     super.key,
   });
 
@@ -45,6 +48,10 @@ class WhosAroundSection extends StatefulWidget {
   /// Joins the call: by default a join request the channel's page takes as
   /// it opens, with the entrance sound.
   final void Function(Room room)? onJoin;
+
+  /// Fetches what joining the call needs, when the pointer or focus rests
+  /// on its join button: by default [warmUp].
+  final void Function(Room room)? onWarmUp;
 
   /// Quiet channels listed before "N more channels".
   static const int maxQuiet = 5;
@@ -101,6 +108,13 @@ class WhosAroundSection extends StatefulWidget {
   static void join(Room room) {
     EntranceSoundGate.instance.requestJoin(room.identifier);
     open(room);
+  }
+
+  /// Fetches the tokens a join of [room]'s call needs (see `CallWarmUp`).
+  /// It opens no microphone and connects nothing.
+  static void warmUp(Room room) {
+    final voip = room.getComponent<VoipRoomComponent>();
+    if (voip != null) CallWarmUp.warm(voip);
   }
 
   @override
@@ -184,6 +198,7 @@ class _WhosAroundSectionState extends State<WhosAroundSection> {
                 onOpen: widget.onOpen ?? WhosAroundSection.open,
                 onOpenChat: widget.onOpenChat ?? WhosAroundSection.openChat,
                 onJoin: widget.onJoin ?? WhosAroundSection.join,
+                onWarmUp: widget.onWarmUp ?? WhosAroundSection.warmUp,
               ),
             ),
         ],
@@ -290,6 +305,7 @@ class _LiveRow extends StatefulWidget {
     required this.onOpen,
     required this.onOpenChat,
     required this.onJoin,
+    required this.onWarmUp,
     super.key,
   });
 
@@ -297,6 +313,7 @@ class _LiveRow extends StatefulWidget {
   final void Function(Room room) onOpen;
   final void Function(Room room) onOpenChat;
   final void Function(Room room) onJoin;
+  final void Function(Room room) onWarmUp;
 
   @override
   State<_LiveRow> createState() => _LiveRowState();
@@ -412,13 +429,16 @@ class _LiveRowState extends State<_LiveRow> {
                           foreground: colors.onSurfaceVariant,
                           compact: compact,
                         )
-                      : _Chip(
-                          WhosAroundSection.labelJoinCall,
-                          icon: Icons.call_rounded,
-                          background: colors.primary,
-                          foreground: colors.onPrimary,
-                          compact: compact,
-                          onTap: () => widget.onJoin(room),
+                      : WarmUpOnRest(
+                          onRest: () => widget.onWarmUp(room),
+                          child: _Chip(
+                            WhosAroundSection.labelJoinCall,
+                            icon: Icons.call_rounded,
+                            background: colors.primary,
+                            foreground: colors.onPrimary,
+                            compact: compact,
+                            onTap: () => widget.onJoin(room),
+                          ),
                         ),
                 ),
             ],

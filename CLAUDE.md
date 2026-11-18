@@ -12,6 +12,7 @@ Hard fork of Commet (a Flutter Matrix client) by PondLabs, shipped as **Rooster*
 - Voice call health: every second a voice room checks that our microphone still gets through and that we still receive everyone, and repairs either without a rejoin. See `docs/voice-call-health.md`.
 - Who is in a voice channel: call memberships read by the homeserver's clock (`HomeserverClock`), written again hourly by their owners for the whole call, plus everyone in LiveKit while we are in it. See `docs/voice-channel-members.md`.
 - Call history: a day-by-day view of who was in voice, for how long and what they shared, worked out from the rooms' history of call memberships (nothing new is stored). See `docs/call-history.md`.
+- Speed log: how long each request, text send and sync takes on this device, kept in memory without content (no text, ids, URLs or tokens); p50 and p95 under Settings > Developer > Speed log, and a report to copy. See `docs/speed-log.md`.
 - Away status: the amber dot, and where idle time comes from on each platform. See `docs/away-status.md`.
 - Profile: Settings > Profile edits a draft with a live preview of your card, and says who sees each field; name colors others see are MSC4522's `eu.she-a.color` profile field, fetched and cached per person. See `docs/profile.md`.
 - Who's around: the top of the Home screen's list, the voice channels with people in them (faces, a join button) across every space and account, and the quiet ones to pull up a chair in. See `docs/whos-around.md`.

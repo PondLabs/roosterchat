@@ -13,8 +13,18 @@ export 'package:rooster/utils/clipboard/pasted_file.dart';
 /// itself, where `navigator.clipboard.read()` (the pasteboard package) needs
 /// a permission and gave nothing. Native does nothing here. Returns what
 /// stops listening.
+///
+/// A file larger than [maxBytes] says (the server's limit on uploads, null
+/// when not known) goes to [onRefused] with its size, by the browser's
+/// `File.size`, and is never read.
 void Function() listenForPastedFiles({
   required bool Function() accept,
   required void Function(List<PastedFile> files) onFiles,
+  int? Function()? maxBytes,
+  void Function(int bytes, int maxBytes)? onRefused,
 }) =>
-    impl.listenForPastedFiles(accept: accept, onFiles: onFiles);
+    impl.listenForPastedFiles(
+        accept: accept,
+        onFiles: onFiles,
+        maxBytes: maxBytes,
+        onRefused: onRefused);

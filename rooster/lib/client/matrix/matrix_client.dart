@@ -25,13 +25,21 @@ import 'package:rooster/config/build_config.dart';
 import 'package:rooster/config/global_config.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/diagnostic/diagnostics.dart';
+import 'package:rooster/diagnostic/speed_log/host_class.dart';
+import 'package:rooster/diagnostic/speed_log/sync_trace.dart';
 import 'package:rooster/main.dart';
+import 'package:rooster/cache/own_media_cache.dart';
+import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
+import 'package:rooster/client/matrix/media/own_media.dart';
+import 'package:rooster/utils/network/speed_http_client.dart';
 import 'package:rooster/utils/notifying_list.dart';
 import 'package:rooster/utils/notifying_list_filter.dart';
 import 'package:rooster/utils/stored_stream_controller.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
+import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/client.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -40,6 +48,7 @@ import 'package:matrix/encryption.dart';
 import 'package:flutter_vodozemac/flutter_vodozemac.dart' as vodozemac;
 
 import '../../ui/atoms/code_block.dart';
+import 'components/key_verification_component/matrix_key_verification_component.dart';
 import 'matrix_room.dart';
 import 'matrix_space.dart';
 import 'package:vodozemac/vodozemac.dart' as vod;
@@ -109,9 +118,20 @@ class MatrixClient extends Client {
       ? const matrix.NativeImplementationsDummy()
       : NativeImplementationsCustom(compute);
 
+  /// The speed log's `sync` spans of this account (docs/speed-log.md).
+  late final SyncSpeedTrace _syncSpeedTrace;
+
+  /// What this account sent from this device (lib/cache/own_media_cache.dart).
+  late final OwnMediaCache _ownMedia;
+
+  /// What the own media listens to on the SDK client, cancelled in close().
+  final List<StreamSubscription<Object?>> _ownMediaListeners = [];
+
   MatrixClient({
     required String identifier,
     required matrix.DatabaseApi database,
+    // Only tests pass one: a fake server under the speed log's client.
+    http.Client? transport,
   }) {
     if (preferences.developerMode.value) {
       matrix.Logs().level = matrix.Level.verbose;
@@ -120,7 +140,14 @@ class MatrixClient extends Client {
     }
 
     _id = identifier;
-    _matrixClient = _createMatrixClient(identifier, database);
+    _matrixClient = _createMatrixClient(identifier, database, transport);
+    _ownMedia = OwnMediaCache.forAccount(identifier, files: fileCache);
+    _ownMediaListeners.add(attachOwnMedia(_matrixClient, _ownMedia));
+    // Logged out here or by the homeserver: nothing sent stays behind.
+    _ownMediaListeners.add(_matrixClient.onLoginStateChanged.stream
+        .where((state) => state == matrix.LoginState.loggedOut)
+        .listen((_) => _clearOwnMedia()));
+    _syncSpeedTrace = SyncSpeedTrace(_matrixClient.onSyncStatus.stream);
 
     self = ErrorProfile();
 
@@ -435,9 +462,17 @@ class MatrixClient extends Client {
   @override
   bool isLoggedIn() => _matrixClient.isLogged();
 
-  matrix.Client _createMatrixClient(String name, matrix.DatabaseApi database) {
-    var client = matrix.Client(
+  matrix.Client _createMatrixClient(
+      String name, matrix.DatabaseApi database, http.Client? transport) {
+    late final matrix.Client client;
+    client = matrix.Client(
       name,
+      // Every request of the account goes through our client, which records
+      // its timings in the speed log without content (lib/diagnostic/speed_log).
+      httpClient: SpeedHttpClient(
+        inner: transport,
+        hosts: HostClassifier(homeserver: () => client.homeserver),
+      ),
       verificationMethods: {
         KeyVerificationMethod.emoji,
         KeyVerificationMethod.numbers,
@@ -474,9 +509,26 @@ class MatrixClient extends Client {
   }
 
   @override
-  Future<void> logout() {
+  Future<void> logout() async {
     preferences.removeRegisteredMatrixClient(_matrixClient.clientName);
-    return _matrixClient.logout();
+    try {
+      await _matrixClient.logout();
+    } finally {
+      await _clearOwnMedia();
+    }
+  }
+
+  /// Never throws: logging out goes on whatever is left on disk. The
+  /// thumbnails the homeserver refused are forgotten with it, and so are
+  /// the files the account was sending, with their bytes.
+  Future<void> _clearOwnMedia() async {
+    MatrixMxcImage.forgetNoServerThumbnails(_matrixClient);
+    AttachmentSends.instance.forgetAccount(identifier);
+    try {
+      await _ownMedia.clear();
+    } catch (error, stack) {
+      Log.onError(error, stack, content: "Could not clear the sent files");
+    }
   }
 
   Future<void> _postLoginSuccess() async {
@@ -756,6 +808,10 @@ class MatrixClient extends Client {
   @override
   Future<void> close({bool closeDatabase = true}) async {
     getComponent<MatrixUserPresenceComponent>()?.dispose();
+    for (final listener in _ownMediaListeners) {
+      await listener.cancel();
+    }
+    await _syncSpeedTrace.dispose();
     await _matrixClient.dispose(closeDatabase: closeDatabase);
   }
 
@@ -994,6 +1050,9 @@ class MatrixClient extends Client {
       }
 
       preferences.addRegisteredMatrixClient(identifier);
+      // A new device of an account with cross-signing reads no encrypted
+      // message until it is verified: ask right away.
+      getComponent<MatrixKeyVerificationComponent>()?.askAfterLogin();
       await _postLoginSuccess();
     }
 

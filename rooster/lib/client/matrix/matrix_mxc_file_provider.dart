@@ -1,8 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 import 'package:rooster/cache/file_provider.dart';
+import 'package:rooster/cache/own_media_cache.dart';
 import 'package:rooster/client/matrix/extensions/matrix_client_extensions.dart';
+import 'package:rooster/client/matrix/media/own_media.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:matrix/matrix.dart' as matrix;
@@ -17,11 +21,31 @@ class MxcFileProvider implements FileProvider {
 
   MxcFileProvider(this.client, this.uri, {this.event});
 
+  /// Whether [uri] is [event]'s own file, the one its own media keeps.
+  bool get _isEventFile => event != null && event!.attachmentMxcUrl == uri;
+
   StreamController<DownloadProgress> fileDownloadProgress =
       StreamController.broadcast();
 
   @override
   Future<Uri?> resolve({String? savePath}) async {
+    // Sent from this device: its own file, never copied under the key every
+    // account shares, which logging out would leave behind.
+    if (_isEventFile) {
+      final own = await ownMediaFile(client, event);
+      if (own != null) return own;
+
+      // The account's own file, no longer there (the cache's clean): from
+      // the network, and kept in the account's own media again.
+      final ownMedia = ownMediaCacheFor(client, event);
+      if (ownMedia != null) {
+        final bytes = await getFileData();
+        if (bytes == null) return null;
+        await ownMedia.write(fileIdentifier, bytes);
+        return ownMedia.fileOf(fileIdentifier);
+      }
+    }
+
     var cached = await fileCache?.getFile(fileIdentifier);
     if (cached != null) {
       return cached;
@@ -49,6 +73,12 @@ class MxcFileProvider implements FileProvider {
   Future<Uint8List?> getFileData() async {
     Uint8List? bytes;
 
+    // Sent from this device: the bytes it still holds.
+    if (_isEventFile) {
+      final own = await readOwnMedia(client, event);
+      if (own != null) return own;
+    }
+
     var cached = await fileCache?.getFile(fileIdentifier);
     if (cached != null) {
       return File.fromUri(cached).readAsBytes();
@@ -57,45 +87,19 @@ class MxcFileProvider implements FileProvider {
     if (event != null) {
       var file = await event!.downloadAndDecryptAttachment(
         downloadCallback: (url) async {
-          var request = http.Request("GET", url);
-          request.headers
-              .addAll({'authorization': 'Bearer ${client.accessToken}'});
-          final response = await http.Client().send(request);
-
-          List<int> downloadedBytes = response.contentLength != null
-              ? Uint8List(response.contentLength!)
-              : [];
-
-          int downloaded = 0;
-          if (response.statusCode != 200) {
-            throw Exception("Unexpected response: ${response.statusCode}");
-          }
-
           var lastUpdatedProgress = DateTime.now();
-
-          var data = response.stream.listen(
-            (event) {
-              if (response.contentLength != null) {
-                downloadedBytes.setAll(downloaded, event);
-              } else {
-                downloadedBytes.addAll(event);
-              }
-              downloaded += event.length;
-
-              var now = DateTime.now();
-              if (now.difference(lastUpdatedProgress).inMilliseconds > 16) {
-                lastUpdatedProgress = now;
-
-                fileDownloadProgress.add(
-                    DownloadProgress(downloaded, response.contentLength ?? -1));
-              }
-            },
-            cancelOnError: true,
-          ).asFuture();
-
-          await data;
-
-          return Uint8List.fromList(downloadedBytes);
+          final bytes =
+              await downloadMedia(client, url, onProgress: (downloaded, total) {
+            var now = DateTime.now();
+            if (now.difference(lastUpdatedProgress).inMilliseconds > 16) {
+              lastUpdatedProgress = now;
+              fileDownloadProgress
+                  .add(DownloadProgress(downloaded, total ?? -1));
+            }
+          });
+          fileDownloadProgress
+              .add(DownloadProgress(bytes.length, bytes.length));
+          return bytes;
         },
       );
       bytes = file.bytes;
@@ -115,4 +119,164 @@ class MxcFileProvider implements FileProvider {
   @override
   Stream<DownloadProgress>? get onProgressChanged =>
       fileDownloadProgress.stream;
+}
+
+/// The account's own media ([ownMediaOf]) when [event] is one of the
+/// account's own: what is downloaded for it is kept there, per account
+/// and cleared on logout, never under the keys every account shares.
+OwnMediaCache? ownMediaCacheFor(matrix.Client client, matrix.Event? event) =>
+    event != null && event.senderId == client.userID
+        ? ownMediaOf(client)
+        : null;
+
+/// The server answered a media download with [statusCode] instead of 200.
+class MediaDownloadException implements Exception {
+  MediaDownloadException(this.statusCode,
+      {this.retryAfter, this.retryAfterUnreadable = false});
+
+  final int statusCode;
+
+  /// How long a 429 asked to wait (its `Retry-After` header, in seconds or
+  /// as an HTTP date, or the `retry_after_ms` of its body), when it said.
+  final Duration? retryAfter;
+
+  /// A 429 said how long to wait in a way that is not understood (not a
+  /// whole number of seconds, an HTTP date or a whole `retry_after_ms`):
+  /// how long to wait is not known.
+  final bool retryAfterUnreadable;
+
+  /// The clock a `Retry-After` date is read against. Only tests change it.
+  static DateTime Function() now = DateTime.now;
+
+  /// Whether asking again can get another answer: the server's own
+  /// trouble (5xx), a request timeout or too many requests. Any other
+  /// answer (a 404) would come again.
+  bool get retryable =>
+      statusCode >= 500 || statusCode == 408 || statusCode == 429;
+
+  @override
+  String toString() => "MediaDownloadException: $statusCode";
+}
+
+/// Downloads [url] (a media download or thumbnail URL of [client]'s
+/// homeserver) through [client]'s HTTP client: the account's, which the
+/// speed log counts and which keeps its connections open between
+/// downloads. Throws [MediaDownloadException] for any answer but 200.
+///
+/// The body is read once into a buffer of the announced size, which is
+/// what is returned; without a size, the pieces are gathered and joined
+/// once. [onProgress] gets the bytes read so far and the announced size.
+Future<Uint8List> downloadMedia(matrix.Client client, Uri url,
+    {void Function(int downloaded, int? total)? onProgress}) async {
+  final request = http.Request("GET", url);
+  request.headers['authorization'] = 'Bearer ${client.accessToken}';
+  final response = await client.httpClient.send(request);
+  if (response.statusCode != 200) {
+    var body = const <int>[];
+    try {
+      // Read to its end, so the connection can carry the next request.
+      body = await response.stream.toBytes();
+    } catch (_) {}
+    final wait = response.statusCode == 429
+        ? _retryAfter(response.headers['retry-after'], body)
+        : null;
+    throw MediaDownloadException(response.statusCode,
+        retryAfter: wait?.wait,
+        retryAfterUnreadable: wait?.unreadable ?? false);
+  }
+
+  final total = response.contentLength;
+  Uint8List? buffer = total != null ? Uint8List(total) : null;
+  BytesBuilder? pieces = buffer == null ? BytesBuilder(copy: false) : null;
+  var downloaded = 0;
+  await for (final chunk in response.stream) {
+    if (buffer != null && downloaded + chunk.length > buffer.length) {
+      // More than announced: gathered from here on.
+      pieces = BytesBuilder(copy: false)
+        ..add(Uint8List.sublistView(buffer, 0, downloaded));
+      buffer = null;
+    }
+    if (buffer != null) {
+      buffer.setRange(downloaded, downloaded + chunk.length, chunk);
+    } else {
+      pieces!.add(chunk);
+    }
+    downloaded += chunk.length;
+    onProgress?.call(downloaded, total);
+  }
+  if (buffer == null) return pieces!.takeBytes();
+  return downloaded == buffer.length
+      ? buffer
+      : Uint8List.sublistView(buffer, 0, downloaded);
+}
+
+/// A 429's wait: its `Retry-After` header, a number of seconds or an HTTP
+/// date (RFC 9110, the IMF-fixdate form servers send), else the Matrix
+/// body's `retry_after_ms`. [wait] is null when neither says; [unreadable]
+/// when the one that says is not understood. A wait over a day is a day:
+/// too long either way.
+({Duration? wait, bool unreadable}) _retryAfter(
+    String? header, List<int> body) {
+  const unread = (wait: null, unreadable: true);
+  const day = Duration(days: 1);
+  Duration atMostADay(Duration wait) => wait > day ? day : wait;
+
+  final said = header?.trim() ?? '';
+  if (said.isNotEmpty) {
+    if (RegExp(r'^\d+$').hasMatch(said)) {
+      // Past nine digits, more than a day: no overflow to read.
+      if (said.length > 9) return (wait: day, unreadable: false);
+      return (
+        wait: atMostADay(Duration(seconds: int.parse(said))),
+        unreadable: false
+      );
+    }
+    final date = _httpDate(said);
+    if (date == null) return unread;
+    final wait = date.difference(MediaDownloadException.now());
+    return (
+      wait: wait.isNegative ? Duration.zero : atMostADay(wait),
+      unreadable: false
+    );
+  }
+  try {
+    final json = jsonDecode(utf8.decode(body));
+    if (json is! Map || !json.containsKey('retry_after_ms')) {
+      return (wait: null, unreadable: false);
+    }
+    final ms = json['retry_after_ms'];
+    if (ms is! int || ms < 0) return unread;
+    return (
+      wait: Duration(milliseconds: min(ms, day.inMilliseconds)),
+      unreadable: false
+    );
+  } catch (_) {
+    // Not JSON: no wait said.
+    return (wait: null, unreadable: false);
+  }
+}
+
+const _months = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', //
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/// [text] as an HTTP date in the IMF-fixdate form
+/// (`Sun, 06 Nov 1994 08:49:37 GMT`), in UTC; null when it is not one.
+/// Read here rather than by `dart:io`'s `HttpDate`, which the web has not.
+DateTime? _httpDate(String text) {
+  final match = RegExp(r'^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), (\d{2}) '
+          r'([A-Z][a-z]{2}) (\d{4}) (\d{2}):(\d{2}):(\d{2}) GMT$')
+      .firstMatch(text);
+  if (match == null) return null;
+  final month = _months.indexOf(match[3]!) + 1;
+  if (month == 0) return null;
+  final [day, year, hour, minute, second] =
+      [2, 4, 5, 6, 7].map((i) => int.parse(match[i]!)).toList();
+  final date = DateTime.utc(year, month, day, hour, minute, second);
+  // Not a day of that month (31 Feb), or past the clock's 23:59:59.
+  if (date.day != day || date.hour != hour || date.minute != minute) {
+    return null;
+  }
+  return date;
 }

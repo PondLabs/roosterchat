@@ -20,6 +20,7 @@ import 'package:rooster/ui/molecules/overlapping_panels.dart';
 import 'package:rooster/ui/molecules/poll_creator.dart';
 import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_reply.dart';
 import 'package:rooster/ui/organisms/attachment_processor/attachment_processor.dart';
+import 'package:rooster/ui/organisms/attachment_processor/picked_files.dart';
 import 'package:rooster/ui/molecules/emoji_picker.dart';
 import 'package:rooster/ui/molecules/emoticon_picker.dart';
 import 'package:rooster/ui/molecules/gif_picker.dart';
@@ -31,7 +32,6 @@ import 'package:rooster/utils/autofill_utils.dart';
 import 'package:rooster/utils/clipboard/pasted_files.dart';
 import 'package:rooster/utils/debounce.dart';
 import 'package:rooster/utils/event_bus.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 
 import 'package:flutter/material.dart';
@@ -45,7 +45,17 @@ import 'package:tiamat/tiamat.dart' as tiamat;
 import '../../client/attachment.dart';
 import '../../client/components/emoticon/emoticon.dart';
 
-enum MessageInputSendResult { success, unhandled }
+enum MessageInputSendResult {
+  /// Sent: the composer clears its text.
+  success,
+
+  /// Not sent: the composer keeps its text.
+  unhandled,
+
+  /// The chat sends it once a question is answered, and clears the text
+  /// itself then: the composer keeps it meanwhile.
+  pending,
+}
 
 class AttachmentPicker {
   IconData icon;
@@ -81,6 +91,7 @@ class MessageInput extends StatefulWidget {
       this.attachments,
       this.addAttachment,
       this.onTextUpdated,
+      this.onInputStarted,
       this.removeAttachment,
       this.typingIndicatorWidget,
       this.availibleEmoticons,
@@ -136,6 +147,10 @@ class MessageInput extends StatefulWidget {
   final Future<void> Function(FavoriteGif gif)? sendFavoriteGif;
   final void Function(bool focused)? onFocusChanged;
   final Function(String currentText)? onTextUpdated;
+
+  /// Text went into an empty composer: a keystroke, a paste, or any text
+  /// put in it. Not when it gains focus, nor when it is emptied.
+  final void Function()? onInputStarted;
   final void Function()? cancelReply;
   final void Function()? editLastMessage;
   final Client? Function(String input)? findOverrideClient;
@@ -306,6 +321,7 @@ class MessageInputState extends State<MessageInput> {
     // Everything this made, released: the chat subtree is rebuilt on every
     // room switch, and these kept each old composer alive.
     controller.removeListener(controllerListener);
+    controller.removeListener(watchInputStart);
     controller.dispose();
     textFocus.removeListener(onTextFocusChanged);
     textFocus.dispose();
@@ -325,11 +341,59 @@ class MessageInputState extends State<MessageInput> {
   /// Web: a screenshot pasted while typing becomes an attachment.
   late final void Function() stopListeningForPastedFiles;
 
+  /// The server's limit on an uploaded file, once known: a file over it is
+  /// refused before it is read.
+  int? maxUploadBytes;
+
+  Future<int?> uploadLimit() async {
+    final room = widget.room;
+    final limit = room == null ? null : await uploadLimitOf(room);
+    return maxUploadBytes = limit;
+  }
+
+  /// The limit a paste is checked against: a paste cannot wait for it, so
+  /// the one known now. When none is known yet (the first ask failed or
+  /// has not answered), it is asked again for the next paste.
+  int? pasteLimit() {
+    final known = maxUploadBytes;
+    if (known == null) unawaited(uploadLimit());
+    return known;
+  }
+
+  /// A file of [bytes] over the server's [limit]: refused, unread.
+  void refuseFile(int bytes, int limit) {
+    if (!mounted) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(content: Text(messageFileOverUploadLimit(bytes, limit))));
+  }
+
+  /// Whether [file] of the gallery fits the limit, by its length (read
+  /// from the file system on native), before its bytes are read.
+  Future<bool> galleryFileFits(XFile file) async => pickedFileFits(file,
+      maxBytes: maxUploadBytes ?? await uploadLimit(), onRefused: refuseFile);
+
+  /// Photos and videos from the gallery or the camera: each one over the
+  /// limit is refused by its length, unread; the others are read and go
+  /// to the attachment dialog.
+  Future<void> attachGalleryFiles(List<XFile> files) async {
+    for (final file in files) {
+      if (!await galleryFileFits(file)) continue;
+      final data = await file.readAsBytes();
+      await handlePickedAttachment(PendingFileAttachment(
+          name: file.name,
+          mimeType: file.mimeType,
+          size: data.lengthInBytes,
+          data: data));
+    }
+  }
+
   @override
   void initState() {
     controller = RichTextEditingController(
         client: widget.client, room: widget.room, text: widget.initialText);
     controller.addListener(controllerListener);
+    composerEmpty = controller.text.isEmpty;
+    controller.addListener(watchInputStart);
     keyboardFocusSubscription =
         widget.focusKeyboard?.listen((_) => onKeyboardFocusRequested());
 
@@ -339,7 +403,11 @@ class MessageInputState extends State<MessageInput> {
     textFocus = FocusNode(onKeyEvent: onKey);
     textFocus.addListener(onTextFocusChanged);
     stopListeningForPastedFiles = listenForPastedFiles(
-        accept: () => textFocus.hasFocus, onFiles: onFilesPasted);
+        accept: () => textFocus.hasFocus,
+        onFiles: onFilesPasted,
+        maxBytes: pasteLimit,
+        onRefused: refuseFile);
+    unawaited(uploadLimit());
 
     preferencesSubscription =
         preferences.onSettingChanged.listen((_) => setState(() {}));
@@ -723,6 +791,19 @@ class MessageInputState extends State<MessageInput> {
   }
 
   TextSelection? prevSelection;
+
+  /// Whether the composer held no text at its last change.
+  bool composerEmpty = true;
+
+  /// Tells [MessageInput.onInputStarted] when text goes into an empty
+  /// composer. A controller listener sees every change, the composer
+  /// cleared by Send among them, which no `onChanged` reports; a selection
+  /// change (focus) leaves the text as it was.
+  void watchInputStart() {
+    final empty = controller.text.isEmpty;
+    if (composerEmpty && !empty) widget.onInputStarted?.call();
+    composerEmpty = empty;
+  }
 
   void controllerListener() {
     if (PlatformUtils.isAndroid) {
@@ -1745,31 +1826,17 @@ class MessageInputState extends State<MessageInput> {
             label: promptChatAttachGallery,
             execute: () async {
               var picker = ImagePicker();
-              var result = await picker.pickMultiImage();
-              for (var file in result) {
-                var data = await file.readAsBytes();
-                await handlePickedAttachment(PendingFileAttachment(
-                    name: file.name,
-                    mimeType: file.mimeType,
-                    size: data.lengthInBytes,
-                    data: data));
-              }
+              await attachGalleryFiles(await picker.pickMultiImage());
             }),
       AttachmentPicker(
           icon: Icons.attach_file,
           label: promptChatAttachFile,
           execute: () async {
-            FilePickerResult? result = await FilePicker.platform.pickFiles(
-                type: FileType.any, withData: true, allowMultiple: true);
-            if (result == null) return;
-
-            for (var file in result.files) {
-              var attachment = PendingFileAttachment(
-                  name: file.name,
-                  path: PlatformUtils.isWeb ? null : file.path,
-                  data: file.bytes,
-                  size: file.bytes?.length);
-
+            // Paths and sizes, not bytes: a file over the server's limit
+            // is refused before it is read.
+            final attachments = await pickFileAttachments(
+                maxBytes: uploadLimit, onRefused: refuseFile);
+            for (final attachment in attachments) {
               await handlePickedAttachment(attachment);
             }
           }),
@@ -1779,15 +1846,7 @@ class MessageInputState extends State<MessageInput> {
             label: promptChatAttachMedia,
             execute: () async {
               var picker = ImagePicker();
-              var result = await picker.pickMultipleMedia();
-              for (var file in result) {
-                var data = await file.readAsBytes();
-                await handlePickedAttachment(PendingFileAttachment(
-                    name: file.name,
-                    mimeType: file.mimeType,
-                    size: data.lengthInBytes,
-                    data: data));
-              }
+              await attachGalleryFiles(await picker.pickMultipleMedia());
             }),
       if (PlatformUtils.isAndroid)
         AttachmentPicker(
@@ -1796,14 +1855,7 @@ class MessageInputState extends State<MessageInput> {
             execute: () async {
               var picker = ImagePicker();
               var file = await picker.pickImage(source: ImageSource.camera);
-              if (file == null) return;
-
-              var data = await file.readAsBytes();
-              await handlePickedAttachment(PendingFileAttachment(
-                  name: file.name,
-                  mimeType: file.mimeType,
-                  size: data.lengthInBytes,
-                  data: data));
+              if (file != null) await attachGalleryFiles([file]);
             }),
     ];
 
@@ -2002,12 +2054,15 @@ class MessageInputState extends State<MessageInput> {
   }
 
   Future<void> readImageFromClipboard() async {
-    var image = await Pasteboard.image;
-    if (image == null) {
-      return;
-    }
-
-    await attachPasted(PendingFileAttachment(data: image, size: image.length));
+    // Its size checked before the attachment dialog decodes it.
+    PendingFileAttachment? pasted;
+    await pasteNativeImage(
+        readImage: () => Pasteboard.image,
+        maxBytes: maxUploadBytes ?? await uploadLimit(),
+        onImage: (image) =>
+            pasted = PendingFileAttachment(data: image, size: image.length),
+        onRefused: refuseFile);
+    if (pasted != null) await attachPasted(pasted!);
   }
 
   Future<void> onFilesPasted(List<PastedFile> files) async {
@@ -2015,9 +2070,10 @@ class MessageInputState extends State<MessageInput> {
       if (!mounted) return;
       await attachPasted(PendingFileAttachment(
           data: file.data,
+          source: file.source,
           name: file.name,
           mimeType: file.mimeType,
-          size: file.data.length));
+          size: file.size));
     }
   }
 
