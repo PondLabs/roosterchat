@@ -275,6 +275,11 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
   }
 
   void loadStateFromEvent(TimelineEvent event) {
+    // A message decrypted once its room key came keeps its display id: its
+    // content is built again all the same, in place of "Failed to decrypt
+    // event".
+    final decryptedNow = this.event is TimelineEventEncrypted &&
+        event is! TimelineEventEncrypted;
     this.event = event;
     showSender = shouldShowSender(index);
     var room = widget.room ?? widget.timeline?.room;
@@ -283,7 +288,7 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
 
     if (widget.timeline != null) {
       var did = widget.timeline!.getDisplayId(event);
-      if (did == displayId) {
+      if (did == displayId && !decryptedNow) {
         didContentChange = false;
       }
       displayId = did;

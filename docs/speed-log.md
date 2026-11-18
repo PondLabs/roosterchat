@@ -96,7 +96,11 @@ With the notices off nothing is readied before Send, no key request nor
 `sendToDevice` leaves until then, and the send makes the session itself
 (`session_created=1` when none was ready).
 A `key_request` with `session_created=0` is a key shared at the send
-with a device that appeared since. The room calls into the span through a guard:
+with a device that appeared since. The first message after someone is
+invited or joins waits for the query of their devices (`POST
+/keys/query`) when the sync's own query has not answered yet, and that
+query is a `key_request` of the send: a room key that left before it
+would never reach their devices (see `third_party/README.md`, T8.1). The room calls into the span through a guard:
 a failure in the measurement is dropped (one fixed line in the app's log)
 and never stops the send.
 
