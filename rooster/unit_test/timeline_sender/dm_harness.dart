@@ -65,14 +65,15 @@ Future<void> useAppFonts() async {
     await loader.load();
   }
 
-  final flutter = Platform.environment['FLUTTER_ROOT'] ??
-      '${Platform.environment['HOME']}/flutter';
   await load('Roboto', ['assets/font/roboto/Roboto-Regular.ttf']);
   await load('NunitoSans',
       ['assets/font/nunito/NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf']);
-  await load('MaterialIcons', [
-    '$flutter/bin/cache/artifacts/material_fonts/materialicons-regular.otf'
-  ]);
+  // The icons from the test's own asset bundle (`flutter test` puts
+  // Material Icons there), not from the SDK's cache, which a CI runner's
+  // Flutter may not have where FLUTTER_ROOT points.
+  await (FontLoader('MaterialIcons')
+        ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf')))
+      .load();
 }
 
 Future<void> setUpDmHarness() async {
