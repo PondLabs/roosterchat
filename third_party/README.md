@@ -270,3 +270,17 @@ Changes since the copy:
   sending anything, keeping its file as `sendFileEvent` does;
   `Room.showFailedMessage` shows a failed message with any content and
   keeps nothing (a photo whose upload the app's closing cut short).
+- Room keys for who just came in (T8.1): `Room.getUserDeviceKeys`
+  (`lib/src/room.dart`), which every room key share reads, first calls
+  the new `Client.updateStaleUserDeviceKeys` (`lib/src/client.dart`): the
+  invited and joined members whose device list was never queried or is
+  marked outdated are queried, and the share waits for the answer. Before,
+  a message sent before the sync's own query answered (it runs after the
+  sync that brought them in) never reached their devices. A user whose
+  homeserver failed is not asked again for 5 min, nor one left
+  unanswered for 1 min. `Client.updateUserDeviceKeys` takes
+  `onlyAdditionalUsers` for that query, and puts each parsed device list
+  in place whole. Who gets the key is unchanged (`Client.shareKeysWith`);
+  `KeyManager._createOutboundGroupSession`
+  (`lib/encryption/key_manager.dart`) logs how many devices of the room's
+  members the key leaves out, with no ids.
