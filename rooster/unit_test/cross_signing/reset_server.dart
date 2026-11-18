@@ -24,6 +24,10 @@ enum ResetKind {
 const resetPage =
     'https://account.matrix.org/?action=org.matrix.cross_signing_reset';
 const resetSession = 'reset-session';
+
+/// The account page's step: Matrix 1.15's name, then the one the Matrix
+/// Authentication Service gave it before.
+const accountStages = ['m.oauth', 'org.matrix.cross_signing_reset'];
 const accountPassword = '1234';
 
 const secretTypes = [
@@ -40,9 +44,14 @@ const backupType = 'm.megolm_backup.v1';
 /// `org.matrix.cross_signing_reset` steps until the person [approved] the
 /// reset on the account page.
 class ResetServer extends VerificationServer {
-  ResetServer(this.kind, {this.url = resetPage}) : super(signed: true);
+  ResetServer(this.kind, {this.url = resetPage, this.stages = accountStages})
+      : super(signed: true);
 
   final ResetKind kind;
+
+  /// The names of the account page's step the server offers, one flow
+  /// each: matrix.org gives both.
+  final List<String> stages;
 
   /// The account page the server sends the person to.
   final String url;
@@ -158,16 +167,13 @@ class ResetServer extends VerificationServer {
         return {
           'session': resetSession,
           'flows': [
-            {
-              'stages': ['m.oauth']
-            },
-            {
-              'stages': ['org.matrix.cross_signing_reset']
-            },
+            for (final stage in stages)
+              {
+                'stages': [stage]
+              },
           ],
           'params': {
-            'm.oauth': {'url': url},
-            'org.matrix.cross_signing_reset': {'url': url},
+            for (final stage in stages) stage: {'url': url},
           },
           'msg': 'To reset your end-to-end encryption cross-signing '
               'identity, you first need to approve it at $url and then try '

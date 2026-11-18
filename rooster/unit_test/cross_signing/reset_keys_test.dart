@@ -60,13 +60,13 @@ void main() {
   /// A verified device of an account with verification keys and a backup,
   /// with the app's dialog for the server's steps listening.
   Future<void> signIn(WidgetTester tester, ResetKind kind,
-      {String url = resetPage}) async {
+      {String url = resetPage, List<String> stages = accountStages}) async {
     tester.view.physicalSize = const Size(1280, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         const MethodChannel('FlutterWebRTC.Event'), (_) async => null);
-    server = ResetServer(kind, url: url);
+    server = ResetServer(kind, url: url, stages: stages);
     await tester.runAsync(() async {
       client = await newAccount(server);
       await FakeLogin(verified: true).submit(client);
@@ -122,74 +122,81 @@ void main() {
     return recoveryKey;
   }
 
-  testWidgets(
-      'on matrix.org the reset is approved on the account page, nothing '
-      'changes before that, and a new session opens with the new recovery '
-      'key',
-      skip: skipWithoutVodozemac != false, (tester) async {
-    await signIn(tester, ResetKind.accountService);
-    final before = server.defaultKey;
-    final recoveryKey = await upToTheUpload(tester);
-    await _settle(tester, () => server.uploads.isNotEmpty);
-    await _settle(
-        tester,
-        () =>
-            find.text(_noMethod).evaluate().isNotEmpty ||
-            find.text(_approveOnWebsite).evaluate().isNotEmpty);
+  // matrix.org offers both names of the step; a server may offer either.
+  for (final stages in [
+    accountStages,
+    ['m.oauth'],
+    ['org.matrix.cross_signing_reset'],
+  ]) {
+    testWidgets(
+        'on matrix.org ($stages) the reset is approved on the account page, '
+        'nothing changes before that, and a new session opens with the new '
+        'recovery key',
+        skip: skipWithoutVodozemac != false, (tester) async {
+      await signIn(tester, ResetKind.accountService, stages: stages);
+      final before = server.defaultKey;
+      final recoveryKey = await upToTheUpload(tester);
+      await _settle(tester, () => server.uploads.isNotEmpty);
+      await _settle(
+          tester,
+          () =>
+              find.text(_noMethod).evaluate().isNotEmpty ||
+              find.text(_approveOnWebsite).evaluate().isNotEmpty);
 
-    // What the person saw, and what the server was left with, before
-    // Rooster knew the step.
-    final problems = [
-      if (find.text(_noMethod).evaluate().isNotEmpty)
-        'the dialog says: "$_noMethod" '
-            '${find.textContaining('m.oauth').evaluate().map((e) => (e.widget as Text).data).join()}',
-      if (server.writes.isNotEmpty)
-        'written before the server took the new keys: ${server.writes}',
-      if (server.defaultKey != before)
-        'the default key is now a new one, holding '
-            '${[
-          for (final type in secretTypes)
-            if ((server.accountData[type]?['encrypted'] as Map?)
-                    ?.containsKey(server.defaultKey) ==
-                true)
-              type
-        ]} of $secretTypes',
-    ];
-    expect(problems, isEmpty);
+      // What the person saw, and what the server was left with, before
+      // Rooster knew the step.
+      final problems = [
+        if (find.text(_noMethod).evaluate().isNotEmpty)
+          'the dialog says: "$_noMethod" '
+              '${find.textContaining('m.oauth').evaluate().map((e) => (e.widget as Text).data).join()}',
+        if (server.writes.isNotEmpty)
+          'written before the server took the new keys: ${server.writes}',
+        if (server.defaultKey != before)
+          'the default key is now a new one, holding '
+              '${[
+            for (final type in secretTypes)
+              if ((server.accountData[type]?['encrypted'] as Map?)
+                      ?.containsKey(server.defaultKey) ==
+                  true)
+                type
+          ]} of $secretTypes',
+      ];
+      expect(problems, isEmpty);
 
-    // The account page opens on a tap, then "Continue" before approving.
-    expect(find.text(_approveOnWebsite), findsOneWidget);
-    // Opened by the tap itself, before any frame: on the web the page
-    // opens in the same task as the tap, so no popup blocker stops it.
-    await tester.tap(find.text(_openWebsite));
-    expect(browser.opened, [Uri.parse(resetPage)]);
-    await tester.pump();
-    await tap(tester, CommonStrings.promptContinue);
-    await _settle(
-        tester, () => find.text(_notApprovedYet).evaluate().isNotEmpty);
-    expect(server.uploads, hasLength(2));
-    expect(server.writes, isEmpty);
+      // The account page opens on a tap, then "Continue" before approving.
+      expect(find.text(_approveOnWebsite), findsOneWidget);
+      // Opened by the tap itself, before any frame: on the web the page
+      // opens in the same task as the tap, so no popup blocker stops it.
+      await tester.tap(find.text(_openWebsite));
+      expect(browser.opened, [Uri.parse(resetPage)]);
+      await tester.pump();
+      await tap(tester, CommonStrings.promptContinue);
+      await _settle(
+          tester, () => find.text(_notApprovedYet).evaluate().isNotEmpty);
+      expect(server.uploads, hasLength(2));
+      expect(server.writes, isEmpty);
 
-    // Approved there; coming back to the app sends the keys again.
-    await tap(tester, _openWebsite);
-    server.approved = true;
-    await leaveAndComeBack(tester);
-    await _settle(tester,
-        () => find.text('Existing backup found!').evaluate().isNotEmpty);
-    expect([for (final (auth, _) in server.uploads.skip(1)) auth],
-        everyElement({'session': resetSession}));
-    expect(server.uploads.last.$2, isTrue);
-    expect(find.text(_approveOnWebsite), findsNothing,
-        reason: 'one dialog, closed once the server took the keys');
+      // Approved there; coming back to the app sends the keys again.
+      await tap(tester, _openWebsite);
+      server.approved = true;
+      await leaveAndComeBack(tester);
+      await _settle(tester,
+          () => find.text('Existing backup found!').evaluate().isNotEmpty);
+      expect([for (final (auth, _) in server.uploads.skip(1)) auth],
+          everyElement({'session': resetSession}));
+      expect(server.uploads.last.$2, isTrue);
+      expect(find.text(_approveOnWebsite), findsNothing,
+          reason: 'one dialog, closed once the server took the keys');
 
-    await tap(tester, 'Wipe backup');
-    await tap(tester, 'Enable backup');
-    await _settle(tester,
-        () => find.text(CommonStrings.promptDone).evaluate().isNotEmpty);
-    await tester.runAsync(
-        () => server.expectNewSessionVerifies(recoveryKey, backup: true));
-    expect(server.defaultKey, isNot(before));
-  });
+      await tap(tester, 'Wipe backup');
+      await tap(tester, 'Enable backup');
+      await _settle(tester,
+          () => find.text(CommonStrings.promptDone).evaluate().isNotEmpty);
+      await tester.runAsync(
+          () => server.expectNewSessionVerifies(recoveryKey, backup: true));
+      expect(server.defaultKey, isNot(before));
+    });
+  }
 
   testWidgets(
       'a server that asks for the password still gets it, and the reset '
