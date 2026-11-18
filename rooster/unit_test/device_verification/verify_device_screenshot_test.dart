@@ -1,9 +1,9 @@
 @TestOn('vm')
 library;
 
-/// Pictures of the prompt, the notice and the line at 280 and 320 px in
-/// English and Portuguese, into DEVICE_VERIFICATION_EVIDENCE_DIR (or the
-/// system's temporary folder).
+/// Pictures of a phone at 280 and 320 px, in English and Portuguese: the
+/// prompt in its bottom sheet over the notice and the line, into
+/// DEVICE_VERIFICATION_EVIDENCE_DIR (or the system's temporary folder).
 
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -22,13 +22,11 @@ void main() {
   for (final locale in ['en', 'pt']) {
     for (final width in [280.0, 320.0]) {
       testWidgets('picture at ${width.toInt()} px ($locale)', (tester) async {
-        tester.view.physicalSize = const Size(400, 900);
-        tester.view.devicePixelRatio = 1;
-        addTearDown(tester.view.reset);
+        phoneScreen(tester, width);
         intl.Intl.defaultLocale = locale;
         final key = GlobalKey();
-        await tester.pumpWidget(verificationTexts(width, boundary: key));
-        await tester.pump();
+        await tester.pumpWidget(verificationTexts(boundary: key));
+        await openPromptSheet(tester);
         expectWholeTexts(tester, '${width.toInt()} px $locale');
 
         final png = await tester.runAsync(() async {
