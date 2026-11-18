@@ -59,15 +59,16 @@ void main() {
     testWidgets('the pending photo, its stage and its clock ($locale)',
         (tester) async {
       await tester.runAsync(() async {
-        final flutter = Platform.environment['FLUTTER_ROOT'] ??
-            '${Platform.environment['HOME']}/flutter';
         await loadFont('Roboto', ['assets/font/roboto/Roboto-Regular.ttf']);
         await loadFont('NunitoSans', [
           'assets/font/nunito/NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf'
         ]);
-        await loadFont('MaterialIcons', [
-          '$flutter/bin/cache/artifacts/material_fonts/materialicons-regular.otf'
-        ]);
+        // The icons from the test's own asset bundle (`flutter test` puts
+        // Material Icons there), not from the SDK's cache, which a CI runner's
+        // Flutter may not have where FLUTTER_ROOT points.
+        await (FontLoader('MaterialIcons')
+              ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf')))
+            .load();
         await initializeMessages(locale);
       });
       intl.Intl.defaultLocale = locale;
