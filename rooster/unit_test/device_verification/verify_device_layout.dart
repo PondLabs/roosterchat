@@ -1,8 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:intl/intl.dart' as intl;
 import 'package:rooster/client/alert.dart';
 import 'package:rooster/client/matrix/components/key_verification_component/matrix_key_verification_component.dart';
 import 'package:rooster/generated/intl/messages_all.dart';
@@ -25,9 +25,16 @@ Future<void> loadAppFonts() async {
   }
 }
 
-Future<void> useLocale(String locale) async {
-  await initializeMessages(locale);
-  intl.Intl.defaultLocale = locale;
+/// Loads the app's fonts and both languages, on the VM. In Chrome the
+/// asset and message loading never ends inside `flutter test` (12 minutes,
+/// then the timeout), so there the texts are English, in the test font,
+/// whose square glyphs are wider than the app's.
+Future<void> loadFontsAndLanguages() async {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  if (kIsWeb) return;
+  await loadAppFonts();
+  await initializeMessages('en');
+  await initializeMessages('pt');
 }
 
 /// The prompt (both ways), the Home screen's notice and the undecrypted
@@ -41,7 +48,9 @@ Widget verificationTexts(double width, {Key? boundary}) {
     theme: ThemeDark.theme,
     debugShowCheckedModeBanner: false,
     home: Scaffold(
-      body: Align(
+      // Scrolls, as the dialog that shows the prompt does.
+      body: SingleChildScrollView(
+          child: Align(
         alignment: Alignment.topLeft,
         child: RepaintBoundary(
           key: boundary,
@@ -72,7 +81,7 @@ Widget verificationTexts(double width, {Key? boundary}) {
             ),
           ),
         ),
-      ),
+      )),
     ),
   );
 }

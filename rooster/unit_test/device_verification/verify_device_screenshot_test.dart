@@ -16,6 +16,7 @@ import 'package:intl/intl.dart' as intl;
 import 'verify_device_layout.dart';
 
 void main() {
+  setUpAll(loadFontsAndLanguages);
   tearDown(() => intl.Intl.defaultLocale = null);
 
   for (final locale in ['en', 'pt']) {
@@ -24,10 +25,7 @@ void main() {
         tester.view.physicalSize = const Size(400, 900);
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
-        await tester.runAsync(() async {
-          await loadAppFonts();
-          await useLocale(locale);
-        });
+        intl.Intl.defaultLocale = locale;
         final key = GlobalKey();
         await tester.pumpWidget(verificationTexts(width, boundary: key));
         await tester.pump();
