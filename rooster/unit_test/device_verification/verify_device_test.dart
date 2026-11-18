@@ -33,6 +33,7 @@ const _recoveryKey = ValueKey("verify-device-recovery-key");
 const _otherDevice = ValueKey("verify-device-other-device");
 const _later = ValueKey("verify-device-later");
 const _line = ValueKey("undecrypted-unverified-device");
+const _loginPage = ValueKey("login-page");
 
 /// The Home screen's alerts as the app shows them, redrawn on every
 /// alert added or removed, as `HomeScreen` does.
@@ -149,6 +150,66 @@ void main() {
 
   MatrixKeyVerificationComponent component() =>
       client.getComponent<MatrixKeyVerificationComponent>()!;
+
+  /// Signs in as `LoginPage.doLogin` does: the login flow, the account
+  /// joins the app's clients, then the page's [onSuccess] navigates.
+  Future<void> loginFrom(WidgetTester tester, void Function() onSuccess) async {
+    server = VerificationServer();
+    await tester.runAsync(() async {
+      client = await newAccount(server);
+      await client.executeLoginFlow(FakeLogin());
+      manager.addClient(client);
+      onSuccess();
+    });
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets(
+      'adding an account (Settings > Accounts, +): the login page closes '
+      'and the prompt opens',
+      skip: skipWithoutVodozemac != false, (tester) async {
+    await desktop(tester);
+    late BuildContext settings;
+    await tester.pumpWidget(_app(Builder(builder: (context) {
+      settings = context;
+      return const Text('Settings > Accounts');
+    })));
+    // The (+) button pushes the login page; its onSuccess pops it
+    // (account_management_tab.dart).
+    Navigator.of(settings).push(MaterialPageRoute(
+        builder: (_) =>
+            const Scaffold(body: Text('login page', key: _loginPage))));
+    await tester.pumpAndSettle();
+
+    await loginFrom(tester, () => Navigator.of(settings).pop());
+
+    expect(find.byKey(_loginPage), findsNothing);
+    expect(find.byKey(_why), findsOneWidget);
+    await close(tester);
+  });
+
+  testWidgets(
+      'the first login: the app takes the place of the login page and the '
+      'prompt opens over it',
+      skip: skipWithoutVodozemac != false, (tester) async {
+    await desktop(tester);
+    // main.dart: the login page's onSuccess rebuilds the app, which shows
+    // the main page in its place.
+    final loggedIn = ValueNotifier(false);
+    await tester.pumpWidget(_app(ValueListenableBuilder<bool>(
+        valueListenable: loggedIn,
+        builder: (_, inApp, __) => inApp
+            ? _Home(manager)
+            : const Text('login page', key: _loginPage))));
+
+    await loginFrom(tester, () => loggedIn.value = true);
+
+    expect(find.byKey(_loginPage), findsNothing);
+    expect(find.byKey(_why), findsOneWidget);
+    expect(find.text(MatrixKeyVerificationComponent.labelDeviceNotVerified),
+        findsOneWidget);
+    await close(tester);
+  });
 
   testWidgets(
       'a fresh login of an account with cross-signing asks to verify this '

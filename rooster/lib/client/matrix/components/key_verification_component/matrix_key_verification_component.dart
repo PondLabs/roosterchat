@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:rooster/client/alert.dart';
 import 'package:rooster/client/components/component.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
@@ -130,9 +130,22 @@ class MatrixKeyVerificationComponent
     final keysKnown = mx.userDeviceKeys[mx.userID]?.outdated == false;
     if (_askOnce && (need || keysKnown)) {
       _askOnce = false;
-      final context = navigator.currentContext;
-      if (need && context != null) VerifyThisDevice.show(context, client);
+      if (need) _askAfterLoginNavigation();
     }
+  }
+
+  /// Opens the prompt after the next frame. The login returns before the
+  /// login page navigates ("Add account" pops itself, the first login gives
+  /// way to the app): a prompt opened before that would be the route the
+  /// pop closes, leaving the login page open.
+  void _askAfterLoginNavigation() {
+    final binding = WidgetsBinding.instance;
+    binding.addPostFrameCallback((_) {
+      final context = navigator.currentContext;
+      if (context == null || !needsVerification(client.matrixClient)) return;
+      VerifyThisDevice.show(context, client);
+    });
+    binding.scheduleFrame();
   }
 
   /// Asks the homeserver for this account's keys again and runs [check]:
