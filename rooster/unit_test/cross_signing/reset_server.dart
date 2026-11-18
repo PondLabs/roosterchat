@@ -128,7 +128,11 @@ class ResetServer extends VerificationServer {
   String? _write(String method, String path) {
     if (path.contains('/rooms/')) return null;
     if (method == 'PUT' && path.contains('/account_data/')) {
-      return 'PUT ${Uri.decodeComponent(path.split('/').last)}';
+      final type = Uri.decodeComponent(path.split('/').last);
+      // A key's id is new on each run.
+      return type.startsWith('m.secret_storage.key.')
+          ? 'PUT m.secret_storage.key.<id>'
+          : 'PUT $type';
     }
     if (method == 'POST' && path.endsWith('/keys/device_signing/upload')) {
       return 'POST device_signing/upload';
@@ -136,8 +140,10 @@ class ResetServer extends VerificationServer {
     if (method == 'POST' && path.endsWith('/keys/signatures/upload')) {
       return 'POST signatures/upload';
     }
-    if (method != 'GET' && path.contains('/room_keys/')) {
-      return '$method room_keys';
+    // A new backup version; not the room keys going into it, which the
+    // app sends on its own as soon as it knows the backup's key.
+    if (method != 'GET' && path.contains('/room_keys/version')) {
+      return '$method room_keys/version';
     }
     return null;
   }
