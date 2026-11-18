@@ -48,6 +48,7 @@ import 'package:matrix/encryption.dart';
 import 'package:flutter_vodozemac/flutter_vodozemac.dart' as vodozemac;
 
 import '../../ui/atoms/code_block.dart';
+import 'components/key_verification_component/matrix_key_verification_component.dart';
 import 'matrix_room.dart';
 import 'matrix_space.dart';
 import 'package:vodozemac/vodozemac.dart' as vod;
@@ -1049,6 +1050,9 @@ class MatrixClient extends Client {
       }
 
       preferences.addRegisteredMatrixClient(identifier);
+      // A new device of an account with cross-signing reads no encrypted
+      // message until it is verified: ask right away.
+      getComponent<MatrixKeyVerificationComponent>()?.askAfterLogin();
       await _postLoginSuccess();
     }
 

@@ -59,6 +59,9 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }),
       EventBus.setFilterClient.stream.listen(setFilterClient),
+      // An alert (this device is not verified) shows and goes at once.
+      widget.clientManager.alertManager.onAlertAdded.listen(onAlertsChanged),
+      widget.clientManager.alertManager.onAlertRemoved.listen(onAlertsChanged),
     ];
 
     if (preferences.checkForUpdates.value == true) {
@@ -76,6 +79,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     super.dispose();
+  }
+
+  void onAlertsChanged(void _) {
+    if (mounted) setState(() {});
   }
 
   void onSync(void event) {

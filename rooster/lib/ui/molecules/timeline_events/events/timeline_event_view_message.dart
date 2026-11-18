@@ -26,6 +26,7 @@ import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_
 import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_sticker.dart';
 import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_thread.dart';
 import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_url_previews.dart';
+import 'package:rooster/ui/molecules/timeline_events/events/undecrypted_message_line.dart';
 import 'package:rooster/ui/molecules/timeline_events/layouts/timeline_event_layout_message.dart';
 import 'package:rooster/ui/molecules/timeline_events/timeline_event_layout.dart';
 import 'package:rooster/ui/molecules/user_list.dart';
@@ -35,7 +36,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' as intl;
 
 import 'package:intl/intl.dart';
-import 'package:tiamat/tiamat.dart' as tiamat;
 
 class TimelineEventViewMessage extends StatefulWidget {
   const TimelineEventViewMessage(
@@ -343,7 +343,8 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
     mentionsSelf = event.mentionsSelf || isReplyToSelf(event);
 
     if (event is TimelineEventEncrypted) {
-      formattedContent = tiamat.Text.error(messageFailedToDecrypt);
+      formattedContent = UndecryptedMessageLine(
+          client: room.client, failedText: messageFailedToDecrypt);
     }
 
     if (event is! TimelineEventMessage) {
