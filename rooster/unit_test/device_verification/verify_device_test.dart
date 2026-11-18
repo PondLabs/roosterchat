@@ -2,30 +2,37 @@
 library;
 
 /// The prompt to verify this device: after a fresh login of an account with
-/// cross-signing, and as a notice in the Home screen until it is verified.
-/// On the SDK's fake homeserver, signed in through the app's own login path.
+/// cross-signing, as a notice in the Home screen until it is verified, and
+/// on the line of a message that did not decrypt. On the SDK's fake
+/// homeserver, signed in through the app's own login path.
 
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/client_manager.dart';
 import 'package:rooster/client/components/component.dart';
 import 'package:rooster/client/matrix/components/key_verification_component/matrix_key_verification_component.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
+import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/main.dart';
+import 'package:rooster/ui/molecules/timeline_events/events/timeline_event_view_message.dart';
+import 'package:rooster/ui/molecules/timeline_events/events/undecrypted_message_line.dart';
 import 'package:rooster/ui/organisms/home_screen/home_screen_view.dart';
 import 'package:rooster/ui/pages/matrix/verification/verify_this_device.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:tiamat/config/style/theme_dark.dart';
 
+import '../speed_log/fake_account.dart' show plainRoom;
 import 'device_verification_fakes.dart';
 
 const _why = ValueKey("verify-device-why");
 const _recoveryKey = ValueKey("verify-device-recovery-key");
 const _otherDevice = ValueKey("verify-device-other-device");
 const _later = ValueKey("verify-device-later");
+const _line = ValueKey("undecrypted-unverified-device");
 
 /// The Home screen's alerts as the app shows them, redrawn on every
 /// alert added or removed, as `HomeScreen` does.
@@ -245,6 +252,68 @@ void main() {
     expect(find.byKey(_why), findsNothing);
     expect(find.text(MatrixKeyVerificationComponent.labelDeviceNotVerified),
         findsOneWidget);
+    await close(tester);
+  });
+
+  Future<MatrixRoom> roomWithUndecrypted(WidgetTester tester) async {
+    late MatrixRoom room;
+    await tester.runAsync(() async {
+      room = await plainRoom(client);
+    });
+    return room;
+  }
+
+  Widget undecrypted(MatrixRoom room) => TimelineEventViewMessage(
+      room: room,
+      initialEvent: room.convertEvent(matrix.Event(
+        type: matrix.EventTypes.Encrypted,
+        senderId: '@alice:example.com',
+        eventId: r'$undecrypted',
+        originServerTs: DateTime(2026, 11, 18),
+        room: room.matrixRoom,
+        content: {
+          'algorithm': matrix.AlgorithmTypes.megolmV1AesSha2,
+          'ciphertext': 'AwgA',
+          'device_id': 'JLAFKJWSCS',
+          'sender_key': 'L+4+JCl8MD63dgo8z5Ta+9QAHXiANyOVSfgbHA5d3H8',
+          'session_id': 'unknown-session',
+        },
+      )),
+      initialIndex: 0,
+      overrideShowSender: true);
+
+  testWidgets(
+      'on a device not verified the undecrypted message says so and opens '
+      'the prompt',
+      skip: skipWithoutVodozemac != false, (tester) async {
+    await desktop(tester);
+    await tester.pumpWidget(_app(const SizedBox()));
+    await reopen(tester, VerificationServer());
+    final room = await roomWithUndecrypted(tester);
+    await tester.pumpWidget(_app(undecrypted(room)));
+    await tester.pump();
+
+    expect(
+        find.text(UndecryptedMessageLine.messageUndecryptedOnUnverifiedDevice),
+        findsOneWidget);
+    await tester.tap(find.byKey(_line));
+    await tester.pumpAndSettle();
+    expect(find.byKey(_why), findsOneWidget);
+    await close(tester);
+  });
+
+  testWidgets('on a verified device the undecrypted message reads as it did',
+      skip: skipWithoutVodozemac != false, (tester) async {
+    await desktop(tester);
+    await tester.pumpWidget(_app(const SizedBox()));
+    await reopen(tester, VerificationServer(signed: true));
+    final room = await roomWithUndecrypted(tester);
+    await tester.pumpWidget(_app(undecrypted(room)));
+    await tester.pump();
+
+    expect(client.matrixClient.isUnknownSession, isFalse);
+    expect(find.text("Failed to decrypt event"), findsOneWidget);
+    expect(find.byKey(_line), findsNothing);
     await close(tester);
   });
 }

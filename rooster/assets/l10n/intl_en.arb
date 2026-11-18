@@ -3628,6 +3628,12 @@
     "type": "text",
     "placeholders": {}
   },
+  "messageUndecryptedOnUnverifiedDevice": "This device is not verified, so this message can't be opened. Tap to verify.",
+  "@messageUndecryptedOnUnverifiedDevice": {
+    "description": "In the chat, in place of a message that could not be decrypted, when this device has not been verified; tapping it opens the prompt to verify this device",
+    "type": "text",
+    "placeholders": {}
+  },
   "promptPinMessage": "Pin Message",
   "@promptPinMessage": {
     "description": "Label for the menu option to pin a message",

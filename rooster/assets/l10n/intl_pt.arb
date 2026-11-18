@@ -543,6 +543,7 @@
   "labelMessageReplyUnknownBody": "Mensagem desconhecida",
   "promptShowSticker": "Mostrar figurinha",
   "labelTimelineUnknownSender": "Remetente desconhecido",
+  "messageUndecryptedOnUnverifiedDevice": "Este dispositivo não foi verificado, por isso esta mensagem não abre. Toque para verificar.",
   "promptPinMessage": "Fixar mensagem",
   "promptUnpinMessage": "Desafixar mensagem",
   "promptReplyInThread": "Responder no tópico",
