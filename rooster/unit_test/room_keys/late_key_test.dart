@@ -105,8 +105,13 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 2));
     await tester.runAsync(() async {
-      await alice.close();
-      await bob.close();
+      await timeline.close();
+      // The SDK's clients alone, their in-memory databases left open: the
+      // app's close, and the database's, wait on work begun under the
+      // widget test's fake clock, which no longer runs.
+      for (final client in [alice, bob]) {
+        await client.getMatrixClient().dispose(closeDatabase: false);
+      }
     });
   });
 }
