@@ -29,16 +29,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tiamat/config/style/theme_dark.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
-/// The reader, as in the owner's screenshot.
-const me = '@ggflores23:example.com';
+/// The reader.
+const me = '@alice:example.com';
 
 /// The other person in the conversation.
-const them = '@apbianco:example.com';
+const them = '@bob:example.com';
 
 /// Whoever wrote the older messages that fill the view above.
 const filler = '@carol:example.com';
 
-const names = {me: 'ggflores23', them: 'apbianco', filler: 'Carol'};
+const names = {me: 'Alice', them: 'Bob', filler: 'Carol'};
 
 class _Database implements matrix.DatabaseApi {
   @override
