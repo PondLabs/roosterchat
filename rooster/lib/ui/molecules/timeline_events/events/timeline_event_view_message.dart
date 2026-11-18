@@ -245,12 +245,32 @@ class _TimelineEventViewMessageState extends State<TimelineEventViewMessage>
   @override
   void didUpdateWidget(covariant TimelineEventViewMessage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Above the "New messages" line, which moves, a message names its
-    // sender.
-    if (oldWidget.overrideShowSender != widget.overrideShowSender &&
-        widget.timeline != null) {
-      showSender = shouldShowSender(index);
-    }
+    // The timeline builds this message again whenever the messages around
+    // it change (one in or out, the "New messages" line moving): the
+    // header follows the message before it now.
+    if (widget.timeline != null) followNeighbour();
+  }
+
+  /// Moves [index] to where this message is now and works its header out
+  /// against the message before it there. [index] is where the message
+  /// was when last loaded, and every message in below it since has pushed
+  /// it up: reading the header there read another message's, which drew
+  /// someone else's messages under ours without their name.
+  ///
+  /// A message not found under its id (a local echo whose event just
+  /// replaced it) is left as it is: [update] loads it.
+  void followNeighbour() {
+    final events = widget.timeline!.events;
+    bool isHere(int i) =>
+        i >= 0 && i < events.length && events[i].eventId == eventId;
+
+    var at = widget.initialIndex;
+    if (!isHere(at)) at = index;
+    if (!isHere(at)) at = events.indexWhere((e) => e.eventId == eventId);
+    if (at == -1) return;
+
+    index = at;
+    showSender = shouldShowSender(at);
   }
 
   @override
