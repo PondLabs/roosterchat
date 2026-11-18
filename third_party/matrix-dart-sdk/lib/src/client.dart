@@ -2405,6 +2405,7 @@ class Client extends MatrixApi {
         _userID = _deviceID = _deviceName = _prevBatch = _trackedUserIds = null;
     _rooms = [];
     _eventsPendingDecryption.clear();
+    _unansweredKeyQueries.clear(); // ROOSTER
     await encryption?.dispose();
     _encryption = null;
     onLoginStateChanged.add(LoginState.loggedOut);
