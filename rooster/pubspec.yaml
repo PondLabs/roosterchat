@@ -222,9 +222,9 @@ dependency_overrides:
   three_js_angle_renderer:
     path: ../third_party/three_js_angle_renderer
 
-  # The Matrix SDK, copied unchanged from commetchat's upstream-v6.1.1 so
-  # the upload loop can be changed in place. matrix_dart_sdk_drift_db
-  # resolves against this copy too.
+  # The Matrix SDK, copied unchanged from the fork's upstream-v6.1.1 tag
+  # (see third_party/README.md) so the upload loop can be changed in place.
+  # matrix_dart_sdk_drift_db resolves against this copy too.
   matrix:
     path: ../third_party/matrix-dart-sdk
 
