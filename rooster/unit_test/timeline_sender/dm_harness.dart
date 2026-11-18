@@ -27,6 +27,7 @@ import 'package:rooster/ui/molecules/timeline_events/layouts/timeline_event_layo
 import 'package:rooster/ui/pages/developer/benchmarks/benchmark_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tiamat/config/style/theme_dark.dart';
+import 'package:tiamat/tiamat.dart' as tiamat;
 
 /// The reader, as in the owner's screenshot.
 const me = '@ggflores23:example.com';
@@ -354,32 +355,43 @@ void expectHeaders(WidgetTester tester, Dm dm, Map<String, bool> expected) {
   expectOwnNames(tester, dm);
 }
 
-/// Every message drawn names and pictures the person who sent it.
+/// Every message drawn names and pictures the person who sent it: its
+/// header's name, and its avatar (their initial in their colour, as these
+/// people have no picture), never those of the message before or after it.
 void expectOwnNames(WidgetTester tester, Dm dm) {
   final borrowed = <String>[];
   for (final element
       in find.byType(TimelineEventLayoutMessage).evaluate().toList()) {
     final layout = element.widget as TimelineEventLayoutMessage;
+    final inside = find.byWidget(layout);
     final bodies = find
-        .descendant(of: find.byWidget(layout), matching: find.byType(RichText))
+        .descendant(of: inside, matching: find.byType(RichText))
         .evaluate()
         .map((e) => (e.widget as RichText).text.toPlainText())
         .where(dm.senders.containsKey)
         .toSet();
     for (final body in bodies) {
-      final name = names[dm.senders[body]];
+      final sender = dm.senders[body]!;
+      final name = names[sender]!;
+      final colour = dm.room.getMemberOrFallback(sender).defaultColor;
       if (layout.senderName != name) {
-        borrowed.add('"$body" is drawn as ${layout.senderName}\'s, '
+        borrowed.add('"$body" is drawn as the message of ${layout.senderName}, '
             'sent by $name');
       }
       if (layout.showSender &&
           find
-              .descendant(of: find.byWidget(layout), matching: find.text(name!))
+              .descendant(of: inside, matching: find.text(name))
               .evaluate()
               .isEmpty) {
         borrowed.add('"$body" has a header without $name');
       }
+      final avatar = tester.widget<tiamat.Avatar>(
+          find.descendant(of: inside, matching: find.byType(tiamat.Avatar)));
+      if (avatar.placeholderText != name || avatar.placeholderColor != colour) {
+        borrowed.add('"$body" has the avatar of ${avatar.placeholderText}, '
+            'sent by $name');
+      }
     }
   }
-  expect(borrowed, isEmpty);
+  expect(borrowed, isEmpty, reason: 'messages drawn as from someone else');
 }
