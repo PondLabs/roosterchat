@@ -1565,6 +1565,18 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelDeviceNotVerified": "This device is not verified",
+  "@labelDeviceNotVerified": {
+    "description": "Title of the notice in the Home screen's alerts while this device (session) has not been verified with the account's cross-signing",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageDeviceNotVerified": "Encrypted messages won't open here until you verify this device. Tap to verify.",
+  "@messageDeviceNotVerified": {
+    "description": "Under 'This device is not verified' in the Home screen's alerts; tapping the notice opens the ways to verify this device",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelRoomPhotoUploadTask": "Uploading Photos",
   "@labelRoomPhotoUploadTask": {
     "description": "Background task shown while photos picked for a photo album room are being uploaded, with a progress bar",
@@ -3613,6 +3625,12 @@
   "labelTimelineUnknownSender": "Unknown Sender",
   "@labelTimelineUnknownSender": {
     "description": "Stands in for the name of who replied in a thread, under the thread's first message, while it is not known",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageUndecryptedOnUnverifiedDevice": "This device is not verified, so this message can't be opened. Tap to verify.",
+  "@messageUndecryptedOnUnverifiedDevice": {
+    "description": "In the chat, in place of a message that could not be decrypted, when this device has not been verified; tapping it opens the prompt to verify this device",
     "type": "text",
     "placeholders": {}
   },
@@ -7964,6 +7982,36 @@
     "placeholders": {
       "emoji": {}
     }
+  },
+  "labelVerifyThisDevice": "Verify this device",
+  "@labelVerifyThisDevice": {
+    "description": "Title of the prompt that asks to verify this device (session), shown after signing in and from the notice in the Home screen",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerifyThisDeviceWhy": "Verify this device to read your encrypted messages. Until then, others won't send it the keys.",
+  "@messageVerifyThisDeviceWhy": {
+    "description": "In the prompt to verify this device: why encrypted messages do not open on a device that has not been verified",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptVerifyWithRecoveryKey": "Use recovery key or security phrase",
+  "@promptVerifyWithRecoveryKey": {
+    "description": "Button in the prompt to verify this device: verify it by typing the account's recovery key or security phrase",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptVerifyWithOtherDevice": "Verify with another device",
+  "@promptVerifyWithOtherDevice": {
+    "description": "Button in the prompt to verify this device: compare emoji with another device where the account is signed in",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptVerifyLater": "Later",
+  "@promptVerifyLater": {
+    "description": "Button in the prompt to verify this device: close it for now; the notice in the Home screen opens it again",
+    "type": "text",
+    "placeholders": {}
   },
   "labelSettingsAppLogs": "Logs",
   "@labelSettingsAppLogs": {
