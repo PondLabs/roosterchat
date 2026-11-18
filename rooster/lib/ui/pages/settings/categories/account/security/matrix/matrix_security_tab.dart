@@ -17,6 +17,30 @@ import 'cross_signing/cross_signing_page.dart';
 class MatrixSecurityTab extends StatefulWidget {
   const MatrixSecurityTab(this.client, {super.key});
   final MatrixClient client;
+
+  static String get messageSettingsSessionsOnAccountPage => Intl.message(
+      "Your server signs sessions out on its own website, which opens in your browser.",
+      name: "messageSettingsSessionsOnAccountPage",
+      desc: "Settings > Security > Sessions: on a server that only lets its "
+          "own account website sign sessions (devices) out, says that "
+          "removing one opens that website");
+
+  static String get messageSettingsSessionsCannotSignOut => Intl.message(
+      "Your server does not let apps sign out your other sessions, so sign out on each device.",
+      name: "messageSettingsSessionsCannotSignOut",
+      desc: "Settings > Security > Sessions: the server neither has an "
+          "account website nor lets apps sign sessions (devices) out, so "
+          "there is no remove button");
+
+  static String messageSettingsSessionsSignedOut(int howMany) =>
+      Intl.plural(howMany,
+          one: "1 session was signed out.",
+          other: "$howMany sessions were signed out.",
+          name: "messageSettingsSessionsSignedOut",
+          args: [howMany],
+          desc: "Settings > Security > Sessions: after the list is fetched "
+              "again, how many sessions (devices) left it, for example "
+              "after signing them out on the server's website");
   @override
   State<MatrixSecurityTab> createState() => _MatrixSecurityTabState();
 }
@@ -31,7 +55,22 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
 
   Map<String, Object?>? authMetadata;
 
+  /// The server answered `/auth_metadata`, with the metadata or with an
+  /// error (a server without an account service): false while unknown.
+  bool authMetadataAnswered = false;
+
   bool? supportsLegacyUIA;
+
+  /// The account page was opened from here: coming back to the app fetches
+  /// the list again, with what was signed out there.
+  bool sentToAccountPage = false;
+
+  /// How many sessions the last fetch found gone from the list before it.
+  int sessionsSignedOut = 0;
+
+  Future<void>? _loading;
+
+  late final AppLifecycleListener _lifecycle;
 
   Uri? get accountManagementUri {
     var str = authMetadata?.tryGet<String>("account_management_uri");
@@ -42,9 +81,22 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
   List<String>? get supportedActions =>
       authMetadata?.tryGetList<String>("account_management_actions_supported");
 
-  bool get canRemoveDeviceOAuth =>
-      supportedActions?.contains("org.matrix.device_delete") == true &&
-      accountManagementUri != null;
+  /// Sessions are signed out on the server's account page (MSC4191), as
+  /// on a server with the Matrix Authentication Service.
+  bool get usesAccountPage =>
+      supportsLegacyUIA != true && accountManagementUri != null;
+
+  /// The server answered that it has no account page and does not sign
+  /// sessions out through the client API either.
+  bool get cannotSignOutSessions =>
+      supportsLegacyUIA == false &&
+      authMetadataAnswered &&
+      accountManagementUri == null;
+
+  /// The first of [actions] the server announces, in that order.
+  String? announcedAction(List<String> actions) => actions
+      .where((action) => supportedActions?.contains(action) == true)
+      .firstOrNull;
 
   String get labelMatrixCrossSigning => Intl.message("Cross signing",
       desc: "Title label for matrix cross signing",
@@ -135,6 +187,11 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
   @override
   void initState() {
     time = DateTime.now();
+    // Back from the account page (another app, or another browser tab on
+    // the web): the list shows what was signed out there.
+    _lifecycle = AppLifecycleListener(onResume: () {
+      if (sentToAccountPage) getDevices();
+    });
     checkState();
     getDevices();
 
@@ -154,10 +211,36 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
     });
   }
 
-  void getDevices() async {
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    super.dispose();
+  }
+
+  /// Fetches the list, unless a fetch is already on its way.
+  void getDevices() {
+    _loading ??= _fetchDevices().whenComplete(() => _loading = null);
+  }
+
+  Future<void> _fetchDevices() async {
     var gotDevices = await widget.client.getMatrixClient().getDevices();
 
-    if (supportsLegacyUIA == null) {
+    if (!authMetadataAnswered) {
+      try {
+        authMetadata = await widget.client.matrixClient
+            .request(RequestType.GET, "/client/v1/auth_metadata");
+        authMetadataAnswered = true;
+      } on MatrixException {
+        // No account service here (404 M_UNRECOGNIZED).
+        authMetadataAnswered = true;
+      } catch (e, s) {
+        Log.onError(e, s);
+      }
+    }
+
+    // A server with an account page signs sessions out only there: the
+    // client API is never asked.
+    if (accountManagementUri == null && supportsLegacyUIA == null) {
       try {
         await widget.client.matrixClient
             .request(RequestType.DELETE, "/client/v3/devices/_", data: {
@@ -176,24 +259,19 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
       }
     }
 
-    if (supportsLegacyUIA != true) {
-      if (authMetadata == null) {
-        try {
-          authMetadata = await widget.client.matrixClient
-              .request(RequestType.GET, "/client/v1/auth_metadata");
-        } catch (e, s) {
-          Log.onError(e, s);
-        }
-      }
-    }
-
     gotDevices
         ?.sort((a, b) => (b.lastSeenTs ?? 0).compareTo(a.lastSeenTs ?? 0));
 
-    if (mounted)
-      setState(() {
-        devices = gotDevices;
-      });
+    if (!mounted) return;
+    final before = devices?.map((device) => device.deviceId).toSet();
+    setState(() {
+      if (before != null && gotDevices != null) {
+        sessionsSignedOut = before
+            .difference(gotDevices.map((device) => device.deviceId).toSet())
+            .length;
+      }
+      devices = gotDevices;
+    });
   }
 
   @override
@@ -220,7 +298,23 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
               child: Center(child: const CircularProgressIndicator()))
           : Column(
               children: [
-                if (supportsLegacyUIA == true && inactiveDevices.isNotEmpty)
+                for (final message in [
+                  if (usesAccountPage)
+                    MatrixSecurityTab.messageSettingsSessionsOnAccountPage,
+                  if (cannotSignOutSessions)
+                    MatrixSecurityTab.messageSettingsSessionsCannotSignOut,
+                  if (sessionsSignedOut > 0)
+                    MatrixSecurityTab.messageSettingsSessionsSignedOut(
+                        sessionsSignedOut),
+                ])
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                    child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: tiamat.Text.labelLow(message)),
+                  ),
+                if ((supportsLegacyUIA == true || usesAccountPage) &&
+                    inactiveDevices.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
                     child: Container(
@@ -253,7 +347,11 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
                                 size: 15,
                                 icon: Icons.logout,
                                 onPressed: () {
-                                  removeInactiveDevices();
+                                  if (supportsLegacyUIA == true) {
+                                    removeInactiveDevices();
+                                  } else {
+                                    openSessionsList();
+                                  }
                                 },
                               ),
                             )
@@ -275,7 +373,7 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
                         inactive: isDeviceInactive(device),
                         removeSession: supportsLegacyUIA == true
                             ? () => removeDeviceUIA(device.deviceId)
-                            : canRemoveDeviceOAuth
+                            : usesAccountPage
                                 ? () => removeDeviceOAuth(device.deviceId)
                                 : null,
                       ),
@@ -312,15 +410,45 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
     getDevices();
   }
 
+  /// Opens the account page on signing [deviceID] out: MSC4191's
+  /// `org.matrix.session_end`, or `org.matrix.device_delete`, its older
+  /// name, when only that one is announced.
   void removeDeviceOAuth(String deviceID) {
+    final action = announcedAction(const [
+          "org.matrix.session_end",
+          "org.matrix.device_delete",
+        ]) ??
+        announcedAction(const [
+          "org.matrix.session_view",
+          "org.matrix.device_view",
+        ]);
+    if (action == null) return openSessionsList();
+    openAccountPage({"action": action, "device_id": deviceID});
+  }
+
+  /// Opens the account page on the list of sessions, where the inactive
+  /// ones are signed out.
+  void openSessionsList() {
+    final action = announcedAction(const [
+      "org.matrix.sessions_list",
+      "org.matrix.devices_list",
+    ]);
+    openAccountPage({if (action != null) "action": action});
+  }
+
+  void openAccountPage(Map<String, String> query) {
+    final page = accountManagementUri!;
+    sentToAccountPage = true;
+    // Without a context: nothing to ask, as this screen says where the
+    // button leads and the link is the server's own, so on the web the
+    // page opens in the same task as the tap (no popup blocker stops it).
     LinkUtils.open(
-        accountManagementUri!.replace(queryParameters: {
-          "action": "org.matrix.device_delete",
-          "device_id": deviceID
-        }),
-        context: context,
+        query.isEmpty
+            ? page
+            : page
+                .replace(queryParameters: {...page.queryParameters, ...query}),
         filterTrackingParameters: false,
-        bypassConfirmation: false);
+        bypassConfirmation: true);
   }
 
   void onUpdated() {

@@ -8601,6 +8601,26 @@
     "type": "text",
     "placeholders": {}
   },
+  "messageSettingsSessionsOnAccountPage": "Your server signs sessions out on its own website, which opens in your browser.",
+  "@messageSettingsSessionsOnAccountPage": {
+    "description": "Settings > Security > Sessions: on a server that only lets its own account website sign sessions (devices) out, says that removing one opens that website",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageSettingsSessionsCannotSignOut": "Your server does not let apps sign out your other sessions, so sign out on each device.",
+  "@messageSettingsSessionsCannotSignOut": {
+    "description": "Settings > Security > Sessions: the server neither has an account website nor lets apps sign sessions (devices) out, so there is no remove button",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageSettingsSessionsSignedOut": "{howMany,plural, =1{1 session was signed out.}other{{howMany} sessions were signed out.}}",
+  "@messageSettingsSessionsSignedOut": {
+    "description": "Settings > Security > Sessions: after the list is fetched again, how many sessions (devices) left it, for example after signing them out on the server's website",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
   "labelMatrixCrossSigning": "Cross signing",
   "@labelMatrixCrossSigning": {
     "description": "Title label for matrix cross signing",
