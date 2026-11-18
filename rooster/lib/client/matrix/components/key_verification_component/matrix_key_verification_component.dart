@@ -69,6 +69,9 @@ class MatrixKeyVerificationComponent
 
   final List<StreamSubscription> _subscriptions = [];
 
+  /// The requests of the server's steps a dialog was opened for.
+  final Expando<bool> _uiaShown = Expando();
+
   /// Opens the prompt once this device's keys are known, if it has to be
   /// verified. Called by a fresh login, before [postLoginInit].
   void askAfterLogin() => _askOnce = true;
@@ -85,7 +88,11 @@ class MatrixKeyVerificationComponent
     });
 
     client.matrixClient.onUiaRequest.stream.listen((event) {
-      if (event.state == matrix.UiaRequestState.waitForUser) {
+      // A request waits again after each refusal (a wrong password, an
+      // approval not seen yet): its dialog is already open.
+      if (event.state == matrix.UiaRequestState.waitForUser &&
+          _uiaShown[event] != true) {
+        _uiaShown[event] = true;
         AdaptiveDialog.show(
           navigator.currentContext!,
           builder: (_) => MatrixUIARequest(event, client),
