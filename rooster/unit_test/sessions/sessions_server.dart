@@ -171,16 +171,19 @@ Future<MatrixClient> signIn(WidgetTester tester, SessionsServer server) async {
 
 /// The security settings of [client] as the app shows them, [width] wide.
 Future<void> openSessions(WidgetTester tester, MatrixClient client,
-    {double width = 1280}) async {
-  tester.view.physicalSize = Size(width, 900);
+    {double width = 1280, double height = 900, Key? boundary}) async {
+  tester.view.physicalSize = Size(width, height);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(MaterialApp(
-    navigatorKey: navigator,
-    theme: ThemeDark.theme,
-    debugShowCheckedModeBanner: false,
-    home: Scaffold(
-      body: SingleChildScrollView(child: MatrixSecurityTab(client)),
+  await tester.pumpWidget(RepaintBoundary(
+    key: boundary,
+    child: MaterialApp(
+      navigatorKey: navigator,
+      theme: ThemeDark.theme,
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        body: SingleChildScrollView(child: MatrixSecurityTab(client)),
+      ),
     ),
   ));
   await settle(
