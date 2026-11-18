@@ -7795,24 +7795,6 @@
     "type": "text",
     "placeholders": {}
   },
-  "promptRoomUiaContinueWithPassword": "Continue with password",
-  "@promptRoomUiaContinueWithPassword": {
-    "description": "Button in the dialog where the server asks us to sign in again before a sensitive action: confirm with the account's password",
-    "type": "text",
-    "placeholders": {}
-  },
-  "promptRoomUiaContinueWithSso": "Continue with SSO",
-  "@promptRoomUiaContinueWithSso": {
-    "description": "Button in the dialog where the server asks us to sign in again before a sensitive action: confirm through single sign-on (SSO) in the browser",
-    "type": "text",
-    "placeholders": {}
-  },
-  "messageRoomUiaNoSupportedMethod": "Sorry, none of the authentication methods provided by the server are supported.",
-  "@messageRoomUiaNoSupportedMethod": {
-    "description": "In the dialog where the server asks us to sign in again: the app supports none of the ways the server offers",
-    "type": "text",
-    "placeholders": {}
-  },
   "messageRoomUiaApproveOnWebsite": "Your server approves this change on its own website: open it, approve the change, and come back.",
   "@messageRoomUiaApproveOnWebsite": {
     "description": "In the dialog where the server asks us to confirm a sensitive change (such as new keys that verify your sessions): the server only takes it once the person approves it on the server's own website, which the button below opens in the browser",
@@ -7828,6 +7810,24 @@
   "promptRoomUiaOpenWebsite": "Open the website",
   "@promptRoomUiaOpenWebsite": {
     "description": "Button in the dialog where the server asks us to approve a sensitive change on its own website: opens that website in the browser",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRoomUiaContinueWithPassword": "Continue with password",
+  "@promptRoomUiaContinueWithPassword": {
+    "description": "Button in the dialog where the server asks us to sign in again before a sensitive action: confirm with the account's password",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRoomUiaContinueWithSso": "Continue with SSO",
+  "@promptRoomUiaContinueWithSso": {
+    "description": "Button in the dialog where the server asks us to sign in again before a sensitive action: confirm through single sign-on (SSO) in the browser",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRoomUiaNoSupportedMethod": "Sorry, none of the authentication methods provided by the server are supported.",
+  "@messageRoomUiaNoSupportedMethod": {
+    "description": "In the dialog where the server asks us to sign in again: the app supports none of the ways the server offers",
     "type": "text",
     "placeholders": {}
   },

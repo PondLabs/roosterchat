@@ -41,6 +41,27 @@ class MatrixUIARequestView extends StatefulWidget {
   final Function()? onSuccess;
   final Function()? onFail;
 
+  static String get messageRoomUiaApproveOnWebsite => Intl.message(
+      "Your server approves this change on its own website: open it, approve the change, and come back.",
+      name: "messageRoomUiaApproveOnWebsite",
+      desc: "In the dialog where the server asks us to confirm a sensitive "
+          "change (such as new keys that verify your sessions): the server "
+          "only takes it once the person approves it on the server's own "
+          "website, which the button below opens in the browser");
+
+  static String get messageRoomUiaNotApprovedYet => Intl.message(
+      "The server has not seen the approval yet. Approve the change on the website, then try again.",
+      name: "messageRoomUiaNotApprovedYet",
+      desc: "In the dialog where the server asks us to approve a sensitive "
+          "change on its website: we asked again and the server still "
+          "waits for that approval");
+
+  static String get promptRoomUiaOpenWebsite => Intl.message("Open the website",
+      name: "promptRoomUiaOpenWebsite",
+      desc: "Button in the dialog where the server asks us to approve a "
+          "sensitive change on its own website: opens that website in the "
+          "browser");
+
   @override
   State<MatrixUIARequestView> createState() => _MatrixUIARequestViewState();
 }
@@ -78,27 +99,6 @@ class _MatrixUIARequestViewState extends State<MatrixUIARequestView> {
       name: "messageRoomUiaNoSupportedMethod",
       desc:
           "In the dialog where the server asks us to sign in again: the app supports none of the ways the server offers");
-
-  static String get messageRoomUiaApproveOnWebsite => Intl.message(
-      "Your server approves this change on its own website: open it, approve the change, and come back.",
-      name: "messageRoomUiaApproveOnWebsite",
-      desc: "In the dialog where the server asks us to confirm a sensitive "
-          "change (such as new keys that verify your sessions): the server "
-          "only takes it once the person approves it on the server's own "
-          "website, which the button below opens in the browser");
-
-  static String get messageRoomUiaNotApprovedYet => Intl.message(
-      "The server has not seen the approval yet. Approve the change on the website, then try again.",
-      name: "messageRoomUiaNotApprovedYet",
-      desc: "In the dialog where the server asks us to approve a sensitive "
-          "change on its website: we asked again and the server still "
-          "waits for that approval");
-
-  static String get promptRoomUiaOpenWebsite => Intl.message("Open the website",
-      name: "promptRoomUiaOpenWebsite",
-      desc: "Button in the dialog where the server asks us to approve a "
-          "sensitive change on its own website: opens that website in the "
-          "browser");
 
   String get labelRoomUiaAccountPassword => Intl.message("Account Password",
       name: "labelRoomUiaAccountPassword",
@@ -192,10 +192,10 @@ class _MatrixUIARequestViewState extends State<MatrixUIARequestView> {
       spacing: 12,
       children: [
         tiamat.Text.label(widget.notApprovedYet
-            ? messageRoomUiaNotApprovedYet
-            : messageRoomUiaApproveOnWebsite),
+            ? MatrixUIARequestView.messageRoomUiaNotApprovedYet
+            : MatrixUIARequestView.messageRoomUiaApproveOnWebsite),
         tiamat.Button(
-          text: promptRoomUiaOpenWebsite,
+          text: MatrixUIARequestView.promptRoomUiaOpenWebsite,
           onTap: () => widget.onOpenAccountPage?.call(),
         ),
         tiamat.Button.secondary(

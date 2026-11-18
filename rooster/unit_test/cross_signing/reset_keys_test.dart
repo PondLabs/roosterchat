@@ -58,13 +58,14 @@ void main() {
 
   /// A verified device of an account with verification keys and a backup,
   /// with the app's dialog for the server's steps listening.
-  Future<void> signIn(WidgetTester tester, ResetKind kind) async {
+  Future<void> signIn(WidgetTester tester, ResetKind kind,
+      {String url = resetPage}) async {
     tester.view.physicalSize = const Size(1280, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         const MethodChannel('FlutterWebRTC.Event'), (_) async => null);
-    server = ResetServer(kind);
+    server = ResetServer(kind, url: url);
     await tester.runAsync(() async {
       client = await newAccount(server);
       await FakeLogin(verified: true).submit(client);
@@ -157,8 +158,11 @@ void main() {
 
     // The account page opens on a tap, then "Continue" before approving.
     expect(find.text(_approveOnWebsite), findsOneWidget);
-    await tap(tester, _openWebsite);
+    // Opened by the tap itself, before any frame: on the web the page
+    // opens in the same task as the tap, so no popup blocker stops it.
+    await tester.tap(find.text(_openWebsite));
     expect(browser.opened, [Uri.parse(resetPage)]);
+    await tester.pump();
     await tap(tester, CommonStrings.promptContinue);
     await _settle(
         tester, () => find.text(_notApprovedYet).evaluate().isNotEmpty);
@@ -208,5 +212,17 @@ void main() {
         () => find.text(CommonStrings.promptDone).evaluate().isNotEmpty);
     await tester.runAsync(
         () => server.expectNewSessionVerifies(recoveryKey, backup: true));
+  });
+
+  testWidgets(
+      'a step whose page is not a web page opens nothing and changes '
+      'nothing',
+      skip: skipWithoutVodozemac != false, (tester) async {
+    await signIn(tester, ResetKind.accountService, url: 'javascript:alert(1)');
+    await upToTheUpload(tester);
+    await _settle(tester, () => find.text(_noMethod).evaluate().isNotEmpty);
+    expect(find.text(_openWebsite), findsNothing);
+    expect(browser.opened, isEmpty);
+    expect(server.writes, isEmpty);
   });
 }
