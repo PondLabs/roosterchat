@@ -278,7 +278,10 @@ Changes since the copy:
   a message sent before the sync's own query answered (it runs after the
   sync that brought them in) never reached their devices. A user whose
   homeserver failed is not asked again for 5 min, nor one left
-  unanswered for 1 min. `Client.updateUserDeviceKeys` takes
+  unanswered for 1 min. The share waits for that query 10 s at most
+  (`Client.staleDeviceKeysTimeout`, what the query lets the homeserver
+  wait for other servers), then goes to the devices known; the answer
+  that comes later counts for the next send. `Client.updateUserDeviceKeys` takes
   `onlyAdditionalUsers` for that query, and puts each parsed device list
   in place whole. Who gets the key is unchanged (`Client.shareKeysWith`);
   `KeyManager._createOutboundGroupSession`

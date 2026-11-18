@@ -3412,6 +3412,12 @@ class Client extends MatrixApi {
   /// and the homeserver did not answer for them. // ROOSTER
   final Map<String, DateTime> _unansweredKeyQueries = {}; // ROOSTER
 
+  /// How long a room key waits for [updateStaleUserDeviceKeys]' query: // ROOSTER
+  /// past it, the key goes to the devices known, as when the query fails, // ROOSTER
+  /// and the answer that comes later counts for the next send. 10 s is // ROOSTER
+  /// what the query itself lets the homeserver wait for other servers. // ROOSTER
+  Duration staleDeviceKeysTimeout = const Duration(seconds: 10); // ROOSTER
+
   /// Brings the device lists of [userIds] up to date before a room key // ROOSTER
   /// goes out to them: those never queried, or marked outdated by a sync, // ROOSTER
   /// are queried now, and the caller waits for the answer. A room key // ROOSTER
@@ -3439,7 +3445,7 @@ class Client extends MatrixApi {
     await updateUserDeviceKeys( // ROOSTER
       additionalUsers: users, // ROOSTER
       onlyAdditionalUsers: true, // ROOSTER
-    ); // ROOSTER
+    ).timeout(staleDeviceKeysTimeout, onTimeout: () {}); // ROOSTER
     for (final userId in users) { // ROOSTER
       if (stale(userId)) { // ROOSTER
         _unansweredKeyQueries[userId] = DateTime.now(); // ROOSTER

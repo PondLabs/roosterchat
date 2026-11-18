@@ -214,4 +214,45 @@ void main() {
           'members: blocked, or not cross-signed by their owner',
     ]);
   });
+
+  test(
+      'a device query that does not answer holds the send no longer than '
+      "its limit: the messages go out encrypted, the room's queue moves, "
+      'and the answer that comes later counts for the next send',
+      skip: vodozemacSkip, () async {
+    final room = await createEncryptedRoom();
+    alice.getMatrixClient().staleDeviceKeysTimeout = const Duration(seconds: 1);
+    // From here, each `POST /keys/query` answers after 4 s.
+    server.keysQueryLatency = const Duration(seconds: 4);
+    await inviteAndJoin(room);
+
+    Future<(String, Duration)> timedSend(String text) async {
+      final watch = Stopwatch()..start();
+      final id = await send(room, text);
+      return (id, watch.elapsed);
+    }
+
+    final (_, first) = await timedSend('Not held for long');
+    final (_, second) = await timedSend('Right behind it');
+    expect(first, lessThan(const Duration(seconds: 3)));
+    expect(second, lessThan(const Duration(seconds: 1)));
+    final sends = server.requests[_alice]!
+        .where((r) => r.startsWith('PUT /rooms/{id}/send/'))
+        .toList();
+    expect(sends, hasLength(2));
+    expect(sends,
+        everyElement(startsWith('PUT /rooms/{id}/send/m.room.encrypted/')));
+
+    await until(
+        () =>
+            alice
+                .getMatrixClient()
+                .userDeviceKeys[_bob]
+                ?.deviceKeys
+                .isNotEmpty ==
+            true,
+        what: "account 2's devices, answered late");
+    final id = await send(room, 'Once they are known');
+    expect(await decryptedOn(bob, room.identifier, id), 'Once they are known');
+  });
 }
