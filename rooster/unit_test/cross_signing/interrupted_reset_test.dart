@@ -192,4 +192,44 @@ void main() {
       }
     });
   });
+
+  for (final keep in ['wipeCrossSigning(false)', 'askSetupCrossSigning()']) {
+    testWidgets(
+        'keeping the verification keys ($keep) after wiping the secret '
+        'storage writes nothing, not even the backup this device knows',
+        skip: skipWithoutVodozemac != false, (tester) async {
+      await tester.runAsync(() async {
+        final server = ResetServer(ResetKind.accountService);
+        final mx = await _device(server);
+        final data = server.accountData.toString();
+        final finished = Completer<Bootstrap>();
+        mx.encryption!.bootstrap(onUpdate: (bootstrap) async {
+          switch (bootstrap.state) {
+            case BootstrapState.askWipeSsss:
+              bootstrap.wipeSsss(true);
+            case BootstrapState.askNewSsss:
+              await bootstrap.newSsss();
+            case BootstrapState.askWipeCrossSigning:
+              await bootstrap
+                  .wipeCrossSigning(keep != 'wipeCrossSigning(false)');
+            case BootstrapState.askSetupCrossSigning:
+              await bootstrap.askSetupCrossSigning();
+            case BootstrapState.done || BootstrapState.error:
+              if (!finished.isCompleted) finished.complete(bootstrap);
+            default:
+              if (bootstrap.state != BootstrapState.loading &&
+                  !finished.isCompleted) {
+                finished.complete(bootstrap);
+              }
+          }
+        });
+        final bootstrap =
+            await finished.future.timeout(const Duration(seconds: 30));
+        expect(server.writes, isEmpty);
+        expect(server.accountData.toString(), data);
+        expect(bootstrap.state, BootstrapState.done);
+        expect(bootstrap.newSsssKey, isNull);
+      });
+    });
+  }
 }

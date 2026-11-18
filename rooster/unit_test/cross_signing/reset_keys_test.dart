@@ -11,6 +11,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:matrix/encryption.dart' show BootstrapState;
 import 'package:rooster/client/matrix/components/key_verification_component/matrix_key_verification_component.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/main.dart';
@@ -224,5 +225,39 @@ void main() {
     expect(find.text(_openWebsite), findsNothing);
     expect(browser.opened, isEmpty);
     expect(server.writes, isEmpty);
+  });
+
+  testWidgets(
+      '"Wait, No!" to wiping the verification keys, after wiping the '
+      'secret storage, changes nothing on the account',
+      skip: skipWithoutVodozemac != false, (tester) async {
+    await signIn(tester, ResetKind.accountService);
+    final before = server.defaultKey;
+    final secrets = await tester.runAsync(() =>
+        server.openWith(recoveryKey, types: [...secretTypes, backupType]));
+    await openReset(tester);
+    await tap(tester, 'Wipe Keys');
+    await tap(tester, 'Generate Key');
+    await _settle(
+        tester,
+        () => find
+            .textContaining('wipe your cross signing')
+            .evaluate()
+            .isNotEmpty);
+    await tap(tester, 'Wait, No!');
+    await _settle(
+        tester,
+        () => ![BootstrapState.loading, BootstrapState.askWipeCrossSigning]
+            .contains(wizard(tester).state));
+
+    expect(server.writes, isEmpty,
+        reason: 'a recovery key the person never saw would hold nothing');
+    expect(server.uploads, isEmpty);
+    expect(server.defaultKey, before);
+    expect(
+        await tester.runAsync(() =>
+            server.openWith(recoveryKey, types: [...secretTypes, backupType])),
+        secrets);
+    expect(wizard(tester).state, BootstrapState.done);
   });
 }

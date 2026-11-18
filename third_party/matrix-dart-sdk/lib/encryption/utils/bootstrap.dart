@@ -84,7 +84,7 @@ class Bootstrap {
   // until the server takes the new cross-signing keys, so a reset stopped
   // before (at the server's own step, such as the account page of
   // matrix.org) leaves the account as it was. [_commitNewSsss] then gives
-  // the key to the server.
+  // the key to the server, or [_dropNewSsss] drops it.
   bool _newSsssPending = false;
 
   Bootstrap({required this.encryption, this.onUpdate}) {
@@ -366,7 +366,7 @@ class Bootstrap {
     if (wipe) {
       state = BootstrapState.askSetupCrossSigning;
     } else {
-      if (!await _tryCommitNewSsss({})) return; // ROOSTER
+      if (_dropNewSsss()) return; // ROOSTER
       await client.dehydratedDeviceSetup(newSsssKey!);
       checkOnlineKeyBackup();
     }
@@ -381,7 +381,7 @@ class Bootstrap {
       throw BootstrapBadStateException();
     }
     if (!setupMasterKey && !setupSelfSigningKey && !setupUserSigningKey) {
-      if (!await _tryCommitNewSsss({})) return; // ROOSTER
+      if (_dropNewSsss()) return; // ROOSTER
       await client.dehydratedDeviceSetup(newSsssKey!);
       checkOnlineKeyBackup();
       return;
@@ -557,18 +557,16 @@ class Bootstrap {
     }
   }
 
-  // ROOSTER: [_commitNewSsss] when the key is still pending, with an error
-  // state when it fails. False when it failed.
-  Future<bool> _tryCommitNewSsss(Map<String, String> secrets) async {
-    if (!_newSsssPending) return true;
-    try {
-      await _commitNewSsss(secrets);
-      return true;
-    } catch (e, s) {
-      Logs().e('[Bootstrapping] Error storing the new SSSS key', e, s);
-      state = BootstrapState.error;
-      return false;
-    }
+  // ROOSTER: no new cross-signing keys after wiping the secret storage
+  // ("Wait, No!"): the new storage could not hold them, and the person never
+  // saw its recovery key. It is dropped before reaching the server, and the
+  // account keeps its storage, keys and backup as they were.
+  bool _dropNewSsss() {
+    if (!_newSsssPending) return false;
+    _newSsssPending = false;
+    newSsssKey = null;
+    state = BootstrapState.done;
+    return true;
   }
 
   void checkOnlineKeyBackup() {
