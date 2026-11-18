@@ -255,4 +255,29 @@ void main() {
     final id = await send(room, 'Once they are known');
     expect(await decryptedOn(bob, room.identifier, id), 'Once they are known');
   });
+
+  test(
+      'a member who left gets no key of the next message: no to-device '
+      'goes to their devices, and they cannot decrypt it',
+      skip: vodozemacSkip, () async {
+    final room = await createEncryptedRoom();
+    await inviteAndJoin(room);
+    final first = await send(room, 'While you are here');
+    expect(
+        await decryptedOn(bob, room.identifier, first), 'While you are here');
+
+    final bobRoom = await roomOf(bob, room.identifier);
+    await bobRoom.matrixRoom.leave();
+    await until(
+        () => !hasMember(
+            room, _bob, [matrix.Membership.join, matrix.Membership.invite]),
+        what: 'account 2 left');
+    final before = server.encryptedToDeviceTo(_bob);
+    final second = await send(room, 'After you left');
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    expect(server.encryptedToDeviceTo(_bob), before);
+    // The homeserver gives the event to whoever asks for it here: account
+    // 2 reads it with the keys it has, and cannot decrypt it.
+    expect(await decryptedOn(bob, room.identifier, second), isNull);
+  });
 }

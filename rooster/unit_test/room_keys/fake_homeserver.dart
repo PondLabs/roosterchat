@@ -137,6 +137,9 @@ class FakeHomeserver {
             ('POST', ['rooms', final roomId, 'join']):
         _room(roomId).member(this, device.userId, device.userId, 'join');
         return _json({'room_id': roomId});
+      case ('POST', ['rooms', final roomId, 'leave']):
+        _room(roomId).member(this, device.userId, device.userId, 'leave');
+        return _json({});
       case ('PUT', ['rooms', final roomId, 'send', final type, final txn]):
         final event =
             _room(roomId).add(this, device.userId, type, body, txn: txn);
