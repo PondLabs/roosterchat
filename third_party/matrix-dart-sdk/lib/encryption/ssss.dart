@@ -229,6 +229,15 @@ class SSSS {
   /// Creates a new secret storage key, optional encrypts it with [passphrase]
   /// and stores it in the user's `accountData`.
   Future<OpenSSSS> createKey([String? passphrase, String? name]) async {
+    final key = await newKey(passphrase, name); // ROOSTER
+    await uploadKey(key); // ROOSTER
+    return key; // ROOSTER
+  } // ROOSTER
+
+  // ROOSTER: [createKey] in two steps. The key is made on this device
+  // only, and [uploadKey] gives it to the server: a reset keeps it here
+  // until the server takes the new cross-signing keys.
+  Future<OpenSSSS> newKey([String? passphrase, String? name]) async {
     Uint8List privateKey;
     final content = SecretStorageKeyContent();
     if (passphrase != null) {
@@ -268,23 +277,27 @@ class SSSS {
     }()
         .firstWhere((keyId) => getKey(keyId) == null);
 
-    final accountDataTypeKeyId = EventTypes.secretStorageKey(keyId);
+    final key = OpenSSSS(ssss: this, keyId: keyId, keyData: content); // ROOSTER
+    await key.setPrivateKey(privateKey);
+    return key;
+  }
+
+  // ROOSTER: the second step of [createKey]: the server gets the key's
+  // description, after which the key opens with [open].
+  Future<void> uploadKey(OpenSSSS key) async {
+    final accountDataTypeKeyId = EventTypes.secretStorageKey(key.keyId);
     // noooow we set the account data
 
     await client.setAccountData(
       client.userID!,
       accountDataTypeKeyId,
-      content.toJson(),
+      key.keyData.toJson(),
     );
 
     while (!client.accountData.containsKey(accountDataTypeKeyId)) {
       Logs().v('Waiting accountData to have $accountDataTypeKeyId');
       await client.oneShotSync();
     }
-
-    final key = open(keyId);
-    await key.setPrivateKey(privateKey);
-    return key;
   }
 
   Future<bool> checkKey(Uint8List key, SecretStorageKeyContent info) async {

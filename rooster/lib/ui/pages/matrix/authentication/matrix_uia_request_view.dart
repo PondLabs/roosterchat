@@ -15,13 +15,52 @@ class MatrixUIARequestView extends StatefulWidget {
       super.key,
       this.onFail,
       this.onSubmitSso,
+      this.accountPage,
+      this.notApprovedYet = false,
+      this.onOpenAccountPage,
+      this.onRetry,
       this.onSuccess});
   final UiaRequestState state;
   final Set<String> nextSteps;
   final Function(String password)? onSubmitAuthentication;
   final Function()? onSubmitSso;
+
+  /// The server's own web page where the person approves the request, when
+  /// it asks for that (Matrix 1.15's `m.oauth`), as the Matrix
+  /// Authentication Service of matrix.org does before new verification
+  /// keys.
+  final Uri? accountPage;
+
+  /// The request was sent again and the server still waits for the
+  /// approval.
+  final bool notApprovedYet;
+  final Function()? onOpenAccountPage;
+
+  /// Sends the request again, once the person approved it on [accountPage].
+  final Function()? onRetry;
   final Function()? onSuccess;
   final Function()? onFail;
+
+  static String get messageRoomUiaApproveOnWebsite => Intl.message(
+      "Your server approves this change on its own website: open it, approve the change, and come back.",
+      name: "messageRoomUiaApproveOnWebsite",
+      desc: "In the dialog where the server asks us to confirm a sensitive "
+          "change (such as new keys that verify your sessions): the server "
+          "only takes it once the person approves it on the server's own "
+          "website, which the button below opens in the browser");
+
+  static String get messageRoomUiaNotApprovedYet => Intl.message(
+      "The server has not seen the approval yet. Approve the change on the website, then try again.",
+      name: "messageRoomUiaNotApprovedYet",
+      desc: "In the dialog where the server asks us to approve a sensitive "
+          "change on its website: we asked again and the server still "
+          "waits for that approval");
+
+  static String get promptRoomUiaOpenWebsite => Intl.message("Open the website",
+      name: "promptRoomUiaOpenWebsite",
+      desc: "Button in the dialog where the server asks us to approve a "
+          "sensitive change on its own website: opens that website in the "
+          "browser");
 
   @override
   State<MatrixUIARequestView> createState() => _MatrixUIARequestViewState();
@@ -37,7 +76,10 @@ class _MatrixUIARequestViewState extends State<MatrixUIARequestView> {
   bool get canUsePassword => widget.nextSteps.contains("m.login.password");
   bool get canUseSso => widget.nextSteps.contains("m.login.sso");
 
-  bool get canUseAnyNextStep => canUsePassword || canUseSso;
+  bool get canUseAccountPage => widget.accountPage != null;
+
+  bool get canUseAnyNextStep =>
+      canUsePassword || canUseSso || canUseAccountPage;
 
   UIAStep? pickedStep;
 
@@ -102,6 +144,7 @@ class _MatrixUIARequestViewState extends State<MatrixUIARequestView> {
       case UiaRequestState.loading:
         return loading();
       case UiaRequestState.waitForUser:
+        if (canUseAccountPage) return accountPageStep();
         return pickedStep == null ? showAvailableSteps() : showPickedStep();
     }
   }
@@ -136,6 +179,32 @@ class _MatrixUIARequestViewState extends State<MatrixUIARequestView> {
           ]
         ],
       ),
+    );
+  }
+
+  /// The server takes the request once the person approves it on its
+  /// website: the button opens it in the same tap (no popup blocker stops
+  /// it on the web), and coming back or "Continue" sends the request again.
+  Widget accountPageStep() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 12,
+      children: [
+        tiamat.Text.label(widget.notApprovedYet
+            ? MatrixUIARequestView.messageRoomUiaNotApprovedYet
+            : MatrixUIARequestView.messageRoomUiaApproveOnWebsite),
+        tiamat.Button(
+          text: MatrixUIARequestView.promptRoomUiaOpenWebsite,
+          onTap: () => widget.onOpenAccountPage?.call(),
+        ),
+        tiamat.Button.secondary(
+          text: widget.notApprovedYet
+              ? CommonStrings.promptRetry
+              : CommonStrings.promptContinue,
+          onTap: () => widget.onRetry?.call(),
+        ),
+      ],
     );
   }
 

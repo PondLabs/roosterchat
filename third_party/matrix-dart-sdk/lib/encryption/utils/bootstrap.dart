@@ -79,6 +79,14 @@ class Bootstrap {
   OpenSSSS? newSsssKey;
   Map<String, String>? secretMap;
 
+  // ROOSTER: [newSsssKey] was made after wiping the old secret storage and
+  // is still known only to this device. Nothing on the account changes
+  // until the server takes the new cross-signing keys, so a reset stopped
+  // before (at the server's own step, such as the account page of
+  // matrix.org) leaves the account as it was. [_commitNewSsss] then gives
+  // the key to the server, or [_dropNewSsss] drops it.
+  bool _newSsssPending = false;
+
   Bootstrap({required this.encryption, this.onUpdate}) {
     if (analyzeSecrets().isNotEmpty) {
       state = BootstrapState.askWipeSsss;
@@ -265,6 +273,14 @@ class Bootstrap {
     state = BootstrapState.loading;
     try {
       Logs().v('Create key...');
+      // ROOSTER: a new storage stays on this device for now: see
+      // [_newSsssPending].
+      if (oldSsssKeys == null) {
+        newSsssKey = await encryption.ssss.newKey(passphrase, name); // ROOSTER
+        _newSsssPending = true; // ROOSTER
+        checkCrossSigning(); // ROOSTER
+        return; // ROOSTER
+      } // ROOSTER
       newSsssKey = await encryption.ssss.createKey(passphrase, name);
       if (oldSsssKeys != null) {
         // alright, we have to re-encrypt old secrets with the new key
@@ -350,6 +366,7 @@ class Bootstrap {
     if (wipe) {
       state = BootstrapState.askSetupCrossSigning;
     } else {
+      if (_dropNewSsss()) return; // ROOSTER
       await client.dehydratedDeviceSetup(newSsssKey!);
       checkOnlineKeyBackup();
     }
@@ -364,6 +381,7 @@ class Bootstrap {
       throw BootstrapBadStateException();
     }
     if (!setupMasterKey && !setupSelfSigningKey && !setupUserSigningKey) {
+      if (_dropNewSsss()) return; // ROOSTER
       await client.dehydratedDeviceSetup(newSsssKey!);
       checkOnlineKeyBackup();
       return;
@@ -468,7 +486,10 @@ class Bootstrap {
           await client.oneShotSync();
         }
       }
-      if (newSsssKey != null) {
+      // ROOSTER: the server took the keys: a pending storage goes to it now.
+      if (_newSsssPending) {
+        await _commitNewSsss(secretsToStore); // ROOSTER
+      } else if (newSsssKey != null) {
         final storeFutures = <Future<void>>[];
         for (final entry in secretsToStore.entries) {
           storeFutures.add(newSsssKey!.store(entry.key, entry.value));
@@ -505,6 +526,47 @@ class Bootstrap {
 
     await client.dehydratedDeviceSetup(newSsssKey!);
     checkOnlineKeyBackup();
+  }
+
+  // ROOSTER: gives the server the key [newSsss] kept on this device, once
+  // nothing can stop the reset any more: the key's description, then every
+  // secret in it ([secrets], and the backup's when this device knows it)
+  // next to the old key's copy, then the default key, and only then the
+  // old copies go. Stopped anywhere, the default key holds every secret it
+  // held, or every new one: never a recovery key with nothing in it.
+  Future<void> _commitNewSsss(Map<String, String> secrets) async {
+    final key = newSsssKey!;
+    final toStore = <String, String>{
+      if (await encryption.ssss.getCached(EventTypes.MegolmBackup)
+          case final backup?)
+        EventTypes.MegolmBackup: backup,
+      ...secrets,
+    };
+    Logs().v('Give the server the new SSSS key...');
+    await encryption.ssss.uploadKey(key);
+    for (final entry in toStore.entries) {
+      await key.store(entry.key, entry.value, add: true);
+    }
+    await encryption.ssss.setDefaultKeyId(key.keyId);
+    while (encryption.ssss.defaultKeyId != key.keyId) {
+      await client.oneShotSync();
+    }
+    _newSsssPending = false;
+    for (final entry in toStore.entries) {
+      await key.validateAndStripOtherKeys(entry.key, entry.value);
+    }
+  }
+
+  // ROOSTER: no new cross-signing keys after wiping the secret storage
+  // ("Wait, No!"): the new storage could not hold them, and the person never
+  // saw its recovery key. It is dropped before reaching the server, and the
+  // account keeps its storage, keys and backup as they were.
+  bool _dropNewSsss() {
+    if (!_newSsssPending) return false;
+    _newSsssPending = false;
+    newSsssKey = null;
+    state = BootstrapState.done;
+    return true;
   }
 
   void checkOnlineKeyBackup() {
