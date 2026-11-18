@@ -33,14 +33,15 @@ class MatrixBackgroundMember implements Member {
 
       avatar = await uriToCachedMxcImageProvider(uri);
 
-      Log.i("Got avatar: ${uri}");
+      Log.i("Got avatar");
     }
   }
 
   static Future<m.ImageProvider?> uriToCachedMxcImageProvider(Uri uri) async {
     var identifier = MatrixMxcImage.getThumbnailIdentifier(uri);
 
-    Log.i("Looking for ${identifier} in file cache");
+    // The identifiers hold the mxc URL: they are not logged.
+    Log.i("Looking for the thumbnail in file cache");
     var thumbnail = await fileCache?.getFile(identifier);
 
     if (thumbnail != null) {
@@ -49,7 +50,7 @@ class MatrixBackgroundMember implements Member {
     } else {
       Log.i("Missed thumbnail");
       var identifier = MatrixMxcImage.getIdentifier(uri);
-      Log.i("Looking for ${identifier} in file cache");
+      Log.i("Looking for the full image in file cache");
       var file = await fileCache?.getFile(identifier);
       if (file != null) {
         Log.i("Got file!");
@@ -74,7 +75,6 @@ class MatrixBackgroundMember implements Member {
   @override
   String get displayName {
     if (event != null) {
-      Log.i("Got user data: ${data!.content}");
       if (event!.content["displayname"] is String) {
         return event!.content["displayname"] as String;
       }
