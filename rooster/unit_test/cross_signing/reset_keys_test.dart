@@ -15,6 +15,7 @@ import 'package:matrix/encryption.dart' show BootstrapState;
 import 'package:rooster/client/matrix/components/key_verification_component/matrix_key_verification_component.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/main.dart';
+import 'package:rooster/ui/pages/matrix/authentication/matrix_uia_request.dart';
 import 'package:rooster/ui/pages/settings/categories/account/security/matrix/cross_signing/cross_signing_page.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:tiamat/config/style/theme_dark.dart';
@@ -175,6 +176,8 @@ void main() {
           tester, () => find.text(_notApprovedYet).evaluate().isNotEmpty);
       expect(server.uploads, hasLength(2));
       expect(server.writes, isEmpty);
+      expect(find.byType(MatrixUIARequest), findsOneWidget,
+          reason: 'the refusal is told in the dialog already open');
 
       // Approved there; coming back to the app sends the keys again.
       await tap(tester, _openWebsite);
