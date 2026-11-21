@@ -406,7 +406,8 @@ class Event extends MatrixEvent {
     }
     // A message still being sent stops first. Once its event's request // ROOSTER
     // has left the server may have it: it is not taken away. // ROOSTER
-    if (!room.cancelSending(transactionId ?? eventId)) { // ROOSTER
+    if (!room.cancelSending(transactionId ?? eventId)) {
+      // ROOSTER
       throw Exception('The event may have reached the server'); // ROOSTER
     } // ROOSTER
     // ROOSTER: what followed is in there now, unchanged.
@@ -417,7 +418,8 @@ class Event extends MatrixEvent {
   Future<String?> sendAgain({String? txid}) async {
     if (!status.isError) return null;
     // A cancelled message is never sent again. // ROOSTER
-    if (room.isSendCancelled(txid ?? transactionId ?? eventId)) { // ROOSTER
+    if (room.isSendCancelled(txid ?? transactionId ?? eventId)) {
+      // ROOSTER
       return null; // ROOSTER
     } // ROOSTER
 
@@ -436,8 +438,10 @@ class Event extends MatrixEvent {
       final encryptsFiles = // ROOSTER
           room.encrypted && room.client.fileEncryptionEnabled; // ROOSTER
       if (content['file'] is Map || // ROOSTER
-          (content['url'] is String && !encryptsFiles)) { // ROOSTER
-        final id = await room.sendEvent( // ROOSTER
+          (content['url'] is String && !encryptsFiles)) {
+        // ROOSTER
+        final id = await room.sendEvent(
+          // ROOSTER
           Map<String, dynamic>.from(content), // ROOSTER
           type: type, // ROOSTER
           txid: txid ?? transactionId ?? eventId, // ROOSTER
@@ -756,7 +760,8 @@ class Event extends MatrixEvent {
     if (status.isSending) {
       final localFile = room.sendingFilePlaceholders[eventId];
       // One read from its source holds no bytes to give. // ROOSTER
-      if (localFile != null && localFile.source == null) { // ROOSTER
+      if (localFile != null && localFile.source == null) {
+        // ROOSTER
         return localFile; // ROOSTER
       } // ROOSTER
     }

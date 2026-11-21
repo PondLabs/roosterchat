@@ -1630,13 +1630,15 @@ class Client extends MatrixApi {
     contentType ??= lookupMimeType(filename ?? '', headerBytes: file);
     final reserved = currentReservedUpload(); // ROOSTER
     final mxc = reserved != null // ROOSTER
-        ? await _uploadToReserved( // ROOSTER
+        ? await _uploadToReserved(
+            // ROOSTER
             reserved, // ROOSTER
             file, // ROOSTER
             filename: filename, // ROOSTER
             contentType: contentType, // ROOSTER
           ) // ROOSTER
-        : await super.uploadContent( // ROOSTER
+        : await super.uploadContent(
+            // ROOSTER
             file, // ROOSTER
             filename: filename, // ROOSTER
             contentType: contentType, // ROOSTER
@@ -1656,21 +1658,27 @@ class Client extends MatrixApi {
   /// Uploads [file] to [mxc], reserved before: an answer that the media // ROOSTER
   /// is there already (`M_CANNOT_OVERWRITE_MEDIA`) means an earlier // ROOSTER
   /// attempt of the same bytes landed after all. // ROOSTER
-  Future<Uri> _uploadToReserved( // ROOSTER
+  Future<Uri> _uploadToReserved(
+    // ROOSTER
     Uri mxc, // ROOSTER
-    Uint8List file, { // ROOSTER
+    Uint8List file, {
+    // ROOSTER
     String? filename, // ROOSTER
     String? contentType, // ROOSTER
-  }) async { // ROOSTER
-    try { // ROOSTER
-      await uploadContentToMXC( // ROOSTER
+  }) async {
+    // ROOSTER
+    try {
+      // ROOSTER
+      await uploadContentToMXC(
+        // ROOSTER
         mxc.host, // ROOSTER
         mxc.pathSegments.first, // ROOSTER
         file, // ROOSTER
         filename: filename, // ROOSTER
         contentType: contentType, // ROOSTER
       ); // ROOSTER
-    } on MatrixException catch (e) { // ROOSTER
+    } on MatrixException catch (e) {
+      // ROOSTER
       if (e.errcode != 'M_CANNOT_OVERWRITE_MEDIA') rethrow; // ROOSTER
     } // ROOSTER
     return mxc; // ROOSTER
@@ -1679,40 +1687,51 @@ class Client extends MatrixApi {
   /// Uploads [body], [length] bytes, as its request takes them: the file // ROOSTER
   /// is never held whole (file_send_source.dart). Refused by the server's // ROOSTER
   /// limit before [body] is listened to, so nothing of it is read then. // ROOSTER
-  Future<Uri> uploadContentStream( // ROOSTER
+  Future<Uri> uploadContentStream(
+    // ROOSTER
     Stream<List<int>> body, // ROOSTER
-    int length, { // ROOSTER
+    int length, {
+    // ROOSTER
     String? filename, // ROOSTER
     String? contentType, // ROOSTER
-  }) async { // ROOSTER
+  }) async {
+    // ROOSTER
     // Read from its source, it would go to a new address. // ROOSTER
-    if (currentReservedUpload() != null) { // ROOSTER
-      throw StateError('A reserved mxc takes an upload held in memory'); // ROOSTER
+    if (currentReservedUpload() != null) {
+      // ROOSTER
+      throw StateError(
+          'A reserved mxc takes an upload held in memory'); // ROOSTER
     } // ROOSTER
     final maxMediaSize = (await getConfig()).mUploadSize; // ROOSTER
-    if (maxMediaSize != null && maxMediaSize < length) { // ROOSTER
+    if (maxMediaSize != null && maxMediaSize < length) {
+      // ROOSTER
       throw FileTooBigMatrixException(length, maxMediaSize); // ROOSTER
     } // ROOSTER
-    final requestUri = Uri( // ROOSTER
+    final requestUri = Uri(
+      // ROOSTER
       path: '_matrix/media/v3/upload', // ROOSTER
       queryParameters: {if (filename != null) 'filename': filename}, // ROOSTER
     ); // ROOSTER
-    final request = FileSendRequest( // ROOSTER
+    final request = FileSendRequest(
+      // ROOSTER
       'POST', // ROOSTER
       baseUri!.resolveUri(requestUri), // ROOSTER
       body, // ROOSTER
       length, // ROOSTER
     ); // ROOSTER
     request.headers['authorization'] = 'Bearer ${bearerToken!}'; // ROOSTER
-    if (contentType != null) request.headers['content-type'] = contentType; // ROOSTER
+    if (contentType != null)
+      request.headers['content-type'] = contentType; // ROOSTER
     final response = await httpClient.send(request); // ROOSTER
     final responseBody = await response.stream.toBytes(); // ROOSTER
-    if (response.statusCode != 200) { // ROOSTER
+    if (response.statusCode != 200) {
+      // ROOSTER
       unexpectedResponse(response, responseBody); // ROOSTER
     } // ROOSTER
     final json = jsonDecode(utf8.decode(responseBody)); // ROOSTER
     final uri = json['content_uri'] as String; // ROOSTER
-    if (!uri.startsWith('mxc://')) throw Exception('Uri not an mxc URI'); // ROOSTER
+    if (!uri.startsWith('mxc://'))
+      throw Exception('Uri not an mxc URI'); // ROOSTER
     return Uri.parse(uri); // ROOSTER
   } // ROOSTER
 
@@ -3067,7 +3086,8 @@ class Client extends MatrixApi {
             // the file kept to send it again is let go (the server may // ROOSTER
             // have it although our PUT /send failed). // ROOSTER
             final txid = timelineEvent.transactionId; // ROOSTER
-            if (txid != null && timelineEvent.eventId != txid) { // ROOSTER
+            if (txid != null && timelineEvent.eventId != txid) {
+              // ROOSTER
               room.forgetFileSend(txid); // ROOSTER
             } // ROOSTER
             onTimelineEvent.add(timelineEvent);
@@ -3427,30 +3447,39 @@ class Client extends MatrixApi {
   /// them, and nothing waits for it). Only those users are queried. One // ROOSTER
   /// whose homeserver failed is not asked again at each send for 5 min, // ROOSTER
   /// as in the sync's query, nor one left unanswered for 1 min. // ROOSTER
-  Future<void> updateStaleUserDeviceKeys(Iterable<String> userIds) async { // ROOSTER
-    bool stale(String userId) { // ROOSTER
+  Future<void> updateStaleUserDeviceKeys(Iterable<String> userIds) async {
+    // ROOSTER
+    bool stale(String userId) {
+      // ROOSTER
       if (_userDeviceKeys[userId]?.outdated == false) return false; // ROOSTER
       final now = DateTime.now(); // ROOSTER
       final failure = _keyQueryFailures[userId.domain]; // ROOSTER
       if (failure != null && // ROOSTER
-          now.subtract(const Duration(minutes: 5)).isBefore(failure)) { // ROOSTER
+          now.subtract(const Duration(minutes: 5)).isBefore(failure)) {
+        // ROOSTER
         return false; // ROOSTER
       } // ROOSTER
       final unanswered = _unansweredKeyQueries[userId]; // ROOSTER
       return unanswered == null || // ROOSTER
-          now.subtract(const Duration(minutes: 1)).isAfter(unanswered); // ROOSTER
+          now
+              .subtract(const Duration(minutes: 1))
+              .isAfter(unanswered); // ROOSTER
     } // ROOSTER
 
     final users = userIds.where(stale).toSet(); // ROOSTER
     if (users.isEmpty || !isLogged()) return; // ROOSTER
-    await updateUserDeviceKeys( // ROOSTER
+    await updateUserDeviceKeys(
+      // ROOSTER
       additionalUsers: users, // ROOSTER
       onlyAdditionalUsers: true, // ROOSTER
     ).timeout(staleDeviceKeysTimeout, onTimeout: () {}); // ROOSTER
-    for (final userId in users) { // ROOSTER
-      if (stale(userId)) { // ROOSTER
+    for (final userId in users) {
+      // ROOSTER
+      if (stale(userId)) {
+        // ROOSTER
         _unansweredKeyQueries[userId] = DateTime.now(); // ROOSTER
-      } else { // ROOSTER
+      } else {
+        // ROOSTER
         _unansweredKeyQueries.remove(userId); // ROOSTER
       } // ROOSTER
     } // ROOSTER
@@ -3458,10 +3487,12 @@ class Client extends MatrixApi {
 
   /// [onlyAdditionalUsers] queries [additionalUsers] alone, not the // ROOSTER
   /// outdated lists of every tracked user, and drops no one. // ROOSTER
-  Future<void> updateUserDeviceKeys({ // ROOSTER
+  Future<void> updateUserDeviceKeys({
+    // ROOSTER
     Set<String>? additionalUsers, // ROOSTER
     bool onlyAdditionalUsers = false, // ROOSTER
-  }) async { // ROOSTER
+  }) async {
+    // ROOSTER
     try {
       final database = this.database;
       if (!isLogged()) return;
@@ -3479,8 +3510,10 @@ class Client extends MatrixApi {
       if (additionalUsers != null) trackedUserIds.addAll(additionalUsers);
 
       // Remove all userIds we no longer need to track the devices of.
-      if (!onlyAdditionalUsers) { // ROOSTER
-        _userDeviceKeys.removeWhere( // ROOSTER
+      if (!onlyAdditionalUsers) {
+        // ROOSTER
+        _userDeviceKeys.removeWhere(
+          // ROOSTER
           (String userId, v) => !trackedUserIds.contains(userId), // ROOSTER
         ); // ROOSTER
       } // ROOSTER
@@ -3491,7 +3524,8 @@ class Client extends MatrixApi {
         outdatedLists[userId] = [];
       }
       // The tracked lists are the sync's own query's to update. // ROOSTER
-      for (final userId in onlyAdditionalUsers ? <String>{} : trackedUserIds) { // ROOSTER
+      for (final userId in onlyAdditionalUsers ? <String>{} : trackedUserIds) {
+        // ROOSTER
         final deviceKeysList =
             _userDeviceKeys[userId] ??= DeviceKeysList(userId, this);
         final failure = _keyQueryFailures[userId.domain];
@@ -3618,7 +3652,8 @@ class Client extends MatrixApi {
             // delete old/unused entries
             for (final oldDeviceKeyEntry in oldKeys.entries) {
               final deviceId = oldDeviceKeyEntry.key;
-              if (!newKeys.containsKey(deviceId)) { // ROOSTER
+              if (!newKeys.containsKey(deviceId)) {
+                // ROOSTER
                 // we need to remove an old key
                 dbActions
                     .add(() => database.removeUserDeviceKey(userId, deviceId));
