@@ -38,7 +38,8 @@ class MatrixFile {
   Future<EncryptedFile> encrypt() async {
     // Read from its source, it has no bytes here: each upload encrypts // ROOSTER
     // what it reads (FileSendSource.readEncrypted). // ROOSTER
-    if (source != null) { // ROOSTER
+    if (source != null) {
+      // ROOSTER
       throw StateError('A file read from its source'); // ROOSTER
     } // ROOSTER
     return await encryptFile(bytes);

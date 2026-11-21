@@ -839,7 +839,8 @@ class Room {
       <String, Map<FileSendPart, UploadedFilePart>>{}; // ROOSTER
 
   /// Lets go of what is kept to send the file message [txid] again. // ROOSTER
-  void forgetFileSend(String txid) { // ROOSTER
+  void forgetFileSend(String txid) {
+    // ROOSTER
     sendingFilePlaceholders.remove(txid); // ROOSTER
     sendingFileThumbnails.remove(txid); // ROOSTER
     sendingFileUploads.remove(txid); // ROOSTER
@@ -865,14 +866,16 @@ class Room {
   Stream<String> get onSendCancelled => _onSendCancelled.stream; // ROOSTER
 
   /// Whether the send of the message [txid] was cancelled. // ROOSTER
-  bool isSendCancelled(String txid) => _cancelledSends.contains(txid); // ROOSTER
+  bool isSendCancelled(String txid) =>
+      _cancelledSends.contains(txid); // ROOSTER
 
   /// Whether the message [txid] can still be cancelled: its event's // ROOSTER
   /// request has not left (once it has, the server may have it) and the // ROOSTER
   /// server did not take it. // ROOSTER
   bool canCancelSend(String txid) => // ROOSTER
       _uploadsAfterEvent.contains(txid) || // ROOSTER
-      (!_sendRequestsLeft.containsKey(txid) && !_sentSends.contains(txid)); // ROOSTER
+      (!_sendRequestsLeft.containsKey(txid) &&
+          !_sentSends.contains(txid)); // ROOSTER
 
   /// The file messages sent before their file went up (an asynchronous // ROOSTER
   /// upload, to an mxc reserved before), by transaction id, while their // ROOSTER
@@ -882,7 +885,8 @@ class Room {
 
   /// The event of the message [txid] was sent and its file goes up now: // ROOSTER
   /// it can be cancelled until [uploadsAfterEventEnded]. // ROOSTER
-  void uploadsAfterEvent(String txid) => _uploadsAfterEvent.add(txid); // ROOSTER
+  void uploadsAfterEvent(String txid) =>
+      _uploadsAfterEvent.add(txid); // ROOSTER
 
   /// The uploads of the message [txid] ended: it is sent, or taken back. // ROOSTER
   void uploadsAfterEventEnded(String txid) => // ROOSTER
@@ -893,21 +897,26 @@ class Room {
   /// it again), without sending anything: being sent, when its send has // ROOSTER
   /// not started yet (the send that follows takes it out of the sending // ROOSTER
   /// queue), or [failed]. // ROOSTER
-  Future<void> showFileMessage( // ROOSTER
+  Future<void> showFileMessage(
+    // ROOSTER
     String txid, // ROOSTER
-    MatrixFile file, { // ROOSTER
+    MatrixFile file, {
+    // ROOSTER
     MatrixImageFile? thumbnail, // ROOSTER
     bool failed = false, // ROOSTER
     Map<String, dynamic>? extraContent, // ROOSTER
     String? threadRootEventId, // ROOSTER
     String? threadLastEventId, // ROOSTER
-  }) async { // ROOSTER
+  }) async {
+    // ROOSTER
     sendingFilePlaceholders[txid] = file; // ROOSTER
     if (thumbnail != null) sendingFileThumbnails[txid] = thumbnail; // ROOSTER
     if (!failed) sendingQueueEventsByTxId.add(txid); // ROOSTER
-    await _showLocalMessage( // ROOSTER
+    await _showLocalMessage(
+      // ROOSTER
       txid, // ROOSTER
-      { // ROOSTER
+      {
+        // ROOSTER
         'msgtype': file.msgType, // ROOSTER
         'body': file.name, // ROOSTER
         'filename': file.name, // ROOSTER
@@ -915,7 +924,8 @@ class Room {
         if (extraContent != null) ...extraContent, // ROOSTER
       }, // ROOSTER
       failed ? EventStatus.error : EventStatus.sending, // ROOSTER
-      FileSendRequestCredentials( // ROOSTER
+      FileSendRequestCredentials(
+        // ROOSTER
         extraContent: extraContent, // ROOSTER
         threadRootEventId: threadRootEventId, // ROOSTER
         threadLastEventId: threadLastEventId, // ROOSTER
@@ -926,36 +936,46 @@ class Room {
   /// Shows a failed message of this device with [content] in the timeline // ROOSTER
   /// under [txid], keeping nothing to send it again and sending nothing: // ROOSTER
   /// a send the app can only report. // ROOSTER
-  Future<void> showFailedMessage( // ROOSTER
+  Future<void> showFailedMessage(
+    // ROOSTER
     String txid, // ROOSTER
     Map<String, dynamic> content, // ROOSTER
   ) => // ROOSTER
       _showLocalMessage(txid, content, EventStatus.error, const {}); // ROOSTER
 
-  Future<void> _showLocalMessage( // ROOSTER
+  Future<void> _showLocalMessage(
+    // ROOSTER
     String txid, // ROOSTER
     Map<String, dynamic> content, // ROOSTER
     EventStatus status, // ROOSTER
     Map<String, dynamic> unsigned, // ROOSTER
-  ) async { // ROOSTER
-    final event = MatrixEvent( // ROOSTER
+  ) async {
+    // ROOSTER
+    final event = MatrixEvent(
+      // ROOSTER
       content: content, // ROOSTER
       type: EventTypes.Message, // ROOSTER
       eventId: txid, // ROOSTER
       senderId: client.userID!, // ROOSTER
       originServerTs: DateTime.now(), // ROOSTER
-      unsigned: { // ROOSTER
+      unsigned: {
+        // ROOSTER
         messageSendingStatusKey: status.intValue, // ROOSTER
         'transaction_id': txid, // ROOSTER
         ...unsigned, // ROOSTER
       }, // ROOSTER
     ); // ROOSTER
-    await _handleFakeSync( // ROOSTER
-      SyncUpdate( // ROOSTER
+    await _handleFakeSync(
+      // ROOSTER
+      SyncUpdate(
+        // ROOSTER
         nextBatch: '', // ROOSTER
-        rooms: RoomsUpdate( // ROOSTER
-          join: { // ROOSTER
-            id: JoinedRoomUpdate( // ROOSTER
+        rooms: RoomsUpdate(
+          // ROOSTER
+          join: {
+            // ROOSTER
+            id: JoinedRoomUpdate(
+              // ROOSTER
               timeline: TimelineUpdate(events: [event]), // ROOSTER
             ), // ROOSTER
           }, // ROOSTER
@@ -968,7 +988,8 @@ class Room {
   /// preparation or uploads (the request in flight is aborted), a text // ROOSTER
   /// leaves the room's queue, and the event is never sent. False, and // ROOSTER
   /// nothing changes, once its event's request has left. // ROOSTER
-  bool cancelSending(String txid) { // ROOSTER
+  bool cancelSending(String txid) {
+    // ROOSTER
     if (!canCancelSend(txid)) return false; // ROOSTER
     if (_cancelledSends.add(txid)) _onSendCancelled.add(txid); // ROOSTER
     return true; // ROOSTER
@@ -976,11 +997,15 @@ class Room {
 
   /// Takes the unsent event [eventId] away: from the database, the room's // ROOSTER
   /// last event and the open timelines (`Event.cancelSend`). // ROOSTER
-  Future<void> dropUnsentEvent(String eventId, {String? senderId}) async { // ROOSTER
+  Future<void> dropUnsentEvent(String eventId, {String? senderId}) async {
+    // ROOSTER
     forgetFileSend(eventId); // ROOSTER: its file and uploads let go
-    if (lastEvent != null && lastEvent!.eventId == eventId) { // ROOSTER
-      final redactedBecause = Event.fromMatrixEvent( // ROOSTER
-        MatrixEvent( // ROOSTER
+    if (lastEvent != null && lastEvent!.eventId == eventId) {
+      // ROOSTER
+      final redactedBecause = Event.fromMatrixEvent(
+        // ROOSTER
+        MatrixEvent(
+          // ROOSTER
           type: EventTypes.Redaction, // ROOSTER
           content: {'redacts': eventId}, // ROOSTER
           redacts: eventId, // ROOSTER
@@ -990,12 +1015,17 @@ class Room {
         ), // ROOSTER
         this, // ROOSTER
       ); // ROOSTER
-      await client.handleSync( // ROOSTER
-        SyncUpdate( // ROOSTER
+      await client.handleSync(
+        // ROOSTER
+        SyncUpdate(
+          // ROOSTER
           nextBatch: '', // ROOSTER
-          rooms: RoomsUpdate( // ROOSTER
-            join: { // ROOSTER
-              id: JoinedRoomUpdate( // ROOSTER
+          rooms: RoomsUpdate(
+            // ROOSTER
+            join: {
+              // ROOSTER
+              id: JoinedRoomUpdate(
+                // ROOSTER
                 timeline: TimelineUpdate(events: [redactedBecause]), // ROOSTER
               ), // ROOSTER
             }, // ROOSTER
@@ -1045,8 +1075,10 @@ class Room {
     // Being sent: its pending event, read again during a long upload, is // ROOSTER
     // not taken for one that was lost (see the `Event` constructor). // ROOSTER
     sendingQueueEventsByTxId.add(txid); // ROOSTER
-    try { // ROOSTER
-      return await _sendFileEvent( // ROOSTER
+    try {
+      // ROOSTER
+      return await _sendFileEvent(
+        // ROOSTER
         file, // ROOSTER
         txid: txid, // ROOSTER
         inReplyTo: inReplyTo, // ROOSTER
@@ -1058,9 +1090,11 @@ class Room {
         threadLastEventId: threadLastEventId, // ROOSTER
         displayPendingEvent: displayPendingEvent, // ROOSTER
       ); // ROOSTER
-    } on SendCancelledException { // ROOSTER
+    } on SendCancelledException {
+      // ROOSTER
       return null; // ROOSTER
-    } finally { // ROOSTER
+    } finally {
+      // ROOSTER
       sendingQueueEventsByTxId.remove(txid); // ROOSTER
       // Cancelled: whatever was shown meanwhile is taken away again. // ROOSTER
       if (isSendCancelled(txid)) await dropUnsentEvent(txid); // ROOSTER
@@ -1068,12 +1102,15 @@ class Room {
   } // ROOSTER
 
   /// Stops the send of the message [txid] when it was cancelled. // ROOSTER
-  void _stopIfSendCancelled(String txid) { // ROOSTER
+  void _stopIfSendCancelled(String txid) {
+    // ROOSTER
     if (isSendCancelled(txid)) throw const SendCancelledException(); // ROOSTER
   } // ROOSTER
 
-  Future<String?> _sendFileEvent( // ROOSTER
-    MatrixFile file, { // ROOSTER
+  Future<String?> _sendFileEvent(
+    // ROOSTER
+    MatrixFile file, {
+    // ROOSTER
     required String txid, // ROOSTER
     Event? inReplyTo, // ROOSTER
     String? editEventId, // ROOSTER
@@ -1083,7 +1120,8 @@ class Room {
     String? threadRootEventId, // ROOSTER
     String? threadLastEventId, // ROOSTER
     required bool displayPendingEvent, // ROOSTER
-  }) async { // ROOSTER
+  }) async {
+    // ROOSTER
     _stopIfSendCancelled(txid); // ROOSTER
     // Create a fake Event object as a placeholder for the uploading file:
     final syncUpdate = SyncUpdate(
@@ -1126,7 +1164,8 @@ class Room {
     );
     // Shown while it is not cancelled: a cancelled message never comes // ROOSTER
     // back (see [dropUnsentEvent]). // ROOSTER
-    Future<void> show() async { // ROOSTER
+    Future<void> show() async {
+      // ROOSTER
       if (!isSendCancelled(txid)) await _handleFakeSync(syncUpdate); // ROOSTER
     } // ROOSTER
 
@@ -1167,7 +1206,8 @@ class Room {
     try {
       final mediaConfig = await client.getConfig();
       final maxMediaSize = mediaConfig.mUploadSize;
-      if (maxMediaSize != null && maxMediaSize < file.size) { // ROOSTER
+      if (maxMediaSize != null && maxMediaSize < file.size) {
+        // ROOSTER
         throw FileTooBigMatrixException(file.size, maxMediaSize); // ROOSTER
       }
     } catch (e) {
@@ -1186,7 +1226,8 @@ class Room {
     // in an encrypted room, the same key and hash (file_upload_loop.dart). // ROOSTER
     // Decided here, once: the upload does not look at what is kept again. // ROOSTER
     final encryptFiles = encrypted && client.fileEncryptionEnabled; // ROOSTER
-    final kept = keptFileParts( // ROOSTER
+    final kept = keptFileParts(
+      // ROOSTER
       this, // ROOSTER
       txid, // ROOSTER
       encrypted: encryptFiles, // ROOSTER
@@ -1196,17 +1237,20 @@ class Room {
     final keptThumbnail = kept[FileSendPart.thumbnail]; // ROOSTER
     EncryptedFile? encryptedFile = keptFile?.encryptedFile; // ROOSTER
     EncryptedFile? encryptedThumbnail = keptThumbnail?.encryptedFile; // ROOSTER
-    if (encryptFiles) { // ROOSTER
+    if (encryptFiles) {
+      // ROOSTER
       syncUpdate.rooms!.join!.values.first.timeline!.events!.first
           .unsigned![fileSendingStatusKey] = FileSendingStatus.encrypting.name;
       await show(); // ROOSTER
       // A file read from its source is encrypted by each upload. // ROOSTER
-      if (keptFile == null && file.source == null) { // ROOSTER
+      if (keptFile == null && file.source == null) {
+        // ROOSTER
         encryptedFile = await file.encrypt(); // ROOSTER: indented
         uploadFile = encryptedFile.toMatrixFile(); // ROOSTER: indented
       } // ROOSTER
 
-      if (thumbnail != null && keptThumbnail == null) { // ROOSTER
+      if (thumbnail != null && keptThumbnail == null) {
+        // ROOSTER
         encryptedThumbnail = await thumbnail.encrypt();
         uploadThumbnail = encryptedThumbnail.toMatrixFile();
       }
@@ -1218,19 +1262,24 @@ class Room {
     // The file and its thumbnail go up together, each tried again by // ROOSTER
     // itself; one that went up stays kept when the other fails. // ROOSTER
     final List<UploadedFilePart> parts; // ROOSTER
-    try { // ROOSTER
-      parts = await uploadFileParts( // ROOSTER
+    try {
+      // ROOSTER
+      parts = await uploadFileParts(
+        // ROOSTER
         this, // ROOSTER
         txid, // ROOSTER
-        { // ROOSTER
-          FileSendPart.file: FilePartSend( // ROOSTER
+        {
+          // ROOSTER
+          FileSendPart.file: FilePartSend(
+            // ROOSTER
             keptFile, // ROOSTER
             uploadFile, // ROOSTER
             encryptedFile, // ROOSTER
             source: file.source, // ROOSTER
           ), // ROOSTER
           if (thumbnail != null) // ROOSTER
-            FileSendPart.thumbnail: FilePartSend( // ROOSTER
+            FileSendPart.thumbnail: FilePartSend(
+              // ROOSTER
               keptThumbnail, // ROOSTER
               uploadThumbnail, // ROOSTER
               encryptedThumbnail, // ROOSTER
@@ -1238,19 +1287,29 @@ class Room {
         }, // ROOSTER
         encrypted: encryptFiles, // ROOSTER
       ); // ROOSTER
-    } catch (_) { // ROOSTER
-      syncUpdate.rooms!.join!.values.first.timeline!.events!.first // ROOSTER
-          .unsigned![messageSendingStatusKey] = // ROOSTER
+    } catch (_) {
+      // ROOSTER
+      syncUpdate
+              .rooms!
+              .join!
+              .values
+              .first
+              .timeline!
+              .events!
+              .first // ROOSTER
+              .unsigned![messageSendingStatusKey] = // ROOSTER
           EventStatus.error.intValue; // ROOSTER
       await show(); // ROOSTER
       rethrow; // ROOSTER
     } // ROOSTER
     final uploadResp = parts.first.uri; // ROOSTER
-    final thumbnailUploadResp = thumbnail != null ? parts.last.uri : null; // ROOSTER
+    final thumbnailUploadResp =
+        thumbnail != null ? parts.last.uri : null; // ROOSTER
     // The key and hash of the bytes that went up, read at the upload for // ROOSTER
     // a file read from its source. // ROOSTER
     encryptedFile = parts.first.encryptedFile; // ROOSTER
-    if (thumbnail != null) encryptedThumbnail = parts.last.encryptedFile; // ROOSTER
+    if (thumbnail != null)
+      encryptedThumbnail = parts.last.encryptedFile; // ROOSTER
 
     // Send event
     final content = <String, dynamic>{
@@ -1354,7 +1413,8 @@ class Room {
     _stopIfSendCancelled(txid); // ROOSTER
     // Read together with whether it is encrypted, below: an encrypted // ROOSTER
     // event never points to a file that went up in the clear. // ROOSTER
-    if (uploadedInTheClear && encrypted && client.fileEncryptionEnabled) { // ROOSTER
+    if (uploadedInTheClear && encrypted && client.fileEncryptionEnabled) {
+      // ROOSTER
       throw const ClearUploadInEncryptedRoomException(); // ROOSTER
     } // ROOSTER
 
@@ -1374,25 +1434,6 @@ class Room {
       txid,
       sendMessageContent,
     );
-  }
-
-  String _stripBodyFallback(String body) {
-    if (body.startsWith('> <@')) {
-      var temp = '';
-      var inPrefix = true;
-      for (final l in body.split('\n')) {
-        if (inPrefix && (l.isEmpty || l.startsWith('> '))) {
-          continue;
-        }
-
-        inPrefix = false;
-        temp += temp.isEmpty ? l : ('\n$l');
-      }
-
-      return temp;
-    } else {
-      return body;
-    }
   }
 
   /// Sends an event to this room with this json as a content. Returns the
@@ -1426,33 +1467,7 @@ class Room {
     }
 
     if (inReplyTo != null) {
-      var replyText =
-          '<${inReplyTo.senderId}> ${_stripBodyFallback(inReplyTo.body)}';
-      replyText = replyText.split('\n').map((line) => '> $line').join('\n');
-      content['format'] = 'org.matrix.custom.html';
-      // be sure that we strip any previous reply fallbacks
-      final replyHtml = (inReplyTo.formattedText.isNotEmpty
-              ? inReplyTo.formattedText
-              : htmlEscape.convert(inReplyTo.body).replaceAll('\n', '<br>'))
-          .replaceAll(
-        RegExp(
-          r'<mx-reply>.*</mx-reply>',
-          caseSensitive: false,
-          multiLine: false,
-          dotAll: true,
-        ),
-        '',
-      );
-      final repliedHtml = content.tryGet<String>('formatted_body') ??
-          htmlEscape
-              .convert(content.tryGet<String>('body') ?? '')
-              .replaceAll('\n', '<br>');
-      content['formatted_body'] =
-          '<mx-reply><blockquote><a href="https://matrix.to/#/${inReplyTo.roomId!}/${inReplyTo.eventId}">In reply to</a> <a href="https://matrix.to/#/${inReplyTo.senderId}">${inReplyTo.senderId}</a><br>$replyHtml</blockquote></mx-reply>$repliedHtml';
-      // We escape all @room-mentions here to prevent accidental room pings when an admin
-      // replies to a message containing that!
-      content['body'] =
-          '${replyText.replaceAll('@room', '@\u200broom')}\n\n${content.tryGet<String>('body') ?? ''}';
+      // ROOSTER: Matrix v1.13 (MSC2781) removed reply fallbacks (<mx-reply> and "> <@user>").
       content['m.relates_to'] = {
         'm.in_reply_to': {
           'event_id': inReplyTo.eventId,
@@ -1520,22 +1535,27 @@ class Room {
     // we need to add the transaction ID to the set of events that are currently queued to be sent
     // even before the fake sync is called, so that the event constructor can check if the event is in the sending state
     sendingQueueEventsByTxId.add(messageID);
-    if (displayPendingEvent && !isSendCancelled(messageID)) { // ROOSTER
+    if (displayPendingEvent && !isSendCancelled(messageID)) {
+      // ROOSTER
       await _handleFakeSync(syncUpdate); // ROOSTER: indented
     } // ROOSTER
     final completer = Completer();
     sendingQueue.add(completer);
     // Cancelled while it waits: it leaves the queue at once, and the send // ROOSTER
     // in front goes on. // ROOSTER
-    try { // ROOSTER
-      while (sendingQueue.first != completer) { // ROOSTER: indented
-        await untilSendCancelled( // ROOSTER
+    try {
+      // ROOSTER
+      while (sendingQueue.first != completer) {
+        // ROOSTER: indented
+        await untilSendCancelled(
+          // ROOSTER
           this, // ROOSTER
           messageID, // ROOSTER
           (_) => sendingQueue.first.future, // ROOSTER
         ); // ROOSTER
       } // ROOSTER
-    } on SendCancelledException { // ROOSTER
+    } on SendCancelledException {
+      // ROOSTER
       return _sendCancelled(completer, messageID); // ROOSTER
     } // ROOSTER
 
@@ -1551,13 +1571,15 @@ class Room {
           content,
           txid: messageID,
           uploadedInTheClear: uploadedInTheClear, // ROOSTER
-          beforeRequest: () { // ROOSTER
+          beforeRequest: () {
+            // ROOSTER
             // Checked each attempt; from the first request on, the // ROOSTER
             // server may have it and it cannot be cancelled. // ROOSTER
             _stopIfSendCancelled(messageID); // ROOSTER
             if (requestLeft) return; // ROOSTER
             requestLeft = true; // ROOSTER
-            _sendRequestsLeft.update( // ROOSTER
+            _sendRequestsLeft.update(
+              // ROOSTER
               messageID, // ROOSTER
               (sends) => sends + 1, // ROOSTER
               ifAbsent: () => 1, // ROOSTER
@@ -1567,7 +1589,8 @@ class Room {
       } catch (e, s) {
         // Cancelled while an attempt that did not reach the server ran: // ROOSTER
         // nothing of it is shown again, not even its failure. // ROOSTER
-        if (e is SendCancelledException || isSendCancelled(messageID)) { // ROOSTER
+        if (e is SendCancelledException || isSendCancelled(messageID)) {
+          // ROOSTER
           return _sendCancelled(completer, messageID); // ROOSTER
         } // ROOSTER
         if (e is MatrixException &&
@@ -1593,7 +1616,8 @@ class Room {
           if (requestLeft) _sendRequestEnded(messageID); // ROOSTER
           // Cancelled while its failure was stored: what was stored is // ROOSTER
           // taken away again, and nothing of it stays. // ROOSTER
-          if (isSendCancelled(messageID)) { // ROOSTER
+          if (isSendCancelled(messageID)) {
+            // ROOSTER
             return _sendCancelled(completer, messageID); // ROOSTER
           } // ROOSTER
           if (e is EventTooLarge ||
@@ -1604,13 +1628,16 @@ class Room {
         } else {
           Logs()
               .w('Problem while sending message: $e Try again in 1 seconds...');
-          try { // ROOSTER: a cancel ends the wait at once
-            await untilSendCancelled( // ROOSTER
+          try {
+            // ROOSTER: a cancel ends the wait at once
+            await untilSendCancelled(
+              // ROOSTER
               this, // ROOSTER
               messageID, // ROOSTER
               (_) => Future.delayed(Duration(seconds: 1)), // ROOSTER
             ); // ROOSTER
-          } on SendCancelledException { // ROOSTER
+          } on SendCancelledException {
+            // ROOSTER
             return _sendCancelled(completer, messageID); // ROOSTER
           } // ROOSTER
         }
@@ -1629,18 +1656,22 @@ class Room {
   }
 
   /// A send of the message [txid] whose request had left ended. // ROOSTER
-  void _sendRequestEnded(String txid) { // ROOSTER
+  void _sendRequestEnded(String txid) {
+    // ROOSTER
     final sends = _sendRequestsLeft[txid] ?? 1; // ROOSTER
-    if (sends <= 1) { // ROOSTER
+    if (sends <= 1) {
+      // ROOSTER
       _sendRequestsLeft.remove(txid); // ROOSTER
-    } else { // ROOSTER
+    } else {
+      // ROOSTER
       _sendRequestsLeft[txid] = sends - 1; // ROOSTER
     } // ROOSTER
   } // ROOSTER
 
   /// The message [txid], queued under [completer], was cancelled before // ROOSTER
   /// its request left: it leaves the queue and the timeline, unsent. // ROOSTER
-  Future<String?> _sendCancelled(Completer completer, String txid) async { // ROOSTER
+  Future<String?> _sendCancelled(Completer completer, String txid) async {
+    // ROOSTER
     if (!completer.isCompleted) completer.complete(); // ROOSTER
     sendingQueue.remove(completer); // ROOSTER
     sendingQueueEventsByTxId.remove(txid); // ROOSTER
@@ -1739,6 +1770,12 @@ class Room {
   /// power levels at once, you need to await each change in the sync, to not
   /// override those.
   Future<String> setPower(String userId, int power) async {
+    // ROOSTER: Matrix room version 12+ forbids listing room creators in m.room.power_levels.users.
+    final creators = _hasPrivilegedCreators ? creatorUserIds : const <String>{};
+    if (creators.contains(userId)) {
+      throw RoomCreatorPowerLevelException(userId, roomVersion!);
+    }
+
     final powerLevelMapCopy =
         getState(EventTypes.RoomPowerLevels)?.content.copy() ?? {};
 
@@ -1751,6 +1788,11 @@ class Room {
         );
       }
       users = powerLevelMapCopy['users'] = <String, Object?>{};
+    }
+
+    // ROOSTER: Never write privileged room creators into m.room.power_levels.users in room version 12+.
+    for (final creator in creators) {
+      users.remove(creator);
     }
 
     users[userId] = power;
@@ -2433,6 +2475,10 @@ class Room {
     };
   }
 
+  // ROOSTER: Room version 12+ grants creators implicit maximum power outside m.room.power_levels.users.
+  bool get _hasPrivilegedCreators =>
+      (int.tryParse(roomVersion ?? '') ?? 0) >= 12;
+
   /// Returns the power level of the given user ID.
   /// If a user_id is in the users list, then that user_id has the associated
   /// power level. Otherwise they have the default level users_default.
@@ -2908,9 +2954,11 @@ class Room {
     final users = await requestParticipants();
     // Who just came in may have no device list yet: it is asked for // ROOSTER
     // first, so the room key reaches their devices. // ROOSTER
-    await client.updateStaleUserDeviceKeys([ // ROOSTER
+    await client.updateStaleUserDeviceKeys([
+      // ROOSTER
       for (final user in users) // ROOSTER
-        if ([Membership.invite, Membership.join].contains(user.membership)) // ROOSTER
+        if ([Membership.invite, Membership.join]
+            .contains(user.membership)) // ROOSTER
           user.id, // ROOSTER
     ]); // ROOSTER
     for (final user in users) {
@@ -2925,7 +2973,8 @@ class Room {
     return deviceKeys;
   }
 
-  Future<void> requestSessionKey(String sessionId, String senderKey) async {
+  // ROOSTER: Accept nullable `senderKey` for Matrix v1.3 (MSC3700) Megolm payloads without `sender_key`.
+  Future<void> requestSessionKey(String sessionId, [String? senderKey]) async {
     if (!client.encryptionEnabled) {
       return;
     }
@@ -3184,4 +3233,16 @@ class Room {
 enum EncryptionHealthState {
   allVerified,
   unverifiedDevices,
+}
+
+// ROOSTER: Thrown when attempting to set a room creator's power level in room version 12+.
+class RoomCreatorPowerLevelException implements Exception {
+  final String userId;
+  final String roomVersion;
+
+  const RoomCreatorPowerLevelException(this.userId, this.roomVersion);
+
+  @override
+  String toString() =>
+      'Cannot set power level for room creator $userId in room version $roomVersion.';
 }

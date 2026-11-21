@@ -392,10 +392,7 @@ class Encryption {
       'algorithm': AlgorithmTypes.megolmV1AesSha2,
       'ciphertext':
           sess!.outboundGroupSession!.encrypt(json.encode(payloadContent)),
-      // device_id + sender_key should be removed at some point in future since
-      // they're deprecated. Just left here for compatibility
-      'device_id': client.deviceID,
-      'sender_key': identityKey,
+      // ROOSTER: Matrix v1.3 (MSC3700) removed deprecated `device_id` and `sender_key` from Megolm payloads.
       'session_id': sess.outboundGroupSession!.sessionId,
       if (mRelatesTo != null) 'm.relates_to': mRelatesTo,
     };
