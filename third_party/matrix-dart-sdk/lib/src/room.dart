@@ -1436,25 +1436,6 @@ class Room {
     );
   }
 
-  String _stripBodyFallback(String body) {
-    if (body.startsWith('> <@')) {
-      var temp = '';
-      var inPrefix = true;
-      for (final l in body.split('\n')) {
-        if (inPrefix && (l.isEmpty || l.startsWith('> '))) {
-          continue;
-        }
-
-        inPrefix = false;
-        temp += temp.isEmpty ? l : ('\n$l');
-      }
-
-      return temp;
-    } else {
-      return body;
-    }
-  }
-
   /// Sends an event to this room with this json as a content. Returns the
   /// event ID generated from the server.
   /// It uses list of completer to make sure events are sending in a row.
@@ -1486,33 +1467,7 @@ class Room {
     }
 
     if (inReplyTo != null) {
-      var replyText =
-          '<${inReplyTo.senderId}> ${_stripBodyFallback(inReplyTo.body)}';
-      replyText = replyText.split('\n').map((line) => '> $line').join('\n');
-      content['format'] = 'org.matrix.custom.html';
-      // be sure that we strip any previous reply fallbacks
-      final replyHtml = (inReplyTo.formattedText.isNotEmpty
-              ? inReplyTo.formattedText
-              : htmlEscape.convert(inReplyTo.body).replaceAll('\n', '<br>'))
-          .replaceAll(
-        RegExp(
-          r'<mx-reply>.*</mx-reply>',
-          caseSensitive: false,
-          multiLine: false,
-          dotAll: true,
-        ),
-        '',
-      );
-      final repliedHtml = content.tryGet<String>('formatted_body') ??
-          htmlEscape
-              .convert(content.tryGet<String>('body') ?? '')
-              .replaceAll('\n', '<br>');
-      content['formatted_body'] =
-          '<mx-reply><blockquote><a href="https://matrix.to/#/${inReplyTo.roomId!}/${inReplyTo.eventId}">In reply to</a> <a href="https://matrix.to/#/${inReplyTo.senderId}">${inReplyTo.senderId}</a><br>$replyHtml</blockquote></mx-reply>$repliedHtml';
-      // We escape all @room-mentions here to prevent accidental room pings when an admin
-      // replies to a message containing that!
-      content['body'] =
-          '${replyText.replaceAll('@room', '@\u200broom')}\n\n${content.tryGet<String>('body') ?? ''}';
+      // ROOSTER: Matrix v1.13 (MSC2781) removed reply fallbacks (<mx-reply> and "> <@user>").
       content['m.relates_to'] = {
         'm.in_reply_to': {
           'event_id': inReplyTo.eventId,
@@ -1815,6 +1770,12 @@ class Room {
   /// power levels at once, you need to await each change in the sync, to not
   /// override those.
   Future<String> setPower(String userId, int power) async {
+    // ROOSTER: Matrix room version 12+ forbids listing room creators in m.room.power_levels.users.
+    final creators = _hasPrivilegedCreators ? creatorUserIds : const <String>{};
+    if (creators.contains(userId)) {
+      throw RoomCreatorPowerLevelException(userId, roomVersion!);
+    }
+
     final powerLevelMapCopy =
         getState(EventTypes.RoomPowerLevels)?.content.copy() ?? {};
 
@@ -1827,6 +1788,11 @@ class Room {
         );
       }
       users = powerLevelMapCopy['users'] = <String, Object?>{};
+    }
+
+    // ROOSTER: Never write privileged room creators into m.room.power_levels.users in room version 12+.
+    for (final creator in creators) {
+      users.remove(creator);
     }
 
     users[userId] = power;
@@ -2508,6 +2474,10 @@ class Room {
       ...additionalCreators,
     };
   }
+
+  // ROOSTER: Room version 12+ grants creators implicit maximum power outside m.room.power_levels.users.
+  bool get _hasPrivilegedCreators =>
+      (int.tryParse(roomVersion ?? '') ?? 0) >= 12;
 
   /// Returns the power level of the given user ID.
   /// If a user_id is in the users list, then that user_id has the associated
@@ -3262,4 +3232,16 @@ class Room {
 enum EncryptionHealthState {
   allVerified,
   unverifiedDevices,
+}
+
+// ROOSTER: Thrown when attempting to set a room creator's power level in room version 12+.
+class RoomCreatorPowerLevelException implements Exception {
+  final String userId;
+  final String roomVersion;
+
+  const RoomCreatorPowerLevelException(this.userId, this.roomVersion);
+
+  @override
+  String toString() =>
+      'Cannot set power level for room creator $userId in room version $roomVersion.';
 }
