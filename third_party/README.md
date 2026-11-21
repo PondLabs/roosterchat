@@ -333,3 +333,25 @@ Changes since the copy:
   HTTP-date in pure web-safe Dart with an injectable clock, Matrix v1.10
   MSC4041) into `retryAfterMs` whenever the JSON body omits `retry_after_ms`,
   ignoring negative or malformed header values without throwing.
+- Matrix v1.18–v1.19 event and account data models (T1.1b): `EventTypes`
+  (`lib/matrix_api_lite/model/event_types.dart`) adds `RoomImagePack`
+  (`m.room.image_pack`) and `ImagePackRooms` (`m.image_pack.rooms`, v1.19
+  MSC2545), `RecentEmoji` (`m.recent_emoji`, v1.18 MSC4356), `KeyBackup`
+  (`m.key_backup`, v1.19 MSC4287), `InvitePermissionConfig`
+  (`m.invite_permission_config`, v1.18 MSC4380), `RoomPolicy`
+  (`m.room.policy`, v1.18 MSC4284), `RoomKeyBundle` (`m.room_key_bundle`,
+  v1.19 MSC4268) and `RtcMember` (`m.rtc.member`, MSC4143). Their typed
+  contents live in `lib/matrix_api_lite/model/matrix_v1_19_models.dart`
+  (exported from `lib/matrix_api_lite.dart`): optional fields are read
+  tolerantly, unknown keys round-trip through `additionalProperties`, and only
+  a missing required field throws, as a `FormatException`. `MatrixImageInfo`
+  carries `is_animated` (v1.18 MSC4230), read from events by the
+  `imageInfo`/`isAnimated` extension on `MatrixEvent`, and `MatrixEvent` gains
+  a typed `replacesState` for `unsigned.replaces_state`. The legacy
+  `im.ponies.*` packs (`ImagePackContent`) and `io.element.recent_emoji` are
+  unchanged.
+- QR key verification reciprocate cancel code (T3.3a):
+  `_KeyVerificationMethodQRReciprocate.handlePayload`
+  (`lib/encryption/utils/key_verification.dart`) cancels with `m.key_mismatch`
+  instead of `m.invalid_message` when `validateStart` rejects an incoming
+  `m.reciprocate.v1` start event whose shared secret does not match.

@@ -3,6 +3,7 @@ import 'package:rooster/client/components/direct_messages/direct_message_compone
 import 'package:rooster/client/components/profile/profile_component.dart';
 import 'package:rooster/client/components/user_color/user_color_component.dart';
 import 'package:rooster/client/components/user_presence/user_presence_component.dart';
+import 'package:rooster/client/matrix/components/key_verification_component/matrix_key_verification_component.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/debug/log.dart';
@@ -11,7 +12,9 @@ import 'package:rooster/ui/atoms/inherited_offstage.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/navigation/navigation_utils.dart';
 import 'package:rooster/ui/organisms/user_profile/profile_card_theme.dart';
+import 'package:rooster/ui/pages/matrix/verification/matrix_verification_page.dart';
 import 'package:rooster/ui/pages/settings/app_settings_page.dart';
+import 'package:rooster/utils/error_utils.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:rooster/ui/organisms/user_profile/user_profile_view.dart';
 import 'package:rooster/utils/timezone_utils.dart';
@@ -217,6 +220,11 @@ class _UserProfileState extends State<UserProfile> {
       return Placeholder();
     }
 
+    final verification =
+        widget.client.getComponent<MatrixKeyVerificationComponent>();
+    final canVerify =
+        verification != null && verification.canVerifyUser(profile.identifier);
+
     var result = Theme(
       data: theme!,
       child: UserProfileView(
@@ -234,6 +242,7 @@ class _UserProfileState extends State<UserProfile> {
         showMessageButton: widget.showMessageButton,
         isSelf: widget.client.self!.identifier == profile.identifier,
         onMessageButtonClicked: openDirectMessage,
+        onVerifyUser: canVerify ? verifyUser : null,
         // Only from the popup: the card shown inside a page has nothing to
         // close first.
         onEditProfile:
@@ -279,6 +288,27 @@ class _UserProfileState extends State<UserProfile> {
 
     if (!mounted) return;
     Navigator.of(context).pop();
+  }
+
+  Future<void> verifyUser() async {
+    final verification =
+        widget.client.getComponent<MatrixKeyVerificationComponent>();
+    final target = profile;
+    if (verification == null || target == null) return;
+
+    await ErrorUtils.tryRun(context, () async {
+      final request =
+          await verification.startUserVerification(target.identifier);
+      if (!mounted) return;
+      await AdaptiveDialog.show(
+        context,
+        title: MatrixKeyVerificationComponent.labelAppVerificationRequest,
+        builder: (_) => MatrixVerificationPage(
+          request: request,
+          component: verification,
+        ),
+      );
+    });
   }
 
   /// Closes the card, then opens Settings on this account's profile.

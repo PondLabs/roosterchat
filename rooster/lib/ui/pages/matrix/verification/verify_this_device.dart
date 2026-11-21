@@ -116,7 +116,8 @@ class _VerifyThisDeviceState extends State<VerifyThisDevice> {
       final request = await ownKeys.startVerification();
       if (!mounted) return;
       AdaptiveDialog.show(context,
-          builder: (_) => MatrixVerificationPage(request: request),
+          builder: (_) =>
+              MatrixVerificationPage(request: request, component: component),
           title: MatrixKeyVerificationComponent.labelAppVerificationRequest);
     });
     if (mounted) setState(() => startingVerification = false);

@@ -40,6 +40,9 @@ abstract class EventTypes {
   static const String RoomTopic = 'm.room.topic';
   static const String RoomAvatar = 'm.room.avatar';
   static const String RoomTombstone = 'm.room.tombstone';
+  // ROOSTER: Stable state event types of Matrix v1.18-v1.19 (T1.1b).
+  static const String RoomImagePack = 'm.room.image_pack'; // v1.19 MSC2545
+  static const String RoomPolicy = 'm.room.policy'; // v1.18 MSC4284
   static const String GuestAccess = 'm.room.guest_access';
   static const String HistoryVisibility = 'm.room.history_visibility';
   static const String Encryption = 'm.room.encryption';
@@ -78,6 +81,8 @@ abstract class EventTypes {
   static const String SecretRequest = 'm.secret.request';
   static const String SecretSend = 'm.secret.send';
   static const String Dummy = 'm.dummy';
+  // ROOSTER: Room key bundle shared on invite (Matrix v1.19 MSC4268, T1.1b).
+  static const String RoomKeyBundle = 'm.room_key_bundle';
 
   // QR
   static const String QRShow = 'm.qr_code.show.v1';
@@ -92,6 +97,12 @@ abstract class EventTypes {
   static const String MegolmBackup = 'm.megolm_backup.v1';
   static const String SecretStorageDefaultKey = 'm.secret_storage.default_key';
   static const String PushRules = 'm.push_rules';
+  // ROOSTER: Stable account data types of Matrix v1.18-v1.19 (T1.1b).
+  static const String ImagePackRooms = 'm.image_pack.rooms'; // v1.19 MSC2545
+  static const String RecentEmoji = 'm.recent_emoji'; // v1.18 MSC4356
+  static const String KeyBackup = 'm.key_backup'; // v1.19 MSC4287
+  static const String InvitePermissionConfig =
+      'm.invite_permission_config'; // v1.18 MSC4380
 
   static String secretStorageKey(String keyId) => 'm.secret_storage.key.$keyId';
 
@@ -119,4 +130,6 @@ abstract class EventTypes {
   static const String GroupCallMemberAssertedIdentity =
       '$GroupCallMember.asserted_identity';
   static const GroupCallMemberReaction = 'com.famedly.call.member.reaction';
+  // ROOSTER: MatrixRTC membership event (MSC4143, T1.1b).
+  static const String RtcMember = 'm.rtc.member';
 }
