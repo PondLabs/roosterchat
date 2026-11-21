@@ -49,8 +49,9 @@ void main() {
       });
       expect(payload['algorithm'], AlgorithmTypes.megolmV1AesSha2);
       expect(payload['ciphertext'] is String, true);
-      expect(payload['device_id'], client.deviceID);
-      expect(payload['sender_key'], client.identityKey);
+      // ROOSTER: Matrix v1.3 (MSC3700) omits deprecated device_id and sender_key from Megolm payloads.
+      expect(payload.containsKey('device_id'), false);
+      expect(payload.containsKey('sender_key'), false);
       expect(payload['session_id'] is String, true);
     });
 
