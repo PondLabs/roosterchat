@@ -30,17 +30,21 @@ class _MatrixRoomAddressSettingsState extends State<MatrixRoomAddressSettings> {
     super.initState();
   }
 
+  @override
+  void dispose() {
+    onMainAliasChanged.close();
+    super.dispose();
+  }
+
   Future<void> getRoomAliases() async {
     var newAliases = List<String>.empty(growable: true);
     var newPublishedAliases = List<String>.empty(growable: true);
 
     try {
-      var result = await widget.matrixRoom.client.request(
-        RequestType.GET,
-        '/client/unstable/org.matrix.msc2432/rooms/${Uri.encodeComponent(widget.matrixRoom.id)}/aliases',
-      );
+      final localAliases =
+          await widget.matrixRoom.client.getLocalAliases(widget.matrixRoom.id);
 
-      newAliases.addAll(List<String>.from(result['aliases'] as Iterable));
+      newAliases.addAll(localAliases);
     } catch (_) {}
 
     var altAliases = widget.matrixRoom.states["m.room.canonical_alias"]?[""]
@@ -59,11 +63,13 @@ class _MatrixRoomAddressSettingsState extends State<MatrixRoomAddressSettings> {
       newAliases.add(widget.matrixRoom.canonicalAlias);
     }
 
-    if (newPublishedAliases.contains(widget.matrixRoom.canonicalAlias) ==
-        false) {
+    if (widget.matrixRoom.canonicalAlias != "" &&
+        newPublishedAliases.contains(widget.matrixRoom.canonicalAlias) ==
+            false) {
       newPublishedAliases.add(widget.matrixRoom.canonicalAlias);
     }
 
+    if (!mounted) return;
     setState(() {
       aliases = newAliases;
       publishedAliases = newPublishedAliases;
