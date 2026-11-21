@@ -101,14 +101,16 @@ extension Msc2964OidcLoginFlow on Client {
     final responseString = utf8.decode(response.bodyBytes);
     final oidcAuthResponse =
         OidcAuthResponse.fromJson(jsonDecode(responseString));
+    // ROOSTER: OAuth 2.0 / OIDC `expires_in` is in seconds (RFC 6749 §5.1); ignore non-positive values.
     final expiresIn = oidcAuthResponse.expiresIn;
+    final tokenExpiresAt = expiresIn != null && expiresIn > 0
+        ? DateTime.now().add(Duration(seconds: expiresIn))
+        : null;
     await init(
       newHomeserver: homeserver,
       newToken: oidcAuthResponse.accessToken,
       newRefreshToken: oidcAuthResponse.refreshToken,
-      newTokenExpiresAt: expiresIn == null
-          ? null
-          : DateTime.now().add(Duration(milliseconds: expiresIn)),
+      newTokenExpiresAt: tokenExpiresAt,
       newOidcClientId: session.oidcClientData.clientId,
     );
   }
@@ -174,14 +176,22 @@ class OidcAuthResponse {
     required this.expiresIn,
   });
 
-  factory OidcAuthResponse.fromJson(Map<String, Object?> json) =>
-      OidcAuthResponse(
-        accessToken: json['access_token'] as String,
-        tokenType: json['token_type'] as String,
-        refreshToken: json['refresh_token'] as String?,
-        scope: json['scope'] as String?,
-        expiresIn: json['expires_in'] as int?,
-      );
+  factory OidcAuthResponse.fromJson(Map<String, Object?> json) {
+    // ROOSTER: Parse `expires_in` safely as an integer number of seconds.
+    final rawExpiresIn = json['expires_in'];
+    final expiresIn = rawExpiresIn is int
+        ? rawExpiresIn
+        : (rawExpiresIn is num && rawExpiresIn.isFinite
+            ? rawExpiresIn.toInt()
+            : null);
+    return OidcAuthResponse(
+      accessToken: json['access_token'] as String,
+      tokenType: json['token_type'] as String,
+      refreshToken: json['refresh_token'] as String?,
+      scope: json['scope'] as String?,
+      expiresIn: expiresIn,
+    );
+  }
 }
 
 class OidcLoginSession {

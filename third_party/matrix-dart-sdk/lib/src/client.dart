@@ -305,36 +305,40 @@ class Client extends MatrixApi {
       throw Exception('Cannot refresh access token when not logged in');
     }
 
-    final tokenResponse = switch (oidcClientId) {
+    // ROOSTER: Distinguish legacy /v3/refresh `expires_in_ms` (milliseconds) from OIDC `expires_in` (seconds), and ignore non-positive lifetimes.
+    final String newAccessToken;
+    final String? newRefreshToken;
+    final DateTime? tokenExpiresAt;
+    if (oidcClientId == null) {
       // We do not use Matrix Native OIDC so we use the legacy /refresh endpoint:
-      null => await refreshWithCustomRefreshTokenLifetime(
-          refreshToken,
-          refreshTokenLifetimeMs: customRefreshTokenLifetime?.inMilliseconds,
-        ).then(
-          (legacyFormat) => OidcAuthResponse(
-            accessToken: legacyFormat.accessToken,
-            tokenType: 'Bearer',
-            refreshToken: legacyFormat.refreshToken,
-            expiresIn: legacyFormat.expiresInMs,
-            scope: null,
-          ),
-        ),
+      final legacyFormat = await refreshWithCustomRefreshTokenLifetime(
+        refreshToken,
+        refreshTokenLifetimeMs: customRefreshTokenLifetime?.inMilliseconds,
+      );
+      newAccessToken = legacyFormat.accessToken;
+      newRefreshToken = legacyFormat.refreshToken;
+      final expiresInMs = legacyFormat.expiresInMs;
+      tokenExpiresAt = expiresInMs != null && expiresInMs > 0
+          ? DateTime.now().add(Duration(milliseconds: expiresInMs))
+          : null;
+    } else {
       // We are using Matrix Native OIDC so we fetch the refresh endpoint first:
-      final String oidcClientId =>
-        await oidcRefresh(oidcClientId, refreshToken),
-    };
+      final oidcResponse = await oidcRefresh(oidcClientId, refreshToken);
+      newAccessToken = oidcResponse.accessToken;
+      newRefreshToken = oidcResponse.refreshToken;
+      final expiresInSeconds = oidcResponse.expiresIn;
+      tokenExpiresAt = expiresInSeconds != null && expiresInSeconds > 0
+          ? DateTime.now().add(Duration(seconds: expiresInSeconds))
+          : null;
+    }
 
-    accessToken = tokenResponse.accessToken;
-    final expiresInMs = tokenResponse.expiresIn;
-    final tokenExpiresAt = expiresInMs == null
-        ? null
-        : DateTime.now().add(Duration(milliseconds: expiresInMs));
+    accessToken = newAccessToken;
     _accessTokenExpiresAt = tokenExpiresAt;
     await database.updateClient(
       homeserverUrl,
-      tokenResponse.accessToken,
+      newAccessToken,
       tokenExpiresAt,
-      tokenResponse.refreshToken,
+      newRefreshToken,
       userId,
       deviceId,
       deviceName,
@@ -576,12 +580,15 @@ class Client extends MatrixApi {
 
       // Check if server supports at least one supported version
       final versions = await getVersions();
-      if (!versions.versions
-          .any((version) => supportedVersions.contains(version))) {
+      // ROOSTER: Accept exact supported versions or newer backwards-compatible v1.x versions; fail explicitly otherwise instead of assert(false).
+      if (!_hasCompatibleServerVersion(versions.versions, supportedVersions)) {
         Logs().w(
-          'Server supports the versions: ${versions.toString()} but this application is only compatible with ${supportedVersions.toString()}.',
+          'Server supports the versions: ${versions.versions.toString()} but this application is only compatible with ${supportedVersions.toString()}.',
         );
-        assert(false);
+        throw BadServerVersionsException(
+          versions.versions.toSet(),
+          supportedVersions,
+        );
       }
 
       final loginTypes = await getLoginFlows() ?? [];
@@ -1852,7 +1859,49 @@ class Client extends MatrixApi {
     'v1.12',
     'v1.13',
     'v1.14',
+    // ROOSTER: Matrix spec v1.15-v1.19 support.
+    'v1.15',
+    'v1.16',
+    'v1.17',
+    'v1.18',
+    'v1.19',
   };
+
+  // ROOSTER: Strict Matrix v1.<minor> spec version matcher and compatibility check.
+  static final RegExp _v1SpecVersionPattern = RegExp(r'^v1\.(0|[1-9]\d*)$');
+
+  static int? _parseV1MinorVersion(String version) {
+    final match = _v1SpecVersionPattern.firstMatch(version);
+    if (match == null) return null;
+    return int.tryParse(match.group(1)!);
+  }
+
+  static bool _hasCompatibleServerVersion(
+    List<String> serverVersions,
+    Set<String> supportedVersions,
+  ) {
+    if (serverVersions.isEmpty || supportedVersions.isEmpty) {
+      return false;
+    }
+    if (serverVersions.any(supportedVersions.contains)) {
+      return true;
+    }
+    int? maxSupportedV1Minor;
+    for (final version in supportedVersions) {
+      final minor = _parseV1MinorVersion(version);
+      if (minor != null &&
+          (maxSupportedV1Minor == null || minor > maxSupportedV1Minor)) {
+        maxSupportedV1Minor = minor;
+      }
+    }
+    if (maxSupportedV1Minor == null) {
+      return false;
+    }
+    return serverVersions.any((version) {
+      final minor = _parseV1MinorVersion(version);
+      return minor != null && minor > maxSupportedV1Minor!;
+    });
+  }
 
   static const List<String> supportedDirectEncryptionAlgorithms = [
     AlgorithmTypes.olmV1Curve25519AesSha2,
@@ -4430,6 +4479,17 @@ class BadServerLoginTypesException implements Exception {
   @override
   String toString() =>
       'Server supports the Login Types: ${serverLoginTypes.toString()} but this application is only compatible with ${supportedLoginTypes.toString()}.';
+}
+
+// ROOSTER: Explicit exception when a homeserver advertises no compatible Matrix spec version.
+class BadServerVersionsException implements Exception {
+  final Set<String> serverVersions, supportedVersions;
+
+  BadServerVersionsException(this.serverVersions, this.supportedVersions);
+
+  @override
+  String toString() =>
+      'Server supports the versions: ${serverVersions.toString()} but this application is only compatible with ${supportedVersions.toString()}.';
 }
 
 class FileTooBigMatrixException extends MatrixException {
