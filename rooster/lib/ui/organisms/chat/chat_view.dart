@@ -1,5 +1,6 @@
 import 'package:rooster/client/components/account_switch_prefix/account_switch_prefix.dart';
 import 'package:rooster/client/components/push_notification/notification_manager.dart';
+import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/room.dart';
 import 'package:rooster/client/timeline_events/timeline_event.dart';
 import 'package:rooster/client/timeline_events/timeline_event_message.dart';
@@ -8,12 +9,15 @@ import 'package:rooster/ui/molecules/message_input.dart';
 import 'package:rooster/ui/molecules/room_timeline_widget/room_timeline_widget.dart';
 import 'package:rooster/ui/molecules/typing_indicators_widget.dart';
 import 'package:rooster/ui/organisms/chat/chat.dart';
+import 'package:rooster/ui/organisms/chat/knock_request_banner.dart';
 import 'package:rooster/ui/organisms/chat/pending_attachments.dart';
+import 'package:rooster/ui/organisms/chat/room_tombstone_banner.dart';
 import 'package:rooster/ui/organisms/particle_player/particle_player.dart';
 import 'package:rooster/utils/autofill_utils.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:matrix/matrix.dart' as matrix;
 
 class ChatView extends StatelessWidget {
   const ChatView(this.state, {super.key});
@@ -54,9 +58,25 @@ class ChatView extends StatelessWidget {
       // Files just sent, until the room's own pending events show them.
       PendingAttachmentsView(
           roomKey: state.room.localId, threadId: state.threadId),
+      if (state.room case MatrixRoom room) ...roomBanners(room),
       input(context),
     ]);
   }
+
+  /// The room was replaced, or takes requests to join from outside.
+  List<Widget> roomBanners(MatrixRoom room) => [
+        RoomTombstoneBanner(
+          room: room.matrixRoom,
+          onOpenRoom: (id) async {
+            final mx = room.matrixRoom.client;
+            if (mx.getRoomById(id)?.membership != matrix.Membership.join) {
+              await mx.waitForRoomInSync(id, join: true);
+            }
+            EventBus.doOpenRoom(id, clientId: room.client.identifier);
+          },
+        ),
+        KnockRequestBanner(room: room.matrixRoom),
+      ];
 
   Widget timeline() {
     return state.timeline == null
