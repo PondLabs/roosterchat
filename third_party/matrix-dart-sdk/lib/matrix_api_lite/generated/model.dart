@@ -279,7 +279,8 @@ class GetAuthMetadataResponse {
         authorizationEndpoint =
             Uri.parse(json['authorization_endpoint'] as String),
         clientIdMetadataDocumentSupported = ((v) => v is bool ? v : null)(
-            json['client_id_metadata_document_supported']),
+          json['client_id_metadata_document_supported'],
+        ),
         codeChallengeMethodsSupported = ((v) => v is List
             ? v.whereType<String>().toList()
             : <String>[])(json['code_challenge_methods_supported']),
@@ -2515,19 +2516,22 @@ class Capabilities {
             ? BooleanCapability.fromJson(v as Map<String, Object?>)
             : null)(json['m.change_password']),
         // ROOSTER: Matrix v1.18 (MSC4267) capability.
-        mForgetForcedUponLeave = ((v) => v is Map<String, Object?>
-            ? BooleanCapability.fromJson(v)
-            : null)(json['m.forget_forced_upon_leave']),
+        mForgetForcedUponLeave = ((v) =>
+            v is Map<String, Object?> && v['enabled'] is bool
+                ? BooleanCapability.fromJson(v)
+                : null)(json['m.forget_forced_upon_leave']),
         mGetLoginToken = ((v) => v != null
             ? BooleanCapability.fromJson(v as Map<String, Object?>)
             : null)(json['m.get_login_token']),
         // ROOSTER: Matrix v1.20 (MSC4452) capability.
-        mPreviewUrl = ((v) => v is Map<String, Object?>
+        mPreviewUrl = ((v) => v is Map<String, Object?> && v['enabled'] is bool
             ? BooleanCapability.fromJson(v)
             : null)(json['m.preview_url']),
-        mProfileFields = ((v) => v != null
-            ? ProfileFieldsCapability.fromJson(v as Map<String, Object?>)
-            : null)(json['m.profile_fields']),
+        // ROOSTER: Guard m.profile_fields against missing/non-bool enabled.
+        mProfileFields = ((v) =>
+            v is Map<String, Object?> && v['enabled'] is bool
+                ? ProfileFieldsCapability.fromJson(v)
+                : null)(json['m.profile_fields']),
         mRoomVersions = ((v) => v != null
             ? RoomVersionsCapability.fromJson(v as Map<String, Object?>)
             : null)(json['m.room_versions']),

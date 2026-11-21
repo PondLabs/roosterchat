@@ -86,6 +86,15 @@ void main() {
       expect(explicitNulls.mForgetForcedUponLeave, isNull);
       expect(explicitNulls.mProfileFields, isNull);
       expect(explicitNulls.mPreviewUrl, isNull);
+
+      final missingEnabled = Capabilities.fromJson({
+        'm.forget_forced_upon_leave': <String, Object?>{},
+        'm.profile_fields': <String, Object?>{},
+        'm.preview_url': <String, Object?>{},
+      });
+      expect(missingEnabled.mForgetForcedUponLeave, isNull);
+      expect(missingEnabled.mProfileFields, isNull);
+      expect(missingEnabled.mPreviewUrl, isNull);
     });
 
     test('Capabilities equality and hashCode reflect new capability fields',
