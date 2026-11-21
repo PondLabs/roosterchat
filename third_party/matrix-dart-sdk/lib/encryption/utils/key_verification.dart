@@ -1170,7 +1170,10 @@ class _KeyVerificationMethodQRReciprocate extends _KeyVerificationMethod {
             return; // abort
           }
           if (!validateStart(payload)) {
-            await request.cancel('m.invalid_message');
+            // ROOSTER: cancel mismatched QR reciprocate secrets with
+            // m.key_mismatch (Matrix spec / matrix-js-sdk) instead of
+            // m.invalid_message.
+            await request.cancel('m.key_mismatch');
             return;
           }
           request.setState(KeyVerificationState.confirmQRScan);

@@ -43,7 +43,8 @@ class UserProfileView extends StatefulWidget {
       this.pronouns = const [],
       this.preview = false,
       this.onEditProfile,
-      this.onMessageButtonClicked});
+      this.onMessageButtonClicked,
+      this.onVerifyUser});
   final ImageProvider? userAvatar;
   final ImageProvider? userBanner;
   final UserPresence? presence;
@@ -65,6 +66,7 @@ class UserProfileView extends StatefulWidget {
   final Future<void> Function(String?)? setPetName;
   final String? currentPetName;
   final Future<void> Function()? onMessageButtonClicked;
+  final Future<void> Function()? onVerifyUser;
   final Future<void> Function(Color?)? setColorOverride;
 
   /// Draws the card as others see it, for a preview: no menu, nothing to
@@ -80,10 +82,16 @@ class UserProfileView extends StatefulWidget {
 
 class UserProfileViewState extends State<UserProfileView> {
   bool isLoadingDirectMessage = false;
+  bool isLoadingVerification = false;
 
   String get promptOpenDirectMessage => Intl.message("Message",
       desc: "Prompt on the button to open a direct message with another user",
       name: "promptOpenDirectMessage");
+
+  String get promptProfileVerifyUser => Intl.message("Verify user",
+      desc: "Button on another user's profile card to start end-to-end "
+          "encryption verification with them",
+      name: "promptProfileVerifyUser");
 
   String get promptProfileEditProfile => Intl.message("Edit profile",
       name: "promptProfileEditProfile",
@@ -355,6 +363,22 @@ class UserProfileViewState extends State<UserProfileView> {
                                                 isLoading:
                                                     isLoadingDirectMessage,
                                                 onTap: clickMessageButton,
+                                              ),
+                                            ),
+                                          if (!widget.preview &&
+                                              !widget.isSelf &&
+                                              widget.onVerifyUser != null)
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.fromLTRB(
+                                                      8, 0, 8, 8),
+                                              child: tiamat.Button.secondary(
+                                                key: const ValueKey(
+                                                    "user-profile-verify"),
+                                                text: promptProfileVerifyUser,
+                                                isLoading:
+                                                    isLoadingVerification,
+                                                onTap: clickVerifyButton,
                                               ),
                                             ),
                                           if (!widget.preview &&
@@ -683,6 +707,19 @@ class UserProfileViewState extends State<UserProfileView> {
 
     setState(() {
       isLoadingDirectMessage = false;
+    });
+  }
+
+  Future<void> clickVerifyButton() async {
+    setState(() {
+      isLoadingVerification = true;
+    });
+
+    await widget.onVerifyUser?.call();
+    if (!mounted) return;
+
+    setState(() {
+      isLoadingVerification = false;
     });
   }
 
