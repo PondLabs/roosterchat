@@ -86,17 +86,17 @@ class MatrixThreadTimeline implements Timeline {
     var room = this.room as MatrixRoom;
 
     var mx = client.getMatrixClient();
-    var data = await mx.request(matrix.RequestType.GET,
-        "/client/unstable/rooms/${room.identifier}/relations/$threadRootId/m.thread",
-        query: {
-          "limit": limit.toString(),
-          if (nextBatch != null) "from": nextBatch
-        });
+    final response = await mx.getRelatingEventsWithRelType(
+      room.identifier,
+      threadRootId,
+      matrix.RelationshipTypes.thread,
+      limit: limit,
+      from: nextBatch,
+    );
 
-    var chunk = List<Map<String, dynamic>>.from(data["chunk"] as Iterable);
-
-    var mxevents =
-        chunk.map((e) => matrix.Event.fromJson(e, room.matrixRoom)).toList();
+    var mxevents = response.chunk
+        .map((e) => matrix.Event.fromMatrixEvent(e, room.matrixRoom))
+        .toList();
 
     for (var i = 0; i < mxevents.length; i++) {
       var event = mxevents[i];
@@ -118,21 +118,19 @@ class MatrixThreadTimeline implements Timeline {
             room.convertEvent(e, timeline: mainRoomTimeline.matrixTimeline))
         .toList();
 
-    this.nextBatch = data["next_batch"] as String?;
+    this.nextBatch = response.nextBatch;
 
     if (this.nextBatch == null) {
       finished = true;
-      var root = data["original_event"] as Map<String, dynamic>?;
-      if (root != null) {
-        var matrixEvent = matrix.Event.fromJson(root, room.matrixRoom);
-        if (matrixEvent.type == "m.room.encrypted") {
-          var decrypted = await mx.encryption?.decryptRoomEvent(matrixEvent);
-          if (decrypted != null) {
-            matrixEvent = decrypted;
-          }
-        }
-        var event = room.convertEvent(matrixEvent);
-        convertedEvents.add(event);
+      TimelineEvent? root = mainRoomTimeline.tryGetEvent(threadRootId);
+      if (root == null) {
+        try {
+          root = await mainRoomTimeline.fetchEventById(threadRootId);
+        } catch (_) {}
+      }
+      if (root != null &&
+          !convertedEvents.any((e) => e.eventId == root!.eventId)) {
+        convertedEvents.add(root);
       }
     }
 
