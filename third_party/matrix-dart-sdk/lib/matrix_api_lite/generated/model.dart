@@ -2412,7 +2412,11 @@ class Capabilities {
   Capabilities({
     this.m3pidChanges,
     this.mChangePassword,
+    // ROOSTER: Matrix v1.18 (MSC4267) capability.
+    this.mForgetForcedUponLeave,
     this.mGetLoginToken,
+    // ROOSTER: Matrix v1.20 (MSC4452) capability.
+    this.mPreviewUrl,
     this.mProfileFields,
     this.mRoomVersions,
     this.mSetAvatarUrl,
@@ -2427,9 +2431,17 @@ class Capabilities {
         mChangePassword = ((v) => v != null
             ? BooleanCapability.fromJson(v as Map<String, Object?>)
             : null)(json['m.change_password']),
+        // ROOSTER: Matrix v1.18 (MSC4267) capability.
+        mForgetForcedUponLeave = ((v) => v is Map<String, Object?>
+            ? BooleanCapability.fromJson(v)
+            : null)(json['m.forget_forced_upon_leave']),
         mGetLoginToken = ((v) => v != null
             ? BooleanCapability.fromJson(v as Map<String, Object?>)
             : null)(json['m.get_login_token']),
+        // ROOSTER: Matrix v1.20 (MSC4452) capability.
+        mPreviewUrl = ((v) => v is Map<String, Object?>
+            ? BooleanCapability.fromJson(v)
+            : null)(json['m.preview_url']),
         mProfileFields = ((v) => v != null
             ? ProfileFieldsCapability.fromJson(v as Map<String, Object?>)
             : null)(json['m.profile_fields']),
@@ -2448,7 +2460,10 @@ class Capabilities {
                 (e) => ![
                   'm.3pid_changes',
                   'm.change_password',
+                  // ROOSTER: Exclude parsed v1.18/v1.20 capabilities from additionalProperties.
+                  'm.forget_forced_upon_leave',
                   'm.get_login_token',
+                  'm.preview_url',
                   'm.profile_fields',
                   'm.room_versions',
                   'm.set_avatar_url',
@@ -2460,7 +2475,10 @@ class Capabilities {
   Map<String, Object?> toJson() {
     final m3pidChanges = this.m3pidChanges;
     final mChangePassword = this.mChangePassword;
+    // ROOSTER: Serialize v1.18/v1.20 capabilities.
+    final mForgetForcedUponLeave = this.mForgetForcedUponLeave;
     final mGetLoginToken = this.mGetLoginToken;
+    final mPreviewUrl = this.mPreviewUrl;
     final mProfileFields = this.mProfileFields;
     final mRoomVersions = this.mRoomVersions;
     final mSetAvatarUrl = this.mSetAvatarUrl;
@@ -2470,7 +2488,10 @@ class Capabilities {
       if (m3pidChanges != null) 'm.3pid_changes': m3pidChanges.toJson(),
       if (mChangePassword != null)
         'm.change_password': mChangePassword.toJson(),
+      if (mForgetForcedUponLeave != null)
+        'm.forget_forced_upon_leave': mForgetForcedUponLeave.toJson(),
       if (mGetLoginToken != null) 'm.get_login_token': mGetLoginToken.toJson(),
+      if (mPreviewUrl != null) 'm.preview_url': mPreviewUrl.toJson(),
       if (mProfileFields != null) 'm.profile_fields': mProfileFields.toJson(),
       if (mRoomVersions != null) 'm.room_versions': mRoomVersions.toJson(),
       if (mSetAvatarUrl != null) 'm.set_avatar_url': mSetAvatarUrl.toJson(),
@@ -2485,8 +2506,16 @@ class Capabilities {
   /// Capability to indicate if the user can change their password.
   BooleanCapability? mChangePassword;
 
+  /// Capability to indicate whether the server automatically forgets rooms when a user leaves them (Matrix v1.18, MSC4267).
+  // ROOSTER: Matrix v1.18 (MSC4267) capability.
+  BooleanCapability? mForgetForcedUponLeave;
+
   /// Capability to indicate if the user can generate tokens to log further clients into their account.
   BooleanCapability? mGetLoginToken;
+
+  /// Capability to indicate whether the server supports generating URL previews (Matrix v1.20, MSC4452).
+  // ROOSTER: Matrix v1.20 (MSC4452) capability.
+  BooleanCapability? mPreviewUrl;
 
   /// Capability to indicate if the user can set or modify extended profile fields via [`PUT /_matrix/client/v3/profile/{userId}/{keyName}`](https://spec.matrix.org/unstable/client-server-api/#put_matrixclientv3profileuseridkeyname). If absent, clients SHOULD assume custom profile fields are supported, provided the homeserver advertises a specification version that includes `m.profile_fields` in the [`/versions`](https://spec.matrix.org/unstable/client-server-api/#get_matrixclientversions) response.
   ProfileFieldsCapability? mProfileFields;
@@ -2521,7 +2550,10 @@ class Capabilities {
           other.runtimeType == runtimeType &&
           other.m3pidChanges == m3pidChanges &&
           other.mChangePassword == mChangePassword &&
+          // ROOSTER: Compare v1.18/v1.20 capabilities.
+          other.mForgetForcedUponLeave == mForgetForcedUponLeave &&
           other.mGetLoginToken == mGetLoginToken &&
+          other.mPreviewUrl == mPreviewUrl &&
           other.mProfileFields == mProfileFields &&
           other.mRoomVersions == mRoomVersions &&
           other.mSetAvatarUrl == mSetAvatarUrl &&
@@ -2531,7 +2563,10 @@ class Capabilities {
   int get hashCode => Object.hash(
         m3pidChanges,
         mChangePassword,
+        // ROOSTER: Hash v1.18/v1.20 capabilities.
+        mForgetForcedUponLeave,
         mGetLoginToken,
+        mPreviewUrl,
         mProfileFields,
         mRoomVersions,
         mSetAvatarUrl,
