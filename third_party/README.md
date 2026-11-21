@@ -287,3 +287,22 @@ Changes since the copy:
   `KeyManager._createOutboundGroupSession`
   (`lib/encryption/key_manager.dart`) logs how many devices of the room's
   members the key leaves out, with no ids.
+- Matrix v1.1–v1.19 compliance quick fixes (T0.1):
+  `Client.supportedVersions` (`lib/src/client.dart`) covers `v1.1` through
+  `v1.19`, and `Client.checkHomeserver` accepts newer `v1.x` versions while
+  throwing `BadServerVersionsException` instead of `assert(false)` when no
+  compatible version is advertised. OIDC `expires_in` in
+  `lib/msc_extensions/msc_2964_oidc_login_flow/msc_2964_oidc_login_flow.dart`
+  and `Client.refreshAccessToken` (`lib/src/client.dart`) uses
+  `Duration(seconds:)` (preserving milliseconds for legacy `/v3/refresh`
+  `expires_in_ms`) and treats missing, zero, or negative lifetimes as null.
+  `Room.sendEvent` (`lib/src/room.dart`) no longer emits `<mx-reply>` HTML or
+  `> <@user>` plaintext reply fallbacks (Matrix v1.13, MSC2781). VoIP events
+  emit stable `sdp_stream_metadata` (`lib/src/voip/models/call_events.dart`,
+  Matrix v1.10, MSC3077) while `VoIP` (`lib/src/voip/voip.dart`) retains
+  fallback reads of `org.matrix.msc3077.sdp_stream_metadata`.
+  `Encryption.encryptGroupMessagePayload` (`lib/encryption/encryption.dart`)
+  omits deprecated `device_id` and `sender_key` from Megolm payloads
+  (Matrix v1.3, MSC3700). `Room.setPower` (`lib/src/room.dart`) throws
+  `RoomCreatorPowerLevelException` for creators in room version 12+ and never
+  writes creators into `m.room.power_levels.users`.
