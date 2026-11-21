@@ -333,3 +333,20 @@ Changes since the copy:
   HTTP-date in pure web-safe Dart with an injectable clock, Matrix v1.10
   MSC4041) into `retryAfterMs` whenever the JSON body omits `retry_after_ms`,
   ignoring negative or malformed header values without throwing.
+- Matrix v1.16 sync (`state_after`, `use_state_after`), v1.4 thread unread
+  counts (`unread_thread_notifications`), and v1.15 Rich Topics (`m.topic`)
+  (T1.2):
+  `JoinedRoomUpdate` and `LeftRoomUpdate`
+  (`lib/matrix_api_lite/model/sync_update.dart`) deserialize and serialize
+  `state_after` (v1.16 MSC4222) and `JoinedRoomUpdate` parses
+  `unread_thread_notifications` (v1.4 MSC3773), skipping malformed entries
+  without crashing sync. `Client._innerSync` (`lib/src/client.dart`) sends
+  `use_state_after=true` only when the server advertises a semantic Matrix
+  version `>= v1.16` (omitting it on `<= v1.15` or unknown versions), and
+  `_handleRooms` / `_storeArchivedRoom` apply legacy `state` before timeline
+  events and `state_after` after timeline events (respecting `Direction.b`
+  guards). `Room.unreadThreadNotifications` (`lib/src/room.dart`) exposes and
+  updates/zeroes per-thread unread counts on every sync. `Room.topic`,
+  `Room.topicHtml`, and `Room.setDescription(plain, {html})` read and write
+  MSC3765 `m.topic` (`m.text` with `text/plain` and `text/html`) while keeping
+  legacy `topic` compatibility on both read and write.
