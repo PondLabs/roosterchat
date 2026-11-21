@@ -145,8 +145,13 @@ extension Msc2964OidcLoginFlow on Client {
     String tokenType,
   ) async {
     final authMetadata = await getAuthMetadata();
+    // ROOSTER: revocation_endpoint is optional in RFC 8414 / Matrix auth_metadata.
+    final revocationEndpoint = authMetadata.revocationEndpoint;
+    if (revocationEndpoint == null) {
+      throw Exception('OIDC server does not advertise a revocation_endpoint.');
+    }
     final response = await httpClient.post(
-      authMetadata.revocationEndpoint,
+      revocationEndpoint,
       body: <String, String>{
         'token': token,
         'token_type': tokenType,

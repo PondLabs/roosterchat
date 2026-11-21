@@ -63,8 +63,15 @@ extension Msc2966OidcDynamicClientRegistration on Client {
           ...entry.value.toJson(entry.key),
     };
 
+    // ROOSTER: registration_endpoint is optional in Matrix auth_metadata (e.g. CIMD servers without DCR).
+    final registrationEndpoint = authMetadata.registrationEndpoint;
+    if (registrationEndpoint == null) {
+      throw Exception(
+        'OIDC server does not advertise a registration_endpoint.',
+      );
+    }
     final response = await httpClient.post(
-      authMetadata.registrationEndpoint,
+      registrationEndpoint,
       body: jsonEncode(body),
       headers: {'content-type': 'application/json'},
     );
