@@ -616,6 +616,7 @@ class Client extends MatrixApi {
       return (wellKnown, versions, loginTypes, authMetadata);
     } catch (_) {
       homeserver = null;
+      _clearCachedServerVersions(); // ROOSTER
       rethrow;
     }
   }
@@ -1336,6 +1337,18 @@ class Client extends MatrixApi {
       );
     }
 
+    // ROOSTER: Matrix v1.16 MSC4222 — apply `state_after` after timeline events
+    // on archived/left rooms as well.
+    final stateAfterEvents = roomUpdate.stateAfter;
+    if (stateAfterEvents != null && stateAfterEvents.isNotEmpty) {
+      await _handleRoomEvents(
+        archivedRoom,
+        stateAfterEvents,
+        EventUpdateType.state,
+        store: false,
+      );
+    }
+
     for (var i = 0; i < timeline.events.length; i++) {
       // Try to decrypt encrypted events but don't update the database.
       if (archivedRoom.encrypted && archivedRoom.client.encryptionEnabled) {
@@ -1356,15 +1369,21 @@ class Client extends MatrixApi {
   Future<GetVersionsResponse> getVersions({
     Duration cacheLifetime = const Duration(days: 3),
     bool throwOnUpdateFailure = false,
-  }) =>
-      requestAndCache(
-        super.getVersions,
-        fromJson: GetVersionsResponse.fromJson,
-        toJson: (response) => response.toJson(),
-        cacheKey: 'get_versions',
-        cacheLifetime: cacheLifetime,
-        throwOnUpdateFailure: throwOnUpdateFailure,
-      );
+  }) async {
+    final response = await requestAndCache(
+      super.getVersions,
+      fromJson: GetVersionsResponse.fromJson,
+      toJson: (response) => response.toJson(),
+      cacheKey: 'get_versions',
+      cacheLifetime: cacheLifetime,
+      throwOnUpdateFailure: throwOnUpdateFailure,
+    );
+    // ROOSTER: Cache advertised server versions in memory for sync checks.
+    _cachedServerVersions = List<String>.unmodifiable(response.versions);
+    _cachedServerVersionsHomeserver = homeserver;
+    _cachedServerVersionsAt = DateTime.now();
+    return response;
+  }
 
   Future<bool> authenticatedMediaSupported() async {
     return (await getVersions()).versions.any(
@@ -1901,6 +1920,116 @@ class Client extends MatrixApi {
       final minor = _parseV1MinorVersion(version);
       return minor != null && minor > maxSupportedV1Minor!;
     });
+  }
+
+  // ROOSTER: Strict semantic Matrix spec version parser (`v<major>.<minor>`)
+  // used to negotiate Matrix v1.16+ features such as `use_state_after`.
+  static final RegExp _specVersionPattern =
+      RegExp(r'^v(0|[1-9]\d*)\.(0|[1-9]\d*)$');
+
+  static ({int major, int minor})? _parseSpecVersion(String version) {
+    final match = _specVersionPattern.firstMatch(version);
+    if (match == null) return null;
+    final major = int.tryParse(match.group(1)!);
+    final minor = int.tryParse(match.group(2)!);
+    if (major == null || minor == null) return null;
+    return (major: major, minor: minor);
+  }
+
+  static bool _supportsSpecVersionAtLeast(
+    Iterable<String> serverVersions,
+    int minMajor,
+    int minMinor,
+  ) {
+    for (final version in serverVersions) {
+      final parsed = _parseSpecVersion(version);
+      if (parsed == null) continue;
+      if (parsed.major > minMajor ||
+          (parsed.major == minMajor && parsed.minor >= minMinor)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // ROOSTER: In-memory cache of the server's advertised Matrix spec versions
+  // paired with the homeserver URI and timestamp (same 3-day TTL as DB cache).
+  List<String>? _cachedServerVersions;
+  Uri? _cachedServerVersionsHomeserver;
+  DateTime? _cachedServerVersionsAt;
+
+  void _clearCachedServerVersions() {
+    _cachedServerVersions = null;
+    _cachedServerVersionsHomeserver = null;
+    _cachedServerVersionsAt = null;
+  }
+
+  Future<bool> _supportsUseStateAfter() async {
+    final currentHomeserver = homeserver;
+    if (currentHomeserver == null) return false;
+    final cached = _cachedServerVersionsHomeserver == currentHomeserver &&
+            _cachedServerVersionsAt != null &&
+            _cachedServerVersionsAt!
+                .add(const Duration(days: 3))
+                .isAfter(DateTime.now())
+        ? _cachedServerVersions
+        : null;
+    List<String> versions;
+    if (cached != null) {
+      versions = cached;
+    } else {
+      try {
+        versions = (await getVersions()).versions;
+      } catch (e, s) {
+        Logs().v(
+          'Unable to check server versions for use_state_after; omitting parameter',
+          e,
+          s,
+        );
+        return false;
+      }
+    }
+    return _supportsSpecVersionAtLeast(versions, 1, 16);
+  }
+
+  // ROOSTER: Filter out older state events when paginating backwards (Direction.b)
+  // without mutating the source SyncUpdate event list.
+  Future<List<MatrixEvent>> _filterStateEventsForDirection(
+    Room room,
+    List<MatrixEvent> events,
+    Direction? direction,
+  ) async {
+    if (direction != Direction.b) return events;
+    await room.postLoad();
+    return events.where((stateEvent) {
+      final existingState =
+          room.getState(stateEvent.type, stateEvent.stateKey ?? '');
+      if (existingState == null) return true;
+      if (existingState is User) {
+        return !(existingState.originServerTs
+                ?.isAfter(stateEvent.originServerTs) ??
+            true);
+      }
+      if (existingState is MatrixEvent) {
+        return !existingState.originServerTs.isAfter(stateEvent.originServerTs);
+      }
+      return false;
+    }).toList();
+  }
+
+  // ROOSTER: Normalize per-thread unread notification counts so omitted
+  // `notification_count`/`highlight_count` default to 0 (Matrix v1.4 MSC3773).
+  static Map<String, UnreadNotificationCounts> _normalizeThreadNotifications(
+    Map<String, UnreadNotificationCounts>? raw,
+  ) {
+    if (raw == null || raw.isEmpty) return <String, UnreadNotificationCounts>{};
+    return {
+      for (final entry in raw.entries)
+        entry.key: UnreadNotificationCounts(
+          notificationCount: entry.value.notificationCount ?? 0,
+          highlightCount: entry.value.highlightCount ?? 0,
+        ),
+    };
   }
 
   static const List<String> supportedDirectEncryptionAlgorithms = [
@@ -2474,6 +2603,7 @@ class Client extends MatrixApi {
     _rooms = [];
     _eventsPendingDecryption.clear();
     _unansweredKeyQueries.clear(); // ROOSTER
+    _clearCachedServerVersions(); // ROOSTER
     await encryption?.dispose();
     _encryption = null;
     onLoginStateChanged.add(LoginState.loggedOut);
@@ -2591,11 +2721,17 @@ class Client extends MatrixApi {
 
       await _checkSyncFilter();
 
+      // ROOSTER: Matrix v1.16 MSC4222 — request `use_state_after=true` only
+      // when the homeserver advertises Matrix >= v1.16.
+      final useStateAfter = await _supportsUseStateAfter();
+      if (!isLogged() || _disposed || _aborted) return;
+
       final syncRequest = sync(
         filter: syncFilterId,
         since: prevBatch,
         timeout: timeout?.inMilliseconds,
         setPresence: syncPresence,
+        useStateAfter: useStateAfter ? true : null, // ROOSTER
       ).then((v) => Future<SyncUpdate?>.value(v)).catchError((e) {
         if (e is MatrixException) {
           syncError = e;
@@ -2895,27 +3031,11 @@ class Client extends MatrixApi {
 
       /// Handle now all room events and save them in the database
       if (syncRoomUpdate is JoinedRoomUpdate) {
-        final state = syncRoomUpdate.state;
-
-        // If we are receiving states when fetching history we need to check if
-        // we are not overwriting a newer state.
-        if (direction == Direction.b) {
-          await room.postLoad();
-          state?.removeWhere((state) {
-            final existingState =
-                room.getState(state.type, state.stateKey ?? '');
-            if (existingState == null) return false;
-            if (existingState is User) {
-              return existingState.originServerTs
-                      ?.isAfter(state.originServerTs) ??
-                  true;
-            }
-            if (existingState is MatrixEvent) {
-              return existingState.originServerTs.isAfter(state.originServerTs);
-            }
-            return true;
-          });
-        }
+        final rawState = syncRoomUpdate.state;
+        // ROOSTER: Keep legacy `state` before timeline for < v1.16 servers.
+        final state = rawState != null && rawState.isNotEmpty
+            ? await _filterStateEventsForDirection(room, rawState, direction)
+            : null;
 
         if (state != null && state.isNotEmpty) {
           await _handleRoomEvents(
@@ -2928,6 +3048,24 @@ class Client extends MatrixApi {
         final timelineEvents = syncRoomUpdate.timeline?.events;
         if (timelineEvents != null && timelineEvents.isNotEmpty) {
           await _handleRoomEvents(room, timelineEvents, timelineUpdateType);
+        }
+
+        // ROOSTER: Matrix v1.16 MSC4222 — apply `state_after` AFTER timeline
+        // events so room state reflects the end of the timeline.
+        final rawStateAfter = syncRoomUpdate.stateAfter;
+        final stateAfter = rawStateAfter != null && rawStateAfter.isNotEmpty
+            ? await _filterStateEventsForDirection(
+                room,
+                rawStateAfter,
+                direction,
+              )
+            : null;
+        if (stateAfter != null && stateAfter.isNotEmpty) {
+          await _handleRoomEvents(
+            room,
+            stateAfter,
+            EventUpdateType.state,
+          );
         }
 
         final ephemeral = syncRoomUpdate.ephemeral;
@@ -2949,6 +3087,20 @@ class Client extends MatrixApi {
       }
 
       if (syncRoomUpdate is LeftRoomUpdate) {
+        // ROOSTER: Apply legacy `state` before timeline events, and Matrix
+        // v1.16 MSC4222 `state_after` after timeline events.
+        final rawState = syncRoomUpdate.state;
+        final state = rawState != null && rawState.isNotEmpty
+            ? await _filterStateEventsForDirection(room, rawState, direction)
+            : null;
+        if (state != null && state.isNotEmpty) {
+          await _handleRoomEvents(
+            room,
+            state,
+            EventUpdateType.state,
+            store: false,
+          );
+        }
         final timelineEvents = syncRoomUpdate.timeline?.events;
         if (timelineEvents != null && timelineEvents.isNotEmpty) {
           await _handleRoomEvents(
@@ -2958,20 +3110,27 @@ class Client extends MatrixApi {
             store: false,
           );
         }
+        final rawStateAfter = syncRoomUpdate.stateAfter;
+        final stateAfter = rawStateAfter != null && rawStateAfter.isNotEmpty
+            ? await _filterStateEventsForDirection(
+                room,
+                rawStateAfter,
+                direction,
+              )
+            : null;
+        if (stateAfter != null && stateAfter.isNotEmpty) {
+          await _handleRoomEvents(
+            room,
+            stateAfter,
+            EventUpdateType.state,
+            store: false,
+          );
+        }
         final accountData = syncRoomUpdate.accountData;
         if (accountData != null && accountData.isNotEmpty) {
           for (final event in accountData) {
             room.roomAccountData[event.type] = event;
           }
-        }
-        final state = syncRoomUpdate.state;
-        if (state != null && state.isNotEmpty) {
-          await _handleRoomEvents(
-            room,
-            state,
-            EventUpdateType.state,
-            store: false,
-          );
         }
       }
 
@@ -3216,6 +3375,10 @@ class Client extends MatrixApi {
                     chatUpdate.unreadNotifications?.highlightCount ?? 0,
                 notificationCount:
                     chatUpdate.unreadNotifications?.notificationCount ?? 0,
+                unreadThreadNotifications: _normalizeThreadNotifications(
+                  // ROOSTER
+                  chatUpdate.unreadThreadNotifications, // ROOSTER
+                ), // ROOSTER
                 summary: chatUpdate.summary,
                 client: this,
               )
@@ -3248,6 +3411,8 @@ class Client extends MatrixApi {
                 (chatUpdate.unreadNotifications?.notificationCount ?? 0) ||
             rooms[roomIndex].highlightCount !=
                 (chatUpdate.unreadNotifications?.highlightCount ?? 0) ||
+            (chatUpdate.unreadThreadNotifications?.isNotEmpty ??
+                false) || // ROOSTER
             chatUpdate.summary != null ||
             chatUpdate.timeline?.prevBatch != null)) {
       /// 1. [InvitedRoomUpdate] doesn't have prev_batch, so we want to set it in case
@@ -3264,6 +3429,14 @@ class Client extends MatrixApi {
             chatUpdate.unreadNotifications?.notificationCount ?? 0;
         rooms[roomIndex].highlightCount =
             chatUpdate.unreadNotifications?.highlightCount ?? 0;
+      }
+
+      // ROOSTER: Merge per-thread unread notification counts from /sync (v1.4).
+      final threadNotifications = chatUpdate.unreadThreadNotifications;
+      if (threadNotifications != null) {
+        rooms[roomIndex].unreadThreadNotifications.addAll(
+              _normalizeThreadNotifications(threadNotifications),
+            );
       }
 
       final summary = chatUpdate.summary;
@@ -4107,6 +4280,7 @@ class Client extends MatrixApi {
     await abortSync();
     _prevBatch = null;
     _trackedUserIds = null;
+    _clearCachedServerVersions(); // ROOSTER
     rooms.clear();
     await database.clearCache();
     encryption?.keyManager.clearOutboundGroupSessions();
