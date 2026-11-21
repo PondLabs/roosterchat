@@ -1095,6 +1095,95 @@ void main() {
       expect(encrypted.containsKey('device_id'), isFalse);
       expect(encrypted.containsKey('sender_key'), isFalse);
     });
+
+    // Regression tests from review finding c1-1: undecryptable Megolm events
+    // without deprecated `sender_key` must remain key-requestable.
+    Future<Event> makeUndecryptable(Map<String, Object?> content) =>
+        client.encryption!.decryptRoomEvent(
+          Event(
+            type: EventTypes.Encrypted,
+            content: content,
+            room: room,
+            originServerTs: DateTime.now(),
+            eventId: '\$undecryptable_${content['session_id'] ?? 'none'}',
+            senderId: '@alice:example.com',
+          ),
+        );
+
+    test('requestKey control: legacy payload with sender_key can request key',
+        () async {
+      FakeMatrixApi.calledEndpoints.clear();
+      final event = await makeUndecryptable({
+        'algorithm': AlgorithmTypes.megolmV1AesSha2,
+        'ciphertext':
+            'AwgAEnACgAkLmt6qF84IK++J7UDH2Za1YVchHyprqTqsg2yyOwAtHaZT',
+        'session_id': 'unknown_session_with_key',
+        'sender_key': 'L+4+JCl8MD63dgo8z5Ta+9QAHXiANyOVSfgbHA5d3H8',
+        'device_id': 'ALICEDEV',
+      });
+      expect(event.messageType, MessageTypes.BadEncrypted);
+      expect(event.content['can_request_session'], true);
+      await event.requestKey();
+
+      final keyReqEntry = FakeMatrixApi.calledEndpoints.entries.firstWhere(
+        (e) => e.key.startsWith('/client/v3/sendToDevice/m.room_key_request/'),
+      );
+      final reqJson =
+          jsonDecode(keyReqEntry.value.last) as Map<String, dynamic>;
+      final messages = reqJson['messages'] as Map<String, dynamic>;
+      final firstUser = messages.values.first as Map<String, dynamic>;
+      final body = (firstUser['*'] as Map<String, dynamic>)['body']
+          as Map<String, dynamic>;
+      expect(body['session_id'], 'unknown_session_with_key');
+      expect(body['sender_key'], 'L+4+JCl8MD63dgo8z5Ta+9QAHXiANyOVSfgbHA5d3H8');
+    });
+
+    test('requestKey c1-1: v1.3 payload without sender_key can request key',
+        () async {
+      FakeMatrixApi.calledEndpoints.clear();
+      final event = await makeUndecryptable({
+        'algorithm': AlgorithmTypes.megolmV1AesSha2,
+        'ciphertext':
+            'AwgAEnACgAkLmt6qF84IK++J7UDH2Za1YVchHyprqTqsg2yyOwAtHaZT',
+        'session_id': 'unknown_session_no_key',
+      });
+      expect(event.messageType, MessageTypes.BadEncrypted);
+      expect(event.content['can_request_session'], true);
+      await event.requestKey();
+
+      final keyReqEntry = FakeMatrixApi.calledEndpoints.entries.firstWhere(
+        (e) => e.key.startsWith('/client/v3/sendToDevice/m.room_key_request/'),
+      );
+      final reqJson =
+          jsonDecode(keyReqEntry.value.last) as Map<String, dynamic>;
+      final messages = reqJson['messages'] as Map<String, dynamic>;
+      final firstUser = messages.values.first as Map<String, dynamic>;
+      final body = (firstUser['*'] as Map<String, dynamic>)['body']
+          as Map<String, dynamic>;
+      expect(body['session_id'], 'unknown_session_no_key');
+      expect(body.containsKey('sender_key'), isFalse);
+    });
+
+    test('requestKey throws when session_id is missing', () async {
+      final event = Event(
+        type: EventTypes.Encrypted,
+        content: {
+          'msgtype': MessageTypes.BadEncrypted,
+          'can_request_session': true,
+          'algorithm': AlgorithmTypes.megolmV1AesSha2,
+          'ciphertext':
+              'AwgAEnACgAkLmt6qF84IK++J7UDH2Za1YVchHyprqTqsg2yyOwAtHaZT',
+        },
+        room: room,
+        originServerTs: DateTime.now(),
+        eventId: '\$undecryptable_no_session_id',
+        senderId: '@alice:example.com',
+      );
+      await expectLater(
+        () => event.requestKey(),
+        throwsA('Unknown session_id'),
+      );
+    });
   });
 
   group('6. RV12 room creator guard in Room.setPower()', () {

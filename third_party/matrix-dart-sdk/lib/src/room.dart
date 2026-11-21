@@ -2973,7 +2973,8 @@ class Room {
     return deviceKeys;
   }
 
-  Future<void> requestSessionKey(String sessionId, String senderKey) async {
+  // ROOSTER: Accept nullable `senderKey` for Matrix v1.3 (MSC3700) Megolm payloads without `sender_key`.
+  Future<void> requestSessionKey(String sessionId, [String? senderKey]) async {
     if (!client.encryptionEnabled) {
       return;
     }

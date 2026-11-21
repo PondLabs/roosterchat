@@ -512,10 +512,11 @@ class Event extends MatrixEvent {
       throw ('Session key not requestable');
     }
 
+    // ROOSTER: Matrix v1.3 (MSC3700) omits deprecated `sender_key` from Megolm payloads; only `session_id` is required.
     final sessionId = content.tryGet<String>('session_id');
     final senderKey = content.tryGet<String>('sender_key');
-    if (sessionId == null || senderKey == null) {
-      throw ('Unknown session_id or sender_key');
+    if (sessionId == null) {
+      throw ('Unknown session_id');
     }
     await room.requestSessionKey(sessionId, senderKey);
     return;

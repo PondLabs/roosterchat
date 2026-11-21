@@ -303,6 +303,9 @@ Changes since the copy:
   fallback reads of `org.matrix.msc3077.sdp_stream_metadata`.
   `Encryption.encryptGroupMessagePayload` (`lib/encryption/encryption.dart`)
   omits deprecated `device_id` and `sender_key` from Megolm payloads
-  (Matrix v1.3, MSC3700). `Room.setPower` (`lib/src/room.dart`) throws
-  `RoomCreatorPowerLevelException` for creators in room version 12+ and never
-  writes creators into `m.room.power_levels.users`.
+  (Matrix v1.3, MSC3700), and `Event.requestKey` (`lib/src/event.dart`) /
+  `Room.requestSessionKey` (`lib/src/room.dart`) accept a nullable `senderKey`
+  so undecryptable v1.3 events remain key-requestable. `Room.setPower`
+  (`lib/src/room.dart`) throws `RoomCreatorPowerLevelException` for creators
+  in room version 12+ and never writes creators into
+  `m.room.power_levels.users`.
