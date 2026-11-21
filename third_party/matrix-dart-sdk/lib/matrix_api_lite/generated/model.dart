@@ -250,63 +250,123 @@ class GetWellknownSupportResponse {
 @_NameSource('generated')
 class GetAuthMetadataResponse {
   GetAuthMetadataResponse({
+    // ROOSTER: Matrix v1.15-v1.18 auth_metadata fields (MSC2965/MSC4191/RFC8628/CIMD).
+    this.accountManagementActionsSupported,
+    this.accountManagementUri,
     required this.authorizationEndpoint,
+    this.clientIdMetadataDocumentSupported,
     required this.codeChallengeMethodsSupported,
+    this.deviceAuthorizationEndpoint,
     required this.grantTypesSupported,
     required this.issuer,
     this.promptValuesSupported,
-    required this.registrationEndpoint,
+    this.registrationEndpoint,
     required this.responseModesSupported,
     required this.responseTypesSupported,
-    required this.revocationEndpoint,
+    this.revocationEndpoint,
+    this.scopesSupported,
     required this.tokenEndpoint,
   });
 
+  // ROOSTER: Parse Matrix v1.15-v1.18 fields safely when absent/null and ignore unknown keys.
   GetAuthMetadataResponse.fromJson(Map<String, Object?> json)
-      : authorizationEndpoint =
+      : accountManagementActionsSupported = ((v) => v is List
+            ? v.whereType<String>().toList()
+            : null)(json['account_management_actions_supported']),
+        accountManagementUri = ((v) => v is String && v.isNotEmpty
+            ? Uri.tryParse(v)
+            : null)(json['account_management_uri']),
+        authorizationEndpoint =
             Uri.parse(json['authorization_endpoint'] as String),
-        codeChallengeMethodsSupported =
-            (json['code_challenge_methods_supported'] as List)
-                .map((v) => v as String)
-                .toList(),
-        grantTypesSupported = (json['grant_types_supported'] as List)
-            .map((v) => v as String)
-            .toList(),
+        clientIdMetadataDocumentSupported = ((v) => v is bool ? v : null)(
+          json['client_id_metadata_document_supported'],
+        ),
+        codeChallengeMethodsSupported = ((v) => v is List
+            ? v.whereType<String>().toList()
+            : <String>[])(json['code_challenge_methods_supported']),
+        deviceAuthorizationEndpoint = ((v) => v is String && v.isNotEmpty
+            ? Uri.tryParse(v)
+            : null)(json['device_authorization_endpoint']),
+        grantTypesSupported = ((v) => v is List
+            ? v.whereType<String>().toList()
+            : <String>[])(json['grant_types_supported']),
         issuer = Uri.parse(json['issuer'] as String),
-        promptValuesSupported = ((v) => v != null
-            ? (v as List).map((v) => v as String).toList()
+        promptValuesSupported = ((v) => v is List
+            ? v.whereType<String>().toList()
             : null)(json['prompt_values_supported']),
-        registrationEndpoint =
-            Uri.parse(json['registration_endpoint'] as String),
-        responseModesSupported = (json['response_modes_supported'] as List)
-            .map((v) => v as String)
-            .toList(),
-        responseTypesSupported = (json['response_types_supported'] as List)
-            .map((v) => v as String)
-            .toList(),
-        revocationEndpoint = Uri.parse(json['revocation_endpoint'] as String),
+        registrationEndpoint = ((v) => v is String && v.isNotEmpty
+            ? Uri.tryParse(v)
+            : null)(json['registration_endpoint']),
+        responseModesSupported = ((v) => v is List
+            ? v.whereType<String>().toList()
+            : <String>[])(json['response_modes_supported']),
+        responseTypesSupported = ((v) => v is List
+            ? v.whereType<String>().toList()
+            : <String>[])(json['response_types_supported']),
+        revocationEndpoint = ((v) => v is String && v.isNotEmpty
+            ? Uri.tryParse(v)
+            : null)(json['revocation_endpoint']),
+        scopesSupported = ((v) => v is List
+            ? v.whereType<String>().toList()
+            : null)(json['scopes_supported']),
         tokenEndpoint = Uri.parse(json['token_endpoint'] as String);
   Map<String, Object?> toJson() {
+    // ROOSTER: Serialize optional Matrix v1.15-v1.18 auth_metadata fields when present.
+    final accountManagementActionsSupported =
+        this.accountManagementActionsSupported;
+    final accountManagementUri = this.accountManagementUri;
+    final clientIdMetadataDocumentSupported =
+        this.clientIdMetadataDocumentSupported;
+    final deviceAuthorizationEndpoint = this.deviceAuthorizationEndpoint;
     final promptValuesSupported = this.promptValuesSupported;
+    final registrationEndpoint = this.registrationEndpoint;
+    final revocationEndpoint = this.revocationEndpoint;
+    final scopesSupported = this.scopesSupported;
     return {
+      if (accountManagementActionsSupported != null)
+        'account_management_actions_supported':
+            accountManagementActionsSupported.map((v) => v).toList(),
+      if (accountManagementUri != null)
+        'account_management_uri': accountManagementUri.toString(),
       'authorization_endpoint': authorizationEndpoint.toString(),
+      if (clientIdMetadataDocumentSupported != null)
+        'client_id_metadata_document_supported':
+            clientIdMetadataDocumentSupported,
       'code_challenge_methods_supported':
           codeChallengeMethodsSupported.map((v) => v).toList(),
+      if (deviceAuthorizationEndpoint != null)
+        'device_authorization_endpoint': deviceAuthorizationEndpoint.toString(),
       'grant_types_supported': grantTypesSupported.map((v) => v).toList(),
       'issuer': issuer.toString(),
       if (promptValuesSupported != null)
         'prompt_values_supported': promptValuesSupported.map((v) => v).toList(),
-      'registration_endpoint': registrationEndpoint.toString(),
+      if (registrationEndpoint != null)
+        'registration_endpoint': registrationEndpoint.toString(),
       'response_modes_supported': responseModesSupported.map((v) => v).toList(),
       'response_types_supported': responseTypesSupported.map((v) => v).toList(),
-      'revocation_endpoint': revocationEndpoint.toString(),
+      if (revocationEndpoint != null)
+        'revocation_endpoint': revocationEndpoint.toString(),
+      if (scopesSupported != null)
+        'scopes_supported': scopesSupported.map((v) => v).toList(),
       'token_endpoint': tokenEndpoint.toString(),
     };
   }
 
+  /// List of account management actions supported by the server (Matrix v1.15, MSC4191).
+  // ROOSTER: Matrix v1.15 (MSC4191) field.
+  List<String>? accountManagementActionsSupported;
+
+  /// URL where the user can manage their account (Matrix v1.15, MSC4191).
+  // ROOSTER: Matrix v1.15 (MSC4191) field.
+  Uri? accountManagementUri;
+
   /// URL of the authorization endpoint, necessary to use the authorization code
   /// grant.
   Uri authorizationEndpoint;
+
+  /// Whether the authorization server supports OAuth 2.0 Client ID Metadata Documents (CIMD).
+  // ROOSTER: Matrix v1.17+ CIMD support flag.
+  bool? clientIdMetadataDocumentSupported;
 
   /// List of OAuth 2.0 Proof Key for Code Exchange (PKCE) code challenge methods
   /// that the server supports at the authorization endpoint.
@@ -314,6 +374,10 @@ class GetAuthMetadataResponse {
   /// This array MUST contain at least the `S256` value, for improved security in
   /// the authorization code grant.
   List<String> codeChallengeMethodsSupported;
+
+  /// URL of the OAuth 2.0 device authorization endpoint (RFC 8628, Matrix v1.18).
+  // ROOSTER: Matrix v1.18 RFC 8628 device authorization endpoint.
+  Uri? deviceAuthorizationEndpoint;
 
   /// List of OAuth 2.0 grant type strings that the server supports at the token
   /// endpoint.
@@ -340,8 +404,9 @@ class GetAuthMetadataResponse {
   List<String>? promptValuesSupported;
 
   /// URL of the client registration endpoint, necessary to perform dynamic
-  /// registration of a client.
-  Uri registrationEndpoint;
+  /// registration of a client. Optional when the server uses CIMD or pre-registered clients.
+  // ROOSTER: Optional per RFC 8414 and Matrix v1.15+ (servers may omit DCR).
+  Uri? registrationEndpoint;
 
   /// List of OAuth 2.0 response mode strings that the server supports at the
   /// authorization endpoint.
@@ -358,8 +423,13 @@ class GetAuthMetadataResponse {
   List<String> responseTypesSupported;
 
   /// URL of the revocation endpoint, necessary to log out a client by invalidating
-  /// its access and refresh tokens.
-  Uri revocationEndpoint;
+  /// its access and refresh tokens. Optional per RFC 8414.
+  // ROOSTER: Optional per RFC 8414.
+  Uri? revocationEndpoint;
+
+  /// List of OAuth 2.0 scope values supported by the server (RFC 8414).
+  // ROOSTER: RFC 8414 / Matrix v1.15+ supported scopes.
+  List<String>? scopesSupported;
 
   /// URL of the token endpoint, necessary to use the authorization code grant and
   /// the refresh token grant.
@@ -370,9 +440,16 @@ class GetAuthMetadataResponse {
       identical(this, other) ||
       (other is GetAuthMetadataResponse &&
           other.runtimeType == runtimeType &&
+          // ROOSTER: Compare Matrix v1.15-v1.18 auth_metadata fields.
+          other.accountManagementActionsSupported ==
+              accountManagementActionsSupported &&
+          other.accountManagementUri == accountManagementUri &&
           other.authorizationEndpoint == authorizationEndpoint &&
+          other.clientIdMetadataDocumentSupported ==
+              clientIdMetadataDocumentSupported &&
           other.codeChallengeMethodsSupported ==
               codeChallengeMethodsSupported &&
+          other.deviceAuthorizationEndpoint == deviceAuthorizationEndpoint &&
           other.grantTypesSupported == grantTypesSupported &&
           other.issuer == issuer &&
           other.promptValuesSupported == promptValuesSupported &&
@@ -380,12 +457,18 @@ class GetAuthMetadataResponse {
           other.responseModesSupported == responseModesSupported &&
           other.responseTypesSupported == responseTypesSupported &&
           other.revocationEndpoint == revocationEndpoint &&
+          other.scopesSupported == scopesSupported &&
           other.tokenEndpoint == tokenEndpoint);
 
   @dart.override
   int get hashCode => Object.hash(
+        // ROOSTER: Hash Matrix v1.15-v1.18 auth_metadata fields.
+        accountManagementActionsSupported,
+        accountManagementUri,
         authorizationEndpoint,
+        clientIdMetadataDocumentSupported,
         codeChallengeMethodsSupported,
+        deviceAuthorizationEndpoint,
         grantTypesSupported,
         issuer,
         promptValuesSupported,
@@ -393,6 +476,7 @@ class GetAuthMetadataResponse {
         responseModesSupported,
         responseTypesSupported,
         revocationEndpoint,
+        scopesSupported,
         tokenEndpoint,
       );
 }
@@ -2412,7 +2496,11 @@ class Capabilities {
   Capabilities({
     this.m3pidChanges,
     this.mChangePassword,
+    // ROOSTER: Matrix v1.18 (MSC4267) capability.
+    this.mForgetForcedUponLeave,
     this.mGetLoginToken,
+    // ROOSTER: Matrix v1.20 (MSC4452) capability.
+    this.mPreviewUrl,
     this.mProfileFields,
     this.mRoomVersions,
     this.mSetAvatarUrl,
@@ -2427,12 +2515,23 @@ class Capabilities {
         mChangePassword = ((v) => v != null
             ? BooleanCapability.fromJson(v as Map<String, Object?>)
             : null)(json['m.change_password']),
+        // ROOSTER: Matrix v1.18 (MSC4267) capability.
+        mForgetForcedUponLeave = ((v) =>
+            v is Map<String, Object?> && v['enabled'] is bool
+                ? BooleanCapability.fromJson(v)
+                : null)(json['m.forget_forced_upon_leave']),
         mGetLoginToken = ((v) => v != null
             ? BooleanCapability.fromJson(v as Map<String, Object?>)
             : null)(json['m.get_login_token']),
-        mProfileFields = ((v) => v != null
-            ? ProfileFieldsCapability.fromJson(v as Map<String, Object?>)
-            : null)(json['m.profile_fields']),
+        // ROOSTER: Matrix v1.20 (MSC4452) capability.
+        mPreviewUrl = ((v) => v is Map<String, Object?> && v['enabled'] is bool
+            ? BooleanCapability.fromJson(v)
+            : null)(json['m.preview_url']),
+        // ROOSTER: Guard m.profile_fields against missing/non-bool enabled.
+        mProfileFields = ((v) =>
+            v is Map<String, Object?> && v['enabled'] is bool
+                ? ProfileFieldsCapability.fromJson(v)
+                : null)(json['m.profile_fields']),
         mRoomVersions = ((v) => v != null
             ? RoomVersionsCapability.fromJson(v as Map<String, Object?>)
             : null)(json['m.room_versions']),
@@ -2448,7 +2547,10 @@ class Capabilities {
                 (e) => ![
                   'm.3pid_changes',
                   'm.change_password',
+                  // ROOSTER: Exclude parsed v1.18/v1.20 capabilities from additionalProperties.
+                  'm.forget_forced_upon_leave',
                   'm.get_login_token',
+                  'm.preview_url',
                   'm.profile_fields',
                   'm.room_versions',
                   'm.set_avatar_url',
@@ -2460,7 +2562,10 @@ class Capabilities {
   Map<String, Object?> toJson() {
     final m3pidChanges = this.m3pidChanges;
     final mChangePassword = this.mChangePassword;
+    // ROOSTER: Serialize v1.18/v1.20 capabilities.
+    final mForgetForcedUponLeave = this.mForgetForcedUponLeave;
     final mGetLoginToken = this.mGetLoginToken;
+    final mPreviewUrl = this.mPreviewUrl;
     final mProfileFields = this.mProfileFields;
     final mRoomVersions = this.mRoomVersions;
     final mSetAvatarUrl = this.mSetAvatarUrl;
@@ -2470,7 +2575,10 @@ class Capabilities {
       if (m3pidChanges != null) 'm.3pid_changes': m3pidChanges.toJson(),
       if (mChangePassword != null)
         'm.change_password': mChangePassword.toJson(),
+      if (mForgetForcedUponLeave != null)
+        'm.forget_forced_upon_leave': mForgetForcedUponLeave.toJson(),
       if (mGetLoginToken != null) 'm.get_login_token': mGetLoginToken.toJson(),
+      if (mPreviewUrl != null) 'm.preview_url': mPreviewUrl.toJson(),
       if (mProfileFields != null) 'm.profile_fields': mProfileFields.toJson(),
       if (mRoomVersions != null) 'm.room_versions': mRoomVersions.toJson(),
       if (mSetAvatarUrl != null) 'm.set_avatar_url': mSetAvatarUrl.toJson(),
@@ -2485,8 +2593,16 @@ class Capabilities {
   /// Capability to indicate if the user can change their password.
   BooleanCapability? mChangePassword;
 
+  /// Capability to indicate whether the server automatically forgets rooms when a user leaves them (Matrix v1.18, MSC4267).
+  // ROOSTER: Matrix v1.18 (MSC4267) capability.
+  BooleanCapability? mForgetForcedUponLeave;
+
   /// Capability to indicate if the user can generate tokens to log further clients into their account.
   BooleanCapability? mGetLoginToken;
+
+  /// Capability to indicate whether the server supports generating URL previews (Matrix v1.20, MSC4452).
+  // ROOSTER: Matrix v1.20 (MSC4452) capability.
+  BooleanCapability? mPreviewUrl;
 
   /// Capability to indicate if the user can set or modify extended profile fields via [`PUT /_matrix/client/v3/profile/{userId}/{keyName}`](https://spec.matrix.org/unstable/client-server-api/#put_matrixclientv3profileuseridkeyname). If absent, clients SHOULD assume custom profile fields are supported, provided the homeserver advertises a specification version that includes `m.profile_fields` in the [`/versions`](https://spec.matrix.org/unstable/client-server-api/#get_matrixclientversions) response.
   ProfileFieldsCapability? mProfileFields;
@@ -2521,7 +2637,10 @@ class Capabilities {
           other.runtimeType == runtimeType &&
           other.m3pidChanges == m3pidChanges &&
           other.mChangePassword == mChangePassword &&
+          // ROOSTER: Compare v1.18/v1.20 capabilities.
+          other.mForgetForcedUponLeave == mForgetForcedUponLeave &&
           other.mGetLoginToken == mGetLoginToken &&
+          other.mPreviewUrl == mPreviewUrl &&
           other.mProfileFields == mProfileFields &&
           other.mRoomVersions == mRoomVersions &&
           other.mSetAvatarUrl == mSetAvatarUrl &&
@@ -2531,7 +2650,10 @@ class Capabilities {
   int get hashCode => Object.hash(
         m3pidChanges,
         mChangePassword,
+        // ROOSTER: Hash v1.18/v1.20 capabilities.
+        mForgetForcedUponLeave,
         mGetLoginToken,
+        mPreviewUrl,
         mProfileFields,
         mRoomVersions,
         mSetAvatarUrl,
