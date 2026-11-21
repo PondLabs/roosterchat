@@ -468,10 +468,9 @@ class VoIP {
     }
 
     var callType = CallType.kVoice;
-    SDPStreamMetadata? sdpStreamMetadata;
-    if (content[sdpStreamMetadataKey] != null) {
-      sdpStreamMetadata =
-          SDPStreamMetadata.fromJson(content[sdpStreamMetadataKey]);
+    // ROOSTER: Read stable `sdp_stream_metadata` with legacy MSC3077 fallback.
+    final sdpStreamMetadata = SDPStreamMetadata.tryFromEventContent(content);
+    if (sdpStreamMetadata != null) {
       sdpStreamMetadata.sdpStreamMetadatas
           .forEach((streamId, SDPStreamPurpose purpose) {
         Logs().v(
@@ -619,10 +618,8 @@ class VoIP {
         content['answer']['type'],
       );
 
-      SDPStreamMetadata? metadata;
-      if (content[sdpStreamMetadataKey] != null) {
-        metadata = SDPStreamMetadata.fromJson(content[sdpStreamMetadataKey]);
-      }
+      // ROOSTER: Read stable `sdp_stream_metadata` with legacy MSC3077 fallback.
+      final metadata = SDPStreamMetadata.tryFromEventContent(content);
       await call.onAnswerReceived(answer, metadata);
     } else {
       Logs().v('[VOIP] onCallAnswer: Session [$callId] not found!');
@@ -711,13 +708,13 @@ class VoIP {
 
     final call = calls[VoipId(roomId: room.id, callId: callId)];
     if (call != null) {
-      if (content[sdpStreamMetadataKey] == null) {
+      // ROOSTER: Read stable `sdp_stream_metadata` with legacy MSC3077 fallback.
+      final metadata = SDPStreamMetadata.tryFromEventContent(content);
+      if (metadata == null) {
         Logs().d('SDP Stream metadata is null');
         return;
       }
-      await call.onSDPStreamMetadataReceived(
-        SDPStreamMetadata.fromJson(content[sdpStreamMetadataKey]),
-      );
+      await call.onSDPStreamMetadataReceived(metadata);
     }
   }
 
@@ -753,10 +750,8 @@ class VoIP {
 
       final description = content['description'];
       try {
-        SDPStreamMetadata? metadata;
-        if (content[sdpStreamMetadataKey] != null) {
-          metadata = SDPStreamMetadata.fromJson(content[sdpStreamMetadataKey]);
-        }
+        // ROOSTER: Read stable `sdp_stream_metadata` with legacy MSC3077 fallback.
+        final metadata = SDPStreamMetadata.tryFromEventContent(content);
         await call.onNegotiateReceived(
           metadata,
           RTCSessionDescription(description['sdp'], description['type']),
