@@ -435,4 +435,45 @@ void main() {
       },
     );
   });
+
+  group('3. Standardized MatrixError codes', () {
+    test('MatrixException recognizes all standardized MatrixError codes', () {
+      const expectedCodes = <String, MatrixError>{
+        'M_USER_LOCKED': MatrixError.M_USER_LOCKED,
+        'M_USER_SUSPENDED': MatrixError.M_USER_SUSPENDED,
+        'M_USER_LIMIT_EXCEEDED': MatrixError.M_USER_LIMIT_EXCEEDED,
+        'M_CANNOT_OVERWRITE_MEDIA': MatrixError.M_CANNOT_OVERWRITE_MEDIA,
+        'M_NOT_YET_UPLOADED': MatrixError.M_NOT_YET_UPLOADED,
+        'M_MISSING_TOKEN': MatrixError.M_MISSING_TOKEN,
+        'M_WRONG_ROOM_KEYS_VERSION': MatrixError.M_WRONG_ROOM_KEYS_VERSION,
+        'M_INCOMPATIBLE_ROOM_VERSION': MatrixError.M_INCOMPATIBLE_ROOM_VERSION,
+        'M_UNSUPPORTED_ROOM_VERSION': MatrixError.M_UNSUPPORTED_ROOM_VERSION,
+        'M_RESOURCE_LIMIT_EXCEEDED': MatrixError.M_RESOURCE_LIMIT_EXCEEDED,
+        'M_DUPLICATE_ANNOTATION': MatrixError.M_DUPLICATE_ANNOTATION,
+      };
+
+      for (final entry in expectedCodes.entries) {
+        final fromJson = MatrixException.fromJson({
+          'errcode': entry.key,
+          'error': 'Error ${entry.key}',
+        });
+        expect(fromJson.errcode, entry.key);
+        expect(fromJson.error, entry.value);
+
+        final fromResp = MatrixException(
+          http.Response(
+            jsonEncode({'errcode': entry.key, 'error': 'Error ${entry.key}'}),
+            403,
+          ),
+        );
+        expect(fromResp.error, entry.value);
+      }
+
+      final unknown = MatrixException.fromJson({
+        'errcode': 'M_FUTURE_UNRECOGNIZED_CODE',
+        'error': 'Unknown',
+      });
+      expect(unknown.error, MatrixError.M_UNKNOWN);
+    });
+  });
 }

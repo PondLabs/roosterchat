@@ -61,6 +61,15 @@ enum MatrixError {
   M_EXCLUSIVE,
   M_RESOURCE_LIMIT_EXCEEDED,
   M_CANNOT_LEAVE_SERVER_NOTICE_ROOM,
+  // ROOSTER: Standardized Matrix v1.1-v1.19 error codes.
+  M_USER_LOCKED,
+  M_USER_SUSPENDED,
+  M_USER_LIMIT_EXCEEDED,
+  M_CANNOT_OVERWRITE_MEDIA,
+  M_NOT_YET_UPLOADED,
+  M_MISSING_TOKEN,
+  M_WRONG_ROOM_KEYS_VERSION,
+  M_DUPLICATE_ANNOTATION,
 }
 
 /// Represents a special response from the Homeserver for errors.
