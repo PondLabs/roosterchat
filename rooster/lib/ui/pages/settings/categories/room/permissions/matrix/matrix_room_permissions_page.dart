@@ -57,7 +57,7 @@ class MatrixRoomPermissionsPage extends StatefulWidget {
 
   /// Builds the updated `m.room.power_levels` content for [room] without
   /// mutating cached state in place. In RV12+ rooms, room creators are never
-  /// written to `users` and synthetic PL 150 entries are stripped from `users`.
+  /// written to `users`.
   static Map<String, Object?> buildUpdatedPowerLevelsContent({
     required matrix.Room room,
     required List<MatrixRoomPermissionEntry> permissions,
@@ -94,7 +94,6 @@ class MatrixRoomPermissionsPage extends StatefulWidget {
         rawUsers.forEach((key, value) {
           final userId = key.toString();
           if (creators.contains(userId)) return;
-          if (value == 150) return;
           sanitizedUsers[userId] = value;
         });
         content['users'] = sanitizedUsers;

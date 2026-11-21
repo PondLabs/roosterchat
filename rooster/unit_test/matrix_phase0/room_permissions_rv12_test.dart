@@ -85,7 +85,7 @@ void main() {
   group('MatrixRoomPermissionsPage RV12 vs RV11', () {
     testWidgets(
       'RV12 displays immutable creators section, omits synthetic PL 150 role, '
-      'and never writes creators or PL 150 in m.room.power_levels.users',
+      'and strips room creators from m.room.power_levels.users',
       (tester) async {
         final writes = <Map<String, dynamic>>[];
         final room = buildRoom(
@@ -138,9 +138,53 @@ void main() {
         final users = written['users'] as Map<String, dynamic>;
         expect(users.containsKey('@creator:example.test'), isFalse);
         expect(users.containsKey('@cocreator:example.test'), isFalse);
-        expect(users.values.contains(150), isFalse);
+        expect(users.keys.any(room.creatorUserIds.contains), isFalse);
         expect(users['@admin:example.test'], 100);
         expect((written['events'] as Map)['m.room.name'], 100);
+      },
+    );
+
+    testWidgets(
+      'RV12 keeps a non-creator user at PL 150 when an unrelated permission '
+      'is saved',
+      (tester) async {
+        final writes = <Map<String, dynamic>>[];
+        final room = buildRoom(
+          roomVersion: '12',
+          creatorId: '@creator:example.test',
+          powerLevelsContent: {
+            'state_default': 50,
+            'events_default': 0,
+            'events': {'m.room.name': 50},
+            'users': {
+              '@senior:example.test': 150,
+              '@admin:example.test': 100,
+            },
+          },
+          capturedPowerLevelWrites: writes,
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeDark.theme,
+            home: Scaffold(body: MatrixRoomPermissionsPage(room)),
+          ),
+        );
+        await tester.pump();
+
+        final view = tester.widget<MatrixRoomPermissionsView>(
+          find.byType(MatrixRoomPermissionsView),
+        );
+        view.permissions.firstWhere((p) => p.key == 'm.room.name').powerLevel =
+            100;
+        await tester.runAsync(() => view.setPermissions!(view.permissions));
+
+        expect(writes, hasLength(1));
+        final users = writes.single['users'] as Map<String, dynamic>;
+        // A non-creator at PL 150 is a real power level, not a synthetic
+        // creator entry: saving another permission must not demote them.
+        expect(users['@senior:example.test'], 150);
+        expect(users['@admin:example.test'], 100);
       },
     );
 
