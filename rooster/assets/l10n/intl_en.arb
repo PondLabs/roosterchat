@@ -6921,6 +6921,12 @@
     "type": "text",
     "placeholders": {}
   },
+  "promptProfileVerifyUser": "Verify user",
+  "@promptProfileVerifyUser": {
+    "description": "Button on another user's profile card to start end-to-end encryption verification with them",
+    "type": "text",
+    "placeholders": {}
+  },
   "promptProfileEditProfile": "Edit profile",
   "@promptProfileEditProfile": {
     "description": "Button on the user's own profile card: opens Settings on their profile, where they change what others see",
@@ -7955,9 +7961,77 @@
       "address": {}
     }
   },
+  "errorVerificationQrEmpty": "Enter or load a QR verification payload first.",
+  "@errorVerificationQrEmpty": {
+    "description": "Shown in the no-camera QR verification fallback when the user submits an empty payload field",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorVerificationQrInvalidEncoding": "This QR payload could not be decoded. Paste the complete verification code and try again.",
+  "@errorVerificationQrInvalidEncoding": {
+    "description": "Shown when the pasted QR verification payload is not valid Base64, hexadecimal, or Matrix QR text",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorVerificationQrInvalidHeader": "This is not a valid Matrix verification QR code.",
+  "@errorVerificationQrInvalidHeader": {
+    "description": "Shown when a pasted or loaded QR payload does not start with the Matrix QR verification header",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorVerificationQrUnsupportedVersion": "This Matrix QR code version is not supported.",
+  "@errorVerificationQrUnsupportedVersion": {
+    "description": "Shown when a Matrix QR verification payload uses an unsupported protocol version",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorVerificationQrInvalidMode": "This QR code uses an unsupported verification mode.",
+  "@errorVerificationQrInvalidMode": {
+    "description": "Shown when a Matrix QR verification payload declares an unknown mode byte",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorVerificationQrInvalidSession": "This QR code does not contain a valid verification session ID.",
+  "@errorVerificationQrInvalidSession": {
+    "description": "Shown when a Matrix QR verification payload has a corrupted or missing transaction ID",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorVerificationQrTruncated": "This QR code payload is incomplete or corrupted.",
+  "@errorVerificationQrTruncated": {
+    "description": "Shown when a Matrix QR verification payload is shorter than the required keys and shared secret",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorVerificationQrWrongSession": "This QR code belongs to a different verification request.",
+  "@errorVerificationQrWrongSession": {
+    "description": "Shown when the pasted QR payload's transaction ID does not match the active verification request",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorVerificationSsssUnlockFailed": "Could not unlock secret storage. Check your recovery key or security phrase and try again.",
+  "@errorVerificationSsssUnlockFailed": {
+    "description": "Shown during verification when unlocking cross-signing keys from secret storage fails",
+    "type": "text",
+    "placeholders": {}
+  },
   "messageWaitingOtherDeviceToAccept": "Waiting for the other device to accept the request",
   "@messageWaitingOtherDeviceToAccept": {
     "description": "Message to show while waiting for another device to accept a matrix session verification request",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageWaitingOtherUserToAccept": "Waiting for {username} to accept the verification request",
+  "@messageWaitingOtherUserToAccept": {
+    "description": "Shown while waiting for another Matrix user to accept an in-room key verification request",
+    "type": "text",
+    "placeholders": {
+      "username": {}
+    }
+  },
+  "messageWaitingOtherPartyToConfirm": "Waiting for the other party to confirm…",
+  "@messageWaitingOtherPartyToConfirm": {
+    "description": "Shown after confirming SAS emoji or numbers while waiting for the other side's MAC confirmation",
     "type": "text",
     "placeholders": {}
   },
@@ -7969,9 +8043,23 @@
       "username": {}
     }
   },
+  "messageMatrixUserVerificationRequest": "**{username}** wants to verify your identity",
+  "@messageMatrixUserVerificationRequest": {
+    "description": "Shown when another Matrix user sends an in-room request to verify identities. Supports markdown to emphasise the user ID",
+    "type": "text",
+    "placeholders": {
+      "username": {}
+    }
+  },
   "messageSasEmojiVerificationPrompt": "Check that the emoji are the same, and in the same order as on the other device",
   "@messageSasEmojiVerificationPrompt": {
     "description": "Explains what to look for when verifying using emoji. Needs to portray that the emoji MUST be the same AND in the same order",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageSasDecimalVerificationPrompt": "Check that these numbers match the ones shown on the other device",
+  "@messageSasDecimalVerificationPrompt": {
+    "description": "Shown when verifying a session or user by comparing three decimal numbers",
     "type": "text",
     "placeholders": {}
   },
@@ -7990,6 +8078,158 @@
   "messageVerificationComplete": "Verification Complete!",
   "@messageVerificationComplete": {
     "description": "Message to show when verification was completed successfully, and the session has been verified",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelVerificationQrTitle": "Verify with QR code",
+  "@labelVerificationQrTitle": {
+    "description": "Heading shown on the QR verification step when a QR code can be displayed or entered",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationQrScanPrompt": "Scan this QR code with the other device, or copy the code below if it has no camera.",
+  "@messageVerificationQrScanPrompt": {
+    "description": "Instructions above the QR code during E2EE verification, including the no-camera copy option",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptCopyQrPayload": "Copy QR payload",
+  "@promptCopyQrPayload": {
+    "description": "Button below a verification QR code to copy its encoded payload for devices without a camera",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelVerificationQrNoCameraTitle": "No camera? Enter or load a QR payload",
+  "@labelVerificationQrNoCameraTitle": {
+    "description": "Heading for the desktop and web fallback input where the user pastes or loads a QR verification payload",
+    "type": "text",
+    "placeholders": {}
+  },
+  "placeholderVerificationQrPayload": "Paste QR verification payload",
+  "@placeholderVerificationQrPayload": {
+    "description": "Placeholder inside the text field for pasting a Matrix QR verification payload without a camera",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptVerifyQrPayload": "Verify QR payload",
+  "@promptVerifyQrPayload": {
+    "description": "Button that submits a pasted QR verification payload to complete reciprocation",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptLoadQrPayloadFile": "Load from file",
+  "@promptLoadQrPayloadFile": {
+    "description": "Button in the no-camera QR verification fallback to load a QR payload from a local file",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptVerifyWithEmoji": "Compare emoji instead",
+  "@promptVerifyWithEmoji": {
+    "description": "Button on the QR verification choice screen to switch to SAS emoji comparison",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationQrScannedWaiting": "QR code verified! Confirm on the other device to finish.",
+  "@messageVerificationQrScannedWaiting": {
+    "description": "Shown to the scanning device after submitting a valid QR payload while waiting for the other side to confirm",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationConfirmQrScan": "The other device scanned your QR code. Did it show a verified confirmation?",
+  "@messageVerificationConfirmQrScan": {
+    "description": "Shown to the device displaying the QR code after receiving a valid reciprocate start event",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationConfirmQrScanUser": "{username} scanned your QR code. Did their device show a verified confirmation?",
+  "@messageVerificationConfirmQrScanUser": {
+    "description": "Shown when another user scanned your QR code and you must confirm they saw the verified screen",
+    "type": "text",
+    "placeholders": {
+      "username": {}
+    }
+  },
+  "promptConfirmQrScanMatches": "Yes, it matches",
+  "@promptConfirmQrScanMatches": {
+    "description": "Button to confirm the other side showed a verified screen after scanning your QR code",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRejectQrScan": "No, cancel verification",
+  "@promptRejectQrScan": {
+    "description": "Button to reject QR scan confirmation and cancel the verification",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelVerificationUnlockSsss": "Unlock your cross-signing keys",
+  "@labelVerificationUnlockSsss": {
+    "description": "Heading shown during verification when secret storage must be unlocked to sign the verified user or device",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationUnlockSsss": "Enter your recovery key or security phrase to sign this verification across your devices.",
+  "@messageVerificationUnlockSsss": {
+    "description": "Explains why a recovery key or security phrase is requested during verification",
+    "type": "text",
+    "placeholders": {}
+  },
+  "placeholderVerificationSsssInput": "Recovery key or security phrase",
+  "@placeholderVerificationSsssInput": {
+    "description": "Placeholder in the input field used to unlock secret storage during key verification",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptSkipVerificationSigning": "Skip signing",
+  "@promptSkipVerificationSigning": {
+    "description": "Button to continue verification without unlocking cross-signing secret storage",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationCancelled": "Verification was cancelled.",
+  "@messageVerificationCancelled": {
+    "description": "Shown when either party cancels a key verification session",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationTimedOut": "Verification timed out. Start a new request to try again.",
+  "@messageVerificationTimedOut": {
+    "description": "Shown when a key verification request expires before completion",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationKeyMismatch": "Verification failed because the security keys did not match.",
+  "@messageVerificationKeyMismatch": {
+    "description": "Shown when a key verification is cancelled due to mismatched keys or QR secret",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationSasMismatch": "Verification failed because the emoji or numbers did not match.",
+  "@messageVerificationSasMismatch": {
+    "description": "Shown when a SAS verification is cancelled because the emoji or numbers did not match",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationAcceptedElsewhere": "This verification request was accepted on another device.",
+  "@messageVerificationAcceptedElsewhere": {
+    "description": "Shown when another device of the same account accepted the verification request first",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationUnsupportedMethod": "No compatible verification method was found.",
+  "@messageVerificationUnsupportedMethod": {
+    "description": "Shown when two clients do not share any supported E2EE verification method",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationInvalidSecret": "Verification failed because the QR secret or message was invalid.",
+  "@messageVerificationInvalidSecret": {
+    "description": "Shown when verification is cancelled due to an invalid message or mismatched QR reciprocate secret",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageVerificationFailed": "Verification failed. Please try again.",
+  "@messageVerificationFailed": {
+    "description": "Fallback error message when a key verification fails for an unspecified reason",
     "type": "text",
     "placeholders": {}
   },
