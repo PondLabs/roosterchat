@@ -52,3 +52,24 @@ known and asks again after a minute. `UserColorComponent.onColorChanged` tells
 those widgets to repaint, also when the theme switches between light and dark.
 Places that draw names without listening (thread footers, polls, mention
 pills, notifications) pick a color up the next time they are built.
+
+## Server capabilities and restricted profiles
+
+Before writing or deleting a profile field via
+`PUT`/`DELETE /_matrix/client/v3/profile/{userId}/{keyName}`,
+`MatrixProfileComponent` URL-encodes the field name (`Uri.encodeComponent`) and
+checks the homeserver's `m.profile_fields` capability from
+`GET /_matrix/client/v3/capabilities` (Matrix v1.16):
+
+- When `enabled` is `false`, all field writes and deletions are refused locally
+  (`ProfileFieldNotAllowedException`).
+- When `allowed` is present, only fields in `allowed` may be modified
+  (`disallowed` is ignored per spec).
+- Otherwise, fields listed in `disallowed` are refused.
+- Homeservers that do not advertise `m.profile_fields` remain allowed for
+  backwards compatibility.
+
+When a homeserver answers `GET /_matrix/client/v3/profile/{userId}` with HTTP
+`403` (`M_FORBIDDEN`, Matrix v1.12+), `getProfile` returns a fallback
+`MatrixProfile` marked `accessForbidden: true` without throwing.
+

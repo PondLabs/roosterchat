@@ -25,6 +25,19 @@ import 'package:vodozemac/vodozemac.dart' as vod;
 // ignore: implementation_imports
 import 'package:matrix/src/utils/markdown.dart' as mx_markdown;
 
+/// Thrown when a profile field write or delete is rejected by the homeserver's
+/// `m.profile_fields` capability (Matrix v1.16).
+class ProfileFieldNotAllowedException implements Exception {
+  ProfileFieldNotAllowedException(this.field);
+
+  final String field;
+
+  @override
+  String toString() =>
+      'ProfileFieldNotAllowedException: Profile field "$field" is not '
+      'allowed by server capabilities';
+}
+
 class MatrixProfile
     implements
         Profile,
@@ -39,6 +52,10 @@ class MatrixProfile
   MatrixClient client;
 
   Map<String, dynamic> fields;
+
+  /// True when the server refused access to this profile with HTTP 403
+  /// (`M_FORBIDDEN`, Matrix v1.12+).
+  final bool accessForbidden;
 
   @override
   ImageProvider<Object>? get avatar => profile.avatarUrl != null
@@ -102,6 +119,7 @@ class MatrixProfile
     this.profile, {
     this.precence,
     this.fields = const {},
+    this.accessForbidden = false,
   });
 
   @override
@@ -419,7 +437,75 @@ class MatrixProfileComponent implements UserProfileComponent<MatrixClient> {
   @override
   MatrixClient client;
 
+  matrix.Capabilities? _cachedCapabilities;
+  Future<matrix.Capabilities?>? _pendingCapabilities;
+
   MatrixProfileComponent(this.client);
+
+  /// Returns whether [field] may be created, modified or deleted under the
+  /// Matrix v1.16 `m.profile_fields` capability.
+  static bool isFieldAllowed(
+    String field,
+    matrix.ProfileFieldsCapability? capability,
+  ) {
+    if (capability == null) return true;
+    if (!capability.enabled) return false;
+    final allowed = capability.allowed;
+    if (allowed != null) {
+      return allowed.contains(field);
+    }
+    final disallowed = capability.disallowed;
+    if (disallowed != null) {
+      return !disallowed.contains(field);
+    }
+    return true;
+  }
+
+  static bool _isForbiddenError(Object error) {
+    if (error is matrix.MatrixException) {
+      return error.response?.statusCode == 403 ||
+          error.error == matrix.MatrixError.M_FORBIDDEN ||
+          error.errcode == 'M_FORBIDDEN';
+    }
+    return false;
+  }
+
+  String get _selfUserId =>
+      client.matrixClient.userID ?? client.self!.identifier;
+
+  Future<matrix.Capabilities?> _getCapabilities() async {
+    if (_cachedCapabilities != null) return _cachedCapabilities;
+    final pending = _pendingCapabilities;
+    if (pending != null) return pending;
+
+    final future = () async {
+      try {
+        final caps = await client.matrixClient.getCapabilities();
+        _cachedCapabilities = caps;
+        return caps;
+      } catch (e) {
+        Log.w('Could not fetch server capabilities for m.profile_fields: $e');
+        return null;
+      } finally {
+        _pendingCapabilities = null;
+      }
+    }();
+    _pendingCapabilities = future;
+    return future;
+  }
+
+  /// Checks whether the homeserver's `m.profile_fields` capability permits
+  /// creating, editing or deleting [field].
+  Future<bool> canEditField(String field) async {
+    final caps = await _getCapabilities();
+    return isFieldAllowed(field, caps?.mProfileFields);
+  }
+
+  Future<void> _ensureFieldAllowed(String field) async {
+    if (!await canEditField(field)) {
+      throw ProfileFieldNotAllowedException(field);
+    }
+  }
 
   @override
   Future<Profile> getProfile(String identifier) async {
@@ -430,9 +516,14 @@ class MatrixProfileComponent implements UserProfileComponent<MatrixClient> {
       );
       fields["user_id"] = identifier;
 
-      var precense = await client
-          .getComponent<UserPresenceComponent>()
-          ?.getUserPresence(identifier);
+      UserPresence? precense;
+      try {
+        precense = await client
+            .getComponent<UserPresenceComponent>()
+            ?.getUserPresence(identifier);
+      } catch (e) {
+        Log.i("Could not fetch presence for $identifier: $e");
+      }
 
       if (precense == null || precense.message == null) {
         if (fields.containsKey(statusKey)) {
@@ -453,6 +544,14 @@ class MatrixProfileComponent implements UserProfileComponent<MatrixClient> {
         fields: fields,
       );
     } catch (e, s) {
+      if (_isForbiddenError(e)) {
+        Log.i("Profile access forbidden (403) for $identifier");
+        return MatrixProfile(
+          client,
+          matrix.Profile(userId: identifier),
+          accessForbidden: true,
+        );
+      }
       Log.onError(e, s, content: "Error while fetching profile");
       return MatrixProfile(client, matrix.Profile(userId: identifier));
     }
@@ -471,19 +570,21 @@ class MatrixProfileComponent implements UserProfileComponent<MatrixClient> {
   }
 
   Future<void> setField(String field, dynamic content) async {
+    await _ensureFieldAllowed(field);
     final data = {field: content};
 
     await client.matrixClient.request(
       RequestType.PUT,
-      "/client/v3/profile/${Uri.encodeComponent(client.self!.identifier)}/$field",
+      "/client/v3/profile/${Uri.encodeComponent(_selfUserId)}/${Uri.encodeComponent(field)}",
       data: data,
     );
   }
 
   Future<void> removeField(String field) async {
+    await _ensureFieldAllowed(field);
     await client.matrixClient.request(
       RequestType.DELETE,
-      "/client/v3/profile/${Uri.encodeComponent(client.self!.identifier)}/$field",
+      "/client/v3/profile/${Uri.encodeComponent(_selfUserId)}/${Uri.encodeComponent(field)}",
     );
   }
 
