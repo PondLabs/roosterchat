@@ -18,11 +18,13 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data'; // ROOSTER: MSC4287
 
 import 'package:collection/collection.dart';
 import 'package:vodozemac/vodozemac.dart' as vod;
 
 import 'package:matrix/encryption/encryption.dart';
+import 'package:matrix/encryption/ssss.dart'; // ROOSTER: MSC4287
 import 'package:matrix/encryption/utils/base64_unpadded.dart';
 import 'package:matrix/encryption/utils/outbound_group_session.dart';
 import 'package:matrix/encryption/utils/pickle_key.dart';
@@ -84,6 +86,112 @@ class KeyManager {
   }
 
   bool get enabled => encryption.ssss.isSecret(megolmKey);
+
+  // ROOSTER: Matrix v1.19 (MSC4287). `m.key_backup` holds the user's choice
+  // to use key backup (`{"enabled": bool}`), shared by all their clients;
+  // the backup's key stays in `m.megolm_backup.v1`, in secret storage.
+  KeyBackupContent? get keyBackupPreference {
+    final content = client.accountData[EventTypes.KeyBackup]?.content;
+    return content == null ? null : KeyBackupContent.fromJson(content);
+  }
+
+  /// Whether the account uses key backup: what `m.key_backup` says, or,
+  /// when no client wrote it yet, whether the backup's key is in secret
+  /// storage (`m.megolm_backup.v1`).
+  bool get keyBackupEnabled => keyBackupPreference?.enabled ?? enabled;
+
+  /// Writes the choice to `m.key_backup`, keeping what else it holds.
+  Future<void> setKeyBackupEnabled(bool on) async {
+    final content = keyBackupPreference ?? KeyBackupContent();
+    if (content.enabled == on) return;
+    content.enabled = on;
+    await client.setAccountData(
+      client.userID!,
+      EventTypes.KeyBackup,
+      content.toJson(),
+    );
+  }
+
+  /// The backup on the server (its version, number of keys, etag and
+  /// algorithm), or null when there is none.
+  Future<GetRoomKeysVersionCurrentResponse?> getKeyBackupStatus() async {
+    try {
+      return await getRoomKeysBackupInfo(false);
+    } on MatrixException catch (e) {
+      if (e.error != MatrixError.M_NOT_FOUND) rethrow;
+      _roomKeysVersionCache = null;
+      return null;
+    }
+  }
+
+  /// Creates a backup with a new key kept in [secretStorage] (which must be
+  /// unlocked), or replaces the current one (a rotation): the old version
+  /// is deleted only once the new key is stored, and every key is sent
+  /// again. Storing the key turns `m.key_backup` on ([SSSS.store]).
+  /// Returns the new version.
+  Future<String> createKeyBackup(OpenSSSS secretStorage) async {
+    if (!secretStorage.isUnlocked) {
+      throw InvalidPassphraseException('Secret storage is locked');
+    }
+    final previous = (await getKeyBackupStatus())?.version;
+    final keyObj = vod.PkDecryption();
+    final version = await client.postRoomKeysVersion(
+      BackupAlgorithm.mMegolmBackupV1Curve25519AesSha2,
+      {'public_key': keyObj.publicKey},
+    );
+    _roomKeysVersionCache = null;
+    await secretStorage.store(megolmKey, base64.encode(keyObj.privateKey));
+    if (previous != null && previous != version) {
+      try {
+        await client.deleteRoomKeysVersion(previous);
+      } catch (e, s) {
+        Logs().w('[KeyManager] Could not delete the replaced backup', e, s);
+      }
+    }
+    await client.database.markInboundGroupSessionsAsNeedingUpload();
+    await uploadInboundGroupSessions();
+    return version;
+  }
+
+  /// Deletes the backup on the server, turns key backup off for all the
+  /// account's clients (`m.key_backup`) and empties its key in secret
+  /// storage, which no longer opens anything.
+  Future<void> deleteKeyBackup() async {
+    final info = await getKeyBackupStatus();
+    if (info != null) await client.deleteRoomKeysVersion(info.version);
+    _roomKeysVersionCache = null;
+    await setKeyBackupEnabled(false);
+    if (enabled) await client.setAccountData(client.userID!, megolmKey, {});
+  }
+
+  /// Restores every key in the backup with the backup's own recovery key,
+  /// for an account whose backup key is not in secret storage (only
+  /// `m.key_backup` says there is a backup). Throws
+  /// [InvalidPassphraseException] when it is not this backup's key.
+  Future<void> restoreKeyBackupWithRecoveryKey(String recoveryKey) async {
+    final privateKey = SSSS.decodeRecoveryKey(recoveryKey);
+    final info = await getRoomKeysBackupInfo(false);
+    if (_backupDecryption(privateKey, info) == null) {
+      throw InvalidPassphraseException('Not the key of this backup');
+    }
+    await loadFromResponse(
+      await client.getRoomKeys(info.version),
+      privateKey: privateKey,
+    );
+  }
+
+  vod.PkDecryption? _backupDecryption(
+    Uint8List privateKey,
+    GetRoomKeysVersionCurrentResponse info,
+  ) {
+    final decryption = vod.PkDecryption.fromSecretKey(
+      vod.Curve25519PublicKey.fromBytes(privateKey),
+    );
+    return info.algorithm == BackupAlgorithm.mMegolmBackupV1Curve25519AesSha2 &&
+            info.authData['public_key'] == decryption.publicKey
+        ? decryption
+        : null;
+  }
 
   /// clear all cached inbound group sessions. useful for testing
   void clearInboundGroupSessions() {
@@ -664,22 +772,19 @@ class KeyManager {
     return _roomKeysVersionCache!;
   }
 
-  Future<void> loadFromResponse(RoomKeys keys) async {
-    if (!(await isCached())) {
-      return;
+  // ROOSTER: [privateKey] is the backup's key when it does not come from
+  // secret storage ([restoreKeyBackupWithRecoveryKey]).
+  Future<void> loadFromResponse(RoomKeys keys, {Uint8List? privateKey}) async {
+    if (privateKey == null) {
+      if (!(await isCached())) {
+        return;
+      }
+      privateKey =
+          base64decodeUnpadded((await encryption.ssss.getCached(megolmKey))!);
     }
-    final privateKey =
-        base64decodeUnpadded((await encryption.ssss.getCached(megolmKey))!);
-    final info = await getRoomKeysBackupInfo();
-    String backupPubKey;
-
-    final decryption = vod.PkDecryption.fromSecretKey(
-      vod.Curve25519PublicKey.fromBytes(privateKey),
-    );
-    backupPubKey = decryption.publicKey;
-
-    if (info.algorithm != BackupAlgorithm.mMegolmBackupV1Curve25519AesSha2 ||
-        info.authData['public_key'] != backupPubKey) {
+    final decryption =
+        _backupDecryption(privateKey, await getRoomKeysBackupInfo());
+    if (decryption == null) {
       return;
     }
     for (final roomEntry in keys.rooms.entries) {
@@ -870,6 +975,8 @@ class KeyManager {
         if (!(await isCached())) {
           return; // we can't backup anyways
         }
+        // ROOSTER: MSC4287, the user turned key backup off.
+        if (keyBackupPreference?.enabled == false) return;
         final dbSessions = await database.getInboundGroupSessionsToUpload();
         if (dbSessions.isEmpty) {
           return; // nothing to do

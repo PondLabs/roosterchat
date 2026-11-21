@@ -411,6 +411,12 @@ class SSSS {
     };
     // store the thing in your account data
     await client.setAccountData(client.userID!, type, content);
+    // ROOSTER: Matrix v1.19 (MSC4287): a new backup key (not a copy of it
+    // under another storage key, [add]) turns key backup on in
+    // `m.key_backup` for all the account's clients.
+    if (type == EventTypes.MegolmBackup && !add) {
+      await encryption.keyManager.setKeyBackupEnabled(true);
+    }
     final db = client.database;
     if (cacheTypes.contains(type)) {
       // cache the thing

@@ -355,4 +355,290 @@ void main() {
       expect(decrypted.content['hello'], 'again');
     });
   });
+
+  group('m.key_backup (MSC4287)', tags: 'olm', () {
+    Logs().level = Level.error;
+
+    late Client client;
+    late OpenSSSS storage;
+    late Map<String, Map<String, dynamic>> api;
+    // The fake server's backup: null when there is none.
+    String? serverVersion;
+    String? serverPublicKey;
+    var serverRoomKeys = <String, Object?>{'rooms': {}};
+    const roomId = '!getallkeys726s6s6q:example.com';
+    const sessionId = 'ciM/JWTPrmiWPPZNkRLDPQYf9AW/I46bxyLSr+Bx5oU';
+
+    KeyManager keyManager() => client.encryption!.keyManager;
+    Map<String, Object?>? accountData(String type) =>
+        client.accountData[type]?.content;
+
+    setUpAll(() async {
+      client = await getClient();
+      await client.abortSync();
+      storage = client.encryption!.ssss.open();
+      await storage.unlock(recoveryKey: ssssKey);
+      api = FakeMatrixApi.currentApi!.api;
+      serverVersion = '5';
+      serverPublicKey = 'GXYaxqhNhUK28zUdxOmEsFRguz+PzBsDlTLlF0O0RkM';
+      final getAll = api['GET']!['/client/v3/room_keys/keys?version=5'];
+      api['GET']!['/client/v3/room_keys/version'] = (_) => serverVersion == null
+          ? {'errcode': 'M_NOT_FOUND', 'error': 'No current backup version'}
+          : {
+              'algorithm': AlgorithmTypes.megolmBackupV1Curve25519AesSha2,
+              'auth_data': {'public_key': serverPublicKey},
+              'count': 42,
+              'etag': 'etag-$serverVersion',
+              'version': serverVersion,
+            };
+      api['POST']!['/client/v3/room_keys/version'] = (req) {
+        serverPublicKey = json.decode(req)['auth_data']['public_key'];
+        serverVersion = '${int.parse(serverVersion ?? '5') + 1}';
+        return {'version': serverVersion};
+      };
+      for (var v = 5; v < 10; v++) {
+        api['DELETE']!['/client/v3/room_keys/version/$v'] = (_) {
+          if (serverVersion == '$v') serverVersion = null;
+          return {};
+        };
+        api['PUT']!['/client/v3/room_keys/keys?version=$v'] =
+            (_) => {'etag': 'up', 'count': 1};
+        api['GET']!['/client/v3/room_keys/keys?version=$v'] =
+            v == 5 ? getAll! : (_) => serverRoomKeys;
+      }
+    });
+
+    tearDownAll(() => client.dispose(closeDatabase: true));
+
+    Future<String> storedBackupKey() => client.encryption!.ssss.getStored(
+          EventTypes.MegolmBackup,
+          storage.keyId,
+          storage.privateKey!,
+        );
+
+    String publicKeyOf(String secret) => vod.PkDecryption.fromSecretKey(
+          vod.Curve25519PublicKey.fromBase64(secret),
+        ).publicKey;
+
+    test('restores with only m.megolm_backup.v1 (an older client)', () async {
+      expect(accountData(EventTypes.KeyBackup), null);
+      expect(accountData(EventTypes.MegolmBackup)?['encrypted'], isA<Map>());
+      expect(keyManager().keyBackupPreference, null);
+      expect(keyManager().keyBackupEnabled, true);
+
+      await storage.maybeCacheAll();
+      expect(await keyManager().isCached(), true);
+      expect(keyManager().getInboundGroupSession(roomId, sessionId), null);
+      await keyManager().loadAllKeys();
+      expect(
+        keyManager().getInboundGroupSession(roomId, sessionId)?.sessionId,
+        sessionId,
+      );
+    });
+
+    test('shows the backup on the server', () async {
+      final status = await keyManager().getKeyBackupStatus();
+      expect(status!.version, '5');
+      expect(status.count, 42);
+      expect(status.etag, 'etag-5');
+      expect(
+        status.algorithm,
+        BackupAlgorithm.mMegolmBackupV1Curve25519AesSha2,
+      );
+    });
+
+    test('rotation writes m.key_backup and m.megolm_backup.v1', () async {
+      FakeMatrixApi.calledEndpoints.clear();
+      final version = await keyManager().createKeyBackup(storage);
+      expect(version, '6');
+      expect(serverVersion, '6');
+      // the old backup goes only once its key is replaced
+      expect(
+        FakeMatrixApi.calledEndpoints
+            .containsKey('/client/v3/room_keys/version/5'),
+        true,
+      );
+      expect(accountData(EventTypes.KeyBackup), {'enabled': true});
+      final secret = await storedBackupKey();
+      expect(publicKeyOf(secret), serverPublicKey);
+      expect(await client.encryption!.ssss.getCached(megolmKey), secret);
+      expect(keyManager().keyBackupEnabled, true);
+      // every key goes to the new backup
+      expect(
+        FakeMatrixApi.calledEndpoints
+            .containsKey('/client/v3/room_keys/keys?version=6'),
+        true,
+      );
+    });
+
+    test('creation without a backup writes both too', () async {
+      serverVersion = null;
+      await client.setAccountData(client.userID!, EventTypes.KeyBackup, {});
+      FakeMatrixApi.calledEndpoints.clear();
+      expect(await keyManager().getKeyBackupStatus(), null);
+      final version = await keyManager().createKeyBackup(storage);
+      expect(version, '6');
+      expect(
+        FakeMatrixApi.calledEndpoints.keys
+            .where((k) => k.startsWith('/client/v3/room_keys/version/')),
+        isEmpty,
+      );
+      expect(accountData(EventTypes.KeyBackup), {'enabled': true});
+      expect(publicKeyOf(await storedBackupKey()), serverPublicKey);
+    });
+
+    test('a locked secret storage cannot create a backup', () async {
+      final locked = client.encryption!.ssss.open();
+      FakeMatrixApi.calledEndpoints.clear();
+      await expectLater(
+        keyManager().createKeyBackup(locked),
+        throwsA(isA<InvalidPassphraseException>()),
+      );
+      expect(
+        FakeMatrixApi.calledEndpoints
+            .containsKey('/client/v3/room_keys/version'),
+        false,
+      );
+    });
+
+    test('only a new backup key turns m.key_backup on', () async {
+      final secret = await storedBackupKey();
+      await keyManager().setKeyBackupEnabled(false);
+      await storage.store(megolmKey, secret, add: true);
+      expect(accountData(EventTypes.KeyBackup), {'enabled': false});
+      await storage.store(megolmKey, secret);
+      expect(accountData(EventTypes.KeyBackup), {'enabled': true});
+    });
+
+    test('keeps the other fields of m.key_backup', () async {
+      await client.setAccountData(client.userID!, EventTypes.KeyBackup, {
+        'enabled': true,
+        'org.example.extra': 1,
+      });
+      await keyManager().setKeyBackupEnabled(false);
+      expect(
+        accountData(EventTypes.KeyBackup),
+        {'enabled': false, 'org.example.extra': 1},
+      );
+      await client.setAccountData(
+        client.userID!,
+        EventTypes.KeyBackup,
+        {'enabled': true},
+      );
+    });
+
+    test('no keys are sent while m.key_backup is off', () async {
+      final session = vod.GroupSession();
+      final inbound = vod.InboundGroupSession(session.sessionKey);
+      await keyManager().setInboundGroupSession(
+        '!someroom:example.org',
+        inbound.sessionId,
+        client.identityKey,
+        {
+          'algorithm': AlgorithmTypes.megolmV1AesSha2,
+          'room_id': '!someroom:example.org',
+          'session_id': inbound.sessionId,
+          'session_key': inbound.exportAt(0),
+          'sender_key': client.identityKey,
+        },
+        forwarded: true,
+      );
+      await keyManager().setKeyBackupEnabled(false);
+      FakeMatrixApi.calledEndpoints.clear();
+      await keyManager().uploadInboundGroupSessions();
+      expect(
+        FakeMatrixApi.calledEndpoints
+            .containsKey('/client/v3/room_keys/keys?version=$serverVersion'),
+        false,
+      );
+      await keyManager().setKeyBackupEnabled(true);
+      await keyManager().uploadInboundGroupSessions();
+      expect(
+        FakeMatrixApi.calledEndpoints
+            .containsKey('/client/v3/room_keys/keys?version=$serverVersion'),
+        true,
+      );
+    });
+
+    test('deletion turns m.key_backup off and empties the key', () async {
+      final version = serverVersion;
+      FakeMatrixApi.calledEndpoints.clear();
+      await keyManager().deleteKeyBackup();
+      expect(
+        FakeMatrixApi.calledEndpoints
+            .containsKey('/client/v3/room_keys/version/$version'),
+        true,
+      );
+      expect(serverVersion, null);
+      expect(accountData(EventTypes.KeyBackup), {'enabled': false});
+      expect(accountData(EventTypes.MegolmBackup), isEmpty);
+      expect(keyManager().enabled, false);
+      expect(keyManager().keyBackupEnabled, false);
+      expect(await keyManager().isCached(), false);
+      expect(await keyManager().getKeyBackupStatus(), null);
+    });
+
+    test('restores with only m.key_backup and the backup key', () async {
+      // Another client's backup, whose key is not in secret storage.
+      final backupKey = vod.PkDecryption();
+      serverVersion = '9';
+      serverPublicKey = backupKey.publicKey;
+      await keyManager().setKeyBackupEnabled(true);
+      expect(accountData(EventTypes.MegolmBackup), isEmpty);
+      expect(keyManager().keyBackupEnabled, true);
+
+      final session = vod.GroupSession();
+      final inbound = vod.InboundGroupSession(session.sessionKey);
+      const room = '!restored:example.org';
+      final (ciphertext, mac, ephemeral) = vod.PkEncryption.fromPublicKey(
+        vod.Curve25519PublicKey.fromBase64(backupKey.publicKey),
+      )
+          .encrypt(
+            json.encode({
+              'algorithm': AlgorithmTypes.megolmV1AesSha2,
+              'forwarding_curve25519_key_chain': [],
+              'sender_key': client.identityKey,
+              'sender_claimed_keys': {'ed25519': client.fingerprintKey},
+              'session_key': inbound.exportAtFirstKnownIndex(),
+            }),
+          )
+          .toBase64();
+      serverRoomKeys = {
+        'rooms': {
+          room: {
+            'sessions': {
+              inbound.sessionId: {
+                'first_message_index': 0,
+                'forwarded_count': 0,
+                'is_verified': false,
+                'session_data': {
+                  'ephemeral': ephemeral,
+                  'ciphertext': ciphertext,
+                  'mac': mac,
+                },
+              },
+            },
+          },
+        },
+      };
+
+      final wrongKey = SSSS.encodeRecoveryKey(vod.PkDecryption().privateKey);
+      await expectLater(
+        keyManager().restoreKeyBackupWithRecoveryKey(wrongKey),
+        throwsA(isA<InvalidPassphraseException>()),
+      );
+      expect(
+        keyManager().getInboundGroupSession(room, inbound.sessionId),
+        null,
+      );
+
+      await keyManager().restoreKeyBackupWithRecoveryKey(
+        SSSS.encodeRecoveryKey(backupKey.privateKey),
+      );
+      expect(
+        keyManager().getInboundGroupSession(room, inbound.sessionId)?.sessionId,
+        inbound.sessionId,
+      );
+    });
+  });
 }
