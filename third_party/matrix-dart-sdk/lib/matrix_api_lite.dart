@@ -53,6 +53,8 @@ export 'matrix_api_lite/model/events/tombstone_content.dart';
 export 'matrix_api_lite/model/matrix_event.dart';
 export 'matrix_api_lite/model/matrix_exception.dart';
 export 'matrix_api_lite/model/matrix_keys.dart';
+// ROOSTER: Matrix v1.18-v1.19 event and account data models (T1.1b).
+export 'matrix_api_lite/model/matrix_v1_19_models.dart';
 export 'matrix_api_lite/model/message_types.dart';
 export 'matrix_api_lite/model/presence.dart';
 export 'matrix_api_lite/model/presence_content.dart';
