@@ -250,63 +250,122 @@ class GetWellknownSupportResponse {
 @_NameSource('generated')
 class GetAuthMetadataResponse {
   GetAuthMetadataResponse({
+    // ROOSTER: Matrix v1.15-v1.18 auth_metadata fields (MSC2965/MSC4191/RFC8628/CIMD).
+    this.accountManagementActionsSupported,
+    this.accountManagementUri,
     required this.authorizationEndpoint,
+    this.clientIdMetadataDocumentSupported,
     required this.codeChallengeMethodsSupported,
+    this.deviceAuthorizationEndpoint,
     required this.grantTypesSupported,
     required this.issuer,
     this.promptValuesSupported,
-    required this.registrationEndpoint,
+    this.registrationEndpoint,
     required this.responseModesSupported,
     required this.responseTypesSupported,
-    required this.revocationEndpoint,
+    this.revocationEndpoint,
+    this.scopesSupported,
     required this.tokenEndpoint,
   });
 
+  // ROOSTER: Parse Matrix v1.15-v1.18 fields safely when absent/null and ignore unknown keys.
   GetAuthMetadataResponse.fromJson(Map<String, Object?> json)
-      : authorizationEndpoint =
+      : accountManagementActionsSupported = ((v) => v is List
+            ? v.whereType<String>().toList()
+            : null)(json['account_management_actions_supported']),
+        accountManagementUri = ((v) => v is String && v.isNotEmpty
+            ? Uri.tryParse(v)
+            : null)(json['account_management_uri']),
+        authorizationEndpoint =
             Uri.parse(json['authorization_endpoint'] as String),
-        codeChallengeMethodsSupported =
-            (json['code_challenge_methods_supported'] as List)
-                .map((v) => v as String)
-                .toList(),
-        grantTypesSupported = (json['grant_types_supported'] as List)
-            .map((v) => v as String)
-            .toList(),
+        clientIdMetadataDocumentSupported = ((v) => v is bool ? v : null)(
+            json['client_id_metadata_document_supported']),
+        codeChallengeMethodsSupported = ((v) => v is List
+            ? v.whereType<String>().toList()
+            : <String>[])(json['code_challenge_methods_supported']),
+        deviceAuthorizationEndpoint = ((v) => v is String && v.isNotEmpty
+            ? Uri.tryParse(v)
+            : null)(json['device_authorization_endpoint']),
+        grantTypesSupported = ((v) => v is List
+            ? v.whereType<String>().toList()
+            : <String>[])(json['grant_types_supported']),
         issuer = Uri.parse(json['issuer'] as String),
-        promptValuesSupported = ((v) => v != null
-            ? (v as List).map((v) => v as String).toList()
+        promptValuesSupported = ((v) => v is List
+            ? v.whereType<String>().toList()
             : null)(json['prompt_values_supported']),
-        registrationEndpoint =
-            Uri.parse(json['registration_endpoint'] as String),
-        responseModesSupported = (json['response_modes_supported'] as List)
-            .map((v) => v as String)
-            .toList(),
-        responseTypesSupported = (json['response_types_supported'] as List)
-            .map((v) => v as String)
-            .toList(),
-        revocationEndpoint = Uri.parse(json['revocation_endpoint'] as String),
+        registrationEndpoint = ((v) => v is String && v.isNotEmpty
+            ? Uri.tryParse(v)
+            : null)(json['registration_endpoint']),
+        responseModesSupported = ((v) => v is List
+            ? v.whereType<String>().toList()
+            : <String>[])(json['response_modes_supported']),
+        responseTypesSupported = ((v) => v is List
+            ? v.whereType<String>().toList()
+            : <String>[])(json['response_types_supported']),
+        revocationEndpoint = ((v) => v is String && v.isNotEmpty
+            ? Uri.tryParse(v)
+            : null)(json['revocation_endpoint']),
+        scopesSupported = ((v) => v is List
+            ? v.whereType<String>().toList()
+            : null)(json['scopes_supported']),
         tokenEndpoint = Uri.parse(json['token_endpoint'] as String);
   Map<String, Object?> toJson() {
+    // ROOSTER: Serialize optional Matrix v1.15-v1.18 auth_metadata fields when present.
+    final accountManagementActionsSupported =
+        this.accountManagementActionsSupported;
+    final accountManagementUri = this.accountManagementUri;
+    final clientIdMetadataDocumentSupported =
+        this.clientIdMetadataDocumentSupported;
+    final deviceAuthorizationEndpoint = this.deviceAuthorizationEndpoint;
     final promptValuesSupported = this.promptValuesSupported;
+    final registrationEndpoint = this.registrationEndpoint;
+    final revocationEndpoint = this.revocationEndpoint;
+    final scopesSupported = this.scopesSupported;
     return {
+      if (accountManagementActionsSupported != null)
+        'account_management_actions_supported':
+            accountManagementActionsSupported.map((v) => v).toList(),
+      if (accountManagementUri != null)
+        'account_management_uri': accountManagementUri.toString(),
       'authorization_endpoint': authorizationEndpoint.toString(),
+      if (clientIdMetadataDocumentSupported != null)
+        'client_id_metadata_document_supported':
+            clientIdMetadataDocumentSupported,
       'code_challenge_methods_supported':
           codeChallengeMethodsSupported.map((v) => v).toList(),
+      if (deviceAuthorizationEndpoint != null)
+        'device_authorization_endpoint': deviceAuthorizationEndpoint.toString(),
       'grant_types_supported': grantTypesSupported.map((v) => v).toList(),
       'issuer': issuer.toString(),
       if (promptValuesSupported != null)
         'prompt_values_supported': promptValuesSupported.map((v) => v).toList(),
-      'registration_endpoint': registrationEndpoint.toString(),
+      if (registrationEndpoint != null)
+        'registration_endpoint': registrationEndpoint.toString(),
       'response_modes_supported': responseModesSupported.map((v) => v).toList(),
       'response_types_supported': responseTypesSupported.map((v) => v).toList(),
-      'revocation_endpoint': revocationEndpoint.toString(),
+      if (revocationEndpoint != null)
+        'revocation_endpoint': revocationEndpoint.toString(),
+      if (scopesSupported != null)
+        'scopes_supported': scopesSupported.map((v) => v).toList(),
       'token_endpoint': tokenEndpoint.toString(),
     };
   }
 
+  /// List of account management actions supported by the server (Matrix v1.15, MSC4191).
+  // ROOSTER: Matrix v1.15 (MSC4191) field.
+  List<String>? accountManagementActionsSupported;
+
+  /// URL where the user can manage their account (Matrix v1.15, MSC4191).
+  // ROOSTER: Matrix v1.15 (MSC4191) field.
+  Uri? accountManagementUri;
+
   /// URL of the authorization endpoint, necessary to use the authorization code
   /// grant.
   Uri authorizationEndpoint;
+
+  /// Whether the authorization server supports OAuth 2.0 Client ID Metadata Documents (CIMD).
+  // ROOSTER: Matrix v1.17+ CIMD support flag.
+  bool? clientIdMetadataDocumentSupported;
 
   /// List of OAuth 2.0 Proof Key for Code Exchange (PKCE) code challenge methods
   /// that the server supports at the authorization endpoint.
@@ -314,6 +373,10 @@ class GetAuthMetadataResponse {
   /// This array MUST contain at least the `S256` value, for improved security in
   /// the authorization code grant.
   List<String> codeChallengeMethodsSupported;
+
+  /// URL of the OAuth 2.0 device authorization endpoint (RFC 8628, Matrix v1.18).
+  // ROOSTER: Matrix v1.18 RFC 8628 device authorization endpoint.
+  Uri? deviceAuthorizationEndpoint;
 
   /// List of OAuth 2.0 grant type strings that the server supports at the token
   /// endpoint.
@@ -340,8 +403,9 @@ class GetAuthMetadataResponse {
   List<String>? promptValuesSupported;
 
   /// URL of the client registration endpoint, necessary to perform dynamic
-  /// registration of a client.
-  Uri registrationEndpoint;
+  /// registration of a client. Optional when the server uses CIMD or pre-registered clients.
+  // ROOSTER: Optional per RFC 8414 and Matrix v1.15+ (servers may omit DCR).
+  Uri? registrationEndpoint;
 
   /// List of OAuth 2.0 response mode strings that the server supports at the
   /// authorization endpoint.
@@ -358,8 +422,13 @@ class GetAuthMetadataResponse {
   List<String> responseTypesSupported;
 
   /// URL of the revocation endpoint, necessary to log out a client by invalidating
-  /// its access and refresh tokens.
-  Uri revocationEndpoint;
+  /// its access and refresh tokens. Optional per RFC 8414.
+  // ROOSTER: Optional per RFC 8414.
+  Uri? revocationEndpoint;
+
+  /// List of OAuth 2.0 scope values supported by the server (RFC 8414).
+  // ROOSTER: RFC 8414 / Matrix v1.15+ supported scopes.
+  List<String>? scopesSupported;
 
   /// URL of the token endpoint, necessary to use the authorization code grant and
   /// the refresh token grant.
@@ -370,9 +439,16 @@ class GetAuthMetadataResponse {
       identical(this, other) ||
       (other is GetAuthMetadataResponse &&
           other.runtimeType == runtimeType &&
+          // ROOSTER: Compare Matrix v1.15-v1.18 auth_metadata fields.
+          other.accountManagementActionsSupported ==
+              accountManagementActionsSupported &&
+          other.accountManagementUri == accountManagementUri &&
           other.authorizationEndpoint == authorizationEndpoint &&
+          other.clientIdMetadataDocumentSupported ==
+              clientIdMetadataDocumentSupported &&
           other.codeChallengeMethodsSupported ==
               codeChallengeMethodsSupported &&
+          other.deviceAuthorizationEndpoint == deviceAuthorizationEndpoint &&
           other.grantTypesSupported == grantTypesSupported &&
           other.issuer == issuer &&
           other.promptValuesSupported == promptValuesSupported &&
@@ -380,12 +456,18 @@ class GetAuthMetadataResponse {
           other.responseModesSupported == responseModesSupported &&
           other.responseTypesSupported == responseTypesSupported &&
           other.revocationEndpoint == revocationEndpoint &&
+          other.scopesSupported == scopesSupported &&
           other.tokenEndpoint == tokenEndpoint);
 
   @dart.override
   int get hashCode => Object.hash(
+        // ROOSTER: Hash Matrix v1.15-v1.18 auth_metadata fields.
+        accountManagementActionsSupported,
+        accountManagementUri,
         authorizationEndpoint,
+        clientIdMetadataDocumentSupported,
         codeChallengeMethodsSupported,
+        deviceAuthorizationEndpoint,
         grantTypesSupported,
         issuer,
         promptValuesSupported,
@@ -393,6 +475,7 @@ class GetAuthMetadataResponse {
         responseModesSupported,
         responseTypesSupported,
         revocationEndpoint,
+        scopesSupported,
         tokenEndpoint,
       );
 }
