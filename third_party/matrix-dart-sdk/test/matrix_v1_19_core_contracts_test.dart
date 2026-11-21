@@ -476,4 +476,237 @@ void main() {
       expect(unknown.error, MatrixError.M_UNKNOWN);
     });
   });
+
+  group('4. Global HTTP Retry-After parsing (v1.10 MSC4041)', () {
+    final fixedNow = DateTime.utc(2026, 10, 21, 7, 28, 0);
+
+    MatrixApi apiReturning(
+      Map<String, Object?> body, {
+      int statusCode = 429,
+      Map<String, String> headers = const {},
+      DateTime? now,
+    }) {
+      return MatrixApi(
+        homeserver: Uri.parse('https://hs.example.test'),
+        accessToken: 'tok',
+        now: () => now ?? fixedNow,
+        httpClient: MockClient((_) async {
+          return http.Response(
+            jsonEncode(body),
+            statusCode,
+            headers: {'content-type': 'application/json', ...headers},
+          );
+        }),
+      );
+    }
+
+    test(
+        'MatrixApi.request parses delta-seconds Retry-After case-insensitively',
+        () async {
+      for (final header in [
+        {'Retry-After': '12'},
+        {'retry-after': '12'},
+        {'RETRY-AFTER': '  12  '},
+      ]) {
+        final api = apiReturning(
+          {'errcode': 'M_LIMIT_EXCEEDED', 'error': 'Too Many Requests'},
+          headers: header,
+        );
+        await expectLater(
+          () => api.request(RequestType.GET, '/client/v3/account/whoami'),
+          throwsA(
+            isA<MatrixException>()
+                .having((e) => e.error, 'error', MatrixError.M_LIMIT_EXCEEDED)
+                .having((e) => e.retryAfterMs, 'retryAfterMs', 12000)
+                .having(
+                  (e) => e.raw.containsKey('retry_after_ms'),
+                  'raw keeps original body',
+                  isFalse,
+                ),
+          ),
+        );
+      }
+
+      final zeroApi = apiReturning(
+        {'errcode': 'M_LIMIT_EXCEEDED', 'error': 'Too Many Requests'},
+        headers: {'Retry-After': '0'},
+      );
+      await expectLater(
+        () => zeroApi.request(RequestType.GET, '/client/v3/account/whoami'),
+        throwsA(
+          isA<MatrixException>().having((e) => e.retryAfterMs, 'zero', 0),
+        ),
+      );
+    });
+
+    test(
+      'JSON retry_after_ms takes precedence over Retry-After header; null body falls back',
+      () async {
+        final bodyWinsApi = apiReturning(
+          {
+            'errcode': 'M_LIMIT_EXCEEDED',
+            'error': 'Too Many Requests',
+            'retry_after_ms': 500,
+          },
+          headers: {'Retry-After': '12'},
+        );
+        await expectLater(
+          () =>
+              bodyWinsApi.request(RequestType.GET, '/client/v3/account/whoami'),
+          throwsA(
+            isA<MatrixException>()
+                .having((e) => e.retryAfterMs, 'body wins', 500),
+          ),
+        );
+
+        final nullBodyApi = apiReturning(
+          {
+            'errcode': 'M_LIMIT_EXCEEDED',
+            'error': 'Too Many Requests',
+            'retry_after_ms': null,
+          },
+          headers: {'Retry-After': '12'},
+        );
+        await expectLater(
+          () =>
+              nullBodyApi.request(RequestType.GET, '/client/v3/account/whoami'),
+          throwsA(
+            isA<MatrixException>()
+                .having((e) => e.retryAfterMs, 'fallback to header', 12000),
+          ),
+        );
+      },
+    );
+
+    test(
+      'MatrixApi.request parses RFC 7231 HTTP-date formats (IMF-fixdate, RFC 850, asctime, leap year, past)',
+      () async {
+        final cases = <(String, DateTime, int)>[
+          ('Wed, 21 Oct 2026 07:28:12 GMT', fixedNow, 12000),
+          (
+            'Sun, 6 Nov 2026 08:49:49 GMT',
+            DateTime.utc(2026, 11, 6, 8, 49, 37),
+            12000,
+          ),
+          ('Wednesday, 21-Oct-26 07:28:12 GMT', fixedNow, 12000),
+          ('Wed Oct 21 07:28:12 2026', fixedNow, 12000),
+          (
+            'Sun Nov  6 08:49:49 2026',
+            DateTime.utc(2026, 11, 6, 8, 49, 37),
+            12000,
+          ),
+          (
+            'Tue, 29 Feb 2028 12:00:15 GMT',
+            DateTime.utc(2028, 2, 29, 12, 0, 0),
+            15000,
+          ),
+          // Past HTTP-date (including RFC 850 50-year rollover to 1994) clamps to 0.
+          ('Wed, 21 Oct 2026 07:27:00 GMT', fixedNow, 0),
+          ('Sunday, 06-Nov-94 08:49:37 GMT', fixedNow, 0),
+        ];
+
+        for (final (headerValue, clockNow, expectedMs) in cases) {
+          final api = apiReturning(
+            {'errcode': 'M_LIMIT_EXCEEDED', 'error': 'Rate limited'},
+            headers: {'Retry-After': headerValue},
+            now: clockNow,
+          );
+          await expectLater(
+            () => api.request(RequestType.GET, '/client/v3/account/whoami'),
+            throwsA(
+              isA<MatrixException>().having(
+                (e) => e.retryAfterMs,
+                'retryAfterMs for "$headerValue"',
+                expectedMs,
+              ),
+            ),
+          );
+        }
+      },
+    );
+
+    test(
+      'MatrixApi.unexpectedResponse extracts Retry-After for generated Api endpoints',
+      () async {
+        final deltaApi = apiReturning(
+          {'errcode': 'M_LIMIT_EXCEEDED', 'error': 'Too Many Requests'},
+          headers: {'Retry-After': '12'},
+        );
+        await expectLater(
+          () => deltaApi.getCapabilities(),
+          throwsA(
+            isA<MatrixException>()
+                .having((e) => e.error, 'error', MatrixError.M_LIMIT_EXCEEDED)
+                .having((e) => e.retryAfterMs, 'delta seconds', 12000),
+          ),
+        );
+
+        final dateApi = apiReturning(
+          {'errcode': 'M_LIMIT_EXCEEDED', 'error': 'Too Many Requests'},
+          headers: {'retry-after': 'Wed, 21 Oct 2026 07:28:15 GMT'},
+        );
+        await expectLater(
+          () => dateApi.getCapabilities(),
+          throwsA(
+            isA<MatrixException>()
+                .having((e) => e.retryAfterMs, 'HTTP-date', 15000),
+          ),
+        );
+      },
+    );
+
+    test(
+      'Malformed or negative Retry-After headers are ignored without throwing',
+      () async {
+        const invalidValues = [
+          '',
+          '   ',
+          '-1',
+          '-12',
+          '-0',
+          '+12',
+          '12.5',
+          '12s',
+          'not-a-date',
+          'Foo, 21 Oct 2026 07:28:12 GMT',
+          'Wed, 30 Feb 2026 07:28:12 GMT',
+          'Sat, 29 Feb 2025 07:28:12 GMT',
+          'Wed, 21 Oct 2026 25:00:00 GMT',
+          'Wed, 21 Oct 2026 07:60:00 GMT',
+          'Wed, 21 Oct 2026 07:28:12 PST',
+          '99999999999999999999999999',
+          '9223372036854775807',
+        ];
+
+        for (final bad in invalidValues) {
+          final api = apiReturning(
+            {'errcode': 'M_LIMIT_EXCEEDED', 'error': 'Rate limited'},
+            headers: {'Retry-After': bad},
+          );
+          await expectLater(
+            () => api.request(RequestType.GET, '/client/v3/account/whoami'),
+            throwsA(
+              isA<MatrixException>()
+                  .having((e) => e.error, 'error', MatrixError.M_LIMIT_EXCEEDED)
+                  .having(
+                    (e) => e.retryAfterMs,
+                    'ignored "$bad"',
+                    isNull,
+                  ),
+            ),
+          );
+
+          final direct = MatrixException(
+            http.Response(
+              jsonEncode({'errcode': 'M_LIMIT_EXCEEDED', 'error': 'Limited'}),
+              429,
+              headers: {'Retry-After': bad},
+            ),
+            now: () => fixedNow,
+          );
+          expect(direct.retryAfterMs, isNull, reason: 'Direct "$bad"');
+        }
+      },
+    );
+  });
 }

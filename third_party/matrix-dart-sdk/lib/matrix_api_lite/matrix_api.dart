@@ -45,12 +45,19 @@ class MatrixApi extends Api {
 
   set accessToken(String? token) => bearerToken = token;
 
+  // ROOSTER: Injectable clock for deterministic HTTP Retry-After date parsing.
+  final DateTime Function() _now;
+
   @override
   Never unexpectedResponse(http.BaseResponse response, Uint8List body) {
     MatrixException? matrixException;
     try {
-      matrixException =
-          MatrixException.fromJson(json.decode(utf8.decode(body)));
+      // ROOSTER: Extract HTTP Retry-After header (v1.10 MSC4041) alongside JSON error body.
+      matrixException = MatrixException.fromJson(
+        json.decode(utf8.decode(body)) as Map<String, Object?>,
+        headers: response.headers,
+        now: _now,
+      );
     } catch (_) {} // Is not a MatrixException!
 
     // Throw MatrixException if response contains 'errcode' (error) or
@@ -74,7 +81,10 @@ class MatrixApi extends Api {
     Uri? homeserver,
     String? accessToken,
     super.httpClient,
-  }) : super(baseUri: homeserver, bearerToken: accessToken);
+    // ROOSTER: Injectable clock for deterministic Retry-After HTTP-date parsing.
+    DateTime Function()? now,
+  })  : _now = now ?? DateTime.now,
+        super(baseUri: homeserver, bearerToken: accessToken);
 
   /// Used for all Matrix json requests using the [c2s API](https://matrix.org/docs/spec/client_server/r0.6.0.html).
   ///
@@ -153,7 +163,8 @@ class MatrixApi extends Api {
         as Map<String, Object?>?; // May throw FormatException
 
     if (resp.statusCode >= 400 && resp.statusCode < 500) {
-      throw MatrixException(resp);
+      // ROOSTER: Pass injectable clock so HTTP Retry-After dates parse deterministically.
+      throw MatrixException(resp, now: _now);
     }
 
     return jsonResp!;
