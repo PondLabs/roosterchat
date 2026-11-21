@@ -26,6 +26,57 @@ import 'package:tiamat/config/style/theme_extensions.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class MatrixHtmlParser {
+  static final RegExp _mxReplyTagPattern = RegExp(
+    r'<\s*(/?)\s*mx-reply(?=(?:\s|/?>))[^>]*>',
+    caseSensitive: false,
+  );
+
+  /// Removes legacy Matrix `<mx-reply>...</mx-reply>` fallback blocks while
+  /// preserving the reply body. Malformed or unmatched `<mx-reply>` tags are
+  /// stripped without throwing or dropping the remaining text.
+  static String stripMxReply(String html) {
+    if (html.isEmpty) return html;
+    final matches = _mxReplyTagPattern.allMatches(html).toList();
+    if (matches.isEmpty) return html;
+
+    final openStack = <(int start, int end)>[];
+    final removals = <(int start, int end)>[];
+
+    for (final match in matches) {
+      final full = match.group(0)!;
+      final isClosing = match.group(1) == '/';
+      final isSelfClosing = !isClosing && full.endsWith('/>');
+
+      if (isSelfClosing) {
+        removals.add((match.start, match.end));
+      } else if (!isClosing) {
+        openStack.add((match.start, match.end));
+      } else if (openStack.isNotEmpty) {
+        final open = openStack.removeLast();
+        removals.add((open.$1, match.end));
+      } else {
+        removals.add((match.start, match.end));
+      }
+    }
+
+    removals.addAll(openStack);
+    removals.sort((a, b) => a.$1.compareTo(b.$1));
+
+    final buffer = StringBuffer();
+    var cursor = 0;
+    for (final range in removals) {
+      if (range.$2 <= cursor) continue;
+      if (range.$1 > cursor) {
+        buffer.write(html.substring(cursor, range.$1));
+      }
+      cursor = range.$2;
+    }
+    if (cursor < html.length) {
+      buffer.write(html.substring(cursor));
+    }
+    return buffer.toString();
+  }
+
   static Widget parse(String text, MatrixClient client, Room? room,
       {bool mentionsRoom = true}) {
     return MatrixHtmlState(
@@ -113,7 +164,9 @@ class _MatrixHtmlStateState extends State<MatrixHtmlState> {
     final SpoilerHtmlExtension spoiler =
         SpoilerHtmlExtension(hideSpoiler, onTap);
 
-    var document = html_parser.parse(widget.text);
+    final sanitizedText = MatrixHtmlParser.stripMxReply(widget.text);
+
+    var document = html_parser.parse(sanitizedText);
     bool big = shouldDoBigEmoji(document);
 
     var theme = TextTheme.of(context);
@@ -124,7 +177,7 @@ class _MatrixHtmlStateState extends State<MatrixHtmlState> {
     var linkify = LinkifyHtmlExtension(widget.client, widget.room, openLink);
 
     var result = Html(
-      data: widget.text,
+      data: sanitizedText,
       extensions: [
         extension,
         spoiler,

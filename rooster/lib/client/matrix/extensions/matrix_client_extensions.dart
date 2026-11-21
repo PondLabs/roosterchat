@@ -6,6 +6,19 @@ import 'package:flutter/material.dart';
 import 'package:matrix/matrix.dart';
 import 'package:matrix/matrix_api_lite/generated/fixed_model.dart';
 
+/// Returns whether a Matrix spec version string (such as `v1.15`) is greater
+/// than or equal to [targetMajor].[targetMinor].
+bool isMatrixVersionAtLeast(String version, int targetMajor, int targetMinor) {
+  if (!version.startsWith('v')) return false;
+  final parts = version.substring(1).split('.');
+  if (parts.length < 2) return false;
+  final major = int.tryParse(parts[0]);
+  final minor = int.tryParse(parts[1]);
+  if (major == null || minor == null) return false;
+  if (major != targetMajor) return major > targetMajor;
+  return minor >= targetMinor;
+}
+
 extension MatrixExtensions on Client {
   Future<FileResponse> getContentFromUri(Uri uri) {
     return getContent(uri.authority, uri.pathSegments.first);
@@ -17,25 +30,62 @@ extension MatrixExtensions on Client {
         uri.authority, uri.pathSegments.first, width, height);
   }
 
+  Future<bool> _supportsStableRoomSummary() async {
+    final versions = await getVersions();
+    return versions.versions.any((v) => isMatrixVersionAtLeast(v, 1, 15));
+  }
+
   Future<RoomPreview?> getRoomPreview(String roomId,
       {List<String>? via}) async {
-    var result = await request(RequestType.GET,
-        "/client/unstable/im.nheko.summary/rooms/${Uri.encodeComponent(roomId)}/summary",
-        query: {
-          if (via != null) "via": via.join(","),
-        });
+    if (await _supportsStableRoomSummary()) {
+      final summary = await getRoomSummary(roomId, via: via);
+      return _buildRoomPreview(
+        id: summary.roomId,
+        name: summary.name,
+        avatarUrl: summary.avatarUrl,
+        topic: summary.topic,
+        numMembers: summary.numJoinedMembers,
+        joinRule: summary.joinRule,
+        roomType: summary.roomType,
+        allowedRoomIds: summary.allowedRoomIds,
+      );
+    }
 
-    var name = result["name"] as String?;
-    var id = result["room_id"] as String?;
-    var avatar = result["avatar_url"] as String?;
-    var topic = result["topic"] as String?;
-    var numMembers = result["num_joined_members"] as int?;
-    var joinRule = result["join_rule"] as String?;
+    // Fallback for homeservers older than Matrix v1.15 (MSC3266).
+    var result = await request(
+      RequestType.GET,
+      "/client/unstable/im.nheko.summary/rooms/${Uri.encodeComponent(roomId)}/summary",
+      query: {
+        if (via != null) "via": via,
+      },
+    );
 
-    var type = switch (result["room_type"]) {
+    final avatar = result["avatar_url"] as String?;
+    return _buildRoomPreview(
+      id: result["room_id"] as String?,
+      name: result["name"] as String?,
+      avatarUrl: avatar != null ? Uri.tryParse(avatar) : null,
+      topic: result["topic"] as String?,
+      numMembers: result["num_joined_members"] as int?,
+      joinRule: result["join_rule"] as String?,
+      roomType: result["room_type"] as String?,
+    );
+  }
+
+  RoomPreview? _buildRoomPreview({
+    required String? id,
+    required String? name,
+    required Uri? avatarUrl,
+    required String? topic,
+    required int? numMembers,
+    required String? joinRule,
+    required String? roomType,
+    List<String>? allowedRoomIds,
+  }) {
+    var type = switch (roomType) {
       "m.space" => rooster.RoomType.space,
-      "chat.rooster.calendar" => rooster.RoomType.calendar,
-      "chat.rooster.photo_album" => rooster.RoomType.photoAlbum,
+      "chat.commet.calendar" => rooster.RoomType.calendar,
+      "chat.commet.photo_album" => rooster.RoomType.photoAlbum,
       "org.matrix.msc3417.call" => rooster.RoomType.voipRoom,
       _ => rooster.RoomType.defaultRoom
     };
@@ -45,15 +95,16 @@ extension MatrixExtensions on Client {
       "knock" => rooster.RoomVisibilityPrivate(),
       "invite" => rooster.RoomVisibilityPrivate(),
       "private" => rooster.RoomVisibilityPrivate(),
-      "restricted" => rooster.RoomVisibilityRestricted([]),
+      "restricted" => rooster.RoomVisibilityRestricted(allowedRoomIds ?? []),
+      "knock_restricted" =>
+        rooster.RoomVisibilityRestricted(allowedRoomIds ?? []),
       _ => rooster.RoomVisibilityPrivate(),
     };
 
     if (name != null && id != null) {
       ImageProvider? image;
-      if (avatar != null) {
-        var mxc = Uri.parse(avatar);
-        image = MatrixMxcImage(mxc, autoLoadFullRes: false, this);
+      if (avatarUrl != null) {
+        image = MatrixMxcImage(avatarUrl, autoLoadFullRes: false, this);
       }
 
       return GenericRoomPreview(id,
