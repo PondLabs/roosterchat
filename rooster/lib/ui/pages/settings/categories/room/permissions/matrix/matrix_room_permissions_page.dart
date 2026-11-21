@@ -45,6 +45,80 @@ class MatrixRoomPermissionsPage extends StatefulWidget {
   final matrix.Room room;
   final bool showCalendarPermissions;
 
+  /// Key for the immutable RV12+ room creators section, used in tests.
+  static const Key immutableCreatorsKey = ValueKey('rv12-immutable-creators');
+
+  /// Room version 12 and newer grant immutable, infinite privileges to room
+  /// creators outside `m.room.power_levels.users`.
+  static bool isPrivilegedCreatorsRoomVersion(String? roomVersion) {
+    final parsed = int.tryParse(roomVersion ?? '');
+    return parsed != null && parsed >= 12;
+  }
+
+  /// Builds the updated `m.room.power_levels` content for [room] without
+  /// mutating cached state in place. In RV12+ rooms, room creators are never
+  /// written to `users` and synthetic PL 150 entries are stripped from `users`.
+  static Map<String, Object?> buildUpdatedPowerLevelsContent({
+    required matrix.Room room,
+    required List<MatrixRoomPermissionEntry> permissions,
+    Map<String, Object?>? existingContent,
+  }) {
+    final source =
+        existingContent ?? room.states["m.room.power_levels"]?[""]?.content;
+    final content = _deepCopyMap(source ?? const {});
+
+    for (final perm in permissions) {
+      if (perm.powerLevel == perm.originalPowerLevel) {
+        continue;
+      }
+
+      var map = content;
+      if (perm.keyParent != null) {
+        final parent = map[perm.keyParent!];
+        if (parent is Map) {
+          map[perm.keyParent!] = _deepCopyMap(parent);
+        } else {
+          map[perm.keyParent!] = <String, Object?>{};
+        }
+        map = map[perm.keyParent!]! as Map<String, Object?>;
+      }
+
+      map[perm.key] = perm.powerLevel;
+    }
+
+    if (isPrivilegedCreatorsRoomVersion(room.roomVersion)) {
+      final rawUsers = content['users'];
+      if (rawUsers is Map) {
+        final creators = room.creatorUserIds;
+        final sanitizedUsers = <String, Object?>{};
+        rawUsers.forEach((key, value) {
+          final userId = key.toString();
+          if (creators.contains(userId)) return;
+          if (value == 150) return;
+          sanitizedUsers[userId] = value;
+        });
+        content['users'] = sanitizedUsers;
+      }
+    }
+
+    return content;
+  }
+
+  static Map<String, Object?> _deepCopyMap(Map<Object?, Object?> source) {
+    final copy = <String, Object?>{};
+    source.forEach((key, value) {
+      final k = key.toString();
+      if (value is Map) {
+        copy[k] = _deepCopyMap(value);
+      } else if (value is List) {
+        copy[k] = List<Object?>.from(value);
+      } else {
+        copy[k] = value;
+      }
+    });
+    return copy;
+  }
+
   @override
   State<MatrixRoomPermissionsPage> createState() =>
       _MatrixRoomPermissionsPageState();
@@ -59,6 +133,20 @@ class _MatrixRoomPermissionsPageState extends State<MatrixRoomPermissionsPage> {
         "Owner",
         name: "labelMatrixPermissionsRoleOwner",
         desc: "Label for the room owner role",
+      );
+
+  String get labelMatrixPermissionsOwnersImmutable => Intl.message(
+        "Immutable creator privileges",
+        name: "labelMatrixPermissionsOwnersImmutable",
+        desc:
+            "Badge next to the Owner heading in room version 12+ permission settings explaining that room creators cannot be changed",
+      );
+
+  String get labelMatrixPermissionsOwnersImmutableDescription => Intl.message(
+        "Room creators always have full permissions in room version 12 and cannot be edited or demoted.",
+        name: "labelMatrixPermissionsOwnersImmutableDescription",
+        desc:
+            "Explanation shown in room version 12+ permission settings under the list of room creators",
       );
 
   String get labelMatrixPermissionsRoleAdmin => Intl.message(
@@ -267,14 +355,8 @@ class _MatrixRoomPermissionsPageState extends State<MatrixRoomPermissionsPage> {
 
   void initPermissions() {
     bool isCalendarRoom = widget.showCalendarPermissions;
-    var version = int.tryParse(widget.room.roomVersion ?? "1");
 
     roles = [
-      if (version != null && version >= 12)
-        MatrixRoomRoleEntry(
-            name: labelMatrixPermissionsRoleOwner,
-            powerlevel: 150,
-            icon: Icons.local_police),
       MatrixRoomRoleEntry(
         name: labelMatrixPermissionsRoleAdmin,
         powerlevel: 100,
@@ -447,7 +529,9 @@ class _MatrixRoomPermissionsPageState extends State<MatrixRoomPermissionsPage> {
         }
       }
 
-      Log.i("Power Levels: ${powerLevels!.content}");
+      if (powerLevels != null) {
+        Log.i("Power Levels: ${powerLevels.content}");
+      }
     }
   }
 
@@ -463,7 +547,10 @@ class _MatrixRoomPermissionsPageState extends State<MatrixRoomPermissionsPage> {
 
       widget.room.postLoad().then((value) {
         var event = widget.room.getState("m.room.power_levels");
-        updatePowerLevels(event!.content);
+        if (event != null) {
+          updatePowerLevels(event.content);
+        }
+        if (!mounted) return;
         setState(() {
           loading = false;
         });
@@ -474,7 +561,7 @@ class _MatrixRoomPermissionsPageState extends State<MatrixRoomPermissionsPage> {
   }
 
   void updatePowerLevels(Map<String, Object?> content) {
-    var stateDefault = content["state_default"] as int;
+    var stateDefault = (content["state_default"] as int?) ?? 50;
     for (int i = 0; i < permissions.length; i++) {
       var perm = permissions[i];
 
@@ -497,6 +584,114 @@ class _MatrixRoomPermissionsPageState extends State<MatrixRoomPermissionsPage> {
     }
   }
 
+  Widget _buildImmutableCreatorsSection(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final creators = widget.room.creatorUserIds.toList()..sort();
+
+    return Container(
+      key: MatrixRoomPermissionsPage.immutableCreatorsKey,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.local_police, color: colors.onSurface, size: 20),
+                  const SizedBox(width: 6),
+                  Text(
+                    labelMatrixPermissionsRoleOwner,
+                    style: theme.textTheme.titleSmall,
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: colors.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.lock_outline,
+                      size: 14,
+                      color: colors.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        labelMatrixPermissionsOwnersImmutable,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            labelMatrixPermissionsOwnersImmutableDescription,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+          if (creators.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                for (final creatorId in creators)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: colors.surfaceContainer,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.lock_outline,
+                          size: 14,
+                          color: colors.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            creatorId,
+                            style: theme.textTheme.bodySmall,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (loading) {
@@ -504,11 +699,25 @@ class _MatrixRoomPermissionsPageState extends State<MatrixRoomPermissionsPage> {
     }
 
     var canEdit = widget.room.canChangeState("m.room.power_levels");
-    return MatrixRoomPermissionsView(
+    final view = MatrixRoomPermissionsView(
       permissions,
       roles,
       setPermissions: setPermissions,
       canEdit: canEdit,
+    );
+
+    if (!MatrixRoomPermissionsPage.isPrivilegedCreatorsRoomVersion(
+      widget.room.roomVersion,
+    )) {
+      return view;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildImmutableCreatorsSection(context),
+        Expanded(child: view),
+      ],
     );
   }
 
@@ -516,24 +725,10 @@ class _MatrixRoomPermissionsPageState extends State<MatrixRoomPermissionsPage> {
     List<MatrixRoomPermissionEntry> permissions,
   ) async {
     var mxRoom = widget.room;
-    var event = mxRoom.states["m.room.power_levels"]?[""];
-    var content = event?.content ?? {};
-
-    for (var perm in permissions) {
-      if (perm.powerLevel == perm.originalPowerLevel) {
-        continue;
-      }
-
-      var map = content;
-      if (perm.keyParent != null) {
-        if (map.containsKey(perm.keyParent!) == false) {
-          map[perm.keyParent!] = Map<String, dynamic>();
-        }
-        map = map[perm.keyParent]! as Map<String, dynamic>;
-      }
-
-      map[perm.key] = perm.powerLevel;
-    }
+    final content = MatrixRoomPermissionsPage.buildUpdatedPowerLevelsContent(
+      room: mxRoom,
+      permissions: permissions,
+    );
 
     await mxRoom.client.setRoomStateWithKey(
       mxRoom.id,

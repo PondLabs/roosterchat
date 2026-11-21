@@ -1696,6 +1696,8 @@
   "labelPushRuleNone": "Mudo",
   "labelRoomSettingsNotifications": "Notificações",
   "labelMatrixPermissionsRoleOwner": "Dono",
+  "labelMatrixPermissionsOwnersImmutable": "Privilégios imutáveis de criador",
+  "labelMatrixPermissionsOwnersImmutableDescription": "Os criadores da sala sempre têm permissão total na versão 12 da sala e não podem ser editados nem rebaixados.",
   "labelMatrixPermissionsRoleAdmin": "Administrador",
   "labelMatrixPermissionsRoleModerator": "Moderador",
   "labelMatrixPermissionsRoleMember": "Membro da sala",
