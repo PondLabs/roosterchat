@@ -333,3 +333,8 @@ Changes since the copy:
   HTTP-date in pure web-safe Dart with an injectable clock, Matrix v1.10
   MSC4041) into `retryAfterMs` whenever the JSON body omits `retry_after_ms`,
   ignoring negative or malformed header values without throwing.
+- QR key verification reciprocate cancel code (T3.3a):
+  `_KeyVerificationMethodQRReciprocate.handlePayload`
+  (`lib/encryption/utils/key_verification.dart`) cancels with `m.key_mismatch`
+  instead of `m.invalid_message` when `validateStart` rejects an incoming
+  `m.reciprocate.v1` start event whose shared secret does not match.

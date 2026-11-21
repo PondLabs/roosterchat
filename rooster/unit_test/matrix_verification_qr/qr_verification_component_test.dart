@@ -318,43 +318,8 @@ void main() {
     );
 
     test(
-      'cancels cleanly when incoming QR reciprocate secret does not match',
-      skip: skipWithoutVodozemac != false,
-      () async {
-        final (reqAlice, reqBob) = await reachAskChoice();
-        final bobComp = bob.getComponent<MatrixKeyVerificationComponent>()!;
-
-        // Component secret verification rejects wrong secret with m.key_mismatch.
-        final matched = await bobComp.verifyQrReciprocateSecret(
-          reqBob,
-          'wrong_secret_value',
-        );
-        expect(matched, isFalse);
-        expect(reqBob.canceled, isTrue);
-        expect(reqBob.canceledCode, 'm.key_mismatch');
-        expect(reqBob.state, KeyVerificationState.error);
-
-        final cancelEvt = server.roomEvents.lastWhere(
-          (e) => e.eventType == matrix.EventTypes.KeyVerificationCancel,
-        );
-        expect(cancelEvt.content['code'], 'm.key_mismatch');
-
-        // Relay cancel to Alice and confirm neither side verified or signed.
-        await relayLastRoomEvent(
-          server: server,
-          sender: bobUser,
-          recipient: alice.matrixClient,
-          eventType: matrix.EventTypes.KeyVerificationCancel,
-        );
-        expect(reqAlice.canceled, isTrue);
-        expect(reqAlice.canceledCode, 'm.key_mismatch');
-        expect(reqAlice.state, KeyVerificationState.error);
-        expect(server.signatureUploads, isEmpty);
-      },
-    );
-
-    test(
-      'SDK cancels when receiving a tampered secret in m.key.verification.start',
+      'displayer cancels with m.key_mismatch when incoming m.reciprocate.v1 '
+      'secret does not match',
       skip: skipWithoutVodozemac != false,
       () async {
         final (reqAlice, reqBob) = await reachAskChoice();
@@ -382,12 +347,31 @@ void main() {
         );
 
         expect(reqBob.canceled, isTrue);
+        expect(reqBob.canceledCode, 'm.key_mismatch');
         expect(reqBob.state, KeyVerificationState.error);
+
+        final cancelEvt = server.roomEvents.lastWhere(
+          (e) =>
+              e.sender == bobUser &&
+              e.eventType == matrix.EventTypes.KeyVerificationCancel,
+        );
+        expect(cancelEvt.content['code'], 'm.key_mismatch');
+
+        // Relay cancel to Alice and confirm neither side verified or signed.
+        await relayLastRoomEvent(
+          server: server,
+          sender: bobUser,
+          recipient: alice.matrixClient,
+          eventType: matrix.EventTypes.KeyVerificationCancel,
+        );
+        expect(reqAlice.canceled, isTrue);
+        expect(reqAlice.canceledCode, 'm.key_mismatch');
+        expect(reqAlice.state, KeyVerificationState.error);
         expect(
           bob.matrixClient.userDeviceKeys[aliceUser]?.masterKey?.directVerified,
           isFalse,
         );
-        expect(reqAlice.state, KeyVerificationState.askChoice);
+        expect(server.signatureUploads, isEmpty);
       },
     );
 

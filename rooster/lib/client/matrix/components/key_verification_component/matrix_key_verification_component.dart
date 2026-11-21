@@ -184,23 +184,6 @@ class MatrixKeyVerificationComponent
     }
   }
 
-  /// Checks a reciprocate [receivedSecret] against the secret generated for
-  /// [request]'s QR code, cancelling with `m.key_mismatch` if it does not
-  /// match.
-  Future<bool> verifyQrReciprocateSecret(
-    KeyVerification request,
-    String receivedSecret,
-  ) async {
-    final expected = request.qrCode?.randomSharedSecret;
-    if (expected == null || receivedSecret != expected) {
-      if (!request.isDone) {
-        await request.cancel('m.key_mismatch');
-      }
-      return false;
-    }
-    return true;
-  }
-
   /// Rejects a QR scan confirmation when the other side does not show a
   /// matching verification screen, cancelling cleanly with [code] (defaults
   /// to `m.key_mismatch`).
