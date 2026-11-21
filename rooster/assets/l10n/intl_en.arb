@@ -10948,6 +10948,18 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelMatrixPermissionsOwnersImmutable": "Immutable creator privileges",
+  "@labelMatrixPermissionsOwnersImmutable": {
+    "description": "Badge next to the Owner heading in room version 12+ permission settings explaining that room creators cannot be changed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelMatrixPermissionsOwnersImmutableDescription": "Room creators always have full permissions in room version 12 and cannot be edited or demoted.",
+  "@labelMatrixPermissionsOwnersImmutableDescription": {
+    "description": "Explanation shown in room version 12+ permission settings under the list of room creators",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelMatrixPermissionsRoleAdmin": "Admin",
   "@labelMatrixPermissionsRoleAdmin": {
     "description": "Label for the room administrator role",
