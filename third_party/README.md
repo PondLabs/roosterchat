@@ -350,3 +350,8 @@ Changes since the copy:
   a typed `replacesState` for `unsigned.replaces_state`. The legacy
   `im.ponies.*` packs (`ImagePackContent`) and `io.element.recent_emoji` are
   unchanged.
+- QR key verification reciprocate cancel code (T3.3a):
+  `_KeyVerificationMethodQRReciprocate.handlePayload`
+  (`lib/encryption/utils/key_verification.dart`) cancels with `m.key_mismatch`
+  instead of `m.invalid_message` when `validateStart` rejects an incoming
+  `m.reciprocate.v1` start event whose shared secret does not match.
