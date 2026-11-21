@@ -166,21 +166,89 @@ class RoomsUpdate {
 
 abstract class SyncRoomUpdate {}
 
+// ROOSTER: Parse `{events: [...]}` state blocks (such as Matrix v1.16 MSC4222
+// `state_after`) without crashing /sync on malformed entries.
+List<MatrixEvent>? _parseStateEvents(Map<String, Object?> json, String key) {
+  final block = json.tryGetMap<String, Object?>(key);
+  if (block == null) return null;
+  final rawEvents = block.tryGetList<Object?>('events');
+  if (rawEvents == null) return null;
+  final events = <MatrixEvent>[];
+  for (final item in rawEvents) {
+    if (item is Map) {
+      try {
+        events.add(MatrixEvent.fromJson(Map<String, Object?>.from(item)));
+      } catch (e, s) {
+        Logs().w('Ignoring malformed event in sync $key', e, s);
+      }
+    }
+  }
+  return events;
+}
+
+// ROOSTER: Parse `unread_thread_notifications` (Matrix v1.4 MSC3773), skipping
+// malformed keys, non-map values, or invalid/negative counts so /sync never fails.
+Map<String, UnreadNotificationCounts>? _parseUnreadThreadNotifications(
+  Map<String, Object?> json,
+) {
+  final raw = json['unread_thread_notifications'];
+  if (raw is! Map) return null;
+  final result = <String, UnreadNotificationCounts>{};
+  for (final entry in raw.entries) {
+    final threadRootId = entry.key;
+    final value = entry.value;
+    if (threadRootId is! String || threadRootId.isEmpty || value is! Map) {
+      Logs().w(
+        'Ignoring malformed unread_thread_notifications entry for key $threadRootId',
+      );
+      continue;
+    }
+    try {
+      final map = Map<String, Object?>.from(value);
+      final rawNotification = map['notification_count'];
+      final rawHighlight = map['highlight_count'];
+      if ((rawNotification != null &&
+              (rawNotification is! int || rawNotification < 0)) ||
+          (rawHighlight != null &&
+              (rawHighlight is! int || rawHighlight < 0))) {
+        Logs().w(
+          'Ignoring malformed unread_thread_notifications counts for $threadRootId',
+        );
+        continue;
+      }
+      result[threadRootId] = UnreadNotificationCounts.fromJson(map);
+    } catch (e, s) {
+      Logs().w(
+        'Ignoring malformed unread_thread_notifications entry for $threadRootId',
+        e,
+        s,
+      );
+    }
+  }
+  return result;
+}
+
 class JoinedRoomUpdate extends SyncRoomUpdate {
   RoomSummary? summary;
   List<MatrixEvent>? state;
+  // ROOSTER: Matrix v1.16 MSC4222 `state_after` applied after timeline events.
+  List<MatrixEvent>? stateAfter;
   TimelineUpdate? timeline;
   List<BasicEvent>? ephemeral;
   List<BasicEvent>? accountData;
   UnreadNotificationCounts? unreadNotifications;
+  // ROOSTER: Matrix v1.4 MSC3773 per-thread unread notification counts.
+  Map<String, UnreadNotificationCounts>? unreadThreadNotifications;
 
   JoinedRoomUpdate({
     this.summary,
     this.state,
+    this.stateAfter, // ROOSTER
     this.timeline,
     this.ephemeral,
     this.accountData,
     this.unreadNotifications,
+    this.unreadThreadNotifications, // ROOSTER
   });
 
   JoinedRoomUpdate.fromJson(Map<String, Object?> json)
@@ -189,6 +257,7 @@ class JoinedRoomUpdate extends SyncRoomUpdate {
             .tryGetMap<String, List<Object?>>('state')?['events']
             ?.map((i) => MatrixEvent.fromJson(i as Map<String, Object?>))
             .toList(),
+        stateAfter = _parseStateEvents(json, 'state_after'), // ROOSTER
         timeline = json.tryGetFromJson('timeline', TimelineUpdate.fromJson),
         ephemeral = json
             .tryGetMap<String, List<Object?>>('ephemeral')?['events']
@@ -201,7 +270,9 @@ class JoinedRoomUpdate extends SyncRoomUpdate {
         unreadNotifications = json.tryGetFromJson(
           'unread_notifications',
           UnreadNotificationCounts.fromJson,
-        );
+        ),
+        unreadThreadNotifications = // ROOSTER
+            _parseUnreadThreadNotifications(json); // ROOSTER
 
   Map<String, Object?> toJson() {
     final data = <String, Object?>{};
@@ -211,6 +282,12 @@ class JoinedRoomUpdate extends SyncRoomUpdate {
     if (state != null) {
       data['state'] = {
         'events': state!.map((i) => i.toJson()).toList(),
+      };
+    }
+    // ROOSTER: Serialize Matrix v1.16 `state_after`.
+    if (stateAfter != null) {
+      data['state_after'] = {
+        'events': stateAfter!.map((i) => i.toJson()).toList(),
       };
     }
     if (timeline != null) {
@@ -228,6 +305,11 @@ class JoinedRoomUpdate extends SyncRoomUpdate {
     }
     if (unreadNotifications != null) {
       data['unread_notifications'] = unreadNotifications!.toJson();
+    }
+    // ROOSTER: Serialize Matrix v1.4 `unread_thread_notifications`.
+    if (unreadThreadNotifications != null) {
+      data['unread_thread_notifications'] =
+          unreadThreadNotifications!.map((k, v) => MapEntry(k, v.toJson()));
     }
     return data;
   }
@@ -279,11 +361,14 @@ class KnockRoomUpdate extends SyncRoomUpdate {
 
 class LeftRoomUpdate extends SyncRoomUpdate {
   List<MatrixEvent>? state;
+  // ROOSTER: Matrix v1.16 MSC4222 `state_after` applied after timeline events.
+  List<MatrixEvent>? stateAfter;
   TimelineUpdate? timeline;
   List<BasicEvent>? accountData;
 
   LeftRoomUpdate({
     this.state,
+    this.stateAfter, // ROOSTER
     this.timeline,
     this.accountData,
   });
@@ -293,6 +378,7 @@ class LeftRoomUpdate extends SyncRoomUpdate {
             .tryGetMap<String, List<Object?>>('state')?['events']
             ?.map((i) => MatrixEvent.fromJson(i as Map<String, Object?>))
             .toList(),
+        stateAfter = _parseStateEvents(json, 'state_after'), // ROOSTER
         timeline = json.tryGetFromJson('timeline', TimelineUpdate.fromJson),
         accountData = json
             .tryGetMap<String, List<Object?>>('account_data')?['events']
@@ -304,6 +390,12 @@ class LeftRoomUpdate extends SyncRoomUpdate {
     if (state != null) {
       data['state'] = {
         'events': state!.map((i) => i.toJson()).toList(),
+      };
+    }
+    // ROOSTER: Serialize Matrix v1.16 `state_after`.
+    if (stateAfter != null) {
+      data['state_after'] = {
+        'events': stateAfter!.map((i) => i.toJson()).toList(),
       };
     }
     if (timeline != null) {
