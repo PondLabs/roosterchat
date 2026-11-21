@@ -309,3 +309,27 @@ Changes since the copy:
   (`lib/src/room.dart`) throws `RoomCreatorPowerLevelException` for creators
   in room version 12+ and never writes creators into
   `m.room.power_levels.users`.
+- Matrix v1.19 SDK core contracts (T1.1a):
+  `AuthenticationTypes.oauth` (`'m.oauth'`, Matrix v1.17 MSC4312) in
+  `lib/matrix_api_lite/model/auth/authentication_types.dart`.
+  `Capabilities` (`lib/matrix_api_lite/generated/model.dart`) adds
+  `mForgetForcedUponLeave` (`m.forget_forced_upon_leave`, v1.18 MSC4267) and
+  `mPreviewUrl` (`m.preview_url`, v1.20 MSC4452) alongside `mProfileFields`,
+  defaulting to `null` when absent. `GetAuthMetadataResponse`
+  (`lib/matrix_api_lite/generated/model.dart`) makes `registrationEndpoint` and
+  `revocationEndpoint` optional (`Uri?`, with explicit null checks in
+  `lib/msc_extensions/msc_2964_oidc_login_flow/msc_2964_oidc_login_flow.dart`
+  and
+  `lib/msc_extensions/msc_2966_oidc_dynamic_client_registration/msc_2966_oidc_dynamic_client_registration.dart`),
+  adds `deviceAuthorizationEndpoint`, `accountManagementUri`,
+  `accountManagementActionsSupported`, `clientIdMetadataDocumentSupported`, and
+  `scopesSupported`, tolerates absent/null optional fields, and ignores unknown
+  extra keys. `MatrixError` (`lib/matrix_api_lite/model/matrix_exception.dart`)
+  adds standardized codes (`M_USER_LOCKED`, `M_USER_SUSPENDED`,
+  `M_USER_LIMIT_EXCEEDED`, `M_CANNOT_OVERWRITE_MEDIA`, `M_NOT_YET_UPLOADED`,
+  `M_MISSING_TOKEN`, `M_WRONG_ROOM_KEYS_VERSION`, `M_DUPLICATE_ANNOTATION`).
+  `MatrixException` and `MatrixApi` (`request` and `unexpectedResponse`) parse
+  the HTTP `Retry-After` header case-insensitively (delta-seconds and RFC 7231
+  HTTP-date in pure web-safe Dart with an injectable clock, Matrix v1.10
+  MSC4041) into `retryAfterMs` whenever the JSON body omits `retry_after_ms`,
+  ignoring negative or malformed header values without throwing.
