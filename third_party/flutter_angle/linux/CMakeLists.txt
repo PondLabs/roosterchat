@@ -50,6 +50,8 @@ target_include_directories(${PLUGIN_NAME} PRIVATE ${OPENGL_INCLUDE_DIRS})
 target_link_libraries(${PLUGIN_NAME} PRIVATE 
   EGL
   OpenGL
+  # ROOSTER: dlopen of GTK's GLX (include/current_context.h).
+  ${CMAKE_DL_LIBS}
 )
 
 # List of absolute paths to libraries that should be bundled with the plugin.

@@ -25,20 +25,26 @@ and listed in `docs/voice-audio-processing.md`.
 
 `flutter_angle` (the GL bridge under `three_js_angle_renderer`) showed
 Sunny Side Putt's green on Linux as one flat beige, the renderer's clear
-colour, while the game played. Dart runs on GTK's thread, and GTK's paint
-of the view makes its own GL context current and then none, so from the
-first paint on every GL call the game made went nowhere and the view kept
-its first frame. The plugin also made its context share with whatever EGL
-context was current when the game started, but Flutter 3.41's is current
-only on its raster thread: usually none was, so the game drew into a
-texture Flutter could not see. Now (`// ROOSTER:` in `linux/` and
-`lib/desktop/angle.dart`) the plugin puts the current EGL context down
-before GTK paints the view and picks it up after; its context lives on
-Flutter's own EGL display (`eglGetPlatformDisplayEXT` for GDK's Wayland or
-X11 display, as `fl_opengl_manager.cc` does) and shares with nothing; and
-Flutter gets the game's texture as an EGLImage, bound to a texture of
-Flutter's own on the first `populate`, which runs with Flutter's context
-current. The Windows, Android and Darwin parts are unchanged.
+colour, while the game played. Dart runs on GTK's thread, which is not the
+game's to keep a context current on: GTK 3 composites the window with GL
+(Flutter's view makes a GL context for it) and leaves its own context
+current after each paint, on X11 a GLX one, and glvnd refuses an EGL
+context while a GLX one is current (`EGL_BAD_ACCESS`); Flutter also runs
+Dart tasks inside its paint (`fl_task_runner_wait`). The plugin also made
+its context share with whatever EGL context was current when the game
+started, but Flutter 3.41's is current only on its raster thread, so
+Flutter could not reliably see the game's texture. Now (`// ROOSTER:` in
+`linux/` and in `lib/desktop/angle.dart` and `lib/src/desktop/wrapper.dart`)
+the game's context is current only while Dart uses it: the first GL call of
+a stretch of Dart borrows the thread (`flutter_angle_acquire` saves what was
+current, EGL or GLX, and puts it down; `linux/include/current_context.h`)
+and a microtask gives it back before control leaves Dart. The plugin's
+context lives on Flutter's own EGL display (`eglGetPlatformDisplayEXT` for
+GDK's Wayland or X11 display, as `fl_opengl_manager.cc` does) and shares
+with nothing, and Flutter gets the game's texture as an EGLImage, bound to
+a texture of Flutter's own on the first `populate`, which runs with
+Flutter's context current. The Windows, Android and Darwin parts are
+unchanged.
 
 `three_js_angle_renderer` (Sunny Side Putt's 3D renderer) decided on every
 draw whether a material's program had to change by comparing the tone

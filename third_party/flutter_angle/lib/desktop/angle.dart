@@ -54,7 +54,14 @@ class FlutterAngleTexture {
 
   RenderingContext getContext() {
     assert(_flutterAngle._baseAppContext != nullptr, "OpenGL isn't initialized! Please call FlutterAngle.initOpenGL");
-    return RenderingContext.create(_flutterAngle._rawOpenGl, options.width, options.height);
+    return RenderingContext.create(
+      _flutterAngle._rawOpenGl,
+      options.width,
+      options.height,
+      false,
+      // ROOSTER: see FlutterAngle._ensureCurrent.
+      Platform.isLinux ? _flutterAngle._ensureCurrent : null,
+    );
   }
 
   /// Whenever you finished your rendering you have to call this function to signal
@@ -91,7 +98,55 @@ class FlutterAngle {
   bool _isRBO = true;
   bool _disposed = false;
 
+  // ROOSTER: on Linux the context is current only while Dart uses it. Dart
+  // runs on GTK's thread, whose own GL context (GLX on X11, which glvnd will
+  // not have current alongside an EGL one) GTK leaves current after its
+  // paints and needs back, sometimes in the middle of a paint that runs
+  // Dart tasks. The first GL call of a stretch of Dart borrows the thread
+  // (the plugin saves what was current and puts it down, see
+  // linux/include/current_context.h) and a microtask gives it back, before
+  // control leaves Dart.
+  static final bool _borrowsThread = Platform.isLinux;
+  static int Function(Pointer<Void>, Pointer<Void>)? _acquire;
+  static void Function()? _release;
+  bool _held = false;
+  bool _acquireFailed = false;
+
+  static void _bindBorrowing() {
+    if (_acquire != null) return;
+    DynamicLibrary library;
+    try {
+      library = DynamicLibrary.process();
+      library.lookup<Void>('flutter_angle_acquire');
+    } catch (_) {
+      library = DynamicLibrary.open('libflutter_angle_plugin.so');
+    }
+    _acquire = library.lookupFunction<Int32 Function(Pointer<Void>, Pointer<Void>), int Function(Pointer<Void>, Pointer<Void>)>('flutter_angle_acquire');
+    _release = library.lookupFunction<Void Function(), void Function()>('flutter_angle_release');
+  }
+
+  void _ensureCurrent() {
+    if (_held || _baseAppContext == nullptr || _disposed) return;
+    _bindBorrowing();
+    if (_acquire!(_display, _baseAppContext) == 0) {
+      if (!_acquireFailed) {
+        _acquireFailed = true;
+        angleConsole.error('Could not make the GL context current (see the [AnglePlugin] line).');
+      }
+      return;
+    }
+    _held = true;
+    scheduleMicrotask(_releaseCurrent);
+  }
+
+  void _releaseCurrent() {
+    if (!_held) return;
+    _held = false;
+    _release!();
+  }
+
   LibOpenGLES get _rawOpenGl {
+    if (_borrowsThread) _ensureCurrent();
     if (_libOpenGLES == null) {
       if (Platform.isWindows) {
         _libOpenGLES = LibOpenGLES(DynamicLibrary.open(resolveDylibPath('libGLESv2')));
@@ -209,7 +264,15 @@ class FlutterAngle {
       isDebugContext: useDebugContext && !Platform.isAndroid
     );
 
-    if(!_isApple){
+    // ROOSTER: on Linux the context is made current around each use instead
+    // (see _ensureCurrent); a failure to do so now fails the start.
+    if (Platform.isLinux) {
+      _ensureCurrent();
+      if (!_held) {
+        throw EglException('The GL context could not be made current.');
+      }
+    }
+    else if(!_isApple){
       /// bind context to this thread. All following OpenGL calls from this thread will use this context
       _libEGL!.eglMakeCurrent(_display, _dummySurface, _dummySurface, _baseAppContext);
     
@@ -612,14 +675,9 @@ class FlutterAngle {
     });
     textures?.clear();
     if(_baseAppContext != nullptr){
-      // ROOSTER: put down first: a context destroyed while current lives on
-      // until released, and on Linux the plugin picks the current context
-      // back up after every GTK paint.
-      if (Platform.isLinux) {
-        try {
-          _libEGL!.eglMakeCurrent(_display, nullptr, nullptr, nullptr);
-        } catch (_) {}
-      }
+      // ROOSTER: given back first: a context destroyed while current lives
+      // on until it is put down.
+      _releaseCurrent();
       _libEGL!.eglDestroyContext(_display, _baseAppContext);
       _baseAppContext = nullptr;
     }

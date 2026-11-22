@@ -37,15 +37,6 @@ struct _FlAngleTextureGL{
   uint32_t flutter_name;
 };
 
-// ROOSTER: the EGL context GTK's paint of the view found current, given
-// back after it (see flutter_angle_plugin.cc).
-struct DrawSavedContext {
-  EGLDisplay display = EGL_NO_DISPLAY;
-  EGLContext context = EGL_NO_CONTEXT;
-  EGLSurface draw = EGL_NO_SURFACE;
-  EGLSurface read = EGL_NO_SURFACE;
-};
-
 #define FLUTTER_ANGLE_PLUGIN(obj)                                     \
   (G_TYPE_CHECK_INSTANCE_CAST((obj), flutter_angle_plugin_get_type(), \
                               FlutterAnglePlugin))
@@ -60,7 +51,6 @@ struct _FlutterAnglePlugin{
   EGLContext eglContext = nullptr;
   EGLConfig config;
   Map *map = nullptr;
-  DrawSavedContext saved;
 };
 
 // ROOSTER: `image` may be EGL_NO_IMAGE_KHR; Flutter then gets `name` as is

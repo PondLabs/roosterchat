@@ -792,12 +792,13 @@ learns, and the view went blank. There the first pixels stretch to the
 new size and the governor only lowers the quality tier.
 
 On Linux the green used to be one flat beige (the clear colour) while the
-game played under it: GTK's paint of the view, on the thread Dart runs on,
-left no GL context current, so the game's frames after the first went
-nowhere, and Flutter could not reliably see the game's texture at all.
-The vendored flutter_angle now keeps the game's context current across
-GTK's paints and hands Flutter the texture as an EGLImage on Flutter's own
-EGL display (`third_party/README.md`). A surface that does not start logs
+game played under it: on X11 the GL surface never started (GTK leaves its
+GLX context current on the thread Dart runs on, and an EGL context cannot
+be made current beside it), and Flutter could not reliably see the game's
+texture anyway. The vendored flutter_angle now borrows GTK's thread for the
+game's context around each stretch of GL and gives GTK's back, and hands
+Flutter the texture as an EGLImage on Flutter's own EGL display
+(`third_party/README.md`). A surface that does not start logs
 why (`[Sunny Side Putt] the GL surface did not start`).
 
 On Windows `rooster.exe` itself answers for the GL names flutter_angle

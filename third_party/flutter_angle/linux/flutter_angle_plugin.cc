@@ -2,6 +2,7 @@
 #include "include/fl_angle_texture_gl.h"
 #include "flutter_angle_plugin_private.h"
 #include  "include/opengl_renderer.h"
+#include "include/current_context.h"
 
 #include <flutter_linux/flutter_linux.h>
 #include <flutter_linux/fl_view.h>
@@ -51,32 +52,28 @@ static EGLDisplay flutter_egl_display() {
   return eglGetDisplay(EGL_DEFAULT_DISPLAY);
 }
 
-// ROOSTER: Dart runs on this (GTK's) thread, and the game's context stays
-// current on it between frames. GTK's paint of the view makes its own GL
-// context current and then none: from the first paint on, every GL call the
-// game made went nowhere and the view kept its first frame, the clear
-// colour (one flat beige). The context is put down before GTK paints (on
-// X11, glvnd refuses GTK's GLX context while an EGL one is current) and
-// picked up again after.
-static gboolean view_draw_before(GtkWidget *widget, cairo_t *cr, gpointer user_data) {
-  DrawSavedContext *saved = &FLUTTER_ANGLE_PLUGIN(user_data)->saved;
-  saved->context = eglGetCurrentContext();
-  if (saved->context != EGL_NO_CONTEXT) {
-    saved->display = eglGetCurrentDisplay();
-    saved->draw = eglGetCurrentSurface(EGL_DRAW);
-    saved->read = eglGetCurrentSurface(EGL_READ);
-    eglMakeCurrent(saved->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+// ROOSTER: the Dart side borrows GTK's thread for its context around
+// every stretch of GL it does (see include/current_context.h), through these
+// two, looked up over FFI.
+static flutter_angle::SavedCurrent dart_saved;
+static EGLDisplay dart_display = EGL_NO_DISPLAY;
+static bool dart_held = false;
+
+extern "C" __attribute__((visibility("default"))) int flutter_angle_acquire(void *display, void *context) {
+  if (dart_held) return 1;
+  if (!flutter_angle::make_current(display, context, &dart_saved)) {
+    std::cerr << "[AnglePlugin] eglMakeCurrent failed: 0x" << std::hex << eglGetError() << std::dec << std::endl;
+    return 0;
   }
-  return FALSE;
+  dart_display = display;
+  dart_held = true;
+  return 1;
 }
 
-static gboolean view_draw_after(GtkWidget *widget, cairo_t *cr, gpointer user_data) {
-  DrawSavedContext *saved = &FLUTTER_ANGLE_PLUGIN(user_data)->saved;
-  if (saved->context != EGL_NO_CONTEXT) {
-    eglMakeCurrent(saved->display, saved->draw, saved->read, saved->context);
-    saved->context = EGL_NO_CONTEXT;
-  }
-  return FALSE;
+extern "C" __attribute__((visibility("default"))) void flutter_angle_release() {
+  if (!dart_held) return;
+  dart_held = false;
+  flutter_angle::restore_current(dart_display, dart_saved);
 }
 
 // Called when a method call is received from Flutter.
@@ -299,13 +296,6 @@ void flutter_angle_plugin_register_with_registrar(FlPluginRegistrar *registrar){
 
 	FlView *fl_view = fl_plugin_registrar_get_view(registrar);
 	plugin->fl_view = fl_view;
-	// ROOSTER: see view_draw_before. GTK runs a widget's own "draw"
-	// handlers, then draws its children (Flutter's render area among them),
-	// then the handlers connected after.
-	if (fl_view != nullptr) {
-		g_signal_connect_object(fl_view, "draw", G_CALLBACK(view_draw_before), plugin, (GConnectFlags)0);
-		g_signal_connect_object(fl_view, "draw", G_CALLBACK(view_draw_after), plugin, G_CONNECT_AFTER);
-	}
 	plugin->textureRegistrar = fl_plugin_registrar_get_texture_registrar(registrar);
 
 	g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();

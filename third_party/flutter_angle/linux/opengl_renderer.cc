@@ -1,5 +1,6 @@
 #include "include/opengl_renderer.h"
 #include "include/fl_angle_texture_gl.h"
+#include "include/current_context.h"
 #include <flutter_linux/fl_texture_registrar.h>
 
 #include <cstdint>
@@ -67,16 +68,14 @@ void OpenglRenderer::changeSize(int width, int height) {
     textureId = 0;
   }
 
-  GLint prevTexture2D;
-  glGetIntegerv(GL_TEXTURE_BINDING_2D, &prevTexture2D);
-
-  // 💡 THREAD SAFETY FIX: Back up whatever context is currently active on this thread right now
-  EGLDisplay prevDisplay = eglGetCurrentDisplay();
-  EGLContext prevContext = eglGetCurrentContext();
-  EGLSurface prevDraw = eglGetCurrentSurface(EGL_DRAW);
-  EGLSurface prevRead = eglGetCurrentSurface(EGL_READ);
-
-  eglMakeCurrent(eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, eglContext);
+  // ROOSTER: the plugin's context borrows the thread (a GLX context of
+  // GTK's may be current here, see include/current_context.h); texture
+  // bindings are the plugin context's own, nothing to put back.
+  flutter_angle::SavedCurrent saved;
+  if (!flutter_angle::make_current(eglDisplay, eglContext, &saved)) {
+    std::cerr << "[OpenglRenderer] eglMakeCurrent failed: 0x" << std::hex << eglGetError() << std::dec << std::endl;
+    return;
+  }
 
   // ROOSTER: Flutter's texture of the old image keeps its storage (an
   // EGLImage's siblings outlive it) until Flutter lets the texture go.
@@ -96,15 +95,7 @@ void OpenglRenderer::changeSize(int width, int height) {
 
   image = create_texture_image(eglDisplay, eglContext, texId);
   glFlush();
-
-  if (prevContext != EGL_NO_CONTEXT && prevDisplay != EGL_NO_DISPLAY) {
-    eglMakeCurrent(prevDisplay, prevDraw, prevRead, prevContext);
-  } 
-  else {
-    eglMakeCurrent(eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-  }
-
-  glBindTexture(GL_TEXTURE_2D, prevTexture2D);
+  flutter_angle::restore_current(eglDisplay, saved);
 
   auto ft = fl_angle_texture_gl_new(GL_TEXTURE_2D, texId, width, height, image);
   std::cerr << "Create Texture" <<std::endl;
@@ -126,10 +117,13 @@ void OpenglRenderer::dispose(bool release_context) {
   destroy_texture_image(eglDisplay, image);
   image = EGL_NO_IMAGE_KHR;
 
-  if (texId != 0) {
+  // ROOSTER: deleted in the plugin's context, not whatever was current.
+  flutter_angle::SavedCurrent saved;
+  if (texId != 0 && flutter_angle::make_current(eglDisplay, eglContext, &saved)) {
     glDeleteTextures(1, &texId);
-    texId = 0;
+    flutter_angle::restore_current(eglDisplay, saved);
   }
+  texId = 0;
 
   if (release_context && texture) {
     fl_texture_registrar_unregister_texture(textureRegistrar, texture);
