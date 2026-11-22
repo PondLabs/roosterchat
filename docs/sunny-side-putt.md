@@ -791,6 +791,15 @@ flutter_angle registers a new texture under an id the view never
 learns, and the view went blank. There the first pixels stretch to the
 new size and the governor only lowers the quality tier.
 
+On Linux the green used to be one flat beige (the clear colour) while the
+game played under it: GTK's paint of the view, on the thread Dart runs on,
+left no GL context current, so the game's frames after the first went
+nowhere, and Flutter could not reliably see the game's texture at all.
+The vendored flutter_angle now keeps the game's context current across
+GTK's paints and hands Flutter the texture as an EGLImage on Flutter's own
+EGL display (`third_party/README.md`). A surface that does not start logs
+why (`[Sunny Side Putt] the GL surface did not start`).
+
 On Windows `rooster.exe` itself answers for the GL names flutter_angle
 binds with `@Native`. Those bindings name no library, so the Dart VM looks
 each name up in every module of the process, in the order the modules

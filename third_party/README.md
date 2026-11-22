@@ -13,6 +13,7 @@ back to their origin; we change them here.
 | `deep_filter` | https://github.com/Rikorose/DeepFilterNet (`libDF/`, `models/DeepFilterNet3_onnx.tar.gz`, MIT or Apache-2.0) | `d375b2d8309e0935d165700c91da9de862a99c31` (2024-10-17), trimmed to the real-time inference |
 | `flutter_vodozemac` | https://pub.dev/packages/flutter_vodozemac | `0.5.0` (2026-10) + the `windows-arm64` cargokit target |
 | `media_kit_libs_windows_video` | https://pub.dev/packages/media_kit_libs_windows_video | `1.0.11` (2026-10) + arm64 libmpv and ANGLE |
+| `flutter_angle` | https://github.com/gabriel-s-flores/flutter_angle (branch `fix/flutter-3-41-linux`, path `flutter_angle`, MIT), the 0.4.2 package with its Linux plugin built against Flutter 3.41 | `4fc2937a26e76e9e60b8835f684ffba2f03148a7` (2026-11) + a Linux GL surface Flutter can see |
 | `three_js_angle_renderer` | https://pub.dev/packages/three_js_angle_renderer (MIT) | `0.0.1` (2026-11) + the tone-mapping program check |
 | `matrix-dart-sdk` | https://github.com/commetchat/matrix-dart-sdk (branch `upstream-v6.1.1`, AGPL-3.0) | `58e0bd24c6a2d74d727dc92a24dc076144fae43b` (2026-03-09), complete and unchanged |
 
@@ -21,6 +22,23 @@ from the copies, except in `matrix-dart-sdk`, which keeps everything but
 `.git` so its own tests run and it matches the pub cache checkout file for
 file. Local changes are marked with `// ROOSTER:` comments in Dart and C++
 and listed in `docs/voice-audio-processing.md`.
+
+`flutter_angle` (the GL bridge under `three_js_angle_renderer`) showed
+Sunny Side Putt's green on Linux as one flat beige, the renderer's clear
+colour, while the game played. Dart runs on GTK's thread, and GTK's paint
+of the view makes its own GL context current and then none, so from the
+first paint on every GL call the game made went nowhere and the view kept
+its first frame. The plugin also made its context share with whatever EGL
+context was current when the game started, but Flutter 3.41's is current
+only on its raster thread: usually none was, so the game drew into a
+texture Flutter could not see. Now (`// ROOSTER:` in `linux/` and
+`lib/desktop/angle.dart`) the plugin puts the current EGL context down
+before GTK paints the view and picks it up after; its context lives on
+Flutter's own EGL display (`eglGetPlatformDisplayEXT` for GDK's Wayland or
+X11 display, as `fl_opengl_manager.cc` does) and shares with nothing; and
+Flutter gets the game's texture as an EGLImage, bound to a texture of
+Flutter's own on the first `populate`, which runs with Flutter's context
+current. The Windows, Android and Darwin parts are unchanged.
 
 `three_js_angle_renderer` (Sunny Side Putt's 3D renderer) decided on every
 draw whether a material's program had to change by comparing the tone
