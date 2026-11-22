@@ -171,6 +171,9 @@ abstract class SyncRoomUpdate {}
 List<MatrixEvent>? _parseStateEvents(Map<String, Object?> json, String key) {
   final block = json.tryGetMap<String, Object?>(key);
   if (block == null) return null;
+  // `events` is optional: a block without it is present and empty, which for
+  // `state_after` still means that the timeline does not define room state.
+  if (!block.containsKey('events')) return [];
   final rawEvents = block.tryGetList<Object?>('events');
   if (rawEvents == null) return null;
   final events = <MatrixEvent>[];

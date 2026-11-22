@@ -364,11 +364,22 @@ Changes since the copy:
   `unread_thread_notifications` (v1.4 MSC3773), skipping malformed entries
   without crashing sync. `Client._innerSync` (`lib/src/client.dart`) sends
   `use_state_after=true` only when the server advertises a semantic Matrix
-  version `>= v1.16` (omitting it on `<= v1.15` or unknown versions), and
+  version `>= v1.16` (omitting it on `<= v1.15` or unknown versions; the
+  versions come from `getVersions()`, cached in the database), and
   `_handleRooms` / `_storeArchivedRoom` apply legacy `state` before timeline
   events and `state_after` after timeline events (respecting `Direction.b`
-  guards). `Room.unreadThreadNotifications` (`lib/src/room.dart`) exposes and
-  updates/zeroes per-thread unread counts on every sync. `Room.topic`,
+  guards). A left room's legacy `state` used to be applied after its timeline;
+  it now comes before it, as for a joined room. When an update carries
+  `state_after`, even an empty one, its timeline does not define room state
+  (a timeline state event may have lost state resolution): the room keeps the
+  state it had for every key `state_after` does not bring, in memory and in
+  the database (`_stateBeforeTimeline`). One case is left: a key the room had
+  no state for stays in the database as the timeline stored it, because the
+  database has no way to delete a state event.
+  `Room.unreadThreadNotifications` (`lib/src/room.dart`) exposes the per-thread
+  unread counts. An update that brings `unread_notifications` or
+  `unread_thread_notifications` replaces them all, so a thread the server
+  leaves out (it has no notifications) is no longer counted. `Room.topic`,
   `Room.topicHtml`, and `Room.setDescription(plain, {html})` read and write
   MSC3765 `m.topic` (`m.text` with `text/plain` and `text/html`) while keeping
   legacy `topic` compatibility on both read and write.

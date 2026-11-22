@@ -616,7 +616,6 @@ class Client extends MatrixApi {
       return (wellKnown, versions, loginTypes, authMetadata);
     } catch (_) {
       homeserver = null;
-      _clearCachedServerVersions(); // ROOSTER
       rethrow;
     }
   }
@@ -1327,6 +1326,11 @@ class Client extends MatrixApi {
       );
     }
 
+    // ROOSTER: Matrix v1.16 MSC4222 — apply `state_after` after timeline events
+    // on archived/left rooms as well. With it in the update, even empty, the
+    // timeline does not define room state.
+    final stateAfterEvents = roomUpdate.stateAfter;
+
     final timelineEvents = roomUpdate.timeline?.events;
     if (timelineEvents != null) {
       await _handleRoomEvents(
@@ -1334,12 +1338,10 @@ class Client extends MatrixApi {
         timelineEvents.reversed.toList(),
         EventUpdateType.timeline,
         store: false,
+        updateState: stateAfterEvents == null, // ROOSTER
       );
     }
 
-    // ROOSTER: Matrix v1.16 MSC4222 — apply `state_after` after timeline events
-    // on archived/left rooms as well.
-    final stateAfterEvents = roomUpdate.stateAfter;
     if (stateAfterEvents != null && stateAfterEvents.isNotEmpty) {
       await _handleRoomEvents(
         archivedRoom,
@@ -1369,21 +1371,15 @@ class Client extends MatrixApi {
   Future<GetVersionsResponse> getVersions({
     Duration cacheLifetime = const Duration(days: 3),
     bool throwOnUpdateFailure = false,
-  }) async {
-    final response = await requestAndCache(
-      super.getVersions,
-      fromJson: GetVersionsResponse.fromJson,
-      toJson: (response) => response.toJson(),
-      cacheKey: 'get_versions',
-      cacheLifetime: cacheLifetime,
-      throwOnUpdateFailure: throwOnUpdateFailure,
-    );
-    // ROOSTER: Cache advertised server versions in memory for sync checks.
-    _cachedServerVersions = List<String>.unmodifiable(response.versions);
-    _cachedServerVersionsHomeserver = homeserver;
-    _cachedServerVersionsAt = DateTime.now();
-    return response;
-  }
+  }) =>
+      requestAndCache(
+        super.getVersions,
+        fromJson: GetVersionsResponse.fromJson,
+        toJson: (response) => response.toJson(),
+        cacheKey: 'get_versions',
+        cacheLifetime: cacheLifetime,
+        throwOnUpdateFailure: throwOnUpdateFailure,
+      );
 
   Future<bool> authenticatedMediaSupported() async {
     return (await getVersions()).versions.any(
@@ -1952,44 +1948,23 @@ class Client extends MatrixApi {
     return false;
   }
 
-  // ROOSTER: In-memory cache of the server's advertised Matrix spec versions
-  // paired with the homeserver URI and timestamp (same 3-day TTL as DB cache).
-  List<String>? _cachedServerVersions;
-  Uri? _cachedServerVersionsHomeserver;
-  DateTime? _cachedServerVersionsAt;
-
-  void _clearCachedServerVersions() {
-    _cachedServerVersions = null;
-    _cachedServerVersionsHomeserver = null;
-    _cachedServerVersionsAt = null;
-  }
-
+  // ROOSTER: `getVersions()` is cached in the database, so asking on every
+  // sync costs one request per cache lifetime.
   Future<bool> _supportsUseStateAfter() async {
-    final currentHomeserver = homeserver;
-    if (currentHomeserver == null) return false;
-    final cached = _cachedServerVersionsHomeserver == currentHomeserver &&
-            _cachedServerVersionsAt != null &&
-            _cachedServerVersionsAt!
-                .add(const Duration(days: 3))
-                .isAfter(DateTime.now())
-        ? _cachedServerVersions
-        : null;
-    List<String> versions;
-    if (cached != null) {
-      versions = cached;
-    } else {
-      try {
-        versions = (await getVersions()).versions;
-      } catch (e, s) {
-        Logs().v(
-          'Unable to check server versions for use_state_after; omitting parameter',
-          e,
-          s,
-        );
-        return false;
-      }
+    try {
+      return _supportsSpecVersionAtLeast(
+        (await getVersions()).versions,
+        1,
+        16,
+      );
+    } catch (e, s) {
+      Logs().v(
+        'Unable to check server versions for use_state_after; omitting parameter',
+        e,
+        s,
+      );
+      return false;
     }
-    return _supportsSpecVersionAtLeast(versions, 1, 16);
   }
 
   // ROOSTER: Filter out older state events when paginating backwards (Direction.b)
@@ -2017,6 +1992,56 @@ class Client extends MatrixApi {
     }).toList();
   }
 
+  // ROOSTER: Matrix v1.16 MSC4222 — the database stores every timeline state
+  // event as room state too (`storeEventUpdate`), which a timeline that came
+  // with `state_after` must not define. This returns the state the room had,
+  // before the timeline is stored, for each state key [timeline] carries and
+  // [stateAfter] does not bring, so the caller stores it again afterwards. A
+  // key the room had no state for is left as the timeline stored it: the
+  // database cannot delete a state event.
+  Future<List<StrippedStateEvent>> _stateBeforeTimeline(
+    Room room,
+    List<MatrixEvent> timeline,
+    List<MatrixEvent> stateAfter,
+  ) async {
+    final handled = {
+      for (final event in stateAfter) (event.type, event.stateKey),
+    };
+    final before = <StrippedStateEvent>[];
+    for (final event in timeline) {
+      final stateKey = event.stateKey;
+      if (stateKey == null || !handled.add((event.type, stateKey))) continue;
+      var state = room.getState(event.type, stateKey);
+      if (state == null) {
+        if (event.type == EventTypes.RoomMember) {
+          // Members are read from the database when they are needed.
+          state = await database.getUser(stateKey, room);
+        } else if (room.partial && !importantStateEvents.contains(event.type)) {
+          await room.postLoad();
+          state = room.getState(event.type, stateKey);
+        }
+      }
+      if (state == null) continue;
+      // A member read from the database is a `User`, which serializes without
+      // its timestamp.
+      before.add(
+        state is User
+            ? MatrixEvent(
+                type: state.type,
+                content: state.content,
+                senderId: state.senderId,
+                stateKey: state.stateKey,
+                eventId: '',
+                originServerTs: state.originServerTs ??
+                    DateTime.fromMillisecondsSinceEpoch(0),
+                prevContent: state.prevContent,
+              )
+            : state,
+      );
+    }
+    return before;
+  }
+
   // ROOSTER: Normalize per-thread unread notification counts so omitted
   // `notification_count`/`highlight_count` default to 0 (Matrix v1.4 MSC3773).
   static Map<String, UnreadNotificationCounts> _normalizeThreadNotifications(
@@ -2030,6 +2055,32 @@ class Client extends MatrixApi {
           highlightCount: entry.value.highlightCount ?? 0,
         ),
     };
+  }
+
+  // ROOSTER: The server may omit a thread without notifications, and the whole
+  // `unread_thread_notifications` object when no thread has any. So an update
+  // that brings either the room counts or the thread counts tells the counts
+  // of every thread: the ones it does not name are zero.
+  static bool _carriesThreadNotifications(JoinedRoomUpdate update) =>
+      update.unreadNotifications != null ||
+      update.unreadThreadNotifications != null;
+
+  // ROOSTER: Whether [update] changes the per-thread unread counts of [room].
+  static bool _threadNotificationsChange(Room room, JoinedRoomUpdate update) {
+    if (!_carriesThreadNotifications(update)) return false;
+    final before = room.unreadThreadNotifications;
+    final after =
+        _normalizeThreadNotifications(update.unreadThreadNotifications);
+    if (before.length != after.length) return true;
+    for (final entry in after.entries) {
+      final counts = before[entry.key];
+      if (counts == null ||
+          (counts.notificationCount ?? 0) != entry.value.notificationCount ||
+          (counts.highlightCount ?? 0) != entry.value.highlightCount) {
+        return true;
+      }
+    }
+    return false;
   }
 
   static const List<String> supportedDirectEncryptionAlgorithms = [
@@ -2603,7 +2654,6 @@ class Client extends MatrixApi {
     _rooms = [];
     _eventsPendingDecryption.clear();
     _unansweredKeyQueries.clear(); // ROOSTER
-    _clearCachedServerVersions(); // ROOSTER
     await encryption?.dispose();
     _encryption = null;
     onLoginStateChanged.add(LoginState.loggedOut);
@@ -3045,14 +3095,27 @@ class Client extends MatrixApi {
           );
         }
 
+        // ROOSTER: Matrix v1.16 MSC4222 — apply `state_after` AFTER timeline
+        // events so room state reflects the end of the timeline. With it in
+        // the update, even empty, room state comes from it alone: the timeline
+        // may carry a state event that lost state resolution.
+        final rawStateAfter = syncRoomUpdate.stateAfter;
+
         final timelineEvents = syncRoomUpdate.timeline?.events;
+        final stateBeforeTimeline = rawStateAfter != null &&
+                timelineEvents != null &&
+                timelineUpdateType == EventUpdateType.timeline
+            ? await _stateBeforeTimeline(room, timelineEvents, rawStateAfter)
+            : const <StrippedStateEvent>[];
         if (timelineEvents != null && timelineEvents.isNotEmpty) {
-          await _handleRoomEvents(room, timelineEvents, timelineUpdateType);
+          await _handleRoomEvents(
+            room,
+            timelineEvents,
+            timelineUpdateType,
+            updateState: rawStateAfter == null, // ROOSTER
+          );
         }
 
-        // ROOSTER: Matrix v1.16 MSC4222 — apply `state_after` AFTER timeline
-        // events so room state reflects the end of the timeline.
-        final rawStateAfter = syncRoomUpdate.stateAfter;
         final stateAfter = rawStateAfter != null && rawStateAfter.isNotEmpty
             ? await _filterStateEventsForDirection(
                 room,
@@ -3065,6 +3128,14 @@ class Client extends MatrixApi {
             room,
             stateAfter,
             EventUpdateType.state,
+          );
+        }
+        for (final state in stateBeforeTimeline) {
+          await database.storeEventUpdate(
+            room.id,
+            state,
+            EventUpdateType.state,
+            this,
           );
         }
 
@@ -3101,6 +3172,7 @@ class Client extends MatrixApi {
             store: false,
           );
         }
+        final rawStateAfter = syncRoomUpdate.stateAfter;
         final timelineEvents = syncRoomUpdate.timeline?.events;
         if (timelineEvents != null && timelineEvents.isNotEmpty) {
           await _handleRoomEvents(
@@ -3108,9 +3180,9 @@ class Client extends MatrixApi {
             timelineEvents,
             timelineUpdateType,
             store: false,
+            updateState: rawStateAfter == null, // ROOSTER
           );
         }
-        final rawStateAfter = syncRoomUpdate.stateAfter;
         final stateAfter = rawStateAfter != null && rawStateAfter.isNotEmpty
             ? await _filterStateEventsForDirection(
                 room,
@@ -3200,6 +3272,9 @@ class Client extends MatrixApi {
     List<StrippedStateEvent> events,
     EventUpdateType type, {
     bool store = true,
+    // ROOSTER: false for a timeline that came with `state_after` (Matrix
+    // v1.16): its state events are shown, and do not change room state.
+    bool updateState = true,
   }) async {
     // Calling events can be omitted if they are outdated from the same sync. So
     // we collect them first before we handle them.
@@ -3266,7 +3341,12 @@ class Client extends MatrixApi {
           room.setState(user);
         }
       }
-      await _updateRoomsByEventUpdate(room, event, type);
+      await _updateRoomsByEventUpdate(
+        room,
+        event,
+        type,
+        updateState: updateState, // ROOSTER
+      );
       if (store) {
         await database.storeEventUpdate(room.id, event, type, this);
       }
@@ -3411,8 +3491,8 @@ class Client extends MatrixApi {
                 (chatUpdate.unreadNotifications?.notificationCount ?? 0) ||
             rooms[roomIndex].highlightCount !=
                 (chatUpdate.unreadNotifications?.highlightCount ?? 0) ||
-            (chatUpdate.unreadThreadNotifications?.isNotEmpty ??
-                false) || // ROOSTER
+            // ROOSTER: or the per-thread counts change.
+            _threadNotificationsChange(rooms[roomIndex], chatUpdate) ||
             chatUpdate.summary != null ||
             chatUpdate.timeline?.prevBatch != null)) {
       /// 1. [InvitedRoomUpdate] doesn't have prev_batch, so we want to set it in case
@@ -3431,12 +3511,11 @@ class Client extends MatrixApi {
             chatUpdate.unreadNotifications?.highlightCount ?? 0;
       }
 
-      // ROOSTER: Merge per-thread unread notification counts from /sync (v1.4).
-      final threadNotifications = chatUpdate.unreadThreadNotifications;
-      if (threadNotifications != null) {
-        rooms[roomIndex].unreadThreadNotifications.addAll(
-              _normalizeThreadNotifications(threadNotifications),
-            );
+      // ROOSTER: Per-thread unread counts from /sync (v1.4) replace the ones
+      // we hold, so a thread the server left out is no longer counted.
+      if (_carriesThreadNotifications(chatUpdate)) {
+        rooms[roomIndex].unreadThreadNotifications =
+            _normalizeThreadNotifications(chatUpdate.unreadThreadNotifications);
       }
 
       final summary = chatUpdate.summary;
@@ -3461,8 +3540,9 @@ class Client extends MatrixApi {
   Future<void> _updateRoomsByEventUpdate(
     Room room,
     StrippedStateEvent eventUpdate,
-    EventUpdateType type,
-  ) async {
+    EventUpdateType type, {
+    bool updateState = true, // ROOSTER
+  }) async {
     if (type == EventUpdateType.history) return;
 
     switch (type) {
@@ -3483,6 +3563,7 @@ class Client extends MatrixApi {
         // Update the room state:
         final stateKey = event.stateKey;
         if (stateKey != null &&
+            updateState && // ROOSTER
             (!room.partial || importantStateEvents.contains(event.type))) {
           room.setState(event);
 
@@ -4280,7 +4361,6 @@ class Client extends MatrixApi {
     await abortSync();
     _prevBatch = null;
     _trackedUserIds = null;
-    _clearCachedServerVersions(); // ROOSTER
     rooms.clear();
     await database.clearCache();
     encryption?.keyManager.clearOutboundGroupSessions();

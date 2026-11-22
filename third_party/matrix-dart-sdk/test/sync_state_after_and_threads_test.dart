@@ -101,11 +101,12 @@ Future<Client> _createLoggedInClient(
   String name, {
   required http.Client httpClient,
   bool runCheckHomeserver = false,
+  DatabaseApi? database,
 }) async {
   final client = Client(
     name,
     httpClient: httpClient,
-    database: await getDatabase(),
+    database: database ?? await getDatabase(),
   );
   client.backgroundSync = false;
   client.syncErrorTimeoutSec = 0;
@@ -121,6 +122,20 @@ Future<Client> _createLoggedInClient(
     newDeviceName: 'Test Device',
     waitForFirstSync: false,
   );
+  await client.abortSync();
+  return client;
+}
+
+/// A new [Client] over the database of one that was disposed with
+/// `closeDatabase: false`: what the app reads when it starts again.
+Future<Client> _restartClient(String name, DatabaseApi database) async {
+  final client = Client(
+    name,
+    httpClient: _syncMockClient(advertisedVersions: ['v1.16']),
+    database: database,
+  );
+  client.backgroundSync = false;
+  await client.init(waitForFirstSync: false);
   await client.abortSync();
   return client;
 }
@@ -204,25 +219,27 @@ void main() {
       expect(client.prevBatch, 's_batch_1');
     });
 
-    test('reuses versions discovered by checkHomeserver without refetching',
-        () async {
+    test('asks /versions once for several syncs (database cache)', () async {
       final syncUris = <Uri>[];
       var versionsRequests = 0;
       final client = await _createLoggedInClient(
-        'sync_check_hs_reuse',
+        'sync_versions_cached',
         httpClient: _syncMockClient(
           advertisedVersions: ['v1.15', 'v1.16'],
           onVersionsRequest: () => versionsRequests++,
           onSyncRequest: syncUris.add,
         ),
-        runCheckHomeserver: true,
       );
       addTearDown(() => client.dispose(closeDatabase: true));
 
       await client.oneShotSync(timeout: Duration.zero);
+      await client.oneShotSync(timeout: Duration.zero);
 
       expect(versionsRequests, 1);
-      expect(syncUris.single.queryParameters['use_state_after'], 'true');
+      expect(syncUris, hasLength(2));
+      for (final uri in syncUris) {
+        expect(uri.queryParameters['use_state_after'], 'true');
+      }
     });
   });
 
@@ -311,8 +328,15 @@ void main() {
           },
           leave: {
             '!bad_left:example.test': {'state_after': <Object?>[]},
+            '!empty_left:example.test': {'state_after': <String, Object?>{}},
           },
         ),
+      );
+
+      // A block without `events` is present and empty, not absent.
+      expect(
+        sync.rooms?.leave?['!empty_left:example.test']?.stateAfter,
+        isEmpty,
       );
 
       expect(sync.rooms?.join?['!bad1:example.test']?.stateAfter, isNull);
@@ -551,6 +575,407 @@ void main() {
       expect(archives.single.room.name, 'Archive State After Name');
     });
 
+    test(
+        'state_after wins over the timeline after a restart on the same '
+        'database', () async {
+      const roomId = '!persist:example.test';
+      final database = await getDatabase();
+      final first = await _createLoggedInClient(
+        'state_after_persist',
+        httpClient: _syncMockClient(advertisedVersions: ['v1.16']),
+        database: database,
+      );
+      await first.handleSync(
+        SyncUpdate.fromJson(
+          _roomSync(
+            join: {
+              roomId: {
+                'timeline': {
+                  'events': [
+                    _stateEvent(
+                      '\$tl_name',
+                      EventTypes.RoomName,
+                      {'name': 'Timeline Name'},
+                      ts: 1700000002000,
+                    ),
+                    _stateEvent(
+                      '\$tl_topic',
+                      EventTypes.RoomTopic,
+                      {'topic': 'Timeline Topic'},
+                      ts: 1700000002001,
+                    ),
+                  ],
+                },
+                'state_after': {
+                  'events': [
+                    _stateEvent(
+                      '\$sa_name',
+                      EventTypes.RoomName,
+                      {'name': 'State After Name'},
+                      ts: 1700000001000,
+                    ),
+                    _stateEvent(
+                      '\$sa_topic',
+                      EventTypes.RoomTopic,
+                      {'topic': 'State After Topic'},
+                      ts: 1700000001001,
+                    ),
+                  ],
+                },
+              },
+            },
+          ),
+        ),
+      );
+      expect(first.getRoomById(roomId)!.name, 'State After Name');
+      await first.dispose(closeDatabase: false);
+
+      final second = await _restartClient('state_after_persist', database);
+      addTearDown(() => second.dispose(closeDatabase: true));
+      final room = second.getRoomById(roomId)!;
+      await room.postLoad();
+      expect(room.name, 'State After Name');
+      expect(room.topic, 'State After Topic');
+    });
+
+    test(
+        'with state_after present, a timeline state event it leaves out does '
+        'not change room state', () async {
+      const roomId = '!reset:example.test';
+      final database = await getDatabase();
+      final first = await _createLoggedInClient(
+        'state_after_reset',
+        httpClient: _syncMockClient(advertisedVersions: ['v1.16']),
+        database: database,
+      );
+      await first.handleSync(
+        SyncUpdate.fromJson(
+          _roomSync(
+            join: {
+              roomId: {
+                'state_after': {
+                  'events': [
+                    _stateEvent(
+                      '\$n0',
+                      EventTypes.RoomName,
+                      {'name': 'Original'},
+                    ),
+                  ],
+                },
+              },
+            },
+          ),
+        ),
+      );
+      final room = first.getRoomById(roomId)!;
+      expect(room.name, 'Original');
+
+      // The timeline carries a name event that lost state resolution, so the
+      // name at the end of the timeline is unchanged and the server leaves it
+      // out of the state_after delta (which is present, here with a topic).
+      await first.handleSync(
+        SyncUpdate.fromJson(
+          _roomSync(
+            nextBatch: 's_2',
+            join: {
+              roomId: {
+                'timeline': {
+                  'events': [
+                    _stateEvent(
+                      '\$n1',
+                      EventTypes.RoomName,
+                      {'name': 'Losing Fork'},
+                      ts: 1700000005000,
+                    ),
+                  ],
+                },
+                'state_after': {
+                  'events': [
+                    _stateEvent(
+                      '\$t1',
+                      EventTypes.RoomTopic,
+                      {'topic': 'Topic'},
+                    ),
+                  ],
+                },
+              },
+            },
+          ),
+        ),
+      );
+      expect(room.name, 'Original');
+      // The event is still shown in the timeline.
+      expect(
+        (await first.database.getEventById('\$n1', room))?.content['name'],
+        'Losing Fork',
+      );
+      await first.dispose(closeDatabase: false);
+
+      // The database stores timeline state events as room state: the name
+      // from before the timeline was stored again.
+      final second = await _restartClient('state_after_reset', database);
+      addTearDown(() => second.dispose(closeDatabase: true));
+      final restored = second.getRoomById(roomId)!;
+      await restored.postLoad();
+      expect(restored.name, 'Original');
+      expect(restored.topic, 'Topic');
+    });
+
+    test(
+        'with an empty state_after block, timeline state events do not '
+        'change room state', () async {
+      const roomId = '!reset_empty:example.test';
+      final client = await _createLoggedInClient(
+        'state_after_reset_empty',
+        httpClient: _syncMockClient(advertisedVersions: ['v1.16']),
+      );
+      addTearDown(() => client.dispose(closeDatabase: true));
+      await client.handleSync(
+        SyncUpdate.fromJson(
+          _roomSync(
+            join: {
+              roomId: {
+                'state_after': {
+                  'events': [
+                    _stateEvent(
+                      '\$n0',
+                      EventTypes.RoomName,
+                      {'name': 'Original'},
+                    ),
+                  ],
+                },
+              },
+            },
+          ),
+        ),
+      );
+      final room = client.getRoomById(roomId)!;
+
+      var batch = 1;
+      for (final emptyStateAfter in <Map<String, Object?>>[
+        {'events': <Object?>[]},
+        {},
+      ]) {
+        await client.handleSync(
+          SyncUpdate.fromJson(
+            _roomSync(
+              nextBatch: 's_${++batch}',
+              join: {
+                roomId: {
+                  'timeline': {
+                    'events': [
+                      _stateEvent(
+                        '\$n$batch',
+                        EventTypes.RoomName,
+                        {'name': 'Losing Fork $batch'},
+                        ts: 1700000005000 + batch,
+                      ),
+                    ],
+                  },
+                  'state_after': emptyStateAfter,
+                },
+              },
+            ),
+          ),
+        );
+        expect(room.name, 'Original', reason: 'state_after: $emptyStateAfter');
+      }
+    });
+
+    test(
+        'a timeline state event state_after leaves out does not reach the '
+        'database of a room that is not loaded (topic and member)', () async {
+      const roomId = '!reset_partial:example.test';
+      const bob = '@bob:example.test';
+      final database = await getDatabase();
+      final first = await _createLoggedInClient(
+        'state_after_reset_partial',
+        httpClient: _syncMockClient(advertisedVersions: ['v1.16']),
+        database: database,
+      );
+      await first.handleSync(
+        SyncUpdate.fromJson(
+          _roomSync(
+            join: {
+              roomId: {
+                'state_after': {
+                  'events': [
+                    _stateEvent(
+                      '\$t0',
+                      EventTypes.RoomTopic,
+                      {'topic': 'Original Topic'},
+                    ),
+                    _stateEvent(
+                      '\$m0',
+                      EventTypes.RoomMember,
+                      {'membership': 'join', 'displayname': 'Bob'},
+                      sender: bob,
+                      stateKey: bob,
+                      ts: 1700000000500,
+                    ),
+                  ],
+                },
+              },
+            },
+          ),
+        ),
+      );
+      await first.dispose(closeDatabase: false);
+
+      // After a restart the room holds neither its topic (not one of the
+      // important state events) nor Bob in memory: both are in the database.
+      final second =
+          await _restartClient('state_after_reset_partial', database);
+      final partialRoom = second.getRoomById(roomId)!;
+      expect(partialRoom.partial, isTrue);
+      expect(partialRoom.getState(EventTypes.RoomTopic), isNull);
+      expect(partialRoom.getState(EventTypes.RoomMember, bob), isNull);
+      await second.handleSync(
+        SyncUpdate.fromJson(
+          _roomSync(
+            nextBatch: 's_2',
+            join: {
+              roomId: {
+                'timeline': {
+                  'events': [
+                    _stateEvent(
+                      '\$t1',
+                      EventTypes.RoomTopic,
+                      {'topic': 'Losing Topic'},
+                      ts: 1700000005000,
+                    ),
+                    _stateEvent(
+                      '\$m1',
+                      EventTypes.RoomMember,
+                      {'membership': 'leave'},
+                      sender: bob,
+                      stateKey: bob,
+                      ts: 1700000005001,
+                    ),
+                  ],
+                },
+                'state_after': {'events': <Object?>[]},
+              },
+            },
+          ),
+        ),
+      );
+      await second.dispose(closeDatabase: false);
+
+      final third = await _restartClient('state_after_reset_partial', database);
+      addTearDown(() => third.dispose(closeDatabase: true));
+      final room = third.getRoomById(roomId)!;
+      await room.postLoad();
+      expect(room.topic, 'Original Topic');
+      final member = await third.database.getUser(bob, room);
+      expect(member?.membership, Membership.join);
+      expect(member?.displayName, 'Bob');
+      expect(
+        member?.originServerTs,
+        DateTime.fromMillisecondsSinceEpoch(1700000000500),
+      );
+    });
+
+    test(
+        'LeftRoomUpdate and the archive: timeline state events do not change '
+        'room state when state_after leaves them out', () async {
+      const leftId = '!reset_left:example.test';
+      const archivedId = '!reset_archive:example.test';
+      final client = await _createLoggedInClient(
+        'state_after_reset_left',
+        httpClient: _syncMockClient(
+          advertisedVersions: ['v1.16'],
+          syncResponseBuilder: (_) => _roomSync(
+            nextBatch: 's_arch_1',
+            leave: {
+              archivedId: {
+                'timeline': {
+                  'events': [
+                    _stateEvent(
+                      '\$arch_tl_name',
+                      EventTypes.RoomName,
+                      {'name': 'Losing Archive Name'},
+                      ts: 1700000009000,
+                    ),
+                    _stateEvent(
+                      '\$arch_tl_topic',
+                      EventTypes.RoomTopic,
+                      {'topic': 'Losing Archive Topic'},
+                      ts: 1700000009001,
+                    ),
+                  ],
+                },
+                'state_after': {
+                  'events': [
+                    _stateEvent(
+                      '\$arch_sa_name',
+                      EventTypes.RoomName,
+                      {'name': 'Archive Name'},
+                      ts: 1700000008000,
+                    ),
+                  ],
+                },
+              },
+            },
+          ),
+        ),
+      );
+      addTearDown(() => client.dispose(closeDatabase: true));
+
+      await client.handleSync(
+        SyncUpdate.fromJson(
+          _roomSync(
+            join: {
+              leftId: {
+                'state_after': {
+                  'events': [
+                    _stateEvent(
+                      '\$init',
+                      EventTypes.RoomName,
+                      {'name': 'Initial Name'},
+                    ),
+                  ],
+                },
+              },
+            },
+          ),
+        ),
+      );
+      await client.handleSync(
+        SyncUpdate.fromJson(
+          _roomSync(
+            nextBatch: 's_2',
+            leave: {
+              leftId: {
+                'timeline': {
+                  'events': [
+                    _stateEvent(
+                      '\$left_tl_name',
+                      EventTypes.RoomName,
+                      {'name': 'Losing Left Name'},
+                      ts: 1700000005000,
+                    ),
+                  ],
+                },
+                'state_after': {'events': <Object?>[]},
+              },
+            },
+          ),
+        ),
+      );
+      expect(
+        client.getArchiveRoomFromCache(leftId)!.room.name,
+        'Initial Name',
+      );
+
+      final archives = await client.loadArchiveWithTimeline();
+      final archived =
+          archives.singleWhere((archive) => archive.room.id == archivedId);
+      expect(archived.room.name, 'Archive Name');
+      expect(archived.room.topic, '');
+      expect(archived.timeline.events, hasLength(2));
+    });
+
     test('preserves legacy state-before-timeline when state_after is absent',
         () async {
       const joinedId = '!legacy_join:example.test';
@@ -775,8 +1200,9 @@ void main() {
           2,
         );
 
-        // Delta sync with ONLY unread_thread_notifications zeroes thread_a,
-        // adds thread_c, leaves thread_b and room counts intact, fires onUpdate.
+        // A sync with ONLY unread_thread_notifications zeroes thread_a, adds
+        // thread_c, drops thread_b (the server leaves out a thread without
+        // notifications), keeps the room counts and fires onUpdate.
         var roomUpdates = 0;
         // ignore: deprecated_member_use_from_same_package
         final sub = room.onUpdate.stream.listen((_) => roomUpdates++);
@@ -811,10 +1237,7 @@ void main() {
           room.unreadThreadNotifications['\$thread_a']?.highlightCount,
           0,
         );
-        expect(
-          room.unreadThreadNotifications['\$thread_b']?.notificationCount,
-          2,
-        );
+        expect(room.unreadThreadNotifications['\$thread_b'], isNull);
         expect(
           room.unreadThreadNotifications['\$thread_c']?.notificationCount,
           4,
@@ -826,7 +1249,34 @@ void main() {
         expect(room.notificationCount, 5);
         expect(room.highlightCount, 1);
 
-        // Empty object zeroes thread_b; omitted field preserves stored counts.
+        // The same counts again change nothing, so nobody is told.
+        final updatesBefore = roomUpdates;
+        await client.handleSync(
+          SyncUpdate.fromJson(
+            _roomSync(
+              nextBatch: 's_t2b',
+              join: {
+                roomId: {
+                  'unread_notifications': {
+                    'notification_count': 5,
+                    'highlight_count': 1,
+                  },
+                  'unread_thread_notifications': {
+                    '\$thread_a': <String, Object?>{},
+                    '\$thread_c': {
+                      'notification_count': 4,
+                      'highlight_count': 0,
+                    },
+                  },
+                },
+              },
+            ),
+          ),
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(roomUpdates, updatesBefore);
+
+        // An empty entry counts as zero, and the threads left out are dropped.
         await client.handleSync(
           SyncUpdate.fromJson(
             _roomSync(
@@ -849,7 +1299,10 @@ void main() {
           room.unreadThreadNotifications['\$thread_b']?.highlightCount,
           0,
         );
+        expect(room.unreadThreadNotifications.keys, {'\$thread_b'});
 
+        // An update with neither the room counts nor the thread counts says
+        // nothing about threads: the counts we hold stay.
         await client.handleSync(
           SyncUpdate.fromJson(
             _roomSync(
@@ -862,9 +1315,10 @@ void main() {
             ),
           ),
         );
+        expect(room.unreadThreadNotifications.keys, {'\$thread_b'});
         expect(
-          room.unreadThreadNotifications['\$thread_c']?.notificationCount,
-          4,
+          room.unreadThreadNotifications['\$thread_b']?.notificationCount,
+          0,
         );
 
         // JoinedRoomUpdate and Room JSON roundtrips.
@@ -884,17 +1338,149 @@ void main() {
           2,
         );
 
+        room.unreadThreadNotifications['\$thread_d'] =
+            UnreadNotificationCounts(notificationCount: 6, highlightCount: 2);
         final restored = Room.fromJson(room.toJson(), client);
         expect(
-          restored.unreadThreadNotifications['\$thread_c']?.notificationCount,
-          4,
+          restored.unreadThreadNotifications['\$thread_d']?.notificationCount,
+          6,
         );
         expect(
-          restored.unreadThreadNotifications['\$thread_a']?.notificationCount,
+          restored.unreadThreadNotifications['\$thread_d']?.highlightCount,
+          2,
+        );
+        expect(
+          restored.unreadThreadNotifications['\$thread_b']?.notificationCount,
           0,
         );
       },
     );
+
+    test(
+        'a thread the server omits from unread_thread_notifications (no '
+        'notifications left) is zeroed', () async {
+      const roomId = '!threads_omit:example.test';
+      final client = await _createLoggedInClient(
+        'thread_notifs_omit',
+        httpClient: _syncMockClient(advertisedVersions: ['v1.16']),
+      );
+      addTearDown(() => client.dispose(closeDatabase: true));
+      await client.handleSync(
+        SyncUpdate.fromJson(
+          _roomSync(
+            join: {
+              roomId: {
+                'unread_notifications': {
+                  'notification_count': 1,
+                  'highlight_count': 0,
+                },
+                'unread_thread_notifications': {
+                  '\$thread_a': {
+                    'notification_count': 3,
+                    'highlight_count': 1,
+                  },
+                },
+              },
+            },
+          ),
+        ),
+      );
+      final room = client.getRoomById(roomId)!;
+      expect(
+        room.unreadThreadNotifications['\$thread_a']?.notificationCount,
+        3,
+      );
+
+      // Thread A was read on another device. The spec lets the server omit a
+      // thread without notifications, and the whole object when no thread has
+      // any; the room-level counts still come down, unchanged.
+      var roomUpdates = 0;
+      // ignore: deprecated_member_use_from_same_package
+      final sub = room.onUpdate.stream.listen((_) => roomUpdates++);
+      addTearDown(sub.cancel);
+      await client.handleSync(
+        SyncUpdate.fromJson(
+          _roomSync(
+            nextBatch: 's_2',
+            join: {
+              roomId: {
+                'unread_notifications': {
+                  'notification_count': 1,
+                  'highlight_count': 0,
+                },
+              },
+            },
+          ),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        room.unreadThreadNotifications['\$thread_a']?.notificationCount ?? 0,
+        0,
+      );
+      expect(roomUpdates, 1);
+    });
+
+    test(
+        'a thread missing from a later unread_thread_notifications object is '
+        'zeroed', () async {
+      const roomId = '!threads_partial:example.test';
+      final client = await _createLoggedInClient(
+        'thread_notifs_partial',
+        httpClient: _syncMockClient(advertisedVersions: ['v1.16']),
+      );
+      addTearDown(() => client.dispose(closeDatabase: true));
+      await client.handleSync(
+        SyncUpdate.fromJson(
+          _roomSync(
+            join: {
+              roomId: {
+                'unread_notifications': {
+                  'notification_count': 5,
+                  'highlight_count': 0,
+                },
+                'unread_thread_notifications': {
+                  '\$thread_a': {
+                    'notification_count': 3,
+                    'highlight_count': 0,
+                  },
+                },
+              },
+            },
+          ),
+        ),
+      );
+      final room = client.getRoomById(roomId)!;
+      await client.handleSync(
+        SyncUpdate.fromJson(
+          _roomSync(
+            nextBatch: 's_2',
+            join: {
+              roomId: {
+                'unread_notifications': {
+                  'notification_count': 5,
+                  'highlight_count': 0,
+                },
+                'unread_thread_notifications': {
+                  '\$thread_b': {
+                    'notification_count': 2,
+                    'highlight_count': 0,
+                  },
+                },
+              },
+            },
+          ),
+        ),
+      );
+      expect(
+        room.unreadThreadNotifications['\$thread_b']?.notificationCount,
+        2,
+      );
+      expect(
+        room.unreadThreadNotifications['\$thread_a']?.notificationCount ?? 0,
+        0,
+      );
+    });
 
     test(
       'ignores malformed unread_thread_notifications without crashing sync',

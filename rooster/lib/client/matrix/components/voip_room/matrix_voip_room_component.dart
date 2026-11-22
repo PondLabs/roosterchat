@@ -60,7 +60,11 @@ class MatrixVoipRoomComponent
   onSync(JoinedRoomUpdate update) {
     // A limited sync delivers state changes in `state`, not the timeline: a
     // leave that came in one was missed, and the member stayed listed.
-    final events = [...?update.state, ...?update.timeline?.events];
+    final events = [
+      ...?update.state,
+      ...?update.stateAfter,
+      ...?update.timeline?.events
+    ];
     if (events.any((event) => event.type == callMemberStateEvent)) {
       _onParticipantsChanged.add(());
       // Joined again from another device? This one leaves. On the next

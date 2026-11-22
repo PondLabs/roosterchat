@@ -556,7 +556,11 @@ class MatrixCallActivityComponent
 
   @override
   onSync(matrix.JoinedRoomUpdate update) {
-    final events = [...?update.state, ...?update.timeline?.events];
+    final events = [
+      ...?update.state,
+      ...?update.stateAfter,
+      ...?update.timeline?.events
+    ];
     if (events.any((event) => event.type == stateEventType)) {
       _followState();
     }
