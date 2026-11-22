@@ -5,9 +5,9 @@ import 'package:rooster/client/components/emoticon/emoji_pack.dart';
 import 'package:rooster/client/components/emoticon/emoticon.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_emoticon.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_emoticon_component.dart';
+import 'package:rooster/client/matrix/components/emoticon/matrix_image_pack_types.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_room_emoticon_component.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_space_emoticon_component.dart';
-import 'package:rooster/client/matrix/extensions/matrix_client_extensions.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
 import 'package:flutter/widgets.dart';
 import 'package:intl/intl.dart';
@@ -147,11 +147,8 @@ class MatrixEmoticonPack implements EmoticonPack {
       return;
     }
 
-    if (isGlobal) {
-      return room.client.addEmoticonRoomPack(room.id, identifier);
-    } else {
-      return room.client.removeEmoticonRoomPack(room.id, identifier);
-    }
+    return room.client
+        .setImagePackEnabledEverywhere(room.id, identifier, isGlobal);
   }
 
   List<String>? _emoticonUsageToArray(EmoticonUsage usage) {
@@ -237,20 +234,6 @@ class MatrixEmoticonPack implements EmoticonPack {
       return false;
     }
 
-    final data = room
-        .client.accountData[MatrixEmoticonComponent.globalEmoteRoomsStateKey];
-    if (data == null) {
-      return false;
-    }
-
-    final rooms = data.content.tryGetMap<String, dynamic>("rooms");
-
-    if (rooms == null) {
-      return false;
-    }
-
-    final roomData = rooms.tryGetMap<String, dynamic>(room.id);
-
-    return roomData?.containsKey(identifier) ?? false;
+    return room.client.isImagePackEnabledEverywhere(room.id, identifier);
   }
 }

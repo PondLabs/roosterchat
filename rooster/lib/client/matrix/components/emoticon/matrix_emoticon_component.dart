@@ -7,6 +7,7 @@ import 'package:rooster/client/components/emoticon/emoticon_component.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_emoticon.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_emoticon_pack.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_emoticon_state_manager.dart';
+import 'package:rooster/client/matrix/components/emoticon/matrix_image_pack_types.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_import_emoticon_pack_task.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/main.dart';
@@ -17,8 +18,10 @@ import 'package:matrix/matrix.dart' as matrix;
 
 /// Manages custom emoticon packs from the matrix user account state
 class MatrixEmoticonComponent extends EmoticonComponent<MatrixClient> {
-  static const roomEmotesStateKey = "im.ponies.room_emotes";
-  static const globalEmoteRoomsStateKey = "im.ponies.emote_rooms";
+  /// The types packs are written to (Matrix v1.19); the legacy ones are
+  /// read too, see [ImagePackTypes].
+  static const roomEmotesStateKey = ImagePackTypes.room;
+  static const globalEmoteRoomsStateKey = ImagePackTypes.rooms;
 
   final StreamController<void> _onStateChanged = StreamController.broadcast();
 
@@ -154,13 +157,7 @@ class MatrixEmoticonComponent extends EmoticonComponent<MatrixClient> {
 
   @override
   List<EmoticonPack> globalPacks() {
-    var matrixClient = client.getMatrixClient();
-
-    if (!matrixClient.accountData.containsKey(globalEmoteRoomsStateKey))
-      return [];
-
-    var rooms = matrixClient.accountData[globalEmoteRoomsStateKey]!
-        .content['rooms'] as Map<String, Object?>;
+    var rooms = client.getMatrixClient().imagePackRooms.rooms;
 
     var packs = List<EmoticonPack>.empty(growable: true);
 
@@ -169,11 +166,8 @@ class MatrixEmoticonComponent extends EmoticonComponent<MatrixClient> {
       var space = client.getSpace(roomId);
 
       if (room == null && space == null) continue;
-      if (rooms[roomId] is! Map<String, dynamic>) {
-        continue;
-      }
 
-      var packKeys = rooms[roomId] as Map<String, dynamic>;
+      var packKeys = rooms[roomId]!;
 
       for (var packKey in packKeys.keys) {
         List? emoji;
