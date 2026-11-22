@@ -50,6 +50,18 @@ class KnockRequestBanner extends StatefulWidget {
           desc: "Banner in a room you asked to join, until a moderator answers",
           name: "messageKnockPending");
 
+  /// Prompts for an optional note for the moderators; returns null if
+  /// cancelled.
+  static Future<String?> promptReason(BuildContext context) =>
+      AdaptiveDialog.textPrompt(
+        context,
+        title: labelKnockReasonTitle,
+        description: labelKnockReasonDescription,
+        hintText: labelKnockReasonHint,
+        submitText: promptSendKnock,
+        initialText: '',
+      );
+
   @override
   State<KnockRequestBanner> createState() => _KnockRequestBannerState();
 }
@@ -57,6 +69,8 @@ class KnockRequestBanner extends StatefulWidget {
 class _KnockRequestBannerState extends State<KnockRequestBanner> {
   late MatrixKnockingComponent knocking;
   StreamSubscription? _stateChanges;
+  StreamSubscription? _syncChanges;
+  matrix.Membership? _lastMembership;
   bool busy = false;
   bool sent = false;
 
@@ -71,41 +85,55 @@ class _KnockRequestBannerState extends State<KnockRequestBanner> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.room != widget.room) {
       _stateChanges?.cancel();
+      _syncChanges?.cancel();
       sent = false;
       _listen();
+    } else if (widget.room.membership != _lastMembership) {
+      _lastMembership = widget.room.membership;
+      sent = false;
     }
   }
 
   void _listen() {
     knocking = MatrixKnockingComponent(widget.room);
+    _lastMembership = widget.room.membership;
     _stateChanges = widget.room.client.onRoomState.stream
         .where((u) => u.roomId == widget.room.id)
         .listen((_) {
-      if (mounted) setState(() {});
+      if (!mounted) return;
+      if (widget.room.membership != _lastMembership) {
+        _lastMembership = widget.room.membership;
+        sent = false;
+      }
+      setState(() {});
+    });
+    _syncChanges = widget.room.client.onSync.stream.listen((_) {
+      if (!mounted) return;
+      if (widget.room.membership != _lastMembership) {
+        setState(() {
+          _lastMembership = widget.room.membership;
+          sent = false;
+        });
+      }
     });
   }
 
   @override
   void dispose() {
     _stateChanges?.cancel();
+    _syncChanges?.cancel();
     super.dispose();
   }
 
   Future<void> requestToJoin() async {
-    final reason = await AdaptiveDialog.textPrompt(
-      context,
-      title: KnockRequestBanner.labelKnockReasonTitle,
-      description: KnockRequestBanner.labelKnockReasonDescription,
-      hintText: KnockRequestBanner.labelKnockReasonHint,
-      submitText: KnockRequestBanner.promptSendKnock,
-      initialText: '',
-    );
+    final reason = await KnockRequestBanner.promptReason(context);
     // Closed without sending.
     if (reason == null || !mounted) return;
 
     setState(() => busy = true);
     await ErrorUtils.tryRun(context, () async {
       await knocking.knock(reason: reason);
+      _lastMembership = widget.room.membership;
       sent = true;
     });
     if (mounted) setState(() => busy = false);
@@ -113,6 +141,10 @@ class _KnockRequestBannerState extends State<KnockRequestBanner> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.room.membership != _lastMembership) {
+      _lastMembership = widget.room.membership;
+      sent = false;
+    }
     if (sent || knocking.hasPendingKnock) {
       return RoomNoticeBanner(
         key: KnockRequestBanner.bannerKey,

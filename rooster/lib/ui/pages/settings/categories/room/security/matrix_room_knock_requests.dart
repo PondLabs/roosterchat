@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/matrix/components/knocking/matrix_knocking_component.dart';
+import 'package:rooster/debug/log.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/utils/error_utils.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
@@ -70,25 +71,113 @@ class MatrixRoomKnockRequests extends StatefulWidget {
 }
 
 class _MatrixRoomKnockRequestsState extends State<MatrixRoomKnockRequests> {
-  late MatrixKnockingComponent knocking = MatrixKnockingComponent(widget.room);
-  StreamSubscription? _memberChanges;
+  late MatrixKnockingComponent knocking;
+  StreamSubscription? _stateChanges;
   final Set<String> busy = {};
+  List<KnockRequest>? _fetchedKnocks;
+  bool _canModerate = false;
+  int _loadGeneration = 0;
 
   @override
   void initState() {
     super.initState();
-    _memberChanges = widget.room.client.onRoomState.stream
+    _bindRoom();
+  }
+
+  @override
+  void didUpdateWidget(covariant MatrixRoomKnockRequests oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.room != widget.room) {
+      _stateChanges?.cancel();
+      busy.clear();
+      _fetchedKnocks = null;
+      _bindRoom();
+    } else {
+      final nowCanModerate = knocking.canModerate;
+      if (nowCanModerate && !_canModerate) {
+        _canModerate = true;
+        _loadKnocks();
+      } else if (!nowCanModerate && _canModerate) {
+        _canModerate = false;
+        _loadGeneration++;
+        _fetchedKnocks = null;
+      }
+    }
+  }
+
+  void _bindRoom() {
+    knocking = MatrixKnockingComponent(widget.room);
+    _canModerate = knocking.canModerate;
+    _stateChanges = widget.room.client.onRoomState.stream
         .where((u) =>
             u.roomId == widget.room.id &&
-            u.state.type == matrix.EventTypes.RoomMember)
-        .listen((_) {
-      if (mounted) setState(() {});
+            (u.state.type == matrix.EventTypes.RoomMember ||
+                u.state.type == matrix.EventTypes.RoomJoinRules ||
+                u.state.type == matrix.EventTypes.RoomPowerLevels))
+        .listen((u) {
+      if (!mounted) return;
+      final nowCanModerate = knocking.canModerate;
+      final gainedModeration = nowCanModerate && !_canModerate;
+      _canModerate = nowCanModerate;
+      if (!nowCanModerate) {
+        _loadGeneration++;
+        _fetchedKnocks = null;
+      } else if (gainedModeration) {
+        _loadKnocks();
+      } else if (u.state.type == matrix.EventTypes.RoomMember &&
+          _fetchedKnocks != null) {
+        final key = u.state.stateKey;
+        if (key != null &&
+            u.state.content['membership'] != matrix.Membership.knock.name) {
+          _fetchedKnocks =
+              _fetchedKnocks!.where((r) => r.userId != key).toList();
+        }
+      }
+      setState(() {});
     });
+    if (_canModerate) {
+      _loadKnocks();
+    }
+  }
+
+  Future<void> _loadKnocks() async {
+    final generation = ++_loadGeneration;
+    try {
+      final loaded = await knocking.loadPendingKnocks();
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() => _fetchedKnocks = loaded);
+    } catch (error, stack) {
+      Log.onError(error, stack,
+          content: 'Could not load pending knock requests');
+    }
+  }
+
+  List<KnockRequest> _mergedRequests() {
+    final byUser = <String, KnockRequest>{};
+    final fetched = _fetchedKnocks;
+    if (fetched != null) {
+      final members = widget.room.states[matrix.EventTypes.RoomMember];
+      for (final request in fetched) {
+        final current = members?[request.userId];
+        if (current != null &&
+            current.content['membership'] != matrix.Membership.knock.name) {
+          continue;
+        }
+        byUser[request.userId] = request;
+      }
+    }
+    for (final request in knocking.pendingKnocks) {
+      byUser[request.userId] = request;
+    }
+    final list = byUser.values.toList();
+    list.sort((a, b) =>
+        (a.requestedAt ?? DateTime(0)).compareTo(b.requestedAt ?? DateTime(0)));
+    return list;
   }
 
   @override
   void dispose() {
-    _memberChanges?.cancel();
+    _stateChanges?.cancel();
     super.dispose();
   }
 
@@ -117,7 +206,7 @@ class _MatrixRoomKnockRequestsState extends State<MatrixRoomKnockRequests> {
   @override
   Widget build(BuildContext context) {
     if (!knocking.canModerate) return const SizedBox.shrink();
-    final requests = knocking.pendingKnocks;
+    final requests = _mergedRequests();
     // A room that stopped taking knocks can still have some waiting.
     if (!knocking.roomAcceptsKnocks && requests.isEmpty) {
       return const SizedBox.shrink();

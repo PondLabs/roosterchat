@@ -38,19 +38,55 @@ class MatrixKnockingComponent {
   bool get canKnock =>
       roomAcceptsKnocks && room.membership == matrix.Membership.leave;
 
+  /// Sends a knock for a room by ID or alias without needing a joined
+  /// [matrix.Room] instance.
+  static Future<String> knockById(
+    matrix.Client client,
+    String roomIdOrAlias, {
+    String? reason,
+    List<String>? via,
+  }) {
+    final trimmed = reason?.trim();
+    final servers = via?.where((s) => s.isNotEmpty).toList();
+    return client.knockRoom(
+      roomIdOrAlias,
+      reason: trimmed == null || trimmed.isEmpty ? null : trimmed,
+      via: servers == null || servers.isEmpty ? null : servers,
+    );
+  }
+
   /// Asks to join the room. [reason] is shown to the moderators.
   Future<void> knock({String? reason, List<String>? via}) async {
-    final trimmed = reason?.trim();
-    await client.knockRoom(
-      room.id,
-      reason: trimmed == null || trimmed.isEmpty ? null : trimmed,
-      via: via,
-    );
+    await knockById(client, room.id, reason: reason, via: via);
   }
 
   /// Moderators answer knocks by inviting (approve) or kicking (deny), so it
   /// takes the power to do both.
   bool get canModerate => room.canInvite && room.canKick;
+
+  static KnockRequest? _knockFromContent(
+    String userId,
+    Map<String, Object?> content,
+    DateTime? requestedAt,
+  ) {
+    if (content['membership'] != matrix.Membership.knock.name) return null;
+    final displayName = content['displayname'];
+    final reason = content['reason'];
+    return KnockRequest(
+      userId: userId,
+      displayName:
+          displayName is String && displayName.isNotEmpty ? displayName : null,
+      reason: reason is String && reason.isNotEmpty ? reason : null,
+      requestedAt: requestedAt,
+    );
+  }
+
+  static List<KnockRequest> _sortedRequests(Iterable<KnockRequest> requests) {
+    final list = requests.toList();
+    list.sort((a, b) =>
+        (a.requestedAt ?? DateTime(0)).compareTo(b.requestedAt ?? DateTime(0)));
+    return list;
+  }
 
   List<KnockRequest> get pendingKnocks {
     final members = room.states[matrix.EventTypes.RoomMember];
@@ -58,23 +94,49 @@ class MatrixKnockingComponent {
     final requests = <KnockRequest>[];
     for (final entry in members.entries) {
       final event = entry.value;
-      if (event.content['membership'] != matrix.Membership.knock.name) {
+      final request = _knockFromContent(
+        entry.key,
+        event.content,
+        event is matrix.Event ? event.originServerTs : null,
+      );
+      if (request != null) requests.add(request);
+    }
+    return _sortedRequests(requests);
+  }
+
+  /// Loads pending knocks from the homeserver (`GET /members?membership=knock`)
+  /// so knocks outside a lazy-loaded `/sync` window are still returned.
+  Future<List<KnockRequest>> loadPendingKnocks() async {
+    final events = await client.getMembersByRoom(
+      room.id,
+      membership: matrix.Membership.knock,
+    );
+    if (events == null) return pendingKnocks;
+    final byUser = <String, KnockRequest>{};
+    for (final event in events) {
+      final userId = event.stateKey;
+      if (userId == null || userId.isEmpty) continue;
+      final request = _knockFromContent(
+        userId,
+        event.content,
+        event.originServerTs,
+      );
+      if (request == null) continue;
+      final existing = room.states[matrix.EventTypes.RoomMember]?[userId];
+      if (existing is matrix.Event &&
+          existing.originServerTs.isAfter(event.originServerTs)) {
+        final newer = _knockFromContent(
+          userId,
+          existing.content,
+          existing.originServerTs,
+        );
+        if (newer != null) byUser[userId] = newer;
         continue;
       }
-      final displayName = event.content['displayname'];
-      final reason = event.content['reason'];
-      requests.add(KnockRequest(
-        userId: entry.key,
-        displayName: displayName is String && displayName.isNotEmpty
-            ? displayName
-            : null,
-        reason: reason is String && reason.isNotEmpty ? reason : null,
-        requestedAt: event is matrix.Event ? event.originServerTs : null,
-      ));
+      room.setState(matrix.Event.fromMatrixEvent(event, room));
+      byUser[userId] = request;
     }
-    requests.sort((a, b) =>
-        (a.requestedAt ?? DateTime(0)).compareTo(b.requestedAt ?? DateTime(0)));
-    return requests;
+    return _sortedRequests(byUser.values);
   }
 
   Future<void> approve(String userId) async {
