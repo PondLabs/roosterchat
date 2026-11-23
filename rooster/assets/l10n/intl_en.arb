@@ -1649,6 +1649,34 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelAccountLocked": "Your account is locked",
+  "@labelAccountLocked": {
+    "description": "Title of the banner shown when the homeserver locked the user's account (Matrix error M_USER_LOCKED)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageAccountLocked": "The administrators of your server locked {account}. Rooster stopped syncing it and checks again from time to time. You are still signed in and nothing was deleted.",
+  "@messageAccountLocked": {
+    "description": "Banner shown when the homeserver locked the user's account; account is the Matrix ID",
+    "type": "text",
+    "placeholders": {
+      "account": {}
+    }
+  },
+  "labelAccountSuspended": "Your account is suspended",
+  "@labelAccountSuspended": {
+    "description": "Title of the banner shown when the homeserver suspended the user's account (Matrix error M_USER_SUSPENDED)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageAccountSuspended": "The administrators of your server suspended {account}. You can still read, but you can't send messages, join rooms or change your profile. Rooster checks again from time to time.",
+  "@messageAccountSuspended": {
+    "description": "Banner shown when the homeserver suspended the user's account; account is the Matrix ID",
+    "type": "text",
+    "placeholders": {
+      "account": {}
+    }
+  },
   "errorSoundboardMissingPermission": "Missing permission to manage soundboard",
   "@errorSoundboardMissingPermission": {
     "description": "Why a soundboard sound could not be added, changed or removed: you may not manage the space's soundboard",
@@ -9362,6 +9390,12 @@
   "labelDeactivateConfirm": "I understand that this cannot be undone",
   "@labelDeactivateConfirm": {
     "description": "Checkbox in the Deactivate account dialog that must be ticked before the account can be deactivated",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptAccountRestrictionCheckAgain": "Check again",
+  "@promptAccountRestrictionCheckAgain": {
+    "description": "Button on the banner of a locked or suspended account: asks the server again now whether the account works",
     "type": "text",
     "placeholders": {}
   },
