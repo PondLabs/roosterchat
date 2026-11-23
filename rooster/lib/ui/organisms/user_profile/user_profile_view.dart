@@ -12,6 +12,7 @@ import 'package:rooster/ui/atoms/scaled_safe_area.dart';
 import 'package:rooster/ui/atoms/tiny_pill.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/organisms/user_profile/user_device_list_view.dart';
+import 'package:rooster/ui/organisms/moderation/profile_moderation_actions.dart';
 import 'package:rooster/ui/organisms/user_profile/user_devices.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -51,7 +52,8 @@ class UserProfileView extends StatefulWidget {
       this.trust,
       this.devices = const [],
       this.onSetDeviceBlocked,
-      this.onWithdrawVerification});
+      this.onWithdrawVerification,
+      this.moderationActions = const []});
   final ImageProvider? userAvatar;
   final ImageProvider? userBanner;
   final UserPresence? presence;
@@ -90,6 +92,9 @@ class UserProfileView extends StatefulWidget {
   /// Draws the card as others see it, for a preview: no menu, nothing to
   /// tap, no buttons.
   final bool preview;
+
+  /// Report and ignore entries, last in the menu of someone else's card.
+  final List<ProfileMenuAction> moderationActions;
 
   /// Shown as an "Edit profile" button on your own card.
   final Future<void> Function()? onEditProfile;
@@ -702,6 +707,9 @@ class UserProfileViewState extends State<UserProfileView> {
             }
           },
         ),
+      for (final action in widget.moderationActions)
+        profileMenuItem(
+            text: action.text, icon: action.icon, onPressed: action.onPressed),
       if (widget.showSource != null && preferences.developerMode.value)
         profileMenuItem(
             text: promptProfileShowRawProfile,

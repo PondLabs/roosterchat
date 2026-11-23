@@ -11,6 +11,7 @@ import 'package:rooster/client/components/threads/thread_component.dart';
 import 'package:rooster/client/components/url_preview/url_preview_component.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
+import 'package:rooster/client/matrix/components/reporting/matrix_ignored_users.dart';
 import 'package:rooster/client/matrix/matrix_timeline.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event.dart';
 import 'package:rooster/client/timeline_events/timeline_event.dart';
@@ -409,7 +410,8 @@ class MatrixThreadTimeline implements Timeline {
   @override
   bool isEventRedacted(TimelineEvent<Client> event) {
     var e = event as MatrixTimelineEvent;
-    return e.event.getDisplayEvent(mainRoomTimeline.matrixTimeline!).redacted;
+    return e.event.getDisplayEvent(mainRoomTimeline.matrixTimeline!).redacted ||
+        MatrixIgnoredUsers.of(e.event.room.client).hides(e.event);
   }
 
   @override

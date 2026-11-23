@@ -4,6 +4,7 @@ import 'package:rooster/client/components/emoticon/emoticon.dart';
 import 'package:rooster/client/components/url_preview/url_preview_component.dart';
 import 'package:rooster/client/matrix/components/read_receipts/matrix_read_receipt_component.dart';
 import 'package:rooster/client/matrix/components/read_receipts/matrix_threaded_receipts.dart';
+import 'package:rooster/client/matrix/components/reporting/matrix_ignored_users.dart';
 import 'package:rooster/client/matrix/extensions/matrix_client_extensions.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
@@ -31,6 +32,9 @@ class MatrixTimeline extends Timeline {
 
   matrix.Timeline? get matrixTimeline => _matrixTimeline;
 
+  late final MatrixIgnoredUsers _ignoredUsers;
+  StreamSubscription<Set<String>>? _ignoredUsersChanged;
+
   MatrixTimeline(
     MatrixClient client,
     MatrixRoom room,
@@ -43,6 +47,15 @@ class MatrixTimeline extends Timeline {
     this.room = room;
     _room = room;
     _matrixTimeline = initialTimeline;
+
+    // Hides or shows again what someone sends when they are ignored or
+    // unignored, without reopening the room.
+    _ignoredUsers = MatrixIgnoredUsers.of(matrixRoom.client);
+    _ignoredUsersChanged = _ignoredUsers.onChanged.listen((users) {
+      for (var i = 0; i < events.length; i++) {
+        if (users.contains(events[i].senderId)) notifyChanged(i);
+      }
+    });
 
     if (_matrixTimeline != null) {
       convertAllTimelineEvents();
@@ -315,6 +328,8 @@ class MatrixTimeline extends Timeline {
 
   @override
   Future<void> close() async {
+    // Not awaited: the subscription's cancel has nothing to wait for.
+    unawaited(_ignoredUsersChanged?.cancel());
     _matrixTimeline?.cancelSubscriptions();
     await onEventAdded.close();
     await onChange.close();
@@ -324,7 +339,9 @@ class MatrixTimeline extends Timeline {
   @override
   bool isEventRedacted(TimelineEvent<Client> event) {
     var e = event as MatrixTimelineEvent;
-    return e.event.getDisplayEvent(_matrixTimeline!).redacted;
+    // An ignored user's message is drawn like a redacted one: not at all.
+    return e.event.getDisplayEvent(_matrixTimeline!).redacted ||
+        _ignoredUsers.hides(e.event);
   }
 
   @override
