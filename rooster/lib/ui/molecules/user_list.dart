@@ -2,12 +2,14 @@ import 'dart:math';
 
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/direct_messages/direct_message_component.dart';
+import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/member.dart';
 import 'package:rooster/client/role.dart';
 import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/ui/atoms/adaptive_context_menu.dart';
 import 'package:rooster/ui/atoms/role_view.dart';
 import 'package:rooster/ui/atoms/shimmer_loading.dart';
+import 'package:rooster/ui/molecules/profile/e2ee_trust.dart';
 import 'package:rooster/ui/molecules/user_panel.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/organisms/user_profile/user_profile.dart';
@@ -296,6 +298,24 @@ class _RoomMemberListState extends State<RoomMemberList> {
             contextRoom: widget.room,
             userId: member.identifier,
           );
+
+          // Each other member's encryption shield, in an encrypted room.
+          final room = widget.room;
+          if (room is MatrixRoom &&
+              room.isE2EE &&
+              member.identifier != room.matrixRoom.client.userID) {
+            result = Row(children: [
+              Expanded(child: result),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 0, 8, 0),
+                child: UserE2eeTrustShield(
+                  key: ValueKey("room-user-list-trust-${member.identifier}"),
+                  client: room.matrixRoom.client,
+                  userId: member.identifier,
+                ),
+              ),
+            ]);
+          }
 
           if (isDirectMessageRoom) {
             if (member.identifier == widget.room.client.self?.identifier)
