@@ -541,3 +541,32 @@ Changes since the copy:
   session's own account or Olm sessions changes on any failure.
   `deleteDehydratedDevice` and `deleteDehydratedDeviceIfSupported` are
   MSC3814's DELETE, for turning the opt-in off.
+- Sync filter defined again when it changed (T4.3): `Client._checkSyncFilter`
+  (`lib/src/client.dart`) used to define the sync filter once per login and
+  keep its id for ever, so a session never got a filter the app changed
+  later. Rooster now asks for per-thread unread counts in it (Matrix v1.4,
+  MSC3773, `room.timeline.unread_thread_notifications`). The filter an id
+  was defined from is kept with `cacheCustomObject`
+  (`rooster_defined_sync_filter`), read once per run, and a different one
+  (or none, as in every session from before) defines the filter again and
+  stores the new id. When that definition fails (the server is unreachable
+  or refuses it), the session keeps the id it had and goes on syncing with
+  it, the failure is logged, and the next run tries again; a login with no
+  id yet still fails its sync, as upstream. `DatabaseApi` does not change,
+  so the drift database still compiles. The SDK's `clearCache` empties
+  custom cache objects too, which costs one more definition after it.
+- Per-thread unread counts kept across restarts (T4.3): with
+  `unread_thread_notifications` in the filter the server leaves the threads
+  out of a room's own counts, and neither database's `storeRoomUpdate`
+  stores `Room.unreadThreadNotifications` (`DatabaseApi` cannot take them:
+  the drift database implements it in another package). So a sync that
+  changes them (a new room that has some, a room whose counts change, a
+  room left) writes every room's counts once, at the end of
+  `Client.handleSync`, with `cacheCustomObject`
+  (`rooster_unread_thread_notifications`), and `Client.init` puts them back
+  on the joined rooms it loads. `Client.storeUnreadThreadNotifications()`
+  writes them on demand, for the app clearing a thread it read before the
+  next sync says so. A store that fails is logged and tried again with the
+  next sync; an unreadable cache is skipped. Without this, a room with
+  unread thread replies looked read after a restart until a sync brought
+  its counts again.

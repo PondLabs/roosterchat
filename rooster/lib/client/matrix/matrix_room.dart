@@ -13,6 +13,7 @@ import 'package:rooster/client/components/push_notification/notification_manager
 import 'package:rooster/client/components/component.dart';
 import 'package:rooster/client/components/room_component.dart';
 import 'package:rooster/client/components/user_color/user_color_component.dart';
+import 'package:rooster/client/matrix/components/threads/matrix_thread_unread.dart';
 import 'package:rooster/client/matrix/components/calendar_room_component/matrix_calendar_room_component.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_room_emoticon_component.dart';
 import 'package:rooster/client/matrix/components/read_receipts/matrix_read_receipt_component.dart';
@@ -211,11 +212,19 @@ class MatrixRoom extends Room implements RoomSendPreparation {
   @override
   bool get isE2EE => _matrixRoom.encrypted;
 
+  // With per-thread counts (Matrix v1.4), the server's room counts leave
+  // out the threads; the room's badge still counts them.
   @override
-  int get highlightedNotificationCount => _matrixRoom.highlightCount;
+  int get highlightedNotificationCount =>
+      _matrixRoom.highlightCount +
+      _matrixRoom.unreadThreadNotifications.values
+          .fold(0, (sum, counts) => sum + (counts.highlightCount ?? 0));
 
   @override
-  int get notificationCount => _matrixRoom.notificationCount;
+  int get notificationCount =>
+      _matrixRoom.notificationCount +
+      _matrixRoom.unreadThreadNotifications.values
+          .fold(0, (sum, counts) => sum + (counts.notificationCount ?? 0));
 
   /// Clears this room's unread counts without waiting for the next sync.
   ///
@@ -225,13 +234,25 @@ class MatrixRoom extends Room implements RoomSendPreparation {
   /// the same value and remains authoritative. A room marked unread by hand
   /// loses its mark here too: the spec's "reset when a read receipt is
   /// sent".
-  void clearUnreadCountsLocally() {
+  ///
+  /// [threads] clears the threads' counts too, for a receipt that reads
+  /// them all (one without `thread_id`).
+  void clearUnreadCountsLocally({bool threads = false}) {
     MatrixMarkedUnread.clearOnRead(_matrixRoom);
     final changed =
         _matrixRoom.notificationCount > 0 || _matrixRoom.highlightCount > 0;
     _matrixRoom.notificationCount = 0;
     _matrixRoom.highlightCount = 0;
+    if (threads) MatrixThreadUnread.clearAllLocally(_matrixRoom);
 
+    _countsChangedLocally(changed || threads);
+  }
+
+  /// A thread of this room was read here and its counts cleared
+  /// ([MatrixThreadUnread.clearLocally]): the room's badge counts them.
+  void threadCountsClearedLocally() => _countsChangedLocally(true);
+
+  void _countsChangedLocally(bool changed) {
     _onUpdate.add(null);
 
     if (changed) {
@@ -1227,7 +1248,8 @@ class MatrixRoom extends Room implements RoomSendPreparation {
         update.stateAfter == null &&
         update.accountData == null &&
         update.summary == null &&
-        update.unreadNotifications == null) {
+        update.unreadNotifications == null &&
+        update.unreadThreadNotifications == null) {
       return;
     }
 
@@ -1346,7 +1368,8 @@ class MatrixRoom extends Room implements RoomSendPreparation {
               .firstWhereOrNull((e) => e.status == matrix.EventStatus.synced)
               ?.eventId ==
           markerEventId) {
-        clearUnreadCountsLocally();
+        // This receipt has no thread, so it reads the threads too.
+        clearUnreadCountsLocally(threads: true);
       }
     } catch (e, s) {
       // The server still has the messages unread, so the badge must stay.

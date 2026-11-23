@@ -1,8 +1,10 @@
 import 'package:rooster/client/components/threads/thread_component.dart';
+import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/timeline.dart';
 import 'package:rooster/client/timeline_events/timeline_event_message.dart';
 import 'package:rooster/client/timeline_events/timeline_event_sticker.dart';
 import 'package:rooster/ui/atoms/thread_reply_footer.dart';
+import 'package:rooster/ui/molecules/timeline_events/thread_unread_badge.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -66,7 +68,7 @@ class _TimelineEventViewThreadState extends State<TimelineEventViewThread> {
 
   @override
   Widget build(BuildContext context) {
-    return ThreadReplyFooter(
+    final footer = ThreadReplyFooter(
       body: body ?? "",
       senderName: senderName ?? labelTimelineUnknownSender,
       senderAvatar: senderAvatar,
@@ -76,6 +78,21 @@ class _TimelineEventViewThreadState extends State<TimelineEventViewThread> {
         widget.timeline.room.identifier,
         threadEventId
       )),
+    );
+
+    final room = widget.timeline.room;
+    if (room is! MatrixRoom) return footer;
+
+    // The thread's unread notifications, after its latest reply.
+    return Row(
+      children: [
+        Expanded(child: footer),
+        ThreadUnreadBadge(
+          room: room.matrixRoom,
+          threadRootId: threadEventId,
+          key: ValueKey("thread-unread-$threadEventId"),
+        ),
+      ],
     );
   }
 }

@@ -3832,6 +3832,14 @@
     "type": "text",
     "placeholders": {}
   },
+  "tooltipThreadUnread": "{count,plural, =1{1 unread notification in this thread}other{{count} unread notifications in this thread}}",
+  "@tooltipThreadUnread": {
+    "description": "Tooltip of the count of unread notifications on a thread, under its first message and in the room's list of threads",
+    "type": "text",
+    "placeholders": {
+      "count": {}
+    }
+  },
   "promptPinMessage": "Pin Message",
   "@promptPinMessage": {
     "description": "Label for the menu option to pin a message",
@@ -4769,6 +4777,30 @@
   "cantSentMessagePrompt": "You do not have permission to send a message in this room",
   "@cantSentMessagePrompt": {
     "description": "Text that explains the user cannot send a message in this room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptJumpToDate": "Jump to date",
+  "@promptJumpToDate": {
+    "description": "Room menu entry, and tooltip of a day separator in the chat, that asks for a day and shows the room's messages from it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageJumpToDateNotFound": "There are no messages around that date",
+  "@messageJumpToDateNotFound": {
+    "description": "Shown after jumping to a date when the room has no message on or around it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageJumpToDateUnsupported": "Your server can't look up messages by date",
+  "@messageJumpToDateUnsupported": {
+    "description": "Shown after jumping to a date when the homeserver is too old for it (before Matrix v1.6)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorJumpToDateFailed": "Couldn't jump to that date",
+  "@errorJumpToDateFailed": {
+    "description": "Shown after jumping to a date when the homeserver did not answer",
     "type": "text",
     "placeholders": {}
   },
@@ -7239,6 +7271,65 @@
     "description": "Shown over the minigolf game while the next hole's 3D scene is being built, above a progress bar",
     "type": "text",
     "placeholders": {}
+  },
+  "labelThreads": "Threads",
+  "@labelThreads": {
+    "description": "Title of the panel that lists a room's threads, and the room menu entry that opens it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelThreadsFilterAll": "All threads",
+  "@labelThreadsFilterAll": {
+    "description": "Filter of the threads panel that shows every thread of the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelThreadsFilterParticipated": "My threads",
+  "@labelThreadsFilterParticipated": {
+    "description": "Filter of the threads panel that shows only the threads the user started or replied in",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageNoThreads": "No threads here yet",
+  "@messageNoThreads": {
+    "description": "Shown in the threads panel when the room has no thread",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageNoParticipatedThreads": "You haven't started or replied in a thread here yet",
+  "@messageNoParticipatedThreads": {
+    "description": "Shown in the threads panel, filtered to the user's threads, when the user has none in the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorThreadsLoadFailed": "Couldn't load the threads",
+  "@errorThreadsLoadFailed": {
+    "description": "Shown in the threads panel when the server did not answer with the room's threads",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelThreadReplyCount": "{count,plural, =0{No replies}=1{1 reply}other{{count} replies}}",
+  "@labelThreadReplyCount": {
+    "description": "How many replies a thread has, in the threads panel",
+    "type": "text",
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "labelThreadUnknownSender": "Unknown sender",
+  "@labelThreadUnknownSender": {
+    "description": "Stands in for the name of who started a thread, in the threads panel, while it is not known",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelThreadLatestReply": "{sender}: {body}",
+  "@labelThreadLatestReply": {
+    "description": "Under a thread in the threads panel: who sent its latest reply and what it says",
+    "type": "text",
+    "placeholders": {
+      "sender": {},
+      "body": {}
+    }
   },
   "labelUpdateVersion": "Version",
   "@labelUpdateVersion": {

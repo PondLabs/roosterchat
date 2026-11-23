@@ -1,6 +1,11 @@
 import 'dart:async';
 
+import 'package:collection/collection.dart';
 import 'package:rooster/client/attachment.dart';
+import 'package:rooster/client/matrix/components/read_receipts/matrix_read_receipt_component.dart';
+import 'package:rooster/client/matrix/components/read_receipts/matrix_threaded_receipts.dart';
+import 'package:rooster/client/matrix/components/threads/matrix_thread_unread.dart';
+import 'package:rooster/debug/log.dart';
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/threads/thread_component.dart';
 import 'package:rooster/client/components/url_preview/url_preview_component.dart';
@@ -214,8 +219,49 @@ class MatrixThreadTimeline implements Timeline {
     throw UnimplementedError();
   }
 
+  /// The reply our last thread receipt was sent for, so the view asking on
+  /// every incoming message makes one request per reply.
+  String? _receiptSentFor;
+
+  /// Sends our receipt for this thread (Matrix v1.4, MSC3771): on its
+  /// newest reply the server has, with `thread_id` set to the root, public
+  /// or private as the room prefers. A thread with no reply yet, or a
+  /// server without threaded receipts, gets none. Then the thread's unread
+  /// badge clears.
   @override
-  void markAsRead(TimelineEvent event) {}
+  Future<void> markAsRead(TimelineEvent event) async {
+    final reply = events.firstWhereOrNull((e) =>
+        e.eventId != threadRootId &&
+        e is MatrixTimelineEvent &&
+        e.event.status.isSynced &&
+        e.event.relationshipType == matrix.RelationshipTypes.thread &&
+        e.event.relationshipEventId == threadRootId);
+    if (reply == null || reply.eventId == _receiptSentFor) return;
+
+    final mxRoom = (room as MatrixRoom).matrixRoom;
+    if (!await MatrixThreadedReceipts.supported(mxRoom.client)) return;
+
+    _receiptSentFor = reply.eventId;
+    try {
+      await MatrixThreadedReceipts.send(mxRoom, reply.eventId,
+          threadId: threadRootId,
+          public: room
+              .getComponent<MatrixReadReceiptComponent>()
+              ?.usePublicReadReceiptsForRoom);
+    } catch (e, s) {
+      // Asked again next time: the server does not have it.
+      if (_receiptSentFor == reply.eventId) _receiptSentFor = null;
+      Log.onError(e, s, content: "Could not send the thread's read receipt");
+      return;
+    }
+
+    // A reply that arrived meanwhile is still unread; its sync owns the
+    // counts.
+    if (events.firstOrNull?.eventId == reply.eventId) {
+      MatrixThreadUnread.clearLocally(mxRoom, threadRootId);
+      (room as MatrixRoom).threadCountsClearedLocally();
+    }
+  }
 
   @override
   void notifyChanged(int index) {}

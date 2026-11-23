@@ -516,6 +516,7 @@ class MatrixClient extends Client {
       },
       nativeImplementations: nativeImplementations,
       database: database,
+      syncFilter: syncFilter,
       // No logLevel: the SDK constructor would override the level set at
       // startup (warning, verbose only in developer mode), and every
       // SDK message went through print on every sync.
@@ -525,6 +526,16 @@ class MatrixClient extends Client {
 
     return client;
   }
+
+  /// The SDK's own sync filter, plus the per-thread unread counts (Matrix
+  /// v1.4, MSC3773) the threads' badges show. The server then leaves the
+  /// threads out of the room's counts; [MatrixRoom] adds them back.
+  static matrix.Filter get syncFilter => matrix.Filter(
+        room: matrix.RoomFilter(
+          state: matrix.StateFilter(lazyLoadMembers: true),
+          timeline: matrix.StateFilter(unreadThreadNotifications: true),
+        ),
+      );
 
   matrix.Client getMatrixClient() {
     return _matrixClient;
