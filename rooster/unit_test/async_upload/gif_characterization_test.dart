@@ -135,6 +135,7 @@ void main() {
     expect(content['msgtype'], 'm.image');
     expect(content['chat.commet.type'], 'chat.commet.sticker');
     expect(content['info'], {
+      'is_animated': true,
       'chat.commet.animated': true,
       'w': 320,
       'h': 240,
