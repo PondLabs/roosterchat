@@ -14,6 +14,7 @@ import 'package:rooster/debug/log.dart';
 import 'package:rooster/utils/color_utils.dart';
 import 'package:rooster/utils/notifying_list.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 /// The origin used by the old widget runner when it delivered app messages.
 /// It remains the app-side origin even when the page itself is hosted directly
@@ -36,6 +37,14 @@ const String matrixWidgetToWidgetStoragePrefix = 'chat.commet.toWidget:';
 const String matrixWidgetBridgeInstallOperation = 'evaluate_javascript';
 const String matrixWidgetBridgeMessageOperation = 'dispatch_script_message';
 const int matrixWidgetBridgeProtocolVersion = 1;
+
+/// MSC2873's `$org.matrix.msc2873.client_id`: who the widget runs in.
+const String matrixWidgetClientId = 'com.pondlabs.rooster';
+
+/// MSC2873's `$org.matrix.msc2873.client_language`: the app's language as a
+/// BCP 47 tag (`pt-BR`, not Intl's `pt_BR`).
+String matrixWidgetClientLanguage() =>
+    Intl.getCurrentLocale().replaceAll('_', '-');
 
 /// Installs the compatibility bridge in the opened page.
 ///
@@ -818,6 +827,8 @@ class MatrixWidgetAdapter {
       r'$org.matrix.msc4039.matrix_base_url': launch.matrixBaseUrl,
       r'$chat.commet.color_scheme': Uri.encodeComponent(launch.colorSchemeJson),
       r'$org.matrix.msc2873.client_theme': launch.theme,
+      r'$org.matrix.msc2873.client_id': matrixWidgetClientId,
+      r'$org.matrix.msc2873.client_language': matrixWidgetClientLanguage(),
     };
     for (final entry in replacements.entries) {
       url = url.replaceAll(entry.key, entry.value);

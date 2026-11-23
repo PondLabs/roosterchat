@@ -1,6 +1,5 @@
 import 'package:rooster/client/components/widgets/widget_component.dart';
 import 'package:rooster/client/matrix/components/widgets/matrix_widget_capabilities_manager.dart';
-import 'package:rooster/config/build_config.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:matrix/matrix_api_lite/utils/try_get_map_extension.dart';
 
@@ -135,26 +134,30 @@ class MatrixWidgetMessageHandler implements WidgetEventHandler {
     }
   }
 
+  /// The Widget API versions Rooster answers `supported_api_versions` with,
+  /// in every build. Announcing a version grants nothing: each capability it
+  /// brings is still asked of the user (see
+  /// [MatrixWidgetCapabilitiesManager.requestCapabilities]).
+  static const List<String> supportedApiVersions = [
+    "0.0.1",
+    "0.0.2",
+    "org.matrix.msc2762", // Read / Send Events
+    "org.matrix.msc2762_update_state",
+    "org.matrix.msc2871", // Capabilities Notifications
+    "org.matrix.msc2974", // Widgets: Capabilities re-exchange
+    "org.matrix.msc4039", // Access the Content repository with the Widget API
+    "town.robin.msc3846", // Allowing widgets to access TURN servers
+    "org.matrix.msc3819", // Allowing widgets to send/receive to-device messages
+    "org.matrix.msc3869", // Read event relations with the Widget API
+    "org.matrix.msc2873", // Identifying clients and user settings in widgets
+    "org.matrix.msc2931", // Allow widgets to navigate with matrix.to URIs
+    "org.matrix.msc2876", // Allowing widgets to read events in a room
+    "org.matrix.msc3973", // Search users in the user directory
+  ];
+
   handleSupportedApiVersions(MatrixWidgetMessage msg) {
     var response = msg.createResponse(response: {
-      "supported_versions": [
-        "0.0.1",
-        "0.0.2",
-        "org.matrix.msc2762", // Read / Send Events
-        "org.matrix.msc2762_update_state",
-        "org.matrix.msc2871", // Capabilities Notifications
-        "org.matrix.msc2974", // Widgets: Capabilities re-exchange
-        "org.matrix.msc4039", // Access the Content repository with the Widget API
-        "town.robin.msc3846", // Allowing widgets to access TURN servers
-        "org.matrix.msc3819", // Allowing widgets to send/receive to-device messages
-        "org.matrix.msc3869", // Read event relations with the Widget API
-        if (BuildConfig.DEBUG) ...[
-          "org.matrix.msc2873", //  Identifying clients and user settings in widgets
-          "org.matrix.msc2931", // Allow widgets to navigate with matrix.to URIs
-          "org.matrix.msc2876", // Allowing widgets to read events in a room (Closed)
-          "org.matrix.msc3973", // Search users in the user directory with the Widget API
-        ]
-      ]
+      "supported_versions": supportedApiVersions,
     });
 
     runner.messageTransport.send(response);

@@ -33,6 +33,29 @@ In an end-to-end encrypted room with URL previews turned off, the homeserver
 is never asked. Image links, X, YouTube, Instagram and video files are still
 previewed, because those requests never go through the homeserver.
 
+### A homeserver that turns previews off
+
+A homeserver can say it offers no link previews with the `m.preview_url`
+capability (MSC4452) in `GET /_matrix/client/v3/capabilities`:
+
+```json
+{"capabilities": {"m.preview_url": {"enabled": false}}}
+```
+
+The component reads `/capabilities` the first time it would ask the
+homeserver for a page, and keeps the answer for the session
+(`MatrixUrlPreviewComponent.homeserverPreviewsEnabled`). With
+`enabled: false` it never sends `preview_url`, in any room: other pages get
+no card, and the composer and the timeline stop fetching them. Image links,
+X, YouTube, Instagram and video files are still previewed by the client, as
+in an encrypted room with previews off.
+
+A server that leaves the capability out, or says `enabled: true`, keeps the
+homeserver previews; servers before MSC4452 never send it. So does a
+`/capabilities` request that fails, which is asked again on the next
+preview instead of being kept. A server that answers `preview_url` with
+`M_UNRECOGNIZED` still turns its previews off for the session, as before.
+
 ## When it is fetched
 
 1. **While you write.** The composer's `UrlPreviewPrefetcher`

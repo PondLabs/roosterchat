@@ -1,3 +1,18 @@
+/// Widget API versions a client may announce in `supported_api_versions`.
+abstract class WidgetApiVersion {
+  static const String msc2762 = "org.matrix.msc2762";
+  static const String msc2871 = "org.matrix.msc2871";
+  static const String msc2873 = "org.matrix.msc2873";
+  static const String msc2876 = "org.matrix.msc2876";
+  static const String msc2931 = "org.matrix.msc2931";
+  static const String msc2974 = "org.matrix.msc2974";
+  static const String msc3819 = "org.matrix.msc3819";
+  static const String msc3846 = "town.robin.msc3846";
+  static const String msc3869 = "org.matrix.msc3869";
+  static const String msc3973 = "org.matrix.msc3973";
+  static const String msc4039 = "org.matrix.msc4039";
+}
+
 abstract class ToWidgetAction {
   static const String supportedApiVersions = "supported_api_versions";
   static const String capabilities = "capabilities";
@@ -34,20 +49,21 @@ class FromWidgetAction {
   static const String beeperReadRoomAccountData =
       "com.beeper.read_room_account_data";
 
-  // Experimental, use with caution
+  // Announced by Rooster in every build; each needs its capability granted.
   static const String readEvents = "org.matrix.msc2876.read_events";
   static const String navigate = "org.matrix.msc2931.navigate";
+  static const String userDirectorySearch =
+      "org.matrix.msc3973.user_directory_search";
+
+  // Experimental, use with caution
   static const String renegotiateCapabilities =
       "org.matrix.msc2974.request_capabilities";
   static const String readRelations = "org.matrix.msc3869.read_relations";
-  static const String userDirectorySearch =
-      "org.matrix.msc3973.user_directory_search";
   static const String getMediaConfigAction =
       "org.matrix.msc4039.get_media_config";
   static const String uploadFileAction = "org.matrix.msc4039.upload_file";
   static const String downloadFileAction = "org.matrix.msc4039.download_file";
   static const String updateDelayedEvent =
       "org.matrix.msc4157.update_delayed_event";
-  static const String sendStickyEvent = "org.matrix.msc4354.send_sticky_event";
   static const String msc2876ReadEvents = "org.matrix.msc2876.read_events";
 }

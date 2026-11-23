@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:rooster/cache/file_provider.dart';
 import 'package:rooster/client/attachment.dart';
 import 'package:rooster/client/components/url_preview/direct_image_link.dart';
@@ -219,7 +221,14 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
     final clientOnly =
         provider is YouTubeProvider || provider is GenericVideoProvider;
 
-    if (clientOnly || !shouldGetPreviewsInRoom(room)) {
+    var askHomeserver = !clientOnly && shouldGetPreviewsInRoom(room);
+    if (askHomeserver) {
+      // Synchronous once known, so later previews are not held back.
+      final enabled = homeserverPreviewsEnabled();
+      askHomeserver = enabled is bool ? enabled : await enabled;
+    }
+
+    if (!askHomeserver) {
       if (!clientOnly) {
         Log.i("Not asking the homeserver for a url preview in this chat");
       }
@@ -228,6 +237,50 @@ class MatrixUrlPreviewComponent implements UrlPreviewComponent<MatrixClient> {
 
     return fetchPreviewData(room, uri);
   }
+
+  bool? _previewsEnabled;
+  Future<bool>? _previewsEnabledRequest;
+
+  /// Whether the homeserver offers link previews: MSC4452's `m.preview_url`
+  /// capability, read once per session. Only `enabled: false` turns them
+  /// off. A server that leaves the capability out, or a `/capabilities`
+  /// that fails, keeps the homeserver previews; a failure is asked again on
+  /// the next preview.
+  FutureOr<bool> homeserverPreviewsEnabled() {
+    final known = _previewsEnabled;
+    if (known != null) return known;
+
+    final pending = _previewsEnabledRequest;
+    if (pending != null) return pending;
+
+    final Future<Capabilities?> request;
+    try {
+      request = requestHomeserverCapabilities();
+    } catch (error, stack) {
+      Log.onError(error, stack,
+          content: 'Failed to read the homeserver capabilities');
+      return true;
+    }
+
+    return _previewsEnabledRequest = request.then((capabilities) {
+      final enabled = capabilities?.mPreviewUrl?.enabled != false;
+      _previewsEnabled = enabled;
+      // Also what shouldGetPreviewsInRoom reads, so the composer and the
+      // timeline stop asking for pages.
+      if (!enabled) serverSupportsUrlPreview = false;
+      return enabled;
+    }, onError: (Object error, StackTrace stack) {
+      Log.onError(error, stack,
+          content: 'Failed to read the homeserver capabilities');
+      return true;
+    }).whenComplete(() {
+      _previewsEnabledRequest = null;
+    });
+  }
+
+  @visibleForTesting
+  Future<Capabilities?> requestHomeserverCapabilities() =>
+      client.getMatrixClient().getCapabilities();
 
   Future<String> getRequestPath() async {
     return _requestPath ??=
