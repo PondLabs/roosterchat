@@ -9,6 +9,7 @@ import 'package:rooster/main.dart';
 import 'package:rooster/ui/pages/settings/categories/app/boolean_preference_toggle.dart';
 import 'package:rooster/ui/pages/settings/categories/app/double_preference_slider.dart';
 import 'package:rooster/ui/pages/settings/categories/app/notification_settings/notifier_debug_view.dart';
+import 'package:rooster/ui/pages/settings/categories/app/notification_settings/push_rules_settings.dart';
 import 'package:rooster/ui/pages/setup/menus/unified_push_setup.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:flutter/material.dart';
@@ -273,6 +274,8 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                 ),
             ],
           ),
+        // The homeserver's rules and history, the same on every device.
+        const AccountNotificationSettings(),
         if (preferences.developerMode.value)
           Panel(
             mode: tiamat.TileType.surfaceContainerLow,
