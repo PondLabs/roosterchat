@@ -369,6 +369,8 @@
   "labelVoipNoiseSuppressionDescription": "Remove do seu microfone o ruído de fundo, os cliques do teclado e as palmas antes de enviar o áudio para os outros. Roda no seu dispositivo.",
   "labelNoiseSuppressionButtonOn": "Ligada",
   "labelNoiseSuppressionButtonOff": "Desligada",
+  "labelSpoilerReason": "Contém spoiler: {reason}",
+  "labelSpoilerHidden": "Spoiler oculto, toque para revelar",
   "labelRoomCreatedWelcome": "Boas-vindas a {roomName}!",
   "labelRoomCreatedMakeYourselfAtHome": "Fique à vontade.",
   "labelRoomRecentEventYou": "Você",

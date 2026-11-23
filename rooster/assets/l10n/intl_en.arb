@@ -2502,6 +2502,20 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelSpoilerReason": "Spoiler: {reason}",
+  "@labelSpoilerReason": {
+    "description": "Shown before a hidden spoiler in a message, with the reason its sender gave for hiding it",
+    "type": "text",
+    "placeholders": {
+      "reason": {}
+    }
+  },
+  "labelSpoilerHidden": "Hidden spoiler, tap to reveal",
+  "@labelSpoilerHidden": {
+    "description": "Read by screen readers in place of the hidden text of a spoiler in a message",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelRoomCreatedWelcome": "Welcome to {roomName}!",
   "@labelRoomCreatedWelcome": {
     "description": "Big title at the very beginning of a room's history, with the room's name",
