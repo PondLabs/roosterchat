@@ -403,14 +403,18 @@ void main() {
       expect(state.device, same(device), reason: 'the device stays');
     }
 
-    test('a 500 on the device', () async {
-      await optIn();
-      final device = state.device;
-      state.failDevice = 500;
-      final login = await loginAgain(state, opened);
-      await expectUntouched(login, DehydratedDeviceStatus.failed, device);
-      expect(state.calls.where((c) => c.startsWith('PUT')), hasLength(1));
-    });
+    // A 5xx is a plain exception in the SDK, any other error answer a
+    // MatrixException: neither replaces the device, only a 404 does.
+    for (final status in [500, 403]) {
+      test('a $status on the device', () async {
+        await optIn();
+        final device = state.device;
+        state.failDevice = status;
+        final login = await loginAgain(state, opened);
+        await expectUntouched(login, DehydratedDeviceStatus.failed, device);
+        expect(state.calls.where((c) => c.startsWith('PUT')), hasLength(1));
+      });
+    }
 
     test('a 404 makes a new device instead', () async {
       final client = await login('GHTYAJCE', olmAccount: pickledOlmAccount);

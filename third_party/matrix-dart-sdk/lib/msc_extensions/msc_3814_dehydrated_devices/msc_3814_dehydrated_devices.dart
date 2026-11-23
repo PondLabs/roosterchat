@@ -143,8 +143,9 @@ extension DehydratedDeviceHandler on Client {
         device = await getDehydratedDevice();
       } on MatrixException catch (e) {
         // ROOSTER: only "no device" (404 M_NOT_FOUND) makes a new one.
-        // Upstream also replaced the device on a 500 or any other error,
-        // dropping the events waiting for it.
+        // Upstream also replaced the device on any other error answer but
+        // a 400 (a 403, a 429...), dropping the events waiting for it. A
+        // 5xx is no MatrixException and ends below, as before.
         if (e.response?.statusCode == 404 ||
             e.error == MatrixError.M_NOT_FOUND) {
           return await replace(DehydratedDeviceStatus.created);

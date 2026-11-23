@@ -528,8 +528,8 @@ Changes since the copy:
   `unstable_features` of `/versions` (`dehydratedDevicesSupported`; no spec
   version has the stable endpoints yet) and returns a
   `DehydratedDeviceResult` instead of nothing. Only a 404 makes a new
-  dehydrated device; upstream also replaced it on a 500 or any other error,
-  dropping the events waiting for it. A key that is missing from secret
+  dehydrated device; upstream also replaced it on any other error answer
+  but a 400 (a 403, a 429...), dropping the events waiting for it. A key that is missing from secret
   storage (`org.matrix.msc3814`) or does not open the device leaves the
   device on the server (`keyMismatch`). The device's cross-signing chain
   may end at a master key whose private key is in the secret storage just
