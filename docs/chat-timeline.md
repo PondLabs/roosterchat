@@ -106,3 +106,68 @@ wherever it loads.
 
 Tests: `unit_test/timeline_follow_latest_test.dart`,
 `unit_test/mention_highlight_test.dart`.
+
+## Threads: read receipts and unread badges
+
+A thread is read apart from the room (threaded receipts, Matrix v1.4,
+MSC3771):
+
+- **The room's timeline** moves our fully read marker to its newest event
+  (`/read_markers`, no receipt in it) and sends our receipt with
+  `thread_id: "main"` on its newest event outside any thread
+  (`MatrixThreadedReceipts.threadOf`: a reply in a thread, or a reaction or
+  edit of one, is not). A server before v1.4 gets the unthreaded receipt as
+  before. Nothing changes for `following` or the "New messages" line: they
+  are worked out from the timeline as before, and the receipt is sent at the
+  same moments.
+- **A thread**, open beside the chat (`MatrixThreadTimeline.markAsRead`),
+  sends our receipt on its newest reply the server has, with `thread_id`
+  set to its root. A thread with no reply yet, or a server before v1.4, gets
+  none. One request per reply.
+- Both are `m.read`, or `m.read.private` when the room (or else the
+  account) keeps receipts private.
+- **"Mark as Read"** in the room's menu still sends an unthreaded receipt,
+  which reads the threads too.
+
+The homeserver reports a thread's unread notifications apart from the
+room's (`unread_thread_notifications`, MSC3773) because the sync filter
+asks for them (`MatrixClient.syncFilter`; the SDK defines the filter again
+for sessions from before, see `third_party/README.md`). The SDK keeps them
+in `Room.unreadThreadNotifications`, across restarts too (in its custom
+cache, written when a sync or a read here changes them);
+`MatrixThreadUnread` reads them and says when they change.
+
+- `ThreadUnreadBadge` shows the count on a thread's root in the timeline
+  (after its latest reply) and on the thread in the threads panel. It is
+  red when one of them calls on us (`highlight_count > 0`) and goes once
+  they are zero: a sync that brings the room's counts names every thread
+  with any, and reading the thread here clears it at once.
+- The room's own badge (`MatrixRoom.notificationCount` and
+  `highlightedNotificationCount`) adds the threads to the room's counts, so
+  a reply in a thread still lights the room in the sidebar. Reading the
+  room's timeline leaves the threads' share until they are read.
+
+### The threads panel
+
+**Threads** in the room's menu lists the room's threads, newest activity
+first (`GET /_matrix/client/v1/rooms/{roomId}/threads`, v1.4): all of them,
+or **My threads** (`include=participated`). Each shows who started it, its
+first message, how many replies it has, the latest one and its unread
+badge. The next page (`from`) loads when the end of the list comes into
+view. Picking a thread opens it beside the chat.
+
+## Jump to date
+
+**Jump to date** in the room's menu, or a click on a day's separator in the
+timeline, asks for a day and shows the room's first message of it
+(`MatrixJumpToDate`, `GET /_matrix/client/v1/rooms/{roomId}/timestamp_to_event`,
+Matrix v1.6, MSC3030). It asks for the first event at or after the day's
+local midnight (`dir=f`, the time in milliseconds) and, when the room has
+nothing from then on, the last one before it (`dir=b`). The timeline then
+goes there as it does for a pinned message (`EventBus.jumpToEvent`), loading
+the messages around it when they are not loaded. When the room has no
+message either way (`M_NOT_FOUND`), or the server is older than v1.6 (or
+answers `M_UNRECOGNIZED`), a toast says so in the app's language. A
+thread's day separators do not jump: a thread shows its replies only.
+
+Tests: `unit_test/matrix_threads/`.

@@ -1,10 +1,15 @@
+import 'package:rooster/ui/organisms/chat/jump_to_date.dart';
 import 'package:rooster/utils/text_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class TimelineEventDateTimeMarker extends StatelessWidget {
-  const TimelineEventDateTimeMarker({required this.time, super.key});
+  const TimelineEventDateTimeMarker(
+      {required this.time, this.onTap, super.key});
   final DateTime time;
+
+  /// Opens "Jump to date" from this day.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -25,10 +30,7 @@ class TimelineEventDateTimeMarker extends StatelessWidget {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
-            child: tiamat.Text.labelLow(
-              TextUtils.timestampToLocalizedTime(time, context),
-              color: color,
-            ),
+            child: dateLabel(context, color),
           ),
           Expanded(
             child: Opacity(
@@ -40,6 +42,29 @@ class TimelineEventDateTimeMarker extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget dateLabel(BuildContext context, Color color) {
+    final label = tiamat.Text.labelLow(
+      TextUtils.timestampToLocalizedTime(time, context),
+      color: color,
+    );
+    final tap = onTap;
+    if (tap == null) return label;
+    return Tooltip(
+      message: JumpToDate.promptJumpToDate,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(6),
+          onTap: tap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            child: label,
+          ),
+        ),
       ),
     );
   }

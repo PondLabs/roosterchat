@@ -2605,8 +2605,10 @@ class Client extends MatrixApi {
       userDeviceKeysLoading = database
           .getUserDeviceKeys(this)
           .then((keys) => _userDeviceKeys = keys);
-      roomsLoading = database.getRoomList(this).then((rooms) {
+      roomsLoading = database.getRoomList(this).then((rooms) async {
         _rooms = rooms;
+        // ROOSTER: with the per-thread unread counts they had.
+        await _restoreUnreadThreadNotifications();
         _sortRooms();
       });
       _accountDataLoading = database.getAccountData().then((data) {
@@ -2737,14 +2739,104 @@ class Client extends MatrixApi {
   /// Presence that is set on sync.
   PresenceType? syncPresence;
 
+  // ROOSTER: The filter the stored sync filter id was defined from, so a
+  // session whose filter predates a change to [syncFilter] (Rooster asking
+  // for per-thread unread counts, Matrix v1.4) defines the new one. Read
+  // once per run.
+  static const _definedSyncFilterCacheKey = 'rooster_defined_sync_filter';
+  bool _syncFilterChecked = false;
+
   Future<void> _checkSyncFilter() async {
     final userID = this.userID;
-    if (syncFilterId == null && userID != null) {
-      final syncFilterId =
-          _syncFilterId = await defineFilter(userID, syncFilter);
-      await database.storeSyncFilterId(syncFilterId);
+    if (userID == null) return;
+    // ROOSTER: Define the filter again when it is not the one stored. A
+    // failure leaves the session on the filter it had, which still syncs,
+    // and the next run tries again.
+    final previousId = syncFilterId;
+    if (previousId != null && !_syncFilterChecked) {
+      _syncFilterChecked = true;
+      try {
+        final defined =
+            await database.getCustomCacheObject(_definedSyncFilterCacheKey);
+        if (defined?.content['filter'] != jsonEncode(syncFilter.toJson())) {
+          await _defineSyncFilter(userID);
+        }
+      } catch (e, s) {
+        Logs().w(
+          'Unable to define the sync filter again; keeping $previousId',
+          e,
+          s,
+        );
+      }
+    }
+    if (syncFilterId == null) {
+      await _defineSyncFilter(userID);
     }
     return;
+  }
+
+  Future<void> _defineSyncFilter(String userID) async {
+    final syncFilterId = _syncFilterId = await defineFilter(userID, syncFilter);
+    await database.storeSyncFilterId(syncFilterId);
+    // ROOSTER: Remember what this id was defined from.
+    _syncFilterChecked = true;
+    await database.cacheCustomObject(
+      _definedSyncFilterCacheKey,
+      {'filter': jsonEncode(syncFilter.toJson())},
+    );
+  }
+
+  // ROOSTER: The per-thread unread counts of every room, kept across
+  // restarts. With `unread_thread_notifications` in the sync filter the
+  // server leaves the threads out of a room's own counts, and no
+  // `storeRoomUpdate` stores the per-thread ones (`DatabaseApi` cannot
+  // change: another package implements it). So they go in the custom
+  // cache when a sync changes them, and come back when the rooms are
+  // loaded. Without this a room with unread thread replies looked read
+  // after a restart, until a sync brought its counts again.
+  static const _threadNotificationsCacheKey =
+      'rooster_unread_thread_notifications';
+  bool _threadNotificationsDirty = false;
+
+  /// ROOSTER: Stores the rooms' per-thread unread counts as they are now.
+  /// A sync that changes them does it on its own; call it after changing
+  /// [Room.unreadThreadNotifications] by hand (a thread read locally).
+  Future<void> storeUnreadThreadNotifications() async {
+    _threadNotificationsDirty = false;
+    try {
+      await database.cacheCustomObject(_threadNotificationsCacheKey, {
+        'rooms': {
+          for (final room in rooms)
+            if (room.unreadThreadNotifications.isNotEmpty)
+              room.id: room.unreadThreadNotifications
+                  .map((id, counts) => MapEntry(id, counts.toJson())),
+        },
+      });
+    } catch (e, s) {
+      // Tried again with the next sync.
+      _threadNotificationsDirty = true;
+      Logs().w('Unable to store the per-thread unread counts', e, s);
+    }
+  }
+
+  Future<void> _restoreUnreadThreadNotifications() async {
+    try {
+      final stored =
+          await database.getCustomCacheObject(_threadNotificationsCacheKey);
+      final byRoom = stored?.content.tryGetMap<String, Object?>('rooms');
+      if (byRoom == null) return;
+      for (final room in _rooms) {
+        final threads = byRoom.tryGetMap<String, Object?>(room.id);
+        if (threads == null || room.membership != Membership.join) continue;
+        room.unreadThreadNotifications = _normalizeThreadNotifications({
+          for (final entry in threads.entries)
+            if (entry.value case final Map<String, Object?> counts)
+              entry.key: UnreadNotificationCounts.fromJson(counts),
+        });
+      }
+    } catch (e, s) {
+      Logs().w('Unable to restore the per-thread unread counts', e, s);
+    }
   }
 
   Future<void>? _handleSoftLogoutFuture;
@@ -2991,6 +3083,8 @@ class Client extends MatrixApi {
       );
     }
     _sortRooms();
+    // ROOSTER: keep the per-thread unread counts this sync changed.
+    if (_threadNotificationsDirty) await storeUnreadThreadNotifications();
     onSync.add(sync);
   }
 
@@ -3510,10 +3604,18 @@ class Client extends MatrixApi {
       final position = membership == Membership.invite ? 0 : rooms.length;
       // Add the new chat to the list
       rooms.insert(position, room);
+      // ROOSTER
+      if (room.unreadThreadNotifications.isNotEmpty) {
+        _threadNotificationsDirty = true;
+      }
     }
     // If the membership is "leave" then remove the item and stop here
     else if (found && membership == Membership.leave) {
       rooms.removeAt(roomIndex);
+      // ROOSTER
+      if (room.unreadThreadNotifications.isNotEmpty) {
+        _threadNotificationsDirty = true;
+      }
 
       // in order to keep the archive in sync, add left room to archive
       if (chatUpdate is LeftRoomUpdate) {
@@ -3551,6 +3653,9 @@ class Client extends MatrixApi {
       // ROOSTER: Per-thread unread counts from /sync (v1.4) replace the ones
       // we hold, so a thread the server left out is no longer counted.
       if (_carriesThreadNotifications(chatUpdate)) {
+        if (_threadNotificationsChange(rooms[roomIndex], chatUpdate)) {
+          _threadNotificationsDirty = true;
+        }
         rooms[roomIndex].unreadThreadNotifications =
             _normalizeThreadNotifications(chatUpdate.unreadThreadNotifications);
       }
