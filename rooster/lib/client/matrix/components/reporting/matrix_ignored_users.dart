@@ -62,17 +62,26 @@ class MatrixIgnoredUsers {
   }
 
   Set<String> get _current {
-    // Read again only when the account data event was replaced.
-    if (!identical(client.accountData[type], _readFrom)) _refresh();
+    // Read again only when the account data event was replaced (the store
+    // loaded at startup, a sync not yet announced). This may run while a
+    // widget builds, so the listeners hear of it after.
+    if (!identical(client.accountData[type], _readFrom)) {
+      _refresh(later: true);
+    }
     return _known;
   }
 
-  void _refresh() {
+  void _refresh({bool later = false}) {
     final before = _known;
     final now = _read();
     _known = now;
     final changed = before.difference(now).union(now.difference(before));
-    if (changed.isNotEmpty) _changed.add(changed);
+    if (changed.isEmpty) return;
+    if (later) {
+      scheduleMicrotask(() => _changed.add(changed));
+    } else {
+      _changed.add(changed);
+    }
   }
 
   /// Who the user ignores, sorted.

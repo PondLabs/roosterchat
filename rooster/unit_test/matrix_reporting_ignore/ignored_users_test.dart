@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/matrix/components/reporting/matrix_ignored_users.dart';
 
 import 'fakes.dart';
@@ -138,6 +139,28 @@ void main() {
     expect(changes, [
       {bob},
       {bob, carol},
+    ]);
+  });
+
+  test(
+      'account data replaced outside a sync is read at once, and announced '
+      'after the caller (it may be a widget building)', () async {
+    final mx = (await account(Script())).matrixClient;
+    final ignored = MatrixIgnoredUsers.of(mx);
+    final changes = <Set<String>>[];
+    ignored.onChanged.listen(changes.add);
+
+    // As the store loaded at startup does.
+    mx.accountData['m.ignored_user_list'] =
+        matrix.BasicEvent(type: 'm.ignored_user_list', content: {
+      'ignored_users': {bob: <String, Object?>{}}
+    });
+
+    expect(ignored.isIgnored(bob), isTrue);
+    expect(changes, isEmpty);
+    await Future<void>.delayed(Duration.zero);
+    expect(changes, [
+      {bob}
     ]);
   });
 }
