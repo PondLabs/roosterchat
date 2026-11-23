@@ -275,6 +275,20 @@ void main() {
       expect(find.byKey(RoomModerationSection.policyServerKey), findsNothing);
     });
 
+    testWidgets('the banned list needs the ban level', (tester) async {
+      final (_, room) = moderatedRoom();
+      putState(room, matrix.EventTypes.RoomPowerLevels, {
+        'users': {self: 50},
+        'ban': 100,
+        'state_default': 50,
+      });
+      await tester.pumpWidget(host(RoomModerationSection(room)));
+
+      expect(find.byKey(RoomModerationSection.bannedKey), findsNothing);
+      expect(find.byKey(RoomModerationSection.serverAclKey), findsOneWidget);
+      expect(find.byKey(RoomModerationSection.policyServerKey), findsOneWidget);
+    });
+
     testWidgets('opens the banned list', (tester) async {
       final (script, room) = moderatedRoom();
       script.routes.add(oneBanned);
