@@ -1893,6 +1893,30 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelWidgetPermissionNavigate": "Open Rooms and Stay on Screen",
+  "@labelWidgetPermissionNavigate": {
+    "description": "A group of permissions a room widget asks for: opening rooms and profiles from matrix.to links, and staying visible",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelWidgetPermissionNavigateDescription": "Open rooms and profiles for you, and stay visible while you use the app",
+  "@labelWidgetPermissionNavigateDescription": {
+    "description": "What the 'Open Rooms and Stay on Screen' permissions let a room widget do, in the dialog where it asks for them",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelWidgetPermissionUserDirectory": "Search Users",
+  "@labelWidgetPermissionUserDirectory": {
+    "description": "A group of permissions a room widget asks for: searching the homeserver's list of users",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelWidgetPermissionUserDirectoryDescription": "Search your homeserver's user directory",
+  "@labelWidgetPermissionUserDirectoryDescription": {
+    "description": "What the 'Search Users' permission lets a room widget do, in the dialog where it asks for it",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelWidgetPermissionRequest": "'{widgetName}' would like permission to do the following actions on your behalf:",
   "@labelWidgetPermissionRequest": {
     "description": "At the top of the dialog where a room widget (a small web app added to a room) asks for permissions, with the widget's name; the permissions are listed under it",
