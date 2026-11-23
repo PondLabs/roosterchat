@@ -13,6 +13,7 @@ import 'package:tiamat/tiamat.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 import 'cross_signing/cross_signing_page.dart';
+import 'key_backup/matrix_key_backup_panel.dart';
 
 class MatrixSecurityTab extends StatefulWidget {
   const MatrixSecurityTab(this.client, {super.key});
@@ -206,7 +207,7 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
     setState(() {
       var encryption = widget.client.getMatrixClient().encryption;
       crossSigningEnabled = encryption?.crossSigning.enabled ?? false;
-      messageBackupEnabled = encryption?.keyManager.enabled ?? false;
+      messageBackupEnabled = encryption?.keyManager.keyBackupEnabled ?? false;
       isVerified = widget.client.matrixClient.isUnknownSession == false;
     });
   }
@@ -548,7 +549,28 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
     );
   }
 
+  late final keyBackupController =
+      MatrixKeyBackupController(widget.client.getMatrixClient());
+
   Widget messageBackup() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 8,
+      children: [
+        messageBackupRow(),
+        // The details, rotation and deletion of the backup on the server
+        // (and m.key_backup, MSC4287), loaded again once it is set up.
+        if (widget.client.getMatrixClient().encryption != null)
+          MatrixKeyBackupPanel(
+            key: ValueKey(messageBackupEnabled),
+            controller: keyBackupController,
+            onChanged: checkState,
+          ),
+      ],
+    );
+  }
+
+  Widget messageBackupRow() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [

@@ -9079,6 +9079,98 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelKeyBackupVersion": "Version: {version}",
+  "@labelKeyBackupVersion": {
+    "description": "Settings > Security > Message backup: the version of the backup on the server, a number the server gives it",
+    "type": "text",
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "labelKeyBackupKeyCount": "{howMany,plural, =0{No keys stored}=1{1 key stored}other{{howMany} keys stored}}",
+  "@labelKeyBackupKeyCount": {
+    "description": "Settings > Security > Message backup: how many message keys the backup on the server holds",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "labelKeyBackupEtag": "Change tag (etag): {etag}",
+  "@labelKeyBackupEtag": {
+    "description": "Settings > Security > Message backup: the server's tag for the backup's current contents, which changes whenever keys are added. 'etag' is the protocol's name for it",
+    "type": "text",
+    "placeholders": {
+      "etag": {}
+    }
+  },
+  "labelKeyBackupAlgorithm": "Algorithm: {algorithm}",
+  "@labelKeyBackupAlgorithm": {
+    "description": "Settings > Security > Message backup: the encryption scheme of the backup, a protocol name such as m.megolm_backup.v1.curve25519-aes-sha2",
+    "type": "text",
+    "placeholders": {
+      "algorithm": {}
+    }
+  },
+  "labelKeyBackupNone": "There is no backup on your server.",
+  "@labelKeyBackupNone": {
+    "description": "Settings > Security > Message backup: the server holds no backup of your message keys",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyBackupLoadFailed": "Could not load the details of your backup.",
+  "@messageKeyBackupLoadFailed": {
+    "description": "Settings > Security > Message backup: asking the server about the backup failed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptKeyBackupRotate": "Rotate key",
+  "@promptKeyBackupRotate": {
+    "description": "Settings > Security > Message backup: button that replaces the backup with a new one under a new key",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptKeyBackupDelete": "Delete backup",
+  "@promptKeyBackupDelete": {
+    "description": "Settings > Security > Message backup: button that deletes the backup from the server",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyBackupConfirmRotate": "A new backup with a new key replaces this one, and every key on this device is saved in it again. The current backup is deleted from your server.",
+  "@messageKeyBackupConfirmRotate": {
+    "description": "Settings > Security > Message backup: asks before rotating the backup's key",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyBackupConfirmDelete": "Your backup is deleted from your server and backup is turned off on all your sessions. Messages that no session of yours can decrypt will be lost.",
+  "@messageKeyBackupConfirmDelete": {
+    "description": "Settings > Security > Message backup: asks before deleting the backup",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKeyBackupUnlockTitle": "Unlock your secret storage",
+  "@labelKeyBackupUnlockTitle": {
+    "description": "Settings > Security > Message backup: title of the dialog asking for the recovery key, which keeps the new backup key",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKeyBackupUnlockHint": "Recovery key or security phrase",
+  "@labelKeyBackupUnlockHint": {
+    "description": "Settings > Security > Message backup: placeholder of the field for the recovery key or the security phrase",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyBackupRotateFailed": "The key was not rotated. Check your recovery key and try again.",
+  "@messageKeyBackupRotateFailed": {
+    "description": "Settings > Security > Message backup: rotating the backup's key failed, for example because of a wrong recovery key",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyBackupDeleteFailed": "The backup was not deleted. Try again.",
+  "@messageKeyBackupDeleteFailed": {
+    "description": "Settings > Security > Message backup: deleting the backup failed",
+    "type": "text",
+    "placeholders": {}
+  },
   "messageSettingsSessionsOnAccountPage": "Your server signs sessions out on its own website, which opens in your browser.",
   "@messageSettingsSessionsOnAccountPage": {
     "description": "Settings > Security > Sessions: on a server that only lets its own account website sign sessions (devices) out, says that removing one opens that website",
