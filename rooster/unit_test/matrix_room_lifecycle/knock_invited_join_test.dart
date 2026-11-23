@@ -213,4 +213,29 @@ void main() {
     expect(find.text(KnockRequestBanner.promptRequestToJoin), findsNWidgets(2));
     expect(find.text(CommonStrings.promptJoin), findsOneWidget);
   });
+
+  testWidgets(
+      'c2-1: a request sent from SpaceSummary that is answered with a ban '
+      'stops showing as waiting', (tester) async {
+    final client = await account(tester, 'c2_1_space_banned');
+    final mx = client.getMatrixClient();
+    await tester.runAsync(() => joinSpace(mx));
+    final space = client.getSpace(spaceId)!;
+
+    await tester.pumpWidget(host(SpaceSummary(space: space)));
+    await settle(tester);
+    await tapVisible(
+        tester, find.text(KnockRequestBanner.promptRequestToJoin).first);
+    await settle(tester);
+    await answerPrompt(tester, 'From team space',
+        submit: KnockRequestBanner.promptSendKnock);
+    expect(pendingText(), findsOneWidget);
+
+    mx.rooms.add(
+        matrix.Room(id: clubId, client: mx, membership: matrix.Membership.ban));
+    await tester.pumpWidget(host(SpaceSummary(space: space)));
+    await settle(tester);
+
+    expect(pendingText(), findsNothing);
+  });
 }
