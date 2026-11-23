@@ -148,6 +148,9 @@ class MatrixCrossSigningPageState extends State<MatrixCrossSigningPage> {
       }
     }
 
+    // A closed confirmation dialog now ends its request, so the setup can
+    // finish after this page is gone.
+    if (!mounted) return;
     setState(() {
       state = bootstrapper.state;
     });

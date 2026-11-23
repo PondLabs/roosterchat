@@ -17,6 +17,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:intl/intl.dart';
+import 'package:rooster/ui/pages/login/password_reset_view.dart';
+import 'package:rooster/ui/pages/login/register_view.dart';
 import 'package:tiamat/atoms/circle_button.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -39,6 +41,8 @@ class LoginPageView extends StatefulWidget {
       this.isServerValid = false,
       this.hasSsoSupport = false,
       this.hasPasswordSupport = false,
+      this.onRegister,
+      this.onForgotPassword,
       this.updateHomeserver});
   final bool canNavigateBack;
   final bool isLoggingIn;
@@ -64,6 +68,11 @@ class LoginPageView extends StatefulWidget {
       doPasswordLogin;
 
   final Function(String)? updateHomeserver;
+
+  /// Legacy registration and password reset by email, on a server without
+  /// OAuth 2.0.
+  final VoidCallback? onRegister;
+  final VoidCallback? onForgotPassword;
 
   @override
   State<LoginPageView> createState() => _LoginPageViewState();
@@ -368,6 +377,16 @@ class _LoginPageViewState extends State<LoginPageView> {
         passwordEntry(),
         const SizedBox(height: 16),
         loginButton(),
+        Wrap(alignment: WrapAlignment.spaceBetween, children: [
+          if (widget.onForgotPassword != null)
+            TextButton(
+                onPressed: widget.onForgotPassword,
+                child: Text(PasswordResetView.promptLoginForgotPassword)),
+          if (widget.onRegister != null)
+            TextButton(
+                onPressed: widget.onRegister,
+                child: Text(RegisterView.promptLoginCreateAccount)),
+        ]),
       ],
     );
   }
