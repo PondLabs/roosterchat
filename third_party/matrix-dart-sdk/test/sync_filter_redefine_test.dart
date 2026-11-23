@@ -24,8 +24,11 @@ final _threads = Filter(
 
 /// Runs a client on [database] until its first sync, and returns how many
 /// filters it defined.
-Future<int> _run(DatabaseApi database, Filter filter,
-    {bool login = false}) async {
+Future<int> _run(
+  DatabaseApi database,
+  Filter filter, {
+  bool login = false,
+}) async {
   final api = FakeMatrixApi();
   final client = Client(
     _clientName,
