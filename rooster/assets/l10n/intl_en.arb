@@ -5562,6 +5562,60 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelNotificationHistoryAll": "All",
+  "@labelNotificationHistoryAll": {
+    "description": "Settings > Notifications > Notification history: the filter that shows every notification",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelNotificationHistoryMentions": "Mentions",
+  "@labelNotificationHistoryMentions": {
+    "description": "Settings > Notifications > Notification history: the filter that shows only the notifications that mention you or match one of your keywords",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelNotificationHistoryEmpty": "No notifications yet",
+  "@labelNotificationHistoryEmpty": {
+    "description": "Settings > Notifications > Notification history: shown when the server has no notifications for the account",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelNotificationHistoryNoMentions": "No mentions yet",
+  "@labelNotificationHistoryNoMentions": {
+    "description": "Settings > Notifications > Notification history, with the Mentions filter: shown when nothing mentioned you",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageNotificationHistoryFailed": "Couldn't load your notifications.",
+  "@messageNotificationHistoryFailed": {
+    "description": "Settings > Notifications > Notification history: the server could not be reached or refused, next to a button to try again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptNotificationHistoryLoadMore": "Load more",
+  "@promptNotificationHistoryLoadMore": {
+    "description": "Settings > Notifications > Notification history: button under the list that loads older notifications",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelNotificationHistoryEncrypted": "Encrypted message",
+  "@labelNotificationHistoryEncrypted": {
+    "description": "Settings > Notifications > Notification history: in place of the text of an end-to-end encrypted message",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelNotificationHistoryInvite": "Invited you to join",
+  "@labelNotificationHistoryInvite": {
+    "description": "Settings > Notifications > Notification history: an invitation to a room, under the room's name and who sent it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelNotificationHistoryOther": "New activity",
+  "@labelNotificationHistoryOther": {
+    "description": "Settings > Notifications > Notification history: a notification for something other than a message or invitation (a call, say)",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelRoomPhotoVideoBadge": "Video",
   "@labelRoomPhotoVideoBadge": {
     "description": "Small badge on a video in a photo album room, shown instead of its length when the length is unknown",
@@ -10174,6 +10228,116 @@
   "labelDeveloperPushersOtherDevices": "Other Devices",
   "@labelDeveloperPushersOtherDevices": {
     "description": "Settings > Notifications, in developer mode: header of the push services registered for your other devices",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelSettingsNotificationRules": "Notification rules",
+  "@labelSettingsNotificationRules": {
+    "description": "Settings > Notifications: header of the panel with what the account gets notified about, kept on the server for every device",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelSettingsNotificationHistory": "Notification history",
+  "@labelSettingsNotificationHistory": {
+    "description": "Settings > Notifications: header of the list of the notifications the account got",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPushRuleAccount": "Notifications for this account",
+  "@labelPushRuleAccount": {
+    "description": "Settings > Notifications > Notification rules: the switch that mutes every notification of the account",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPushRuleAccountDescription": "Turn off to mute every notification, on all of your devices",
+  "@labelPushRuleAccountDescription": {
+    "description": "Under the 'Notifications for this account' switch",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPushRuleDirectMessages": "Direct messages",
+  "@labelPushRuleDirectMessages": {
+    "description": "Settings > Notifications > Notification rules: switch for messages in one-to-one chats",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPushRuleEncryptedDirectMessages": "Encrypted direct messages",
+  "@labelPushRuleEncryptedDirectMessages": {
+    "description": "Settings > Notifications > Notification rules: switch for end-to-end encrypted messages in one-to-one chats",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPushRuleRoomMessages": "Messages in rooms",
+  "@labelPushRuleRoomMessages": {
+    "description": "Settings > Notifications > Notification rules: switch for messages in rooms with more than two people",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPushRuleEncryptedRoomMessages": "Encrypted messages in rooms",
+  "@labelPushRuleEncryptedRoomMessages": {
+    "description": "Settings > Notifications > Notification rules: switch for end-to-end encrypted messages in rooms with more than two people",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPushRuleInvites": "Invitations",
+  "@labelPushRuleInvites": {
+    "description": "Settings > Notifications > Notification rules: switch for being invited to a room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPushRuleCalls": "Calls",
+  "@labelPushRuleCalls": {
+    "description": "Settings > Notifications > Notification rules: switch for incoming calls",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPushRuleKeywords": "Keywords",
+  "@labelPushRuleKeywords": {
+    "description": "Settings > Notifications > Notification rules: header of the words that notify you when a message has them",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelPushRuleKeywordsDescription": "Get a notification when a message has one of these words",
+  "@labelPushRuleKeywordsDescription": {
+    "description": "Under the 'Keywords' header in Settings > Notifications",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptPushRuleKeywordAdd": "Add a keyword",
+  "@promptPushRuleKeywordAdd": {
+    "description": "Settings > Notifications > Keywords: placeholder of the box you type a new keyword in",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messagePushRuleKeywordEmpty": "Type a keyword first.",
+  "@messagePushRuleKeywordEmpty": {
+    "description": "Settings > Notifications > Keywords: Add was pressed with the box empty",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messagePushRuleKeywordDuplicate": "You already have that keyword.",
+  "@messagePushRuleKeywordDuplicate": {
+    "description": "Settings > Notifications > Keywords: the keyword typed is already in the list",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messagePushRuleFailed": "Couldn't save the change. Try again.",
+  "@messagePushRuleFailed": {
+    "description": "Settings > Notifications > Notification rules: the server refused a change, which was undone",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messagePushRuleRateLimited": "{seconds,plural, =1{Too many changes at once. Try again in 1 second.}other{Too many changes at once. Try again in {seconds} seconds.}}",
+  "@messagePushRuleRateLimited": {
+    "description": "Settings > Notifications > Notification rules: the server refused a change for coming too fast, and said how long to wait",
+    "type": "text",
+    "placeholders": {
+      "seconds": {}
+    }
+  },
+  "messagePushRulesLoadFailed": "Couldn't load your notification rules.",
+  "@messagePushRulesLoadFailed": {
+    "description": "Settings > Notifications > Notification rules: the server could not be reached or refused, next to a button to try again",
     "type": "text",
     "placeholders": {}
   },

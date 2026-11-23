@@ -380,6 +380,38 @@ Changes since the copy:
   (turns it off and empties the stored key) and
   `restoreKeyBackupWithRecoveryKey` (a backup whose key is not in secret
   storage).
+- Matrix v1.16 sync (`state_after`, `use_state_after`), v1.4 thread unread
+  counts (`unread_thread_notifications`), and v1.15 Rich Topics (`m.topic`)
+  (T1.2):
+  `JoinedRoomUpdate` and `LeftRoomUpdate`
+  (`lib/matrix_api_lite/model/sync_update.dart`) deserialize and serialize
+  `state_after` (v1.16 MSC4222) and `JoinedRoomUpdate` parses
+  `unread_thread_notifications` (v1.4 MSC3773), skipping malformed entries
+  without crashing sync. `Client._innerSync` (`lib/src/client.dart`) sends
+  `use_state_after=true` only when the server advertises a semantic Matrix
+  version `>= v1.16` (omitting it on `<= v1.15` or unknown versions; the
+  versions come from `getVersions()`, cached in the database), and
+  `_handleRooms` / `_storeArchivedRoom` apply legacy `state` before timeline
+  events and `state_after` after timeline events (respecting `Direction.b`
+  guards). A left room's legacy `state` used to be applied after its timeline;
+  it now comes before it, as for a joined room. When an update carries
+  `state_after`, even an empty one, its timeline does not define room state
+  (a timeline state event may have lost state resolution), in memory or in
+  the database. A database stores a timeline event that has a state key as
+  room state too, and `DatabaseApi.storeEventUpdate` cannot take a parameter
+  that says otherwise: the database the app uses outside the browser
+  (`matrix_dart_sdk_drift_db`) implements `DatabaseApi` in another package and
+  would no longer compile. So `Client._handleRoomEvents` hands such an event
+  to the database as a `_TimelineOnlyEvent` (`lib/src/client.dart`), which has
+  no state key and writes the real one in its JSON: the event is stored in the
+  timeline, whole, and not as room state, in either database.
+  `Room.unreadThreadNotifications` (`lib/src/room.dart`) exposes the per-thread
+  unread counts. An update that brings `unread_notifications` or
+  `unread_thread_notifications` replaces them all, so a thread the server
+  leaves out (it has no notifications) is no longer counted. `Room.topic`,
+  `Room.topicHtml`, and `Room.setDescription(plain, {html})` read and write
+  MSC3765 `m.topic` (`m.text` with `text/plain` and `text/html`) while keeping
+  legacy `topic` compatibility on both read and write.
 - Claimed Ed25519 key of `m.room_key` (T3.1b): `KeyManager.handleToDeviceEvent`
   (`lib/encryption/key_manager.dart`) takes the key a received room key
   claims from the sender's device whose Curve25519 key is the Olm session's

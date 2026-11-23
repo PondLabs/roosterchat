@@ -244,7 +244,11 @@ class MatrixUserPresenceComponent
   /// (see [isInCall]).
   void handleCallMemberships(JoinedRoomUpdate update) async {
     final senders = {
-      for (final event in [...?update.state, ...?update.timeline?.events])
+      for (final event in [
+        ...?update.state,
+        ...?update.stateAfter,
+        ...?update.timeline?.events
+      ])
         if (event.type == MatrixVoipRoomComponent.callMemberStateEvent)
           event.senderId,
     };

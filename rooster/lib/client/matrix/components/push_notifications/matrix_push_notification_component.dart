@@ -1,17 +1,39 @@
+import 'package:collection/collection.dart';
 import 'package:rooster/client/components/push_notification/notification_manager.dart';
+import 'package:rooster/client/components/push_notification/notifier.dart';
 import 'package:rooster/client/components/push_notification/push_notification_component.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/config/build_config.dart';
+import 'package:rooster/config/languages.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:matrix/matrix.dart';
+import 'package:rooster/utils/language/app_language.dart';
 
 class MatrixPushNotificationComponent
     implements PushNotificationComponent<MatrixClient> {
   @override
   MatrixClient client;
 
-  MatrixPushNotificationComponent(this.client);
+  /// The notifier, push gateway and language come from the app unless a
+  /// test gives its own.
+  MatrixPushNotificationComponent(this.client,
+      {Notifier? Function()? notifier,
+      String Function()? pushGateway,
+      Language Function()? language})
+      : _notifier = notifier ?? (() => NotificationManager.notifier),
+        _pushGateway = pushGateway ?? (() => preferences.pushGateway),
+        _language = language ?? (() => AppLanguage.current.value);
+
+  final Notifier? Function() _notifier;
+  final String Function() _pushGateway;
+  final Language Function() _language;
+
+  /// Whether [notifier] gets its notifications through a push gateway:
+  /// Firebase and UnifiedPush on Android. The desktop and browser notifiers
+  /// show what the running app syncs and have no gateway to register, so a
+  /// pusher for them would only make the homeserver push to nowhere.
+  static bool deliversPush(Notifier? notifier) => notifier?.needsToken == true;
 
   @override
   Future<void> ensurePushNotificationsRegistered(
@@ -23,27 +45,27 @@ class MatrixPushNotificationComponent
 
     var pushers = await matrixClient.getPushers();
 
-    var data = PusherData(
-      format: "event_id_only",
-      url: pushServer,
-      additionalProperties: extraData ?? {},
-    );
-
-    if (pushers != null &&
-        pushers.any((element) =>
-            element.pushkey == pushKey &&
-            element.data.toJson() == data.toJson())) {
-      return;
-    }
-
     var pusher = Pusher(
         appId: "com.pondlabs.rooster.android",
         pushkey: pushKey,
         appDisplayName: BuildConfig.appName,
-        data: data,
+        data: PusherData(
+          format: "event_id_only",
+          url: pushServer,
+          additionalProperties: extraData ?? {},
+        ),
         deviceDisplayName: deviceName,
         kind: "http",
-        lang: "en");
+        // The language the app is shown in, for the gateway's own text.
+        lang: _language().code);
+
+    // Registered already, with the same gateway, data and language.
+    final wanted = pusher.toJson();
+    if (pushers != null &&
+        pushers.any((element) =>
+            const DeepCollectionEquality().equals(element.toJson(), wanted))) {
+      return;
+    }
 
     await matrixClient.postPusher(pusher, append: true);
   }
@@ -70,10 +92,14 @@ class MatrixPushNotificationComponent
     if (NotificationManager.notifierLoading != null) {
       await NotificationManager.notifierLoading;
     }
-    var notifier = NotificationManager.notifier;
-    var key = await notifier?.getToken();
+    var notifier = _notifier();
+    // Nothing to register where nothing is pushed, and nothing to clean:
+    // the pushers of this account's phones are theirs.
+    if (!deliversPush(notifier)) return;
+
+    var key = await notifier!.getToken();
     var mxClient = client.getMatrixClient();
-    var extraData = notifier?.extraRegistrationData();
+    var extraData = notifier.extraRegistrationData();
 
     extraData ??= {};
 
@@ -81,9 +107,10 @@ class MatrixPushNotificationComponent
 
     var name = mxClient.clientName;
 
-    var uri = Uri.parse(preferences.pushGateway);
+    final gateway = _pushGateway();
+    var uri = Uri.parse(gateway);
     if (uri.hasScheme == false) {
-      uri = Uri.https(preferences.pushGateway);
+      uri = Uri.https(gateway);
     }
 
     uri = Uri(

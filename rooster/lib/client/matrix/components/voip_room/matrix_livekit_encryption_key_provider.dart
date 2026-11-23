@@ -313,7 +313,9 @@ class MatrixLivekitEncryptionKeyProvider
             (e) => e.type == MatrixVoipRoomComponent.callMemberStateEvent) ??
         false;
     // A gappy sync puts membership changes in the state section.
-    if (!touches(roomUpdate.timeline?.events) && !touches(roomUpdate.state)) {
+    if (!touches(roomUpdate.timeline?.events) &&
+        !touches(roomUpdate.state) &&
+        !touches(roomUpdate.stateAfter)) {
       return;
     }
 
