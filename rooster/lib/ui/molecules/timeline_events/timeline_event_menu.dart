@@ -28,6 +28,7 @@ import 'package:rooster/ui/molecules/gif_picker.dart';
 import 'package:rooster/ui/molecules/notification_debugger.dart';
 import 'package:rooster/ui/molecules/room_timeline_widget/timeline_selection_area.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
+import 'package:rooster/ui/organisms/moderation/report_content_dialog.dart';
 import 'package:rooster/utils/autofill_utils.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/download_utils.dart';
@@ -468,6 +469,20 @@ class TimelineEventMenu {
                 text: selection?.textToCopy(body) ?? body,
               ));
             }),
+      // Someone else's message, once the server has it.
+      if (pending is MatrixTimelineEvent &&
+          event.status == TimelineEventStatus.synced &&
+          pending.event.senderId != pending.event.room.client.userID)
+        TimelineEventMenuEntry(
+          name: ReportContentDialog.promptReportMessage,
+          icon: Icons.flag_outlined,
+          action: (BuildContext context) {
+            onActionFinished?.call();
+            final mx = pending.event;
+            ReportContentDialog.reportEvent(
+                context, mx.room.client, mx.room.id, mx.eventId);
+          },
+        ),
       TimelineEventMenuEntry(
         name: promptShowSource,
         icon: Icons.code,
