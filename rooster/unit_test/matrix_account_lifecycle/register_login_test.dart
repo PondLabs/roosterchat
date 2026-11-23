@@ -12,7 +12,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:matrix/fake_matrix_api.dart';
 import 'package:rooster/client/client.dart';
-import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/config/global_config.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/pages/login/login_page.dart';
