@@ -3286,12 +3286,17 @@ class Client extends MatrixApi {
         updateState: updateState, // ROOSTER
       );
       if (store) {
+        // ROOSTER: a database stores a timeline event that has a state key as
+        // room state too, so one that must not change room state is handed
+        // over as a [_TimelineOnlyEvent].
+        final stateKey = event.stateKey;
         await database.storeEventUpdate(
           room.id,
-          event,
+          !updateState && stateKey != null && event is MatrixEvent
+              ? _TimelineOnlyEvent(Event.fromMatrixEvent(event, room), stateKey)
+              : event,
           type,
           this,
-          updateState: updateState, // ROOSTER
         );
       }
       if (event is MatrixEvent && encryptionEnabled) {
@@ -4724,6 +4729,39 @@ class ArchivedRoom {
   final Timeline timeline;
 
   ArchivedRoom({required this.room, required this.timeline});
+}
+
+/// ROOSTER: A state event of a timeline that came with `state_after` (Matrix
+/// v1.16 MSC4222), as the database gets it: an event of the stored timeline
+/// that is not room state.
+///
+/// [DatabaseApi.storeEventUpdate] stores a timeline event that has a state key
+/// as room state too. Its signature cannot say otherwise: the database the app
+/// uses outside the browser (`matrix_dart_sdk_drift_db`) implements
+/// [DatabaseApi] in another package, and would no longer compile. So this
+/// event has no [stateKey], which is what a database looks at before it
+/// stores state, and writes the real one in [toJson], which is what a
+/// database stores in the timeline.
+class _TimelineOnlyEvent extends Event {
+  final String _stateKey;
+
+  _TimelineOnlyEvent(Event event, this._stateKey)
+      : super(
+          status: event.status,
+          content: event.content,
+          type: event.type,
+          eventId: event.eventId,
+          senderId: event.senderId,
+          originServerTs: event.originServerTs,
+          unsigned: event.unsigned,
+          prevContent: event.prevContent,
+          redacts: event.redacts,
+          room: event.room,
+          originalSource: event.originalSource,
+        );
+
+  @override
+  Map<String, dynamic> toJson() => super.toJson()..['state_key'] = _stateKey;
 }
 
 /// An event that is waiting for a key to arrive to decrypt. Times out after some time.

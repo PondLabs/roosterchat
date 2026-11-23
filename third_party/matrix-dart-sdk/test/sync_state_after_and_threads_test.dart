@@ -1044,11 +1044,16 @@ void main() {
           'callMemberPresent': false,
         },
       );
-      // The events themselves are still in the stored timeline.
+      // The events are in the stored timeline all the same, as state events.
+      final stored = await second.database.getEventList(afterRestart);
       expect(
-        (await second.database.getEventList(afterRestart))
-            .map((event) => event.eventId),
-        unorderedEquals(['\$tl_name', '\$tl_topic', '\$tl_enc', '\$tl_call']),
+        {for (final event in stored) event.eventId: event.stateKey},
+        {
+          '\$tl_name': '',
+          '\$tl_topic': '',
+          '\$tl_enc': '',
+          '\$tl_call': callKey,
+        },
       );
     });
 
