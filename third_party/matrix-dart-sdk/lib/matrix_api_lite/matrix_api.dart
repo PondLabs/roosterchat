@@ -258,6 +258,112 @@ class MatrixApi extends Api {
   ) async {
     return getRoomKeyBySessionId(roomId, sessionId, version);
   }
+
+  // ROOSTER: Matrix v1.18-v1.19 endpoints the generated Api does not have
+  // yet (T1.1c), written like the generated ones so errors come out of
+  // [unexpectedResponse] as a [MatrixException].
+
+  /// Lists the rooms the user shares with [userId] (Matrix v1.19, MSC2666),
+  /// one batch at a time: pass the [GetMutualRoomsResponse.nextBatch] of a
+  /// batch as [from] to get the next one. A server that does not know the
+  /// endpoint answers `404 M_UNRECOGNIZED`.
+  Future<GetMutualRoomsResponse> getMutualRooms(
+    String userId, {
+    String? from,
+  }) async {
+    final requestUri = Uri(
+      path: '_matrix/client/v1/mutual_rooms',
+      queryParameters: {
+        'user_id': userId,
+        if (from != null) 'from': from,
+      },
+    );
+    final json = await _sendJson('GET', requestUri);
+    return GetMutualRoomsResponse.fromJson(json);
+  }
+
+  /// Whether the server-local user [userId] is suspended (Matrix v1.18,
+  /// MSC4323). Server administrators only: others get `403 M_FORBIDDEN`.
+  Future<bool> getUserSuspended(String userId) async =>
+      (await _sendJson('GET', _adminUri('suspend', userId)))['suspended']
+          as bool;
+
+  /// Suspends or unsuspends the server-local user [userId] (Matrix v1.18,
+  /// MSC4323) and returns the status the server answers with.
+  Future<bool> setUserSuspended(String userId, bool suspended) async =>
+      (await _sendJson(
+        'PUT',
+        _adminUri('suspend', userId),
+        body: {'suspended': suspended},
+      ))['suspended'] as bool;
+
+  /// Whether the server-local user [userId] is locked (Matrix v1.18,
+  /// MSC4323). Server administrators only: others get `403 M_FORBIDDEN`.
+  Future<bool> getUserLocked(String userId) async =>
+      (await _sendJson('GET', _adminUri('lock', userId)))['locked'] as bool;
+
+  /// Locks or unlocks the server-local user [userId] (Matrix v1.18, MSC4323)
+  /// and returns the status the server answers with.
+  Future<bool> setUserLocked(String userId, bool locked) async =>
+      (await _sendJson(
+        'PUT',
+        _adminUri('lock', userId),
+        body: {'locked': locked},
+      ))['locked'] as bool;
+
+  Uri _adminUri(String action, String userId) => Uri(
+        path: '_matrix/client/v1/admin/$action/${Uri.encodeComponent(userId)}',
+      );
+
+  Future<Map<String, Object?>> _sendJson(
+    String method,
+    Uri requestUri, {
+    Map<String, Object?>? body,
+  }) async {
+    final request = http.Request(method, baseUri!.resolveUri(requestUri));
+    request.headers['authorization'] = 'Bearer ${bearerToken!}';
+    if (body != null) {
+      request.headers['content-type'] = 'application/json';
+      request.bodyBytes = utf8.encode(jsonEncode(body));
+    }
+    final response = await httpClient.send(request);
+    final responseBody = await response.stream.toBytes();
+    if (response.statusCode != 200) unexpectedResponse(response, responseBody);
+    return jsonDecode(utf8.decode(responseBody)) as Map<String, Object?>;
+  }
+}
+
+// ROOSTER: Response of `GET /_matrix/client/v1/mutual_rooms` (Matrix v1.19,
+// MSC2666, T1.1c).
+class GetMutualRoomsResponse {
+  GetMutualRoomsResponse({
+    required this.joined,
+    this.count,
+    this.nextBatch,
+  });
+
+  /// Reads `joined`, `count` and `next_batch`, leaving out what is missing or
+  /// of the wrong type.
+  GetMutualRoomsResponse.fromJson(Map<String, Object?> json)
+      : joined = json.tryGetList<String>('joined') ?? [],
+        count = json.tryGet<int>('count'),
+        nextBatch = json.tryGet<String>('next_batch');
+
+  Map<String, Object?> toJson() => {
+        'joined': joined,
+        if (count != null) 'count': count,
+        if (nextBatch != null) 'next_batch': nextBatch,
+      };
+
+  /// The ids of the rooms both users are joined to, in this batch.
+  List<String> joined;
+
+  /// How many such rooms there are in all batches. The spec requires it, but
+  /// it may be inaccurate, and it is null when a server leaves it out.
+  int? count;
+
+  /// The `from` of the next batch; null on the last one.
+  String? nextBatch;
 }
 
 class EventTooLarge implements Exception {

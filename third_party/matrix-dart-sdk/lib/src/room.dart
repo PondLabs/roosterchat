@@ -31,6 +31,7 @@ import 'package:matrix/src/utils/file_send_request_credentials.dart';
 import 'package:matrix/src/utils/markdown.dart';
 import 'package:matrix/src/utils/marked_unread.dart';
 import 'package:matrix/src/utils/space_child.dart';
+import 'package:matrix/src/utils/versions_comparator.dart'; // ROOSTER
 
 export 'package:matrix/src/utils/file_send_source.dart'; // ROOSTER
 export 'package:matrix/src/utils/file_upload_loop.dart'; // ROOSTER
@@ -2891,14 +2892,51 @@ class Room {
     } else {
       messageID = txid;
     }
-    final data = <String, dynamic>{};
-    if (reason != null) data['reason'] = reason;
+    // ROOSTER: Matrix v1.18 (MSC4169) servers take an `m.room.redaction`
+    // through `PUT /send` in every room version, with `redacts` in the
+    // content. It goes straight to the API: a redaction is never encrypted.
+    // Older servers, unreadable versions and an `M_UNRECOGNIZED` answer fall
+    // back to `PUT /redact`.
+    if (await _supportsRedactionViaSend()) {
+      try {
+        return await client.sendMessage(
+          id,
+          EventTypes.Redaction,
+          messageID,
+          {
+            'redacts': eventId,
+            if (reason != null) 'reason': reason,
+          },
+        );
+      } on MatrixException catch (e) {
+        if (e.error != MatrixError.M_UNRECOGNIZED) rethrow;
+        Logs().v('Redaction through /send unrecognized, using /redact', e);
+      }
+    }
     return await client.redactEvent(
       id,
       eventId,
       messageID,
       reason: reason,
     );
+  }
+
+  // ROOSTER: Only spec versions written `v<major>.<minor>` count, so a
+  // malformed one such as `v1` is not read as `>= v1.18`. `getVersions()` is
+  // cached in the database (T1.1c).
+  static final RegExp _specVersionPattern = RegExp(r'^v\d+\.\d+$');
+
+  Future<bool> _supportsRedactionViaSend() async {
+    try {
+      return (await client.getVersions()).versions.any(
+            (v) =>
+                _specVersionPattern.hasMatch(v) &&
+                isVersionGreaterThanOrEqualTo(v, 'v1.18'),
+          );
+    } catch (e, s) {
+      Logs().v('Unable to check server versions for redaction', e, s);
+      return false;
+    }
   }
 
   /// This tells the server that the user is typing for the next N milliseconds
