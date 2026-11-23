@@ -137,7 +137,8 @@ class PolicyRule {
     for (final MapEntry(key: kind, value: names) in types.entries) {
       final byEntity = <String, PolicyRule>{};
       for (final type in names.reversed) {
-        for (final event in room.states[type]?.values ?? const []) {
+        for (final event in room.states[type]?.values ??
+            const <matrix.StrippedStateEvent>[]) {
           final rule = fromContent(kind, event.content);
           if (rule != null) byEntity[rule.entity] = rule;
         }

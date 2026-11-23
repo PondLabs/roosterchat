@@ -55,7 +55,9 @@ Map<String, Object?> memberEvent(String userId, String membership,
 (Script, matrix.Room) moderatedRoom({int ownLevel = 100}) {
   final script = Script();
   final client = DirectoryTestClient(script);
-  final room = joinedRoom(client, id: roomId, ownLevel: ownLevel);
+  final room = joinedRoom(client, id: roomId, ownLevel: ownLevel)
+    // Its whole state is in memory: nothing to load from a database.
+    ..partial = false;
   return (script, room);
 }
 

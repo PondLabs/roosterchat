@@ -1,4 +1,5 @@
 import 'package:matrix/matrix.dart' as matrix;
+import 'package:rooster/client/matrix/components/history_sharing/matrix_history_sharing.dart';
 
 /// Why the homeserver turned a moderation action down, for the screens to
 /// say so in the app's language.
@@ -115,12 +116,15 @@ class MatrixRoomModeration {
   Future<void> ban(String userId, {String? reason}) =>
       client.ban(room.id, userId, reason: cleanReason(reason));
 
-  /// Invites through the room, so the history is shared when the room says
-  /// so (see `MatrixHistorySharing.invite`).
-  Future<void> invite(String userId,
-          {String? reason, bool shareHistory = false}) =>
-      room.invite(userId,
-          reason: cleanReason(reason), shareHistory: shareHistory);
+  /// Invites through the room, sharing its history when its settings say
+  /// so, as `MatrixHistorySharing.invite` does.
+  Future<void> invite(String userId, {String? reason}) async {
+    await room.postLoad();
+    await room.invite(userId,
+        reason: cleanReason(reason),
+        shareHistory:
+            MatrixHistorySharing.stateOf(room) == HistorySharingState.on);
+  }
 
   Future<String?> redact(String eventId, {String? reason}) =>
       room.redactEvent(eventId, reason: cleanReason(reason));
