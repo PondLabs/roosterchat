@@ -541,3 +541,14 @@ Changes since the copy:
   session's own account or Olm sessions changes on any failure.
   `deleteDehydratedDevice` and `deleteDehydratedDeviceIfSupported` are
   MSC3814's DELETE, for turning the opt-in off.
+- Sync filter defined again when it changed (T4.3): `Client._checkSyncFilter`
+  (`lib/src/client.dart`) used to define the sync filter once per login and
+  keep its id for ever, so a session never got a filter the app changed
+  later. Rooster now asks for per-thread unread counts in it (Matrix v1.4,
+  MSC3773, `room.timeline.unread_thread_notifications`). The filter an id
+  was defined from is kept with `cacheCustomObject`
+  (`rooster_defined_sync_filter`), read once per run, and a different one
+  (or none, as in every session from before) defines the filter again and
+  stores the new id. `DatabaseApi` does not change, so the drift database
+  still compiles. The SDK's `clearCache` empties custom cache objects too,
+  which costs one more definition after it.

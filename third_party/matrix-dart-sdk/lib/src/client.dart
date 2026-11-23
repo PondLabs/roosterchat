@@ -2737,12 +2737,39 @@ class Client extends MatrixApi {
   /// Presence that is set on sync.
   PresenceType? syncPresence;
 
+  // ROOSTER: The filter the stored sync filter id was defined from, so a
+  // session whose filter predates a change to [syncFilter] (Rooster asking
+  // for per-thread unread counts, Matrix v1.4) defines the new one. Read
+  // once per run.
+  static const _definedSyncFilterCacheKey = 'rooster_defined_sync_filter';
+  bool _syncFilterChecked = false;
+
   Future<void> _checkSyncFilter() async {
     final userID = this.userID;
-    if (syncFilterId == null && userID != null) {
+    if (userID == null) return;
+    // ROOSTER: Define the filter again when it is not the one stored.
+    if (syncFilterId != null && !_syncFilterChecked) {
+      _syncFilterChecked = true;
+      try {
+        final defined =
+            await database.getCustomCacheObject(_definedSyncFilterCacheKey);
+        if (defined?.content['filter'] != jsonEncode(syncFilter.toJson())) {
+          _syncFilterId = null;
+        }
+      } catch (e, s) {
+        Logs().w('Unable to read the defined sync filter', e, s);
+      }
+    }
+    if (syncFilterId == null) {
       final syncFilterId =
           _syncFilterId = await defineFilter(userID, syncFilter);
       await database.storeSyncFilterId(syncFilterId);
+      // ROOSTER: Remember what this id was defined from.
+      _syncFilterChecked = true;
+      await database.cacheCustomObject(
+        _definedSyncFilterCacheKey,
+        {'filter': jsonEncode(syncFilter.toJson())},
+      );
     }
     return;
   }
