@@ -152,8 +152,26 @@ void main() {
     final result = await portability()
         .importKeys(Uint8List.fromList(utf8.encode(mixed)), _passphrase);
     expect(result.total, 4);
-    expect(result.imported, 1);
+    expect(result.imported, 0);
+    expect(result.alreadyHeld, 1);
+    expect(result.unusable, 3);
     expect(await _stored(newSession), before,
         reason: 'the good one is already there, the others never are');
+  });
+
+  test('importing the same file again keeps nothing new', skip: vodozemacSkip,
+      () async {
+    final before = await _stored(newSession);
+    // As after a restart: no session in memory.
+    newSession
+        .getMatrixClient()
+        .encryption!
+        .keyManager
+        .clearInboundGroupSessions();
+    final result = await portability().importKeys(file, _passphrase);
+    expect(result.imported, 0);
+    expect(result.alreadyHeld, 1);
+    expect(result.unusable, 0);
+    expect(await _stored(newSession), before);
   });
 }

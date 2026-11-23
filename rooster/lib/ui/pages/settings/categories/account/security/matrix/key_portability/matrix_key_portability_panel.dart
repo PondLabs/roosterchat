@@ -105,13 +105,22 @@ class MatrixKeyPortabilityPanel extends StatefulWidget {
               "passphrase field");
 
   static String messageKeyImportDone(int howMany) => Intl.plural(howMany,
-      zero: "The file holds no keys.",
+      zero: "No keys were imported.",
       one: "1 key was imported.",
       other: "$howMany keys were imported.",
       name: "messageKeyImportDone",
       args: [howMany],
       desc: "Settings > Security: after a key file was imported, how many "
-          "keys it gave");
+          "keys it gave that this session did not have yet");
+
+  static String messageKeyImportAlreadyHeld(int howMany) => Intl.plural(howMany,
+      one: "This session already had 1 key from the file.",
+      other: "This session already had $howMany keys from the file.",
+      name: "messageKeyImportAlreadyHeld",
+      args: [howMany],
+      desc: "Settings > Security: after a key file was imported, how many "
+          "of its keys were left out because this session already holds "
+          "them, as good or better");
 
   static String messageKeyImportSkipped(int howMany) => Intl.plural(howMany,
       one: "1 key in the file could not be used.",
@@ -205,11 +214,13 @@ class _MatrixKeyPortabilityPanelState extends State<MatrixKeyPortabilityPanel> {
     if (passphrase == null || !mounted) return;
     await run(() async {
       final result = await widget.controller.importKeys(file!, passphrase);
-      final skipped = result.total - result.imported;
       return [
         MatrixKeyPortabilityPanel.messageKeyImportDone(result.imported),
-        if (skipped > 0)
-          MatrixKeyPortabilityPanel.messageKeyImportSkipped(skipped),
+        if (result.alreadyHeld > 0)
+          MatrixKeyPortabilityPanel.messageKeyImportAlreadyHeld(
+              result.alreadyHeld),
+        if (result.unusable > 0)
+          MatrixKeyPortabilityPanel.messageKeyImportSkipped(result.unusable),
       ];
     }, MatrixKeyPortabilityPanel.importError);
   }

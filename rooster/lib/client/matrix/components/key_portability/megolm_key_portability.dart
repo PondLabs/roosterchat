@@ -7,13 +7,23 @@ import 'package:vodozemac/vodozemac.dart' as vod;
 
 import 'megolm_export_format.dart';
 
-/// How an import went: [imported] of the file's [total] sessions were
-/// read; the others were not room key sessions this app can use.
+/// How an import went: of the file's [total] sessions, [imported] were
+/// kept and [alreadyHeld] were not, because this device holds them from
+/// the same message or an earlier one; the others were not room key
+/// sessions this app can use.
 class KeyImportResult {
-  const KeyImportResult({required this.total, required this.imported});
+  const KeyImportResult({
+    required this.total,
+    required this.imported,
+    this.alreadyHeld = 0,
+  });
 
   final int total;
   final int imported;
+  final int alreadyHeld;
+
+  /// The file's entries that were not usable room key sessions.
+  int get unusable => total - imported - alreadyHeld;
 }
 
 /// What the key export panel asks of the account, so a test can stand in
@@ -92,12 +102,21 @@ class MegolmKeyPortability implements KeyPortabilityController {
     // passphrase or a damaged file leaves the database as it was.
     final sessions = await MegolmExportFormat.decrypt(file, passphrase);
     final usable = sessions.where(_usable).toList();
+    var imported = 0;
     for (final session in usable) {
+      final roomId = session['room_id'] as String;
+      final sessionId = session['session_id'] as String;
       final senderClaimedKeys =
           session.tryGetMap<String, Object?>('sender_claimed_keys') ?? const {};
+      // The session this device holds, out of its database: the SDK keeps
+      // the better of the two, but compares only with what is in memory,
+      // and after a restart nothing is until a message needs it. Without
+      // this, a file's later copy would replace an earlier one, and the
+      // messages before it would no longer decrypt.
+      final held = await keyManager.loadInboundGroupSession(roomId, sessionId);
       await keyManager.setInboundGroupSession(
-        session['room_id'] as String,
-        session['session_id'] as String,
+        roomId,
+        sessionId,
         session['sender_key'] as String,
         {
           'algorithm': AlgorithmTypes.megolmV1AesSha2,
@@ -116,8 +135,15 @@ class MegolmKeyPortability implements KeyPortabilityController {
             if (entry.value is String) entry.key: entry.value as String,
         },
       );
+      // Kept only when it took the place of [held] (or of nothing).
+      final now = keyManager.getInboundGroupSession(roomId, sessionId);
+      if (now != null && !identical(now, held)) imported++;
     }
-    return KeyImportResult(total: sessions.length, imported: usable.length);
+    return KeyImportResult(
+      total: sessions.length,
+      imported: imported,
+      alreadyHeld: usable.length - imported,
+    );
   }
 
   /// A Megolm session whose ids and key are there, and whose key vodozemac

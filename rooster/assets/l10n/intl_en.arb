@@ -9387,9 +9387,17 @@
     "type": "text",
     "placeholders": {}
   },
-  "messageKeyImportDone": "{howMany,plural, =0{The file holds no keys.}=1{1 key was imported.}other{{howMany} keys were imported.}}",
+  "messageKeyImportDone": "{howMany,plural, =0{No keys were imported.}=1{1 key was imported.}other{{howMany} keys were imported.}}",
   "@messageKeyImportDone": {
-    "description": "Settings > Security: after a key file was imported, how many keys it gave",
+    "description": "Settings > Security: after a key file was imported, how many keys it gave that this session did not have yet",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "messageKeyImportAlreadyHeld": "{howMany,plural, =1{This session already had 1 key from the file.}other{This session already had {howMany} keys from the file.}}",
+  "@messageKeyImportAlreadyHeld": {
+    "description": "Settings > Security: after a key file was imported, how many of its keys were left out because this session already holds them, as good or better",
     "type": "text",
     "placeholders": {
       "howMany": {}

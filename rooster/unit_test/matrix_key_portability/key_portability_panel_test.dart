@@ -185,6 +185,29 @@ void main() {
       expect(find.text('3 keys were imported.'), findsOneWidget);
       expect(
           find.text('2 keys in the file could not be used.'), findsOneWidget);
+      expect(find.textContaining('already had'), findsNothing);
+    });
+
+    testWidgets('keys the session already had are told apart', (tester) async {
+      await pumpPanel(tester);
+      keys.importResult =
+          const KeyImportResult(total: 7, imported: 0, alreadyHeld: 6);
+      await importWith(tester, 'the passphrase');
+      expect(find.text('No keys were imported.'), findsOneWidget);
+      expect(find.text('This session already had 6 keys from the file.'),
+          findsOneWidget);
+      expect(find.text('1 key in the file could not be used.'), findsOneWidget);
+    });
+
+    testWidgets('keys the session already had, in Portuguese', (tester) async {
+      intl.Intl.defaultLocale = 'pt';
+      await pumpPanel(tester);
+      keys.importResult =
+          const KeyImportResult(total: 6, imported: 0, alreadyHeld: 6);
+      await importWith(tester, 'a senha');
+      expect(find.text('Nenhuma chave foi importada.'), findsOneWidget);
+      expect(find.text('Esta sessão já tinha 6 chaves do arquivo.'),
+          findsOneWidget);
     });
 
     testWidgets('no file picked asks for nothing', (tester) async {
