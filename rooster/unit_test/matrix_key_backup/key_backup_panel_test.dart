@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:rooster/ui/pages/settings/categories/account/security/matrix/key_backup/matrix_key_backup_panel.dart';
@@ -6,7 +7,7 @@ import 'package:rooster/utils/common_strings.dart';
 import 'package:tiamat/config/style/theme_dark.dart';
 
 import '../device_verification/verify_device_layout.dart'
-    show loadFontsAndLanguages;
+    show loadFontsAndLanguages, phoneScreen;
 
 /// Stands in for the account: counts what reaches the "server".
 class FakeKeyBackupController implements KeyBackupController {
@@ -49,16 +50,22 @@ void main() {
   late FakeKeyBackupController backup;
   late int changes;
 
-  Future<void> pumpPanel(WidgetTester tester) async {
+  Future<void> pumpPanel(
+    WidgetTester tester, {
+    EdgeInsetsGeometry padding = EdgeInsets.zero,
+  }) async {
     backup = FakeKeyBackupController();
     changes = 0;
     await tester.pumpWidget(MaterialApp(
       theme: ThemeDark.theme,
       home: Scaffold(
         body: SingleChildScrollView(
-          child: MatrixKeyBackupPanel(
-            controller: backup,
-            onChanged: () => changes++,
+          child: Padding(
+            padding: padding,
+            child: MatrixKeyBackupPanel(
+              controller: backup,
+              onChanged: () => changes++,
+            ),
           ),
         ),
       ),
@@ -189,5 +196,26 @@ void main() {
     expect(find.text('1234 chaves guardadas'), findsOneWidget);
     expect(find.text('Excluir o backup'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Portuguese unlock dialog fits on a 360px phone screen',
+      (tester) async {
+    phoneScreen(tester, 360);
+    intl.Intl.defaultLocale = 'pt';
+    await pumpPanel(tester, padding: const EdgeInsets.all(8));
+
+    await tester.tap(find.text(MatrixKeyBackupPanel.promptKeyBackupRotate));
+    await tester.pumpAndSettle();
+    await tester.tap(button(MatrixKeyBackupPanel.promptKeyBackupRotate));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    for (final p
+        in tester.renderObjectList<RenderParagraph>(find.byType(RichText))) {
+      final text = p.text.toPlainText();
+      expect(p.didExceedMaxLines, isFalse, reason: '"$text" is clipped');
+      expect(p.size.width <= p.constraints.maxWidth + 0.5, isTrue,
+          reason: '"$text" overflows');
+    }
   });
 }

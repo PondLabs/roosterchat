@@ -318,10 +318,10 @@ class _UnlockViewState extends State<_UnlockView> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: 8,
         children: [
+          tiamat.Text.labelLow(MatrixKeyBackupPanel.labelKeyBackupUnlockHint),
           tiamat.TextInput(
             controller: controller,
             obscureText: true,
-            placeholder: MatrixKeyBackupPanel.labelKeyBackupUnlockHint,
             onSubmitted: (_) => submit(),
           ),
           tiamat.Button(
