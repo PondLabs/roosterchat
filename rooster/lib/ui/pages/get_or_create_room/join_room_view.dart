@@ -1,10 +1,16 @@
 import 'package:rooster/client/client.dart';
+import 'package:rooster/client/matrix/components/knocking/matrix_knocking_component.dart';
+import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/room_preview.dart';
 import 'package:rooster/client/space_child.dart';
 import 'package:rooster/ui/atoms/room_preview.dart';
+import 'package:rooster/ui/organisms/chat/knock_request_banner.dart';
+import 'package:rooster/ui/organisms/chat/room_notice_banner.dart';
 import 'package:rooster/utils/debounce.dart';
+import 'package:rooster/utils/error_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:matrix/matrix.dart' as matrix;
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class JoinRoomView extends StatefulWidget {
@@ -29,6 +35,8 @@ class _JoinRoomViewState extends State<JoinRoomView> {
   String text = "";
   bool loading = false;
   bool joinLoading = false;
+  bool knockLoading = false;
+  bool knockSent = false;
 
   late TextEditingController controller;
 
@@ -60,7 +68,85 @@ class _JoinRoomViewState extends State<JoinRoomView> {
   }
 
   @override
+  void dispose() {
+    searchDebouncer.cancel();
+    controller.dispose();
+    super.dispose();
+  }
+
+  bool _canJoinDirectly(RoomPreview? p) {
+    if (p == null) return true;
+    if (p.joinRule == 'knock') return false;
+    if (p.joinRule == 'knock_restricted') {
+      return switch (p.visibility) {
+        RoomVisibilityRestricted(spaces: final allowed) => allowed.any(
+            (id) => widget.client.hasSpace(id) || widget.client.hasRoom(id)),
+        _ => false,
+      };
+    }
+    return true;
+  }
+
+  Future<void> _joinRoom() async {
+    setState(() {
+      joinLoading = true;
+    });
+
+    SpaceChild? result;
+    if (preview?.type == RoomType.space) {
+      result = SpaceChildSpace(await widget.client.joinSpace(text));
+    } else {
+      result = SpaceChildRoom(await widget.client.joinRoom(text));
+    }
+
+    widget.onPicked?.call(result);
+  }
+
+  Future<void> _requestToJoin() async {
+    final client = widget.client;
+    if (client is! MatrixClient) return;
+
+    final reason = await KnockRequestBanner.promptReason(context);
+    if (reason == null || !mounted) return;
+
+    final parsed = client.parseAddressToIdAndVia(text);
+    final target = parsed?.$1 ?? preview?.roomId ?? text;
+    final via = preview?.via.isNotEmpty == true ? preview!.via : parsed?.$2;
+
+    setState(() => knockLoading = true);
+    await ErrorUtils.tryRun(context, () async {
+      await MatrixKnockingComponent.knockById(
+        client.getMatrixClient(),
+        target,
+        reason: reason,
+        via: via,
+      );
+      knockSent = true;
+    });
+    if (mounted) setState(() => knockLoading = false);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final matrixClient =
+        widget.client is MatrixClient ? widget.client as MatrixClient : null;
+    final membership = matrixClient == null || preview == null
+        ? null
+        : matrixClient
+            .getMatrixClient()
+            .getRoomById(preview!.roomId)
+            ?.membership;
+    // An invite (which is also what an approved request to join becomes)
+    // is accepted with Join; the server refuses a knock from someone invited.
+    final invited = membership == matrix.Membership.invite;
+    final canKnock =
+        !invited && matrixClient != null && preview?.canKnock == true;
+    final canJoin = invited || _canJoinDirectly(preview);
+    // A request just sent counts until the sync shows what became of it.
+    final pending = membership == matrix.Membership.knock ||
+        (knockSent &&
+            (membership == null || membership == matrix.Membership.leave));
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -91,24 +177,41 @@ class _JoinRoomViewState extends State<JoinRoomView> {
             ),
           ],
         ),
-        tiamat.Button(
-          text: promptConfirmRoomJoin,
-          isLoading: joinLoading,
-          onTap: () async {
-            setState(() {
-              joinLoading = true;
-            });
-
-            SpaceChild? result;
-            if (preview?.type == RoomType.space) {
-              result = SpaceChildSpace(await widget.client.joinSpace(text));
-            } else {
-              result = SpaceChildRoom(await widget.client.joinRoom(text));
-            }
-
-            widget.onPicked?.call(result);
-          },
-        )
+        if (pending)
+          RoomNoticeBanner(
+            icon: Icons.hourglass_top,
+            message: KnockRequestBanner.messageKnockPending,
+          )
+        else if (canKnock && !canJoin)
+          tiamat.Button(
+            text: KnockRequestBanner.promptRequestToJoin,
+            isLoading: knockLoading,
+            onTap: knockLoading ? null : _requestToJoin,
+          )
+        else if (canKnock && canJoin)
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 8,
+            children: [
+              tiamat.Button(
+                text: promptConfirmRoomJoin,
+                isLoading: joinLoading,
+                onTap: _joinRoom,
+              ),
+              tiamat.Button.secondary(
+                text: KnockRequestBanner.promptRequestToJoin,
+                isLoading: knockLoading,
+                onTap: knockLoading ? null : _requestToJoin,
+              ),
+            ],
+          )
+        else
+          tiamat.Button(
+            text: promptConfirmRoomJoin,
+            isLoading: joinLoading,
+            onTap: _joinRoom,
+          ),
       ],
     );
   }
@@ -120,6 +223,7 @@ class _JoinRoomViewState extends State<JoinRoomView> {
       setState(() {
         preview = null;
         loading = false;
+        knockSent = false;
       });
       searchDebouncer.cancel();
       return;
@@ -128,10 +232,12 @@ class _JoinRoomViewState extends State<JoinRoomView> {
     setState(() {
       preview = null;
       loading = true;
+      knockSent = false;
     });
 
     searchDebouncer.run(() async {
       var result = await widget.client.getRoomPreview(value);
+      if (!mounted) return;
       setState(() {
         preview = result;
         loading = false;

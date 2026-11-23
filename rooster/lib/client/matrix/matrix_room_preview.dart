@@ -38,6 +38,7 @@ class MatrixSpaceRoomChunkPreview implements RoomPreview {
     }
   }
 
+  @override
   List<String> via;
 
   @override
@@ -47,5 +48,18 @@ class MatrixSpaceRoomChunkPreview implements RoomPreview {
   int? get numMembers => 0;
 
   @override
-  RoomVisibility? get visibility => null;
+  String? get joinRule => chunk.joinRule;
+
+  @override
+  bool get canKnock => RoomPreview.isKnockJoinRule(joinRule);
+
+  @override
+  RoomVisibility? get visibility => switch (chunk.joinRule) {
+        'public' => RoomVisibilityPublic(),
+        'restricted' ||
+        'knock_restricted' =>
+          RoomVisibilityRestricted(chunk.allowedRoomIds ?? const []),
+        'private' || 'invite' || 'knock' => RoomVisibilityPrivate(),
+        _ => null,
+      };
 }

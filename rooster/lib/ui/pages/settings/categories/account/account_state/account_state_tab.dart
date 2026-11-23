@@ -1,5 +1,8 @@
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/client_manager.dart';
+import 'package:rooster/client/matrix/components/room_lifecycle/matrix_archived_rooms.dart';
+import 'package:rooster/client/matrix/matrix_client.dart';
+import 'package:rooster/ui/pages/settings/categories/account/account_state/archived_rooms_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 
@@ -35,6 +38,14 @@ class _AccountStateTabState extends State<AccountStateTab> {
                 selectedClient = client;
               });
             },
+          ),
+        if (selectedClient case MatrixClient client)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: ArchivedRoomsView(
+              MatrixArchivedRooms(client.getMatrixClient()),
+              key: ValueKey(client.identifier),
+            ),
           ),
         selectedClient!.buildDebugInfo()
       ],

@@ -2293,6 +2293,14 @@
       "user": {}
     }
   },
+  "messageUserReplacedRoom": "{user} upgraded this room. The conversation continues in the new room.",
+  "@messageUserReplacedRoom": {
+    "description": "Timeline line for when someone upgrades a room: it is closed and a new room (Matrix calls it the replacement room) takes its place",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
   "labelNotificationUnknownEventType": "Unknown event type",
   "@labelNotificationUnknownEventType": {
     "description": "Text of a notification on Android for something in a room that is neither a message nor encrypted, which the app cannot describe",
@@ -4621,6 +4629,60 @@
   "cantSentMessagePrompt": "You do not have permission to send a message in this room",
   "@cantSentMessagePrompt": {
     "description": "Text that explains the user cannot send a message in this room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRoomTakesKnocks": "You are not in this room. You can ask its moderators to let you in.",
+  "@messageRoomTakesKnocks": {
+    "description": "Banner in a room you are not in that takes requests to join",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRequestToJoin": "Request to join",
+  "@promptRequestToJoin": {
+    "description": "Button that asks a room's moderators to let you in (Matrix calls it knocking)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKnockReasonTitle": "Request to join",
+  "@labelKnockReasonTitle": {
+    "description": "Title of the dialog that sends a request to join a room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKnockReasonDescription": "Add a note for the moderators, if you like.",
+  "@labelKnockReasonDescription": {
+    "description": "Text above the optional note sent with a request to join a room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKnockReasonHint": "Note (optional)",
+  "@labelKnockReasonHint": {
+    "description": "Placeholder of the optional note sent with a request to join",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptSendKnock": "Send request",
+  "@promptSendKnock": {
+    "description": "Button that sends a request to join a room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKnockPending": "Your request to join is waiting for a moderator.",
+  "@messageKnockPending": {
+    "description": "Banner in a room you asked to join, until a moderator answers",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRoomReplaced": "This room has been replaced and is no longer active.",
+  "@messageRoomReplaced": {
+    "description": "Banner in a room that was upgraded: a new room (Matrix calls it the replacement room) took its place",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptGoToReplacementRoom": "Go to new room",
+  "@promptGoToReplacementRoom": {
+    "description": "Button on the banner of an upgraded room that joins and opens the room that replaced it",
     "type": "text",
     "placeholders": {}
   },
@@ -8477,6 +8539,50 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelArchivedRoomsHeader": "Rooms you left",
+  "@labelArchivedRoomsHeader": {
+    "description": "Header of the list of rooms the account left or was removed from",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptLoadArchivedRooms": "Show rooms you left",
+  "@promptLoadArchivedRooms": {
+    "description": "Button that loads the list of rooms the account left",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageNoArchivedRooms": "You have not left any rooms.",
+  "@messageNoArchivedRooms": {
+    "description": "Shown when the list of rooms the account left is empty",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptForgetRoom": "Forget",
+  "@promptForgetRoom": {
+    "description": "Button that forgets a room the account left: it leaves the room list for good and its history is no longer kept for you",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelForgetRoomPrompt": "Forget {room}? It will no longer show up anywhere, and you will need an invite or the address to come back.",
+  "@labelForgetRoomPrompt": {
+    "description": "Confirmation before forgetting a room the account left",
+    "type": "text",
+    "placeholders": {
+      "room": {}
+    }
+  },
+  "messageForgetForcedUponLeave": "Your homeserver forgets rooms as soon as you leave them, so there is nothing to forget here.",
+  "@messageForgetForcedUponLeave": {
+    "description": "Shown above the rooms the account left when the homeserver already forgets every room on leave (Matrix capability m.forget_forced_upon_leave)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRoomForgotten": "Room forgotten",
+  "@messageRoomForgotten": {
+    "description": "Brief notice after forgetting a room",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelChatPrivacyTitle": "Chat Privacy",
   "@labelChatPrivacyTitle": {
     "description": "Header for the chat privacy section in settings",
@@ -11336,6 +11442,90 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelRoomVersionHeader": "Room version",
+  "@labelRoomVersionHeader": {
+    "description": "Header of the room settings section that shows the room's version and upgrades it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelCurrentRoomVersion": "This room uses version {version}",
+  "@labelCurrentRoomVersion": {
+    "description": "The room's version (Matrix room versions are numbers like 11 or 12)",
+    "type": "text",
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "promptUpgradeRoom": "Upgrade room",
+  "@promptUpgradeRoom": {
+    "description": "Button that upgrades a room to a newer version",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageUpgradeRoomNoPermission": "Only people allowed to change this room's settings can upgrade it.",
+  "@messageUpgradeRoomNoPermission": {
+    "description": "Shown instead of the upgrade button to someone without the power to upgrade the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageUpgradeRoomExplanation": "Upgrading makes a new room on the chosen version and closes this one. Members are asked to move to the new room.",
+  "@messageUpgradeRoomExplanation": {
+    "description": "What upgrading a room does, above the version picker",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageNoRoomVersions": "Your homeserver did not say which room versions it supports.",
+  "@messageNoRoomVersions": {
+    "description": "Shown when the homeserver reports no room versions to upgrade to",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelStableRoomVersions": "Stable",
+  "@labelStableRoomVersions": {
+    "description": "Heading of the room versions the homeserver calls stable",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelUnstableRoomVersions": "Experimental",
+  "@labelUnstableRoomVersions": {
+    "description": "Heading of the room versions the homeserver calls unstable (still being tried out)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelRoomVersionOption": "Version {version}",
+  "@labelRoomVersionOption": {
+    "description": "One room version in the upgrade picker",
+    "type": "text",
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "labelDefaultRoomVersionOption": "Version {version} (default)",
+  "@labelDefaultRoomVersionOption": {
+    "description": "The homeserver's default room version in the upgrade picker",
+    "type": "text",
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "labelAdditionalCreators": "Other creators (optional)",
+  "@labelAdditionalCreators": {
+    "description": "Field naming more people to make creators of the upgraded room (room version 12 and later)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "hintAdditionalCreators": "@someone:example.org, one per line",
+  "@hintAdditionalCreators": {
+    "description": "Placeholder of the field naming more creators of the upgraded room; the example is a Matrix user ID",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageAdditionalCreatorsExplanation": "Creators have full power over the new room and cannot be removed.",
+  "@messageAdditionalCreatorsExplanation": {
+    "description": "Below the field naming more creators of the upgraded room",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelDefaultReadReceiptsOption": "Use global preference ({pref})",
   "@labelDefaultReadReceiptsOption": {
     "description": "Label to use the global preference, showing the current global preference value",
@@ -11598,6 +11788,112 @@
     "type": "text",
     "placeholders": {
       "eventType": {}
+    }
+  },
+  "messageRoomSettingNoPermission": "You need permission to change this setting.",
+  "@messageRoomSettingNoPermission": {
+    "description": "Below a room setting someone without the power to change it can only look at",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelHistoryVisibilityHeader": "Who can read history",
+  "@labelHistoryVisibilityHeader": {
+    "description": "Header of the room setting for who can read past messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelHistoryWorldReadable": "Anyone",
+  "@labelHistoryWorldReadable": {
+    "description": "Room history option: anyone, even people not in the room, can read past messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelHistoryShared": "Members, including messages from before they joined",
+  "@labelHistoryShared": {
+    "description": "Room history option: members can read all past messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelHistoryInvited": "Members, from when they were invited",
+  "@labelHistoryInvited": {
+    "description": "Room history option: members read messages sent after they were invited",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelHistoryJoined": "Members, from when they joined",
+  "@labelHistoryJoined": {
+    "description": "Room history option: members read messages sent after they joined",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGuestAccessHeader": "Guest access",
+  "@labelGuestAccessHeader": {
+    "description": "Header of the room setting for whether guest accounts (Matrix accounts without a full registration) can join",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGuestsCanJoin": "Guests can join",
+  "@labelGuestsCanJoin": {
+    "description": "Guest access option: guest accounts may join the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGuestsForbidden": "No guests",
+  "@labelGuestsForbidden": {
+    "description": "Guest access option: guest accounts may not join the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKnockRequestsHeader": "Requests to join",
+  "@labelKnockRequestsHeader": {
+    "description": "Header of the list of people asking to join the room (Matrix calls these knocks), in its security settings",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageNoKnockRequests": "Nobody is waiting to join.",
+  "@messageNoKnockRequests": {
+    "description": "Shown in the list of requests to join a room when it is empty",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptApproveKnock": "Let in",
+  "@promptApproveKnock": {
+    "description": "Button that accepts someone's request to join the room (it invites them)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptDeclineKnock": "Decline",
+  "@promptDeclineKnock": {
+    "description": "Button that turns down someone's request to join the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeclineKnockTitle": "Decline request",
+  "@labelDeclineKnockTitle": {
+    "description": "Title of the dialog that turns down a request to join the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeclineKnockReasonDescription": "Decline the request from {user}? They will see the reason, if you give one.",
+  "@labelDeclineKnockReasonDescription": {
+    "description": "Above the optional reason for turning down a request to join, with the name of who asked",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "labelDeclineKnockReasonHint": "Reason (optional)",
+  "@labelDeclineKnockReasonHint": {
+    "description": "Placeholder of the optional reason for turning down a request to join",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKnockReason": "Note: {reason}",
+  "@labelKnockReason": {
+    "description": "The note someone sent with their request to join the room",
+    "type": "text",
+    "placeholders": {
+      "reason": {}
     }
   },
   "promptEnableEncryptionRoomSettings": "Enable Encryption",
