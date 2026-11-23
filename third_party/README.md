@@ -510,3 +510,14 @@ Changes since the copy:
   belongs to (as T3.1b does for `m.room_key`), and adds the bundle sender's
   Curve25519 key to the forwarding chain. `onImported`, `onRejected` and
   `lastImport` tell the app. Pending bundles and inviters live in memory.
+- Inbound Megolm sessions compared with the database (T3.4b):
+  `KeyManager.setInboundGroupSession` compares the new session with the one
+  in memory or, when none is there (as after a restart), with the one the
+  database keeps, and keeps whichever starts at the earlier index (or, at the
+  same index, has the shorter forwarding chain). Upstream compared only with
+  memory, so after a restart a session from the key backup, a forwarded key,
+  an import or a bundle that starts later replaced a stored one from index 0
+  and earlier messages stopped decrypting. The stored session is read without
+  being cached in memory, and memory is checked again after the read, so of
+  two calls at once the better session still wins. An unreadable stored
+  session is replaced.
