@@ -536,6 +536,7 @@ class MatrixClient extends Client {
     try {
       await _matrixClient.logout();
     } finally {
+      _clearReauthenticationAlert();
       await _clearOwnMedia();
     }
   }
@@ -830,11 +831,8 @@ class MatrixClient extends Client {
   /// Shows the dialog to sign in again, and an alert on the Home screen
   /// that opens it, while the refresh token is refused.
   void _onTokenRefreshState() {
-    final alerts = clientManager?.alertManager;
     if (tokenRefresher.state.value == TokenRefreshState.active) {
-      final alert = _reauthenticationAlert;
-      _reauthenticationAlert = null;
-      if (alert != null) alerts?.clearAlert(alert);
+      _clearReauthenticationAlert();
       return;
     }
     if (_reauthenticationAlert != null) return;
@@ -844,13 +842,21 @@ class MatrixClient extends Client {
       messageGetter: () => ReauthenticateDialog.messageReauthenticateAlert,
       action: (context) => ReauthenticateDialog.show(context, this),
     );
-    alerts?.addAlert(alert);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    clientManager?.alertManager.addAlert(alert);
+    final binding = WidgetsBinding.instance;
+    binding.addPostFrameCallback((_) {
       final context = navigator.currentContext;
       if (context != null && context.mounted) {
         ReauthenticateDialog.show(context, this);
       }
     });
+    binding.scheduleFrame();
+  }
+
+  void _clearReauthenticationAlert() {
+    final alert = _reauthenticationAlert;
+    _reauthenticationAlert = null;
+    if (alert != null) clientManager?.alertManager.clearAlert(alert);
   }
 
   /// The ways to sign this device in again: none for a session signed in

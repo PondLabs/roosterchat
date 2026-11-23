@@ -169,8 +169,6 @@ class MatrixTokenRefresher {
     client.onLoginStateChanged.add(matrix.LoginState.loggedIn);
     _resumeSync(client);
   }
-
-  void dispose() => state.dispose();
 }
 
 /// Sends every request of the account and, when the homeserver answers one
