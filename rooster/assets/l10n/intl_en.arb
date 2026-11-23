@@ -7215,6 +7215,36 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelProfileMutualRooms": "Rooms in common",
+  "@labelProfileMutualRooms": {
+    "description": "Heading of the list of rooms the user and the person whose profile card is open have both joined",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageProfileMutualRoomsNone": "You have no rooms in common.",
+  "@messageProfileMutualRoomsNone": {
+    "description": "Shown on a profile card when the user and that person share no room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageProfileMutualRoomsLocal": "Your server can't list them, so these are the ones this device knows about. Some may be missing.",
+  "@messageProfileMutualRoomsLocal": {
+    "description": "Under the rooms in common on a profile card when the homeserver is too old to list them and the app worked them out itself",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageProfileMutualRoomsFailed": "Couldn't load the rooms in common.",
+  "@messageProfileMutualRoomsFailed": {
+    "description": "Shown on a profile card when the list of rooms in common could not be loaded",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptProfileMutualRoomsMore": "Show more",
+  "@promptProfileMutualRoomsMore": {
+    "description": "Button under the rooms in common on a profile card: loads the next ones",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelProfileSessions": "{howMany,plural, =1{1 session}other{{howMany} sessions}}",
   "@labelProfileSessions": {
     "description": "Heading of the list of another user's sessions (devices) on their profile, with how many there are",

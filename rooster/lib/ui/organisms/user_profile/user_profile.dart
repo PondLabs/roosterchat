@@ -14,6 +14,7 @@ import 'package:rooster/ui/atoms/inherited_offstage.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/navigation/navigation_utils.dart';
 import 'package:rooster/ui/molecules/profile/e2ee_trust.dart';
+import 'package:rooster/ui/organisms/user_profile/mutual_rooms_view.dart';
 import 'package:rooster/ui/organisms/user_profile/profile_card_theme.dart';
 import 'package:rooster/ui/organisms/user_profile/user_devices.dart';
 import 'package:rooster/ui/pages/matrix/verification/matrix_verification_page.dart';
@@ -301,6 +302,7 @@ class _UserProfileState extends State<UserProfile> {
         devices: devices,
         onSetDeviceBlocked: onSetDeviceBlocked,
         onWithdrawVerification: onWithdrawVerification,
+        mutualRooms: MutualRoomsView.forUser(widget.client, profile.identifier),
         // Only from the popup: the card shown inside a page has nothing to
         // close first.
         onEditProfile:
