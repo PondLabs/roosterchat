@@ -3,6 +3,7 @@ import 'package:collection/collection.dart';
 import 'package:rooster/client/components/emoticon/emoticon.dart';
 import 'package:rooster/client/components/url_preview/url_preview_component.dart';
 import 'package:rooster/client/matrix/components/read_receipts/matrix_read_receipt_component.dart';
+import 'package:rooster/client/matrix/components/read_receipts/matrix_threaded_receipts.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/matrix/timeline_events/matrix_timeline_event.dart';
@@ -200,8 +201,7 @@ class MatrixTimeline extends Timeline {
 
     _readMarkerSentFor = event.eventId;
     try {
-      await timeline.setReadMarker(
-          eventId: markerEventId,
+      await _sendReadMarker(timeline, markerEventId,
           public: receipts?.usePublicReadReceiptsForRoom);
     } catch (e, s) {
       // Asked again next time: the server does not have it, so the badge
@@ -222,6 +222,32 @@ class MatrixTimeline extends Timeline {
         markerEventId) {
       _room.clearUnreadCountsLocally();
     }
+  }
+
+  /// Moves our read marker to [markerEventId], the newest event, and sends
+  /// our receipt for the room's own timeline. A server with threaded
+  /// receipts (Matrix v1.4) gets it with `thread_id: "main"`, on the newest
+  /// event outside any thread, so the threads keep their unread messages
+  /// until they are read; an older one gets the unthreaded receipt.
+  Future<void> _sendReadMarker(matrix.Timeline timeline, String markerEventId,
+      {bool? public}) async {
+    if (!await MatrixThreadedReceipts.supported(_matrixRoom.client)) {
+      await timeline.setReadMarker(eventId: markerEventId, public: public);
+      return;
+    }
+
+    matrix.Event? lookup(String id) =>
+        timeline.events.firstWhereOrNull((e) => e.eventId == id);
+    final mainEvent = timeline.events.firstWhereOrNull((e) =>
+        e.status == matrix.EventStatus.synced &&
+        MatrixThreadedReceipts.threadOf(e, lookup) ==
+            MatrixThreadedReceipts.mainThreadId);
+
+    // The fully read marker has no thread: it goes on the newest event.
+    await _matrixRoom.setReadMarker(markerEventId);
+    if (mainEvent == null) return;
+    await MatrixThreadedReceipts.send(_matrixRoom, mainEvent.eventId,
+        threadId: MatrixThreadedReceipts.mainThreadId, public: public);
   }
 
   @override
@@ -308,3 +334,4 @@ class MatrixTimeline extends Timeline {
     return "${event.eventId}-${ev.eventId}";
   }
 }
+
