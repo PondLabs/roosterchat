@@ -20,9 +20,17 @@ import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key, this.onSuccess, this.canNavigateBack = false});
+  const LoginPage(
+      {super.key,
+      this.onSuccess,
+      this.canNavigateBack = false,
+      this.createClient});
   final bool canNavigateBack;
   final Function(Client loggedInClient)? onSuccess;
+
+  /// Makes the client that signs in; [MatrixClient.create] when null. Tests
+  /// give one on a fake homeserver.
+  final Future<Client> Function(String internalId)? createClient;
 
   @override
   State<LoginPage> createState() => LoginPageState();
@@ -99,8 +107,9 @@ class LoginPageState extends State<LoginPage> {
 
   Future<void> _initializeLoginClient(String internalId) async {
     try {
-      final client = await MatrixClient.create(internalId)
-          .timeout(const Duration(seconds: 15));
+      final client =
+          await (widget.createClient ?? MatrixClient.create)(internalId)
+              .timeout(const Duration(seconds: 15));
       if (!mounted) return;
       loginClient = client;
 
@@ -170,7 +179,12 @@ class LoginPageState extends State<LoginPage> {
         title: RegisterView.promptLoginCreateAccount,
         builder: (_) => RegisterView(
             lifecycle: MatrixAccountLifecycle(client.matrixClient)));
-    if (registered == true) await doLogin(() async => LoginResultSuccess());
+    // As any other login: the account is kept for the next start, and what
+    // follows a login (push, invitations, key verification) runs.
+    if (registered == true) {
+      await doLogin(
+          () => client.executeLoginFlow(const RegisteredAccountLoginFlow()));
+    }
   }
 
   void doPasswordReset() {

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:matrix/matrix.dart';
+import 'package:matrix/matrix.dart' hide LoginFlow;
+import 'package:rooster/client/auth.dart';
+import 'package:rooster/client/client.dart' as rooster;
 import 'package:rooster/client/matrix/auth/matrix_account_lifecycle.dart';
+import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/config/build_config.dart';
 import 'package:rooster/ui/pages/matrix/authentication/uia_dialog_prompter.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
@@ -155,6 +158,20 @@ class _RegisterViewState extends State<RegisterView> {
       ],
     );
   }
+}
+
+/// Signs in the account [RegisterView] just created. Registration leaves
+/// the Matrix client signed in already, so this only reports it: run
+/// through [rooster.Client.executeLoginFlow], the account is kept for the
+/// next start and gets everything that follows any other login.
+class RegisteredAccountLoginFlow implements LoginFlow {
+  const RegisteredAccountLoginFlow();
+
+  @override
+  Future<rooster.LoginResult> submit(rooster.Client client) async =>
+      client is MatrixClient && client.matrixClient.isLogged()
+          ? rooster.LoginResultSuccess()
+          : rooster.LoginResultFailed();
 }
 
 /// What the person reads when creating an account failed; null when they
