@@ -22,6 +22,7 @@ import 'package:rooster/ui/pages/settings/app_settings_page.dart';
 import 'package:rooster/utils/error_utils.dart';
 import 'package:rooster/utils/event_bus.dart';
 import 'package:rooster/ui/organisms/user_profile/user_profile_view.dart';
+import 'package:rooster/ui/organisms/moderation/profile_moderation_actions.dart';
 import 'package:rooster/utils/timezone_utils.dart';
 import 'package:rooster/client/components/petname/petname_component.dart';
 import 'package:flutter/material.dart';
@@ -320,6 +321,11 @@ class _UserProfileState extends State<UserProfile> {
                 .getComponent<UserColorComponent>()
                 ?.getOverride(profile.identifier) !=
             null,
+        moderationActions: ProfileModerationActions.of(
+            context, widget.client, profile.identifier,
+            displayName: profile.displayName, onChanged: () {
+          if (mounted) setState(() {});
+        }),
       ),
     );
   }

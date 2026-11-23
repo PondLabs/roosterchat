@@ -6,6 +6,7 @@ import 'package:rooster/client/matrix/components/sidebar_entries/matrix_room_tag
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/room.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
+import 'package:rooster/ui/organisms/moderation/report_content_dialog.dart';
 import 'package:rooster/utils/error_utils.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
@@ -89,6 +90,11 @@ class RoomPanelActions {
           icon: Icons.label_outline,
           onPressed: () => AdaptiveDialog.show(context,
               title: promptRoomEditTags, builder: (_) => RoomTagsEditor(tags))),
+      tiamat.ContextMenuItem(
+          text: ReportContentDialog.promptReportRoom,
+          icon: Icons.flag_outlined,
+          onPressed: () =>
+              ReportContentDialog.reportRoom(context, mx.client, mx.id)),
     ];
   }
 }

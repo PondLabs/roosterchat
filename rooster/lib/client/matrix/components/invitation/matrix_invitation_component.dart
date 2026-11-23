@@ -4,6 +4,7 @@ import 'package:rooster/client/components/invitation/invitation_component.dart';
 import 'package:rooster/client/components/profile/profile_component.dart';
 import 'package:rooster/client/matrix/components/history_sharing/matrix_history_sharing.dart';
 import 'package:rooster/client/matrix/components/profile/matrix_profile_component.dart';
+import 'package:rooster/client/matrix/components/reporting/matrix_ignored_users.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
 import 'package:rooster/client/matrix/matrix_peer.dart';
@@ -42,11 +43,18 @@ class MatrixInvitationComponent
     _updateInviteList();
 
     client.onSync.listen((_) => _updateInviteList());
+    // An invite from someone ignored goes, and comes back when unignored.
+    MatrixIgnoredUsers.of(client.getMatrixClient())
+        .onChanged
+        .listen((_) => _updateInviteList());
   }
 
   void _updateInviteList() async {
     var mx = client.getMatrixClient();
+    var ignored = MatrixIgnoredUsers.of(mx);
     var invitedRooms = mx.rooms.where((element) => element.membership.isInvite);
+
+    invitations.removeWhere((i) => ignored.isIgnored(i.senderId));
 
     for (var room in invitedRooms) {
       if (invitations
@@ -57,6 +65,7 @@ class MatrixInvitationComponent
 
       var state = room.states[matrix.EventTypes.RoomMember]?[mx.userID];
       var sender = state?.senderId;
+      if (ignored.isIgnored(sender)) continue;
 
       var avatar =
           room.avatar != null ? MatrixMxcImage(room.avatar!, mx) : null;

@@ -5730,6 +5730,128 @@
     "type": "text",
     "placeholders": {}
   },
+  "promptIgnoreUser": "Ignore",
+  "@promptIgnoreUser": {
+    "description": "Entry in a user's profile menu, and button in Settings, that ignores the user: their messages and invites are hidden",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptUnignoreUser": "Stop Ignoring",
+  "@promptUnignoreUser": {
+    "description": "Entry in a user's profile menu, and button next to each ignored user in Settings, that shows their messages and invites again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelIgnoreUserConfirmation": "Ignore {name}? You will no longer see their messages or invites. You can stop ignoring them in Settings.",
+  "@labelIgnoreUserConfirmation": {
+    "description": "Asked before ignoring a user, with their name",
+    "type": "text",
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "errorIgnoreSelf": "You cannot ignore yourself.",
+  "@errorIgnoreSelf": {
+    "description": "Shown when the user tries to put their own Matrix ID on their ignore list",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorIgnoreInvalidId": "That is not a Matrix ID. It looks like @name:example.org.",
+  "@errorIgnoreInvalidId": {
+    "description": "Under the field in Settings where a user to ignore is typed, when what was typed is not a Matrix ID; the example stays as it is",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorIgnoreFailed": "The ignore list could not be saved. Check your connection and try again.",
+  "@errorIgnoreFailed": {
+    "description": "Shown when saving the ignore list to the homeserver failed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptReportMessage": "Report Message",
+  "@promptReportMessage": {
+    "description": "Entry in a message's menu, and the title of the dialog it opens, that reports the message to the homeserver's administrators",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptReportRoom": "Report Room",
+  "@promptReportRoom": {
+    "description": "Entry in a room's menu, and the title of the dialog it opens, that reports the room to the homeserver's administrators",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptReportUser": "Report User",
+  "@promptReportUser": {
+    "description": "Entry in a user's profile menu, and the title of the dialog it opens, that reports the user to the homeserver's administrators",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelReportMessageDescription": "Your homeserver's administrators will see this message and your reason.",
+  "@labelReportMessageDescription": {
+    "description": "Top of the dialog that reports a message",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelReportRoomDescription": "Your homeserver's administrators will see this room and your reason.",
+  "@labelReportRoomDescription": {
+    "description": "Top of the dialog that reports a room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelReportUserDescription": "Your homeserver's administrators will see this user and your reason.",
+  "@labelReportUserDescription": {
+    "description": "Top of the dialog that reports a user",
+    "type": "text",
+    "placeholders": {}
+  },
+  "hintReportReason": "Reason (optional)",
+  "@hintReportReason": {
+    "description": "Placeholder of the field in the report dialog where the user says why they report something; it can be left empty",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptReportSend": "Send Report",
+  "@promptReportSend": {
+    "description": "Button in the report dialog that sends the report",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageReportSent": "Report sent. Thank you for helping keep this place safe.",
+  "@messageReportSent": {
+    "description": "Shown in the report dialog after the homeserver took the report",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorReportForbidden": "The server did not let you report this. You may no longer be in the room.",
+  "@errorReportForbidden": {
+    "description": "In the report dialog when the homeserver answered M_FORBIDDEN",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorReportNotFound": "The server could not find what you are reporting. It may have been deleted.",
+  "@errorReportNotFound": {
+    "description": "In the report dialog when the homeserver answered M_NOT_FOUND",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorReportUnsupported": "Your homeserver does not take reports of this kind.",
+  "@errorReportUnsupported": {
+    "description": "In the report dialog when the homeserver is too old for room or user reports (M_UNRECOGNIZED)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorReportRateLimited": "Too many reports at once. Wait a moment and try again.",
+  "@errorReportRateLimited": {
+    "description": "In the report dialog when the homeserver answered M_LIMIT_EXCEEDED",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorReportFailed": "The report could not be sent. Check your connection and try again.",
+  "@errorReportFailed": {
+    "description": "In the report dialog when sending failed for any other reason",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelNotificationHistoryAll": "All",
   "@labelNotificationHistoryAll": {
     "description": "Settings > Notifications > Notification history: the filter that shows every notification",
@@ -9574,6 +9696,30 @@
   "labelAllowInvitationsDescription": "Allow other users to invite you to rooms",
   "@labelAllowInvitationsDescription": {
     "description": "description for the toggle for enabling and disabling the automatic blocking of invitations",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelIgnoredUsersTitle": "Ignored Users",
+  "@labelIgnoredUsersTitle": {
+    "description": "Header of the settings section listing the users the user ignores",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelIgnoredUsersDescription": "You do not see messages or invites from the people you ignore.",
+  "@labelIgnoredUsersDescription": {
+    "description": "Under the header of the ignored users section in settings",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelIgnoredUsersEmpty": "You are not ignoring anyone.",
+  "@labelIgnoredUsersEmpty": {
+    "description": "In the ignored users section of settings when the list is empty",
+    "type": "text",
+    "placeholders": {}
+  },
+  "hintIgnoreUserId": "Matrix ID of someone to ignore",
+  "@hintIgnoreUserId": {
+    "description": "Placeholder of the field in settings where the user types the Matrix ID of someone to ignore",
     "type": "text",
     "placeholders": {}
   },
