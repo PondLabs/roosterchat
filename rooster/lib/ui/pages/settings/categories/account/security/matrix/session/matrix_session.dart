@@ -9,11 +9,16 @@ import '../../../../../../matrix/verification/matrix_verification_page.dart';
 
 class MatrixSession extends StatefulWidget {
   const MatrixSession(this.device, this.matrixClient,
-      {super.key, this.onUpdated, this.inactive = false, this.removeSession});
+      {super.key,
+      this.onUpdated,
+      this.inactive = false,
+      this.removeSession,
+      this.editName});
   final Device device;
   final Client matrixClient;
   final Function? onUpdated;
   final Function? removeSession;
+  final VoidCallback? editName;
   final bool inactive;
   @override
   State<MatrixSession> createState() => _MatrixSessionState();
@@ -40,6 +45,7 @@ class _MatrixSessionState extends State<MatrixSession> {
       inactive: widget.inactive,
       beginVerification: beginVerification,
       removeSession: widget.removeSession,
+      editName: widget.editName,
     );
   }
 

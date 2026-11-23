@@ -1,9 +1,11 @@
 import 'package:rooster/client/alert.dart';
+import 'package:rooster/client/matrix/components/key_portability/megolm_key_portability.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/ui/molecules/alert_view.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/pages/settings/categories/account/security/matrix/session/matrix_session.dart';
+import 'package:rooster/ui/pages/settings/categories/account/security/matrix/session/matrix_session_name_view.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/links/link_utils.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +16,7 @@ import 'package:tiamat/tiamat.dart' as tiamat;
 
 import 'cross_signing/cross_signing_page.dart';
 import 'key_backup/matrix_key_backup_panel.dart';
+import 'key_portability/matrix_key_portability_panel.dart';
 
 class MatrixSecurityTab extends StatefulWidget {
   const MatrixSecurityTab(this.client, {super.key});
@@ -69,6 +72,9 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
   /// How many sessions the last fetch found gone from the list before it.
   int sessionsSignedOut = 0;
 
+  /// Why the last rename of a session failed, while its name stays.
+  String? sessionNameError;
+
   Future<void>? _loading;
 
   late final AppLifecycleListener _lifecycle;
@@ -86,6 +92,11 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
   /// on a server with the Matrix Authentication Service.
   bool get usesAccountPage =>
       supportsLegacyUIA != true && accountManagementUri != null;
+
+  /// Sessions are renamed here, through the client API, unless the
+  /// server's account page manages them. A server that gave no metadata
+  /// does not delegate.
+  bool get canEditSessionNames => !usesAccountPage;
 
   /// The server answered that it has no account page and does not sign
   /// sessions out through the client API either.
@@ -314,6 +325,13 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
                         alignment: AlignmentDirectional.centerStart,
                         child: tiamat.Text.labelLow(message)),
                   ),
+                if (sessionNameError != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                    child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: tiamat.Text.error(sessionNameError!)),
+                  ),
                 if ((supportsLegacyUIA == true || usesAccountPage) &&
                     inactiveDevices.isNotEmpty)
                   Padding(
@@ -372,6 +390,9 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
                         device,
                         widget.client.getMatrixClient(),
                         inactive: isDeviceInactive(device),
+                        editName: canEditSessionNames
+                            ? () => editSessionName(device)
+                            : null,
                         removeSession: supportsLegacyUIA == true
                             ? () => removeDeviceUIA(device.deviceId)
                             : usesAccountPage
@@ -385,6 +406,35 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
               ],
             ),
     );
+  }
+
+  /// Renames [device] (`PUT /devices/{id}`), or clears its name, then
+  /// fetches the list again. When the server refuses or cannot be
+  /// reached, the list keeps the name it had.
+  Future<void> editSessionName(Device device) async {
+    final choice = await AdaptiveDialog.show<SessionNameChoice>(context,
+        title: MatrixSessionNameView.labelSessionRenameTitle,
+        builder: (_) => MatrixSessionNameView(currentName: device.displayName));
+    if (choice == null || !mounted) return;
+    final client = widget.client.getMatrixClient();
+    try {
+      final name = choice.name;
+      if (name == null) {
+        await client.deleteDeviceDisplayName(device.deviceId);
+      } else {
+        await client.updateDevice(device.deviceId, displayName: name);
+      }
+    } catch (e, s) {
+      Log.onError(e, s);
+      if (mounted) {
+        setState(() => sessionNameError =
+            MatrixSessionNameView.messageSessionRenameFailed);
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() => sessionNameError = null);
+    getDevices();
   }
 
   void removeDeviceUIA(String deviceID) async {
@@ -566,9 +616,17 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
             controller: keyBackupController,
             onChanged: checkState,
           ),
+        // Room keys to and from a file (the spec's key export format).
+        if (widget.client.getMatrixClient().encryption != null) ...[
+          const tiamat.Seperator(),
+          MatrixKeyPortabilityPanel(controller: keyPortability),
+        ],
       ],
     );
   }
+
+  late final keyPortability =
+      MegolmKeyPortability(widget.client.getMatrixClient());
 
   Widget messageBackupRow() {
     return Row(
