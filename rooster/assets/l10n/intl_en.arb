@@ -2226,6 +2226,31 @@
       "user": {}
     }
   },
+  "messageCanonicalAliasSet": "{user} set the main address of the room to {address}",
+  "@messageCanonicalAliasSet": {
+    "description": "Timeline line for when someone sets the room's main address (Matrix calls it the canonical alias, like #room:example.org), with the address",
+    "type": "text",
+    "placeholders": {
+      "user": {},
+      "address": {}
+    }
+  },
+  "messageCanonicalAliasRemoved": "{user} removed the main address of the room",
+  "@messageCanonicalAliasRemoved": {
+    "description": "Timeline line for when someone clears the room's main address (canonical alias)",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageAltAliasesChanged": "{user} changed the other addresses of the room",
+  "@messageAltAliasesChanged": {
+    "description": "Timeline line for when someone changes the room's alternative addresses (alt_aliases) and not its main one",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
   "messagePlaceholderUserCreatedRoom": "{user} created the room!",
   "@messagePlaceholderUserCreatedRoom": {
     "description": "Message body for when a user creates the room",
@@ -2249,6 +2274,118 @@
     "placeholders": {
       "user": {},
       "emote": {}
+    }
+  },
+  "messageGuestAccessAllowed": "{user} let guests join the room",
+  "@messageGuestAccessAllowed": {
+    "description": "Timeline line for when someone allows guest accounts (temporary accounts without a password) to join the room",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageGuestAccessForbidden": "{user} stopped guests from joining the room",
+  "@messageGuestAccessForbidden": {
+    "description": "Timeline line for when someone stops guest accounts from joining the room",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageGuestAccessChanged": "{user} changed guest access to the room",
+  "@messageGuestAccessChanged": {
+    "description": "Timeline line for a change to the room's guest access that the app cannot describe (unknown or missing)",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageHistoryVisibilityShared": "{user} made new messages readable by every member, including those who join later",
+  "@messageHistoryVisibilityShared": {
+    "description": "Timeline line for the 'shared' history visibility: members can read the room's history from this point on, even messages sent before they joined",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageHistoryVisibilityInvited": "{user} made new messages readable by members from the time they were invited",
+  "@messageHistoryVisibilityInvited": {
+    "description": "Timeline line for the 'invited' history visibility",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageHistoryVisibilityJoined": "{user} made new messages readable by members from the time they joined",
+  "@messageHistoryVisibilityJoined": {
+    "description": "Timeline line for the 'joined' history visibility",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageHistoryVisibilityWorldReadable": "{user} made new messages readable by anyone",
+  "@messageHistoryVisibilityWorldReadable": {
+    "description": "Timeline line for the 'world_readable' history visibility: anyone, even people who are not in the room, can read it",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageHistoryVisibilityChanged": "{user} changed who can read the room history",
+  "@messageHistoryVisibilityChanged": {
+    "description": "Timeline line for a change to the room's history visibility that the app cannot describe (unknown or missing)",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageJoinRulePublic": "{user} made the room public: anyone can join",
+  "@messageJoinRulePublic": {
+    "description": "Timeline line for when someone sets the room's join rule to public",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageJoinRuleInvite": "{user} made the room invite only",
+  "@messageJoinRuleInvite": {
+    "description": "Timeline line for when someone sets the room so that only people invited can join",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageJoinRuleKnock": "{user} let people ask to join the room",
+  "@messageJoinRuleKnock": {
+    "description": "Timeline line for when someone sets the room so that anyone can ask to join (Matrix calls it knocking) and must be let in",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageJoinRuleRestricted": "{user} let members of certain spaces join the room",
+  "@messageJoinRuleRestricted": {
+    "description": "Timeline line for when someone sets the room so that members of the spaces or rooms it lists can join (the restricted join rule)",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageJoinRuleKnockRestricted": "{user} let members of certain spaces join the room, and others ask to join",
+  "@messageJoinRuleKnockRestricted": {
+    "description": "Timeline line for the knock_restricted join rule: members of the spaces or rooms it lists can join, anyone else can ask to join",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageJoinRuleChanged": "{user} changed who can join the room",
+  "@messageJoinRuleChanged": {
+    "description": "Timeline line for a change to the room's join rule that the app cannot describe (unknown or missing)",
+    "type": "text",
+    "placeholders": {
+      "user": {}
     }
   },
   "messagePlaceholderUserJoinedRoom": "{user} joined the room!",
@@ -2372,6 +2509,114 @@
   "messagePowerLevelsChanged": "{user} changed the room power levels",
   "@messagePowerLevelsChanged": {
     "description": "Message to display when a user changes the room power levels",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageRoomAvatarChanged": "{user} changed the room picture",
+  "@messageRoomAvatarChanged": {
+    "description": "Timeline line for when someone sets a new picture (avatar) for the room",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageRoomAvatarRemoved": "{user} removed the room picture",
+  "@messageRoomAvatarRemoved": {
+    "description": "Timeline line for when someone removes the room's picture (avatar)",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageRoomEncryptionEnabled": "{user} turned on end-to-end encryption",
+  "@messageRoomEncryptionEnabled": {
+    "description": "Timeline line for when someone turns on end-to-end encryption in the room",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageRoomEncryptionChanged": "{user} changed the encryption settings",
+  "@messageRoomEncryptionChanged": {
+    "description": "Timeline line for a change to the room's encryption settings that the app cannot describe (an unknown or missing algorithm)",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageRoomNameChanged": "{user} changed the room name to {name}",
+  "@messageRoomNameChanged": {
+    "description": "Timeline line for when someone renames the room, with their name and the room's new name",
+    "type": "text",
+    "placeholders": {
+      "user": {},
+      "name": {}
+    }
+  },
+  "messageRoomNameRemoved": "{user} removed the room name",
+  "@messageRoomNameRemoved": {
+    "description": "Timeline line for when someone clears the room's name",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageRoomTopicChanged": "{user} changed the topic to: {topic}",
+  "@messageRoomTopicChanged": {
+    "description": "Timeline line for when someone changes the room's topic (its description), with their name and the new topic",
+    "type": "text",
+    "placeholders": {
+      "user": {},
+      "topic": {}
+    }
+  },
+  "messageRoomTopicChangedFormatted": "{user} changed the topic to:",
+  "@messageRoomTopicChangedFormatted": {
+    "description": "Timeline line for when someone changes the room's topic to a formatted one, which is shown right under this line",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageRoomTopicRemoved": "{user} removed the topic",
+  "@messageRoomTopicRemoved": {
+    "description": "Timeline line for when someone clears the room's topic (its description)",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageServerAclChanged": "{user} changed which servers can take part in the room",
+  "@messageServerAclChanged": {
+    "description": "Timeline line for when someone changes the room's server access rules (Matrix calls them server ACLs)",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageThirdPartyInvite": "{user} invited {invitee} to the room",
+  "@messageThirdPartyInvite": {
+    "description": "Timeline line for when someone invites a person by email or phone number, with the invitee's display name (often a shortened address)",
+    "type": "text",
+    "placeholders": {
+      "user": {},
+      "invitee": {}
+    }
+  },
+  "messageThirdPartyInviteRevoked": "{user} revoked the invitation for {invitee}",
+  "@messageThirdPartyInviteRevoked": {
+    "description": "Timeline line for when someone withdraws an invitation sent by email or phone number, with the invitee's display name",
+    "type": "text",
+    "placeholders": {
+      "user": {},
+      "invitee": {}
+    }
+  },
+  "messageThirdPartyInviteRevokedUnnamed": "{user} revoked an invitation",
+  "@messageThirdPartyInviteRevokedUnnamed": {
+    "description": "Timeline line for when someone withdraws an invitation sent by email or phone number, when the app does not know whose it was",
     "type": "text",
     "placeholders": {
       "user": {}
@@ -12850,6 +13095,18 @@
   "messageRoomDirectoryFailed": "The change could not be saved. Try again later.",
   "@messageRoomDirectoryFailed": {
     "description": "Shown under the room directory switch when changing it failed for another reason (the switch goes back)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelRoomTopicHeader": "Topic",
+  "@labelRoomTopicHeader": {
+    "description": "Header of the room settings section that shows the room's topic (its description), formatted as members see it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelRoomTopicEmpty": "This room has no topic.",
+  "@labelRoomTopicEmpty": {
+    "description": "Shown in the room settings' topic section when the room has no topic (description)",
     "type": "text",
     "placeholders": {}
   },
