@@ -76,6 +76,7 @@ class _SpaceSummaryState extends State<SpaceSummary> {
       joinRoom: joinRoom,
       knockRoom: widget.space.client is MatrixClient ? knockRoom : null,
       isKnockPending: _isKnockPending,
+      isInvited: _isInvited,
       topic: widget.space.topic,
       banner: banner?.banner,
       openSpaceSettings: openSpaceSettings,
@@ -167,14 +168,29 @@ class _SpaceSummaryState extends State<SpaceSummary> {
     await widget.space.client.joinRoomFromPreview(preview);
   }
 
-  bool _isKnockPending(RoomPreview preview) {
-    if (_knockedRoomIds.contains(preview.roomId)) return true;
+  matrix.Membership? _membershipIn(RoomPreview preview) {
     final client = widget.space.client;
-    if (client is MatrixClient) {
-      return client.getMatrixClient().getRoomById(preview.roomId)?.membership ==
-          matrix.Membership.knock;
+    if (client is! MatrixClient) return null;
+    return client.getMatrixClient().getRoomById(preview.roomId)?.membership;
+  }
+
+  /// An invite (which is also what an approved request to join becomes) is
+  /// accepted with Join; the server refuses a knock from someone invited.
+  bool _isInvited(RoomPreview preview) =>
+      _membershipIn(preview) == matrix.Membership.invite;
+
+  bool _isKnockPending(RoomPreview preview) {
+    final membership = _membershipIn(preview);
+    if (membership == matrix.Membership.knock) {
+      // The sync caught up with the request: from here on the membership
+      // alone says whether it still waits, so one that was declined (back
+      // to leave) stops showing as waiting.
+      _knockedRoomIds.remove(preview.roomId);
+      return true;
     }
-    return false;
+    // A request just sent counts until the sync shows what became of it.
+    return _knockedRoomIds.contains(preview.roomId) &&
+        (membership == null || membership == matrix.Membership.leave);
   }
 
   Future<void> knockRoom(RoomPreview preview) async {

@@ -130,16 +130,22 @@ class _JoinRoomViewState extends State<JoinRoomView> {
   Widget build(BuildContext context) {
     final matrixClient =
         widget.client is MatrixClient ? widget.client as MatrixClient : null;
-    final canKnock = matrixClient != null && preview?.canKnock == true;
-    final canJoin = _canJoinDirectly(preview);
-    final pending = knockSent ||
-        (matrixClient != null &&
-            preview != null &&
-            matrixClient
-                    .getMatrixClient()
-                    .getRoomById(preview!.roomId)
-                    ?.membership ==
-                matrix.Membership.knock);
+    final membership = matrixClient == null || preview == null
+        ? null
+        : matrixClient
+            .getMatrixClient()
+            .getRoomById(preview!.roomId)
+            ?.membership;
+    // An invite (which is also what an approved request to join becomes)
+    // is accepted with Join; the server refuses a knock from someone invited.
+    final invited = membership == matrix.Membership.invite;
+    final canKnock =
+        !invited && matrixClient != null && preview?.canKnock == true;
+    final canJoin = invited || _canJoinDirectly(preview);
+    // A request just sent counts until the sync shows what became of it.
+    final pending = membership == matrix.Membership.knock ||
+        (knockSent &&
+            (membership == null || membership == matrix.Membership.leave));
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,

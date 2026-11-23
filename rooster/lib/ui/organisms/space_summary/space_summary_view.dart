@@ -34,6 +34,7 @@ class SpaceSummaryView extends StatefulWidget {
       this.joinRoom,
       this.knockRoom,
       this.isKnockPending,
+      this.isInvited,
       this.avatar,
       this.onSpaceUpdated,
       this.banner,
@@ -56,6 +57,9 @@ class SpaceSummaryView extends StatefulWidget {
   final Future<void> Function(RoomPreview preview)? joinRoom;
   final Future<void> Function(RoomPreview preview)? knockRoom;
   final bool Function(RoomPreview preview)? isKnockPending;
+
+  /// Whether we hold an invite to the room: it is then joined, never knocked.
+  final bool Function(RoomPreview preview)? isInvited;
   final Stream<void>? onSpaceUpdated;
   final RoomVisibility? visibility;
   final ImageProvider? avatar;
@@ -412,17 +416,23 @@ class SpaceSummaryViewState extends State<SpaceSummaryView> {
                 itemData: previews,
                 shrinkWrap: true,
                 itemBuilder: (context, preview) {
-                  final pending = widget.isKnockPending?.call(preview) == true;
-                  final canKnock = preview.canKnock && widget.knockRoom != null;
-                  final canJoinDirectly = preview.joinRule != 'knock' &&
-                      (preview.joinRule != 'knock_restricted' ||
-                          switch (preview.visibility) {
-                            RoomVisibilityRestricted(spaces: final allowed) =>
-                              allowed.any((id) =>
-                                  widget.space.client.hasSpace(id) ||
-                                  widget.space.client.hasRoom(id)),
-                            _ => false,
-                          });
+                  final invited = widget.isInvited?.call(preview) == true;
+                  final pending =
+                      !invited && widget.isKnockPending?.call(preview) == true;
+                  final canKnock =
+                      !invited && preview.canKnock && widget.knockRoom != null;
+                  final canJoinDirectly = invited ||
+                      preview.joinRule != 'knock' &&
+                          (preview.joinRule != 'knock_restricted' ||
+                              switch (preview.visibility) {
+                                RoomVisibilityRestricted(
+                                  spaces: final allowed
+                                ) =>
+                                  allowed.any((id) =>
+                                      widget.space.client.hasSpace(id) ||
+                                      widget.space.client.hasRoom(id)),
+                                _ => false,
+                              });
 
                   if (pending) {
                     return RoomPanelView(
