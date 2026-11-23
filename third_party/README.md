@@ -355,3 +355,28 @@ Changes since the copy:
   (`lib/encryption/utils/key_verification.dart`) cancels with `m.key_mismatch`
   instead of `m.invalid_message` when `validateStart` rejects an incoming
   `m.reciprocate.v1` start event whose shared secret does not match.
+- Olm `sender_device_keys` (T3.1, Matrix v1.15 MSC4147):
+  `OlmManager.encryptToDeviceMessagePayload`
+  (`lib/encryption/olm_manager.dart`) puts our device keys, as `/keys/query`
+  returns them and without `unsigned`, in every Olm payload. On receipt the
+  keys must be the sender's, carry the Olm session's Curve25519 key and the
+  payload's claimed `keys.ed25519`, and be validly self-signed, or the event
+  is discarded (`DecryptException`). A device not known yet is stored
+  unverified, with its list marked outdated for the next `/keys/query`;
+  divergent keys that collide with a known or previously seen device's
+  Curve25519 or Ed25519 key reject the event (`DecryptException`), and no
+  known device is ever overwritten.
+- Key backup account data (T3.1, Matrix v1.19 MSC4287): `m.key_backup`
+  (`{"enabled": bool}`, `KeyBackupContent`) holds the user's choice to use key
+  backup. `SSSS.store` (`lib/encryption/ssss.dart`) writes it on when a new
+  backup key goes into `m.megolm_backup.v1` (not when the key is copied under
+  another storage key). `KeyManager` (`lib/encryption/key_manager.dart`)
+  reads it (`keyBackupEnabled` falls back to the presence of
+  `m.megolm_backup.v1`), updates `client.accountData` and the local database
+  after `setKeyBackupEnabled` and `deleteKeyBackup`, stops uploading keys
+  while it is off, and adds
+  `getKeyBackupStatus`, `createKeyBackup` (creation and rotation, deleting the
+  replaced version only after the new key is stored), `deleteKeyBackup`
+  (turns it off and empties the stored key) and
+  `restoreKeyBackupWithRecoveryKey` (a backup whose key is not in secret
+  storage).

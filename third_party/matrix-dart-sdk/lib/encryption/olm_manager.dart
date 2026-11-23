@@ -477,12 +477,163 @@ class OlmManager {
         plainContent['recipient_keys']['ed25519'] != fingerprintKey) {
       throw DecryptException(DecryptException.ownFingerprintDoesntMatch);
     }
+    // ROOSTER: MSC4147, checked before anything is read from the payload.
+    if (plainContent.containsKey('sender_device_keys')) {
+      await _ingestSenderDeviceKeys(
+        plainContent['sender_device_keys'],
+        sender: event.sender,
+        senderKey: senderKey,
+        claimedKeys: plainContent['keys'],
+      );
+    }
     return ToDeviceEvent(
       content: plainContent['content'],
       encryptedContent: event.content,
       type: plainContent['type'],
       sender: event.sender,
     );
+  }
+
+  // ROOSTER: Matrix v1.15 (MSC4147). Our device keys, as `/keys/query`
+  // gives them, go in every Olm payload, so a recipient that has not
+  // fetched this device yet still knows who sent what it gets: our own
+  // entry from `/keys/query` while its keys are ours (it carries the
+  // cross-signing signature), else the keys signed here. Never `unsigned`,
+  // which holds the device's name.
+  Map<String, Object?> get senderDeviceKeys {
+    final known = client.userDeviceKeys[client.userID]?.deviceKeys[ourDeviceId];
+    if (known != null &&
+        known.ed25519Key == fingerprintKey &&
+        known.curve25519Key == identityKey &&
+        known.selfSigned) {
+      return known.toJson()..remove('unsigned');
+    }
+    return _ownDeviceKeys ??= signJson({
+      'user_id': client.userID,
+      'device_id': ourDeviceId,
+      'algorithms': [
+        AlgorithmTypes.olmV1Curve25519AesSha2,
+        AlgorithmTypes.megolmV1AesSha2,
+      ],
+      'keys': {
+        'curve25519:$ourDeviceId': identityKey,
+        'ed25519:$ourDeviceId': fingerprintKey,
+      },
+    });
+  }
+
+  Map<String, Object?>? _ownDeviceKeys;
+
+  // ROOSTER: MSC4147 on the receiving side. The keys must be the sender's,
+  // their Curve25519 key the Olm session's ([senderKey]), their Ed25519 key
+  // the one the payload claims ([claimedKeys]), and signed by it: anything
+  // else throws (the event is discarded) and nothing is written. A device
+  // we do not know yet is kept (unverified), its list marked outdated so
+  // the next `/keys/query` has the last word; keys that diverge on a known
+  // or previously seen Curve25519 or Ed25519 key reject the event, and no
+  // known device is ever overwritten.
+  Future<void> _ingestSenderDeviceKeys(
+    Object? raw, {
+    required String sender,
+    required String senderKey,
+    required Object? claimedKeys,
+  }) async {
+    Never reject(String why) => throw DecryptException(
+          DecryptException.senderDoesntMatch,
+          'sender_device_keys: $why',
+        );
+    if (raw is! Map<String, Object?>) reject('not an object');
+    final deviceId = raw['device_id'];
+    final keys = raw['keys'];
+    if (raw['user_id'] != sender ||
+        deviceId is! String ||
+        keys is! Map ||
+        raw['algorithms'] is! List) {
+      reject('not the device keys of the sender');
+    }
+    final ed25519 = keys['ed25519:$deviceId'];
+    if (keys['curve25519:$deviceId'] != senderKey) {
+      reject("the Curve25519 key is not the Olm session's");
+    }
+    if (ed25519 is! String ||
+        claimedKeys is! Map ||
+        claimedKeys['ed25519'] != ed25519) {
+      reject('the Ed25519 key is not the one the payload claims');
+    }
+    if (!Map<String, dynamic>.from(raw)
+        .checkJsonSignature(ed25519, sender, deviceId)) {
+      reject('bad signature');
+    }
+
+    final list = client.userDeviceKeys[sender];
+    final known = list?.deviceKeys[deviceId];
+    if (known != null &&
+        known.ed25519Key == ed25519 &&
+        known.curve25519Key == senderKey) {
+      return;
+    }
+    if (list?.deviceKeys.values.any(
+          (d) => d.ed25519Key == ed25519 || d.curve25519Key == senderKey,
+        ) ??
+        false) {
+      reject(
+        known != null &&
+                (known.ed25519Key == ed25519 ||
+                    known.curve25519Key == senderKey)
+            ? 'the device is known with other keys'
+            : 'the keys are known as another device',
+      );
+    }
+    final database = client.database;
+    final seenKeys = await database.deviceIdSeen(sender, deviceId);
+    for (final key in [ed25519, senderKey]) {
+      final seenDevice = await database.publicKeySeen(key);
+      if (seenDevice != null) {
+        if (seenDevice != deviceId) {
+          reject('the keys were seen as another device');
+        }
+        if (seenKeys != senderKey + ed25519) {
+          reject('the device id was seen with other keys');
+        }
+      }
+    }
+    // A known or seen device_id with completely different Curve25519 and
+    // Ed25519 keys (neither colliding with any known or seen key) is not
+    // ingested, leaving the known device untouched.
+    void ignore(String why) => Logs().w(
+          '[OlmManager] Not using the sender_device_keys of '
+          '$sender:$deviceId: $why',
+        );
+    if (known != null) {
+      return ignore('the device is known with other keys');
+    }
+    if (seenKeys != null && seenKeys != senderKey + ed25519) {
+      return ignore('the device id was seen with other keys');
+    }
+    final DeviceKeys entry;
+    try {
+      entry = DeviceKeys.fromJson(raw, client)..lastActive = DateTime.now();
+    } catch (_) {
+      reject('malformed');
+    }
+    if (!entry.isValid) reject('invalid');
+
+    final userKeys =
+        client.userDeviceKeys[sender] ??= DeviceKeysList(sender, client);
+    userKeys.deviceKeys[deviceId] = entry;
+    userKeys.outdated = true;
+    await database.addSeenDeviceId(sender, deviceId, senderKey + ed25519);
+    await database.addSeenPublicKey(ed25519, deviceId);
+    await database.addSeenPublicKey(senderKey, deviceId);
+    await database.storeUserDeviceKey(
+      sender,
+      deviceId,
+      json.encode(entry.toJson()),
+      false,
+      false,
+      entry.lastActive.millisecondsSinceEpoch,
+    );
+    await database.storeUserDeviceKeysInfo(sender, true);
   }
 
   Future<List<OlmSession>> getOlmSessionsFromDatabase(String senderKey) async {
@@ -677,6 +828,7 @@ class OlmManager {
       'keys': {'ed25519': fingerprintKey},
       'recipient': device.userId,
       'recipient_keys': {'ed25519': device.ed25519Key},
+      'sender_device_keys': senderDeviceKeys, // ROOSTER: MSC4147
     };
     final encryptResult = sess.first.session!.encrypt(json.encode(fullPayload));
     await storeOlmSession(sess.first);
