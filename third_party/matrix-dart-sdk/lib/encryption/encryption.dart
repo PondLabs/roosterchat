@@ -23,6 +23,7 @@ import 'package:matrix/encryption/cross_signing.dart';
 import 'package:matrix/encryption/key_manager.dart';
 import 'package:matrix/encryption/key_verification_manager.dart';
 import 'package:matrix/encryption/olm_manager.dart';
+import 'package:matrix/encryption/room_key_bundle.dart'; // ROOSTER: MSC4268
 import 'package:matrix/encryption/ssss.dart';
 import 'package:matrix/encryption/utils/bootstrap.dart';
 import 'package:matrix/matrix.dart';
@@ -51,6 +52,7 @@ class Encryption {
   late final OlmManager olmManager;
   late final KeyVerificationManager keyVerificationManager;
   late final CrossSigning crossSigning;
+  late final RoomKeyBundleManager roomKeyBundle; // ROOSTER: MSC4268
   late SSSS ssss; // some tests mock this, which is why it isn't final
 
   late String ourDeviceId;
@@ -64,6 +66,7 @@ class Encryption {
     olmManager = OlmManager(this);
     keyVerificationManager = KeyVerificationManager(this);
     crossSigning = CrossSigning(this);
+    roomKeyBundle = RoomKeyBundleManager(this); // ROOSTER: MSC4268
   }
 
   // initial login passes null to init a new olm account
@@ -105,6 +108,8 @@ class Encryption {
   void onSync() {
     // ignore: discarded_futures
     keyVerificationManager.cleanup();
+    // ROOSTER: MSC4268, bundles waiting for the invite or for us to join.
+    runInRoot(() => roomKeyBundle.processPending());
   }
 
   Future<void> handleToDeviceEvent(ToDeviceEvent event) async {
@@ -118,6 +123,11 @@ class Encryption {
       // "just" room key request things. We don't need these asap, so we handle
       // them in the background
       runInRoot(() => keyManager.handleToDeviceEvent(event));
+    }
+    // ROOSTER: MSC4268, the stable and the unstable type alike.
+    if (event.type == EventTypes.RoomKeyBundle ||
+        event.type == unstableRoomKeyBundleType) {
+      runInRoot(() => roomKeyBundle.handleToDeviceEvent(event));
     }
     if (event.type == EventTypes.Dummy) {
       // the previous device just had to create a new olm session, due to olm session
@@ -424,6 +434,7 @@ class Encryption {
     keyManager.dispose();
     await olmManager.dispose();
     keyVerificationManager.dispose();
+    roomKeyBundle.dispose(); // ROOSTER: MSC4268
   }
 }
 

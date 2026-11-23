@@ -24,6 +24,7 @@ import 'package:collection/collection.dart';
 import 'package:vodozemac/vodozemac.dart' as vod;
 
 import 'package:matrix/encryption/encryption.dart';
+import 'package:matrix/encryption/room_key_bundle.dart'; // ROOSTER: MSC4268
 import 'package:matrix/encryption/ssss.dart'; // ROOSTER: MSC4287
 import 'package:matrix/encryption/utils/base64_unpadded.dart';
 import 'package:matrix/encryption/utils/outbound_group_session.dart';
@@ -671,6 +672,9 @@ class KeyManager {
       );
     }
 
+    // ROOSTER: MSC3061, the history visibility below is kept in memory only
+    // once the room's state is loaded.
+    await room.postLoad();
     final deviceKeys = await room.getUserDeviceKeys();
     final deviceKeyIds = _getDeviceKeyIdMap(deviceKeys);
     // How many devices of the room's members the key leaves out (blocked, // ROOSTER
@@ -694,6 +698,10 @@ class KeyManager {
       'room_id': room.id,
       'session_id': outboundGroupSession.sessionId,
       'session_key': outboundGroupSession.sessionKey,
+      // ROOSTER: MSC3061, newcomers may read this session's messages; only
+      // such sessions go in an MSC4268 bundle on invite.
+      if (sessionHistoryIsShared(room.historyVisibility))
+        sharedHistoryKey: true,
     };
     final allowedAtIndex = <String, Map<String, int>>{};
     for (final device in deviceKeys) {

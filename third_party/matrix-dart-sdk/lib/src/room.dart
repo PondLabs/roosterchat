@@ -1892,15 +1892,30 @@ class Room {
   }
 
   /// Call the Matrix API to invite a user to this room.
+  ///
+  /// ROOSTER: with [shareHistory], the room's encrypted history the history
+  /// visibility lets the invitee read goes to it afterwards (MSC4268,
+  /// `RoomKeyBundleManager.shareHistoryWith`); a failure there is logged and
+  /// leaves the invite as it is.
   Future<void> invite(
     String userID, {
     String? reason,
-  }) =>
-      client.inviteUser(
-        id,
-        userID,
-        reason: reason,
-      );
+    bool shareHistory = false, // ROOSTER: MSC4268
+  }) async {
+    await client.inviteUser(
+      id,
+      userID,
+      reason: reason,
+    );
+    // ROOSTER: MSC4268
+    final encryption = client.encryption;
+    if (!shareHistory || encryption == null) return;
+    try {
+      await encryption.roomKeyBundle.shareHistoryWith(this, userID);
+    } catch (e, s) {
+      Logs().w('[RoomKeyBundle] Could not share the room history', e, s);
+    }
+  }
 
   /// Request more previous events from the server. [historyCount] defines how many events should
   /// be received maximum. When the request is answered, [onHistoryReceived] will be triggered **before**
