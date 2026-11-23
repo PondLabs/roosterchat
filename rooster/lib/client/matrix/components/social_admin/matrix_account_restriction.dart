@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:matrix/matrix.dart' as matrix;
 import 'package:rooster/client/alert.dart';
 import 'package:rooster/client/components/component.dart';
+import 'package:rooster/client/matrix/auth/matrix_token_refresher.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/main.dart';
 
@@ -12,40 +13,64 @@ import 'package:rooster/main.dart';
 /// v1.12 `M_USER_SUSPENDED`).
 enum AccountRestriction { locked, suspended }
 
-/// Watches one account's sync for a lock or a suspension. Neither is a soft
-/// logout: the session and its keys stay. The sync loop of that account (and
-/// only that one) stops instead of asking again every few seconds, and comes
-/// back after [firstRetry], then twice as long each time up to [maxRetry], or
-/// when [checkAgain] is called. The first sync that goes through clears it.
+/// Watches one account's sync and homeserver responses for a lock or a
+/// suspension. Neither is a soft logout: the session and its keys stay.
+///
+/// For a lock (`M_USER_LOCKED`), the sync loop of that account (and only that
+/// one) stops instead of asking again every few seconds, and comes back after
+/// [firstRetry], then twice as long each time up to [maxRetry], or when
+/// [checkAgain] is called (only while [canResume] allows it, e.g. the token
+/// refresher is still active). The first sync that goes through clears it.
+///
+/// For a suspension (`M_USER_SUSPENDED`, Matrix v1.12), the account keeps
+/// syncing so the person can still read, and the banner stays until
+/// [checkAgain] is called or the restriction changes.
 class AccountRestrictionWatcher {
   AccountRestrictionWatcher({
     required Stream<matrix.SyncStatusUpdate> syncStatus,
     required void Function(bool enabled) setBackgroundSync,
+    Stream<matrix.MatrixError>? restrictionErrors,
+    bool Function()? canResume,
     this.firstRetry = const Duration(minutes: 1),
     this.maxRetry = const Duration(minutes: 30),
   })  : _setBackgroundSync = setBackgroundSync,
+        _canResume = canResume ?? _alwaysResume,
         _nextRetry = firstRetry {
     _subscription = syncStatus.listen(_onSyncStatus);
+    _errorSubscription = restrictionErrors?.listen(_onRestrictionError);
   }
+
+  static bool _alwaysResume() => true;
 
   final Duration firstRetry;
   final Duration maxRetry;
   final void Function(bool enabled) _setBackgroundSync;
+  final bool Function() _canResume;
   late final StreamSubscription<matrix.SyncStatusUpdate> _subscription;
+  StreamSubscription<matrix.MatrixError>? _errorSubscription;
 
   /// The restriction last reported, or null while the account works.
   final ValueNotifier<AccountRestriction?> restriction = ValueNotifier(null);
 
   Timer? _retry;
   Duration _nextRetry;
+  bool _syncStopped = false;
+
+  static AccountRestriction? restrictionOfError(matrix.MatrixError error) =>
+      switch (error) {
+        matrix.MatrixError.M_USER_LOCKED => AccountRestriction.locked,
+        matrix.MatrixError.M_USER_SUSPENDED => AccountRestriction.suspended,
+        _ => null,
+      };
 
   static AccountRestriction? restrictionOf(Object? error) {
     if (error is! matrix.MatrixException) return null;
-    return switch (error.error) {
-      matrix.MatrixError.M_USER_LOCKED => AccountRestriction.locked,
-      matrix.MatrixError.M_USER_SUSPENDED => AccountRestriction.suspended,
-      _ => null,
-    };
+    return restrictionOfError(error.error);
+  }
+
+  void _onRestrictionError(matrix.MatrixError error) {
+    final kind = restrictionOfError(error);
+    if (kind != null) report(kind);
   }
 
   void _onSyncStatus(matrix.SyncStatusUpdate update) {
@@ -53,7 +78,10 @@ class AccountRestrictionWatcher {
       _retry?.cancel();
       _retry = null;
       _nextRetry = firstRetry;
-      restriction.value = null;
+      _syncStopped = false;
+      if (restriction.value == AccountRestriction.locked) {
+        restriction.value = null;
+      }
       return;
     }
     if (update.status != matrix.SyncStatus.error) return;
@@ -61,10 +89,21 @@ class AccountRestrictionWatcher {
     if (kind != null) report(kind);
   }
 
-  /// Stops the sync of this account and plans the next attempt, unless one
-  /// is already planned.
+  /// Records a restriction. For a lock, stops the sync of this account and
+  /// plans the next attempt unless one is already planned. For a suspension,
+  /// leaves sync running so the person can still read (Matrix v1.12).
   void report(AccountRestriction kind) {
     restriction.value = kind;
+    if (kind == AccountRestriction.suspended) {
+      if (_syncStopped) {
+        _retry?.cancel();
+        _retry = null;
+        _syncStopped = false;
+        if (_canResume()) _setBackgroundSync(true);
+      }
+      return;
+    }
+    _syncStopped = true;
     _setBackgroundSync(false);
     if (_retry != null) return;
     _retry = Timer(_nextRetry, checkAgain);
@@ -72,16 +111,24 @@ class AccountRestrictionWatcher {
     _nextRetry = doubled > maxRetry ? maxRetry : doubled;
   }
 
-  /// Tries the sync again now.
+  /// Tries the sync again now (only when [canResume] allows it), or clears a
+  /// suspension banner whose sync stayed on.
   void checkAgain() {
     _retry?.cancel();
     _retry = null;
+    if (restriction.value == AccountRestriction.suspended && !_syncStopped) {
+      restriction.value = null;
+      return;
+    }
+    if (!_canResume()) return;
+    _syncStopped = false;
     _setBackgroundSync(true);
   }
 
   void dispose() {
     _retry?.cancel();
     _subscription.cancel();
+    _errorSubscription?.cancel();
     restriction.dispose();
   }
 }
@@ -94,6 +141,9 @@ class MatrixAccountRestrictionComponent extends Component<MatrixClient> {
           syncStatus: client.getMatrixClient().onSyncStatus.stream,
           setBackgroundSync: (enabled) =>
               client.getMatrixClient().backgroundSync = enabled,
+          restrictionErrors: client.tokenRefresher.onRestriction,
+          canResume: () =>
+              client.tokenRefresher.state.value == TokenRefreshState.active,
         ) {
     watcher.restriction.addListener(_updateAlert);
   }
