@@ -7,6 +7,7 @@ import 'package:rooster/client/room_preview.dart';
 import 'package:rooster/client/space_child.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/adaptive_context_menu.dart';
+import 'package:rooster/ui/atoms/room_panel_actions.dart';
 import 'package:rooster/ui/atoms/room_preview_text_button.dart';
 import 'package:rooster/ui/atoms/room_text_button.dart';
 import 'package:rooster/ui/navigation/adaptive_dialog.dart';
@@ -171,6 +172,7 @@ class _SpaceListState extends State<SpaceList> {
       room == selectedRoom ||
       room.displayNotificationCount > 0 ||
       room.displayHighlightedNotificationCount > 0 ||
+      RoomPanelActions.showsUnreadDot(room) ||
       RoomTextButton.callSessionIn(
               room, clientManager?.callManager.currentSessions ?? const []) !=
           null;

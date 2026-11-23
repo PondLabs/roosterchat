@@ -2628,6 +2628,62 @@
     "type": "text",
     "placeholders": {}
   },
+  "promptRoomMarkAsUnread": "Mark as Unread",
+  "@promptRoomMarkAsUnread": {
+    "description": "Entry in a room's menu (right-click or long press in the room list) that marks it unread, so its dot shows until it is read again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRoomSetLowPriority": "Set as Low Priority",
+  "@promptRoomSetLowPriority": {
+    "description": "Entry in a room's menu that gives the room the low priority tag",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRoomUnsetLowPriority": "Remove Low Priority",
+  "@promptRoomUnsetLowPriority": {
+    "description": "Entry in a room's menu that takes the low priority tag off the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRoomEditTags": "Tags",
+  "@promptRoomEditTags": {
+    "description": "Entry in a room's menu, and the title of the dialog it opens, where the user adds and removes their own tags on the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelRoomTagsEmpty": "This room has no tags of yours yet.",
+  "@labelRoomTagsEmpty": {
+    "description": "In the room tags dialog, when the user has not tagged the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "hintRoomTagName": "New tag",
+  "@hintRoomTagName": {
+    "description": "Placeholder of the field where the user types a new room tag",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRoomAddTag": "Add",
+  "@promptRoomAddTag": {
+    "description": "Button in the room tags dialog that adds the typed tag",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRoomRemoveTag": "Remove tag {tag}",
+  "@promptRoomRemoveTag": {
+    "description": "Tooltip of the button next to a tag in the room tags dialog that removes it",
+    "type": "text",
+    "placeholders": {
+      "tag": {}
+    }
+  },
+  "errorRoomTagInvalid": "Type a name for the tag that is not too long.",
+  "@errorRoomTagInvalid": {
+    "description": "Under the tag field when the typed tag is empty or too long to be saved",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelRoomRecentEventSender": "{sender}:",
   "@labelRoomRecentEventSender": {
     "description": "Before a room's last message in its panel, with who sent it (a name, or 'You'); the message follows",
@@ -7539,6 +7595,128 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelExplorePublicRooms": "Explore public rooms",
+  "@labelExplorePublicRooms": {
+    "description": "Title of the page that lists a server's public rooms, and the tooltip of the sidebar button that opens it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "hintExploreSearch": "Search rooms",
+  "@hintExploreSearch": {
+    "description": "Placeholder of the search field on the public rooms page",
+    "type": "text",
+    "placeholders": {}
+  },
+  "hintExploreServer": "Server (empty for your own)",
+  "@hintExploreServer": {
+    "description": "Placeholder of the field on the public rooms page that picks another server's directory, like example.org",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptExploreSearch": "Search",
+  "@promptExploreSearch": {
+    "description": "Button on the public rooms page that runs the search",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageExploreEmpty": "No public rooms found.",
+  "@messageExploreEmpty": {
+    "description": "The public rooms page when the server lists no room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageExploreUnavailable": "This server's room directory could not be loaded.",
+  "@messageExploreUnavailable": {
+    "description": "The public rooms page when the server did not answer or refused to list its rooms",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageExploreLoadMoreFailed": "More rooms could not be loaded.",
+  "@messageExploreLoadMoreFailed": {
+    "description": "Under the public rooms list when the next page failed to load",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptExploreRetry": "Try again",
+  "@promptExploreRetry": {
+    "description": "Button on the public rooms page that repeats a failed request",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptExploreLoadMore": "Load more",
+  "@promptExploreLoadMore": {
+    "description": "Button under the public rooms list that loads the next page",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptExploreJoin": "Join",
+  "@promptExploreJoin": {
+    "description": "Button next to a public room that joins it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptExploreOpen": "Open",
+  "@promptExploreOpen": {
+    "description": "Button next to a public room we are already in that opens it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptExplorePreview": "Preview",
+  "@promptExplorePreview": {
+    "description": "Button next to a public room anyone can read that shows its messages without joining",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelExploreMembers": "{count,plural, =1{{count} member}other{{count} members}}",
+  "@labelExploreMembers": {
+    "description": "How many people are in a public room, in its row",
+    "type": "text",
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "labelRoomPeekReadOnly": "You are previewing this room. Join it to send messages.",
+  "@labelRoomPeekReadOnly": {
+    "description": "Banner above the messages of a room shown without joining it (read only)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRoomPeekForbidden": "This room can only be read by its members. Join it to see its messages.",
+  "@messageRoomPeekForbidden": {
+    "description": "Shown instead of the messages when a room cannot be previewed without joining",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRoomPeekFailed": "This room's messages could not be loaded.",
+  "@messageRoomPeekFailed": {
+    "description": "Shown when previewing a room failed for another reason",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRoomPeekEmpty": "No messages to show yet.",
+  "@messageRoomPeekEmpty": {
+    "description": "Shown when a previewed room has no messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelRoomPeekEncrypted": "Encrypted message",
+  "@labelRoomPeekEncrypted": {
+    "description": "Stands for a message of a previewed room that cannot be read without joining (end-to-end encrypted)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRoomPeekJoin": "Join room",
+  "@promptRoomPeekJoin": {
+    "description": "Button on a room's preview that joins it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRoomPeekRefresh": "Refresh",
+  "@promptRoomPeekRefresh": {
+    "description": "Button on a room's preview that loads newer messages",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelAppFatalErrorTitle": "Something went wrong!",
   "@labelAppFatalErrorTitle": {
     "description": "First line of the page shown when the app crashed and cannot go on; the error itself follows, untranslated",
@@ -12411,6 +12589,30 @@
   "labelRoomEmoticonUsageEmojiAndSticker": "Emoji & Sticker",
   "@labelRoomEmoticonUsageEmojiAndSticker": {
     "description": "Choice in the emoticon editor of a room's settings: the image is used both as an emoji and as a sticker",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelRoomDirectoryHeader": "Room directory",
+  "@labelRoomDirectoryHeader": {
+    "description": "Header of the room settings section about the homeserver's public room directory",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelRoomPublishToDirectory": "List this room in the public room directory",
+  "@labelRoomPublishToDirectory": {
+    "description": "Switch that lists the room in the homeserver's public room directory, where anyone can find it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRoomDirectoryForbidden": "Your homeserver did not let you change whether this room is listed.",
+  "@messageRoomDirectoryForbidden": {
+    "description": "Shown under the room directory switch when the homeserver refused the change (the switch goes back)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRoomDirectoryFailed": "The change could not be saved. Try again later.",
+  "@messageRoomDirectoryFailed": {
+    "description": "Shown under the room directory switch when changing it failed for another reason (the switch goes back)",
     "type": "text",
     "placeholders": {}
   },
