@@ -96,12 +96,47 @@ class RoomKeyBundleManager {
   final Map<String, List<_PendingBundle>> _pending = {};
   final Map<String, RoomKeyBundleImport> _lastImports = {};
 
+  /// The latest `m.room.history_visibility` each room's syncs brought since
+  /// the app started, with its timestamp.
+  final Map<String, (HistoryVisibility?, DateTime)> _seenVisibility = {};
+
   final StreamController<RoomKeyBundleImport> onImported =
       StreamController.broadcast();
   final StreamController<RoomKeyBundleRejection> onRejected =
       StreamController.broadcast();
 
   RoomKeyBundleManager(this.encryption);
+
+  /// A room event came in a sync: the history visibility is noted here too.
+  /// `Room.historyVisibility` alone is not enough: the state the room keeps
+  /// in memory misses an event stored while `Room.postLoad` was reading the
+  /// database, and then says nothing, or what the room was before.
+  void handleEventUpdate(Event event) {
+    if (event.type != EventTypes.HistoryVisibility || event.stateKey != '') {
+      return;
+    }
+    final roomId = event.room.id;
+    // Not over a later one: paginating may bring state from before.
+    final seen = _seenVisibility[roomId];
+    if (seen != null && seen.$2.isAfter(event.originServerTs)) return;
+    final text = event.content.tryGet<String>('history_visibility');
+    _seenVisibility[roomId] = (
+      HistoryVisibility.values.singleWhereOrNull((v) => v.text == text),
+      event.originServerTs,
+    );
+  }
+
+  /// [room]'s history visibility as far as sharing goes, once its state is
+  /// loaded (`Room.postLoad`): what the room's state says, or what the syncs
+  /// brought when the state says nothing; `joined` when the two disagree, so
+  /// that nothing is shared on the word of either alone.
+  HistoryVisibility? historyVisibilityOf(Room room) {
+    final inState = room.historyVisibility;
+    final seen = _seenVisibility[room.id];
+    if (seen == null) return inState;
+    if (inState == null || inState == seen.$1) return seen.$1;
+    return HistoryVisibility.joined;
+  }
 
   /// The last bundle imported for [roomId] since the app started.
   RoomKeyBundleImport? lastImport(String roomId) => _lastImports[roomId];
@@ -113,7 +148,7 @@ class RoomKeyBundleManager {
     // The history visibility and the invitee's membership are not kept in
     // memory until the room's state is loaded.
     await room.postLoad();
-    if (!roomSharesHistoryOnInvite(room.historyVisibility)) {
+    if (!roomSharesHistoryOnInvite(historyVisibilityOf(room))) {
       Logs().i('[RoomKeyBundle] History visibility keeps keys to members');
       return 0;
     }

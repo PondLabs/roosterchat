@@ -57,7 +57,12 @@ class MatrixHistorySharing implements HistorySharingController {
 
   static HistorySharingState stateOf(matrix.Room room) {
     if (!room.encrypted) return HistorySharingState.notEncrypted;
-    if (!roomSharesHistoryOnInvite(room.historyVisibility)) {
+    // As the SDK reads it when it shares: the room's state, and what the
+    // syncs brought when the state missed it.
+    final visibility =
+        room.client.encryption?.roomKeyBundle.historyVisibilityOf(room) ??
+            room.historyVisibility;
+    if (!roomSharesHistoryOnInvite(visibility)) {
       return HistorySharingState.keptToMembers;
     }
     return shareOnInvite(room)

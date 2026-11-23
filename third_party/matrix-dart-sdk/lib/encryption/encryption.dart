@@ -154,6 +154,7 @@ class Encryption {
     if (type == EventUpdateType.history) {
       return;
     }
+    roomKeyBundle.handleEventUpdate(event); // ROOSTER: MSC4268
     if (event.type.startsWith('m.key.verification.') ||
         (event.type == EventTypes.Message &&
             event.content

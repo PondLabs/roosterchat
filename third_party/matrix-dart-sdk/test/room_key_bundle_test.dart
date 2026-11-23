@@ -85,28 +85,35 @@ void main() {
     late Client inviter;
     late Client invitee;
 
+    /// A new session of [userId] on [deviceId]; with [restarting], the
+    /// same session again, started from that client's database.
     Future<Client> newClient(
       String userId,
       String deviceId, {
       String? olmAccount,
+      Client? restarting,
     }) async {
       final client = Client(
         'bundle$deviceId',
         httpClient: _MediaClient(server, FakeMatrixApi()),
-        database: await getDatabase(),
+        database: restarting?.database ?? await getDatabase(),
       );
       await client.checkHomeserver(
         Uri.parse('https://fakeserver.notexisting'),
         checkWellKnown: false,
       );
-      await client.init(
-        newToken: 'abcd',
-        newUserID: userId,
-        newHomeserver: client.homeserver,
-        newDeviceName: deviceId,
-        newDeviceID: deviceId,
-        newOlmAccount: olmAccount,
-      );
+      if (restarting != null) {
+        await client.init();
+      } else {
+        await client.init(
+          newToken: 'abcd',
+          newUserID: userId,
+          newHomeserver: client.homeserver,
+          newDeviceName: deviceId,
+          newDeviceID: deviceId,
+          newOlmAccount: olmAccount,
+        );
+      }
       await Future.delayed(const Duration(milliseconds: 10));
       await client.abortSync();
       return client;
@@ -182,8 +189,22 @@ void main() {
             ),
         ];
 
-    /// The inviter's room under [visibility], and one encrypted message.
-    Future<Map<String, dynamic>> inviterRoom(String visibility) async {
+    Future<Map<String, dynamic>> say(String body) =>
+        inviter.encryption!.encryptGroupMessagePayload(
+          _roomId,
+          {'msgtype': 'm.text', 'body': body},
+        );
+
+    bool? marked(Map<String, dynamic> message) => inviter.encryption!.keyManager
+        .getInboundGroupSession(_roomId, message['session_id'] as String)!
+        .content['shared_history'] as bool?;
+
+    /// The inviter's room under [visibility], and one encrypted message;
+    /// [first] runs once the room is there, before that message.
+    Future<Map<String, dynamic>> inviterRoom(
+      String visibility, {
+      void Function(Room room)? first,
+    }) async {
       await sync(
         inviter,
         RoomsUpdate(
@@ -195,10 +216,8 @@ void main() {
           },
         ),
       );
-      return inviter.encryption!.encryptGroupMessagePayload(
-        _roomId,
-        {'msgtype': 'm.text', 'body': 'said before the invite'},
-      );
+      first?.call(inviter.getRoomById(_roomId)!);
+      return say('said before the invite');
     }
 
     Future<void> setVisibility(String visibility) => sync(
@@ -512,6 +531,155 @@ void main() {
       expect(bundlesSent(), isEmpty);
     });
 
+    // The outbound session turns over when the history visibility starts or
+    // stops letting newcomers read: what is said under "joined", or under
+    // "invited" before the invite, must not reach someone invited later.
+    for (final (between, after) in [
+      ('joined', 'shared'),
+      ('invited', 'invited'),
+    ]) {
+      test(
+          'what was said under "$between" stays out of a bundle sent under '
+          '"$after"', () async {
+        final before = await inviterRoom('shared');
+        await setVisibility(between);
+        final hidden = await inviter.encryption!.encryptGroupMessagePayload(
+          _roomId,
+          {'msgtype': 'm.text', 'body': 'said under $between'},
+        );
+        expect(hidden['session_id'], isNot(before['session_id']));
+        if (after != between) await setVisibility(after);
+        await inviter
+            .getRoomById(_roomId)!
+            .invite(_inviteeId, shareHistory: true);
+        await invited();
+        for (final message in bundlesSent()) {
+          await deliver(message);
+        }
+        await joined();
+        await takeIn();
+        // The session used under "shared" may travel...
+        expect(sessionHeld(before['session_id'] as String), isNotNull);
+        // ...but the invitee must not read what was said under [between].
+        expect(sessionHeld(hidden['session_id'] as String), isNull);
+        final event = await invitee.encryption!.decryptRoomEvent(
+          Event(
+            type: EventTypes.Encrypted,
+            content: hidden,
+            senderId: _inviterId,
+            eventId: '\$hidden',
+            originServerTs: DateTime.now(),
+            room: invitee.getRoomById(_roomId)!,
+          ),
+        );
+        expect(
+          event.content['body'],
+          isNot('said under $between'),
+          reason: 'the session used under "$between" was bundled',
+        );
+      });
+    }
+
+    test('a room back to "shared" starts a session newcomers may read',
+        () async {
+      await inviterRoom('joined');
+      await setVisibility('shared');
+      final said = await inviter.encryption!.encryptGroupMessagePayload(
+        _roomId,
+        {'msgtype': 'm.text', 'body': 'said under shared again'},
+      );
+      expect(
+        inviter.encryption!.keyManager
+            .getInboundGroupSession(_roomId, said['session_id'] as String)!
+            .content['shared_history'],
+        true,
+      );
+    });
+
+    test('the session is kept while the visibility stays as it was', () async {
+      final first = await inviterRoom('shared');
+      // After a restart the room's state is not in memory, and the session
+      // comes from the database.
+      final before = inviter;
+      await before.dispose(closeDatabase: false);
+      inviter = await newClient(_inviterId, 'INVITERDEV', restarting: before);
+      expect(inviter.getRoomById(_roomId)!.partial, isTrue);
+      expect(inviter.getRoomById(_roomId)!.historyVisibility, isNull);
+      final second = await say('the same session');
+      expect(second['session_id'], first['session_id']);
+      // And between the two visibilities that keep history to members.
+      await setVisibility('invited');
+      final third = await say('under invited');
+      await setVisibility('joined');
+      final fourth = await say('under joined');
+      expect(third['session_id'], isNot(first['session_id']));
+      expect(fourth['session_id'], third['session_id']);
+    });
+
+    // `Room.postLoad` reads the database once; an event stored meanwhile
+    // (the app loads a room as soon as a sync brings it) never reaches the
+    // state in memory, which then says nothing or what the room was before.
+    group('when the room\'s state in memory missed the visibility,', () {
+      test('a room that became "joined" shares nothing', () async {
+        final before = await inviterRoom('shared');
+        final room = inviter.getRoomById(_roomId)!;
+        room.partial = true;
+        await setVisibility('joined');
+        room.partial = false;
+        expect(room.historyVisibility, HistoryVisibility.shared);
+
+        final hidden = await say('said under joined');
+        expect(hidden['session_id'], isNot(before['session_id']));
+        expect(marked(hidden), isNull);
+        await room.invite(_inviteeId, shareHistory: true);
+        expect(server.uploads, isEmpty);
+        expect(bundlesSent(), isEmpty);
+      });
+
+      test('a new "shared" room shares what is said in it', () async {
+        // The state was loaded before the sync stored the visibility.
+        final said = await inviterRoom(
+          'shared',
+          first: (room) => room.partial = false,
+        );
+        final room = inviter.getRoomById(_roomId)!;
+        expect(room.historyVisibility, isNull);
+        expect(marked(said), isTrue);
+        await room.invite(_inviteeId, shareHistory: true);
+        expect(bundlesSent(), hasLength(1));
+      });
+
+      test('state from before, coming late, changes nothing', () async {
+        await inviterRoom('joined', first: (room) => room.partial = false);
+        // As a page of older events may carry it.
+        await sync(
+          inviter,
+          RoomsUpdate(
+            join: {
+              _roomId: JoinedRoomUpdate(
+                state: [
+                  MatrixEvent(
+                    type: EventTypes.HistoryVisibility,
+                    content: {'history_visibility': 'shared'},
+                    stateKey: '',
+                    senderId: _inviterId,
+                    eventId: '\$older',
+                    originServerTs:
+                        DateTime.now().subtract(const Duration(days: 1)),
+                  ),
+                ],
+              ),
+            },
+          ),
+        );
+        final room = inviter.getRoomById(_roomId)!;
+        expect(room.historyVisibility, HistoryVisibility.shared);
+        expect(marked(await say('still under joined')), isNull);
+        await room.invite(_inviteeId, shareHistory: true);
+        expect(server.uploads, isEmpty);
+      });
+    });
+
     test('without shareHistory the invite shares nothing', () async {
       await inviterRoom('shared');
       await inviter.getRoomById(_roomId)!.invite(_inviteeId);
@@ -579,6 +747,16 @@ void main() {
       test('from someone other than the inviter', () async {
         await invited(by: '@alice:example.com');
         await sendBundle([exported(sessionId)]);
+        await joined();
+        await expectRefused(RoomKeyBundleRejection.notInvitedBySender);
+      });
+
+      // In a real sync the to-device events come before the invite, and
+      // the pending bundles are looked at once the sync is through.
+      test('from someone else, arriving before the invite', () async {
+        await sendBundle([exported(sessionId)]);
+        await invited(by: '@alice:example.com');
+        await invitee.encryption!.roomKeyBundle.processPending();
         await joined();
         await expectRefused(RoomKeyBundleRejection.notInvitedBySender);
       });

@@ -475,10 +475,21 @@ Changes since the copy:
 - Encrypted history shared on invite (T3.2, Matrix v1.19 MSC4268):
   `lib/encryption/room_key_bundle.dart` (`Encryption.roomKeyBundle`).
   `Room.invite(userId, shareHistory: true)` invites, then bundles the room's
-  Megolm sessions marked `shared_history: true` (MSC3061: `KeyManager` marks
-  a new outbound session when the room is `shared` or `world_readable`, so
-  sessions started under `invited` or `joined`, and every session from
-  before this change, never leave), encrypts the bundle as an attachment
+  Megolm sessions marked `shared_history: true` (MSC3061). `KeyManager` marks
+  a new outbound session when the room is `shared` or `world_readable`, and
+  `clearOrUseOutboundGroupSession` ends the session before the next message
+  when its mark no longer matches the room (`shared` to `invited` or
+  `joined`, and back), so no marked session encrypts what is said under
+  `invited` or `joined`; sessions from before this change never leave. The
+  history visibility these decisions use is
+  `RoomKeyBundleManager.historyVisibilityOf`: the room's state, or the
+  latest `m.room.history_visibility` this session's syncs brought when the
+  state in memory has none, and `joined` when the two disagree. The state in
+  memory alone misses an event stored while `Room.postLoad` was reading the
+  database (the app loads a room as soon as a sync brings it), and then says
+  nothing or what the room was before. A message sent before our own sync
+  shows the change still goes out on the old session. The invite encrypts
+  the bundle as an attachment
   (`encryptFile`), uploads it and sends `m.room_key_bundle` over Olm to the
   invitee's devices whose `encryptToDevice` holds (`Client.shareKeysWith`,
   never blocked). Nothing is uploaded or sent when the room's
