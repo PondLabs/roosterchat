@@ -6,6 +6,7 @@ import 'package:rooster/client/client_manager.dart';
 import 'package:rooster/client/components/component.dart';
 import 'package:rooster/client/components/component_registry.dart';
 import 'package:rooster/client/error_profile.dart';
+import 'package:rooster/client/matrix/auth/matrix_oidc_login_flow.dart';
 import 'package:rooster/client/matrix/auth/matrix_sso_login_flow.dart';
 import 'package:rooster/client/matrix/auth/matrix_username_password_login_flow.dart';
 import 'package:rooster/client/matrix/components/matrix_sync_listener.dart';
@@ -987,14 +988,40 @@ class MatrixClient extends Client {
     connectionStatusChanged.add(result);
   }
 
+  /// The homeserver's OAuth 2.0 server metadata (Matrix v1.15
+  /// `auth_metadata`) from the last [setHomeserver], or null when the server
+  /// has no OAuth 2.0 API. The device grant, refresh and account management
+  /// read it from here.
+  matrix.GetAuthMetadataResponse? authMetadata;
+
   @override
   Future<(bool, List<LoginFlow>?)> setHomeserver(Uri uri) async {
+    authMetadata = null;
     try {
       var result = await _matrixClient.checkHomeserver(uri);
 
       var flows = result.$3;
 
       var resultFlows = List<LoginFlow>.empty(growable: true);
+
+      final metadata = result.$4;
+      authMetadata = metadata;
+      if (metadata != null &&
+          MatrixOidcLoginFlow.isSupportedBy(metadata) &&
+          MatrixOidcLoginFlow.isAvailableOnThisPlatform) {
+        final serverName = _matrixClient.homeserver?.host ?? uri.host;
+        resultFlows.add(MatrixOidcLoginFlow(
+          authMetadata: metadata,
+          serverName: serverName,
+        ));
+        if (metadata.supportsPromptCreate) {
+          resultFlows.add(MatrixOidcLoginFlow(
+            authMetadata: metadata,
+            serverName: serverName,
+            createAccount: true,
+          ));
+        }
+      }
 
       if (flows.any((element) => element.type == "m.login.password")) {
         resultFlows.add(MatrixPasswordLoginFlow());
@@ -1006,6 +1033,7 @@ class MatrixClient extends Client {
 
       return (true, resultFlows);
     } catch (error, trace) {
+      authMetadata = null;
       Log.onError(error, trace);
       return (false, null);
     }

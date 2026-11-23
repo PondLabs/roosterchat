@@ -1226,6 +1226,48 @@
       "widgetName": {}
     }
   },
+  "errorLoginOauthStateMismatch": "The sign-in page sent back an answer Rooster did not ask for, so it was ignored. Try signing in again.",
+  "@errorLoginOauthStateMismatch": {
+    "description": "In the 'Login failed' dialog when the browser came back from the server's sign-in page with a reply that does not belong to this sign-in (a stale tab or a forged link); nothing was signed in",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorLoginOauthAccessDenied": "Access was not allowed on the sign-in page, so you are not signed in.",
+  "@errorLoginOauthAccessDenied": {
+    "description": "In the 'Login failed' dialog when the person, or the server, refused to let Rooster in on the server's sign-in page",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorLoginOauthFailed": "Your server's sign-in page did not finish signing you in. Try again.",
+  "@errorLoginOauthFailed": {
+    "description": "In the 'Login failed' dialog when the server's sign-in page came back with an error or without a login, or the login could not be completed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorLoginOauthNoClientRegistration": "Your server does not let new apps sign in, so Rooster cannot sign in there.",
+  "@errorLoginOauthNoClientRegistration": {
+    "description": "In the 'Login failed' dialog when the server neither accepts Rooster's app description nor lets apps register themselves",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelLoginOauthReturnTitle": "Back to Rooster",
+  "@labelLoginOauthReturnTitle": {
+    "description": "Title of the page the system browser shows when it comes back from the server's sign-in page, on desktop",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelLoginOauthReturn": "You can close this page and go back to Rooster.",
+  "@labelLoginOauthReturn": {
+    "description": "The page the system browser shows when it comes back from the server's sign-in page, on desktop; Rooster finishes the sign-in",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelLoginOauthReturnFailed": "Signing in did not finish. You can close this page and go back to Rooster.",
+  "@labelLoginOauthReturnFailed": {
+    "description": "The page the system browser shows when it comes back from the server's sign-in page without a login (refused or failed), on desktop",
+    "type": "text",
+    "placeholders": {}
+  },
   "errorLoginWrongClientType": "Attempted to login with the wrong type of client",
   "@errorLoginWrongClientType": {
     "description": "In the 'Login failed' dialog if single sign-on was started for an account of another kind than Matrix; should never happen",
@@ -7978,6 +8020,20 @@
     "placeholders": {
       "provider": {}
     }
+  },
+  "promptLoginOauth": "Sign in with {server}",
+  "@promptLoginOauth": {
+    "description": "Button on the login screen that opens the homeserver's own sign-in page in the browser; the server is its address, such as matrix.org",
+    "type": "text",
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "promptLoginOauthCreateAccount": "Create account",
+  "@promptLoginOauthCreateAccount": {
+    "description": "Button on the login screen that opens the homeserver's page for making a new account, in the browser",
+    "type": "text",
+    "placeholders": {}
   },
   "updateInstalledTitle": "Update Installed",
   "@updateInstalledTitle": {

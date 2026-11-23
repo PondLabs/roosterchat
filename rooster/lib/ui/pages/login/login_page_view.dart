@@ -1,10 +1,12 @@
 import 'dart:ui';
 
 import 'package:rooster/client/auth.dart';
+import 'package:rooster/client/matrix/auth/matrix_oidc_login_flow.dart';
 import 'package:rooster/config/build_config.dart';
 import 'package:rooster/config/global_config.dart';
 import 'package:rooster/ui/atoms/shader/star_trails.dart';
 import 'package:rooster/ui/navigation/navigation_utils.dart';
+import 'package:rooster/ui/pages/login/oidc_login_buttons.dart';
 import 'package:rooster/ui/pages/settings/app_settings_page.dart';
 import 'package:rooster/ui/pages/settings/categories/about/settings_category_about.dart';
 import 'package:rooster/utils/common_strings.dart';
@@ -25,6 +27,7 @@ class LoginPageView extends StatefulWidget {
       this.homeserverChecked,
       this.doSsoLogin,
       this.doPasswordLogin,
+      this.doOidcLogin,
       this.loadingServerInfo = false,
       this.serverInfoError,
       this.isServerValid = false,
@@ -42,6 +45,7 @@ class LoginPageView extends StatefulWidget {
   final bool hasSsoSupport;
   final bool hasPasswordSupport;
   final Future<void> Function(SsoLoginFlow flow)? doSsoLogin;
+  final Future<void> Function(MatrixOidcLoginFlow flow)? doOidcLogin;
   final Future<void> Function(
           PasswordLoginFlow flow, String username, String password)?
       doPasswordLogin;
@@ -215,6 +219,8 @@ class _LoginPageViewState extends State<LoginPageView> {
 
   Widget loginInputs(BuildContext context) {
     var ssoFlows = widget.flows?.whereType<SsoLoginFlow>().toList();
+    final oidcFlows =
+        widget.flows?.whereType<MatrixOidcLoginFlow>().toList() ?? const [];
     SsoLoginFlow? defaultSso;
     if (ssoFlows != null) {
       defaultSso = ssoFlows.where((e) => e.id == null).firstOrNull;
@@ -244,6 +250,13 @@ class _LoginPageViewState extends State<LoginPageView> {
           ),
         ),
       const SizedBox(height: 16),
+      if (oidcFlows.isNotEmpty) ...[
+        OidcLoginButtons(
+          flows: oidcFlows,
+          onLogin: (flow) => widget.doOidcLogin?.call(flow),
+        ),
+        if (widget.hasPasswordSupport || widget.hasSsoSupport) orSeparator(),
+      ],
       if (widget.hasPasswordSupport) usenamePasswordLoginInputs(),
       if (widget.hasSsoSupport)
         Flexible(
@@ -251,27 +264,7 @@ class _LoginPageViewState extends State<LoginPageView> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (widget.hasPasswordSupport)
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const SizedBox(
-                        width: 100,
-                        height: 10,
-                        child: tiamat.Seperator(),
-                      ),
-                      tiamat.Text.labelLow(CommonStrings.labelOr),
-                      const SizedBox(
-                        width: 100,
-                        height: 10,
-                        child: tiamat.Seperator(),
-                      ),
-                    ],
-                  ),
-                ),
+              if (widget.hasPasswordSupport) orSeparator(),
               if (defaultSso != null)
                 tiamat.Button.secondary(
                   text: promptLoginWithSso(defaultSso.name),
@@ -316,6 +309,29 @@ class _LoginPageViewState extends State<LoginPageView> {
         ),
       ),
     ]);
+  }
+
+  Widget orSeparator() {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const SizedBox(
+            width: 100,
+            height: 10,
+            child: tiamat.Seperator(),
+          ),
+          tiamat.Text.labelLow(CommonStrings.labelOr),
+          const SizedBox(
+            width: 100,
+            height: 10,
+            child: tiamat.Seperator(),
+          ),
+        ],
+      ),
+    );
   }
 
   Column usenamePasswordLoginInputs() {

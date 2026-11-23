@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:rooster/client/auth.dart';
 import 'package:rooster/client/client.dart';
+import 'package:rooster/client/matrix/auth/matrix_oidc_login_flow.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
@@ -130,6 +131,7 @@ class LoginPageState extends State<LoginPage> {
       },
       flows: loginFlows,
       doSsoLogin: doSsoLogin,
+      doOidcLogin: doOidcLogin,
       doPasswordLogin: doPasswordLogin,
       isLoggingIn: isLoggingIn,
       loadingServerInfo: loadingServerInfo,
@@ -200,6 +202,11 @@ class LoginPageState extends State<LoginPage> {
   }
 
   Future<void> doSsoLogin(SsoLoginFlow flow) async {
+    if (loginClient == null) return;
+    await doLogin(() => loginClient!.executeLoginFlow(flow));
+  }
+
+  Future<void> doOidcLogin(MatrixOidcLoginFlow flow) async {
     if (loginClient == null) return;
     await doLogin(() => loginClient!.executeLoginFlow(flow));
   }
