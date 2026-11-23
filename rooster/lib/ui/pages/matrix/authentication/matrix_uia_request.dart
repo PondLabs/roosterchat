@@ -56,6 +56,12 @@ class _MatrixUIARequestState extends State<MatrixUIARequest> {
   @override
   void dispose() {
     _lifecycle.dispose();
+    // Closed while the server still waits: the request ends (its caller
+    // gets an error) instead of waiting forever.
+    widget.request.onUpdate = originalOnUpdate;
+    if (widget.request.state == UiaRequestState.waitForUser) {
+      widget.request.cancel();
+    }
     super.dispose();
   }
 
@@ -141,6 +147,8 @@ class _MatrixUIARequestState extends State<MatrixUIARequest> {
         bypassConfirmation: true,
         filterTrackingParameters: false,
         context: context);
-    Navigator.of(context).pop();
+    // The dialog stays open: closing it would end the request. Coming back
+    // from the browser sends it again with the session.
+    sentToAccountPage = true;
   }
 }

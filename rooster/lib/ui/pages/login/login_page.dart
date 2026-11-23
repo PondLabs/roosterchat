@@ -2,12 +2,15 @@ import 'dart:async';
 
 import 'package:rooster/client/auth.dart';
 import 'package:rooster/client/client.dart';
+import 'package:rooster/client/matrix/auth/matrix_account_lifecycle.dart';
 import 'package:rooster/client/matrix/auth/matrix_device_auth_flow.dart';
 import 'package:rooster/client/matrix/auth/matrix_oidc_login_flow.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/debug/log.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/pages/login/login_page_view.dart';
+import 'package:rooster/ui/pages/login/password_reset_view.dart';
+import 'package:rooster/ui/pages/login/register_view.dart';
 import 'package:rooster/utils/debounce.dart';
 import 'package:rooster/utils/rng.dart';
 import 'package:flutter/material.dart';
@@ -147,7 +150,36 @@ class LoginPageState extends State<LoginPage> {
           loginFlows?.whereType<PasswordLoginFlow>().isNotEmpty == true,
       isServerValid: isServerValid,
       serverInfoError: serverInfoError,
+      onRegister: legacyAccountFlows ? doRegister : null,
+      onForgotPassword: legacyAccountFlows ? doPasswordReset : null,
     );
+  }
+
+  /// Registration and password reset of the legacy API, on a server
+  /// without OAuth 2.0 (which has its own pages for both).
+  bool get legacyAccountFlows =>
+      isServerValid &&
+      authMetadata == null &&
+      loginClient is MatrixClient &&
+      loginFlows?.whereType<PasswordLoginFlow>().isNotEmpty == true;
+
+  Future<void> doRegister() async {
+    final client = loginClient;
+    if (client is! MatrixClient) return;
+    final registered = await AdaptiveDialog.show<bool>(context,
+        title: RegisterView.promptLoginCreateAccount,
+        builder: (_) => RegisterView(
+            lifecycle: MatrixAccountLifecycle(client.matrixClient)));
+    if (registered == true) await doLogin(() async => LoginResultSuccess());
+  }
+
+  void doPasswordReset() {
+    final client = loginClient;
+    if (client is! MatrixClient) return;
+    AdaptiveDialog.show(context,
+        title: PasswordResetView.labelPasswordReset,
+        builder: (_) => PasswordResetView(
+            lifecycle: MatrixAccountLifecycle(client.matrixClient)));
   }
 
   Future<void> doLogin(Future<LoginResult> Function() login) async {
