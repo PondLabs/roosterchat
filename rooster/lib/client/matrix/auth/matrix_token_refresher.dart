@@ -63,25 +63,38 @@ class MatrixTokenRefresher {
     if (state.value == TokenRefreshState.needsReauthentication) {
       return Future.value(null);
     }
-    return _inFlight ??= _run().whenComplete(() => _inFlight = null);
+    return _start();
   }
 
-  /// Tries the refresh token again after it was refused.
-  Future<String?> retry() {
-    state.value = TokenRefreshState.active;
-    return refresh();
+  /// Tries the refresh token again after it was refused. The state stays
+  /// until it works: a failure keeps asking the person to sign in again.
+  Future<String?> retry() => _start();
+
+  Future<String?> _start() =>
+      _inFlight ??= _run().whenComplete(() => _inFlight = null);
+
+  static const Symbol _renewalZoneKey = #roosterTokenRenewal;
+
+  /// Called by [TokenRefreshingHttpClient] for every answer: the status of
+  /// the renewal's own requests tells a server failing from a refusal (the
+  /// SDK throws a bare exception for an OAuth error or a proxy's page).
+  static void recordStatus(int status) {
+    final answer = Zone.current[_renewalZoneKey];
+    if (answer is _RenewalStatus) answer.status = status;
   }
 
   Future<String?> _run() async {
     final client = _client();
+    final answer = _RenewalStatus();
     try {
-      await _renew(client);
+      await runZoned(() => _renew(client),
+          zoneValues: {_renewalZoneKey: answer});
       _resumeSync(client);
       return client.accessToken;
     } catch (e) {
       // The kind of error only: it may quote the request.
       final reason = e is matrix.MatrixException ? e.errcode : e.runtimeType;
-      if (_isTransient(e)) {
+      if (_isTransient(e, answer.status)) {
         Log.w("Access token not renewed, will try again: $reason");
         return null;
       }
@@ -93,7 +106,10 @@ class MatrixTokenRefresher {
     }
   }
 
-  static bool _isTransient(Object e) =>
+  /// A server error (5xx), a rate limit (429) or no answer at all: the
+  /// token was not refused, so the next renewal tries again.
+  static bool _isTransient(Object e, int? status) =>
+      (status != null && (status >= 500 || status == 429)) ||
       e is http.ClientException ||
       e is TimeoutException ||
       (e is matrix.MatrixException &&
@@ -203,6 +219,7 @@ class TokenRefreshingHttpClient extends http.BaseClient {
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     final authorization = request.headers['authorization'];
     final response = await _inner.send(request);
+    MatrixTokenRefresher.recordStatus(response.statusCode);
     if (response.statusCode != 401 ||
         authorization == null ||
         !authorization.startsWith('Bearer ') ||
@@ -251,4 +268,9 @@ class TokenRefreshingHttpClient extends http.BaseClient {
 
   @override
   void close() => _inner.close();
+}
+
+/// The HTTP status of the last answer a renewal got.
+class _RenewalStatus {
+  int? status;
 }
