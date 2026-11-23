@@ -9409,6 +9409,32 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelServerSupportHeader": "Server support",
+  "@labelServerSupportHeader": {
+    "description": "Header of the section of account settings with the contacts and help page the user's homeserver publishes",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerSupportAdmin": "Administrator",
+  "@labelServerSupportAdmin": {
+    "description": "Role of a contact of the homeserver: the people who run it (Matrix role m.role.admin)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerSupportSecurity": "Security contact",
+  "@labelServerSupportSecurity": {
+    "description": "Role of a contact of the homeserver: for security reports (Matrix role m.role.security)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptServerSupportPage": "Open the help page on {host}",
+  "@promptServerSupportPage": {
+    "description": "Button that opens the homeserver's own help page in the browser; host is the web address it is on",
+    "type": "text",
+    "placeholders": {
+      "host": {}
+    }
+  },
   "labelChatPrivacyTitle": "Chat Privacy",
   "@labelChatPrivacyTitle": {
     "description": "Header for the chat privacy section in settings",
