@@ -161,8 +161,10 @@ void main() {
     });
 
     test('more than five redirects fail explicitly', () async {
+      final wellKnownRequests = <String>[];
       final client = await _client((request) async {
         final url = request.url.toString();
+        if (request.url.host == 'example.org') wellKnownRequests.add(url);
         if (url == 'https://example.org$_wellKnownPath') {
           return _redirect(301, 'https://example.org/hop/1');
         }
@@ -178,13 +180,22 @@ void main() {
       await expectLater(
         client.checkHomeserver(Uri.https('example.org')),
         throwsA(
-          isA<WellKnownRedirectException>().having(
-            (e) => e.failure,
-            'failure',
-            WellKnownRedirectFailure.tooManyRedirects,
-          ),
+          isA<WellKnownRedirectException>()
+              .having(
+                (e) => e.failure,
+                'failure',
+                WellKnownRedirectFailure.tooManyRedirects,
+              )
+              // The sixth redirect is refused before it is requested.
+              .having(
+                (e) => e.target,
+                'target',
+                Uri.parse('https://example.org/hop/6'),
+              ),
         ),
       );
+      expect(wellKnownRequests, hasLength(1 + Client.maxWellKnownRedirects));
+      expect(Client.maxWellKnownRedirects, 5);
       expect(client.homeserver, isNull);
     });
 
