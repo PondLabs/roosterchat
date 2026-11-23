@@ -105,11 +105,13 @@ class KeyManager {
     final content = keyBackupPreference ?? KeyBackupContent();
     if (content.enabled == on) return;
     content.enabled = on;
+    final json = content.toJson();
     await client.setAccountData(
       client.userID!,
       EventTypes.KeyBackup,
-      content.toJson(),
+      json,
     );
+    await _storeLocalAccountData(EventTypes.KeyBackup, json);
   }
 
   /// The backup on the server (its version, number of keys, etag and
@@ -161,7 +163,18 @@ class KeyManager {
     if (info != null) await client.deleteRoomKeysVersion(info.version);
     _roomKeysVersionCache = null;
     await setKeyBackupEnabled(false);
-    if (enabled) await client.setAccountData(client.userID!, megolmKey, {});
+    if (enabled) {
+      await client.setAccountData(client.userID!, megolmKey, {});
+      await _storeLocalAccountData(megolmKey, {});
+    }
+  }
+
+  Future<void> _storeLocalAccountData(
+    String type,
+    Map<String, Object?> content,
+  ) async {
+    await client.database.storeAccountData(type, content);
+    client.accountData[type] = BasicEvent(type: type, content: content);
   }
 
   /// Restores every key in the backup with the backup's own recovery key,

@@ -363,15 +363,18 @@ Changes since the copy:
   payload's claimed `keys.ed25519`, and be validly self-signed, or the event
   is discarded (`DecryptException`). A device not known yet is stored
   unverified, with its list marked outdated for the next `/keys/query`;
-  keys that clash with a known or already seen device are not used and never
-  overwrite it.
+  divergent keys that collide with a known or previously seen device's
+  Curve25519 or Ed25519 key reject the event (`DecryptException`), and no
+  known device is ever overwritten.
 - Key backup account data (T3.1, Matrix v1.19 MSC4287): `m.key_backup`
   (`{"enabled": bool}`, `KeyBackupContent`) holds the user's choice to use key
   backup. `SSSS.store` (`lib/encryption/ssss.dart`) writes it on when a new
   backup key goes into `m.megolm_backup.v1` (not when the key is copied under
   another storage key). `KeyManager` (`lib/encryption/key_manager.dart`)
   reads it (`keyBackupEnabled` falls back to the presence of
-  `m.megolm_backup.v1`), stops uploading keys while it is off, and adds
+  `m.megolm_backup.v1`), updates `client.accountData` and the local database
+  after `setKeyBackupEnabled` and `deleteKeyBackup`, stops uploading keys
+  while it is off, and adds
   `getKeyBackupStatus`, `createKeyBackup` (creation and rotation, deleting the
   replaced version only after the new key is stored), `deleteKeyBackup`
   (turns it off and empties the stored key) and

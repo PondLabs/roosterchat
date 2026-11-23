@@ -529,8 +529,9 @@ class OlmManager {
   // the one the payload claims ([claimedKeys]), and signed by it: anything
   // else throws (the event is discarded) and nothing is written. A device
   // we do not know yet is kept (unverified), its list marked outdated so
-  // the next `/keys/query` has the last word; keys that clash with a known
-  // device are left out, and that device is never overwritten.
+  // the next `/keys/query` has the last word; keys that diverge on a known
+  // or previously seen Curve25519 or Ed25519 key reject the event, and no
+  // known device is ever overwritten.
   Future<void> _ingestSenderDeviceKeys(
     Object? raw, {
     required String sender,
@@ -564,36 +565,50 @@ class OlmManager {
       reject('bad signature');
     }
 
-    // Keys that clash with a device we know are not used: the event is
-    // handled as before MSC4147, and the known device stays as it is.
-    void ignore(String why) => Logs().w(
-          '[OlmManager] Not using the sender_device_keys of '
-          '$sender:$deviceId: $why',
-        );
     final list = client.userDeviceKeys[sender];
     final known = list?.deviceKeys[deviceId];
-    if (known != null) {
-      if (known.ed25519Key != ed25519 || known.curve25519Key != senderKey) {
-        ignore('the device is known with other keys');
-      }
+    if (known != null &&
+        known.ed25519Key == ed25519 &&
+        known.curve25519Key == senderKey) {
       return;
     }
     if (list?.deviceKeys.values.any(
           (d) => d.ed25519Key == ed25519 || d.curve25519Key == senderKey,
         ) ??
         false) {
-      return ignore('the keys are known as another device');
+      reject(
+        known != null &&
+                (known.ed25519Key == ed25519 ||
+                    known.curve25519Key == senderKey)
+            ? 'the device is known with other keys'
+            : 'the keys are known as another device',
+      );
     }
     final database = client.database;
     final seenKeys = await database.deviceIdSeen(sender, deviceId);
-    if (seenKeys != null && seenKeys != senderKey + ed25519) {
-      return ignore('the device id was seen with other keys');
-    }
     for (final key in [ed25519, senderKey]) {
       final seenDevice = await database.publicKeySeen(key);
-      if (seenDevice != null && seenDevice != deviceId) {
-        return ignore('the keys were seen as another device');
+      if (seenDevice != null) {
+        if (seenDevice != deviceId) {
+          reject('the keys were seen as another device');
+        }
+        if (seenKeys != senderKey + ed25519) {
+          reject('the device id was seen with other keys');
+        }
       }
+    }
+    // A known or seen device_id with completely different Curve25519 and
+    // Ed25519 keys (neither colliding with any known or seen key) is not
+    // ingested, leaving the known device untouched.
+    void ignore(String why) => Logs().w(
+          '[OlmManager] Not using the sender_device_keys of '
+          '$sender:$deviceId: $why',
+        );
+    if (known != null) {
+      return ignore('the device is known with other keys');
+    }
+    if (seenKeys != null && seenKeys != senderKey + ed25519) {
+      return ignore('the device id was seen with other keys');
     }
     final DeviceKeys entry;
     try {

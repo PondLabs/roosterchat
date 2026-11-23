@@ -4,6 +4,7 @@
 import 'dart:convert';
 
 import 'package:canonical_json/canonical_json.dart';
+import 'package:http/http.dart' as http;
 import 'package:test/test.dart';
 import 'package:vodozemac/vodozemac.dart' as vod;
 
@@ -312,10 +313,8 @@ void main() {
         await expectUnchanged();
       });
 
-      test('a known device id with other keys is not used', () async {
-        // Consistent with itself (the claimed Ed25519 key is the attacker's,
-        // and signs it), but the device is known with other keys: the event
-        // is handled as without MSC4147, and the known device stays.
+      test('a known device id with a divergent Ed25519 key is rejected',
+          () async {
         final attacker = vod.Account();
         final attackerEd = attacker.identityKeys.ed25519.toBase64();
         final forged = signedBy(attacker, {
@@ -327,11 +326,10 @@ void main() {
           },
           'user_id': _otherUser,
         });
-        final decrypted =
-            await client.encryption!.olmManager.decryptToDeviceEvent(
+        await expectRejected(
           await craft(plaintextWith(forged, claimedEd25519: attackerEd)),
+          'the device is known with other keys',
         );
-        expect(decrypted.content['hello'], 'forged');
         await expectUnchanged();
       });
 
@@ -354,6 +352,78 @@ void main() {
           await client.encryption!.decryptToDeviceEvent(toDevice(payload));
       expect(decrypted.content['hello'], 'again');
     });
+
+    test(
+      'forged sender_device_keys colliding with known Olm session rejects m.room_key',
+      () async {
+        final known =
+            client.userDeviceKeys[_otherUser]!.deviceKeys[_otherDevice]!;
+        await known.setVerified(true, false);
+
+        Future<void> expectRoomKeyRejected(
+          String id,
+          String room,
+          String why,
+        ) async {
+          final group = vod.GroupSession();
+          final attacker = vod.Account();
+          final ed = attacker.identityKeys.ed25519.toBase64();
+          final forged = signedBy(attacker, {
+            'algorithms': [AlgorithmTypes.olmV1Curve25519AesSha2],
+            'device_id': id,
+            'keys': {
+              'curve25519:$id': otherClient.identityKey,
+              'ed25519:$id': ed,
+            },
+            'user_id': _otherUser,
+          });
+          final event = await craft({
+            'type': EventTypes.RoomKey,
+            'content': {
+              'algorithm': AlgorithmTypes.megolmV1AesSha2,
+              'room_id': room,
+              'session_id': group.sessionId,
+              'session_key': group.sessionKey,
+            },
+            'sender': _otherUser,
+            'keys': {'ed25519': ed},
+            'recipient': client.userID,
+            'recipient_keys': {'ed25519': client.fingerprintKey},
+            'sender_device_keys': forged,
+          });
+          await expectRejected(event, why);
+          expect(
+            client.encryption!.keyManager
+                .getInboundGroupSession(room, group.sessionId),
+            isNull,
+          );
+        }
+
+        await expectRoomKeyRejected(
+          _otherDevice,
+          '!forged1:example.org',
+          'the device is known with other keys',
+        );
+        await expectRoomKeyRejected(
+          'SPOOFED_DEVICE',
+          '!forged2:example.org',
+          'the keys are known as another device',
+        );
+        expect(known.verified, true);
+
+        client.userDeviceKeys[_otherUser]!.deviceKeys.remove(_otherDevice);
+        await expectRoomKeyRejected(
+          'SPOOFED_DEVICE_2',
+          '!forged3:example.org',
+          'the keys were seen as another device',
+        );
+        await expectRoomKeyRejected(
+          _otherDevice,
+          '!forged4:example.org',
+          'the device id was seen with other keys',
+        );
+      },
+    );
   });
 
   group('m.key_backup (MSC4287)', tags: 'olm', () {
@@ -641,4 +711,112 @@ void main() {
       );
     });
   });
+
+  test(
+    'setKeyBackupEnabled and deleteKeyBackup keep local accountData in sync without synthetic sync',
+    tags: 'olm',
+    () async {
+      Logs().level = Level.error;
+      final fake = FakeMatrixApi();
+      final realistic = _NoAutoSyncAccountDataClient(fake);
+      final client = Client(
+        'realclient',
+        httpClient: realistic,
+        database: await getDatabase(),
+      );
+      FakeMatrixApi.client = client;
+      await client.checkHomeserver(
+        Uri.parse('https://fakeServer.notExisting'),
+        checkWellKnown: false,
+      );
+      await client.init(
+        newToken: 'abcd',
+        newUserID: '@test:fakeServer.notExisting',
+        newHomeserver: client.homeserver,
+        newDeviceName: 'Test',
+        newDeviceID: 'GHTYAJCE',
+        newOlmAccount: pickledOlmAccount,
+      );
+      await client.abortSync();
+      await client.handleSync(
+        SyncUpdate(
+          nextBatch: '',
+          accountData: [
+            BasicEvent(type: EventTypes.KeyBackup, content: {'enabled': true}),
+            BasicEvent(
+              type: EventTypes.MegolmBackup,
+              content: {
+                'encrypted': {
+                  'k': {'iv': 'i', 'ciphertext': 'c', 'mac': 'm'},
+                },
+              },
+            ),
+          ],
+        ),
+      );
+
+      final km = client.encryption!.keyManager;
+      await km.setKeyBackupEnabled(false);
+      expect(km.keyBackupEnabled, false);
+      // Re-enabling before /sync delivers {enabled: false} must still PUT {enabled: true}.
+      await km.setKeyBackupEnabled(true);
+      expect(realistic.puts, [
+        {
+          'type': EventTypes.KeyBackup,
+          'body': {'enabled': false},
+        },
+        {
+          'type': EventTypes.KeyBackup,
+          'body': {'enabled': true},
+        },
+      ]);
+      expect(km.keyBackupEnabled, true);
+
+      // Deleting the backup must reflect immediately in local state and DB.
+      fake.api['GET']!['/client/v3/room_keys/version'] = (_) => {
+            'algorithm': AlgorithmTypes.megolmBackupV1Curve25519AesSha2,
+            'auth_data': {
+              'public_key': 'GXYaxqhNhUK28zUdxOmEsFRguz+PzBsDlTLlF0O0RkM',
+            },
+            'count': 1,
+            'etag': '1',
+            'version': '5',
+          };
+      fake.api['DELETE']!['/client/v3/room_keys/version/5'] = (_) => {};
+      await km.deleteKeyBackup();
+      expect(km.keyBackupEnabled, false);
+      expect(km.enabled, false);
+      final stored = await client.database.getAccountData();
+      expect(stored[EventTypes.KeyBackup]?.content, {'enabled': false});
+      expect(stored[EventTypes.MegolmBackup]?.content, isEmpty);
+
+      await client.dispose(closeDatabase: true);
+    },
+  );
+}
+
+class _NoAutoSyncAccountDataClient extends http.BaseClient {
+  final FakeMatrixApi inner;
+  final List<Map<String, Object?>> puts = [];
+
+  _NoAutoSyncAccountDataClient(this.inner);
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    if (request.method == 'PUT' &&
+        request.url.path.contains('/account_data/') &&
+        !request.url.path.contains('/rooms/')) {
+      final bytes = await request.finalize().toBytes();
+      puts.add({
+        'type': Uri.decodeComponent(request.url.pathSegments.last),
+        'body': json.decode(utf8.decode(bytes)),
+      });
+      return http.StreamedResponse(
+        Stream.value(utf8.encode('{}')),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    }
+    return inner.send(request);
+  }
 }

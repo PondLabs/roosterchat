@@ -207,7 +207,7 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
     setState(() {
       var encryption = widget.client.getMatrixClient().encryption;
       crossSigningEnabled = encryption?.crossSigning.enabled ?? false;
-      messageBackupEnabled = encryption?.keyManager.enabled ?? false;
+      messageBackupEnabled = encryption?.keyManager.keyBackupEnabled ?? false;
       isVerified = widget.client.matrixClient.isUnknownSession == false;
     });
   }
