@@ -69,7 +69,7 @@ void main() {
   });
 
   for (final (what, answer) in [
-    ('a 404', () => json({'errcode': 'M_NOT_FOUND'}, status: 404)),
+    ('a 404, whatever its body', () => json(validFile, status: 404)),
     ('broken JSON', () => http.Response('{"contacts": [', 200)),
     ('an HTML page', () => http.Response('<html>support</html>', 200)),
     ('a JSON list', () => json([validFile])),
