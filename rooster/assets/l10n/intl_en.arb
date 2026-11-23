@@ -2293,6 +2293,14 @@
       "user": {}
     }
   },
+  "messageUserReplacedRoom": "{user} upgraded this room. The conversation continues in the new room.",
+  "@messageUserReplacedRoom": {
+    "description": "Timeline line for when someone upgrades a room: it is closed and a new room (Matrix calls it the replacement room) takes its place",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
   "labelNotificationUnknownEventType": "Unknown event type",
   "@labelNotificationUnknownEventType": {
     "description": "Text of a notification on Android for something in a room that is neither a message nor encrypted, which the app cannot describe",
@@ -2397,6 +2405,42 @@
   "fileDragDropNoChat": "Select a text channel first to send files",
   "@fileDragDropNoChat": {
     "description": "Shown when a file is dragged or dropped where there is no message box to send it from",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelE2eeTrustVerified": "Verified",
+  "@labelE2eeTrustVerified": {
+    "description": "Next to a shield icon: this user's (or every member's) encryption identity and devices are verified",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelE2eeTrustUnverified": "Not verified",
+  "@labelE2eeTrustUnverified": {
+    "description": "Next to a shield icon: this user's (or a member's) encryption identity or one of their devices is not verified",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelE2eeTrustIdentityChanged": "Identity changed",
+  "@labelE2eeTrustIdentityChanged": {
+    "description": "Next to a red shield icon: the encryption identity of a user the user had verified was replaced by a new one",
+    "type": "text",
+    "placeholders": {}
+  },
+  "tooltipE2eeTrustVerified": "Encrypted, and verified: you know these keys are theirs",
+  "@tooltipE2eeTrustVerified": {
+    "description": "Tooltip of the green shield of a verified user or room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "tooltipE2eeTrustUnverified": "Encrypted, but not verified: verify to make sure no one else reads along",
+  "@tooltipE2eeTrustUnverified": {
+    "description": "Tooltip of the grey shield of a user or room not verified yet",
+    "type": "text",
+    "placeholders": {}
+  },
+  "tooltipE2eeTrustIdentityChanged": "Their identity changed since you verified them. Verify them again before you trust their messages",
+  "@tooltipE2eeTrustIdentityChanged": {
+    "description": "Tooltip of the red shield shown when a verified user's encryption identity was replaced",
     "type": "text",
     "placeholders": {}
   },
@@ -4585,6 +4629,60 @@
   "cantSentMessagePrompt": "You do not have permission to send a message in this room",
   "@cantSentMessagePrompt": {
     "description": "Text that explains the user cannot send a message in this room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRoomTakesKnocks": "You are not in this room. You can ask its moderators to let you in.",
+  "@messageRoomTakesKnocks": {
+    "description": "Banner in a room you are not in that takes requests to join",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptRequestToJoin": "Request to join",
+  "@promptRequestToJoin": {
+    "description": "Button that asks a room's moderators to let you in (Matrix calls it knocking)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKnockReasonTitle": "Request to join",
+  "@labelKnockReasonTitle": {
+    "description": "Title of the dialog that sends a request to join a room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKnockReasonDescription": "Add a note for the moderators, if you like.",
+  "@labelKnockReasonDescription": {
+    "description": "Text above the optional note sent with a request to join a room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKnockReasonHint": "Note (optional)",
+  "@labelKnockReasonHint": {
+    "description": "Placeholder of the optional note sent with a request to join",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptSendKnock": "Send request",
+  "@promptSendKnock": {
+    "description": "Button that sends a request to join a room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKnockPending": "Your request to join is waiting for a moderator.",
+  "@messageKnockPending": {
+    "description": "Banner in a room you asked to join, until a moderator answers",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRoomReplaced": "This room has been replaced and is no longer active.",
+  "@messageRoomReplaced": {
+    "description": "Banner in a room that was upgraded: a new room (Matrix calls it the replacement room) took its place",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptGoToReplacementRoom": "Go to new room",
+  "@promptGoToReplacementRoom": {
+    "description": "Button on the banner of an upgraded room that joins and opens the room that replaced it",
     "type": "text",
     "placeholders": {}
   },
@@ -6977,6 +7075,56 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelProfileSessions": "{howMany,plural, =1{1 session}other{{howMany} sessions}}",
+  "@labelProfileSessions": {
+    "description": "Heading of the list of another user's sessions (devices) on their profile, with how many there are",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "labelProfileSessionsDescription": "A blocked session gets no keys to the messages you send from now on.",
+  "@labelProfileSessionsDescription": {
+    "description": "Under the heading of another user's sessions on their profile: what blocking one of them does",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSessionVerified": "Verified",
+  "@labelProfileSessionVerified": {
+    "description": "State of one of another user's sessions (devices) on their profile: it is verified",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSessionUnverified": "Not verified",
+  "@labelProfileSessionUnverified": {
+    "description": "State of one of another user's sessions (devices) on their profile: it is not verified",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSessionBlocked": "Blocked",
+  "@labelProfileSessionBlocked": {
+    "description": "State of one of another user's sessions on their profile: the user blocked it, it gets no keys to their messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptProfileBlockSession": "Block",
+  "@promptProfileBlockSession": {
+    "description": "Button next to one of another user's sessions on their profile: stops sending it the keys to the user's messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptProfileUnblockSession": "Unblock",
+  "@promptProfileUnblockSession": {
+    "description": "Button next to a blocked session of another user on their profile: sends it the keys to the user's messages again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageProfileDeviceChangeFailed": "This session could not be changed. Close the profile and try again.",
+  "@messageProfileDeviceChangeFailed": {
+    "description": "Error shown when blocking or unblocking one of a user's sessions (devices) on their profile did not work",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelProfileSourceTitle": "Source",
   "@labelProfileSourceTitle": {
     "description": "Title of the dialog that shows the raw JSON of a user's profile (developer mode)",
@@ -6992,6 +7140,20 @@
   "promptProfileVerifyUser": "Verify user",
   "@promptProfileVerifyUser": {
     "description": "Button on another user's profile card to start end-to-end encryption verification with them",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageProfileIdentityChanged": "{user}'s identity changed since you verified them. Until you verify them again, their messages may come from someone else.",
+  "@messageProfileIdentityChanged": {
+    "description": "Alert on the profile of a user the user had verified, whose encryption identity was replaced since, with their name",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "promptProfileWithdrawVerification": "Withdraw verification",
+  "@promptProfileWithdrawVerification": {
+    "description": "Button on the alert of a user whose encryption identity changed: accepts the new identity as not verified, and stops the alert",
     "type": "text",
     "placeholders": {}
   },
@@ -8431,6 +8593,50 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelArchivedRoomsHeader": "Rooms you left",
+  "@labelArchivedRoomsHeader": {
+    "description": "Header of the list of rooms the account left or was removed from",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptLoadArchivedRooms": "Show rooms you left",
+  "@promptLoadArchivedRooms": {
+    "description": "Button that loads the list of rooms the account left",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageNoArchivedRooms": "You have not left any rooms.",
+  "@messageNoArchivedRooms": {
+    "description": "Shown when the list of rooms the account left is empty",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptForgetRoom": "Forget",
+  "@promptForgetRoom": {
+    "description": "Button that forgets a room the account left: it leaves the room list for good and its history is no longer kept for you",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelForgetRoomPrompt": "Forget {room}? It will no longer show up anywhere, and you will need an invite or the address to come back.",
+  "@labelForgetRoomPrompt": {
+    "description": "Confirmation before forgetting a room the account left",
+    "type": "text",
+    "placeholders": {
+      "room": {}
+    }
+  },
+  "messageForgetForcedUponLeave": "Your homeserver forgets rooms as soon as you leave them, so there is nothing to forget here.",
+  "@messageForgetForcedUponLeave": {
+    "description": "Shown above the rooms the account left when the homeserver already forgets every room on leave (Matrix capability m.forget_forced_upon_leave)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageRoomForgotten": "Room forgotten",
+  "@messageRoomForgotten": {
+    "description": "Brief notice after forgetting a room",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelChatPrivacyTitle": "Chat Privacy",
   "@labelChatPrivacyTitle": {
     "description": "Header for the chat privacy section in settings",
@@ -8924,6 +9130,98 @@
   "labelMatrixExplainOnlineKeyBackup": "Online key backup will allow you to retrieve message history in the event that you lose access to all your sessions",
   "@labelMatrixExplainOnlineKeyBackup": {
     "description": "Explains what the message backup does",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKeyBackupVersion": "Version: {version}",
+  "@labelKeyBackupVersion": {
+    "description": "Settings > Security > Message backup: the version of the backup on the server, a number the server gives it",
+    "type": "text",
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "labelKeyBackupKeyCount": "{howMany,plural, =0{No keys stored}=1{1 key stored}other{{howMany} keys stored}}",
+  "@labelKeyBackupKeyCount": {
+    "description": "Settings > Security > Message backup: how many message keys the backup on the server holds",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "labelKeyBackupEtag": "Change tag (etag): {etag}",
+  "@labelKeyBackupEtag": {
+    "description": "Settings > Security > Message backup: the server's tag for the backup's current contents, which changes whenever keys are added. 'etag' is the protocol's name for it",
+    "type": "text",
+    "placeholders": {
+      "etag": {}
+    }
+  },
+  "labelKeyBackupAlgorithm": "Algorithm: {algorithm}",
+  "@labelKeyBackupAlgorithm": {
+    "description": "Settings > Security > Message backup: the encryption scheme of the backup, a protocol name such as m.megolm_backup.v1.curve25519-aes-sha2",
+    "type": "text",
+    "placeholders": {
+      "algorithm": {}
+    }
+  },
+  "labelKeyBackupNone": "There is no backup on your server.",
+  "@labelKeyBackupNone": {
+    "description": "Settings > Security > Message backup: the server holds no backup of your message keys",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyBackupLoadFailed": "Could not load the details of your backup.",
+  "@messageKeyBackupLoadFailed": {
+    "description": "Settings > Security > Message backup: asking the server about the backup failed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptKeyBackupRotate": "Rotate key",
+  "@promptKeyBackupRotate": {
+    "description": "Settings > Security > Message backup: button that replaces the backup with a new one under a new key",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptKeyBackupDelete": "Delete backup",
+  "@promptKeyBackupDelete": {
+    "description": "Settings > Security > Message backup: button that deletes the backup from the server",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyBackupConfirmRotate": "A new backup with a new key replaces this one, and every key on this device is saved in it again. The current backup is deleted from your server.",
+  "@messageKeyBackupConfirmRotate": {
+    "description": "Settings > Security > Message backup: asks before rotating the backup's key",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyBackupConfirmDelete": "Your backup is deleted from your server and backup is turned off on all your sessions. Messages that no session of yours can decrypt will be lost.",
+  "@messageKeyBackupConfirmDelete": {
+    "description": "Settings > Security > Message backup: asks before deleting the backup",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKeyBackupUnlockTitle": "Unlock your secret storage",
+  "@labelKeyBackupUnlockTitle": {
+    "description": "Settings > Security > Message backup: title of the dialog asking for the recovery key, which keeps the new backup key",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKeyBackupUnlockHint": "Recovery key or security phrase",
+  "@labelKeyBackupUnlockHint": {
+    "description": "Settings > Security > Message backup: placeholder of the field for the recovery key or the security phrase",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyBackupRotateFailed": "The key was not rotated. Check your recovery key and try again.",
+  "@messageKeyBackupRotateFailed": {
+    "description": "Settings > Security > Message backup: rotating the backup's key failed, for example because of a wrong recovery key",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyBackupDeleteFailed": "The backup was not deleted. Try again.",
+  "@messageKeyBackupDeleteFailed": {
+    "description": "Settings > Security > Message backup: deleting the backup failed",
     "type": "text",
     "placeholders": {}
   },
@@ -11308,6 +11606,90 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelRoomVersionHeader": "Room version",
+  "@labelRoomVersionHeader": {
+    "description": "Header of the room settings section that shows the room's version and upgrades it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelCurrentRoomVersion": "This room uses version {version}",
+  "@labelCurrentRoomVersion": {
+    "description": "The room's version (Matrix room versions are numbers like 11 or 12)",
+    "type": "text",
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "promptUpgradeRoom": "Upgrade room",
+  "@promptUpgradeRoom": {
+    "description": "Button that upgrades a room to a newer version",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageUpgradeRoomNoPermission": "Only people allowed to change this room's settings can upgrade it.",
+  "@messageUpgradeRoomNoPermission": {
+    "description": "Shown instead of the upgrade button to someone without the power to upgrade the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageUpgradeRoomExplanation": "Upgrading makes a new room on the chosen version and closes this one. Members are asked to move to the new room.",
+  "@messageUpgradeRoomExplanation": {
+    "description": "What upgrading a room does, above the version picker",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageNoRoomVersions": "Your homeserver did not say which room versions it supports.",
+  "@messageNoRoomVersions": {
+    "description": "Shown when the homeserver reports no room versions to upgrade to",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelStableRoomVersions": "Stable",
+  "@labelStableRoomVersions": {
+    "description": "Heading of the room versions the homeserver calls stable",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelUnstableRoomVersions": "Experimental",
+  "@labelUnstableRoomVersions": {
+    "description": "Heading of the room versions the homeserver calls unstable (still being tried out)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelRoomVersionOption": "Version {version}",
+  "@labelRoomVersionOption": {
+    "description": "One room version in the upgrade picker",
+    "type": "text",
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "labelDefaultRoomVersionOption": "Version {version} (default)",
+  "@labelDefaultRoomVersionOption": {
+    "description": "The homeserver's default room version in the upgrade picker",
+    "type": "text",
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "labelAdditionalCreators": "Other creators (optional)",
+  "@labelAdditionalCreators": {
+    "description": "Field naming more people to make creators of the upgraded room (room version 12 and later)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "hintAdditionalCreators": "@someone:example.org, one per line",
+  "@hintAdditionalCreators": {
+    "description": "Placeholder of the field naming more creators of the upgraded room; the example is a Matrix user ID",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageAdditionalCreatorsExplanation": "Creators have full power over the new room and cannot be removed.",
+  "@messageAdditionalCreatorsExplanation": {
+    "description": "Below the field naming more creators of the upgraded room",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelDefaultReadReceiptsOption": "Use global preference ({pref})",
   "@labelDefaultReadReceiptsOption": {
     "description": "Label to use the global preference, showing the current global preference value",
@@ -11570,6 +11952,112 @@
     "type": "text",
     "placeholders": {
       "eventType": {}
+    }
+  },
+  "messageRoomSettingNoPermission": "You need permission to change this setting.",
+  "@messageRoomSettingNoPermission": {
+    "description": "Below a room setting someone without the power to change it can only look at",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelHistoryVisibilityHeader": "Who can read history",
+  "@labelHistoryVisibilityHeader": {
+    "description": "Header of the room setting for who can read past messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelHistoryWorldReadable": "Anyone",
+  "@labelHistoryWorldReadable": {
+    "description": "Room history option: anyone, even people not in the room, can read past messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelHistoryShared": "Members, including messages from before they joined",
+  "@labelHistoryShared": {
+    "description": "Room history option: members can read all past messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelHistoryInvited": "Members, from when they were invited",
+  "@labelHistoryInvited": {
+    "description": "Room history option: members read messages sent after they were invited",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelHistoryJoined": "Members, from when they joined",
+  "@labelHistoryJoined": {
+    "description": "Room history option: members read messages sent after they joined",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGuestAccessHeader": "Guest access",
+  "@labelGuestAccessHeader": {
+    "description": "Header of the room setting for whether guest accounts (Matrix accounts without a full registration) can join",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGuestsCanJoin": "Guests can join",
+  "@labelGuestsCanJoin": {
+    "description": "Guest access option: guest accounts may join the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelGuestsForbidden": "No guests",
+  "@labelGuestsForbidden": {
+    "description": "Guest access option: guest accounts may not join the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKnockRequestsHeader": "Requests to join",
+  "@labelKnockRequestsHeader": {
+    "description": "Header of the list of people asking to join the room (Matrix calls these knocks), in its security settings",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageNoKnockRequests": "Nobody is waiting to join.",
+  "@messageNoKnockRequests": {
+    "description": "Shown in the list of requests to join a room when it is empty",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptApproveKnock": "Let in",
+  "@promptApproveKnock": {
+    "description": "Button that accepts someone's request to join the room (it invites them)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptDeclineKnock": "Decline",
+  "@promptDeclineKnock": {
+    "description": "Button that turns down someone's request to join the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeclineKnockTitle": "Decline request",
+  "@labelDeclineKnockTitle": {
+    "description": "Title of the dialog that turns down a request to join the room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeclineKnockReasonDescription": "Decline the request from {user}? They will see the reason, if you give one.",
+  "@labelDeclineKnockReasonDescription": {
+    "description": "Above the optional reason for turning down a request to join, with the name of who asked",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "labelDeclineKnockReasonHint": "Reason (optional)",
+  "@labelDeclineKnockReasonHint": {
+    "description": "Placeholder of the optional reason for turning down a request to join",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKnockReason": "Note: {reason}",
+  "@labelKnockReason": {
+    "description": "The note someone sent with their request to join the room",
+    "type": "text",
+    "placeholders": {
+      "reason": {}
     }
   },
   "promptEnableEncryptionRoomSettings": "Enable Encryption",

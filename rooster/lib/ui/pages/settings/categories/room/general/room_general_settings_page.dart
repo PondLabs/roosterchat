@@ -1,6 +1,7 @@
 import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/room.dart';
 import 'package:rooster/ui/pages/settings/categories/room/general/room_general_chat_privacy.dart';
+import 'package:rooster/ui/pages/settings/categories/room/general/matrix_room_upgrade_settings.dart';
 import 'package:rooster/ui/pages/matrix/room_address_settings/matrix_room_address_settings.dart';
 import 'package:rooster/ui/pages/settings/categories/room/general/room_general_settings_view.dart';
 import 'package:flutter/widgets.dart';
@@ -39,6 +40,10 @@ class _RoomGeneralSettingsPageState extends State<RoomGeneralSettingsPage> {
             height: 10,
           ),
           MatrixRoomAddressSettings((widget.room as MatrixRoom).matrixRoom),
+          const SizedBox(
+            height: 10,
+          ),
+          MatrixRoomUpgradeSettings((widget.room as MatrixRoom).matrixRoom),
         ]
       ],
     );

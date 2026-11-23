@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:rooster/client/client.dart';
 import 'package:rooster/client/components/gif/gif_component.dart';
 import 'package:rooster/client/components/gif/gif_search_result.dart';
+import 'package:rooster/client/matrix/components/gif/matrix_animated_image.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
 import 'package:rooster/client/matrix/matrix_room.dart';
@@ -37,7 +38,10 @@ class MatrixFavoriteGif implements FavoriteGif {
   @override
   ImageProvider<Object> get image {
     var url = data.tryGet<String>("url");
-    return MatrixMxcImage(Uri.parse(url!), client.matrixClient);
+    var info = data.tryGetMap<String, Object?>("info");
+    return MatrixMxcImage(Uri.parse(url!), client.matrixClient,
+        animated: AnimatedImageInfo.isAnimated(info,
+            mimetype: info?.tryGet<String>("mimetype")));
   }
 
   @override
@@ -188,12 +192,8 @@ class MatrixGifComponent implements GifComponent<MatrixClient> {
       if (preferences.stickerCompatibilityMode.value) "msgtype": "m.image",
       if (preferences.stickerCompatibilityMode.value)
         "chat.commet.type": "chat.commet.sticker",
-      "info": {
-        "chat.commet.animated": true,
-        "w": gif.x.toInt(),
-        "h": gif.y.toInt(),
-        "mimetype": gif.mimeType
-      }
+      "info": AnimatedImageInfo.markAnimated(
+          {"w": gif.x.toInt(), "h": gif.y.toInt(), "mimetype": gif.mimeType})
     };
 
     var id = await matrixRoom.sendEvent(content,
@@ -312,10 +312,10 @@ class MatrixGifComponent implements GifComponent<MatrixClient> {
 
     bool isGifMimeType = Mime.gifTypes.contains(event.attachmentMimetype);
 
-    var info = event.content.tryGetMap("info");
+    var info = event.content.tryGetMap<String, Object?>("info");
 
-    bool isAnimated = event.attachmentMimetype == "image/gif" ||
-        info?["chat.commet.animated"] == true;
+    bool isAnimated =
+        AnimatedImageInfo.isAnimated(info, mimetype: event.attachmentMimetype);
 
     bool isGif = isSticker && isGifMimeType && isAnimated;
 
@@ -382,13 +382,19 @@ class MatrixGifComponent implements GifComponent<MatrixClient> {
     matrix.Event? replyingTo;
     var matrixRoom = (room as MatrixRoom).matrixRoom;
 
+    // A favorite saved before is_animated has only the legacy key.
+    final info = fav.data.tryGetMap<String, Object?>("info");
+    final mimetype = info?.tryGet<String>("mimetype");
+
     var content = {
       "body": fav.data["body"],
       "url": fav.data["url"],
       if (preferences.stickerCompatibilityMode.value) "msgtype": "m.image",
       if (preferences.stickerCompatibilityMode.value)
         "chat.commet.type": "chat.commet.sticker",
-      "info": fav.data["info"]
+      "info": AnimatedImageInfo.isAnimated(info, mimetype: mimetype)
+          ? AnimatedImageInfo.markAnimated(info)
+          : info
     };
 
     if (inReplyTo != null) {
