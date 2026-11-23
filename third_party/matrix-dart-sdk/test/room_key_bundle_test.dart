@@ -501,6 +501,17 @@ void main() {
       expect(bundlesSent(), isEmpty);
     });
 
+    test('a room now "joined" shares no session, shared ones included',
+        () async {
+      await inviterRoom('shared');
+      await setVisibility('joined');
+      await inviter
+          .getRoomById(_roomId)!
+          .invite(_inviteeId, shareHistory: true);
+      expect(server.uploads, isEmpty);
+      expect(bundlesSent(), isEmpty);
+    });
+
     test('without shareHistory the invite shares nothing', () async {
       await inviterRoom('shared');
       await inviter.getRoomById(_roomId)!.invite(_inviteeId);
