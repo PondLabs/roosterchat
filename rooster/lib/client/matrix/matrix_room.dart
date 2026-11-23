@@ -16,6 +16,7 @@ import 'package:rooster/client/components/user_color/user_color_component.dart';
 import 'package:rooster/client/matrix/components/calendar_room_component/matrix_calendar_room_component.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_room_emoticon_component.dart';
 import 'package:rooster/client/matrix/components/read_receipts/matrix_read_receipt_component.dart';
+import 'package:rooster/client/matrix/components/sidebar_entries/matrix_room_marked_unread.dart';
 import 'package:rooster/client/matrix/components/typing_indicators/matrix_typing_indicators_component.dart';
 import 'package:rooster/client/matrix/components/user_presence/matrix_user_presence.dart';
 import 'package:rooster/client/matrix/matrix_attachment.dart';
@@ -221,8 +222,11 @@ class MatrixRoom extends Room implements RoomSendPreparation {
   /// The homeserver owns these counts and only reports them in `/sync`. Until
   /// that response arrives, a room the user has just read keeps its badge on
   /// screen. Mirroring the read locally clears it now; the next sync confirms
-  /// the same value and remains authoritative.
+  /// the same value and remains authoritative. A room marked unread by hand
+  /// loses its mark here too: the spec's "reset when a read receipt is
+  /// sent".
   void clearUnreadCountsLocally() {
+    MatrixMarkedUnread.clearOnRead(_matrixRoom);
     final changed =
         _matrixRoom.notificationCount > 0 || _matrixRoom.highlightCount > 0;
     _matrixRoom.notificationCount = 0;

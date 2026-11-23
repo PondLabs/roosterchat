@@ -109,6 +109,13 @@ class _SdkRoom implements matrix.Room {
   @override
   final Map<String, Map<String, matrix.StrippedStateEvent>> states = {};
 
+  /// Joined, with no room account data: not marked unread.
+  @override
+  matrix.Membership get membership => matrix.Membership.join;
+
+  @override
+  final Map<String, matrix.BasicEvent> roomAccountData = {};
+
   /// Nobody here may move anyone but themselves.
   @override
   int getPowerLevelByUserId(String userId) => 0;

@@ -6,6 +6,7 @@ import 'package:rooster/client/components/user_presence/user_presence_component.
 import 'package:rooster/client/member.dart';
 import 'package:rooster/client/room.dart';
 import 'package:rooster/ui/atoms/adaptive_context_menu.dart';
+import 'package:rooster/ui/atoms/room_panel_actions.dart';
 import 'package:rooster/ui/atoms/room_panel_view.dart';
 import 'package:rooster/ui/atoms/room_text_button.dart';
 import 'package:rooster/utils/event_bus.dart';
@@ -129,6 +130,7 @@ class _RoomPanelState extends State<RoomPanel> {
             : null,
         body: widget.room.lastMessage?.plainTextBody,
         notificationCount: widget.room.notificationCount,
+        markedUnread: RoomPanelActions.showsUnreadDot(widget.room),
         typingMembers: typingUsers,
         highlightNotificationCount:
             widget.room.displayHighlightedNotificationCount,

@@ -35,6 +35,7 @@ class RoomPanelView extends StatefulWidget {
       this.showUserAvatar = false,
       this.notificationCount = 0,
       this.highlightNotificationCount = 0,
+      this.markedUnread = false,
       this.typingMembers,
       super.key});
   final ImageProvider? avatar;
@@ -58,6 +59,9 @@ class RoomPanelView extends StatefulWidget {
   final double random;
   final int notificationCount;
   final int highlightNotificationCount;
+
+  /// Marked unread by hand: the dot shows with no notification.
+  final bool markedUnread;
   final UserPresence? userPresence;
   @override
   State<RoomPanelView> createState() => _RoomPanelViewState();
@@ -234,7 +238,8 @@ class _RoomPanelViewState extends State<RoomPanelView> {
                             ],
                           ),
                         ),
-                        if (widget.notificationCount > 0 &&
+                        if ((widget.notificationCount > 0 ||
+                                widget.markedUnread) &&
                             widget.highlightNotificationCount == 0)
                           const Padding(
                             padding: EdgeInsets.all(4.0),
