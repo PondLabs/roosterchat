@@ -523,3 +523,21 @@ Changes since the copy:
   again after the read, so of two calls at once the better session still
   wins. A stored session that wins goes in memory, where callers look next.
   An unreadable stored session is replaced.
+- Dehydrated devices, opt-in (MSC3814, T3.5): `dehydratedDeviceSetup`
+  asks nothing of a server that does not announce `org.matrix.msc3814` in
+  `unstable_features` of `/versions` (`dehydratedDevicesSupported`; no spec
+  version has the stable endpoints yet) and returns a
+  `DehydratedDeviceResult` instead of nothing. Only a 404 makes a new
+  dehydrated device; upstream also replaced it on a 500 or any other error,
+  dropping the events waiting for it. A key that is missing from secret
+  storage (`org.matrix.msc3814`) or does not open the device leaves the
+  device on the server (`keyMismatch`). The device's cross-signing chain
+  may end at a master key whose private key is in the secret storage just
+  unlocked, as after a login the device is read while the session is being
+  verified, before its master key is marked (upstream replaced it then).
+  The room keys go to the session's own key manager (memory and database,
+  through `setInboundGroupSession`), an event that does not decrypt is
+  skipped, and a repeated `next_batch` ends the loop. Nothing of the
+  session's own account or Olm sessions changes on any failure.
+  `deleteDehydratedDevice` and `deleteDehydratedDeviceIfSupported` are
+  MSC3814's DELETE, for turning the opt-in off.
