@@ -10,18 +10,19 @@ import 'package:tiamat/tiamat.dart' as tiamat;
 
 /// Opens the room of a notification and jumps to its event, closing the
 /// pages above the main one (Settings) first. The jump waits for the room
-/// to be the selected one, so that its timeline is there to hear it.
+/// to be the selected one, so that its timeline is there to hear it, or
+/// for [timeout]: a room that was selected already is not selected again.
 Future<void> openNotificationEvent(BuildContext context,
     {required String roomId,
     required String eventId,
     String? clientId,
-    Duration timeout = const Duration(seconds: 5)}) async {
+    Duration timeout = const Duration(seconds: 2)}) async {
   Navigator.of(context).popUntil((route) => route.isFirst);
   final selected = EventBus.onSelectedRoomChanged.stream
       .firstWhere((room) => room?.identifier == roomId)
       .timeout(timeout, onTimeout: () => null);
   EventBus.doOpenRoom(roomId, clientId: clientId);
-  if (await selected == null) return;
+  await selected;
   await WidgetsBinding.instance.endOfFrame;
   EventBus.jumpToEvent.add(eventId);
 }

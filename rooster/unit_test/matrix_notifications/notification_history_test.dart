@@ -247,7 +247,8 @@ void main() {
     expect(jumps, [r'$b']);
   });
 
-  testWidgets('no jump when the room never opens', (tester) async {
+  testWidgets('a room that was open already still gets the jump',
+      (tester) async {
     final jumps = <String>[];
     final sub = EventBus.jumpToEvent.stream.listen(jumps.add);
     addTearDown(sub.cancel);
@@ -257,11 +258,14 @@ void main() {
       return const SizedBox();
     })));
     final done = openNotificationEvent(context,
-        roomId: '!gone:example.test',
+        roomId: '!open:example.test',
         eventId: r'$x',
         timeout: const Duration(milliseconds: 10));
-    await tester.pump(const Duration(milliseconds: 20));
-    await done;
+    await tester.pump(const Duration(milliseconds: 5));
     expect(jumps, isEmpty);
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.pump();
+    await done;
+    expect(jumps, [r'$x']);
   });
 }
