@@ -1226,6 +1226,24 @@
       "widgetName": {}
     }
   },
+  "errorLoginDeviceExpired": "The code expired before it was approved. Start again to get a new one.",
+  "@errorLoginDeviceExpired": {
+    "description": "In the 'Login failed' dialog when the sign-in code shown for signing in from another device ran out of time before the person approved it",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorLoginDeviceDenied": "The sign-in was refused on the other device, so you are not signed in.",
+  "@errorLoginDeviceDenied": {
+    "description": "In the 'Login failed' dialog when the person, or the server, refused the sign-in on the device where the code was entered",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorLoginDeviceFailed": "Your server could not sign you in with a code. Try again.",
+  "@errorLoginDeviceFailed": {
+    "description": "In the 'Login failed' dialog when signing in from another device failed for a reason the server did not explain",
+    "type": "text",
+    "placeholders": {}
+  },
   "errorLoginOauthStateMismatch": "The sign-in page sent back an answer Rooster did not ask for, so it was ignored. Try signing in again.",
   "@errorLoginOauthStateMismatch": {
     "description": "In the 'Login failed' dialog when the browser came back from the server's sign-in page with a reply that does not belong to this sign-in (a stale tab or a forged link); nothing was signed in",
@@ -7956,6 +7974,48 @@
     "placeholders": {
       "tag": {}
     }
+  },
+  "promptLoginDeviceAuth": "Sign in from another device",
+  "@promptLoginDeviceAuth": {
+    "description": "Button on the login screen that shows a code to approve on a phone or computer already able to sign in to the server",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeviceAuthWaitingForCode": "Getting a code from your server…",
+  "@labelDeviceAuthWaitingForCode": {
+    "description": "On the login screen, while the server is asked for a code to sign in from another device",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeviceAuthInstructions": "On a phone or computer, scan the QR code or open the link, then check that it shows this code:",
+  "@labelDeviceAuthInstructions": {
+    "description": "On the login screen, above the sign-in code, explaining how to approve the sign-in on another device",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDeviceAuthWaitingForApproval": "Waiting for you to approve on the other device…",
+  "@labelDeviceAuthWaitingForApproval": {
+    "description": "On the login screen, under the sign-in code, while Rooster waits for the sign-in to be approved on another device",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptDeviceAuthCopyCode": "Copy code",
+  "@promptDeviceAuthCopyCode": {
+    "description": "Button that copies the sign-in code to the clipboard",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptDeviceAuthCopyLink": "Copy link",
+  "@promptDeviceAuthCopyLink": {
+    "description": "Button that copies the link of the page where the sign-in is approved to the clipboard",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptDeviceAuthOpenLink": "Open link",
+  "@promptDeviceAuthOpenLink": {
+    "description": "Button that opens the page where the sign-in is approved in the browser of this device",
+    "type": "text",
+    "placeholders": {}
   },
   "messageLoginFailed": "Login Failed...",
   "@messageLoginFailed": {
