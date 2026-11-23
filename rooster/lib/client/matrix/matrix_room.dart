@@ -1220,6 +1220,7 @@ class MatrixRoom extends Room implements RoomSendPreparation {
     // someone typing in any room.
     if (update.timeline == null &&
         update.state == null &&
+        update.stateAfter == null &&
         update.accountData == null &&
         update.summary == null &&
         update.unreadNotifications == null) {

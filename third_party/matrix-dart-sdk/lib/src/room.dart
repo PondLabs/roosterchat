@@ -59,6 +59,9 @@ class Room {
   /// The count of highlighted notifications.
   int highlightCount;
 
+  /// The count of unread notifications per thread root event ID (Matrix v1.4). // ROOSTER
+  Map<String, UnreadNotificationCounts> unreadThreadNotifications; // ROOSTER
+
   /// A token that can be supplied to the from parameter of the rooms/{roomId}/messages endpoint.
   String? prev_batch;
 
@@ -89,12 +92,30 @@ class Room {
         'membership': membership.toString().split('.').last,
         'highlight_count': highlightCount,
         'notification_count': notificationCount,
+        // ROOSTER: Persist per-thread unread notification counts (Matrix v1.4).
+        if (unreadThreadNotifications.isNotEmpty)
+          'unread_thread_notifications':
+              unreadThreadNotifications.map((k, v) => MapEntry(k, v.toJson())),
         'prev_batch': prev_batch,
         'summary': summary.toJson(),
         'last_event': lastEvent?.toJson(),
       };
 
   factory Room.fromJson(Map<String, dynamic> json, Client client) {
+    // ROOSTER: Restore and normalize per-thread unread notification counts safely.
+    final parsedThreads = json['unread_thread_notifications'] != null
+        ? JoinedRoomUpdate.fromJson({
+            'unread_thread_notifications': json['unread_thread_notifications'],
+          }).unreadThreadNotifications?.map(
+              (k, v) => MapEntry(
+                k,
+                UnreadNotificationCounts(
+                  notificationCount: v.notificationCount ?? 0,
+                  highlightCount: v.highlightCount ?? 0,
+                ),
+              ),
+            )
+        : null;
     final room = Room(
       client: client,
       id: json['id'],
@@ -104,6 +125,7 @@ class Room {
       ),
       notificationCount: json['notification_count'],
       highlightCount: json['highlight_count'],
+      unreadThreadNotifications: parsedThreads, // ROOSTER
       prev_batch: json['prev_batch'],
       summary: RoomSummary.fromJson(Map<String, dynamic>.from(json['summary'])),
     );
@@ -297,11 +319,49 @@ class Room {
     return i18n.emptyChat;
   }
 
-  /// The topic of the room if set by a participant.
+  // ROOSTER: Extract a representation from Matrix v1.15 MSC3765 `m.topic`
+  // (`m.text` array of `{body, mimetype?}` entries). An omitted/null `mimetype`
+  // defaults to `text/plain` per MSC1767.
+  String? _getRichTopicRepresentation(String desiredMimeType) {
+    final content = getState(EventTypes.RoomTopic)?.content;
+    if (content == null) return null;
+    final mTopic = content['m.topic'];
+    if (mTopic is! Map) return null;
+    final representations = mTopic['m.text'];
+    if (representations is! List) return null;
+    for (final entry in representations) {
+      if (entry is! Map) continue;
+      final body = entry['body'];
+      if (body is! String) continue;
+      final rawMimeType = entry['mimetype'];
+      final String normalizedMimeType;
+      if (rawMimeType == null) {
+        normalizedMimeType = 'text/plain';
+      } else if (rawMimeType is String) {
+        normalizedMimeType = rawMimeType.split(';').first.trim().toLowerCase();
+      } else {
+        continue;
+      }
+      if (normalizedMimeType == desiredMimeType) {
+        return body;
+      }
+    }
+    return null;
+  }
+
+  /// The plain-text topic of the room if set by a participant. // ROOSTER
+  /// Reads Matrix v1.15 `m.topic` (`text/plain`, or omitted `mimetype`) first // ROOSTER
+  /// and falls back to the legacy `topic` field. // ROOSTER
   String get topic {
+    final richPlain = _getRichTopicRepresentation('text/plain'); // ROOSTER
+    if (richPlain != null) return richPlain; // ROOSTER
     final t = getState(EventTypes.RoomTopic)?.content['topic'];
     return t is String ? t : '';
   }
+
+  /// The HTML topic of the room from Matrix v1.15 `m.topic` (`text/html`), // ROOSTER
+  /// or `null` when no HTML representation is present. // ROOSTER
+  String? get topicHtml => _getRichTopicRepresentation('text/html'); // ROOSTER
 
   /// The avatar of the room if set by a participant.
   /// Please note, that necessary room members are lazy loaded. To be sure
@@ -482,13 +542,20 @@ class Room {
     this.membership = Membership.join,
     this.notificationCount = 0,
     this.highlightCount = 0,
+    Map<String, UnreadNotificationCounts>? unreadThreadNotifications, // ROOSTER
     this.prev_batch,
     required this.client,
     Map<String, BasicEvent>? roomAccountData,
     RoomSummary? summary,
     this.lastEvent,
     LatestReceiptState? receiptState,
-  })  : roomAccountData = roomAccountData ?? <String, BasicEvent>{},
+  })  : unreadThreadNotifications = unreadThreadNotifications != null // ROOSTER
+            ? Map<String, UnreadNotificationCounts>.from(
+                // ROOSTER
+                unreadThreadNotifications, // ROOSTER
+              ) // ROOSTER
+            : <String, UnreadNotificationCounts>{}, // ROOSTER
+        roomAccountData = roomAccountData ?? <String, BasicEvent>{},
         summary = summary ??
             RoomSummary.fromJson({
               'm.joined_member_count': 0,
@@ -541,12 +608,30 @@ class Room {
         {'name': newName},
       );
 
-  /// Call the Matrix API to change the topic of this room.
-  Future<String> setDescription(String newName) => client.setRoomStateWithKey(
+  /// Call the Matrix API to change the topic of this room. // ROOSTER
+  /// Writes both legacy `topic` and Matrix v1.15 MSC3765 `m.topic` (`m.text`). // ROOSTER
+  Future<String> setDescription(String newName, {String? html}) => // ROOSTER
+      client.setRoomStateWithKey(
         id,
         EventTypes.RoomTopic,
         '',
-        {'topic': newName},
+        {
+          'topic': newName,
+          // ROOSTER: Matrix v1.15 MSC3765 rich topic representation.
+          'm.topic': {
+            'm.text': [
+              {
+                'body': newName,
+                'mimetype': 'text/plain',
+              },
+              if (html != null && html.isNotEmpty)
+                {
+                  'body': html,
+                  'mimetype': 'text/html',
+                },
+            ],
+          },
+        },
       );
 
   /// Add a tag to the room.

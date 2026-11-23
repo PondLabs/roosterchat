@@ -75,7 +75,11 @@ class HomeserverClock {
   void readSync(SyncUpdate sync, {required String homeserver}) {
     DateTime? serverTime;
     for (final room in sync.rooms?.join?.values ?? const <JoinedRoomUpdate>[]) {
-      for (final event in [...?room.state, ...?room.timeline?.events]) {
+      for (final event in [
+        ...?room.state,
+        ...?room.stateAfter,
+        ...?room.timeline?.events
+      ]) {
         final age = event.unsigned?['age'];
         if (age is! int || age < 0) continue;
         if (event.senderId.domain != homeserver) continue;

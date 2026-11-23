@@ -492,6 +492,30 @@ void main() {
 
       expect(changes, hasLength(1));
     });
+
+    test(
+        "a membership that arrives in state_after (Matrix v1.16, "
+        "use_state_after=true) refreshes the list", () async {
+      // A v1.16 server answering use_state_after=true omits `state` and
+      // sends the same changes in `state_after`.
+      final changes = <void>[];
+      final sub = component.onSessionsChanged.listen(changes.add);
+      addTearDown(sub.cancel);
+
+      component.onSync(matrix.JoinedRoomUpdate(stateAfter: [
+        matrix.MatrixEvent(
+          type: MatrixActivitiesComponent.callMemberStateEvent,
+          content: const {},
+          senderId: otherUserId,
+          stateKey: "_${otherUserId}_DEVICEB_m.call",
+          eventId: r"$left",
+          originServerTs: DateTime.now(),
+        ),
+      ]));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(changes, hasLength(1));
+    });
   });
 
   // A client with no delayed leave (a homeserver without delayed events)
