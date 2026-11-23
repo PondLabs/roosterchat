@@ -3,6 +3,56 @@ import 'dart:convert';
 import 'package:matrix/matrix.dart';
 
 extension Msc2966OidcDynamicClientRegistration on Client {
+  // ROOSTER: pick how this client identifies itself to the authorization
+  // server: a Client ID Metadata Document (Matrix v1.15, MSC2965) when the
+  // server announces `client_id_metadata_document_supported: true` and the
+  // app has one, otherwise RFC 7591 Dynamic Client Registration.
+  /// Returns the client to use for an OAuth 2.0 login. With CIMD the
+  /// `client_id` is [clientMetadataDocumentUri] itself and nothing is sent to
+  /// the server; otherwise the client is registered at the server's
+  /// `registration_endpoint`. Throws [OidcClientRegistrationException] when
+  /// the server offers neither.
+  Future<OidcClientData> obtainOidcClient({
+    required List<Uri> redirectUris,
+    required OidcApplicationType applicationType,
+    required OidcClientInformation clientInformation,
+    Uri? clientMetadataDocumentUri,
+    GetAuthMetadataResponse? authMetadata,
+    Map<String, OidcClientInformation>? localizedClientInformation,
+  }) async {
+    authMetadata ??= await getAuthMetadata();
+    if (clientMetadataDocumentUri != null &&
+        authMetadata.clientIdMetadataDocumentSupported == true) {
+      if (!isValidClientIdMetadataDocumentUri(clientMetadataDocumentUri)) {
+        throw ArgumentError.value(
+          clientMetadataDocumentUri,
+          'clientMetadataDocumentUri',
+          'A client ID metadata document URL must be https, with a path and no fragment',
+        );
+      }
+      final clientId = clientMetadataDocumentUri.toString();
+      return OidcClientData(
+        clientId: clientId,
+        clientIdIssuedAt: null,
+        clientInformation: clientInformation,
+        additionalProperties: {
+          'client_id': clientId,
+          ...clientInformation.toJson(),
+        },
+        isClientIdMetadataDocument: true,
+      );
+    }
+    if (authMetadata.registrationEndpoint == null) {
+      throw const OidcClientRegistrationException();
+    }
+    return registerOidcClient(
+      redirectUris: redirectUris,
+      applicationType: applicationType,
+      clientInformation: clientInformation,
+      localizedClientInformation: localizedClientInformation,
+    );
+  }
+
   /// Registers a new OIDC Client to retrieve a Client ID for OIDC login.
   /// Please be aware that there are certain requirements for the [redirectUris],
   /// and the Urls in `clientInformation`.
@@ -89,17 +139,39 @@ extension Msc2966OidcDynamicClientRegistration on Client {
 
 enum OidcApplicationType { web, native }
 
+// ROOSTER: the server offers neither CIMD nor Dynamic Client Registration.
+class OidcClientRegistrationException implements Exception {
+  const OidcClientRegistrationException();
+
+  @override
+  String toString() =>
+      'OidcClientRegistrationException: the server supports neither client ID metadata documents nor dynamic client registration';
+}
+
+// ROOSTER: a client ID metadata document URL is https, has a path and no
+// fragment (draft-ietf-oauth-client-id-metadata-document).
+bool isValidClientIdMetadataDocumentUri(Uri uri) =>
+    uri.scheme == 'https' &&
+    uri.host.isNotEmpty &&
+    uri.path.length > 1 &&
+    !uri.hasFragment &&
+    uri.userInfo.isEmpty;
+
 class OidcClientData {
   final String clientId;
   final DateTime? clientIdIssuedAt;
   final OidcClientInformation clientInformation;
   final Map<String, Object?> additionalProperties;
 
+  // ROOSTER: true when [clientId] is a client ID metadata document URL.
+  final bool isClientIdMetadataDocument;
+
   const OidcClientData({
     required this.clientId,
     required this.clientIdIssuedAt,
     required this.clientInformation,
     required this.additionalProperties,
+    this.isClientIdMetadataDocument = false,
   });
 
   factory OidcClientData.fromJson(Map<String, Object?> json) => OidcClientData(
