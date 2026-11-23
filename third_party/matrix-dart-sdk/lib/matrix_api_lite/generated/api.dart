@@ -4729,12 +4729,15 @@ class Api {
   /// [reason] The reason the content is being reported.
   ///
   /// [score] The score to rate this content as where -100 is most offensive
-  /// and 0 is inoffensive.
+  /// and 0 is inoffensive. Removed in Matrix v1.18 (MSC4277): it is sent only
+  /// when a caller passes it.
+  // ROOSTER: v1.18 (MSC4277) removed `score`. It stays optional, and is left
+  // out of the body unless passed, so existing callers keep compiling.
   Future<void> reportEvent(
     String roomId,
     String eventId, {
     String? reason,
-    int? score,
+    @Deprecated('Removed in Matrix v1.18 (MSC4277)') int? score,
   }) async {
     final requestUri = Uri(
       path:
@@ -4752,9 +4755,9 @@ class Api {
     final response = await httpClient.send(request);
     final responseBody = await response.stream.toBytes();
     if (response.statusCode != 200) unexpectedResponse(response, responseBody);
-    final responseString = utf8.decode(responseBody);
-    final json = jsonDecode(responseString);
-    return ignore(json);
+    // ROOSTER: any 200 is a success, `{}`, with extra fields or empty
+    // (v1.18 MSC4277 lets a server answer 200 whatever the event), so the
+    // body is not parsed.
   }
 
   /// This endpoint is used to send a message event to a room. Message events
