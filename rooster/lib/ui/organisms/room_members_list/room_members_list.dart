@@ -1,6 +1,8 @@
 import 'package:rooster/client/components/direct_messages/direct_message_component.dart';
+import 'package:rooster/client/matrix/matrix_room.dart';
 import 'package:rooster/client/room.dart';
 import 'package:rooster/config/layout_config.dart';
+import 'package:rooster/ui/molecules/profile/e2ee_trust.dart';
 import 'package:rooster/ui/molecules/user_list.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -36,7 +38,19 @@ class _RoomMembersListWidgetState extends State<RoomMembersListWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (!isDirectMessage) tiamat.Text.labelLow(labelRoomMembersHeader),
+        if (!isDirectMessage)
+          Row(
+            spacing: 6,
+            children: [
+              Flexible(child: tiamat.Text.labelLow(labelRoomMembersHeader)),
+              // The members' trust together; nothing when not encrypted.
+              if (widget.room case MatrixRoom room)
+                RoomE2eeTrustShield(
+                    key: const ValueKey("room-members-trust"),
+                    room: room.matrixRoom,
+                    size: 14),
+            ],
+          ),
         Expanded(
           child: SizedBox(
             width: MediaQuery.sizeOf(context).desktop

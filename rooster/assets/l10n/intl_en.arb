@@ -2400,6 +2400,42 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelE2eeTrustVerified": "Verified",
+  "@labelE2eeTrustVerified": {
+    "description": "Next to a shield icon: this user's (or every member's) encryption identity and devices are verified",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelE2eeTrustUnverified": "Not verified",
+  "@labelE2eeTrustUnverified": {
+    "description": "Next to a shield icon: this user's (or a member's) encryption identity or one of their devices is not verified",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelE2eeTrustIdentityChanged": "Identity changed",
+  "@labelE2eeTrustIdentityChanged": {
+    "description": "Next to a red shield icon: the encryption identity of a user the user had verified was replaced by a new one",
+    "type": "text",
+    "placeholders": {}
+  },
+  "tooltipE2eeTrustVerified": "Encrypted, and verified: you know these keys are theirs",
+  "@tooltipE2eeTrustVerified": {
+    "description": "Tooltip of the green shield of a verified user or room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "tooltipE2eeTrustUnverified": "Encrypted, but not verified: verify to make sure no one else reads along",
+  "@tooltipE2eeTrustUnverified": {
+    "description": "Tooltip of the grey shield of a user or room not verified yet",
+    "type": "text",
+    "placeholders": {}
+  },
+  "tooltipE2eeTrustIdentityChanged": "Their identity changed since you verified them. Verify them again before you trust their messages",
+  "@tooltipE2eeTrustIdentityChanged": {
+    "description": "Tooltip of the red shield shown when a verified user's encryption identity was replaced",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelLightboxPosition": "{position} / {total}",
   "@labelLightboxPosition": {
     "description": "Counter at the top of the image viewer while it pages through several photos: which one is shown, of how many",
@@ -2463,6 +2499,20 @@
   "labelNoiseSuppressionButtonOff": "Off",
   "@labelNoiseSuppressionButtonOff": {
     "description": "In the tooltip of the call panel's noise suppression button, after its name: noise suppression is off",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelSpoilerReason": "Spoiler: {reason}",
+  "@labelSpoilerReason": {
+    "description": "Shown before a hidden spoiler in a message, with the reason its sender gave for hiding it",
+    "type": "text",
+    "placeholders": {
+      "reason": {}
+    }
+  },
+  "labelSpoilerHidden": "Hidden spoiler, tap to reveal",
+  "@labelSpoilerHidden": {
+    "description": "Read by screen readers in place of the hidden text of a spoiler in a message",
     "type": "text",
     "placeholders": {}
   },
@@ -6909,6 +6959,56 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelProfileSessions": "{howMany,plural, =1{1 session}other{{howMany} sessions}}",
+  "@labelProfileSessions": {
+    "description": "Heading of the list of another user's sessions (devices) on their profile, with how many there are",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "labelProfileSessionsDescription": "A blocked session gets no keys to the messages you send from now on.",
+  "@labelProfileSessionsDescription": {
+    "description": "Under the heading of another user's sessions on their profile: what blocking one of them does",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSessionVerified": "Verified",
+  "@labelProfileSessionVerified": {
+    "description": "State of one of another user's sessions (devices) on their profile: it is verified",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSessionUnverified": "Not verified",
+  "@labelProfileSessionUnverified": {
+    "description": "State of one of another user's sessions (devices) on their profile: it is not verified",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelProfileSessionBlocked": "Blocked",
+  "@labelProfileSessionBlocked": {
+    "description": "State of one of another user's sessions on their profile: the user blocked it, it gets no keys to their messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptProfileBlockSession": "Block",
+  "@promptProfileBlockSession": {
+    "description": "Button next to one of another user's sessions on their profile: stops sending it the keys to the user's messages",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptProfileUnblockSession": "Unblock",
+  "@promptProfileUnblockSession": {
+    "description": "Button next to a blocked session of another user on their profile: sends it the keys to the user's messages again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageProfileDeviceChangeFailed": "This session could not be changed. Close the profile and try again.",
+  "@messageProfileDeviceChangeFailed": {
+    "description": "Error shown when blocking or unblocking one of a user's sessions (devices) on their profile did not work",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelProfileSourceTitle": "Source",
   "@labelProfileSourceTitle": {
     "description": "Title of the dialog that shows the raw JSON of a user's profile (developer mode)",
@@ -6924,6 +7024,20 @@
   "promptProfileVerifyUser": "Verify user",
   "@promptProfileVerifyUser": {
     "description": "Button on another user's profile card to start end-to-end encryption verification with them",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageProfileIdentityChanged": "{user}'s identity changed since you verified them. Until you verify them again, their messages may come from someone else.",
+  "@messageProfileIdentityChanged": {
+    "description": "Alert on the profile of a user the user had verified, whose encryption identity was replaced since, with their name",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "promptProfileWithdrawVerification": "Withdraw verification",
+  "@promptProfileWithdrawVerification": {
+    "description": "Button on the alert of a user whose encryption identity changed: accepts the new identity as not verified, and stops the alert",
     "type": "text",
     "placeholders": {}
   },
@@ -8856,6 +8970,98 @@
   "labelMatrixExplainOnlineKeyBackup": "Online key backup will allow you to retrieve message history in the event that you lose access to all your sessions",
   "@labelMatrixExplainOnlineKeyBackup": {
     "description": "Explains what the message backup does",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKeyBackupVersion": "Version: {version}",
+  "@labelKeyBackupVersion": {
+    "description": "Settings > Security > Message backup: the version of the backup on the server, a number the server gives it",
+    "type": "text",
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "labelKeyBackupKeyCount": "{howMany,plural, =0{No keys stored}=1{1 key stored}other{{howMany} keys stored}}",
+  "@labelKeyBackupKeyCount": {
+    "description": "Settings > Security > Message backup: how many message keys the backup on the server holds",
+    "type": "text",
+    "placeholders": {
+      "howMany": {}
+    }
+  },
+  "labelKeyBackupEtag": "Change tag (etag): {etag}",
+  "@labelKeyBackupEtag": {
+    "description": "Settings > Security > Message backup: the server's tag for the backup's current contents, which changes whenever keys are added. 'etag' is the protocol's name for it",
+    "type": "text",
+    "placeholders": {
+      "etag": {}
+    }
+  },
+  "labelKeyBackupAlgorithm": "Algorithm: {algorithm}",
+  "@labelKeyBackupAlgorithm": {
+    "description": "Settings > Security > Message backup: the encryption scheme of the backup, a protocol name such as m.megolm_backup.v1.curve25519-aes-sha2",
+    "type": "text",
+    "placeholders": {
+      "algorithm": {}
+    }
+  },
+  "labelKeyBackupNone": "There is no backup on your server.",
+  "@labelKeyBackupNone": {
+    "description": "Settings > Security > Message backup: the server holds no backup of your message keys",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyBackupLoadFailed": "Could not load the details of your backup.",
+  "@messageKeyBackupLoadFailed": {
+    "description": "Settings > Security > Message backup: asking the server about the backup failed",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptKeyBackupRotate": "Rotate key",
+  "@promptKeyBackupRotate": {
+    "description": "Settings > Security > Message backup: button that replaces the backup with a new one under a new key",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptKeyBackupDelete": "Delete backup",
+  "@promptKeyBackupDelete": {
+    "description": "Settings > Security > Message backup: button that deletes the backup from the server",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyBackupConfirmRotate": "A new backup with a new key replaces this one, and every key on this device is saved in it again. The current backup is deleted from your server.",
+  "@messageKeyBackupConfirmRotate": {
+    "description": "Settings > Security > Message backup: asks before rotating the backup's key",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyBackupConfirmDelete": "Your backup is deleted from your server and backup is turned off on all your sessions. Messages that no session of yours can decrypt will be lost.",
+  "@messageKeyBackupConfirmDelete": {
+    "description": "Settings > Security > Message backup: asks before deleting the backup",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKeyBackupUnlockTitle": "Unlock your secret storage",
+  "@labelKeyBackupUnlockTitle": {
+    "description": "Settings > Security > Message backup: title of the dialog asking for the recovery key, which keeps the new backup key",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelKeyBackupUnlockHint": "Recovery key or security phrase",
+  "@labelKeyBackupUnlockHint": {
+    "description": "Settings > Security > Message backup: placeholder of the field for the recovery key or the security phrase",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyBackupRotateFailed": "The key was not rotated. Check your recovery key and try again.",
+  "@messageKeyBackupRotateFailed": {
+    "description": "Settings > Security > Message backup: rotating the backup's key failed, for example because of a wrong recovery key",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageKeyBackupDeleteFailed": "The backup was not deleted. Try again.",
+  "@messageKeyBackupDeleteFailed": {
+    "description": "Settings > Security > Message backup: deleting the backup failed",
     "type": "text",
     "placeholders": {}
   },
