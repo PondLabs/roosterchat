@@ -3,6 +3,7 @@
 // nothing deleted) and tries again with a growing wait without overriding a
 // token-refresh stop, while a suspended account keeps syncing and reports
 // 403 M_USER_SUSPENDED from forbidden actions (Matrix v1.12).
+// ignore_for_file: invalid_use_of_visible_for_testing_member
 @TestOn('vm')
 library;
 
