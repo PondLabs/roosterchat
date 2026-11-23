@@ -129,6 +129,19 @@ void main() {
       expect(built.actions.stickySent, isEmpty);
     });
 
+    test('send.event alone does not send a sticky event as a plain one',
+        () async {
+      // The sticky capability was never asked for, so it is not refused
+      // either: only the send.event capability could take the request.
+      final built = buildManager(room: FakeRoom());
+      await built.runner.manager.requestCapabilities([sendMember]);
+
+      final reply = await built.runner.manager.handleEvent(stickyRequest);
+
+      expect(
+          errorOf(reply), 'Permission denied: missing capability $sendSticky');
+    });
+
     test('a sticky event needs the send capability for its type', () async {
       final built =
           buildManager(room: FakeRoom(), answer: (_) => const [sendSticky]);
