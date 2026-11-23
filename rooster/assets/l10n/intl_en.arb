@@ -8297,6 +8297,70 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelReauthenticateTitle": "Sign in again",
+  "@labelReauthenticateTitle": {
+    "description": "Title of the dialog, and of the alert on the Home screen, when the server no longer accepts this device's session and the person has to sign in again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageReauthenticateAlert": "Your session on this device has ended. Your messages and encryption keys are still here: sign in again to keep using them.",
+  "@messageReauthenticateAlert": {
+    "description": "Alert on the Home screen when the server no longer accepts this device's session; tapping it opens the dialog to sign in again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageReauthenticate": "The session of {user} on this device has ended. Sign in again to go on where you left off: this device keeps its messages and encryption keys.",
+  "@messageReauthenticate": {
+    "description": "In the dialog to sign in again, when the server no longer accepts this device's session; user is the account's Matrix ID",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "messageReauthenticateNoMethod": "Rooster cannot sign this device in again from here yet. You can try again later; nothing was deleted from this device.",
+  "@messageReauthenticateNoMethod": {
+    "description": "In the dialog to sign in again, when the server offers no way to sign this same device in again (a server that signs in through its own page)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelReauthenticatePassword": "Password",
+  "@labelReauthenticatePassword": {
+    "description": "Label of the password field in the dialog to sign in again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptReauthenticate": "Sign in",
+  "@promptReauthenticate": {
+    "description": "Button in the dialog to sign in again, under the password",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptReauthenticateSso": "Continue with {provider}",
+  "@promptReauthenticateSso": {
+    "description": "Button in the dialog to sign in again through single sign-on; provider is the sign-in provider's name, or the word for the server's own sign-in",
+    "type": "text",
+    "placeholders": {
+      "provider": {}
+    }
+  },
+  "promptReauthenticateRetry": "Try again",
+  "@promptReauthenticateRetry": {
+    "description": "Button in the dialog to sign in again that asks the server to renew the session once more, without a password",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptReauthenticateLater": "Not now",
+  "@promptReauthenticateLater": {
+    "description": "Button that closes the dialog to sign in again; the alert on the Home screen opens it again",
+    "type": "text",
+    "placeholders": {}
+  },
+  "errorReauthenticateOtherDevice": "The server signed in another account or device, so nothing changed here. Sign in with this account.",
+  "@errorReauthenticateOtherDevice": {
+    "description": "In the dialog to sign in again, when the server answered for another account or another device than this one",
+    "type": "text",
+    "placeholders": {}
+  },
   "updateInstalledTitle": "Update Installed",
   "@updateInstalledTitle": {
     "description": "Title for the dialog which is shown when an update has been installed",
@@ -9448,6 +9512,84 @@
   "labelMatrixExplainOnlineKeyBackup": "Online key backup will allow you to retrieve message history in the event that you lose access to all your sessions",
   "@labelMatrixExplainOnlineKeyBackup": {
     "description": "Explains what the message backup does",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDehydratedDeviceTitle": "Messages while you are signed out",
+  "@labelDehydratedDeviceTitle": {
+    "description": "Settings > Security: title of the option that keeps a stand-in session (an MSC3814 dehydrated device) on the server to receive message keys while no session is signed in",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDehydratedDeviceExplanation": "Your server keeps an encrypted stand-in session, locked with your recovery key. When you sign in again and verify with your recovery key, the messages sent while all your sessions were signed out can be read.",
+  "@labelDehydratedDeviceExplanation": {
+    "description": "Settings > Security: explains the stand-in session (dehydrated device) option",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDehydratedDeviceOn": "On for this account.",
+  "@labelDehydratedDeviceOn": {
+    "description": "Settings > Security: the stand-in session option is turned on, for every session of the account",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDehydratedDeviceOff": "Off for this account.",
+  "@labelDehydratedDeviceOff": {
+    "description": "Settings > Security: the stand-in session option is turned off",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageDehydratedDeviceUnsupported": "Your server does not support this, so it cannot be turned on.",
+  "@messageDehydratedDeviceUnsupported": {
+    "description": "Settings > Security: the server does not offer stand-in sessions (it does not announce MSC3814), so the option is off",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptDehydratedDeviceEnable": "Turn on",
+  "@promptDehydratedDeviceEnable": {
+    "description": "Settings > Security: button that turns the stand-in session option on",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptDehydratedDeviceDisable": "Turn off",
+  "@promptDehydratedDeviceDisable": {
+    "description": "Settings > Security: button that turns the stand-in session option off",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageDehydratedDeviceConfirmDisable": "The stand-in session is deleted from your server. Messages sent while all your sessions are signed out can no longer be read when you sign in again.",
+  "@messageDehydratedDeviceConfirmDisable": {
+    "description": "Settings > Security: asks before turning the stand-in session option off",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDehydratedDeviceUnlockTitle": "Unlock your secret storage",
+  "@labelDehydratedDeviceUnlockTitle": {
+    "description": "Settings > Security: title of the dialog asking for the recovery key, which keeps the stand-in session's key",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelDehydratedDeviceUnlockHint": "Recovery key or security phrase",
+  "@labelDehydratedDeviceUnlockHint": {
+    "description": "Settings > Security: placeholder of the field for the recovery key or the security phrase, to turn the stand-in session option on",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageDehydratedDeviceEnableFailed": "It was not turned on. Check your recovery key and try again.",
+  "@messageDehydratedDeviceEnableFailed": {
+    "description": "Settings > Security: turning the stand-in session option on failed, for example because of a wrong recovery key or a server error",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageDehydratedDeviceKeyMismatch": "The stand-in session on your server does not open with the key in your secret storage, so it was left as it is.",
+  "@messageDehydratedDeviceKeyMismatch": {
+    "description": "Settings > Security: the stand-in session already on the server could not be opened with the key kept in secret storage",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageDehydratedDeviceDisableFailed": "It was not turned off. Try again.",
+  "@messageDehydratedDeviceDisableFailed": {
+    "description": "Settings > Security: turning the stand-in session option off failed",
     "type": "text",
     "placeholders": {}
   },

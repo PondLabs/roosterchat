@@ -7,6 +7,7 @@ import 'package:rooster/client/components/space_component.dart';
 import 'package:rooster/client/matrix/components/account_switch_prefix/matrix_account_switch_prefix.dart';
 import 'package:rooster/client/matrix/components/calendar_room_component/matrix_calendar_room_component.dart';
 import 'package:rooster/client/matrix/components/command_component/matrix_command_component.dart';
+import 'package:rooster/client/matrix/components/dehydrated_devices/matrix_dehydrated_devices_component.dart';
 import 'package:rooster/client/matrix/components/direct_messages/matrix_direct_messages_component.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_emoticon_component.dart';
 import 'package:rooster/client/matrix/components/emoticon/matrix_emoticon_state_manager.dart';
@@ -76,6 +77,8 @@ class ComponentRegistry {
       MatrixUserColorComponent(client),
       MatrixPetNameComponent(client),
       MatrixKeyVerificationComponent(client),
+      // MSC3814, opt-in: without it a login is as before.
+      MatrixDehydratedDevicesComponent(client),
       MatrixPollComponent(client),
       MatrixWidgetComponent(client),
       MatrixGifComponent(client),

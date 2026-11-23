@@ -510,3 +510,34 @@ Changes since the copy:
   belongs to (as T3.1b does for `m.room_key`), and adds the bundle sender's
   Curve25519 key to the forwarding chain. `onImported`, `onRejected` and
   `lastImport` tell the app. Pending bundles and inviters live in memory.
+- Inbound Megolm sessions compared with the database (T3.4b):
+  `KeyManager.setInboundGroupSession` compares the new session with the one
+  in memory or, when none is there (as after a restart), with the one the
+  database keeps, and keeps whichever starts at the earlier index (or, at the
+  same index, has the shorter forwarding chain). Upstream compared only with
+  memory, so after a restart a session from the key backup, a forwarded key,
+  an import or a bundle that starts later replaced a stored one from index 0
+  and earlier messages stopped decrypting. The stored session is read
+  without `loadInboundGroupSession` (which writes it into memory after the
+  read, over what a concurrent call may have just set), and memory is checked
+  again after the read, so of two calls at once the better session still
+  wins. A stored session that wins goes in memory, where callers look next.
+  An unreadable stored session is replaced.
+- Dehydrated devices, opt-in (MSC3814, T3.5): `dehydratedDeviceSetup`
+  asks nothing of a server that does not announce `org.matrix.msc3814` in
+  `unstable_features` of `/versions` (`dehydratedDevicesSupported`; no spec
+  version has the stable endpoints yet) and returns a
+  `DehydratedDeviceResult` instead of nothing. Only a 404 makes a new
+  dehydrated device; upstream also replaced it on any other error answer
+  but a 400 (a 403, a 429...), dropping the events waiting for it. A key that is missing from secret
+  storage (`org.matrix.msc3814`) or does not open the device leaves the
+  device on the server (`keyMismatch`). The device's cross-signing chain
+  may end at a master key whose private key is in the secret storage just
+  unlocked, as after a login the device is read while the session is being
+  verified, before its master key is marked (upstream replaced it then).
+  The room keys go to the session's own key manager (memory and database,
+  through `setInboundGroupSession`), an event that does not decrypt is
+  skipped, and a repeated `next_batch` ends the loop. Nothing of the
+  session's own account or Olm sessions changes on any failure.
+  `deleteDehydratedDevice` and `deleteDehydratedDeviceIfSupported` are
+  MSC3814's DELETE, for turning the opt-in off.
