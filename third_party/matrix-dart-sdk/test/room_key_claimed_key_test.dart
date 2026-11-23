@@ -308,8 +308,6 @@ void main() {
           null,
         );
         expect(session.senderClaimedKeys, isEmpty);
-        expect(session.content, isNot(contains('sender_claimed_ed25519_key')));
-        expect(session.content, isNot(contains('sender_claimed_keys')));
 
         final reloaded = await reload(sessionId);
         expect(reloaded.senderKey, attacker.identityKey);
@@ -321,6 +319,12 @@ void main() {
         // key nor ours goes out with it.
         expect(await forwardTo(attacker, sessionId), isNull);
         expect(await backedUpClaim(sessionId), isEmpty);
+
+        // Nor is any claim the sender wrote in the content kept.
+        expect(session.content, isNot(contains('sender_claimed_ed25519_key')));
+        expect(session.content, isNot(contains('sender_claimed_keys')));
+        expect(reloaded.content, isNot(contains('sender_claimed_ed25519_key')));
+        expect(reloaded.content, isNot(contains('sender_claimed_keys')));
       },
     );
 
