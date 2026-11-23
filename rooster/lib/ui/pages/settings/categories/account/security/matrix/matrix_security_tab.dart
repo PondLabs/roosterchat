@@ -1,4 +1,5 @@
 import 'package:rooster/client/alert.dart';
+import 'package:rooster/client/matrix/components/dehydrated_devices/matrix_dehydrated_devices_component.dart';
 import 'package:rooster/client/matrix/components/key_portability/megolm_key_portability.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/debug/log.dart';
@@ -15,6 +16,7 @@ import 'package:tiamat/tiamat.dart';
 import 'package:tiamat/tiamat.dart' as tiamat;
 
 import 'cross_signing/cross_signing_page.dart';
+import 'dehydrated_device/matrix_dehydrated_device_panel.dart';
 import 'key_backup/matrix_key_backup_panel.dart';
 import 'key_portability/matrix_key_portability_panel.dart';
 
@@ -621,9 +623,18 @@ class _MatrixSecurityTabState extends State<MatrixSecurityTab> {
           const tiamat.Seperator(),
           MatrixKeyPortabilityPanel(controller: keyPortability),
         ],
+        // MSC3814: keys for messages sent while no session is signed in.
+        if (widget.client.getMatrixClient().encryption != null &&
+            dehydratedDevices != null) ...[
+          const tiamat.Seperator(),
+          MatrixDehydratedDevicePanel(controller: dehydratedDevices!),
+        ],
       ],
     );
   }
+
+  late final dehydratedDevices =
+      widget.client.getComponent<MatrixDehydratedDevicesComponent>();
 
   late final keyPortability =
       MegolmKeyPortability(widget.client.getMatrixClient());
