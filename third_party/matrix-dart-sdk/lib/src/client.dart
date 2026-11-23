@@ -573,6 +573,10 @@ class Client extends MatrixApi {
         try {
           wellKnown = await getWellknown();
           homeserver = wellKnown.mHomeserver.baseUrl.stripTrailingSlash();
+        } on WellKnownRedirectException {
+          // ROOSTER: a redirect loop or a redirect to a non-HTTP(S) URL is a
+          // broken discovery file (FAIL_PROMPT in the spec), not "no file".
+          rethrow;
         } catch (e) {
           Logs().v('Found no well known information', e);
         }
@@ -591,14 +595,10 @@ class Client extends MatrixApi {
         );
       }
 
-      final loginTypes = await getLoginFlows() ?? [];
-      if (!loginTypes.any((f) => supportedLoginTypes.contains(f.type))) {
-        throw BadServerLoginTypesException(
-          loginTypes.map((f) => f.type).toSet(),
-          supportedLoginTypes,
-        );
-      }
-
+      // ROOSTER: ask for `auth_metadata` (Matrix v1.15 OAuth 2.0 API) before
+      // requiring `/v3/login`: a server whose accounts live in an OAuth
+      // authorization server (MAS) may answer `/v3/login` with 404 or no
+      // flows, and is still a server we can sign in to.
       fetchAuthMetadata ??= versions.versions.any(
         (v) => isVersionGreaterThanOrEqualTo(v, 'v1.15'),
       );
@@ -610,7 +610,29 @@ class Client extends MatrixApi {
           if (e.error != MatrixError.M_UNRECOGNIZED) {
             Logs().w('Unable to discover OIDC auth metadata.', e, s);
           }
+        } catch (e, s) {
+          Logs().w('Unable to read OIDC auth metadata.', e, s);
         }
+      }
+
+      final List<LoginFlow> loginTypes;
+      if (authMetadata == null) {
+        loginTypes = await getLoginFlows() ?? [];
+        if (!loginTypes.any((f) => supportedLoginTypes.contains(f.type))) {
+          throw BadServerLoginTypesException(
+            loginTypes.map((f) => f.type).toSet(),
+            supportedLoginTypes,
+          );
+        }
+      } else {
+        List<LoginFlow> flows;
+        try {
+          flows = await getLoginFlows() ?? [];
+        } catch (e) {
+          Logs().v('No legacy login flows next to OAuth 2.0', e);
+          flows = [];
+        }
+        loginTypes = flows;
       }
 
       return (wellKnown, versions, loginTypes, authMetadata);
@@ -637,7 +659,8 @@ class Client extends MatrixApi {
   }) =>
       requestAndCache(
         () async {
-          final wellKnownResponse = await httpClient.get(
+          // ROOSTER: follow 301/302/307/308 (MSC4402, Matrix v1.20).
+          final wellKnownResponse = await _getFollowingWellKnownRedirects(
             Uri.https(
               userID?.domain ?? homeserver!.host,
               '/.well-known/matrix/client',
@@ -654,6 +677,71 @@ class Client extends MatrixApi {
         cacheLifetime: cacheLifetime,
         throwOnUpdateFailure: throwOnUpdateFailure,
       );
+
+  // ROOSTER: MSC4402 (Matrix v1.20) lets `/.well-known/matrix/client` answer
+  // with a redirect. Each hop resolves `Location` against the URL it came
+  // from; at most [maxWellKnownRedirects] hops, only http(s), no URL twice.
+  /// The most redirects followed for `/.well-known/matrix/client`.
+  static const int maxWellKnownRedirects = 5;
+
+  static const Set<int> _wellKnownRedirectStatusCodes = {301, 302, 307, 308};
+
+  // On the web `fetch` follows redirects itself (and refuses non-HTTP(S)
+  // targets); asking it not to would make it fail on the first one.
+  static const bool _browserFollowsRedirects =
+      bool.fromEnvironment('dart.library.js_interop');
+
+  Future<http.Response> _getFollowingWellKnownRedirects(Uri uri) async {
+    final seen = <Uri>{uri};
+    var current = uri;
+    for (var hops = 0;; hops++) {
+      final request = http.Request('GET', current)
+        ..followRedirects = _browserFollowsRedirects;
+      final response =
+          await http.Response.fromStream(await httpClient.send(request));
+      if (!_wellKnownRedirectStatusCodes.contains(response.statusCode)) {
+        return response;
+      }
+      final location = response.headers['location'];
+      if (location == null || location.isEmpty) {
+        throw WellKnownRedirectException(
+          WellKnownRedirectFailure.missingLocation,
+          current,
+        );
+      }
+      final Uri next;
+      try {
+        next = current.resolve(location.trim());
+      } on FormatException {
+        throw WellKnownRedirectException(
+          WellKnownRedirectFailure.invalidLocation,
+          current,
+        );
+      }
+      if (next.scheme != 'https' && next.scheme != 'http') {
+        throw WellKnownRedirectException(
+          WellKnownRedirectFailure.unsupportedScheme,
+          current,
+          target: next,
+        );
+      }
+      if (hops + 1 > maxWellKnownRedirects) {
+        throw WellKnownRedirectException(
+          WellKnownRedirectFailure.tooManyRedirects,
+          current,
+          target: next,
+        );
+      }
+      if (!seen.add(next)) {
+        throw WellKnownRedirectException(
+          WellKnownRedirectFailure.loop,
+          current,
+          target: next,
+        );
+      }
+      current = next;
+    }
+  }
 
   /// Checks to see if a username is available, and valid, for the server.
   /// Returns the fully-qualified Matrix user ID (MXID) that has been registered.
@@ -4682,6 +4770,42 @@ class BadServerLoginTypesException implements Exception {
   @override
   String toString() =>
       'Server supports the Login Types: ${serverLoginTypes.toString()} but this application is only compatible with ${supportedLoginTypes.toString()}.';
+}
+
+// ROOSTER: Why following `/.well-known/matrix/client` redirects failed (MSC4402).
+enum WellKnownRedirectFailure {
+  /// The same URL came back: the redirects go round in a circle.
+  loop,
+
+  /// More than [Client.maxWellKnownRedirects] redirects.
+  tooManyRedirects,
+
+  /// A redirect to something other than http(s), such as `file:` or
+  /// `javascript:`.
+  unsupportedScheme,
+
+  /// A redirect without a `Location` header.
+  missingLocation,
+
+  /// A `Location` header that is not a URL.
+  invalidLocation,
+}
+
+// ROOSTER: Explicit error for a broken `/.well-known/matrix/client` redirect.
+class WellKnownRedirectException implements Exception {
+  final WellKnownRedirectFailure failure;
+
+  /// The URL that answered with the redirect.
+  final Uri from;
+
+  /// Where it pointed, when it could be read.
+  final Uri? target;
+
+  WellKnownRedirectException(this.failure, this.from, {this.target});
+
+  @override
+  String toString() =>
+      'WellKnownRedirectException: ${failure.name} at $from${target == null ? '' : ' -> ${target!.scheme}:'}';
 }
 
 // ROOSTER: Explicit exception when a homeserver advertises no compatible Matrix spec version.
