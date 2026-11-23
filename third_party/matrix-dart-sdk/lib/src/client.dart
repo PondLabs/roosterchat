@@ -1992,56 +1992,6 @@ class Client extends MatrixApi {
     }).toList();
   }
 
-  // ROOSTER: Matrix v1.16 MSC4222 — the database stores every timeline state
-  // event as room state too (`storeEventUpdate`), which a timeline that came
-  // with `state_after` must not define. This returns the state the room had,
-  // before the timeline is stored, for each state key [timeline] carries and
-  // [stateAfter] does not bring, so the caller stores it again afterwards. A
-  // key the room had no state for is left as the timeline stored it: the
-  // database cannot delete a state event.
-  Future<List<StrippedStateEvent>> _stateBeforeTimeline(
-    Room room,
-    List<MatrixEvent> timeline,
-    List<MatrixEvent> stateAfter,
-  ) async {
-    final handled = {
-      for (final event in stateAfter) (event.type, event.stateKey),
-    };
-    final before = <StrippedStateEvent>[];
-    for (final event in timeline) {
-      final stateKey = event.stateKey;
-      if (stateKey == null || !handled.add((event.type, stateKey))) continue;
-      var state = room.getState(event.type, stateKey);
-      if (state == null) {
-        if (event.type == EventTypes.RoomMember) {
-          // Members are read from the database when they are needed.
-          state = await database.getUser(stateKey, room);
-        } else if (room.partial && !importantStateEvents.contains(event.type)) {
-          await room.postLoad();
-          state = room.getState(event.type, stateKey);
-        }
-      }
-      if (state == null) continue;
-      // A member read from the database is a `User`, which serializes without
-      // its timestamp.
-      before.add(
-        state is User
-            ? MatrixEvent(
-                type: state.type,
-                content: state.content,
-                senderId: state.senderId,
-                stateKey: state.stateKey,
-                eventId: '',
-                originServerTs: state.originServerTs ??
-                    DateTime.fromMillisecondsSinceEpoch(0),
-                prevContent: state.prevContent,
-              )
-            : state,
-      );
-    }
-    return before;
-  }
-
   // ROOSTER: Normalize per-thread unread notification counts so omitted
   // `notification_count`/`highlight_count` default to 0 (Matrix v1.4 MSC3773).
   static Map<String, UnreadNotificationCounts> _normalizeThreadNotifications(
@@ -3102,11 +3052,6 @@ class Client extends MatrixApi {
         final rawStateAfter = syncRoomUpdate.stateAfter;
 
         final timelineEvents = syncRoomUpdate.timeline?.events;
-        final stateBeforeTimeline = rawStateAfter != null &&
-                timelineEvents != null &&
-                timelineUpdateType == EventUpdateType.timeline
-            ? await _stateBeforeTimeline(room, timelineEvents, rawStateAfter)
-            : const <StrippedStateEvent>[];
         if (timelineEvents != null && timelineEvents.isNotEmpty) {
           await _handleRoomEvents(
             room,
@@ -3128,14 +3073,6 @@ class Client extends MatrixApi {
             room,
             stateAfter,
             EventUpdateType.state,
-          );
-        }
-        for (final state in stateBeforeTimeline) {
-          await database.storeEventUpdate(
-            room.id,
-            state,
-            EventUpdateType.state,
-            this,
           );
         }
 
@@ -3273,7 +3210,8 @@ class Client extends MatrixApi {
     EventUpdateType type, {
     bool store = true,
     // ROOSTER: false for a timeline that came with `state_after` (Matrix
-    // v1.16): its state events are shown, and do not change room state.
+    // v1.16): its state events are shown, and do not change room state, in
+    // memory or in the database.
     bool updateState = true,
   }) async {
     // Calling events can be omitted if they are outdated from the same sync. So
@@ -3348,7 +3286,13 @@ class Client extends MatrixApi {
         updateState: updateState, // ROOSTER
       );
       if (store) {
-        await database.storeEventUpdate(room.id, event, type, this);
+        await database.storeEventUpdate(
+          room.id,
+          event,
+          type,
+          this,
+          updateState: updateState, // ROOSTER
+        );
       }
       if (event is MatrixEvent && encryptionEnabled) {
         await encryption?.handleEventUpdate(

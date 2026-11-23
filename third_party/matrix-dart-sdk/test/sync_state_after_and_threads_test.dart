@@ -449,6 +449,71 @@ void main() {
       },
     );
 
+    test('handles the timeline events before state_after', () async {
+      const roomId = '!order_events:example.test';
+      final client = await _createLoggedInClient(
+        'state_after_order_events',
+        httpClient: _syncMockClient(advertisedVersions: ['v1.16']),
+      );
+      addTearDown(() => client.dispose(closeDatabase: true));
+
+      // The one stream that carries timeline and state updates, in the order
+      // they were handled.
+      final handled = <String>[];
+      // ignore: deprecated_member_use_from_same_package
+      final sub = client.onEvent.stream.listen(
+        (update) =>
+            handled.add('${update.type.name} ${update.content['event_id']}'),
+      );
+      addTearDown(sub.cancel);
+
+      await client.handleSync(
+        SyncUpdate.fromJson(
+          _roomSync(
+            join: {
+              roomId: {
+                'timeline': {
+                  'events': [
+                    _stateEvent(
+                      '\$tl_name',
+                      EventTypes.RoomName,
+                      {'name': 'Timeline Name'},
+                      ts: 1700000002000,
+                    ),
+                    {
+                      'event_id': '\$tl_message',
+                      'type': EventTypes.Message,
+                      'sender': '@alice:example.test',
+                      'origin_server_ts': 1700000002001,
+                      'content': {'msgtype': 'm.text', 'body': 'hello'},
+                    },
+                  ],
+                },
+                'state_after': {
+                  'events': [
+                    _stateEvent(
+                      '\$sa_name',
+                      EventTypes.RoomName,
+                      {'name': 'State After Name'},
+                      ts: 1700000001000,
+                    ),
+                  ],
+                },
+              },
+            },
+          ),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(handled, [
+        'timeline \$tl_name',
+        'timeline \$tl_message',
+        'state \$sa_name',
+      ]);
+      expect(client.getRoomById(roomId)!.name, 'State After Name');
+    });
+
     test('LeftRoomUpdate applies state_after AFTER timeline on archived room',
         () async {
       const roomId = '!order_left:example.test';
@@ -711,8 +776,7 @@ void main() {
       );
       await first.dispose(closeDatabase: false);
 
-      // The database stores timeline state events as room state: the name
-      // from before the timeline was stored again.
+      // The timeline was stored without becoming room state.
       final second = await _restartClient('state_after_reset', database);
       addTearDown(() => second.dispose(closeDatabase: true));
       final restored = second.getRoomById(roomId)!;
@@ -874,6 +938,201 @@ void main() {
         member?.originServerTs,
         DateTime.fromMillisecondsSinceEpoch(1700000000500),
       );
+    });
+
+    test(
+        'timeline state events on keys the room never had do not come back '
+        'after a restart on the same database (name, topic, encryption, call '
+        'member)', () async {
+      const roomId = '!unseen:example.test';
+      const callMember = 'org.matrix.msc3401.call.member';
+      const callKey = '_@bob:example.test_DEV2_m.call';
+      final database = await getDatabase();
+      final first = await _createLoggedInClient(
+        'state_after_unseen',
+        httpClient: _syncMockClient(advertisedVersions: ['v1.16']),
+        database: database,
+      );
+      await first.handleSync(
+        SyncUpdate.fromJson(
+          _roomSync(
+            join: {
+              roomId: {
+                'state_after': {
+                  'events': [
+                    _stateEvent(
+                      '\$c0',
+                      EventTypes.RoomCreate,
+                      {'creator': '@alice:example.test'},
+                    ),
+                  ],
+                },
+              },
+            },
+          ),
+        ),
+      );
+
+      // Four state events that lost state resolution: the server shows them
+      // in the timeline and leaves them out of state_after.
+      await first.handleSync(
+        SyncUpdate.fromJson(
+          _roomSync(
+            nextBatch: 's_2',
+            join: {
+              roomId: {
+                'timeline': {
+                  'events': [
+                    _stateEvent(
+                      '\$tl_name',
+                      EventTypes.RoomName,
+                      {'name': 'Losing Fork Name'},
+                      ts: 1700000005000,
+                    ),
+                    _stateEvent(
+                      '\$tl_topic',
+                      EventTypes.RoomTopic,
+                      {'topic': 'Losing Fork Topic'},
+                      ts: 1700000005001,
+                    ),
+                    _stateEvent(
+                      '\$tl_enc',
+                      EventTypes.Encryption,
+                      {'algorithm': 'm.megolm.v1.aes-sha2'},
+                      ts: 1700000005002,
+                    ),
+                    _stateEvent(
+                      '\$tl_call',
+                      callMember,
+                      {'application': 'm.call', 'scope': 'm.room'},
+                      sender: '@bob:example.test',
+                      stateKey: callKey,
+                      ts: 1700000005003,
+                    ),
+                  ],
+                },
+                'state_after': {'events': <Object?>[]},
+              },
+            },
+          ),
+        ),
+      );
+
+      final beforeRestart = first.getRoomById(roomId)!;
+      expect(beforeRestart.name, '');
+      expect(beforeRestart.topic, '');
+      expect(beforeRestart.encrypted, isFalse);
+      expect(beforeRestart.getState(callMember, callKey), isNull);
+      await first.dispose(closeDatabase: false);
+
+      final second = await _restartClient('state_after_unseen', database);
+      addTearDown(() => second.dispose(closeDatabase: true));
+      final afterRestart = second.getRoomById(roomId)!;
+      await afterRestart.postLoad();
+      expect(
+        {
+          'name': afterRestart.name,
+          'topic': afterRestart.topic,
+          'encrypted': afterRestart.encrypted,
+          'callMemberPresent':
+              afterRestart.getState(callMember, callKey) != null,
+        },
+        {
+          'name': '',
+          'topic': '',
+          'encrypted': false,
+          'callMemberPresent': false,
+        },
+      );
+      // The events themselves are still in the stored timeline.
+      expect(
+        (await second.database.getEventList(afterRestart))
+            .map((event) => event.eventId),
+        unorderedEquals(['\$tl_name', '\$tl_topic', '\$tl_enc', '\$tl_call']),
+      );
+    });
+
+    test(
+        'on a room that is not loaded, a timeline member event state_after '
+        'leaves out, followed by a message from that member, does not change '
+        'the member in memory', () async {
+      const roomId = '!partial_member:example.test';
+      const bob = '@bob:example.test';
+      final database = await getDatabase();
+      final first = await _createLoggedInClient(
+        'state_after_partial_member',
+        httpClient: _syncMockClient(advertisedVersions: ['v1.16']),
+        database: database,
+      );
+      await first.handleSync(
+        SyncUpdate.fromJson(
+          _roomSync(
+            join: {
+              roomId: {
+                'state_after': {
+                  'events': [
+                    _stateEvent(
+                      '\$m0',
+                      EventTypes.RoomMember,
+                      {'membership': 'join', 'displayname': 'Original Bob'},
+                      sender: bob,
+                      stateKey: bob,
+                      ts: 1700000000500,
+                    ),
+                  ],
+                },
+              },
+            },
+          ),
+        ),
+      );
+      await first.dispose(closeDatabase: false);
+
+      final second =
+          await _restartClient('state_after_partial_member', database);
+      addTearDown(() => second.dispose(closeDatabase: true));
+      final room = second.getRoomById(roomId)!;
+      expect(room.partial, isTrue);
+      expect(room.getState(EventTypes.RoomMember, bob), isNull);
+
+      // The message makes the client read its sender from the database, where
+      // the member event of the timeline must not be.
+      await second.handleSync(
+        SyncUpdate.fromJson(
+          _roomSync(
+            nextBatch: 's_2',
+            join: {
+              roomId: {
+                'timeline': {
+                  'events': [
+                    _stateEvent(
+                      '\$m1',
+                      EventTypes.RoomMember,
+                      {'membership': 'leave', 'displayname': 'Losing Bob'},
+                      sender: bob,
+                      stateKey: bob,
+                      ts: 1700000005000,
+                    ),
+                    {
+                      'event_id': '\$msg1',
+                      'type': EventTypes.Message,
+                      'sender': bob,
+                      'origin_server_ts': 1700000005001,
+                      'content': {'msgtype': 'm.text', 'body': 'hello'},
+                    },
+                  ],
+                },
+                'state_after': {'events': <Object?>[]},
+              },
+            },
+          ),
+        ),
+      );
+
+      final bobInMemory =
+          room.getState(EventTypes.RoomMember, bob)?.asUser(room);
+      expect(bobInMemory?.membership, Membership.join);
+      expect(bobInMemory?.displayName, 'Original Bob');
     });
 
     test(

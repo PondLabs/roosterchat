@@ -371,11 +371,12 @@ Changes since the copy:
   guards). A left room's legacy `state` used to be applied after its timeline;
   it now comes before it, as for a joined room. When an update carries
   `state_after`, even an empty one, its timeline does not define room state
-  (a timeline state event may have lost state resolution): the room keeps the
-  state it had for every key `state_after` does not bring, in memory and in
-  the database (`_stateBeforeTimeline`). One case is left: a key the room had
-  no state for stays in the database as the timeline stored it, because the
-  database has no way to delete a state event.
+  (a timeline state event may have lost state resolution), in memory or in
+  the database. For the database, `DatabaseApi.storeEventUpdate` and
+  `MatrixSdkDatabase.storeEventUpdate` (`lib/src/database/database_api.dart`,
+  `lib/src/database/matrix_sdk_database.dart`) take `updateState`: with
+  `false`, which `Client._handleRoomEvents` passes for such a timeline, the
+  event is stored in the timeline and not as room state.
   `Room.unreadThreadNotifications` (`lib/src/room.dart`) exposes the per-thread
   unread counts. An update that brings `unread_notifications` or
   `unread_thread_notifications` replaces them all, so a thread the server

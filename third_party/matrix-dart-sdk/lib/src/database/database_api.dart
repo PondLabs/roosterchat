@@ -82,12 +82,16 @@ abstract class DatabaseApi {
 
   /// Stores an EventUpdate object in the database. Must be called inside of
   /// [transaction].
+  // ROOSTER: With [updateState] false the event is stored without becoming
+  // room state. A timeline that came with `state_after` (Matrix v1.16
+  // MSC4222) is stored this way: it does not define room state.
   Future<void> storeEventUpdate(
     String roomId,
     StrippedStateEvent event,
     EventUpdateType type,
-    Client client,
-  );
+    Client client, {
+    bool updateState = true, // ROOSTER
+  });
 
   Future<Event?> getEventById(String eventId, Room room);
 
