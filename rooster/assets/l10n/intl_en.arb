@@ -1649,6 +1649,34 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelAccountLocked": "Your account is locked",
+  "@labelAccountLocked": {
+    "description": "Title of the banner shown when the homeserver locked the user's account (Matrix error M_USER_LOCKED)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageAccountLocked": "The administrators of your server locked {account}. Rooster stopped syncing it and checks again from time to time. You are still signed in and nothing was deleted.",
+  "@messageAccountLocked": {
+    "description": "Banner shown when the homeserver locked the user's account; account is the Matrix ID",
+    "type": "text",
+    "placeholders": {
+      "account": {}
+    }
+  },
+  "labelAccountSuspended": "Your account is suspended",
+  "@labelAccountSuspended": {
+    "description": "Title of the banner shown when the homeserver suspended the user's account (Matrix error M_USER_SUSPENDED)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageAccountSuspended": "The administrators of your server suspended {account}. You can still read, but you can't send messages, join rooms or change your profile. Rooster checks again from time to time.",
+  "@messageAccountSuspended": {
+    "description": "Banner shown when the homeserver suspended the user's account; account is the Matrix ID",
+    "type": "text",
+    "placeholders": {
+      "account": {}
+    }
+  },
   "errorSoundboardMissingPermission": "Missing permission to manage soundboard",
   "@errorSoundboardMissingPermission": {
     "description": "Why a soundboard sound could not be added, changed or removed: you may not manage the space's soundboard",
@@ -7428,6 +7456,36 @@
     "type": "text",
     "placeholders": {}
   },
+  "labelProfileMutualRooms": "Rooms in common",
+  "@labelProfileMutualRooms": {
+    "description": "Heading of the list of rooms the user and the person whose profile card is open have both joined",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageProfileMutualRoomsNone": "You have no rooms in common.",
+  "@messageProfileMutualRoomsNone": {
+    "description": "Shown on a profile card when the user and that person share no room",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageProfileMutualRoomsLocal": "Your server can't list them, so these are the ones this device knows about. Some may be missing.",
+  "@messageProfileMutualRoomsLocal": {
+    "description": "Under the rooms in common on a profile card when the homeserver is too old to list them and the app worked them out itself",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageProfileMutualRoomsFailed": "Couldn't load the rooms in common.",
+  "@messageProfileMutualRoomsFailed": {
+    "description": "Shown on a profile card when the list of rooms in common could not be loaded",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptProfileMutualRoomsMore": "Show more",
+  "@promptProfileMutualRoomsMore": {
+    "description": "Button under the rooms in common on a profile card: loads the next ones",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelProfileSessions": "{howMany,plural, =1{1 session}other{{howMany} sessions}}",
   "@labelProfileSessions": {
     "description": "Heading of the list of another user's sessions (devices) on their profile, with how many there are",
@@ -9548,6 +9606,12 @@
     "type": "text",
     "placeholders": {}
   },
+  "promptAccountRestrictionCheckAgain": "Check again",
+  "@promptAccountRestrictionCheckAgain": {
+    "description": "Button on the banner of a locked or suspended account: asks the server again now whether the account works",
+    "type": "text",
+    "placeholders": {}
+  },
   "labelArchivedRoomsHeader": "Rooms you left",
   "@labelArchivedRoomsHeader": {
     "description": "Header of the list of rooms the account left or was removed from",
@@ -9591,6 +9655,138 @@
     "description": "Brief notice after forgetting a room",
     "type": "text",
     "placeholders": {}
+  },
+  "labelServerAdminHeader": "Server administration",
+  "@labelServerAdminHeader": {
+    "description": "Header of the server tools in account settings, for administrators of the homeserver",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAdminDescription": "For administrators of your server: see an account's sessions, and lock or suspend it.",
+  "@labelServerAdminDescription": {
+    "description": "Under the header of the server administration tools",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAdminUser": "User ID",
+  "@labelServerAdminUser": {
+    "description": "Label of the field where a server administrator types the Matrix ID of the account to look up",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptServerAdminLookUp": "Look up",
+  "@promptServerAdminLookUp": {
+    "description": "Button that loads what the server says about the account typed in the server administration tools",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAdminLocked": "Locked",
+  "@labelServerAdminLocked": {
+    "description": "Switch in the server administration tools: the account is locked and none of its sessions work until it is unlocked",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAdminSuspended": "Suspended",
+  "@labelServerAdminSuspended": {
+    "description": "Switch in the server administration tools: the account is suspended, it can read but not send, join or change its profile",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAdminConfirmLockTitle": "Lock account",
+  "@labelServerAdminConfirmLockTitle": {
+    "description": "Title of the confirmation dialog before a server administrator locks an account",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageServerAdminConfirmLock": "Lock {user}? All of their sessions will stop working until an administrator unlocks the account.",
+  "@messageServerAdminConfirmLock": {
+    "description": "Question in the confirmation dialog before locking a user's account; user is the Matrix ID",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "promptServerAdminLock": "Lock",
+  "@promptServerAdminLock": {
+    "description": "Button that confirms locking an account in the server administration tools",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerAdminConfirmSuspendTitle": "Suspend account",
+  "@labelServerAdminConfirmSuspendTitle": {
+    "description": "Title of the confirmation dialog before a server administrator suspends an account",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageServerAdminConfirmSuspend": "Suspend {user}? They will still be able to read, but won't be able to send messages, join rooms or change their profile.",
+  "@messageServerAdminConfirmSuspend": {
+    "description": "Question in the confirmation dialog before suspending a user's account; user is the Matrix ID",
+    "type": "text",
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "promptServerAdminSuspend": "Suspend",
+  "@promptServerAdminSuspend": {
+    "description": "Button that confirms suspending an account in the server administration tools",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageServerAdminForbidden": "Only administrators of your server can do this.",
+  "@messageServerAdminForbidden": {
+    "description": "Shown in the server administration tools when the server refuses because the user is not one of its administrators",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageServerAdminUnsupported": "Your server doesn't offer these tools.",
+  "@messageServerAdminUnsupported": {
+    "description": "Shown in the server administration tools when the homeserver does not know the lock and suspend requests",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageServerAdminNotFound": "There is no such account on your server.",
+  "@messageServerAdminNotFound": {
+    "description": "Shown in the server administration tools when the account looked up does not exist on the homeserver",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageServerAdminFailed": "The server didn't answer. Try again.",
+  "@messageServerAdminFailed": {
+    "description": "Shown in the server administration tools when a request failed for another reason",
+    "type": "text",
+    "placeholders": {}
+  },
+  "messageServerAdminInvalidUser": "Type a full Matrix ID, with the @ and the server.",
+  "@messageServerAdminInvalidUser": {
+    "description": "Shown in the server administration tools when what was typed is not a Matrix ID",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerSupportHeader": "Server support",
+  "@labelServerSupportHeader": {
+    "description": "Header of the section of account settings with the contacts and help page the user's homeserver publishes",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerSupportAdmin": "Administrator",
+  "@labelServerSupportAdmin": {
+    "description": "Role of a contact of the homeserver: the people who run it (Matrix role m.role.admin)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "labelServerSupportSecurity": "Security contact",
+  "@labelServerSupportSecurity": {
+    "description": "Role of a contact of the homeserver: for security reports (Matrix role m.role.security)",
+    "type": "text",
+    "placeholders": {}
+  },
+  "promptServerSupportPage": "Open the help page on {host}",
+  "@promptServerSupportPage": {
+    "description": "Button that opens the homeserver's own help page in the browser; host is the web address it is on",
+    "type": "text",
+    "placeholders": {
+      "host": {}
+    }
   },
   "labelChatPrivacyTitle": "Chat Privacy",
   "@labelChatPrivacyTitle": {
