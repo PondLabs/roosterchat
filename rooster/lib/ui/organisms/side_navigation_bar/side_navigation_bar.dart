@@ -8,9 +8,14 @@ import 'package:rooster/config/layout_config.dart';
 import 'package:rooster/main.dart';
 import 'package:rooster/ui/atoms/dot_indicator.dart';
 import 'package:rooster/ui/atoms/notification_badge.dart';
+import 'package:rooster/ui/atoms/room_panel_actions.dart';
 import 'package:rooster/ui/molecules/space_selector.dart';
+import 'package:rooster/ui/navigation/adaptive_dialog.dart';
 import 'package:rooster/ui/organisms/home_screen/home_screen_view.dart';
 import 'package:rooster/ui/organisms/side_navigation_bar/side_navigation_bar_direct_messages.dart';
+import 'package:rooster/client/matrix/matrix_client.dart';
+import 'package:rooster/ui/navigation/navigation_utils.dart';
+import 'package:rooster/ui/pages/explore/explore_page.dart';
 import 'package:rooster/ui/pages/get_or_create_room/get_or_create_room.dart';
 import 'package:rooster/utils/common_strings.dart';
 import 'package:rooster/utils/event_bus.dart';
@@ -89,6 +94,9 @@ class _SideNavigationBarState extends State<SideNavigationBar> {
   int notificationCount = 0;
   int highlightedNotificationCount = 0;
 
+  /// Rooms marked unread by hand, which light the dot with no notification.
+  int markedUnreadCount = 0;
+
   @override
   void initState() {
     _clientManager = Provider.of<ClientManager>(context, listen: false);
@@ -129,7 +137,9 @@ class _SideNavigationBarState extends State<SideNavigationBar> {
   void updateNotificationCounts() {
     highlightedNotificationCount = 0;
     notificationCount = 0;
+    markedUnreadCount = 0;
     for (var room in clientManager!.singleRooms(filterClient: filterClient)) {
+      if (RoomPanelActions.showsUnreadDot(room)) markedUnreadCount++;
       notificationCount += room.displayNotificationCount;
       highlightedNotificationCount += room.displayHighlightedNotificationCount;
     }
@@ -237,7 +247,8 @@ class _SideNavigationBarState extends State<SideNavigationBar> {
                                   widget.onRoomsViewSelected?.call();
                                 },
                               ),
-                              if (notificationCount > 0)
+                              if (notificationCount > 0 ||
+                                  markedUnreadCount > 0)
                                 Align(
                                     alignment: AlignmentGeometry.xy(-1.55, 0),
                                     child: DotIndicator()),
@@ -273,6 +284,14 @@ class _SideNavigationBarState extends State<SideNavigationBar> {
                           ),
                           context),
                     ),
+                    SideNavigationBar.tooltip(
+                        ExplorePage.labelExplorePublicRooms,
+                        ImageButton(
+                          size: 70,
+                          icon: Icons.explore_outlined,
+                          onTap: openExplore,
+                        ),
+                        context),
                     SizedBox(
                       height: MediaQuery.sizeOf(context).height / 2,
                     )
@@ -293,6 +312,14 @@ class _SideNavigationBarState extends State<SideNavigationBar> {
               ),
           ],
         ));
+  }
+
+  /// The public room directory of the account picked in the sidebar, or of
+  /// one the user picks.
+  Future<void> openExplore() async {
+    final client = filterClient ?? await AdaptiveDialog.pickClient(context);
+    if (client is! MatrixClient || !mounted) return;
+    await NavigationUtils.navigateTo(context, ExplorePage(client));
   }
 
   bool shouldShowAvatarForSpace(Space space) {
