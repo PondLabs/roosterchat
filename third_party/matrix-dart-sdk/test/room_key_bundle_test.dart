@@ -220,7 +220,8 @@ void main() {
       return say('said before the invite');
     }
 
-    Future<void> setVisibility(String visibility) => sync(
+    /// The inviter's sync brings a history visibility event, dated [at].
+    Future<void> setVisibility(String visibility, {DateTime? at}) => sync(
           inviter,
           RoomsUpdate(
             join: {
@@ -231,8 +232,8 @@ void main() {
                     content: {'history_visibility': visibility},
                     stateKey: '',
                     senderId: _inviterId,
-                    eventId: '\$vis$visibility',
-                    originServerTs: DateTime.now(),
+                    eventId: '\$vis$visibility${at ?? ''}',
+                    originServerTs: at ?? DateTime.now(),
                   ),
                 ],
               ),
@@ -662,25 +663,9 @@ void main() {
       test('state from before, coming late, changes nothing', () async {
         await inviterRoom('joined', first: (room) => room.partial = false);
         // As a page of older events may carry it.
-        await sync(
-          inviter,
-          RoomsUpdate(
-            join: {
-              _roomId: JoinedRoomUpdate(
-                state: [
-                  MatrixEvent(
-                    type: EventTypes.HistoryVisibility,
-                    content: {'history_visibility': 'shared'},
-                    stateKey: '',
-                    senderId: _inviterId,
-                    eventId: '\$older',
-                    originServerTs:
-                        DateTime.now().subtract(const Duration(days: 1)),
-                  ),
-                ],
-              ),
-            },
-          ),
+        await setVisibility(
+          'shared',
+          at: DateTime.now().subtract(const Duration(days: 1)),
         );
         final room = inviter.getRoomById(_roomId)!;
         expect(room.historyVisibility, HistoryVisibility.shared);
