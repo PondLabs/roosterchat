@@ -2,6 +2,7 @@ import 'package:rooster/client/components/component.dart';
 import 'package:rooster/client/components/invitation/invitation.dart';
 import 'package:rooster/client/components/invitation/invitation_component.dart';
 import 'package:rooster/client/components/profile/profile_component.dart';
+import 'package:rooster/client/matrix/components/history_sharing/matrix_history_sharing.dart';
 import 'package:rooster/client/matrix/components/profile/matrix_profile_component.dart';
 import 'package:rooster/client/matrix/matrix_client.dart';
 import 'package:rooster/client/matrix/matrix_mxc_image_provider.dart';
@@ -76,7 +77,8 @@ class MatrixInvitationComponent
   Future<void> inviteUserToRoom(
       {required String userId, required String roomId}) {
     var mx = client.getMatrixClient();
-    return mx.inviteUser(roomId, userId);
+    // Shares the room's encrypted history when its settings say so.
+    return MatrixHistorySharing.invite(mx, roomId, userId);
   }
 
   @override
