@@ -105,6 +105,11 @@ void main() {
       return entry == null ? null : SessionKey.fromDb(entry, client.userID!);
     }
 
+    int? inMemoryFirstIndex() => keyManager
+        .getInboundGroupSession(_roomId, sessionId)
+        ?.inboundGroupSession
+        ?.firstKnownIndex;
+
     /// What a restart leaves: the database, nothing in memory.
     void restart() {
       keyManager.clearInboundGroupSessions();
@@ -192,6 +197,7 @@ void main() {
 
       await keyManager.loadFromResponse(await backupFrom(1));
 
+      expect(inMemoryFirstIndex(), 0);
       expect((await stored())?.inboundGroupSession?.firstKnownIndex, 0);
       expect(await decryptFirstMessage(), 'first');
     });
@@ -204,6 +210,7 @@ void main() {
 
       await receiveForwarded(1);
 
+      expect(inMemoryFirstIndex(), 0);
       expect((await stored())?.inboundGroupSession?.firstKnownIndex, 0);
       expect(await decryptFirstMessage(), 'first');
     });
@@ -222,13 +229,7 @@ void main() {
 
       await receiveForwarded(0);
 
-      expect(
-        keyManager
-            .getInboundGroupSession(_roomId, sessionId)
-            ?.inboundGroupSession
-            ?.firstKnownIndex,
-        0,
-      );
+      expect(inMemoryFirstIndex(), 0);
       expect((await stored())?.inboundGroupSession?.firstKnownIndex, 0);
       expect(await decryptFirstMessage(), 'first');
     });
@@ -287,13 +288,7 @@ void main() {
         ),
       ]);
 
-      expect(
-        keyManager
-            .getInboundGroupSession(_roomId, sessionId)
-            ?.inboundGroupSession
-            ?.firstKnownIndex,
-        0,
-      );
+      expect(inMemoryFirstIndex(), 0);
       expect((await stored())?.inboundGroupSession?.firstKnownIndex, 0);
     });
   });

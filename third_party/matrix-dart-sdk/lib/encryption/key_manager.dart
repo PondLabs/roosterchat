@@ -272,10 +272,11 @@ class KeyManager {
     // put the stored session back in memory over one a concurrent call has
     // just set), then look in memory again: a call that ran during the read
     // set a session already compared with the stored one. No await from here
-    // to the memory write below.
+    // to the memory writes below. A stored session that is kept goes in
+    // memory, where callers (a key request, a restore) look next.
     var oldSession = getInboundGroupSession(roomId, sessionId);
+    SessionKey? stored;
     if (oldSession == null) {
-      SessionKey? stored;
       try {
         final dbEntry =
             await client.database.getInboundGroupSession(roomId, sessionId);
@@ -301,6 +302,10 @@ class KeyManager {
       // use new session
     } else {
       // we are gonna keep our old session
+      if (stored != null && identical(oldSession, stored)) {
+        (_inboundGroupSessions[roomId] ??= <String, SessionKey>{})[sessionId] =
+            stored; // ROOSTER
+      }
       return;
     }
 
