@@ -211,17 +211,20 @@ void main() {
   });
 
   group('the device authorization answer', () {
-    test('a verification link that is not http(s) is refused', () async {
-      final server = DeviceGrantServer(
-        authorization: deviceAuthorizationJson(
-            verificationUri: 'javascript:alert(1)', complete: null),
-      );
-      final (client, flow, clock) = await setUpFlow(server);
-      expect(errorOf(await flow.submit(client)),
-          MatrixDeviceAuthFlow.errorLoginDeviceFailed);
-      expect(server.tokenPolls, isEmpty);
-      expect(clock.timers, isEmpty);
-    });
+    for (final link in ['javascript:alert(1)', 'ftp://auth.example.org/link']) {
+      test('a verification link that is not http(s) is refused: $link',
+          () async {
+        final server = DeviceGrantServer(
+          authorization:
+              deviceAuthorizationJson(verificationUri: link, complete: null),
+        );
+        final (client, flow, clock) = await setUpFlow(server);
+        expect(errorOf(await flow.submit(client)),
+            MatrixDeviceAuthFlow.errorLoginDeviceFailed);
+        expect(server.tokenPolls, isEmpty);
+        expect(clock.timers, isEmpty);
+      });
+    }
 
     test('no registration endpoint and no CIMD: no client', () async {
       final metadata = deviceAuthMetadataJson()
